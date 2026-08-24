@@ -1,0 +1,111 @@
+commands:
+  - name: casts generate examples generate-files component-files
+    description: Regenerate the Generate Files example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-generated-files
+        working_directory: &generate_files_fixture "../../.context/cast-fixtures/generate-files"
+        output: none
+        command: rm -rf components/terraform/demo && mkdir -p components/terraform/demo
+      - type: cast
+        name: component-files
+        working_directory: *generate_files_fixture
+        title: "Generate Files: build a Terraform component from stack config"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/generate-files/component-files.cast"
+        steps:
+          - type: simulate
+            text: "# the component starts empty"
+          - type: simulate
+            text: &empty_cmd find components/terraform/demo -maxdepth 1 -type f | sort
+          - type: shell
+            name: empty
+            duration: 350ms
+            interval: 650ms
+            command: *empty_cmd
+          - type: simulate
+            text: "# generate the component files from stack configuration"
+          - type: simulate
+            text: &generate_cmd atmos terraform generate files demo -s dev
+          - type: shell
+            name: generate
+            duration: 450ms
+            interval: 750ms
+            command: *generate_cmd
+          - type: simulate
+            text: "# inspect the generated file set"
+          - type: simulate
+            text: &list_cmd find components/terraform/demo -maxdepth 1 -type f -exec basename {} \; | sort
+          - type: shell
+            name: list-files
+            duration: 450ms
+            interval: 750ms
+            command: *list_cmd
+          - type: simulate
+            text: "# regenerate the component for prod with real stack values"
+          - type: simulate
+            text: &prod_generate_cmd atmos terraform generate files demo -s prod
+          - type: shell
+            name: generate-prod
+            duration: 450ms
+            interval: 750ms
+            command: *prod_generate_cmd
+          - type: simulate
+            text: "# inspect a generated file with prod values"
+          - type: simulate
+            text: &show_config_cmd cat components/terraform/demo/config.json
+          - type: shell
+            name: show-config
+            duration: 450ms
+            interval: 750ms
+            command: *show_config_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples generate-files component-files
+  - name: casts validate examples generate-files component-files
+    description: Validate the Generate Files example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/generate-files/component-files.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "# the component starts empty",
+              "atmos terraform generate files demo -s dev",
+              "README.md",
+              "config.json",
+              "locals.tf",
+              "outputs.tf",
+              "terraform.tfvars",
+              "variables.tf",
+              "versions.tf",
+              "atmos terraform generate files demo -s prod",
+              "cat components/terraform/demo/config.json",
+              "myapp",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"generate-files cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "[generate]", "completed", "--dry-run", "Would generate:", "Created:", "Updated:", "Deleted:"]:
+              if bad in plain:
+                  raise SystemExit(f"generate-files cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

@@ -5,19 +5,25 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	cp "github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.yaml.in/yaml/v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/vendor"
+	"github.com/cloudposse/atmos/pkg/vendoring"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
+	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
 
 // Dedicated logger for stderr to keep stdout clean of detailed messaging, e.g. for files vendoring.
@@ -51,8 +57,19 @@ type processTargetsParams struct {
 	TemplateData         struct{ Component, Version string }
 	VendorConfigFilePath string
 	URI                  string
-	PkgType              pkgType
+	SourceTemplate       string // Raw un-templated source URL for per-target version re-resolution.
+	PkgType              install.PkgType
 	SourceIsLocalFile    bool
+	// RawVersion is the source-level declared version, populated only when it was a semver range
+	// (TemplateData.Version already carries its resolved concrete value) -- see
+	// install.VendorPackage.RawVersion.
+	RawVersion string
+	// RefreshLock forces fresh semver-range resolution for any per-target version override --
+	// see resolveEffectiveVersion.
+	RefreshLock bool
+	// Lister overrides the remote Git tag lister for any per-target version override -- see
+	// vendorSourceParams.lister's doc comment.
+	Lister version.RemoteLister
 }
 type executeVendorOptions struct {
 	atmosConfig          *schema.AtmosConfiguration
@@ -61,6 +78,9 @@ type executeVendorOptions struct {
 	component            string
 	tags                 []string
 	dryRun               bool
+	refreshLock          bool
+	// lockEnforcement is one of install.LockEnforcementSilent/Warn/Strict; see VendorFlags.LockEnforcement.
+	lockEnforcement string
 }
 
 type vendorSourceParams struct {
@@ -70,6 +90,13 @@ type vendorSourceParams struct {
 	tags                 []string
 	vendorConfigFileName string
 	vendorConfigFilePath string
+	// refreshLock forces fresh semver-range version resolution (bypassing any matching
+	// vendor.lock.yaml receipt) for range-declared `version:` sources -- see resolveEffectiveVersion.
+	refreshLock bool
+	// lister overrides the remote Git tag lister used to resolve a semver-range `version:`. Nil in
+	// every production call path (install.ResolveDeclaredVersion defaults to version.DefaultLister);
+	// only ever set by tests, so a range's resolution can be verified without real network access.
+	lister version.RemoteLister
 }
 
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`.
@@ -105,11 +132,27 @@ func ReadAndProcessVendorConfigFile(
 	return vendorConfig, true, foundVendorConfigFile, nil
 }
 
+// getVendorDirToUse returns the appropriate vendor directory for file resolution. It prefers
+// the precomputed VendorDirAbsolutePath (set by AtmosConfigAbsolutePaths, the same mechanism
+// cloudposse/atmos#2864 uses for the top-level base_path), falling back to joining the raw
+// BasePath/Vendor.BasePath for callers that construct an AtmosConfiguration by hand without
+// running it through AtmosConfigAbsolutePaths first (e.g. tests). Mirrors getWorkflowsDirToUse
+// and getBasePathToUse (validate_component.go).
+func getVendorDirToUse(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig.VendorDirAbsolutePath != "" {
+		return atmosConfig.VendorDirAbsolutePath
+	}
+	// u.JoinPath (unlike filepath.Join) returns an already-absolute Vendor.BasePath as-is
+	// instead of nesting it under BasePath. getBasePathToUse (not raw atmosConfig.BasePath)
+	// keeps this consistent with getWorkflowsDirToUse's identical fallback.
+	return u.JoinPath(getBasePathToUse(atmosConfig), atmosConfig.Vendor.BasePath)
+}
+
 // Helper function to resolve the vendor config file path.
 func resolveVendorConfigFilePath(atmosConfig *schema.AtmosConfiguration, vendorConfigFile string, checkGlobalConfig bool) string {
 	if checkGlobalConfig && atmosConfig.Vendor.BasePath != "" {
 		if !filepath.IsAbs(atmosConfig.Vendor.BasePath) {
-			return filepath.Join(atmosConfig.BasePath, atmosConfig.Vendor.BasePath)
+			return getVendorDirToUse(atmosConfig)
 		}
 		return atmosConfig.Vendor.BasePath
 	}
@@ -117,7 +160,7 @@ func resolveVendorConfigFilePath(atmosConfig *schema.AtmosConfiguration, vendorC
 	// Search for the vendor config file
 	foundVendorConfigFile, fileExists := u.SearchConfigFile(vendorConfigFile)
 	if !fileExists {
-		pathToVendorConfig := filepath.Join(atmosConfig.BasePath, vendorConfigFile)
+		pathToVendorConfig := filepath.Join(getBasePathToUse(atmosConfig), vendorConfigFile)
 		foundVendorConfigFile, fileExists = u.SearchConfigFile(pathToVendorConfig)
 		if !fileExists {
 			return "" // File does not exist, but this is not an error
@@ -134,20 +177,19 @@ func getConfigFiles(path string) ([]string, error) {
 			return nil, ErrVendoringNotConfigured
 		}
 		if os.IsPermission(err) {
-			return nil, fmt.Errorf("%w '%s'. Please check the file permissions", ErrPermissionDenied, path)
+			return nil, fmt.Errorf("%w '%s'. Please check the file permissions", ErrPermissionDenied, displayPath(path))
 		}
 		return nil, fmt.Errorf("An error occurred while accessing the vendoring configuration: %w", err)
 	}
 
 	if fileInfo.IsDir() {
-		path = filepath.ToSlash(path)
 		matches, err := doublestar.Glob(os.DirFS(path), "*.{yaml,yml}")
 		if err != nil {
 			return nil, err
 		}
 
 		if len(matches) == 0 {
-			return nil, fmt.Errorf("%w '%s'", ErrNoYAMLConfigFiles, path)
+			return nil, fmt.Errorf("%w '%s'", ErrNoYAMLConfigFiles, displayPath(path))
 		}
 		for i, match := range matches {
 			matches[i] = filepath.Join(path, match)
@@ -179,7 +221,7 @@ func mergeVendorConfigFiles(configFiles []string) (schema.AtmosVendorConfig, err
 			source := currentConfig.Spec.Sources[i]
 			if source.Component != "" {
 				if sourceMap[source.Component] {
-					return vendorConfig, fmt.Errorf("%w '%s' found in config file '%s'", ErrDuplicateComponentsFound, source.Component, configFile)
+					return vendorConfig, fmt.Errorf("%w '%s' found in config file '%s'", ErrDuplicateComponentsFound, source.Component, displayPath(configFile))
 				}
 				sourceMap[source.Component] = true
 			}
@@ -204,9 +246,11 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 	var err error
 	vendorConfigFilePath := filepath.Dir(params.vendorConfigFileName)
 
-	logInitialMessage(params.vendorConfigFileName, params.tags)
+	// displayPath keeps the log message short and machine-independent; params.vendorConfigFileName
+	// itself stays untouched (and possibly absolute) for the actual file/source resolution below.
+	logInitialMessage(displayPath(params.vendorConfigFileName), params.tags)
 	if len(params.atmosVendorSpec.Sources) == 0 && len(params.atmosVendorSpec.Imports) == 0 {
-		return fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, params.vendorConfigFileName)
+		return fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, displayPath(params.vendorConfigFileName))
 	}
 	// Process imports and return all sources from all the imports and from `vendor.yaml`.
 	sources, _, err := processVendorImports(
@@ -221,7 +265,7 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 	}
 
 	if len(sources) == 0 {
-		return fmt.Errorf("%w %s", ErrEmptySources, params.vendorConfigFileName)
+		return fmt.Errorf("%w %s", ErrEmptySources, displayPath(params.vendorConfigFileName))
 	}
 
 	if err := validateTagsAndComponents(sources, params.vendorConfigFileName, params.component, params.tags); err != nil {
@@ -235,13 +279,19 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 		tags:                 params.tags,
 		vendorConfigFileName: params.vendorConfigFileName,
 		vendorConfigFilePath: vendorConfigFilePath,
+		refreshLock:          params.refreshLock,
 	}
 	packages, err := processAtmosVendorSource(sourceParams)
 	if err != nil {
 		return err
 	}
+	opts := install.InstallOptions{DryRun: params.dryRun, RefreshLock: params.refreshLock, LockEnforcement: params.lockEnforcement}
+	packages, err = install.FilterPending(params.atmosConfig, packages, opts)
+	if err != nil {
+		return err
+	}
 	if len(packages) > 0 {
-		return executeVendorModel(packages, params.dryRun, params.atmosConfig)
+		return executeVendorModel(packages, opts, params.atmosConfig)
 	}
 	return nil
 }
@@ -252,91 +302,69 @@ func validateTagsAndComponents(
 	component string,
 	tags []string,
 ) error {
-	if len(tags) > 0 {
-		componentTags := lo.FlatMap(sources, func(s schema.AtmosVendorSource, _ int) []string {
-			return s.Tags
-		})
-
-		if len(lo.Intersect(tags, componentTags)) == 0 {
-			return fmt.Errorf("%w '%s' tagged with the tags %v",
-				ErrNoComponentsWithTags, vendorConfigFileName, tags)
-		}
-	}
-
 	components := lo.FilterMap(sources, func(s schema.AtmosVendorSource, _ int) (string, bool) {
 		return s.Component, s.Component != ""
 	})
 
 	if duplicates := lo.FindDuplicates(components); len(duplicates) > 0 {
 		return fmt.Errorf("%w %v in the vendor config file '%s' and the imports",
-			ErrDuplicateComponents, duplicates, vendorConfigFileName)
+			ErrDuplicateComponents, duplicates, displayPath(vendorConfigFileName))
 	}
 
-	if component != "" && !u.SliceContainsString(components, component) {
+	// Component existence is checked before any tags reasoning below, so an undeclared --component
+	// is always reported as such -- never masked behind a tags-mismatch message just because --tags
+	// also happens to match nothing.
+	if component != "" && !slices.Contains(components, component) {
 		return fmt.Errorf("%w component '%s', file '%s'",
-			ErrComponentNotDefined, component, vendorConfigFileName)
+			ErrComponentNotDefined, component, displayPath(vendorConfigFileName))
+	}
+
+	if len(tags) == 0 {
+		return nil
+	}
+
+	// Tag matching is scoped to the components actually in play: just the named --component if one
+	// was given, never a different, out-of-scope component. Checking tags globally across every
+	// declared source let a mismatched --component/--tags pair (e.g. "-c vpc --tags compute" where
+	// only "eks" has the "compute" tag) pass this check on the strength of a component the user
+	// never asked for, then silently filter down to zero packages later with no error.
+	if component != "" {
+		var declaredTags []string
+		for i := range sources {
+			if sources[i].Component == component {
+				declaredTags = sources[i].Tags
+				break
+			}
+		}
+		if len(lo.Intersect(tags, declaredTags)) == 0 {
+			return errUtils.Build(errUtils.ErrInvalidArgumentError).
+				WithExplanation("No components matched the given selector.").
+				WithHint(fmt.Sprintf("component '%s' does not declare any of the requested tags %v.", component, tags)).
+				Err()
+		}
+		return nil
+	}
+
+	componentTags := lo.FlatMap(sources, func(s schema.AtmosVendorSource, _ int) []string {
+		return s.Tags
+	})
+	if len(lo.Intersect(tags, componentTags)) == 0 {
+		return fmt.Errorf("%w '%s' tagged with the tags %v",
+			ErrNoComponentsWithTags, displayPath(vendorConfigFileName), tags)
 	}
 
 	return nil
 }
 
-func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, error) {
-	var packages []pkgAtmosVendor
+func processAtmosVendorSource(params *vendorSourceParams) ([]install.VendorPackage, error) {
+	var packages []install.VendorPackage
 	for indexSource := range params.sources {
-		if shouldSkipSource(&params.sources[indexSource], params.component, params.tags) {
+		pkgs, skip, err := processAtmosVendorSourceEntry(params, indexSource)
+		if err != nil {
+			return nil, err
+		}
+		if skip {
 			continue
-		}
-
-		if err := validateSourceFields(&params.sources[indexSource], params.vendorConfigFileName); err != nil {
-			return nil, err
-		}
-
-		tmplData := struct {
-			Component string
-			Version   string
-		}{params.sources[indexSource].Component, params.sources[indexSource].Version}
-
-		// Parse 'source' template
-		uri, err := ProcessTmpl(params.atmosConfig, fmt.Sprintf("source-%d", indexSource), params.sources[indexSource].Source, tmplData, false)
-		if err != nil {
-			return nil, err
-		}
-
-		// Normalize the URI to handle triple-slash pattern (///), which indicates cloning from
-		// the root of the repository. This pattern broke in go-getter v1.7.9 due to CVE-2025-8959
-		// security fixes.
-		uri = normalizeVendorURI(uri)
-
-		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, params.vendorConfigFilePath)
-		if err != nil {
-			return nil, err
-		}
-		if !useLocalFileSystem {
-			err = u.ValidateURI(uri)
-			if err != nil {
-				if strings.Contains(uri, "..") {
-					return nil, fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", params.sources[indexSource].Component, err)
-				}
-				return nil, fmt.Errorf("invalid URI for component %s: %w", params.sources[indexSource].Component, err)
-			}
-		}
-
-		// Determine package type
-		pType := determinePackageType(useOciScheme, useLocalFileSystem)
-
-		// Process each target within the source
-		pkgs, err := processTargets(&processTargetsParams{
-			AtmosConfig:          params.atmosConfig,
-			IndexSource:          indexSource,
-			Source:               &params.sources[indexSource],
-			TemplateData:         tmplData,
-			VendorConfigFilePath: params.vendorConfigFilePath,
-			URI:                  uri,
-			PkgType:              pType,
-			SourceIsLocalFile:    sourceIsLocalFile,
-		})
-		if err != nil {
-			return nil, err
 		}
 		packages = append(packages, pkgs...)
 	}
@@ -344,37 +372,236 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 	return packages, nil
 }
 
-func determinePackageType(useOciScheme, useLocalFileSystem bool) pkgType {
-	if useOciScheme {
-		return pkgTypeOci
-	} else if useLocalFileSystem {
-		return pkgTypeLocal
+// processAtmosVendorSourceEntry resolves and installs the packages for the single vendor.yaml
+// source at params.sources[indexSource]. Skip is true when shouldSkipSource excludes this source
+// based on the requested component/tags filter, in which case pkgs and err are both zero-valued.
+func processAtmosVendorSourceEntry(params *vendorSourceParams, indexSource int) (pkgs []install.VendorPackage, skip bool, err error) {
+	if shouldSkipSource(&params.sources[indexSource], params.component, params.tags) {
+		return nil, true, nil
 	}
-	return pkgTypeRemote
+
+	if err := validateSourceFields(&params.sources[indexSource], params.vendorConfigFileName); err != nil {
+		return nil, false, err
+	}
+
+	resolution, err := resolveAtmosVendorSource(params, indexSource)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// Process each target within the source.
+	pkgs, err = processTargets(&processTargetsParams{
+		AtmosConfig:          params.atmosConfig,
+		IndexSource:          indexSource,
+		Source:               &params.sources[indexSource],
+		TemplateData:         resolution.TemplateData,
+		VendorConfigFilePath: params.vendorConfigFilePath,
+		URI:                  resolution.URI,
+		SourceTemplate:       params.sources[indexSource].Source,
+		PkgType:              resolution.PkgType,
+		SourceIsLocalFile:    resolution.SourceIsLocalFile,
+		RawVersion:           resolution.RawVersion,
+		RefreshLock:          params.refreshLock,
+		Lister:               params.lister,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	return pkgs, false, nil
 }
 
-func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
-	var packages []pkgAtmosVendor
+// atmosVendorSourceResolution is resolveAtmosVendorSource's result: the templated source URI (with
+// a range-declared `version:` already resolved to a concrete version -- see resolveEffectiveVersion),
+// its classification, and the template data used to produce it (reused unchanged for every target
+// that doesn't declare its own version override).
+type atmosVendorSourceResolution struct {
+	URI               string
+	TemplateData      struct{ Component, Version string }
+	PkgType           install.PkgType
+	SourceIsLocalFile bool
+	// RawVersion is the source-level declared version, populated only when it was a semver range --
+	// see install.VendorPackage.RawVersion.
+	RawVersion string
+}
+
+// resolveAtmosVendorSource resolves params.sources[indexSource]'s declared version, templates it
+// into the source URI, and classifies the result (OCI/local/remote) -- the shared preamble
+// processAtmosVendorSourceEntry needs before it can process each of the source's targets.
+func resolveAtmosVendorSource(params *vendorSourceParams, indexSource int) (*atmosVendorSourceResolution, error) {
+	src := &params.sources[indexSource]
+	resolvedVersion, rawVersion, err := install.ResolveEffectiveVersion(&install.ResolveEffectiveVersionInputs{
+		AtmosConfig: params.atmosConfig,
+		Name:        src.Component,
+		Source:      src.Source,
+		RawVersion:  src.Version,
+		Constraints: src.Constraints,
+		RefreshLock: params.refreshLock,
+		Lister:      params.lister,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve version for component %q: %w", src.Component, err)
+	}
+
+	tmplData := struct {
+		Component string
+		Version   string
+	}{src.Component, resolvedVersion}
+
+	// Parse 'source' template
+	uri, err := ProcessTmpl(params.atmosConfig, fmt.Sprintf("source-%d", indexSource), src.Source, tmplData, false)
+	if err != nil {
+		return nil, err
+	}
+
+	// Normalize the URI to handle triple-slash pattern (///), which indicates cloning from
+	// the root of the repository. This pattern broke in go-getter v1.7.9 due to CVE-2025-8959
+	// security fixes.
+	uri = normalizeVendorURI(uri)
+
+	useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, params.vendorConfigFilePath)
+	if err != nil {
+		return nil, err
+	}
+	if !useLocalFileSystem {
+		if err := u.ValidateURI(uri); err != nil {
+			if strings.Contains(uri, "..") {
+				return nil, fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", src.Component, err)
+			}
+			return nil, fmt.Errorf("invalid URI for component %s: %w", src.Component, err)
+		}
+	}
+
+	return &atmosVendorSourceResolution{
+		URI:               uri,
+		TemplateData:      tmplData,
+		PkgType:           install.DeterminePackageType(useOciScheme, useLocalFileSystem),
+		SourceIsLocalFile: sourceIsLocalFile,
+		RawVersion:        rawVersion,
+	}, nil
+}
+
+// resolvedTarget holds the resolved URI, version, template data, and source classification for a single target.
+type resolvedTarget struct {
+	uri               string
+	version           string
+	rawVersion        string
+	tmplData          struct{ Component, Version string }
+	pkgType           install.PkgType
+	sourceIsLocalFile bool
+}
+
+// resolveTargetOverride re-resolves the source URI and classification when a target has a version override.
+func resolveTargetOverride(params *processTargetsParams, indexTarget int, tgt schema.AtmosVendorTarget) (*resolvedTarget, error) {
+	resolvedVersion, rawVersion, err := install.ResolveEffectiveVersion(&install.ResolveEffectiveVersionInputs{
+		AtmosConfig:   params.AtmosConfig,
+		Name:          params.Source.Component,
+		Source:        params.SourceTemplate,
+		RawVersion:    tgt.Version,
+		Constraints:   params.Source.Constraints,
+		Discriminator: fmt.Sprintf("target-%d", indexTarget),
+		RefreshLock:   params.RefreshLock,
+		Lister:        params.Lister,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve version for component %q target %d: %w", params.Source.Component, indexTarget, err)
+	}
+
+	tmplData := struct{ Component, Version string }{
+		Component: params.TemplateData.Component,
+		Version:   resolvedVersion,
+	}
+
+	// Re-template the source URL with the target-specific version.
+	effectiveURI, err := ProcessTmpl(
+		params.AtmosConfig,
+		fmt.Sprintf("source-%d-target-%d", params.IndexSource, indexTarget),
+		params.SourceTemplate,
+		tmplData,
+		false,
+	)
+	if err != nil {
+		return nil, err
+	}
+	effectiveURI = normalizeVendorURI(effectiveURI)
+
+	// Recompute source classification from the re-resolved URI, since per-target version
+	// overrides may produce a URI with a different scheme or locality than the source-level URI.
+	useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&effectiveURI, params.VendorConfigFilePath)
+	if err != nil {
+		return nil, err
+	}
+	if !useLocalFileSystem {
+		if err := u.ValidateURI(effectiveURI); err != nil {
+			return nil, fmt.Errorf("invalid URI for component %s: %w", params.Source.Component, err)
+		}
+	}
+
+	return &resolvedTarget{
+		uri:               effectiveURI,
+		version:           resolvedVersion,
+		rawVersion:        rawVersion,
+		tmplData:          tmplData,
+		pkgType:           install.DeterminePackageType(useOciScheme, useLocalFileSystem),
+		sourceIsLocalFile: sourceIsLocalFile,
+	}, nil
+}
+
+func processTargets(params *processTargetsParams) ([]install.VendorPackage, error) {
+	var packages []install.VendorPackage
 	for indexTarget, tgt := range params.Source.Targets {
-		target, err := ProcessTmpl(params.AtmosConfig, fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt, params.TemplateData, false)
+		// Determine the effective template data and URI for this target.
+		tmplData := params.TemplateData
+		effectiveURI := params.URI
+		// Default to the source-level resolved version/raw-range (TemplateData.Version is already
+		// the resolved concrete version; RawVersion is empty unless it was a range).
+		effectiveVersion := params.TemplateData.Version
+		effectiveRawVersion := params.RawVersion
+		// Default to source-level classification.
+		pType := params.PkgType
+		sourceIsLocalFile := params.SourceIsLocalFile
+
+		// If the target has its own version, override template data and re-resolve the source URI.
+		if tgt.Version != "" {
+			resolved, err := resolveTargetOverride(params, indexTarget, tgt)
+			if err != nil {
+				return nil, err
+			}
+			effectiveURI = resolved.uri
+			effectiveVersion = resolved.version
+			effectiveRawVersion = resolved.rawVersion
+			tmplData = resolved.tmplData
+			pType = resolved.pkgType
+			sourceIsLocalFile = resolved.sourceIsLocalFile
+		}
+
+		// Template-expand the target path.
+		target, err := ProcessTmpl(params.AtmosConfig, fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt.Path, tmplData, false)
 		if err != nil {
 			return nil, err
 		}
-		targetPath := filepath.Join(filepath.ToSlash(params.VendorConfigFilePath), filepath.ToSlash(target))
+		targetPath := filepath.Join(params.VendorConfigFilePath, target)
+		// Resolve to absolute so the vendor lock's target-containment check (pkg/vendoring/lockfile)
+		// compares two absolute paths; a relative VendorConfigFilePath otherwise makes targetPath
+		// relative to CWD, which the lock validation cannot reliably relate back to BasePath.
+		targetPath, err = filepath.Abs(targetPath)
+		if err != nil {
+			return nil, fmt.Errorf("resolve target path: %w", err)
+		}
 		pkgName := params.Source.Component
 		if pkgName == "" {
-			pkgName = params.URI
+			pkgName = effectiveURI
 		}
-		// Create package struct
-		p := pkgAtmosVendor{
-			uri:               params.URI,
-			name:              pkgName,
-			targetPath:        targetPath,
-			sourceIsLocalFile: params.SourceIsLocalFile,
-			pkgType:           params.PkgType,
-			version:           params.Source.Version,
-			atmosVendorSource: *params.Source,
-		}
+		// Create package.
+		p := install.NewAtmosVendorPackage(&install.AtmosPackageParams{
+			Name:              pkgName,
+			URI:               effectiveURI,
+			TargetPath:        targetPath,
+			Version:           effectiveVersion,
+			RawVersion:        effectiveRawVersion,
+			PkgType:           pType,
+			SourceIsLocalFile: sourceIsLocalFile,
+			Source:            *params.Source,
+		})
 		packages = append(packages, p)
 	}
 	return packages, nil
@@ -390,11 +617,12 @@ func processVendorImports(
 ) ([]schema.AtmosVendorSource, []string, error) {
 	var mergedSources []schema.AtmosVendorSource
 	for _, imp := range imports {
-		if u.SliceContainsString(allImports, imp) {
-			return nil, nil, fmt.Errorf("%w '%s' in the vendor config file '%s'. It was already imported in the import chain",
+		if slices.Contains(allImports, imp) {
+			return nil, nil, fmt.Errorf(
+				"%w '%s' in the vendor config file '%s'. It was already imported in the import chain",
 				ErrDuplicateImport,
-				imp,
-				vendorConfigFile,
+				displayPath(imp),
+				displayPath(vendorConfigFile),
 			)
 		}
 
@@ -405,12 +633,12 @@ func processVendorImports(
 			return nil, nil, err
 		}
 
-		if u.SliceContainsString(vendorConfig.Spec.Imports, imp) {
-			return nil, nil, fmt.Errorf("%w file '%s'", ErrVendorConfigSelfImport, imp)
+		if slices.Contains(vendorConfig.Spec.Imports, imp) {
+			return nil, nil, fmt.Errorf("%w file '%s'", ErrVendorConfigSelfImport, displayPath(imp))
 		}
 
 		if len(vendorConfig.Spec.Sources) == 0 && len(vendorConfig.Spec.Imports) == 0 {
-			return nil, nil, fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, imp)
+			return nil, nil, fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, displayPath(imp))
 		}
 
 		mergedSources, allImports, err = processVendorImports(atmosConfig, imp, vendorConfig.Spec.Imports, mergedSources, allImports)
@@ -433,7 +661,7 @@ func logInitialMessage(vendorConfigFileName string, tags []string) {
 	if len(tags) > 0 {
 		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}
-	log.Info(logMessage)
+	ui.Info(logMessage)
 }
 
 func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName string) error {
@@ -442,87 +670,29 @@ func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName stri
 		s.File = vendorConfigFileName
 	}
 	if s.Source == "" {
-		return fmt.Errorf("%w `%s`", ErrSourceMissing, s.File)
+		return fmt.Errorf("%w `%s`", ErrSourceMissing, displayPath(s.File))
 	}
 	if len(s.Targets) == 0 {
-		return fmt.Errorf("%w for source '%s' in file '%s'", ErrTargetsMissing, s.Source, s.File)
+		return fmt.Errorf("%w for source '%s' in file '%s'", ErrTargetsMissing, s.Source, displayPath(s.File))
+	}
+	if err := version.ValidateVersionRangeConstraints(s.Version, s.Constraints); err != nil {
+		return err
 	}
 	return nil
 }
 
+// shouldSkipSource reports whether s should be skipped for the given --component/--tags filter --
+// the inverse of vendoring.MatchesComponentTags, the shared component-exact/tags-any matcher also
+// used by `vendor update` (pkg/vendoring/update.go's sourceMatchesFilter), so the two commands don't
+// hand-maintain independent copies of the same filter logic.
 func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []string) bool {
-	// Skip if component or tags do not match
-	// If `--component` is specified, and it's not equal to this component, skip this component
-	// If `--tags` list is specified, and it does not contain any tags defined in this component, skip this component.
-	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
+	return !vendoring.MatchesComponentTags(s, component, tags)
 }
 
-// normalizeVendorURI Normalizes vendor source URIs to handle all patterns consistently.
-// It uses go-getter syntax where the double-slash (//) is a delimiter between the repository URL
-// and the subdirectory path within that repository. The dot (.) indicates the current
-// directory (root of the repository).
-//
-// This function handles multiple normalization cases:
-// 1. Converts triple-slash (///) to double-slash-dot (//.) for root directory
-// 2. Adds //. to Git URLs without subdirectory delimiter
-// 3. Preserves existing valid patterns unchanged
-//
-// Examples:
-//   - "github.com/repo.git///?ref=v1.0.0" -> "github.com/repo.git//.?ref=v1.0.0"
-//   - "github.com/repo.git?ref=v1.0.0" -> "github.com/repo.git//.?ref=v1.0.0"
-//   - "github.com/repo.git///some/path?ref=v1.0.0" -> "github.com/repo.git//some/path?ref=v1.0.0"
-//   - "github.com/repo.git//some/path?ref=v1.0.0" -> unchanged
-//
-//nolint:godot // Private function, follows standard Go documentation style.
+// normalizeVendorURI normalizes vendor source URIs to handle all patterns consistently.
+// Delegates to pkg/vendor for the shared implementation.
 func normalizeVendorURI(uri string) string {
-	// Skip normalization for special URI types
-	if isFileURI(uri) || isOCIURI(uri) || isS3URI(uri) || isLocalPath(uri) || isNonGitHTTPURI(uri) {
-		return uri
-	}
-
-	// Handle triple-slash pattern first
-	if containsTripleSlash(uri) {
-		uri = normalizeTripleSlash(uri)
-	}
-
-	// Add //. to Git URLs without subdirectory
-	if needsDoubleSlashDot(uri) {
-		uri = appendDoubleSlashDot(uri)
-		log.Debug("Added //. to Git URL without subdirectory", "normalized", uri)
-	}
-
-	return uri
-}
-
-// normalizeTripleSlash converts triple-slash patterns to appropriate double-slash patterns.
-// Uses go-getter's SourceDirSubdir for robust parsing across all Git platforms.
-func normalizeTripleSlash(uri string) string {
-	// Use go-getter to parse the URI and extract subdirectory
-	// Note: source will include query parameters from the original URI
-	source, subdir := parseSubdirFromTripleSlash(uri)
-
-	// Separate query parameters from source if present
-	var queryParams string
-	if queryPos := strings.Index(source, "?"); queryPos != -1 {
-		queryParams = source[queryPos:]
-		source = source[:queryPos]
-	}
-
-	// Determine the normalized form based on subdirectory
-	var normalized string
-	if subdir == "" {
-		// Root of repository case: convert /// to //.
-		normalized = source + "//." + queryParams
-		log.Debug("Normalized triple-slash to double-slash-dot for repository root",
-			"original", uri, "normalized", normalized)
-	} else {
-		// Path specified after triple slash: convert /// to //
-		normalized = source + "//" + subdir + queryParams
-		log.Debug("Normalized triple-slash to double-slash with path",
-			"original", uri, "normalized", normalized)
-	}
-
-	return normalized
+	return vendor.NormalizeURI(uri)
 }
 
 func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, error) {
@@ -535,7 +705,7 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 	}
 
-	absPath, err := u.JoinPathAndValidate(filepath.ToSlash(vendorConfigFilePath), *uri)
+	absPath, err := u.JoinPathAndValidate(vendorConfigFilePath, *uri)
 	// if URI contain path traversal is path should be resolved
 	if err != nil && strings.Contains(*uri, "..") && !strings.HasPrefix(*uri, "file://") {
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
@@ -561,100 +731,14 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 }
 
-func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
-	copyOptions := cp.Options{
-		Skip:          generateSkipFunction(tempDir, s),
-		PreserveTimes: false,
-		PreserveOwner: false,
-		OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
-	}
-
-	// Adjust the target path if it's a local file with no extension
-	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
-		// Sanitize the URI for safe filenames, especially on Windows
-		sanitizedBase := SanitizeFileName(uri)
-		targetPath = filepath.Join(targetPath, sanitizedBase)
-	}
-
-	return cp.Copy(tempDir, targetPath, copyOptions)
-}
-
-// GenerateSkipFunction creates a function that determines whether to skip files during copying.
-// Based on the vendor source configuration. It uses the provided patterns in ExcludedPaths.
-// And IncludedPaths to filter files during the copy operation.
-//
-// Parameters:
-//   - atmosConfig: The CLI configuration for logging.
-//   - tempDir: The temporary directory containing the files to copy.
-//   - s: The vendor source configuration containing exclusion/inclusion patterns.
-//
-// Returns a function that determines if a file should be skipped during copying.
+// generateSkipFunction creates a function that determines whether to skip files during copying.
+// Delegates to pkg/vendor for the shared implementation.
 func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
-	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-		// Skip .git directories
-		if filepath.Base(src) == ".git" {
-			return true, nil
-		}
-
-		// Normalize paths
-		tempDir = filepath.ToSlash(tempDir)
-		src = filepath.ToSlash(src)
-		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
-
-		// Check if the file should be excluded
-		if len(s.ExcludedPaths) > 0 {
-			return shouldExcludeFile(src, s.ExcludedPaths, trimmedSrc)
-		}
-
-		// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
-		if len(s.IncludedPaths) > 0 {
-			return shouldIncludeFile(src, s.IncludedPaths, trimmedSrc)
-		}
-
-		// If 'included_paths' is not provided, include all files that were not excluded
-		StderrLogger.Debug("Including", "path", u.TrimBasePathFromPath(tempDir+"/", src))
-		return false, nil
-	}
+	return vendor.CreateSkipFunc(tempDir, s.IncludedPaths, s.ExcludedPaths)
 }
 
-// Exclude the files that match the 'excluded_paths' patterns.
-// It supports POSIX-style Globs for file names/paths (double-star `**` is supported).
-// https://en.wikipedia.org/wiki/Glob_(programming).
-// https://github.com/bmatcuk/doublestar#pattern.
+// shouldExcludeFile checks if the file matches any of the excluded patterns.
+// Delegates to pkg/vendor for the shared implementation.
 func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (bool, error) {
-	for _, excludePath := range excludedPaths {
-		excludeMatch, err := u.PathMatch(excludePath, src)
-		if err != nil {
-			return true, err
-		} else if excludeMatch {
-			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-			log.Debug("Excluding file since it match any pattern from 'excluded_paths'", "excluded_paths", excludePath, "source", trimmedSrc)
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// Helper function to check if a file should be included.
-func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (bool, error) {
-	anyMatches := false
-	for _, includePath := range includedPaths {
-		includeMatch, err := u.PathMatch(includePath, src)
-		if err != nil {
-			return true, err
-		} else if includeMatch {
-			// If the file matches ANY of the 'included_paths' patterns, include the file
-			log.Debug("Including path since it matches the '%s' pattern from 'included_paths'", "included_paths", includePath, "path", trimmedSrc)
-
-			anyMatches = true
-			break
-		}
-	}
-
-	if anyMatches {
-		return false, nil
-	} else {
-		log.Debug("Excluding path since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
-		return true, nil
-	}
+	return vendor.ShouldExcludeFile(excludedPaths, trimmedSrc)
 }

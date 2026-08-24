@@ -1,0 +1,40 @@
+---
+slug: atmos-stack-schema-command
+title: "Get the exact stack-manifest schema for the Atmos you have installed"
+authors: [osterman]
+tags: [dx]
+---
+
+Editors, CI pipelines, and offline environments that want to validate stack manifests locally
+have had one option: fetch the JSON Schema from `atmos.tools` over the network and hope it
+matches whatever `atmos` binary you actually have installed. There was no way to just ask your
+own binary for its schema.
+
+<!--truncate-->
+
+## The Fix
+
+A new command, `atmos stack schema`, prints the JSON Schema Atmos uses to validate stack
+manifests — the exact one built into the binary you're running, not a version fetched from the
+internet. Pass a path and it writes the schema to a file instead of stdout.
+
+This is useful for:
+
+- **Offline/air-gapped environments** — no network call needed, since the schema comes straight
+  out of the binary already on disk.
+- **IDE setup** — point your editor's YAML language server at a local file instead of a URL.
+- **Version certainty** — the output always matches the `atmos` version you ran it with, so there's
+  no risk of validating against a schema that's ahead of or behind your binary.
+
+## How to Use It
+
+```shell
+# Print the schema to stdout.
+atmos stack schema
+
+# Write it to a file for your editor or CI to use.
+atmos stack schema ./atmos-manifest.json
+```
+
+It lives under the existing `atmos stack` command group, alongside the other stack-manifest
+commands (`get`, `set`, `delete`, `format`, `config`).

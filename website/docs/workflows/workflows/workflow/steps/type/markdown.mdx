@@ -1,0 +1,30 @@
+---
+title: markdown
+sidebar_label: markdown
+slug: /workflows/steps/type/markdown
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `markdown` step type renders Markdown with the Atmos UI theme, so your custom commands and workflows can print richly formatted summaries and instructions that match the rest of the Atmos CLI.
+</Intro>
+
+```yaml
+steps:
+  - name: summary
+    type: markdown
+    content: |
+      ## Deployment Summary
+
+      Stack: `{{ .env.ATMOS_STACK }}`
+```
+
+## Fields
+
+<dl>
+  <dt>`content`</dt>
+  <dd>Required. Markdown text. Supports templates.</dd>
+</dl>
+
+The step result value is the rendered content source after template resolution.

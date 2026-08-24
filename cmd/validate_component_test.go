@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // mockComponentResolver is a test implementation of ComponentResolver.
@@ -297,6 +299,23 @@ func TestValidateComponentCmd_FlagsRegistered(t *testing.T) {
 			assert.Equal(t, tt.defaultValue, flag.DefValue, "flag %s should have default value %s", tt.flagName, tt.defaultValue)
 		})
 	}
+}
+
+func TestComponentStackSource(t *testing.T) {
+	original := atmosConfig
+	t.Cleanup(func() { atmosConfig = original })
+	root := t.TempDir()
+	stacks := filepath.Join(root, "stacks")
+	require.NoError(t, os.MkdirAll(stacks, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(stacks, "dev.yml"), []byte("components: {}\n"), 0o600))
+	atmosConfig = schema.AtmosConfiguration{StacksBaseAbsolutePath: stacks}
+
+	command := &cobra.Command{}
+	command.Flags().String("stack", "dev", "")
+	assert.Equal(t, filepath.Join("stacks", "dev.yml"), componentStackSource(command, []string{"api"}, root))
+	assert.Empty(t, componentStackSource(command, nil, root))
+	require.NoError(t, command.Flags().Set("stack", "missing"))
+	assert.Empty(t, componentStackSource(command, []string{"api"}, root))
 }
 
 func TestValidateComponentCmd_StackFlagRequired(t *testing.T) {

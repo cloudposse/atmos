@@ -1,0 +1,36 @@
+---
+title: "!git.root"
+sidebar_position: 10
+sidebar_label: "!git.root"
+sidebar_class_name: command
+description: Get the root directory of the current Git repository
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `!git.root` Atmos YAML function returns the absolute root directory of the current Git worktree.
+    It is an alias of [`!repo-root`](/functions/yaml/repo-root) — both resolve identically.
+</Intro>
+
+## Usage
+
+```yaml
+  # Get the root directory of the current Git repository.
+  # If the Git root cannot be resolved, it returns a default value if specified; otherwise, it returns an error.
+  !git.root <default-value>
+```
+
+## Examples
+
+```yaml
+vars:
+  base_path: !git.root
+
+  # With a fallback value if the Git repository root is not present.
+  base_path_safe: !git.root <default-value>
+```
+
+## Related Functions
+
+- [`!repo-root`](/functions/yaml/repo-root) — identical function, kept for naming-convention consistency with the
+  other `!git.*` functions

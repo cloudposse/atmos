@@ -43,6 +43,11 @@ const (
 	goroutineStackBufSize = 64
 	// Maximum buffer size to prevent unbounded growth.
 	maxGoroutineStackBufSize = 8192
+	// MaxResolutionDepth caps the nested-call depth tolerated by the YAML-function resolver.
+	// The cycle detector should catch all true cycles; this is a defense-in-depth bound that
+	// aborts with a clean error instead of letting the Go runtime stack overflow if a new
+	// re-entry path slips past the detector (see issue #2457).
+	MaxResolutionDepth = 64
 )
 
 // getGoroutineID returns the current goroutine ID.
@@ -99,47 +104,32 @@ func ClearResolutionContext() {
 	goroutineResolutionContexts.Delete(gid)
 }
 
-// scopedResolutionContext creates a new scoped resolution context and returns a restore function.
-// This prevents memory leaks and cross-call contamination by ensuring contexts are cleaned up.
-// Usage:
-//
-//	restoreCtx := scopedResolutionContext()
-//	defer restoreCtx()
-func scopedResolutionContext() func() {
-	gid := getGoroutineID()
-
-	// Save the existing context (if any).
-	var savedCtx *ResolutionContext
-	if ctx, ok := goroutineResolutionContexts.Load(gid); ok {
-		savedCtx = ctx.(*ResolutionContext)
-	}
-
-	// Install a fresh context.
-	freshCtx := NewResolutionContext()
-	goroutineResolutionContexts.Store(gid, freshCtx)
-
-	// Return a restore function that reinstates the saved context or clears it.
-	return func() {
-		if savedCtx != nil {
-			goroutineResolutionContexts.Store(gid, savedCtx)
-		} else {
-			goroutineResolutionContexts.Delete(gid)
-		}
-	}
-}
-
 // Push adds a node to the call stack and checks for circular dependencies.
 func (ctx *ResolutionContext) Push(atmosConfig *schema.AtmosConfiguration, node DependencyNode) error {
 	defer perf.Track(atmosConfig, "exec.ResolutionContext.Push")()
 
 	key := fmt.Sprintf("%s-%s", node.Stack, node.Component)
 
-	// Check if we've already visited this node
+	// Check if we've already visited this node.
 	if ctx.Visited[key] {
 		return ctx.buildCircularDependencyError(node)
 	}
 
-	// Mark as visited and add to call stack
+	// Defense-in-depth: refuse to grow the call stack past MaxResolutionDepth.
+	// The Visited check above should catch every real cycle; this bound exists so
+	// that a future re-entry path that bypasses the cycle detector fails with a
+	// clean error instead of crashing the Go runtime stack (see #2457).
+	if len(ctx.CallStack) >= MaxResolutionDepth {
+		return fmt.Errorf("%w: depth=%d, current node: component=%q stack=%q call=%q",
+			errUtils.ErrYamlFuncMaxResolutionDepth,
+			len(ctx.CallStack),
+			node.Component,
+			node.Stack,
+			node.FunctionCall,
+		)
+	}
+
+	// Mark as visited and add to call stack.
 	ctx.Visited[key] = true
 	ctx.CallStack = append(ctx.CallStack, node)
 

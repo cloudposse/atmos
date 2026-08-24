@@ -1459,7 +1459,7 @@ rolesResp, err := ssoClient.ListAccountRoles(ctx, &sso.ListAccountRolesInput{
 
 ### D. XDG Base Directory Specification
 
-- **Specification**: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+- **Specification**: https://specifications.freedesktop.org/basedir/basedir-spec-latest.html
 - **XDG_CACHE_HOME**: Directory for user-specific non-essential data (cache)
   - Linux: `~/.cache`
   - macOS: `~/Library/Caches`

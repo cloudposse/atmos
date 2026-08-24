@@ -1,0 +1,67 @@
+---
+slug: include-dependencies-closure
+title: "Apply a Stack and Everything It Depends On"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Standing up an environment is rarely one `apply`. The stack you actually care about sits on top of prerequisites — a network layer in a shared stack, a database a few components down — and something has to run them first, in the right order. In practice that "something" is usually a bash wrapper: a hand-maintained list of stacks, a loop of `atmos terraform apply` calls, and a prayer that the ordering comments are still true. Atmos now does this natively: `--include-dependencies` and `--include-dependents` expand any multi-component selection with its dependency closure and execute it in graph order, and the `list` commands preview exactly what would run.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos has always known the dependency graph — `dependencies.components` declares what each component needs, and bulk operations like `atmos terraform apply --all` already execute in topological order. But the *selection* never followed the edges. Selecting a stack with `-s dev`, or a set of components with `--tags` or `--labels`, ran only what matched; prerequisites living in another stack (or without the matching tag) were silently out of scope. Deploying "dev and everything dev needs" meant knowing the prerequisite chain yourself and scripting around Atmos — exactly the kind of glue the tool exists to remove.
+
+The reverse direction had the same gap: after changing a shared component, running everything that *depends on* it was only possible through `--affected`, not from an arbitrary selection.
+
+## The Fix
+
+Every multi-component terraform selection — `--all`, `--components`, `--query`, `-s`, `--tags`, `--labels`, and `--affected` — now accepts two closure flags:
+
+- The `--include-dependencies[=N]` flag expands the selection with everything it depends on (its prerequisites), N levels deep. The bare flag means unlimited depth.
+- The `--include-dependents[=N]` flag expands in the reverse direction: everything that depends on the selection.
+
+Selectors choose the *seed*; the closure flags *expand* it. Expanded components execute even when they don't match the selectors — a prerequisite doesn't need your `env=dev` label to be required by something that has it. Execution stays in dependency order (reverse order for `destroy`), and cross-stack edges are followed: `apply --all -s dev --include-dependencies` will run a prerequisite in `core` before the components in `dev`.
+
+The same flags work on `atmos list components`, `atmos list stacks`, and `atmos list instances`, so you can see the exact set a bulk run would execute before running it.
+
+Scoping stays lazy: Atmos first walks a lightweight structural graph to find the closure, then fully evaluates (templates, YAML functions, authentication) only the stacks the closure actually touches. An unrelated account's unreachable backend still can't break your deploy.
+
+## How to Use It
+
+Apply everything labeled for dev, plus all of its prerequisites, in dependency order:
+
+```shell
+atmos terraform apply --all --labels=env=dev --include-dependencies
+```
+
+Bound the expansion to one dependency level:
+
+```shell
+atmos terraform plan --all --tags=app --include-dependencies=1
+```
+
+Tear down a component and everything that depends on it (dependents are destroyed first):
+
+```shell
+atmos terraform destroy --components=vpc -s dev --include-dependents
+```
+
+Preview the execution set without running anything:
+
+```shell
+atmos list components --labels=env=dev --include-dependencies
+atmos list stacks --labels=env=dev --include-dependencies
+```
+
+A few things to know:
+
+- Using `--include-dependencies` with `destroy` also destroys *shared* prerequisites of your selection — components other stacks may still rely on. Atmos warns when you combine them.
+- Because `metadata.tags` and `metadata.labels` now drive scoping decisions *before* evaluation, they are selectors by design: plain strings, simple templates, and local functions like `!env`, `!git.*`, and `!include` are allowed, but values that require authentication or execution (`!terraform.state`, `!store`, `!exec`, `atmos.Component`, ...) are rejected with an error. This contract is enforced for every component whenever stacks are enumerated — by `describe`, `list`, and bulk terraform commands — even when no selector flag is used and the component is outside the current stack filter, so an existing impure value fails fast rather than surfacing later as a confusing scoping bug. The error names the offending component and stack manifest. Move those values into `vars` or `settings` instead — or, if you need time to migrate, set `describe.settings.eager_evaluation: true` in `atmos.yaml` to restore the previous full-evaluation behavior (see the [describe configuration](/cli/configuration/describe) reference).
+- If you already combine `--affected --include-dependents` with `--tags` or `--labels`, note the semantics changed: previously the tag/label filter also removed non-matching dependents from the expanded set; now selectors narrow only the *seed* and closure members are retained regardless. That is the whole point of closure expansion — but it does mean such runs can now include more components than before.
+- The depth value must be attached with `=` (for example `--include-dependencies=2`). On the terraform commands a bare `--include-dependencies` followed by a separate value is also accepted, so take care that a following positional argument isn't consumed as the depth — Atmos rejects non-numeric values loudly rather than guessing.
+
+## Get Involved
+
+Try the closure flags on your own dependency graph and tell us where the semantics surprise you — especially around `destroy` ordering and depth bounds. Issues and discussions are open at [github.com/cloudposse/atmos](https://github.com/cloudposse/atmos).

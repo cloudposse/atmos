@@ -1,102 +1,133 @@
 ---
 title: Add Custom Commands
-sidebar_position: 9
+sidebar_position: 10
 sidebar_label: Add Custom Commands
 ---
-import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
 
-Atmos can be easily extended to support any number of custom CLI commands.
-
-:::tip
-Refer to [Atmos Custom Commands](/cli/configuration/commands) for more information about Atmos Custom Commands
+:::note Optional chapter
+This is an advanced extension point, not a required step — most people add custom commands only after running Atmos for a while and noticing a command they wish existed.
 :::
 
-Custom commands are defined in the `commands` section in `atmos.yaml` CLI configuration file.
+Atmos can be extended with any number of **custom CLI commands** — your own `atmos <verb>` subcommands, defined in YAML, that wrap whatever your team repeats.
 
-In this Quick Start guide, we'll define two custom commands to list the Atmos stacks in the infrastructure and the components in the stacks.
+:::tip
+See [Atmos Custom Commands](/cli/configuration/commands) for the full reference.
+:::
+
+Custom commands are defined in the `commands` section of your `atmos.yaml`.
+
+Atmos already has built-in commands for discovery, including `atmos list stacks`, `atmos list components`, and `atmos list instances`.
+Instead of reimplementing those, the quick-start example adds an `operator` command group that combines the built-ins into the views operators
+usually need.
 
 <File title="atmos.yaml">
 ```yaml
-# Custom CLI commands
 commands:
-  - name: list
-    description: Execute 'atmos list' commands
-    # subcommands
+  - name: operator
+    description: Operator shortcuts for exploring and running the quick-start stack
     commands:
-      - name: stacks
-        description: |
-          List all Atmos stacks.
-        steps:
-          - >
-            atmos describe stacks --process-templates=false --sections none | grep -e "^\S" | sed s/://g
-      - name: components
-        description: |
-          List all Atmos components in all stacks or in a single stack.
-
-          Example usage:
-            atmos list components
-            atmos list components -s plat-ue2-dev
-            atmos list components --stack plat-uw2-prod
-            atmos list components -s plat-ue2-dev --type abstract
-            atmos list components -s plat-ue2-dev -t enabled
-            atmos list components -s plat-ue2-dev -t disabled
+      - name: status
+        description: Show the stack/component tree and next operator checks
         flags:
           - name: stack
             shorthand: s
-            description: Name of the stack
-            required: false
-          - name: type
-            shorthand: t
-            description: Component types - abstract, enabled, or disabled
-            required: false
+            description: Target stack (for example, plat-ue2-dev)
+            required: true
         steps:
-          - >
-            {{ if .Flags.stack }}
-              {{ if eq .Flags.type "enabled" }}
-                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r .key
-              {{ else if eq .Flags.type "disabled" }}
-                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r .key
-              {{ else if eq .Flags.type "abstract" }}
-                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.metadata.type == "abstract")' | jq -r .key
-              {{ else }}
-                atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
-              {{ end }}
-            {{ else }}
-              {{ if eq .Flags.type "enabled" }}
-                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
-              {{ else if eq .Flags.type "disabled" }}
-                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
-              {{ else if eq .Flags.type "abstract" }}
-                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.metadata.type == "abstract")' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
-              {{ else }}
-                atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
-              {{ end }}
-            {{ end }}
+          - name: stacks
+            type: stage
+            title: Stack import tree
+          - type: shell
+            command: atmos list stacks --format tree --provenance --identity=false --process-functions=false --process-templates=false
+          - name: instances
+            type: stage
+            title: Component instances in {{ .Flags.stack }}
+          - type: shell
+            command: atmos list instances --stack {{ .Flags.stack }} --format tree --provenance --identity=false --process-functions=false --process-templates=false
+          - name: catalog
+            type: stage
+            title: Component catalog
+          - type: spin
+            title: Resolving component catalog
+            command: atmos list components --identity=false --process-functions=false --process-templates=false
+          - type: table
+            title: Next operator commands
+            columns:
+              - task
+              - command
+            data:
+              - task: Validate manifests
+                command: atmos validate stacks
+              - task: Deploy stack
+                command: atmos terraform deploy --all -s {{ .Flags.stack }}
+              - task: Destroy stack
+                command: atmos terraform destroy --all -s {{ .Flags.stack }} -auto-approve
+          - type: toast
+            level: success
+            content: "Operator status complete for {{ .Flags.stack }}."
+
+      - name: inspect
+        description: Inspect a component and show where its values came from
+        arguments:
+          - name: component
+            description: Component to inspect
+        flags:
+          - name: stack
+            shorthand: s
+            description: Target stack (for example, plat-ue2-dev)
+            required: true
+        steps:
+          - name: provenance
+            type: stage
+            title: Component configuration provenance
+          - type: shell
+            command: atmos describe component {{ .Arguments.component }} -s {{ .Flags.stack }} --provenance
+          - type: toast
+            level: info
+            content: "Use `atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}` to preview changes, or omit the component/stack in an interactive terminal and Atmos will prompt you."
 ```
 </File>
 
-Run the following Atmos command to list all stacks in the infrastructure:
+Run the status command to see stack inheritance, component instances, the component catalog, and the next operator commands:
 
-<Terminal title="atmos list stacks">
+<Terminal title="atmos operator status -s plat-ue2-dev">
 ```console
-plat-gbl-dev
-plat-gbl-prod
-plat-gbl-staging
-plat-ue2-dev
-plat-ue2-prod
-plat-ue2-staging
-plat-uw2-dev
-plat-uw2-prod
-plat-uw2-staging
+Stack import tree
+Component instances in plat-ue2-dev
+Component catalog
+Next operator commands
 ```
 </Terminal>
 
-Run the following Atmos command to list all components in the stack `plat-ue2-dev`:
+Run the inspect command when you need to answer where a value came from:
 
-<Terminal title="atmos list components -s plat-ue2-dev">
-```console
-vpc
-vpc-flow-logs-bucket
+```shell
+atmos operator inspect app-config -s plat-ue2-dev
 ```
-</Terminal>
+
+The inspect command wraps:
+
+```shell
+atmos describe component app-config -s plat-ue2-dev --provenance
+```
+
+:::tip Let Atmos prompt you
+Prompting is built into single-component Terraform commands. If you forget the component or stack, omit it and Atmos will ask:
+
+```shell
+# Explicit
+atmos terraform plan app-config -s plat-ue2-dev
+
+# Interactive: choose component, then stack
+atmos terraform plan
+```
+
+For bulk operations, use `--all`, `--components`, or `--query` instead:
+
+```shell
+atmos terraform deploy --all -s plat-ue2-dev
+atmos terraform destroy --all -s plat-ue2-dev -auto-approve
+```
+:::

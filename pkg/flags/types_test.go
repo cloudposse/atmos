@@ -44,6 +44,7 @@ func TestBoolFlag(t *testing.T) {
 	assert.False(t, flag.IsRequired()) // Bool flags are never required
 	assert.Equal(t, "", flag.GetNoOptDefVal())
 	assert.Equal(t, []string{"VERBOSE"}, flag.GetEnvVars())
+	assert.False(t, flag.GetNoOptDefValConsumesNextArg())
 }
 
 func TestIntFlag(t *testing.T) {
@@ -63,6 +64,48 @@ func TestIntFlag(t *testing.T) {
 	assert.True(t, flag.IsRequired())
 	assert.Equal(t, "", flag.GetNoOptDefVal())
 	assert.Equal(t, []string{"COUNT"}, flag.GetEnvVars())
+	assert.False(t, flag.GetNoOptDefValConsumesNextArg())
+}
+
+// TestStringSliceFlag verifies StringSliceFlag getters. NoOptDefVal-related methods
+// mirror StringFlag's behavior (empty by default, consumes-next-arg true by default,
+// e.g. to support --profile's bare-flag sentinel pattern) rather than being
+// permanently hardcoded to empty/false.
+func TestStringSliceFlag(t *testing.T) {
+	flag := &StringSliceFlag{
+		Name:        "config",
+		Shorthand:   "c",
+		Default:     []string{"a.yaml"},
+		Description: "Config files",
+		Required:    true,
+		EnvVars:     []string{"ATMOS_CONFIG"},
+	}
+
+	assert.Equal(t, "config", flag.GetName())
+	assert.Equal(t, "c", flag.GetShorthand())
+	assert.Equal(t, []string{"a.yaml"}, flag.GetDefault())
+	assert.Equal(t, "Config files", flag.GetDescription())
+	assert.True(t, flag.IsRequired())
+	assert.Equal(t, "", flag.GetNoOptDefVal())
+	assert.True(t, flag.GetNoOptDefValConsumesNextArg(), "zero-value NoOptDefValNoSpaceValue means consumes-next-arg defaults true, matching StringFlag")
+	assert.Equal(t, []string{"ATMOS_CONFIG"}, flag.GetEnvVars())
+	assert.Nil(t, flag.GetCompletionFunc())
+}
+
+// TestStringSliceFlag_NoOptDefVal_Profile verifies the --profile bare-flag pattern
+// (NoOptDefVal set, no NoOptDefValNoSpaceValue) mirrors --identity's StringFlag
+// behavior: consumes the next arg unless explicitly marked otherwise.
+func TestStringSliceFlag_NoOptDefVal_Profile(t *testing.T) {
+	flag := &StringSliceFlag{
+		Name:        "profile",
+		Default:     []string{},
+		Description: "Activate configuration profiles",
+		EnvVars:     []string{"ATMOS_PROFILE"},
+		NoOptDefVal: "__SELECT__",
+	}
+
+	assert.Equal(t, "__SELECT__", flag.GetNoOptDefVal())
+	assert.True(t, flag.GetNoOptDefValConsumesNextArg(), "profile must consume a following non-flag arg so space-separated syntax still works")
 }
 
 func TestIdentityFlag(t *testing.T) {
@@ -74,7 +117,7 @@ func TestIdentityFlag(t *testing.T) {
 		Description: "Identity to use",
 		Required:    false,
 		NoOptDefVal: cfg.IdentityFlagSelectValue,
-		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
+		EnvVars:     []string{"ATMOS_IDENTITY"},
 	}
 
 	assert.Equal(t, "identity", flag.GetName())
@@ -82,5 +125,57 @@ func TestIdentityFlag(t *testing.T) {
 	assert.Equal(t, "", flag.GetDefault())
 	assert.False(t, flag.IsRequired())
 	assert.Equal(t, "__SELECT__", flag.GetNoOptDefVal())
-	assert.Equal(t, []string{"ATMOS_IDENTITY", "IDENTITY"}, flag.GetEnvVars())
+	assert.Equal(t, []string{"ATMOS_IDENTITY"}, flag.GetEnvVars())
+}
+
+// TestGetInt verifies that GetInt correctly retrieves integer values from flags map.
+func TestGetInt(t *testing.T) {
+	t.Run("returns integer value when key exists", func(t *testing.T) {
+		m := map[string]interface{}{"count": 42}
+		assert.Equal(t, 42, GetInt(m, "count"))
+	})
+
+	t.Run("returns zero when key does not exist", func(t *testing.T) {
+		m := map[string]interface{}{}
+		assert.Equal(t, 0, GetInt(m, "count"))
+	})
+
+	t.Run("returns zero when value is not int", func(t *testing.T) {
+		m := map[string]interface{}{"count": "not-an-int"}
+		assert.Equal(t, 0, GetInt(m, "count"))
+	})
+}
+
+// TestParsedConfig_GetIdentity verifies GetIdentity delegates to GetString for "identity".
+func TestParsedConfig_GetIdentity(t *testing.T) {
+	t.Run("returns identity when set", func(t *testing.T) {
+		pc := &ParsedConfig{
+			Flags: map[string]interface{}{"identity": "prod"},
+		}
+		assert.Equal(t, "prod", pc.GetIdentity())
+	})
+
+	t.Run("returns empty when not set", func(t *testing.T) {
+		pc := &ParsedConfig{
+			Flags: map[string]interface{}{},
+		}
+		assert.Equal(t, "", pc.GetIdentity())
+	})
+}
+
+// TestParsedConfig_GetStack verifies GetStack delegates to GetString for "stack".
+func TestParsedConfig_GetStack(t *testing.T) {
+	t.Run("returns stack when set", func(t *testing.T) {
+		pc := &ParsedConfig{
+			Flags: map[string]interface{}{"stack": "ue2-dev"},
+		}
+		assert.Equal(t, "ue2-dev", pc.GetStack())
+	})
+
+	t.Run("returns empty when not set", func(t *testing.T) {
+		pc := &ParsedConfig{
+			Flags: map[string]interface{}{},
+		}
+		assert.Equal(t, "", pc.GetStack())
+	})
 }

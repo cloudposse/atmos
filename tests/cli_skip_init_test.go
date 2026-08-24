@@ -8,20 +8,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 // TestSkipInitFlag tests that the --skip-init flag prevents terraform init from running.
 // This test addresses DEV-3847: Atmos version 1.202.0 ignores --skip-init for terraform output.
 func TestSkipInitFlag(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {

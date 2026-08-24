@@ -23,63 +23,111 @@ func BuildSpaceliftStackName(spaceliftSettings map[string]any, context schema.Co
 	}
 }
 
+// SpaceliftStackNaming bundles the two (mutually preferred) stack-naming schemes so callers that
+// need to resolve a stack's logical name don't have to pass them as separate positional arguments.
+type SpaceliftStackNaming struct {
+	// NameTemplate is `stacks.name_template` (Go template, recommended).
+	NameTemplate string
+	// NamePattern is `stacks.name_pattern` (deprecated, token-based). Only consulted when
+	// NameTemplate is empty.
+	NamePattern string
+}
+
+// ResolveSpaceliftContextPrefix computes the logical stack name (context prefix) used for
+// Spacelift stack naming. Precedence: naming.NameTemplate (Go template, recommended) >
+// naming.NamePattern (deprecated, token-based) > the raw stack name. Callers decide which of the
+// two configured naming schemes (if any) applies — e.g. explicit-file-path invocations
+// intentionally pass an empty SpaceliftStackNaming to preserve raw path-based naming.
+func ResolveSpaceliftContextPrefix(
+	atmosConfig *schema.AtmosConfiguration,
+	stackName string,
+	context *schema.Context,
+	componentVars map[string]any,
+	naming SpaceliftStackNaming,
+) (string, error) {
+	defer perf.Track(atmosConfig, "exec.ResolveSpaceliftContextPrefix")()
+
+	switch {
+	case naming.NameTemplate != "":
+		return ProcessTmpl(
+			atmosConfig,
+			"spacelift-stack-name-template",
+			naming.NameTemplate,
+			map[string]any{cfg.VarsSectionName: componentVars},
+			atmosConfig.Templates.Settings.IgnoreMissingTemplateValues,
+		)
+	case naming.NamePattern != "":
+		return cfg.GetContextPrefix(stackName, *context, naming.NamePattern, stackName)
+	default:
+		return strings.ReplaceAll(stackName, "/", "-"), nil
+	}
+}
+
+// buildSpaceliftStackNameForComponent resolves a single Terraform component's Spacelift stack name.
+func buildSpaceliftStackNameForComponent(
+	atmosConfig *schema.AtmosConfiguration,
+	stackName string,
+	component string,
+	componentMap map[string]any,
+	naming SpaceliftStackNaming,
+) (string, error) {
+	componentVars := map[string]any{}
+	if i, ok := componentMap["vars"]; ok {
+		componentVars = i.(map[string]any)
+	}
+
+	spaceliftSettings := map[string]any{}
+	if i, ok := componentMap["settings"]; ok {
+		componentSettings := i.(map[string]any)
+		if i2, ok2 := componentSettings["spacelift"]; ok2 {
+			spaceliftSettings = i2.(map[string]any)
+		}
+	}
+
+	context := cfg.GetContextFromVars(componentVars)
+
+	contextPrefix, err := ResolveSpaceliftContextPrefix(atmosConfig, stackName, &context, componentVars, naming)
+	if err != nil {
+		return "", err
+	}
+
+	context.Component = component
+
+	spaceliftStackName, _, err := BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.ReplaceAll(spaceliftStackName, "/", "-"), nil
+}
+
 // BuildSpaceliftStackNames builds Spacelift stack names.
-func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([]string, error) {
-	defer perf.Track(nil, "exec.BuildSpaceliftStackNames")()
+func BuildSpaceliftStackNames(atmosConfig *schema.AtmosConfiguration, stacks map[string]any, naming SpaceliftStackNaming) ([]string, error) {
+	defer perf.Track(atmosConfig, "exec.BuildSpaceliftStackNames")()
 
 	var allStackNames []string
 
 	for stackName, stackConfig := range stacks {
 		config := stackConfig.(map[string]any)
 
-		if i, ok := config["components"]; ok {
-			componentsSection := i.(map[string]any)
+		i, ok := config["components"]
+		if !ok {
+			continue
+		}
+		componentsSection := i.(map[string]any)
 
-			if terraformComponents, ok := componentsSection["terraform"]; ok {
-				terraformComponentsMap := terraformComponents.(map[string]any)
+		terraformComponents, ok := componentsSection["terraform"]
+		if !ok {
+			continue
+		}
+		terraformComponentsMap := terraformComponents.(map[string]any)
 
-				for component, v := range terraformComponentsMap {
-					componentMap := v.(map[string]any)
-					componentVars := map[string]any{}
-					spaceliftSettings := map[string]any{}
-
-					if i, ok2 := componentMap["vars"]; ok2 {
-						componentVars = i.(map[string]any)
-					}
-
-					componentSettings := map[string]any{}
-					if i, ok2 := componentMap["settings"]; ok2 {
-						componentSettings = i.(map[string]any)
-					}
-
-					if i, ok2 := componentSettings["spacelift"]; ok2 {
-						spaceliftSettings = i.(map[string]any)
-					}
-
-					context := cfg.GetContextFromVars(componentVars)
-
-					var contextPrefix string
-					var err error
-
-					if stackNamePattern != "" {
-						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
-						if err != nil {
-							return nil, err
-						}
-					} else {
-						contextPrefix = strings.Replace(stackName, "/", "-", -1)
-					}
-
-					context.Component = component
-
-					spaceliftStackName, _, err := BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
-					if err != nil {
-						return nil, err
-					}
-
-					allStackNames = append(allStackNames, strings.Replace(spaceliftStackName, "/", "-", -1))
-				}
+		for component, v := range terraformComponentsMap {
+			spaceliftStackName, err := buildSpaceliftStackNameForComponent(atmosConfig, stackName, component, v.(map[string]any), naming)
+			if err != nil {
+				return nil, err
 			}
+			allStackNames = append(allStackNames, spaceliftStackName)
 		}
 	}
 
@@ -108,7 +156,7 @@ func BuildSpaceliftStackNameFromComponentConfig(
 		context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
 
 		if atmosConfig.Stacks.NameTemplate != "" {
-			contextPrefix, err = ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+			contextPrefix, err = ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 			if err != nil {
 				return "", err
 			}

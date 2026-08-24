@@ -1,15 +1,22 @@
 package terraform
 
 import (
+	"bytes"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	h "github.com/cloudposse/atmos/pkg/hooks"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestCheckTerraformFlags(t *testing.T) {
@@ -113,6 +120,105 @@ func TestCheckTerraformFlags(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTerraformRunWithOptionsMockGuards(t *testing.T) {
+	parent := &cobra.Command{Use: "terraform"}
+
+	err := terraformRunWithOptions(parent, &cobra.Command{Use: "apply"}, nil, &TerraformRunOptions{
+		ProcessFunctions: true,
+		UseMocks:         true,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "supported only by `atmos terraform plan`")
+
+	err = terraformRunWithOptions(parent, &cobra.Command{Use: "plan"}, nil, &TerraformRunOptions{
+		ProcessFunctions: false,
+		UseMocks:         true,
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "requires --process-functions=true")
+}
+
+func TestValidateTerraformMockFlagsBeforeHooks(t *testing.T) {
+	cmd := &cobra.Command{Use: "apply"}
+	cmd.Flags().Bool("use-mocks", true, "")
+	cmd.Flags().Bool("process-functions", true, "")
+
+	err := validateTerraformMockFlags(cmd)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "supported only by `atmos terraform plan`")
+}
+
+func TestValidateTerraformMockFlags(t *testing.T) {
+	tests := []struct {
+		name             string
+		command          *cobra.Command
+		useMocks         bool
+		processFunctions bool
+		wantErr          string
+	}{
+		{name: "nil command"},
+		{name: "command without mock flag", command: &cobra.Command{Use: "plan"}},
+		{name: "mocks disabled", command: &cobra.Command{Use: "apply"}, processFunctions: true},
+		{name: "mocks require function processing", command: &cobra.Command{Use: "plan"}, useMocks: true, wantErr: "requires --process-functions=true"},
+		{name: "mocks require plan", command: &cobra.Command{Use: "apply"}, useMocks: true, processFunctions: true, wantErr: "supported only by `atmos terraform plan`"},
+		{name: "valid mock plan", command: &cobra.Command{Use: "plan"}, useMocks: true, processFunctions: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.command != nil && tt.name != "command without mock flag" {
+				tt.command.Flags().Bool("use-mocks", tt.useMocks, "")
+				tt.command.Flags().Bool("process-functions", tt.processFunctions, "")
+			}
+
+			err := validateTerraformMockFlags(tt.command)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestValidateTerraformMockOptions(t *testing.T) {
+	assert.NoError(t, validateTerraformMockOptions("apply", false, false))
+	assert.ErrorContains(t, validateTerraformMockOptions("plan", true, false), "requires --process-functions=true")
+	assert.ErrorContains(t, validateTerraformMockOptions("apply", true, true), "supported only by `atmos terraform plan`")
+	assert.NoError(t, validateTerraformMockOptions("plan", true, true))
+}
+
+func TestIsCompoundTerraformCommandWithoutComponent(t *testing.T) {
+	for _, args := range [][]string{
+		{"providers", "lock"},
+		{"state", "list"},
+		{"workspace", "show"},
+	} {
+		assert.True(t, isCompoundTerraformCommandWithoutComponent(args))
+	}
+
+	assert.False(t, isCompoundTerraformCommandWithoutComponent(nil))
+	assert.False(t, isCompoundTerraformCommandWithoutComponent([]string{"providers"}))
+	assert.False(t, isCompoundTerraformCommandWithoutComponent([]string{"version", "show"}))
+}
+
+func TestRunBeforeHooksRejectsInvalidMocksBeforeResolution(t *testing.T) {
+	cmd := &cobra.Command{Use: "apply"}
+	cmd.Flags().Bool("use-mocks", true, "")
+	cmd.Flags().Bool("process-functions", true, "")
+
+	err := runBeforeHooks(h.HookEvent("before.terraform.apply"), cmd, nil)
+	assert.ErrorContains(t, err, "supported only by `atmos terraform plan`")
+}
+
+func TestTerraformRunWithOptionsRejectsInvalidMocksBeforeConfig(t *testing.T) {
+	parent := &cobra.Command{Use: "terraform"}
+	actual := &cobra.Command{Use: "plan"}
+
+	err := terraformRunWithOptions(parent, actual, nil, &TerraformRunOptions{UseMocks: true})
+	assert.ErrorContains(t, err, "requires --process-functions=true")
 }
 
 // TestTerraformIdentityFlagHandling tests the identity flag handling in terraformRun.
@@ -316,6 +422,154 @@ func TestCheckTerraformFlags_AllEdgeCases(t *testing.T) {
 	}
 }
 
+// TestHasMultiComponentFlags tests the hasMultiComponentFlags function.
+func TestHasMultiComponentFlags(t *testing.T) {
+	tests := []struct {
+		name     string
+		info     *schema.ConfigAndStacksInfo
+		expected bool
+	}{
+		{
+			name:     "no flags set",
+			info:     &schema.ConfigAndStacksInfo{},
+			expected: false,
+		},
+		{
+			name: "all flag set",
+			info: &schema.ConfigAndStacksInfo{
+				All: true,
+			},
+			expected: true,
+		},
+		{
+			name: "affected flag set",
+			info: &schema.ConfigAndStacksInfo{
+				Affected: true,
+			},
+			expected: true,
+		},
+		{
+			name: "query flag set",
+			info: &schema.ConfigAndStacksInfo{
+				Query: ".components.test",
+			},
+			expected: true,
+		},
+		{
+			name: "components flag set",
+			info: &schema.ConfigAndStacksInfo{
+				Components: []string{"comp1", "comp2"},
+			},
+			expected: true,
+		},
+		{
+			name: "empty components slice",
+			info: &schema.ConfigAndStacksInfo{
+				Components: []string{},
+			},
+			expected: false,
+		},
+		{
+			name: "multiple multi-component flags set",
+			info: &schema.ConfigAndStacksInfo{
+				All:   true,
+				Query: ".components.test",
+			},
+			expected: true,
+		},
+		{
+			name:     "tags flag set",
+			info:     &schema.ConfigAndStacksInfo{Tags: []string{"production"}},
+			expected: true,
+		},
+		{
+			name:     "labels flag set",
+			info:     &schema.ConfigAndStacksInfo{Labels: map[string]string{"cost-center": "platform"}},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasMultiComponentFlags(tt.info)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestHandleInteractiveComponentStackSelection_SkipsPromptForMultiComponentFlags tests that
+// interactive prompting is skipped when multi-component flags are set.
+// Regression test for: https://github.com/cloudposse/atmos/issues/1945
+// Before the fix, `--all` flag was not applied to info before this check, causing
+// the prompt to appear even when `--all` was specified.
+func TestHandleInteractiveComponentStackSelection_SkipsPromptForMultiComponentFlags(t *testing.T) {
+	tests := []struct {
+		name string
+		info *schema.ConfigAndStacksInfo
+	}{
+		{
+			name: "skips prompt when --all flag is set",
+			info: &schema.ConfigAndStacksInfo{
+				All: true,
+			},
+		},
+		{
+			name: "skips prompt when --affected flag is set",
+			info: &schema.ConfigAndStacksInfo{
+				Affected: true,
+			},
+		},
+		{
+			name: "skips prompt when --query flag is set",
+			info: &schema.ConfigAndStacksInfo{
+				Query: ".components.test",
+			},
+		},
+		{
+			name: "skips prompt when --components flag is set",
+			info: &schema.ConfigAndStacksInfo{
+				Components: []string{"comp1", "comp2"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "plan"}
+
+			// Capture the initial state - ComponentFromArg should remain empty
+			// because the function should skip prompting and return early.
+			initialComponent := tt.info.ComponentFromArg
+			initialStack := tt.info.Stack
+
+			err := handleInteractiveComponentStackSelection(tt.info, cmd)
+
+			// Should return nil (no error) and NOT modify the info struct.
+			assert.NoError(t, err)
+			assert.Equal(t, initialComponent, tt.info.ComponentFromArg,
+				"ComponentFromArg should not be modified when multi-component flags are set")
+			assert.Equal(t, initialStack, tt.info.Stack,
+				"Stack should not be modified when multi-component flags are set")
+		})
+	}
+}
+
+// TestHandleInteractiveComponentStackSelection_SkipsWhenBothProvided tests that
+// interactive prompting is skipped when both component and stack are already provided.
+func TestHandleInteractiveComponentStackSelection_SkipsWhenBothProvided(t *testing.T) {
+	cmd := &cobra.Command{Use: "plan"}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "my-component",
+		Stack:            "my-stack",
+	}
+
+	err := handleInteractiveComponentStackSelection(info, cmd)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "my-component", info.ComponentFromArg)
+	assert.Equal(t, "my-stack", info.Stack)
+}
+
 // TestStackFlagCompletion_NoArgs tests the stackFlagCompletion function without args.
 func TestStackFlagCompletion_NoArgs(t *testing.T) {
 	t.Chdir("../../examples/demo-stacks")
@@ -340,4 +594,687 @@ func TestStackFlagCompletion_WithComponent(t *testing.T) {
 	stacks, directive := stackFlagCompletion(cmd, []string{"myapp"}, "")
 	assert.NotNil(t, stacks)
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestIsMultiComponentExecution tests the isMultiComponentExecution function.
+func TestIsMultiComponentExecution(t *testing.T) {
+	tests := []struct {
+		name     string
+		info     *schema.ConfigAndStacksInfo
+		expected bool
+	}{
+		{
+			name:     "all flag set",
+			info:     &schema.ConfigAndStacksInfo{All: true},
+			expected: true,
+		},
+		{
+			name:     "components set",
+			info:     &schema.ConfigAndStacksInfo{Components: []string{"comp1", "comp2"}},
+			expected: true,
+		},
+		{
+			name:     "query set",
+			info:     &schema.ConfigAndStacksInfo{Query: ".components.test"},
+			expected: true,
+		},
+		{
+			name:     "stack set without component",
+			info:     &schema.ConfigAndStacksInfo{Stack: "dev-us-east-1"},
+			expected: true,
+		},
+		{
+			name:     "stack and component both set - single component mode",
+			info:     &schema.ConfigAndStacksInfo{Stack: "dev-us-east-1", ComponentFromArg: "vpc"},
+			expected: false,
+		},
+		{
+			name:     "no flags - single component mode",
+			info:     &schema.ConfigAndStacksInfo{},
+			expected: false,
+		},
+		{
+			name:     "only component - single component mode",
+			info:     &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"},
+			expected: false,
+		},
+		{
+			name:     "tags set",
+			info:     &schema.ConfigAndStacksInfo{Tags: []string{"production"}},
+			expected: true,
+		},
+		{
+			name:     "labels set",
+			info:     &schema.ConfigAndStacksInfo{Labels: map[string]string{"cost-center": "platform"}},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isMultiComponentExecution(tt.info)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestHasNonAffectedMultiFlags_TagsAndLabelsComposeWithAffected asserts that
+// --tags/--labels are deliberately excluded from hasNonAffectedMultiFlags, so
+// `--affected --tags production` passes checkTerraformFlags instead of being
+// rejected as a conflicting multi-component selector.
+func TestHasNonAffectedMultiFlags_TagsAndLabelsComposeWithAffected(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		Affected: true,
+		Tags:     []string{"production"},
+		Labels:   map[string]string{"cost-center": "platform"},
+	}
+
+	assert.False(t, hasNonAffectedMultiFlags(info), "tags/labels alone must not trip the non-affected multi-flag check")
+	assert.NoError(t, checkTerraformFlags(info), "--affected --tags/--labels must compose without error")
+}
+
+// TestHasNonAffectedMultiFlags tests the hasNonAffectedMultiFlags function.
+func TestHasNonAffectedMultiFlags(t *testing.T) {
+	tests := []struct {
+		name     string
+		info     *schema.ConfigAndStacksInfo
+		expected bool
+	}{
+		{
+			name:     "all flag",
+			info:     &schema.ConfigAndStacksInfo{All: true},
+			expected: true,
+		},
+		{
+			name:     "components set",
+			info:     &schema.ConfigAndStacksInfo{Components: []string{"comp1"}},
+			expected: true,
+		},
+		{
+			name:     "query set",
+			info:     &schema.ConfigAndStacksInfo{Query: ".test"},
+			expected: true,
+		},
+		{
+			name:     "affected only - should return false",
+			info:     &schema.ConfigAndStacksInfo{Affected: true},
+			expected: false,
+		},
+		{
+			name:     "no flags",
+			info:     &schema.ConfigAndStacksInfo{},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasNonAffectedMultiFlags(tt.info)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsMultiComponentInvocationUsesViperValues(t *testing.T) {
+	v := viper.GetViper()
+	t.Cleanup(func() {
+		v.Set("all", false)
+		v.Set("affected", false)
+		v.Set("components", []string{})
+		v.Set("query", "")
+	})
+	v.Set("all", false)
+	v.Set("affected", false)
+	v.Set("components", []string{"vpc", "eks"})
+	v.Set("query", "")
+
+	cmd := &cobra.Command{Use: "plan"}
+	cmd.Flags().Bool("all", false, "")
+	cmd.Flags().Bool("affected", false, "")
+	cmd.Flags().StringSlice("components", nil, "")
+	cmd.Flags().String("query", "", "")
+
+	assert.True(t, isMultiComponentInvocation(cmd))
+}
+
+// TestHasSingleComponentFlags tests the hasSingleComponentFlags function.
+func TestHasSingleComponentFlags(t *testing.T) {
+	tests := []struct {
+		name     string
+		info     *schema.ConfigAndStacksInfo
+		expected bool
+	}{
+		{
+			name:     "plan-file set",
+			info:     &schema.ConfigAndStacksInfo{PlanFile: "plan.tfplan"},
+			expected: true,
+		},
+		{
+			name:     "use-terraform-plan set",
+			info:     &schema.ConfigAndStacksInfo{UseTerraformPlan: true},
+			expected: true,
+		},
+		{
+			name:     "both set",
+			info:     &schema.ConfigAndStacksInfo{PlanFile: "plan.tfplan", UseTerraformPlan: true},
+			expected: true,
+		},
+		{
+			name:     "neither set",
+			info:     &schema.ConfigAndStacksInfo{},
+			expected: false,
+		},
+		{
+			name:     "empty plan-file",
+			info:     &schema.ConfigAndStacksInfo{PlanFile: ""},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasSingleComponentFlags(tt.info)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestHandlePathResolutionError tests the handlePathResolutionError function.
+func TestHandlePathResolutionError(t *testing.T) {
+	tests := []struct {
+		name        string
+		err         error
+		expectedErr error
+		checkIs     bool // Use errors.Is to check
+	}{
+		{
+			name:        "ambiguous path error passes through",
+			err:         errUtils.ErrAmbiguousComponentPath,
+			expectedErr: errUtils.ErrAmbiguousComponentPath,
+			checkIs:     true,
+		},
+		{
+			name:        "component not in stack passes through",
+			err:         errUtils.ErrComponentNotInStack,
+			expectedErr: errUtils.ErrComponentNotInStack,
+			checkIs:     true,
+		},
+		{
+			name:        "stack not found passes through",
+			err:         errUtils.ErrStackNotFound,
+			expectedErr: errUtils.ErrStackNotFound,
+			checkIs:     true,
+		},
+		{
+			name:        "user aborted passes through",
+			err:         errUtils.ErrUserAborted,
+			expectedErr: errUtils.ErrUserAborted,
+			checkIs:     true,
+		},
+		{
+			name:        "generic error gets wrapped with ErrPathResolutionFailed",
+			err:         errors.New("some generic error"),
+			expectedErr: errUtils.ErrPathResolutionFailed,
+			checkIs:     true,
+		},
+		{
+			name:        "wrapped ambiguous path error passes through",
+			err:         errUtils.Build(errUtils.ErrAmbiguousComponentPath).WithExplanation("test").Err(),
+			expectedErr: errUtils.ErrAmbiguousComponentPath,
+			checkIs:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := handlePathResolutionError(tt.err)
+			assert.Error(t, result)
+			if tt.checkIs {
+				assert.ErrorIs(t, result, tt.expectedErr)
+			}
+		})
+	}
+}
+
+// TestHandleInteractiveComponentStackSelection tests the handleInteractiveComponentStackSelection function.
+func TestHandleInteractiveComponentStackSelection(t *testing.T) {
+	tests := []struct {
+		name                  string
+		info                  *schema.ConfigAndStacksInfo
+		expectComponentPrompt bool
+		expectStackPrompt     bool
+		shouldSkip            bool
+	}{
+		{
+			name:       "skip when all flag is set",
+			info:       &schema.ConfigAndStacksInfo{All: true},
+			shouldSkip: true,
+		},
+		{
+			name:       "skip when affected flag is set",
+			info:       &schema.ConfigAndStacksInfo{Affected: true},
+			shouldSkip: true,
+		},
+		{
+			name:       "skip when components set",
+			info:       &schema.ConfigAndStacksInfo{Components: []string{"comp1"}},
+			shouldSkip: true,
+		},
+		{
+			name:       "skip when query set",
+			info:       &schema.ConfigAndStacksInfo{Query: ".test"},
+			shouldSkip: true,
+		},
+		{
+			name:       "skip when need help",
+			info:       &schema.ConfigAndStacksInfo{NeedHelp: true},
+			shouldSkip: true,
+		},
+		{
+			name:       "skip when both component and stack provided",
+			info:       &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "dev"},
+			shouldSkip: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "test"}
+			err := handleInteractiveComponentStackSelection(tt.info, cmd)
+
+			if tt.shouldSkip {
+				assert.NoError(t, err)
+				// Info should not be modified.
+			}
+		})
+	}
+}
+
+// TestIdentityFlagCompletion tests the identityFlagCompletion function.
+func TestIdentityFlagCompletion(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+
+	cmd := &cobra.Command{Use: "test"}
+
+	// Test identity completion (will return empty if no identities configured).
+	identities, directive := identityFlagCompletion(cmd, []string{}, "")
+
+	// Directive should always be NoFileComp.
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+
+	// Identities may be nil or empty depending on config.
+	// We just verify no panic and correct directive.
+	_ = identities
+}
+
+// TestAddIdentityCompletion tests the addIdentityCompletion function.
+func TestAddIdentityCompletion(t *testing.T) {
+	t.Run("flag exists", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().StringP("identity", "i", "", "Identity flag")
+
+		// Should not panic.
+		addIdentityCompletion(cmd)
+	})
+
+	t.Run("flag does not exist", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+
+		// Should not panic when flag doesn't exist.
+		addIdentityCompletion(cmd)
+	})
+
+	t.Run("inherited flag", func(t *testing.T) {
+		parent := &cobra.Command{Use: "parent"}
+		parent.PersistentFlags().StringP("identity", "i", "", "Identity flag")
+
+		child := &cobra.Command{Use: "child"}
+		parent.AddCommand(child)
+
+		// Should find inherited flag.
+		addIdentityCompletion(child)
+	})
+}
+
+// TestComponentsArgCompletion tests the componentsArgCompletion function.
+func TestComponentsArgCompletion(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack flag")
+
+	// Test with no args.
+	components, directive := componentsArgCompletion(cmd, []string{}, "")
+	assert.NotNil(t, components)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestComponentsArgCompletion_WithExistingArgs tests completion when args already exist.
+func TestComponentsArgCompletion_WithExistingArgs(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+
+	// Test with existing args - should return nil.
+	components, directive := componentsArgCompletion(cmd, []string{"existing-component"}, "")
+	assert.Nil(t, components)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestHandleInteractiveComponentStackSelection_ValidateStackExists tests the ValidateStackExists path.
+func TestHandleInteractiveComponentStackSelection_ValidateStackExists(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+
+	tests := []struct {
+		name        string
+		info        *schema.ConfigAndStacksInfo
+		expectError bool
+	}{
+		{
+			name: "valid stack with no component passes validation",
+			info: &schema.ConfigAndStacksInfo{
+				Stack:            "dev",
+				ComponentFromArg: "",
+			},
+			// Note: In non-TTY environment, this won't prompt but will return nil
+			// since interactive mode isn't available.
+			expectError: false,
+		},
+		{
+			name: "invalid stack with no component - validation returns error",
+			info: &schema.ConfigAndStacksInfo{
+				Stack:            "nonexistent-stack-xyz",
+				ComponentFromArg: "",
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "test"}
+			err := handleInteractiveComponentStackSelection(tt.info, cmd)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				// In non-TTY environment, it should return nil (interactive mode not available).
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestHandlePromptErrorDelegate tests the handlePromptError delegate function.
+func TestHandlePromptErrorDelegate(t *testing.T) {
+	// Save original OsExit and restore it after tests.
+	originalOsExit := errUtils.OsExit
+	defer func() {
+		errUtils.OsExit = originalOsExit
+	}()
+
+	tests := []struct {
+		name             string
+		err              error
+		promptName       string
+		expectExit       bool
+		expectedExitCode int
+		expectedReturn   error
+	}{
+		{
+			name:           "nil error returns nil",
+			err:            nil,
+			promptName:     "component",
+			expectExit:     false,
+			expectedReturn: nil,
+		},
+		{
+			name:           "ErrInteractiveModeNotAvailable returns nil",
+			err:            errUtils.ErrInteractiveModeNotAvailable,
+			promptName:     "stack",
+			expectExit:     false,
+			expectedReturn: nil,
+		},
+		{
+			name:           "generic error returns the error",
+			err:            errors.New("some error"),
+			promptName:     "component",
+			expectExit:     false,
+			expectedReturn: errors.New("some error"),
+		},
+		{
+			name:             "ErrUserAborted triggers exit with SIGINT code",
+			err:              errUtils.ErrUserAborted,
+			promptName:       "component",
+			expectExit:       true,
+			expectedExitCode: errUtils.ExitCodeSIGINT,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var exitCalled bool
+			var exitCode int
+			errUtils.OsExit = func(code int) {
+				exitCalled = true
+				exitCode = code
+			}
+
+			result := handlePromptError(tt.err, tt.promptName)
+
+			if tt.expectExit {
+				assert.True(t, exitCalled, "OsExit should be called")
+				assert.Equal(t, tt.expectedExitCode, exitCode, "Exit code should match")
+			} else {
+				assert.False(t, exitCalled, "OsExit should not be called")
+				if tt.expectedReturn == nil {
+					assert.NoError(t, result)
+				} else {
+					assert.Error(t, result)
+					assert.Equal(t, tt.expectedReturn.Error(), result.Error())
+				}
+			}
+		})
+	}
+}
+
+// TestPromptForComponentDelegate tests the promptForComponent delegate function.
+func TestPromptForComponentDelegate(t *testing.T) {
+	// Test that it delegates to shared.PromptForComponent.
+	// In non-TTY environment, it should return ErrInteractiveModeNotAvailable.
+	cmd := &cobra.Command{Use: "test"}
+	_, err := promptForComponent(cmd, "")
+	// The function should return an error in non-TTY environment.
+	// This is expected behavior - in CI, interactive mode is not available.
+	if err != nil {
+		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
+	}
+}
+
+// TestPromptForStackDelegate tests the promptForStack delegate function.
+func TestPromptForStackDelegate(t *testing.T) {
+	// Test that it delegates to shared.PromptForStack.
+	// In non-TTY environment, it should return ErrInteractiveModeNotAvailable.
+	cmd := &cobra.Command{Use: "test"}
+	_, err := promptForStack(cmd, "")
+	// The function should return an error in non-TTY environment.
+	// This is expected behavior - in CI, interactive mode is not available.
+	if err != nil {
+		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
+	}
+}
+
+// TestHandleInteractiveIdentitySelectionDelegate verifies handleInteractiveIdentitySelection
+// delegates to shared.HandleInteractiveIdentitySelection: with no auth configured at all,
+// the shared implementation returns ErrNoIdentitiesAvailable.
+func TestHandleInteractiveIdentitySelectionDelegate(t *testing.T) {
+	err := handleInteractiveIdentitySelection(&schema.ConfigAndStacksInfo{})
+	assert.ErrorIs(t, err, errUtils.ErrNoIdentitiesAvailable)
+}
+
+// TestResolveAndPromptForArgsDelegate verifies resolveAndPromptForArgs delegates to
+// shared.ResolveAndPromptForArgs: multi-component flags must short-circuit without
+// modifying the info struct, matching handleInteractiveComponentStackSelection's
+// documented skip behavior.
+func TestResolveAndPromptForArgsDelegate(t *testing.T) {
+	cmd := &cobra.Command{Use: "plan"}
+	info := &schema.ConfigAndStacksInfo{All: true}
+
+	err := resolveAndPromptForArgs(info, cmd)
+
+	assert.NoError(t, err)
+	assert.Empty(t, info.ComponentFromArg)
+	assert.Empty(t, info.Stack)
+}
+
+// TestCheckTerraformFlagsClosureFlags verifies the dependency-closure flags
+// require a multi-component selection: alone with a single component (or with
+// nothing at all) they error; with any multi-component selection (including
+// --affected) they pass.
+func TestCheckTerraformFlagsClosureFlags(t *testing.T) {
+	tests := []struct {
+		name          string
+		info          *schema.ConfigAndStacksInfo
+		expectedError error
+	}{
+		{
+			name:          "include-dependencies without any selection",
+			info:          &schema.ConfigAndStacksInfo{IncludeDependencies: -1},
+			expectedError: errUtils.ErrClosureFlagsRequireMultiComponent,
+		},
+		{
+			name:          "include-dependents without any selection",
+			info:          &schema.ConfigAndStacksInfo{IncludeDependents: 2},
+			expectedError: errUtils.ErrClosureFlagsRequireMultiComponent,
+		},
+		{
+			name: "include-dependencies with all",
+			info: &schema.ConfigAndStacksInfo{IncludeDependencies: -1, All: true},
+		},
+		{
+			name: "include-dependencies with tags",
+			info: &schema.ConfigAndStacksInfo{IncludeDependencies: 1, Tags: []string{"app"}},
+		},
+		{
+			name: "include-dependents with labels",
+			info: &schema.ConfigAndStacksInfo{IncludeDependents: -1, Labels: map[string]string{"env": "dev"}},
+		},
+		{
+			name: "include-dependents with affected",
+			info: &schema.ConfigAndStacksInfo{IncludeDependents: -1, Affected: true},
+		},
+		{
+			name: "include-dependencies with bare stack selection",
+			info: &schema.ConfigAndStacksInfo{IncludeDependencies: -1, Stack: "dev"},
+		},
+		{
+			// Destroying a selection's prerequisites tears down shared
+			// dependencies other components may still need — allowed, but
+			// checkTerraformFlags must warn rather than reject the run.
+			name: "include-dependencies with destroy warns but does not error",
+			info: &schema.ConfigAndStacksInfo{IncludeDependencies: -1, All: true, SubCommand: "destroy"},
+		},
+		{
+			// include-dependents alone (no include-dependencies) must not
+			// trigger the destroy warning.
+			name: "include-dependents with destroy does not warn",
+			info: &schema.ConfigAndStacksInfo{IncludeDependents: -1, All: true, SubCommand: "destroy"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkTerraformFlags(tt.info)
+			if tt.expectedError != nil {
+				assert.ErrorIs(t, err, tt.expectedError)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestCheckTerraformFlagsDestroyDependenciesWarning verifies the destroy warning is
+// actually emitted (or withheld) on the UI stream, not just that checkTerraformFlags
+// returns no error: destroying a selection's dependencies tears down shared
+// prerequisites, so `destroy --include-dependencies` must warn, while
+// `--include-dependents` alone and non-destroy subcommands must stay silent.
+func TestCheckTerraformFlagsDestroyDependenciesWarning(t *testing.T) {
+	const warningText = "--include-dependencies with destroy also destroys shared prerequisites of the selected components"
+
+	tests := []struct {
+		name       string
+		info       *schema.ConfigAndStacksInfo
+		expectWarn bool
+	}{
+		{
+			name:       "destroy with include-dependencies emits the warning",
+			info:       &schema.ConfigAndStacksInfo{IncludeDependencies: -1, All: true, SubCommand: "destroy"},
+			expectWarn: true,
+		},
+		{
+			name:       "destroy with include-dependents only does not warn",
+			info:       &schema.ConfigAndStacksInfo{IncludeDependents: -1, All: true, SubCommand: "destroy"},
+			expectWarn: false,
+		},
+		{
+			name:       "plan with include-dependencies does not warn",
+			info:       &schema.ConfigAndStacksInfo{IncludeDependencies: -1, All: true, SubCommand: "plan"},
+			expectWarn: false,
+		},
+		{
+			name:       "apply with include-dependencies does not warn",
+			info:       &schema.ConfigAndStacksInfo{IncludeDependencies: -1, All: true, SubCommand: "apply"},
+			expectWarn: false,
+		},
+	}
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	// Initialize the package formatter once for these output assertions. PushUIWriter
+	// captures only this test's UI stream and restores the previous sink on return.
+	ui.InitFormatter(ioCtx)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var output bytes.Buffer
+			restore := iolib.PushUIWriter(&output)
+			defer restore()
+
+			require.NoError(t, checkTerraformFlags(tt.info))
+
+			// Normalize before asserting: depending on the environment's
+			// terminal capabilities the formatter renders the UI stream with
+			// ANSI colors and width-dependent wrapping (CI does), which
+			// splits the sentence across styled segments or lines.
+			normalized := normalizeUIOutput(output.String())
+			if tt.expectWarn {
+				assert.Contains(t, normalized, warningText, "destroy with --include-dependencies must emit the shared-prerequisites warning")
+			} else {
+				assert.NotContains(t, normalized, warningText, "the destroy warning must only fire for destroy with --include-dependencies")
+			}
+		})
+	}
+}
+
+// normalizeUIOutput strips ANSI escape sequences and collapses all whitespace
+// (including wrap-inserted newlines) to single spaces, so text assertions on
+// the captured UI stream hold regardless of the environment's color and
+// terminal-width settings.
+func normalizeUIOutput(s string) string {
+	var b strings.Builder
+	inEscape := false
+	for i := 0; i < len(s); i++ {
+		switch {
+		case inEscape:
+			// A CSI sequence ends at the first alphabetic byte (e.g. the
+			// `m` in `\x1b[93m`).
+			if (s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z') {
+				inEscape = false
+			}
+		case s[i] == '\x1b':
+			inEscape = true
+		default:
+			b.WriteByte(s[i])
+		}
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
 }

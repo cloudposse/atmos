@@ -1,0 +1,35 @@
+---
+slug: workflow-tags-and-labels
+title: "Use Tags and Labels with Workflows"
+authors: [zack-is-cool]
+tags: [feature]
+---
+
+Atmos workflows already supported `--stack`. They now also support `--tags` and `--labels`, forwarding those selectors to every nested `type: atmos` step.
+
+For an introduction to defining and selecting [tags and labels](/changelog/tags-and-labels), see the original feature announcement.
+
+<!--truncate-->
+
+## How to Use It
+
+Use tags and labels on their own:
+
+```shell
+atmos workflow deploy --tags networking --labels deployment:dev
+```
+
+`--stack`, `--tags`, and `--labels` are all optional selectors. Combine the ones that define the scope you need:
+
+```shell
+atmos workflow deploy \
+  --stack tenant1-ue2-dev \
+  --tags networking \
+  --labels deployment:dev
+```
+
+Use the same selectors you already use with normal Atmos commands, while keeping the workflow's ordering, dependencies, parallel steps, and matrix steps intact.
+
+## Get Involved
+
+Try tags and labels with the workflows you already use for targeted deployments. If a workflow pattern needs a different selection model, open an issue with the command and component scope you want to express.

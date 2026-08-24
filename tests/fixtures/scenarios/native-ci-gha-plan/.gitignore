@@ -1,0 +1,8 @@
+github-output.txt
+github-step-summary.txt
+.terraform
+.terraform.lock.hcl
+*.planfile
+*.tfvars.json
+terraform.tfstate.d
+backend.tf.json

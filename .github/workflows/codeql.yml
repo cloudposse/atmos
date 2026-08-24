@@ -7,9 +7,17 @@ on:
     # The branches below must be a subset of the branches above
     branches: ["main"]
     types: [opened, labeled, unlabeled, synchronize]
+  # Code scanning and required checks must run on merge-queue commits too.
+  merge_group:
+    types: [checks_requested]
   schedule:
     # runs on 19:17 every Tuesday
     - cron: "27 19 * * 2"
+
+env:
+  # Use pipe fallback so transient proxy.golang.org 5xx errors during
+  # `go mod download` fall back to direct module fetches.
+  GOPROXY: "https://proxy.golang.org|direct"
 
 jobs:
   analyze:
@@ -28,11 +36,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           languages: ${{ matrix.language }}
           # If you wish to specify custom queries, you can do so here or in a config file.
@@ -45,7 +55,7 @@ jobs:
       # Autobuild attempts to build any compiled languages (C/C++, C#, Go, Java, or Swift).
       # If this step fails, then you should remove it and run the build manually (see below)
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v4
+        uses: github/codeql-action/autobuild@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
 
       # ℹ️ Command-line programs to run using the OS shell.
       # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
@@ -58,9 +68,24 @@ jobs:
       #     ./location_of_script_within_repo/buildscript.sh
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           category: "/language:${{matrix.language}}"
+          # The merge queue's ephemeral gh-readonly-queue/... ref is deleted as
+          # soon as the queue cycles, which routinely races the upload for this
+          # multi-minute analysis and fails it with "ref not found" if the
+          # action is left to auto-detect ref/sha from GITHUB_REF/GITHUB_SHA
+          # (the doomed ephemeral ref). Skipping the upload entirely (an
+          # earlier attempt at this fix) isn't right either: the native
+          # "CodeQL" required status check is only created when a SARIF
+          # upload actually happens, so skipping it left that required check
+          # permanently missing for merge_group commits -- the merge queue
+          # then waits out its full timeout for a check that will never
+          # report, exactly like the PR Semver Labels gap. Instead, point the
+          # upload at the queue's real target branch ref (which persists)
+          # while still analyzing the actual queued merge commit.
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          sha: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
 
   lint-golangci:
     name: "Lint (golangci)"
@@ -71,7 +96,9 @@ jobs:
       - extras=s3-cache
       - private=false
 
-    if: github.event_name == 'pull_request'
+    # golangci-lint-action supports merge_group with fetch-depth: 0 below,
+    # using the merge group's base revision to limit findings to new issues.
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     permissions:
       # Required: allow read access to the content for analysis.
       contents: read
@@ -83,15 +110,16 @@ jobs:
       security-events: write
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       # golangci-lint-action@v4.0.0+ requires explicit Go setup
       # Without this step, the action may fail intermittently with
       # "could not load export data" errors due to cache corruption
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
@@ -119,8 +147,8 @@ jobs:
           # Ensure lintroller module is ready
           cd tools/lintroller && go mod tidy && cd ../..
 
-          # Build custom golangci-lint with plugins
-          golangci-lint custom
+          # Build custom golangci-lint with plugins (staleness-guarded; see magefiles/)
+          go tool mage lint:customGCL
 
           # Verify the custom binary was created
           test -x ./custom-gcl || { echo "Error: custom-gcl not found or not executable"; exit 1; }
@@ -152,32 +180,57 @@ jobs:
       # - t.Setenv in defer blocks (should use os.Setenv)
       # will appear in the SARIF output and GitHub Security tab.
       - name: Run golangci-lint with lintroller plugin
-        uses: golangci/golangci-lint-action@v8.0.0
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: 101ccaca0df22b2e36dd917ed5d0be423baa6298
           install-mode: none
+          # The action's config verification downloads a remote JSON schema and
+          # can fail transiently. The subsequent lint command still parses and
+          # validates the configuration, so skip the duplicate network preflight.
+          verify: false
           only-new-issues: true
           args: >
             --output.sarif.path=golangci-lint.sarif
             --issues-exit-code=0
 
       - name: Upload filtered SARIF results
+        # merge_group's ephemeral gh-readonly-queue/... ref is deleted as soon
+        # as the queue cycles, which routinely races this upload and fails it
+        # with "ref not found" if left to auto-detect ref/sha from
+        # GITHUB_REF/GITHUB_SHA (the doomed ephemeral ref). Point it at the
+        # queue's real target branch ref (which persists) while still
+        # uploading results for the actual queued merge commit, same as the
+        # CodeQL analyze step above -- skipping the upload outright isn't an
+        # option here either: it would leave the native "CodeQL" code-scanning
+        # required check without this SARIF's contribution.
         if: always()
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: golangci-lint.sarif
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          sha: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
 
   pr-semver-labels:
     name: PR Semver Labels
-    if: github.event_name == 'pull_request'
+    # Required checks must also report on the merge queue's synthetic commit
+    # (github.event_name == 'merge_group'), otherwise the merge queue waits
+    # out its full check-response timeout for a check that will never exist,
+    # then dequeues the PR -- even when every other check already passed.
+    # The label check itself only makes sense against a real pull_request
+    # event (github.event.pull_request doesn't exist for merge_group), and
+    # by the time a PR reaches the queue its label was already verified on
+    # pull_request, so merge_group just needs this job to report a pass.
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
       issues: write
     steps:
       # Checkout is required for local composite actions
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+        with:
+          persist-credentials: false
 
       # Remove Dependabot's auto-added semver labels
       # Dependabot PRs should only have the 'no-release' label since
@@ -188,7 +241,10 @@ jobs:
 
       # Check for required semver labels
       # Every PR must have exactly one: major, minor, patch, or no-release
-      - uses: mheap/github-action-required-labels@v5
+      # pull_request only: merge_group has no github.event.pull_request for
+      # this action to check labels against.
+      - uses: mheap/github-action-required-labels@23e10fde7e062233401931a0eece796cd9bf3177 # v5.6.0
+        if: github.event_name == 'pull_request'
         with:
           mode: exactly
           count: 1

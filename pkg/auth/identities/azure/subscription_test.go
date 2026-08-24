@@ -3,6 +3,9 @@ package azure
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -222,6 +225,102 @@ func TestSubscriptionIdentity_GetProviderName(t *testing.T) {
 	}
 }
 
+func TestSubscriptionIdentity_PostAuthenticate(t *testing.T) {
+	// Sandbox HOME so credential files land under a temp dir.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
+	identity := &subscriptionIdentity{
+		name:           "azure-test",
+		subscriptionID: "sub-123",
+		location:       "centralus",
+	}
+	identity.SetRealm("test-realm")
+
+	creds := &types.AzureCredentials{
+		AccessToken:    "access-token",
+		Expiration:     time.Now().UTC().Add(1 * time.Hour).Format(time.RFC3339),
+		TenantID:       "tenant-123",
+		SubscriptionID: "sub-123",
+		Location:       "centralus",
+		AuthMethod:     types.AzureAuthMethodCLI, // CLI-sourced: az cache write-back is skipped.
+	}
+
+	authContext := &schema.AuthContext{}
+	stackInfo := &schema.ConfigAndStacksInfo{}
+
+	err := identity.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		AuthContext:  authContext,
+		StackInfo:    stackInfo,
+		ProviderName: "azure-cli",
+		IdentityName: "azure-test",
+		Credentials:  creds,
+		Realm:        "test-realm",
+	})
+	require.NoError(t, err)
+
+	// Credentials file was written under the sandboxed home.
+	credsPath := filepath.Join(tmpHome, ".azure", "atmos", "test-realm", "azure-cli", "credentials.json")
+	_, statErr := os.Stat(credsPath)
+	assert.NoError(t, statErr, "credentials.json should be written by SetupFiles")
+
+	// Auth context was populated and env vars derived into stack info.
+	require.NotNil(t, authContext.Azure)
+	assert.Equal(t, "sub-123", authContext.Azure.SubscriptionID)
+	assert.Equal(t, "tenant-123", authContext.Azure.TenantID)
+	assert.Equal(t, "sub-123", stackInfo.ComponentEnvSection["ARM_SUBSCRIPTION_ID"])
+
+	// CLI-sourced credentials must not have created az CLI cache files.
+	_, msalErr := os.Stat(filepath.Join(tmpHome, ".azure", "msal_token_cache.json"))
+	assert.True(t, os.IsNotExist(msalErr), "az MSAL cache must not be written for CLI-sourced credentials")
+}
+
+func TestSubscriptionIdentity_Authenticate_PreservesAllProviderFields(t *testing.T) {
+	// Regression: the identity used to rebuild AzureCredentials field-by-field,
+	// silently dropping newly added fields (AuthMethod, HomeAccountID) — which
+	// disabled the Azure CLI write-back gating and re-broke az for guest users.
+	// Populate every field via reflection so any future field is covered
+	// automatically without updating this test.
+	base := &types.AzureCredentials{}
+	bv := reflect.ValueOf(base).Elem()
+	for idx := 0; idx < bv.NumField(); idx++ {
+		f := bv.Field(idx)
+		switch f.Kind() {
+		case reflect.String:
+			f.SetString(bv.Type().Field(idx).Name + "-sentinel")
+		case reflect.Bool:
+			f.SetBool(true)
+		default:
+			t.Fatalf("unhandled field kind %s for %s; extend this test", f.Kind(), bv.Type().Field(idx).Name)
+		}
+	}
+
+	identity := &subscriptionIdentity{
+		name:           "azure-test",
+		subscriptionID: "identity-sub",
+		location:       "identity-location",
+	}
+
+	result, err := identity.Authenticate(context.Background(), base)
+	require.NoError(t, err)
+	creds, ok := result.(*types.AzureCredentials)
+	require.True(t, ok)
+
+	rv := reflect.ValueOf(creds).Elem()
+	for idx := 0; idx < rv.NumField(); idx++ {
+		field := rv.Type().Field(idx)
+		switch field.Name {
+		case "SubscriptionID":
+			assert.Equal(t, "identity-sub", creds.SubscriptionID, "identity subscription must override the provider's")
+		case "Location":
+			assert.Equal(t, "identity-location", creds.Location, "identity location must override the provider's")
+		default:
+			assert.False(t, rv.Field(idx).IsZero(), "field %s was dropped by the identity credential wrap", field.Name)
+		}
+	}
+}
+
 func TestSubscriptionIdentity_Authenticate(t *testing.T) {
 	now := time.Now().UTC()
 
@@ -250,6 +349,8 @@ func TestSubscriptionIdentity_Authenticate(t *testing.T) {
 				GraphAPIExpiration: now.Add(1 * time.Hour).Format(time.RFC3339),
 				KeyVaultToken:      "keyvault-token",
 				KeyVaultExpiration: now.Add(1 * time.Hour).Format(time.RFC3339),
+				AKSToken:           "aks-token",
+				AKSTokenExpiration: now.Add(1 * time.Hour).Format(time.RFC3339),
 			},
 			expectError: false,
 		},
@@ -287,6 +388,24 @@ func TestSubscriptionIdentity_Authenticate(t *testing.T) {
 				SubscriptionID: "provider-sub-456",
 				Location:       "provider-location", // Should be preserved.
 				Expiration:     now.Add(1 * time.Hour).Format(time.RFC3339),
+			},
+			expectError: false,
+		},
+		{
+			name: "preserves cloud environment from provider",
+			identity: &subscriptionIdentity{
+				name:           "azure-gov",
+				subscriptionID: "gov-sub-123",
+				location:       "usgovvirginia",
+			},
+			baseCreds: &types.AzureCredentials{
+				AccessToken:      "gov-token",
+				TokenType:        "Bearer",
+				Expiration:       now.Add(1 * time.Hour).Format(time.RFC3339),
+				TenantID:         "gov-tenant-456",
+				SubscriptionID:   "provider-sub",
+				Location:         "eastus",
+				CloudEnvironment: "usgovernment",
 			},
 			expectError: false,
 		},
@@ -349,12 +468,17 @@ func TestSubscriptionIdentity_Authenticate(t *testing.T) {
 			assert.Equal(t, baseCreds.TenantID, azureCreds.TenantID)
 			assert.Equal(t, baseCreds.GraphAPIToken, azureCreds.GraphAPIToken)
 			assert.Equal(t, baseCreds.KeyVaultToken, azureCreds.KeyVaultToken)
+			assert.Equal(t, baseCreds.AKSToken, azureCreds.AKSToken)
+			assert.Equal(t, baseCreds.AKSTokenExpiration, azureCreds.AKSTokenExpiration)
 
 			// Verify OIDC fields are preserved.
 			assert.Equal(t, baseCreds.ClientID, azureCreds.ClientID)
 			assert.Equal(t, baseCreds.IsServicePrincipal, azureCreds.IsServicePrincipal)
 			assert.Equal(t, baseCreds.TokenFilePath, azureCreds.TokenFilePath)
 			assert.Equal(t, baseCreds.FederatedToken, azureCreds.FederatedToken)
+
+			// Verify cloud environment is preserved.
+			assert.Equal(t, baseCreds.CloudEnvironment, azureCreds.CloudEnvironment)
 		})
 	}
 }
@@ -578,6 +702,84 @@ func TestSubscriptionIdentity_Logout(t *testing.T) {
 	ctx := context.Background()
 	err := identity.Logout(ctx)
 	assert.NoError(t, err, "Logout should always succeed")
+}
+
+func TestSubscriptionIdentity_SetRealm(t *testing.T) {
+	config := &schema.Identity{
+		Kind: "azure/subscription",
+		Principal: map[string]interface{}{
+			"subscription_id": "sub-123",
+		},
+		Via: &schema.IdentityVia{
+			Provider: "azure-provider",
+		},
+	}
+
+	identity, err := NewSubscriptionIdentity("test", config)
+	require.NoError(t, err)
+
+	// Initially realm should be empty.
+	assert.Empty(t, identity.realm)
+
+	// Set a realm.
+	identity.SetRealm("test-realm-123")
+	assert.Equal(t, "test-realm-123", identity.realm)
+
+	// Update realm.
+	identity.SetRealm("new-realm-456")
+	assert.Equal(t, "new-realm-456", identity.realm)
+
+	// Set empty realm.
+	identity.SetRealm("")
+	assert.Empty(t, identity.realm)
+}
+
+func TestSubscriptionIdentity_Paths(t *testing.T) {
+	config := &schema.Identity{
+		Kind: "azure/subscription",
+		Principal: map[string]interface{}{
+			"subscription_id": "sub-123",
+		},
+		Via: &schema.IdentityVia{
+			Provider: "azure-provider",
+		},
+	}
+
+	identity, err := NewSubscriptionIdentity("test", config)
+	require.NoError(t, err)
+
+	// Paths should return a list with credentials file path.
+	paths, err := identity.Paths()
+	assert.NoError(t, err)
+	assert.Len(t, paths, 1)
+	assert.Equal(t, types.PathTypeFile, paths[0].Type)
+	assert.True(t, paths[0].Required)
+	assert.Contains(t, paths[0].Location, "azure-provider")
+	assert.Contains(t, paths[0].Location, "credentials.json")
+}
+
+func TestSubscriptionIdentity_Paths_WithRealm(t *testing.T) {
+	config := &schema.Identity{
+		Kind: "azure/subscription",
+		Principal: map[string]interface{}{
+			"subscription_id": "sub-123",
+		},
+		Via: &schema.IdentityVia{
+			Provider: "azure-provider",
+		},
+	}
+
+	identity, err := NewSubscriptionIdentity("test", config)
+	require.NoError(t, err)
+
+	// Set a realm.
+	identity.SetRealm("test-realm")
+
+	// Paths should include realm in the path.
+	paths, err := identity.Paths()
+	assert.NoError(t, err)
+	assert.Len(t, paths, 1)
+	assert.Contains(t, paths[0].Location, "test-realm")
 }
 
 func TestSubscriptionIdentity_PrincipalFieldTypes(t *testing.T) {

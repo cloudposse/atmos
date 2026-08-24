@@ -1,0 +1,30 @@
+# Test fixture for YAML functions in locals.
+# Tests that locals can use YAML functions like !terraform.state and !terraform.output.
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "../../components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true

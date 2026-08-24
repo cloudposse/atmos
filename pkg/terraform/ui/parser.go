@@ -75,6 +75,27 @@ func unmarshalMessage[T any](line []byte) (*T, error) {
 	return &msg, nil
 }
 
+// messageParsers maps each known Terraform JSON message type to a function that
+// unmarshals a line into the corresponding concrete message type. Using a lookup table
+// instead of a type switch keeps parseMessage's complexity low as new message types are added.
+var messageParsers = map[MessageType]func([]byte) (any, error){
+	MessageTypeVersion:       func(line []byte) (any, error) { return unmarshalMessage[VersionMessage](line) },
+	MessageTypePlannedChange: func(line []byte) (any, error) { return unmarshalMessage[PlannedChangeMessage](line) },
+	MessageTypeChangeSummary: func(line []byte) (any, error) { return unmarshalMessage[ChangeSummaryMessage](line) },
+	MessageTypeApplyStart:    func(line []byte) (any, error) { return unmarshalMessage[ApplyStartMessage](line) },
+	MessageTypeApplyProgress: func(line []byte) (any, error) { return unmarshalMessage[ApplyProgressMessage](line) },
+	MessageTypeApplyComplete: func(line []byte) (any, error) { return unmarshalMessage[ApplyCompleteMessage](line) },
+	MessageTypeApplyErrored:  func(line []byte) (any, error) { return unmarshalMessage[ApplyErroredMessage](line) },
+	MessageTypeRefreshStart:  func(line []byte) (any, error) { return unmarshalMessage[RefreshStartMessage](line) },
+	MessageTypeRefreshComplete: func(line []byte) (any, error) {
+		return unmarshalMessage[RefreshCompleteMessage](line)
+	},
+	MessageTypeDiagnostic: func(line []byte) (any, error) { return unmarshalMessage[DiagnosticMessage](line) },
+	MessageTypeOutputs:    func(line []byte) (any, error) { return unmarshalMessage[OutputsMessage](line) },
+	MessageTypeInitOutput: func(line []byte) (any, error) { return unmarshalMessage[InitOutputMessage](line) },
+	MessageTypeLog:        func(line []byte) (any, error) { return unmarshalMessage[LogMessage](line) },
+}
+
 // parseMessage parses a JSON line into the appropriate message type.
 func (p *Parser) parseMessage(line []byte) (any, error) {
 	// First, parse to determine message type.
@@ -85,35 +106,10 @@ func (p *Parser) parseMessage(line []byte) (any, error) {
 	}
 
 	// Parse into specific type based on message type.
-	switch base.Type {
-	case MessageTypeVersion:
-		return unmarshalMessage[VersionMessage](line)
-	case MessageTypePlannedChange:
-		return unmarshalMessage[PlannedChangeMessage](line)
-	case MessageTypeChangeSummary:
-		return unmarshalMessage[ChangeSummaryMessage](line)
-	case MessageTypeApplyStart:
-		return unmarshalMessage[ApplyStartMessage](line)
-	case MessageTypeApplyProgress:
-		return unmarshalMessage[ApplyProgressMessage](line)
-	case MessageTypeApplyComplete:
-		return unmarshalMessage[ApplyCompleteMessage](line)
-	case MessageTypeApplyErrored:
-		return unmarshalMessage[ApplyErroredMessage](line)
-	case MessageTypeRefreshStart:
-		return unmarshalMessage[RefreshStartMessage](line)
-	case MessageTypeRefreshComplete:
-		return unmarshalMessage[RefreshCompleteMessage](line)
-	case MessageTypeDiagnostic:
-		return unmarshalMessage[DiagnosticMessage](line)
-	case MessageTypeOutputs:
-		return unmarshalMessage[OutputsMessage](line)
-	case MessageTypeInitOutput:
-		return unmarshalMessage[InitOutputMessage](line)
-	case MessageTypeLog:
-		return unmarshalMessage[LogMessage](line)
-	default:
-		// Unknown message type - return base message.
-		return &base, nil
+	if parseFn, ok := messageParsers[base.Type]; ok {
+		return parseFn(line)
 	}
+
+	// Unknown message type - return base message.
+	return &base, nil
 }

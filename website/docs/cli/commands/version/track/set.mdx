@@ -1,0 +1,66 @@
+---
+title: atmos version track set
+sidebar_position: 50
+sidebar_label: set
+sidebar_class_name: command
+description: Update fields of a dependency entry in atmos.yaml.
+---
+
+Update selected fields of an existing dependency entry in `atmos.yaml`, preserving comments and formatting. Only flags you pass are changed.
+
+## Usage
+
+```shell
+atmos version track set NAME [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`NAME` <em>required</em></dt>
+  <dd>Entry name to update.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--desired`</dt>
+  <dd>Desired version: concrete, SemVer constraint, or `latest`.</dd>
+
+  <dt>`--package`</dt>
+  <dd>Package coordinate.</dd>
+
+  <dt>`--provider`</dt>
+  <dd>Provider name from `version.providers`.</dd>
+
+  <dt>`--group`</dt>
+  <dd>Version group name.</dd>
+
+  <dt>`--pin`</dt>
+  <dd>Pin policy: `digest`, `sha`, or `none`.</dd>
+
+  <dt>`--include`</dt>
+  <dd>Candidate version patterns to include. Repeat the flag for multiple patterns.</dd>
+
+  <dt>`--exclude`</dt>
+  <dd>Candidate version patterns to exclude. Repeat the flag for multiple patterns.</dd>
+
+  <dt>`--prerelease`</dt>
+  <dd>Allow or disallow prerelease candidates for this entry.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Move checkout to the v6 desired range
+atmos version track set checkout --desired=v6
+
+# Render nginx with an immutable OCI digest
+atmos version track set nginx --pin=digest
+
+# Exclude a known vulnerable release and keep prereleases disabled
+atmos version track set checkout --exclude=v6.0.0 --prerelease=false
+
+# Move an entry into a group on prod
+atmos version track set opentofu --track=prod --group=infrastructure
+```

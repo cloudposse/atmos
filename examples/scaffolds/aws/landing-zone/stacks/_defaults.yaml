@@ -1,0 +1,98 @@
+# atmos:template
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Shared foundation for every environment. Each stage stack (dev.yaml,
+# staging.yaml, prod.yaml) imports this file and layers its own values on top —
+# per-stage substance lives in the stage stacks, not here.
+
+vars:
+  # Used by every component to build resource names like
+  # <project>-<stage>-audit-logs.
+  project: "[[ .Config.project_name ]]"
+
+# Pin the toolchain for every component in this landing zone. `dependencies.tools`
+# is the current, integrated way to declare required tool versions (installed/
+# resolved by `atmos toolchain` and recorded in toolchain.lock.yaml).
+# https://atmos.tools/cli/commands/toolchain
+dependencies:
+  tools:
+    # `terraform_command` selects the invoked binary (see atmos.yaml); the toolchain
+    # registry key differs for OpenTofu (`opentofu`, not the `tofu` binary name).
+    '[[ if eq .Config.terraform_command "tofu" ]]opentofu[[ else ]]terraform[[ end ]]': "latest"
+
+components:
+  emulator:
+    # The local AWS emulator, stack-scoped: `atmos emulator up aws -s dev`.
+    # The `local` identity in atmos.yaml resolves its live endpoint and wires
+    # Terraform to it automatically.
+    aws:
+      driver: floci/aws
+      region: "[[ .Config.region ]]"
+      container:
+        # Pull Floci from Google's Docker Hub mirror to avoid rate limits and
+        # pin to the release the Atmos test suite verifies.
+        image: mirror.gcr.io/floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2
+        # Pin a fixed host port so the Terraform state backend below has a
+        # stable default endpoint. 14566 rather than the conventional 4566 so
+        # another emulator (e.g. a CI service container) can coexist.
+        ports:
+          - host: 14566
+            container: 4566
+
+  terraform:
+    # The per-environment baseline every stage gets. Stage stacks override the
+    # values that differ per environment.
+    kms:
+      vars: {}
+    audit-trail:
+      # Component dependencies declare the apply order in the DAG (consumed by
+      # `atmos describe dependents`, `atmos describe affected`, and
+      # `atmos terraform apply --all`). This is the current form; the legacy
+      # `settings.depends_on` map is deprecated.
+      # https://atmos.tools/stacks/dependencies/components
+      dependencies:
+        components:
+          - name: kms
+      vars:
+        # Read straight from kms's Terraform state so this can never drift
+        # from what was actually deployed.
+        kms_key_arn: !terraform.state kms key_arn
+    baseline:
+      dependencies:
+        components:
+          - name: kms
+      vars:
+        kms_key_arn: !terraform.state kms key_arn
+    monitoring:
+      dependencies:
+        components:
+          - name: kms
+      vars:
+        kms_key_arn: !terraform.state kms key_arn
+    iam-baseline:
+      vars: {}
+
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: "[[ .Config.project_name ]]-tfstate"
+      key: terraform.tfstate
+      region: "[[ .Config.region ]]"
+      # Standard Terraform S3-backend custom-endpoint settings so both the
+      # Atmos backend provisioner and Terraform's own S3 backend talk to the
+      # emulator. For real AWS, delete everything from `access_key` down.
+      access_key: test
+      secret_key: test
+      use_path_style: true
+      skip_credentials_validation: true
+      skip_region_validation: true
+      skip_metadata_api_check: true
+      skip_requesting_account_id: true
+      endpoints:
+        s3: !env AWS_ENDPOINT_URL_S3 http://localhost:14566
+  provision:
+    # Atmos creates the state bucket automatically before `terraform init` —
+    # no separate tfstate-backend component required.
+    backend:
+      enabled: true

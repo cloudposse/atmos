@@ -1,0 +1,17 @@
+# Development environment
+vars:
+  stage: dev
+
+import:
+  - catalog/demo
+
+components:
+  terraform:
+    demo:
+      vars:
+        app_name: "myapp-dev"
+        app_version: "1.0.0-dev"
+        features:
+          - feature1
+          - feature2
+          - debug-mode

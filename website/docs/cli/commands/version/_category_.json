@@ -1,6 +1,5 @@
 {
   "label": "version",
-  "position": 19,
   "className": "command",
   "collapsible": true,
   "collapsed": true,

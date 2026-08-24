@@ -1,11 +1,17 @@
 package toolchain
 
 import (
+	"strconv"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // TestInstallCommandProvider_Extended tests additional InstallCommandProvider functionality.
@@ -24,7 +30,7 @@ func TestInstallCommandProvider_Extended(t *testing.T) {
 		cmd := provider.GetCommand()
 		require.NotNil(t, cmd)
 		assert.Contains(t, cmd.Use, "install")
-		assert.Contains(t, cmd.Use, "[tool]")
+		assert.Contains(t, cmd.Use, "[tool...]")
 	})
 }
 
@@ -41,13 +47,19 @@ func TestInstallCommand_Flags(t *testing.T) {
 		require.NotNil(t, flag)
 		assert.Equal(t, "false", flag.DefValue)
 	})
+
+	t.Run("install command has max-concurrency flag", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("max-concurrency")
+		require.NotNil(t, flag)
+		assert.Equal(t, "0", flag.DefValue)
+	})
 }
 
 // TestInstallCommand_CommandStructure tests the install command structure.
 func TestInstallCommand_CommandStructure(t *testing.T) {
 	t.Run("command has correct use string", func(t *testing.T) {
 		assert.Contains(t, installCmd.Use, "install")
-		assert.Contains(t, installCmd.Use, "[tool]")
+		assert.Contains(t, installCmd.Use, "[tool...]")
 	})
 
 	t.Run("command has short description", func(t *testing.T) {
@@ -72,8 +84,12 @@ func TestInstallCommand_CommandStructure(t *testing.T) {
 		assert.True(t, installCmd.SilenceErrors)
 	})
 
-	t.Run("command accepts max 1 argument", func(t *testing.T) {
-		assert.NotNil(t, installCmd.Args)
+	t.Run("command accepts multiple arguments", func(t *testing.T) {
+		require.NotNil(t, installCmd.Args)
+		// Verify the command accepts zero, one, or multiple arguments.
+		assert.NoError(t, installCmd.Args(installCmd, []string{}))
+		assert.NoError(t, installCmd.Args(installCmd, []string{"tool1"}))
+		assert.NoError(t, installCmd.Args(installCmd, []string{"tool1", "tool2", "tool3"}))
 	})
 }
 
@@ -125,19 +141,6 @@ func TestInstallCommand_ViperIntegration(t *testing.T) {
 	}
 }
 
-// TestInstallCommand_EnvVars tests that environment variables are configured.
-func TestInstallCommand_EnvVars(t *testing.T) {
-	t.Run("reinstall env var is configured", func(t *testing.T) {
-		// The parser is configured with WithEnvVars("reinstall", "ATMOS_TOOLCHAIN_REINSTALL").
-		require.NotNil(t, installParser)
-	})
-
-	t.Run("default env var is configured", func(t *testing.T) {
-		// The parser is configured with WithEnvVars("default", "ATMOS_TOOLCHAIN_DEFAULT").
-		require.NotNil(t, installParser)
-	})
-}
-
 // TestInstallCommand_FlagDefaults tests default flag values.
 func TestInstallCommand_FlagDefaults(t *testing.T) {
 	t.Run("reinstall default is false", func(t *testing.T) {
@@ -151,4 +154,96 @@ func TestInstallCommand_FlagDefaults(t *testing.T) {
 		require.NotNil(t, flag)
 		assert.Equal(t, "false", flag.DefValue)
 	})
+}
+
+// TestInstallCommandProvider_Interface tests the full interface implementation.
+func TestInstallCommandProvider_Interface(t *testing.T) {
+	provider := &InstallCommandProvider{}
+
+	t.Run("GetName returns install", func(t *testing.T) {
+		assert.Equal(t, "install", provider.GetName())
+	})
+
+	t.Run("GetGroup returns Toolchain Commands", func(t *testing.T) {
+		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+	})
+
+	t.Run("GetFlagsBuilder returns parser", func(t *testing.T) {
+		fb := provider.GetFlagsBuilder()
+		assert.NotNil(t, fb)
+		assert.Equal(t, installParser, fb)
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		pab := provider.GetPositionalArgsBuilder()
+		assert.Nil(t, pab)
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		cf := provider.GetCompatibilityFlags()
+		assert.Nil(t, cf)
+	})
+}
+
+func TestResolveInstallMaxConcurrency(t *testing.T) {
+	tests := []struct {
+		name        string
+		configValue int
+		envValue    *string
+		flagValue   *int
+		want        int
+		wantErr     bool
+	}{
+		{name: "uses default", want: toolchain.DefaultInstallMaxConcurrency},
+		{name: "uses config", configValue: 3, want: 3},
+		{name: "environment overrides config", configValue: 3, envValue: stringPtr("5"), want: 5},
+		{name: "flag overrides environment and config", configValue: 3, envValue: stringPtr("5"), flagValue: intPtr(7), want: 7},
+		{name: "rejects zero from config", configValue: 0, wantErr: true},
+		{name: "rejects zero from environment", envValue: stringPtr("0"), wantErr: true},
+		{name: "rejects negative environment value", envValue: stringPtr("-2"), wantErr: true},
+		{name: "rejects zero from flag", flagValue: intPtr(0), wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			require.NoError(t, v.BindEnv("max-concurrency", maxConcurrencyEnvVar))
+			config := &schema.AtmosConfiguration{}
+			if tt.configValue != 0 || tt.name == "rejects zero from config" {
+				config.Toolchain.MaxConcurrency = tt.configValue
+				v.Set("toolchain.max_concurrency", tt.configValue)
+			}
+			if tt.envValue != nil {
+				t.Setenv(maxConcurrencyEnvVar, *tt.envValue)
+			}
+
+			cmd := newInstallMaxConcurrencyTestCmd(t, tt.flagValue)
+			got, err := resolveInstallMaxConcurrencyFromSources(cmd, v, config, tt.envValue != nil)
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func newInstallMaxConcurrencyTestCmd(t *testing.T, flagValue *int) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{Use: "install", Run: func(*cobra.Command, []string) {}}
+	cmd.Flags().Int("max-concurrency", 0, "")
+	if flagValue != nil {
+		cmd.SetArgs([]string{"--max-concurrency", strconv.Itoa(*flagValue)})
+		require.NoError(t, cmd.Execute())
+	}
+	return cmd
+}
+
+func intPtr(value int) *int {
+	return &value
+}
+
+func stringPtr(value string) *string {
+	return &value
 }

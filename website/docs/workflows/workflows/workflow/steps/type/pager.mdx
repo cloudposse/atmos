@@ -1,0 +1,38 @@
+---
+title: pager
+sidebar_label: pager
+slug: /workflows/steps/type/pager
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `pager` step type opens content in a scrollable, full-screen pager, letting your custom commands and workflows present long output — changelogs, plans, or logs — without flooding the terminal.
+</Intro>
+
+```yaml
+steps:
+  - name: changelog
+    type: pager
+    title: Changelog
+    path: CHANGELOG.md
+    markdown: true
+```
+
+## Fields
+
+<dl>
+  <dt>`content`</dt>
+  <dd>Inline content to display. Use either `content` or `path`.</dd>
+
+  <dt>`path`</dt>
+  <dd>File path to read and display. Use either `path` or `content`.</dd>
+
+  <dt>`title`</dt>
+  <dd>Optional pager title.</dd>
+
+  <dt>`markdown`</dt>
+  <dd>Render content as Markdown. Markdown files are also detected by extension.</dd>
+</dl>
+
+The step result value contains the displayed content source.

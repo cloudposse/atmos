@@ -4,25 +4,21 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
-
-// ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command.
-// Deprecated: Use ExecuteTerraformGenerateVarfiles with typed parameters instead.
-func ExecuteTerraformGenerateVarfilesCmd(cmd interface{}, args []string) error {
-	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfilesCmd")()
-
-	return errUtils.ErrDeprecatedCmdNotCallable
-}
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks.
 func ExecuteTerraformGenerateVarfiles(
@@ -34,7 +30,7 @@ func ExecuteTerraformGenerateVarfiles(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateVarfiles")()
 
-	stacksMap, _, err := FindStacksMap(atmosConfig, false)
+	stacksMap, _, deferredContexts, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}
@@ -69,8 +65,7 @@ func ExecuteTerraformGenerateVarfiles(
 
 			// Check if `components` filter is provided
 			if len(components) == 0 ||
-				u.SliceContainsString(components, componentName) {
-
+				slices.Contains(components, componentName) {
 				// Component vars
 				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[string]any); !ok {
 					continue
@@ -142,7 +137,10 @@ func ExecuteTerraformGenerateVarfiles(
 					ComponentOverridesSection: overridesSection,
 					ComponentBackendSection:   backendSection,
 					ComponentBackendType:      backendTypeSection,
-					ComponentSection: map[string]any{
+					// Snapshot the complete merged component section (hooks, generate,
+					// required_providers, etc. included), not just the sections this generator
+					// directly consumes — see cloneComponentSectionWithOverrides.
+					ComponentSection: cloneComponentSectionWithOverrides(componentSection, map[string]any{
 						cfg.VarsSectionName:        varsSection,
 						cfg.MetadataSectionName:    metadataSection,
 						cfg.SettingsSectionName:    settingsSection,
@@ -152,11 +150,20 @@ func ExecuteTerraformGenerateVarfiles(
 						cfg.OverridesSectionName:   overridesSection,
 						cfg.BackendSectionName:     backendSection,
 						cfg.BackendTypeSectionName: backendTypeSection,
-					},
+					}),
 				}
 
 				if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
 					configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
+				}
+
+				// Recover this component's deferred-merge contexts (per section: vars, settings,
+				// env, auth, providers, etc.) from the FindStacksMap cache so deferred YAML
+				// functions (!template, !labels, !tags, !terraform.output, etc.) can be resolved
+				// and deep-merged against a concrete override at the same path below, instead of
+				// silently losing data the way #2888 described for the main describe/plan path.
+				if compDctx, ok := deferredContexts[stackFileName][cfg.TerraformComponentType][componentName]; ok {
+					configAndStacksInfo.DeferredMergeContexts = compDctx
 				}
 
 				// Context
@@ -167,7 +174,7 @@ func ExecuteTerraformGenerateVarfiles(
 				// Stack name
 				var stackName string
 				if atmosConfig.Stacks.NameTemplate != "" {
-					stackName, err = ProcessTmpl(atmosConfig, "terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+					stackName, err = ProcessTmpl(atmosConfig, "terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 					if err != nil {
 						return err
 					}
@@ -202,7 +209,7 @@ func ExecuteTerraformGenerateVarfiles(
 				componentSection["atmos_manifest"] = stackFileName
 
 				// Process `Go` templates
-				componentSectionStr, err := u.ConvertToYAML(componentSection)
+				componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 				if err != nil {
 					return err
 				}
@@ -211,6 +218,15 @@ func ExecuteTerraformGenerateVarfiles(
 				err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
 				if err != nil {
 					return err
+				}
+
+				// Snapshot the component context for deferred-YAML-function template rendering
+				// below (a deferred value's own {{ }} expression, e.g. a parametrized
+				// !terraform.state stack argument, needs the same data source ProcessTmplWithDatasources
+				// uses here).
+				componentTemplateContext := make(map[string]any, len(configAndStacksInfo.ComponentSection))
+				for k, v := range configAndStacksInfo.ComponentSection {
+					componentTemplateContext[k] = v
 				}
 
 				componentSectionProcessed, err := ProcessTmplWithDatasources(
@@ -244,6 +260,18 @@ func ExecuteTerraformGenerateVarfiles(
 				}
 
 				componentSection = componentSectionFinal
+				configAndStacksInfo.ComponentSection = componentSectionFinal
+
+				// Resolve deferred YAML functions (!template, !labels, !tags, !terraform.output,
+				// etc.) and deep-merge their results against any concrete override at the same
+				// path. Without this, a section that only survived Stage 2's structural merge as an
+				// unresolved function string (or a placeholder) would silently lose the function's
+				// contribution here, the same #2888 data-loss bug the main describe/plan path fixes
+				// via this same call (see internal/exec/utils.go).
+				if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, nil); err != nil {
+					return err
+				}
+				componentSection = configAndStacksInfo.ComponentSection
 
 				if i, ok := componentSection[cfg.VarsSectionName].(map[string]any); ok {
 					varsSection = i
@@ -253,11 +281,10 @@ func ExecuteTerraformGenerateVarfiles(
 				if len(stacks) == 0 ||
 					// `stacks` filter can contain the names of the top-level stack config files:
 					// atmos terraform generate varfiles --stacks=orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2
-					u.SliceContainsString(stacks, stackFileName) ||
+					slices.Contains(stacks, stackFileName) ||
 					// `stacks` filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
-					u.SliceContainsString(stacks, stackName) {
-
+					slices.Contains(stacks, stackName) {
 					// Replace the tokens in the file template
 					// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
 					fileName := cfg.ReplaceContextTokens(context, fileTemplate)
@@ -272,19 +299,29 @@ func ExecuteTerraformGenerateVarfiles(
 						return err
 					}
 
+					// Keep resolved secrets out of generated varfiles so plaintext secrets
+					// never hit disk. Batch generation has no env-injection target, so
+					// secret-bearing variables are omitted (use the singular
+					// `generate varfile --with-secrets` to export them deliberately).
+					varsToWrite, secretVars := tfvars.Partition(varsSection, atmosio.ContainsSecret)
+					if len(secretVars) > 0 {
+						log.Warn("Omitting secret-bearing variables from the generated varfile",
+							"file", fileName, "count", len(secretVars))
+					}
+
 					// Write the varfile
 					if format == "yaml" {
-						err = u.WriteToFileAsYAML(fileAbsolutePath, varsSection, 0o644)
+						err = u.WriteToFileAsYAML(fileAbsolutePath, varsToWrite, filePermissions)
 						if err != nil {
 							return err
 						}
 					} else if format == "json" {
-						err = u.WriteToFileAsJSON(fileAbsolutePath, varsSection, 0o644)
+						err = u.WriteToFileAsJSON(fileAbsolutePath, varsToWrite, filePermissions)
 						if err != nil {
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteToFileAsHcl(fileAbsolutePath, varsSection, 0o644)
+						err = u.WriteToFileAsHcl(fileAbsolutePath, varsToWrite, filePermissions)
 						if err != nil {
 							return err
 						}

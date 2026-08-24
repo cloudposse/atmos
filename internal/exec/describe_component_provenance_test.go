@@ -33,9 +33,11 @@ func TestDescribeComponent_NestedImportProvenance(t *testing.T) {
 	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
-	// Initialize config.
+	// Initialize config. `kms-key` is used because it resolves fully offline (no
+	// `!terraform.output`/`!store`/`!secret` that need a running emulator), while
+	// still inheriting the deep nested import chain via `catalog/backend`.
 	var configAndStacksInfo schema.ConfigAndStacksInfo
-	configAndStacksInfo.ComponentFromArg = "vpc-flow-logs-bucket"
+	configAndStacksInfo.ComponentFromArg = "kms-key"
 	configAndStacksInfo.Stack = "plat-ue2-dev"
 	configAndStacksInfo.ComponentType = cfg.TerraformComponentType
 
@@ -48,7 +50,7 @@ func TestDescribeComponent_NestedImportProvenance(t *testing.T) {
 	// Execute describe component with context to get provenance
 	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
 		AtmosConfig:          &atmosConfig,
-		Component:            "vpc-flow-logs-bucket",
+		Component:            "kms-key",
 		Stack:                "plat-ue2-dev",
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
@@ -72,18 +74,21 @@ func TestDescribeComponent_NestedImportProvenance(t *testing.T) {
 	}
 	require.NotEmpty(t, imports, "imports should not be empty")
 
-	// Expected imports in the flattened list (order may vary):
+	// Expected imports in the flattened list (order may vary). Most of these are
+	// nested: `orgs/acme/plat/_defaults` imports `catalog/backend`, which in turn
+	// imports the Terraform catalog components (kms-key, s3-bucket, …).
 	expectedImports := map[string]bool{
-		"catalog/vpc-flow-logs-bucket/defaults": true,
-		"catalog/vpc/defaults":                  true,
-		"catalog/vpc/dev":                       true,
-		"catalog/vpc/ue2":                       true, // Nested: from mixins/region/us-east-2
-		"mixins/region/us-east-2":               true,
-		"mixins/stage/dev":                      true,
-		"mixins/tenant/plat":                    true,
-		"orgs/acme/_defaults":                   true,
-		"orgs/acme/plat/_defaults":              true,
-		"orgs/acme/plat/dev/_defaults":          true,
+		"catalog/backend":                 true,
+		"catalog/kms-key/defaults":        true, // Nested: from catalog/backend
+		"catalog/s3-bucket/defaults":      true, // Nested: from catalog/backend
+		"catalog/sns-topic/defaults":      true, // Nested: from catalog/backend
+		"catalog/sqs-queue/defaults":      true, // Nested: from catalog/backend
+		"catalog/dynamodb-table/defaults": true, // Nested: from catalog/backend
+		"catalog/app-config/defaults":     true, // Nested: from catalog/backend
+		"mixins/region/us-east-2":         true,
+		"orgs/acme/_defaults":             true,
+		"orgs/acme/plat/_defaults":        true,
+		"orgs/acme/plat/dev/_defaults":    true,
 	}
 
 	// Verify we have all expected imports
@@ -139,38 +144,22 @@ func TestDescribeComponent_NestedImportProvenance(t *testing.T) {
 		t.Fail()
 	}
 
-	// Additional assertions: Check that specific nested imports have correct provenance
-	// catalog/vpc/ue2 should have provenance from mixins/region/us-east-2.yaml
-	metaKey := "__import_meta__:catalog/vpc/ue2"
+	// Additional assertion: a nested import has correct provenance.
+	// catalog/kms-key/defaults is imported by catalog/backend.yaml (which is itself
+	// imported by orgs/acme/plat/_defaults), so it is a nested import (depth > 0)
+	// whose importing file is catalog/backend.yaml.
+	metaKey := "__import_meta__:catalog/kms-key/defaults"
 	if ctx.HasProvenance(metaKey) {
 		entries := ctx.GetProvenance(metaKey)
-		require.NotEmpty(t, entries, "catalog/vpc/ue2 should have provenance entry")
-
-		// The file that imported it should be mixins/region/us-east-2.yaml
-		// (this is a nested import - us-east-2 imports vpc/ue2)
-		entry := entries[0]
-		assert.Contains(t, entry.File, "us-east-2",
-			"catalog/vpc/ue2 should be imported from a file containing 'us-east-2'")
-
-		// Depth should be > 0 since it's a nested import
-		assert.Greater(t, entry.Depth, 0,
-			"catalog/vpc/ue2 is a nested import and should have depth > 0")
-	}
-
-	// catalog/vpc-flow-logs-bucket/defaults should have provenance from a region mixin file
-	// (could be us-east-2 or us-west-2, depending on processing order)
-	metaKey = "__import_meta__:catalog/vpc-flow-logs-bucket/defaults"
-	if ctx.HasProvenance(metaKey) {
-		entries := ctx.GetProvenance(metaKey)
-		require.NotEmpty(t, entries, "catalog/vpc-flow-logs-bucket/defaults should have provenance entry")
+		require.NotEmpty(t, entries, "catalog/kms-key/defaults should have provenance entry")
 
 		entry := entries[0]
-		// Should be imported from a mixins/region file
-		assert.Contains(t, entry.File, "mixins/region/us-",
-			"catalog/vpc-flow-logs-bucket/defaults should be imported from a mixins/region file")
+		assert.Contains(t, entry.File, "backend",
+			"catalog/kms-key/defaults should be imported from catalog/backend.yaml")
 
+		// Depth should be > 0 since it's a nested import.
 		assert.Greater(t, entry.Depth, 0,
-			"catalog/vpc-flow-logs-bucket/defaults is a nested import and should have depth > 0")
+			"catalog/kms-key/defaults is a nested import and should have depth > 0")
 	}
 
 	// Clean up after test to avoid polluting subsequent tests
@@ -202,9 +191,9 @@ func TestDescribeComponent_DirectImportProvenance(t *testing.T) {
 	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
-	// Initialize config.
+	// Initialize config. `kms-key` resolves fully offline (see the nested-import test).
 	var configAndStacksInfo schema.ConfigAndStacksInfo
-	configAndStacksInfo.ComponentFromArg = "vpc"
+	configAndStacksInfo.ComponentFromArg = "kms-key"
 	configAndStacksInfo.Stack = "plat-ue2-dev"
 	configAndStacksInfo.ComponentType = cfg.TerraformComponentType
 
@@ -217,7 +206,7 @@ func TestDescribeComponent_DirectImportProvenance(t *testing.T) {
 	// Execute describe component with context to get provenance
 	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
 		AtmosConfig:          &atmosConfig,
-		Component:            "vpc",
+		Component:            "kms-key",
 		Stack:                "plat-ue2-dev",
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
@@ -229,16 +218,14 @@ func TestDescribeComponent_DirectImportProvenance(t *testing.T) {
 
 	ctx := result.MergeContext
 
-	// The stack file orgs/acme/plat/dev/us-east-2.yaml has these direct imports:
-	// - orgs/acme/plat/dev/_defaults (line 2)
-	// - mixins/region/us-east-2 (line 3)
-	// - catalog/vpc/dev (line 5)
+	// The leaf stack file orgs/acme/plat/dev/us-east-2.yaml has these direct imports:
+	// - orgs/acme/plat/dev/_defaults
+	// - mixins/region/us-east-2
 
 	// Check that these direct imports have BOTH __import_meta__ AND __import__ entries
 	directImports := []string{
 		"orgs/acme/plat/dev/_defaults",
 		"mixins/region/us-east-2",
-		"catalog/vpc/dev",
 	}
 
 	for _, importPath := range directImports {

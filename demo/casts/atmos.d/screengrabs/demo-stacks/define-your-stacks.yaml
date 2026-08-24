@@ -1,0 +1,106 @@
+commands:
+  - name: casts generate screengrabs demo-stacks define-your-stacks
+    description: Regenerate the "define your stacks" docs screengrab cast
+    dependencies:
+      tools:
+        sharkdp/bat: v0.26.1
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: require
+        name: require-screengrab-tools
+        tools:
+          - tree
+        hint: Install GNU-compatible `tree` before recording docs screengrabs.
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: define-your-stacks
+        working_directory: "../../.context/cast-fixtures/demo-stacks"
+        title: Define your Stacks
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        output:
+          cast: "../../website/static/casts/screengrabs/demo-stacks/define-your-stacks.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# Here's how simple it is to organize your environments."
+          - type: simulate
+            text: "# (but it's entirely configurable)."
+          - type: simulate
+            text: tree stacks
+          - type: shell
+            name: tree-stacks
+            output: raw
+            command: tree -CF --gitignore --charset=UTF-8 -I ".git" -I "terraform.tfstate*" -I "*.tfvars.json" -I "cache*.txt" stacks
+          - type: simulate
+            text: "# Start by defining the baseline configuration for myapp."
+          - type: simulate
+            text: "# This is the configuration that you want to import anytime you deploy your component."
+          - type: simulate
+            text: cat stacks/catalog/myapp.yaml
+          - type: shell
+            name: cat-catalog
+            output: raw
+            command: bat --force-colorization --style header,numbers --theme="GitHub" --paging=never stacks/catalog/myapp.yaml
+          - type: simulate
+            text: "# Then we define each environment importing that baseline configuration."
+          - type: simulate
+            text: "# Here's how the configuration for the 'dev' environment looks like..."
+          - type: simulate
+            text: cat stacks/deploy/dev.yaml
+          - type: shell
+            name: cat-dev
+            output: raw
+            command: bat --force-colorization --style header,numbers --theme="GitHub" --paging=never stacks/deploy/dev.yaml
+          - type: simulate
+            text: "# Define the configuration for the 'staging' environment."
+          - type: simulate
+            text: cat stacks/deploy/staging.yaml
+          - type: shell
+            name: cat-staging
+            output: raw
+            command: bat --force-colorization --style header,numbers --theme="GitHub" --paging=never stacks/deploy/staging.yaml
+          - type: simulate
+            text: "# Finally, define the configuration for the 'prod' environment..."
+          - type: simulate
+            text: cat stacks/deploy/prod.yaml
+          - type: shell
+            name: cat-prod
+            output: raw
+            command: bat --force-colorization --style header,numbers --theme="GitHub" --paging=never stacks/deploy/prod.yaml
+      - type: shell
+        name: validate
+        command: atmos casts validate screengrabs demo-stacks define-your-stacks
+  - name: casts validate screengrabs demo-stacks define-your-stacks
+    description: Validate the "define your stacks" docs screengrab cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import json
+          import re
+          from pathlib import Path
+
+          def cast_text(path):
+              lines = Path(path).read_text().splitlines()
+              data = "".join(json.loads(line)[2] for line in lines[1:] if line.strip() and not line.startswith("#"))
+              return re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", data)
+
+          text = cast_text("../../website/static/casts/screengrabs/demo-stacks/define-your-stacks.cast")
+          for needle in ["organize your environments", "myapp.yaml", "dev.yaml", "staging.yaml", "prod.yaml"]:
+              if needle not in text:
+                  raise SystemExit(f"define-your-stacks cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic"]:
+              if bad in text:
+                  raise SystemExit(f"define-your-stacks cast contains {bad!r}")
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/screengrabs/demo-stacks/define-your-stacks.cast")
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)

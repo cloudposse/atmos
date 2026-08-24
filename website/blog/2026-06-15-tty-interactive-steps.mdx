@@ -1,0 +1,96 @@
+---
+slug: tty-interactive-steps
+title: "Terminal Steps: tty, interactive, and exec for Custom Commands and Workflows"
+date: 2026-06-15T12:00:00.000Z
+authors: [osterman]
+tags: [feature]
+---
+
+Custom command and workflow shell steps now support docker-style `tty` and `interactive` fields — plus a new `exec` step type that replaces the Atmos process entirely — so commands like `aws ssm start-session`, `ssh`, `psql`, and `vim` can take over the terminal properly, with Ctrl-C going to the session instead of killing Atmos.
+
+<!--truncate-->
+
+## The Problem
+
+Shell steps run with Atmos managing their output: secrets are masked, output can be captured for later steps, and everything flows through pipes. That's exactly what you want for `terraform plan` — and exactly wrong for an interactive session:
+
+```yaml
+commands:
+  - name: ssh
+    steps:
+      - type: shell
+        command: "aws ssm start-session --target {{ .Arguments.instance_id }}"
+```
+
+The SSM session ran as a piped subprocess, so full-screen rendering broke. Worse, pressing Ctrl-C inside the session interrupted *Atmos itself* — Atmos exited, the pipe closed, and the orphaned session died with SIGPIPE.
+
+There was no way to say "give this step the terminal."
+
+## The Solution
+
+Steps now accept `tty` and `interactive`, modeled on `docker run -it`:
+
+```yaml
+commands:
+  - name: ssh
+    description: Open an SSM session to an instance
+    arguments:
+      - name: instance_id
+        description: EC2 instance ID
+        required: true
+    steps:
+      - type: shell
+        tty: true
+        interactive: true
+        command: "aws ssm start-session --target {{ .Arguments.instance_id }}"
+```
+
+Now `atmos ssh i-1234567890` behaves like a native terminal session:
+
+- **`tty: true`** allocates a pseudo-terminal (like `docker -t`). The command sees a real TTY, so full-screen programs render correctly. Secret masking is still applied to the session output.
+- **`interactive: true`** attaches your stdin and lets the step own Ctrl-C (like `docker -i`). Atmos suspends its own interrupt handling while the step runs, so Ctrl-C interrupts the command in the session — not Atmos.
+- Together, keystrokes flow straight to the session and the session's exit code becomes the Atmos exit code.
+
+The same fields work in workflow shell steps:
+
+```yaml
+workflows:
+  debug-db:
+    steps:
+      - type: shell
+        tty: true
+        interactive: true
+        command: "psql $DATABASE_URL"
+```
+
+You can also use `interactive: true` on its own for prompt-style commands that read stdin but don't need a full TTY, while Ctrl-C is handled by the command.
+
+## Going Further: `type: exec`
+
+Sometimes Atmos should be purely a launcher. A step of `type: exec` **replaces the Atmos process entirely** — shell `exec` semantics, a true `execve` on macOS and Linux:
+
+```yaml
+commands:
+  - name: ssh
+    steps:
+      - type: exec
+        command: "aws ssm start-session --target {{ .Arguments.instance_id }}"
+```
+
+The command inherits your terminal, environment, and working directory natively. Job control (Ctrl-Z) works exactly as if you'd run the command yourself, there's zero proxy overhead, and the command's exit code becomes the Atmos exit code. The trade-offs are inherent to process replacement: the exec step must be the final step (validated), no secret masking applies, and nothing runs after it.
+
+Rule of thumb: use `tty`/`interactive` when you want Atmos supervising (masking, multiple steps, retries); use `type: exec` when the command *is* the destination — SSM sessions, SSH, consoles.
+
+## How It Works
+
+With `tty: true`, Atmos runs the step under a pseudo-terminal (the same mechanism `atmos devcontainer attach` uses). With `interactive: true`, your terminal switches to raw mode for the duration of the step, so the Ctrl-C byte travels through the PTY to the child process — Atmos never even sees the signal. Secret masking is applied to the PTY output stream, so credentials in session output are still redacted.
+
+Pseudo-terminals are supported on macOS and Linux. On Windows, `tty: true` falls back to attaching the real console streams directly; sessions still work and Ctrl-C still goes to the step, but secret masking is unavailable in that mode (Atmos warns when masking is enabled).
+
+## How to Use It
+
+See the [Interactive and TTY Steps](/cli/configuration/commands/steps#interactive-and-tty-steps) documentation for the full reference, including semantics of each flag and platform notes.
+
+## Get Involved
+
+Have a use case that still doesn't fit — port-forwarding helpers, REPLs, TUIs? [Open an issue](https://github.com/cloudposse/atmos/issues) or join us in the [Atmos community](https://cloudposse.com/slack).

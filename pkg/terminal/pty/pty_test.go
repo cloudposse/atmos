@@ -1,17 +1,169 @@
 package pty
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
 )
+
+type ptyTestRecorder struct {
+	streams []string
+	events  []string
+}
+
+func (r *ptyTestRecorder) Record(stream, content string) {
+	r.streams = append(r.streams, stream)
+	r.events = append(r.events, content)
+}
+
+func ptyHelperCommand(t *testing.T, args ...string) *exec.Cmd {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable() error = %v", err)
+	}
+	cmd := exec.Command(exe, append([]string{"-test.run=TestPTYHelper", "--"}, args...)...)
+	// The test binary links TUI libraries that query the terminal (OSC/DSR)
+	// when stdout is a TTY and block waiting for replies no test PTY will
+	// send. A dumb terminal suppresses the queries.
+	cmd.Env = append(os.Environ(), "TERM=dumb", "NO_COLOR=1")
+	return cmd
+}
+
+func TestPTYHelper(t *testing.T) {
+	args := ptyHelperArgs()
+	if args == nil {
+		return
+	}
+
+	switch args[0] {
+	case "print-done":
+		fmt.Println("done")
+		time.Sleep(100 * time.Millisecond)
+	case "stdin-marker":
+		if isCharDevice(os.Stdin) {
+			fmt.Println("is-a-tty")
+		}
+		if line, ok := readLineWithTimeout(300 * time.Millisecond); ok {
+			fmt.Println("INPUT-RECEIVED:" + strings.TrimSpace(line))
+		} else {
+			fmt.Println("NO-INPUT")
+		}
+	default:
+		t.Fatalf("unknown helper command: %s", args[0])
+	}
+	os.Exit(0)
+}
+
+func ptyHelperArgs() []string {
+	for i, arg := range os.Args {
+		if arg == "--" && i+1 < len(os.Args) {
+			return os.Args[i+1:]
+		}
+	}
+	return nil
+}
+
+func isCharDevice(file *os.File) bool {
+	info, err := file.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+func readLineWithTimeout(timeout time.Duration) (string, bool) {
+	lines := make(chan string, 1)
+	go func() {
+		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err == nil || line != "" {
+			lines <- line
+			return
+		}
+		lines <- ""
+	}()
+
+	select {
+	case line := <-lines:
+		return line, line != ""
+	case <-time.After(timeout):
+		return "", false
+	}
+}
+
+func TestRecordingWriterRecordsPTYOutput(t *testing.T) {
+	rec := &ptyTestRecorder{}
+	restore := iolib.SetRecorder(rec)
+	defer restore()
+
+	var stdout bytes.Buffer
+	writer := &recordingWriter{underlying: &stdout}
+
+	n, err := writer.Write([]byte("pty output"))
+	if err != nil {
+		t.Fatalf("recordingWriter.Write() error = %v", err)
+	}
+
+	if n != len("pty output") {
+		t.Fatalf("recordingWriter.Write() wrote %d bytes, want %d", n, len("pty output"))
+	}
+	if stdout.String() != "pty output" {
+		t.Fatalf("stdout = %q, want pty output", stdout.String())
+	}
+	if len(rec.events) != 1 || rec.streams[0] != "o" || rec.events[0] != "pty output" {
+		t.Fatalf("recorded events = %#v streams = %#v", rec.events, rec.streams)
+	}
+}
+
+func TestTerminalResponseReaderAnswersSplitQueries(t *testing.T) {
+	src := iotest.OneByteReader(strings.NewReader("\x1b]11;?\x1b\\\x1b[6n"))
+	var responses bytes.Buffer
+	reader := &terminalResponseReader{src: src, responder: &responses}
+
+	var out bytes.Buffer
+	if _, err := io.Copy(&out, reader); err != nil {
+		t.Fatalf("io.Copy() error = %v", err)
+	}
+
+	if out.String() != "\x1b]11;?\x1b\\\x1b[6n" {
+		t.Fatalf("output = %q", out.String())
+	}
+	if got := responses.String(); got != "\x1b]11;rgb:0000/0000/0000\x1b\\\x1b[1;1R" {
+		t.Fatalf("responses = %q", got)
+	}
+}
+
+// TestTerminalResponseReaderAnswersForegroundColorQuery verifies that the
+// OSC 10 (foreground color) query is answered, exercising the first branch
+// of respond() which TestTerminalResponseReaderAnswersSplitQueries does not cover.
+func TestTerminalResponseReaderAnswersForegroundColorQuery(t *testing.T) {
+	src := strings.NewReader("\x1b]10;?\x1b\\")
+	var responses bytes.Buffer
+	reader := &terminalResponseReader{src: src, responder: &responses}
+
+	var out bytes.Buffer
+	if _, err := io.Copy(&out, reader); err != nil {
+		t.Fatalf("io.Copy() error = %v", err)
+	}
+
+	if out.String() != "\x1b]10;?\x1b\\" {
+		t.Fatalf("output = %q", out.String())
+	}
+	if got := responses.String(); got != "\x1b]10;rgb:ffff/ffff/ffff\x1b\\" {
+		t.Fatalf("responses = %q", got)
+	}
+}
 
 func TestIsSupported(t *testing.T) {
 	supported := IsSupported()
@@ -250,7 +402,7 @@ func TestExecWithPTY_DefaultOptions(t *testing.T) {
 	}
 }
 
-func TestMaskedWriter_Write(t *testing.T) {
+func TestRecordingWriterMasksOutput(t *testing.T) {
 	// Create IO context with masking enabled.
 	ioCtx, err := iolib.NewContext()
 	if err != nil {
@@ -258,8 +410,11 @@ func TestMaskedWriter_Write(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
+	recorder := &ptyTestRecorder{}
+	restore := iolib.SetRecorder(recorder)
+	defer restore()
 
-	writer := &maskedWriter{
+	writer := &recordingWriter{
 		underlying: &buf,
 		masker:     ioCtx.Masker(),
 	}
@@ -288,9 +443,18 @@ func TestMaskedWriter_Write(t *testing.T) {
 	if !strings.Contains(output, iolib.MaskReplacement) {
 		t.Errorf("Output does not contain mask replacement: %s", output)
 	}
+	if len(recorder.events) != 1 {
+		t.Fatalf("expected one recorded event, got %d", len(recorder.events))
+	}
+	if strings.Contains(recorder.events[0], secretKey) {
+		t.Errorf("Recorded event contains unmasked secret: %s", recorder.events[0])
+	}
+	if !strings.Contains(recorder.events[0], iolib.MaskReplacement) {
+		t.Errorf("Recorded event does not contain mask replacement: %s", recorder.events[0])
+	}
 }
 
-func TestMaskedWriter_PreservesByteCount(t *testing.T) {
+func TestRecordingWriterPreservesByteCount(t *testing.T) {
 	// Create IO context with masking enabled.
 	ioCtx, err := iolib.NewContext()
 	if err != nil {
@@ -299,7 +463,7 @@ func TestMaskedWriter_PreservesByteCount(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	writer := &maskedWriter{
+	writer := &recordingWriter{
 		underlying: &buf,
 		masker:     ioCtx.Masker(),
 	}
@@ -321,5 +485,227 @@ func TestMaskedWriter_PreservesByteCount(t *testing.T) {
 		if n != len(input) {
 			t.Errorf("Write(%q) returned %d bytes, expected %d", input, n, len(input))
 		}
+	}
+}
+
+// neverEOFReader simulates a terminal stdin: reads block forever until the
+// process exits, so io.Copy from such a reader never returns on its own.
+type neverEOFReader struct{}
+
+func (neverEOFReader) Read(p []byte) (int, error) {
+	select {} // Block forever.
+}
+
+func TestExecWithPTY_ReturnsWithBlockedStdin(t *testing.T) {
+	if !IsSupported() {
+		t.Skipf("PTY not supported on %s", runtime.GOOS)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var stdout bytes.Buffer
+	cmd := ptyHelperCommand(t, "print-done")
+	opts := &Options{
+		Stdin:  neverEOFReader{},
+		Stdout: &stdout,
+	}
+
+	// Regression: the stdin copier must not block completion. Before the fix,
+	// ExecWithPTY joined the stdin copy goroutine, which blocks until the next
+	// stdin read after the child exits (i.e., until a keypress).
+	finished := make(chan error, 1)
+	go func() { finished <- ExecWithPTY(ctx, cmd, opts) }()
+
+	select {
+	case err := <-finished:
+		if err != nil {
+			t.Fatalf("ExecWithPTY() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("ExecWithPTY() did not return after child exit with blocked stdin")
+	}
+
+	if !strings.Contains(stdout.String(), "done") {
+		t.Errorf("Expected output to contain 'done', got: %s", stdout.String())
+	}
+}
+
+func TestExecWithPTY_DisableStdinForward(t *testing.T) {
+	if !IsSupported() {
+		t.Skipf("PTY not supported on %s", runtime.GOOS)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var stdout bytes.Buffer
+	cmd := ptyHelperCommand(t, "stdin-marker")
+	opts := &Options{
+		Stdin:               strings.NewReader("should never be forwarded\n"),
+		Stdout:              &stdout,
+		DisableStdinForward: true,
+	}
+
+	if err := ExecWithPTY(ctx, cmd, opts); err != nil {
+		t.Fatalf("ExecWithPTY() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "is-a-tty") {
+		t.Errorf("Expected child to see a TTY on stdin, got: %s", output)
+	}
+	if !strings.Contains(output, "NO-INPUT") {
+		t.Errorf("Expected host stdin not to be forwarded, got: %s", output)
+	}
+	if strings.Contains(output, "INPUT-RECEIVED") {
+		t.Errorf("Host stdin leaked into the PTY: %s", output)
+	}
+}
+
+func TestExecWithPTY_ForwardsStdin(t *testing.T) {
+	if !IsSupported() {
+		t.Skipf("PTY not supported on %s", runtime.GOOS)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var stdout bytes.Buffer
+	cmd := ptyHelperCommand(t, "stdin-marker")
+	opts := &Options{
+		Stdin:  strings.NewReader("forwarded input\n"),
+		Stdout: &stdout,
+	}
+
+	if err := ExecWithPTY(ctx, cmd, opts); err != nil {
+		t.Fatalf("ExecWithPTY() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "is-a-tty") {
+		t.Errorf("Expected child to see a TTY on stdin, got: %s", output)
+	}
+	if !strings.Contains(output, "INPUT-RECEIVED:forwarded input") {
+		t.Errorf("Expected host stdin to be forwarded, got: %s", output)
+	}
+}
+
+func TestExecWithPTY_ReturnsWhenGrandchildHoldsPTY(t *testing.T) {
+	if !IsSupported() {
+		t.Skipf("PTY not supported on %s", runtime.GOOS)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var stdout bytes.Buffer
+	// Reproduces the aws ssm session-manager-plugin teardown hang: the shell
+	// exits immediately, but the backgrounded sleep inherits the PTY slave
+	// and holds it open, so the output copier never gets EIO. Completion must
+	// be bounded by the drain deadline, not the grandchild's lifetime.
+	cmd := exec.Command("sh", "-c", "echo session-over; sleep 15 & exit 0")
+	opts := &Options{
+		Stdin:  strings.NewReader(""),
+		Stdout: &stdout,
+	}
+
+	start := time.Now()
+	err := ExecWithPTY(ctx, cmd, opts)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("ExecWithPTY() error = %v", err)
+	}
+	if elapsed > 5*time.Second {
+		t.Fatalf("ExecWithPTY() took %v; teardown must be bounded by the drain deadline, not the grandchild's lifetime", elapsed)
+	}
+	if !strings.Contains(stdout.String(), "session-over") {
+		t.Errorf("Expected drained output to contain 'session-over', got: %q", stdout.String())
+	}
+}
+
+func TestIsPtyEIO(t *testing.T) {
+	if isPtyEIO(nil) {
+		t.Error("isPtyEIO(nil) must be false")
+	}
+	if isPtyEIO(errors.New("plain error")) {
+		t.Error("isPtyEIO(plain error) must be false")
+	}
+	eio := &os.PathError{Op: "read", Path: "/dev/ptmx", Err: syscall.EIO}
+	if runtime.GOOS != "windows" && !isPtyEIO(eio) {
+		t.Error("isPtyEIO(PathError{EIO}) must be true on Unix")
+	}
+	notEIO := &os.PathError{Op: "read", Path: "/dev/ptmx", Err: syscall.ENOENT}
+	if isPtyEIO(notEIO) {
+		t.Error("isPtyEIO(PathError{ENOENT}) must be false")
+	}
+}
+
+func TestCopyInputReportsUnexpectedErrors(t *testing.T) {
+	errChan := make(chan error, 2)
+	copyInput(errChan, io.Discard, iotest.ErrReader(errors.New("boom")))
+
+	select {
+	case err := <-errChan:
+		if !strings.Contains(err.Error(), "input copy failed") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	default:
+		t.Error("expected an input copy error to be reported")
+	}
+}
+
+func TestCopyOutputIgnoresBenignErrors(t *testing.T) {
+	for _, benign := range []error{os.ErrDeadlineExceeded, os.ErrClosed} {
+		errChan := make(chan error, 2)
+		var wg sync.WaitGroup
+		wg.Add(1)
+		copyOutput(&wg, errChan, io.Discard, iotest.ErrReader(benign))
+		select {
+		case err := <-errChan:
+			t.Errorf("benign error %v must not be reported, got %v", benign, err)
+		default:
+		}
+	}
+
+	// Unexpected errors ARE reported.
+	errChan := make(chan error, 2)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	copyOutput(&wg, errChan, io.Discard, iotest.ErrReader(errors.New("boom")))
+	select {
+	case <-errChan:
+	default:
+		t.Error("expected an output copy error to be reported")
+	}
+}
+
+func TestWaitOutputDrained_ForcesUnblockAfterDeadline(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error = %v", err)
+	}
+	defer func() { _ = w.Close(); _ = r.Close() }()
+
+	// Simulate the output copier blocked on a PTY that never EOFs: the read
+	// only returns once waitOutputDrained forces the deadline.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		buf := make([]byte, 1)
+		_, _ = r.Read(buf)
+	}()
+
+	start := time.Now()
+	waitOutputDrained(r, &wg)
+	elapsed := time.Since(start)
+
+	if elapsed < outputDrainTimeout {
+		t.Errorf("waitOutputDrained returned in %v, before the %v deadline", elapsed, outputDrainTimeout)
+	}
+	if elapsed > outputDrainTimeout+5*time.Second {
+		t.Errorf("waitOutputDrained took %v; the deadline must force the pending read to return", elapsed)
 	}
 }

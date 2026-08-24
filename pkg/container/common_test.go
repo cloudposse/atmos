@@ -1,10 +1,66 @@
 package container
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestExtractContainerID(t *testing.T) {
+	// The "real docker create with inline pull" case reproduces the CI failure where
+	// `docker create alpine:latest` pulls the image first and the whole blob was previously
+	// returned as the container ID, breaking the subsequent `docker start`.
+	tests := []struct {
+		name     string
+		output   string
+		expected string
+	}{
+		{
+			name:     "container ID only",
+			output:   "78cd31fb92191347df7b4cb8b0e7a6fcf2633080720af5f81a0c2f2def2b5550",
+			expected: "78cd31fb92191347df7b4cb8b0e7a6fcf2633080720af5f81a0c2f2def2b5550",
+		},
+		{
+			name: "container ID with inline pull output (real docker behavior)",
+			output: "Unable to find image 'alpine:latest' locally\n" +
+				"latest: Pulling from library/alpine\n" +
+				"55afa1ecc21d: Pulling fs layer\n" +
+				"55afa1ecc21d: Download complete\n" +
+				"55afa1ecc21d: Pull complete\n" +
+				"Digest: sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b\n" +
+				"Status: Downloaded newer image for alpine:latest\n" +
+				"78cd31fb92191347df7b4cb8b0e7a6fcf2633080720af5f81a0c2f2def2b5550\n",
+			expected: "78cd31fb92191347df7b4cb8b0e7a6fcf2633080720af5f81a0c2f2def2b5550",
+		},
+		{
+			name:     "container ID with trailing newline",
+			output:   "abc123\n",
+			expected: "abc123",
+		},
+		{
+			name:     "container ID with multiple trailing newlines",
+			output:   "abc123\n\n\n",
+			expected: "abc123",
+		},
+		{
+			name:     "empty output",
+			output:   "",
+			expected: "",
+		},
+		{
+			name:     "whitespace-only output",
+			output:   "  \n\t\n  ",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, extractContainerID([]byte(tt.output)))
+		})
+	}
+}
 
 func TestBuildCreateArgs(t *testing.T) {
 	tests := []struct {
@@ -67,6 +123,23 @@ func TestBuildCreateArgs(t *testing.T) {
 			},
 		},
 		{
+			name: "config with networks and aliases",
+			config: &CreateConfig{
+				Name:  "test-container",
+				Image: "ubuntu:22.04",
+				Networks: []NetworkAttachment{
+					{Name: "github_network_123", Aliases: []string{"aws", "localstack"}},
+				},
+			},
+			expected: []string{
+				"create", "--name", "test-container", "-it",
+				"--network", "github_network_123",
+				"--network-alias", "aws",
+				"--network-alias", "localstack",
+				"ubuntu:22.04",
+			},
+		},
+		{
 			name: "config with user and workspace",
 			config: &CreateConfig{
 				Name:            "test-container",
@@ -114,6 +187,7 @@ func TestBuildCreateArgs(t *testing.T) {
 			},
 			expected: []string{
 				"create", "--name", "test-container", "-it",
+				"--stop-signal", "SIGKILL",
 				"--entrypoint", "/bin/sh",
 				"ubuntu:22.04",
 				"-c", "sleep infinity",
@@ -162,6 +236,7 @@ func TestBuildCreateArgs(t *testing.T) {
 				"--user", "node",
 				"-w", "/workspace",
 				"--network=bridge",
+				"--stop-signal", "SIGKILL",
 				"--entrypoint", "/bin/sh",
 				"node:18",
 				"-c", "sleep infinity",
@@ -465,6 +540,7 @@ func TestAddImageAndCommand(t *testing.T) {
 				OverrideCommand: true,
 			},
 			expected: []string{
+				"--stop-signal", "SIGKILL",
 				"--entrypoint", "/bin/sh",
 				"ubuntu:22.04",
 				"-c", "sleep infinity",
@@ -479,6 +555,7 @@ func TestAddImageAndCommand(t *testing.T) {
 			},
 			expected: []string{
 				"--rm",
+				"--stop-signal", "SIGKILL",
 				"--entrypoint", "/bin/sh",
 				"ubuntu:22.04",
 				"-c", "sleep infinity",
@@ -668,10 +745,13 @@ func TestAddExecOptions(t *testing.T) {
 	}
 }
 
-func TestBuildAttachCommand(t *testing.T) {
+func TestBuildShellCommand(t *testing.T) {
+	// Shared stream instances so the expected ExecOptions can reference the exact
+	// same pointers that are propagated from ShellOptions.
+	inBuf, outBuf, errBuf := &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{}
 	tests := []struct {
 		name            string
-		opts            *AttachOptions
+		opts            *ShellOptions
 		expectedCmd     []string
 		expectedExecOpt *ExecOptions
 	}{
@@ -688,7 +768,7 @@ func TestBuildAttachCommand(t *testing.T) {
 		},
 		{
 			name:        "empty options - uses defaults",
-			opts:        &AttachOptions{},
+			opts:        &ShellOptions{},
 			expectedCmd: []string{"/bin/bash"},
 			expectedExecOpt: &ExecOptions{
 				Tty:          true,
@@ -699,7 +779,7 @@ func TestBuildAttachCommand(t *testing.T) {
 		},
 		{
 			name: "custom shell",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				Shell: "/bin/sh",
 			},
 			expectedCmd: []string{"/bin/sh"},
@@ -712,7 +792,7 @@ func TestBuildAttachCommand(t *testing.T) {
 		},
 		{
 			name: "shell with args",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				Shell:     "/bin/bash",
 				ShellArgs: []string{"-l", "-i"},
 			},
@@ -726,7 +806,7 @@ func TestBuildAttachCommand(t *testing.T) {
 		},
 		{
 			name: "custom user",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				User: "node",
 			},
 			expectedCmd: []string{"/bin/bash"},
@@ -740,7 +820,7 @@ func TestBuildAttachCommand(t *testing.T) {
 		},
 		{
 			name: "all options",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				Shell:     "/bin/zsh",
 				ShellArgs: []string{"-c", "echo hello"},
 				User:      "developer",
@@ -754,16 +834,110 @@ func TestBuildAttachCommand(t *testing.T) {
 				User:         "developer",
 			},
 		},
+		{
+			// Lock the contract that the Stdin/Stdout/Stderr streams from
+			// ShellOptions are propagated onto the returned ExecOptions.
+			name: "io streams propagate to exec options",
+			opts: &ShellOptions{
+				Stdin:  inBuf,
+				Stdout: outBuf,
+				Stderr: errBuf,
+			},
+			expectedCmd: []string{"/bin/bash"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+				Stdin:        inBuf,
+				Stdout:       outBuf,
+				Stderr:       errBuf,
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd, execOpts := buildAttachCommand(tt.opts)
+			cmd, execOpts := buildShellCommand(tt.opts)
 
 			// Verify command.
 			assert.Equal(t, tt.expectedCmd, cmd, "command should match expected")
 
 			// Verify exec options.
+			assert.Equal(t, tt.expectedExecOpt, execOpts, "exec options should match expected")
+		})
+	}
+}
+
+func TestBuildAttachArgs(t *testing.T) {
+	tests := []struct {
+		name            string
+		opts            *AttachOptions
+		expectedArgs    []string
+		expectedExecOpt *ExecOptions
+	}{
+		{
+			name:         "nil options - attaches stdin/stdout/stderr to PID 1",
+			opts:         nil,
+			expectedArgs: []string{"attach", "cid"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+			},
+		},
+		{
+			name:         "empty options - defaults",
+			opts:         &AttachOptions{},
+			expectedArgs: []string{"attach", "cid"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+			},
+		},
+		{
+			name:         "no-stdin attaches output only",
+			opts:         &AttachOptions{NoStdin: true},
+			expectedArgs: []string{"attach", "--no-stdin", "cid"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  false,
+				AttachStdout: true,
+				AttachStderr: true,
+			},
+		},
+		{
+			name:         "custom detach keys",
+			opts:         &AttachOptions{DetachKeys: "ctrl-x"},
+			expectedArgs: []string{"attach", "--detach-keys", "ctrl-x", "cid"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+			},
+		},
+		{
+			name:         "no-stdin and detach keys together",
+			opts:         &AttachOptions{NoStdin: true, DetachKeys: "ctrl-x"},
+			expectedArgs: []string{"attach", "--no-stdin", "--detach-keys", "ctrl-x", "cid"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  false,
+				AttachStdout: true,
+				AttachStderr: true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args, execOpts := buildAttachArgs("cid", tt.opts)
+
+			assert.Equal(t, tt.expectedArgs, args, "args should match expected")
 			assert.Equal(t, tt.expectedExecOpt, execOpts, "exec options should match expected")
 		})
 	}
@@ -840,6 +1014,190 @@ func TestBuildBuildArgs(t *testing.T) {
 				"-f", "Dockerfile.dev", "/path/to/context",
 			},
 		},
+		{
+			name: "buildx build",
+			config: &BuildConfig{
+				Engine:     "buildx",
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Tags:       []string{"myapp:latest"},
+			},
+			expected: []string{"buildx", "build", "-t", "myapp:latest", "-f", "Dockerfile", "."},
+		},
+		{
+			name: "buildx build with load",
+			config: &BuildConfig{
+				Engine:     "buildx",
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Tags:       []string{"myapp:latest"},
+				Load:       true,
+			},
+			expected: []string{"buildx", "build", "--load", "-t", "myapp:latest", "-f", "Dockerfile", "."},
+		},
+		{
+			name: "buildx bake",
+			config: &BuildConfig{
+				NoCache: true,
+				Pull:    true,
+				Bake: &BakeConfig{
+					File:    "docker-bake.hcl",
+					Files:   []string{"docker-bake.override.hcl"},
+					Target:  "app",
+					Targets: []string{"worker"},
+					Set:     []string{"*.platform=linux/amd64"},
+					Vars:    map[string]string{"VERSION": "1.0.0"},
+					Load:    true,
+					Push:    true,
+					Print:   true,
+				},
+			},
+			expected: []string{
+				"buildx", "bake",
+				"--file", "docker-bake.hcl",
+				"--file", "docker-bake.override.hcl",
+				"--no-cache",
+				"--pull",
+				"--load",
+				"--push",
+				"--print",
+				"--set", "*.platform=linux/amd64",
+				"app",
+				"worker",
+			},
+		},
+		{
+			// Bake.Vars is injected into the subprocess environment (see bakeVarEnv/
+			// bakeCommandEnv), not passed as a --var CLI flag, since --var isn't
+			// implemented by every buildx release (e.g. Debian Trixie's docker-buildx
+			// 0.13.1). Confirms Vars leaves no trace in the CLI args.
+			name: "buildx bake with vars does not affect CLI args",
+			config: &BuildConfig{
+				Bake: &BakeConfig{File: "docker-bake.hcl", Vars: map[string]string{"VERSION": "1.0.0"}},
+			},
+			expected: []string{"buildx", "bake", "--file", "docker-bake.hcl"},
+		},
+		{
+			name: "buildx bake with driver",
+			config: &BuildConfig{
+				Driver: &DriverConfig{Name: "my-builder", Provider: "docker-container"},
+				Bake: &BakeConfig{
+					File:   "docker-bake.hcl",
+					Target: "app",
+				},
+			},
+			expected: []string{
+				"buildx", "bake",
+				"--builder", "my-builder",
+				"--file", "docker-bake.hcl",
+				"app",
+			},
+		},
+		{
+			name: "buildx bake with cache from and to",
+			config: &BuildConfig{
+				Bake: &BakeConfig{File: "docker-bake.hcl", Target: "app"},
+				Cache: &CacheConfig{
+					From: []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache"}},
+					To:   []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache", "mode": "max"}},
+				},
+			},
+			expected: []string{
+				"buildx", "bake",
+				"--set", "*.cache-from=ref=registry.example.com/app:buildcache,type=registry",
+				"--set", "*.cache-to=mode=max,ref=registry.example.com/app:buildcache,type=registry",
+				"--file", "docker-bake.hcl",
+				"app",
+			},
+		},
+		{
+			name: "buildx build with driver shorthand",
+			config: &BuildConfig{
+				Engine:     "buildx",
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Driver:     &DriverConfig{Provider: "docker-container"},
+			},
+			expected: []string{
+				"buildx", "build",
+				"--builder", "atmos",
+				"-f", "Dockerfile", ".",
+			},
+		},
+		{
+			name: "buildx build with named driver",
+			config: &BuildConfig{
+				Engine:     "buildx",
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Driver:     &DriverConfig{Name: "my-builder", Provider: "docker-container"},
+			},
+			expected: []string{
+				"buildx", "build",
+				"--builder", "my-builder",
+				"-f", "Dockerfile", ".",
+			},
+		},
+		{
+			name: "buildx build with cache from and to",
+			config: &BuildConfig{
+				Engine:     "buildx",
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Cache: &CacheConfig{
+					From: []map[string]string{
+						{"type": "registry", "ref": "registry.example.com/app:buildcache"},
+					},
+					To: []map[string]string{
+						{"type": "registry", "ref": "registry.example.com/app:buildcache", "mode": "max"},
+					},
+				},
+			},
+			expected: []string{
+				"buildx", "build",
+				"--cache-from", "ref=registry.example.com/app:buildcache,type=registry",
+				"--cache-to", "mode=max,ref=registry.example.com/app:buildcache,type=registry",
+				"-f", "Dockerfile", ".",
+			},
+		},
+		{
+			name: "buildx build with driver, cache, custom dockerfile/context, and tags together",
+			config: &BuildConfig{
+				Engine:     "buildx",
+				Dockerfile: "docker/Dockerfile.prod",
+				Context:    "./app",
+				Tags:       []string{"myapp:latest", "myapp:v1.0"},
+				Driver:     &DriverConfig{Name: "my-builder", Provider: "docker-container"},
+				Cache: &CacheConfig{
+					From: []map[string]string{
+						{"type": "registry", "ref": "registry.example.com/app:buildcache"},
+					},
+					To: []map[string]string{
+						{"type": "registry", "ref": "registry.example.com/app:buildcache", "mode": "max"},
+					},
+				},
+			},
+			expected: []string{
+				"buildx", "build",
+				"--builder", "my-builder",
+				"--cache-from", "ref=registry.example.com/app:buildcache,type=registry",
+				"--cache-to", "mode=max,ref=registry.example.com/app:buildcache,type=registry",
+				"-t", "myapp:latest",
+				"-t", "myapp:v1.0",
+				"-f", "docker/Dockerfile.prod", "./app",
+			},
+		},
+		{
+			name: "cache is ignored on plain docker build",
+			config: &BuildConfig{
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Cache: &CacheConfig{
+					From: []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache"}},
+				},
+			},
+			expected: []string{"build", "-f", "Dockerfile", "."},
+		},
 	}
 
 	for _, tt := range tests {
@@ -860,6 +1218,132 @@ func TestBuildBuildArgs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestJoinAttrs(t *testing.T) {
+	tests := []struct {
+		name     string
+		attrs    map[string]string
+		expected string
+	}{
+		{
+			name:     "empty map",
+			attrs:    map[string]string{},
+			expected: "",
+		},
+		{
+			name:     "single attribute",
+			attrs:    map[string]string{"type": "registry"},
+			expected: "type=registry",
+		},
+		{
+			name: "multiple attributes are sorted for determinism",
+			attrs: map[string]string{
+				"type": "registry",
+				"ref":  "registry.example.com/app:buildcache",
+				"mode": "max",
+			},
+			expected: "mode=max,ref=registry.example.com/app:buildcache,type=registry",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, joinAttrs(tt.attrs))
+		})
+	}
+}
+
+func TestBakeVarEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		vars     map[string]string
+		expected []string
+	}{
+		{
+			name:     "nil vars",
+			vars:     nil,
+			expected: nil,
+		},
+		{
+			name:     "empty vars",
+			vars:     map[string]string{},
+			expected: nil,
+		},
+		{
+			name:     "single var",
+			vars:     map[string]string{"VERSION": "1.0.0"},
+			expected: []string{"VERSION=1.0.0"},
+		},
+		{
+			name:     "multiple vars sorted by key",
+			vars:     map[string]string{"VERSION": "1.0.0", "BUILD_ID": "42"},
+			expected: []string{"BUILD_ID=42", "VERSION=1.0.0"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, bakeVarEnv(tt.vars))
+		})
+	}
+}
+
+func TestBakeCommandEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		base     []string
+		config   *BuildConfig
+		expected []string
+	}{
+		{
+			name:     "no bake",
+			base:     []string{"PATH=/usr/bin"},
+			config:   &BuildConfig{},
+			expected: nil,
+		},
+		{
+			name:     "bake without vars",
+			base:     []string{"PATH=/usr/bin"},
+			config:   &BuildConfig{Bake: &BakeConfig{File: "docker-bake.hcl"}},
+			expected: nil,
+		},
+		{
+			name: "bake with vars appends to configured base env",
+			base: []string{"PATH=/usr/bin", "DOCKER_CONFIG=/tmp/dc"},
+			config: &BuildConfig{
+				Bake: &BakeConfig{File: "docker-bake.hcl", Vars: map[string]string{"VERSION": "1.0.0"}},
+			},
+			expected: []string{"PATH=/usr/bin", "DOCKER_CONFIG=/tmp/dc", "VERSION=1.0.0"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, bakeCommandEnv(tt.base, tt.config))
+		})
+	}
+
+	t.Run("nil base falls back to os.Environ", func(t *testing.T) {
+		config := &BuildConfig{
+			Bake: &BakeConfig{File: "docker-bake.hcl", Vars: map[string]string{"VERSION": "1.0.0"}},
+		}
+		result := bakeCommandEnv(nil, config)
+		assert.Contains(t, result, "VERSION=1.0.0")
+		assert.Greater(t, len(result), 1, "should include os.Environ() entries, not just the bake var")
+	})
+
+	t.Run("does not mutate base slice", func(t *testing.T) {
+		base := []string{"PATH=/usr/bin"}
+		config := &BuildConfig{Bake: &BakeConfig{Vars: map[string]string{"VERSION": "1.0.0"}}}
+		_ = bakeCommandEnv(base, config)
+		assert.Equal(t, []string{"PATH=/usr/bin"}, base, "base must not be mutated so later commands on the same runtime don't inherit bake vars")
+	})
+}
+
+func TestEffectiveDriverName(t *testing.T) {
+	assert.Equal(t, "atmos", effectiveDriverName(&DriverConfig{}))
+	assert.Equal(t, "my-builder", effectiveDriverName(&DriverConfig{Name: "my-builder"}))
 }
 
 func TestBuildRemoveArgs(t *testing.T) {
@@ -939,6 +1423,49 @@ func TestBuildStopArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := buildStopArgs(tt.containerID, tt.timeoutSecs)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildNetworkConnectArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		network     string
+		containerID string
+		aliases     []string
+		expected    []string
+	}{
+		{
+			name:        "no aliases",
+			network:     "atmos-fixtures",
+			containerID: "abc123",
+			expected:    []string{"network", "connect", "atmos-fixtures", "abc123"},
+		},
+		{
+			name:        "single alias",
+			network:     "atmos-fixtures",
+			containerID: "abc123",
+			aliases:     []string{"fixtures-aws"},
+			expected:    []string{"network", "connect", "--alias", "fixtures-aws", "atmos-fixtures", "abc123"},
+		},
+		{
+			name:        "multiple aliases preserve order",
+			network:     "atmos-fixtures",
+			containerID: "abc123",
+			aliases:     []string{"fixtures-aws", "fixtures-aws-alt"},
+			expected: []string{
+				"network", "connect",
+				"--alias", "fixtures-aws",
+				"--alias", "fixtures-aws-alt",
+				"atmos-fixtures", "abc123",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildNetworkConnectArgs(tt.network, tt.containerID, tt.aliases)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -1038,4 +1565,12 @@ func TestType_String(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestBuildImageInspectArgs(t *testing.T) {
+	assert.Equal(
+		t,
+		[]string{"image", "inspect", "--format", "{{json .}}", "alpine:latest"},
+		buildImageInspectArgs("alpine:latest"),
+	)
 }

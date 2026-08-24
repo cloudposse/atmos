@@ -15,6 +15,11 @@ import (
 // from URL detection through token injection to final URL generation.
 // This reproduces the exact scenario reported by the user.
 func TestCustomGitDetector_EndToEnd_GitHubTokenFallback(t *testing.T) {
+	// Disable the gh-CLI fallback (tier 4) so the "both tokens empty" case is deterministic
+	// regardless of whether the host running this test has an authenticated gh session; every
+	// other case in this table sets an explicit token, which already short-circuits the CLI tier.
+	t.Setenv("ATMOS_GITHUB_CLI", "")
+
 	tests := []struct {
 		name                string
 		githubToken         string
@@ -113,6 +118,30 @@ func TestCustomGitDetector_EndToEnd_GitHubTokenFallback(t *testing.T) {
 	}
 }
 
+func TestCustomGitDetector_NormalizesNativeGitHubFileImport(t *testing.T) {
+	// No token is configured for this test; disable the gh-CLI fallback (tier 4) so the
+	// expected token-free URL is deterministic regardless of the host's gh session.
+	t.Setenv("ATMOS_GITHUB_CLI", "")
+
+	sourceURL := "github.com/cloudposse/infra-live//profiles/managers/atmos.yaml?ref=main"
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			InjectGithubToken: true,
+		},
+	}
+
+	detector := NewCustomGitDetector(atmosConfig, sourceURL)
+	finalURL, detected, err := detector.Detect(sourceURL, "")
+
+	require.NoError(t, err)
+	require.True(t, detected)
+	assert.Equal(t,
+		"git::https://github.com/cloudposse/infra-live.git//profiles/managers/atmos.yaml?depth=1&ref=main",
+		finalURL,
+		"native GitHub file imports should stay native externally but become unambiguous go-getter git sources internally")
+	assert.NotContains(t, finalURL, "raw.githubusercontent.com")
+}
+
 // TestCustomGitDetector_EndToEnd_PreExistingCredentials tests that when
 // credentials are already in the URL (from template processing), user-provided
 // credentials take precedence and automatic injection is skipped.
@@ -166,6 +195,12 @@ func TestCustomGitDetector_EndToEnd_NonGitHubHost(t *testing.T) {
 
 // TestCustomGitDetector_EndToEnd_UserSpecifiedCredentials tests that user-specified credentials in the URL are preserved.
 func TestCustomGitDetector_EndToEnd_UserSpecifiedCredentials(t *testing.T) {
+	// The "no user credentials and no token" case needs the gh-CLI fallback (tier 4) disabled
+	// so it's deterministic regardless of the host's gh session; the other cases already have
+	// user-specified credentials in the URL, which short-circuits injection before token
+	// resolution is ever reached.
+	t.Setenv("ATMOS_GITHUB_CLI", "")
+
 	tests := []struct {
 		name             string
 		sourceURL        string

@@ -18,6 +18,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Helper functions for creating pointer values in tests.
+func intPtr(i int) *int                          { return &i }
+func durationPtr(d time.Duration) *time.Duration { return &d }
+func float64Ptr(f float64) *float64              { return &f }
+
 func TestIsRetryableGitError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -362,7 +367,7 @@ func TestGetRunCommandWithRetry_MaxAttemptsOne(t *testing.T) {
 
 	getter := &CustomGitGetter{
 		RetryConfig: &schema.RetryConfig{
-			MaxAttempts: 1,
+			MaxAttempts: intPtr(1),
 		},
 	}
 
@@ -380,10 +385,10 @@ func TestGetRunCommandWithRetry_SucceedsAfterRetry(t *testing.T) {
 
 	getter := &CustomGitGetter{
 		RetryConfig: &schema.RetryConfig{
-			MaxAttempts:     3,
-			InitialDelay:    10 * time.Millisecond,
-			MaxDelay:        100 * time.Millisecond,
-			MaxElapsedTime:  30 * time.Second,
+			MaxAttempts:     intPtr(3),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
 			BackoffStrategy: schema.BackoffConstant,
 		},
 	}
@@ -406,10 +411,10 @@ func TestGetRunCommandWithRetry_SucceedsAfterMultipleRetries(t *testing.T) {
 
 	getter := &CustomGitGetter{
 		RetryConfig: &schema.RetryConfig{
-			MaxAttempts:     5,
-			InitialDelay:    10 * time.Millisecond,
-			MaxDelay:        100 * time.Millisecond,
-			MaxElapsedTime:  30 * time.Second,
+			MaxAttempts:     intPtr(5),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
 			BackoffStrategy: schema.BackoffConstant,
 		},
 	}
@@ -432,10 +437,10 @@ func TestGetRunCommandWithRetry_ExhaustsAllAttempts(t *testing.T) {
 
 	getter := &CustomGitGetter{
 		RetryConfig: &schema.RetryConfig{
-			MaxAttempts:     3,
-			InitialDelay:    10 * time.Millisecond,
-			MaxDelay:        100 * time.Millisecond,
-			MaxElapsedTime:  30 * time.Second,
+			MaxAttempts:     intPtr(3),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
 			BackoffStrategy: schema.BackoffConstant,
 		},
 	}
@@ -458,10 +463,10 @@ func TestGetRunCommandWithRetry_NonRetryableError(t *testing.T) {
 
 	getter := &CustomGitGetter{
 		RetryConfig: &schema.RetryConfig{
-			MaxAttempts:     5,
-			InitialDelay:    10 * time.Millisecond,
-			MaxDelay:        100 * time.Millisecond,
-			MaxElapsedTime:  30 * time.Second,
+			MaxAttempts:     intPtr(5),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
 			BackoffStrategy: schema.BackoffConstant,
 		},
 	}
@@ -478,16 +483,144 @@ func TestGetRunCommandWithRetry_NonRetryableError(t *testing.T) {
 	assert.Equal(t, 1, count, "expected 1 git invocation (non-retryable error, no retry)")
 }
 
+// TestIsRetryableGitOrAuthError covers the brokered-mode predicate: auth failures and
+// transient network errors are retryable, while genuinely terminal errors are not.
+func TestIsRetryableGitOrAuthError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{name: "nil error", err: nil, expected: false},
+		// Auth failures ARE retryable in brokered mode (post-mint propagation window).
+		{
+			name:     "authentication failed",
+			err:      errors.New("fatal: Authentication failed for 'https://github.com/life360/atmos.git/'"),
+			expected: true,
+		},
+		{
+			name:     "could not read Username (no creds seen)",
+			err:      errors.New("fatal: could not read Username for 'https://github.com': terminal prompts disabled"),
+			expected: true,
+		},
+		// Transient network errors remain retryable.
+		{name: "connection reset", err: errors.New("read: connection reset by peer"), expected: true},
+		// Genuinely terminal errors are still not retryable, even in brokered mode.
+		{
+			name:     "repository not found",
+			err:      errors.New("fatal: repository 'https://github.com/org/repo' not found"),
+			expected: false,
+		},
+		{name: "reference not found", err: errors.New("fatal: couldn't find remote ref v9.9.9"), expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isRetryableGitOrAuthError(tt.err)
+			assert.Equal(t, tt.expected, result, "isRetryableGitOrAuthError(%v) = %v, want %v", tt.err, result, tt.expected)
+		})
+	}
+}
+
+// TestGetRunCommandWithRetry_BrokeredAuthRetried is the fix: when Atmos brokered a fresh
+// token this process (RetryAuthErrors=true), a transient "Authentication failed" is retried
+// and the second attempt — with the now-propagated token — succeeds.
+func TestGetRunCommandWithRetry_BrokeredAuthRetried(t *testing.T) {
+	counterFile := writeCountingFakeGit(t, 1, "fatal: Authentication failed for 'https://github.com/life360/atmos.git/'")
+
+	getter := &CustomGitGetter{
+		RetryAuthErrors: true,
+		RetryConfig: &schema.RetryConfig{
+			MaxAttempts:     intPtr(3),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
+			BackoffStrategy: schema.BackoffConstant,
+		},
+	}
+
+	cmd := exec.Command("git", "version")
+	err := getter.getRunCommandWithRetry(context.Background(), cmd)
+
+	assert.NoError(t, err, "brokered auth failure should be retried and then succeed")
+	assert.Equal(t, 2, readCounter(t, counterFile), "expected 2 git invocations (1 auth failure + 1 success)")
+}
+
+// TestGetRunCommandWithRetry_AuthNotRetriedWhenNotBrokered is the guardrail/negative path:
+// without brokered credentials, an auth failure is terminal and fails fast (one attempt),
+// so a genuinely wrong/expired static credential never stalls in a retry loop.
+func TestGetRunCommandWithRetry_AuthNotRetriedWhenNotBrokered(t *testing.T) {
+	counterFile := writeCountingFakeGit(t, 10, "fatal: Authentication failed for 'https://github.com/org/repo.git/'")
+
+	getter := &CustomGitGetter{
+		// RetryAuthErrors deliberately left false.
+		RetryConfig: &schema.RetryConfig{
+			MaxAttempts:     intPtr(5),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
+			BackoffStrategy: schema.BackoffConstant,
+		},
+	}
+
+	cmd := exec.Command("git", "version")
+	err := getter.getRunCommandWithRetry(context.Background(), cmd)
+
+	assert.Error(t, err, "non-brokered auth failure must fail fast")
+	assert.Equal(t, 1, readCounter(t, counterFile), "expected 1 git invocation (auth is terminal without brokered creds)")
+}
+
+// TestGetRunCommandWithRetry_BrokeredAuthBudgetExhausted asserts the bounded retry gives up
+// (rather than hanging) when the token is rejected for the whole window.
+func TestGetRunCommandWithRetry_BrokeredAuthBudgetExhausted(t *testing.T) {
+	counterFile := writeCountingFakeGit(t, 10, "fatal: Authentication failed for 'https://github.com/org/repo.git/'")
+
+	getter := &CustomGitGetter{
+		RetryAuthErrors: true,
+		RetryConfig: &schema.RetryConfig{
+			MaxAttempts:     intPtr(3),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
+			BackoffStrategy: schema.BackoffConstant,
+		},
+	}
+
+	cmd := exec.Command("git", "version")
+	err := getter.getRunCommandWithRetry(context.Background(), cmd)
+
+	assert.Error(t, err, "persistent auth rejection must fail after the bounded window")
+	assert.Equal(t, 3, readCounter(t, counterFile), "expected exactly MaxAttempts invocations")
+}
+
+// TestGetRunCommandWithRetry_BrokeredAuthUsesDefaultConfig verifies that brokered mode
+// retries auth failures even when the source configured no explicit retry: a bounded
+// default policy is applied.
+func TestGetRunCommandWithRetry_BrokeredAuthUsesDefaultConfig(t *testing.T) {
+	counterFile := writeCountingFakeGit(t, 1, "fatal: Authentication failed for 'https://github.com/org/repo.git/'")
+
+	getter := &CustomGitGetter{
+		RetryAuthErrors: true,
+		RetryConfig:     nil, // no per-source retry configured.
+	}
+
+	cmd := exec.Command("git", "version")
+	err := getter.getRunCommandWithRetry(context.Background(), cmd)
+
+	assert.NoError(t, err, "brokered mode should apply a default retry policy and recover")
+	assert.Equal(t, 2, readCounter(t, counterFile), "expected 2 git invocations (1 failure + 1 success)")
+}
+
 func TestGetRunCommandWithRetry_ContextCancelled(t *testing.T) {
 	// Simulate context cancellation during retry.
 	counterFile := writeCountingFakeGit(t, 10, "connection reset by peer")
 
 	getter := &CustomGitGetter{
 		RetryConfig: &schema.RetryConfig{
-			MaxAttempts:     5,
-			InitialDelay:    100 * time.Millisecond, // Longer delay to allow cancellation.
-			MaxDelay:        1 * time.Second,
-			MaxElapsedTime:  30 * time.Second,
+			MaxAttempts:     intPtr(5),
+			InitialDelay:    durationPtr(100 * time.Millisecond), // Longer delay to allow cancellation.
+			MaxDelay:        durationPtr(1 * time.Second),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
 			BackoffStrategy: schema.BackoffConstant,
 		},
 	}
@@ -522,10 +655,10 @@ func TestGetRunCommandWithRetry_ImmediateSuccess(t *testing.T) {
 
 	getter := &CustomGitGetter{
 		RetryConfig: &schema.RetryConfig{
-			MaxAttempts:     3,
-			InitialDelay:    10 * time.Millisecond,
-			MaxDelay:        100 * time.Millisecond,
-			MaxElapsedTime:  30 * time.Second,
+			MaxAttempts:     intPtr(3),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
 			BackoffStrategy: schema.BackoffConstant,
 		},
 	}
@@ -545,12 +678,12 @@ func TestGetRunCommandWithRetry_ImmediateSuccess(t *testing.T) {
 func TestCustomGitGetterWithRetryConfig(t *testing.T) {
 	// Test that CustomGitGetter properly holds and uses RetryConfig.
 	retryConfig := &schema.RetryConfig{
-		MaxAttempts:     5,
-		InitialDelay:    2 * time.Second,
-		MaxDelay:        30 * time.Second,
+		MaxAttempts:     intPtr(5),
+		InitialDelay:    durationPtr(2 * time.Second),
+		MaxDelay:        durationPtr(30 * time.Second),
 		BackoffStrategy: schema.BackoffExponential,
-		Multiplier:      2.0,
-		RandomJitter:    0.1,
+		Multiplier:      float64Ptr(2.0),
+		RandomJitter:    float64Ptr(0.1),
 	}
 
 	getter := &CustomGitGetter{
@@ -558,10 +691,10 @@ func TestCustomGitGetterWithRetryConfig(t *testing.T) {
 	}
 
 	assert.NotNil(t, getter.RetryConfig)
-	assert.Equal(t, 5, getter.RetryConfig.MaxAttempts)
-	assert.Equal(t, 2*time.Second, getter.RetryConfig.InitialDelay)
-	assert.Equal(t, 30*time.Second, getter.RetryConfig.MaxDelay)
+	assert.Equal(t, 5, *getter.RetryConfig.MaxAttempts)
+	assert.Equal(t, 2*time.Second, *getter.RetryConfig.InitialDelay)
+	assert.Equal(t, 30*time.Second, *getter.RetryConfig.MaxDelay)
 	assert.Equal(t, schema.BackoffExponential, getter.RetryConfig.BackoffStrategy)
-	assert.Equal(t, 2.0, getter.RetryConfig.Multiplier)
-	assert.Equal(t, 0.1, getter.RetryConfig.RandomJitter)
+	assert.Equal(t, 2.0, *getter.RetryConfig.Multiplier)
+	assert.Equal(t, 0.1, *getter.RetryConfig.RandomJitter)
 }

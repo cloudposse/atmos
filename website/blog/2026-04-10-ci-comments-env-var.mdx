@@ -1,0 +1,58 @@
+---
+slug: ci-comments-env-var
+title: "Toggle CI PR Comments with an Environment Variable"
+authors: [atmos]
+tags: [enhancement]
+date: 2026-04-10T00:00:00.000Z
+---
+
+You can now enable or disable CI PR comments per-pipeline using the `ATMOS_CI_COMMENTS_ENABLED` environment variable — no config file changes needed.
+
+<!--truncate-->
+
+## What Changed
+
+A new `ATMOS_CI_COMMENTS_ENABLED` environment variable overrides the `ci.comments.enabled` setting in `atmos.yaml`. When set, it takes precedence over the YAML configuration.
+
+```
+ATMOS_CI_COMMENTS_ENABLED=true   # enable PR comments
+ATMOS_CI_COMMENTS_ENABLED=false  # disable PR comments
+```
+
+The variable accepts any standard boolean value (`true`, `false`, `1`, `0`). Invalid values log a warning and leave the YAML setting unchanged.
+
+## Why This Matters
+
+Some CI workflows need different PR comment behavior depending on the context. For example:
+
+- **Scheduled drift-detection runs** should suppress PR comments (there's no PR to comment on)
+- **PR preview pipelines** should post plan summaries as PR comments
+- **Staging deploys** triggered by merge should skip comments
+
+Previously, you had to maintain separate `atmos.yaml` files or use conditional YAML templating to toggle comments. Now it's a single environment variable.
+
+## How to Use It
+
+Set the variable in your CI workflow:
+
+```yaml
+# Post plan summaries as PR comments
+- name: atmos terraform plan
+  env:
+    ATMOS_CI_COMMENTS_ENABLED: "true"
+  run: |
+    atmos terraform plan "$COMPONENT" --stack "$STACK"
+
+# Suppress comments for scheduled runs
+- name: atmos terraform plan (drift detection)
+  env:
+    ATMOS_CI_COMMENTS_ENABLED: "false"
+  run: |
+    atmos terraform plan "$COMPONENT" --stack "$STACK"
+```
+
+The environment variable follows the same precedence as other `ATMOS_*` variables: CLI flags > environment variables > config files > defaults.
+
+## Get Involved
+
+Found an issue or have a feature request? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

@@ -1,0 +1,66 @@
+---
+title: atmos version track
+sidebar_position: 0
+sidebar_label: usage
+sidebar_class_name: command
+id: index
+slug: /cli/commands/version/track
+description: Manage tracked software versions with the Atmos Version Tracker.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use `atmos version track` (alias: `tracks`) to manage software versions declared under `version:` in `atmos.yaml`, resolved into `versions.lock.yaml`, and applied to project files by the file managers.
+</Intro>
+
+The top-level `atmos version` command reports and manages the Atmos CLI itself. `atmos version track` manages software versions whether Atmos installs and runs the software locally through Toolchain, or only tracks, locks, and renders the version into files such as GitHub Actions workflows, container image references, templates, and configuration.
+
+## Usage
+
+```shell
+atmos version track <subcommand> [track] [flags]
+```
+
+Most subcommands accept an optional `[track]` argument. The target track resolves in this order: positional argument, `--track` flag, `version.track` in `atmos.yaml`, then `default`.
+
+## Subcommands
+
+| Subcommand | Description |
+|------------|-------------|
+| [`list`](/cli/commands/version/track/list) | List configured version tracks as a dependency x track version matrix. |
+| [`show`](/cli/commands/version/track/show) | Show a track's effective entries after defaults and group policies are applied. |
+| [`get`](/cli/commands/version/track/get) | Show one dependency entry with its effective policy and lock state. |
+| [`add`](/cli/commands/version/track/add) | Add a dependency entry to `atmos.yaml`. |
+| [`set`](/cli/commands/version/track/set) | Update fields of an existing dependency entry. |
+| [`remove`](/cli/commands/version/track/remove) | Remove a dependency entry. |
+| [`lock`](/cli/commands/version/track/lock) | Resolve desired versions as-is and write the lock file. |
+| [`update`](/cli/commands/version/track/update) | Advance locked versions within policy. |
+| [`status`](/cli/commands/version/track/status) | Show policy-aware lock and update status. |
+| [`diff`](/cli/commands/version/track/diff) | Show entries that are unlocked or have policy-eligible updates. |
+| [`apply`](/cli/commands/version/track/apply) | Rewrite version-managed files from the lock. |
+| [`verify`](/cli/commands/version/track/verify) | CI gate for lock freshness and managed-file currency. |
+
+## Global Flags
+
+<dl>
+  <dt>`--format`</dt>
+  <dd>Output format: `yaml` (default) or `json`.</dd>
+
+  <dt>`--track`</dt>
+  <dd>Version track to operate on. A positional `[track]` argument takes precedence.</dd>
+</dl>
+
+## Example
+
+```shell
+atmos version track status prod --format=json
+atmos version track apply prod --check
+atmos version track verify prod
+```
+
+## See Also
+
+- [Managed Versions Configuration](/cli/configuration/version/managed-versions)
+- [Version Track Configuration](/cli/configuration/version/tracks)
+- [`!version`](/functions/yaml/version)

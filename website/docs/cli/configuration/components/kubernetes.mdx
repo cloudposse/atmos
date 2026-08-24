@@ -1,0 +1,104 @@
+---
+title: Kubernetes Configuration
+sidebar_position: 6
+sidebar_label: kubernetes
+sidebar_class_name: command
+id: kubernetes
+description: Configure Kubernetes-native component behavior in atmos.yaml.
+---
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
+import DocCardList from "@theme/DocCardList";
+
+<Intro>
+  Tell Atmos where Kubernetes component files live and which manifest workflow
+  to use by default. These project-wide settings keep stack files focused on
+  what to deploy while `atmos.yaml` defines how Kubernetes components are found
+  and rendered.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+components:
+  kubernetes:
+    # Base path to Kubernetes component directories
+    base_path: components/kubernetes
+
+    # Default manifest workflow for Kubernetes components
+    provider: kubectl
+
+    # Generate files from the component `generate` section before operations
+    auto_generate_files: false
+
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`base_path`</dt>
+  <dd>Directory containing Kubernetes component directories. Relative paths are resolved from the Atmos base path. Defaults to `components/kubernetes`.</dd>
+
+  <dt>`provider`</dt>
+  <dd>
+    Default provider when a stack component does not set `provider`.
+    Supported values are `kubectl` and `kustomize`. Both providers use Go SDKs and do not require matching binaries.
+    Defaults to `kubectl`.
+  </dd>
+
+  <dt>`auto_generate_files`</dt>
+  <dd>
+    When `true`, Atmos writes files from a component's [`generate`](/stacks/generate) block before rendering, diffing, applying, deploying, or deleting manifests.
+    Defaults to `false`.
+  </dd>
+</dl>
+
+## Providers
+
+The provider decides how Atmos turns component files into Kubernetes objects:
+
+<dl>
+  <dt>`kubectl`</dt>
+  <dd>Use this for plain YAML or JSON manifests. Atmos loads objects from `paths` and `manifests`, then resolves and applies them with Kubernetes clients.</dd>
+
+  <dt>`kustomize`</dt>
+  <dd>Use this when component paths point at Kustomize roots. Atmos renders the overlays before previewing, applying, or deleting objects.</dd>
+</dl>
+
+The provider names describe behavior, not executable names. Atmos does not shell out to `kubectl` or `kustomize` for these component operations.
+
+## Related Commands
+
+<DocCardList
+  items={[
+    {
+      type: "link",
+      href: "/cli/commands/kubernetes/usage",
+      label: "atmos kubernetes",
+      description:
+        "Render, preview, deploy, and delete Kubernetes components",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/kubernetes/render",
+      label: "atmos kubernetes render",
+      description: "Inspect final manifests before deployment",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/kubernetes/apply",
+      label: "atmos kubernetes apply",
+      description: "Deploy rendered manifests to a cluster",
+    },
+  ]}
+/>
+
+## Related
+
+- [Kubernetes Components](/stacks/components/kubernetes)
+- [Component Configuration Overview](/cli/configuration/components)
+- [Stack Configuration](/cli/configuration/stacks)
+```

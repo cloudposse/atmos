@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 var instancesParser *flags.StandardParser
@@ -20,16 +21,27 @@ var instancesParser *flags.StandardParser
 // InstancesOptions contains parsed flags for the instances command.
 type InstancesOptions struct {
 	global.Flags
-	Format     string
-	Columns    []string
-	MaxColumns int
-	Delimiter  string
-	Stack      string
-	Filter     string
-	Query      string
-	Sort       string
-	Upload     bool
-	Provenance bool
+	Format           string
+	Columns          []string
+	MaxColumns       int
+	Delimiter        string
+	Stack            string
+	Filter           string
+	Query            string
+	Sort             string
+	Upload           bool
+	Provenance       bool
+	OutputFile       string
+	ProcessTemplates bool
+	ProcessFunctions bool
+	Skip             []string
+	AuthDisabled     bool
+	Tags             []string
+	LabelsRaw        string
+	// IncludeDependencies/IncludeDependents preview the dependency closure
+	// (0 = off, -1 = unlimited, N>0 = N levels).
+	IncludeDependencies int
+	IncludeDependents   int
 }
 
 // instancesCmd lists atmos instances.
@@ -53,22 +65,41 @@ var instancesCmd = &cobra.Command{
 			return err
 		}
 
-		opts := &InstancesOptions{
-			Flags:      flags.ParseGlobalFlags(cmd, v),
-			Format:     v.GetString("format"),
-			Columns:    v.GetStringSlice("columns"),
-			MaxColumns: v.GetInt("max-columns"),
-			Delimiter:  v.GetString("delimiter"),
-			Stack:      v.GetString("stack"),
-			Filter:     v.GetString("filter"),
-			Query:      v.GetString("query"),
-			Sort:       v.GetString("sort"),
-			Upload:     v.GetBool("upload"),
-			Provenance: v.GetBool("provenance"),
+		opts := parseInstancesOptions(cmd, v)
+		if err := parseListClosureOptions(v, &opts.IncludeDependencies, &opts.IncludeDependents); err != nil {
+			return err
 		}
 
 		return executeListInstancesCmd(cmd, args, opts)
 	},
+}
+
+// parseInstancesOptions maps viper state into an InstancesOptions struct.
+// Extracted from the RunE closure so the viper→options mapping can be
+// unit-tested without driving the whole cobra command.
+func parseInstancesOptions(cmd *cobra.Command, v *viper.Viper) *InstancesOptions {
+	identityName := getIdentityFromCommand(cmd)
+
+	return &InstancesOptions{
+		Flags:            flags.ParseGlobalFlags(cmd, v),
+		Format:           v.GetString("format"),
+		Columns:          v.GetStringSlice("columns"),
+		MaxColumns:       v.GetInt("max-columns"),
+		Delimiter:        v.GetString("delimiter"),
+		Stack:            v.GetString("stack"),
+		Filter:           v.GetString("filter"),
+		Query:            v.GetString("query"),
+		Sort:             v.GetString("sort"),
+		Upload:           v.GetBool("upload"),
+		Provenance:       v.GetBool("provenance"),
+		OutputFile:       v.GetString("output-file"),
+		ProcessTemplates: v.GetBool("process-templates"),
+		ProcessFunctions: v.GetBool("process-functions"),
+		Skip:             v.GetStringSlice("skip"),
+		AuthDisabled:     identityName == cfg.IdentityFlagDisabledValue,
+		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
+		LabelsRaw:        v.GetString("labels"),
+	}
 }
 
 // columnsCompletionForInstances provides dynamic tab completion for --columns flag.
@@ -118,8 +149,15 @@ func init() {
 		WithFilterFlag,
 		WithQueryFlag,
 		WithSortFlag,
+		WithTagsFlag,
+		WithLabelsFlag,
+		WithClosureFlags,
 		WithUploadFlag,
 		WithProvenanceFlag,
+		WithOutputFileFlag,
+		WithProcessTemplatesFlag,
+		WithProcessFunctionsFlag,
+		WithSkipFlag,
 	)
 
 	// Register flags.
@@ -157,21 +195,33 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 	}
 
 	// Create AuthManager for authentication support.
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		return err
 	}
 
 	return list.ExecuteListInstancesCmd(&list.InstancesCommandOptions{
-		Info:        &configAndStacksInfo,
-		Cmd:         cmd,
-		Args:        args,
-		ShowImports: opts.Provenance,
-		ColumnsFlag: opts.Columns,
-		FilterSpec:  opts.Filter,
-		SortSpec:    opts.Sort,
-		Delimiter:   opts.Delimiter,
-		Query:       opts.Query,
-		AuthManager: authManager,
+		Info:                &configAndStacksInfo,
+		Cmd:                 cmd,
+		Args:                args,
+		Format:              opts.Format,
+		Upload:              opts.Upload,
+		Stack:               opts.Stack,
+		ShowImports:         opts.Provenance,
+		ColumnsFlag:         opts.Columns,
+		FilterSpec:          opts.Filter,
+		SortSpec:            opts.Sort,
+		Delimiter:           opts.Delimiter,
+		Query:               opts.Query,
+		AuthManager:         authManager,
+		AuthDisabled:        opts.AuthDisabled,
+		OutputFile:          opts.OutputFile,
+		ProcessTemplates:    opts.ProcessTemplates,
+		ProcessFunctions:    opts.ProcessFunctions,
+		Skip:                skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager),
+		Tags:                opts.Tags,
+		LabelsRaw:           opts.LabelsRaw,
+		IncludeDependencies: opts.IncludeDependencies,
+		IncludeDependents:   opts.IncludeDependents,
 	})
 }

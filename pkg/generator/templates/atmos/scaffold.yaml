@@ -1,0 +1,30 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: atmos
+  description: Complete Atmos project with full atmos.yaml configuration
+  author: Cloud Posse
+  version: 1.0.0
+spec:
+  fields:
+    - name: project_name
+      label: Project name
+      description: Name of the project (lowercase letters, numbers, and hyphens only; used as S3 bucket and DynamoDB table name prefix)
+      type: input
+      default: my-atmos-project
+      validation:
+        # Generated bucket/table names suffix project_name with "-terraform-state" (16 chars)
+        # and "-terraform-state-lock" (21 chars). S3 bucket names are capped at 63 characters,
+        # so project_name must leave room for the longest suffix: 63 - 21 = 42.
+        pattern: "^[a-z0-9][a-z0-9-]{0,40}[a-z0-9]$"
+        message: "Project name must be 3-42 characters, start and end with a lowercase letter or digit, and contain only lowercase letters, numbers, and hyphens."
+    - name: terraform_version
+      label: Terraform version
+      description: Terraform version to use
+      type: input
+      default: "1.5.0"
+    - name: aws_region
+      label: AWS region
+      description: Default AWS region
+      type: input
+      default: us-east-1

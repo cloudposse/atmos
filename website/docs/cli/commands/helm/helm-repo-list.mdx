@@ -1,0 +1,94 @@
+---
+title: atmos helm repo list
+sidebar_label: repo list
+sidebar_class_name: command
+id: repo-list
+description: List Helm repositories associated with native Helm components.
+---
+
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  List the declarative Helm chart repositories associated with native Helm
+  components. The command reads Atmos stack configuration and shows which
+  repositories each component inherits from global `components.helm.repositories`,
+  declares locally, or references directly with `repository`.
+</Intro>
+
+## Usage
+
+```shell
+atmos helm repo list [component] --stack <stack> [options]
+```
+
+List all Helm repository associations in a stack:
+
+```shell
+atmos helm repo list -s plat-ue2-dev
+```
+
+List repository associations for one component:
+
+```shell
+atmos helm repo list monitoring -s plat-ue2-dev
+```
+
+Render machine-readable output:
+
+```shell
+atmos helm repo list -s plat-ue2-dev --format=json
+atmos helm repo list monitoring -s plat-ue2-dev --format=yaml
+```
+
+## Columns
+
+<dl>
+  <dt>`stack`</dt>
+  <dd>Atmos stack containing the Helm component.</dd>
+
+  <dt>`component`</dt>
+  <dd>Helm component name.</dd>
+
+  <dt>`name`</dt>
+  <dd>Repository name. Direct `repository: https://...` entries are shown as `direct`.</dd>
+
+  <dt>`url`</dt>
+  <dd>Repository URL.</dd>
+
+  <dt>`source`</dt>
+  <dd>`global`, `component`, or `direct`.</dd>
+
+  <dt>`chart`</dt>
+  <dd>The component's resolved chart reference.</dd>
+
+  <dt>`used`</dt>
+  <dd>`true` when the component's `chart` uses the repository prefix, or when the row is a direct repository URL.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(optional)</em></dt>
+  <dd>Filter by stack.</dd>
+
+  <dt>`--format`, `-f` <em>(optional)</em></dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, or `tsv`.</dd>
+
+  <dt>`--columns` <em>(optional)</em></dt>
+  <dd>Comma-separated columns to display.</dd>
+
+  <dt>`--process-templates` <em>(optional)</em></dt>
+  <dd>Enable or disable Go template processing in stack manifests. Defaults to `true`.</dd>
+
+  <dt>`--process-functions` <em>(optional)</em></dt>
+  <dd>Enable or disable YAML function processing in stack manifests. Defaults to `true`.</dd>
+
+  <dt>`--skip` <em>(optional)</em></dt>
+  <dd>Skip paths when loading stack manifests.</dd>
+</dl>
+
+## Related
+
+- [Helm command overview](/cli/commands/helm/usage)
+- [Helm component configuration](/stacks/components/helm)
+- [Helm CLI configuration](/cli/configuration/components/helm)

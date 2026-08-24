@@ -347,6 +347,9 @@ func mergeSpecMaps(maps []map[string]any, name string) (map[string]any, error) {
 
 	for i := 1; i < len(maps); i++ {
 		log.Debug("Merging map", logKeyName, name, "index", i, "keys", len(maps[i]))
+		// NOTE: Uses mergo (not native merge from pkg/merge). Devcontainer config
+		// merging is not on the hot path and uses typed structs, not map[string]any.
+		// TODO: migrate to native merge to eliminate the mergo dependency entirely.
 		if err := mergo.Merge(&result, maps[i], mergo.WithOverride); err != nil {
 			return nil, errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
 				WithCause(err).

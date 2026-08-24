@@ -1,0 +1,666 @@
+package auth
+
+import (
+	"context"
+	"errors"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+)
+
+func TestRedactHomeDir(t *testing.T) {
+	// Use filepath.Join and filepath.Separator for cross-platform compatibility.
+	sep := string(filepath.Separator)
+	homeDir := filepath.Join("home", "user")
+
+	tests := []struct {
+		name     string
+		value    string
+		homeDir  string
+		expected string
+	}{
+		{
+			name:     "path starting with home",
+			value:    filepath.Join("home", "user", ".aws", "credentials"),
+			homeDir:  homeDir,
+			expected: "~" + sep + filepath.Join(".aws", "credentials"),
+		},
+		{
+			name:     "exact home match",
+			value:    homeDir,
+			homeDir:  homeDir,
+			expected: "~",
+		},
+		{
+			name:     "no home prefix",
+			value:    filepath.Join("etc", "config"),
+			homeDir:  homeDir,
+			expected: filepath.Join("etc", "config"),
+		},
+		{
+			name:     "empty home",
+			value:    filepath.Join("home", "user", "file"),
+			homeDir:  "",
+			expected: filepath.Join("home", "user", "file"),
+		},
+		{
+			name:     "partial match not replaced",
+			value:    filepath.Join("home", "username", ".config"),
+			homeDir:  homeDir,
+			expected: filepath.Join("home", "username", ".config"),
+		},
+		{
+			name:     "similar prefix not replaced",
+			value:    filepath.Join("home", "user2", ".config"),
+			homeDir:  homeDir,
+			expected: filepath.Join("home", "user2", ".config"),
+		},
+		{
+			name:     "nested path",
+			value:    filepath.Join("home", "user", ".config", "atmos", "config.yaml"),
+			homeDir:  homeDir,
+			expected: "~" + sep + filepath.Join(".config", "atmos", "config.yaml"),
+		},
+		{
+			name:     "empty value",
+			value:    "",
+			homeDir:  homeDir,
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := redactHomeDir(tt.value, tt.homeDir)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSanitizeEnvMap(t *testing.T) {
+	// Use filepath.Join for cross-platform compatibility.
+	homeDir := filepath.Join("home", "user")
+
+	tests := []struct {
+		name     string
+		input    map[string]string
+		homeDir  string
+		expected map[string]string
+	}{
+		{
+			name:     "empty map",
+			input:    map[string]string{},
+			homeDir:  homeDir,
+			expected: map[string]string{},
+		},
+		{
+			name: "redacts AWS_SECRET_ACCESS_KEY",
+			input: map[string]string{
+				"AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+			},
+			homeDir: homeDir,
+			expected: map[string]string{
+				"AWS_SECRET_ACCESS_KEY": "***REDACTED***",
+			},
+		},
+		{
+			name: "redacts TOKEN values",
+			input: map[string]string{
+				"AUTH_TOKEN": "token123",
+			},
+			homeDir: homeDir,
+			expected: map[string]string{
+				"AUTH_TOKEN": "***REDACTED***",
+			},
+		},
+		{
+			name: "redacts PASSWORD values",
+			input: map[string]string{
+				"DB_PASSWORD": "secret123",
+			},
+			homeDir: homeDir,
+			expected: map[string]string{
+				"DB_PASSWORD": "***REDACTED***",
+			},
+		},
+		{
+			name: "redacts PRIVATE values",
+			input: map[string]string{
+				"PRIVATE_KEY": "private_key_data",
+			},
+			homeDir: homeDir,
+			expected: map[string]string{
+				"PRIVATE_KEY": "***REDACTED***",
+			},
+		},
+		{
+			name: "redacts ACCESS_KEY values",
+			input: map[string]string{
+				"AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE",
+			},
+			homeDir: homeDir,
+			expected: map[string]string{
+				"AWS_ACCESS_KEY_ID": "***REDACTED***",
+			},
+		},
+		{
+			name: "redacts SESSION values",
+			input: map[string]string{
+				"AWS_SESSION_TOKEN": "session_token_data",
+			},
+			homeDir: homeDir,
+			expected: map[string]string{
+				"AWS_SESSION_TOKEN": "***REDACTED***",
+			},
+		},
+		{
+			name: "preserves non-sensitive values",
+			input: map[string]string{
+				"AWS_REGION": "us-east-1",
+				"PATH":       "/usr/bin:/bin",
+			},
+			homeDir: homeDir,
+			expected: map[string]string{
+				"AWS_REGION": "us-east-1",
+				"PATH":       "/usr/bin:/bin",
+			},
+		},
+		{
+			name: "case insensitive matching",
+			input: map[string]string{
+				"my_secret": "should_be_redacted",
+			},
+			homeDir: homeDir,
+			expected: map[string]string{
+				"my_secret": "***REDACTED***",
+			},
+		},
+		{
+			name: "mixed sensitive and non-sensitive",
+			input: map[string]string{
+				"AWS_REGION":            "us-east-1",
+				"AWS_SECRET_ACCESS_KEY": "secret",
+				"HOME":                  homeDir,
+			},
+			homeDir: homeDir,
+			expected: map[string]string{
+				"AWS_REGION":            "us-east-1",
+				"AWS_SECRET_ACCESS_KEY": "***REDACTED***",
+				"HOME":                  "~",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := sanitizeEnvMap(tt.input, tt.homeDir)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildWhoamiTableRows(t *testing.T) {
+	tests := []struct {
+		name        string
+		whoami      *authTypes.WhoamiInfo
+		expectedMin int // minimum number of rows
+		checkFields []string
+	}{
+		{
+			name: "minimal info",
+			whoami: &authTypes.WhoamiInfo{
+				Provider:    "aws-sso",
+				Identity:    "prod-admin",
+				LastUpdated: time.Now(),
+			},
+			expectedMin: 3, // Provider, Identity, Last Updated
+			checkFields: []string{"Provider", "Identity", "Last Updated"},
+		},
+		{
+			name: "with principal",
+			whoami: &authTypes.WhoamiInfo{
+				Provider:    "aws-sso",
+				Identity:    "prod-admin",
+				Principal:   "arn:aws:sts::123456789012:assumed-role/Admin/user",
+				LastUpdated: time.Now(),
+			},
+			expectedMin: 4,
+			checkFields: []string{"Provider", "Identity", "Principal", "Last Updated"},
+		},
+		{
+			name: "with account",
+			whoami: &authTypes.WhoamiInfo{
+				Provider:    "aws-sso",
+				Identity:    "prod-admin",
+				Account:     "123456789012",
+				LastUpdated: time.Now(),
+			},
+			expectedMin: 4,
+			checkFields: []string{"Provider", "Identity", "Account", "Last Updated"},
+		},
+		{
+			name: "with region",
+			whoami: &authTypes.WhoamiInfo{
+				Provider:    "aws-sso",
+				Identity:    "prod-admin",
+				Region:      "us-east-1",
+				LastUpdated: time.Now(),
+			},
+			expectedMin: 4,
+			checkFields: []string{"Provider", "Identity", "Region", "Last Updated"},
+		},
+		{
+			name: "with expiration",
+			whoami: &authTypes.WhoamiInfo{
+				Provider:    "aws-sso",
+				Identity:    "prod-admin",
+				Expiration:  func() *time.Time { t := time.Now().Add(1 * time.Hour); return &t }(),
+				LastUpdated: time.Now(),
+			},
+			expectedMin: 4,
+			checkFields: []string{"Provider", "Identity", "Expires", "Last Updated"},
+		},
+		{
+			name: "full info",
+			whoami: &authTypes.WhoamiInfo{
+				Provider:    "aws-sso",
+				Identity:    "prod-admin",
+				Principal:   "arn:aws:sts::123456789012:assumed-role/Admin/user",
+				Account:     "123456789012",
+				Region:      "us-east-1",
+				Expiration:  func() *time.Time { t := time.Now().Add(1 * time.Hour); return &t }(),
+				LastUpdated: time.Now(),
+			},
+			expectedMin: 7,
+			checkFields: []string{"Provider", "Identity", "Principal", "Account", "Region", "Expires", "Last Updated"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rows := buildWhoamiTableRows(tt.whoami)
+
+			assert.GreaterOrEqual(t, len(rows), tt.expectedMin)
+
+			// Check that expected fields are present.
+			rowLabels := make([]string, len(rows))
+			for i, row := range rows {
+				if len(row) > 0 {
+					rowLabels[i] = row[0]
+				}
+			}
+
+			for _, field := range tt.checkFields {
+				assert.Contains(t, rowLabels, field)
+			}
+		})
+	}
+}
+
+func TestFormatExpiration(t *testing.T) {
+	tests := []struct {
+		name           string
+		expiration     time.Time
+		threshold      int
+		expectRed      bool
+		expectContains string
+	}{
+		{
+			name:           "future expiration - normal",
+			expiration:     time.Now().Add(2 * time.Hour),
+			threshold:      15,
+			expectRed:      false,
+			expectContains: "h", // Check for hour format (could be 1h 59m or 2h depending on timing)
+		},
+		{
+			name:           "expiring soon - warning",
+			expiration:     time.Now().Add(10 * time.Minute),
+			threshold:      15,
+			expectRed:      true,
+			expectContains: "m",
+		},
+		{
+			name:           "already expired",
+			expiration:     time.Now().Add(-1 * time.Hour),
+			threshold:      15,
+			expectRed:      false, // expired shows differently
+			expectContains: "expired",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatExpiration(&tt.expiration, tt.threshold)
+
+			// Verify the result contains expected content.
+			assert.Contains(t, result, tt.expectContains)
+
+			// Verify date format is included.
+			assert.Contains(t, result, "2")
+		})
+	}
+}
+
+func TestValidateCredentials(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	tests := []struct {
+		name           string
+		setupWhoami    func(*gomock.Controller) *authTypes.WhoamiInfo
+		expectedResult bool
+	}{
+		{
+			name: "nil credentials returns false",
+			setupWhoami: func(_ *gomock.Controller) *authTypes.WhoamiInfo {
+				return &authTypes.WhoamiInfo{
+					Identity:    "test",
+					Credentials: nil,
+				}
+			},
+			expectedResult: false,
+		},
+		{
+			name: "credentials with validator - success",
+			setupWhoami: func(c *gomock.Controller) *authTypes.WhoamiInfo {
+				mockCreds := authTypes.NewMockICredentials(c)
+				// MockICredentials implements Validate, so it will be used.
+				mockCreds.EXPECT().Validate(gomock.Any()).Return(&authTypes.ValidationInfo{
+					Principal: "arn:aws:iam::123456789012:user/test",
+				}, nil)
+				return &authTypes.WhoamiInfo{
+					Identity:    "test",
+					Credentials: mockCreds,
+				}
+			},
+			expectedResult: true,
+		},
+		{
+			name: "credentials with validator - error",
+			setupWhoami: func(c *gomock.Controller) *authTypes.WhoamiInfo {
+				mockCreds := authTypes.NewMockICredentials(c)
+				mockCreds.EXPECT().Validate(gomock.Any()).Return(nil, errUtils.ErrAuthenticationFailed)
+				return &authTypes.WhoamiInfo{
+					Identity:    "test",
+					Credentials: mockCreds,
+				}
+			},
+			expectedResult: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a new controller for each test case.
+			c := gomock.NewController(t)
+			defer c.Finish()
+			whoami := tt.setupWhoami(c)
+			ctx := context.Background()
+			result := validateCredentials(ctx, whoami)
+			assert.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+func TestPopulateWhoamiFromValidation(t *testing.T) {
+	tests := []struct {
+		name              string
+		whoami            *authTypes.WhoamiInfo
+		validationInfo    *authTypes.ValidationInfo
+		expectedPrincipal string
+		expectedAccount   string
+		hasExpiration     bool
+	}{
+		{
+			name:              "nil validation info",
+			whoami:            &authTypes.WhoamiInfo{},
+			validationInfo:    nil,
+			expectedPrincipal: "",
+			expectedAccount:   "",
+			hasExpiration:     false,
+		},
+		{
+			name:              "empty validation info",
+			whoami:            &authTypes.WhoamiInfo{},
+			validationInfo:    &authTypes.ValidationInfo{},
+			expectedPrincipal: "",
+			expectedAccount:   "",
+			hasExpiration:     false,
+		},
+		{
+			name:   "full validation info",
+			whoami: &authTypes.WhoamiInfo{},
+			validationInfo: &authTypes.ValidationInfo{
+				Principal:  "arn:aws:sts::123456789012:assumed-role/Admin",
+				Account:    "123456789012",
+				Expiration: func() *time.Time { t := time.Now().Add(1 * time.Hour); return &t }(),
+			},
+			expectedPrincipal: "arn:aws:sts::123456789012:assumed-role/Admin",
+			expectedAccount:   "123456789012",
+			hasExpiration:     true,
+		},
+		{
+			name:   "partial validation info - only principal",
+			whoami: &authTypes.WhoamiInfo{},
+			validationInfo: &authTypes.ValidationInfo{
+				Principal: "test-principal",
+			},
+			expectedPrincipal: "test-principal",
+			expectedAccount:   "",
+			hasExpiration:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			populateWhoamiFromValidation(tt.whoami, tt.validationInfo)
+
+			assert.Equal(t, tt.expectedPrincipal, tt.whoami.Principal)
+			assert.Equal(t, tt.expectedAccount, tt.whoami.Account)
+			if tt.hasExpiration {
+				assert.NotNil(t, tt.whoami.Expiration)
+			}
+		})
+	}
+}
+
+func TestCreateWhoamiTable(t *testing.T) {
+	rows := [][]string{
+		{"Provider", "aws-sso"},
+		{"Identity", "prod-admin"},
+	}
+
+	table := createWhoamiTable(rows)
+	assert.NotNil(t, table)
+}
+
+func TestAuthWhoamiCommand_Structure(t *testing.T) {
+	assert.Equal(t, "whoami", authWhoamiCmd.Use)
+	assert.NotEmpty(t, authWhoamiCmd.Short)
+	assert.NotEmpty(t, authWhoamiCmd.Long)
+	assert.NotNil(t, authWhoamiCmd.RunE)
+
+	// Check output flag exists.
+	outputFlag := authWhoamiCmd.Flags().Lookup("output")
+	assert.NotNil(t, outputFlag)
+	assert.Equal(t, "o", outputFlag.Shorthand)
+}
+
+func TestRedactHomeDirWithOsPathSeparator(t *testing.T) {
+	// Test with actual OS path separator using filepath.Join consistently.
+	homeDir := filepath.Join("home", "user")
+	testPath := filepath.Join("home", "user", ".config", "atmos")
+
+	result := redactHomeDir(testPath, homeDir)
+
+	// Result should start with ~.
+	assert.True(t, len(result) > 0 && result[0] == '~',
+		"expected result to start with ~, got: %s", result)
+}
+
+// TestAddGCPReauthExplanation covers the three branches of the GCP reauth
+// hint: nil pass-through, unrelated error pass-through, and the
+// invalid_grant + invalid_rapt enrichment path.
+func TestAddGCPReauthExplanation(t *testing.T) {
+	t.Run("nil error returns nil", func(t *testing.T) {
+		assert.NoError(t, addGCPReauthExplanation(nil))
+	})
+
+	t.Run("unrelated error passes through unchanged", func(t *testing.T) {
+		original := errors.New("network down")
+		got := addGCPReauthExplanation(original)
+		assert.Same(t, original, got,
+			"errors that don't match the GCP reauth pattern must not be re-wrapped")
+	})
+
+	t.Run("invalid_grant alone is not enriched", func(t *testing.T) {
+		original := errors.New("oauth: invalid_grant — token expired")
+		got := addGCPReauthExplanation(original)
+		// Need BOTH invalid_grant AND invalid_rapt to trigger the GCP-specific hint.
+		assert.Same(t, original, got)
+	})
+
+	t.Run("invalid_grant + invalid_rapt triggers gcloud reauth hint", func(t *testing.T) {
+		original := errors.New(`oauth2: "invalid_grant" "reauth related error (invalid_rapt)"`)
+		got := addGCPReauthExplanation(original)
+		require.Error(t, got)
+		// Original error preserved in the chain.
+		assert.ErrorIs(t, got, original)
+	})
+}
+
+// TestPrintWhoamiJSON_RedactsCredentials guards the contract that the JSON
+// output never includes Credentials and that the Environment map is
+// home-redacted/sanitised.
+func TestPrintWhoamiJSON_RedactsCredentials(t *testing.T) {
+	t.Run("nil Environment is fine", func(t *testing.T) {
+		whoami := &authTypes.WhoamiInfo{
+			Provider: "aws-sso",
+			Identity: "prod-admin",
+		}
+		assert.NotPanics(t, func() {
+			_ = printWhoamiJSON(whoami)
+		})
+	})
+
+	t.Run("Environment with secrets and home paths is sanitised", func(t *testing.T) {
+		whoami := &authTypes.WhoamiInfo{
+			Provider: "aws-sso",
+			Identity: "prod-admin",
+			Environment: map[string]string{
+				"AWS_REGION":                  "us-east-1",
+				"AWS_SECRET_ACCESS_KEY":       "super-secret",
+				"AWS_SHARED_CREDENTIALS_FILE": filepath.Join("home", "user", ".aws", "creds"),
+			},
+		}
+		assert.NotPanics(t, func() {
+			_ = printWhoamiJSON(whoami)
+		})
+		// The original whoami.Environment must NOT have been mutated by the
+		// sanitiser (the function operates on a copy via redactedWhoami).
+		assert.Equal(t, "super-secret", whoami.Environment["AWS_SECRET_ACCESS_KEY"],
+			"printWhoamiJSON must not mutate the caller's Environment map")
+	})
+}
+
+// TestExecuteAuthWhoamiCommand_SmokeNoConfig exercises the whoami orchestrator
+// from a directory without an atmos.yaml. Contract: no panic.
+func TestExecuteAuthWhoamiCommand_SmokeNoConfig(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	cmd := authWhoamiCmd
+	resetAuthCmdFlags(t, cmd)
+	cmd.SetContext(context.Background())
+
+	assert.NotPanics(t, func() {
+		_ = executeAuthWhoamiCommand(cmd, nil)
+	})
+}
+
+// TestExecuteAuthWhoamiCommand_WithMockAuth exercises whoami end-to-end with
+// a real auth config (mock/aws provider). Drives identity resolution,
+// authManager.Whoami, and the human-format output path.
+func TestExecuteAuthWhoamiCommand_WithMockAuth(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authWhoamiCmd
+	resetAuthCmdFlags(t, cmd)
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags(nil))
+
+	// The mock provider implements Whoami; we don't pin its exact output —
+	// the contract here is that the orchestrator runs to completion.
+	_ = executeAuthWhoamiCommand(cmd, nil)
+}
+
+// TestLoadAuthManager_SmokeFromEmptyTempDir exercises the orchestrator's load
+// path from a directory without an atmos.yaml. Either it succeeds (atmos
+// falls back to defaults and finds a usable config) or it fails with an
+// error wrapped by ErrInvalidAuthConfig — both are acceptable; the contract
+// is "no panic and any error must be the documented sentinel".
+func TestLoadAuthManager_SmokeFromEmptyTempDir(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+
+	v := viper.New()
+	cmd := &cobra.Command{Use: "whoami"}
+
+	manager, err := loadAuthManager(cmd, v)
+	if err != nil {
+		// Failure path: must wrap with ErrInvalidAuthConfig per the function's
+		// stated contract.
+		assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig,
+			"loadAuthManager must wrap any failure with ErrInvalidAuthConfig")
+		assert.Nil(t, manager)
+		return
+	}
+	// Success path: manager must be non-nil.
+	assert.NotNil(t, manager)
+}
+
+// TestPrintWhoamiHuman covers the table-rendering paths for valid and invalid
+// credential states. Smoke-level: just confirm no panic and key fields render.
+func TestPrintWhoamiHuman(t *testing.T) {
+	future := time.Now().Add(2 * time.Hour)
+	whoami := &authTypes.WhoamiInfo{
+		Provider:    "aws-sso",
+		Identity:    "prod-admin",
+		Account:     "123456789012",
+		Region:      "us-east-1",
+		Expiration:  &future,
+		LastUpdated: time.Now(),
+	}
+
+	t.Run("valid credentials renders without warning section", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			printWhoamiHuman(whoami, true)
+		})
+	})
+
+	t.Run("invalid credentials renders the refresh tip", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			printWhoamiHuman(whoami, false)
+		})
+	})
+
+	t.Run("nil expiration is handled", func(t *testing.T) {
+		w := &authTypes.WhoamiInfo{
+			Provider:    "aws-sso",
+			Identity:    "prod-admin",
+			LastUpdated: time.Now(),
+		}
+		assert.NotPanics(t, func() {
+			printWhoamiHuman(w, true)
+		})
+	})
+}

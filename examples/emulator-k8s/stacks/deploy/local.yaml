@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+import:
+  - catalog/demo
+
+vars:
+  stage: local
+
+components:
+  # The Kubernetes emulator: Atmos manages a privileged k3s container for this stack.
+  # `atmos emulator up kubernetes -s local` starts it; the kubernetes/emulator identity
+  # (atmos.yaml) harvests its kubeconfig so helmfile just works.
+  emulator:
+    kubernetes:
+      driver: k3s
+      # Pin a non-standard host port: the conventional 6443 may be taken by another
+      # local k3s. The container still serves the API on 6443.
+      container:
+        ports:
+          - host: 16443
+            container: 6443
+          # Expose the Traefik ingress HTTP listener so app.localhost is reachable
+          # from the host without a separate port-forward.
+          - host: 8080
+            container: 80
+
+  helmfile:
+    demo:
+      metadata:
+        type: real

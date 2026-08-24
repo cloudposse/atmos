@@ -1,0 +1,11 @@
+name: isolated-shared
+
+components:
+  terraform:
+    chatops:
+      metadata:
+        component: mock
+        inherits:
+          - dns-primary
+      vars:
+        name: chatops

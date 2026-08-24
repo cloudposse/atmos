@@ -1,0 +1,117 @@
+package skill
+
+import (
+	_ "embed"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	ai "github.com/cloudposse/atmos/cmd/ai"
+
+	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/version"
+)
+
+// uninstallParser handles flag parsing with Viper precedence for the uninstall command.
+var uninstallParser *flags.StandardParser
+
+//go:embed markdown/atmos_ai_skill_uninstall.md
+var uninstallLongMarkdown string
+
+//go:embed markdown/atmos_ai_skill_uninstall_usage.md
+var uninstallUsageMarkdown string
+
+// uninstallCmd represents the 'atmos ai skill uninstall' command.
+var uninstallCmd = &cobra.Command{
+	Use:     "uninstall [name]",
+	Short:   "Remove an installed skill",
+	Long:    uninstallLongMarkdown,
+	Example: uninstallUsageMarkdown,
+	Args:    cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		defer perf.Track(nil, "cmd.aiSkillUninstallCmd")()
+
+		// Bind parsed flags to Viper for precedence handling.
+		v := viper.GetViper()
+		if err := uninstallParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		// Reject an unsupported --client before doing any work; BindFlagsToViper
+		// alone doesn't validate ValidValues (that only happens inside Parse()),
+		// so this command validates explicitly.
+		if err := uninstallParser.ValidateFlagValues(cmd); err != nil {
+			return err
+		}
+
+		// Get flags from Viper (supports CLI > ENV > config > defaults).
+		force := v.GetBool("force")
+
+		// Create installer (which manages registry).
+		installer, err := marketplace.NewInstaller(version.Version)
+		if err != nil {
+			return fmt.Errorf("failed to initialize installer: %w", err)
+		}
+
+		basePath, err := os.Getwd()
+		if err != nil {
+			basePath = "."
+		}
+
+		scopes, err := resolveUninstallScopes(cmd, v, force)
+		if err != nil {
+			return err
+		}
+
+		clients, err := resolveUninstallClients(basePath, v, force, scopes)
+		if err != nil {
+			return err
+		}
+
+		// With no <name> given, uninstall every installed skill instead of
+		// just one, mirroring `atmos mcp uninstall` acting on every
+		// configured server when no server names are given.
+		if len(args) == 0 {
+			return installer.UninstallAll(force, basePath, clients, scopes)
+		}
+
+		if err := installer.Uninstall(args[0], force, basePath, clients, scopes); err != nil {
+			return err
+		}
+
+		return nil
+	},
+}
+
+func init() {
+	// Create parser with uninstall-specific flags using functional options.
+	uninstallParser = flags.NewStandardParser(
+		flags.WithBoolFlag("force", "f", false, "Skip confirmation prompt"),
+		flags.WithEnvVars("force", "ATMOS_AI_SKILL_FORCE"),
+		flags.WithStringSliceFlag(clientFlag, "c", nil, "AI client to remove the skill from (repeatable): claude-code, vscode, gemini"),
+		flags.WithEnvVars(clientFlag, "ATMOS_AI_SKILL_CLIENT"),
+		flags.WithValidValues(clientFlag, marketplace.SupportedClients...),
+		flags.WithBoolFlag("all-clients", "", false, "Remove the skill from all supported AI clients"),
+		flags.WithEnvVars("all-clients", "ATMOS_AI_SKILL_ALL_CLIENTS"),
+		flags.WithStringFlag(scopeFlag, "", marketplace.ScopeProject, "Distribution scope: project or user (wins over --global if both are set)"),
+		flags.WithEnvVars(scopeFlag, "ATMOS_AI_SKILL_SCOPE"),
+		flags.WithValidValues(scopeFlag, marketplace.ScopeProject, marketplace.ScopeUser),
+		flags.WithBoolFlag("global", "g", false, "Alias for --scope user"),
+		flags.WithEnvVars("global", "ATMOS_AI_SKILL_GLOBAL"),
+	)
+
+	// Register flags on the command.
+	uninstallParser.RegisterFlags(uninstallCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := uninstallParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Add 'uninstall' subcommand to 'skill' command.
+	ai.SkillCmd.AddCommand(uninstallCmd)
+}

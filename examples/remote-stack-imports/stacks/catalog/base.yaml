@@ -1,0 +1,12 @@
+# Base configuration for the myapp component.
+# This is a local import that provides component defaults.
+
+components:
+  terraform:
+    myapp:
+      metadata:
+        type: abstract
+        component: myapp
+      vars:
+        name: "myapp"
+        environment: "base"

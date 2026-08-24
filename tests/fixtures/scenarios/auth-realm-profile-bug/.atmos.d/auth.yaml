@@ -1,0 +1,14 @@
+# Default identity defined in .atmos.d/auth.yaml.
+# The identity name "root-admin" does NOT match any profile directory.
+# This should NOT cause a "profile not found" error.
+auth:
+  identities:
+    root-admin:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: org-sso
+      principal:
+        name: AdministratorAccess
+        account:
+          name: Root

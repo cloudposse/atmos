@@ -1,0 +1,47 @@
+---
+title: atmos terraform cache prune
+sidebar_label: cache prune
+sidebar_class_name: command
+id: prune
+description: Remove stale cached registry metadata.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Remove cached registry metadata older than the retention window. Immutable artifacts (provider zips, module archives) are kept unless you opt in with `--all`.
+</Intro>
+
+<CastPlayer title="atmos terraform cache prune --help" src="/casts/screengrabs/atmos-terraform-cache-prune--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos terraform cache prune [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--older-than`</dt>
+  <dd>Prune objects older than this Go duration (e.g. `168h`, `720h`). Defaults to `168h`.</dd>
+  <dt>`--all`</dt>
+  <dd>Also prune immutable artifacts (provider zips, module archives), not just metadata.</dd>
+  <dt>`--dry-run`</dt>
+  <dd>Show what would be pruned without deleting anything.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Prune metadata older than the default 168h window
+atmos terraform cache prune
+
+# Preview a more aggressive prune that also removes old artifacts
+atmos terraform cache prune --older-than=720h --all --dry-run
+```
+
+## Related Commands
+
+- [`atmos terraform cache stats`](/cli/commands/terraform/cache/stats)
+- [`atmos terraform cache delete`](/cli/commands/terraform/cache/delete)

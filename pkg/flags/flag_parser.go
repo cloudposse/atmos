@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -82,7 +83,7 @@ func (p *AtmosFlagParser) Parse(args []string) (*ParsedConfig, error) {
 	// limitation that NoOptDefVal requires equals syntax (pflag #134, #321, cobra #1962).
 	// Only applies to args before the -- separator (Atmos flags, not pass-through).
 	if p.registry != nil && len(argsBeforeSep) > 0 {
-		argsBeforeSep = p.registry.PreprocessNoOptDefValArgs(argsBeforeSep)
+		argsBeforeSep = p.preprocessNoOptDefValFlags(argsBeforeSep)
 	}
 
 	// Step 3: Normalize Cobra shorthand flags with = syntax (e.g., -i=value → --identity=value).
@@ -143,13 +144,30 @@ func splitAtSeparator(args []string) ([]string, []string) {
 //
 // This works around Cobra's NoOptDefVal limitation where --identity value treats
 // "value" as a positional arg instead of the flag value.
+//
+// The set of flags eligible for this treatment is derived generically from this
+// parser's registry (any Flag whose GetNoOptDefVal() is non-empty), rather than a
+// hard-coded per-flag-name map. This mirrors the pattern used by
+// preprocessNoOptDefValFlags (see p.registry.All() usage above) so new NoOptDefVal
+// flags (e.g. --profile) are picked up automatically without touching this function.
 func (p *AtmosFlagParser) resolveNoOptDefValForEmptyFlags() {
 	defer perf.Track(nil, "flags.FlagParser.resolveNoOptDefValForEmptyFlags")()
 
-	// Hard-coded list of flags that support empty-value interactive selection.
-	// In future, this could be configurable via builder pattern.
-	interactiveFlags := map[string]string{
-		"identity": "__SELECT__",
+	if p.registry == nil {
+		return
+	}
+
+	// Build the set of flags that support empty-value interactive selection
+	// from the registry's NoOptDefVal metadata.
+	interactiveFlags := make(map[string]string)
+	for _, f := range p.registry.All() {
+		if marker := f.GetNoOptDefVal(); marker != "" {
+			interactiveFlags[f.GetName()] = marker
+		}
+	}
+
+	if len(interactiveFlags) == 0 {
+		return
 	}
 
 	p.cmd.Flags().VisitAll(func(flag *pflag.Flag) {
@@ -308,6 +326,26 @@ func (p *AtmosFlagParser) normalizeShorthandFlags(argsBeforeSep []string) []stri
 	}
 
 	return normalizedArgs
+}
+
+// preprocessNoOptDefValFlags rewrites space-separated flag syntax to equals syntax for NoOptDefVal flags.
+// Uses the preprocess package's NoOptDefValPreprocessor for consistent behavior across all callers.
+func (p *AtmosFlagParser) preprocessNoOptDefValFlags(args []string) []string {
+	defer perf.Track(nil, "flags.FlagParser.preprocessNoOptDefValFlags")()
+
+	// Convert flags.Flag to preprocess.FlagInfo for the preprocessor.
+	// The flags.Flag interface satisfies preprocess.FlagInfo.
+	allFlags := p.registry.All()
+	flagInfos := make([]preprocess.FlagInfo, len(allFlags))
+	for i, f := range allFlags {
+		flagInfos[i] = f
+	}
+
+	// Use the preprocess pipeline for native flag preprocessing.
+	pipeline := preprocess.NewPipeline(
+		preprocess.NewNoOptDefValPreprocessor(flagInfos),
+	)
+	return pipeline.Run(args)
 }
 
 // parseAndBindFlags parses Cobra flags and binds them to Viper.

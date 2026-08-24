@@ -46,13 +46,13 @@ The inline progress bar shows spinner, command, current activity, and completion
 
 **Dependency tree with attribute changes:**
 ```
-     plat-ue2-dev/myapp
+      plat-ue2-dev/myapp
   ●  ├── aws_s3_object.file
-     │     content_type  "text/html"  →  "text/plain"
-     │     source        "hello.html" →  "hello.txt"
+      │     content_type  "text/html"  →  "text/plain"
+      │     source        "hello.html" →  "hello.txt"
   ●  └── aws_instance.new
-           ami            (none)       →  "ami-12345"
-           instance_type  (none)       →  "t3.micro"
+            ami            (none)       →  "ami-12345"
+            instance_type  (none)       →  "t3.micro"
 ```
 
 Resources are marked with colored dots (●): green for create, yellow for update, red for delete. Attribute changes display in a two-column layout with color-coded keys.
@@ -60,7 +60,7 @@ Resources are marked with colored dots (●): green for create, yellow for updat
 **Multi-line value changes:**
 ```
   ●  └── aws_s3_object.weather
-           content
+            content
           - Current weather: Sunny, 72°F
           - Humidity: 45%
           + Current weather: Cloudy, 65°F

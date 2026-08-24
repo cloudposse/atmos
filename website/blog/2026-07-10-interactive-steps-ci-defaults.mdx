@@ -1,0 +1,58 @@
+---
+slug: interactive-steps-ci-defaults
+title: "Interactive Workflow & Command Steps Now Run in CI"
+date: 2026-07-10T12:00:00.000Z
+authors: [sgtoj]
+tags: [feature, dx]
+---
+
+You built a slick interactive workflow — `choose` an account, `input` a release tag, then deploy. It is perfect on your laptop. Then CI runs it and everything stops with `interactive terminal required for step`. The prompts that make the workflow friendly locally are exactly what make it unrunnable in a pipeline, so you end up maintaining a second, prompt-free copy just for CI.
+
+Interactive steps now fall back to their `default` value when there is no TTY, so the *same* workflow runs unattended in CI — no duplicate variant required.
+
+<!--truncate-->
+
+## The Problem
+
+Interactive step types (`choose`, `input`, `confirm`, `filter`, `file`, `write`) need a terminal to prompt you. In CI there is no TTY, so every one of them failed hard with `interactive terminal required for step`. The usual workaround was to fork your automation: an interactive version for humans and a flag-driven version for pipelines.
+
+## The Fix
+
+When an interactive step has a `default` and there is no TTY, Atmos now uses that default instead of erroring. With a TTY it still prompts (using the default as the pre-selected value). Without a default, the existing error stands — so you never silently deploy an unintended value.
+
+```yaml
+workflows:
+  build-manifests:
+    steps:
+      - name: account
+        type: choose
+        prompt: "Account"
+        options: [dev, prod]
+        default: !env STACK_ACCOUNT dev
+      - name: tag
+        type: input
+        prompt: "Release tag"
+        default: !env RELEASE_TAG latest
+      - type: shell
+        command: atmos kube build "{{ .steps.account.value }}/tao" --tag "{{ .steps.tag.value }}"
+```
+
+Locally, this prompts. In CI, it reads `STACK_ACCOUNT` / `RELEASE_TAG` (falling back to `dev` / `latest`), then runs the shell step with the captured values.
+
+## Dynamic Defaults from the Environment
+
+Defaults can come from the environment with the `!env` function (`!env VAR fallback`) in a workflow step's `default`, `prompt`, `options`, and `placeholder`. `!exec` is supported too. Custom commands defined in `atmos.yaml` already resolved `!env`; workflows now do as well.
+
+Consuming those captured values in later `shell`/`atmos` steps (`{{ .steps.<name>.value }}`) works thanks to a companion fix that brought workflow command templating to parity with custom command steps.
+
+## How to Use It
+
+- Give each interactive step a `default` so it can run unattended.
+- Use `!env VAR fallback` to pull that default from the environment in CI.
+- Leave `default` off when a human must choose — the step still errors in CI, by design.
+
+The behavior is automatic based on TTY detection; there is no new flag to set. It applies to both workflows and custom commands, which share the same step engine.
+
+## Get Involved
+
+Try converting one of your prompt-driven workflows to run in CI by adding `default` values, and let us know how it goes in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

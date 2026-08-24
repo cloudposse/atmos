@@ -16,7 +16,7 @@ This fixture tests the workdir provisioner feature which enables isolated workin
 cd tests/fixtures/scenarios/workdir
 
 # Build atmos
-make build
+atmos build
 
 # List stacks
 ../../../../build/atmos list stacks

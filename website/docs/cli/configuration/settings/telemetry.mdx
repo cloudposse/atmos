@@ -1,0 +1,181 @@
+---
+title: Telemetry
+sidebar_position: 6
+sidebar_label: telemetry
+sidebar_class_name: command
+description: Configure anonymous usage telemetry collection
+id: telemetry
+slug: /cli/configuration/settings/telemetry
+---
+
+import Intro from '@site/src/components/Intro';
+import KeyPoints from '@site/src/components/KeyPoints';
+import Note from '@site/src/components/Note';
+import File from '@site/src/components/File';
+
+<Intro>
+Atmos collects anonymous usage telemetry to help us understand how the tool is used and where to invest engineering effort. Telemetry is fully opt-out and never includes personal information, repository contents, or stack values. The `settings.telemetry` section gives you complete control over whether events are sent and where they go.
+</Intro>
+
+<KeyPoints>
+- Disable telemetry entirely with a single setting or environment variable
+- Override the endpoint and token to send events to your own collector
+- No user data, repository paths, or stack values are ever transmitted
+- Diagnostic logging can be enabled to inspect every event before it's sent
+</KeyPoints>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  telemetry:
+    # Enable or disable telemetry collection. Defaults to true.
+    enabled: true
+    # Override the telemetry endpoint (advanced).
+    endpoint: ""
+    # Override the telemetry token (advanced).
+    token: ""
+    # Enable verbose telemetry diagnostic logging. Defaults to false.
+    logging: false
+```
+</File>
+
+To opt out completely:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  telemetry:
+    enabled: false
+```
+</File>
+
+Or via environment variable:
+
+```bash
+export ATMOS_TELEMETRY_ENABLED=false
+```
+
+## Configuration Reference
+
+<dl>
+  <dt>`settings.telemetry.enabled`</dt>
+  <dd>
+    Controls whether Atmos sends anonymous usage events. When `false`, no telemetry is collected or transmitted regardless of any other setting.
+
+    - **Type:** `boolean`
+    - **Default:** `true`
+    - **Environment Variable:** `ATMOS_TELEMETRY_ENABLED`
+  </dd>
+
+  <dt>`settings.telemetry.endpoint`</dt>
+  <dd>
+    Override the endpoint that telemetry events are sent to. Most users should leave this unset; it's intended for organizations that want to route Atmos telemetry to their own collector for internal observability.
+
+    - **Type:** `string`
+    - **Default:** (built-in default endpoint)
+    - **Environment Variable:** `ATMOS_TELEMETRY_ENDPOINT`
+  </dd>
+
+  <dt>`settings.telemetry.token`</dt>
+  <dd>
+    Override the API token used to authenticate with the telemetry endpoint. Pair this with `endpoint` when sending events to your own collector. Most users should leave this unset.
+
+    - **Type:** `string`
+    - **Default:** (built-in default token)
+    - **Environment Variable:** `ATMOS_TELEMETRY_TOKEN`
+  </dd>
+
+  <dt>`settings.telemetry.logging`</dt>
+  <dd>
+    Enable diagnostic logging for the telemetry client. When `true`, every event the telemetry client emits is also logged through Atmos' standard logger so you can audit exactly what is being sent. When `false`, the telemetry client runs silently. Disabled by default to keep CI logs clean.
+
+    - **Type:** `boolean`
+    - **Default:** `false`
+    - **Environment Variable:** `ATMOS_TELEMETRY_LOGGING`
+  </dd>
+</dl>
+
+## Environment Variables
+
+Environment variables take precedence over `atmos.yaml` settings.
+
+<dl>
+  <dt>`ATMOS_TELEMETRY_ENABLED`</dt>
+  <dd>Set to `false` to disable telemetry. Maps to `settings.telemetry.enabled`.</dd>
+
+  <dt>`ATMOS_TELEMETRY_ENDPOINT`</dt>
+  <dd>Override the telemetry endpoint URL. Maps to `settings.telemetry.endpoint`.</dd>
+
+  <dt>`ATMOS_TELEMETRY_TOKEN`</dt>
+  <dd>Override the telemetry API token. Maps to `settings.telemetry.token`.</dd>
+
+  <dt>`ATMOS_TELEMETRY_LOGGING`</dt>
+  <dd>Enable verbose telemetry diagnostic logging. Maps to `settings.telemetry.logging`.</dd>
+</dl>
+
+## What Atmos Collects
+
+Atmos telemetry is designed to capture only the minimum information needed to understand product usage. Events include:
+
+- The Atmos command that was run (e.g., `terraform plan`, `list components`)
+- Whether the command succeeded or failed
+- Atmos version, OS, and architecture
+- An anonymous, randomly generated machine identifier
+
+Atmos never collects:
+
+- Repository contents, file paths, or stack manifest values
+- Component names, stack names, or variable values
+- Environment variable values
+- AWS account IDs, ARNs, or any cloud credentials
+- Personally identifiable information
+
+## Use Cases
+
+### Disable in CI
+
+Many teams prefer to keep CI logs clean and avoid any outbound telemetry from automation. Disable globally with an environment variable in your CI configuration:
+
+```bash
+export ATMOS_TELEMETRY_ENABLED=false
+```
+
+### Route to a Self-Hosted Collector
+
+Organizations with strict data-egress policies can route Atmos telemetry to their own internal endpoint:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  telemetry:
+    enabled: true
+    endpoint: "https://telemetry.internal.example.com"
+    token: "${TELEMETRY_TOKEN}"
+```
+</File>
+
+### Audit What's Being Sent
+
+To verify exactly what Atmos sends, enable diagnostic logging:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  telemetry:
+    enabled: true
+    logging: true
+```
+</File>
+
+The telemetry client will log every event through Atmos' standard logger.
+
+<Note>
+Telemetry is sent asynchronously and never blocks command execution. If the telemetry endpoint is unreachable, the event is dropped silently — Atmos commands always succeed or fail based on their own work, not on telemetry delivery.
+</Note>
+
+## See Also
+
+- [Settings](/cli/configuration/settings) — Overview of all settings
+- [Atmos Pro](/cli/configuration/settings/pro) — Atmos Pro integration (separate from telemetry)

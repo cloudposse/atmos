@@ -1,7 +1,7 @@
 {
   "label": "registry",
-  "position": 20,
   "className": "command",
+  "position": 20,
   "link": {
     "type": "doc",
     "id": "cli/commands/toolchain/registry/usage"

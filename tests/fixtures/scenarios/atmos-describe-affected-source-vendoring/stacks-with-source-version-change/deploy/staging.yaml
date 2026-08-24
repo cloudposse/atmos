@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# BASE (main branch) state - has source.version = "1.1.0" (CHANGED from HEAD)
+# This simulates main branch after a PR updated the source version
+
+vars:
+  environment: ue1
+  stage: staging
+
+components:
+  terraform:
+    # Component with source vendoring - VERSION CHANGED from "1.0.0" to "1.1.0"
+    vpc-source:
+      metadata:
+        component: mock
+      source:
+        uri: "github.com/cloudposse/terraform-null-label//exports"
+        version: "1.1.0"  # <-- CHANGED from "1.0.0"
+      vars:
+        enabled: true
+        name: "vpc"
+
+    # Component with source vendoring AND workdir - VERSION CHANGED
+    vpc-source-workdir:
+      metadata:
+        component: mock
+      source:
+        uri: "github.com/cloudposse/terraform-null-label//exports"
+        version: "1.1.0"  # <-- CHANGED from "1.0.0"
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        enabled: true
+        name: "vpc-workdir"
+
+    # Regular component without source - NO CHANGES
+    regular-component:
+      metadata:
+        component: mock
+      vars:
+        enabled: true
+        name: "regular"
+
+    # Component with ONLY workdir change (no source change)
+    component-workdir-only:
+      metadata:
+        component: mock
+      provision:
+        workdir:
+          enabled: true  # <-- CHANGED from false/not present in HEAD
+      vars:
+        enabled: true
+        name: "workdir-only"

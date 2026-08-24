@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=schema.json
+# Tests for the packer-docker example demonstrating the Packer component type
+# via Packer's Docker builder (no cloud credentials, no Docker daemon needed
+# for these assertions). See examples/packer-docker/ for the example code.
+#
+# `atmos packer init`/`validate`/`build` are intentionally NOT exercised here:
+# `init`/`build` need network access to download the Docker plugin and a
+# local Docker (or Podman) daemon to actually run, and `validate` requires
+# the plugin to already be installed (i.e. `init` to have run first) — see
+# tests/test-cases/packer.yaml for the same policy. `inspect` parses the HCL
+# statically and works without either, so it is used here instead.
+
+tests:
+  # Test 1: List stacks shows the single flat "alpine" stack.
+  - name: "packer-docker list stacks"
+    enabled: true
+    snapshot: false
+    description: "Verify packer-docker example lists the alpine stack."
+    workdir: "../examples/packer-docker"
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+    expect:
+      stdout:
+        - "alpine"
+      exit_code: 0
+
+  # Test 2: Describe the alpine component resolves vars from the stack.
+  - name: "packer-docker describe component alpine -s alpine"
+    enabled: true
+    snapshot: false
+    description: "Verify alpine component vars are resolved correctly."
+    workdir: "../examples/packer-docker"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "alpine"
+      - "-s"
+      - "alpine"
+      - "--format"
+      - "json"
+    expect:
+      valid:
+        - "json"
+      stdout:
+        # Patterns are compiled as regexes, so the literal "+" in the message
+        # value is intentionally left out of the match below.
+        - '"component": "alpine"'
+        - '"message": "Hello from Atmos'
+        - '"packer": "1.14.2"'
+      exit_code: 0
+
+  # Test 3: Validate the stack manifest.
+  - name: "packer-docker validate stacks"
+    enabled: true
+    snapshot: false
+    description: "Verify the packer-docker stack manifest is valid."
+    workdir: "../examples/packer-docker"
+    command: "atmos"
+    args:
+      - "validate"
+      - "stacks"
+    expect:
+      exit_code: 0
+
+  # Test 4: Inspect the Docker builder template without requiring plugin init.
+  - name: "packer-docker packer inspect alpine -s alpine"
+    enabled: true
+    snapshot: false
+    description: "Verify the Packer template's variables and Docker source are loaded (no plugin download required)."
+    workdir: "../examples/packer-docker"
+    command: "atmos"
+    args:
+      - "packer"
+      - "inspect"
+      - "alpine"
+      - "-s"
+      - "alpine"
+    preconditions:
+      - packer
+    expect:
+      stdout:
+        - "var.message"
+        - "docker.example"
+      exit_code: 0

@@ -103,7 +103,7 @@ func TestSessionTokenDoesNotOverwriteLongLivedCredentialsInKeyring(t *testing.T)
 
 	// Step 5: Verify keyring STILL contains long-lived credentials (INTENDED BEHAVIOR).
 	// Session tokens should NOT have been cached in keyring.
-	retrievedCreds, err := store.Retrieve("test-identity")
+	retrievedCreds, err := store.Retrieve("test-identity", "")
 	require.NoError(t, err, "Should retrieve credentials from keyring")
 
 	retrievedAWSCreds, ok := retrievedCreds.(*types.AWSCredentials)
@@ -181,6 +181,8 @@ func (m *mockIdentityReturningSessionTokens) GetProviderName() (string, error) {
 	return "test-provider", nil
 }
 
+func (m *mockIdentityReturningSessionTokens) SetRealm(_ string) {}
+
 // TestBuildWhoamiInfo_SkipsSessionTokenCaching verifies that buildWhoamiInfo
 // does NOT cache session tokens in the keyring.
 //
@@ -242,7 +244,7 @@ func TestBuildWhoamiInfo_SkipsSessionTokenCaching(t *testing.T) {
 
 	// Step 4: Verify keyring STILL contains long-lived credentials.
 	// Session tokens should NOT have been cached.
-	retrievedCreds, err := store.Retrieve("test-identity")
+	retrievedCreds, err := store.Retrieve("test-identity", "")
 	require.NoError(t, err, "Should retrieve credentials from keyring")
 
 	retrievedAWSCreds, ok := retrievedCreds.(*types.AWSCredentials)
@@ -293,7 +295,7 @@ func TestBuildWhoamiInfo_CachesNonSessionCredentials(t *testing.T) {
 	assert.Equal(t, "test-identity", info.CredentialsRef)
 
 	// Verify credentials WERE cached (since they're not session tokens).
-	retrievedCreds, err := store.Retrieve("test-identity")
+	retrievedCreds, err := store.Retrieve("test-identity", "")
 	require.NoError(t, err, "Credentials should be cached in keyring")
 
 	retrievedAWSCreds, ok := retrievedCreds.(*types.AWSCredentials)

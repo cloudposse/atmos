@@ -577,6 +577,90 @@ func TestRegisterCommandCompatFlags_Concurrent(t *testing.T) {
 	}
 }
 
+// resetFlagRegistries clears the commandFlagRegistries for test isolation.
+func resetFlagRegistries() {
+	commandFlagRegistries.mu.Lock()
+	defer commandFlagRegistries.mu.Unlock()
+	commandFlagRegistries.registries = make(map[string]*flags.FlagRegistry)
+}
+
+func TestRegisterCommandFlagRegistry(t *testing.T) {
+	resetFlagRegistries()
+
+	flagReg := flags.NewFlagRegistry()
+	flagReg.Register(&flags.StringFlag{
+		Name:        "identity",
+		NoOptDefVal: "__SELECT__",
+	})
+
+	RegisterCommandFlagRegistry("terraform", flagReg)
+
+	got := GetCommandFlagRegistry("terraform")
+	require.NotNil(t, got, "registered flag registry should be retrievable")
+	assert.Same(t, flagReg, got, "should return the exact same registry instance")
+}
+
+func TestGetCommandFlagRegistry_NotFound(t *testing.T) {
+	resetFlagRegistries()
+
+	got := GetCommandFlagRegistry("nonexistent")
+	assert.Nil(t, got, "should return nil for unregistered provider")
+}
+
+func TestRegisterCommandFlagRegistry_Overwrite(t *testing.T) {
+	resetFlagRegistries()
+
+	first := flags.NewFlagRegistry()
+	second := flags.NewFlagRegistry()
+
+	RegisterCommandFlagRegistry("terraform", first)
+	RegisterCommandFlagRegistry("terraform", second)
+
+	got := GetCommandFlagRegistry("terraform")
+	assert.Same(t, second, got, "second registration should overwrite the first")
+}
+
+func TestRegisterCommandFlagRegistry_MultipleProviders(t *testing.T) {
+	resetFlagRegistries()
+
+	tfRegistry := flags.NewFlagRegistry()
+	hfRegistry := flags.NewFlagRegistry()
+
+	RegisterCommandFlagRegistry("terraform", tfRegistry)
+	RegisterCommandFlagRegistry("helmfile", hfRegistry)
+
+	assert.Same(t, tfRegistry, GetCommandFlagRegistry("terraform"))
+	assert.Same(t, hfRegistry, GetCommandFlagRegistry("helmfile"))
+	assert.Nil(t, GetCommandFlagRegistry("packer"))
+}
+
+func TestRegisterCommandFlagRegistry_Concurrent(t *testing.T) {
+	resetFlagRegistries()
+
+	done := make(chan bool)
+
+	// Concurrently register flag registries for different providers.
+	for i := 0; i < 10; i++ {
+		go func(idx int) {
+			provider := fmt.Sprintf("provider%d", idx)
+			reg := flags.NewFlagRegistry()
+			RegisterCommandFlagRegistry(provider, reg)
+			done <- true
+		}(i)
+	}
+
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	// Verify all registrations succeeded.
+	for i := 0; i < 10; i++ {
+		provider := fmt.Sprintf("provider%d", i)
+		got := GetCommandFlagRegistry(provider)
+		require.NotNil(t, got, "flag registry for %s should exist", provider)
+	}
+}
+
 // mockExperimentalCommandProvider is a test implementation that returns IsExperimental = true.
 type mockExperimentalCommandProvider struct {
 	mockCommandProvider
@@ -719,6 +803,150 @@ func TestIsCommandExperimental(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestRegisterAll_DefaultNoArgs(t *testing.T) {
+	t.Run("applies NoArgs to parent command with subcommands", func(t *testing.T) {
+		Reset()
+
+		rootCmd := &cobra.Command{Use: "root"}
+
+		// Create parent command with subcommands (no Args set).
+		parentCmd := &cobra.Command{Use: "parent"}
+		childCmd := &cobra.Command{Use: "child"}
+		parentCmd.AddCommand(childCmd)
+
+		provider := &mockCommandProvider{
+			name:  "parent",
+			group: "Test",
+			cmd:   parentCmd,
+		}
+
+		Register(provider)
+		err := RegisterAll(rootCmd)
+		require.NoError(t, err)
+
+		// Verify NoArgs was applied to parent.
+		registeredCmd, _, err := rootCmd.Find([]string{"parent"})
+		require.NoError(t, err)
+		require.NotNil(t, registeredCmd.Args, "Args should be set")
+
+		// Verify NoArgs behavior: accepts zero args.
+		err = registeredCmd.Args(registeredCmd, []string{})
+		assert.NoError(t, err)
+
+		// Verify NoArgs behavior: rejects any args.
+		err = registeredCmd.Args(registeredCmd, []string{"unexpected"})
+		assert.Error(t, err)
+	})
+
+	t.Run("applies NoArgs to leaf command without subcommands", func(t *testing.T) {
+		Reset()
+
+		rootCmd := &cobra.Command{Use: "root"}
+
+		// Create leaf command without subcommands (no Args set).
+		cmd := &cobra.Command{Use: "standalone"}
+
+		provider := &mockCommandProvider{
+			name:  "standalone",
+			group: "Test",
+			cmd:   cmd,
+		}
+
+		Register(provider)
+		err := RegisterAll(rootCmd)
+		require.NoError(t, err)
+
+		// Verify NoArgs was applied to leaf command.
+		registeredCmd, _, err := rootCmd.Find([]string{"standalone"})
+		require.NoError(t, err)
+		require.NotNil(t, registeredCmd.Args, "Args should be set for leaf command")
+
+		// Verify NoArgs behavior: accepts zero args.
+		err = registeredCmd.Args(registeredCmd, []string{})
+		assert.NoError(t, err)
+
+		// Verify NoArgs behavior: rejects any args.
+		err = registeredCmd.Args(registeredCmd, []string{"unexpected"})
+		assert.Error(t, err)
+	})
+
+	t.Run("does not overwrite explicit Args", func(t *testing.T) {
+		Reset()
+
+		rootCmd := &cobra.Command{Use: "root"}
+
+		// Create parent command with subcommands AND explicit Args.
+		parentCmd := &cobra.Command{
+			Use:  "parent",
+			Args: cobra.MaximumNArgs(1), // Explicit Args - should not be overwritten.
+		}
+		childCmd := &cobra.Command{Use: "child"}
+		parentCmd.AddCommand(childCmd)
+
+		provider := &mockCommandProvider{
+			name:  "parent",
+			group: "Test",
+			cmd:   parentCmd,
+		}
+
+		Register(provider)
+		err := RegisterAll(rootCmd)
+		require.NoError(t, err)
+
+		// Verify original Args is preserved.
+		registeredCmd, _, err := rootCmd.Find([]string{"parent"})
+		require.NoError(t, err)
+		require.NotNil(t, registeredCmd.Args, "Args should be set")
+
+		// Verify MaximumNArgs behavior: accepts 0 or 1 args.
+		err = registeredCmd.Args(registeredCmd, []string{})
+		assert.NoError(t, err)
+		err = registeredCmd.Args(registeredCmd, []string{"one"})
+		assert.NoError(t, err)
+		err = registeredCmd.Args(registeredCmd, []string{"one", "two"})
+		assert.Error(t, err) // MaximumNArgs(1) rejects 2 args.
+	})
+
+	t.Run("does not modify command with PositionalArgsBuilder", func(t *testing.T) {
+		Reset()
+
+		rootCmd := &cobra.Command{Use: "root"}
+
+		// Create parent command with subcommands.
+		parentCmd := &cobra.Command{Use: "parent"}
+		childCmd := &cobra.Command{Use: "child"}
+		parentCmd.AddCommand(childCmd)
+
+		// Provider that returns a PositionalArgsBuilder.
+		provider := &mockProviderWithPositionalArgs{
+			mockCommandProvider: mockCommandProvider{
+				name:  "parent",
+				group: "Test",
+				cmd:   parentCmd,
+			},
+		}
+
+		Register(provider)
+		err := RegisterAll(rootCmd)
+		require.NoError(t, err)
+
+		// Verify Args was NOT set (provider has PositionalArgsBuilder).
+		registeredCmd, _, err := rootCmd.Find([]string{"parent"})
+		require.NoError(t, err)
+		assert.Nil(t, registeredCmd.Args, "Args should remain nil when PositionalArgsBuilder is set")
+	})
+}
+
+// mockProviderWithPositionalArgs is a test provider that returns a PositionalArgsBuilder.
+type mockProviderWithPositionalArgs struct {
+	mockCommandProvider
+}
+
+func (m *mockProviderWithPositionalArgs) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	// Return non-nil builder to simulate command that accepts positional args.
+	return &flags.PositionalArgsBuilder{}
 }
 
 func TestRegisterAllMarksExperimentalCommands(t *testing.T) {

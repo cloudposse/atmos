@@ -1,0 +1,26 @@
+---
+title: hint
+sidebar_label: hint
+slug: /workflows/steps/type/hint
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `hint` step type displays a muted tip message with Atmos' lightbulb hint styling.
+</Intro>
+
+```yaml
+steps:
+  - type: hint
+    content: Run `atmos dev shell` so `atmos` resolves to `./build/atmos`.
+```
+
+Use `hint` for optional guidance that should not be treated as a warning or error.
+
+## Fields
+
+<dl>
+  <dt>`content`</dt>
+  <dd>Required. Hint text. Supports templates and inline Markdown.</dd>
+</dl>

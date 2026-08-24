@@ -3,10 +3,13 @@ package cmd
 import (
 	"os"
 	"reflect"
+	"testing"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -14,6 +17,20 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
+
+// ensureIOInitialized initializes the global I/O writer and ui formatter for
+// tests that invoke data.Write*/ui.Write* code paths directly, without going
+// through RootCmd.Execute() (whose PersistentPreRun normally does this).
+// Needed because restoreRootCmdState (registered via NewTestKit's cleanup)
+// resets this global state to nil at the end of every test that uses it, so
+// a later test that calls a migrated helper directly can otherwise panic.
+func ensureIOInitialized(t *testing.T) {
+	t.Helper()
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+}
 
 // flagSnapshot stores the state of a flag for restoration.
 type flagSnapshot struct {
@@ -28,6 +45,8 @@ type cmdStateSnapshot struct {
 	flags          map[string]flagSnapshot
 	chdirProcessed bool
 	colorProfile   termenv.Profile // Lipgloss color profile
+	openDocsURL    func(string) error
+	commands       []*cobra.Command // RootCmd.Commands() at snapshot time.
 }
 
 // snapshotRootCmdState captures the current state of RootCmd including all flag values and I/O streams.
@@ -40,6 +59,8 @@ func snapshotRootCmdState() *cmdStateSnapshot {
 		flags:          make(map[string]flagSnapshot),
 		chdirProcessed: chdirProcessed,
 		colorProfile:   lipgloss.ColorProfile(),
+		openDocsURL:    openDocsURL,
+		commands:       append([]*cobra.Command(nil), RootCmd.Commands()...),
 	}
 
 	// Copy args.
@@ -101,6 +122,21 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 	ui.Reset()
 	homedir.Reset()
 
+	// Re-establish a valid default I/O context immediately after resetting.
+	// Many tests in this package call migrated data.Write*/ui.Write* code paths
+	// (directly or transitively) without going through RootCmd.Execute()'s
+	// PersistentPreRun, which normally does this initialization. Leaving the
+	// global state nil between tests means whichever test happens to run next
+	// would panic (data.Write*) or silently no-op (ui.Write*) depending on
+	// test execution order — restoring a fresh baseline here keeps ambient
+	// I/O state valid the way it always is in the real binary, while a test
+	// that explicitly needs its own stream capture can still call
+	// iolib.Initialize()/data.InitWriter/ui.InitFormatter itself afterward.
+	if ioCtx, err := iolib.NewContext(); err == nil {
+		data.InitWriter(ioCtx)
+		ui.InitFormatter(ioCtx)
+	}
+
 	// Restore command args.
 	RootCmd.SetArgs(snapshot.args)
 
@@ -134,4 +170,37 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 	// This prevents test pollution from color settings.
 	lipgloss.SetColorProfile(snapshot.colorProfile)
 	theme.InvalidateStyleCache()
+
+	// Restore package-level test seams.
+	openDocsURL = snapshot.openDocsURL
+
+	// Remove any command registered on RootCmd since the snapshot was taken
+	// (e.g. by a test loading real custom commands via InitCliConfig +
+	// processCustomCommands). Left in place, a later test can collide with
+	// or silently observe a command from an unrelated, already-finished test.
+	restoreRootCmdCommands(snapshot.commands)
+}
+
+// restoreRootCmdCommands removes every command currently on RootCmd that
+// wasn't present in the given snapshot, and re-adds every snapshot command a
+// test removed (e.g. via RootCmd.RemoveCommand), restoring RootCmd's command
+// set to what it was when the snapshot was taken.
+func restoreRootCmdCommands(original []*cobra.Command) {
+	originalSet := make(map[*cobra.Command]bool, len(original))
+	for _, c := range original {
+		originalSet[c] = true
+	}
+	for _, c := range RootCmd.Commands() {
+		if !originalSet[c] {
+			RootCmd.RemoveCommand(c)
+		}
+	}
+	// Cobra's RemoveCommand clears the removed command's Parent(); AddCommand sets it
+	// back to the new parent. So a snapshot command whose Parent() is no longer RootCmd
+	// was removed by the test and must be re-added.
+	for _, c := range original {
+		if c.Parent() != RootCmd {
+			RootCmd.AddCommand(c)
+		}
+	}
 }

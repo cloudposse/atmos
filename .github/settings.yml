@@ -40,3 +40,6 @@ labels:
   - name: experimental
     color: '#ff9800'
     description: Feature is experimental and still being refined
+  - name: ai-prompt
+    color: '#a855f7'
+    description: Feature request submitted as an AI prompt

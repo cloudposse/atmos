@@ -1,0 +1,70 @@
+---
+title: Version Tracks
+sidebar_position: 49
+sidebar_label: tracks
+sidebar_class_name: command
+description: Configure environment-specific managed-version lanes.
+---
+
+import File from '@site/src/components/File'
+
+Tracks are named lanes for managed versions, such as `dev`, `staging`, and `prod`. A track can override base catalog entries and defaults without duplicating the full catalog.
+
+The active track resolves from a command argument, the `--track` flag, `version.track` in `atmos.yaml`, and then `default`.
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+version:
+  track: prod
+
+  dependencies:
+    nginx:
+      ecosystem: oci
+      datasource: oci-tags
+      provider: dockerhub
+      package: library/nginx
+      desired: "1.29.0"
+
+  tracks:
+    dev:
+      defaults:
+        update:
+          strategy: minor
+          cooldown: 0h
+
+    prod:
+      defaults:
+        update:
+          strategy: patch
+          cooldown: 14d
+      dependencies:
+        nginx:
+          desired: "1.28.0"
+```
+</File>
+
+## Fields
+
+<dl>
+  <dt>`version.track`</dt>
+  <dd>Default track name for commands and runtime version resolution.</dd>
+
+  <dt>`version.tracks.<name>.extends`</dt>
+  <dd>Optional parent track to inherit from.</dd>
+
+  <dt>`version.tracks.<name>.defaults`</dt>
+  <dd>Track-level defaults that override `version.defaults`.</dd>
+
+  <dt>`version.tracks.<name>.dependencies`</dt>
+  <dd>Track-level dependency overrides merged with the base catalog.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos version track list
+atmos version track show prod
+atmos version track update prod --group=infrastructure
+```

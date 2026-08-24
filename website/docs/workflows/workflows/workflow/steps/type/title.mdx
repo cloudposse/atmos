@@ -1,0 +1,30 @@
+---
+title: title
+sidebar_label: title
+slug: /workflows/steps/type/title
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `title` step type sets the terminal window title, a small touch that lets long-running custom commands and workflows surface their current activity in the terminal tab.
+</Intro>
+
+```yaml
+steps:
+  - name: title
+    type: title
+    content: Deploying platform
+
+  - name: restore_title
+    type: title
+```
+
+## Fields
+
+<dl>
+  <dt>`content`</dt>
+  <dd>Optional terminal title. Supports templates. When omitted, Atmos restores the original title.</dd>
+</dl>
+
+Terminal title support depends on the terminal emulator.

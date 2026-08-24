@@ -1,0 +1,61 @@
+---
+title: atmos version track list
+sidebar_position: 10
+sidebar_label: list
+sidebar_class_name: command
+description: List configured version tracks as a dependency x track version matrix.
+---
+
+List the configured version tracks from `atmos.yaml` as a comparison table: each row is a
+dependency and each column is a track, so you can compare versions across all tracks at a
+glance.
+
+## Usage
+
+```shell
+atmos version track list [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--show string`</dt>
+  <dd>Version value to show per track: `desired` (the configured version, no lock file read) or `locked` (the resolved version from `versions.lock.yaml`, blank if not yet locked) (default: `locked`)</dd>
+  <dt>`--format string`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+  <dt>`--max-columns int`</dt>
+  <dd>Limit the number of track columns displayed (default: `0`, no limit)</dd>
+</dl>
+
+## Examples
+
+```shell
+# Show the locked version for every dependency, across all tracks
+atmos version track list
+
+# Show the configured (desired) version instead of the locked version
+atmos version track list --show=desired
+
+# Print the matrix as JSON: track -> dependency -> version
+atmos version track list --format=json
+
+# Print as CSV for spreadsheet import
+atmos version track list --format=csv
+```
+
+## Example Output
+
+In an interactive terminal, `--format=table` (the default) renders a styled table with
+`Dependency` as the first column and one column per track. Non-interactive output (e.g.
+piped, or `--format=csv`) looks like:
+
+```shell
+> atmos version track list --format=csv
+Key,dev,prod,staging
+checkout,v6.1.0,v6.2.0,v6.1.0
+nginx,1.28.0,1.29.0,1.28.0
+opentofu,1.10.5,1.10.6,1.10.5
+```
+
+A blank cell means that dependency isn't locked yet for that track (`--show=locked`, the
+default) — run `atmos version track lock <track>` to resolve it.

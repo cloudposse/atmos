@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 // terraformArgs holds parsed terraform function arguments.
@@ -22,27 +22,15 @@ type terraformArgs struct {
 //   - 2 parts: component output_name (stack from context)
 //   - 3 parts: component stack output_name
 func parseTerraformArgs(args string, execCtx *ExecutionContext) (*terraformArgs, error) {
-	parts, err := utils.SplitStringByDelimiter(args, ' ')
+	parsed, err := parser.ParseTerraform(args)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrInvalidArguments, err)
 	}
-
-	var component, stack, output string
-
-	switch len(parts) {
-	case 3:
-		component = strings.TrimSpace(parts[0])
-		stack = strings.TrimSpace(parts[1])
-		output = strings.TrimSpace(parts[2])
-	case 2:
-		component = strings.TrimSpace(parts[0])
+	stack := parsed.Stack
+	if stack == "" {
 		stack = execCtx.Stack
-		output = strings.TrimSpace(parts[1])
-	default:
-		return nil, fmt.Errorf("%w: terraform function requires 2 or 3 arguments, got %d", ErrInvalidArguments, len(parts))
 	}
-
-	return &terraformArgs{component: component, stack: stack, output: output}, nil
+	return &terraformArgs{component: parsed.Component, stack: stack, output: parsed.Expression}, nil
 }
 
 // TerraformOutputFunction implements the terraform.output function.

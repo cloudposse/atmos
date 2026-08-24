@@ -1,41 +1,52 @@
 .key-points {
-  background-color: transparent; /* Light background color for the container */
-  border: 1px solid #ddd; /* Light border around the container */
-  border-radius: 20px; /* Rounded corners */
-  padding: 20px; /* Padding inside the container */
-  margin-top: 3em;
-  margin-bottom: 3em;
-
-}
-
-[data-theme='dark'] .key-points {
-    color: #67ffded2;
-    border: 1px solid #67ffded2;
-}
-
-[data-theme='dark'] .key-points strong {
-    color: inherit;
-}
-
-[data-theme='dark'] .key-points a {
-    color: inherit;
-}
-
-.key-points a {
-    color: inherit;
+  margin: 2rem 0;
+  padding: 1.25rem 1.35rem;
+  overflow: hidden;
+  background: var(--atmos-docs-surface-elevated);
+  border: 1px solid var(--atmos-docs-border);
+  border-radius: var(--atmos-docs-radius);
+  box-shadow: var(--atmos-docs-shadow);
+  color: var(--atmos-docs-text);
+  font-family: var(--atmos-docs-font-sans);
 }
 
 .key-points h2 {
-  margin-top: 0; /* Remove top margin */
-  font-size: 1.5em; /* Adjust font size */
+  margin: 0 0 0.85rem;
+  color: var(--atmos-docs-text);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+.key-points a {
+  color: var(--atmos-docs-accent-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.key-points strong {
+  color: var(--atmos-docs-text);
+  font-weight: 600;
 }
 
 .key-points ul {
-  padding-left: 20px; /* Indent the list */
-  margin: 10px 0; /* Margin for the list */
+  margin: 0;
+  padding-left: 1.25rem;
 }
 
 .key-points li {
-  margin-bottom: 10px; /* Space between list items */
-  font-size: 1.1em; /* Slightly larger font size for list items */
+  margin: 0.45rem 0;
+  color: var(--atmos-docs-muted);
+  font-size: 0.98rem;
+  line-height: 1.65;
+}
+
+.key-points li::marker {
+  color: var(--atmos-docs-accent);
+  font-weight: 600;
+}
+
+.key-points li:last-child {
+  margin-bottom: 0;
 }

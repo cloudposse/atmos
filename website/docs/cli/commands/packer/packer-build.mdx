@@ -50,18 +50,37 @@ For more details on the `packer build` command and options, refer to [Packer bui
 
     <dt>`--template` <em>(alias `-t`)</em><em>(optional)</em></dt>
     <dd>
-        Packer template.
-        It can be specified in the `settings.packer.template` section in the Atmos component manifest,
-        or on the command line via the flag `--template <template>` (shorthand `-t`).
-        The command line flag takes precedence over `settings.packer.template`.
+        Packer template file or directory path. Defaults to `.` (component working directory), which tells Packer
+        to load all `*.pkr.hcl` files from the component directory.
+
+        Can also be specified via `settings.packer.template` in the stack manifest.
+        The command line flag takes precedence.
     </dd>
 </dl>
 
 ## Examples
 
+### Directory Mode (Default)
+
+When no template is specified, Packer loads all `*.pkr.hcl` files from the component directory.
+This is the recommended approach for components with multiple HCL files:
+
 <Terminal>
 ```shell
+# Uses all *.pkr.hcl files in the component directory (recommended)
 atmos packer build aws/bastion --stack nonprod
+
+# Explicit directory mode
+atmos packer build aws/bastion --stack prod --template .
+```
+</Terminal>
+
+### Single File Mode
+
+For components that require a specific template file:
+
+<Terminal>
+```shell
 atmos packer build aws/bastion -s prod --template main.pkr.hcl
 atmos packer build aws/bastion -s nonprod -t main.nonprod.pkr.hcl
 ```

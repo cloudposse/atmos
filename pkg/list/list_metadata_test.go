@@ -2,15 +2,22 @@
 package list
 
 import (
+	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/filter"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestParseMetadataColumnsFlag(t *testing.T) {
@@ -283,27 +290,129 @@ func TestBuildMetadataSorters(t *testing.T) {
 }
 
 func TestBuildMetadataFilters(t *testing.T) {
-	// Currently buildMetadataFilters is a placeholder that returns nil.
-	// Test that it behaves as expected.
 	tests := []struct {
-		name       string
-		filterSpec string
+		name          string
+		tags          []string
+		labelsRaw     string
+		expectedCount int
+		expectErr     bool
 	}{
 		{
-			name:       "empty filter spec",
-			filterSpec: "",
+			name:          "empty inputs produce no filters",
+			expectedCount: 0,
 		},
 		{
-			name:       "non-empty filter spec (currently ignored)",
-			filterSpec: "stack=dev*",
+			name:          "tags only",
+			tags:          []string{"network"},
+			expectedCount: 1,
+		},
+		{
+			name:          "labels only",
+			labelsRaw:     "team=platform",
+			expectedCount: 1,
+		},
+		{
+			name:          "labels with colon separator",
+			labelsRaw:     "team:platform",
+			expectedCount: 1,
+		},
+		{
+			name:          "tags and labels",
+			tags:          []string{"network"},
+			labelsRaw:     "team=platform",
+			expectedCount: 2,
+		},
+		{
+			name:      "invalid labels error",
+			labelsRaw: "no-separator",
+			expectErr: true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := buildMetadataFilters(tc.filterSpec)
+			result, err := buildMetadataFilters(tc.tags, tc.labelsRaw)
+			if tc.expectErr {
+				require.Error(t, err)
+				return
+			}
 			require.NoError(t, err)
-			assert.Nil(t, result)
+			assert.Len(t, result, tc.expectedCount)
+		})
+	}
+}
+
+// applyMetadataFilters runs rows through every filter in sequence, returning the final result.
+func applyMetadataFilters(t *testing.T, rows []map[string]any, filters []filter.Filter) []map[string]any {
+	t.Helper()
+	result := any(rows)
+	var err error
+	for _, f := range filters {
+		result, err = f.Apply(result)
+		require.NoError(t, err)
+	}
+	filtered, ok := result.([]map[string]any)
+	require.True(t, ok)
+	return filtered
+}
+
+// metadataComponentsOf returns the "component" field of each row, for order-preserving assertions.
+func metadataComponentsOf(rows []map[string]any) []string {
+	names := make([]string, 0, len(rows))
+	for _, r := range rows {
+		names = append(names, r["component"].(string))
+	}
+	return names
+}
+
+// TestBuildMetadataFilters_FiltersRows verifies the produced filters actually
+// narrow rows on the flattened tags/labels fields, and that multi-value tags
+// are any-match while multi-value labels are all-match.
+func TestBuildMetadataFilters_FiltersRows(t *testing.T) {
+	rows := []map[string]any{
+		{"component": "vpc", "tags": []string{"network"}, "labels": map[string]string{"team": "platform"}},
+		{"component": "rds", "tags": []string{"database"}, "labels": map[string]string{"team": "data"}},
+		{"component": "eks", "tags": []string{"network", "compute"}, "labels": map[string]string{"team": "platform", "env": "dev"}},
+	}
+
+	tests := []struct {
+		name           string
+		tags           []string
+		labelsRaw      string
+		wantFilterLen  int
+		wantComponents []string
+	}{
+		{
+			name:           "multi-tag any-match",
+			tags:           []string{"database", "compute"},
+			wantFilterLen:  1,
+			wantComponents: []string{"rds", "eks"},
+		},
+		{
+			// eks has both team=platform and env=dev; vpc has team=platform but no env.
+			// All-match must require every requested label, not just one.
+			name:           "multi-label all-match",
+			labelsRaw:      "team:platform,env:dev",
+			wantFilterLen:  1,
+			wantComponents: []string{"eks"},
+		},
+		{
+			name:           "tags and labels combined match only the intersection",
+			tags:           []string{"network"},
+			labelsRaw:      "team:platform",
+			wantFilterLen:  2,
+			wantComponents: []string{"vpc", "eks"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			filters, err := buildMetadataFilters(tc.tags, tc.labelsRaw)
+			require.NoError(t, err)
+			require.Len(t, filters, tc.wantFilterLen)
+
+			filtered := applyMetadataFilters(t, rows, filters)
+			assert.Equal(t, tc.wantComponents, metadataComponentsOf(filtered))
 		})
 	}
 }
@@ -333,12 +442,14 @@ func TestDefaultMetadataColumns(t *testing.T) {
 func TestMetadataOptionsStruct(t *testing.T) {
 	// Test that MetadataOptions struct can be properly constructed.
 	opts := MetadataOptions{
-		Format:    "json",
-		Columns:   []string{"Stack={{ .stack }}"},
-		Sort:      "-Stack",
-		Filter:    "stack=dev*",
-		Stack:     "dev",
-		Delimiter: ",",
+		Format:           "json",
+		Columns:          []string{"Stack={{ .stack }}"},
+		Sort:             "-Stack",
+		Filter:           "stack=dev*",
+		Stack:            "dev",
+		Delimiter:        ",",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
 	}
 
 	assert.Equal(t, "json", opts.Format)
@@ -347,4 +458,57 @@ func TestMetadataOptionsStruct(t *testing.T) {
 	assert.Equal(t, "stack=dev*", opts.Filter)
 	assert.Equal(t, "dev", opts.Stack)
 	assert.Equal(t, ",", opts.Delimiter)
+	assert.True(t, opts.ProcessTemplates)
+	assert.False(t, opts.ProcessFunctions)
+}
+
+// TestExecuteListMetadataCmd exercises the main pkg-level metadata entry
+// point against the `complete` fixture. Mirrors TestExecuteListInstancesCmd
+// so the executor's flag-forwarding and render pipeline are covered at the
+// pkg layer (cross-package coverage from cmd/list tests is not counted by
+// Codecov for this package).
+func TestExecuteListMetadataCmd(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "failed to initialize I/O context")
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "complete")
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("format", "json", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: fixturePath,
+	}
+
+	err = ExecuteListMetadataCmd(info, cmd, []string{}, &MetadataOptions{
+		Format:           "json",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+	})
+	require.NoError(t, err, "complete fixture should list metadata cleanly")
+}
+
+// TestExecuteListMetadataCmd_InvalidConfig verifies the metadata executor
+// surfaces config-init errors from InitCliConfig as the
+// `ErrFailedToInitConfig` sentinel — guards against future changes that
+// might swallow the init error and surface a render-time error instead.
+func TestExecuteListMetadataCmd_InvalidConfig(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("format", "json", "Output format")
+
+	// Build a path that's guaranteed not to exist using t.TempDir() so the
+	// test is portable across OSes and never collides with a real path.
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: filepath.Join(t.TempDir(), "does-not-exist"),
+	}
+
+	err := ExecuteListMetadataCmd(info, cmd, []string{}, &MetadataOptions{
+		Format: "json",
+	})
+	require.Error(t, err, "invalid base path should fail config init")
+	assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig,
+		"invalid base path should surface ErrFailedToInitConfig from InitCliConfig")
 }

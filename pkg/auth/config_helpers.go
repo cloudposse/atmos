@@ -11,15 +11,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// CopyGlobalAuthConfig creates a deep copy of global auth config.
-// Copies all fields: providers, identities, logs, keyring, and identity case map.
+// CopyGlobalAuthConfig creates an independent copy of global auth configuration.
+// Mutable integration and console settings are cloned so component-level merges
+// cannot mutate the caller's global configuration.
 func CopyGlobalAuthConfig(globalAuth *schema.AuthConfig) *schema.AuthConfig {
 	if globalAuth == nil {
 		return &schema.AuthConfig{}
 	}
 
 	config := &schema.AuthConfig{
-		Logs: globalAuth.Logs,
+		Realm:       globalAuth.Realm,
+		RealmSource: globalAuth.RealmSource,
+		Logs:        globalAuth.Logs,
 		Keyring: schema.KeyringConfig{
 			Type: globalAuth.Keyring.Type,
 		},
@@ -46,6 +49,21 @@ func CopyGlobalAuthConfig(globalAuth *schema.AuthConfig) *schema.AuthConfig {
 		}
 	}
 
+	if globalAuth.Console != nil {
+		config.Console = &schema.AuthConsoleConfig{}
+		if globalAuth.Console.Isolated != nil {
+			isolated := *globalAuth.Console.Isolated
+			config.Console.Isolated = &isolated
+		}
+	}
+
+	if globalAuth.Integrations != nil {
+		config.Integrations = make(map[string]schema.Integration, len(globalAuth.Integrations))
+		for name, integration := range globalAuth.Integrations {
+			config.Integrations[name] = copyIntegration(integration)
+		}
+	}
+
 	if globalAuth.IdentityCaseMap != nil {
 		config.IdentityCaseMap = make(map[string]string, len(globalAuth.IdentityCaseMap))
 		for k, v := range globalAuth.IdentityCaseMap {
@@ -54,6 +72,46 @@ func CopyGlobalAuthConfig(globalAuth *schema.AuthConfig) *schema.AuthConfig {
 	}
 
 	return config
+}
+
+// copyIntegration clones an integration and all of its mutable nested configuration.
+func copyIntegration(integration schema.Integration) schema.Integration {
+	result := schema.Integration{Kind: integration.Kind}
+
+	if integration.Via != nil {
+		via := *integration.Via
+		result.Via = &via
+	}
+
+	if integration.Spec != nil {
+		spec := *integration.Spec
+		if integration.Spec.AutoProvision != nil {
+			autoProvision := *integration.Spec.AutoProvision
+			spec.AutoProvision = &autoProvision
+		}
+		if integration.Spec.Registry != nil {
+			registry := *integration.Spec.Registry
+			spec.Registry = &registry
+		}
+		if integration.Spec.Cluster != nil {
+			cluster := *integration.Spec.Cluster
+			if integration.Spec.Cluster.Kubeconfig != nil {
+				kubeconfig := *integration.Spec.Cluster.Kubeconfig
+				cluster.Kubeconfig = &kubeconfig
+			}
+			spec.Cluster = &cluster
+		}
+		if integration.Spec.Repos != nil {
+			spec.Repos = append([]string(nil), integration.Spec.Repos...)
+		}
+		if integration.Spec.RevokeOnExit != nil {
+			revokeOnExit := *integration.Spec.RevokeOnExit
+			spec.RevokeOnExit = &revokeOnExit
+		}
+		result.Spec = &spec
+	}
+
+	return result
 }
 
 // AuthConfigToMap converts AuthConfig struct to map[string]any for deep merging.
@@ -73,20 +131,48 @@ func AuthConfigToMap(authConfig *schema.AuthConfig) (map[string]any, error) {
 
 // MergeComponentAuthConfig merges component-level auth config with global auth config.
 // Returns the merged AuthConfig with component overrides applied.
+//
+// When the component auth section declares any identity with `default: true`,
+// all existing `default: true` flags in the global auth config are cleared
+// before merging. This ensures the component-level default wins over the
+// global default (matching Atmos inheritance semantics: more specific config
+// overrides more general). Without this step, a global default and a
+// component-level default would both survive the deep merge, causing
+// "multiple default identities" prompts or errors.
 func MergeComponentAuthConfig(
 	atmosConfig *schema.AtmosConfiguration,
 	globalAuthConfig *schema.AuthConfig,
 	componentAuthSection map[string]any,
 ) (*schema.AuthConfig, error) {
+	// Work on a copy so the caller's globalAuthConfig is never mutated.
+	// MergeComponentAuthFromConfig already passes a copy, but copying here
+	// makes MergeComponentAuthConfig safe for any future direct caller too.
+	workingGlobalAuth := CopyGlobalAuthConfig(globalAuthConfig)
+
+	// Normalize default-only component identity markers before they can be
+	// materialized as incomplete identities by the deep merge.
+	normalizedComponentAuth, err := normalizeComponentIdentityDefaultMarkers(workingGlobalAuth, componentAuthSection)
+	if err != nil {
+		return nil, err
+	}
+
+	// If the component declares its own default identity, clear any existing
+	// defaults from the working copy so the component-level default wins.
+	// This matches the precedence pattern used by MergeStackAuthDefaults in
+	// pkg/config/stack_auth_loader.go.
+	if componentAuthHasDefault(normalizedComponentAuth) {
+		clearExistingIdentityDefaults(workingGlobalAuth)
+	}
+
 	// Convert global auth config to map for deep merging.
-	globalAuthMap, err := AuthConfigToMap(globalAuthConfig)
+	globalAuthMap, err := AuthConfigToMap(workingGlobalAuth)
 	if err != nil {
 		return nil, err
 	}
 
 	// Deep merge global and component auth configs.
 	// Component config takes precedence and can override parts of identities/providers (not just whole objects).
-	mergedMap, err := merge.Merge(atmosConfig, []map[string]any{globalAuthMap, componentAuthSection})
+	mergedMap, err := merge.Merge(atmosConfig, []map[string]any{globalAuthMap, normalizedComponentAuth})
 	if err != nil {
 		return nil, fmt.Errorf("%w: global and component auth configs: %w", errUtils.ErrMerge, err)
 	}
@@ -120,6 +206,117 @@ func MergeComponentAuthConfig(
 	}
 
 	return &finalAuthConfig, nil
+}
+
+// normalizeComponentIdentityDefaultMarkers removes component identity entries that are only
+// `default: false` markers for identities absent from the active global auth configuration.
+// It also rejects undefined `default: true` markers because they select an identity that cannot
+// be authenticated. All other entries remain identity declarations and continue through the
+// existing deep-merge and validation flow.
+func normalizeComponentIdentityDefaultMarkers(
+	globalAuth *schema.AuthConfig,
+	componentAuth map[string]any,
+) (map[string]any, error) {
+	// Copy the top-level map and the identities map before filtering so callers' resolved component
+	// configuration remains unchanged.
+	normalized := make(map[string]any, len(componentAuth))
+	for key, value := range componentAuth {
+		normalized[key] = value
+	}
+
+	identities, ok := componentAuth["identities"].(map[string]any)
+	if !ok {
+		return normalized, nil
+	}
+
+	normalizedIdentities := make(map[string]any, len(identities))
+	for identityName, rawIdentity := range identities {
+		marker, err := resolveComponentIdentityMarker(globalAuth, identityName, rawIdentity)
+		if err != nil {
+			return nil, err
+		}
+		if marker.keep {
+			normalizedIdentities[marker.canonicalName] = marker.value
+		}
+	}
+
+	normalized["identities"] = normalizedIdentities
+	return normalized, nil
+}
+
+// componentIdentityMarker is the classification of a single component
+// identity entry, returned by resolveComponentIdentityMarker.
+type componentIdentityMarker struct {
+	// canonicalName is the key to write value back under: the globally-configured
+	// casing when the entry resolves to a global identity, otherwise identityName unchanged.
+	canonicalName string
+	// value is what to store under canonicalName; nil when keep is false.
+	value any
+	// keep reports whether this entry should remain in the normalized identities map.
+	keep bool
+}
+
+// resolveComponentIdentityMarker classifies a single component identity entry: entries that
+// aren't bare `default` markers, or that reference an identity defined in the active global
+// auth configuration, pass through unchanged (keep=true). An undefined `default: false` marker
+// has no identity to override and is dropped (keep=false). An undefined `default: true` marker
+// selects an identity that cannot be authenticated and is rejected.
+//
+// Global identity names are resolved case-insensitively via globalAuth.IdentityCaseMap (Viper
+// lower-cases config keys during load, so a component marker's own casing, e.g. "IDENTITY",
+// otherwise never matches globalAuth.Identities' "identity" key). The returned canonicalName
+// is the globally-configured casing so callers write markers back under the same key as the
+// identity they're overriding, rather than creating a separate, differently-cased entry.
+func resolveComponentIdentityMarker(
+	globalAuth *schema.AuthConfig,
+	identityName string,
+	rawIdentity any,
+) (componentIdentityMarker, error) {
+	identity, isIdentityMap := rawIdentity.(map[string]any)
+	defaultValue, hasDefault := identity["default"]
+	isDefault, isBooleanDefault := defaultValue.(bool)
+
+	// Entries are markers only when they contain exactly one boolean `default` field.
+	if !isIdentityMap || len(identity) != 1 || !hasDefault || !isBooleanDefault {
+		return componentIdentityMarker{canonicalName: identityName, value: rawIdentity, keep: true}, nil
+	}
+
+	if resolved, ok := resolveGlobalIdentityKey(globalAuth, identityName); ok {
+		return componentIdentityMarker{canonicalName: resolved, value: rawIdentity, keep: true}, nil
+	}
+
+	if !isDefault {
+		// An undefined false-only marker has no identity to override and must not create one.
+		return componentIdentityMarker{canonicalName: identityName, keep: false}, nil
+	}
+
+	return componentIdentityMarker{}, errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+		WithExplanationf("Component default identity %q is not defined in the active global auth configuration", identityName).
+		WithHint("Define the identity in atmos.yaml or the active profile, or select an existing identity").
+		WithContext("identity", identityName).
+		WithExitCode(1).
+		Err()
+}
+
+// resolveGlobalIdentityKey looks up identityName in globalAuth.Identities, first as an exact
+// match (also covers callers, e.g. tests, that build Identities directly without populating
+// IdentityCaseMap), then case-insensitively via IdentityCaseMap. Returns the identity's own key
+// in Identities and whether a match was found.
+func resolveGlobalIdentityKey(globalAuth *schema.AuthConfig, identityName string) (string, bool) {
+	if globalAuth == nil {
+		return "", false
+	}
+	if _, ok := globalAuth.Identities[identityName]; ok {
+		return identityName, true
+	}
+	resolved, ok := globalAuth.IdentityCaseMap[strings.ToLower(identityName)]
+	if !ok {
+		return "", false
+	}
+	if _, ok := globalAuth.Identities[resolved]; !ok {
+		return "", false
+	}
+	return resolved, true
 }
 
 // MergeComponentAuthFromConfig merges component-specific auth config from component configuration
@@ -157,4 +354,41 @@ func MergeComponentAuthFromConfig(
 
 	// Merge component auth with global auth.
 	return MergeComponentAuthConfig(atmosConfig, mergedAuthConfig, componentAuthSection)
+}
+
+// componentAuthHasDefault checks whether a component-level auth section
+// (as a raw map from the stack processor) contains any identity with
+// `default: true`. This is used to decide whether to clear global defaults
+// before merging.
+func componentAuthHasDefault(componentAuth map[string]any) bool {
+	identities, ok := componentAuth["identities"].(map[string]any)
+	if !ok {
+		return false
+	}
+	for _, identity := range identities {
+		identityMap, ok := identity.(map[string]any)
+		if !ok {
+			continue
+		}
+		if d, ok := identityMap["default"]; ok && d == true {
+			return true
+		}
+	}
+	return false
+}
+
+// clearExistingIdentityDefaults removes the `Default` flag from all
+// identities in an AuthConfig struct. Called before merging when the
+// component-level auth declares its own default, so the component-level
+// default wins cleanly without producing "multiple defaults" conflicts.
+func clearExistingIdentityDefaults(authConfig *schema.AuthConfig) {
+	if authConfig == nil {
+		return
+	}
+	for name, identity := range authConfig.Identities {
+		if identity.Default {
+			identity.Default = false
+			authConfig.Identities[name] = identity
+		}
+	}
 }

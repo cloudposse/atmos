@@ -1,0 +1,11 @@
+{
+  "label": "terraform",
+  "className": "command",
+  "collapsed": true,
+  "collapsible": true,
+  "position": 2,
+  "link": {
+    "type": "doc",
+    "id": "stacks/components/terraform/index"
+  }
+}

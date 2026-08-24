@@ -1,6 +1,5 @@
 {
   "label": "toolchain",
-  "position": 13,
   "className": "command",
   "collapsible": true,
   "collapsed": true,

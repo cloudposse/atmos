@@ -11,11 +11,13 @@ import (
 	"github.com/arsham/figurine/figurine"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/jwalton/go-supportscolor"
 	"github.com/spf13/viper"
 	xterm "golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -58,18 +60,18 @@ func PrintStyledText(text string) error {
 	// Check --force-color flag (via Viper).
 	// This allows `atmos version --force-color` to work for screenshot generation.
 	if viper.GetBool("force-color") {
-		return figurine.Write(os.Stdout, text, AnsiRegularFont)
+		return figurine.Write(iolib.Data, text, AnsiRegularFont)
 	}
 
 	// Check standard CLICOLOR_FORCE and FORCE_COLOR env vars.
 	if os.Getenv("CLICOLOR_FORCE") != "" || os.Getenv("FORCE_COLOR") != "" { //nolint:forbidigo // Standard terminal env vars
-		return figurine.Write(os.Stdout, text, AnsiRegularFont)
+		return figurine.Write(iolib.Data, text, AnsiRegularFont)
 	}
 
 	// Fall back to automatic color detection.
 	// supportscolor automatically detects TTY and other standard environment variables.
 	if supportscolor.Stdout().SupportsColor {
-		return figurine.Write(os.Stdout, text, AnsiRegularFont)
+		return figurine.Write(iolib.Data, text, AnsiRegularFont)
 	}
 	return nil
 }
@@ -95,25 +97,19 @@ func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 		return v == "0" || v == "false"
 	}
 
-	// Bind environment variables for color control.
-	_ = viper.BindEnv("ATMOS_FORCE_COLOR")
-	_ = viper.BindEnv("CLICOLOR_FORCE")
-	_ = viper.BindEnv("FORCE_COLOR")
-	_ = viper.BindEnv("NO_COLOR")
-
 	// Check if colors are explicitly disabled.
-	atmosForceColor := viper.GetString("ATMOS_FORCE_COLOR")
-	cliColorForce := viper.GetString("CLICOLOR_FORCE")
-	forceColorEnv := viper.GetString("FORCE_COLOR")
-	noColor := viper.GetString("NO_COLOR")
+	atmosForceColor := os.Getenv("ATMOS_FORCE_COLOR") //nolint:forbidigo // Standard Atmos env var
+	cliColorForce := os.Getenv("CLICOLOR_FORCE")      //nolint:forbidigo // Standard terminal env var
+	forceColorEnv := os.Getenv("FORCE_COLOR")         //nolint:forbidigo // Standard terminal env var
+	noColor := os.Getenv("NO_COLOR")                  //nolint:forbidigo // Standard terminal env var
 
 	// If explicitly disabled, return early without printing
-	if isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {
+	if viper.GetBool("no-color") || isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {
 		return nil
 	}
 
 	// Check if colors are supported or forced
-	forceColor := isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv)
+	forceColor := viper.GetBool("force-color") || isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv)
 	if supportscolor.Stdout().SupportsColor || forceColor {
 		// Write to the specified output writer, not os.Stdout
 		return figurine.Write(out, text, AnsiRegularFont)
@@ -159,6 +155,13 @@ func RenderMarkdown(markdownText string, style string) (string, error) {
 	}
 
 	return out, nil
+}
+
+// NewAtmosConfirm returns a huh Confirm field pre-configured with Atmos conventions.
+// Buttons are left-aligned (huh defaults to centered) so they line up with the title
+// and footer. Callers chain Title/Affirmative/Negative/Value/etc. as usual.
+func NewAtmosConfirm() *huh.Confirm {
+	return huh.NewConfirm().WithButtonAlignment(lipgloss.Left)
 }
 
 // NewAtmosHuhTheme returns the Atmos-styled Huh theme for interactive prompts.

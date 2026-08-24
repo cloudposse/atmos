@@ -1,6 +1,8 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/edition"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -101,6 +104,145 @@ func TestLoadConfigFromCLIArgs_InvalidConfigFile(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestLoadConfigFromCLIArgs_InvalidEditionPin covers the applyEditionDefaults call this
+// --config path added: this path skips the main LoadConfig flow's edition hook, so it
+// applies (and validates) the pin itself. An unparseable `edition:` value must surface
+// as an error here too, not silently unmarshal into an invalid AtmosConfig.
+func TestLoadConfigFromCLIArgs_InvalidEditionPin(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "atmos.yaml")
+
+	configContent := `
+base_path: "."
+edition: "not-a-date"
+stacks:
+  base_path: "stacks"
+components:
+  terraform:
+    base_path: "components/terraform"
+`
+	require.NoError(t, os.WriteFile(configFile, []byte(configContent), 0o644))
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configFile},
+	}
+
+	var atmosConfig schema.AtmosConfiguration
+	err := loadConfigFromCLIArgs(v, configAndStacksInfo, &atmosConfig)
+	require.ErrorIs(t, err, edition.ErrInvalidEdition)
+}
+
+// TestLoadConfigFromCLIArgs_AppliesGitRootBasePath reproduces cloudposse/atmos#2863:
+// loading config via --config/--config-path with an empty (or ".") base_path skipped
+// git-root discovery, because loadConfigFromCLIArgs never called applyGitRootBasePath,
+// unlike the main LoadConfig auto-discovery flow (load.go). This asserts the desired
+// end state -- BasePath resolved to the (mocked) git root -- for every CLI input
+// (--config file vs --config-path directory) and default base_path spelling ("" vs
+// "."), since applyGitRootBasePath treats both spellings as "unset" and either CLI
+// input can carry that config.
+func TestLoadConfigFromCLIArgs_AppliesGitRootBasePath(t *testing.T) {
+	tests := []struct {
+		name     string
+		basePath string
+		useDir   bool // true = AtmosConfigDirsFromArg, false = AtmosConfigFilesFromArg
+	}{
+		{name: "config file, empty base_path", basePath: `""`, useDir: false},
+		{name: "config file, dot base_path", basePath: `"."`, useDir: false},
+		{name: "config dir, empty base_path", basePath: `""`, useDir: true},
+		{name: "config dir, dot base_path", basePath: `"."`, useDir: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// The fixture atmos.yaml lives in its own temp dir, separate from the process
+			// cwd: hasLocalAtmosConfig only inspects the cwd, never the --config file's
+			// directory, so the two must be kept apart to exercise the real code path.
+			configDir := t.TempDir()
+			configFile := filepath.Join(configDir, "atmos.yaml")
+
+			configContent := fmt.Sprintf(`
+base_path: %s
+stacks:
+  base_path: "stacks"
+components:
+  terraform:
+    base_path: "components/terraform"
+`, tt.basePath)
+			require.NoError(t, os.WriteFile(configFile, []byte(configContent), 0o644))
+
+			// cwd must be a separate, atmos-config-free directory so hasLocalAtmosConfig(cwd)
+			// returns false and git-root discovery is not skipped.
+			cwd := t.TempDir()
+			t.Chdir(cwd)
+
+			// Mock git-root discovery deterministically (see pkg/utils/git.go ProcessTagGitRoot,
+			// which short-circuits to TEST_GIT_ROOT when set, bypassing real git detection).
+			t.Setenv("TEST_GIT_ROOT", "/mock/git/repo/root")
+
+			v := viper.New()
+			v.SetConfigType("yaml")
+
+			configAndStacksInfo := &schema.ConfigAndStacksInfo{}
+			if tt.useDir {
+				configAndStacksInfo.AtmosConfigDirsFromArg = []string{configDir}
+			} else {
+				configAndStacksInfo.AtmosConfigFilesFromArg = []string{configFile}
+			}
+
+			var atmosConfig schema.AtmosConfiguration
+			err := loadConfigFromCLIArgs(v, configAndStacksInfo, &atmosConfig)
+			require.NoError(t, err)
+
+			// Desired end state: BasePath resolves to the git root, exactly like the main
+			// LoadConfig auto-discovery path does for the same atmos.yaml content.
+			assert.Equal(t, "/mock/git/repo/root", atmosConfig.BasePath)
+		})
+	}
+}
+
+// TestLoadConfigFromCLIArgs_GitRootBasePathErrorIsNonFatal verifies that a git-root
+// discovery failure is logged and swallowed rather than failing config loading, per
+// the "Don't fail config loading if this step fails, just log it" contract.
+func TestLoadConfigFromCLIArgs_GitRootBasePathErrorIsNonFatal(t *testing.T) {
+	original := gitRootResolver
+	var resolverCalled bool
+	gitRootResolver = func(string) (string, error) {
+		resolverCalled = true
+		return "", errors.New("simulated git root detection failure")
+	}
+	defer func() { gitRootResolver = original }()
+
+	configDir := t.TempDir()
+	configFile := filepath.Join(configDir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(configFile, []byte(`
+base_path: ""
+stacks:
+  base_path: "stacks"
+components:
+  terraform:
+    base_path: "components/terraform"
+`), 0o644))
+
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configFile},
+	}
+
+	var atmosConfig schema.AtmosConfiguration
+	err := loadConfigFromCLIArgs(v, configAndStacksInfo, &atmosConfig)
+	require.NoError(t, err, "a git-root resolution failure must not fail config loading")
+	assert.True(t, resolverCalled, "gitRootResolver must have been invoked for this test to prove anything")
+	assert.Empty(t, atmosConfig.BasePath, "base_path should remain unset when git-root discovery fails")
+}
+
 func TestLoadConfigFromCLIArgs_InvalidConfigDir(t *testing.T) {
 	v := viper.New()
 	v.SetConfigType("yaml")
@@ -155,6 +297,67 @@ commands:
 	assert.Equal(t, "shell", atmosConfig.Commands[0].Steps[0].Type)
 	assert.Equal(t, "structured-step", atmosConfig.Commands[0].Steps[1].Name)
 	assert.Equal(t, "echo world", atmosConfig.Commands[0].Steps[1].Command)
+}
+
+func TestLoadConfigFromCLIArgs_WithCommandStepDefaultsInclude(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "atmos.yaml")
+	sharedConfigFile := filepath.Join(tmpDir, "cast-defaults.yaml")
+
+	configContent := fmt.Sprintf(`
+base_path: "."
+commands:
+  - name: test-command
+    steps:
+      - type: cast
+        name: demo
+        command: atmos version
+        mode: steps
+        defaults:
+          simulate: !include %s .simulate
+        rate: 12ms
+        steps:
+          - type: simulate
+            text: atmos version
+`, sharedConfigFile)
+	sharedConfigContent := `
+simulate:
+  mode: typed
+  cursor: true
+  prompt:
+    text: '> '
+    style: command
+  rate: 35ms
+`
+	require.NoError(t, os.WriteFile(configFile, []byte(configContent), 0o644))
+	require.NoError(t, os.WriteFile(sharedConfigFile, []byte(sharedConfigContent), 0o644))
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configFile},
+	}
+
+	var atmosConfig schema.AtmosConfiguration
+	err := loadConfigFromCLIArgs(v, configAndStacksInfo, &atmosConfig)
+	require.NoError(t, err)
+
+	require.Len(t, atmosConfig.Commands, 1)
+	require.Len(t, atmosConfig.Commands[0].Steps, 1)
+	castStep := atmosConfig.Commands[0].Steps[0]
+	assert.Equal(t, schema.TaskTypeCast, castStep.Type)
+	assert.Equal(t, "steps", castStep.Mode)
+	assert.Equal(t, "12ms", castStep.Rate)
+	require.NotNil(t, castStep.Defaults)
+	require.NotNil(t, castStep.Defaults.Simulate)
+	assert.Equal(t, "typed", castStep.Defaults.Simulate.Mode)
+	require.NotNil(t, castStep.Defaults.Simulate.Cursor)
+	assert.True(t, *castStep.Defaults.Simulate.Cursor)
+	require.NotNil(t, castStep.Defaults.Simulate.Prompt)
+	assert.Equal(t, "> ", castStep.Defaults.Simulate.Prompt.Text)
+	assert.Equal(t, "command", castStep.Defaults.Simulate.Prompt.Style)
+	assert.Equal(t, "35ms", castStep.Defaults.Simulate.Rate)
 }
 
 func TestValidatedIsFiles_EmptyPath(t *testing.T) {

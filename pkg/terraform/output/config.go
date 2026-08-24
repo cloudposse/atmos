@@ -6,6 +6,9 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ComponentConfig holds validated configuration for terraform output execution.
@@ -28,6 +31,17 @@ type ComponentConfig struct {
 	AutoGenerateBackend bool
 	// InitRunReconfigure indicates whether to run init with -reconfigure.
 	InitRunReconfigure bool
+	// AutoProvisionWorkdirForOutputs controls whether the executor auto-provisions
+	// JIT working directories before terraform init.
+	AutoProvisionWorkdirForOutputs bool
+	// PassVars mirrors components.terraform.init.pass_vars. When true, the
+	// component's vars are exported as TF_VAR_* so that `terraform init` can
+	// resolve init-time variable dependencies (e.g. a module `version` bound to
+	// var.foo) while resolving !terraform.output. See issue #1412.
+	PassVars bool
+	// Vars holds the component's resolved vars section, used to build TF_VAR_*
+	// environment variables when PassVars is true.
+	Vars map[string]any
 }
 
 // IsComponentProcessable determines if a component should be processed for terraform output.
@@ -72,7 +86,7 @@ func isComponentEnabled(varsSection map[string]any) bool {
 }
 
 // extractRequiredFields extracts required fields from sections into config.
-func extractRequiredFields(sections map[string]any, component, stack string, config *ComponentConfig) error {
+func extractRequiredFields(atmosConfig *schema.AtmosConfiguration, sections map[string]any, component, stack string, config *ComponentConfig) error {
 	// Extract executable (required).
 	executable, ok := sections[cfg.CommandSectionName].(string)
 	if !ok {
@@ -92,7 +106,7 @@ func extractRequiredFields(sections map[string]any, component, stack string, con
 	config.Workspace = workspace
 
 	// Extract component_path (required).
-	componentPath, err := extractComponentPath(sections, component, stack)
+	componentPath, err := extractComponentPath(atmosConfig, sections, component, stack)
 	if err != nil {
 		return err
 	}
@@ -101,8 +115,10 @@ func extractRequiredFields(sections map[string]any, component, stack string, con
 	return nil
 }
 
-// extractComponentPath extracts and validates component_path from sections.
-func extractComponentPath(sections map[string]any, component, stack string) (string, error) {
+// extractComponentPath extracts and resolves the absolute component path from sections.
+// It uses utils.GetComponentPath to ensure consistent path resolution across the codebase.
+func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[string]any, component, stack string) (string, error) {
+	// Validate component_info exists.
 	componentInfo, ok := sections["component_info"]
 	if !ok {
 		return "", errUtils.Build(errUtils.ErrMissingComponentInfo).
@@ -117,11 +133,65 @@ func extractComponentPath(sections map[string]any, component, stack string) (str
 			Err()
 	}
 
-	componentPath, ok := componentInfoMap["component_path"].(string)
+	// Get component type (terraform, helmfile, etc.).
+	componentType, ok := componentInfoMap["component_type"].(string)
 	if !ok {
+		componentType = "terraform" // Default to terraform for backward compatibility.
+	}
+
+	// Get the base component name (the actual component, not the stack component name).
+	// This handles derived components correctly.
+	baseComponent := ""
+	if comp, ok := sections[cfg.ComponentSectionName].(string); ok && comp != "" {
+		baseComponent = comp
+	}
+	if baseComponent == "" {
 		return "", errUtils.Build(errUtils.ErrMissingComponentPath).
+			WithExplanationf("Component '%s' in stack '%s' has no base component defined.", component, stack).
+			Err()
+	}
+
+	// Get component folder prefix if it exists in metadata.
+	componentFolderPrefix := ""
+	if metadata, ok := sections[cfg.MetadataSectionName].(map[string]any); ok {
+		if prefix, ok := metadata["component_folder_prefix"].(string); ok {
+			componentFolderPrefix = prefix
+		}
+	}
+
+	// Use utils.GetComponentPath for consistent path resolution.
+	// This ensures proper handling of BasePath, environment variables, and absolute paths.
+	componentPath, err := u.GetComponentPath(atmosConfig, componentType, componentFolderPrefix, baseComponent)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrMissingComponentPath).
+			WithCause(err).
 			WithExplanationf("Component '%s' in stack '%s'.", component, stack).
 			Err()
+	}
+
+	// When workdir provisioning is active, all terraform operations must target the
+	// workdir, not the base component directory. The workdir path is deterministic
+	// (built from basePath + componentType + stack + instance name) so we can
+	// reconstruct it here even when _workdir_path is absent from freshly-described
+	// sections (e.g. during hook execution where DescribeComponent is called fresh).
+	if provWorkdir.IsWorkdirEnabled(sections) {
+		basePath := atmosConfig.BasePath
+		if basePath == "" {
+			basePath = "."
+		}
+		// BuildPath itself rejects a derived path that escapes basePath (component and
+		// stack names both come from user-controlled YAML; a value containing ../ sequences
+		// could otherwise escape BasePath via filepath.Join's implicit Clean()). Surface that
+		// error rather than silently falling back to componentPath: componentPath is the
+		// *source* component directory, and redirecting terraform there on a rejected path
+		// risks mixing up stacks or reusing the wrong local state -- exactly the collision
+		// BuildPath's validation exists to prevent. Fail closed instead (see
+		// provWorkdir.BuildPath's doc comment for the exact conditions that trigger this).
+		workdirPath, err := provWorkdir.BuildPath(basePath, componentType, component, stack, sections)
+		if err != nil {
+			return "", err
+		}
+		return workdirPath, nil
 	}
 
 	return componentPath, nil
@@ -141,19 +211,25 @@ func extractOptionalFields(sections map[string]any, config *ComponentConfig) {
 	if env, ok := sections[cfg.EnvSectionName].(map[string]any); ok {
 		config.Env = env
 	}
+	if vars, ok := sections[cfg.VarsSectionName].(map[string]any); ok {
+		config.Vars = vars
+	}
 }
 
 // ExtractComponentConfig extracts and validates component configuration from sections.
 // Returns an error with appropriate sentinel if required fields are missing.
-func ExtractComponentConfig(sections map[string]any, component, stack string, autoGenerateBackend, initRunReconfigure bool) (*ComponentConfig, error) {
-	defer perf.Track(nil, "output.ExtractComponentConfig")()
+// The autoGenerateBackend and initRunReconfigure flags are read directly from atmosConfig.
+func ExtractComponentConfig(atmosConfig *schema.AtmosConfiguration, sections map[string]any, component, stack string) (*ComponentConfig, error) {
+	defer perf.Track(atmosConfig, "output.ExtractComponentConfig")()
 
 	config := &ComponentConfig{
-		AutoGenerateBackend: autoGenerateBackend,
-		InitRunReconfigure:  initRunReconfigure,
+		AutoGenerateBackend:            atmosConfig.Components.Terraform.AutoGenerateBackendFile,
+		InitRunReconfigure:             atmosConfig.Components.Terraform.InitRunReconfigure,
+		AutoProvisionWorkdirForOutputs: atmosConfig.Components.Terraform.AutoProvisionWorkdirForOutputs,
+		PassVars:                       atmosConfig.Components.Terraform.Init.PassVars,
 	}
 
-	if err := extractRequiredFields(sections, component, stack, config); err != nil {
+	if err := extractRequiredFields(atmosConfig, sections, component, stack, config); err != nil {
 		return nil, err
 	}
 

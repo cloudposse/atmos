@@ -78,7 +78,7 @@ func ExecuteVarfileGeneration(config *VarfileConfig) error {
 
 // runVarfileCommand is the shared implementation for varfile commands.
 func runVarfileCommand(cmd *cobra.Command, component string, parser *flags.StandardParser, deprecationMsg string) error {
-	_ = ui.Warning(deprecationMsg)
+	ui.Warning(deprecationMsg)
 
 	v := viper.GetViper()
 

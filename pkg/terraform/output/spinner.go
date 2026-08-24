@@ -2,17 +2,49 @@ package output
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
+
+var spinnerSuppression struct {
+	sync.Mutex
+	count int
+}
+
+// SuppressSpinners disables animated output spinners until the returned function is called.
+func SuppressSpinners() func() {
+	defer perf.Track(nil, "output.SuppressSpinners")()
+
+	spinnerSuppression.Lock()
+	spinnerSuppression.count++
+	spinnerSuppression.Unlock()
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			spinnerSuppression.Lock()
+			spinnerSuppression.count--
+			spinnerSuppression.Unlock()
+		})
+	}
+}
+
+func spinnersSuppressed() bool {
+	spinnerSuppression.Lock()
+	defer spinnerSuppression.Unlock()
+	return spinnerSuppression.count > 0
+}
 
 type modelSpinner struct {
 	spinner spinner.Model
@@ -57,13 +89,22 @@ func NewSpinner(message string) *tea.Program {
 
 	s := spinner.New()
 	s.Style = theme.GetCurrentStyles().Spinner
+	fps.Apply(&s)
 
-	var opts []tea.ProgramOption
+	// Always output to UI (stderr) to avoid blocking /dev/tty.
+	// Without this, bubbletea defaults to /dev/tty which can block credential resolution
+	// and cause hangs when used with commands that need AWS access.
+	opts := []tea.ProgramOption{tea.WithOutput(iolib.UI)}
+
 	if !term.IsTTYSupportForStdout() {
 		// Workaround for non-TTY environments.
-		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
+		opts = append(opts, tea.WithoutRenderer(), tea.WithInput(nil))
 		log.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
-		_ = ui.Writeln(message)
+		ui.Writeln(message)
+	} else if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
 	}
 
 	p := tea.NewProgram(modelSpinner{
@@ -82,7 +123,7 @@ func RunSpinner(p *tea.Program, spinnerChan chan struct{}, message string) {
 		defer close(spinnerChan)
 		if _, err := p.Run(); err != nil {
 			// If there's any error running the spinner, output the message and log the error.
-			_ = ui.Writeln(message)
+			ui.Writeln(message)
 			log.Error("Failed to run spinner:", "error", err)
 		}
 	}()

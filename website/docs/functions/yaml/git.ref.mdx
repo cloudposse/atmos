@@ -1,0 +1,40 @@
+---
+title: "!git.ref"
+sidebar_position: 10
+sidebar_label: "!git.ref"
+sidebar_class_name: command
+description: Get an immutable Git ref of the current repository, suitable for source pinning
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `!git.ref` Atmos YAML function returns an immutable Git ref for the current `HEAD`. It is an alias
+    of [`!git.sha`](/functions/yaml/git.sha) — both currently resolve to the same commit SHA.
+</Intro>
+
+## Usage
+
+```yaml
+  # Get an immutable ref for the current HEAD.
+  # If the ref cannot be resolved, it returns a default value if specified; otherwise, it returns an error.
+  !git.ref <default-value>
+```
+
+## Examples
+
+Use `!git.ref` when the intent is pinning a value to an immutable source revision (for example, a component or
+module version), and `!git.sha` when the intent is simply identifying the current commit:
+
+```yaml
+vars:
+  # Pin a vendored module to the current commit.
+  module_version: !git.ref
+
+  # With a fallback value when the ref cannot be resolved (e.g. not a Git repository).
+  module_version_safe: !git.ref main
+```
+
+## Related Functions
+
+- [`!git.sha`](/functions/yaml/git.sha) — the underlying commit SHA `!git.ref` resolves to
+- [`!git.branch`](/functions/yaml/git.branch) — the current branch name

@@ -1,0 +1,88 @@
+commands:
+  - name: casts generate examples gitops reconcile
+    description: Regenerate the GitOps Publishing example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-gitops
+        working_directory: &fixture "../../.context/cast-fixtures/gitops"
+        output: none
+        env:
+          ATMOS_XDG_CACHE_HOME: /tmp/atmos-cast-cache
+        command: atmos git clean deploy --force || true
+      - type: cast
+        name: reconcile
+        working_directory: *fixture
+        title: "GitOps Publishing: reconcile a deployment repo"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env:
+          NO_COLOR: ''
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+          ATMOS_EXPERIMENTAL: silence
+          ATMOS_LOGS_LEVEL: Warning
+          ATMOS_XDG_CACHE_HOME: /tmp/atmos-cast-cache
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/gitops/reconcile.cast"
+        steps:
+          - type: simulate
+            text: "# clone or update the managed deployment repository"
+          - type: simulate
+            text: &cmd atmos gitops reconcile
+          - type: shell
+            name: reconcile
+            duration: 650ms
+            interval: 750ms
+            command: *cmd
+          - type: simulate
+            text: "# clean up the managed workdir"
+          - type: simulate
+            text: &clean_cmd atmos git clean deploy --force
+          - type: shell
+            name: clean
+            duration: 450ms
+            interval: 750ms
+            command: *clean_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples gitops reconcile
+  - name: casts validate examples gitops reconcile
+    description: Validate the GitOps Publishing example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/gitops/reconcile.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "atmos gitops reconcile",
+              "atmos git clean deploy --force",
+              "deploy",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"gitops cast missing {needle!r}")
+          for bad in ["--dry-run"]:
+              if bad in plain:
+                  raise SystemExit(f"gitops cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

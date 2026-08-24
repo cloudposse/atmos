@@ -1,0 +1,11 @@
+# This stack uses an explicit `name` to override the filename.
+# Reference with: atmos terraform plan mock -s production
+# Note: Using `-s prod` will NOT work because the canonical name is "production".
+name: "production"
+
+components:
+  terraform:
+    mock:
+      vars:
+        environment: production
+        enabled: true

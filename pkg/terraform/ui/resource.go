@@ -36,46 +36,62 @@ func (rt *ResourceTracker) HandleMessage(msg any) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 
+	if rt.handleResourceLifecycleMessage(msg) {
+		return
+	}
+	rt.handleMetaMessage(msg)
+}
+
+// handleResourceLifecycleMessage handles plan/apply/refresh resource messages.
+// Returns true if msg was one of the handled types.
+func (rt *ResourceTracker) handleResourceLifecycleMessage(msg any) bool {
+	switch m := msg.(type) {
+	case *PlannedChangeMessage:
+		rt.handlePlannedChange(m)
+	case *ApplyStartMessage:
+		rt.handleApplyStart(m)
+	case *ApplyProgressMessage:
+		rt.handleApplyProgress(m)
+	case *ApplyCompleteMessage:
+		rt.handleApplyComplete(m)
+	case *ApplyErroredMessage:
+		rt.handleApplyErrored(m)
+	case *RefreshStartMessage:
+		rt.handleRefreshStart(m)
+	case *RefreshCompleteMessage:
+		rt.handleRefreshComplete(m)
+	default:
+		return false
+	}
+	return true
+}
+
+// handleMetaMessage handles version/diagnostic/summary/outputs messages.
+func (rt *ResourceTracker) handleMetaMessage(msg any) {
 	switch m := msg.(type) {
 	case *VersionMessage:
 		rt.version = m
-
-	case *PlannedChangeMessage:
-		rt.handlePlannedChange(m)
-
-	case *ApplyStartMessage:
-		rt.handleApplyStart(m)
-
-	case *ApplyProgressMessage:
-		rt.handleApplyProgress(m)
-
-	case *ApplyCompleteMessage:
-		rt.handleApplyComplete(m)
-
-	case *ApplyErroredMessage:
-		rt.handleApplyErrored(m)
-
-	case *RefreshStartMessage:
-		rt.handleRefreshStart(m)
-
-	case *RefreshCompleteMessage:
-		rt.handleRefreshComplete(m)
-
 	case *DiagnosticMessage:
-		rt.diagnostics = append(rt.diagnostics, m)
-		if m.Diagnostic.Severity == "error" {
-			rt.phase = PhaseError
-		}
-
+		rt.handleDiagnostic(m)
 	case *ChangeSummaryMessage:
-		rt.changeSummary = m
-		// Mark complete for both plan and apply operations.
-		if (m.Changes.Operation == "apply" || m.Changes.Operation == "plan") && rt.phase != PhaseError {
-			rt.phase = PhaseComplete
-		}
-
+		rt.handleChangeSummary(m)
 	case *OutputsMessage:
 		rt.outputs = m
+	}
+}
+
+func (rt *ResourceTracker) handleDiagnostic(m *DiagnosticMessage) {
+	rt.diagnostics = append(rt.diagnostics, m)
+	if m.Diagnostic.Severity == "error" {
+		rt.phase = PhaseError
+	}
+}
+
+func (rt *ResourceTracker) handleChangeSummary(m *ChangeSummaryMessage) {
+	rt.changeSummary = m
+	// Mark complete for both plan and apply operations.
+	if (m.Changes.Operation == "apply" || m.Changes.Operation == "plan") && rt.phase != PhaseError {
+		rt.phase = PhaseComplete
 	}
 }
 

@@ -1,0 +1,67 @@
+---
+slug: faster-remote-stack-imports
+title: "Faster Remote Stack Imports: Clone Once, Cache Across Runs"
+authors: [osterman]
+tags: [enhancement, dx]
+date: 2026-06-05
+---
+
+Atmos now clones each remote (Git) stack-import source **once per run** instead of re-cloning it for every import that points at the same repository — and an optional `ttl` lets a warm cache (like the GitHub Actions cache) skip the clone entirely on subsequent runs.
+
+<!--truncate-->
+
+## What Changed
+
+When stacks import their catalog from a remote repository — common in hub-and-spoke setups:
+
+```yaml
+import:
+  - "git::https://github.com/my-org/hub.git//stacks/catalog/vpc?ref=main"
+  - "git::https://github.com/my-org/hub.git//stacks/catalog/eks?ref=main"
+  # ...dozens more, all from the same repo
+```
+
+…Atmos previously cloned the **entire repository once for every import** and threw each clone away. A spoke with 80 imports of the hub meant ~80 clones per run — and because commands like `atmos describe affected` process stacks twice (current vs. base ref), that doubled again.
+
+Now Atmos clones each unique source repository **at most once per invocation** and resolves every subdir import from that single shared clone. This is automatic — no configuration required — and a single run always sees one consistent snapshot.
+
+## Cache Across Runs with `ttl`
+
+Within-run dedup already eliminates most of the cost, but every run still re-clones from scratch. For CI, you can now keep the clone **across runs** by setting a `ttl` on the import:
+
+```yaml
+import:
+  - path: "git::https://github.com/my-org/hub.git//stacks/catalog/vpc?ref=main"
+    ttl: 5m   # reuse the cached clone for 5 minutes across runs
+```
+
+Or set a default for all imports in `atmos.yaml`:
+
+```yaml title="atmos.yaml"
+imports:
+  ttl: 5m
+```
+
+Atmos caches sources under the XDG cache directory (`~/.cache/atmos/stack-imports/`, honoring `XDG_CACHE_HOME`). Cache that directory between CI runs and a fresh clone within the `ttl` window is skipped:
+
+```yaml title=".github/workflows/atmos.yaml"
+- uses: actions/cache@v4
+  with:
+    path: ~/.cache/atmos/stack-imports
+    key: atmos-stack-imports-${{ runner.os }}
+```
+
+`ttl` accepts durations like `0s`, `5m`, `1h`, `7d`, or keywords like `daily`. It is **opt-in**: with no `ttl`, the source is refreshed once per run so mutable refs (e.g. `?ref=main`) always stay current.
+
+## Why This Matters
+
+For hub-and-spoke repositories pulling a shared catalog via remote imports, this collapses change-detection time dramatically — what used to be dozens of redundant clones per run becomes one, and with a warm cache and a `ttl`, often zero. Shallow clones (`depth=1`) were already in use; the win here is **not re-cloning the same repository over and over**.
+
+## How to Use It
+
+- **Nothing to do for the within-run win** — it's automatic.
+- Add `ttl` per-import (or `imports.ttl` globally) to enable cross-run cache reuse.
+- In CI, cache `~/.cache/atmos/stack-imports/` to let the `ttl` skip clones between runs.
+- Pin to an immutable `?ref=<tag>` (or a SHA) and use a longer `ttl` for maximum reuse; for mutable refs like `main`, keep `ttl` short so the catalog stays fresh.
+
+See the [imports documentation](/stacks/imports) for details.

@@ -1,0 +1,9 @@
+# Sandbox EKS stack — triggers list→map type override (the primary regression).
+import:
+  - orgs/acme/sandbox/_defaults
+  - catalog/eks-defaults
+  - catalog/eks-sandbox
+
+vars:
+  environment: use1
+  stage: sandbox

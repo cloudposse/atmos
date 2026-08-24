@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/version/track"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -31,15 +32,23 @@ type VersionOptions struct {
 // This is called from root.go after atmosConfig is initialized.
 func SetAtmosConfig(config *schema.AtmosConfiguration) {
 	atmosConfigPtr = config
+	track.SetAtmosConfig(config)
 }
 
 // versionCmd represents the version command.
+//
+// Note: The command registry (cmd/internal/registry.go) automatically applies cobra.NoArgs
+// to any command that meets BOTH conditions:
+//  1. The command does not define an Args field (cmd.Args == nil)
+//  2. The CommandProvider does not return a PositionalArgsBuilder (GetPositionalArgsBuilder() == nil)
+//
+// Since versionCmd has no Args field and VersionCommandProvider.GetPositionalArgsBuilder()
+// returns nil, the registry will apply NoArgs validation automatically.
 var versionCmd = &cobra.Command{
 	Use:     "version",
 	Short:   "Display the version of Atmos you are running and check for updates",
 	Long:    `This command shows the version of the Atmos CLI you are currently running and checks if a newer version is available. Use this command to verify your installation and ensure you are up to date.`,
 	Example: "atmos version",
-	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "version.RunE")()
 
@@ -88,6 +97,9 @@ func init() {
 	if err := versionParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+
+	// Attach the Version Tracker command group (atmos version track ...).
+	versionCmd.AddCommand(track.GetTrackCommand())
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.

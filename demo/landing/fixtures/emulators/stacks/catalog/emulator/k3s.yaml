@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Local Kubernetes (k3s in a single privileged container). `atmos emulator up k3s
+# -s <stack>` starts it. k3s needs a privileged, cgroup-capable runtime, so it may
+# not come up in every environment — the landing demo tolerates that.
+components:
+  emulator:
+    k3s:
+      driver: k3s
+      # Pin a non-standard host port: the conventional 6443 may be taken by another
+      # local k3s. The container still serves the API on 6443.
+      container:
+        ports:
+          - host: 16443
+            container: 6443

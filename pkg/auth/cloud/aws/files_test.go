@@ -21,6 +21,20 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// skipIfCannotDenyDirWrite skips tests that rely on removing write permission
+// from a directory to force a write failure: the trick is a no-op on Windows
+// (permissions work differently) and on Unix when running as root (root
+// bypasses permission checks).
+func skipIfCannotDenyDirWrite(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("directory write-permission bits are not enforced the same way on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+}
+
 func TestAWSFileManager_WriteCredentials(t *testing.T) {
 	tmp := t.TempDir()
 	m := &AWSFileManager{baseDir: tmp}
@@ -89,8 +103,9 @@ func TestAWSFileManager_PathsEnvCleanup(t *testing.T) {
 	m := &AWSFileManager{baseDir: tmp}
 	credsPath := m.GetCredentialsPath("prov")
 	cfgPath := m.GetConfigPath("prov")
-	assert.Equal(t, filepath.Join(tmp, "prov", "credentials"), credsPath)
-	assert.Equal(t, filepath.Join(tmp, "prov", "config"), cfgPath)
+	// New path structure: baseDir/aws/providerName/credentials
+	assert.Equal(t, filepath.Join(tmp, "aws", "prov", "credentials"), credsPath)
+	assert.Equal(t, filepath.Join(tmp, "aws", "prov", "config"), cfgPath)
 
 	// Ensure env variables are produced.
 	env := m.GetEnvironmentVariables("prov", "dev")
@@ -103,7 +118,8 @@ func TestAWSFileManager_PathsEnvCleanup(t *testing.T) {
 	assert.NoError(t, f.Close())
 	err = m.Cleanup("prov")
 	assert.NoError(t, err)
-	_, statErr := os.Stat(filepath.Join(tmp, "prov"))
+	// New path structure verification
+	_, statErr := os.Stat(filepath.Join(tmp, "aws", "prov"))
 	assert.True(t, os.IsNotExist(statErr))
 }
 
@@ -405,12 +421,13 @@ func TestNewAWSFileManager_LegacyPathWarning(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", xdgConfigDir)
 
 	// Create file manager (should trigger warning about legacy path).
-	fm, err := NewAWSFileManager("")
+	fm, err := NewAWSFileManager("", "")
 	require.NoError(t, err)
 	require.NotNil(t, fm)
 
 	// Verify that new base directory is XDG-compliant, not legacy.
-	assert.Contains(t, fm.baseDir, filepath.Join(xdgConfigDir, "atmos", "aws"),
+	// New path structure: baseDir is ~/.config/atmos (without /aws suffix)
+	assert.Contains(t, fm.baseDir, filepath.Join(xdgConfigDir, "atmos"),
 		"New file manager should use XDG config directory")
 	assert.NotContains(t, fm.baseDir, filepath.Join(".aws", "atmos"),
 		"New file manager should not use legacy path")
@@ -435,12 +452,13 @@ func TestNewAWSFileManager_NoLegacyPath(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", xdgConfigDir)
 
 	// Create file manager without legacy path (should not trigger warning).
-	fm, err := NewAWSFileManager("")
+	fm, err := NewAWSFileManager("", "")
 	require.NoError(t, err)
 	require.NotNil(t, fm)
 
 	// Verify XDG-compliant path.
-	assert.Contains(t, fm.baseDir, filepath.Join(xdgConfigDir, "atmos", "aws"))
+	// New path structure: baseDir is ~/.config/atmos (without /aws suffix)
+	assert.Contains(t, fm.baseDir, filepath.Join(xdgConfigDir, "atmos"))
 
 	t.Logf("New base directory: %s", fm.baseDir)
 }
@@ -472,9 +490,11 @@ func TestAWSFileManager_CustomBasePath(t *testing.T) {
 			setupEnv:         func(t *testing.T) {},
 		},
 		{
-			name:             "empty base_path uses XDG default",
-			basePath:         "",
-			expectedBasePath: filepath.Join(".config", "atmos", "aws"),
+			name:     "empty base_path uses XDG default",
+			basePath: "",
+			// New path structure: baseDir is ~/.config/atmos (without /aws suffix)
+			// The /aws is added by GetCredentialsPath/GetConfigPath
+			expectedBasePath: filepath.Join(".config", "atmos"),
 			setupEnv: func(t *testing.T) {
 				homeDir, err := homedir.Dir()
 				require.NoError(t, err)
@@ -494,7 +514,7 @@ func TestAWSFileManager_CustomBasePath(t *testing.T) {
 
 			tt.setupEnv(t)
 
-			fm, err := NewAWSFileManager(tt.basePath)
+			fm, err := NewAWSFileManager(tt.basePath, "")
 			require.NoError(t, err)
 			require.NotNil(t, fm)
 
@@ -518,10 +538,10 @@ func TestAWSFileManager_BasePathCredentialIsolation(t *testing.T) {
 	basePath1 := t.TempDir()
 	basePath2 := t.TempDir()
 
-	fm1, err := NewAWSFileManager(basePath1)
+	fm1, err := NewAWSFileManager(basePath1, "")
 	require.NoError(t, err)
 
-	fm2, err := NewAWSFileManager(basePath2)
+	fm2, err := NewAWSFileManager(basePath2, "")
 	require.NoError(t, err)
 
 	// Write credentials to both managers with same provider/identity.
@@ -569,7 +589,7 @@ func TestAWSFileManager_BasePathCredentialIsolation(t *testing.T) {
 // variables point to the correct base_path location.
 func TestAWSFileManager_BasePathEnvironmentVariables(t *testing.T) {
 	customBasePath := t.TempDir()
-	fm, err := NewAWSFileManager(customBasePath)
+	fm, err := NewAWSFileManager(customBasePath, "")
 	require.NoError(t, err)
 
 	providerName := "custom-sso"
@@ -577,9 +597,10 @@ func TestAWSFileManager_BasePathEnvironmentVariables(t *testing.T) {
 
 	envVars := fm.GetEnvironmentVariables(providerName, identityName)
 
-	// Verify environment variables point to custom base path.
-	expectedCredsPath := filepath.Join(customBasePath, providerName, "credentials")
-	expectedConfigPath := filepath.Join(customBasePath, providerName, "config")
+	// Verify environment variables point to custom base path with new path structure.
+	// New path structure: basePath/aws/providerName/credentials
+	expectedCredsPath := filepath.Join(customBasePath, "aws", providerName, "credentials")
+	expectedConfigPath := filepath.Join(customBasePath, "aws", providerName, "config")
 
 	assert.Equal(t, expectedCredsPath, envVars[0].Value, "AWS_SHARED_CREDENTIALS_FILE should use custom base_path")
 	assert.Equal(t, expectedConfigPath, envVars[1].Value, "AWS_CONFIG_FILE should use custom base_path")
@@ -605,7 +626,7 @@ func TestAWSFileManager_BasePathLegacyCompatibility(t *testing.T) {
 	legacyBasePath := filepath.Join(fakeHome, ".aws", "atmos")
 
 	// Create file manager with legacy base path.
-	fm, err := NewAWSFileManager(legacyBasePath)
+	fm, err := NewAWSFileManager(legacyBasePath, "")
 	require.NoError(t, err)
 
 	// Write credentials.
@@ -620,8 +641,9 @@ func TestAWSFileManager_BasePathLegacyCompatibility(t *testing.T) {
 	err = fm.WriteCredentials(providerName, identityName, creds)
 	require.NoError(t, err)
 
-	// Verify credentials are written to legacy path.
-	expectedPath := filepath.Join(legacyBasePath, providerName, "credentials")
+	// Verify credentials are written to path with aws subdirectory.
+	// New path structure: basePath/aws/providerName/credentials
+	expectedPath := filepath.Join(legacyBasePath, "aws", providerName, "credentials")
 	assert.Equal(t, expectedPath, fm.GetCredentialsPath(providerName))
 
 	// Verify credentials file exists and contains correct data.
@@ -640,7 +662,7 @@ func TestAWSFileManager_BasePathInvalidPath(t *testing.T) {
 	// Test with path that cannot be expanded.
 	invalidPath := "~nonexistentuser/path"
 
-	_, err := NewAWSFileManager(invalidPath)
+	_, err := NewAWSFileManager(invalidPath, "")
 	assert.Error(t, err, "Should fail with invalid home directory expansion")
 	assert.Contains(t, err.Error(), "invalid base_path")
 }
@@ -831,4 +853,421 @@ func TestAWSFileManager_GetCachePath_CrossPlatform(t *testing.T) {
 	t.Logf("Platform: %s", runtime.GOOS)
 	t.Logf("Cache path: %s", cachePath)
 	t.Logf("Path separator: %s", expectedSeparator)
+}
+
+func TestAWSFileManager_GetRealm(t *testing.T) {
+	tests := []struct {
+		name     string
+		realm    string
+		expected string
+	}{
+		{
+			name:     "returns realm when set",
+			realm:    "test-realm",
+			expected: "test-realm",
+		},
+		{
+			name:     "returns empty string when no realm",
+			realm:    "",
+			expected: "",
+		},
+		{
+			name:     "returns auto-generated realm hash",
+			realm:    "a1b2c3d4",
+			expected: "a1b2c3d4",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &AWSFileManager{baseDir: "/tmp", realm: tt.realm}
+			assert.Equal(t, tt.expected, m.GetRealm())
+		})
+	}
+}
+
+func TestAWSFileManager_GetDisplayPath_WithRealm(t *testing.T) {
+	homeDir, err := homedir.Dir()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		baseDir  string
+		realm    string
+		expected string
+	}{
+		{
+			name:     "includes realm in path under home",
+			baseDir:  filepath.Join(homeDir, ".config", "atmos"),
+			realm:    "test-realm",
+			expected: filepath.ToSlash(filepath.Join("~", ".config", "atmos", "test-realm")),
+		},
+		{
+			name:     "includes realm in absolute path",
+			baseDir:  "/opt/atmos",
+			realm:    "my-realm",
+			expected: "/opt/atmos/my-realm",
+		},
+		{
+			name:     "handles empty realm",
+			baseDir:  filepath.Join(homeDir, ".config", "atmos"),
+			realm:    "",
+			expected: filepath.ToSlash(filepath.Join("~", ".config", "atmos")),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &AWSFileManager{baseDir: tt.baseDir, realm: tt.realm}
+			result := m.GetDisplayPath()
+			normalizedResult := filepath.ToSlash(result)
+			assert.Equal(t, tt.expected, normalizedResult)
+		})
+	}
+}
+
+func TestAWSFileManager_GetCredentialsPath_WithRealm(t *testing.T) {
+	tests := []struct {
+		name         string
+		baseDir      string
+		realm        string
+		providerName string
+		expected     string
+	}{
+		{
+			name:         "includes realm in credentials path",
+			baseDir:      "/home/user/.config/atmos",
+			realm:        "test-realm",
+			providerName: "my-provider",
+			expected:     "/home/user/.config/atmos/test-realm/aws/my-provider/credentials",
+		},
+		{
+			name:         "handles explicit realm",
+			baseDir:      "/home/user/.config/atmos",
+			realm:        "a1b2c3d4",
+			providerName: "provider",
+			expected:     "/home/user/.config/atmos/a1b2c3d4/aws/provider/credentials",
+		},
+		{
+			name:         "empty realm produces backward-compatible path",
+			baseDir:      "/home/user/.config/atmos",
+			realm:        "",
+			providerName: "my-provider",
+			expected:     "/home/user/.config/atmos/aws/my-provider/credentials",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &AWSFileManager{baseDir: tt.baseDir, realm: tt.realm}
+			result := m.GetCredentialsPath(tt.providerName)
+			normalizedResult := filepath.ToSlash(result)
+			assert.Equal(t, tt.expected, normalizedResult)
+		})
+	}
+}
+
+func TestAWSFileManager_GetConfigPath_WithRealm(t *testing.T) {
+	tests := []struct {
+		name         string
+		baseDir      string
+		realm        string
+		providerName string
+		expected     string
+	}{
+		{
+			name:         "includes realm in config path",
+			baseDir:      "/home/user/.config/atmos",
+			realm:        "test-realm",
+			providerName: "my-provider",
+			expected:     "/home/user/.config/atmos/test-realm/aws/my-provider/config",
+		},
+		{
+			name:         "handles different realm values",
+			baseDir:      "/opt/atmos",
+			realm:        "prod-realm",
+			providerName: "aws-prod",
+			expected:     "/opt/atmos/prod-realm/aws/aws-prod/config",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &AWSFileManager{baseDir: tt.baseDir, realm: tt.realm}
+			result := m.GetConfigPath(tt.providerName)
+			normalizedResult := filepath.ToSlash(result)
+			assert.Equal(t, tt.expected, normalizedResult)
+		})
+	}
+}
+
+func TestNewAWSFileManager_WithRealm(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", tempHome)
+	}
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+
+	tests := []struct {
+		name          string
+		basePath      string
+		realm         string
+		expectedRealm string
+	}{
+		{
+			name:          "creates manager with realm",
+			basePath:      "",
+			realm:         "test-realm",
+			expectedRealm: "test-realm",
+		},
+		{
+			name:          "creates manager without realm",
+			basePath:      "",
+			realm:         "",
+			expectedRealm: "",
+		},
+		{
+			name:          "creates manager with custom base path and realm",
+			basePath:      tempHome,
+			realm:         "custom-realm",
+			expectedRealm: "custom-realm",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fm, err := NewAWSFileManager(tt.basePath, tt.realm)
+			require.NoError(t, err)
+			require.NotNil(t, fm)
+			assert.Equal(t, tt.expectedRealm, fm.GetRealm())
+		})
+	}
+}
+
+// TestWithFileLock_WrapsErrCacheLocked verifies that withFileLock wraps ErrCacheLocked with the package's ErrFileLockTimeout sentinel and never invokes fn when the lock cannot be acquired.
+// Using a path whose ".lock" sibling lives under a directory that was never created makes the underlying open call fail immediately with ENOENT, since O_CREATE cannot materialize the missing parent directory — no waiting or real timeout involved, on either Unix or Windows.
+func TestWithFileLock_WrapsErrCacheLocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows uses a best-effort no-op FileLock (see pkg/cache/filelock_windows.go)
+		// that never returns ErrCacheLocked, so this branch cannot be exercised there.
+		t.Skip("Windows FileLock is a no-op and never reports a lock timeout")
+	}
+
+	path := filepath.Join(t.TempDir(), "missing-subdir", "credentials")
+
+	fnCalled := false
+	err := withFileLock(context.Background(), path, func() error {
+		fnCalled = true
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileLockTimeout)
+	assert.False(t, fnCalled, "fn must not run when the lock cannot be acquired")
+}
+
+// TestAWSFileManager_WriteCredentials_WithExpiration verifies that a non-empty
+// Expiration is persisted as the section comment, which is the fallback used
+// to determine credential validity when keychain access is unavailable (e.g.
+// inside Docker containers).
+func TestAWSFileManager_WriteCredentials_WithExpiration(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	creds := &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret", Expiration: "2099-01-01T00:00:00Z"}
+	require.NoError(t, m.WriteCredentials("prov", "dev", creds))
+
+	cfg, err := ini.Load(m.GetCredentialsPath("prov"))
+	require.NoError(t, err)
+	sec := cfg.Section("dev")
+	// ini re-serializes comments with a leading "; " marker, so assert on the
+	// substring rather than exact equality with what was originally set.
+	assert.Contains(t, sec.Comment, "atmos: expiration=2099-01-01T00:00:00Z")
+}
+
+// TestAWSFileManager_WriteCredentials_LoadFailure verifies that a non-ENOENT
+// failure while loading the existing credentials file (e.g. the path is
+// actually a directory) is surfaced as ErrLoadCredentialsFile and does not
+// fall back to treating it as a missing file.
+func TestAWSFileManager_WriteCredentials_LoadFailure(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	credsPath := m.GetCredentialsPath("prov")
+	require.NoError(t, os.MkdirAll(credsPath, PermissionRWX)) // Directory in place of the file makes ini.Load fail non-ENOENT.
+
+	err := m.WriteCredentials("prov", "dev", &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrLoadCredentialsFile)
+}
+
+// TestAWSFileManager_WriteConfig_LoadFailure mirrors the credentials case for
+// WriteConfig's non-ENOENT ini.Load failure branch.
+func TestAWSFileManager_WriteConfig_LoadFailure(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	configPath := m.GetConfigPath("prov")
+	require.NoError(t, os.MkdirAll(configPath, PermissionRWX))
+
+	err := m.WriteConfig("prov", "dev", "us-east-1", "json")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrLoadConfigFile)
+}
+
+// TestAWSFileManager_WriteCredentials_SaveFailure verifies that cfg.SaveTo
+// failures (e.g. an unwritable target directory) are surfaced as
+// ErrWriteCredentialsFile.
+func TestAWSFileManager_WriteCredentials_SaveFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	credsPath := m.GetCredentialsPath("prov")
+	credsDir := filepath.Dir(credsPath)
+	require.NoError(t, os.MkdirAll(credsDir, PermissionRWX))
+	// Pre-create the sibling lock file so lock acquisition (which also needs to
+	// create a file in this directory) still succeeds once the directory is
+	// made read-only below; only the SaveTo of the new credentials file itself
+	// should be blocked.
+	require.NoError(t, os.WriteFile(credsPath+".lock", nil, PermissionRW))
+	require.NoError(t, os.Chmod(credsDir, 0o555)) // Read-only: blocks creating the new credentials file.
+	t.Cleanup(func() { _ = os.Chmod(credsDir, PermissionRWX) })
+
+	err := m.WriteCredentials("prov", "dev", &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWriteCredentialsFile)
+}
+
+// TestAWSFileManager_WriteConfig_SaveFailure mirrors the credentials case for
+// WriteConfig's cfg.SaveTo failure branch.
+func TestAWSFileManager_WriteConfig_SaveFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	configPath := m.GetConfigPath("prov")
+	configDir := filepath.Dir(configPath)
+	require.NoError(t, os.MkdirAll(configDir, PermissionRWX))
+	require.NoError(t, os.WriteFile(configPath+".lock", nil, PermissionRW))
+	require.NoError(t, os.Chmod(configDir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(configDir, PermissionRWX) })
+
+	err := m.WriteConfig("prov", "dev", "us-east-1", "json")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWriteConfigFile)
+}
+
+// TestAWSFileManager_RemoveConfigProfile_LoadFailure verifies the non-ENOENT
+// ini.Load failure branch inside RemoveConfigProfile (distinct from the "file
+// vanished after the existence check" race branch).
+func TestAWSFileManager_RemoveConfigProfile_LoadFailure(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	configPath := m.GetConfigPath("prov")
+	require.NoError(t, os.MkdirAll(configPath, PermissionRWX)) // Directory in place of the file.
+
+	err := m.RemoveConfigProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveCredentialsProfile_LoadFailure mirrors the config
+// case for RemoveCredentialsProfile's non-ENOENT ini.Load failure branch.
+func TestAWSFileManager_RemoveCredentialsProfile_LoadFailure(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	credsPath := m.GetCredentialsPath("prov")
+	require.NoError(t, os.MkdirAll(credsPath, PermissionRWX))
+
+	err := m.RemoveCredentialsProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveConfigProfile_SaveFailure verifies that when other
+// profiles remain after the delete, a cfg.SaveTo failure (target file made
+// read-only) is surfaced as ErrRemoveProfile instead of being silently
+// swallowed.
+func TestAWSFileManager_RemoveConfigProfile_SaveFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	require.NoError(t, m.WriteConfig("prov", "keep", "us-east-1", "json"))
+	require.NoError(t, m.WriteConfig("prov", "dev", "us-west-2", "yaml"))
+
+	configPath := m.GetConfigPath("prov")
+	require.NoError(t, os.Chmod(configPath, 0o444)) // Read-only: blocks the rewrite triggered by deleting "dev".
+	t.Cleanup(func() { _ = os.Chmod(configPath, PermissionRW) })
+
+	err := m.RemoveConfigProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveCredentialsProfile_SaveFailure mirrors the config
+// case for RemoveCredentialsProfile's cfg.SaveTo failure branch.
+func TestAWSFileManager_RemoveCredentialsProfile_SaveFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	require.NoError(t, m.WriteCredentials("prov", "keep", &types.AWSCredentials{AccessKeyID: "AKIA1", SecretAccessKey: "secret1"}))
+	require.NoError(t, m.WriteCredentials("prov", "dev", &types.AWSCredentials{AccessKeyID: "AKIA2", SecretAccessKey: "secret2"}))
+
+	credsPath := m.GetCredentialsPath("prov")
+	require.NoError(t, os.Chmod(credsPath, 0o444))
+	t.Cleanup(func() { _ = os.Chmod(credsPath, PermissionRW) })
+
+	err := m.RemoveCredentialsProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveConfigProfile_RemoveFailure verifies that when no
+// profiles remain and the file must be deleted, an os.Remove failure (the
+// containing directory made read-only, which blocks unlink on POSIX even
+// though the file itself is readable) is surfaced as ErrRemoveProfile.
+func TestAWSFileManager_RemoveConfigProfile_RemoveFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	require.NoError(t, m.WriteConfig("prov", "dev", "us-east-1", "json"))
+
+	configDir := filepath.Dir(m.GetConfigPath("prov"))
+	require.NoError(t, os.Chmod(configDir, 0o555)) // Read-only: blocks unlinking the now-empty config file.
+	t.Cleanup(func() { _ = os.Chmod(configDir, PermissionRWX) })
+
+	err := m.RemoveConfigProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveCredentialsProfile_RemoveFailure mirrors the
+// config case for RemoveCredentialsProfile's os.Remove failure branch.
+func TestAWSFileManager_RemoveCredentialsProfile_RemoveFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	require.NoError(t, m.WriteCredentials("prov", "dev", &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret"}))
+
+	credsDir := filepath.Dir(m.GetCredentialsPath("prov"))
+	require.NoError(t, os.Chmod(credsDir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(credsDir, PermissionRWX) })
+
+	err := m.RemoveCredentialsProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
 }

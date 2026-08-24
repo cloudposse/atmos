@@ -87,7 +87,7 @@ func areTerraformComponentModulesChangedIndexed(
 //nolint:revive // Dependency checking requires nested loops and multiple return values for complete status
 func isComponentDependentFolderOrFileChangedIndexed(
 	filesIndex *changedFilesIndex,
-	deps schema.DependsOn,
+	deps []schema.ComponentDependency,
 ) (bool, string, string, error) {
 	isChanged := false
 	changedType := ""
@@ -96,24 +96,26 @@ func isComponentDependentFolderOrFileChangedIndexed(
 	// Get all files once (dependencies can span multiple component types).
 	allChangedFiles := filesIndex.getAllFiles()
 
-	for _, dep := range deps { //nolint:gocritic // DependsOn value copy is acceptable; refactoring would require schema changes
+	for i := range deps {
 		if isChanged {
 			break
 		}
 
+		dep := &deps[i]
+
 		// Determine dependency type and set variables accordingly.
 		var pathPatternSuffix string
 		switch {
-		case dep.File != "":
+		case dep.IsFileDependency():
 			changedType = "file"
-			changedFileOrFolder = dep.File
+			changedFileOrFolder = dep.Path
 			pathPatternSuffix = ""
-		case dep.Folder != "":
+		case dep.IsFolderDependency():
 			changedType = "folder"
-			changedFileOrFolder = dep.Folder
+			changedFileOrFolder = dep.Path
 			pathPatternSuffix = "/**"
 		default:
-			// Skip dependencies with neither File nor Folder.
+			// Skip non-file/folder dependencies.
 			continue
 		}
 

@@ -2,7 +2,6 @@ package devcontainer
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -17,7 +16,7 @@ const (
 	flagReplace = "replace"
 )
 
-var shellParser *flags.StandardParser
+var shellParser *flags.StandardFlagParser
 
 // ShellOptions contains parsed flags for the shell command.
 type ShellOptions struct {
@@ -61,7 +60,6 @@ Launch a devcontainer with Atmos-managed credentials:
 
 Inside the container, cloud provider SDKs automatically use the authenticated identity.`,
 	Example:           markdown.DevcontainerShellUsageMarkdown,
-	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: devcontainerNameCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.shell.RunE")()
@@ -74,16 +72,11 @@ Inside the container, cloud provider SDKs automatically use the authenticated id
 				Err()
 		}
 
-		// Parse flags using new options pattern.
-		v := viper.GetViper()
-		if err := shellParser.BindFlagsToViper(cmd, v); err != nil {
-			return err
-		}
-
-		opts, err := parseShellOptions(cmd, v, args)
+		parsed, err := shellParser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err
 		}
+		opts := parseShellOptions(parsed)
 
 		// Handle identity selection if __SELECT__ sentinel value is used.
 		// This happens when user passes --identity without a value.
@@ -114,7 +107,7 @@ Inside the container, cloud provider SDKs automatically use the authenticated id
 		}
 
 		// Get devcontainer name from args or prompt user.
-		name, err := getDevcontainerName(args)
+		name, err := getDevcontainerName(parsed.PositionalArgs)
 		if err != nil {
 			return err
 		}
@@ -177,25 +170,26 @@ Inside the container, cloud provider SDKs automatically use the authenticated id
 
 // parseShellOptions parses command flags into ShellOptions.
 //
-// Converts flag values from v into a ShellOptions struct.
-// It reads the flags "instance", "identity", "pty", "new", "replace", "rm", and "no-pull" from the provided Viper instance and returns the populated ShellOptions and a nil error.
-func parseShellOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*ShellOptions, error) {
+// Converts flag values from parsed config into a ShellOptions struct.
+func parseShellOptions(parsed *flags.ParsedConfig) *ShellOptions {
 	return &ShellOptions{
-		Instance: v.GetString("instance"),
-		Identity: v.GetString("identity"),
-		UsePTY:   v.GetBool("pty"),
-		New:      v.GetBool("new"),
-		Replace:  v.GetBool("replace"),
-		Rm:       v.GetBool("rm"),
-		NoPull:   v.GetBool("no-pull"),
-	}, nil
+		Instance: flags.GetString(parsed.Flags, "instance"),
+		Identity: flags.GetString(parsed.Flags, "identity"),
+		UsePTY:   flags.GetBool(parsed.Flags, "pty"),
+		New:      flags.GetBool(parsed.Flags, "new"),
+		Replace:  flags.GetBool(parsed.Flags, "replace"),
+		Rm:       flags.GetBool(parsed.Flags, "rm"),
+		NoPull:   flags.GetBool(parsed.Flags, "no-pull"),
+	}
 }
 
 // init configures and registers the `shell` subcommand.
 // It creates the flag parser with shell-specific flags and environment variables, initializes the command with those flags, marks `--new` and `--replace` as mutually exclusive, and adds `shellCmd` to `devcontainerCmd`.
 func init() {
 	// Create parser with shell-specific flags using functional options.
-	shellParser = flags.NewStandardParser(
+	var usage string
+	shellParser, usage = newDevcontainerParser(
+		false,
 		flags.WithStringFlag("instance", "", "default", "Instance name for this devcontainer"),
 		flags.WithIdentityFlag(),
 		flags.WithBoolFlag("pty", "", false, "Experimental: Use PTY mode with masking support (not available on Windows)"),
@@ -210,6 +204,7 @@ func init() {
 		flags.WithEnvVars("rm", "ATMOS_DEVCONTAINER_RM"),
 		flags.WithEnvVars("no-pull", "ATMOS_DEVCONTAINER_NO_PULL"),
 	)
+	shellCmd.Use = "shell " + usage
 
 	initCommandWithFlags(shellCmd, shellParser)
 

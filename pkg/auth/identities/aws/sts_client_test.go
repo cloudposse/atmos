@@ -89,7 +89,7 @@ func TestNewSTSClientWithCredentials_WithIdentityConfig(t *testing.T) {
 	assert.Equal(t, "eu-central-1", resolvedRegion)
 }
 
-func TestNewSTSClientWithCredentials_WithCustomResolver(t *testing.T) {
+func TestNewSTSClientWithCredentials_WithCustomEndpoint(t *testing.T) {
 	baseCreds := &types.AWSCredentials{
 		AccessKeyID:     "AKIAEXAMPLE",
 		SecretAccessKey: "secret",
@@ -97,19 +97,15 @@ func TestNewSTSClientWithCredentials_WithCustomResolver(t *testing.T) {
 		Region:          "us-east-1",
 	}
 
-	// Config with custom resolver.
+	// Config with custom endpoint.
 	identityConfig := &schema.Identity{
 		Kind: "aws/assume-root",
 		Principal: map[string]any{
 			"target_principal": "123456789012",
 			"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
 		},
-		Credentials: map[string]any{
-			"aws": map[string]any{
-				"resolver": map[string]any{
-					"url": "http://localhost:4566",
-				},
-			},
+		Spec: map[string]any{
+			"endpoint_url": "http://localhost:4566",
 		},
 	}
 

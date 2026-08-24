@@ -1,0 +1,82 @@
+commands:
+  - name: casts generate examples terraform-tests stack-discovery
+    description: Regenerate the Terraform Tests example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: stack-discovery
+        working_directory: "../../.context/cast-fixtures/terraform-tests"
+        title: "Terraform Tests: run emulator-backed fixtures"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/terraform-tests/stack-discovery.cast"
+        steps:
+          - type: simulate
+            text: "# validate the test stack manifests"
+          - type: simulate
+            text: &validate_cmd atmos validate stacks
+          - type: shell
+            name: validate-stacks
+            duration: 450ms
+            interval: 750ms
+            command: *validate_cmd
+          - type: simulate
+            text: "# run Terraform tests against the local AWS emulator"
+          - type: simulate
+            text: &test_cmd atmos terraform test app -s fixtures
+          - type: shell
+            name: terraform-test
+            duration: 650ms
+            interval: 750ms
+            command: *test_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples terraform-tests stack-discovery
+  - name: casts validate examples terraform-tests stack-discovery
+    description: Validate the Terraform Tests example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/terraform-tests/stack-discovery.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "atmos validate stacks",
+              "All stacks validated successfully",
+              "atmos terraform test app -s fixtures",
+              "tests/app.tftest.hcl",
+              "bucket_name_is_namespaced",
+              "provisions_resources_against_emulator",
+              "versioning_can_be_disabled",
+              "Success!",
+              "0 failed",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"terraform-tests cast missing {needle!r}")
+          for bad in [
+              "Incomplete lock file information",
+              "Value for undeclared variable",
+              "undeclared variable",
+              "Workspace \"default\" doesn't exist",
+              "workdir mismatch",
+          ]:
+              if bad in plain:
+                  raise SystemExit(f"terraform-tests cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

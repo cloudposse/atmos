@@ -66,7 +66,7 @@ func TestCustomCommandIdentityAuthentication(t *testing.T) {
 	require.NoError(t, err)
 
 	// Process custom commands to register them with RootCmd.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err)
 
 	// Find the registered test-identity command.
@@ -101,7 +101,7 @@ func TestCustomCommandIdentityFlagOverride(t *testing.T) {
 	require.NoError(t, err)
 
 	// Process custom commands to register them with RootCmd.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err)
 
 	// Find the registered test-identity command.

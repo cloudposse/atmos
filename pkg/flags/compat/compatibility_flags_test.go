@@ -449,6 +449,107 @@ func TestCompatibilityFlagTranslator_EdgeCases(t *testing.T) {
 	}
 }
 
+// TestCompatibilityFlagTranslator_DoubleHyphenSeparator tests the "--" end-of-options handling.
+// This is the fix for GitHub issue #1967 where args after "--" were incorrectly parsed.
+func TestCompatibilityFlagTranslator_DoubleHyphenSeparator(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected translationResult
+	}{
+		{
+			name:  "double-hyphen with terraform flags after",
+			input: []string{"terraform", "plan", "vpc", "--stack", "nonprod", "--", "-consolidate-warnings=false"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "vpc", "--stack", "nonprod", "--"},
+				separatedArgs: []string{"-consolidate-warnings=false"},
+			},
+		},
+		{
+			name:  "double-hyphen with multiple args after",
+			input: []string{"terraform", "plan", "vpc", "-s", "nonprod", "--", "-var=foo=bar", "-var=baz=qux"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "vpc", "-s", "nonprod", "--"},
+				separatedArgs: []string{"-var=foo=bar", "-var=baz=qux"},
+			},
+		},
+		{
+			name:  "double-hyphen at end (no args after)",
+			input: []string{"terraform", "plan", "vpc", "--stack", "nonprod", "--"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "vpc", "--stack", "nonprod", "--"},
+				separatedArgs: []string{},
+			},
+		},
+		{
+			name:  "no double-hyphen",
+			input: []string{"terraform", "plan", "vpc", "--stack", "nonprod"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "vpc", "--stack", "nonprod"},
+				separatedArgs: []string{},
+			},
+		},
+		{
+			name:  "double-hyphen with compat flag after (should go to separated)",
+			input: []string{"terraform", "plan", "vpc", "--", "-var", "foo=bar"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "vpc", "--"},
+				separatedArgs: []string{"-var", "foo=bar"},
+			},
+		},
+		{
+			name:  "complex component name with hyphens (issue 1967 exact scenario)",
+			input: []string{"terraform", "plan", "10-static-web-app-no-frontdoor", "--stack", "trialintelx-eastus-sbx", "--", "-consolidate-warnings=false"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "10-static-web-app-no-frontdoor", "--stack", "trialintelx-eastus-sbx", "--"},
+				separatedArgs: []string{"-consolidate-warnings=false"},
+			},
+		},
+		{
+			name:  "double-hyphen with -s flag after (should NOT be parsed as stack)",
+			input: []string{"terraform", "plan", "vpc", "--stack", "prod", "--", "-s", "wrongstack"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "vpc", "--stack", "prod", "--"},
+				separatedArgs: []string{"-s", "wrongstack"},
+			},
+		},
+		{
+			name:  "multiple double-hyphens (only first matters)",
+			input: []string{"terraform", "plan", "vpc", "--", "-var=a", "--", "-var=b"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "vpc", "--"},
+				separatedArgs: []string{"-var=a", "--", "-var=b"},
+			},
+		},
+		{
+			name:  "double-hyphen as only arg after command",
+			input: []string{"terraform", "plan", "--"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "--"},
+				separatedArgs: []string{},
+			},
+		},
+		{
+			name:  "double-hyphen first in args",
+			input: []string{"--", "-var=foo"},
+			expected: translationResult{
+				atmosArgs:     []string{"--"},
+				separatedArgs: []string{"-var=foo"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			translator := buildTestCompatibilityTranslator()
+			atmosArgs, separatedArgs := translator.Translate(tt.input)
+
+			assert.Equal(t, tt.expected.atmosArgs, atmosArgs, "atmosArgs mismatch")
+			assert.Equal(t, tt.expected.separatedArgs, separatedArgs, "separatedArgs mismatch")
+		})
+	}
+}
+
 func TestCompatibilityFlagTranslator_ValidateTargets(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -894,6 +995,56 @@ func TestCompatibilityFlagTranslator_ShorthandNormalization(t *testing.T) {
 			// Verify results.
 			assert.Equal(t, tt.expectedAtmosArgs, atmosArgs, "AtmosArgs mismatch: %s", tt.description)
 			assert.Equal(t, tt.expectedSeparated, separatedArgs, "SeparatedArgs mismatch: %s", tt.description)
+		})
+	}
+}
+
+// TestCompatibilityFlagTranslator_UnknownBehavior verifies that unknown/custom CompatibilityBehavior
+// values fall through to the default case (passed as-is to Atmos args).
+// This tests the defensive default branches in applyFlagBehaviorWithEquals and
+// applyFlagBehaviorWithoutEquals.
+func TestCompatibilityFlagTranslator_UnknownBehavior(t *testing.T) {
+	// Use a custom behavior value that is not MapToAtmosFlag or AppendToSeparated.
+	unknownBehavior := CompatibilityBehavior(999)
+
+	tests := []struct {
+		name              string
+		args              []string
+		flagMap           map[string]CompatibilityFlag
+		expectedAtmosArgs []string
+		expectedSeparated []string
+	}{
+		{
+			name: "unknown behavior with equals syntax",
+			args: []string{"-custom=value"},
+			flagMap: map[string]CompatibilityFlag{
+				"-custom": {Behavior: unknownBehavior, Target: "--custom"},
+			},
+			// default branch: pass original arg to atmos args.
+			expectedAtmosArgs: []string{"-custom=value"},
+			expectedSeparated: []string{},
+		},
+		{
+			name: "unknown behavior without equals syntax",
+			args: []string{"-custom", "value"},
+			flagMap: map[string]CompatibilityFlag{
+				"-custom": {Behavior: unknownBehavior, Target: "--custom"},
+			},
+			// default branch: pass the flag arg to atmos args, consumed=0 so the next
+			// token ("value") is NOT consumed here — it is processed independently in
+			// the next loop iteration and becomes a positional/atmos arg.
+			expectedAtmosArgs: []string{"-custom", "value"},
+			expectedSeparated: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			translator := NewCompatibilityFlagTranslator(tt.flagMap)
+			atmosArgs, separatedArgs := translator.Translate(tt.args)
+
+			assert.Equal(t, tt.expectedAtmosArgs, atmosArgs)
+			assert.Equal(t, tt.expectedSeparated, separatedArgs)
 		})
 	}
 }

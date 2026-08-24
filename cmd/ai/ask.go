@@ -1,0 +1,200 @@
+package ai
+
+import (
+	"bytes"
+	"context"
+	_ "embed"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai"
+	"github.com/cloudposse/atmos/pkg/ai/executor"
+	"github.com/cloudposse/atmos/pkg/ai/formatter"
+	"github.com/cloudposse/atmos/pkg/ai/tools"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/flags"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
+)
+
+//go:embed markdown/atmos_ai_ask.md
+var askLongMarkdown string
+
+// askParser handles flag parsing with Viper precedence for the ask command.
+var askParser *flags.StandardParser
+
+// aiAskCmd represents the ai ask command.
+var askCmd = &cobra.Command{
+	Use:   "ask [question]",
+	Short: "Ask the AI assistant a question",
+	Long:  askLongMarkdown,
+	Args:  cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Bind parsed flags to Viper for precedence handling.
+		v := viper.GetViper()
+		if err := askParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		// Get flags from Viper (supports CLI > ENV > config > defaults).
+		includePatterns := v.GetStringSlice("include")
+		excludePatterns := v.GetStringSlice("exclude")
+		noAutoContext := v.GetBool("no-auto-context")
+		noTools := v.GetBool("no-tools")
+		mcpServers := v.GetStringSlice("mcp")
+		sessionID := v.GetString("session")
+
+		// Initialize configuration. Stack graph tools load stack manifests lazily so
+		// ask can start before stacks exist or while stack imports are temporarily broken.
+		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
+		if err != nil {
+			return err
+		}
+
+		// Check if AI is enabled.
+		if !isAIEnabled(&atmosConfig) {
+			return errAINotEnabled()
+		}
+
+		// Resolve provider (explicit config, auto-detected CLI tool, or anthropic) once
+		// so downstream tool/MCP and logging logic see a consistent value.
+		atmosConfig.AI.DefaultProvider = ai.GetProvider(&atmosConfig)
+
+		// Apply context discovery overrides.
+		if noAutoContext {
+			atmosConfig.AI.Context.Enabled = false
+		}
+		if len(includePatterns) > 0 {
+			atmosConfig.AI.Context.AutoInclude = append(atmosConfig.AI.Context.AutoInclude, includePatterns...)
+		}
+		if len(excludePatterns) > 0 {
+			atmosConfig.AI.Context.Exclude = append(atmosConfig.AI.Context.Exclude, excludePatterns...)
+		}
+
+		// Join all arguments as the question.
+		question := strings.Join(args, " ")
+
+		log.Debug("Asking AI question", "question", question)
+
+		// Create AI client using factory. When --mcp was given, filter MCP.Servers
+		// for CLI providers, whose clients otherwise read atmosConfig.MCP.Servers
+		// directly and ignore --mcp entirely (see clientConfigForMCP).
+		clientConfig := clientConfigForMCP(&atmosConfig, mcpServers)
+		client, err := ai.NewClient(&clientConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create AI client: %w", err)
+		}
+
+		// Gather context if explicitly configured (skip interactive prompt since tools handle introspection).
+		finalQuestion := question
+		if atmosConfig.AI.SendContext {
+			stackContext, err := ai.GatherStackContext(&atmosConfig)
+			if err != nil {
+				log.Debug("Could not gather stack context", "error", err)
+			} else {
+				finalQuestion = fmt.Sprintf("%s\n\n%s", stackContext, question)
+			}
+		}
+
+		// Create tool executor (if tools are enabled).
+		var toolExecutor *tools.Executor
+		if !noTools && atmosConfig.AI.Tools.Enabled {
+			toolsResult, toolsErr := initializeAIToolsAndExecutor(&atmosConfig, mcpServers, question)
+			if toolsErr != nil {
+				log.Warn("Failed to initialize tools", "error", toolsErr)
+				// Continue without tools rather than failing.
+			}
+			if toolsResult != nil {
+				toolExecutor = toolsResult.Executor
+				if toolsResult.MCPMgr != nil {
+					defer toolsResult.MCPMgr.StopAll() //nolint:errcheck // Best-effort MCP server cleanup.
+				}
+			}
+		}
+
+		// Create non-interactive executor.
+		exec := executor.NewExecutor(client, toolExecutor, &atmosConfig)
+
+		// Create context with timeout (default 60 seconds if not configured).
+		timeoutSeconds := 60
+		if atmosConfig.AI.TimeoutSeconds > 0 {
+			timeoutSeconds = atmosConfig.AI.TimeoutSeconds
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
+		defer cancel()
+
+		// Load or create a persisted session when --session and ai.sessions.enabled
+		// are both set. Cheap no-op (no storage opened) otherwise.
+		sess, err := prepareSession(ctx, &atmosConfig, sessionID, client.GetModel())
+		if err != nil {
+			return fmt.Errorf("failed to prepare session: %w", err)
+		}
+		defer sess.Close() // Best-effort session storage cleanup.
+
+		// Execute question with tool support.
+		ui.Writef("👽 Thinking...\n")
+		result := exec.Execute(ctx, executor.Options{
+			Prompt:       finalQuestion,
+			ToolsEnabled: !noTools && toolExecutor != nil,
+			SessionID:    sessionID,
+			History:      sess.History(),
+		})
+
+		// Persist this turn (the plain question, not the context-augmented
+		// finalQuestion) so a subsequent `--session` invocation sees it.
+		if result.Success {
+			sess.recordTurn(ctx, question, result.Response)
+		}
+
+		if !result.Success {
+			if result.Error != nil {
+				return fmt.Errorf("%w: %s", errUtils.ErrAIExecutionFailed, result.Error.Message)
+			}
+			return errUtils.ErrAIExecutionFailed
+		}
+
+		// Render response with tool execution details as Markdown.
+		var buf bytes.Buffer
+		mdFormatter := formatter.NewFormatter(formatter.FormatMarkdown)
+		if err := mdFormatter.Format(&buf, result); err != nil {
+			return fmt.Errorf("failed to format response: %w", err)
+		}
+		return data.Markdownf("%s", buf.String())
+	},
+}
+
+func init() {
+	// Create parser with ask-specific flags using functional options.
+	askParser = flags.NewStandardParser(
+		flags.WithStringSliceFlag("include", "", nil, "Add glob patterns to include in context (can be repeated)"),
+		flags.WithStringSliceFlag("exclude", "", nil, "Add glob patterns to exclude from context (can be repeated)"),
+		flags.WithBoolFlag("no-auto-context", "", false, "Disable automatic context discovery"),
+		flags.WithBoolFlag("no-tools", "", false, "Disable tool execution"),
+		flags.WithStringSliceFlag("mcp", "", nil, "MCP servers to use (comma-separated, skips auto-routing)"),
+		flags.WithStringFlag("session", "s", "", "Session ID for conversation context"),
+		flags.WithEnvVars("include", "ATMOS_AI_INCLUDE"),
+		flags.WithEnvVars("exclude", "ATMOS_AI_EXCLUDE"),
+		flags.WithEnvVars("no-auto-context", "ATMOS_AI_NO_AUTO_CONTEXT"),
+		flags.WithEnvVars("no-tools", "ATMOS_AI_NO_TOOLS"),
+		flags.WithEnvVars("mcp", "ATMOS_AI_MCP"),
+		flags.WithEnvVars("session", "ATMOS_AI_SESSION"),
+	)
+
+	// Register flags on the command.
+	askParser.RegisterFlags(askCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := askParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	aiCmd.AddCommand(askCmd)
+}

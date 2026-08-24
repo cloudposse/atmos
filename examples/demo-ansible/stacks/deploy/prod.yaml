@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: prod
+
+import:
+  - catalog/hello-world
+
+components:
+  ansible:
+    hello-world:
+      vars:
+        app_version: "2.0.0"
+        app_port: 443

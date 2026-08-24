@@ -1,0 +1,96 @@
+# Demonstrates and validates the Atmos Version Tracker end-to-end: builds
+# atmos, then exercises lock/status/verify/apply --check against the committed
+# examples/version-tracker fixture. The fixture's desired versions are
+# concrete, so the whole flow runs offline.
+name: Version Tracker
+
+on:
+  pull_request:
+    paths:
+      - pkg/version/**
+      - cmd/version/**
+      - examples/version-tracker/**
+      - .github/workflows/version-tracker.yaml
+
+permissions:
+  contents: read
+
+env:
+  ATMOS_BOOTSTRAP_VERSION: "1.223.0"
+
+jobs:
+  demo:
+    name: Version Tracker E2E
+    runs-on:
+      - runs-on=${{github.run_id}}
+      - runner=terraform
+      - tag=atmos
+      - extras=s3-cache
+      - private=false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@89c34b209108da66a27c8d6565d8d4b21dbdaa73 # v3.2.0
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
+
+      - name: Build atmos
+        run: atmos build
+
+      - name: Verify committed lock and managed files are current
+        working-directory: examples/version-tracker
+        run: |
+          ../../build/atmos version track status
+          ../../build/atmos version track verify
+
+      - name: Detect drift with apply --check
+        working-directory: examples/version-tracker
+        run: |
+          # Simulate a stale workflow ref; the check must fail.
+          sed -i.bak 's/actions\/checkout@v6.1.0/actions\/checkout@v4/' workflows/ci.yaml
+          rm workflows/ci.yaml.bak
+          if ../../build/atmos version track apply --check; then
+            echo "::error::apply --check passed on a stale file"
+            exit 1
+          fi
+
+      - name: Repair drift with apply
+        working-directory: examples/version-tracker
+        run: |
+          ../../build/atmos version track apply
+          ../../build/atmos version track verify
+
+      - name: Dev and prod tracks resolve independently
+        working-directory: examples/version-tracker
+        run: |
+          DEV_REDIS=$(../../build/atmos describe component app -s dev --query .vars.redis_image)
+          PROD_REDIS=$(../../build/atmos describe component app -s prod --query .vars.redis_image)
+          echo "dev=$DEV_REDIS prod=$PROD_REDIS"
+          test "$DEV_REDIS" = "redis:7.4.0"
+          test "$PROD_REDIS" = "redis:7.2.5"
+
+      - name: Update dev's track without touching prod's
+        working-directory: examples/version-tracker
+        run: |
+          ../../build/atmos version track set redis --desired=7.4.1 --track=dev
+          ../../build/atmos version track lock dev
+          NEW_DEV_REDIS=$(../../build/atmos describe component app -s dev --query .vars.redis_image)
+          PROD_REDIS_AFTER=$(../../build/atmos describe component app -s prod --query .vars.redis_image)
+          test "$NEW_DEV_REDIS" = "redis:7.4.1"
+          test "$PROD_REDIS_AFTER" = "redis:7.2.5"
+
+      - name: Restore the example to its committed state
+        run: git checkout -- examples/version-tracker/atmos.yaml examples/version-tracker/versions.lock.yaml
+
+      - name: Applied files match the committed state exactly
+        run: git diff --exit-code examples/version-tracker

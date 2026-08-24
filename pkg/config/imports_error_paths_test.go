@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -79,11 +80,68 @@ func TestProcessConfigImports_MkdirTempError_WithMock(t *testing.T) {
 	assert.Contains(t, err.Error(), "disk full")
 }
 
+// TestProcessConfigImports_ProvenanceReadError covers the branch where re-reading a
+// successfully merged import (to detect a base_path declaration) fails. The read
+// failure is tolerated: the import stays merged and processing continues.
+func TestProcessConfigImports_ProvenanceReadError(t *testing.T) {
+	setupTestAdapters()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	root := t.TempDir()
+	importDir := filepath.Join(root, ".atmos")
+	require.NoError(t, os.MkdirAll(importDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(importDir, "extra.yaml"),
+		[]byte("settings:\n  terminal:\n    max_width: 191\n"),
+		0o644,
+	))
+
+	// MkdirTemp/RemoveAll use the real filesystem so the import resolves and merges;
+	// only the provenance re-read (ReadFile) is forced to fail.
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().MkdirTemp("", "atmos-import-*").DoAndReturn(os.MkdirTemp)
+	mockFS.EXPECT().RemoveAll(gomock.Any()).DoAndReturn(os.RemoveAll)
+	mockFS.EXPECT().ReadFile(gomock.Any()).Return(nil, errors.New("read failed"))
+
+	source := &schema.AtmosConfiguration{
+		BasePath: root,
+		Import:   []string{filepath.Join(".atmos", "extra.yaml")},
+	}
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	basePathDir, err := processConfigImportsWithFSAndBasePathSource(source, v, mockFS)
+	require.NoError(t, err)
+	assert.Empty(t, basePathDir) // Provenance dir not set because the re-read failed.
+	assert.Equal(t, 191, v.GetInt("settings.terminal.max_width"))
+}
+
+// TestProcessConfigImports_EmptyBasePathPropagates covers the processImports error
+// propagation: an empty base path is rejected by processImports and surfaced by
+// processConfigImports (the redundant filepath.Abs that previously masked it is gone).
+func TestProcessConfigImports_EmptyBasePathPropagates(t *testing.T) {
+	setupTestAdapters()
+
+	source := &schema.AtmosConfiguration{
+		BasePath: "",
+		Import:   []string{"x.yaml"},
+	}
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	err := processConfigImports(source, v)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrBasePath)
+}
+
 // TestProcessImports_EmptyBasePath tests error path at imports.go:108-110.
 func TestProcessImports_EmptyBasePath(t *testing.T) {
 	tempDir := t.TempDir()
 
-	_, err := processImports("", []string{"test.yaml"}, tempDir, 1, MaximumImportLvL)
+	_, err := processImports(nil, "", []string{"test.yaml"}, tempDir, 1, MaximumImportLvL)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrBasePath)
 }
@@ -92,7 +150,7 @@ func TestProcessImports_EmptyBasePath(t *testing.T) {
 func TestProcessImports_EmptyTempDir(t *testing.T) {
 	tempDir := t.TempDir()
 
-	_, err := processImports(tempDir, []string{"test.yaml"}, "", 1, MaximumImportLvL)
+	_, err := processImports(nil, tempDir, []string{"test.yaml"}, "", 1, MaximumImportLvL)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrTempDir)
 }
@@ -101,7 +159,7 @@ func TestProcessImports_EmptyTempDir(t *testing.T) {
 func TestProcessImports_MaxDepthExceeded(t *testing.T) {
 	tempDir := t.TempDir()
 
-	_, err := processImports(tempDir, []string{"test.yaml"}, tempDir, 11, 10)
+	_, err := processImports(nil, tempDir, []string{"test.yaml"}, tempDir, 11, 10)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMaxImportDepth)
 }
@@ -114,7 +172,7 @@ func TestProcessImports_MaxDepthExceeded(t *testing.T) {
 func TestProcessImports_EmptyImportPath(t *testing.T) {
 	tempDir := t.TempDir()
 
-	paths, err := processImports(tempDir, []string{""}, tempDir, 1, MaximumImportLvL)
+	paths, err := processImports(nil, tempDir, []string{""}, tempDir, 1, MaximumImportLvL)
 	assert.NoError(t, err)
 	assert.Empty(t, paths) // Empty import path should be skipped
 }

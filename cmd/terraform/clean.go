@@ -57,7 +57,7 @@ Common use cases:
 
 		// Prompt for component/stack if neither is provided.
 		if component == "" && stack == "" {
-			prompted, err := promptForComponent(cmd)
+			prompted, err := promptForComponent(cmd, stack) // stack is empty here.
 			if err == nil && prompted != "" {
 				component = prompted
 			}

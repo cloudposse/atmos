@@ -1,12 +1,17 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 func setupTestFile(content, tempDir string, filename string) (string, error) {
@@ -65,7 +70,7 @@ func TestProcessImports(t *testing.T) {
 	}
 
 	// Step 5: Run the processImports method
-	imported, err := processImports(baseDir, imports, baseDir, 0, 10)
+	imported, err := processImports(nil, baseDir, imports, baseDir, 0, 10)
 
 	// Step 6: Assertions
 	assert.NoError(t, err, "processImports should not return an error")
@@ -113,7 +118,7 @@ import:
 	t.Run("Test local import processing", func(t *testing.T) {
 		tempDir := t.TempDir()
 		importPaths := []string{"local.yaml"}
-		imported, err := processImports(baseDir, importPaths, tempDir, 1, 5)
+		imported, err := processImports(nil, baseDir, importPaths, tempDir, 1, 5)
 		assert.NoError(t, err)
 		var resolvedPaths []string
 		for _, resolvedPath := range imported {
@@ -125,7 +130,7 @@ import:
 	t.Run("Test imports with depth limit", func(t *testing.T) {
 		tempDir := t.TempDir()
 		importPaths := []string{"local.yaml"}
-		resolved, err := processImports(baseDir, importPaths, tempDir, 11, 10)
+		resolved, err := processImports(nil, baseDir, importPaths, tempDir, 11, 10)
 		assert.Error(t, err, "should return an error when maxDepth is exceeded")
 		assert.Nil(t, resolved, "no resolved paths should be returned on depth limit breach")
 	})
@@ -216,7 +221,7 @@ func TestSanitizeImport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := sanitizeImport(tt.input)
+			result := SanitizeImport(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -259,7 +264,7 @@ settings:
 	// This simulates the case where .github/atmos.yaml imports ../atmos.yaml.
 	tempDir := t.TempDir()
 
-	resolvedPaths, err := processImports(subDir, []string{"../atmos.yaml"}, tempDir, 1, 10)
+	resolvedPaths, err := processImports(nil, subDir, []string{"../atmos.yaml"}, tempDir, 1, 10)
 
 	// Verify that the import resolves successfully.
 	assert.NoError(t, err)
@@ -268,4 +273,70 @@ settings:
 
 	// The import should work despite being outside base directory.
 	// The message is now logged at Trace level, not Warn level.
+}
+
+// TestMergeResolvedImports_MergeFailureLogsWarnAndContinues verifies that when one resolved
+// import file fails to merge (e.g. malformed YAML), mergeResolvedImports logs the failure at
+// Warn level with a sanitized import path and continues merging the remaining files instead
+// of aborting the whole config load.
+func TestMergeResolvedImports_MergeFailureLogsWarnAndContinues(t *testing.T) {
+	originalLogger := log.Default()
+	buffer := &bytes.Buffer{}
+	testLogger := log.New()
+	testLogger.SetOutput(buffer)
+	testLogger.SetLevel(log.WarnLevel)
+	testLogger.SetReportTimestamp(false)
+	log.SetDefault(testLogger)
+	t.Cleanup(func() { log.SetDefault(originalLogger) })
+
+	tempDir := t.TempDir()
+
+	badFile, err := setupTestFile("key: [unterminated", tempDir, "bad.yaml")
+	require.NoError(t, err)
+	goodFile, err := setupTestFile("key2: value2", tempDir, "good.yaml")
+	require.NoError(t, err)
+
+	resolvedPaths := []ResolvedPaths{
+		{FilePath: badFile, ImportPaths: "https://user:super-secret-token@example.com/bad.yaml", ImportType: REMOTE},
+		{FilePath: goodFile, ImportPaths: "./good.yaml", ImportType: LOCAL},
+	}
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	basePathSourceDir := mergeResolvedImports(resolvedPaths, v, defaultFileSystem)
+
+	assert.Empty(t, basePathSourceDir, "neither file declares base_path")
+	assert.Equal(t, "value2", v.Get("key2"), "the good file after the bad one must still merge")
+	logged := buffer.String()
+	assert.Contains(t, logged, "error loading config file", "the merge failure should be logged")
+	assert.NotContains(t, logged, "super-secret-token", "the merge-failure warning must not leak credentials")
+}
+
+// TestProcessImports_FailedImportLogSanitized verifies that the Warn log emitted when an
+// import fails to resolve never leaks credentials embedded in the import URL.
+func TestProcessImports_FailedImportLogSanitized(t *testing.T) {
+	setupTestAdapters()
+	t.Setenv("NO_COLOR", "1")
+
+	originalLogger := log.Default()
+	buffer := &bytes.Buffer{}
+	testLogger := log.New()
+	testLogger.SetOutput(buffer)
+	testLogger.SetLevel(log.WarnLevel)
+	testLogger.SetReportTimestamp(false)
+	log.SetDefault(testLogger)
+	t.Cleanup(func() { log.SetDefault(originalLogger) })
+
+	// .invalid is a reserved TLD (RFC 2606) that always fails DNS resolution immediately,
+	// so this exercises a real resolve failure without a real network dependency.
+	credentialedImport := "https://user:super-secret-token@nonexistent.invalid/config.yaml"
+	tempDir := t.TempDir()
+
+	_, err := processImports(nil, tempDir, []string{credentialedImport}, tempDir, 1, 10)
+
+	require.NoError(t, err, "a failed import must not abort the whole config load")
+	logged := buffer.String()
+	assert.NotContains(t, logged, "super-secret-token", "the failed-import warning must not leak credentials")
+	assert.NotContains(t, logged, "user:super-secret-token@", "the failed-import warning must not leak the userinfo segment")
+	assert.Contains(t, logged, "failed to resolve import", "the warning should still identify the failure")
 }

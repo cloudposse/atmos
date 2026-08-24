@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,7 +20,7 @@ import (
 func setupFakeS3Factory(t *testing.T, fake *fakeS3) {
 	t.Helper()
 
-	SetS3ClientFactory(func(_ aws.Config) S3ClientAPI {
+	SetS3ClientFactory(func(_ aws.Config, _ ...func(*s3.Options)) S3ClientAPI {
 		return fake.client
 	})
 
@@ -50,7 +51,7 @@ func TestE2E_CreateS3Backend_WithMockAWSProvider(t *testing.T) {
 
 	// Create mock-aws identity.
 	identity := mockaws.NewIdentity("e2e-test-identity", &schema.Identity{
-		Kind: "mock-aws",
+		Kind: "mock/aws",
 		Via:  &schema.IdentityVia{Provider: "mock-provider"},
 	})
 
@@ -110,7 +111,7 @@ func TestE2E_DeleteS3Backend_WithMockAWSProvider(t *testing.T) {
 
 	// Create mock-aws identity.
 	identity := mockaws.NewIdentity("e2e-delete-identity", &schema.Identity{
-		Kind: "mock-aws",
+		Kind: "mock/aws",
 		Via:  &schema.IdentityVia{Provider: "mock-provider"},
 	})
 
@@ -209,7 +210,7 @@ func TestE2E_AuthContext_EnvVarsPopulated(t *testing.T) {
 
 	// Create mock-aws identity.
 	identity := mockaws.NewIdentity("env-test-identity", &schema.Identity{
-		Kind: "mock-aws",
+		Kind: "mock/aws",
 		Via:  &schema.IdentityVia{Provider: "mock-provider"},
 	})
 
@@ -264,11 +265,11 @@ func TestE2E_MultipleIdentities_IsolatedCredentials(t *testing.T) {
 
 	// Create two mock-aws identities.
 	identity1 := mockaws.NewIdentity("identity-1", &schema.Identity{
-		Kind: "mock-aws",
+		Kind: "mock/aws",
 		Via:  &schema.IdentityVia{Provider: "provider-1"},
 	})
 	identity2 := mockaws.NewIdentity("identity-2", &schema.Identity{
-		Kind: "mock-aws",
+		Kind: "mock/aws",
 		Via:  &schema.IdentityVia{Provider: "provider-2"},
 	})
 

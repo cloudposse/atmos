@@ -15,7 +15,9 @@ stacks:
     - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
+vendor:
+  base_path: "./vendor.yaml"
 
 logs:
   file: "/dev/stderr"

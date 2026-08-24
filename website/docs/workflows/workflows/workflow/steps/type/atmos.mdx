@@ -1,0 +1,40 @@
+---
+title: atmos
+sidebar_label: atmos
+slug: /workflows/steps/type/atmos
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `atmos` step type runs an Atmos CLI command from inside a custom command or workflow, giving your automation direct access to the same stack-aware commands you run by hand. It is the default command step type when a step has `command` and no explicit `type`.
+</Intro>
+
+```yaml
+steps:
+  - name: plan
+    type: atmos
+    command: terraform plan vpc
+    stack: tenant1-ue2-dev
+```
+
+## Fields
+
+<dl>
+  <dt>`command`</dt>
+  <dd>Required. Atmos command arguments to run, without the leading `atmos` binary name.</dd>
+
+  <dt>`stack`</dt>
+  <dd>Optional stack value. Atmos appends it as `-s` when the command does not already include a stack flag.</dd>
+
+  <dt>`working_directory`</dt>
+  <dd>Optional working directory for the command. See [working_directory](/workflows/steps/working-directory).</dd>
+
+  <dt>`env`</dt>
+  <dd>Optional environment variables for this step. See [env](/workflows/steps/env).</dd>
+
+  <dt>`output`</dt>
+  <dd>Optional output mode. See [output](/workflows/steps/output).</dd>
+</dl>
+
+The step result stores stdout as the step value and includes `stdout`, `stderr`, and `exit_code` metadata.

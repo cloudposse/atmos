@@ -1,0 +1,12 @@
+vars:
+  environment: dev
+  stage: shared
+
+components:
+  terraform:
+    shared:
+      metadata:
+        component: mock
+      vars:
+        inherited_value: from-shared-catalog
+        name: shared

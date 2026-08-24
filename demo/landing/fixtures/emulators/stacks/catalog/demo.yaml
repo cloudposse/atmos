@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# A small Terraform component deployed to the local AWS emulator (the deploy beat).
+# No per-component identity binding: local-aws is the default identity (atmos.yaml),
+# so this runs against the local AWS sandbox automatically.
+components:
+  terraform:
+    demo:
+      metadata:
+        type: abstract
+        component: bucket
+      vars: {}

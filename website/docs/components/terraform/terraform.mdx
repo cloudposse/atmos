@@ -9,6 +9,7 @@ slug: /components/terraform
 import DocCardList from '@theme/DocCardList'
 import KeyPoints from '@site/src/components/KeyPoints'
 import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 Atmos manages Terraform root modules as components, handling workspace selection, backend configuration, provider overrides, and variable generation.
@@ -91,6 +92,12 @@ See [Stack Configuration](/components/terraform/stack-config) for the complete s
 ## Using Submodules (Child Modules)
 
 If your components rely on local submodules, our convention is to use a `modules/` subfolder of the component to store them.
+
+## Try It
+
+Explore a complete, working example that provisions a small AWS application stack — entirely offline, against a local AWS emulator.
+
+<EmbedExample example="quick-start-advanced" />
 
 ## Related Topics
 

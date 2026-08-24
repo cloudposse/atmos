@@ -19,9 +19,9 @@ func TestBuildAWSConfigFromCreds_InvalidCredentialsType(t *testing.T) {
 	// Create a mock credentials type that isn't AWSCredentials.
 	mockCreds := &mockNonAWSCredentials{}
 
-	_, err := buildAWSConfigFromCreds(ctx, mockCreds, "us-east-1")
+	_, err := BuildAWSConfigFromCreds(ctx, mockCreds, "us-east-1")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrECRAuthFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 	assert.Contains(t, err.Error(), "expected AWS credentials")
 }
 
@@ -61,7 +61,7 @@ func TestBuildAWSConfigFromCreds_RegionHandling(t *testing.T) {
 				Region:          tt.credentialsRegion,
 			}
 
-			cfg, err := buildAWSConfigFromCreds(ctx, awsCreds, tt.providedRegion)
+			cfg, err := BuildAWSConfigFromCreds(ctx, awsCreds, tt.providedRegion)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedRegion, cfg.Region)
 			assert.NotNil(t, cfg.Credentials)

@@ -199,3 +199,48 @@ func TestDescribeStacksAuthManagerWithNilAuthContext(t *testing.T) {
 	require.NoError(t, err, "Should handle nil AuthContext gracefully")
 	require.NotNil(t, stacksMap)
 }
+
+// TestDescribeStacksAuthManager_NoPerComponentAuthWhenYamlFunctionsDisabled verifies that
+// per-component auth resolution is skipped when processYamlFunctions=false.
+// This covers the `if p.processYamlFunctions` conditional in processComponentEntry.
+func TestDescribeStacksAuthManager_NoPerComponentAuthWhenYamlFunctionsDisabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockAuthManager := types.NewMockAuthManager(ctrl)
+	// GetStackInfo is called for auth propagation (not per-component resolution).
+	mockAuthManager.EXPECT().
+		GetStackInfo().
+		Return(&schema.ConfigAndStacksInfo{
+			AuthContext: &schema.AuthContext{
+				AWS: &schema.AWSAuthContext{Profile: "parent-identity"},
+			},
+		}).
+		AnyTimes()
+
+	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
+	t.Chdir(workDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// processYamlFunctions=false → no per-component auth resolution.
+	stacksMap, err := ExecuteDescribeStacks(
+		&atmosConfig,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+		false,
+		false, // processYamlFunctions disabled — no per-component auth resolution.
+		false,
+		nil,
+		mockAuthManager,
+	)
+
+	require.NoError(t, err, "Should succeed with processYamlFunctions=false")
+	require.NotNil(t, stacksMap)
+	assert.NotEmpty(t, stacksMap)
+}

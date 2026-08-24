@@ -1,0 +1,124 @@
+---
+title: http
+sidebar_label: http
+slug: /workflows/steps/type/http
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `http` step type performs an HTTP request from a workflow or custom command — call an API, notify a service, trigger a CI job, hit a deployment webhook, or poll a health endpoint. It supports any HTTP verb, query-string parameters, headers, and a request body (raw or form/JSON), with per-attempt timeouts and HTTP-aware retries that compose with the step's [`retry`](/workflows/steps/retry) policy. No shelling out to `curl`.
+</Intro>
+
+:::note Alias
+`webhook` is an accepted alias for `http` — `type: webhook` behaves identically and reads naturally for the fire-a-notification use case.
+:::
+
+```yaml
+steps:
+  - name: notify
+    type: http
+    url: "https://ci.example.com/hook/{{ .env.JOB_ID }}"
+    method: POST
+    query:
+      ref: "{{ .env.GIT_SHA }}"
+    headers:
+      Authorization: "Bearer {{ .env.TOKEN }}"
+      Content-Type: application/json
+    body: '{"status":"deployed"}'
+    expect:
+      status: [200, 201, 202, 204]
+      response:
+        - /"status"\s*:\s*"deployed"/
+    timeout: 30s
+    retry:
+      max_attempts: 5
+      backoff_strategy: exponential
+      initial_delay: 1s
+      max_delay: 30s
+```
+
+Send form parameters instead of a raw body with `form` (mutually exclusive with `body`). By default `form` is sent as `application/x-www-form-urlencoded`; set a JSON `Content-Type` header to send it as a JSON object instead:
+
+```yaml
+steps:
+  - name: notify-slack
+    type: http
+    url: "{{ .env.SLACK_WEBHOOK_URL }}"
+    method: POST
+    headers:
+      Content-Type: application/json
+    form:
+      text: "Deployment of {{ .steps.plan.value }} complete"
+```
+
+## Fields
+
+<dl>
+  <dt>`url`</dt>
+  <dd>Required. Request URL. Supports Go templates.</dd>
+
+  <dt>`method`</dt>
+  <dd>HTTP method/verb: `GET` (default), `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`.</dd>
+
+  <dt>`query`</dt>
+  <dd>Query-string parameters as key-value pairs (supports templates).</dd>
+
+  <dt>`headers`</dt>
+  <dd>Request headers as key-value pairs (supports templates).</dd>
+
+  <dt>`body`</dt>
+  <dd>Raw request body (supports templates). Mutually exclusive with `form`.</dd>
+
+  <dt>`form`</dt>
+  <dd>Form/JSON body parameters as key-value pairs. Sent as `application/x-www-form-urlencoded` unless the `Content-Type` header is `application/json`. Mutually exclusive with `body`.</dd>
+
+  <dt>`expect.status`</dt>
+  <dd>List of acceptable HTTP status codes. When set, the response status must be in this list. Defaults to any `2xx`.</dd>
+
+  <dt>`expect.response`</dt>
+  <dd>List of regular expressions; the response body must match at least one. Patterns may be written as `/.../ ` literals (surrounding slashes are stripped) or bare regex strings.</dd>
+
+  <dt>`timeout`</dt>
+  <dd>Per-attempt timeout (e.g., `30s`, `1m`). Defaults to `30s`. Each retry attempt gets its own deadline.</dd>
+
+  <dt>`retry`</dt>
+  <dd>Retry policy (see [retry](/workflows/steps/retry)). Transport errors, `5xx`, and `429` responses are retried by default; other `4xx` responses fail fast. Use `retry.conditions` (regexes matched against `"<status> <body>"`) to retry additional cases.</dd>
+</dl>
+
+## Polling
+
+Because `http` retries are HTTP-aware, the step doubles as a poller — `GET` an endpoint and retry until the body matches:
+
+```yaml
+steps:
+  - name: health
+    type: http
+    url: "{{ .env.HEALTH_URL }}"
+    expect:
+      status: [200]
+      response:
+        - /"status"\s*:\s*"(ok|healthy)"/
+    retry:
+      max_attempts: 10
+      backoff_strategy: constant
+      initial_delay: 2s
+```
+
+## Result
+
+The response body becomes the step's value, and useful details land in metadata (see [outputs](/workflows/steps/outputs)):
+
+<dl>
+  <dt>`{{ .steps.<name>.value }}`</dt>
+  <dd>The response body.</dd>
+
+  <dt>`{{ .steps.<name>.metadata.status_code }}`</dt>
+  <dd>The numeric HTTP status code (e.g., `200`).</dd>
+
+  <dt>`{{ .steps.<name>.metadata.status }}`</dt>
+  <dd>The HTTP status text (e.g., `200 OK`).</dd>
+
+  <dt>`{{ .steps.<name>.metadata.response_headers }}`</dt>
+  <dd>Response headers as a map.</dd>
+</dl>

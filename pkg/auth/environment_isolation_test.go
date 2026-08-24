@@ -32,6 +32,7 @@ func TestAuthenticationIgnoresExternalAWSEnvVars(t *testing.T) {
 	// Create a minimal auth configuration that would normally fail
 	// if AWS SDK picks up the conflicting environment variables.
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-sso-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -65,6 +66,7 @@ func TestAuthenticationIgnoresExternalAWSEnvVars(t *testing.T) {
 		credStore,
 		validator,
 		nil,
+		"",
 	)
 	require.NoError(t, err)
 	require.NotNil(t, authManager)
@@ -102,6 +104,7 @@ func TestAuthManagerCreationWithConflictingEnvVars(t *testing.T) {
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "secretEXAMPLE")
 
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -134,6 +137,7 @@ func TestAuthManagerCreationWithConflictingEnvVars(t *testing.T) {
 		credStore,
 		validator,
 		nil,
+		"",
 	)
 
 	require.NoError(t, err, "Auth manager creation should succeed despite conflicting env vars")

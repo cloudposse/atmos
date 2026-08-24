@@ -1,0 +1,58 @@
+commands:
+  - name: casts generate examples hooks-infracost cost-summary
+    description: Regenerate the Infracost Hook example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: prepare-workspace
+        working_directory: "../../.context/cast-fixtures/hooks-infracost/components/terraform/nat-gateway"
+        command: terraform init -input=false >/dev/null && (terraform workspace select test >/dev/null 2>&1 || terraform workspace new test >/dev/null)
+      - type: cast
+        name: cost-summary
+        working_directory: "../../.context/cast-fixtures/hooks-infracost"
+        title: "Hooks: Infracost summary after a Terraform plan"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/hooks-infracost/cost-summary.cast"
+        steps:
+          - type: simulate
+            text: "# plan the NAT gateway and let the Infracost hook summarize monthly cost"
+          - type: simulate
+            text: &plan_cmd atmos terraform plan nat-gateway -s test
+          - type: shell
+            name: plan
+            duration: 550ms
+            interval: 750ms
+            command: *plan_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples hooks-infracost cost-summary
+  - name: casts validate examples hooks-infracost cost-summary
+    description: Validate the Infracost Hook example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/hooks-infracost/cost-summary.cast")
+          plain = strip_ansi(text).lower()
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in ["atmos terraform plan nat-gateway -s test", "plan: 2 to add", "## infracost", "aws_nat_gateway.main", "aws_eip.nat"]:
+              if needle not in plain:
+                  raise SystemExit(f"hooks-infracost cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

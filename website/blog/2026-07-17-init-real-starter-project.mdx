@@ -1,0 +1,56 @@
+---
+slug: init-real-starter-project
+title: "Initialize an Atmos project from a proven starting point"
+date: 2026-07-17T12:00:00.000Z
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+
+Initializing a project should establish a useful local starting point, not leave a developer with
+an empty directory and a list of conventions to reconstruct. Modern development platforms provide
+an initialization workflow: developers select a known-good example or template, create the project
+locally, and make the next action obvious. Atmos provides that workflow for infrastructure projects.
+
+The `atmos init` command initializes an Atmos project from a template chosen for the job at hand:
+a minimal cloud-agnostic project, an AWS application SDLC project, or a cloud landing zone. Each
+template creates the configuration, structure, and operational path appropriate to that project
+rather than asking every team to assemble it from scratch.
+
+<!--truncate-->
+
+<CastPlayer src="/casts/examples/init/init-basic.cast" title="atmos init a working project" chrome controls scrubber />
+
+[View the full init example](/examples/init)
+
+## Initialize the Project You Need
+
+The `basic` template gives a new project a small, cloud-agnostic foundation with a real `greeting`
+Terraform component. It creates a local file, so a developer can validate and deploy the generated
+project without a cloud account, credentials, or an emulator. The point is to prove that the
+initialized project works before anyone starts extending it.
+
+For teams beginning an application project, the `aws/app` catalog template establishes a complete
+AWS application SDLC repository with dev, staging, and production stacks, native CI, and an
+emulator-proven application component. For a platform foundation, `aws/landing-zone` initializes
+dev, staging, and production environments with a conventional AWS baseline for audit, KMS, SSM,
+monitoring, and IAM. The catalog also includes GCP and Azure landing-zone starting points.
+
+## A Consistent Initialization Contract
+
+An interactive invocation lets a developer choose the project template and answer only the
+questions that shape it. Required answers, patterns, option lists, and boolean values are enforced
+consistently whether they come from prompts, defaults, persisted values, or `--set`. The same
+initialization can therefore be repeated from automation without bypassing the template’s contract.
+
+Built-in templates travel with the Atmos binary. Catalog templates resolve to the source associated
+with that build, so a team initializes from a known template version rather than an accidental
+snapshot of a repository.
+
+## Build Your Organization's Golden Paths
+
+The `init` catalog distributes proven starting points with Atmos. For organization-owned golden
+paths that your platform team distributes through a catalog or Git repository, see [the scaffolds announcement](/changelog/scaffold-conditional-generation-and-hooks).
+
+See the [Init Command Documentation](/cli/commands/init) for the full template list.

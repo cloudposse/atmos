@@ -1,0 +1,20 @@
+import:
+  - catalog/app/defaults
+
+vars:
+  stage: prod
+
+components:
+  terraform:
+    app:
+      vars:
+        stage: prod
+      settings:
+        # Prod identity and secret store — separate from dev to enforce the env boundary.
+        # TODO: replace local-dev/app-secrets with production-grade equivalents
+        # (e.g. identity: aws/iam-role, secrets.DB_PASSWORD.store: prod-secrets).
+        identity: local-dev
+        secrets:
+          DB_PASSWORD:
+            store: app-secrets
+            description: Database password injected only at runtime.

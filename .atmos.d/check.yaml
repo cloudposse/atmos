@@ -1,0 +1,122 @@
+commands:
+  - name: check
+    description: Read-only repository checks
+    commands:
+      - name: staged
+        description: Run pre-commit hooks against staged files
+        steps:
+          - |
+            echo "Running pre-commit checks on staged files..."
+
+            STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+            if [ -z "$STAGED_FILES" ]; then
+              echo "No staged files to check"
+              exit 0
+            fi
+
+            echo "Checking $(echo "$STAGED_FILES" | wc -l | xargs) staged files"
+            echo ""
+
+            if pre-commit run; then
+              echo ""
+              echo "All pre-commit checks passed."
+            else
+              EXIT_CODE=$?
+              echo ""
+              echo "Some pre-commit checks failed (exit code: $EXIT_CODE)"
+              echo ""
+              echo "To auto-fix issues, run: atmos format staged"
+              exit $EXIT_CODE
+            fi
+
+      - name: pr
+        description: Run pre-commit hooks against PR modified files
+        steps:
+          - |
+            echo "Running pre-commit checks on PR files..."
+
+            BASE_REF="${GITHUB_BASE_REF:-origin/main}"
+
+            if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+              BASE_REF="${BASE_REF#origin/}"
+              if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+                echo "Base ref '$BASE_REF' not found. Fetching from origin..."
+                git fetch origin main:main || true
+                BASE_REF="main"
+              fi
+            fi
+
+            echo "Checking files changed from $BASE_REF..."
+
+            CHANGED_FILES=$(git diff --name-only "$BASE_REF"...HEAD 2>/dev/null || git diff --name-only origin/main...HEAD)
+
+            if [ -z "$CHANGED_FILES" ]; then
+              echo "No files changed in PR"
+              exit 0
+            fi
+
+            echo "Found $(echo "$CHANGED_FILES" | wc -l | xargs) changed files"
+            echo ""
+
+            if pre-commit run --from-ref "$BASE_REF" --to-ref HEAD; then
+              echo ""
+              echo "All pre-commit checks passed."
+            else
+              EXIT_CODE=$?
+              echo ""
+              echo "Some pre-commit checks failed (exit code: $EXIT_CODE)"
+              echo ""
+              echo "To auto-fix issues, run: atmos format pr"
+              exit $EXIT_CODE
+            fi
+
+      - name: all
+        description: Run pre-commit hooks against all files
+        steps:
+          - |
+            echo "Running pre-commit checks on all files..."
+            echo "This may take a while."
+            echo ""
+
+            FILE_COUNT=$(git ls-files | wc -l | xargs)
+            echo "Checking $FILE_COUNT files in the repository"
+            echo ""
+
+            if pre-commit run --all-files; then
+              echo ""
+              echo "All pre-commit checks passed."
+            else
+              EXIT_CODE=$?
+              echo ""
+              echo "Some pre-commit checks failed (exit code: $EXIT_CODE)"
+              echo ""
+              echo "To auto-fix issues, run: atmos format all"
+              echo "WARNING: format all will modify many files."
+              exit $EXIT_CODE
+            fi
+
+      - name: codecov
+        description: Validate codecov.yml configuration
+        steps:
+          - |
+            echo "Validating codecov.yml configuration..."
+
+            if [ ! -f codecov.yml ]; then
+              echo "codecov.yml not found"
+              exit 1
+            fi
+
+            RESULT=$(curl --silent --data-binary @codecov.yml https://codecov.io/validate 2>&1)
+
+            if echo "$RESULT" | grep -q "Valid"; then
+              echo "codecov.yml is valid"
+              echo ""
+              echo "$RESULT" | grep -E "(Valid|Error)"
+              exit 0
+            else
+              echo "codecov.yml validation failed"
+              echo ""
+              echo "$RESULT"
+              exit 1
+            fi

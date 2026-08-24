@@ -1,0 +1,100 @@
+---
+title: DRY Configuration with Locals
+sidebar_position: 16
+sidebar_label: DRY Configuration with Locals
+description: Reduce repetition in stack files with locals
+---
+
+import Intro from '@site/src/components/Intro'
+import PillBox from '@site/src/components/PillBox'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+Locals are file-scoped variables that reduce repetition within a single stack file. Use them to define values once and reference them throughout the file.
+</Intro>
+
+## Problem
+
+You have repeated values in a stack file that you want to define once and reuse:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        name: acme-prod-vpc
+        tags:
+          Project: acme-prod
+    cluster:
+      vars:
+        name: acme-prod-cluster
+        tags:
+          Project: acme-prod
+```
+
+## Solution
+
+Use locals to define the value once:
+
+```yaml
+locals:
+  project: acme-prod
+
+components:
+  terraform:
+    vpc:
+      vars:
+        name: "{{ .locals.project }}-vpc"
+        tags:
+          Project: "{{ .locals.project }}"
+    cluster:
+      vars:
+        name: "{{ .locals.project }}-cluster"
+        tags:
+          Project: "{{ .locals.project }}"
+```
+
+## Building on Locals
+
+Locals can reference other locals:
+
+```yaml
+locals:
+  namespace: acme
+  environment: prod
+  prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        name: "{{ .locals.prefix }}-vpc"
+```
+
+## Accessing Settings and Vars
+
+Locals can also access `settings` and `vars` from the same file:
+
+```yaml
+settings:
+  version: v1
+
+vars:
+  stage: prod
+
+locals:
+  label: "{{ .vars.stage }}-{{ .settings.version }}"
+```
+
+## Key Points
+
+- **File-scoped**: Locals only exist within the file where they're defined.
+- **Not inherited**: Locals from imported files are not accessible.
+- **Use for DRY**: Extract repeated values to reduce duplication.
+
+For cross-file values, use `vars` or `settings` instead.
+
+## References
+
+- [Locals Documentation](/stacks/locals)

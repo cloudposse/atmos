@@ -48,6 +48,7 @@ func TestAffectedOptions(t *testing.T) {
 		ProcessTemplates:  true,
 		ProcessFunctions:  true,
 		Skip:              []string{"component1", "component2"},
+		IdentityName:      "admin-account",
 	}
 
 	assert.Equal(t, "json", opts.Format)
@@ -66,6 +67,7 @@ func TestAffectedOptions(t *testing.T) {
 	assert.True(t, opts.ProcessTemplates)
 	assert.True(t, opts.ProcessFunctions)
 	assert.Equal(t, []string{"component1", "component2"}, opts.Skip)
+	assert.Equal(t, "admin-account", opts.IdentityName)
 }
 
 // TestAffectedOptions_Defaults tests default values in AffectedOptions.
@@ -88,6 +90,76 @@ func TestAffectedOptions_Defaults(t *testing.T) {
 	assert.False(t, opts.ProcessTemplates)
 	assert.False(t, opts.ProcessFunctions)
 	assert.Empty(t, opts.Skip)
+	assert.Empty(t, opts.IdentityName)
+}
+
+// TestAffectedIdentityFlagParsing tests the identity flag/viper precedence logic.
+func TestAffectedIdentityFlagParsing(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupCmd     func() *cobra.Command
+		setupViper   func()
+		expectedName string
+	}{
+		{
+			name: "identity from flag takes precedence",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().StringP("identity", "i", "", "Identity")
+				_ = cmd.Flags().Set("identity", "flag-identity")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+				viper.Set("identity", "viper-identity")
+			},
+			expectedName: "flag-identity",
+		},
+		{
+			name: "identity from viper when flag not changed",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().StringP("identity", "i", "", "Identity")
+				// Flag not set — Changed() returns false.
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+				viper.Set("identity", "viper-identity")
+			},
+			expectedName: "viper-identity",
+		},
+		{
+			name: "empty when neither flag nor viper set",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().StringP("identity", "i", "", "Identity")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+			},
+			expectedName: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := tt.setupCmd()
+			tt.setupViper()
+			v := viper.GetViper()
+
+			// Replicate the logic from affectedCmd.RunE.
+			var identityName string
+			if cmd.Flags().Changed("identity") {
+				identityName, _ = cmd.Flags().GetString("identity")
+			} else {
+				identityName = v.GetString("identity")
+			}
+
+			assert.Equal(t, tt.expectedName, identityName)
+		})
+	}
 }
 
 // TestAffectedOptions_GitOptions tests the git-related options.

@@ -1,0 +1,7 @@
+# `ignore_missing_template_values` prevents a hard error when the referenced
+# value is absent; the value renders empty and `skip_if_missing` tolerates the
+# unresolved import.
+import:
+  - path: "catalog/{{ .catalog_ref }}/service"
+    ignore_missing_template_values: true
+    skip_if_missing: true

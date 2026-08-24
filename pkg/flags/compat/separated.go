@@ -17,6 +17,11 @@ var (
 // Separated args are flags that should be passed through to the underlying command,
 // (e.g., terraform -out=/tmp/plan, -var=foo=bar) rather than being parsed by Atmos.
 // These are identified by the CompatibilityFlagTranslator during preprocessing.
+//
+// Note: passing an empty (non-nil) slice is equivalent to passing nil — the global
+// state will be nil and GetSeparated() will return nil. This is intentional: callers
+// that range over the result are unaffected, and it avoids spurious "no args" vs
+// "zero-length args" ambiguity. This contract is tested and must be preserved.
 func SetSeparated(separatedArgs []string) {
 	defer perf.Track(nil, "compat.SetSeparated")()
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -63,22 +64,12 @@ func processIncludeTagInternal(
 	var localFile string
 
 	// Parse the include arguments
-	parts, err := SplitStringByDelimiter(val, ' ')
+	parsed, err := parser.ParseInclude(val)
 	if err != nil {
 		return err
 	}
-
-	partsLen := len(parts)
-
-	switch partsLen {
-	case 2:
-		includeFile = strings.TrimSpace(parts[0])
-		includeQuery = strings.TrimSpace(parts[1])
-	case 1:
-		includeFile = strings.TrimSpace(parts[0])
-	default:
-		return fmt.Errorf("%w: %s, stack manifest: %s", ErrIncludeYamlFunctionInvalidArguments, val, file)
-	}
+	includeFile = parsed.Path
+	includeQuery = parsed.Query
 
 	// Try to find the file locally
 	localFile = findLocalFile(includeFile, file, atmosConfig)
@@ -97,9 +88,14 @@ func processIncludeTagInternal(
 			return err
 		}
 	} else {
-		// Local file not found - provide helpful error message
+		// Local file not found - provide helpful error message.
+		// Prefer BasePathAbsolute for the error since it's more informative.
+		errBasePath := atmosConfig.BasePathAbsolute
+		if errBasePath == "" {
+			errBasePath = atmosConfig.BasePath
+		}
 		return fmt.Errorf("%w: could not find local file '%s' (tried relative to manifest '%s' and base path '%s')",
-			ErrIncludeYamlFunctionInvalidFile, includeFile, file, atmosConfig.BasePath)
+			ErrIncludeYamlFunctionInvalidFile, includeFile, file, errBasePath)
 	}
 
 	// Apply YQ expression if provided
@@ -194,8 +190,13 @@ func findLocalFile(includeFile, manifestFile string, atmosConfig *schema.AtmosCo
 		return absPath
 	}
 
-	// Try relative to the base_path from atmos.yaml
-	atmosManifestPath := filepath.Join(atmosConfig.BasePath, includeFile)
+	// Try relative to the base_path from atmos.yaml.
+	// Prefer BasePathAbsolute (resolved during config init) over BasePath (which may be relative).
+	basePath := atmosConfig.BasePathAbsolute
+	if basePath == "" {
+		basePath = atmosConfig.BasePath
+	}
+	atmosManifestPath := filepath.Join(basePath, includeFile)
 	return resolveAbsolutePath(atmosManifestPath)
 }
 

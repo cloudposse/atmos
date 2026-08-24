@@ -1,0 +1,198 @@
+---
+title: Application SDLC Environments
+sidebar_position: 4
+sidebar_label: Application SDLC Environments
+description: Application SDLC Environments Atmos Design Pattern
+id: application-sdlc
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+The **Application SDLC Environments** pattern describes how to structure stacks for application repositories that manage their own infrastructure alongside application code. Not every repository needs deep organizational taxonomy — sometimes `dev.yaml`, `staging.yaml`, `prod.yaml` is all you need.
+</Intro>
+
+For application teams, an overly hierarchical directory structure can be overwhelming. The goal is to expose only the bits and pieces that the team needs to care about — which typically means organizing by SDLC environment (using the isolation boundary that your cloud provides, whether that's AWS accounts, Azure subscriptions, or GCP projects).
+
+:::tip
+These are not rigid guidelines. Atmos doesn't impose any particular directory structure — you can organize your stacks however you like. This pattern reflects what has worked well in practice for application repositories: minimal overhead, easy to navigate, and scales naturally as environments are added.
+
+Foundational infrastructure like networking, identity, and DNS is typically managed in separate core infrastructure repositories using patterns like [Multi-Cloud Configuration](/design-patterns/stack-organization/multi-cloud-configuration) or [Organizational Hierarchy](/design-patterns/stack-organization/organizational-hierarchy-configuration). Application repositories manage just their slice — the application's own resources — while relying on the foundation that's already in place.
+:::
+
+## Use-cases
+
+Use the **Application SDLC Environments** pattern when:
+
+- You have an application repository that manages its own infrastructure (e.g., an ECS service, a Lambda function, a Kubernetes deployment)
+
+- The infrastructure is scoped to a single cloud, single region, and a single isolation boundary (account, subscription, or project) — only the SDLC environment changes
+
+- You want to co-locate Terraform alongside application code so everything ships together
+
+- You need ephemeral preview environments for pull requests
+
+## Benefits
+
+The **Application SDLC Environments** pattern provides the following benefits:
+
+- Minimal overhead — one file per environment, no directory nesting
+
+- Infrastructure ships with the application in the same repository and the same pull request
+
+- Adding a new environment is just adding a new YAML file
+
+- Preview environments can be created dynamically per pull request using template functions
+
+## Example
+
+The following example shows how to structure an application repository with Terraform co-located alongside application code. The stacks are flat — one file per SDLC environment.
+
+### Directory Structure
+
+```console
+   my-app
+   ├── app
+   │   ├── Dockerfile
+   │   └── main.go
+   │
+   └── terraform
+       ├── components
+       │   └── app
+       └── stacks
+           ├── _defaults.yaml
+           ├── defaults
+           │   └── app.yaml
+           ├── dev.yaml
+           ├── staging.yaml
+           ├── prod.yaml
+           └── preview.yaml
+```
+
+### Configure atmos.yaml
+
+<File title="atmos.yaml">
+```yaml
+base_path: "."
+
+components:
+  terraform:
+    base_path: "terraform/components"
+
+stacks:
+  base_path: "terraform/stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "defaults/*"
+    - "**/_defaults.yaml"
+  name_template: "{{.vars.stage}}"
+```
+</File>
+
+The key difference from other patterns: `name_template: "{{.vars.stage}}"` produces stack names that are simply `dev`, `staging`, `prod`, and `preview`. No region, no tenant, no namespace — just the SDLC environment.
+
+### Configure Defaults
+
+All context variables except `stage` are fixed — the app deploys to one account, one region. Only the SDLC environment changes.
+
+<File title="terraform/stacks/_defaults.yaml">
+```yaml
+vars:
+  namespace: acme
+  region: us-east-2
+  environment: ue2
+```
+</File>
+
+<File title="terraform/stacks/defaults/app.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        name: my-app
+        containers:
+          app:
+            image: "123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest"
+            memory: 256
+            port: 8080
+```
+</File>
+
+### Configure Stacks
+
+Each SDLC environment is a single file that imports the shared defaults and sets `stage`:
+
+<File title="terraform/stacks/dev.yaml">
+```yaml
+import:
+  - _defaults
+  - defaults/app
+
+vars:
+  stage: dev
+```
+</File>
+
+<File title="terraform/stacks/prod.yaml">
+```yaml
+import:
+  - _defaults
+  - defaults/app
+
+vars:
+  stage: prod
+
+components:
+  terraform:
+    app:
+      vars:
+        containers:
+          app:
+            memory: 1024
+```
+</File>
+
+### Preview Environments
+
+For ephemeral PR preview environments, use template functions to generate unique workspaces per pull request:
+
+<File title="terraform/stacks/preview.yaml">
+```yaml
+import:
+  - _defaults
+  - defaults/app
+
+vars:
+  stage: preview
+  attributes:
+    - '{{ env "PR_NUMBER" | default "0" }}'
+```
+</File>
+
+The `PR_NUMBER` environment variable is set by your CI/CD pipeline. Each pull request gets its own isolated deployment, and the `attributes` list ensures resource names are unique per PR.
+
+### Provision
+
+```shell
+atmos terraform apply app -s dev
+atmos terraform apply app -s prod
+atmos terraform apply app -s preview
+```
+
+## Related Patterns
+
+- [Basic Stack Organization](/design-patterns/stack-organization/basic-stack-organization) - Similar simplicity, but for standalone infrastructure repos
+- [Multi-Cloud Configuration](/design-patterns/stack-organization/multi-cloud-configuration) - Organizing stacks by cloud provider hierarchy
+- [Organizational Hierarchy](/design-patterns/stack-organization/organizational-hierarchy-configuration) - For when your app repo grows into a platform repo
+
+## References
+
+- [app-on-ecs](https://github.com/cloudposse-examples/app-on-ecs) - Working example of this pattern on GitHub
+- [Stack Imports](/stacks/imports)
+- [_defaults.yaml Convention](/design-patterns/stack-organization/defaults-pattern)
+- [Template Functions](/templates)

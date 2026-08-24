@@ -6,8 +6,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// Compile-time sentinel: if WorkspaceConfig.PrefixSeparator is renamed,
+// the build fails immediately instead of producing subtle test breakage.
+var _ = schema.WorkspaceConfig{PrefixSeparator: "-"}
 
 func TestProcessTerraformBackend(t *testing.T) {
 	tests := []struct {
@@ -506,6 +511,688 @@ func TestProcessTerraformRemoteStateBackend(t *testing.T) {
 			if tt.expectedRemoteStateBackendConfigNotNil {
 				assert.NotNil(t, remoteStateBackendConfig)
 			}
+		})
+	}
+}
+
+// ============================================================================
+// Prefix separator tests — terraform.workspace.prefix_separator setting.
+// ============================================================================
+
+func TestGetWorkspacePrefixSeparator(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *schema.AtmosConfiguration
+		expected string
+	}{
+		{
+			name:     "nil config returns default dash",
+			config:   nil,
+			expected: "-",
+		},
+		{
+			name:     "empty separator returns default dash",
+			config:   &schema.AtmosConfiguration{},
+			expected: "-",
+		},
+		{
+			name: "dash separator",
+			config: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						Workspace: schema.WorkspaceConfig{PrefixSeparator: "-"},
+					},
+				},
+			},
+			expected: "-",
+		},
+		{
+			name: "slash separator",
+			config: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						Workspace: schema.WorkspaceConfig{PrefixSeparator: "/"},
+					},
+				},
+			},
+			expected: "/",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, getWorkspacePrefixSeparator(tt.config))
+		})
+	}
+}
+
+func TestApplyPrefixSeparator(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		separator string
+		expected  string
+	}{
+		{
+			name:      "dash separator replaces slashes",
+			input:     "services/consul",
+			separator: "-",
+			expected:  "services-consul",
+		},
+		{
+			name:      "slash separator preserves slashes",
+			input:     "services/consul",
+			separator: "/",
+			expected:  "services/consul",
+		},
+		{
+			name:      "no slashes in input — dash separator",
+			input:     "vpc",
+			separator: "-",
+			expected:  "vpc",
+		},
+		{
+			name:      "no slashes in input — slash separator",
+			input:     "vpc",
+			separator: "/",
+			expected:  "vpc",
+		},
+		{
+			name:      "deeply nested path — dash",
+			input:     "platform/services/consul",
+			separator: "-",
+			expected:  "platform-services-consul",
+		},
+		{
+			name:      "deeply nested path — slash",
+			input:     "platform/services/consul",
+			separator: "/",
+			expected:  "platform/services/consul",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, applyPrefixSeparator(tt.input, tt.separator))
+		})
+	}
+}
+
+func TestSetS3BackendDefaults_PrefixSeparator(t *testing.T) {
+	tests := []struct {
+		name              string
+		component         string
+		baseComponentName string
+		metadata          map[string]any
+		separator         string
+		existingPrefix    string // Pre-set workspace_key_prefix (empty = auto-generate).
+		expected          string
+	}{
+		{
+			name:      "default dash separator flattens slashes",
+			component: "services/consul",
+			separator: "-",
+			expected:  "services-consul",
+		},
+		{
+			name:      "slash separator preserves hierarchy",
+			component: "services/consul",
+			separator: "/",
+			expected:  "services/consul",
+		},
+		{
+			name:              "metadata.name with slash separator",
+			component:         "services/consul",
+			baseComponentName: "",
+			metadata:          map[string]any{"name": "services/consul"},
+			separator:         "/",
+			expected:          "services/consul",
+		},
+		{
+			name:              "metadata.name with dash separator",
+			component:         "services/consul",
+			baseComponentName: "",
+			metadata:          map[string]any{"name": "services/consul"},
+			separator:         "-",
+			expected:          "services-consul",
+		},
+		{
+			name:              "baseComponentName with slash separator",
+			component:         "services/consul/v2",
+			baseComponentName: "services/consul",
+			separator:         "/",
+			expected:          "services/consul",
+		},
+		{
+			name:           "explicit prefix is never modified",
+			component:      "services/consul",
+			separator:      "-",
+			existingPrefix: "custom/prefix",
+			expected:       "custom/prefix",
+		},
+		{
+			name:           "explicit prefix preserved even with slash separator",
+			component:      "services/consul",
+			separator:      "/",
+			existingPrefix: "my-custom-prefix",
+			expected:       "my-custom-prefix",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			backend := map[string]any{}
+			if tt.existingPrefix != "" {
+				backend["workspace_key_prefix"] = tt.existingPrefix
+			}
+
+			metadata := tt.metadata
+			if metadata == nil {
+				metadata = map[string]any{}
+			}
+
+			setS3BackendDefaults(backend, tt.component, tt.baseComponentName, metadata, tt.separator)
+
+			result, ok := backend["workspace_key_prefix"].(string)
+			require.True(t, ok, "workspace_key_prefix should be a string")
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSetGCSBackendDefaults_PrefixSeparator(t *testing.T) {
+	tests := []struct {
+		name           string
+		component      string
+		separator      string
+		existingPrefix string
+		expected       string
+	}{
+		{
+			name:      "dash separator flattens",
+			component: "services/consul",
+			separator: "-",
+			expected:  "services-consul",
+		},
+		{
+			name:      "slash separator preserves",
+			component: "services/consul",
+			separator: "/",
+			expected:  "services/consul",
+		},
+		{
+			name:           "explicit prefix is never modified",
+			component:      "services/consul",
+			separator:      "-",
+			existingPrefix: "custom/prefix",
+			expected:       "custom/prefix",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			backend := map[string]any{}
+			if tt.existingPrefix != "" {
+				backend["prefix"] = tt.existingPrefix
+			}
+
+			setGCSBackendDefaults(backend, tt.component, "", map[string]any{}, tt.separator)
+
+			result, ok := backend["prefix"].(string)
+			require.True(t, ok, "prefix should be a string")
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSetAzureBackendKey_PrefixSeparator(t *testing.T) {
+	tests := []struct {
+		name      string
+		component string
+		separator string
+		expected  string
+	}{
+		{
+			name:      "dash separator flattens component in key",
+			component: "services/consul",
+			separator: "-",
+			expected:  "services-consul.terraform.tfstate",
+		},
+		{
+			name:      "slash separator preserves hierarchy in key",
+			component: "services/consul",
+			separator: "/",
+			expected:  "services/consul.terraform.tfstate",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			backend := map[string]any{}
+			componentBackend := map[string]any{}
+			globalBackend := map[string]any{}
+
+			err := setAzureBackendKey(backend, tt.component, "", map[string]any{}, componentBackend, globalBackend, tt.separator)
+			require.NoError(t, err)
+
+			result, ok := backend["key"].(string)
+			require.True(t, ok, "key should be a string")
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestProcessTerraformBackend_WithPrefixSeparator(t *testing.T) {
+	// End-to-end test: verify the separator flows through processTerraformBackend.
+	t.Run("slash separator produces hierarchical S3 prefix", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					Workspace: schema.WorkspaceConfig{PrefixSeparator: "/"},
+				},
+			},
+		}
+
+		cfg := &terraformBackendConfig{
+			atmosConfig:       atmosConfig,
+			component:         "services/consul",
+			baseComponentName: "",
+			componentMetadata: map[string]any{},
+			globalBackendType: "s3",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{
+					"bucket": "test-bucket",
+					"region": "us-east-1",
+				},
+			},
+			baseComponentBackendSection: map[string]any{},
+			componentBackendSection:     map[string]any{},
+		}
+
+		backendType, backendConfig, err := processTerraformBackend(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, "s3", backendType)
+		assert.Equal(t, "services/consul", backendConfig["workspace_key_prefix"])
+	})
+
+	t.Run("default separator produces flattened S3 prefix", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		cfg := &terraformBackendConfig{
+			atmosConfig:       atmosConfig,
+			component:         "services/consul",
+			baseComponentName: "",
+			componentMetadata: map[string]any{},
+			globalBackendType: "s3",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{
+					"bucket": "test-bucket",
+				},
+			},
+			baseComponentBackendSection: map[string]any{},
+			componentBackendSection:     map[string]any{},
+		}
+
+		backendType, backendConfig, err := processTerraformBackend(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, "s3", backendType)
+		assert.Equal(t, "services-consul", backendConfig["workspace_key_prefix"])
+	})
+}
+
+// TestExtractBackendTypeMap covers the helper introduced in Phase 11.
+// The success and missing-key paths are exercised by TestProcessTerraform*
+// indirectly, but the type-mismatch error path needs its own assertion.
+func TestExtractBackendTypeMap(t *testing.T) {
+	t.Run("returns empty map for nil section", func(t *testing.T) {
+		out, err := extractBackendTypeMap(nil, "s3", "vpc")
+		require.NoError(t, err)
+		assert.NotNil(t, out)
+		assert.Empty(t, out)
+	})
+
+	t.Run("returns empty map for missing key", func(t *testing.T) {
+		section := map[string]any{"gcs": map[string]any{"bucket": "x"}}
+		out, err := extractBackendTypeMap(section, "s3", "vpc")
+		require.NoError(t, err)
+		assert.NotNil(t, out)
+		assert.Empty(t, out)
+	})
+
+	t.Run("returns the inner map when key exists", func(t *testing.T) {
+		section := map[string]any{"s3": map[string]any{"bucket": "my-bucket", "key": "tfstate"}}
+		out, err := extractBackendTypeMap(section, "s3", "vpc")
+		require.NoError(t, err)
+		assert.Equal(t, "my-bucket", out["bucket"])
+		assert.Equal(t, "tfstate", out["key"])
+	})
+
+	t.Run("returns error when value at key is not a map", func(t *testing.T) {
+		section := map[string]any{"s3": "not-a-map"}
+		out, err := extractBackendTypeMap(section, "s3", "vpc")
+		require.Error(t, err)
+		assert.Nil(t, out)
+		assert.Contains(t, err.Error(), "vpc", "error should mention the component name")
+	})
+}
+
+// TestProcessTerraformBackend_TypeMismatchSurfacesError covers the post-merge
+// type assertion in processTerraformBackend: if backendSection[type] exists
+// but is not a map (e.g., a string mistakenly written in YAML), the function
+// must return an ErrInvalidTerraformBackend rather than panicking.
+func TestProcessTerraformBackend_TypeMismatchSurfacesError(t *testing.T) {
+	cfg := &terraformBackendConfig{
+		atmosConfig:       &schema.AtmosConfiguration{},
+		component:         "broken",
+		globalBackendType: "s3",
+		globalBackendSection: map[string]any{
+			// Non-map value at the s3 key — invalid YAML structure.
+			"s3": "not-a-map",
+		},
+	}
+	gotType, gotBackend, err := processTerraformBackend(cfg)
+	require.Error(t, err)
+	assert.Empty(t, gotType)
+	assert.Nil(t, gotBackend)
+	assert.Contains(t, err.Error(), "broken", "error must reference the component name")
+}
+
+// TestProcessTerraformRemoteStateBackend_PropagatesExtractError covers the
+// four error-return sites in processTerraformRemoteStateBackend that bubble
+// up extractBackendTypeMap's type-mismatch error. Each test case poisons one
+// of the four input sections with a non-map value at the resolved backend
+// type, then verifies the error surfaces.
+func TestProcessTerraformRemoteStateBackend_PropagatesExtractError(t *testing.T) {
+	const component = "rs-broken"
+	const backendType = "s3"
+	validSection := map[string]any{"s3": map[string]any{"bucket": "ok"}}
+	poison := map[string]any{"s3": "not-a-map"}
+
+	cases := []struct {
+		name string
+		mut  func(c *remoteStateBackendConfig)
+	}{
+		{
+			name: "global remote state section poisoned",
+			mut:  func(c *remoteStateBackendConfig) { c.globalRemoteStateBackendSection = poison },
+		},
+		{
+			name: "base component remote state section poisoned",
+			mut:  func(c *remoteStateBackendConfig) { c.baseComponentRemoteStateBackendSection = poison },
+		},
+		{
+			name: "component remote state section poisoned",
+			mut:  func(c *remoteStateBackendConfig) { c.componentRemoteStateBackendSection = poison },
+		},
+		{
+			name: "final component backend section poisoned",
+			mut:  func(c *remoteStateBackendConfig) { c.finalComponentBackendSection = poison },
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &remoteStateBackendConfig{
+				atmosConfig:                            &schema.AtmosConfiguration{},
+				component:                              component,
+				finalComponentBackendType:              backendType,
+				finalComponentBackendSection:           validSection,
+				globalRemoteStateBackendSection:        validSection,
+				baseComponentRemoteStateBackendSection: validSection,
+				componentRemoteStateBackendSection:     validSection,
+			}
+			tc.mut(cfg)
+			gotType, gotBackend, err := processTerraformRemoteStateBackend(cfg)
+			require.Error(t, err)
+			assert.Empty(t, gotType)
+			assert.Nil(t, gotBackend)
+			assert.Contains(t, err.Error(), component, "error must reference the component name")
+		})
+	}
+}
+
+// TestProcessTerraformBackend_TypeKeyMismatch guards against issue #2919's field-test finding:
+// backend_type not matching any key under backend: previously validated fine and silently
+// resolved to an empty backend config (e.g. backend_type: http with backend: {s3: {...}}), instead
+// of erroring. Reproduces both the mismatch case and the still-legitimate "backend not configured
+// at all" case (an empty backend section is not a mismatch -- it just means no defaults apply yet).
+func TestProcessTerraformBackend_TypeKeyMismatch(t *testing.T) {
+	t.Run("mismatch errors", func(t *testing.T) {
+		cfg := &terraformBackendConfig{
+			atmosConfig:       &schema.AtmosConfiguration{},
+			component:         "vpc",
+			globalBackendType: "http",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{"bucket": "wrong-key-for-http"},
+			},
+		}
+		gotType, gotBackend, err := processTerraformBackend(cfg)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrBackendTypeMismatch)
+		assert.Empty(t, gotType)
+		assert.Nil(t, gotBackend)
+		assert.True(t, errUtils.HasContext(err, "component", "vpc"))
+		assert.True(t, errUtils.HasContext(err, "backend_type", "http"))
+		assert.True(t, errUtils.HasHint(err, "backend_type is"))
+	})
+
+	// This check runs during whole-repo stack processing (mergeComponentConfigurations
+	// processes every stack, not just the one requested via -s/--stack), so a mismatch
+	// in one component blocks describe/plan for every other stack too. Prior to this
+	// test, the component/stack causing the failure were attached only via WithContext,
+	// which the CLI's default (non---verbose) error renderer drops entirely -- the printed
+	// error gave no way to find which of potentially hundreds of components was at fault.
+	t.Run("mismatch names the offending component and stack directly in the hint", func(t *testing.T) {
+		cfg := &terraformBackendConfig{
+			atmosConfig:       &schema.AtmosConfiguration{},
+			component:         "vpc-no-provider",
+			stackName:         "orgs/cplive/plat/sandbox/us-east-2",
+			globalBackendType: "http",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{"bucket": "wrong-key-for-http"},
+			},
+		}
+		_, _, err := processTerraformBackend(cfg)
+		require.Error(t, err)
+		assert.True(t, errUtils.HasContext(err, "stack", "orgs/cplive/plat/sandbox/us-east-2"))
+		assert.True(t, errUtils.HasHint(err, "vpc-no-provider"),
+			"hint text must name the offending component directly, not just as hidden verbose-only context")
+		assert.True(t, errUtils.HasHint(err, "orgs/cplive/plat/sandbox/us-east-2"),
+			"hint text must name the offending stack directly, not just as hidden verbose-only context")
+	})
+
+	t.Run("no backend section configured at all is not a mismatch", func(t *testing.T) {
+		cfg := &terraformBackendConfig{
+			atmosConfig:       &schema.AtmosConfiguration{},
+			component:         "vpc",
+			globalBackendType: "http",
+		}
+		gotType, gotBackend, err := processTerraformBackend(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, "http", gotType)
+		assert.Empty(t, gotBackend)
+	})
+
+	t.Run("matching key across layers is not a mismatch", func(t *testing.T) {
+		cfg := &terraformBackendConfig{
+			atmosConfig:       &schema.AtmosConfiguration{},
+			component:         "vpc",
+			globalBackendType: "s3",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{"bucket": "test-bucket"},
+			},
+		}
+		_, gotBackend, err := processTerraformBackend(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, "test-bucket", gotBackend["bucket"])
+	})
+}
+
+// TestProcessTerraformRemoteStateBackend_TypeKeyMismatch mirrors
+// TestProcessTerraformBackend_TypeKeyMismatch for remote_state_backend_type /
+// remote_state_backend.
+func TestProcessTerraformRemoteStateBackend_TypeKeyMismatch(t *testing.T) {
+	t.Run("mismatch errors", func(t *testing.T) {
+		cfg := &remoteStateBackendConfig{
+			atmosConfig:                  &schema.AtmosConfiguration{},
+			component:                    "vpc",
+			finalComponentBackendType:    "s3",
+			finalComponentBackendSection: map[string]any{"s3": map[string]any{"bucket": "b"}},
+			globalRemoteStateBackendType: "http",
+			globalRemoteStateBackendSection: map[string]any{
+				"s3": map[string]any{"bucket": "wrong-key-for-http"},
+			},
+		}
+		gotType, gotBackend, err := processTerraformRemoteStateBackend(cfg)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrBackendTypeMismatch)
+		assert.Empty(t, gotType)
+		assert.Nil(t, gotBackend)
+		assert.True(t, errUtils.HasContext(err, "component", "vpc"))
+		assert.True(t, errUtils.HasContext(err, "remote_state_backend_type", "http"))
+	})
+
+	t.Run("no remote_state_backend section configured is not a mismatch", func(t *testing.T) {
+		cfg := &remoteStateBackendConfig{
+			atmosConfig:                  &schema.AtmosConfiguration{},
+			component:                    "vpc",
+			finalComponentBackendType:    "s3",
+			finalComponentBackendSection: map[string]any{"s3": map[string]any{"bucket": "b"}},
+			globalRemoteStateBackendType: "http",
+		}
+		gotType, _, err := processTerraformRemoteStateBackend(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, "http", gotType)
+	})
+
+	// Same rationale as TestProcessTerraformBackend_TypeKeyMismatch's equivalent case:
+	// the hint text is the only thing the CLI prints by default, so it must name the
+	// offending component/stack directly rather than relying on hidden verbose-only context.
+	t.Run("mismatch names the offending component and stack directly in the hint", func(t *testing.T) {
+		cfg := &remoteStateBackendConfig{
+			atmosConfig:                  &schema.AtmosConfiguration{},
+			component:                    "vpc-no-provider",
+			stackName:                    "orgs/cplive/plat/sandbox/us-east-2",
+			finalComponentBackendType:    "s3",
+			finalComponentBackendSection: map[string]any{"s3": map[string]any{"bucket": "b"}},
+			globalRemoteStateBackendType: "http",
+			globalRemoteStateBackendSection: map[string]any{
+				"s3": map[string]any{"bucket": "wrong-key-for-http"},
+			},
+		}
+		_, _, err := processTerraformRemoteStateBackend(cfg)
+		require.Error(t, err)
+		assert.True(t, errUtils.HasContext(err, "stack", "orgs/cplive/plat/sandbox/us-east-2"))
+		assert.True(t, errUtils.HasHint(err, "vpc-no-provider"),
+			"hint text must name the offending component directly, not just as hidden verbose-only context")
+		assert.True(t, errUtils.HasHint(err, "orgs/cplive/plat/sandbox/us-east-2"),
+			"hint text must name the offending stack directly, not just as hidden verbose-only context")
+	})
+}
+
+// TestProcessTerraformRemoteStateBackend_InheritedLocalTypeMismatch reproduces the exact
+// real-world shape found in cloudposse/infra-live: an org-level stack manifest sets a global
+// s3 remote_state_backend default, and one unrelated component overrides backend_type: local
+// (with a valid backend.local section, so the backend/backend_type check passes cleanly) but
+// never sets remote_state_backend_type or remote_state_backend to match. The type then
+// legitimately inherits "local" from the component's own backend_type (per
+// processTerraformRemoteStateBackend's documented precedence), but the only configured
+// remote_state_backend key anywhere in scope is the inherited global "s3" -- a genuine
+// mismatch, not a defaulting bug. This is intended behavior (the component's remote-state
+// config silently resolved to nothing under the pre-1.226.0 code, which is the exact silent-
+// misconfiguration class this check was added to catch) -- this test guards it staying an
+// error, and that the error names the component/stack.
+func TestProcessTerraformRemoteStateBackend_InheritedLocalTypeMismatch(t *testing.T) {
+	backendCfg := &terraformBackendConfig{
+		atmosConfig: &schema.AtmosConfiguration{},
+		component:   "vpc-no-provider",
+		stackName:   "orgs/cplive/plat/sandbox/us-east-2",
+		// Global backend_type is s3 (org default); the component overrides it to local.
+		globalBackendType: "s3",
+		globalBackendSection: map[string]any{
+			"s3": map[string]any{"bucket": "org-tfstate"},
+		},
+		componentBackendType: "local",
+		componentBackendSection: map[string]any{
+			"local": map[string]any{"path": "terraform.tfstate"},
+		},
+	}
+	finalBackendType, finalBackend, err := processTerraformBackend(backendCfg)
+	require.NoError(t, err, "backend_type/backend must resolve cleanly -- local is validly configured")
+	assert.Equal(t, "local", finalBackendType)
+
+	remoteCfg := &remoteStateBackendConfig{
+		atmosConfig:                  &schema.AtmosConfiguration{},
+		component:                    "vpc-no-provider",
+		stackName:                    "orgs/cplive/plat/sandbox/us-east-2",
+		finalComponentBackendType:    finalBackendType,
+		finalComponentBackendSection: map[string]any{finalBackendType: finalBackend},
+		// Global remote_state_backend only configures s3 (org default); nothing at any
+		// scope sets remote_state_backend_type or a "local" key under remote_state_backend.
+		globalRemoteStateBackendSection: map[string]any{
+			"s3": map[string]any{"role_arn": "arn:aws:iam::123456789012:role/readonly"},
+		},
+	}
+	_, _, err = processTerraformRemoteStateBackend(remoteCfg)
+	require.Error(t, err, "local backend_type with only an s3 remote_state_backend default is a genuine mismatch")
+	assert.ErrorIs(t, err, errUtils.ErrBackendTypeMismatch)
+	assert.True(t, errUtils.HasHint(err, "vpc-no-provider"))
+	assert.True(t, errUtils.HasHint(err, "orgs/cplive/plat/sandbox/us-east-2"))
+	assert.True(t, errUtils.HasHint(err, `"local"`))
+	assert.True(t, errUtils.HasHint(err, "s3"))
+}
+
+// TestShouldPreserveAuthoredKey covers the three decision paths of the
+// helper: no authored key (false), no global azurerm section (true), no
+// global key in azurerm (true), global key matches authored (false, treat
+// global as prefix), global key differs from authored (true, preserve).
+func TestShouldPreserveAuthoredKey(t *testing.T) {
+	cases := []struct {
+		name     string
+		final    map[string]any
+		global   map[string]any
+		expected bool
+	}{
+		{
+			name:     "no authored key returns false",
+			final:    map[string]any{},
+			global:   map[string]any{"azurerm": map[string]any{"key": "global.tfstate"}},
+			expected: false,
+		},
+		{
+			name:     "empty-string authored key returns false",
+			final:    map[string]any{"key": ""},
+			global:   map[string]any{"azurerm": map[string]any{"key": "global.tfstate"}},
+			expected: false,
+		},
+		{
+			name:     "no global azurerm section preserves authored key",
+			final:    map[string]any{"key": "authored.tfstate"},
+			global:   map[string]any{},
+			expected: true,
+		},
+		{
+			name:     "global azurerm with no key preserves authored key",
+			final:    map[string]any{"key": "authored.tfstate"},
+			global:   map[string]any{"azurerm": map[string]any{"resource_group_name": "rg"}},
+			expected: true,
+		},
+		{
+			name:     "global key matches authored - treated as prefix, do not preserve",
+			final:    map[string]any{"key": "global-prefix"},
+			global:   map[string]any{"azurerm": map[string]any{"key": "global-prefix"}},
+			expected: false,
+		},
+		{
+			name:     "global key differs from authored - preserve",
+			final:    map[string]any{"key": "authored.tfstate"},
+			global:   map[string]any{"azurerm": map[string]any{"key": "global.tfstate"}},
+			expected: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := shouldPreserveAuthoredKey(tc.final, tc.global)
+			assert.Equal(t, tc.expected, got)
 		})
 	}
 }

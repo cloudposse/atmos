@@ -1,0 +1,20 @@
+# Top-level stack manifest for acme-dev-ue1.
+#
+# It imports `orgs/acme/dev/_defaults.yaml` which declares the default identity.
+# After full stack processing, the merged config for this stack should contain
+# `auth.identities.dev-identity.default: true` — but the current auth
+# pre-scanner runs BEFORE this merge and does not see the imported file.
+
+import:
+  - orgs/acme/dev/_defaults
+
+vars:
+  region: us-east-1
+
+components:
+  terraform:
+    mycomponent:
+      metadata:
+        component: mock_caller_identity
+      vars:
+        enabled: true

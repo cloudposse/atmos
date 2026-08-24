@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
-	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -21,6 +20,12 @@ var (
 	defaultCliConfig = schema.AtmosConfiguration{
 		Default:  true,
 		BasePath: ".",
+		Cast: &schema.CastConfig{
+			Recording: &schema.CastRecordingConfig{
+				Width:  120,
+				Height: 36,
+			},
+		},
 		Stacks: schema.Stacks{
 			BasePath:    "stacks",
 			NamePattern: "{tenant}-{environment}-{stage}",
@@ -47,24 +52,37 @@ var (
 				Plan: schema.TerraformPlan{
 					SkipPlanfile: false,
 				},
+				Workspace: schema.WorkspaceConfig{
+					PrefixSeparator: "-", // Character used in place of '/' in auto-generated backend key prefixes.
+				},
 			},
 			Helmfile: schema.Helmfile{
 				BasePath:              "components/helmfile",
 				KubeconfigPath:        "",
-				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
-				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
-				UseEKS:                true,
+				HelmAwsProfilePattern: "", // Deprecated: kept for backward compatibility, use --identity flag.
+				ClusterNamePattern:    "", // Deprecated: kept for backward compatibility, use ClusterNameTemplate.
+				ClusterNameTemplate:   "",
+				ClusterName:           "",
+				UseEKS:                false, // Changed from true to false - EKS is now opt-in.
 			},
 			Packer: schema.Packer{
 				BasePath: "components/packer",
 				Command:  "packer",
 			},
+			Kubernetes: schema.Kubernetes{
+				BasePath:          "components/kubernetes",
+				Provider:          "kubectl",
+				AutoGenerateFiles: false,
+			},
 		},
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "replace",
 			Terminal: schema.Terminal{
-				MaxWidth: templates.GetTerminalWidth(),
-				Pager:    "less",
+				// Unlimited by default: 0 means "use the live detected terminal width".
+				// Baking GetTerminalWidth() here froze the width measured at package
+				// init (before TTY setup — typically 78) and clamped all rendering.
+				MaxWidth: 0,
+				Pager:    "false", // Disabled by default since PR #1642 (journaled in pkg/edition); previously "less" here contradicted setDefaultConfiguration.
 				Unicode:  true,
 				SyntaxHighlighting: schema.SyntaxHighlighting{
 					Enabled:     true,

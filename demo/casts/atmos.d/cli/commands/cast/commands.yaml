@@ -1,0 +1,219 @@
+commands:
+  - name: casts generate cli commands cast
+    description: Regenerate cast command demos
+    working_directory: &repo_root "../.."
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: usage
+        command: atmos --chdir=demo/casts casts generate cli commands cast usage
+      - type: shell
+        name: play
+        command: atmos --chdir=demo/casts casts generate cli commands cast play
+      - type: shell
+        name: render
+        command: atmos --chdir=demo/casts casts generate cli commands cast render
+  - name: casts generate cli commands cast usage
+    description: Regenerate the cast command usage demo
+    working_directory: *repo_root
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos --chdir=demo/casts casts setup
+      - type: shell
+        name: clean
+        command: rm -rf .context/cast-command-demo
+      - type: shell
+        name: prepare-renderer
+        output: none
+        command: |
+          mkdir -p .context/bin .context/cast-command-demo
+          cat > .context/bin/agg <<'SH'
+          #!/bin/sh
+          input="$1"
+          output="$2"
+          test -f "$input" || exit 2
+          mkdir -p "$(dirname "$output")"
+          printf 'GIF89a' > "$output"
+          SH
+          chmod +x .context/bin/agg
+      - type: cast
+        name: usage
+        title: atmos about --cast=.context/cast-command-demo/about.gif
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        output:
+          cast: "../../website/static/casts/cli/commands/cast/usage.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: atmos about --cast=.context/cast-command-demo/about.gif
+          - type: shell
+            name: usage
+            output: raw
+            command: |
+              PATH="$PWD/.context/bin:$PATH" atmos about --cast=.context/cast-command-demo/about.gif
+              test -s .context/cast-command-demo/about.gif
+      - type: shell
+        name: validate
+        command: atmos --chdir=demo/casts casts validate cli commands cast usage
+  - name: casts generate cli commands cast play
+    description: Regenerate the cast play command demo
+    working_directory: *repo_root
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos --chdir=demo/casts casts setup
+      - type: cast
+        name: play
+        title: atmos cast play
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        output:
+          cast: "../../website/static/casts/cli/commands/cast/play.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: &play_cmd atmos cast play website/static/casts/examples/custom-commands/hello-greet.cast
+          - type: shell
+            name: play
+            output: raw
+            command: *play_cmd
+      - type: shell
+        name: validate
+        command: atmos --chdir=demo/casts casts validate cli commands cast play
+  - name: casts generate cli commands cast render
+    description: Regenerate the cast render command demo
+    working_directory: *repo_root
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos --chdir=demo/casts casts setup
+      - type: shell
+        name: prepare-renderer
+        output: none
+        command: |
+          mkdir -p .context/bin .context/cast-render
+          cat > .context/bin/agg <<'SH'
+          #!/bin/sh
+          input="$1"
+          output="$2"
+          test -f "$input" || exit 2
+          mkdir -p "$(dirname "$output")"
+          printf 'GIF89a' > "$output"
+          SH
+          chmod +x .context/bin/agg
+      - type: shell
+        name: clean
+        command: rm -f .context/cast-render/hello-greet.gif
+      - type: cast
+        name: render
+        title: atmos cast render
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        output:
+          cast: "../../website/static/casts/cli/commands/cast/render.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --output=.context/cast-render/hello-greet.gif
+          - type: spin
+            name: render
+            title: "Rendering hello-greet.gif..."
+            command: |
+              PATH="$PWD/.context/bin:$PATH" atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --output=.context/cast-render/hello-greet.gif
+              test -s .context/cast-render/hello-greet.gif
+      - type: shell
+        name: validate
+        command: atmos --chdir=demo/casts casts validate cli commands cast render
+  - name: casts validate cli commands cast
+    description: Validate cast command demos
+    working_directory: *repo_root
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: usage
+        command: atmos --chdir=demo/casts casts validate cli commands cast usage
+      - type: shell
+        name: play
+        command: atmos --chdir=demo/casts casts validate cli commands cast play
+      - type: shell
+        name: render
+        command: atmos --chdir=demo/casts casts validate cli commands cast render
+  - name: casts validate cli commands cast usage
+    description: Validate the cast command usage demo
+    working_directory: *repo_root
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.path.join(os.getcwd(), "demo", "casts"))
+          from cast_checks import load_text, strip_ansi, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("website/static/casts/cli/commands/cast/usage.cast")
+          plain = strip_ansi(text)
+          for needle in ["atmos about --cast=.context/cast-command-demo/about.gif", "About Atmos", "Cast rendered: .context/cast-command-demo/about.gif"]:
+              if needle not in plain:
+                  raise SystemExit(f"cast usage demo missing {needle!r}")
+          if "atmos cast --help" in plain:
+              raise SystemExit("cast usage demo should demonstrate recording, not help output")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
+              if bad in plain:
+                  raise SystemExit(f"cast usage demo contains {bad!r}")
+          assert_colored(text, "Cast rendered:")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)
+  - name: casts validate cli commands cast play
+    description: Validate the cast play command demo
+    working_directory: *repo_root
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.path.join(os.getcwd(), "demo", "casts"))
+          from cast_checks import load_text, strip_ansi, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("website/static/casts/cli/commands/cast/play.cast")
+          plain = strip_ansi(text)
+          for needle in ["Hello world!", "Hello, Alice", "atmos cast play"]:
+              if needle not in plain:
+                  raise SystemExit(f"cast play demo missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
+              if bad in plain:
+                  raise SystemExit(f"cast play demo contains {bad!r}")
+          assert_colored(text, "[play]")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)
+  - name: casts validate cli commands cast render
+    description: Validate the cast render command demo
+    working_directory: *repo_root
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.path.join(os.getcwd(), "demo", "casts"))
+          from cast_checks import load_text, strip_ansi, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("website/static/casts/cli/commands/cast/render.cast")
+          plain = strip_ansi(text)
+          for needle in ["atmos cast render", "hello-greet.gif", "Rendering hello-greet.gif"]:
+              if needle not in plain:
+                  raise SystemExit(f"cast render demo missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
+              if bad in plain:
+                  raise SystemExit(f"cast render demo contains {bad!r}")
+          assert_colored(text, "Rendering hello-greet.gif")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

@@ -1,1 +1,4 @@
 **/backend.tf.json
+
+# Isolated per-component working directories created by provision.workdir.enabled.
+.workdir/

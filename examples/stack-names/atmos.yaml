@@ -1,0 +1,23 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths: []
+  # No name_template or name_pattern configured.
+  # Stack names are determined by:
+  # 1. The `name` field in the stack manifest (if present)
+  # 2. The filename (if `name` is not set)
+
+logs:
+  file: "/dev/stderr"
+  level: Info

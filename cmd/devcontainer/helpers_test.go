@@ -332,6 +332,7 @@ func TestCreateUnauthenticatedAuthManager(t *testing.T) {
 		{
 			name: "empty identities",
 			authConfig: &schema.AuthConfig{
+				Realm:      "test-realm",
 				Identities: map[string]schema.Identity{},
 			},
 			// Empty identities map is valid - no error expected.
@@ -340,6 +341,7 @@ func TestCreateUnauthenticatedAuthManager(t *testing.T) {
 		{
 			name: "with identities configured",
 			authConfig: &schema.AuthConfig{
+				Realm: "test-realm",
 				Identities: map[string]schema.Identity{
 					"test-identity": {
 						Kind:    "mock",

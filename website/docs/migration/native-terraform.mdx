@@ -5,6 +5,8 @@ sidebar_label: From Native Terraform
 description: How to migrate from vanilla Terraform to Atmos
 id: native-terraform
 ---
+import EmbedExample from '@site/src/components/EmbedExample'
+import EmbedFile from '@site/src/components/EmbedFile'
 import FAQItem from '@site/src/components/FAQItem'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
@@ -69,17 +71,7 @@ go install github.com/cloudposse/atmos@latest
 
 Point Atmos to where your Terraform **root modules** live. Atmos only cares about root modules—where you put child modules (reusable modules called via `source`) is entirely up to you and has no bearing on Atmos configuration.
 
-<File title="atmos.yaml">
-```yaml
-components:
-  terraform:
-    base_path: "components/terraform"  # Where your Terraform root modules live
-
-stacks:
-  base_path: "stacks"                  # Where your stack configs will go
-  name_template: "{{ .vars.stage }}"   # Simple naming: dev, staging, prod
-```
-</File>
+<EmbedFile filePath="examples/native-terraform/atmos.yaml" />
 
 :::tip[Customize Your Structure]
 The `base_path` setting is flexible. If your root modules are already in a `terraform/` directory, set `base_path: "terraform"`. If you only use Terraform (no Helmfile or other toolchains), you could use `base_path: "components"` or even just `base_path: "."`. The `components/terraform` convention exists because Atmos supports multiple toolchains (Terraform, Helmfile, etc.), but organize however makes sense for your project.
@@ -144,43 +136,14 @@ Create a stack YAML file for one environment. Start by referencing your existing
   <TabItem value="include" label="Keep Using tfvars" default>
     Keep your existing `.tfvars` files and include them directly:
 
-    <File title="stacks/dev.yaml">
-    ```yaml
-    vars:
-      stage: dev
+    <EmbedFile filePath="examples/native-terraform/stacks/dev.yaml" />
 
-    components:
-      terraform:
-        vpc:
-          vars: !include components/terraform/vpc/envs/dev.tfvars
-        database:
-          vars: !include components/terraform/database/envs/dev.tfvars
-    ```
-    </File>
-
-    The `!include` function resolves paths relative to the Atmos base path and automatically parses `.tfvars` files (HCL format). This is the fastest migration path—your existing variable files keep working. You still get stack inheritance, imports, and all other Atmos features.
+    The `!include` function resolves paths relative to the stack file and automatically parses `.tfvars` files (HCL format). This is the fastest migration path—your existing variable files keep working. You still get stack inheritance, imports, and all other Atmos features.
   </TabItem>
   <TabItem value="convert" label="Convert to YAML">
     As you grow, convert your `.tfvars` to native YAML for deep merge benefits:
 
-    <File title="stacks/dev.yaml">
-    ```yaml
-    vars:
-      stage: dev
-
-    components:
-      terraform:
-        vpc:
-          vars:
-            cidr_block: "10.0.0.0/16"
-            environment: dev
-            enable_dns_hostnames: true
-        database:
-          vars:
-            instance_class: db.t3.micro
-            allocated_storage: 20
-    ```
-    </File>
+    <EmbedFile filePath="examples/native-terraform/stacks/prod.yaml" />
 
     Native YAML lets you define variables directly in stacks, enabling deep merging across inherited files—no duplication between environments.
   </TabItem>
@@ -354,11 +317,10 @@ components:
 
 <File title="stacks/dev.yaml">
 ```yaml
+name: dev
+
 import:
   - _defaults
-
-vars:
-  stage: dev
 
 components:
   terraform:
@@ -371,11 +333,10 @@ components:
 
 <File title="stacks/prod.yaml">
 ```yaml
+name: prod
+
 import:
   - _defaults
-
-vars:
-  stage: prod
 
 components:
   terraform:
@@ -425,6 +386,8 @@ Stop managing backend config in every directory:
 
 <File title="stacks/dev.yaml">
 ```yaml
+name: dev
+
 terraform:
   backend_type: s3
   backend:
@@ -432,9 +395,6 @@ terraform:
       bucket: my-terraform-state
       key: "terraform.tfstate"
       region: us-east-1
-
-vars:
-  stage: dev
 
 components:
   terraform:
@@ -515,179 +475,39 @@ components:
 
 ---
 
-## Real Example: Hello World Migration
+## Real Example: VPC Migration
 
-Let's migrate a simple "Hello World" Terraform configuration that creates an S3 bucket.
+Let's walk through a complete migration. The full example is in [`examples/native-terraform/`](https://github.com/cloudposse/atmos/tree/main/examples/native-terraform).
 
 ### Before (Native Terraform)
 
-<Tabs>
-  <TabItem value="structure" label="Structure" default>
-    ```plaintext
-    hello-world/
-      dev/
-        main.tf
-        variables.tf
-        outputs.tf
-        terraform.tfvars
-        backend.tf
-      prod/
-        main.tf
-        variables.tf
-        outputs.tf
-        terraform.tfvars
-        backend.tf
-    ```
-  </TabItem>
-  <TabItem value="main" label="main.tf">
-    ```hcl
-    resource "aws_s3_bucket" "hello" {
-      bucket = var.bucket_name
+```plaintext
+my-infrastructure/
+  terraform/vpc/
+    main.tf
+    variables.tf
+    outputs.tf
+    envs/
+      dev.tfvars
+      prod.tfvars
+```
 
-      tags = {
-        Environment = var.environment
-        Project     = "hello-world"
-      }
-    }
-    ```
-  </TabItem>
-  <TabItem value="variables" label="variables.tf">
-    ```hcl
-    variable "bucket_name" {
-      type        = string
-      description = "Name of the S3 bucket"
-    }
+Your existing `.tfvars` files look like this:
 
-    variable "environment" {
-      type        = string
-      description = "Environment name"
-    }
-    ```
-  </TabItem>
-  <TabItem value="tfvars" label="terraform.tfvars">
-    ```hcl
-    bucket_name = "hello-world-dev-bucket"
-    environment = "dev"
-    ```
-  </TabItem>
-  <TabItem value="backend" label="backend.tf">
-    ```hcl
-    terraform {
-      backend "s3" {
-        bucket         = "my-terraform-state"
-        key            = "dev/hello-world/terraform.tfstate"
-        region         = "us-east-1"
-      }
-    }
-    ```
-  </TabItem>
-</Tabs>
+<EmbedFile filePath="examples/native-terraform/components/terraform/vpc/envs/dev.tfvars" language="hcl" />
 
 **Commands:**
 ```bash
-cd hello-world/dev
-terraform init
-terraform plan -var-file=terraform.tfvars
-terraform apply -var-file=terraform.tfvars
+cd terraform/vpc
+terraform plan -var-file=envs/dev.tfvars
+terraform apply -var-file=envs/dev.tfvars
 ```
 
 ### After (Atmos)
 
-<Tabs>
-  <TabItem value="structure" label="Structure" default>
-    ```plaintext
-    atmos.yaml
-    components/terraform/hello-world/
-      main.tf          # Same code, no changes
-      variables.tf     # Same code, no changes
-      outputs.tf       # Same code, no changes
-    stacks/
-      dev.yaml
-      prod.yaml
-    ```
-  </TabItem>
-  <TabItem value="atmos" label="atmos.yaml">
-    ```yaml
-    components:
-      terraform:
-        base_path: "components/terraform"
+Your Terraform code stays the same — you just move it and add stack configs:
 
-    stacks:
-      base_path: "stacks"
-      name_template: "{{ .vars.stage }}"
-    ```
-  </TabItem>
-  <TabItem value="dev" label="stacks/dev.yaml">
-    ```yaml
-    terraform:
-      backend_type: s3
-      backend:
-        s3:
-          bucket: my-terraform-state
-          key: "dev/hello-world/terraform.tfstate"
-          region: us-east-1
-
-    vars:
-      stage: dev
-
-    components:
-      terraform:
-        hello-world:
-          vars:
-            bucket_name: "hello-world-dev-bucket"
-            environment: dev
-    ```
-  </TabItem>
-  <TabItem value="prod" label="stacks/prod.yaml">
-    ```yaml
-    terraform:
-      backend_type: s3
-      backend:
-        s3:
-          bucket: my-terraform-state
-          key: "prod/hello-world/terraform.tfstate"
-          region: us-east-1
-
-    vars:
-      stage: prod
-
-    components:
-      terraform:
-        hello-world:
-          vars:
-            bucket_name: "hello-world-prod-bucket"
-            environment: prod
-    ```
-  </TabItem>
-  <TabItem value="include" label="Using !include">
-    Want to keep using your existing `.tfvars` files? Use `!include`:
-
-    ```yaml
-    # stacks/dev.yaml
-    terraform:
-      backend_type: s3
-      backend:
-        s3:
-          bucket: my-terraform-state
-          key: "dev/hello-world/terraform.tfstate"
-          region: us-east-1
-
-    vars:
-      stage: dev
-
-    components:
-      terraform:
-        hello-world:
-          vars: !include ../legacy/dev/terraform.tfvars
-    ```
-  </TabItem>
-</Tabs>
-
-**Commands:**
-```bash
-atmos terraform plan hello-world -s dev
-atmos terraform apply hello-world -s dev
-```
+<EmbedExample example="native-terraform" title="Native Terraform Migration" />
 
 ---
 

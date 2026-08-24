@@ -1,0 +1,77 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.65rem 0.9rem;
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.2s ease;
+}
+
+.row:hover {
+  background: rgba(30, 91, 184, 0.04);
+  text-decoration: none;
+}
+
+:global(html[data-theme='dark']) .row:hover {
+  background: rgba(83, 140, 233, 0.06);
+}
+
+.rowCast {
+  flex: 0 0 auto;
+  width: 216px;
+  min-width: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  /* Thumbnail is decorative; the whole row is the clickable link. */
+  pointer-events: none;
+}
+
+.rowBody {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rowTitle {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ifm-heading-color);
+}
+
+.rowDescription {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--ifm-color-emphasis-600);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.rowArrow {
+  flex: 0 0 auto;
+  align-self: center;
+  font-size: 1.1rem;
+  color: var(--ifm-color-primary);
+}
+
+@media screen and (max-width: 640px) {
+  .row {
+    flex-wrap: wrap;
+  }
+
+  .rowCast {
+    width: 100%;
+    max-width: 264px;
+  }
+}

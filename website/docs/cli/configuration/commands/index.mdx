@@ -1,0 +1,101 @@
+---
+title: Custom Commands
+sidebar_label: commands
+sidebar_class_name: command
+id: commands
+description: Use the `atmos.yaml` to configure any number of custom commands you want to add to the Atmos CLI.
+---
+
+import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
+
+<Intro>
+Atmos can be extended to support any number of custom CLI commands. Custom commands are exposed through the `atmos` CLI and appear in `atmos help`. They are a great way to centralize how operational tools are run and improve developer experience.
+</Intro>
+
+<DemoVideo id="commands" title="Atmos Custom Commands" showCaption={false} />
+
+One great way to use custom commands is to tie all your miscellaneous scripts into one consistent CLI interface. Then you can kiss those ugly, inconsistent arguments to bash scripts goodbye — just wire up the commands in `atmos` to call the script. Developers can then run `atmos help` and discover every available command.
+
+## Simple Example
+
+Adding the following to `atmos.yaml` introduces a new `hello` command:
+
+```yaml
+# Custom CLI commands
+commands:
+  - name: hello
+    description: This command says Hello world
+    steps:
+      - "echo Hello world!"
+```
+
+Run it like this:
+
+```shell
+atmos hello
+```
+
+## The `commands` section
+
+`commands` is a list of command objects. Each entry defines one custom command (which can
+itself contain nested [`commands`](/cli/configuration/commands/commands) for subcommands).
+See the [`command`](/cli/configuration/commands/command) reference for every key a command
+supports.
+
+```yaml
+commands:
+  - name: hello
+    description: This command says Hello world
+    steps:
+      - "echo Hello world!"
+  - name: greet
+    description: This command greets the provided name
+    arguments:
+      - name: name
+        description: Name to greet
+        default: John Doe
+    steps:
+      - "echo Hello {{ .Arguments.name }}!"
+```
+
+## Reference
+
+<dl>
+  <dt>[`command`](/cli/configuration/commands/command)</dt>
+  <dd>The structure of a single custom command and all of its keys.</dd>
+
+  <dt>[`arguments`](/cli/configuration/commands/arguments)</dt>
+  <dd>Positional arguments, including trailing arguments and typed (component/stack) arguments.</dd>
+
+  <dt>[`flags`](/cli/configuration/commands/flags)</dt>
+  <dd>Long and short flags, boolean flags, defaults, and semantic types.</dd>
+
+  <dt>[`env`](/cli/configuration/commands/env)</dt>
+  <dd>Environment variables exported to the command's steps.</dd>
+
+  <dt>[`steps`](/cli/configuration/commands/steps)</dt>
+  <dd>What the command runs. Custom commands support the same step types as [workflows](/workflows).</dd>
+
+  <dt>[`component`](/cli/configuration/commands/component)</dt>
+  <dd>Custom component types that bring stack configuration into a command.</dd>
+
+  <dt>[`dependencies`](/cli/configuration/commands/dependencies)</dt>
+  <dd>Tool dependencies installed via the toolchain before the command runs.</dd>
+
+  <dt>[`working_directory`](/cli/configuration/commands/working-directory)</dt>
+  <dd>The directory the command's steps execute in.</dd>
+
+  <dt>[`identity`](/cli/configuration/commands/identity)</dt>
+  <dd>Authenticate an Atmos auth identity before the command runs.</dd>
+
+  <dt>[`commands`](/cli/configuration/commands/commands)</dt>
+  <dd>Nested subcommands for grouping related commands.</dd>
+</dl>
+
+## Try It
+
+Explore working examples that demonstrate custom commands in action.
+
+<EmbedExample example="custom-commands" />

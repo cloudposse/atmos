@@ -1,0 +1,100 @@
+commands:
+  - name: casts generate examples toolchain demo-convert
+    description: Regenerate the Toolchain example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: prepare-tools
+        working_directory: &toolchain_fixture "../../.context/cast-fixtures/toolchain"
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: atmos --logs-level=Off toolchain install
+      - type: cast
+        name: demo-convert
+        working_directory: *toolchain_fixture
+        title: atmos toolchain demo
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/toolchain/demo-convert.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# tool versions are pinned in .tool-versions and resolved from registries"
+          - type: simulate
+            text: &toolchain_list_cmd atmos toolchain list
+          - type: shell
+            name: toolchain-list
+            duration: 450ms
+            interval: 750ms
+            command: *toolchain_list_cmd
+          - type: simulate
+            text: "# custom commands can pin exact tool versions"
+          - type: simulate
+            text: &demo_pinned_cmd atmos demo pinned
+          - type: shell
+            name: demo-pinned
+            duration: 450ms
+            interval: 750ms
+            command: *demo_pinned_cmd
+          - type: simulate
+            text: "# or accept semver ranges"
+          - type: simulate
+            text: &demo_constrained_cmd atmos demo constrained
+          - type: shell
+            name: demo-constrained
+            duration: 450ms
+            interval: 750ms
+            command: *demo_constrained_cmd
+          - type: simulate
+            text: "# and compose toolchain-managed tools into pipelines"
+          - type: simulate
+            text: &demo_convert_cmd atmos demo convert
+          - type: shell
+            name: demo-convert
+            duration: 450ms
+            interval: 750ms
+            command: *demo_convert_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples toolchain demo-convert
+  - name: casts validate examples toolchain demo-convert
+    description: Validate the Toolchain example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/toolchain/demo-convert.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "# tool versions are pinned in .tool-versions",
+              "atmos toolchain list",
+              "jq",
+              "yq",
+              "Using pinned jq 1.7.1",
+              "Converting demo.yaml to formatted JSON",
+              "name",
+              "atmos",
+              "features",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"demo-convert cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[toolchain-list]", "[demo-pinned]", "[demo-constrained]", "[demo-convert]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"demo-convert cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

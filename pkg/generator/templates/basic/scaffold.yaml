@@ -1,0 +1,37 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: basic
+  description: Minimal cloud-agnostic Atmos project layout — atmos.yaml, stacks, and components
+  author: Cloud Posse
+  version: 1.0.0
+spec:
+  fields:
+    - name: project_name
+      label: Project name
+      description: Name of the project (lowercase letters, numbers, and hyphens)
+      type: input
+      default: my-project
+      required: true
+      validation:
+        pattern: "^[a-z][a-z0-9-]{1,30}$"
+        message: "Project name must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens (2-31 characters)."
+
+    - name: environments
+      label: Which environments do you need?
+      description: Select the stacks to generate — each gets its own dev/staging/prod-style config
+      type: multiselect
+      options: [dev, staging, prod]
+      default: [dev]
+      required: true
+
+  # Only the selected environments' stacks are generated; the rest are
+  # skipped. stacks/_defaults.yaml (shared by all stacks) is not listed here
+  # and always generates.
+  files:
+    - path: stacks/dev.yaml
+      when: "'dev' in answers.environments"
+    - path: stacks/staging.yaml
+      when: "'staging' in answers.environments"
+    - path: stacks/prod.yaml
+      when: "'prod' in answers.environments"

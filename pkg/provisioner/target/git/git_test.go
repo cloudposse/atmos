@@ -1,0 +1,752 @@
+package git
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"os/user"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
+	cockroacherrors "github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/provisioner/target"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// errEnvProvider is a stub IdentityEnvironmentProvider that always fails, used
+// to drive Deliver's ComposeEnvironment error branch.
+type errEnvProvider struct {
+	err error
+}
+
+func (e *errEnvProvider) EnsureIdentityEnvironment(_ context.Context, _ string) (map[string]string, error) {
+	return nil, e.err
+}
+
+func TestParseConfig(t *testing.T) {
+	block := map[string]any{
+		"repository": "deployments",
+		"path":       "clusters/dev/argocd",
+		"split":      false,
+		"auth":       map[string]any{"identity": "platform-admin"},
+		"commit": map[string]any{
+			"message": "Render argocd",
+			"signing": "always",
+		},
+		"pull_request": map[string]any{"enabled": true},
+	}
+	cfg, err := parseConfig(block)
+	require.NoError(t, err)
+	assert.Equal(t, "deployments", cfg.Repository)
+	assert.Equal(t, "clusters/dev/argocd", cfg.Path)
+	assert.Equal(t, "platform-admin", cfg.Identity)
+	assert.Equal(t, "Render argocd", cfg.CommitMessage)
+	assert.Equal(t, "always", cfg.Signing)
+	assert.True(t, cfg.PullRequest)
+	require.NotNil(t, cfg.Split)
+	assert.False(t, *cfg.Split)
+}
+
+func TestParseConfigEmpty(t *testing.T) {
+	cfg, err := parseConfig(map[string]any{})
+	require.NoError(t, err)
+	assert.Empty(t, cfg.Repository)
+	assert.Empty(t, cfg.Identity)
+	assert.False(t, cfg.PullRequest)
+	assert.Nil(t, cfg.Split, "split is unset until the target block explicitly configures it")
+}
+
+func TestParseConfigRejectsNonBoolSplit(t *testing.T) {
+	_, err := parseConfig(map[string]any{
+		"repository": "deployments",
+		"path":       "clusters/dev/argocd",
+		"split":      "yes",
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitTargetSplitInvalid)
+}
+
+func TestResolveSplit(t *testing.T) {
+	trueVal, falseVal := true, false
+
+	tests := []struct {
+		name  string
+		split *bool
+		path  string
+		want  bool
+	}{
+		{"explicit true overrides manifest-looking path", &trueVal, filepath.Join("kustomize", "overlays", "prod", "kustomization.yaml"), true},
+		{"explicit false overrides directory-looking path", &falseVal, filepath.Join("clusters", "dev"), false},
+		{"unset with .yaml extension infers single-file mode", nil, filepath.Join("kustomize", "overlays", "prod", "kustomization.yaml"), false},
+		{"unset with .yml extension infers single-file mode", nil, filepath.Join("overlays", "prod", "patch.yml"), false},
+		{"unset with .json extension infers single-file mode", nil, filepath.Join("overlays", "prod", "patch.JSON"), false},
+		{"unset with no extension preserves directory default", nil, filepath.Join("clusters", "dev", "argocd"), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, resolveSplit(tt.split, tt.path))
+		})
+	}
+}
+
+func TestDeliverPullRequestNotSupported(t *testing.T) {
+	g := &gitProvisioner{}
+	err := g.Deliver(context.Background(), &target.DeliverInput{
+		AtmosConfig:  &schema.AtmosConfiguration{},
+		TargetName:   "deployment-repo",
+		TargetConfig: map[string]any{"repository": "deployments", "pull_request": map[string]any{"enabled": true}},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitPullRequestNotSupported)
+}
+
+func TestDeliverRepositoryNotFound(t *testing.T) {
+	g := &gitProvisioner{}
+	err := g.Deliver(context.Background(), &target.DeliverInput{
+		AtmosConfig:  &schema.AtmosConfiguration{}, // no git.repositories configured.
+		TargetName:   "deployment-repo",
+		TargetConfig: map[string]any{"repository": "missing"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitRepositoryNotFound)
+}
+
+// TestDeliverRejectsNonBoolSplit verifies Deliver fails closed on a
+// config parse error (a typo'd, non-bool "split" value) instead of silently
+// falling through to repository resolution with a zero-value config.
+func TestDeliverRejectsNonBoolSplit(t *testing.T) {
+	g := &gitProvisioner{}
+	err := g.Deliver(context.Background(), &target.DeliverInput{
+		AtmosConfig:  &schema.AtmosConfiguration{},
+		TargetName:   "deployment-repo",
+		TargetConfig: map[string]any{"repository": "deployments", "split": "yes"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitTargetSplitInvalid)
+	// Must fail before repository resolution -- a repository-not-found error
+	// would mean the parse error was silently swallowed.
+	assert.NotErrorIs(t, err, errUtils.ErrGitRepositoryNotFound)
+}
+
+// TestFetchRejectsNonBoolSplit mirrors TestDeliverRejectsNonBoolSplit for the
+// read-only Fetch path: a typo'd, non-bool "split" value must fail closed
+// before repository resolution is even attempted.
+func TestFetchRejectsNonBoolSplit(t *testing.T) {
+	g := &gitProvisioner{}
+	_, err := g.Fetch(context.Background(), &target.FetchInput{
+		AtmosConfig:  &schema.AtmosConfiguration{},
+		TargetName:   "deployment-repo",
+		TargetConfig: map[string]any{"repository": "deployments", "split": "yes"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitTargetSplitInvalid)
+	assert.NotErrorIs(t, err, errUtils.ErrGitRepositoryNotFound)
+}
+
+func TestWriteArtifactReplacesManagedSubtree(t *testing.T) {
+	workdir := t.TempDir()
+	path := "clusters/dev/argocd"
+
+	// First write: two files plus a stale file that should be removed on rewrite.
+	first := target.ProvisionArtifact{Files: map[string][]byte{
+		"namespace.yaml":  []byte("kind: Namespace\n"),
+		"deployment.yaml": []byte("kind: Deployment\n"),
+		"old/stale.yaml":  []byte("stale\n"),
+	}}
+	require.NoError(t, writeArtifact(workdir, path, &first, true))
+	assert.FileExists(t, filepath.Join(workdir, "clusters", "dev", "argocd", "namespace.yaml"))
+	assert.FileExists(t, filepath.Join(workdir, "clusters", "dev", "argocd", "old", "stale.yaml"))
+
+	// Second write without the stale file: managed subtree is replaced, stale file gone.
+	second := target.ProvisionArtifact{Files: map[string][]byte{
+		"namespace.yaml": []byte("kind: Namespace\n"),
+	}}
+	require.NoError(t, writeArtifact(workdir, path, &second, true))
+	assert.FileExists(t, filepath.Join(workdir, "clusters", "dev", "argocd", "namespace.yaml"))
+	assert.NoFileExists(t, filepath.Join(workdir, "clusters", "dev", "argocd", "old", "stale.yaml"))
+	assert.NoFileExists(t, filepath.Join(workdir, "clusters", "dev", "argocd", "deployment.yaml"))
+}
+
+func TestReadManagedTreeRoundTrip(t *testing.T) {
+	workdir := t.TempDir()
+	path := "clusters/dev/argocd"
+
+	written := target.ProvisionArtifact{Files: map[string][]byte{
+		"namespace.yaml":      []byte("kind: Namespace\n"),
+		"app/deployment.yaml": []byte("kind: Deployment\n"),
+	}}
+	require.NoError(t, writeArtifact(workdir, path, &written, true))
+
+	got, err := readManagedTree(workdir, path)
+	require.NoError(t, err)
+	assert.Equal(t, "kind: Namespace\n", string(got["namespace.yaml"]))
+	// Nested files use forward-slash keys regardless of OS.
+	assert.Equal(t, "kind: Deployment\n", string(got["app/deployment.yaml"]))
+	assert.Len(t, got, 2)
+}
+
+func TestReadManagedTreeMissingPathIsEmpty(t *testing.T) {
+	workdir := t.TempDir()
+
+	got, err := readManagedTree(workdir, filepath.Join("clusters", "absent"))
+	require.NoError(t, err)
+	assert.Empty(t, got, "an unpublished path must be an empty baseline, not an error")
+}
+
+func TestReadManagedTreeSingleFile(t *testing.T) {
+	workdir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(workdir, "clusters", "dev"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "clusters", "dev", "rendered.yaml"), []byte("kind: ConfigMap\n"), 0o600))
+
+	got, err := readManagedTree(workdir, filepath.Join("clusters", "dev", "rendered.yaml"))
+	require.NoError(t, err)
+	assert.Equal(t, map[string][]byte{"rendered.yaml": []byte("kind: ConfigMap\n")}, got)
+}
+
+func TestWriteArtifactRejectsPathEscape(t *testing.T) {
+	workdir := t.TempDir()
+	err := writeArtifact(workdir, "../escape", &target.ProvisionArtifact{Files: map[string][]byte{"x.yaml": []byte("x")}}, true)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitPathEscapesWorktree)
+}
+
+func TestWriteArtifactRejectsRootPath(t *testing.T) {
+	for _, path := range []string{"", ".", "  ", " . ", "./", "a/..", "./a/.."} {
+		workdir := t.TempDir()
+		// A sentinel file at the worktree root must survive: a root path must be
+		// rejected before os.RemoveAll could wipe the repository (including .git).
+		sentinel := filepath.Join(workdir, ".git")
+		require.NoError(t, os.WriteFile(sentinel, []byte("gitdir"), 0o600))
+
+		err := writeArtifact(workdir, path, &target.ProvisionArtifact{Files: map[string][]byte{"x.yaml": []byte("x")}}, true)
+		require.ErrorIs(t, err, errUtils.ErrGitTargetPathInvalid)
+		assert.FileExists(t, sentinel)
+	}
+}
+
+func TestIdentityFor(t *testing.T) {
+	resolved := &atmosgit.ResolvedRepository{Identity: "repo-default"}
+
+	// Target override wins over the repository default.
+	override := identityFor(&config{Identity: "target-override"}, resolved)
+	assert.Equal(t, "target-override", override)
+
+	// Empty target identity falls back to the repository default.
+	fallback := identityFor(&config{}, resolved)
+	assert.Equal(t, "repo-default", fallback)
+}
+
+func TestSigningMode(t *testing.T) {
+	resolved := &atmosgit.ResolvedRepository{Signing: atmosgit.SigningMode("auto")}
+
+	// Non-empty target signing overrides the repository default.
+	override := signingMode(&config{Signing: "always"}, resolved)
+	assert.Equal(t, atmosgit.SigningMode("always"), override)
+
+	never := signingMode(&config{Signing: "never"}, resolved)
+	assert.Equal(t, atmosgit.SigningMode("never"), never)
+
+	// Empty target signing falls back to the repository default.
+	fallback := signingMode(&config{}, resolved)
+	assert.Equal(t, atmosgit.SigningMode("auto"), fallback)
+}
+
+func TestTrailersSortedKeysAndStringField(t *testing.T) {
+	assert.Equal(t, map[string]string{}, trailers(&target.ProvisionArtifact{}))
+	assert.Equal(t, map[string]string{
+		"Atmos-Stack":     "dev",
+		"Atmos-Component": "app",
+	}, trailers(&target.ProvisionArtifact{
+		Metadata: target.ArtifactMetadata{Stack: "dev", Component: "app"},
+	}))
+
+	assert.Equal(t, []string{"a.yaml", "b.yaml", "nested/c.yaml"}, sortedFileKeys(map[string][]byte{
+		"b.yaml":        []byte("b"),
+		"nested/c.yaml": []byte("c"),
+		"a.yaml":        []byte("a"),
+	}))
+	assert.Equal(t, "value", stringField(map[string]any{"key": "value"}, "key"))
+	assert.Empty(t, stringField(map[string]any{"key": 1}, "key"))
+	assert.Empty(t, stringField(nil, "missing"))
+}
+
+func TestWriteArtifactRejectsFilePathEscape(t *testing.T) {
+	workdir := t.TempDir()
+	// A managed path is valid, but an artifact file key escapes the worktree:
+	// the per-file ValidateRepoRelativePath must reject it.
+	err := writeArtifact(workdir, "clusters/dev", &target.ProvisionArtifact{Files: map[string][]byte{
+		"../../../escape.yaml": []byte("x"),
+	}}, true)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitPathEscapesWorktree)
+}
+
+func TestWriteArtifactSingleFileMode(t *testing.T) {
+	workdir := t.TempDir()
+	path := filepath.Join("kustomize", "overlays", "prod", "kustomization.yaml")
+
+	artifact := &target.ProvisionArtifact{Files: map[string][]byte{
+		"001_kustomize.config.k8s.io_v1alpha1_Component_cert-manager.yaml": []byte("apiVersion: kustomize.config.k8s.io/v1alpha1\nkind: Component\n"),
+	}}
+	require.NoError(t, writeArtifact(workdir, path, artifact, false))
+
+	abs := filepath.Join(workdir, "kustomize", "overlays", "prod", "kustomization.yaml")
+	info, err := os.Stat(abs)
+	require.NoError(t, err)
+	assert.False(t, info.IsDir(), "path must be written as a file, not a directory")
+
+	got, err := os.ReadFile(abs)
+	require.NoError(t, err)
+	assert.Equal(t, "apiVersion: kustomize.config.k8s.io/v1alpha1\nkind: Component\n", string(got))
+}
+
+func TestWriteArtifactSingleFileModeMergesMultipleDocuments(t *testing.T) {
+	workdir := t.TempDir()
+	path := filepath.Join("clusters", "dev", "manifest.yaml")
+
+	artifact := &target.ProvisionArtifact{Files: map[string][]byte{
+		"a.yaml": []byte("kind: Namespace\n"),
+		"b.yaml": []byte("kind: Deployment\n"),
+	}}
+	require.NoError(t, writeArtifact(workdir, path, artifact, false))
+
+	got, err := os.ReadFile(filepath.Join(workdir, "clusters", "dev", "manifest.yaml"))
+	require.NoError(t, err)
+	assert.Equal(t, "kind: Namespace\n---\nkind: Deployment\n", string(got))
+}
+
+func TestWriteArtifactSingleFileModeReplacesExistingDirectory(t *testing.T) {
+	workdir := t.TempDir()
+	path := filepath.Join("kustomize", "overlays", "prod", "kustomization.yaml")
+
+	// Simulate the reported bug's on-disk state: a stale directory left over from a
+	// prior split=true delivery to the same path.
+	stale := filepath.Join(workdir, "kustomize", "overlays", "prod", "kustomization.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Join(stale, "001_stale.yaml"), 0o755))
+
+	artifact := &target.ProvisionArtifact{Files: map[string][]byte{
+		"001_kustomize.config.k8s.io_v1alpha1_Component.yaml": []byte("kind: Component\n"),
+	}}
+	require.NoError(t, writeArtifact(workdir, path, artifact, false))
+
+	info, err := os.Stat(stale)
+	require.NoError(t, err)
+	assert.False(t, info.IsDir(), "the stale directory must be replaced by a single file")
+}
+
+// TestWriteArtifactDirectoryModeReplacesExistingFile mirrors
+// TestWriteArtifactSingleFileModeReplacesExistingDirectory in the other
+// direction: a stale single file left over from a prior split=false delivery
+// to the same path is silently replaced when split flips to true.
+func TestWriteArtifactDirectoryModeReplacesExistingFile(t *testing.T) {
+	workdir := t.TempDir()
+	path := filepath.Join("clusters", "dev", "demo")
+
+	stale := filepath.Join(workdir, "clusters", "dev", "demo")
+	require.NoError(t, os.MkdirAll(filepath.Dir(stale), 0o755))
+	require.NoError(t, os.WriteFile(stale, []byte("stale single file\n"), 0o600))
+
+	artifact := &target.ProvisionArtifact{Files: map[string][]byte{
+		"001_v1_Namespace.yaml": []byte("kind: Namespace\n"),
+	}}
+	require.NoError(t, writeArtifact(workdir, path, artifact, true))
+
+	info, err := os.Stat(stale)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir(), "the stale file must be replaced by a directory")
+}
+
+// TestWarnOnSplitModeFlip exercises warnOnSplitModeFlip's branches directly.
+// Note: ui.Warningf writes to the process's real stderr formatter (no test
+// seam in this codebase, see pkg/degradation for the same convention), so
+// these assert the function doesn't panic across every existing-path shape
+// rather than capturing the warning text.
+func TestWarnOnSplitModeFlip(t *testing.T) {
+	t.Run("no existing path", func(t *testing.T) {
+		workdir := t.TempDir()
+		assert.NotPanics(t, func() {
+			warnOnSplitModeFlip(filepath.Join(workdir, "missing"), "missing", true)
+		})
+	})
+
+	t.Run("directory replaced by file (mode flip)", func(t *testing.T) {
+		workdir := t.TempDir()
+		dir := filepath.Join(workdir, "clusters", "dev")
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		assert.NotPanics(t, func() {
+			warnOnSplitModeFlip(dir, "clusters/dev", false)
+		})
+	})
+
+	t.Run("file replaced by directory (mode flip)", func(t *testing.T) {
+		workdir := t.TempDir()
+		file := filepath.Join(workdir, "kustomization.yaml")
+		require.NoError(t, os.WriteFile(file, []byte("kind: Kustomization\n"), 0o600))
+		assert.NotPanics(t, func() {
+			warnOnSplitModeFlip(file, "kustomization.yaml", true)
+		})
+	})
+
+	t.Run("directory replaced by directory (no flip)", func(t *testing.T) {
+		workdir := t.TempDir()
+		dir := filepath.Join(workdir, "clusters", "dev")
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		assert.NotPanics(t, func() {
+			warnOnSplitModeFlip(dir, "clusters/dev", true)
+		})
+	})
+
+	t.Run("file replaced by file (no flip)", func(t *testing.T) {
+		workdir := t.TempDir()
+		file := filepath.Join(workdir, "kustomization.yaml")
+		require.NoError(t, os.WriteFile(file, []byte("kind: Kustomization\n"), 0o600))
+		assert.NotPanics(t, func() {
+			warnOnSplitModeFlip(file, "kustomization.yaml", false)
+		})
+	})
+}
+
+func TestWriteArtifactWriteFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file-mode permissions behave differently on Windows")
+	}
+	if currentUser, userErr := user.Current(); userErr == nil && (currentUser.Uid == "0" || currentUser.Username == "root") {
+		t.Skip("running as root ignores filesystem permissions")
+	}
+
+	workdir := t.TempDir()
+	// Make a read-only managed-path parent so MkdirAll/WriteFile under it fail.
+	managed := filepath.Join(workdir, "clusters")
+	require.NoError(t, os.Mkdir(managed, 0o555))
+	t.Cleanup(func() {
+		// Restore write perms so t.TempDir cleanup can remove the tree.
+		_ = os.Chmod(managed, 0o755)
+	})
+
+	err := writeArtifact(workdir, filepath.Join("clusters", "dev"), &target.ProvisionArtifact{Files: map[string][]byte{
+		"namespace.yaml": []byte("kind: Namespace\n"),
+	}}, true)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitArtifactWrite)
+}
+
+func TestWriteArtifactSingleFileModeWriteFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file-mode permissions behave differently on Windows")
+	}
+	if currentUser, userErr := user.Current(); userErr == nil && (currentUser.Uid == "0" || currentUser.Username == "root") {
+		t.Skip("running as root ignores filesystem permissions")
+	}
+
+	workdir := t.TempDir()
+	// Make a read-only managed-path parent so writeSingleArtifactFile's
+	// MkdirAll/WriteFile under it fail.
+	managed := filepath.Join(workdir, "clusters")
+	require.NoError(t, os.Mkdir(managed, 0o555))
+	t.Cleanup(func() {
+		_ = os.Chmod(managed, 0o755)
+	})
+
+	err := writeArtifact(workdir, filepath.Join("clusters", "dev", "manifest.yaml"), &target.ProvisionArtifact{Files: map[string][]byte{
+		"namespace.yaml": []byte("kind: Namespace\n"),
+	}}, false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitArtifactWrite)
+}
+
+func TestDeliverProviderNotFound(t *testing.T) {
+	g := &gitProvisioner{}
+	atmosConfig := &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"deployments": {
+					URI:      "https://example.invalid/repo.git",
+					Branch:   "main",
+					Provider: "bogus", // Unregistered provider drives NewProvider's error path.
+				},
+			},
+		},
+	}
+	err := g.Deliver(context.Background(), &target.DeliverInput{
+		AtmosConfig:  atmosConfig,
+		TargetName:   "deployment-repo",
+		TargetConfig: map[string]any{"repository": "deployments", "path": "clusters/dev"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitProviderNotFound)
+}
+
+func TestDeliverComposeEnvironmentError(t *testing.T) {
+	g := &gitProvisioner{}
+	atmosConfig := &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"deployments": {
+					URI:    "https://example.invalid/repo.git",
+					Branch: "main",
+				},
+			},
+		},
+	}
+	sentinel := errors.New("identity environment failed")
+	err := g.Deliver(context.Background(), &target.DeliverInput{
+		AtmosConfig: atmosConfig,
+		TargetName:  "deployment-repo",
+		// auth.identity is non-empty, so ComposeEnvironment invokes EnvProvider.
+		TargetConfig: map[string]any{
+			"repository": "deployments",
+			"path":       "clusters/dev",
+			"auth":       map[string]any{"identity": "platform-admin"},
+		},
+		EnvProvider: &errEnvProvider{err: sentinel},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sentinel)
+}
+
+// isolatedGitEnv configures the process env so the developer's gitconfig cannot
+// leak in and "main" is the deterministic default branch.
+func isolatedGitEnv(t *testing.T) {
+	t.Helper()
+	globalCfg := filepath.Join(t.TempDir(), "gitconfig")
+	cfg := "[init]\n\tdefaultBranch = main\n[user]\n\tname = Test User\n\temail = test@example.com\n"
+	require.NoError(t, os.WriteFile(globalCfg, []byte(cfg), 0o600))
+	t.Setenv("GIT_CONFIG_GLOBAL", globalCfg)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_TERMINAL_PROMPT", "0")
+}
+
+func gitCmd(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	result, err := atmosgit.NewExecRunner().Run(context.Background(), "git", args, atmosgit.RunOptions{Dir: dir, Env: os.Environ()})
+	require.NoError(t, err, "git %v: %s", args, result.StderrTail)
+	return result.Stdout
+}
+
+// seedBareRepo creates a bare repo with an initial commit on main and returns its path.
+func seedBareRepo(t *testing.T, root string) string {
+	t.Helper()
+	bare := filepath.Join(root, "origin.git")
+	gitCmd(t, "", "init", "--bare", bare)
+	gitCmd(t, bare, "symbolic-ref", "HEAD", "refs/heads/main")
+
+	seed := filepath.Join(root, "seed")
+	gitCmd(t, "", "clone", bare, seed)
+	require.NoError(t, os.WriteFile(filepath.Join(seed, "README.md"), []byte("# deployments\n"), 0o600))
+	gitCmd(t, seed, "add", "-A")
+	gitCmd(t, seed, "commit", "-m", "init")
+	gitCmd(t, seed, "push", "origin", "main")
+	return bare
+}
+
+func TestDeliverIntegrationCommitError(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git binary not available")
+	}
+	isolatedGitEnv(t)
+
+	root := t.TempDir()
+	bare := seedBareRepo(t, root)
+
+	// Pre-clone into the workdir and leave a dirty file OUTSIDE the managed path.
+	// reconcile fast-forwards the existing clone, writeArtifact writes the managed
+	// path, and Commit's path-scoped safety rule then rejects the unmanaged change.
+	workdir := filepath.Join(root, "workdir")
+	gitCmd(t, "", "clone", bare, workdir)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "README.md"), []byte("# tampered\n"), 0o600))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"deployments": {
+					URI:     bare,
+					Branch:  "main",
+					Workdir: workdir,
+				},
+			},
+		},
+	}
+	in := &target.DeliverInput{
+		AtmosConfig: atmosConfig,
+		TargetName:  "deployment-repo",
+		TargetConfig: map[string]any{
+			"repository": "deployments",
+			"path":       "clusters/dev/argocd",
+			"commit":     map[string]any{"message": "Render argocd", "signing": "never"},
+		},
+		Artifact: target.ProvisionArtifact{
+			Kind:   target.ArtifactKindKubernetesManifests,
+			Format: target.FormatYAML,
+			Files:  map[string][]byte{"namespace.yaml": []byte("apiVersion: v1\nkind: Namespace\n")},
+		},
+	}
+
+	g := &gitProvisioner{}
+	err := g.Deliver(context.Background(), in)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitDirtyUnmanagedFiles)
+}
+
+// stubCloneFailureProvider is a deterministic atmosgit.Provider double whose Clone always
+// fails with a representative git error and whose SwapStderr writes representative stderr
+// into the caller-supplied writer. It reproduces exactly what a real git clone against a
+// branch with no commits yet produces (a missing remote branch), without invoking the git
+// binary or touching the filesystem/network.
+type stubCloneFailureProvider struct{}
+
+func (s *stubCloneFailureProvider) Init(context.Context, *atmosgit.InitOptions) error { return nil }
+
+func (s *stubCloneFailureProvider) Clone(context.Context, *atmosgit.CloneOptions) error {
+	return fmt.Errorf("%w: git clone (exit 128)", errUtils.ErrGitCommandExited)
+}
+
+func (s *stubCloneFailureProvider) Pull(context.Context, *atmosgit.PullOptions) error { return nil }
+
+func (s *stubCloneFailureProvider) Status(context.Context, *atmosgit.StatusOptions) (*atmosgit.StatusResult, error) {
+	return &atmosgit.StatusResult{}, nil
+}
+
+func (s *stubCloneFailureProvider) Diff(context.Context, *atmosgit.DiffOptions) (*atmosgit.DiffResult, error) {
+	return &atmosgit.DiffResult{}, nil
+}
+
+func (s *stubCloneFailureProvider) Commit(context.Context, *atmosgit.CommitOptions) (*atmosgit.CommitResult, error) {
+	return &atmosgit.CommitResult{}, nil
+}
+
+func (s *stubCloneFailureProvider) Push(context.Context, *atmosgit.PushOptions) error { return nil }
+
+func (s *stubCloneFailureProvider) SwapStderr(w io.Writer) func() {
+	_, _ = w.Write([]byte("fatal: Remote branch main not found in upstream origin\n"))
+	return func() {}
+}
+
+// setTestProvider overrides the package-level newProvider hook for the duration of a
+// test, always returning p regardless of the requested provider name. The caller is
+// responsible for restoring it (e.g. via t.Cleanup).
+func setTestProvider(p atmosgit.Provider) func() {
+	prev := newProvider
+	newProvider = func(string) (atmosgit.Provider, error) { return p, nil }
+	return func() { newProvider = prev }
+}
+
+// TestDeliverIntegrationCloneErrorSurfacesStderrAndHint reproduces the
+// first-time-GitOps-bootstrap failure mode: a deployment repository that
+// exists but has no commits on the configured branch yet (a brand-new,
+// empty repo). Before this fix, Deliver returned only "git clone (exit 128)"
+// with no indication of the real cause. It must now surface git's own stderr
+// output (naming the missing remote branch) and an actionable hint. Uses a
+// deterministic provider double (no git binary, no filesystem/network) so
+// this regression test can never be silently skipped.
+func TestDeliverIntegrationCloneErrorSurfacesStderrAndHint(t *testing.T) {
+	t.Cleanup(setTestProvider(&stubCloneFailureProvider{}))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"deployments": {
+					URI:     "https://example.invalid/deployments.git",
+					Branch:  "main",
+					Workdir: t.TempDir(),
+				},
+			},
+		},
+	}
+	in := &target.DeliverInput{
+		AtmosConfig: atmosConfig,
+		TargetName:  "deployment-repo",
+		TargetConfig: map[string]any{
+			"repository": "deployments",
+			"path":       "clusters/dev/argocd",
+			"commit":     map[string]any{"message": "Render argocd", "signing": "never"},
+		},
+		Artifact: target.ProvisionArtifact{
+			Kind:   target.ArtifactKindKubernetesManifests,
+			Format: target.FormatYAML,
+			Files:  map[string][]byte{"namespace.yaml": []byte("apiVersion: v1\nkind: Namespace\n")},
+		},
+	}
+
+	g := &gitProvisioner{}
+	err := g.Deliver(context.Background(), in)
+	require.Error(t, err)
+
+	details := strings.Join(cockroacherrors.GetAllDetails(err), "\n")
+	assert.Contains(t, details, "Remote branch", "the real git stderr must be surfaced, not just an exit code")
+
+	hints := strings.Join(cockroacherrors.GetAllHints(err), "\n")
+	assert.Contains(t, hints, "Confirm the configured branch exists and has commits",
+		"an actionable hint must be attached")
+}
+
+func TestDeliverIntegrationPublishesToRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git binary not available")
+	}
+	isolatedGitEnv(t)
+
+	root := t.TempDir()
+	bare := seedBareRepo(t, root)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Git: schema.GitConfig{
+			Repositories: map[string]schema.GitRepository{
+				"deployments": {
+					URI:     bare,
+					Branch:  "main",
+					Workdir: filepath.Join(root, "workdir"),
+				},
+			},
+		},
+	}
+	in := &target.DeliverInput{
+		AtmosConfig: atmosConfig,
+		TargetName:  "deployment-repo",
+		TargetConfig: map[string]any{
+			"repository": "deployments",
+			"path":       "clusters/dev/argocd",
+			"commit":     map[string]any{"message": "Render argocd for dev", "signing": "never"},
+		},
+		Artifact: target.ProvisionArtifact{
+			Kind:   target.ArtifactKindKubernetesManifests,
+			Format: target.FormatYAML,
+			Files: map[string][]byte{
+				"namespace.yaml":  []byte("apiVersion: v1\nkind: Namespace\n"),
+				"deployment.yaml": []byte("apiVersion: apps/v1\nkind: Deployment\n"),
+			},
+			Metadata: target.ArtifactMetadata{Stack: "dev", Component: "argocd"},
+		},
+	}
+
+	g := &gitProvisioner{}
+	require.NoError(t, g.Deliver(context.Background(), in))
+
+	// Verify by cloning the bare repo fresh.
+	verify := filepath.Join(root, "verify")
+	gitCmd(t, "", "clone", bare, verify)
+	assert.FileExists(t, filepath.Join(verify, "clusters", "dev", "argocd", "namespace.yaml"))
+	assert.FileExists(t, filepath.Join(verify, "clusters", "dev", "argocd", "deployment.yaml"))
+	body := gitCmd(t, verify, "log", "-1", "--format=%B")
+	assert.Contains(t, body, "Render argocd for dev")
+	assert.Contains(t, body, "Atmos-Stack: dev")
+	assert.Contains(t, body, "Atmos-Component: argocd")
+
+	commitsBefore := gitCmd(t, verify, "rev-list", "--count", "HEAD")
+
+	// Re-deliver the same artifact: a no-op, no new commit.
+	require.NoError(t, g.Deliver(context.Background(), in))
+	gitCmd(t, verify, "pull", "--ff-only")
+	commitsAfter := gitCmd(t, verify, "rev-list", "--count", "HEAD")
+	assert.Equal(t, commitsBefore, commitsAfter, "re-delivering identical artifact must be a no-op")
+}

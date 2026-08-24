@@ -374,6 +374,67 @@ func TestPodmanRuntime_parsePodmanContainer_DetailedEdgeCases(t *testing.T) {
 	}
 }
 
+// TestPodmanRuntime_parsePodmanContainer_Ports verifies that published port bindings
+// from podman's `ps --format json` (structured, snake_case keys) are parsed into
+// Info.Ports. Regression: podman dropped ports entirely, so emulator endpoint
+// resolution produced an empty URL and Terraform fell back to real cloud endpoints.
+func TestPodmanRuntime_parsePodmanContainer_Ports(t *testing.T) {
+	tests := []struct {
+		name          string
+		containerJSON map[string]interface{}
+		expected      []PortBinding
+	}{
+		{
+			name: "single published tcp port (numbers as float64, like json.Unmarshal)",
+			containerJSON: map[string]interface{}{
+				"Id":    "p1",
+				"Names": []interface{}{"floci"},
+				"State": "running",
+				"Ports": []interface{}{
+					map[string]interface{}{
+						"host_ip":        "0.0.0.0",
+						"container_port": float64(4566),
+						"host_port":      float64(40933),
+						"range":          float64(1),
+						"protocol":       "tcp",
+					},
+				},
+			},
+			expected: []PortBinding{{ContainerPort: 4566, HostPort: 40933, Protocol: "tcp"}},
+		},
+		{
+			name: "unpublished port (host_port 0) is skipped",
+			containerJSON: map[string]interface{}{
+				"Ports": []interface{}{
+					map[string]interface{}{"container_port": float64(80), "host_port": float64(0), "protocol": "tcp"},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "missing protocol defaults to tcp",
+			containerJSON: map[string]interface{}{
+				"Ports": []interface{}{
+					map[string]interface{}{"container_port": float64(8200), "host_port": float64(8200)},
+				},
+			},
+			expected: []PortBinding{{ContainerPort: 8200, HostPort: 8200, Protocol: "tcp"}},
+		},
+		{
+			name:          "no Ports field yields nil",
+			containerJSON: map[string]interface{}{"Id": "x"},
+			expected:      nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parsePodmanContainer(tt.containerJSON)
+			assert.Equal(t, tt.expected, result.Ports)
+		})
+	}
+}
+
 // TestFindContainerByIDOrName tests the container search logic used by Inspect.
 func TestFindContainerByIDOrName(t *testing.T) {
 	// This tests the actual production search logic extracted from Inspect.

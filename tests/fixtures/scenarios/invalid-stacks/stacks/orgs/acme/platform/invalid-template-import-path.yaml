@@ -1,0 +1,5 @@
+vars:
+  stage: invalid-template-import-path-test
+
+import:
+  - "{{ unclosed"

@@ -1,0 +1,44 @@
+vars:
+  stage: producer
+
+components:
+  terraform:
+    output-demo:
+      dependencies:
+        tools:
+          opentofu: "1.12.2"
+      hooks:
+        store-to-ssm:
+          events:
+            - after.terraform.apply
+          kind: store
+          name: outputs/ssm
+          outputs:
+            demo_id: .demo_id
+            structured_config: .structured_config
+            secret_like_value: .secret_like_value
+        store-to-secrets-manager:
+          events:
+            - after.terraform.apply
+          kind: store
+          name: outputs/asm
+          outputs:
+            demo_id: .demo_id
+            structured_config: .structured_config
+            secret_like_value: .secret_like_value
+
+    reader:
+      metadata:
+        component: output-demo
+      dependencies:
+        tools:
+          opentofu: "1.12.2"
+      vars:
+        same_stack_ssm: !store outputs/ssm output-demo demo_id
+        same_stack_asm: !store outputs/asm output-demo demo_id
+        ssm_query: !store outputs/ssm output-demo structured_config | query .nested.enabled
+        asm_query: !store outputs/asm output-demo structured_config | query .ports[0]
+        ssm_raw_key: !store.get outputs/ssm producer/output-demo/demo_id
+        asm_raw_key: !store.get outputs/asm producer/output-demo/demo_id
+        template_read: !template '{{ atmos.Store "outputs/ssm" "producer" "output-demo" "demo_id" }}'
+        cold_start_default: !store outputs/ssm output-demo missing_key | default "fallback-value"

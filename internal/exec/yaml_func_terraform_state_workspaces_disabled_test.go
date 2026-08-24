@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -24,47 +25,22 @@ import (
 //
 // See: https://github.com/cloudposse/atmos/issues/1920
 func TestYamlFuncTerraformStateWorkspacesDisabled(t *testing.T) {
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
+	if _, lookErr := exec.LookPath("tofu"); lookErr != nil {
+		if _, lookErr2 := exec.LookPath("terraform"); lookErr2 != nil {
+			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for !terraform.state workspaces-disabled integration test)")
+		}
 	}
-
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
-	}
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
 	stack := "test"
 
-	defer func() {
-		// Delete the generated files and folders after the test.
-		mockComponentPath := filepath.Join("..", "..", "tests", "fixtures", "components", "terraform", "mock")
-		// Clean up terraform state files.
-		err := os.RemoveAll(filepath.Join(mockComponentPath, ".terraform"))
-		assert.NoError(t, err)
-
-		err = os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d"))
-		assert.NoError(t, err)
-
-		// When workspaces are disabled, state is stored at terraform.tfstate (not in terraform.tfstate.d/).
-		err = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate"))
-		// Ignore error if file doesn't exist.
-		if err != nil && !os.IsNotExist(err) {
-			assert.NoError(t, err)
-		}
-
-		err = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate.backup"))
-		// Ignore error if file doesn't exist.
-		if err != nil && !os.IsNotExist(err) {
-			assert.NoError(t, err)
-		}
-	}()
-
 	// Define the working directory (workspaces-disabled fixture).
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function-workspaces-disabled"
+	setupTerraformStateSandbox(t, workDir)
 	t.Chdir(workDir)
 
 	// Deploy component-1 first to create terraform state.
@@ -79,7 +55,7 @@ func TestYamlFuncTerraformStateWorkspacesDisabled(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	err = ExecuteTerraform(info)
+	err := ExecuteTerraform(info)
 	require.NoError(t, err, "Failed to execute 'ExecuteTerraform' for component-1")
 
 	// Initialize CLI config.
@@ -126,43 +102,23 @@ func TestYamlFuncTerraformStateWorkspacesDisabled(t *testing.T) {
 // TestWorkspacesDisabledStateLocation verifies that when workspaces are disabled,
 // the terraform state is stored at the correct location (terraform.tfstate, not terraform.tfstate.d/default/terraform.tfstate).
 func TestWorkspacesDisabledStateLocation(t *testing.T) {
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	require.NoError(t, err)
-
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	require.NoError(t, err)
+	if _, lookErr := exec.LookPath("tofu"); lookErr != nil {
+		if _, lookErr2 := exec.LookPath("terraform"); lookErr2 != nil {
+			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for workspaces-disabled state location test)")
+		}
+	}
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
 	stack := "test"
 
-	// Get the absolute path to the mock component before changing directories.
-	// The path is relative to the current working directory (internal/exec).
-	mockComponentPath, err := filepath.Abs("../../tests/fixtures/components/terraform/mock")
-	require.NoError(t, err)
-
-	defer func() {
-		// Clean up terraform state files.
-		err := os.RemoveAll(filepath.Join(mockComponentPath, ".terraform"))
-		assert.NoError(t, err)
-
-		err = os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d"))
-		assert.NoError(t, err)
-
-		err = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate"))
-		if err != nil && !os.IsNotExist(err) {
-			assert.NoError(t, err)
-		}
-
-		err = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate.backup"))
-		if err != nil && !os.IsNotExist(err) {
-			assert.NoError(t, err)
-		}
-	}()
-
 	// Define the working directory (workspaces-disabled fixture).
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function-workspaces-disabled"
+	terraformComponentsPath := setupTerraformStateSandbox(t, workDir)
+	mockComponentPath := filepath.Join(terraformComponentsPath, "mock")
 	t.Chdir(workDir)
 
 	// Deploy component-1.
@@ -177,7 +133,7 @@ func TestWorkspacesDisabledStateLocation(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	err = ExecuteTerraform(info)
+	err := ExecuteTerraform(info)
 	require.NoError(t, err, "Failed to deploy component-1")
 
 	// Verify that the state file is at terraform.tfstate (not terraform.tfstate.d/default/terraform.tfstate).

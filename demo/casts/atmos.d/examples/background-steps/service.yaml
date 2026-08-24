@@ -1,0 +1,56 @@
+commands:
+  - name: casts generate examples background-steps service
+    description: Regenerate the Background Steps example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: service
+        working_directory: "../../.context/cast-fixtures/background-steps"
+        title: "Background Steps: run and cancel a service"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/background-steps/service.cast"
+        steps:
+          - type: simulate
+            text: "# start nginx in the background, use it, then cancel it"
+          - type: simulate
+            text: &cmd atmos workflow service -f background
+          - type: shell
+            name: service
+            duration: 650ms
+            interval: 750ms
+            command: *cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples background-steps service
+  - name: casts validate examples background-steps service
+    description: Validate the Background Steps example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/background-steps/service.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          for needle in [
+              "atmos workflow service -f background",
+              "service is healthy; doing work against http://localhost:8080",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"background-steps cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

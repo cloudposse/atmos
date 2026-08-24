@@ -1,0 +1,53 @@
+---
+title: atmos version track lock
+sidebar_position: 70
+sidebar_label: lock
+sidebar_class_name: command
+description: Resolve desired versions and write the lock file.
+---
+
+Resolve each entry's `desired` expression to a concrete version and write `versions.lock.yaml`. `lock` resolves desired versions as-is; use [`update`](/cli/commands/version/track/update) to advance existing locks within policy.
+
+When an entry's effective policy sets `pin: digest` or `pin: sha`, locking also resolves the immutable identifier: a git commit SHA for GitHub datasources or a `sha256:` manifest digest for OCI registries.
+
+## Usage
+
+```shell
+atmos version track lock [track] [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--group`</dt>
+  <dd>Limit locking to entries in the named version group.</dd>
+
+  <dt>`--format string`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+</dl>
+
+## Examples
+
+```shell
+# Bootstrap the lock file for the prod track
+atmos version track lock prod
+
+# Re-resolve only the infrastructure group
+atmos version track lock prod --group=infrastructure
+```
+
+## Example Output
+
+In an interactive terminal, `--format=table` (the default) renders a styled table scoped to the
+resolved track's entries. Use `--format=csv` or `--format=tsv` for delimited output; piped table
+output remains a table.
+
+```shell
+> atmos version track lock prod --format=csv
+Track,Name,Version,Ecosystem,Digest,Resolved At
+prod,checkout,v6.1.0,github-actions,8edcb1bdb4e267140fa742c62e395cd74f332709,2026-07-04T00:00:00Z
+prod,nginx,1.29.0,docker,,2026-07-04T00:00:00Z
+```
+
+Use `--format=yaml` or `--format=json` for the full multi-track `versions.lock.yaml` contents,
+rather than just the resolved track's entries.

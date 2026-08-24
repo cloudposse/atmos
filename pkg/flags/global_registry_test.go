@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 )
 
 func TestParseIdentityFlag_NormalizesDisabledValues(t *testing.T) {
@@ -94,6 +95,22 @@ func TestParseIdentityFlag_NormalizesDisabledValues(t *testing.T) {
 			assert.True(t, selector.IsProvided(), "identity should be marked as provided")
 		})
 	}
+}
+
+// TestParseIdentityFlag_FlagNotRegistered verifies that when a command (and its
+// parents) doesn't have the identity flag registered at all, parseIdentityFlag
+// returns a selector that reports not-provided rather than panicking or falling
+// back to Viper.
+func TestParseIdentityFlag_FlagNotRegistered(t *testing.T) {
+	v := viper.New()
+	v.Set(identityFlagName, "should-be-ignored")
+
+	cmd := &cobra.Command{Use: "test"}
+
+	selector := parseIdentityFlag(cmd, v)
+
+	assert.Equal(t, "", selector.Value())
+	assert.False(t, selector.IsProvided())
 }
 
 func TestParseIdentityFlag_NotProvided(t *testing.T) {
@@ -415,6 +432,30 @@ func TestParseGlobalFlags_Integration(t *testing.T) {
 	assert.False(t, flags.Pager.IsEnabled(), "Pager should be disabled")
 }
 
+func TestParseGlobalFlags_InheritedIdentityUsesChangedFlagValue(t *testing.T) {
+	rootCmd := &cobra.Command{Use: "atmos"}
+	globalBuilder := NewGlobalOptionsBuilder()
+	parser := globalBuilder.Build()
+	parser.RegisterPersistentFlags(rootCmd)
+
+	ansibleCmd := &cobra.Command{Use: "ansible"}
+	playbookCmd := &cobra.Command{Use: "playbook"}
+	rootCmd.AddCommand(ansibleCmd)
+	ansibleCmd.AddCommand(playbookCmd)
+
+	err := rootCmd.PersistentFlags().Set("identity", "terraform")
+	require.NoError(t, err)
+
+	v := viper.New()
+	err = parser.BindToViper(v)
+	require.NoError(t, err)
+
+	flags := ParseGlobalFlags(playbookCmd, v)
+
+	assert.True(t, flags.Identity.IsProvided())
+	assert.Equal(t, "terraform", flags.Identity.Value())
+}
+
 // TestParsePagerFlag_FallbackToEnv tests that parsePagerFlag falls back to
 // environment variables when the flag is not provided.
 func TestParsePagerFlag_FallbackToEnv(t *testing.T) {
@@ -435,6 +476,268 @@ func TestParsePagerFlag_FallbackToEnv(t *testing.T) {
 	assert.True(t, result.IsEnabled(), "Should be enabled")
 }
 
+// TestParseCastFlag covers all three branches of parseCastFlag:
+// flag not registered, flag explicitly changed, and fallback to Viper.
+func TestParseCastFlag(t *testing.T) {
+	t.Run("flag not registered returns empty string", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		assert.Equal(t, "", parseCastFlag(cmd, v))
+	})
+
+	t.Run("flag explicitly changed returns flag value", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String(cfg.CastFlagName, "", "Cast recording")
+		require.NoError(t, cmd.Flags().Set(cfg.CastFlagName, "demo.cast"))
+		v := viper.New()
+		assert.Equal(t, "demo.cast", parseCastFlag(cmd, v))
+	})
+
+	t.Run("falls back to viper when not changed", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String(cfg.CastFlagName, "", "Cast recording")
+		v := viper.New()
+		v.Set(cfg.CastFlagName, "from-env.cast")
+		assert.Equal(t, "from-env.cast", parseCastFlag(cmd, v))
+	})
+
+	t.Run("returns empty when neither changed nor set in viper", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String(cfg.CastFlagName, "", "Cast recording")
+		v := viper.New()
+		assert.Equal(t, "", parseCastFlag(cmd, v))
+	})
+}
+
+// TestParseGlobalFlags_AIFlag tests that the --ai flag is correctly parsed.
+func TestParseGlobalFlags_AIFlag(t *testing.T) {
+	t.Run("defaults to false", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.False(t, flags.AI, "AI should default to false")
+	})
+
+	t.Run("CLI flag enables AI", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("ai", true)
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.True(t, flags.AI, "AI should be true when set via CLI flag")
+	})
+
+	t.Run("environment variable enables AI", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_AI", "true")
+		_ = v.BindEnv("ai", "ATMOS_AI")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.True(t, flags.AI, "AI should be true when ATMOS_AI is set")
+	})
+}
+
+// TestParseGlobalFlags_SkillFlag tests that the --skill flag is correctly parsed as a string slice.
+func TestParseGlobalFlags_SkillFlag(t *testing.T) {
+	t.Run("defaults to empty", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Empty(t, flags.Skill, "Skill should default to empty slice")
+	})
+
+	t.Run("CLI flag sets single skill", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("skill", []string{"atmos-terraform"})
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"atmos-terraform"}, flags.Skill, "Skill should be set via CLI flag")
+	})
+
+	t.Run("CLI flag sets multiple skills", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("skill", []string{"atmos-terraform", "atmos-stacks"})
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"atmos-terraform", "atmos-stacks"}, flags.Skill, "Skill should support multiple values")
+	})
+
+	t.Run("environment variable sets skill", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_SKILL", "atmos-terraform")
+		_ = v.BindEnv("skill", "ATMOS_SKILL")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Contains(t, flags.Skill, "atmos-terraform", "Skill should be set when ATMOS_SKILL is set")
+	})
+}
+
+// TestParseGlobalFlags_ConfigEnvVarCommaSplit guards against a bug found during a field-test
+// pass on cloudposse/atmos#2867/#2868: ATMOS_CONFIG/ATMOS_CONFIG_PATH with multiple
+// comma-separated files worked for commands hitting pkg/config's own os.Args/env fallback (e.g.
+// `atmos config get`), but broke every command reading these flags through this canonical
+// ParseGlobalFlags path (`atmos list stacks`, `atmos auth list`, etc.) with a "file not found:
+// 'a.yaml,b.yaml'" error -- because Viper's env-sourced GetStringSlice splits on whitespace, not
+// commas (the same quirk already fixed for --profile/ATMOS_PROFILE, just not applied here).
+func TestParseGlobalFlags_ConfigEnvVarCommaSplit(t *testing.T) {
+	t.Run("CLI flag with multiple files is unaffected", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("config", []string{"a.yaml", "b.yaml"})
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"a.yaml", "b.yaml"}, flags.Config)
+	})
+
+	t.Run("ATMOS_CONFIG with multiple comma-separated files splits correctly", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_CONFIG", "a.yaml,b.yaml")
+		_ = v.BindEnv("config", "ATMOS_CONFIG")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"a.yaml", "b.yaml"}, flags.Config,
+			"ATMOS_CONFIG should split on commas like the --config CLI flag does")
+	})
+
+	t.Run("ATMOS_CONFIG_PATH with multiple comma-separated dirs splits correctly", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_CONFIG_PATH", "dirA,dirB")
+		_ = v.BindEnv("config-path", "ATMOS_CONFIG_PATH")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"dirA", "dirB"}, flags.ConfigPath,
+			"ATMOS_CONFIG_PATH should split on commas like the --config-path CLI flag does")
+	})
+
+	t.Run("ATMOS_CONFIG with a single file is unaffected", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_CONFIG", "a.yaml")
+		_ = v.BindEnv("config", "ATMOS_CONFIG")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"a.yaml"}, flags.Config)
+	})
+}
+
+// TestParseGlobalFlags_SettingsListMergeStrategyFlag verifies that the
+// --settings-list-merge-strategy global flag is registered (so Cobra accepts it)
+// and that its value flows through Viper, env var, and the default empty state.
+// Regression test for cloudposse/atmos#2398.
+func TestParseGlobalFlags_SettingsListMergeStrategyFlag(t *testing.T) {
+	t.Run("flag is registered on RootCmd as persistent", func(t *testing.T) {
+		rootCmd := &cobra.Command{Use: "atmos"}
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterPersistentFlags(rootCmd)
+
+		flag := rootCmd.PersistentFlags().Lookup("settings-list-merge-strategy")
+		require.NotNil(t, flag, "settings-list-merge-strategy must be registered as a persistent flag on RootCmd")
+		assert.Equal(t, "string", flag.Value.Type(), "settings-list-merge-strategy should be a string flag")
+	})
+
+	t.Run("defaults to empty string", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, "", flags.SettingsListMergeStrategy, "should default to empty string when not set")
+	})
+
+	t.Run("CLI flag value flows through Viper", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("settings-list-merge-strategy", "append")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, "append", flags.SettingsListMergeStrategy)
+	})
+
+	t.Run("ATMOS_SETTINGS_LIST_MERGE_STRATEGY env var flows through Viper", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_SETTINGS_LIST_MERGE_STRATEGY", "merge")
+		_ = v.BindEnv("settings-list-merge-strategy", "ATMOS_SETTINGS_LIST_MERGE_STRATEGY")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, "merge", flags.SettingsListMergeStrategy)
+	})
+
+	t.Run("subcommand inherits the persistent flag", func(t *testing.T) {
+		rootCmd := &cobra.Command{Use: "atmos"}
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterPersistentFlags(rootCmd)
+
+		subCmd := &cobra.Command{Use: "terraform"}
+		rootCmd.AddCommand(subCmd)
+		leafCmd := &cobra.Command{Use: "plan"}
+		subCmd.AddCommand(leafCmd)
+
+		inherited := leafCmd.InheritedFlags().Lookup("settings-list-merge-strategy")
+		require.NotNil(t, inherited, "subcommands must inherit settings-list-merge-strategy from RootCmd")
+	})
+}
+
 // TestParsePagerFlag_NoFlagRegistered tests behavior when pager flag is not registered.
 func TestParsePagerFlag_NoFlagRegistered(t *testing.T) {
 	// Create command WITHOUT pager flag.
@@ -449,4 +752,131 @@ func TestParsePagerFlag_NoFlagRegistered(t *testing.T) {
 	assert.False(t, result.IsProvided(), "Should not be provided")
 	assert.Equal(t, "", result.Value(), "Value should be empty")
 	assert.False(t, result.IsEnabled(), "Should not be enabled")
+}
+
+func TestGlobalFlagsRegistry_ContainsNoOptDefValFlags(t *testing.T) {
+	registry := GlobalFlagsRegistry()
+
+	// Verify identity flag is registered with NoOptDefVal.
+	identityFlag := registry.Get("identity")
+	assert.NotNil(t, identityFlag, "identity flag should be registered")
+	assert.Equal(t, cfg.IdentityFlagSelectValue, identityFlag.GetNoOptDefVal(), "identity should have NoOptDefVal set")
+	assert.Equal(t, "i", identityFlag.GetShorthand(), "identity should have shorthand 'i'")
+
+	// Verify pager flag is registered with NoOptDefVal.
+	pagerFlag := registry.Get("pager")
+	assert.NotNil(t, pagerFlag, "pager flag should be registered")
+	assert.Equal(t, "true", pagerFlag.GetNoOptDefVal(), "pager should have NoOptDefVal set")
+
+	castFlag := registry.Get(cfg.CastFlagName)
+	assert.NotNil(t, castFlag, "cast flag should be registered")
+	assert.Equal(t, cfg.CastFlagAutoValue, castFlag.GetNoOptDefVal(), "cast should have NoOptDefVal set")
+	assert.False(t, castFlag.GetNoOptDefValConsumesNextArg(), "cast must not consume the next positional arg")
+
+	// Verify profile flag (a StringSliceFlag) is registered with NoOptDefVal, mirroring identity.
+	profileFlag := registry.Get("profile")
+	require.NotNil(t, profileFlag, "profile flag should be registered")
+	_, isSlice := profileFlag.(*StringSliceFlag)
+	assert.True(t, isSlice, "profile should be a StringSliceFlag")
+	assert.Equal(t, cfg.ProfileFlagSelectValue, profileFlag.GetNoOptDefVal(), "profile should have NoOptDefVal set")
+	assert.True(t, profileFlag.GetNoOptDefValConsumesNextArg(), "profile must consume a following non-flag arg so space-separated syntax still works")
+}
+
+func TestGlobalFlagsRegistry_PreprocessesIdentityFlag(t *testing.T) {
+	registry := GlobalFlagsRegistry()
+
+	// Convert flags to preprocess.FlagInfo interface.
+	allFlags := registry.All()
+	flagInfos := make([]preprocess.FlagInfo, len(allFlags))
+	for i, f := range allFlags {
+		flagInfos[i] = f
+	}
+
+	// Create the preprocessor.
+	preprocessor := preprocess.NewNoOptDefValPreprocessor(flagInfos)
+
+	tests := []struct {
+		name     string
+		input    []string
+		expected []string
+	}{
+		{
+			name:     "identity with space-separated value",
+			input:    []string{"auth", "login", "--identity", "prod-admin"},
+			expected: []string{"auth", "login", "--identity=prod-admin"},
+		},
+		{
+			name:     "identity shorthand with space-separated value",
+			input:    []string{"auth", "login", "-i", "prod-admin"},
+			expected: []string{"auth", "login", "-i=prod-admin"},
+		},
+		{
+			name:     "identity with equals syntax unchanged",
+			input:    []string{"auth", "login", "--identity=prod-admin"},
+			expected: []string{"auth", "login", "--identity=prod-admin"},
+		},
+		{
+			name:     "cast bare flag does not consume command",
+			input:    []string{"--cast", "terraform", "plan"},
+			expected: []string{"--cast", "terraform", "plan"},
+		},
+		{
+			name:     "cast with equals syntax unchanged",
+			input:    []string{"--cast=demo.cast", "terraform", "plan"},
+			expected: []string{"--cast=demo.cast", "terraform", "plan"},
+		},
+		{
+			name:     "identity at end unchanged",
+			input:    []string{"auth", "login", "--identity"},
+			expected: []string{"auth", "login", "--identity"},
+		},
+		{
+			name:     "identity followed by another flag unchanged",
+			input:    []string{"auth", "login", "--identity", "--verbose"},
+			expected: []string{"auth", "login", "--identity", "--verbose"},
+		},
+		// --profile (StringSliceFlag with NoOptDefVal) regression cases.
+		// These guard the actual bug this feature fixes: before --profile had
+		// NoOptDefVal, "atmos auth login --profile" failed with "flag needs an
+		// argument". Once NoOptDefVal is set, space-separated explicit values
+		// become ambiguous to pflag unless this preprocessing step rewrites them
+		// to equals syntax first.
+		{
+			name:     "profile with space-separated single value",
+			input:    []string{"auth", "login", "--profile", "name1"},
+			expected: []string{"auth", "login", "--profile=name1"},
+		},
+		{
+			name:     "profile with equals syntax unchanged",
+			input:    []string{"auth", "login", "--profile=name1"},
+			expected: []string{"auth", "login", "--profile=name1"},
+		},
+		{
+			name:     "profile with comma-separated space-separated value",
+			input:    []string{"auth", "login", "--profile", "a,b"},
+			expected: []string{"auth", "login", "--profile=a,b"},
+		},
+		{
+			name:     "repeated profile flags with space-separated values",
+			input:    []string{"auth", "login", "--profile", "x", "--profile", "y"},
+			expected: []string{"auth", "login", "--profile=x", "--profile=y"},
+		},
+		{
+			name:     "bare profile at end unchanged (resolves via native NoOptDefVal)",
+			input:    []string{"auth", "login", "--profile"},
+			expected: []string{"auth", "login", "--profile"},
+		},
+		{
+			name:     "bare profile followed by another flag unchanged",
+			input:    []string{"auth", "login", "--profile", "--identity=x"},
+			expected: []string{"auth", "login", "--profile", "--identity=x"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := preprocessor.Preprocess(tc.input)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
 }

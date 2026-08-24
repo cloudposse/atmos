@@ -1,0 +1,90 @@
+---
+title: atmos.Resolve
+sidebar_position: 4
+sidebar_label: atmos.Resolve
+sidebar_class_name: command
+description: Evaluate an Atmos YAML function inside a Go template
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+The `atmos.Resolve` template function evaluates an [Atmos YAML function](/functions/yaml) string —
+such as `!git.repository`, `!exec`, `!store`, or `!terraform.output` — at template-render time and
+returns the resolved value. It lets you **compose** the result of a YAML function with other strings
+and template variables in a single value, which a bare YAML tag cannot do because a tag owns the
+entire scalar.
+</Intro>
+
+## Usage
+
+```yaml
+# Resolve a YAML-function string and combine it with other text
+key: '{{ atmos.Resolve "!git.repository" }}/something'
+
+# Resolve a value that is stored elsewhere in the stack
+key: '{{ atmos.Resolve .settings.context.repo }}'
+```
+
+## Arguments
+
+<dl>
+    <dt>`input`</dt>
+    <dd>An Atmos YAML-function string to evaluate (for example, `"!git.repository"` or `"!env API_KEY"`). A plain (untagged) string is returned unchanged.</dd>
+</dl>
+
+## Why It's Needed
+
+Atmos evaluates Go templates **before** it evaluates YAML functions. As a result, a bare YAML tag
+cannot be combined with other text on the same line, and referencing a YAML function through an
+intermediate variable in a plain template does not work — at template time the value is still the
+unresolved tag string (e.g. `"!git.repository"`).
+
+`atmos.Resolve` bridges this gap: it runs the YAML-function processor on demand during template
+rendering, so the resolved value is available inside the template where you can concatenate it with
+other strings and template expressions.
+
+## Examples
+
+### Prefix a `workspace_key_prefix` with the repository slug
+
+A common use case is prefixing the Terraform `workspace_key_prefix` (or any other value) with the
+repository slug returned by [`!git.repository`](/functions/yaml/git.repository):
+
+<File>
+```yaml
+settings:
+  context:
+    repo: "!git.repository"
+
+components:
+  terraform:
+    vpc:
+      backend:
+        s3:
+          workspace_key_prefix: '{{ atmos.Resolve .settings.context.repo }}/{{ or .metadata.name .metadata.component }}'
+```
+</File>
+
+In a repository whose `origin` remote is `https://github.com/cloudposse/atmos.git`, the
+`workspace_key_prefix` resolves to `cloudposse/atmos/vpc`.
+
+### Resolve any YAML function inline
+
+`atmos.Resolve` works with every Atmos YAML function, so you can compose values that previously
+required shelling out through `!exec`:
+
+```yaml
+vars:
+  # Combine an environment variable with a static suffix
+  bucket: '{{ atmos.Resolve "!env BUCKET_PREFIX" }}-state'
+```
+
+## Considerations
+
+- `atmos.Resolve` runs during the **template** phase (before the eager YAML-function pass), giving it
+  the same evaluation semantics as [`atmos.Component`](/functions/template/atmos.Component). Avoid using
+  it for expensive functions (e.g. `!terraform.output`) when a plain YAML tag would suffice.
+- A plain (untagged) string is returned unchanged, so it is safe to pass values that may or may not
+  contain a YAML function.

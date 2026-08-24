@@ -71,33 +71,47 @@ func formatSimpleValue(v interface{}, sensitive bool) string {
 	}
 	switch val := v.(type) {
 	case string:
-		// Single-line string - truncate if needed.
-		const maxWidth = 40
-		if len(val) > maxWidth-2 {
-			return fmt.Sprintf("\"%s...\"", val[:maxWidth-5])
-		}
-		return fmt.Sprintf("%q", val)
+		return formatSimpleStringValue(val)
 	case bool:
 		return fmt.Sprintf("%t", val)
 	case float64:
-		if val == float64(int64(val)) {
-			return fmt.Sprintf("%d", int64(val))
-		}
-		return fmt.Sprintf("%g", val)
+		return formatSimpleFloatValue(val)
 	case map[string]interface{}, []interface{}:
-		const maxWidth = 40
-		jsonBytes, err := json.Marshal(val)
-		if err != nil {
-			return "(complex)"
-		}
-		s := string(jsonBytes)
-		if len(s) > maxWidth {
-			return s[:maxWidth-3] + "..."
-		}
-		return s
+		return formatSimpleComplexValue(val)
 	default:
 		return fmt.Sprintf("%v", val)
 	}
+}
+
+// formatSimpleStringValue truncates a single-line string if it exceeds the display width.
+func formatSimpleStringValue(val string) string {
+	const maxWidth = 40
+	if len(val) > maxWidth-2 {
+		return fmt.Sprintf("\"%s...\"", val[:maxWidth-5])
+	}
+	return fmt.Sprintf("%q", val)
+}
+
+// formatSimpleFloatValue formats a float64, rendering whole numbers without a decimal point.
+func formatSimpleFloatValue(val float64) string {
+	if val == float64(int64(val)) {
+		return fmt.Sprintf("%d", int64(val))
+	}
+	return fmt.Sprintf("%g", val)
+}
+
+// formatSimpleComplexValue formats a map or slice as compact JSON, truncated if needed.
+func formatSimpleComplexValue(val interface{}) string {
+	const maxWidth = 40
+	jsonBytes, err := json.Marshal(val)
+	if err != nil {
+		return "(complex)"
+	}
+	s := string(jsonBytes)
+	if len(s) > maxWidth {
+		return s[:maxWidth-3] + "..."
+	}
+	return s
 }
 
 // valuesEqual compares two interface values for equality.
@@ -117,9 +131,20 @@ func valuesEqual(a, b interface{}) bool {
 	return string(aJSON) == string(bJSON)
 }
 
+// safeFdToInt converts a file descriptor (uintptr) to int, guarding against the
+// theoretical overflow on platforms where uintptr is wider than int. File
+// descriptors are always small, non-negative values in practice, but term.GetSize
+// requires an int, so we bounds-check rather than convert unchecked.
+func safeFdToInt(fd uintptr) int {
+	if fd > math.MaxInt {
+		return -1
+	}
+	return int(fd)
+}
+
 // getMaxLineWidth returns the maximum width for content lines based on terminal width.
 func getMaxLineWidth() int {
-	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	width, _, err := term.GetSize(safeFdToInt(os.Stdout.Fd()))
 	if err != nil || width <= 0 {
 		width = defaultTerminalWidth
 	}

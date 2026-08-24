@@ -1,0 +1,13 @@
+workflows:
+  retry-demo:
+    description: |
+      Demonstrates automatic retry behavior when commands fail.
+      The command intentionally fails to show retries in action.
+    steps:
+      - command: echo "Attempting deployment..." && exit 1
+        type: shell
+        retry:
+          max_attempts: 3
+          initial_delay: 100ms
+          backoff_strategy: exponential
+          multiplier: 2.0

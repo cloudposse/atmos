@@ -1,0 +1,62 @@
+---
+title: atmos emulator reset
+sidebar_label: reset
+sidebar_class_name: command
+id: reset
+description: Stop an emulator and wipe its persisted state
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to stop and remove the emulator's container and then delete its persisted state directory under the XDG cache. The next [`atmos emulator up`](/cli/commands/emulator/up) starts a fresh instance. This is the deliberate counterpart to [`atmos emulator down`](/cli/commands/emulator/down), which keeps persisted state.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos emulator reset --help" src="/casts/screengrabs/atmos-emulator-reset--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos emulator reset <component> --stack <stack> [flags]
+```
+
+Unless `--force` is set, `reset` prompts for confirmation before deleting persisted state.
+
+## Examples
+
+```shell
+# Stop the aws emulator and wipe its persisted state (with a confirmation prompt)
+atmos emulator reset aws --stack=plat-ue2-dev
+
+# Wipe without prompting
+atmos emulator reset aws --stack=plat-ue2-dev --force
+
+# Using the emu alias
+atmos emu reset aws --stack=plat-ue2-dev --force
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>**Required.** The emulator component to reset (for example, `aws`).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`-s, --stack`</dt>
+  <dd>**Required.** The stack the emulator component belongs to (for example, `plat-ue2-dev`).</dd>
+
+  <dt>`-f, --force`</dt>
+  <dd>Wipe persisted state without prompting for confirmation. Also settable with `ATMOS_EMULATOR_RESET_FORCE=true`.</dd>
+</dl>
+
+## See Also
+
+- [`atmos emulator up`](/cli/commands/emulator/up) — Start (or reuse) the emulator container
+- [`atmos emulator down`](/cli/commands/emulator/down) — Stop and remove the emulator container (state is kept)
+- [`atmos emulator ps`](/cli/commands/emulator/ps) — List running emulators in the stack

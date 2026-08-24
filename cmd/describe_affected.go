@@ -4,11 +4,20 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// describeAffectedErrorModeParser is the minimal StandardParser wired to the
+// --error-mode flag; see cmd/describe_error_mode_flag.go for why this command
+// doesn't migrate to flags.NewStandardParser wholesale.
+var describeAffectedErrorModeParser *flags.StandardParser
 
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits.
 var describeAffectedCmd = &cobra.Command{
@@ -24,10 +33,16 @@ func init() {
 	describeAffectedCmd.DisableFlagParsing = false
 
 	describeAffectedCmd.PersistentFlags().String("repo-path", "", "Filesystem path to the already cloned target repository with which to compare the current branch")
-	describeAffectedCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch. Refer to [10.3 Git Internals Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References) for more details")
+	describeAffectedCmd.PersistentFlags().String("base", "", "The base commit (ref or SHA) to compare against. Auto-detected in CI when ci.enabled is true")
+	describeAffectedCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch")
 	describeAffectedCmd.PersistentFlags().String("sha", "", "Git commit SHA with which to compare the current branch")
+
+	// Deprecate --ref and --sha in favor of --base.
+	_ = describeAffectedCmd.PersistentFlags().MarkDeprecated("ref", "use --base instead")
+	_ = describeAffectedCmd.PersistentFlags().MarkDeprecated("sha", "use --base instead")
 	describeAffectedCmd.PersistentFlags().String("file", "", "Write the result to the file")
-	describeAffectedCmd.PersistentFlags().String("format", "json", "The output format. (`json` is default)")
+	describeAffectedCmd.PersistentFlags().String("output-file", "", "Write output to file in key=value format (for $GITHUB_OUTPUT)")
+	describeAffectedCmd.PersistentFlags().String("format", "json", "The output format: json, yaml, or matrix (for GitHub Actions matrix strategy)")
 	describeAffectedCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH")
 	describeAffectedCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block")
 	describeAffectedCmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "Include the Spacelift admin stack of any stack that is affected by config changes")
@@ -45,6 +60,12 @@ func init() {
 	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "Deprecated. Alias for `--logs-level=Debug`")
 	describeAffectedCmd.PersistentFlags().Bool("exclude-locked", false, "Exclude the locked components (`metadata.locked: true`) from the output")
 
+	describeAffectedErrorModeParser = newDescribeErrorModeParser()
+	describeAffectedErrorModeParser.RegisterPersistentFlags(describeAffectedCmd)
+	if err := describeAffectedErrorModeParser.BindToViper(viper.GetViper()); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
 	describeCmd.AddCommand(describeAffectedCmd)
 }
 
@@ -57,6 +78,13 @@ func getRunnableDescribeAffectedCmd(
 	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
+
+		// Resolve ATMOS_DESCRIBE_ERROR_MODE (via Viper) onto the --error-mode Cobra flag
+		// before parseDescribeAffectedCliArgs reads it, so the legacy cmd.Flags()-based
+		// parsing in internal/exec picks it up.
+		if err := resolveDescribeErrorModeFlag(cmd, viper.GetViper(), describeAffectedErrorModeParser); err != nil {
+			return err
+		}
 
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
 		if err != nil {
@@ -72,14 +100,30 @@ func getRunnableDescribeAffectedCmd(
 			}
 		}
 
-		// Get identity from flag and create AuthManager if provided.
-		// Use the WithAtmosConfig variant to enable stack-level default identity loading.
+		// Only create auth manager when YAML functions are enabled or identity is explicitly requested.
+		// When functions are disabled (--process-functions=false), there are no YAML functions
+		// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
-		authManager, err := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &props.CLIConfig.Auth, props.CLIConfig)
-		if err != nil {
-			return err
+		identityExplicit := cmd.Flags().Changed(cfg.IdentityFlagName)
+
+		// Record an explicit "auth disabled" signal so downstream stack processors can skip
+		// per-component auth resolution. Without this, a nil AuthManager is indistinguishable
+		// from "no identity specified" and the per-component resolver still runs whenever
+		// --process-templates is true (its default), reintroducing the auth attempt the user
+		// tried to disable. See plan: --identity=false not honored in `atmos describe affected`.
+		props.AuthDisabled = identityName == cfg.IdentityFlagDisabledValue
+
+		if props.ProcessYamlFunctions || identityExplicit {
+			// Category B: describe affected operates on multiple affected components across stacks
+			// with no single target (component, stack) pair. Use the SCAN wrapper to discover
+			// stack-level defaults (including imported _defaults.yaml). See
+			// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
+			authManager, authErr := CreateAuthManagerFromIdentityWithStackScan(identityName, &props.CLIConfig.Auth, props.CLIConfig)
+			if authErr != nil {
+				return authErr
+			}
+			props.AuthManager = authManager
 		}
-		props.AuthManager = authManager
 
 		// Global --pager flag is now handled in cfg.InitCliConfig
 

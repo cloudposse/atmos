@@ -1,0 +1,103 @@
+---
+title: Helm Configuration
+sidebar_position: 7
+sidebar_label: helm
+sidebar_class_name: command
+id: helm
+description: Configure native Helm component behavior in atmos.yaml.
+---
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  Tell Atmos where native Helm component files live. These project-wide settings
+  keep stack files focused on what to deploy, while `atmos.yaml` defines how Helm
+  components are found. Charts are rendered and deployed through the Helm Go SDK,
+  so no `helm` or `helmfile` binary is required.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+components:
+  helm:
+    # Base path to native Helm component directories (where local charts live).
+    base_path: components/helm
+
+    # Generate files from the component `generate` section before operations.
+    auto_generate_files: false
+
+    # Reusable chart repositories available to native Helm components.
+    repositories:
+      - name: prometheus-community
+        url: https://prometheus-community.github.io/helm-charts
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`base_path`</dt>
+  <dd>Base directory for native Helm components. Local charts referenced with a relative <code>chart</code> path resolve under each component directory. Defaults to <code>components/helm</code>.</dd>
+
+  <dt>`auto_generate_files`</dt>
+  <dd>When <code>true</code>, Atmos renders the component <code>generate</code> section into the component directory before Helm operations. Defaults to <code>false</code>.</dd>
+
+  <dt>`repositories`</dt>
+  <dd>
+    Reusable Helm chart repositories. Components can reference these with
+    <code>chart: repo-name/chart-name</code>. Component-level
+    <code>repositories</code> entries override global entries with the same
+    <code>name</code>.
+  </dd>
+</dl>
+
+## Helm Repositories
+
+Global repositories are declared once in `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+components:
+  helm:
+    repositories:
+      - name: prometheus-community
+        url: https://prometheus-community.github.io/helm-charts
+      - name: internal
+        url: https://charts.example.com
+        username: !env HELM_REPO_USERNAME
+        password: !env HELM_REPO_PASSWORD
+        pass_credentials_all: true
+```
+</File>
+
+Supported repository fields:
+
+<dl>
+  <dt>`name` <em>(required)</em></dt>
+  <dd>Repository name used in `repo/chart` references.</dd>
+
+  <dt>`url` <em>(required)</em></dt>
+  <dd>HTTP chart repository URL.</dd>
+
+  <dt>`username`, `password`</dt>
+  <dd>Basic authentication credentials for the repository.</dd>
+
+  <dt>`pass_credentials_all`</dt>
+  <dd>Pass credentials to chart URLs on all domains, matching Helm's `--pass-credentials` behavior.</dd>
+
+  <dt>`cert_file`, `key_file`, `ca_file`</dt>
+  <dd>TLS client certificate, key, and CA bundle files.</dd>
+
+  <dt>`insecure_skip_tls_verify`</dt>
+  <dd>Skip TLS certificate verification for repository access.</dd>
+</dl>
+
+Before `template`, `diff`, `apply`, or `deploy`, Atmos adds or updates these
+repositories in Helm's local repository config and downloads their indexes into
+Helm's repository cache. `delete` does not update repositories.
+
+See the [`atmos helm`](/cli/commands/helm/usage) command and the
+[Helm stack configuration](/stacks/components/helm) for component-level fields.

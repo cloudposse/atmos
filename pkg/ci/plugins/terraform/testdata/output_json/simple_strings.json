@@ -1,0 +1,12 @@
+{
+  "bucket_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "my-bucket"
+  },
+  "region": {
+    "sensitive": false,
+    "type": "string",
+    "value": "us-east-1"
+  }
+}

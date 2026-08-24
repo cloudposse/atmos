@@ -1,0 +1,71 @@
+---
+title: atmos version track update
+sidebar_position: 80
+sidebar_label: update
+sidebar_class_name: command
+description: Update locked versions within the update policy.
+---
+
+Advance locked versions to the newest candidates allowed by each entry's effective update policy, then write the lock file.
+
+Unlike [`lock`](/cli/commands/version/track/lock), `update` starts from the locked state and respects strategy caps, cooldown windows, include/exclude rules, and prerelease policy. Newer candidates held back by policy are reported with a reason.
+
+## Usage
+
+```shell
+atmos version track update [track] [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--group`</dt>
+  <dd>Limit the update to entries in the named version group.</dd>
+
+  <dt>`--only`</dt>
+  <dd>Limit the update to the named entries. Repeat the flag for multiple entries.</dd>
+
+  <dt>`--format string`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+</dl>
+
+## Examples
+
+```shell
+# Update every entry in the default track within policy
+atmos version track update
+
+# Update only the infrastructure group in prod
+atmos version track update prod --group=infrastructure
+
+# Update two specific entries
+atmos version track update prod --only=checkout --only=nginx
+```
+
+## Example Output
+
+In an interactive terminal, `--format=table` (the default) renders a styled table.
+Use `--format=csv` or `--format=tsv` for delimited output; piped table output remains a table.
+
+```shell
+> atmos version track update --format=csv
+Track,Name,From,To,Updated,Reason
+prod,checkout,v6.1.0,v6.2.0,true,
+prod,nginx,1.29.0,,false,"1.30.0 released 3d ago; cooldown 14d has not elapsed"
+```
+
+Use `--format=yaml` or `--format=json` for the full-fidelity result, including fields the table
+omits (e.g. digests):
+
+```yaml
+track: prod
+results:
+  - name: checkout
+    from: v6.1.0
+    to: v6.2.0
+    updated: true
+  - name: nginx
+    from: 1.29.0
+    updated: false
+    reason: "1.30.0 released 3d ago; cooldown 14d has not elapsed"
+```

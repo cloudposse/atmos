@@ -102,7 +102,7 @@ func rebuildContainer(p *rebuildParams) error {
 		return err
 	}
 
-	_ = ui.Successf("Container %s rebuilt successfully", p.containerName)
+	ui.Successf("Container %s rebuilt successfully", p.containerName)
 
 	// Inspect container to get actual port information after rebuild.
 	containerInfo, err := p.runtime.Inspect(p.ctx, containerID)

@@ -1,0 +1,10 @@
+# Minimal Helmfile component for the "ship anything" demo (listed, not synced).
+repositories:
+  - name: bitnami
+    url: registry-1.docker.io/bitnamicharts
+    oci: true
+
+releases:
+  - name: ingress
+    namespace: ingress
+    chart: bitnami/nginx

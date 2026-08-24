@@ -1,0 +1,12 @@
+name: Demo Workflows
+description: Sequence Atmos commands for a stack-specific deployment.
+
+workflows:
+  deploy:
+    description: Inspect component vars and run a Terraform plan for the selected stack.
+    steps:
+      - name: inspect-vars
+        command: describe component myapp --query .vars
+
+      - name: plan
+        command: terraform plan myapp

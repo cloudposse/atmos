@@ -1,0 +1,60 @@
+commands:
+  - name: lint
+    description: Linting commands for Atmos development
+    flags:
+      - name: changed
+        type: bool
+        description: Run lint checks for changes from origin/main
+        default: false
+    steps:
+      - type: shell
+        command: |
+          set -eu
+          if [ "{{ .Flags.changed }}" != "true" ]; then
+            echo "Select a lint mode, for example: atmos lint --changed" >&2
+            exit 1
+          fi
+      - type: atmos
+        command: lint changed
+    commands:
+      - name: changed
+        description: Run lint checks for changes from origin/main
+        # golangci-lint custom-build orchestration (staleness checks, per-worktree cache
+        # isolation, staged-patch diffing) lives in magefiles/, invoked via
+        # `go tool mage` (Go 1.24+ tool directive) — see magefiles/ and
+        # tools/lintroller/README.md.
+        env: &go_auto_env
+          GOTOOLCHAIN: auto
+        steps:
+          - type: atmos
+            command: build deps
+          - type: shell
+            command: go tool mage lint:changed
+
+      - name: custom-gcl
+        description: Build the custom golangci-lint binary with the lintroller plugin
+        steps:
+          - type: shell
+            command: go tool mage lint:customGCL
+
+      - name: lintroller
+        description: Build and run Atmos custom lintroller rules
+        env: *go_auto_env
+        steps:
+          - type: shell
+            command: go tool mage lint:lintroller
+
+      - name: gomodcheck
+        description: Check go.mod for replace/exclude directives that break go install
+        env: *go_auto_env
+        steps:
+          - type: shell
+            command: go tool mage lint:goModCheck
+
+      - name: link-check
+        description: Check markdown links with lychee
+        steps:
+          - |
+            set -eu
+            command -v lychee >/dev/null 2>&1 || { echo "Install lychee: brew install lychee"; exit 1; }
+            lychee --config lychee.toml --root-dir "$PWD" '**/*.md'

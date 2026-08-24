@@ -76,6 +76,7 @@ func TestGetFileExtension(t *testing.T) {
 		{"HCL file", "file.hcl", ".hcl"},
 		{"TF file", "file.tf", ".tf"},
 		{"TFVARS file", "file.tfvars", ".tfvars"},
+		{"Dotenv file", "foo.env", ".env"},
 		{"Text file", "file.txt", ".txt"},
 		{"Markdown file", "README.md", ".md"},
 
@@ -94,7 +95,11 @@ func TestGetFileExtension(t *testing.T) {
 		{"No extension with path", "/path/to/README", ""},
 
 		// Hidden files
-		{"Hidden file no ext", ".env", ""},
+		{"Hidden dotenv", ".env", ".env"},
+		{"Hidden dotenv variant", ".env.local", ".env"},
+		{"Hidden dotenv environment", ".env.production", ".env"},
+		{"Envrc remains raw", ".envrc", ""},
+		{"Env segment not at start or end remains normal extension", "foo.env.local", ".local"},
 		{"Hidden file with ext", ".hidden.json", ".json"},
 		{"Hidden backup", ".backup.yaml", ".yaml"},
 
@@ -233,6 +238,33 @@ func TestParseByExtension(t *testing.T) {
 				require.True(t, ok)
 				assert.Equal(t, "us-east-1", m["region"])
 			},
+		},
+
+		// dotenv parsing
+		{
+			name: "Valid dotenv with .env extension",
+			data: []byte(`DATABASE_URL=postgres://localhost/db
+QUOTED="hello world"
+WITH_EQUALS=host=localhost;port=5432
+# ignored comment
+`),
+			ext:        ".env",
+			filename:   ".env",
+			expectType: "map",
+			validate: func(t *testing.T, result any) {
+				m, ok := result.(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "postgres://localhost/db", m["DATABASE_URL"])
+				assert.Equal(t, "hello world", m["QUOTED"])
+				assert.Equal(t, "host=localhost;port=5432", m["WITH_EQUALS"])
+			},
+		},
+		{
+			name:        "Invalid dotenv with .env extension",
+			data:        []byte("BAD LINE\n"),
+			ext:         ".env",
+			filename:    ".env",
+			expectError: true,
 		},
 
 		// Raw string (default)
@@ -389,6 +421,61 @@ func TestParseFileByExtension(t *testing.T) {
 				s, ok := result.(string)
 				require.True(t, ok)
 				assert.Equal(t, "This is a readme", s)
+			},
+		},
+		{
+			name:        "Hidden dotenv file",
+			filename:    "/path/to/.env",
+			fileContent: "DATABASE_URL=postgres://localhost/db\n",
+			expectType:  "map",
+			validate: func(t *testing.T, result any) {
+				m, ok := result.(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "postgres://localhost/db", m["DATABASE_URL"])
+			},
+		},
+		{
+			name:        "Hidden dotenv variant",
+			filename:    "/path/to/.env.local",
+			fileContent: "LOCAL=true\n",
+			expectType:  "map",
+			validate: func(t *testing.T, result any) {
+				m, ok := result.(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "true", m["LOCAL"])
+			},
+		},
+		{
+			name:        "Dotenv suffix file",
+			filename:    "/path/to/foo.env",
+			fileContent: "FOO=bar\n",
+			expectType:  "map",
+			validate: func(t *testing.T, result any) {
+				m, ok := result.(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "bar", m["FOO"])
+			},
+		},
+		{
+			name:        "Env segment in middle remains raw",
+			filename:    "/path/to/foo.env.local",
+			fileContent: "FOO=bar\n",
+			expectType:  "string",
+			validate: func(t *testing.T, result any) {
+				s, ok := result.(string)
+				require.True(t, ok)
+				assert.Equal(t, "FOO=bar\n", s)
+			},
+		},
+		{
+			name:        "Envrc remains raw",
+			filename:    "/path/to/.envrc",
+			fileContent: "export FOO=bar\n",
+			expectType:  "string",
+			validate: func(t *testing.T, result any) {
+				s, ok := result.(string)
+				require.True(t, ok)
+				assert.Equal(t, "export FOO=bar\n", s)
 			},
 		},
 	}

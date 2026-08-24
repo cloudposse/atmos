@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Single flat stack for the packer-docker example.
+#
+# The stack name ("alpine") comes from `vars.stage` via the `name_template`
+# in atmos.yaml. There's only one stack in this example, so there's no
+# dev/staging/prod tiering — just `-s alpine`.
+
+vars:
+  stage: alpine
+
+components:
+  packer:
+    alpine:
+      metadata:
+        type: real
+        component: alpine
+
+      # Component-level tool dependency: pins the exact Packer version
+      # resolved by the Atmos toolchain (see atmos.yaml). `atmos packer
+      # init/build alpine -s alpine` installs this version automatically —
+      # no manual `packer` install required.
+      dependencies:
+        tools:
+          packer: "1.14.2"
+
+      # Variables passed to the Packer template as a var-file.
+      vars:
+        message: "Hello from Atmos + Packer + Docker!"

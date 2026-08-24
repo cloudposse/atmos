@@ -92,6 +92,12 @@ type Masker interface {
 	// Mask applies all registered masks to the input string.
 	Mask(input string) string
 
+	// ContainsSecret reports whether the input contains any registered secret literal
+	// (as a substring). Unlike Mask, this is NOT gated on the enabled flag: it is used
+	// to keep secrets off disk (e.g. out of Terraform varfiles) regardless of whether
+	// display masking is enabled via --mask.
+	ContainsSecret(value string) bool
+
 	// Clear removes all registered masks.
 	Clear()
 
@@ -100,6 +106,16 @@ type Masker interface {
 
 	// Enabled returns whether masking is enabled.
 	Enabled() bool
+
+	// SetEnabled updates whether masking is enabled. Used to reconcile the masker with the
+	// resolved `--mask` flag after CLI flags are parsed (the masker may be created before then).
+	SetEnabled(enabled bool)
+
+	// SetReplacement updates the string used when masking values.
+	SetReplacement(replacement string)
+
+	// Replacement returns the configured mask replacement string.
+	Replacement() string
 }
 
 // Config holds I/O configuration for channels and masking.

@@ -1,6 +1,6 @@
 output "tags" {
   description = "Generated Resource Tags"
-  value = data.context_tags.this.tags
+  value       = data.context_tags.this.tags
 }
 
 output "instance_type" {

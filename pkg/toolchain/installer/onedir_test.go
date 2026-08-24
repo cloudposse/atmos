@@ -1,0 +1,1882 @@
+package installer
+
+import (
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/toolchain/registry"
+)
+
+// ---------------------------------------------------------------------------
+// Fixture helpers (support dirs and symlinks, which the shared helpers do not).
+// ---------------------------------------------------------------------------
+
+type tarEntry struct {
+	name     string
+	content  string
+	link     string // Non-empty => a symlink entry with this target.
+	hardlink string // Non-empty => a hard-link entry with this target (archive-relative).
+	dir      bool
+	mode     int64
+}
+
+// writeTarGzTree builds a tar.gz containing regular files, directories, and
+// symlinks, for exercising onedir extraction end to end.
+func writeTarGzTree(t *testing.T, path string, entries []tarEntry) {
+	t.Helper()
+
+	f, err := os.Create(path)
+	require.NoError(t, err)
+	defer f.Close()
+
+	gw := gzip.NewWriter(f)
+	defer gw.Close()
+	tw := tar.NewWriter(gw)
+	defer tw.Close()
+
+	for _, e := range entries {
+		mode := e.mode
+		if mode == 0 {
+			mode = 0o644
+		}
+		switch {
+		case e.dir:
+			require.NoError(t, tw.WriteHeader(&tar.Header{Name: e.name, Typeflag: tar.TypeDir, Mode: 0o755}))
+		case e.link != "":
+			require.NoError(t, tw.WriteHeader(&tar.Header{Name: e.name, Typeflag: tar.TypeSymlink, Linkname: e.link, Mode: mode}))
+		case e.hardlink != "":
+			require.NoError(t, tw.WriteHeader(&tar.Header{Name: e.name, Typeflag: tar.TypeLink, Linkname: e.hardlink, Mode: mode}))
+		default:
+			require.NoError(t, tw.WriteHeader(&tar.Header{Name: e.name, Typeflag: tar.TypeReg, Mode: mode, Size: int64(len(e.content))}))
+			_, err := tw.Write([]byte(e.content))
+			require.NoError(t, err)
+		}
+	}
+}
+
+type zipEntry struct {
+	name    string
+	content string
+	link    string // Non-empty => a symlink entry with this target.
+	mode    os.FileMode
+}
+
+// writeZipTree builds a zip containing regular files and symlinks.
+func writeZipTree(t *testing.T, path string, entries []zipEntry) {
+	t.Helper()
+
+	f, err := os.Create(path)
+	require.NoError(t, err)
+	defer f.Close()
+
+	w := zip.NewWriter(f)
+	defer w.Close()
+
+	for _, e := range entries {
+		if e.link != "" {
+			hdr := &zip.FileHeader{Name: e.name}
+			hdr.SetMode(os.ModeSymlink | 0o777)
+			fw, err := w.CreateHeader(hdr)
+			require.NoError(t, err)
+			_, err = fw.Write([]byte(e.link))
+			require.NoError(t, err)
+			continue
+		}
+		mode := e.mode
+		if mode == 0 {
+			mode = 0o644
+		}
+		hdr := &zip.FileHeader{Name: e.name}
+		hdr.SetMode(mode)
+		fw, err := w.CreateHeader(hdr)
+		require.NoError(t, err)
+		_, err = fw.Write([]byte(e.content))
+		require.NoError(t, err)
+	}
+}
+
+func writeFileUnder(t *testing.T, root, rel, content string) {
+	t.Helper()
+	full := filepath.Join(root, filepath.FromSlash(rel))
+	require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o755))
+	require.NoError(t, os.WriteFile(full, []byte(content), 0o644))
+}
+
+// ---------------------------------------------------------------------------
+// The onedir gate.
+// ---------------------------------------------------------------------------
+
+func TestShouldPreserveTree(t *testing.T) {
+	testCases := []struct {
+		name      string
+		eps       []entrypoint
+		build     func(root string)
+		symlinks  []pendingSymlink
+		hardLinks []pendingHardLink
+		want      bool
+	}{
+		{
+			name:  "no entrypoints stays flat",
+			eps:   nil,
+			build: func(root string) {},
+			want:  false,
+		},
+		{
+			name:  "single binary only stays flat",
+			eps:   []entrypoint{{name: "tool", src: "tool"}},
+			build: func(root string) { writeFileUnder(t, root, "tool", "bin") },
+			want:  false,
+		},
+		{
+			name: "binary plus docs stays flat",
+			eps:  []entrypoint{{name: "tool", src: "tool"}},
+			build: func(root string) {
+				writeFileUnder(t, root, "tool", "bin")
+				writeFileUnder(t, root, "LICENSE", "license")
+				writeFileUnder(t, root, "README.md", "readme")
+				writeFileUnder(t, root, "docs/CHANGELOG.txt", "changes")
+			},
+			want: false,
+		},
+		{
+			name: "binary plus runtime sibling triggers onedir",
+			eps:  []entrypoint{{name: "tool", src: "tool"}},
+			build: func(root string) {
+				writeFileUnder(t, root, "tool", "bin")
+				writeFileUnder(t, root, "libdep.so", "shared-lib")
+			},
+			want: true,
+		},
+		{
+			name:  "nested entrypoint alone stays flat",
+			eps:   []entrypoint{{name: "helm", src: "linux-amd64/helm"}},
+			build: func(root string) { writeFileUnder(t, root, "linux-amd64/helm", "bin") },
+			want:  false,
+		},
+		{
+			name: "nested entrypoint plus sibling triggers onedir",
+			eps:  []entrypoint{{name: "aws", src: "aws/dist/aws"}},
+			build: func(root string) {
+				writeFileUnder(t, root, "aws/dist/aws", "bin")
+				writeFileUnder(t, root, "aws/dist/libpython.so", "shared-lib")
+			},
+			want: true,
+		},
+		{
+			name: "bin entrypoint plus lib directory triggers onedir",
+			eps:  []entrypoint{{name: "tool", src: "bundle/bin/tool"}},
+			build: func(root string) {
+				writeFileUnder(t, root, "bundle/bin/tool", "bin")
+				writeFileUnder(t, root, "bundle/lib/libtool.so", "shared-lib")
+			},
+			want: true,
+		},
+		{
+			// gum/k9s shape: a self-contained binary shipping completions/ and
+			// manpages/ in SUBDIRS stays flat (subdir files are not siblings).
+			name: "completions and manpages subdirs stay flat",
+			eps:  []entrypoint{{name: "gum", src: "gum_0.17.0/gum"}},
+			build: func(root string) {
+				writeFileUnder(t, root, "gum_0.17.0/gum", "bin")
+				writeFileUnder(t, root, "gum_0.17.0/LICENSE", "license")
+				writeFileUnder(t, root, "gum_0.17.0/README.md", "readme")
+				writeFileUnder(t, root, "gum_0.17.0/completions/gum.bash", "comp")
+				writeFileUnder(t, root, "gum_0.17.0/manpages/gum.1", "man")
+			},
+			want: false,
+		},
+		{
+			// kots shape: a single binary with an sbom/ subdir stays flat.
+			name: "sbom subdir stays flat",
+			eps:  []entrypoint{{name: "kots", src: "kots"}},
+			build: func(root string) {
+				writeFileUnder(t, root, "kots", "bin")
+				writeFileUnder(t, root, "LICENSE", "license")
+				writeFileUnder(t, root, "sbom/kots-sbom.tgz", "sbom")
+			},
+			want: false,
+		},
+		{
+			// Windows: the archive carries `tofu.exe` while the registry src is
+			// `tofu` (no extension). The `.exe` variant must be recognized as the
+			// entrypoint, not treated as an extra file that forces onedir.
+			name: "windows .exe entrypoint stays flat",
+			eps:  []entrypoint{{name: "tofu", src: "tofu"}},
+			build: func(root string) {
+				writeFileUnder(t, root, "tofu.exe", "bin")
+				writeFileUnder(t, root, "LICENSE", "license")
+				writeFileUnder(t, root, "CHANGELOG.md", "changes")
+			},
+			want: false,
+		},
+		{
+			// Node shape: a symlinked entrypoint (npm -> ../lib/...) forces
+			// onedir even though its own directory has no other non-doc file.
+			// Symlinks are collected during extraction, never written to disk,
+			// so the gate must recognize them from the set.
+			name: "symlinked entrypoint triggers onedir",
+			eps: []entrypoint{
+				{name: "node", src: "node-v1/bin/node"},
+				{name: "npm", src: "node-v1/bin/npm"},
+			},
+			build: func(root string) {
+				writeFileUnder(t, root, "node-v1/bin/node", "NODE")
+				writeFileUnder(t, root, "node-v1/lib/npm-cli.js", "NPM")
+			},
+			symlinks: []pendingSymlink{{rel: "node-v1/bin/npm", target: "../lib/npm-cli.js"}},
+			want:     true,
+		},
+		{
+			// A NON-entrypoint symlink sibling beside the primary binary is a
+			// runtime sibling too, even though extraction never wrote it to disk.
+			name:  "symlink sibling triggers onedir",
+			eps:   []entrypoint{{name: "tool", src: "pkg/tool"}},
+			build: func(root string) { writeFileUnder(t, root, "pkg/tool", "bin") },
+			symlinks: []pendingSymlink{
+				{rel: "pkg/libcurl.so", target: "libcurl.so.4"},
+			},
+			want: true,
+		},
+		{
+			// A symlink sibling that is DOCUMENTATION does not force onedir,
+			// matching the regular-file doc handling.
+			name:  "symlink doc sibling stays flat",
+			eps:   []entrypoint{{name: "tool", src: "pkg/tool"}},
+			build: func(root string) { writeFileUnder(t, root, "pkg/tool", "bin") },
+			symlinks: []pendingSymlink{
+				{rel: "pkg/README.md", target: "docs/README.md"},
+			},
+			want: false,
+		},
+		{
+			// A NON-entrypoint hard-link sibling is a runtime sibling too. Hard
+			// links are collected during extraction, not on disk at gate time,
+			// so the gate must recognize them from the set.
+			name:  "hard-link sibling triggers onedir",
+			eps:   []entrypoint{{name: "tool", src: "pkg/tool"}},
+			build: func(root string) { writeFileUnder(t, root, "pkg/tool", "bin") },
+			hardLinks: []pendingHardLink{
+				{rel: "pkg/data.bin", target: "pkg/tool"},
+			},
+			want: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			tc.build(root)
+
+			got, err := shouldPreserveTree(root, tc.eps, tc.symlinks, tc.hardLinks)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestShouldPreserveTree_SymlinkEntrypoint uses a deferred symlink entrypoint.
+func TestShouldPreserveTree_SymlinkEntrypoint(t *testing.T) {
+	root := t.TempDir()
+	writeFileUnder(t, root, "node-v1/bin/node", "NODE")
+
+	eps := []entrypoint{
+		{name: "node", src: "node-v1/bin/node"},
+		{name: "npm", src: "node-v1/bin/npm"},
+	}
+
+	got, err := shouldPreserveTree(root, eps, []pendingSymlink{
+		{rel: "node-v1/bin/npm", target: "../lib/npm-cli.js"},
+	}, nil)
+	require.NoError(t, err)
+	assert.True(t, got, "a symlinked entrypoint (from the set) must force onedir")
+
+	got, err = shouldPreserveTree(root, eps, nil, nil)
+	require.NoError(t, err)
+	assert.False(t, got, "with no symlink and no runtime sibling, the layout must stay flat")
+}
+
+func TestIsIgnorableExtraFile(t *testing.T) {
+	ignorable := []string{"LICENSE", "LICENSE.txt", "licence", "README", "README.md", "NOTICE", "CHANGELOG", "AUTHORS", "docs/guide.md", "notes.txt"}
+	for _, name := range ignorable {
+		assert.Truef(t, isIgnorableExtraFile(name), "%q should be ignorable", name)
+	}
+	notIgnorable := []string{"libpython3.14.so.1.0", "aws", "node", "lib/npm-cli.js", "bin/tool"}
+	for _, name := range notIgnorable {
+		assert.Falsef(t, isIgnorableExtraFile(name), "%q should NOT be ignorable", name)
+	}
+}
+
+// Sidecar manifest tests.
+
+func TestOnedirManifest_WriteReadRoundtrip(t *testing.T) {
+	versionDir := t.TempDir()
+	manifest := onedirManifest{
+		Entrypoints: map[string]string{
+			"node": filepath.Join(onedirTreeName, "node-v1.2.3", "bin", "node"),
+			"npm":  filepath.Join(onedirTreeName, "node-v1.2.3", "bin", "npm"),
+		},
+		Primary: "node",
+	}
+
+	require.NoError(t, writeOnedirManifest(versionDir, manifest))
+
+	got, ok := readOnedirManifest(versionDir)
+	require.True(t, ok)
+	assert.Equal(t, manifest, got)
+}
+
+func TestWriteOnedirManifest_ErrorPaths(t *testing.T) {
+	t.Run("fails when the version dir cannot be created", func(t *testing.T) {
+		base := t.TempDir()
+		fileAsParent := filepath.Join(base, "iamafile")
+		require.NoError(t, os.WriteFile(fileAsParent, []byte("x"), 0o644))
+
+		err := writeOnedirManifest(filepath.Join(fileAsParent, "child"), onedirManifest{Primary: "tool"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("fails when the manifest path is occupied by a directory", func(t *testing.T) {
+		versionDir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(versionDir, onedirManifestName), 0o755))
+
+		err := writeOnedirManifest(versionDir, onedirManifest{Primary: "tool"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
+func TestReadOnedirManifest_AbsentOrCorrupt(t *testing.T) {
+	t.Run("missing file", func(t *testing.T) {
+		_, ok := readOnedirManifest(t.TempDir())
+		assert.False(t, ok, "a flat install (no manifest file) must report false")
+	})
+
+	t.Run("corrupt JSON", func(t *testing.T) {
+		versionDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(versionDir, onedirManifestName), []byte("{not json"), 0o644))
+		_, ok := readOnedirManifest(versionDir)
+		assert.False(t, ok)
+	})
+}
+
+func TestVersionDirFromBinaryPath(t *testing.T) {
+	t.Run("flat install: no manifest anywhere, returns the immediate parent", func(t *testing.T) {
+		binDir := t.TempDir()
+		versionDir := filepath.Join(binDir, "hashicorp", "terraform", "1.9.8")
+		binaryPath := filepath.Join(versionDir, "terraform")
+
+		assert.Equal(t, versionDir, versionDirFromBinaryPath(binDir, binaryPath))
+	})
+
+	t.Run("onedir install: walks up to the directory holding the manifest", func(t *testing.T) {
+		binDir := t.TempDir()
+		versionDir := filepath.Join(binDir, "nodejs", "node", "24.18.0")
+		require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{Primary: "node"}))
+		binaryPath := filepath.Join(versionDir, onedirTreeName, "node-v24.18.0-darwin-arm64", "bin", "node")
+
+		assert.Equal(t, versionDir, versionDirFromBinaryPath(binDir, binaryPath))
+	})
+
+	t.Run("legacy alternative-path layout: no manifest, falls back to immediate parent", func(t *testing.T) {
+		binDir := t.TempDir()
+		versionDir := filepath.Join(binDir, "1.9.8")
+		binaryPath := filepath.Join(versionDir, "terraform")
+
+		assert.Equal(t, versionDir, versionDirFromBinaryPath(binDir, binaryPath))
+	})
+
+	t.Run("binaryPath outside binDir walks to the filesystem root and falls back", func(t *testing.T) {
+		binDir := filepath.Join(t.TempDir(), "unrelated-bindir")
+		binaryPath := filepath.Join(t.TempDir(), "elsewhere", "tool")
+
+		assert.Equal(t, filepath.Dir(binaryPath), versionDirFromBinaryPath(binDir, binaryPath))
+	})
+}
+
+func TestGetBinaryPath_OnedirManifest(t *testing.T) {
+	t.Run("explicit binaryName resolves its manifest entrypoint", func(t *testing.T) {
+		binDir := t.TempDir()
+		inst := &Installer{binDir: binDir}
+		versionDir := filepath.Join(binDir, "nodejs", "node", "24.18.0")
+		require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+			Entrypoints: map[string]string{
+				"node": filepath.Join(onedirTreeName, "bin", "node"),
+				"npm":  filepath.Join(onedirTreeName, "lib", "npm"),
+			},
+			Primary: "node",
+		}))
+
+		// A named secondary entrypoint resolves to its real nested path, not the
+		// version-dir root (which is where the old bug looked).
+		got := inst.GetBinaryPath("nodejs", "node", "24.18.0", "npm")
+		assert.Equal(t, filepath.Join(versionDir, onedirTreeName, "lib", "npm"), got)
+	})
+
+	t.Run("explicit binaryName not in the manifest falls back to the flat path", func(t *testing.T) {
+		binDir := t.TempDir()
+		inst := &Installer{binDir: binDir}
+		versionDir := filepath.Join(binDir, "nodejs", "node", "24.18.0")
+		require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+			Entrypoints: map[string]string{"node": filepath.Join(onedirTreeName, "bin", "node")},
+			Primary:     "node",
+		}))
+
+		got := inst.GetBinaryPath("nodejs", "node", "24.18.0", "ghost")
+		assert.Equal(t, filepath.Join(versionDir, "ghost"), got, "an unknown explicit name uses the flat layout")
+	})
+
+	t.Run("empty binaryName resolves the primary entrypoint via the manifest", func(t *testing.T) {
+		binDir := t.TempDir()
+		inst := &Installer{binDir: binDir}
+		versionDir := filepath.Join(binDir, "nodejs", "node", "24.18.0")
+		require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+			Entrypoints: map[string]string{
+				"node": filepath.Join(onedirTreeName, "node-v24.18.0", "bin", "node"),
+				"npm":  filepath.Join(onedirTreeName, "node-v24.18.0", "bin", "npm"),
+			},
+			Primary: "node",
+		}))
+
+		got := inst.GetBinaryPath("nodejs", "node", "24.18.0", "")
+		assert.Equal(t, filepath.Join(versionDir, onedirTreeName, "node-v24.18.0", "bin", "node"), got)
+	})
+
+	t.Run("manifest missing the primary key falls through to auto-detect", func(t *testing.T) {
+		binDir := t.TempDir()
+		inst := &Installer{binDir: binDir}
+		versionDir := filepath.Join(binDir, "acme", "tool", "1.0.0")
+		// A manifest that (incorrectly) omits its declared Primary from
+		// Entrypoints must not panic; GetBinaryPath falls through to the
+		// existing auto-detect/fallback behavior.
+		require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+			Entrypoints: map[string]string{"other": "somewhere"},
+			Primary:     "tool",
+		}))
+
+		got := inst.GetBinaryPath("acme", "tool", "1.0.0", "")
+		assert.Equal(t, filepath.Join(versionDir, "tool"), got, "falls back to the repo-name fallback path")
+	})
+
+	t.Run("flat install (no manifest) is unaffected", func(t *testing.T) {
+		binDir := t.TempDir()
+		inst := &Installer{binDir: binDir}
+
+		got := inst.GetBinaryPath("hashicorp", "terraform", "1.9.8", "")
+		assert.Equal(t, filepath.Join(binDir, "hashicorp", "terraform", "1.9.8", "terraform"), got)
+	})
+}
+
+func TestGetBinaryPaths(t *testing.T) {
+	t.Run("onedir returns every entrypoint path, sorted", func(t *testing.T) {
+		binDir := t.TempDir()
+		inst := &Installer{binDir: binDir}
+		versionDir := filepath.Join(binDir, "nodejs", "node", "24.18.0")
+		require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+			Entrypoints: map[string]string{
+				"node": filepath.Join(onedirTreeName, "bin", "node"),
+				"npm":  filepath.Join(onedirTreeName, "lib", "npm", "npm"),
+			},
+			Primary: "node",
+		}))
+
+		got := inst.GetBinaryPaths("nodejs", "node", "24.18.0")
+		assert.Equal(t, []string{
+			filepath.Join(versionDir, onedirTreeName, "bin", "node"),
+			filepath.Join(versionDir, onedirTreeName, "lib", "npm", "npm"),
+		}, got, "all entrypoints returned, sorted by path")
+	})
+
+	t.Run("flat install returns nil", func(t *testing.T) {
+		binDir := t.TempDir()
+		inst := &Installer{binDir: binDir}
+		assert.Nil(t, inst.GetBinaryPaths("hashicorp", "terraform", "1.9.8"))
+	})
+
+	t.Run("resolves the latest pointer", func(t *testing.T) {
+		binDir := t.TempDir()
+		inst := &Installer{binDir: binDir}
+		versionDir := filepath.Join(binDir, "nodejs", "node", "24.18.0")
+		require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+			Entrypoints: map[string]string{"node": filepath.Join(onedirTreeName, "bin", "node")},
+			Primary:     "node",
+		}))
+		require.NoError(t, inst.CreateLatestFile("nodejs", "node", "24.18.0"))
+
+		got := inst.GetBinaryPaths("nodejs", "node", "latest")
+		assert.Equal(t, []string{filepath.Join(versionDir, onedirTreeName, "bin", "node")}, got)
+	})
+}
+
+// TestExtractAndInstall_FlatReplacesStaleOnedir verifies that installing a flat
+// binary over an existing same-version onedir install clears the stale manifest
+// and .pkg tree, so the freshly installed flat binary is what resolves.
+func TestExtractAndInstall_FlatReplacesStaleOnedir(t *testing.T) {
+	tmp := t.TempDir()
+	inst := &Installer{binDir: tmp}
+	versionDir := filepath.Join(tmp, "acme", "tool", "1.0.0")
+
+	// Seed a stale onedir install for the same version.
+	writeFileUnder(t, filepath.Join(versionDir, onedirTreeName), "dist/tool", "OLD-ONEDIR")
+	require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+		Entrypoints: map[string]string{"tool": filepath.Join(onedirTreeName, "dist", "tool")},
+		Primary:     "tool",
+	}))
+
+	// Install a flat raw binary asset for the same version.
+	asset := filepath.Join(tmp, "asset")
+	require.NoError(t, os.WriteFile(asset, []byte("NEW-FLAT-BINARY"), 0o755))
+	tool := &registry.Tool{RepoOwner: "acme", RepoName: "tool", BinaryName: "tool"}
+
+	resolved, err := inst.extractAndInstall(tool, asset, "1.0.0")
+	require.NoError(t, err)
+
+	// The stale onedir artifacts are gone and the flat binary is what resolves.
+	// extractAndInstall applies the Windows .exe suffix, so build the expected
+	// path with the same helper rather than hardcoding it.
+	assert.NoFileExists(t, filepath.Join(versionDir, onedirManifestName))
+	assert.NoDirExists(t, filepath.Join(versionDir, onedirTreeName))
+	assert.Equal(t, filepath.Join(versionDir, EnsureWindowsExeExtension("tool")), resolved)
+	got, err := os.ReadFile(resolved)
+	require.NoError(t, err)
+	assert.Equal(t, "NEW-FLAT-BINARY", string(got))
+
+	_, ok := readOnedirManifest(versionDir)
+	assert.False(t, ok, "no manifest may remain after a flat replacement")
+}
+
+// TestFinalizeFlatInstall covers the artifact cleanup helper directly.
+func TestFinalizeFlatInstall(t *testing.T) {
+	t.Run("removes manifest and tree", func(t *testing.T) {
+		versionDir := t.TempDir()
+		writeFileUnder(t, filepath.Join(versionDir, onedirTreeName), "dist/tool", "x")
+		require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{Primary: "tool"}))
+
+		require.NoError(t, finalizeFlatInstall(versionDir))
+		assert.NoFileExists(t, filepath.Join(versionDir, onedirManifestName))
+		assert.NoDirExists(t, filepath.Join(versionDir, onedirTreeName))
+	})
+
+	t.Run("no-op when no onedir artifacts exist", func(t *testing.T) {
+		require.NoError(t, finalizeFlatInstall(t.TempDir()))
+	})
+
+	t.Run("errors when the manifest cannot be removed", func(t *testing.T) {
+		versionDir := t.TempDir()
+		// A non-empty directory at the manifest path makes os.Remove fail with a
+		// non-IsNotExist error.
+		require.NoError(t, os.MkdirAll(filepath.Join(versionDir, onedirManifestName, "child"), 0o755))
+		err := finalizeFlatInstall(versionDir)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
+// TestOnedirInstall_NoSymlinksInVersionDirRoot is an explicit regression
+// tripwire for the exact concern raised in review: Atmos must not create ANY
+// symlink to expose onedir entrypoints. It installs an aws-cli-shaped and a
+// node-shaped (with an in-archive symlink) package and asserts that no
+// symlink exists anywhere directly under the version-dir root — only inside
+// the preserved .pkg tree (where the archive's OWN symlinks may legitimately
+// live, materialized by createValidatedSymlink after the tree is in place).
+func TestOnedirInstall_NoSymlinksInVersionDirRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("this fixture's node archive carries a real in-archive symlink for npm, requiring symlink creation to build the fixture on Unix; Windows node archives ship .cmd files instead, so the scenario does not apply there")
+	}
+
+	tmp := t.TempDir()
+	archive := filepath.Join(tmp, "node.tar.gz")
+	writeTarGzTree(t, archive, []tarEntry{
+		{name: "node-v1.2.3/bin/node", content: "NODE-BINARY", mode: 0o755},
+		{name: "node-v1.2.3/bin/npm", link: "../lib/node_modules/npm/bin/npm-cli.js"},
+		{name: "node-v1.2.3/lib/node_modules/npm/bin/npm-cli.js", content: "NPM-CLI", mode: 0o644},
+	})
+
+	versionDir := filepath.Join(tmp, "version")
+	binaryPath := filepath.Join(versionDir, "node")
+	tool := &registry.Tool{Files: []registry.File{
+		{Name: "node", Src: "node-v1.2.3/bin/node"},
+		{Name: "npm", Src: "node-v1.2.3/bin/npm"},
+	}}
+	require.NoError(t, (&Installer{}).extractTarGz(archive, binaryPath, tool))
+
+	entries, err := os.ReadDir(versionDir)
+	require.NoError(t, err)
+	for _, e := range entries {
+		info, err := os.Lstat(filepath.Join(versionDir, e.Name()))
+		require.NoError(t, err)
+		assert.Zerof(t, info.Mode()&os.ModeSymlink,
+			"Atmos must not create a symlink at the version-dir root: found one at %q", e.Name())
+	}
+	// Sanity: the manifest (not a symlink) is what's actually there.
+	assert.FileExists(t, filepath.Join(versionDir, onedirManifestName))
+}
+
+// ---------------------------------------------------------------------------
+// Symlink materialization.
+// ---------------------------------------------------------------------------
+
+func TestCreateValidatedSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires privilege on Windows; onedir Windows support is tracked separately")
+	}
+
+	t.Run("creates a symlink reproducing the archive's relative target", func(t *testing.T) {
+		dest := t.TempDir()
+		link := filepath.Join(dest, "bin", "npm")
+		require.NoError(t, createValidatedSymlink(dest, link, "../lib/npm-cli.js"))
+
+		info, err := os.Lstat(link)
+		require.NoError(t, err)
+		require.NotZero(t, info.Mode()&os.ModeSymlink)
+		target, err := os.Readlink(link)
+		require.NoError(t, err)
+		assert.False(t, filepath.IsAbs(target), "target must be relative, got %q", target)
+		assert.Equal(t, filepath.FromSlash("../lib/npm-cli.js"), target)
+		// The link resolves to the real file once that file exists.
+		writeFileUnder(t, dest, "lib/npm-cli.js", "NPM")
+		got, err := os.ReadFile(link)
+		require.NoError(t, err)
+		assert.Equal(t, "NPM", string(got))
+	})
+
+	t.Run("rejects a relative target that escapes dest", func(t *testing.T) {
+		dest := t.TempDir()
+		link := filepath.Join(dest, "evil")
+		err := createValidatedSymlink(dest, link, "../../../../etc/passwd")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("rejects an absolute target outside dest", func(t *testing.T) {
+		dest := t.TempDir()
+		link := filepath.Join(dest, "evil")
+		err := createValidatedSymlink(dest, link, "/etc/passwd")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("links to a target materialized later (lexical validation)", func(t *testing.T) {
+		dest := t.TempDir()
+		link := filepath.Join(dest, "bin", "npm")
+		// The target does not exist yet (archive ordering); the link must still be created.
+		require.NoError(t, createValidatedSymlink(dest, link, "../lib/cli.js"))
+
+		// Materialize the target afterwards and confirm the link resolves.
+		writeFileUnder(t, dest, "lib/cli.js", "CLI")
+		got, err := os.ReadFile(link)
+		require.NoError(t, err)
+		assert.Equal(t, "CLI", string(got))
+	})
+}
+
+// TestCreateValidatedSymlink_Validation covers the single symlink-creation
+// sink's containment guards (what CodeQL flags as "arbitrary file write via
+// archive symlinks"). The rejection cases return before any filesystem
+// mutation, so they run on every platform (no symlink privilege needed); the
+// success cases assert the reproduced RELATIVE archive target and are Unix-only.
+func TestCreateValidatedSymlink_Validation(t *testing.T) {
+	t.Run("rejects an empty target", func(t *testing.T) {
+		root := t.TempDir()
+		err := createValidatedSymlink(root, filepath.Join(root, "link"), "")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("rejects an absolute target", func(t *testing.T) {
+		root := t.TempDir()
+		// Use a genuinely OS-absolute path outside root (a Unix-style "/etc/..."
+		// is NOT absolute on Windows, where filepath.IsAbs requires a volume).
+		absOutside := filepath.Join(t.TempDir(), "evil")
+		require.True(t, filepath.IsAbs(absOutside))
+		err := createValidatedSymlink(root, filepath.Join(root, "link"), absOutside)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("rejects a target escaping root", func(t *testing.T) {
+		root := t.TempDir()
+		// A relative "../" climb escapes on every platform.
+		escaping := filepath.Join("..", "..", "..", "..", "etc", "passwd")
+		err := createValidatedSymlink(root, filepath.Join(root, "node", "bin", "npm"), escaping)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("rejects a link path outside root", func(t *testing.T) {
+		root := t.TempDir()
+		// The symlink's own location is outside root (sibling of root).
+		outside := filepath.Join(filepath.Dir(root), "outside-link")
+		err := createValidatedSymlink(root, outside, "x")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+		_, statErr := os.Lstat(outside)
+		assert.True(t, os.IsNotExist(statErr), "no link may be created outside root")
+	})
+
+	t.Run("creates a relative in-root link for a valid target", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation requires privilege on Windows")
+		}
+		root := t.TempDir()
+		link := filepath.Join(root, "node", "bin", "npm")
+		require.NoError(t, createValidatedSymlink(root, link, "../lib/npm-cli.js"))
+		got, err := os.Readlink(link)
+		require.NoError(t, err)
+		assert.Equal(t, filepath.FromSlash("../lib/npm-cli.js"), got)
+	})
+
+	t.Run("reproduces a redundant archive target verbatim", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation requires privilege on Windows")
+		}
+		root := t.TempDir()
+		link := filepath.Join(root, "node", "bin", "npm")
+		// The archive target is reproduced verbatim, not cleaned or rewritten.
+		require.NoError(t, createValidatedSymlink(root, link, "./sub/../other"))
+		got, err := os.Readlink(link)
+		require.NoError(t, err)
+		assert.Equal(t, filepath.FromSlash("./sub/../other"), got)
+	})
+}
+
+// TestExtractTarGz_RejectsSymlinkEscapingRoot is an end-to-end security
+// regression: a tar containing a symlink whose target escapes the extraction
+// root must be rejected, and nothing may be written outside the destination.
+func TestExtractTarGz_RejectsSymlinkEscapingRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires privilege on Windows; the containment guard is covered on all platforms by TestCreateValidatedSymlink_Validation")
+	}
+
+	tmp := t.TempDir()
+	outside := filepath.Join(tmp, "outside")
+	require.NoError(t, os.MkdirAll(outside, 0o755))
+
+	archive := filepath.Join(tmp, "evil.tar.gz")
+	writeTarGzTree(t, archive, []tarEntry{
+		{name: "pkg/tool", content: "BIN", mode: 0o755},
+		{name: "pkg/extra.so", content: "LIB"}, // forces onedir mode
+		{name: "pkg/escape", link: "../../../outside/pwned"},
+	})
+
+	versionDir := filepath.Join(tmp, "version")
+	binaryPath := filepath.Join(versionDir, "tool")
+	tool := &registry.Tool{Files: []registry.File{{Name: "tool", Src: "pkg/tool"}}}
+
+	err := (&Installer{}).extractTarGz(archive, binaryPath, tool)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileOperation)
+
+	// Nothing was created at the escape destination.
+	_, statErr := os.Lstat(filepath.Join(outside, "pwned"))
+	assert.True(t, os.IsNotExist(statErr), "escaping symlink must not be created outside the destination")
+}
+
+// ---------------------------------------------------------------------------
+// onedir installs (#2743 aws-cli shape, #2744 node shape).
+// ---------------------------------------------------------------------------
+
+// TestExtractFilesFromDir_Onedir_PreservesRuntimeSiblings reproduces the #2743
+// shape: a bundled binary with a runtime shared-library sibling. The fix must
+// preserve the whole tree and co-locate the sibling with the resolved binary.
+//
+// This also verifies the exposure mechanism itself: Atmos creates NO symlink
+// (or any file) at the root entrypoint path — symlinks are avoided by design
+// (see the onedirTreeName doc) — so this test needs no Windows skip.
+func TestExtractFilesFromDir_Onedir_PreservesRuntimeSiblings(t *testing.T) {
+	tmp := t.TempDir()
+	staging := filepath.Join(tmp, "staging")
+	writeFileUnder(t, staging, "aws/dist/aws", "MAIN-BINARY")
+	writeFileUnder(t, staging, "aws/dist/aws_completer", "COMPLETER")
+	writeFileUnder(t, staging, "aws/dist/libpython3.so", "SHARED-LIB") // The dropped-by-old-code sibling.
+
+	inst := &Installer{binDir: tmp}
+	versionDir := filepath.Join(tmp, "aws", "aws-cli", "2.35.15")
+	binaryPath := filepath.Join(versionDir, "aws")
+	tool := &registry.Tool{Files: []registry.File{
+		{Name: "aws", Src: "aws/dist/aws"},
+		{Name: "aws_completer", Src: "aws/dist/aws_completer"},
+	}}
+
+	require.NoError(t, inst.extractFilesFromDir(staging, binaryPath, tool, nil, nil))
+
+	// The complete tree is preserved under .pkg, including the runtime sibling.
+	assert.FileExists(t, filepath.Join(versionDir, onedirTreeName, "aws", "dist", "libpython3.so"))
+
+	// No symlink (or anything else) is created at the root entrypoint path.
+	_, lerr := os.Lstat(binaryPath)
+	assert.True(t, os.IsNotExist(lerr), "onedir must not create anything at the root entrypoint path")
+
+	// Exposure goes through the sidecar manifest instead.
+	manifest, ok := readOnedirManifest(versionDir)
+	require.True(t, ok, "onedir install must write a manifest")
+	assert.Equal(t, "aws", manifest.Primary)
+	assert.Equal(t, filepath.Join(onedirTreeName, "aws", "dist", "aws"), manifest.Entrypoints["aws"])
+	assert.Equal(t, filepath.Join(onedirTreeName, "aws", "dist", "aws_completer"), manifest.Entrypoints["aws_completer"])
+
+	// GetBinaryPath resolves the primary entrypoint to its real, executable path.
+	resolved := inst.GetBinaryPath("aws", "aws-cli", "2.35.15", "")
+	got, err := os.ReadFile(resolved)
+	require.NoError(t, err)
+	assert.Equal(t, "MAIN-BINARY", string(got))
+
+	// The critical #2743 guarantee: the shared library sits next to the resolved
+	// binary, so it loads at runtime.
+	assert.FileExists(t, filepath.Join(filepath.Dir(resolved), "libpython3.so"))
+}
+
+// TestInstallOnedirForOS_UsesWindowsExeEntrypoint verifies that Windows Aqua
+// registry sources can omit `.exe` while the archive contains it. This mirrors
+// nodejs/node's `files[].src` behavior. No symlink privilege is needed (or
+// used) for this, so it runs on every platform, including a real Windows
+// runner in CI.
+func TestInstallOnedirForOS_UsesWindowsExeEntrypoint(t *testing.T) {
+	tmp := t.TempDir()
+	staging := filepath.Join(tmp, "staging")
+	writeFileUnder(t, staging, "node/bin/node.exe", "NODE")
+	writeFileUnder(t, staging, "node/lib/runtime.dll", "RUNTIME")
+
+	versionDir := filepath.Join(tmp, "version")
+	binaryPath := filepath.Join(versionDir, "node.exe")
+	eps := []entrypoint{{name: "node", src: "node/bin/node"}}
+
+	require.NoError(t, (&Installer{}).installOnedirForOS(staging, binaryPath, eps, deferredEntries{}, "windows"))
+
+	// No symlink/file is created at the root entrypoint path.
+	_, lerr := os.Lstat(binaryPath)
+	assert.True(t, os.IsNotExist(lerr))
+
+	manifest, ok := readOnedirManifest(versionDir)
+	require.True(t, ok)
+	assert.Equal(t, "node", manifest.Primary)
+	assert.Equal(t, filepath.Join(onedirTreeName, "node", "bin", "node.exe"), manifest.Entrypoints["node"])
+
+	got, err := os.ReadFile(filepath.Join(versionDir, manifest.Entrypoints["node"]))
+	require.NoError(t, err)
+	assert.Equal(t, "NODE", string(got))
+}
+
+func TestResolveOnedirEntrypointSourceForOS(t *testing.T) {
+	t.Run("returns the on-disk source", func(t *testing.T) {
+		staging := t.TempDir()
+		writeFileUnder(t, staging, "bin/node", "NODE")
+
+		src, err := resolveOnedirEntrypointSourceForOS(staging, "bin/node", nil, "linux")
+		require.NoError(t, err)
+		assert.Equal(t, "bin/node", src)
+	})
+
+	t.Run("recognizes a collected (not-yet-materialized) symlink entrypoint", func(t *testing.T) {
+		// The npm launcher is a symlink collected during extraction, so it is
+		// NOT on disk; it must still resolve via the symlink set.
+		symSet := symlinkRelSet([]pendingSymlink{{rel: "bin/npm", target: "../lib/cli.js"}})
+		src, err := resolveOnedirEntrypointSourceForOS(t.TempDir(), "bin/npm", symSet, "linux")
+		require.NoError(t, err)
+		assert.Equal(t, "bin/npm", src)
+	})
+
+	t.Run("returns the Windows exe variant", func(t *testing.T) {
+		staging := t.TempDir()
+		writeFileUnder(t, staging, "node.exe", "NODE")
+
+		src, err := resolveOnedirEntrypointSourceForOS(staging, "node", nil, "windows")
+		require.NoError(t, err)
+		assert.Equal(t, "node.exe", src)
+	})
+
+	t.Run("fails when neither Windows variant exists", func(t *testing.T) {
+		_, err := resolveOnedirEntrypointSourceForOS(t.TempDir(), "node", nil, "windows")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrToolNotFound)
+	})
+
+	t.Run("propagates a stat error that is not not-exist", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("a path that traverses through a file yields ENOTDIR on Unix; Windows maps this differently")
+		}
+		// A source path traversing THROUGH a regular file yields ENOTDIR (not
+		// IsNotExist), which must surface as an error rather than "absent".
+		staging := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(staging, "iamafile"), []byte("x"), 0o644))
+
+		_, err := resolveOnedirEntrypointSourceForOS(staging, filepath.Join("iamafile", "child"), nil, "linux")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
+func TestResolveWindowsExeFallback(t *testing.T) {
+	t.Run("non-windows goos always reports the entrypoint missing", func(t *testing.T) {
+		src, dst, err := resolveWindowsExeFallback(filepath.Join(t.TempDir(), "node"), "node", "linux")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrToolNotFound)
+		assert.Empty(t, src)
+		assert.Empty(t, dst)
+	})
+
+	t.Run("windows: falls back to the .exe sibling when present", func(t *testing.T) {
+		dir := t.TempDir()
+		src := filepath.Join(dir, "node")
+		require.NoError(t, os.WriteFile(src+".exe", []byte("NODE"), 0o600))
+
+		gotSrc, gotDst, err := resolveWindowsExeFallback(src, "node", "windows")
+		require.NoError(t, err)
+		assert.Equal(t, src+".exe", gotSrc)
+		assert.Equal(t, "node.exe", gotDst)
+	})
+
+	t.Run("windows: reports not-found when neither variant exists", func(t *testing.T) {
+		_, _, err := resolveWindowsExeFallback(filepath.Join(t.TempDir(), "node"), "node", "windows")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrToolNotFound)
+	})
+
+	t.Run("windows: propagates a stat error that is not not-exist", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("a path that traverses through a file yields ENOTDIR on Unix; Windows maps this differently")
+		}
+		// A source path traversing THROUGH a regular file yields ENOTDIR (not
+		// IsNotExist) when stat'ing the .exe sibling, which must surface as an
+		// error rather than being treated as "the .exe variant is absent".
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "iamafile"), []byte("x"), 0o644))
+		src := filepath.Join(dir, "iamafile", "child")
+
+		_, _, err := resolveWindowsExeFallback(src, "child", "windows")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
+// TestInstallOnedir_FailedReinstallPreservesExistingTree verifies that an
+// incomplete replacement does not delete a known-good onedir installation.
+// Uses no symlinks (the existing install is represented purely via the
+// manifest + tree, matching how a real prior install would look), so this
+// needs no Windows skip.
+func TestInstallOnedir_FailedReinstallPreservesExistingTree(t *testing.T) {
+	tmp := t.TempDir()
+	versionDir := filepath.Join(tmp, "version")
+	treeDir := filepath.Join(versionDir, onedirTreeName)
+	writeFileUnder(t, treeDir, "old/tool", "KNOWN-GOOD")
+	require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+		Entrypoints: map[string]string{"tool": filepath.Join(onedirTreeName, "old", "tool")},
+		Primary:     "tool",
+	}))
+
+	staging := filepath.Join(tmp, "staging")
+	writeFileUnder(t, staging, "new/tool", "REPLACEMENT")
+	writeFileUnder(t, staging, "new/runtime.so", "RUNTIME")
+	// `new/missing-helper` is intentionally absent.
+	eps := []entrypoint{
+		{name: "tool", src: "new/tool"},
+		{name: "helper", src: "new/missing-helper"},
+	}
+
+	err := (&Installer{}).installOnedir(staging, filepath.Join(versionDir, "tool"), eps, nil, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrToolNotFound)
+
+	// The old tree and manifest must still be intact after a failed reinstall;
+	// replacing .pkg before validating every entrypoint caused this to break.
+	manifest, ok := readOnedirManifest(versionDir)
+	require.True(t, ok, "manifest must survive a failed reinstall")
+	assert.Equal(t, "tool", manifest.Primary)
+	got, err := os.ReadFile(filepath.Join(versionDir, manifest.Entrypoints["tool"]))
+	require.NoError(t, err)
+	assert.Equal(t, "KNOWN-GOOD", string(got))
+	assert.FileExists(t, filepath.Join(treeDir, "old", "tool"))
+}
+
+// TestInstallOnedir_MoveFailureRestoresExistingTree verifies the atomic-reinstall
+// rollback: if the tree move fails AFTER validation (disk full, interrupted
+// cross-device copy, ...), the previously-installed tree is restored rather than
+// left destroyed. The failure is injected via moveTreeFunc so the rollback path
+// is exercised deterministically on every platform.
+func TestInstallOnedir_MoveFailureRestoresExistingTree(t *testing.T) {
+	tmp := t.TempDir()
+	versionDir := filepath.Join(tmp, "version")
+	treeDir := filepath.Join(versionDir, onedirTreeName)
+	writeFileUnder(t, treeDir, "old/tool", "KNOWN-GOOD")
+	require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+		Entrypoints: map[string]string{"tool": filepath.Join(onedirTreeName, "old", "tool")},
+		Primary:     "tool",
+	}))
+
+	staging := filepath.Join(tmp, "staging")
+	writeFileUnder(t, staging, "new/tool", "REPLACEMENT")
+	eps := []entrypoint{{name: "tool", src: "new/tool"}} // valid: passes entrypoint validation.
+
+	// Force the move to fail after the existing tree has been renamed aside.
+	orig := moveTreeFunc
+	t.Cleanup(func() { moveTreeFunc = orig })
+	moveTreeFunc = func(src, dst string) error { return assert.AnError }
+
+	err := (&Installer{}).installOnedir(staging, filepath.Join(versionDir, "tool"), eps, nil, nil)
+	require.Error(t, err)
+
+	// The known-good tree must be restored and no backup residue left behind.
+	got, err := os.ReadFile(filepath.Join(treeDir, "old", "tool"))
+	require.NoError(t, err)
+	assert.Equal(t, "KNOWN-GOOD", string(got))
+	_, statErr := os.Stat(treeDir + onedirBackupSuffix)
+	assert.True(t, os.IsNotExist(statErr), "backup must not be left behind after rollback")
+
+	// The pre-existing manifest is untouched and still resolves.
+	manifest, ok := readOnedirManifest(versionDir)
+	require.True(t, ok)
+	assert.Equal(t, "tool", manifest.Primary)
+}
+
+// TestInstallOnedir_ReinstallReplacesTreeAndClearsBackup verifies the happy-path
+// reinstall over an existing tree: the new tree is installed, the old one is
+// gone, and no backup directory residue remains.
+func TestInstallOnedir_ReinstallReplacesTreeAndClearsBackup(t *testing.T) {
+	tmp := t.TempDir()
+	versionDir := filepath.Join(tmp, "version")
+	treeDir := filepath.Join(versionDir, onedirTreeName)
+	writeFileUnder(t, treeDir, "old/tool", "OLD")
+	require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+		Entrypoints: map[string]string{"tool": filepath.Join(onedirTreeName, "old", "tool")},
+		Primary:     "tool",
+	}))
+
+	staging := filepath.Join(tmp, "staging")
+	writeFileUnder(t, staging, "new/tool", "NEW")
+	eps := []entrypoint{{name: "tool", src: "new/tool"}}
+
+	require.NoError(t, (&Installer{}).installOnedir(staging, filepath.Join(versionDir, "tool"), eps, nil, nil))
+
+	// New tree in place, old content gone, no backup residue.
+	assert.NoFileExists(t, filepath.Join(treeDir, "old", "tool"))
+	assert.FileExists(t, filepath.Join(treeDir, "new", "tool"))
+	_, statErr := os.Stat(treeDir + onedirBackupSuffix)
+	assert.True(t, os.IsNotExist(statErr), "backup must be cleared after a successful reinstall")
+
+	manifest, ok := readOnedirManifest(versionDir)
+	require.True(t, ok)
+	got, err := os.ReadFile(filepath.Join(versionDir, manifest.Entrypoints["tool"]))
+	require.NoError(t, err)
+	assert.Equal(t, "NEW", string(got))
+}
+
+// TestInstallOnedir_RecoversInterruptedBackup verifies that a run interrupted
+// right after the tree was renamed aside (treeDir missing, only backupDir holds
+// the good install) does not lose that install: the next run restores the
+// backup first, so even a subsequent failed reinstall leaves the good tree
+// intact. Before the fix, the leading os.RemoveAll(backupDir) deleted the sole
+// surviving copy.
+func TestInstallOnedir_RecoversInterruptedBackup(t *testing.T) {
+	tmp := t.TempDir()
+	versionDir := filepath.Join(tmp, "version")
+	treeDir := filepath.Join(versionDir, onedirTreeName)
+
+	// Simulate the interrupted state: treeDir is ABSENT; the only good install
+	// survives in the backup directory.
+	backupDir := treeDir + onedirBackupSuffix
+	writeFileUnder(t, backupDir, "old/tool", "KNOWN-GOOD")
+
+	// A reinstall that fails validation (missing entrypoint) must not destroy
+	// the recovered install.
+	staging := filepath.Join(tmp, "staging")
+	writeFileUnder(t, staging, "new/tool", "REPLACEMENT")
+	eps := []entrypoint{{name: "tool", src: "new/missing"}} // absent -> validation fails
+
+	err := (&Installer{}).installOnedir(staging, filepath.Join(versionDir, "tool"), eps, nil, nil)
+	require.Error(t, err)
+
+	// The known-good install was recovered from the backup and preserved.
+	got, err := os.ReadFile(filepath.Join(treeDir, "old", "tool"))
+	require.NoError(t, err)
+	assert.Equal(t, "KNOWN-GOOD", string(got))
+	assert.NoDirExists(t, backupDir, "no backup residue should remain")
+}
+
+// TestInstallOnedir_ManifestFailureRestoresExistingTree verifies that a failed
+// manifest write during reinstall rolls back to the known-good tree instead of
+// leaving a new tree with no manifest. The failure is injected by occupying the
+// manifest path with a directory so os.WriteFile fails on every platform.
+func TestInstallOnedir_ManifestFailureRestoresExistingTree(t *testing.T) {
+	tmp := t.TempDir()
+	versionDir := filepath.Join(tmp, "version")
+	treeDir := filepath.Join(versionDir, onedirTreeName)
+	writeFileUnder(t, treeDir, "old/tool", "KNOWN-GOOD")
+	// A directory at the manifest path makes writeOnedirManifest's WriteFile fail.
+	require.NoError(t, os.MkdirAll(filepath.Join(versionDir, onedirManifestName), 0o755))
+
+	staging := filepath.Join(tmp, "staging")
+	writeFileUnder(t, staging, "new/tool", "REPLACEMENT")
+	eps := []entrypoint{{name: "tool", src: "new/tool"}}
+
+	err := (&Installer{}).installOnedir(staging, filepath.Join(versionDir, "tool"), eps, nil, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileOperation)
+
+	// The known-good tree is restored and no backup residue remains.
+	got, err := os.ReadFile(filepath.Join(treeDir, "old", "tool"))
+	require.NoError(t, err)
+	assert.Equal(t, "KNOWN-GOOD", string(got))
+	assert.NoFileExists(t, filepath.Join(treeDir, "new", "tool"))
+	_, statErr := os.Stat(treeDir + onedirBackupSuffix)
+	assert.True(t, os.IsNotExist(statErr), "backup must not be left behind after rollback")
+}
+
+// TestExtractTarGz_Onedir_RecreatesSymlinkEntrypoint reproduces the #2744 shape:
+// a tar.gz whose npm entrypoint is an in-archive symlink into a sibling lib tree.
+// The fix must recreate the symlink (not drop it) and expose a working entrypoint.
+func TestExtractTarGz_Onedir_RecreatesSymlinkEntrypoint(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink entrypoints require privilege on Windows; onedir Windows support is tracked separately")
+	}
+
+	tmp := t.TempDir()
+	archive := filepath.Join(tmp, "node.tar.gz")
+	writeTarGzTree(t, archive, []tarEntry{
+		{name: "node-v1.2.3/", dir: true},
+		{name: "node-v1.2.3/bin/", dir: true},
+		{name: "node-v1.2.3/bin/node", content: "NODE-BINARY", mode: 0o755},
+		{name: "node-v1.2.3/bin/npm", link: "../lib/node_modules/npm/bin/npm-cli.js"},
+		{name: "node-v1.2.3/lib/", dir: true},
+		{name: "node-v1.2.3/lib/node_modules/npm/bin/", dir: true},
+		{name: "node-v1.2.3/lib/node_modules/npm/bin/npm-cli.js", content: "NPM-CLI", mode: 0o644},
+	})
+
+	versionDir := filepath.Join(tmp, "version")
+	binaryPath := filepath.Join(versionDir, "node")
+	inst := &Installer{}
+	tool := &registry.Tool{Files: []registry.File{
+		{Name: "node", Src: "node-v1.2.3/bin/node"},
+		{Name: "npm", Src: "node-v1.2.3/bin/npm"},
+	}}
+
+	require.NoError(t, inst.extractTarGz(archive, binaryPath, tool))
+
+	// No root symlink/file is created; entrypoints are exposed via the manifest.
+	manifest, ok := readOnedirManifest(versionDir)
+	require.True(t, ok)
+
+	// node resolves to the real binary.
+	got, err := os.ReadFile(filepath.Join(versionDir, manifest.Entrypoints["node"]))
+	require.NoError(t, err)
+	assert.Equal(t, "NODE-BINARY", string(got))
+
+	// The in-archive symlink was RECREATED inside the preserved tree (not dropped).
+	internal := filepath.Join(versionDir, onedirTreeName, "node-v1.2.3", "bin", "npm")
+	linfo, err := os.Lstat(internal)
+	require.NoError(t, err)
+	require.NotZero(t, linfo.Mode()&os.ModeSymlink, "in-archive symlink must be recreated")
+
+	// npm entrypoint chains through the recreated symlink to the real CLI script.
+	got, err = os.ReadFile(filepath.Join(versionDir, manifest.Entrypoints["npm"]))
+	require.NoError(t, err)
+	assert.Equal(t, "NPM-CLI", string(got))
+}
+
+// TestExtractZip_Onedir_RecreatesSymlinkEntrypoint verifies the same behavior for
+// zip archives (aws-cli is distributed as a zip), including zip symlink entries.
+func TestExtractZip_Onedir_RecreatesSymlinkEntrypoint(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink entrypoints require privilege on Windows; onedir Windows support is tracked separately")
+	}
+
+	tmp := t.TempDir()
+	archive := filepath.Join(tmp, "tool.zip")
+	writeZipTree(t, archive, []zipEntry{
+		{name: "pkg/dist/tool", content: "TOOL-BINARY", mode: 0o755},
+		{name: "pkg/dist/libdep.so", content: "SHARED-LIB", mode: 0o644},
+		{name: "pkg/bin/tool", link: "../dist/tool"}, // zip symlink entry.
+	})
+
+	versionDir := filepath.Join(tmp, "version")
+	binaryPath := filepath.Join(versionDir, "tool")
+	inst := &Installer{}
+	// The entrypoint is the symlinked launcher, which points at the real binary.
+	tool := &registry.Tool{Files: []registry.File{
+		{Name: "tool", Src: "pkg/bin/tool"},
+	}}
+
+	require.NoError(t, inst.extractZip(archive, binaryPath, tool))
+
+	// Runtime sibling preserved.
+	assert.FileExists(t, filepath.Join(versionDir, onedirTreeName, "pkg", "dist", "libdep.so"))
+
+	// Entrypoint resolves via the manifest, chaining through the recreated zip
+	// symlink to the real binary.
+	manifest, ok := readOnedirManifest(versionDir)
+	require.True(t, ok)
+	got, err := os.ReadFile(filepath.Join(versionDir, manifest.Entrypoints["tool"]))
+	require.NoError(t, err)
+	assert.Equal(t, "TOOL-BINARY", string(got))
+}
+
+// A onedir package whose first entrypoint is a symlink into a sibling tree (as
+// nodejs/node ships corepack/npm/npx) must install so the entrypoint resolves
+// to a real, executable file, including when the install path is relative.
+func TestExtractAndInstall_Onedir_RelativeInstallPath_LeadingSymlinkEntrypoint(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("in-archive symlink entrypoints require symlink privilege on Windows; onedir Windows support is tracked separately")
+	}
+
+	base := t.TempDir()
+	t.Chdir(base)
+
+	archive := filepath.Join(base, "node.tar.gz")
+	writeTarGzTree(t, archive, []tarEntry{
+		{name: "node-v1/bin/corepack", link: "../lib/node_modules/corepack/dist/corepack.js"},
+		{name: "node-v1/bin/npm", link: "../lib/node_modules/npm/bin/npm-cli.js"},
+		{name: "node-v1/bin/node", content: "NODE-BINARY", mode: 0o755},
+		{name: "node-v1/lib/node_modules/corepack/dist/corepack.js", content: "COREPACK", mode: 0o644},
+		{name: "node-v1/lib/node_modules/npm/bin/npm-cli.js", content: "NPM-CLI", mode: 0o644},
+	})
+
+	// A relative binDir (resolved against cwd) is the case under test.
+	inst := &Installer{binDir: filepath.Join(".tools", "bin")}
+	tool := &registry.Tool{
+		RepoOwner: "nodejs",
+		RepoName:  "node",
+		// corepack (a symlink) leads files[], so it is the resolved primary.
+		Files: []registry.File{
+			{Name: "corepack", Src: "node-v1/bin/corepack"},
+			{Name: "npm", Src: "node-v1/bin/npm"},
+			{Name: "node", Src: "node-v1/bin/node"},
+		},
+	}
+
+	resolved, err := inst.extractAndInstall(tool, archive, "20.19.6")
+	require.NoError(t, err)
+
+	// chmod and Stat follow the symlink, so the entrypoint must resolve to a real file.
+	require.NoError(t, os.Chmod(resolved, 0o755))
+
+	info, err := os.Stat(resolved)
+	require.NoError(t, err)
+	require.False(t, info.IsDir())
+	payload, err := os.ReadFile(resolved)
+	require.NoError(t, err)
+	assert.Equal(t, "COREPACK", string(payload))
+
+	target, err := os.Readlink(resolved)
+	require.NoError(t, err)
+	assert.False(t, filepath.IsAbs(target), "symlink target must be relative, got %q", target)
+	assert.Equal(t, filepath.FromSlash("../lib/node_modules/corepack/dist/corepack.js"), target)
+
+	// Each entrypoint resolves through the manifest to a real file (npm via its symlink).
+	npm := inst.GetBinaryPath("nodejs", "node", "20.19.6", "npm")
+	npmPayload, err := os.ReadFile(npm)
+	require.NoError(t, err)
+	assert.Equal(t, "NPM-CLI", string(npmPayload))
+
+	node := inst.GetBinaryPath("nodejs", "node", "20.19.6", "node")
+	nodePayload, err := os.ReadFile(node)
+	require.NoError(t, err)
+	assert.Equal(t, "NODE-BINARY", string(nodePayload))
+}
+
+// TestExtractAndInstall_CleansUpOnFailure verifies that a failed extraction of a
+// fresh version does not orphan a partial install (which would otherwise fool
+// FindBinaryPath into reporting the tool as installed).
+func TestExtractAndInstall_CleansUpOnFailure(t *testing.T) {
+	tmp := t.TempDir()
+	inst := &Installer{binDir: tmp}
+
+	// A tar.gz whose payload does not contain the configured entrypoint.
+	archive := filepath.Join(tmp, "asset.tar.gz")
+	createTestTarGzArchive(t, archive, map[string]string{"unrelated-file": "x"})
+
+	tool := &registry.Tool{
+		RepoOwner: "acme",
+		RepoName:  "tool",
+		Files:     []registry.File{{Name: "tool", Src: "does/not/exist"}},
+	}
+
+	_, err := inst.extractAndInstall(tool, archive, "1.0.0")
+	require.Error(t, err)
+
+	// The version directory must not be left behind.
+	_, statErr := os.Stat(filepath.Join(tmp, "acme", "tool", "1.0.0"))
+	assert.Truef(t, os.IsNotExist(statErr), "failed install must not orphan a version dir (stat err: %v)", statErr)
+}
+
+// TestUninstall_RemovesOnedirTree verifies uninstall removes the whole version
+// directory, including the preserved tree and the sidecar manifest. Uses no
+// symlinks (matching how Atmos actually exposes onedir entrypoints), so this
+// needs no Windows skip.
+func TestUninstall_RemovesOnedirTree(t *testing.T) {
+	tmp := t.TempDir()
+	inst := &Installer{binDir: tmp}
+
+	versionDir := filepath.Join(tmp, "acme", "tool", "1.0.0")
+	require.NoError(t, os.MkdirAll(filepath.Join(versionDir, onedirTreeName, "dist"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(versionDir, onedirTreeName, "dist", "tool"), []byte("BIN"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(versionDir, onedirTreeName, "dist", "lib.so"), []byte("LIB"), 0o644))
+	require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+		Entrypoints: map[string]string{"tool": filepath.Join(onedirTreeName, "dist", "tool")},
+		Primary:     "tool",
+	}))
+
+	require.NoError(t, inst.Uninstall("acme", "tool", "1.0.0"))
+
+	_, err := os.Stat(versionDir)
+	assert.True(t, os.IsNotExist(err), "onedir version dir must be fully removed")
+}
+
+// TestOnedir_ErrorPaths covers the error branches of the onedir helpers using
+// filesystem conditions (a file where a directory is expected, missing sources,
+// malformed templates) rather than mocks.
+func TestOnedir_ErrorPaths(t *testing.T) {
+	// pathUnderFile returns a path whose PARENT is a regular file, so any
+	// os.MkdirAll of the parent fails.
+	pathUnderFile := func(t *testing.T) string {
+		t.Helper()
+		base := t.TempDir()
+		fileAsParent := filepath.Join(base, "iamafile")
+		require.NoError(t, os.WriteFile(fileAsParent, []byte("x"), 0o644))
+		return filepath.Join(fileAsParent, "child")
+	}
+
+	t.Run("resolveEntrypoints defaults src to name", func(t *testing.T) {
+		eps, err := (&Installer{}).resolveEntrypoints(&registry.Tool{
+			Files: []registry.File{{Name: "tool"}}, // Src omitted.
+		})
+		require.NoError(t, err)
+		require.Len(t, eps, 1)
+		assert.Equal(t, "tool", eps[0].src)
+	})
+
+	t.Run("resolveEntrypoints propagates template error", func(t *testing.T) {
+		_, err := (&Installer{}).resolveEntrypoints(&registry.Tool{
+			Files: []registry.File{{Name: "t", Src: "{{ .Bad "}}, // Malformed template.
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("installFlat fails when dest dir cannot be created", func(t *testing.T) {
+		err := (&Installer{}).installFlat(t.TempDir(), pathUnderFile(t), []entrypoint{{name: "t", src: "t"}})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("createValidatedSymlink fails when parent cannot be created", func(t *testing.T) {
+		base := t.TempDir()
+		fileAsParent := filepath.Join(base, "iamafile")
+		require.NoError(t, os.WriteFile(fileAsParent, []byte("x"), 0o644))
+		err := createValidatedSymlink(base, filepath.Join(fileAsParent, "child"), "target")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("extractHardLink fails when parent cannot be created", func(t *testing.T) {
+		base := t.TempDir()
+		writeFileUnder(t, base, "real", "data")
+		fileAsParent := filepath.Join(base, "iamafile")
+		require.NoError(t, os.WriteFile(fileAsParent, []byte("x"), 0o644))
+		err := extractHardLink(filepath.Join(fileAsParent, "child"), "real", base)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("copyRegularFile fails on missing source", func(t *testing.T) {
+		err := copyRegularFile(filepath.Join(t.TempDir(), "nope"), filepath.Join(t.TempDir(), "dst"), 0o644)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("copyRegularFile fails when dest parent cannot be created", func(t *testing.T) {
+		src := filepath.Join(t.TempDir(), "src")
+		require.NoError(t, os.WriteFile(src, []byte("x"), 0o644))
+		err := copyRegularFile(src, pathUnderFile(t), 0o644)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("copyTree fails on missing source", func(t *testing.T) {
+		err := copyTree(filepath.Join(t.TempDir(), "nope"), t.TempDir())
+		require.Error(t, err)
+	})
+
+	t.Run("newStagingDir fails when version dir cannot be created", func(t *testing.T) {
+		_, err := newStagingDir(pathUnderFile(t))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("extractTarGz fails when staging dir cannot be created", func(t *testing.T) {
+		archive := filepath.Join(t.TempDir(), "a.tar.gz")
+		createTestTarGzArchive(t, archive, map[string]string{"x": "y"})
+		err := (&Installer{}).extractTarGz(archive, pathUnderFile(t), &registry.Tool{Name: "x"})
+		require.Error(t, err)
+	})
+
+	t.Run("extractZip fails when staging dir cannot be created", func(t *testing.T) {
+		archive := filepath.Join(t.TempDir(), "a.zip")
+		createTestZipArchive(t, archive, map[string]string{"x": "y"})
+		err := (&Installer{}).extractZip(archive, pathUnderFile(t), &registry.Tool{Name: "x"})
+		require.Error(t, err)
+	})
+}
+
+// TestCreateValidatedSymlink_SymlinkFailure rejects a blocked link path.
+func TestCreateValidatedSymlink_SymlinkFailure(t *testing.T) {
+	newBlockedLink := func(t *testing.T) (dest, linkPath string) {
+		t.Helper()
+		dest = t.TempDir()
+		linkPath = filepath.Join(dest, "occupied")
+		// A non-empty directory at linkPath makes os.Remove + os.Symlink fail.
+		require.NoError(t, os.MkdirAll(filepath.Join(linkPath, "child"), 0o755))
+		return dest, linkPath
+	}
+
+	t.Run("returns an error", func(t *testing.T) {
+		dest, linkPath := newBlockedLink(t)
+		err := createValidatedSymlink(dest, linkPath, "target")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
+// TestCreateValidatedSymlinkForOS_WindowsFallback exercises the Windows
+// best-effort fallback (hard link or copy for a file target) when symlink
+// creation is unavailable. The symlinkFunc seam forces a failure so the path
+// runs on any platform.
+func TestCreateValidatedSymlinkForOS_WindowsFallback(t *testing.T) {
+	orig := symlinkFunc
+	t.Cleanup(func() { symlinkFunc = orig })
+	symlinkFunc = func(string, string) error { return assert.AnError }
+
+	t.Run("reproduces a file target as a real file (hard link)", func(t *testing.T) {
+		root := t.TempDir()
+		writeFileUnder(t, root, "lib/real.js", "PAYLOAD")
+		link := filepath.Join(root, "bin", "npm")
+
+		require.NoError(t, createValidatedSymlinkForOS(root, link, "../lib/real.js", "windows"))
+
+		got, err := os.ReadFile(link)
+		require.NoError(t, err)
+		assert.Equal(t, "PAYLOAD", string(got))
+		info, err := os.Lstat(link)
+		require.NoError(t, err)
+		assert.Zero(t, info.Mode()&os.ModeSymlink, "fallback must produce a real file, not a symlink")
+	})
+
+	t.Run("rejects a directory target", func(t *testing.T) {
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "lib", "sub"), 0o755))
+		err := createValidatedSymlinkForOS(root, filepath.Join(root, "bin", "dirlink"), "../lib/sub", "windows")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("errors when the target is missing", func(t *testing.T) {
+		root := t.TempDir()
+		err := createValidatedSymlinkForOS(root, filepath.Join(root, "bin", "ghost"), "../lib/missing", "windows")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("non-windows still returns the symlink error", func(t *testing.T) {
+		root := t.TempDir()
+		writeFileUnder(t, root, "lib/real.js", "PAYLOAD")
+		err := createValidatedSymlinkForOS(root, filepath.Join(root, "bin", "npm"), "../lib/real.js", "linux")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
+// TestWindowsSymlinkFallback_CopyBranch covers the copy path taken when
+// hard-linking fails (forced here by a pre-existing destination).
+func TestWindowsSymlinkFallback_CopyBranch(t *testing.T) {
+	root := t.TempDir()
+	writeFileUnder(t, root, "real", "PAYLOAD")
+	target := filepath.Join(root, "real")
+	linkPath := filepath.Join(root, "copy")
+	// A pre-existing destination makes os.Link fail, forcing the copy fallback.
+	require.NoError(t, os.WriteFile(linkPath, []byte("OLD"), 0o644))
+
+	require.NoError(t, windowsSymlinkFallback(target, linkPath, linkPath))
+
+	got, err := os.ReadFile(linkPath)
+	require.NoError(t, err)
+	assert.Equal(t, "PAYLOAD", string(got))
+}
+
+// TestMoveEntrypointFileForOS_Windows covers the Windows `.exe` handling: an
+// archive entry named without the extension is resolved to the `.exe` file.
+func TestMoveEntrypointFileForOS_Windows(t *testing.T) {
+	t.Run("resolves the .exe variant", func(t *testing.T) {
+		tmp := t.TempDir()
+		src := filepath.Join(tmp, "tool") // Does not exist without .exe.
+		require.NoError(t, os.WriteFile(src+windowsExeExt, []byte("BINARY"), 0o755))
+		dst := filepath.Join(tmp, "out", "tool")
+
+		require.NoError(t, moveEntrypointFileForOS(src, dst, "windows"))
+
+		got, err := os.ReadFile(dst + windowsExeExt)
+		require.NoError(t, err)
+		assert.Equal(t, "BINARY", string(got))
+	})
+
+	t.Run("returns not-found when neither variant exists", func(t *testing.T) {
+		tmp := t.TempDir()
+		err := moveEntrypointFileForOS(filepath.Join(tmp, "ghost"), filepath.Join(tmp, "out", "ghost"), "windows")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrToolNotFound)
+	})
+}
+
+func TestShouldPreserveTree_WalkError(t *testing.T) {
+	// A nonexistent root makes WalkDir invoke the callback with an error, which
+	// must propagate rather than silently returning false.
+	_, err := shouldPreserveTree(filepath.Join(t.TempDir(), "does-not-exist"), []entrypoint{{name: "t", src: "t"}}, nil, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileOperation)
+}
+
+func TestExtractFilesFromDir_ErrorPaths(t *testing.T) {
+	t.Run("propagates entrypoint template errors", func(t *testing.T) {
+		err := (&Installer{}).extractFilesFromDir(
+			t.TempDir(),
+			filepath.Join(t.TempDir(), "bin"),
+			&registry.Tool{Files: []registry.File{{Name: "t", Src: "{{ .Bad "}}},
+			nil,
+			nil,
+		)
+		require.Error(t, err)
+	})
+
+	t.Run("propagates gate inspection errors", func(t *testing.T) {
+		err := (&Installer{}).extractFilesFromDir(
+			filepath.Join(t.TempDir(), "does-not-exist"),
+			filepath.Join(t.TempDir(), "bin"),
+			&registry.Tool{Files: []registry.File{{Name: "t", Src: "t"}}},
+			nil,
+			nil,
+		)
+		require.Error(t, err)
+	})
+}
+
+func TestCopyRegularFile_OpenFileError(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "src")
+	require.NoError(t, os.WriteFile(src, []byte("x"), 0o644))
+	// The destination is an existing directory, so OpenFile for writing fails.
+	dstDir := t.TempDir()
+	err := copyRegularFile(src, dstDir, 0o644)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileOperation)
+}
+
+// TestExtractTarGz_PreservesHardLink verifies tar hard-link extraction.
+func TestExtractTarGz_PreservesHardLink(t *testing.T) {
+	tmp := t.TempDir()
+	archive := filepath.Join(tmp, "tool.tar.gz")
+	writeTarGzTree(t, archive, []tarEntry{
+		{name: "pkg/", dir: true},
+		{name: "pkg/real", content: "PAYLOAD", mode: 0o755},
+		{name: "pkg/hardlink", hardlink: "pkg/real"},
+		{name: "pkg/extra.so", content: "LIB"}, // Forces onedir mode.
+	})
+
+	versionDir := filepath.Join(tmp, "version")
+	binaryPath := filepath.Join(versionDir, "real")
+	tool := &registry.Tool{Files: []registry.File{{Name: "real", Src: "pkg/real"}}}
+
+	require.NoError(t, (&Installer{}).extractTarGz(archive, binaryPath, tool))
+
+	// The hard link was materialized in the preserved tree with the same content.
+	got, err := os.ReadFile(filepath.Join(versionDir, onedirTreeName, "pkg", "hardlink"))
+	require.NoError(t, err)
+	assert.Equal(t, "PAYLOAD", string(got))
+}
+
+func TestExtractTarGz_PreservesForwardHardLink(t *testing.T) {
+	tmp := t.TempDir()
+	archive := filepath.Join(tmp, "tool.tar.gz")
+	writeTarGzTree(t, archive, []tarEntry{
+		{name: "pkg/", dir: true},
+		{name: "pkg/hardlink", hardlink: "pkg/real"},
+		{name: "pkg/real", content: "PAYLOAD", mode: 0o755},
+		{name: "pkg/extra.so", content: "LIB"},
+	})
+
+	versionDir := filepath.Join(tmp, "version")
+	tool := &registry.Tool{Files: []registry.File{{Name: "real", Src: "pkg/real"}}}
+	require.NoError(t, (&Installer{}).extractTarGz(archive, filepath.Join(versionDir, "real"), tool))
+
+	got, err := os.ReadFile(filepath.Join(versionDir, onedirTreeName, "pkg", "hardlink"))
+	require.NoError(t, err)
+	assert.Equal(t, "PAYLOAD", string(got))
+}
+
+// TestExtractTarGz_Onedir_HardLinkToSymlink reproduces an archive that hard-links
+// to a symlink entry. Because hard links are materialized after symlinks in the
+// final tree, the hard link resolves through the symlink to the real file.
+func TestExtractTarGz_Onedir_HardLinkToSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires privilege on Windows; onedir Windows support is tracked separately")
+	}
+
+	tmp := t.TempDir()
+	archive := filepath.Join(tmp, "tool.tar.gz")
+	writeTarGzTree(t, archive, []tarEntry{
+		{name: "pkg/", dir: true},
+		{name: "pkg/real", content: "PAYLOAD", mode: 0o755},
+		{name: "pkg/link", link: "real"},         // symlink -> real
+		{name: "pkg/hard", hardlink: "pkg/link"}, // hard link -> the symlink entry
+		{name: "pkg/extra.so", content: "LIB"},   // forces onedir mode
+	})
+
+	versionDir := filepath.Join(tmp, "version")
+	tool := &registry.Tool{Files: []registry.File{{Name: "tool", Src: "pkg/real"}}}
+	require.NoError(t, (&Installer{}).extractTarGz(archive, filepath.Join(versionDir, "tool"), tool))
+
+	// The hard link (to the symlink) resolves through to the real file's content.
+	got, err := os.ReadFile(filepath.Join(versionDir, onedirTreeName, "pkg", "hard"))
+	require.NoError(t, err)
+	assert.Equal(t, "PAYLOAD", string(got))
+
+	// The symlink itself was recreated in the preserved tree.
+	linfo, err := os.Lstat(filepath.Join(versionDir, onedirTreeName, "pkg", "link"))
+	require.NoError(t, err)
+	assert.NotZero(t, linfo.Mode()&os.ModeSymlink, "in-archive symlink must be recreated")
+}
+
+func TestExtractHardLink(t *testing.T) {
+	t.Run("links to an existing target", func(t *testing.T) {
+		dest := t.TempDir()
+		writeFileUnder(t, dest, "real.bin", "DATA")
+
+		linkPath := filepath.Join(dest, "hard.bin")
+		require.NoError(t, extractHardLink(linkPath, "real.bin", dest))
+
+		got, err := os.ReadFile(linkPath)
+		require.NoError(t, err)
+		assert.Equal(t, "DATA", string(got))
+	})
+
+	t.Run("rejects a target that escapes dest", func(t *testing.T) {
+		dest := t.TempDir()
+		err := extractHardLink(filepath.Join(dest, "h"), "../../../../etc/passwd", dest)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("rejects an absolute target", func(t *testing.T) {
+		dest := t.TempDir()
+		// A genuinely OS-absolute target (volume-qualified on Windows).
+		absTarget := filepath.Join(t.TempDir(), "outside")
+		require.True(t, filepath.IsAbs(absTarget))
+		err := extractHardLink(filepath.Join(dest, "h"), absTarget, dest)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("returns an error when the target is missing", func(t *testing.T) {
+		dest := t.TempDir()
+		linkPath := filepath.Join(dest, "h")
+		err := extractHardLink(linkPath, "not-there", dest)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrToolNotFound)
+		_, err = os.Lstat(linkPath)
+		assert.True(t, os.IsNotExist(err))
+	})
+}
+
+func TestMaterializeHardLinks(t *testing.T) {
+	t.Run("returns not-found when no target is extracted", func(t *testing.T) {
+		err := materializeHardLinks(t.TempDir(), []pendingHardLink{{rel: "link", target: "missing"}})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrToolNotFound)
+	})
+
+	t.Run("propagates link creation errors", func(t *testing.T) {
+		root := t.TempDir()
+		writeFileUnder(t, root, "target", "data")
+		require.NoError(t, os.WriteFile(filepath.Join(root, "blocked"), []byte("x"), 0o644))
+
+		err := materializeHardLinks(root, []pendingHardLink{{rel: filepath.Join("blocked", "link"), target: "target"}})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
+func TestCopyTree(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink copy requires privilege on Windows; onedir Windows support is tracked separately")
+	}
+
+	src := t.TempDir()
+	writeFileUnder(t, src, "dir/file.txt", "CONTENT")
+	require.NoError(t, os.Chmod(filepath.Join(src, "dir", "file.txt"), 0o755))
+	require.NoError(t, os.Symlink("file.txt", filepath.Join(src, "dir", "link")))
+
+	dst := filepath.Join(t.TempDir(), "copy")
+	require.NoError(t, copyTree(src, dst))
+
+	// Regular file copied with its mode preserved.
+	got, err := os.ReadFile(filepath.Join(dst, "dir", "file.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "CONTENT", string(got))
+	info, err := os.Stat(filepath.Join(dst, "dir", "file.txt"))
+	require.NoError(t, err)
+	assert.NotZero(t, info.Mode()&0o100, "executable bit should be preserved")
+
+	// Symlink copied as a symlink.
+	linfo, err := os.Lstat(filepath.Join(dst, "dir", "link"))
+	require.NoError(t, err)
+	assert.NotZero(t, linfo.Mode()&os.ModeSymlink)
+}
+
+// TestMoveTree_CopyFallback forces the cross-filesystem branch of moveTree by
+// renaming onto a non-empty destination (which fails), exercising the recursive
+// copy fallback used when the staging dir is on a different device (e.g. .pkg).
+func TestMoveTree_CopyFallback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink copy requires privilege on Windows; onedir Windows support is tracked separately")
+	}
+
+	root := t.TempDir()
+	src := filepath.Join(root, "src")
+	dst := filepath.Join(root, "dst")
+
+	writeFileUnder(t, src, "a/b.bin", "PAYLOAD")
+	require.NoError(t, os.Symlink("b.bin", filepath.Join(src, "a", "link")))
+
+	// A pre-existing, non-empty destination makes os.Rename fail, forcing the copy.
+	require.NoError(t, os.MkdirAll(dst, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dst, "occupied"), []byte("z"), 0o644))
+
+	require.NoError(t, moveTree(src, dst))
+
+	// The source is removed and the tree is present at the destination.
+	_, err := os.Stat(src)
+	assert.True(t, os.IsNotExist(err), "source staging dir must be removed after copy fallback")
+	got, err := os.ReadFile(filepath.Join(dst, "a", "b.bin"))
+	require.NoError(t, err)
+	assert.Equal(t, "PAYLOAD", string(got))
+	linfo, err := os.Lstat(filepath.Join(dst, "a", "link"))
+	require.NoError(t, err)
+	assert.NotZero(t, linfo.Mode()&os.ModeSymlink)
+}
+
+// TestExtraction_FlatLayout_SingleBinary_Unchanged pins the invariant that a
+// single-binary archive (no extra runtime payload) installs as a flat, regular
+// file directly in the version dir, with no preserved-tree ("onedir") directory.
+//
+// This is a characterization test for the reduced-blast-radius guarantee: the
+// onedir change must NOT alter how simple, single-binary tools (such as jq,
+// terraform, kubectl) are laid out on disk. It passes on the pre-change code
+// (which always flattens) and must keep passing after the onedir change (the
+// gate must keep single-file archives flat).
+// TestExtractFilesFromDir_Flat_SelfContainedBinaryWithExtras is a regression
+// guard for the CI failure where gum/kots (self-contained single binaries that
+// ship completions/, manpages/, sbom/, and docs) were wrongly installed as
+// onedir, breaking the flat `<versionDir>/<binary>` path consumers rely on.
+// Such tools MUST stay flat: the binary lands directly in the version dir with
+// no `.pkg` tree and no manifest.
+func TestExtractFilesFromDir_Flat_SelfContainedBinaryWithExtras(t *testing.T) {
+	tmp := t.TempDir()
+	staging := filepath.Join(tmp, "staging")
+	// gum-shaped: binary at the root of its top dir, docs beside it, and
+	// completions/manpages in subdirs.
+	writeFileUnder(t, staging, "gum_0.17.0/gum", "GUM-BINARY")
+	writeFileUnder(t, staging, "gum_0.17.0/LICENSE", "license")
+	writeFileUnder(t, staging, "gum_0.17.0/README.md", "readme")
+	writeFileUnder(t, staging, "gum_0.17.0/completions/gum.bash", "comp")
+	writeFileUnder(t, staging, "gum_0.17.0/manpages/gum.1", "man")
+
+	inst := &Installer{binDir: tmp}
+	versionDir := filepath.Join(tmp, "charmbracelet", "gum", "0.17.0")
+	binaryPath := filepath.Join(versionDir, "gum")
+	tool := &registry.Tool{Files: []registry.File{{Name: "gum", Src: "gum_0.17.0/gum"}}}
+
+	require.NoError(t, inst.extractFilesFromDir(staging, binaryPath, tool, nil, nil))
+
+	// Flat: the binary is a regular file directly in the version dir.
+	info, err := os.Lstat(binaryPath)
+	require.NoError(t, err)
+	require.True(t, info.Mode().IsRegular(), "self-contained binary must install flat, got mode %s", info.Mode())
+	got, err := os.ReadFile(binaryPath)
+	require.NoError(t, err)
+	assert.Equal(t, "GUM-BINARY", string(got))
+
+	// No onedir artifacts.
+	_, statErr := os.Stat(filepath.Join(versionDir, onedirTreeName))
+	assert.True(t, os.IsNotExist(statErr), "must not create a %q tree", onedirTreeName)
+	_, ok := readOnedirManifest(versionDir)
+	assert.False(t, ok, "must not write a onedir manifest for a flat install")
+}
+
+func TestExtraction_FlatLayout_SingleBinary_Unchanged(t *testing.T) {
+	const script = "#!/bin/sh\necho hello\n"
+
+	testCases := []struct {
+		name    string
+		ext     string
+		build   func(t *testing.T, path string, files map[string]string)
+		extract func(i *Installer, archivePath, binaryPath string, tool *registry.Tool) error
+	}{
+		{
+			name:  "tar.gz",
+			ext:   "tar.gz",
+			build: createTestTarGzArchive,
+			extract: func(i *Installer, archivePath, binaryPath string, tool *registry.Tool) error {
+				return i.extractTarGz(archivePath, binaryPath, tool)
+			},
+		},
+		{
+			name:  "zip",
+			ext:   "zip",
+			build: createTestZipArchive,
+			extract: func(i *Installer, archivePath, binaryPath string, tool *registry.Tool) error {
+				return i.extractZip(archivePath, binaryPath, tool)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			archivePath := filepath.Join(tmpDir, "archive."+tc.ext)
+			versionDir := filepath.Join(tmpDir, "version")
+			binaryPath := filepath.Join(versionDir, "mytool")
+
+			// Single-binary archive: the only payload is the binary itself.
+			tc.build(t, archivePath, map[string]string{"mytool": script})
+
+			installer := &Installer{}
+			tool := &registry.Tool{Name: "mytool"}
+
+			require.NoError(t, tc.extract(installer, archivePath, binaryPath, tool))
+
+			// The binary must be a REGULAR file (not a symlink into a tree).
+			info, err := os.Lstat(binaryPath)
+			require.NoError(t, err)
+			require.True(t, info.Mode().IsRegular(),
+				"flat mode: binary must be a regular file, got mode %s", info.Mode())
+
+			// Content must round-trip.
+			got, err := os.ReadFile(binaryPath)
+			require.NoError(t, err)
+			require.Equal(t, script, string(got))
+
+			// Flat mode must NOT create a preserved-tree (.pkg) directory.
+			_, err = os.Stat(filepath.Join(versionDir, onedirTreeName))
+			require.True(t, os.IsNotExist(err),
+				"flat mode must not create a %q tree directory", onedirTreeName)
+
+			// The version dir must contain exactly the one entrypoint.
+			entries, err := os.ReadDir(versionDir)
+			require.NoError(t, err)
+			require.Len(t, entries, 1)
+			require.Equal(t, "mytool", entries[0].Name())
+		})
+	}
+}

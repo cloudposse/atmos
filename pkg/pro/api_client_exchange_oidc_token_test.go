@@ -4,8 +4,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -17,6 +19,7 @@ func TestExchangeOIDCTokenForAtmosToken_Success(t *testing.T) {
 		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "/api/auth/github-oidc", r.URL.Path)
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		assert.Contains(t, r.Header.Get("User-Agent"), "atmos/")
 
 		// Verify request body
 		body, err := io.ReadAll(r.Body)
@@ -109,6 +112,27 @@ func TestExchangeOIDCTokenForAtmosToken_RequestCreationError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "", token)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateRequest)
+}
+
+// TestExchangeOIDCTokenForAtmosToken_ErrorStatusNonJSON verifies that an error status with
+// a non-JSON body returns an enriched error with troubleshooting hints.
+func TestExchangeOIDCTokenForAtmosToken_ErrorStatusNonJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte(`<html>Bad Gateway</html>`))
+	}))
+	defer server.Close()
+
+	token, err := exchangeOIDCTokenForAtmosToken(server.URL, "api", "oidc-token", "workspace-id")
+	assert.Error(t, err)
+	assert.Equal(t, "", token)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToExchangeOIDCToken)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToDecodeTokenResponse)
+	// The troubleshooting hint is now visible at the top-level error because
+	// wrapErr re-attaches cockroach hints to the outer layer.
+	hints := cockroachErrors.GetAllHints(err)
+	allHints := strings.Join(hints, "\n")
+	assert.Contains(t, allHints, "troubleshooting")
 }
 
 func TestExchangeOIDCTokenForAtmosToken_MarshalError(t *testing.T) {

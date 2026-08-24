@@ -10,6 +10,7 @@ import (
 )
 
 func TestPrintHelpFlagPrinter_PrintHelpFlag(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	tests := []struct {
 		name           string
 		flag           *pflag.Flag

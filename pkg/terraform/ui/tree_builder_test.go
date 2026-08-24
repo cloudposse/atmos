@@ -11,8 +11,7 @@ import (
 func TestBuildTreeFromPlan_Empty(t *testing.T) {
 	plan := &tfjson.Plan{}
 
-	tree, err := buildTreeFromPlan(plan, "dev", "vpc")
-	require.NoError(t, err)
+	tree := buildTreeFromPlan(plan, "dev", "vpc")
 	require.NotNil(t, tree)
 	assert.Equal(t, "dev", tree.Stack)
 	assert.Equal(t, "vpc", tree.Component)
@@ -30,8 +29,7 @@ func TestBuildTreeFromPlan_SingleResource(t *testing.T) {
 		},
 	}
 
-	tree, err := buildTreeFromPlan(plan, "dev", "vpc")
-	require.NoError(t, err)
+	tree := buildTreeFromPlan(plan, "dev", "vpc")
 	require.Len(t, tree.Root.Children, 1)
 	assert.Equal(t, "aws_vpc.main", tree.Root.Children[0].Address)
 	assert.Equal(t, "create", tree.Root.Children[0].Action)
@@ -53,8 +51,7 @@ func TestBuildTreeFromPlan_SkipsDataSources(t *testing.T) {
 		},
 	}
 
-	tree, err := buildTreeFromPlan(plan, "dev", "vpc")
-	require.NoError(t, err)
+	tree := buildTreeFromPlan(plan, "dev", "vpc")
 	// Only managed resource should be included.
 	require.Len(t, tree.Root.Children, 1)
 	assert.Equal(t, "aws_vpc.main", tree.Root.Children[0].Address)
@@ -76,8 +73,7 @@ func TestBuildTreeFromPlan_SkipsNoOp(t *testing.T) {
 		},
 	}
 
-	tree, err := buildTreeFromPlan(plan, "dev", "vpc")
-	require.NoError(t, err)
+	tree := buildTreeFromPlan(plan, "dev", "vpc")
 	// Only create action should be included, no-op should be skipped.
 	require.Len(t, tree.Root.Children, 1)
 	assert.Equal(t, "aws_vpc.main", tree.Root.Children[0].Address)
@@ -94,8 +90,7 @@ func TestBuildTreeFromPlan_ReplaceAction(t *testing.T) {
 		},
 	}
 
-	tree, err := buildTreeFromPlan(plan, "dev", "app")
-	require.NoError(t, err)
+	tree := buildTreeFromPlan(plan, "dev", "app")
 	require.Len(t, tree.Root.Children, 1)
 	// Delete+Create should be "replace".
 	assert.Equal(t, "replace", tree.Root.Children[0].Action)
@@ -127,8 +122,7 @@ func TestBuildTreeFromPlan_AllActionTypes(t *testing.T) {
 		},
 	}
 
-	tree, err := buildTreeFromPlan(plan, "dev", "vpc")
-	require.NoError(t, err)
+	tree := buildTreeFromPlan(plan, "dev", "vpc")
 	require.Len(t, tree.Root.Children, 4)
 
 	// Find each action type.
@@ -154,8 +148,7 @@ func TestBuildTreeFromPlan_ModulePrefix(t *testing.T) {
 		},
 	}
 
-	tree, err := buildTreeFromPlan(plan, "dev", "vpc")
-	require.NoError(t, err)
+	tree := buildTreeFromPlan(plan, "dev", "vpc")
 	require.Len(t, tree.Root.Children, 1)
 	// module.vpc.aws_subnet.main is a resource within a module, not a module itself.
 	assert.False(t, tree.Root.Children[0].IsModule)
@@ -183,8 +176,7 @@ func TestBuildTreeFromPlan_SortedByAddress(t *testing.T) {
 		},
 	}
 
-	tree, err := buildTreeFromPlan(plan, "dev", "test")
-	require.NoError(t, err)
+	tree := buildTreeFromPlan(plan, "dev", "test")
 	require.Len(t, tree.Root.Children, 3)
 	assert.Equal(t, "a_resource.first", tree.Root.Children[0].Address)
 	assert.Equal(t, "m_resource.middle", tree.Root.Children[1].Address)

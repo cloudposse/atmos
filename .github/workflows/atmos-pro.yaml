@@ -1,0 +1,97 @@
+---
+name: atmos.ci
+on: pull_request
+env:
+  GOFUMPT_VERSION: v0.9.1
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  autofix:
+    # Skip on fork PRs: GitHub withholds id-token (OIDC) and repo vars/secrets
+    # from fork-originated pull_request runs, so `atmos pro commit` cannot
+    # authenticate or push and the job always fails for external contributors.
+    if: >-
+      github.actor != 'atmos-pro[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on:
+      - runs-on=${{github.run_id}}
+      - runner=terraform
+      - tag=atmos
+      - extras=s3-cache
+      - private=false
+    container:
+      image: ghcr.io/cloudposse/atmos:1.215.0
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 15
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc # v2.2.0
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Install Go and toolchain dependencies
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+      - run: go mod tidy
+      - name: Install Go tools
+        run: |
+          go install mvdan.cc/gofumpt@${GOFUMPT_VERSION}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Install toolchain dependencies
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install
+          atmos toolchain env --format=github
+
+      # gofumpt
+      - name: Get changed Go files
+        id: changed-files
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
+        with:
+          use_rest_api: "false"
+          files: |
+            **/*.go
+      - if: steps.changed-files.outputs.all_changed_files_count != '0'
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: |
+          # shellcheck disable=SC2086
+          gofumpt -l -w $ALL_CHANGED_FILES
+
+      # Run pre-commit hooks for whitespace fixes
+      - name: Install pre-commit
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends pre-commit
+
+      - name: Run pre-commit whitespace fixes
+        run: |
+          # Run only the whitespace-related hooks from pre-commit
+          pre-commit run trailing-whitespace --all-files || true
+          pre-commit run end-of-file-fixer --all-files || true
+
+      # Generate NOTICE file on all PRs to ensure it stays up-to-date
+      - name: Generate NOTICE file
+        run: ./scripts/generate-notice.sh
+
+      # Format HCL files in test fixtures and examples
+      - name: Format HCL
+        run: |
+          atmos toolchain exec -- tofu fmt -recursive tests/fixtures/components/terraform
+          atmos toolchain exec -- tofu fmt -recursive examples/
+
+      # Regenerate README.md from README.yaml
+      - name: Regenerate README
+        run: atmos docs generate readme
+
+      - name: Commit fixes via Atmos Pro
+        env:
+          ATMOS_LOGS_LEVEL: debug
+          ATMOS_PRO_WORKSPACE_ID: ${{ vars.ATMOS_PRO_WORKSPACE_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: atmos pro commit -m "[autocommit] formatting fixes" --all

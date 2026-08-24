@@ -105,6 +105,27 @@ func BenchmarkExample(b *testing.B) {
 
 ## Usage
 
+### Via Mage (Recommended)
+
+All staleness-checked build/run orchestration for lintroller and custom-gcl lives in the
+`magefiles/`, invoked through Go 1.24's `tool` directive — no global `mage`
+install required:
+
+```bash
+go tool mage lint:lintroller     # build (if stale) + run the standalone analyzer
+go tool mage lint:customGCL      # staleness-guarded custom-gcl build
+go tool mage lint:changed        # gomodcheck -> customGCL -> precommit-style patch-scoped run
+go tool mage lint:precommit      # check-only; fails fast if custom-gcl is missing/stale, never builds
+```
+
+### Via Atmos
+
+```bash
+atmos lint lintroller   # -> go tool mage lint:lintroller
+atmos lint custom-gcl   # -> go tool mage lint:customGCL
+atmos lint --changed    # -> go tool mage lint:changed
+```
+
 ### Standalone Binary
 
 Build and run the Lint Roller binary directly:
@@ -114,16 +135,6 @@ cd tools/lintroller
 go build -o .lintroller ./cmd/lintroller
 ./.lintroller ./...
 ```
-
-### Via Makefile
-
-The recommended way to run Lint Roller locally:
-
-```bash
-make lintroller
-```
-
-This is automatically run as part of `make lint`.
 
 ### Via golangci-lint (Local Development)
 
@@ -144,7 +155,9 @@ This provides unified linting with all golangci-lint features:
 
 ### Pre-commit Hook
 
-Lint Roller runs automatically via pre-commit hooks. It will block commits if violations are found.
+Lint Roller runs automatically via pre-commit hooks (`go tool mage lint:precommit`). It will
+block commits if violations are found, and will never build custom-gcl itself — see the comment
+on `Lint.Precommit` in `magefiles/mage_lint_precommit.go` for why.
 
 To bypass (not recommended):
 ```bash
@@ -216,31 +229,31 @@ All rules are enabled by default.
 To add another custom linter:
 
 1. **Add plugin to `.custom-gcl.yml`**:
-   ```yaml
-   plugins:
-     - module: 'github.com/cloudposse/atmos/tools/lintroller'
-       path: './tools/lintroller'
-     - module: 'github.com/cloudposse/atmos/tools/another-linter'
-       path: './tools/another-linter'
-   ```
+  ```yaml
+  plugins:
+    - module: 'github.com/cloudposse/atmos/tools/lintroller'
+      path: './tools/lintroller'
+    - module: 'github.com/cloudposse/atmos/tools/another-linter'
+      path: './tools/another-linter'
+  ```
 
 2. **Enable in `.golangci.yml`**:
-   ```yaml
-   linters:
-     enable:
-       - lintroller
-       - another-linter
-   ```
+  ```yaml
+  linters:
+    enable:
+      - lintroller
+      - another-linter
+  ```
 
 3. **Configure in `.golangci.yml`**:
-   ```yaml
-   settings:
-     custom:
-       another-linter:
-         type: "module"
-         settings:
-           some-rule: true
-   ```
+  ```yaml
+  settings:
+    custom:
+      another-linter:
+        type: "module"
+        settings:
+          some-rule: true
+  ```
 
 4. **Rebuild**: `golangci-lint custom` creates one binary with both plugins
 
@@ -254,7 +267,7 @@ The custom binary integrates with GitHub Actions via `golangci-lint-action`:
 
 - name: Build custom golangci-lint with plugins
   run: |
-    golangci-lint custom
+    go tool mage lint:customGCL
     sudo cp ./custom-gcl /usr/local/bin/golangci-lint
 
 - name: Run golangci-lint with plugins
@@ -294,14 +307,14 @@ Each rule is implemented in its own file:
 Lint Roller supports both standalone and golangci-lint plugin modes:
 
 1. **Standalone Mode** (`cmd/lintroller/main.go`):
-   - Uses `golang.org/x/tools/go/analysis/singlechecker`
-   - Direct binary execution
-   - Used by Makefile and pre-commit hooks
+  - Uses `golang.org/x/tools/go/analysis/singlechecker`
+  - Direct binary execution
+  - Used by Makefile and pre-commit hooks
 
 2. **Plugin Mode** (`plugin.go`):
-   - Implements `register.LinterPlugin` interface
-   - Integrates with golangci-lint
-   - Auto-registers via `init()` with `register.Plugin("lintroller", New)`
+  - Implements `register.LinterPlugin` interface
+  - Integrates with golangci-lint
+  - Auto-registers via `init()` with `register.Plugin("lintroller", New)`
 
 ## Adding New Rules
 

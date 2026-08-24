@@ -1,0 +1,42 @@
+/* Discrete yellow dot marking an experimental feature in the sidebar. No cursor
+   override, so it inherits the enclosing link's pointer cursor (no "help" caret). */
+.dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 0.4rem;
+  border-radius: 50%;
+  background-color: #ffd700; /* Atmos gold; matches the list-command status dot. */
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* Fixed-positioned so it is never clipped by the scrollable sidebar. The inline
+   style sets left/top to the dot center/top; the transform centers it above. */
+.tooltip {
+  position: fixed;
+  transform: translate(-50%, calc(-100% - 8px));
+  z-index: 1002;
+  padding: 0.25rem 0.5rem;
+  background: #1e1e2e;
+  color: #f0f0f0;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.4;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  animation: expTooltipIn 0.12s ease-out;
+}
+
+@keyframes expTooltipIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-100% - 4px));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, calc(-100% - 8px));
+  }
+}

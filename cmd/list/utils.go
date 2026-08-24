@@ -1,11 +1,15 @@
 package list
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
 import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -16,7 +20,10 @@ import (
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	f "github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
+	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -155,16 +162,29 @@ func newCommonListParser(additionalOptions ...flags.Option) *flags.StandardParse
 func getIdentityFromCommand(cmd *cobra.Command) string {
 	var value string
 
-	// Check if flag was explicitly set.
-	if cmd.Flags().Changed("identity") {
-		value, _ = cmd.Flags().GetString("identity")
-	} else {
-		// Fall back to environment variable via Viper.
-		value = viper.GetString("identity")
+	if flag := lookupChangedIdentityFlag(cmd); flag != nil {
+		value = flag.Value.String()
+		return normalizeIdentityValue(value)
 	}
 
-	// Normalize boolean false representations to disabled sentinel value.
+	// Fall back to environment variable via Viper.
+	value = viper.GetString(cfg.IdentityFlagName)
 	return normalizeIdentityValue(value)
+}
+
+func lookupChangedIdentityFlag(cmd *cobra.Command) *pflag.Flag {
+	for current := cmd; current != nil; current = current.Parent() {
+		for _, flagSet := range []*pflag.FlagSet{
+			current.Flags(),
+			current.InheritedFlags(),
+			current.PersistentFlags(),
+		} {
+			if flag := flagSet.Lookup(cfg.IdentityFlagName); flag != nil && flag.Changed {
+				return flag
+			}
+		}
+	}
+	return nil
 }
 
 // normalizeIdentityValue converts boolean false representations to the disabled sentinel value.
@@ -176,16 +196,54 @@ func normalizeIdentityValue(value string) string {
 	return cfg.NormalizeIdentityValue(value)
 }
 
-// createAuthManagerForList creates an AuthManager for list commands.
-// It uses the identity from --identity flag or ATMOS_IDENTITY env var.
-// If no identity is specified, it loads stack configs for default identity.
-// Returns nil AuthManager if no auth is configured (which is valid for many use cases).
-func createAuthManagerForList(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
-	identityName := getIdentityFromCommand(cmd)
+// AuthManagerFactory abstracts auth.CreateAndAuthenticateManagerWithStackScan so
+// createAuthManagerForList's evaluation policy can be verified without performing real
+// authentication.
+type AuthManagerFactory interface {
+	// CreateWithStackScan creates and authenticates an AuthManager, first running the stack-file
+	// pre-scan to discover stack-level default identities.
+	CreateWithStackScan(
+		identity string,
+		authConfig *schema.AuthConfig,
+		selectValue string,
+		atmosConfig *schema.AtmosConfiguration,
+	) (auth.AuthManager, error)
+}
 
-	// Create AuthManager with stack-level default identity loading.
-	// When identityName is empty, this loads stack configs for auth.identities.*.default: true.
-	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
+// defaultAuthManagerFactory implements AuthManagerFactory using pkg/auth.
+type defaultAuthManagerFactory struct{}
+
+func (defaultAuthManagerFactory) CreateWithStackScan(
+	identity string,
+	authConfig *schema.AuthConfig,
+	selectValue string,
+	atmosConfig *schema.AtmosConfiguration,
+) (auth.AuthManager, error) {
+	return auth.CreateAndAuthenticateManagerWithStackScan(identity, authConfig, selectValue, atmosConfig)
+}
+
+// listAuthManagerFactory is replaceable in tests so command-level auth policy can be verified
+// without performing real authentication.
+var listAuthManagerFactory AuthManagerFactory = defaultAuthManagerFactory{}
+
+// createAuthManagerForList creates an AuthManager when the command will evaluate values
+// that can require credentials, or when the caller explicitly selected an identity. Plain
+// inventory runs with both template and YAML-function processing disabled remain credential-free.
+// An explicit --identity=false always disables authentication.
+func createAuthManagerForList(
+	cmd *cobra.Command,
+	atmosConfig *schema.AtmosConfiguration,
+	processTemplates, processYamlFunctions bool,
+) (auth.AuthManager, error) {
+	identityName := getIdentityFromCommand(cmd)
+	if identityName == cfg.IdentityFlagDisabledValue {
+		return nil, nil
+	}
+	if identityName == "" && !processTemplates && !processYamlFunctions {
+		return nil, nil
+	}
+
+	authManager, err := listAuthManagerFactory.CreateWithStackScan(
 		identityName,
 		&atmosConfig.Auth,
 		cfg.IdentityFlagSelectValue,
@@ -196,6 +254,41 @@ func createAuthManagerForList(cmd *cobra.Command, atmosConfig *schema.AtmosConfi
 	}
 
 	return authManager, nil
+}
+
+func skipCredentialBackedYAMLFunctionsForInventory(skip []string, authManager auth.AuthManager) []string {
+	if authManager != nil {
+		return skip
+	}
+
+	merged := append([]string{}, skip...)
+	for _, functionName := range []string{
+		u.AtmosYamlFuncTerraformState,
+		u.AtmosYamlFuncTerraformOutput,
+		u.AtmosYamlFuncStore,
+		u.AtmosYamlFuncStoreGet,
+		u.AtmosYamlFuncSecret,
+		u.AtmosYamlFuncAwsAccountID,
+		u.AtmosYamlFuncAwsCallerIdentityArn,
+		u.AtmosYamlFuncAwsCallerIdentityUserID,
+		u.AtmosYamlFuncAwsRegion,
+		u.AtmosYamlFuncAwsOrganizationID,
+	} {
+		name := strings.TrimPrefix(functionName, "!")
+		if !containsString(merged, name) {
+			merged = append(merged, name)
+		}
+	}
+	return merged
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 // setDefaultCSVDelimiter sets the delimiter to comma if CSV format is used and delimiter is default TSV.
@@ -215,7 +308,11 @@ func getComponentFilter(args []string) string {
 
 // initConfigAndAuth initializes CLI config and creates an auth manager.
 // The cmd and v parameters allow honoring config selection flags (--base-path, --config, --config-path, --profile).
-func initConfigAndAuth(cmd *cobra.Command, v *viper.Viper) (schema.AtmosConfiguration, auth.AuthManager, error) {
+func initConfigAndAuth(
+	cmd *cobra.Command,
+	v *viper.Viper,
+	processTemplates, processYamlFunctions bool,
+) (schema.AtmosConfiguration, auth.AuthManager, error) {
 	// Parse global flags and build ConfigAndStacksInfo to honor config selection flags.
 	globalFlags := flags.ParseGlobalFlags(cmd, v)
 	configAndStacksInfo := buildConfigAndStacksInfo(&globalFlags)
@@ -224,7 +321,7 @@ func initConfigAndAuth(cmd *cobra.Command, v *viper.Viper) (schema.AtmosConfigur
 		return schema.AtmosConfiguration{}, nil, &listerrors.InitConfigError{Cause: err}
 	}
 
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, processTemplates, processYamlFunctions)
 	if err != nil {
 		return schema.AtmosConfiguration{}, nil, err
 	}
@@ -249,4 +346,31 @@ func handleNoValuesError(err error, componentFilter string, logFunc func(string)
 		return "", nil
 	}
 	return "", err
+}
+
+// renderWithPager renders data using the renderer, optionally using a pager for interactive display.
+// If pager is enabled in atmosConfig and TTY is available, the output is displayed in a scrollable pager.
+// Otherwise, the output is written directly to stdout.
+func renderWithPager(atmosConfig *schema.AtmosConfiguration, title string, r *renderer.Renderer, data []map[string]any) error {
+	defer perf.Track(atmosConfig, "list.renderWithPager")()
+
+	// Check if pager is enabled in config.
+	if atmosConfig.Settings.Terminal.IsPagerEnabled() {
+		// Get rendered content as string.
+		content, err := r.RenderToString(data)
+		if err != nil {
+			return err
+		}
+
+		// Try to use pager - it handles TTY detection and falls back to direct print.
+		pageCreator := pager.NewWithAtmosConfig(true, atmosConfig.Settings.Terminal.Speed)
+		if err := pageCreator.Run(title, content); err != nil {
+			// Pager failed, fall back to direct render.
+			return r.Render(data)
+		}
+		return nil
+	}
+
+	// No pager - render directly.
+	return r.Render(data)
 }

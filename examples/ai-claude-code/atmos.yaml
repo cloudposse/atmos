@@ -1,0 +1,94 @@
+# Atmos AI with Claude Code CLI Provider
+#
+# Use your Claude Pro/Max subscription instead of API tokens.
+#
+# Prerequisites:
+#   - Claude Code: brew install --cask claude-code && claude auth login
+#   - For aws-billing: atmos auth login (see auth section below)
+#
+# Quick start:
+#   atmos ai ask "What stacks do we have?"
+#   atmos ai ask "Search AWS docs for VPC peering"
+#   atmos ai ask "What did we spend on EC2 last month?"
+
+base_path: "."
+
+# Map uv to the aqua registry so uvx is available for MCP servers.
+# Docs: https://atmos.tools/cli/configuration/toolchain
+toolchain:
+  aliases:
+    uv: astral-sh/uv
+
+# MCP Servers — their tools become available to Claude Code via pass-through.
+# Docs: https://atmos.tools/cli/configuration/mcp
+#
+# For more AWS MCP servers (security, IAM, CloudTrail, API), see:
+# https://atmos.tools/cli/configuration/mcp#example-aws-mcp-servers
+mcp:
+  servers:
+    # No credentials needed — searches public AWS documentation.
+    aws-docs:
+      command: uvx
+      args: ["awslabs.aws-documentation-mcp-server@latest"]
+      env:
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Documentation — search and fetch AWS docs"
+
+    # Requires AWS credentials via Atmos Auth (see auth section below).
+    aws-billing:
+      command: uvx
+      args: ["awslabs.billing-cost-management-mcp-server@latest"]
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Billing — billing summaries and payment history"
+      identity: "readonly"
+
+# Atmos Auth — automatic credential injection for MCP servers.
+# Update these values to match your AWS organization, then run: atmos auth login
+# Docs: https://atmos.tools/cli/configuration/auth
+auth:
+  providers:
+    aws-sso:
+      kind: aws/iam-identity-center
+      start_url: "https://your-org.awsapps.com/start"   # ← Change this
+      region: "us-east-1"
+  identities:
+    readonly:
+      kind: aws/permission-set
+      provider: aws-sso
+      default: true
+      principal:
+        permission_set: "ReadOnlyAccess"                 # ← Change this
+        account:
+          id: "123456789012"                             # ← Change this
+
+# AI Configuration
+# Docs: https://atmos.tools/cli/configuration/ai
+ai:
+  enabled: true
+  default_provider: "claude-code"
+  timeout_seconds: 300
+
+  providers:
+    claude-code:
+      max_turns: 10
+
+  tools:
+    enabled: true
+
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+
+# Minimal stacks config (required for Atmos to load).
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*.yaml"
+  excluded_paths: []
+  name_template: "{{ .vars.stage }}"
+
+components:
+  terraform:
+    base_path: components/terraform

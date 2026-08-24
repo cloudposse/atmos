@@ -9,6 +9,12 @@ on:
   # • Eastern Time (ET): 7:35 PM (previous day)
     - cron: "35 0 * * *"
 
+env:
+  ATMOS_BOOTSTRAP_VERSION: "1.223.0"
+  # Use pipe fallback so transient proxy.golang.org 5xx errors during
+  # `go mod download` fall back to direct module fetches.
+  GOPROXY: "https://proxy.golang.org|direct"
+
 jobs:
   cache-warmup:
     name: Cache warmup (${{ matrix.target }})
@@ -21,20 +27,35 @@ jobs:
             target: windows
           - os: macos-latest
             target: macos
+          # Build (macos-intel) uses this Intel runner and has no self-hosted
+          # s3-cache like Linux, so without a nightly warmup here its Go build
+          # cache is always cold — risking the 30m build timeout that a warm
+          # ARM `macos` cache comfortably avoids.
+          - os: macos-15-intel
+            target: macos-intel
     runs-on: ${{ matrix.os }}
     steps:
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.target == 'windows'
+        shell: pwsh
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: "go.mod"
         id: go
 
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@89c34b209108da66a27c8d6565d8d4b21dbdaa73 # v3.2.0
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
+
       - name: Get deps
-        run: make deps
+        run: go mod download

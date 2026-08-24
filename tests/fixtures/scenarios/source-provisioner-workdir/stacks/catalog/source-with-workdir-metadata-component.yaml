@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Regression fixture for GitHub issue #2364.
+# Tests that metadata.component is honored for JIT source provisioning.
+# The full repo is cloned (no //subpath in URI); metadata.component: exports
+# tells atmos that the Terraform module lives at exports/ within the repo.
+# Expected: WorkdirPathKey is updated to <workdir>/exports/ after provisioning.
+components:
+  terraform:
+    null-label-exports:
+      source:
+        uri: "github.com/cloudposse/terraform-null-label"
+        version: "0.25.0"
+      provision:
+        workdir:
+          enabled: true
+      metadata:
+        component: exports
+      vars:
+        enabled: true
+        environment: "null-label-exports-test"

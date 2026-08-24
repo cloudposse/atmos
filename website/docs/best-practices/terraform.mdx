@@ -34,11 +34,13 @@ When you need to extend a component, we recommend using [Terraform Overrides](ht
 It's essentially a Terraform-native way of [Monkey Patching](https://en.wikipedia.org/wiki/Monkey_patch).
 This way, you can maintain the original component as a dependency and only override the parts you need to change.
 
+Atmos can [generate Terraform override files](/stacks/generate#terraform-overrides-for-vendored-components) from stack configuration, which keeps the patch separate from vendored source code. This is useful when you need a small, stack-specific extension but still want to re-vendor the upstream component cleanly.
+
 :::warning Pitfall!
 Use this technique cautiously because your overrides may break if the upstream interfaces change. There’s no contract that an upstream component will remain the same.
 :::
 
-To gain a deeper understanding of how this works, you have to understand how [Terraform overrides work](https://developer.hashicorp.com/terraform/language/files/override), and then it will make sense how [vendoring with Atmos](/vendor/) can be used to extend components.
+To gain a deeper understanding of how this works, you have to understand how [Terraform overrides work](https://developer.hashicorp.com/terraform/language/files/override), and then it will make sense how [vendoring with Atmos](/vendor/) and the Atmos [`generate`](/stacks/generate) section can be used to extend components.
 
 <details>
 <summary>Comparison to Other Languages or Frameworks</summary>

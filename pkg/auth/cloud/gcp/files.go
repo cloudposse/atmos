@@ -1,0 +1,384 @@
+package gcp
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	ini "gopkg.in/ini.v1"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/cache"
+	"github.com/cloudposse/atmos/pkg/filesystem"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/xdg"
+)
+
+const (
+	// GCPSubdir is the subdirectory for GCP credentials.
+	GCPSubdir = "gcp"
+	// ADCSubdir is the subdirectory for Application Default Credentials.
+	ADCSubdir = "adc"
+	// ConfigSubdir is the subdirectory for gcloud-style config.
+	ConfigSubdir = "config"
+	// CredentialsFileName is the standard ADC filename.
+	CredentialsFileName = "application_default_credentials.json"
+	// ActiveConfigFileName is the gcloud active config file.
+	ActiveConfigFileName = "active_config"
+	// ConfigurationsSubdir is the gcloud configurations directory.
+	ConfigurationsSubdir = "configurations"
+	// PropertiesFileName is the gcloud properties file.
+	PropertiesFileName = "properties"
+	// AccessTokenFileName is the filename for the access token file.
+	AccessTokenFileName = "access_token"
+
+	// Permission for directories (owner read/write/execute only).
+	permDir = 0o700
+	// Permission for files (owner read/write only).
+	permFile = 0o600
+
+	// File locking timeouts.
+	fileLockTimeout = 10 * time.Second
+)
+
+var credentialFileSystem = filesystem.NewOSFileSystem()
+
+func credentialFileError(sentinel error, explanation string, cause error) error {
+	builder := errUtils.Build(sentinel).WithExplanation(explanation)
+	if cause != nil {
+		builder = builder.WithCause(cause)
+	}
+	return builder.Err()
+}
+
+func withFileLock(path string, fn func() error) error {
+	ctx, cancel := context.WithTimeout(context.Background(), fileLockTimeout)
+	defer cancel()
+
+	return cache.NewFileLock(path).WithLockContext(ctx, fn)
+}
+
+// identityLockTarget returns a single, persistent lock target shared by every write
+// helper (WriteADCFile, WritePropertiesFile, WriteAccessTokenFile) and
+// CleanupIdentityFiles for the given identity. It intentionally lives directly under
+// providerDir rather than inside the adc/ or config/ subdirectories that
+// CleanupIdentityFiles removes, and it is never deleted once created: removing it
+// after use (as the individual per-file locks previously were) would let a
+// concurrent waiter recreate the lock file at the same path and lock a different
+// inode, silently losing mutual exclusion. Sharing one target across all four
+// operations is what makes them actually contend with each other; locking each
+// write's own file path (as before) let a cleanup run concurrently with a write and
+// remove a directory out from under it.
+func identityLockTarget(providerDir, identityName string) string {
+	return filepath.Join(providerDir, identityName+".identity")
+}
+
+// AuthorizedUserContent represents the structure of an authorized_user ADC JSON file.
+type AuthorizedUserContent struct {
+	Type         string `json:"type"`
+	AccessToken  string `json:"access_token,omitempty"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	ClientID     string `json:"client_id,omitempty"`
+	ClientSecret string `json:"client_secret,omitempty"`
+	TokenExpiry  string `json:"token_expiry,omitempty"`
+}
+
+// GetGCPBaseDir returns the base directory for GCP credentials.
+// Returns: ~/.config/atmos/ (realm and gcp subdirs are added by callers).
+func GetGCPBaseDir() (string, error) {
+	defer perf.Track(nil, "gcp.GetGCPBaseDir")()
+
+	dir, err := xdg.GetXDGConfigDir("", permDir)
+	if err != nil {
+		return "", credentialFileError(errUtils.ErrInvalidAuthConfig, "Failed to resolve Atmos GCP credential directory", err)
+	}
+	return dir, nil
+}
+
+// GetProviderDir returns the directory for a specific GCP provider.
+// Path structure: {baseDir}/[realm]/gcp/{provider}/.
+// When realm is empty, legacy paths are used without a realm subdirectory.
+func GetProviderDir(realm, providerName string) (string, error) {
+	defer perf.Track(nil, "gcp.GetProviderDir")()
+
+	if err := validatePathSegment("provider name", providerName); err != nil {
+		return "", err
+	}
+	if realm != "" {
+		if err := validatePathSegment("realm", realm); err != nil {
+			return "", err
+		}
+	}
+	base, err := GetGCPBaseDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(base, realm, GCPSubdir, providerName)
+	if err := os.MkdirAll(dir, permDir); err != nil {
+		return "", credentialFileError(errUtils.ErrInvalidAuthConfig, "Failed to create GCP provider directory", err)
+	}
+	return dir, nil
+}
+
+// GetADCDir returns the directory for ADC credentials for a specific identity.
+// Path structure: {baseDir}/[realm]/gcp/{provider}/adc/{identity}/.
+func GetADCDir(realm, providerName, identityName string) (string, error) {
+	defer perf.Track(nil, "gcp.GetADCDir")()
+
+	providerDir, err := GetProviderDir(realm, providerName)
+	if err != nil {
+		return "", err
+	}
+	if err := validatePathSegment("identity name", identityName); err != nil {
+		return "", err
+	}
+	dir := filepath.Join(providerDir, ADCSubdir, identityName)
+	if err := os.MkdirAll(dir, permDir); err != nil {
+		return "", credentialFileError(errUtils.ErrInvalidAuthConfig, "Failed to create GCP ADC directory", err)
+	}
+	return dir, nil
+}
+
+// GetADCFilePath returns the path to the ADC JSON file for a specific identity.
+// Path structure: {baseDir}/[realm]/gcp/{provider}/adc/{identity}/application_default_credentials.json.
+func GetADCFilePath(realm, providerName, identityName string) (string, error) {
+	defer perf.Track(nil, "gcp.GetADCFilePath")()
+
+	dir, err := GetADCDir(realm, providerName, identityName)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, CredentialsFileName), nil
+}
+
+// GetConfigDir returns the gcloud-style config directory for a specific identity.
+// Path structure: {baseDir}/[realm]/gcp/{provider}/config/{identity}/.
+func GetConfigDir(realm, providerName, identityName string) (string, error) {
+	defer perf.Track(nil, "gcp.GetConfigDir")()
+
+	providerDir, err := GetProviderDir(realm, providerName)
+	if err != nil {
+		return "", err
+	}
+	if err := validatePathSegment("identity name", identityName); err != nil {
+		return "", err
+	}
+	dir := filepath.Join(providerDir, ConfigSubdir, identityName)
+	if err := os.MkdirAll(dir, permDir); err != nil {
+		return "", credentialFileError(errUtils.ErrInvalidAuthConfig, "Failed to create GCP config directory", err)
+	}
+	return dir, nil
+}
+
+// GetPropertiesFilePath returns the path to the gcloud properties file.
+// Path structure: {baseDir}/[realm]/gcp/{provider}/config/{identity}/properties.
+func GetPropertiesFilePath(realm, providerName, identityName string) (string, error) {
+	defer perf.Track(nil, "gcp.GetPropertiesFilePath")()
+
+	dir, err := GetConfigDir(realm, providerName, identityName)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, PropertiesFileName), nil
+}
+
+// GetAccessTokenFilePath returns the path to the access token file for an identity.
+// Path structure: {baseDir}/[realm]/gcp/{provider}/adc/{identity}/access_token.
+func GetAccessTokenFilePath(realm, providerName, identityName string) (string, error) {
+	defer perf.Track(nil, "gcp.GetAccessTokenFilePath")()
+
+	dir, err := GetADCDir(realm, providerName, identityName)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, AccessTokenFileName), nil
+}
+
+// WriteADCFile writes the Application Default Credentials JSON file.
+// Uses file locking to prevent concurrent modification conflicts.
+func WriteADCFile(realm, providerName, identityName string, content *AuthorizedUserContent) (string, error) {
+	defer perf.Track(nil, "gcp.WriteADCFile")()
+
+	if content == nil {
+		return "", fmt.Errorf("%w: ADC file content cannot be nil", errUtils.ErrInvalidADCContent)
+	}
+	providerDir, err := GetProviderDir(realm, providerName)
+	if err != nil {
+		return "", credentialFileError(errUtils.ErrWriteADCFile, "Failed to resolve GCP provider directory", err)
+	}
+
+	// Resolve the ADC path (which creates its parent directory) inside the lock callback,
+	// not before it: CleanupIdentityFiles now shares this same lock, so creating the
+	// directory before acquiring the lock would leave a window where cleanup can remove
+	// it before the write actually happens.
+	var path string
+	if err := withFileLock(identityLockTarget(providerDir, identityName), func() error {
+		var err error
+		path, err = GetADCFilePath(realm, providerName, identityName)
+		if err != nil {
+			return credentialFileError(errUtils.ErrWriteADCFile, "Failed to resolve ADC file path", err)
+		}
+		data, err := json.MarshalIndent(content, "", "  ")
+		if err != nil {
+			return credentialFileError(errUtils.ErrWriteADCFile, "Failed to marshal ADC content", err)
+		}
+		if err := credentialFileSystem.WriteFileAtomic(path, data, permFile); err != nil {
+			return credentialFileError(errUtils.ErrWriteADCFile, "Failed to write ADC file", err)
+		}
+		return nil
+	}); err != nil {
+		return "", credentialFileError(errUtils.ErrWriteADCFile, "Failed to write ADC file", err)
+	}
+	return path, nil
+}
+
+// WritePropertiesFile writes the gcloud-style properties file (INI format).
+// Uses the ini.v1 library for consistent, properly-escaped INI generation
+// and file locking to prevent concurrent modification conflicts.
+func WritePropertiesFile(realm, providerName, identityName string, projectID string, region string) (string, error) {
+	defer perf.Track(nil, "gcp.WritePropertiesFile")()
+
+	providerDir, err := GetProviderDir(realm, providerName)
+	if err != nil {
+		return "", credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to resolve GCP provider directory", err)
+	}
+
+	// See WriteADCFile: resolve the properties path (which creates its parent
+	// directory) inside the lock callback so CleanupIdentityFiles can't remove it
+	// in the window before the write happens.
+	var path string
+	if err := withFileLock(identityLockTarget(providerDir, identityName), func() error {
+		var err error
+		path, err = GetPropertiesFilePath(realm, providerName, identityName)
+		if err != nil {
+			return credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to resolve GCP properties file path", err)
+		}
+		cfg := ini.Empty()
+		coreSection, err := cfg.NewSection("core")
+		if err != nil {
+			return credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to create GCP properties core section", err)
+		}
+		if projectID != "" {
+			if _, err := coreSection.NewKey("project", projectID); err != nil {
+				return credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to set GCP project property", err)
+			}
+		}
+		computeSection, err := cfg.NewSection("compute")
+		if err != nil {
+			return credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to create GCP properties compute section", err)
+		}
+		if region != "" {
+			if _, err := computeSection.NewKey("region", region); err != nil {
+				return credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to set GCP region property", err)
+			}
+		}
+		var buf bytes.Buffer
+		if _, err := cfg.WriteTo(&buf); err != nil {
+			return credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to serialize GCP properties file", err)
+		}
+		if err := credentialFileSystem.WriteFileAtomic(path, buf.Bytes(), permFile); err != nil {
+			return credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to write GCP properties file", err)
+		}
+		return nil
+	}); err != nil {
+		return "", credentialFileError(errUtils.ErrWritePropertiesFile, "Failed to write GCP properties file", err)
+	}
+
+	return path, nil
+}
+
+// WriteAccessTokenFile writes a simple access token file for tools that need it.
+// Uses file locking to prevent concurrent modification conflicts.
+// Realm is required for credential isolation.
+func WriteAccessTokenFile(realm, providerName, identityName string, accessToken string, expiry time.Time) (string, error) {
+	defer perf.Track(nil, "gcp.WriteAccessTokenFile")()
+
+	if accessToken == "" {
+		return "", fmt.Errorf("%w: access token cannot be empty", errUtils.ErrWriteAccessTokenFile)
+	}
+	providerDir, err := GetProviderDir(realm, providerName)
+	if err != nil {
+		return "", credentialFileError(errUtils.ErrWriteAccessTokenFile, "Failed to resolve GCP provider directory", err)
+	}
+
+	// See WriteADCFile: resolve the access-token path (which creates its parent
+	// directory) inside the lock callback so CleanupIdentityFiles can't remove it
+	// in the window before the write happens.
+	var path string
+	if err := withFileLock(identityLockTarget(providerDir, identityName), func() error {
+		var err error
+		path, err = GetAccessTokenFilePath(realm, providerName, identityName)
+		if err != nil {
+			return credentialFileError(errUtils.ErrWriteAccessTokenFile, "Failed to resolve GCP access token file path", err)
+		}
+		content := accessToken + "\n"
+		if !expiry.IsZero() {
+			content += expiry.Format(time.RFC3339) + "\n"
+		}
+		if err := credentialFileSystem.WriteFileAtomic(path, []byte(content), permFile); err != nil {
+			return credentialFileError(errUtils.ErrWriteAccessTokenFile, "Failed to write GCP access token file", err)
+		}
+		return nil
+	}); err != nil {
+		return "", credentialFileError(errUtils.ErrWriteAccessTokenFile, "Failed to write GCP access token file", err)
+	}
+	return path, nil
+}
+
+// CleanupIdentityFiles removes all credential files for an identity.
+// Uses file locking to prevent concurrent modification conflicts.
+// Realm is required for credential isolation.
+func CleanupIdentityFiles(realm, providerName, identityName string) error {
+	defer perf.Track(nil, "gcp.CleanupIdentityFiles")()
+
+	providerDir, err := GetProviderDir(realm, providerName)
+	if err != nil {
+		return err
+	}
+	if err := validatePathSegment("identity name", identityName); err != nil {
+		return err
+	}
+
+	// Lock the same target the write helpers use so cleanup actually contends with a
+	// concurrent WriteADCFile/WritePropertiesFile/WriteAccessTokenFile for this identity,
+	// instead of racing it: RemoveAll below could otherwise delete a directory out from
+	// under a write in progress, or delete a file a write just finished creating.
+	lockErr := withFileLock(identityLockTarget(providerDir, identityName), func() error {
+		adcDir := filepath.Join(providerDir, ADCSubdir, identityName)
+		configDir := filepath.Join(providerDir, ConfigSubdir, identityName)
+		var errs []error
+		for _, dir := range []string{adcDir, configDir} {
+			if err := os.RemoveAll(dir); err != nil && !os.IsNotExist(err) {
+				errs = append(errs, errors.Join(errUtils.ErrRemoveDirectory, fmt.Errorf("failed to remove %s: %w", dir, err)))
+			}
+		}
+		if len(errs) > 0 {
+			return errors.Join(errs...)
+		}
+		return nil
+	})
+
+	if lockErr != nil {
+		return fmt.Errorf("cleanup identity files: %w", lockErr)
+	}
+	return nil
+}
+
+func validatePathSegment(label, value string) error {
+	if value == "" {
+		return fmt.Errorf("%w: %s is required", errUtils.ErrInvalidAuthConfig, label)
+	}
+	if value == "." || value == ".." {
+		return fmt.Errorf("%w: %s must not be %q", errUtils.ErrInvalidAuthConfig, label, value)
+	}
+	if strings.ContainsAny(value, "/\\") {
+		return fmt.Errorf("%w: %s must not contain path separators", errUtils.ErrInvalidAuthConfig, label)
+	}
+	return nil
+}

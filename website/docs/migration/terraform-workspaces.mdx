@@ -12,33 +12,33 @@ import KeyTakeaways from '@site/src/components/KeyTakeaways'
 import TaskList from '@site/src/components/TaskList'
 
 <Intro>
-Terraform workspaces solve a simple problem: deploy the same code to multiple environments using one state backend. But as your infrastructure grows, workspaces create more problems than they solve. Atmos provides a better path forward.
+Terraform workspaces solve a simple problem: deploy the same code to multiple environments using one state backend. Atmos can adopt that workspace-backed state while moving environment configuration into explicit stack files.
 </Intro>
 
-## Why Workspaces Fall Short
+## How Workspaces Fit With Atmos
 
-Workspaces seem great at first—one command (`terraform workspace select prod`) and you're deploying to production. But they have fundamental limitations:
+Workspaces are a valid way to organize Terraform state. When migrating to Atmos, the important shift is making configuration explicit in stacks while preserving the state layout that already works for your team.
 
-### 1. **Shared State Backend = Single Point of Failure**
+### 1. **Shared Backend Configuration**
 
-All workspaces share the same backend configuration. One misconfigured workspace can corrupt state for all environments.
+Terraform workspaces share backend configuration and differentiate state by workspace name. Atmos can keep that model, or configure separate backends per stack when a team explicitly wants that operating model.
 
 ```hcl
-# ALL workspaces use this backend
+# All workspaces use this backend configuration
 terraform {
   backend "s3" {
     bucket = "my-terraform-state"  # Same bucket for dev, staging, prod
-    key    = "terraform.tfstate"   # Workspace adds prefix, but it's fragile
+    key    = "terraform.tfstate"   # Workspace adds the environment-specific path
     region = "us-east-1"
   }
 }
 ```
 
-A typo in `dev` can overwrite `prod` state. This has happened to many teams.
+If your team wants independent backend configuration per environment, use the optional separate-backend migration path below.
 
-### 2. **No Configuration Differentiation**
+### 2. **Configuration Often Lives in Code**
 
-Workspaces use the same variables file. You end up with massive case statements:
+Workspace-based repos often put environment-specific choices in Terraform expressions. Atmos moves those choices into stack YAML:
 
 <File title="variables.tf">
 ```hcl
@@ -47,14 +47,14 @@ variable "instance_type" {
 }
 
 locals {
-  # Ugly workspace-specific logic
+  # Workspace-specific logic
   instance_type = terraform.workspace == "prod" ? "m5.large" :
                   terraform.workspace == "staging" ? "t3.medium" :
                   "t3.micro"
 
   enable_monitoring = terraform.workspace == "prod" ? true : false
 
-  # This gets unmaintainable quickly
+  # This can grow as environments diverge
 }
 ```
 </File>
@@ -73,24 +73,24 @@ $ terraform workspace list
   johns-experiment    # What is this?
 ```
 
-### 4. **No Code Reuse**
+### 4. **Component Versioning**
 
-Every workspace runs the exact same code. Want to test a new module version in dev before prod? Tough luck. You need to branch your entire repository.
+Workspaces usually run the same root module version for every environment. Atmos stacks can point environments at different component versions when a rollout needs that control.
 
-### 5. **Blast Radius**
+### 5. **Optional Backend Changes**
 
-All environments in one state backend means one mistake can affect all environments. Separate state backends provide isolation.
+Teams that want separate backend configuration can migrate workspaces into per-stack backends. This is optional and should be planned carefully because it moves state.
 
-## How Atmos Solves These Problems
+## How Atmos Helps
 
 Atmos separates **code** (Terraform components) from **configuration** ([stack YAML files](/stacks/)). This gives you:
 
 <KeyTakeaways title="Atmos Advantages">
-- **Isolated state** - Each stack has its own [backend configuration](/stacks/remote-state)
+- **Workspace-compatible state** - Keep existing workspace-backed state, or choose separate [backend configuration](/stacks/remote-state)
 - **Environment-specific config** - No giant case statements
 - **Visible configuration** - Stacks are files you can search, version, review
 - **Component reuse** - Share code, customize config via [inheritance](/howto/inheritance)
-- **Reduced blast radius** - Isolated state backends per environment
+- **Optional backend changes** - Move state backends only when your team chooses that model
 </KeyTakeaways>
 
 ## Migration Strategy
@@ -284,9 +284,9 @@ components:
 ```
 </File>
 
-### 3. Migrate State Backends
+### 3. Choose a State Backend Strategy
 
-**Critical:** This step requires careful planning to avoid state loss.
+Atmos can use your existing workspace-backed state. Moving state to separate backends is optional and requires careful planning to avoid state loss.
 
 **Option A: Keep Workspace State (Easiest)**
 
@@ -314,9 +314,9 @@ components:
 
 This lets you migrate incrementally without touching state.
 
-**Option B: Migrate to Separate Backends (Recommended)**
+**Option B: Move to Separate Backends (Optional)**
 
-For better isolation, migrate each workspace to its own backend:
+If your team explicitly wants independent backend configuration per environment, migrate each workspace to its own backend:
 
 1. **Export state from workspace:**
    ```bash
@@ -535,17 +535,17 @@ components:
 - [ ] Convert workspace conditionals to variables
 - [ ] Create Atmos `atmos.yaml` configuration
 - [ ] Create stack files for each workspace
-- [ ] Test state migration in dev first
-- [ ] Migrate state (keep workspace structure OR move to separate backends)
+- [ ] Keep workspace-backed state, unless your team explicitly chooses separate backends
+- [ ] If moving state, test the migration in dev first
 - [ ] Verify `atmos terraform plan` shows no changes
 - [ ] Update CI/CD pipelines
 - [ ] Update team documentation
-- [ ] Deprecate workspace commands
+- [ ] Update workspace commands to stack-based Atmos commands where appropriate
 </TaskList>
 
 <KeyTakeaways title="Benefits After Migration">
-- **Explicit configuration** - No hidden workspace state
-- **Isolated backends** - Prod can't accidentally affect dev
+- **Explicit configuration** - Environment settings live in stack files
+- **Workspace-compatible state** - Keep existing workspace-backed state
 - **Environment-specific settings** - No complex conditionals
 - **Better code review** - Stack changes visible in YAML diffs
 - **Reusable components** - Same code, different configs
@@ -555,15 +555,15 @@ components:
 ## Common Questions
 
 <FAQItem question="Can I keep using workspaces with Atmos?">
-Yes! Atmos supports workspace-based backends via `workspace` settings. But we recommend migrating away from workspaces for better isolation.
+Yes. Atmos supports workspace-based backends via `workspace` settings. Migrating state to separate backends is optional, not required or recommended by default.
 </FAQItem>
 
 <FAQItem question="Do I need to migrate everything at once?">
-No. Migrate incrementally—one component at a time. Use workspaces for unmigrated components and Atmos stacks for migrated ones.
+No. Migrate incrementally, one component at a time. You can keep workspace-backed state throughout the migration.
 </FAQItem>
 
 <FAQItem question="What about Terraform Cloud workspaces?">
-Terraform Cloud workspaces are different from OSS workspaces—they're more similar to Atmos stacks (isolated state, separate config). Migration is similar but simpler.
+Terraform Cloud workspaces are different from OSS workspaces. They are more similar to Atmos stacks because each workspace carries its own state and configuration. Migration is similar but simpler.
 </FAQItem>
 
 ## Get Help

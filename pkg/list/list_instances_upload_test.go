@@ -239,6 +239,84 @@ func TestUploadInstancesWithDeps_IncompleteRepoInfo(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestUploadInstancesWithDeps_PreservesEnabledDisabled verifies that instances with
+// settings.pro.enabled: false and instances with no pro config are uploaded (not
+// filtered out), and that the enabled flag is preserved verbatim in the payload.
+// Atmos Pro reconciles enabled/disabled state on the server from this data.
+func TestUploadInstancesWithDeps_PreservesEnabledDisabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockGit := pkgGit.NewMockRepositoryOperations(ctrl)
+	mockConfig := pkgCfg.NewMockLoader(ctrl)
+	mockClientFactory := pro.NewMockClientFactory(ctrl)
+	mockAPIClient := pro.NewMockAPIClient(ctrl)
+
+	instances := []schema.Instance{
+		{
+			Component: "vpc",
+			Stack:     "dev",
+			Settings: map[string]any{
+				"pro": map[string]any{"enabled": true},
+			},
+		},
+		{
+			Component: "app",
+			Stack:     "dev",
+			Settings: map[string]any{
+				"pro": map[string]any{"enabled": false},
+			},
+		},
+		{
+			Component: "db",
+			Stack:     "dev",
+			Settings:  map[string]any{}, // No pro config at all.
+		},
+	}
+
+	mockRepo := &git.Repository{}
+	repoInfo := pkgGit.RepoInfo{
+		RepoUrl:   "https://github.com/test/repo",
+		RepoName:  "repo",
+		RepoOwner: "test",
+		RepoHost:  "github.com",
+	}
+	atmosConfig := schema.AtmosConfiguration{}
+
+	mockGit.EXPECT().GetLocalRepo().Return(mockRepo, nil)
+	mockGit.EXPECT().GetRepoInfo(mockRepo).Return(repoInfo, nil)
+	mockConfig.EXPECT().InitCliConfig(gomock.Any(), false).Return(atmosConfig, nil)
+	mockClientFactory.EXPECT().NewClient(&atmosConfig).Return(mockAPIClient, nil)
+	mockAPIClient.EXPECT().UploadInstances(gomock.Any()).
+		Do(func(req *dtos.InstancesUploadRequest) {
+			// All three instances must reach the payload.
+			assert.Equal(t, 3, len(req.Instances))
+
+			// Index by component for stable assertions regardless of order.
+			byComponent := make(map[string]dtos.UploadInstance, len(req.Instances))
+			for _, u := range req.Instances {
+				byComponent[u.Component] = u
+			}
+
+			// vpc: pro.enabled must be preserved as true.
+			vpcPro, ok := byComponent["vpc"].Settings["pro"].(map[string]any)
+			assert.True(t, ok, "vpc.settings.pro must be a map")
+			assert.Equal(t, true, vpcPro["enabled"])
+
+			// app: pro.enabled: false must flow through, not be dropped.
+			appPro, ok := byComponent["app"].Settings["pro"].(map[string]any)
+			assert.True(t, ok, "app.settings.pro must be a map (enabled:false preserved)")
+			assert.Equal(t, false, appPro["enabled"])
+
+			// db: no pro config → Settings is nil (omitempty on the wire).
+			assert.Nil(t, byComponent["db"].Settings)
+		}).
+		Return(nil)
+
+	err := uploadInstancesWithDeps(instances, mockGit, mockConfig, mockClientFactory)
+	assert.NoError(t, err)
+}
+
 // TestUploadInstancesWithDeps_EmptyInstances tests behavior with empty instance list.
 func TestUploadInstancesWithDeps_EmptyInstances(t *testing.T) {
 	ctrl := gomock.NewController(t)

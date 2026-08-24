@@ -37,6 +37,34 @@ func TestGetLogStyles(t *testing.T) {
 	assert.NotNil(t, styles.Message)
 }
 
+func TestComponentLabelStyleCyclesPalette(t *testing.T) {
+	// Seed the cached scheme so the style picks deterministic palette colors.
+	InitializeStyles(&ColorScheme{
+		Primary: "#0000FF", Success: "#00FF00", Highlight: "#FF00FF",
+		Warning: "#FFFF00", Link: "#00FFFF", Secondary: "#FF8800",
+		Gold: "#FFD700", Error: "#FF0000", Selected: "#88FF88",
+	})
+	t.Cleanup(InvalidateStyleCache)
+
+	first := ComponentLabelStyle(0)
+	second := ComponentLabelStyle(1)
+	// Distinct backgrounds for adjacent indices.
+	assert.NotEqual(t, first.GetBackground(), second.GetBackground())
+	// Index wraps around the palette (9 colors): index 9 == index 0.
+	assert.Equal(t, first.GetBackground(), ComponentLabelStyle(9).GetBackground())
+	// Foreground is set for contrast.
+	assert.NotNil(t, first.GetForeground())
+}
+
+func TestComponentLabelStyleNoSchemeFallback(t *testing.T) {
+	InvalidateStyleCache()
+	t.Cleanup(InvalidateStyleCache)
+	// With no cached scheme it must still return a usable (bold, padded) style and
+	// not panic. It may load the active theme; either way GetBold holds.
+	style := ComponentLabelStyle(0)
+	assert.True(t, style.GetBold())
+}
+
 func TestGetLogStyles_NilScheme(t *testing.T) {
 	styles := GetLogStyles(nil)
 	require.NotNil(t, styles)

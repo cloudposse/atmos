@@ -1,16 +1,19 @@
 ---
 title: Component Configuration
-sidebar_position: 1
 sidebar_label: components
 sidebar_class_name: command
 id: components
-description: Configure how Atmos locates and executes your Terraform, Helmfile, and Packer components.
+description: Configure how Atmos locates and executes your Terraform, Helmfile, Kubernetes, Packer, and Ansible components.
 ---
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
 
 <Intro>
-The `components` section in `atmos.yaml` defines how Atmos locates and executes your infrastructure components. Each component type (Terraform, Helmfile, Packer) has its own configuration for paths, commands, and behaviors.
+  The `components` section in `atmos.yaml` defines how Atmos locates and
+  executes your infrastructure components. Each component type (Terraform,
+  Helmfile, Kubernetes, Packer, Ansible) has its own configuration for paths,
+  providers, commands, and behaviors.
 </Intro>
 
 :::important
@@ -20,17 +23,25 @@ This configuration is defined in `atmos.yaml` and specifies default behaviors li
 
 ## Supported Component Types
 
-Atmos supports three built-in component types:
+Atmos supports these built-in component types:
 
 <dl>
   <dt>[Terraform](/cli/configuration/components/terraform)</dt>
   <dd>Infrastructure as Code for cloud resources using Terraform or OpenTofu.</dd>
 
-  <dt>[Helmfile](/cli/configuration/components/helmfile)</dt>
-  <dd>Kubernetes package management for deploying Helm charts.</dd>
+<dt>[Helmfile](/cli/configuration/components/helmfile)</dt>
+<dd>Kubernetes package management for deploying Helm charts.</dd>
 
-  <dt>[Packer](/cli/configuration/components/packer)</dt>
-  <dd>Machine image building for AMIs, VM images, and container images.</dd>
+<dt>[Kubernetes](/cli/configuration/components/kubernetes)</dt>
+<dd>
+  SDK-backed Kubernetes manifest rendering, diffing, applying, and deleting.
+</dd>
+
+<dt>[Packer](/cli/configuration/components/packer)</dt>
+<dd>Machine image building for AMIs, VM images, and container images.</dd>
+
+  <dt>[Ansible](/cli/configuration/components/ansible)</dt>
+  <dd>Configuration management and infrastructure automation using Ansible playbooks.</dd>
 </dl>
 
 ## Configuration Structure
@@ -50,10 +61,24 @@ components:
     command: helmfile
     # ... helmfile-specific settings
 
+  helm:
+    base_path: components/helm
+    # ... native Helm-specific settings
+
+  kubernetes:
+    base_path: components/kubernetes
+    provider: kubectl
+    # ... kubernetes-specific settings
+
   packer:
     base_path: components/packer
     command: packer
     # ... packer-specific settings
+
+  ansible:
+    base_path: components/ansible
+    command: ansible
+    # ... ansible-specific settings
 ```
 </File>
 
@@ -66,12 +91,16 @@ All component types share these common configuration options:
   <dd>Directory path where components of this type are located. Supports absolute and relative paths. Relative paths are resolved from `base_path` in the root configuration.</dd>
 
   <dt>`command`</dt>
-  <dd>Executable to run for this component type. Can be a command name (resolved via PATH) or an absolute path to a binary.</dd>
+  <dd>Executable to run for binary-backed component types. Can be a command name (resolved via PATH) or an absolute path to a binary. SDK-backed component types such as Kubernetes do not use this option.</dd>
 </dl>
 
 ## Related
 
 - [Terraform Configuration](/cli/configuration/components/terraform)
+- [Helm Configuration](/cli/configuration/components/helm)
 - [Helmfile Configuration](/cli/configuration/components/helmfile)
+- [Kubernetes Configuration](/cli/configuration/components/kubernetes)
 - [Packer Configuration](/cli/configuration/components/packer)
+- [Ansible Configuration](/cli/configuration/components/ansible)
 - [Stack Configuration](/cli/configuration/stacks)
+```

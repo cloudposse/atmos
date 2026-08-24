@@ -115,7 +115,7 @@ first_subnet: !terraform.output vpc .private_subnet_ids[0]
 db_host: !terraform.output config .database_config.host
 
 # Provide default values
-username: !terraform.output config ".username // ""default-user"""
+username: !terraform.output config .username // "default-user"
 ```
 
 ## Performance Considerations

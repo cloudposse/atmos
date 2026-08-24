@@ -462,3 +462,77 @@ func TestResolveDestination_EmptyTenantIDWithAlias(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveDestination_SovereignCloud(t *testing.T) {
+	tests := []struct {
+		name             string
+		cloudEnvironment string
+		expectedPortal   string
+	}{
+		{
+			name:             "US government portal URL",
+			cloudEnvironment: "usgovernment",
+			expectedPortal:   "https://portal.azure.us/",
+		},
+		{
+			name:             "China portal URL",
+			cloudEnvironment: "china",
+			expectedPortal:   "https://portal.azure.cn/",
+		},
+		{
+			name:             "public portal URL",
+			cloudEnvironment: "public",
+			expectedPortal:   "https://portal.azure.com/",
+		},
+		{
+			name:             "empty defaults to public portal",
+			cloudEnvironment: "",
+			expectedPortal:   "https://portal.azure.com/",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			creds := &types.AzureCredentials{
+				AccessToken:      "test-token",
+				TenantID:         "tenant-123",
+				SubscriptionID:   "sub-456",
+				CloudEnvironment: tt.cloudEnvironment,
+			}
+
+			// Test home destination uses correct portal URL.
+			result, err := ResolveDestination("home", creds)
+			require.NoError(t, err)
+			assert.Contains(t, result, tt.expectedPortal)
+			assert.Contains(t, result, "tenant-123")
+
+			// Test alias destination uses correct portal URL.
+			result, err = ResolveDestination("resourcegroups", creds)
+			require.NoError(t, err)
+			assert.Contains(t, result, tt.expectedPortal)
+
+			// Test subscription destination uses correct portal URL.
+			result, err = ResolveDestination("subscription", creds)
+			require.NoError(t, err)
+			assert.Contains(t, result, tt.expectedPortal)
+			assert.Contains(t, result, "sub-456")
+		})
+	}
+}
+
+func TestGetConsoleURL_SovereignCloud(t *testing.T) {
+	generator := &ConsoleURLGenerator{}
+
+	creds := &types.AzureCredentials{
+		AccessToken:      "gov-token",
+		TenantID:         "gov-tenant",
+		SubscriptionID:   "gov-sub",
+		CloudEnvironment: "usgovernment",
+	}
+
+	url, duration, err := generator.GetConsoleURL(context.Background(), creds, types.ConsoleURLOptions{})
+	require.NoError(t, err)
+	assert.Contains(t, url, "https://portal.azure.us/")
+	assert.Contains(t, url, "gov-tenant")
+	assert.Equal(t, AzureDefaultSessionDuration, duration)
+}

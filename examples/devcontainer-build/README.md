@@ -1,3 +1,11 @@
+---
+title: Devcontainer (Custom Build)
+tags: [DX]
+cast:
+  file: /casts/examples/devcontainer-build/build-config.cast
+  title: atmos devcontainer build config
+---
+
 # Custom Dockerfile Devcontainer Example
 
 This example demonstrates using a custom Dockerfile with Atmos devcontainers. The Dockerfile extends the Geodesic base image and pre-installs Atmos.

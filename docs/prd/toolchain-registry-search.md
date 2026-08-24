@@ -492,7 +492,7 @@ func executeSearch(cmd *cobra.Command, args []string) error {
 
 ## References
 
-- **Aqua Registry Format:** https://aquaproj.github.io/docs/reference/registry-config
+- **Aqua Registry Format:** https://aquaproj.github.io/docs/reference/registry-config/
 - **Similar Tools:**
   - `brew search` (Homebrew)
   - `apt search` (Debian)

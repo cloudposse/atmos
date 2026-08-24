@@ -1,0 +1,29 @@
+base_path: "."
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.stage }}"
+
+components:
+  container:
+    base_path: "components/container"
+
+container:
+  runtime:
+    provider: auto # optional: auto (default), or pin docker|podman
+    # Auto-start is the default. Set auto_start: false to opt out.
+
+# A composition groups multiple services into one system. The `services:` list is
+# a CLOSED contract for membership (a component may only claim a service listed
+# here) but OPEN for fulfillment (a declared service with no component in a given
+# stack is allowed). Membership is declared per-component via the first-class
+# `composition:` field; fulfillment varies per stack.
+compositions:
+  storefront:
+    description: Storefront frontend, API, and database
+    services:
+      - frontend
+      - api
+      - database

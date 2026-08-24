@@ -22,6 +22,60 @@ func GetTerraformWorkspace(sections *map[string]any) string {
 	return ""
 }
 
+// ComponentEnvKeysAWS is the whitelist of env vars that in-process AWS backend
+// readers honor from a component's `env` section. Mirrors the credential- and
+// endpoint-relevant keys tofu's S3 backend reads from the process environment,
+// so the in-process reader matches subprocess behavior for `!terraform.state`.
+//
+// Symmetric with the env overlay that `!terraform.output` already applies via
+// `pkg/terraform/output/environment.go::SetupEnvironment` (the loop that
+// writes `config.Env` over the subprocess environment).
+//
+// AWS_STS_REGIONAL_ENDPOINTS is intentionally NOT in this list — it was a v1
+// SDK toggle; SDK v2 always uses regional endpoints by default and the legacy
+// toggle is a no-op. Including it would silently fail to honor.
+var ComponentEnvKeysAWS = []string{
+	"AWS_PROFILE",
+	"AWS_REGION",
+	"AWS_DEFAULT_REGION",
+	"AWS_CONFIG_FILE",
+	"AWS_SHARED_CREDENTIALS_FILE",
+	"AWS_ENDPOINT_URL_S3",
+	"AWS_ENDPOINT_URL_STS",
+	"AWS_USE_FIPS_ENDPOINT",
+}
+
+// ExtractComponentEnvOverlay returns a whitelisted overlay of the component's
+// `env` section. Keys outside the whitelist are ignored — only credential- and
+// endpoint-related env vars are exposed to in-process backend clients.
+//
+// Returns nil when no relevant keys are present so callers preserve their
+// existing default-credential-chain behavior unchanged. This is the
+// backward-compatibility hinge: components that don't set any whitelisted key
+// see no observable difference.
+func ExtractComponentEnvOverlay(sections *map[string]any, whitelist []string) map[string]string {
+	defer perf.Track(nil, "terraform_backend.ExtractComponentEnvOverlay")()
+
+	if sections == nil {
+		return nil
+	}
+
+	envSection, ok := (*sections)[cfg.EnvSectionName].(map[string]any)
+	if !ok || len(envSection) == 0 {
+		return nil
+	}
+	overlay := make(map[string]string, len(whitelist))
+	for _, k := range whitelist {
+		if v, present := envSection[k]; present {
+			overlay[k] = fmt.Sprintf("%v", v)
+		}
+	}
+	if len(overlay) == 0 {
+		return nil
+	}
+	return overlay
+}
+
 // GetTerraformComponent returns the `component` section for a component in a stack.
 func GetTerraformComponent(sections *map[string]any) string {
 	defer perf.Track(nil, "terraform_backend.GetTerraformComponent")()

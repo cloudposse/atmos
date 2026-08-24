@@ -1,0 +1,42 @@
+# Landing-page fixture for the "Developer experience" demo (demo/landing/dx.tape).
+#
+# This project exists only to back the homepage DX demo: running `atmos terraform plan`
+# with no component and no stack, so Atmos prompts for *which component* and *which stack*
+# you meant, then plans against the local AWS emulator (Floci) — no cloud account needed.
+#
+# It is intentionally a dedicated demo fixture (not an examples/* project) so it can be
+# tailored to the landing-page message without churning docs screengrabs. Modeled on
+# examples/emulator-aws.
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# A single aws/emulator identity binds every component to the local sandbox.
+# `atmos emulator up aws -s <stack>` starts the emulator; the provider-config
+# contributor and this identity wire Terraform to its live endpoint at runtime —
+# no providers.tf, no endpoint configuration, no hand-rolled docker-compose.
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: aws
+      default: true

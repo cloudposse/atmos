@@ -1,0 +1,324 @@
+// Package plugin defines the CI plugin interface and related types for component type abstractions.
+package plugin
+
+import (
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/ci/templates"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+//go:generate mockgen -typed -destination=../../../mock_plugin_test.go -package=ci github.com/cloudposse/atmos/pkg/ci/internal/plugin Plugin
+
+// HookHandler is the callback signature for plugin event handlers.
+// Plugins implement handlers that own all action logic for their events.
+type HookHandler func(ctx *HookContext) error
+
+// HookContext provides everything a plugin callback needs to execute CI actions.
+type HookContext struct {
+	// Event is the full hook event (e.g., "after.terraform.plan").
+	Event string
+
+	// Command is the extracted command (e.g., "plan", "apply").
+	Command string
+
+	// EventPrefix is "before" or "after".
+	EventPrefix string
+
+	// Config is the Atmos configuration.
+	Config *schema.AtmosConfiguration
+
+	// Info contains component and stack information.
+	Info *schema.ConfigAndStacksInfo
+
+	// Output is the raw command output.
+	Output string
+
+	// CommandError is the error from the command execution, if any.
+	CommandError error
+
+	// ExitCode is the exit code from the command execution. This is the
+	// authoritative signal for success/failure and (for `terraform plan` with
+	// -detailed-exitcode) for change detection:
+	//   - apply/deploy: 0 = success; non-zero = error.
+	//   - plan: 0 = no changes; 1 = error; 2 = changes detected.
+	// Plugins should prefer this over text parsing of Output, which is
+	// fragile against terraform/OpenTofu output drift and against errors
+	// that occur before terraform itself runs (e.g., authentication failures).
+	ExitCode int
+
+	// Aggregate carries command-specific aggregate result data for hook events
+	// that summarize more than one component.
+	Aggregate any
+
+	// Provider is the detected CI platform provider.
+	Provider provider.Provider
+
+	// CICtx is the CI platform context (repo, SHA, PR, etc.).
+	CICtx *provider.Context
+
+	// TemplateLoader loads and renders CI summary templates.
+	TemplateLoader *templates.Loader
+
+	// CreatePlanfileStore is a lazy factory for creating planfile stores.
+	// Not all events need a store, so it's created on demand.
+	// Returns an any that should be type-asserted to planfile.Store by the handler.
+	CreatePlanfileStore func() (any, error)
+}
+
+// HookBinding declares what happens at a specific hook event.
+type HookBinding struct {
+	// Event is the hook event pattern (e.g., "after.terraform.plan").
+	Event string
+
+	// Handler is the callback that owns all action logic for this event.
+	Handler HookHandler
+}
+
+// Plugin is implemented by component types that support CI integration.
+// Plugins own all action logic via Handler callbacks in their HookBindings.
+// Unlike Provider (which represents CI platforms like GitHub/GitLab), this interface
+// represents component types (terraform, helmfile) and their CI behavior.
+type Plugin interface {
+	// GetType returns the component type (e.g., "terraform", "helmfile").
+	GetType() string
+
+	// GetHookBindings returns all hook bindings for this plugin.
+	// Each binding declares an event and a Handler callback that owns all action logic.
+	GetHookBindings() []HookBinding
+}
+
+// HookBindings is a slice of HookBinding with helper methods.
+type HookBindings []HookBinding
+
+// GetBindingForEvent returns the hook binding for a specific event, or nil if not found.
+func (bindings HookBindings) GetBindingForEvent(event string) *HookBinding {
+	defer perf.Track(nil, "plugin.HookBindings.GetBindingForEvent")()
+
+	for i := range bindings {
+		if bindings[i].Event == event {
+			return &bindings[i]
+		}
+	}
+	return nil
+}
+
+// OutputResult contains parsed command output.
+type OutputResult struct {
+	// ExitCode is the command exit code.
+	ExitCode int
+
+	// HasChanges indicates if there are pending changes.
+	HasChanges bool
+
+	// HasErrors indicates if there were errors.
+	HasErrors bool
+
+	// Errors contains error messages if HasErrors is true.
+	Errors []string
+
+	// Data contains component-specific parsed data.
+	// For terraform: *TerraformOutputData
+	// For helmfile: *HelmfileOutputData
+	Data any
+}
+
+// TerraformOutputData contains terraform-specific output data.
+type TerraformOutputData struct {
+	// ResourceCounts contains resource change counts.
+	ResourceCounts ResourceCounts
+
+	// CreatedResources contains addresses of resources to be created.
+	CreatedResources []string
+
+	// UpdatedResources contains addresses of resources to be updated.
+	UpdatedResources []string
+
+	// ReplacedResources contains addresses of resources to be replaced.
+	ReplacedResources []string
+
+	// DeletedResources contains addresses of resources to be destroyed.
+	DeletedResources []string
+
+	// MovedResources contains resources that have been moved.
+	MovedResources []MovedResource
+
+	// ImportedResources contains addresses of resources to be imported.
+	ImportedResources []string
+
+	// Outputs contains terraform output values (after apply).
+	Outputs map[string]TerraformOutput
+
+	// HasOutputChanges indicates whether a plan includes output value changes.
+	HasOutputChanges bool
+
+	// ChangedResult contains the plan summary text.
+	ChangedResult string
+
+	// Warnings contains full warning block text extracted from terraform output.
+	Warnings []string
+}
+
+// TerraformTestOutputData contains terraform test-specific output data
+// parsed from `terraform test` stdout.
+type TerraformTestOutputData struct {
+	// Total is the number of run blocks executed.
+	Total int
+
+	// Pass is the number of run blocks that passed.
+	Pass int
+
+	// Fail is the number of run blocks that failed.
+	Fail int
+
+	// Error is the number of run blocks that errored.
+	Error int
+
+	// Skip is the number of run blocks that were skipped.
+	Skip int
+
+	// Files contains per-test-file results in execution order.
+	Files []TerraformTestFile
+
+	// Runs contains the per-run results in execution order.
+	Runs []TerraformTestRun
+
+	// CleanupFailures contains resources Terraform could not destroy after tests.
+	CleanupFailures []TerraformTestCleanupFailure
+}
+
+// TerraformTestFile represents the result of a single `.tftest.hcl` file.
+type TerraformTestFile struct {
+	// Path is the test file path.
+	Path string
+
+	// Status is the file outcome: "pass", "fail", "error", or "skip".
+	Status string
+
+	// Pass is the number of run blocks in this file that passed.
+	Pass int
+
+	// Fail is the number of run blocks in this file that failed.
+	Fail int
+
+	// Error is the number of run blocks in this file that errored.
+	Error int
+
+	// Skip is the number of run blocks in this file that were skipped.
+	Skip int
+}
+
+// TerraformTestCleanupFailure represents resources left behind after a test run.
+type TerraformTestCleanupFailure struct {
+	// File is the test file path.
+	File string
+
+	// Run is the run block associated with the cleanup failure.
+	Run string
+
+	// Resources contains Terraform resource instance addresses that need cleanup.
+	Resources []string
+}
+
+// TerraformTestRun represents the result of a single `terraform test` run block.
+type TerraformTestRun struct {
+	// Name is the run block name (the identifier in `run "<name>" { ... }`).
+	Name string
+
+	// File is the .tftest.hcl file the run belongs to (the JUnit testsuite).
+	File string
+
+	// Status is the run outcome: "pass", "fail", "error", or "skip".
+	Status string
+
+	// Error contains failure detail when Status is "fail"/"error" (best-effort; may be empty).
+	Error string
+
+	// Line is the 1-based source line of the failing assertion (0 = unknown).
+	// Populated from `terraform test -json` diagnostic ranges.
+	Line int
+
+	// Duration is the run's wall-clock time in seconds (0 = unknown).
+	Duration float64
+}
+
+// TerraformOutput represents a single terraform output value.
+type TerraformOutput struct {
+	// Value is the output value (string, number, bool, list, map).
+	Value any
+
+	// Type is the output type (string, number, bool, list, map, object).
+	Type string
+
+	// Sensitive indicates whether the output is marked as sensitive.
+	Sensitive bool
+}
+
+// MovedResource represents a resource that has been moved.
+type MovedResource struct {
+	// From is the original resource address.
+	From string
+
+	// To is the new resource address.
+	To string
+}
+
+// ResourceCounts contains resource change counts.
+type ResourceCounts struct {
+	// Create is the number of resources to create.
+	Create int
+
+	// Change is the number of resources to change.
+	Change int
+
+	// Replace is the number of resources to replace.
+	Replace int
+
+	// Destroy is the number of resources to destroy.
+	Destroy int
+}
+
+// HelmfileOutputData contains helmfile-specific output data.
+type HelmfileOutputData struct {
+	// Releases contains information about releases.
+	Releases []ReleaseInfo
+}
+
+// ReleaseInfo contains helmfile release information.
+type ReleaseInfo struct {
+	// Name is the release name.
+	Name string
+
+	// Namespace is the Kubernetes namespace.
+	Namespace string
+
+	// Status is the release status.
+	Status string
+}
+
+// TemplateContext contains all data available to CI summary templates.
+type TemplateContext struct {
+	// Component is the component name.
+	Component string
+
+	// ComponentType is the component type (e.g., "terraform", "helmfile").
+	ComponentType string
+
+	// Stack is the stack name.
+	Stack string
+
+	// Command is the command that was executed (e.g., "plan", "apply").
+	Command string
+
+	// CI contains CI platform metadata.
+	CI *provider.Context
+
+	// Result contains parsed output data.
+	Result *OutputResult
+
+	// Output is the raw command output.
+	Output string
+
+	// Custom contains custom variables from configuration.
+	Custom map[string]any
+}

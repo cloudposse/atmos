@@ -1,0 +1,27 @@
+---
+title: alert
+sidebar_label: alert
+slug: /workflows/steps/type/alert
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `alert` step type rings the terminal bell and optionally prints a message, a small building block for grabbing attention when a long-running custom command or workflow finishes or needs input.
+</Intro>
+
+```yaml
+steps:
+  - name: notify
+    type: alert
+    content: Workflow complete.
+```
+
+## Fields
+
+<dl>
+  <dt>`content`</dt>
+  <dd>Optional message to print after the alert. Supports templates.</dd>
+</dl>
+
+Use `alert` at the end of long-running workflows when a terminal notification is useful.

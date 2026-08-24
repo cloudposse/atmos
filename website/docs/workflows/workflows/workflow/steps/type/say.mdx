@@ -1,0 +1,47 @@
+---
+title: say
+sidebar_label: say
+slug: /workflows/steps/type/say
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `say` step type speaks a message aloud using text-to-speech (TTS) — an audible cue, like [`alert`](/workflows/steps/type/alert), for when a long-running custom command or workflow finishes or needs attention, but with a spoken message instead of just a bell. It detects an available speech engine per OS and degrades gracefully (printing the message) when none is available or when running in CI.
+</Intro>
+
+```yaml
+steps:
+  - name: notify
+    type: say
+    content: Deployment to {{ .steps.env.value }} is complete
+    voice: [Samantha, Zira, en-us]   # cross-platform stack; first installed wins
+    rate: normal                      # slow | normal | fast
+    print: fallback                   # fallback (default) | always | never
+```
+
+`say` works across platforms by detecting an available speech engine: the built-in `say` command on macOS, `spd-say` or `espeak`/`espeak-ng` on Linux, and PowerShell's `System.Speech` on Windows. When no engine is available — or when running in CI or another headless environment — it follows the `print` policy (by default, printing the message as a Markdown blockquote so the information is never lost).
+
+## Fields
+
+<dl>
+  <dt>`content`</dt>
+  <dd>The message to speak. Supports templates.</dd>
+
+  <dt>`voice`</dt>
+  <dd>An ordered list of candidate voices. Like a CSS `font-family` stack, the first voice actually installed on the host is used; if none match, the engine's default voice is used. Voice names are platform-specific (macOS uses human names like `Samantha`; Windows uses names like `Zira`/`David`; espeak uses language codes like `en-us`), so a portable stack mixes them — e.g. `[Samantha, Zira, en-us]` resolves to Samantha on macOS, Zira on Windows, and `en-us` on Linux.</dd>
+
+  <dt>`rate`</dt>
+  <dd>Speech rate: `slow`, `normal` (default), or `fast`. Mapped to each engine's native scale.</dd>
+
+  <dt>`print`</dt>
+  <dd>
+    How the message is shown in addition to (or instead of) speaking:
+
+    - `fallback` (default) — speak when possible; otherwise print the message as a Markdown blockquote.
+    - `always` — always print the blockquote *and* also speak when possible.
+    - `never` — speak when possible; otherwise stay silent (no printed output).
+  </dd>
+</dl>
+
+Use `say` at the end of long-running workflows for an audible cue when you've switched to another window. In CI it skips speech and follows the `print` policy (default `fallback` prints the message).

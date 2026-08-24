@@ -9,10 +9,13 @@ slug: /cli/configuration/aliases
 import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
 Aliases let you create shortcut names for existing CLI commands. Any CLI command can be aliased, including Atmos native commands like `terraform apply` or `describe stacks`, as well as [custom commands](/cli/configuration/commands).
 </Intro>
+
+<DemoVideo id="aliases" title="Atmos Aliases" showCaption={false} />
 
 ## Configuration
 
@@ -95,6 +98,20 @@ aliases:
   ls: list stacks
   lc: list components
 ```
+
+## Custom command aliases
+
+A [custom command](/cli/configuration/commands/command#aliases) can also declare its own `aliases:` directly, native and in-process (the same command object, just with extra names):
+
+```yaml
+commands:
+  - name: deploy
+    aliases: [dep, d]
+    description: Deploy a component to a stack
+    steps: [...]
+```
+
+This is a different mechanism from the top-level `aliases:` section on this page — the top-level map redirects an alias to a **possibly-unrelated** command by re-executing Atmos as a subprocess, which is what it takes to alias one arbitrary command to another. A custom command's own `aliases:` names the same command, so it needs none of that indirection. Use the top-level `aliases:` section to shorten built-in or already-defined commands (`tf: terraform`); use a custom command's own `aliases:` when you're defining the command yourself.
 
 ## See Also
 

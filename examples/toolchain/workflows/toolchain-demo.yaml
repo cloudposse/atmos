@@ -35,10 +35,10 @@ workflows:
     dependencies:
       tools:
         jq: "^1.7.0"
-        yq: "~> 4.40.0"
+        yq: "^4.40.0"
     steps:
       - name: show-versions
-        command: "echo 'jq (^1.7.0):' && jq --version && echo 'yq (~> 4.40.0):' && yq --version"
+        command: "echo 'jq (^1.7.0):' && jq --version && echo 'yq (^4.40.0):' && yq --version"
         type: shell
 
   # Example 4: Multi-tool pipeline

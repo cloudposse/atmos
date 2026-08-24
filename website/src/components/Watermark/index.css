@@ -5,12 +5,21 @@
   right: 2%;
   width: 10em;
   z-index: 100;
-  opacity: 0.5;
-  transition: opacity 0.2s ease-in-out;
+  /* Hidden until the visitor scrolls (declutters the hero); toggled by JS. */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.3s ease-in-out;
   text-decoration: none;
 }
 
-.cloudposse-logo:hover {
+.cloudposse-logo--visible {
+  opacity: 0.5;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.cloudposse-logo--visible:hover {
   opacity: 0.8;
 }
 
@@ -21,11 +30,11 @@
 
 /* Theme-based logo switching */
 /* Light mode: show light logo, hide dark logo */
-.cloudposse-logo__light {
+html:not([data-theme='dark']) .cloudposse-logo__light {
   display: block;
 }
 
-.cloudposse-logo__dark {
+html:not([data-theme='dark']) .cloudposse-logo__dark {
   display: none;
 }
 

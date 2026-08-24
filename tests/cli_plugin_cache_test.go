@@ -2,27 +2,29 @@ package tests
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+)
 
-	"github.com/cloudposse/atmos/tests/testhelpers"
+const (
+	terraformInitTimeout       = 4 * time.Minute
+	terraformCacheTrustTimeout = 1 * time.Minute
+	terraformCleanTimeout      = 1 * time.Minute
 )
 
 // TestTerraformPluginCache verifies that Terraform provider caching works correctly.
 // It runs terraform init on two components that use the same provider and verifies
 // that the provider is cached in the XDG cache directory.
 func TestTerraformPluginCache(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
@@ -83,15 +85,71 @@ func TestTerraformPluginCache(t *testing.T) {
 	runTerraformCleanForceWithEnv(t, envVars)
 }
 
+// TestTerraformRegistryCache verifies that the native Terraform registry cache can
+// be enabled through environment variables and writes provider registry artifacts
+// into an explicit, stable cache location.
+func TestTerraformRegistryCache(t *testing.T) {
+	if (runtime.GOOS == "darwin" || runtime.GOOS == "windows") && os.Getenv("ATMOS_TEST_TERRAFORM_REGISTRY_CACHE") != "1" {
+		t.Skip("set ATMOS_TEST_TERRAFORM_REGISTRY_CACHE=1 to run the registry cache trust test on macOS/Windows")
+	}
+
+	ensureAtmosRunner(t)
+
+	if skipReason != "" {
+		t.Skipf("Skipping test: %s", skipReason)
+	}
+
+	xdgCacheDir := t.TempDir()
+	registryCacheDir := filepath.Join(t.TempDir(), "terraform-registry-cache")
+
+	require.NoError(t, os.Unsetenv("ATMOS_CLI_CONFIG_PATH"))
+	require.NoError(t, os.Unsetenv("ATMOS_BASE_PATH"))
+
+	workDir := "fixtures/scenarios/plugin-cache"
+	t.Chdir(workDir)
+	cleanupTerraformDirs(t)
+	t.Cleanup(func() {
+		cleanupTerraformDirs(t)
+		runTerraformCleanForceWithEnv(t, map[string]string{
+			"XDG_CACHE_HOME": xdgCacheDir,
+		})
+	})
+
+	envVars := map[string]string{
+		"XDG_CACHE_HOME": xdgCacheDir,
+		"ATMOS_COMPONENTS_TERRAFORM_CACHE_ENABLED":  "true",
+		"ATMOS_COMPONENTS_TERRAFORM_CACHE_LOCATION": registryCacheDir,
+		"ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE":   "false",
+		"TF_PLUGIN_CACHE_DIR":                       "",
+	}
+
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		t.Logf("Generating registry cache certificate on %s...", runtime.GOOS)
+		stdout, stderr, err := runTerraformInitCommandWithEnv(t, "component-a", envVars)
+		if err != nil {
+			t.Logf("Initial %s cache-enabled init failed as expected before trust: %v", runtime.GOOS, err)
+			assert.Contains(t, stdout+stderr, "terraform cache trust")
+		}
+
+		require.FileExists(t, filepath.Join(registryCacheDir, "tls", "proxy.pem"))
+		runTerraformCacheTrustCommandWithEnv(t, "trust", envVars)
+		t.Cleanup(func() {
+			runTerraformCacheTrustCommandBestEffort(t, "untrust", envVars)
+		})
+		cleanupTerraformDirs(t)
+	}
+
+	t.Log("Running terraform init with registry cache enabled...")
+	runTerraformInitWithEnv(t, "component-a", envVars)
+
+	providerDir := filepath.Join(registryCacheDir, "providers", "registry.terraform.io", "hashicorp", "null")
+	require.DirExists(t, providerDir, "registry cache should contain null provider artifacts")
+	assert.Greater(t, countFilesInDir(t, providerDir), 0, "registry cache provider directory should contain files")
+}
+
 // TestTerraformPluginCacheClean verifies that `terraform clean --cache` works correctly.
 func TestTerraformPluginCacheClean(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
@@ -153,13 +211,7 @@ func TestTerraformPluginCacheClean(t *testing.T) {
 
 // TestTerraformPluginCacheDisabled verifies that plugin cache can be disabled.
 func TestTerraformPluginCacheDisabled(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
@@ -204,13 +256,7 @@ func TestTerraformPluginCacheDisabled(t *testing.T) {
 
 // TestTerraformPluginCacheUserOverride verifies that user's TF_PLUGIN_CACHE_DIR takes precedence.
 func TestTerraformPluginCacheUserOverride(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
@@ -262,7 +308,17 @@ func TestTerraformPluginCacheUserOverride(t *testing.T) {
 // Uses the "test" stack from the plugin-cache fixture.
 func runTerraformInitWithEnv(t *testing.T, component string, envVars map[string]string) {
 	t.Helper()
-	cmd := atmosRunner.Command("terraform", "init", component, "-s", "test")
+	_, _, err := runTerraformInitCommandWithEnv(t, component, envVars)
+	if err != nil {
+		t.Fatalf("Failed to run terraform init %s -s test: %v", component, err)
+	}
+}
+
+func runTerraformInitCommandWithEnv(t *testing.T, component string, envVars map[string]string) (string, string, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), terraformInitTimeout)
+	defer cancel()
+	cmd := atmosRunner.CommandContext(ctx, "terraform", "init", component, "-s", "test")
 
 	// Add custom env vars to the command.
 	for k, v := range envVars {
@@ -283,15 +339,55 @@ func runTerraformInitWithEnv(t *testing.T, component string, envVars map[string]
 	err := cmd.Run()
 	t.Logf("Terraform init stdout:\n%s", stdout.String())
 	t.Logf("Terraform init stderr:\n%s", stderr.String())
-	if err != nil {
-		t.Fatalf("Failed to run terraform init %s -s test: %v", component, err)
+	if ctx.Err() != nil {
+		t.Logf("Terraform init timed out after %s", terraformInitTimeout)
 	}
+	return stdout.String(), stderr.String(), err
+}
+
+func runTerraformCacheTrustCommandWithEnv(t *testing.T, subcommand string, envVars map[string]string) {
+	t.Helper()
+	stdout, stderr, err := runTerraformCacheTrustCommand(t, subcommand, envVars)
+	require.NoError(t, err, "terraform cache %s stdout:\n%s\nstderr:\n%s", subcommand, stdout, stderr)
+}
+
+func runTerraformCacheTrustCommandBestEffort(t *testing.T, subcommand string, envVars map[string]string) {
+	t.Helper()
+	stdout, stderr, err := runTerraformCacheTrustCommand(t, subcommand, envVars)
+	if err != nil {
+		t.Logf("Best-effort terraform cache %s failed: %v\nstdout:\n%s\nstderr:\n%s", subcommand, err, stdout, stderr)
+	}
+}
+
+func runTerraformCacheTrustCommand(t *testing.T, subcommand string, envVars map[string]string) (string, string, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), terraformCacheTrustTimeout)
+	defer cancel()
+	cmd := atmosRunner.CommandContext(ctx, "terraform", "cache", subcommand)
+	for k, v := range envVars {
+		if strings.HasPrefix(k, "TF_PLUGIN_CACHE") {
+			continue
+		}
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	t.Logf("Terraform cache %s stdout:\n%s", subcommand, stdout.String())
+	t.Logf("Terraform cache %s stderr:\n%s", subcommand, stderr.String())
+	if ctx.Err() != nil {
+		t.Logf("Terraform cache %s timed out after %s", subcommand, terraformCacheTrustTimeout)
+	}
+	return stdout.String(), stderr.String(), err
 }
 
 // runTerraformCleanForceWithEnv runs terraform clean --force with custom env vars.
 func runTerraformCleanForceWithEnv(t *testing.T, envVars map[string]string) {
 	t.Helper()
-	cmd := atmosRunner.Command("terraform", "clean", "--force")
+	ctx, cancel := context.WithTimeout(context.Background(), terraformCleanTimeout)
+	defer cancel()
+	cmd := atmosRunner.CommandContext(ctx, "terraform", "clean", "--force")
 	for k, v := range envVars {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}

@@ -1,0 +1,95 @@
+---
+title: wait
+sidebar_label: wait
+slug: /workflows/steps/type/wait
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `wait` step type blocks the workflow until one or more named [background container services](/workflows/steps/type/container#background-services) are ready. The companion `wait-all` step type waits for every background service started so far. Readiness reuses the service's container `healthcheck`, so you describe "wait until healthy" declaratively instead of hand-rolling readiness-polling scripts.
+</Intro>
+
+A container step with `background: true` starts a long-running service detached and lets the workflow continue. Use `wait` to gate the next step on that service becoming ready:
+
+```yaml
+steps:
+  - name: emulator
+    type: container
+    action: run
+    background: true
+    with:
+      image: localstack/localstack
+      ports:
+        - host: 4566
+          container: 4566
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+        interval: 5s
+        retries: 10
+        start_period: 30s
+
+  - type: wait
+    for: [emulator]
+
+  - name: apply
+    type: atmos
+    command: terraform apply vpc -s dev
+```
+
+When the named service declares a `healthcheck`, Atmos already blocks until it is healthy before running the next step, so an explicit `wait` is most useful when you start several services and want to gate a specific point in the workflow on a subset of them.
+
+For a background service, `wait` means "until the service is healthy", never "until it exits" — a long-running service never exits on its own, so its health check defines readiness.
+
+## Fields
+
+<dl>
+  <dt>`for`</dt>
+  <dd>List of background service step names to wait for. Each named step must be an earlier `action: run` step with `background: true`. The `wait` step blocks until every named service reports healthy.</dd>
+</dl>
+
+## wait-all
+
+`wait-all` waits for every background service started earlier in the workflow, without naming them individually:
+
+```yaml
+steps:
+  - name: localstack
+    type: container
+    action: run
+    background: true
+    with:
+      image: localstack/localstack
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+        interval: 5s
+        retries: 10
+
+  - name: registry
+    type: container
+    action: run
+    background: true
+    with:
+      image: registry:2
+      healthcheck:
+        test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:5000/v2/"]
+        interval: 5s
+        retries: 10
+
+  - type: wait-all
+
+  - name: e2e
+    type: shell
+    command: ./scripts/e2e.sh
+```
+
+`wait-all` takes no `for` field — it blocks until all background services declared up to that point are healthy.
+
+## Readiness semantics
+
+- A background service with a `healthcheck` is "ready" when its container reports healthy.
+- `wait` and `wait-all` block until the named (or all) services are ready, then let the workflow continue.
+- The ordinary [`needs`](/workflows/steps) field is unchanged: it expresses step ordering, not service readiness.
+- Background services are torn down with a [`cancel`](/workflows/steps/type/cancel) step, or automatically at workflow end.
+
+See [background services](/workflows/steps/type/container#background-services) on the `container` step page for the full lifecycle.

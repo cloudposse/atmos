@@ -1,0 +1,8 @@
+# Default chart values. Atmos `values:` from the stack are merged on top of these.
+replicaCount: 1
+image:
+  repository: nginx
+  tag: "latest"
+service:
+  type: ClusterIP
+  port: 80

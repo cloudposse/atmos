@@ -7,152 +7,54 @@ description: This command produces a list of Atmos components in Atmos stacks th
 ---
 
 import Terminal from '@site/src/components/Terminal'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
 Use this command to show a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
 </Intro>
 
-<Screengrab title="atmos describe dependents --help" slug="atmos-describe-dependents--help"/>
+<CastPlayer title="atmos describe dependents --help" src="/casts/screengrabs/atmos-describe-dependents--help.cast" static chrome />
 
 ## Description
 
-In Atmos, you can define component dependencies by using the `settings.depends_on` section. The section used to define
-all the Atmos components (in the same or different stacks) that the current component depends on.
+Declare component relationships with [`dependencies.components`](/stacks/dependencies/components). The command reads that graph to list the components that depend on the requested component.
 
-The `settings.depends_on` section is a map of objects. The map keys are just the descriptions of dependencies and can be strings or numbers.
-Provide meaningful descriptions so that people can understand what the dependencies are about.
+Use `name` for the dependency instance, `stack` when it is provisioned in another stack, and `kind` for a cross-type dependency. Use the sibling `dependencies.files` and `dependencies.folders` lists for external paths.
 
-Each object in the `settings.depends_on` section has the following schema:
-
-<dl>
-    <dt>file <em>(optional)</em></dt>
-    <dd>A file on the local filesystem that the current component depends on</dd>
-
-    <dt>folder <em>(optional)</em></dt>
-    <dd>A folder on the local filesystem that the current component depends on</dd>
-
-    <dt>component <em>(required if `file` or `folder` is not specified)</em></dt>
-    <dd>an Atmos component that the current component depends on</dd>
-
-    <dt>stack <em>(optional)</em></dt>
-    <dd>Atmos stack where the `component` is provisioned</dd>
-
-    <dt>namespace <em>(optional)</em></dt>
-    <dd>The `namespace` where the `component` is provisioned</dd>
-
-    <dt>tenant <em>(optional)</em></dt>
-    <dd>The `tenant` where the `component` is provisioned</dd>
-
-    <dt>environment <em>(optional)</em></dt>
-    <dd>The `environment` where the `component` is provisioned</dd>
-
-    <dt>stage <em>(optional)</em></dt>
-    <dd>The `stage` where the `component` is provisioned</dd>
-</dl>
-
-One of `component`, `file` or `folder` is required.
-
-Dependencies on external files (not in the component's folder) are defined using the `file` attribute. For example:
-
-```yaml title="stacks/catalog/terraform/top-level-component3.yaml"
-components:
-  terraform:
-    top-level-component3:
-      metadata:
-        component: "top-level-component1"
-      settings:
-        depends_on:
-          1:
-            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
-```
-
-In the configuration above, we specify that the Atmos component `top-level-component3` depends on the file
-`tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf` (which is not in the component's folder).
-
-Dependencies on external folders are defined using the `folder` attribute. For example:
-
-```yaml title="stacks/catalog/terraform/top-level-component3.yaml"
-components:
-  terraform:
-    top-level-component3:
-      metadata:
-        component: "top-level-component1"
-      settings:
-        depends_on:
-          1:
-            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
-          2:
-            folder: "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
-```
-
-In the configuration above, we specify that the Atmos component `top-level-component3` depends on the folder
-`tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server`.
-
-If `component` is specified, the rest of the attributes are the context variables and are used to define Atmos stacks other than the current stack.
-For example, you can specify:
-
-- `namespace` if the `component` is from a different Organization
-- `tenant` if the `component` is from a different Organizational Unit
-- `environment` if the `component` is from a different region
-- `stage` if the `component` is from a different account
-- `tenant`, `environment` and `stage` if the component is from a different Atmos stack (e.g. `tenant1-ue2-dev`)
-
-In the following example, we define that the `top-level-component1` component depends on the following:
-
-- The `test/test-component-override` component in the same Atmos stack
-- The `test/test-component` component in Atmos stacks identified by the `dev` stage
-- The `my-component` component from the `tenant1-ue2-staging` Atmos stack
-
-```yaml title="tests/fixtures/scenarios/complete/stacks/catalog/terraform/top-level-component1.yaml"
+```yaml title="stacks/catalog/terraform/top-level-component1.yaml"
 components:
   terraform:
     top-level-component1:
-      settings:
-        depends_on:
-          1:
-            # If the `context` (namespace, tenant, environment, stage) is not provided,
-            # the `component` is from the same Atmos stack as this component
-            component: "test/test-component-override"
-          2:
-            # This component (in any stage) depends on `test/test-component`
-            # from the `dev` stage (in any `environment` and any `tenant`)
-            component: "test/test-component"
-            stage: "dev"
-          3:
-            # This component depends on `my-component`
-            # from the `tenant1-ue2-staging` Atmos stack
-            component: "my-component"
-            tenant: "tenant1"
-            environment: "ue2"
-            stage: "staging"
+      dependencies:
+        components:
+          # Same stack
+          - name: test/test-component-override
+          # Explicit cross-stack dependency
+          - name: test/test-component
+            stack: tenant1-ue2-dev
+          - name: my-component
+            stack: tenant1-ue2-staging
+        files:
+          - tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf
+        folders:
+          - tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server
       vars:
         enabled: true
 ```
 
-In the following example, we specify that the `top-level-component2` component depends on the following:
+In this configuration, `top-level-component1` depends on components in the current and named stacks, and is affected when either external path changes.
 
-- The `test/test-component` component in the same Atmos stack
-- The `test/test2/test-component-2` component in the same Atmos stack
-
-```yaml title="tests/fixtures/scenarios/complete/stacks/catalog/terraform/top-level-component2.yaml"
+```yaml title="stacks/catalog/terraform/top-level-component2.yaml"
 components:
   terraform:
     top-level-component2:
       metadata:
-        # Point to Terraform component
         component: "top-level-component1"
-      settings:
-        depends_on:
-          1:
-            # If the `context` (namespace, tenant, environment, stage) is not provided,
-            # the `component` is from the same Atmos stack as this component
-            component: "test/test-component"
-          2:
-            # If the `context` (namespace, tenant, environment, stage) is not provided,
-            # the `component` is from the same Atmos stack as this component
-            component: "test/test2/test-component-2"
+      dependencies:
+        components:
+          - name: test/test-component
+          - name: test/test2/test-component-2
       vars:
         enabled: true
 ```
@@ -220,11 +122,6 @@ After the `test/test-component` has been provisioned, you can use the outputs to
 
 - Provision the dependent components by executing the Atmos commands `atmos terraform apply top-level-component1 -s tenant1-ue2-test-1` and
 `atmos terraform apply top-level-component2 -s tenant1-ue2-test-1` (on the command line or from a GitHub Action)
-
-- Trigger the dependent Spacelift stack (from a GitHub Action by using the [spacectl](https://github.com/spacelift-io/spacectl) CLI, or by using an
-OPA [Trigger](https://docs.spacelift.io/concepts/policy/trigger-policy)
-policy, or by using
-the [spacelift_stack_dependency](https://registry.terraform.io/providers/spacelift-io/spacelift/latest/docs/resources/stack_dependency) resource)
 
 - Trigger the dependent Atlantis project
 

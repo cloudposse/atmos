@@ -109,7 +109,7 @@ func TestGetBuiltinDefaultStyle(t *testing.T) {
 	t.Run("code styles", func(t *testing.T) {
 		require.NotNil(t, style.Code.Color)
 		assert.Equal(t, Purple, *style.Code.Color)
-		assert.Equal(t, " ", style.Code.Prefix)
+		assert.Equal(t, "", style.Code.Prefix)
 
 		require.NotNil(t, style.CodeBlock.Color)
 		assert.Equal(t, Blue, *style.CodeBlock.Color)

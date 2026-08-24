@@ -1,0 +1,528 @@
+package installer
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+
+	log "github.com/charmbracelet/log"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filelock"
+	"github.com/cloudposse/atmos/pkg/filesystem"
+	github "github.com/cloudposse/atmos/pkg/github"
+	httpClient "github.com/cloudposse/atmos/pkg/http"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain/registry"
+)
+
+const (
+	downloadRetryMaxAttempts  = 5
+	downloadRetryInitialDelay = 1 * time.Second
+	downloadRetryMaxDelay     = 10 * time.Second
+)
+
+// downloadAsset downloads an asset to the cache directory.
+func (i *Installer) downloadAsset(url string) (string, error) {
+	defer perf.Track(nil, "Installer.downloadAsset")()
+
+	// Create cache directory if it doesn't exist.
+	if err := os.MkdirAll(i.cacheDir, defaultMkdirPermissions); err != nil {
+		return "", fmt.Errorf("%w: failed to create cache directory: %w", ErrFileOperation, err)
+	}
+
+	// Extract filename from URL.
+	parts := strings.Split(url, "/")
+	filename := parts[len(parts)-1]
+	cachePath := filepath.Join(i.cacheDir, filename)
+
+	// Asset filenames are not globally unique, and source metadata is stored in
+	// a companion file. Protect the cache hit check and both writes as one
+	// transaction so concurrent processes cannot pair an asset with another
+	// URL's metadata.
+	lock := filelock.New(cachePath + ".lock")
+	var assetPath string
+	err := lock.WithExclusive(context.Background(), func() error {
+		if _, statErr := os.Stat(cachePath); statErr == nil {
+			if cachedAssetMatchesURL(cachePath, url) {
+				log.Debug("Using cached asset", filenameKey, filename)
+				i.reportCachedDownloadProgress(cachePath)
+				assetPath = cachePath
+				return nil
+			}
+			log.Debug("Ignoring cached asset from a different URL", filenameKey, filename)
+		}
+
+		log.Debug("Downloading asset", filenameKey, filename)
+		var downloadErr error
+		assetPath, downloadErr = downloadToCacheWithProgress(url, cachePath, i.downloadProgress)
+		if downloadErr != nil {
+			return downloadErr
+		}
+		return writeCacheSourceURL(cachePath, url)
+	})
+	if err != nil {
+		return "", err
+	}
+	return assetPath, nil
+}
+
+// reportCachedDownloadProgress keeps the interactive renderer informative
+// after a cache hit. Verification can take much longer than download, so the
+// last known asset size must remain visible while the tool is being verified.
+func (i *Installer) reportCachedDownloadProgress(cachePath string) {
+	if i.downloadProgress == nil {
+		return
+	}
+	info, err := os.Stat(cachePath)
+	if err != nil {
+		return
+	}
+	i.downloadProgress(info.Size(), info.Size())
+}
+
+func cachedAssetMatchesURL(cachePath, url string) bool {
+	data, err := os.ReadFile(cacheSourceURLPath(cachePath))
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(data)) == url
+}
+
+func writeCacheSourceURL(cachePath, url string) error {
+	if err := os.WriteFile(cacheSourceURLPath(cachePath), []byte(url+"\n"), defaultFileWritePermissions); err != nil {
+		return fmt.Errorf("%w: failed to record cache source URL: %w", ErrFileOperation, err)
+	}
+	return nil
+}
+
+func cacheSourceURLPath(cachePath string) string {
+	return cachePath + ".url"
+}
+
+// downloadToCache downloads a URL to the specified cache path.
+func downloadToCache(url, cachePath string) (string, error) {
+	return downloadToCacheWithProgress(url, cachePath, nil)
+}
+
+func downloadToCacheWithProgress(url, cachePath string, progress func(downloaded, total int64)) (string, error) {
+	defer perf.Track(nil, "downloadToCache")()
+
+	maxAttempts := downloadRetryMaxAttempts
+	initialDelay := downloadRetryInitialDelay
+	maxDelay := downloadRetryMaxDelay
+	retryConfig := &schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+	}
+
+	var result string
+	var lastErr error
+	attempts := 0
+	err := retry.WithPredicate(
+		context.Background(),
+		retryConfig,
+		func() error {
+			attempts++
+			var downloadErr error
+			result, downloadErr = downloadToCacheOnceWithProgress(url, cachePath, progress)
+			if downloadErr != nil {
+				lastErr = downloadErr
+			}
+			return downloadErr
+		},
+		isRetryableDownloadError,
+	)
+	if err != nil {
+		if lastErr != nil && isRetryableDownloadError(lastErr) {
+			// Tag the final error as retryable (even though retries are now exhausted) so
+			// downloadAssetWithVersionFallback can still treat it as fallback-eligible: a
+			// wrong version-prefix URL sometimes surfaces as a transient 5xx/timeout instead
+			// of a clean 404 (observed under concurrent CI load), which would otherwise never
+			// reach the fallback path.
+			return "", errors.Join(errUtils.ErrDownloadRetryable, buildDownloadRetryError(url, attempts, lastErr))
+		}
+		return "", err
+	}
+	return result, nil
+}
+
+func downloadToCacheOnceWithProgress(url, cachePath string, progress func(downloaded, total int64)) (string, error) {
+	client := httpClient.NewDefaultClient(
+		httpClient.WithGitHubToken(github.GetGitHubToken()),
+	)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to create request: %w", ErrHTTPRequest, err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		requestErr := &downloadRequestError{url: url, err: err}
+		return "", errors.Join(errUtils.ErrDownloadRetryable, errUtils.Build(errUtils.ErrDownloadFailed).
+			WithCause(requestErr).
+			WithExplanationf("Failed to download asset from `%s`", url).
+			WithHint("Check your internet connection").
+			WithHint("Verify GitHub access: `curl -I https://api.github.com`").
+			WithHint("If behind proxy, ensure `HTTPS_PROXY` environment variable is set").
+			WithContext("url", url).
+			WithContext("error", err.Error()).
+			WithExitCode(1).
+			Err())
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", buildDownloadError(url, resp.StatusCode)
+	}
+
+	return writeResponseToCacheWithProgress(resp.Body, cachePath, resp.ContentLength, progress)
+}
+
+func isRetryableDownloadError(err error) bool {
+	if err == nil || errors.Is(err, ErrHTTP404) {
+		return false
+	}
+	// Retry on errors explicitly marked retryable (transport failures, 5xx/429)
+	// and on transient network failures detected structurally (e.g. a
+	// connection reset by peer while reading the response body).
+	return errors.Is(err, errUtils.ErrDownloadRetryable) || registry.IsTransientNetworkError(err)
+}
+
+// writeResponseToCache reads the response body and writes it atomically to cache.
+func writeResponseToCache(body io.Reader, cachePath string) (string, error) {
+	return writeResponseToCacheWithProgress(body, cachePath, -1, nil)
+}
+
+func writeResponseToCacheWithProgress(body io.Reader, cachePath string, total int64, progress func(downloaded, total int64)) (string, error) {
+	defer perf.Track(nil, "writeResponseToCache")()
+
+	var buf bytes.Buffer
+	reader := body
+	if progress != nil {
+		progress(0, total)
+		reader = io.TeeReader(body, &downloadProgressWriter{total: total, report: progress})
+	}
+	_, err := io.Copy(&buf, reader)
+	if err != nil {
+		// A failure reading the response body (e.g. "connection reset by peer",
+		// a truncated stream) is a transient transfer error. Mark it retryable
+		// so downloadToCache re-issues the request from scratch.
+		return "", errors.Join(errUtils.ErrDownloadRetryable,
+			fmt.Errorf("%w: failed to read response body: %w", ErrHTTPRequest, err))
+	}
+
+	fs := filesystem.NewOSFileSystem()
+	if err := fs.WriteFileAtomic(cachePath, buf.Bytes(), defaultFileWritePermissions); err != nil {
+		return "", fmt.Errorf("%w: failed to write cache file atomically: %w", ErrFileOperation, err)
+	}
+
+	return cachePath, nil
+}
+
+type downloadProgressWriter struct {
+	downloaded int64
+	total      int64
+	report     func(downloaded, total int64)
+}
+
+func (w *downloadProgressWriter) Write(data []byte) (int, error) {
+	defer perf.Track(nil, "installer.downloadProgressWriter.Write")()
+
+	w.downloaded += int64(len(data))
+	w.report(w.downloaded, w.total)
+	return len(data), nil
+}
+
+type downloadHTTPStatusError struct {
+	url        string
+	statusCode int
+}
+
+func (e *downloadHTTPStatusError) Error() string {
+	defer perf.Track(nil, "installer.downloadHTTPStatusError.Error")()
+
+	if statusText := e.statusText(); statusText != "" {
+		return fmt.Sprintf("HTTP %d %s: %s", e.statusCode, statusText, e.url)
+	}
+	return fmt.Sprintf("HTTP %d: %s", e.statusCode, e.url)
+}
+
+func (e *downloadHTTPStatusError) statusText() string {
+	return http.StatusText(e.statusCode)
+}
+
+type downloadRequestError struct {
+	url string
+	err error
+}
+
+func (e *downloadRequestError) Error() string {
+	defer perf.Track(nil, "installer.downloadRequestError.Error")()
+
+	return fmt.Sprintf("request failed for %s: %v", e.url, e.err)
+}
+
+func (e *downloadRequestError) Unwrap() error {
+	defer perf.Track(nil, "installer.downloadRequestError.Unwrap")()
+
+	return e.err
+}
+
+// buildDownloadError creates a detailed error for failed downloads.
+// For 404 errors, includes ErrHTTP404 so isHTTP404() can detect it for version fallback.
+func buildDownloadError(url string, statusCode int) error {
+	defer perf.Track(nil, "buildDownloadError")()
+
+	statusErr := &downloadHTTPStatusError{url: url, statusCode: statusCode}
+	explanation := fmt.Sprintf("Download failed with HTTP %d", statusCode)
+	if statusText := statusErr.statusText(); statusText != "" {
+		explanation = fmt.Sprintf("%s %s", explanation, statusText)
+	}
+
+	// For 404, include ErrHTTP404 so the version fallback mechanism can detect it.
+	if statusCode == http.StatusNotFound {
+		return errors.Join(
+			ErrHTTP404,
+			errUtils.Build(errUtils.ErrDownloadFailed).
+				WithCause(statusErr).
+				WithExplanation(explanation).
+				WithHint("Asset not found - check tool name and version are correct").
+				WithHint("The tool registry may have a different version format").
+				WithContext("url", url).
+				WithContext("status_code", statusCode).
+				WithExitCode(1).
+				Err(),
+		)
+	}
+
+	builder := errUtils.Build(errUtils.ErrDownloadFailed).
+		WithCause(statusErr).
+		WithExplanation(explanation).
+		WithContext("url", url).
+		WithContext("status_code", statusCode).
+		WithExitCode(1)
+
+	switch statusCode {
+	case http.StatusForbidden, http.StatusUnauthorized:
+		builder.
+			WithHint("GitHub API rate limit exceeded or authentication required").
+			WithHint("Set `GITHUB_TOKEN` environment variable to increase rate limits").
+			WithHint("Get token at: https://github.com/settings/tokens")
+	default:
+		builder.WithHint("Check GitHub status: https://www.githubstatus.com")
+	}
+
+	err := builder.Err()
+	if isRetryableHTTPStatus(statusCode) {
+		return errors.Join(errUtils.ErrDownloadRetryable, err)
+	}
+	return err
+}
+
+func buildDownloadRetryError(url string, attempts int, lastErr error) error {
+	summary := downloadErrorSummary(lastErr)
+	builder := errUtils.Build(errUtils.ErrDownloadFailed).
+		WithCausef("failed to download %s after %d attempts: %s", url, attempts, summary).
+		WithExplanationf("Failed to download asset from `%s` after %d attempts. Last error: %s", url, attempts, summary).
+		WithHint("Check GitHub status: https://www.githubstatus.com").
+		WithContext("url", url).
+		WithContext("attempts", attempts).
+		WithExitCode(1)
+
+	var statusErr *downloadHTTPStatusError
+	if errors.As(lastErr, &statusErr) {
+		builder.WithContext("status_code", statusErr.statusCode)
+		if statusText := statusErr.statusText(); statusText != "" {
+			builder.WithContext("status", statusText)
+		}
+	}
+
+	var requestErr *downloadRequestError
+	if errors.As(lastErr, &requestErr) && requestErr.err != nil {
+		builder.WithContext("error", requestErr.err.Error())
+	}
+
+	return builder.Err()
+}
+
+func downloadErrorSummary(err error) string {
+	var statusErr *downloadHTTPStatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.Error()
+	}
+
+	var requestErr *downloadRequestError
+	if errors.As(err, &requestErr) {
+		return requestErr.Error()
+	}
+
+	if err != nil {
+		return err.Error()
+	}
+	return "unknown error"
+}
+
+func isRetryableHTTPStatus(statusCode int) bool {
+	switch statusCode {
+	case http.StatusTooManyRequests,
+		http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
+}
+
+// downloadFallbackResult bundles the outcome of a version-fallback download: the
+// downloaded asset path, the effective URL, and the effective version that actually
+// downloaded (which may carry a version prefix the caller did not request, e.g. nodejs
+// "v24.18.0"). The effective version must be used to render files[].src so extraction
+// matches the archive's directory names.
+type downloadFallbackResult struct {
+	assetPath        string
+	effectiveURL     string
+	effectiveVersion string
+}
+
+// downloadAssetWithVersionFallback tries the asset URL as-is, then with 'v' prefix or without, if the
+// primary URL is not found or exhausts its retries.
+func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, version, assetURL string) (downloadFallbackResult, error) {
+	defer perf.Track(nil, "Installer.downloadAssetWithVersionFallback")()
+
+	assetPath, err := i.downloadAsset(assetURL)
+	if err == nil {
+		return downloadFallbackResult{assetPath: assetPath, effectiveURL: assetURL, effectiveVersion: version}, nil
+	}
+	if !isVersionFallbackEligible(err) {
+		return downloadFallbackResult{}, err
+	}
+
+	return i.tryFallbackVersion(tool, version, assetURL, err)
+}
+
+// isVersionFallbackEligible reports whether a primary-URL download failure is worth retrying with an
+// alternate version prefix. A clean 404 is the common case (wrong prefix, fast failure). A retry-exhausted
+// error is included too: a wrong-prefix URL can surface as a transient 5xx/timeout instead of a clean 404
+// under load, which would otherwise never reach the fallback path.
+func isVersionFallbackEligible(err error) bool {
+	return isHTTP404(err) || errors.Is(err, errUtils.ErrDownloadRetryable)
+}
+
+// tryFallbackVersion attempts download with an alternative version prefix.
+// Uses the tool's VersionPrefix if set, otherwise falls back to the standard "v" prefix.
+// On success it returns the fallback version so callers can render archive paths
+// (files[].src) with the same prefix that produced the working download.
+func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL string, originalErr error) (downloadFallbackResult, error) {
+	defer perf.Track(nil, "Installer.tryFallbackVersion")()
+
+	// Use tool-specific prefix (e.g., "jq-") if available, otherwise use standard "v".
+	prefix := VersionPrefix
+	if tool.VersionPrefix != "" {
+		prefix = tool.VersionPrefix
+	}
+
+	var fallbackVersion string
+	if strings.HasPrefix(version, prefix) {
+		fallbackVersion = strings.TrimPrefix(version, prefix)
+	} else {
+		fallbackVersion = prefix + version
+	}
+
+	if fallbackVersion == version {
+		return downloadFallbackResult{}, originalErr
+	}
+
+	fallbackURL, buildErr := i.BuildAssetURL(tool, fallbackVersion)
+	if buildErr != nil {
+		return downloadFallbackResult{}, fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, buildErr)
+	}
+
+	log.Debug("Primary asset URL failed, trying fallback version", "original", assetURL, "fallback", fallbackURL)
+	assetPath, err := i.downloadAsset(fallbackURL)
+	if err == nil {
+		return downloadFallbackResult{assetPath: assetPath, effectiveURL: fallbackURL, effectiveVersion: fallbackVersion}, nil
+	}
+	if !isHTTP404(err) {
+		return downloadFallbackResult{}, err
+	}
+
+	// Both URLs failed - create a user-friendly error message.
+	// Don't nest ErrHTTPRequest again since the inner error already contains it.
+	return downloadFallbackResult{}, buildDownloadNotFoundError(tool.RepoOwner, tool.RepoName, version, assetURL, fallbackURL)
+}
+
+// buildDownloadNotFoundError creates a user-friendly error for when both URL attempts fail.
+func buildDownloadNotFoundError(owner, repo, version, url1, url2 string) error {
+	builder := errUtils.Build(errUtils.ErrDownloadFailed).
+		WithExplanationf("Asset not found for `%s/%s@%s`", owner, repo, version).
+		WithHint("Verify the tool name and version are correct").
+		WithHintf("Check if the tool publishes binaries for your platform (%s/%s)", getOS(), getArch()).
+		WithHint("Some tools may not publish pre-built binaries - check the tool's releases page").
+		WithContext("url_attempted", url1).
+		WithContext("url_fallback", url2).
+		WithExitCode(1)
+
+	// Add platform-specific hints.
+	addPlatformSpecificHints(builder)
+
+	return errors.Join(ErrHTTP404, builder.Err())
+}
+
+// addPlatformSpecificHints adds platform-specific suggestions to the error builder.
+func addPlatformSpecificHints(builder *errUtils.ErrorBuilder) {
+	currentOS := getOS()
+	currentArch := getArch()
+
+	switch {
+	case currentOS == "windows":
+		builder.WithHint("Consider using WSL (Windows Subsystem for Linux) if this tool only supports Linux")
+
+	case currentOS == "darwin" && currentArch == "arm64":
+		builder.WithHint("Try running under Rosetta 2 if only amd64 binaries are available")
+	}
+}
+
+// isHTTP404 returns true if the error is a 404 from downloadAsset.
+func isHTTP404(err error) bool {
+	return errors.Is(err, ErrHTTP404)
+}
+
+// getOS returns the current operating system.
+func getOS() string {
+	return runtime.GOOS
+}
+
+// getArch returns the current architecture.
+func getArch() string {
+	return runtime.GOARCH
+}
+
+// buildPlatformNotSupportedError creates a user-friendly error when a tool doesn't support the current platform.
+func buildPlatformNotSupportedError(platformErr *PlatformError) error {
+	builder := errUtils.Build(errUtils.ErrToolPlatformNotSupported).
+		WithExplanationf("Tool `%s` does not support your platform (%s)", platformErr.Tool, platformErr.CurrentEnv).
+		WithExitCode(1)
+
+	// Add all the platform-specific hints.
+	for _, hint := range platformErr.Hints {
+		builder.WithHint(hint)
+	}
+
+	return builder.Err()
+}

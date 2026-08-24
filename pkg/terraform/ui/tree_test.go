@@ -152,7 +152,7 @@ func TestSortChildren(t *testing.T) {
 func TestRenderChildren_Empty(t *testing.T) {
 	var b strings.Builder
 	// No styling in test for simplicity.
-	renderChildren(&b, nil, "", defaultTreeStyle(), nil)
+	renderChildren(&b, nil, "", nil)
 
 	assert.Empty(t, b.String())
 }
@@ -163,7 +163,7 @@ func TestRenderChildren_SingleNode(t *testing.T) {
 		{Address: "aws_vpc.main", Action: "create"},
 	}
 
-	renderChildren(&b, nodes, "", defaultTreeStyle(), nil)
+	renderChildren(&b, nodes, "", nil)
 
 	result := b.String()
 	assert.Contains(t, result, "aws_vpc.main")
@@ -177,7 +177,7 @@ func TestRenderChildren_MultipleNodes(t *testing.T) {
 		{Address: "aws_security_group.default", Action: "update"},
 	}
 
-	renderChildren(&b, nodes, "", defaultTreeStyle(), nil)
+	renderChildren(&b, nodes, "", nil)
 
 	result := b.String()
 	assert.Contains(t, result, "aws_vpc.main")
@@ -271,7 +271,7 @@ func TestRenderMultilineDiffSimple_IdenticalLines(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", createStyle, deleteStyle, nil)
+	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
 
 	result := b.String()
 	// Identical content should have no +/- markers.
@@ -290,7 +290,7 @@ func TestRenderMultilineDiffSimple_SingleLineChange(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", createStyle, deleteStyle, nil)
+	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
 
 	result := b.String()
 	// Only the changed line should have markers.
@@ -308,7 +308,7 @@ func TestRenderMultilineDiffSimple_ConsecutiveChangesGrouped(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", createStyle, deleteStyle, nil)
+	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
 
 	result := b.String()
 
@@ -342,7 +342,7 @@ func TestRenderMultilineDiffSimple_MixedUnchangedAndChanged(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", createStyle, deleteStyle, nil)
+	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
 
 	result := b.String()
 
@@ -365,7 +365,7 @@ func TestRenderMultilineDiffSimple_LinesAdded(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", createStyle, deleteStyle, nil)
+	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
 
 	result := b.String()
 	// line2 is new, should have + marker.
@@ -382,7 +382,7 @@ func TestRenderMultilineDiffSimple_LinesDeleted(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", createStyle, deleteStyle, nil)
+	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
 
 	result := b.String()
 	// line2 was removed, should have - marker.
@@ -399,7 +399,7 @@ func TestRenderMultilineDiffSimple_DifferentLengths(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", createStyle, deleteStyle, nil)
+	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
 
 	result := b.String()
 	// a and b are unchanged.
@@ -418,7 +418,7 @@ func TestRenderMultilineDiffSimple_EmptyBefore(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", createStyle, deleteStyle, nil)
+	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
 
 	result := b.String()
 	// All content is new.
@@ -432,7 +432,7 @@ func TestRenderMultilineDiffSimple_EmptyAfter(t *testing.T) {
 	createStyle := lipgloss.NewStyle()
 	deleteStyle := lipgloss.NewStyle()
 
-	renderMultilineDiffSimple(&b, before, after, "", createStyle, deleteStyle, nil)
+	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
 
 	result := b.String()
 	// All content is deleted.
@@ -446,7 +446,7 @@ func TestRenderAttributeChanges_NewAttribute(t *testing.T) {
 		{Key: "new_attr", Before: nil, After: "value", Unknown: false},
 	}
 
-	renderAttributeChanges(&b, changes, "", false, defaultTreeStyle(), nil)
+	renderAttributeChanges(&b, changes, "", nil)
 
 	result := b.String()
 	// Should contain the attribute name.
@@ -461,7 +461,7 @@ func TestRenderAttributeChanges_DeletedAttribute(t *testing.T) {
 		{Key: "deleted_attr", Before: "old_value", After: nil, Unknown: false},
 	}
 
-	renderAttributeChanges(&b, changes, "", false, defaultTreeStyle(), nil)
+	renderAttributeChanges(&b, changes, "", nil)
 
 	result := b.String()
 	// Should contain the attribute name.
@@ -476,7 +476,7 @@ func TestRenderAttributeChanges_UpdatedAttribute(t *testing.T) {
 		{Key: "updated_attr", Before: "old", After: "new", Unknown: false},
 	}
 
-	renderAttributeChanges(&b, changes, "", false, defaultTreeStyle(), nil)
+	renderAttributeChanges(&b, changes, "", nil)
 
 	result := b.String()
 	// Should contain the attribute name.
@@ -494,7 +494,7 @@ func TestRenderAttributeChanges_ComputedUnknown(t *testing.T) {
 		{Key: "computed_attr", Before: "old_hash", After: nil, Unknown: true},
 	}
 
-	renderAttributeChanges(&b, changes, "", false, defaultTreeStyle(), nil)
+	renderAttributeChanges(&b, changes, "", nil)
 
 	result := b.String()
 	// Should contain the attribute name.
@@ -509,7 +509,7 @@ func TestRenderAttributeChanges_SensitiveValue(t *testing.T) {
 		{Key: "secret", Before: nil, After: "super-secret", Unknown: false, Sensitive: true},
 	}
 
-	renderAttributeChanges(&b, changes, "", false, defaultTreeStyle(), nil)
+	renderAttributeChanges(&b, changes, "", nil)
 
 	result := b.String()
 	// Should contain the attribute name.
@@ -528,7 +528,7 @@ func TestRenderAttributeChanges_MultipleAttributesAligned(t *testing.T) {
 		{Key: "very_long_attribute_name", Before: nil, After: "c", Unknown: false},
 	}
 
-	renderAttributeChanges(&b, changes, "", false, defaultTreeStyle(), nil)
+	renderAttributeChanges(&b, changes, "", nil)
 
 	result := b.String()
 	// All attribute names should be present.
@@ -543,7 +543,7 @@ func TestRenderAttributeChanges_BooleanValues(t *testing.T) {
 		{Key: "enabled", Before: false, After: true, Unknown: false},
 	}
 
-	renderAttributeChanges(&b, changes, "", false, defaultTreeStyle(), nil)
+	renderAttributeChanges(&b, changes, "", nil)
 
 	result := b.String()
 	assert.Contains(t, result, "enabled")
@@ -557,7 +557,7 @@ func TestRenderAttributeChanges_NumericValues(t *testing.T) {
 		{Key: "count", Before: float64(5), After: float64(10), Unknown: false},
 	}
 
-	renderAttributeChanges(&b, changes, "", false, defaultTreeStyle(), nil)
+	renderAttributeChanges(&b, changes, "", nil)
 
 	result := b.String()
 	assert.Contains(t, result, "count")
@@ -571,7 +571,7 @@ func TestRenderAttributeChanges_ForcesReplacement(t *testing.T) {
 		{Key: "content", Before: "old", After: "new", Unknown: false, ForcesReplacement: true},
 	}
 
-	renderAttributeChanges(&b, changes, "", false, defaultTreeStyle(), nil)
+	renderAttributeChanges(&b, changes, "", nil)
 
 	result := b.String()
 	// Should contain the attribute name.
@@ -586,7 +586,7 @@ func TestRenderAttributeChanges_ForcesReplacementMultiline(t *testing.T) {
 		{Key: "content", Before: "line1\nline2", After: "line1\nline3", Unknown: false, ForcesReplacement: true},
 	}
 
-	renderAttributeChanges(&b, changes, "", false, defaultTreeStyle(), nil)
+	renderAttributeChanges(&b, changes, "", nil)
 
 	result := b.String()
 	// Should contain the attribute name.
@@ -601,7 +601,7 @@ func TestRenderAttributeChanges_NoForcesReplacement(t *testing.T) {
 		{Key: "tags", Before: "old", After: "new", Unknown: false, ForcesReplacement: false},
 	}
 
-	renderAttributeChanges(&b, changes, "", false, defaultTreeStyle(), nil)
+	renderAttributeChanges(&b, changes, "", nil)
 
 	result := b.String()
 	// Should contain the attribute name.

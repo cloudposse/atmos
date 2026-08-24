@@ -1,0 +1,31 @@
+/* PrimaryCTA wraps a Docusaurus `.button--lg`. Two global rules make that button
+   render inconsistently unless the call site cooperates:
+     1. `.button--lg` uses `padding-bottom: 0` and relies on an inner <p> margin
+        for its bottom gap — so a plain-text label gets crammed to the bottom edge.
+     2. `--ifm-button-color: #ccc` makes the label a muted grey on the vivid blue.
+   The component should look right on its own, everywhere it's used, so fix both
+   here rather than depending on every call site to wrap the label in a <p>. */
+.lp-primary-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lp-primary-cta.button--lg {
+  padding-top: 0.7em;
+  padding-bottom: 0.7em;
+}
+
+.lp-primary-cta.button--primary {
+  color: #fff;
+}
+
+/* Defensive: if a call site still wraps the label (e.g. in a <p>), neutralize the
+   inherited paragraph margin/color so the button never deforms or recolors. */
+.lp-primary-cta > * {
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+}

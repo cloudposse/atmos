@@ -6,23 +6,25 @@ sidebar_class_name: command
 description: Use the metadata section to control component behavior, inheritance, and deployment settings.
 id: component-metadata
 ---
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
 
 <Intro>
-The `metadata` section configures how Atmos interprets and manages a component. Unlike other sections, `metadata` is only valid within component definitions (`components.terraform.<name>.metadata`), not at the global or component-type level.
+The `metadata` section configures how Atmos interprets and manages a component. Most `metadata` fields are only valid within component definitions (`components.terraform.<name>.metadata`). A restricted subset of fields (`labels`, `tags`, `custom`, `enabled`, `locked`, `terraform_workspace_pattern`) can also be set stack-wide as a default.
 </Intro>
 
 ## Use Cases
 
 - **Component Mapping:** Specify which Terraform root module a component uses.
+- **Human-Readable Descriptions:** Document what a component is for.
 - **Inheritance:** Define which components a component inherits from.
 - **Abstract Components:** Mark components as templates that cannot be deployed directly.
 - **Component Control:** Enable, disable, or lock components.
 
 ## Configuration Scope
 
-The `metadata` section is **only valid inside component definitions**:
+Most `metadata` fields are **only valid inside component definitions**:
 
 ```yaml
 components:
@@ -34,7 +36,45 @@ components:
           - vpc/defaults
 ```
 
-It cannot be used at the global level or under `terraform:` / `helmfile:` / `packer:` defaults.
+Component-identity fields — `component`, `inherits`, `type`, `name`, `terraform_workspace` — cannot be set at the global level or under `terraform:` / `helmfile:` / `packer:` defaults. Setting one of these fields at global scope is a hard error, since applying the same component path or inheritance chain to every component in a stack would be a misconfiguration, not a useful default.
+
+### Global (stack-wide) metadata
+
+A restricted allowlist of `metadata` fields — the ones that are data bags or simple gates rather than component identity — can be set at the root of a stack manifest (for example in `_defaults.yaml`), and are deep-merged as a **default** into every component's own `metadata`:
+
+```yaml title="_defaults.yaml"
+metadata:
+  labels:
+    org: acme
+  enabled: true
+```
+
+Allowed at global scope: `labels`, `tags`, `custom`, `enabled`, `locked`, `terraform_workspace_pattern`. Any other field (`component`, `inherits`, `type`, `name`, `terraform_workspace`) is rejected with an error if set here.
+
+Precedence, lowest to highest:
+
+1. Global `metadata:` (stack-wide default)
+2. The `metadata.inherits` base-component chain
+3. The component's own local `metadata:` block — always wins
+
+```yaml title="_defaults.yaml"
+metadata:
+  labels:
+    org: acme
+```
+
+```yaml title="stacks/catalog/vpc.yaml"
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          org: platform-team # overrides the global "org: acme" for this component
+      vars:
+        tags: !labels
+```
+
+Here `vars.tags` resolves to `{org: platform-team}` for the `vpc` component, while any component that doesn't set its own `metadata.labels.org` gets `{org: acme}` from the global default.
 
 ## Metadata Fields
 
@@ -47,12 +87,28 @@ components:
   terraform:
     vpc-prod:
       metadata:
-        component: vpc  # Uses components/terraform/vpc
+        component: vpc # Uses components/terraform/vpc
+        description: Production VPC
       vars:
         environment: prod
 ```
 
 This allows multiple stack components to share the same Terraform root module with different configurations.
+
+### `description`
+
+Provides a human-readable description of the component:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        description: "Virtual Private Cloud with public and private subnets"
+```
+
+Atmos preserves `description` as component metadata. It does not change how the component is processed, planned, or applied.
 
 ### `name`
 
@@ -63,8 +119,8 @@ components:
   terraform:
     vpc:
       metadata:
-        name: vpc              # Stable logical identity
-        component: vpc/v2      # Physical version path
+        name: vpc # Stable logical identity
+        component: vpc/v2 # Physical version path
 ```
 
 **Why this matters:** Without `name`, the `workspace_key_prefix` is auto-generated from `component`, which includes the version (`vpc-v2`). When you upgrade to `vpc/v3`, the workspace key prefix changes, creating a new state file and losing your existing infrastructure state.
@@ -106,12 +162,13 @@ components:
   terraform:
     vpc/base:
       metadata:
-        type: abstract  # Cannot be deployed directly
+        type: abstract # Cannot be deployed directly
       vars:
         enable_dns_hostnames: true
 ```
 
 **Abstract components:**
+
 - Serve as templates for other components to inherit from
 - Cannot be deployed with `atmos terraform apply`
 - Do not appear in `atmos describe stacks` output by default
@@ -126,15 +183,18 @@ components:
   terraform:
     monitoring:
       metadata:
-        enabled: false  # Component is disabled
+        enabled: false # Component is disabled
       vars:
         # ...
 ```
 
 When `enabled: false`:
+
 - The component is skipped during `atmos terraform apply`
 - The component does not appear in active stack listings
 - Useful for conditionally disabling components per environment
+
+`enabled` can also be set as a [global default](#global-stack-wide-metadata) to disable every component in a stack unless a component overrides it.
 
 ### `locked`
 
@@ -145,14 +205,17 @@ components:
   terraform:
     core-network:
       metadata:
-        locked: true  # Prevent changes
+        locked: true # Prevent changes
       vars:
         # ...
 ```
 
 When `locked: true`:
+
 - Atmos will warn or prevent changes to the component
 - Useful for protecting critical infrastructure components
+
+`locked` can also be set as a [global default](#global-stack-wide-metadata) to lock every component in a stack unless a component overrides it.
 
 ### `terraform_workspace`
 
@@ -182,7 +245,10 @@ components:
         terraform_workspace_pattern: "{tenant}-{environment}-{stage}"
 ```
 
+`terraform_workspace_pattern` can also be set as a [global default](#global-stack-wide-metadata), unlike `terraform_workspace` (an explicit value, which would collide across components if applied stack-wide and so is component-only).
+
 Supported tokens:
+
 - `{namespace}` - The namespace from context variables
 - `{tenant}` - The tenant from context variables
 - `{environment}` - The environment from context variables
@@ -210,13 +276,69 @@ components:
 ```
 
 Use `custom` for:
+
 - Storing metadata for external tooling to consume (CI/CD pipelines, dashboards)
 - Adding labels or annotations readable via `atmos describe stacks`
 - Custom categorization that doesn't affect Atmos behavior
 
 :::note
-The `custom` section is inherited from base components when `stacks.inherit.metadata` is enabled (the default). Like other metadata fields, values from derived components override inherited values, and nested maps are deep-merged.
+The `custom` section is inherited from base components when `stacks.inherit.metadata` is enabled (the default). Like other metadata fields, values from derived components override inherited values, and nested maps are deep-merged. `custom` can also be set as a [global default](#global-stack-wide-metadata).
 :::
+
+### `tags`
+
+A list of tags used to select this component with the `--tags` flag on commands like [`atmos list components`](/cli/commands/list/components), `atmos terraform plan/apply/deploy`, and the native Kubernetes/Helm/container commands:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        tags:
+          - production
+          - tier-1
+```
+
+`--tags` matches **any** of the given tags (OR semantics). For example, `atmos terraform apply --tags production,tier-1` applies components tagged `production` **or** `tier-1`.
+
+`tags` can also be set as a [global default](#global-stack-wide-metadata).
+
+### `labels`
+
+A map of `key: value` labels used to select this component with the `--labels` flag, similar to a Kubernetes label selector:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          cost-center: platform
+          compliance: sox
+```
+
+`--labels` matches **all** of the given `key=value` pairs (AND semantics). For example, `atmos terraform apply --labels cost-center=platform,compliance=sox` only applies components whose `metadata.labels` contain both `cost-center: platform` **and** `compliance: sox`.
+
+`labels` can also be set as a [global default](#global-stack-wide-metadata).
+
+### Selector Purity
+
+Labels and tags are selectors: Atmos evaluates them **before** authentication, template processing, and YAML function execution to decide which components a command operates on. By design, their values must be resolvable without authenticating or executing external processes — this keeps selection fast, deterministic, and credential-free.
+
+Allowed in `metadata.tags` and `metadata.labels`:
+
+- Plain strings
+- Simple Go templates over the stack context (for example, `{{ .vars.stage }}`)
+- Local YAML functions: `!env`, `!git.*`, `!include`
+
+Rejected with a hard error on any command that enumerates stacks (`describe stacks`, `describe affected`, the `list` commands, and multi-component `terraform` selections such as `--all` and `--affected`):
+
+- YAML functions that require authentication or process execution: `!terraform.state`, `!terraform.output`, `!store`, `!store.get`, `!secret`, `!aws.*`, `!emulator`, `!exec`, `!random`
+- Template calls to `atmos.Component`, `atmos.Store`, `atmos.GomplateDatasource`, `atmos.Resolve`, gomplate datasources (`ds`/`datasource`, `include`, `datasourceExists`, `datasourceReachable`, `defineDatasource`), the gomplate `aws.*`/`gcp.*`/`net.*`/`random.*` namespaces, and network or non-deterministic template functions (`getHostByName`, `uuidv4`, `randAlpha`, `randAlphaNum`, `randNumeric`, `randAscii`, `randBytes`, `now`)
+
+The error names the offending component and stack manifest. If a value needs one of these constructs, move it into `vars` or `settings` and reference it from there — the value stays available to the component while the selectors remain pure.
+
+If upgrading surfaces this error for existing manifests and you need time to migrate, set `describe.settings.eager_evaluation: true` in `atmos.yaml`: it disables pre-evaluation scoping entirely (every stack is fully evaluated before filtering, matching pre-optimization behavior), under which selectors are evaluated like any other value and the purity contract is not enforced.
 
 ## Examples
 
@@ -231,6 +353,7 @@ components:
     vpc-main:
       metadata:
         component: vpc
+        description: Main VPC
       vars:
         vpc_cidr: "10.0.0.0/16"
         name: main
@@ -238,10 +361,12 @@ components:
     vpc-isolated:
       metadata:
         component: vpc
+        description: Isolated VPC without an internet gateway
       vars:
         vpc_cidr: "10.1.0.0/16"
         name: isolated
         enable_internet_gateway: false
+
 ```
 </File>
 
@@ -263,6 +388,7 @@ components:
         enable_nat_gateway: true
         single_nat_gateway: false
 ```
+
 </File>
 
 <File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
@@ -297,6 +423,7 @@ components:
       vars:
         # ...
 ```
+
 </File>
 
 <File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
@@ -305,7 +432,7 @@ components:
   terraform:
     expensive-feature:
       metadata:
-        enabled: true   # Enabled in production
+        enabled: true # Enabled in production
       vars:
         # ...
 ```
@@ -344,6 +471,7 @@ components:
       vars:
         enable_nat_gateway: true
         multi_az: true
+
 ```
 </File>
 
@@ -366,3 +494,4 @@ components:
 - [Overrides](/stacks/overrides)
 - [Variables (vars)](/stacks/vars)
 - [Terraform Components](/stacks/components/terraform)
+```

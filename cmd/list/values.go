@@ -11,6 +11,7 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	l "github.com/cloudposse/atmos/pkg/list"
@@ -19,7 +20,6 @@ import (
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
@@ -105,8 +105,7 @@ var valuesCmd = &cobra.Command{
 			return err
 		}
 
-		u.PrintMessage(output)
-		return nil
+		return data.Writeln(output)
 	},
 }
 
@@ -153,21 +152,20 @@ var varsCmd = &cobra.Command{
 		if err != nil {
 			var componentVarsNotFoundErr *listerrors.ComponentVarsNotFoundError
 			if errors.As(err, &componentVarsNotFoundErr) {
-				_ = ui.Info("No vars found for component: " + componentVarsNotFoundErr.Component)
+				ui.Info("No vars found for component: " + componentVarsNotFoundErr.Component)
 				return nil
 			}
 
 			var noValuesErr *listerrors.NoValuesFoundError
 			if errors.As(err, &noValuesErr) {
-				_ = ui.Info("No values found for query '.vars' for component: " + args[0])
+				ui.Info("No values found for query '.vars' for component: " + args[0])
 				return nil
 			}
 
 			return err
 		}
 
-		u.PrintMessage(output)
-		return nil
+		return data.Writeln(output)
 	},
 }
 
@@ -184,7 +182,8 @@ func init() {
 		WithProcessFunctionsFlag,
 		// Add vars flag only for values command.
 		func(options *[]flags.Option) {
-			*options = append(*options,
+			*options = append(
+				*options,
 				flags.WithBoolFlag("vars", "", false, "Show only vars (equivalent to --query .vars)"),
 				flags.WithEnvVars("vars", "ATMOS_LIST_VARS"),
 			)
@@ -280,9 +279,9 @@ func getFilterOptionsFromValues(opts *ValuesOptions) *l.FilterOptions {
 // displayNoValuesFoundMessage displays an appropriate message when no values or vars are found.
 func displayNoValuesFoundMessage(componentName string, query string) {
 	if query == ".vars" {
-		_ = ui.Info("No vars found for component: " + componentName)
+		ui.Info("No vars found for component: " + componentName)
 	} else {
-		_ = ui.Info("No values found for component: " + componentName)
+		ui.Info("No values found for component: " + componentName)
 	}
 }
 
@@ -329,7 +328,7 @@ func listValuesWithOptions(cmd *cobra.Command, opts *ValuesOptions, args []strin
 	}
 
 	// Create AuthManager for authentication support.
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		return "", err
 	}

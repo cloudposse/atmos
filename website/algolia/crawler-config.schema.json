@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atmos.tools/schemas/algolia-crawler-config.json",
+  "title": "Atmos Algolia Crawler Configuration",
+  "description": "Hand-written JSON Schema for the subset of the Algolia Crawler configuration that this repo deploys. Algolia does not publish a public JSON Schema for the Crawler API; this captures the contract we rely on so structural drift fails fast in CI.",
+  "type": "object",
+  "required": [
+    "appId",
+    "rateLimit",
+    "maxDepth",
+    "maxUrls",
+    "startUrls",
+    "sitemaps",
+    "discoveryPatterns",
+    "actions",
+    "initialIndexSettings",
+    "apiKey"
+  ],
+  "properties": {
+    "appId": { "type": "string", "minLength": 1 },
+    "indexPrefix": { "type": "string" },
+    "rateLimit": { "type": "integer", "minimum": 1, "maximum": 100 },
+    "maxDepth": { "type": "integer", "minimum": 1 },
+    "maxUrls": { "type": "integer", "minimum": 1 },
+    "schedule": { "type": "string" },
+    "renderJavaScript": { "type": "boolean" },
+    "ignoreCanonicalTo": { "type": "boolean" },
+    "startUrls": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1
+    },
+    "sitemaps": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "discoveryPatterns": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["indexName", "pathsToMatch", "recordExtractor"],
+        "properties": {
+          "indexName": { "type": "string", "minLength": 1 },
+          "pathsToMatch": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1
+          },
+          "recordExtractor": {
+            "description": "JavaScript function. Validated separately by parsing the serialized source with acorn and analyzing scope for unresolved globals."
+          }
+        }
+      }
+    },
+    "safetyChecks": {
+      "type": "object",
+      "properties": {
+        "maxFailedUrls": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "initialIndexSettings": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "attributesForFaceting": { "type": "array", "items": { "type": "string" } },
+          "attributesToRetrieve": { "type": "array", "items": { "type": "string" } },
+          "attributesToHighlight": { "type": "array", "items": { "type": "string" } },
+          "attributesToSnippet": { "type": "array", "items": { "type": "string" } },
+          "camelCaseAttributes": { "type": "array", "items": { "type": "string" } },
+          "searchableAttributes": { "type": "array", "items": { "type": "string" } },
+          "distinct": { "type": "boolean" },
+          "attributeForDistinct": { "type": "string" },
+          "customRanking": { "type": "array", "items": { "type": "string" } },
+          "ranking": { "type": "array", "items": { "type": "string" } },
+          "highlightPreTag": { "type": "string" },
+          "highlightPostTag": { "type": "string" },
+          "minWordSizefor1Typo": { "type": "integer", "minimum": 1 },
+          "minWordSizefor2Typos": { "type": "integer", "minimum": 1 },
+          "allowTyposOnNumericTokens": { "type": "boolean" },
+          "minProximity": { "type": "integer", "minimum": 1 },
+          "ignorePlurals": { "type": "boolean" },
+          "advancedSyntax": { "type": "boolean" },
+          "attributeCriteriaComputedByMinProximity": { "type": "boolean" },
+          "removeWordsIfNoResults": { "type": "string" }
+        }
+      }
+    },
+    "apiKey": { "type": "string", "minLength": 1 }
+  }
+}

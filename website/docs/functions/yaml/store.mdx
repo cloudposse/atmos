@@ -11,7 +11,7 @@ import Terminal from '@site/src/components/Terminal'
 
 <Intro>
 The `!store` YAML function allows reading the values from a remote [store](/cli/configuration/stores)
-(e.g. SSM Parameter Store, Artifactory, Redis, etc.) for an Atmos component in a stack into Atmos stack manifests.
+(e.g. SSM Parameter Store, AWS Secrets Manager, Artifactory, Redis, etc.) for an Atmos component in a stack into Atmos stack manifests.
 </Intro>
 
 ## Usage
@@ -205,7 +205,7 @@ tenant `net` (instead of `plat`):
 
 ## Considerations
 
-- Using `!store` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.
+- `!store` reads values in cleartext and cannot read stores marked `secret: true`. For secrets, mark the store [`secret: true`](/cli/configuration/secrets) and read it with [`!secret`](/functions/yaml/secret), which masks values and gates access through the declarative secret registry.
 - When using `!store` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced stores.
    If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.
 - Be mindful of disaster recovery (DR) implications when using it across regions.

@@ -4,35 +4,26 @@ package devcontainer
 import (
 	"testing"
 
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/flags"
 )
 
 // parseTestHelper is a generic helper for testing parse functions.
-// It creates a viper instance with the given settings and calls the parse function.
+// It creates a ParsedConfig with the given settings and calls the parse function.
 func parseTestHelper[T any](
 	t *testing.T,
-	viperSettings map[string]interface{},
-	parseFunc func(*cobra.Command, *viper.Viper, []string) (T, error),
+	flagSettings map[string]interface{},
+	parseFunc func(*flags.ParsedConfig) T,
 ) T {
 	t.Helper()
 
-	// Create a fresh viper instance for this test.
-	v := viper.New()
-	for key, value := range viperSettings {
-		v.Set(key, value)
+	parsed := &flags.ParsedConfig{
+		Flags:          flagSettings,
+		PositionalArgs: []string{},
+		SeparatedArgs:  []string{},
 	}
-
-	// Create a dummy command (not needed for parsing, but required by signature).
-	cmd := &cobra.Command{}
-
-	// Parse options.
-	opts, err := parseFunc(cmd, v, []string{})
-	require.NoError(t, err)
-
-	return opts
+	return parseFunc(parsed)
 }
 
 func TestParseAttachOptions(t *testing.T) {

@@ -46,6 +46,7 @@ func TestStackProcessor(t *testing.T) {
 		terraformComponentsBasePath,
 		helmfileComponentsBasePath,
 		packerComponentsBasePath,
+		"",
 		filePaths,
 		processStackDeps,
 		processComponentDeps,
@@ -234,6 +235,7 @@ func TestStackProcessorRelativePaths(t *testing.T) {
 		terraformComponentsBasePath,
 		"",
 		"",
+		"",
 		filePaths,
 		true,
 		true,
@@ -276,7 +278,7 @@ func TestProcessYAMLConfigFile(t *testing.T) {
 		},
 	}
 
-	_, _, stackConfigMap, _, _, _, _, err := ProcessYAMLConfigFile(
+	processingResult, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -294,9 +296,9 @@ func TestProcessYAMLConfigFile(t *testing.T) {
 	)
 
 	assert.Nil(t, err)
-	assert.Equal(t, 3, len(stackConfigMap))
+	assert.Equal(t, 3, len(processingResult.StackConfig))
 
-	mapResultKeys := u.StringKeysFromMap(stackConfigMap)
+	mapResultKeys := u.StringKeysFromMap(processingResult.StackConfig)
 	// sorting so that the output is deterministic
 	sort.Strings(mapResultKeys)
 
@@ -327,6 +329,7 @@ func TestProcessYAMLConfigFiles(t *testing.T) {
 			"terraform",
 			"helmfile",
 			"packer",
+			"ansible",
 			[]string{},
 			true,
 			true,
@@ -354,6 +357,7 @@ func TestProcessYAMLConfigFiles(t *testing.T) {
 			"terraform",
 			"helmfile",
 			"packer",
+			"ansible",
 			[]string{"non-existent-file.yaml"},
 			true,
 			true,
@@ -388,6 +392,7 @@ func TestProcessYAMLConfigFiles(t *testing.T) {
 			"../../tests/fixtures/scenarios/complete/components/terraform",
 			"../../tests/fixtures/scenarios/complete/components/helmfile",
 			"../../tests/fixtures/scenarios/complete/components/packer",
+			"../../tests/fixtures/scenarios/complete/components/ansible",
 			filePaths,
 			true,
 			true,

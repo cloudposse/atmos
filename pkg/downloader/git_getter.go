@@ -16,6 +16,13 @@ type CustomGitGetter struct {
 	getter.GitGetter
 	// RetryConfig specifies retry behavior for git operations.
 	RetryConfig *schema.RetryConfig
+	// RetryAuthErrors tolerates transient authentication failures by retrying them within a
+	// bounded window. It is enabled ONLY when Atmos brokered a fresh GitHub token this
+	// process (see pkg/auth/broker.HasBrokeredCredentials): a just-minted GitHub App
+	// installation token can briefly return 401 before GitHub propagates it across its git
+	// frontends. For ordinary static credentials this stays false so a wrong/expired token
+	// fails fast instead of stalling.
+	RetryAuthErrors bool
 }
 
 // Get implements the custom getter logic removing symlinks.

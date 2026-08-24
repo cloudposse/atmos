@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# BASE (main branch) state - HAS the new prometheus component AND a reference to it
+# This simulates the exact error scenario where:
+# 1. PR1 added prometheus component and merged to main
+# 2. PR1 also updated eks to reference prometheus via !terraform.state
+# 3. PR2 (based on old main) runs describe affected and fails
+
+vars:
+  environment: ue1
+  stage: staging
+
+components:
+  terraform:
+    # Existing component that exists in both HEAD and BASE
+    vpc:
+      metadata:
+        component: mock
+      vars:
+        cidr_block: "10.0.0.0/16"
+        environment: "{{ .vars.environment }}"
+
+    # Existing component - but in BASE it references prometheus which doesn't exist in HEAD
+    # This will cause the error:
+    #   "failed to describe component prometheus in stack ue1-staging"
+    #   "YAML function: !terraform.state prometheus workspace_endpoint"
+    #   "Could not find the component prometheus in the stack ue1-staging"
+    eks:
+      metadata:
+        component: mock
+      vars:
+        cluster_name: "eks-{{ .vars.stage }}"
+        # This !terraform.state reference causes the failure when processing BASE
+        # because prometheus component doesn't exist in HEAD
+        prometheus_endpoint: '!terraform.state prometheus workspace_endpoint'
+
+    # NEW component added in main (BASE) - does NOT exist in HEAD (PR branch)
+    prometheus:
+      metadata:
+        component: mock
+      vars:
+        workspace_name: "prometheus-{{ .vars.stage }}"
+        workspace_endpoint: "https://prometheus.example.com"

@@ -1,0 +1,41 @@
+---
+title: output
+sidebar_label: output
+sidebar_position: 6
+slug: /workflows/output
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The workflow-level `output` field sets the default command output mode for all steps in the workflow.
+</Intro>
+
+```yaml
+workflows:
+  verbose-deploy:
+    output: log
+    steps:
+      - name: plan
+        type: atmos
+        command: terraform plan vpc
+        output: viewport
+```
+
+## Values
+
+<dl>
+  <dt>`raw`</dt>
+  <dd>Pass command output directly to the terminal. This is the default behavior.</dd>
+
+  <dt>`log`</dt>
+  <dd>Display grouped output with step headers.</dd>
+
+  <dt>`viewport`</dt>
+  <dd>Display output in a scrollable viewport.</dd>
+
+  <dt>`none`</dt>
+  <dd>Suppress command output and rely on the exit code.</dd>
+</dl>
+
+Step-level `output` overrides the workflow-level default for that step.

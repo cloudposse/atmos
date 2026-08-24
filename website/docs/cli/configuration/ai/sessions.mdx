@@ -1,0 +1,303 @@
+---
+title: AI Sessions
+sidebar_label: sessions
+sidebar_class_name: command
+description: Configure AI session persistence in the `ai.sessions` section of your `atmos.yaml`.
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+The `ai.sessions` section configures persistent conversation sessions, including storage backend,
+retention, auto-compact, and session limits.
+</Intro>
+
+<Experimental />
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+    max_sessions: 10
+```
+</File>
+
+## Session Settings
+
+<dl>
+  <dt>`sessions.enabled`</dt>
+  <dd>Enable or disable persistent sessions (default: `false`). When enabled, conversation history is stored locally and can be resumed across CLI invocations.</dd>
+
+  <dt>`sessions.path`</dt>
+  <dd>Directory path where the session database is stored, relative to project root (default: `.atmos/sessions`). The SQLite database is created automatically at `<path>/sessions.db`.</dd>
+
+  <dt>`sessions.max_sessions`</dt>
+  <dd>Maximum number of sessions to keep per project (default: `10`). When this limit is reached, the oldest sessions are automatically cleaned up.</dd>
+</dl>
+
+## Conversation Memory
+
+When you send a message, the AI receives the complete conversation history for the session. This
+enables multi-turn conversations where you can ask follow-up questions like "yes", "tell me more",
+or "what about staging?" and the AI understands the context.
+
+### Example: Multi-Turn Conversation
+
+<Terminal title="atmos ai chat --session vpc-design">
+```bash
+You: What are Atmos stacks?
+
+AI: Atmos stacks are configuration files that define your infrastructure.
+    They use inheritance and composition to share configuration across environments.
+
+You: can you show me an example for production?
+
+AI: Sure! Based on the stack structure I explained, here's a production example:
+    # AI references the earlier explanation
+    [Shows YAML example with production values]
+
+# Day 2: Resume the session
+atmos ai chat --session vpc-design
+
+You: let's continue with the staging variant
+
+AI: Welcome back! Based on the production stack we discussed yesterday,
+    here's how staging differs:
+    # AI recalls full context from previous day
+    [Shows staging example highlighting differences from production]
+```
+</Terminal>
+
+:::info Privacy Note
+When resuming a session, the complete message history is sent to the AI provider. If your conversations
+contain sensitive information, review the [Privacy and Security](#privacy-and-security) section below.
+:::
+
+## Using Sessions
+
+### Starting and Resuming Sessions
+
+<Terminal title="atmos ai chat --session">
+```bash
+# Start a named session (creates if new, resumes if existing)
+atmos ai chat --session vpc-refactor
+
+# Start an anonymous session (auto-generated name)
+atmos ai chat
+```
+</Terminal>
+
+### Managing Sessions in the TUI
+
+#### Creating Sessions (Ctrl+N)
+
+Press `Ctrl+N` to open the create session form. You can enter a custom name, select an AI provider,
+and pick a model. Each session remembers which provider and model it was created with.
+
+#### Session Picker (Ctrl+L)
+
+Press `Ctrl+L` to open the session picker. It displays all sessions with their name, provider badge
+(color-coded), creation date, and message count.
+
+**Session picker controls:**
+
+<dl>
+  <dt>`Up`/`Down` or `j`/`k`</dt>
+  <dd>Navigate sessions.</dd>
+
+  <dt>`Enter`</dt>
+  <dd>Switch to selected session.</dd>
+
+  <dt>`n` or `Ctrl+N`</dt>
+  <dd>Create a new session.</dd>
+
+  <dt>`d`</dt>
+  <dd>Delete selected session (with confirmation).</dd>
+
+  <dt>`r`</dt>
+  <dd>Rename selected session (inline editing).</dd>
+
+  <dt>`f`</dt>
+  <dd>Cycle through provider filters.</dd>
+
+  <dt>`Esc` or `q`</dt>
+  <dd>Return to current chat.</dd>
+</dl>
+
+:::warning Permanent Action
+Deleting a session permanently removes all conversation history for that session. This action cannot be undone.
+:::
+
+### Skill Persistence
+
+Sessions remember which AI skill you are using. When you switch skills during a conversation
+(with `Ctrl+A`), that choice is automatically saved. When you resume the session later, it
+continues using the same skill.
+
+### Listing and Cleaning Sessions
+
+<Terminal title="atmos ai sessions">
+```bash
+# List all sessions with metadata
+atmos ai sessions
+
+# Clean sessions older than 30 days
+atmos ai sessions clean --older-than 30d
+```
+</Terminal>
+
+Supported time units for `--older-than`: `h` (hours), `d` (days), `w` (weeks), `m` (months).
+
+## Auto-Compact Configuration
+
+Auto-compact summarizes older messages instead of dropping them, allowing sessions to continue indefinitely without losing context. When a session reaches its trigger threshold, the oldest messages are summarized into a concise summary that preserves infrastructure decisions and technical details.
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  max_history_messages: 50
+
+  sessions:
+    enabled: true
+    auto_compact:
+      enabled: true                     # Enable auto-compact (default: false)
+      trigger_threshold: 0.75           # Compact at 75% capacity
+      compact_ratio: 0.4                # Summarize oldest 40%
+      preserve_recent: 10               # Always keep last 10 messages verbatim
+      use_ai_summary: true              # Use AI for smart summaries
+      show_summary_markers: false       # Show [SUMMARY] tags for debugging
+```
+</File>
+
+### Auto-Compact Settings
+
+<dl>
+  <dt>`auto_compact.enabled`</dt>
+  <dd>Enable intelligent auto-compaction (default: `false`). When disabled, uses traditional truncation that drops old messages.</dd>
+
+  <dt>`auto_compact.trigger_threshold`</dt>
+  <dd>Percentage (0.0-1.0) of `max_history_messages` at which to trigger compaction (default: `0.75`). For example, with a 50-message limit, triggers at 38 messages.</dd>
+
+  <dt>`auto_compact.compact_ratio`</dt>
+  <dd>Percentage (0.0-1.0) of oldest messages to summarize when compaction triggers (default: `0.4`). For example, with 50 messages, summarizes the oldest 20.</dd>
+
+  <dt>`auto_compact.preserve_recent`</dt>
+  <dd>Number of most recent messages to never compact (default: `10`). Ensures immediate context is always available verbatim.</dd>
+
+  <dt>`auto_compact.use_ai_summary`</dt>
+  <dd>Use AI to generate intelligent summaries that preserve infrastructure decisions and technical details (default: `true`). If `false`, uses simple concatenation.</dd>
+
+  <dt>`auto_compact.show_summary_markers`</dt>
+  <dd>Display visual markers `[SUMMARY: Messages 1-20]` around summaries (default: `false`). Enable for debugging.</dd>
+</dl>
+
+### What Gets Preserved vs. Dropped
+
+Summaries preserve infrastructure decisions (CIDR choices, component selections, architectural
+patterns), technical details (stack names, file paths, configuration values), security context
+(security group rules, IAM policies, encryption settings), and validation results (errors found
+and resolutions).
+
+Conversational filler ("Thanks!", "OK"), step-by-step process narration, and tool execution
+details are intentionally filtered out.
+
+### Performance and Costs
+
+<dl>
+  <dt>Original messages (20)</dt>
+  <dd>~8,000 tokens</dd>
+
+  <dt>AI-generated summary</dt>
+  <dd>~300-500 tokens</dd>
+
+  <dt>Token reduction</dt>
+  <dd>~94%</dd>
+
+  <dt>Break-even point</dt>
+  <dd>~2 messages after compaction</dd>
+</dl>
+
+Auto-compact pays for itself quickly in long conversations. The summary generation costs one API
+call (~8,000 input + 500 output tokens), but every subsequent message saves ~7,500 tokens in context.
+
+## Example Configurations
+
+**Privacy-first** -- keep everything local with Ollama:
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  default_provider: "ollama"
+  max_history_messages: 100
+  sessions:
+    enabled: true
+    auto_compact:
+      enabled: true
+```
+</File>
+
+## Session Storage
+
+Sessions are stored locally in a SQLite database at `<project-root>/.atmos/sessions/sessions.db`. Each session stores messages, AI responses, metadata (name, timestamps, model, provider), and context references. No API keys or credentials are stored.
+
+### Backup and Restore
+
+<Terminal title="shell">
+```bash
+# Backup
+cp .atmos/sessions/sessions.db .atmos/sessions/sessions.db.backup
+
+# Restore
+cp .atmos/sessions/sessions.db.backup .atmos/sessions/sessions.db
+
+# Export for sharing
+sqlite3 .atmos/sessions/sessions.db .dump > session-export.sql
+```
+</Terminal>
+
+## Privacy and Security
+
+Session data is stored locally on your machine. No data is sent to AI providers except during active
+conversations, when the message history is sent to provide context. API keys and credentials are
+never stored in the session database.
+
+If your conversations contain sensitive information (AWS account IDs, infrastructure details),
+be aware that this data is sent to your AI provider when you resume a session.
+
+To delete all session data:
+
+<Terminal title="shell">
+```bash
+atmos ai sessions clean --older-than 0d
+
+# Or remove the database entirely
+rm .atmos/sessions/sessions.db
+```
+</Terminal>
+
+## Troubleshooting
+
+<dl>
+  <dt>Session not found</dt>
+  <dd>Run `atmos ai sessions` to verify the name exists.</dd>
+
+  <dt>Database corruption</dt>
+  <dd>Run `sqlite3 .atmos/sessions/sessions.db "PRAGMA integrity_check;"` or restore from backup.</dd>
+
+  <dt>Disk space issues</dt>
+  <dd>Run `atmos ai sessions clean --older-than 7d` then `sqlite3 .atmos/sessions/sessions.db "VACUUM;"`.</dd>
+
+  <dt>Permission errors</dt>
+  <dd>Run `chmod 755 .atmos/sessions && chmod 644 .atmos/sessions/sessions.db`.</dd>
+</dl>
+
+## Related Documentation
+
+- [AI Configuration](/cli/configuration/ai) - Configure AI providers and settings
+- [AI Commands](/cli/commands/ai/usage) - Complete command reference

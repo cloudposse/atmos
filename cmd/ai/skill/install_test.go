@@ -1,0 +1,1205 @@
+//nolint:dupl // Test files contain similar setup code by design for isolation and clarity.
+package skill
+
+import (
+	"bytes"
+	"io"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
+)
+
+func TestInstallCmd_BasicProperties(t *testing.T) {
+	assert.Equal(t, "install [source]", installCmd.Use)
+	assert.Equal(t, "Install bundled or GitHub-hosted AI skills", installCmd.Short)
+	assert.NotEmpty(t, installCmd.Long)
+	assert.NotNil(t, installCmd.RunE)
+}
+
+func TestInstallCmd_Flags(t *testing.T) {
+	t.Run("has force flag", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("force")
+		require.NotNil(t, flag, "force flag should be registered")
+		assert.Equal(t, "bool", flag.Value.Type())
+		assert.Equal(t, "false", flag.DefValue)
+	})
+
+	t.Run("has yes flag with shorthand", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("yes")
+		require.NotNil(t, flag, "yes flag should be registered")
+		assert.Equal(t, "bool", flag.Value.Type())
+		assert.Equal(t, "false", flag.DefValue)
+		assert.Equal(t, "y", flag.Shorthand)
+	})
+
+	t.Run("has path flag", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("path")
+		require.NotNil(t, flag, "path flag should be registered")
+		assert.Equal(t, "string", flag.Value.Type())
+		assert.Equal(t, "", flag.DefValue)
+	})
+
+	t.Run("has client flag with shorthand", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("client")
+		require.NotNil(t, flag, "client flag should be registered")
+		assert.Equal(t, "stringSlice", flag.Value.Type())
+		assert.Equal(t, "c", flag.Shorthand)
+	})
+
+	t.Run("has all-clients flag", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("all-clients")
+		require.NotNil(t, flag, "all-clients flag should be registered")
+		assert.Equal(t, "bool", flag.Value.Type())
+		assert.Equal(t, "false", flag.DefValue)
+	})
+
+	t.Run("has scope flag", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("scope")
+		require.NotNil(t, flag, "scope flag should be registered")
+		assert.Equal(t, "string", flag.Value.Type())
+		assert.Equal(t, "project", flag.DefValue)
+	})
+
+	t.Run("has global flag with shorthand", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("global")
+		require.NotNil(t, flag, "global flag should be registered")
+		assert.Equal(t, "bool", flag.Value.Type())
+		assert.Equal(t, "false", flag.DefValue)
+		assert.Equal(t, "g", flag.Shorthand)
+	})
+}
+
+func TestInstallCmd_LongDescription(t *testing.T) {
+	// Verify long description contains important information.
+	assert.Contains(t, installCmd.Long, "Install AI skills")
+	assert.Contains(t, installCmd.Long, "bundled Atmos skill name")
+	assert.Contains(t, installCmd.Long, "atmos-terraform")
+	assert.Contains(t, installCmd.Long, "~/.atmos/skills/")
+	assert.Contains(t, installCmd.Long, "agentskills.io")
+	assert.Contains(t, installCmd.Long, "SKILL.md")
+	assert.Contains(t, installCmd.Long, "user/repo")
+	assert.Contains(t, installCmd.Long, "@v1.2.3")
+}
+
+func TestInstallCmd_ArgsValidation(t *testing.T) {
+	// The command accepts at most 1 argument; an omitted <source> means
+	// "install every bundled skill".
+	assert.NotNil(t, installCmd.Args)
+
+	t.Run("accepts zero arguments (install all bundled)", func(t *testing.T) {
+		err := installCmd.Args(installCmd, []string{})
+		assert.NoError(t, err)
+	})
+
+	t.Run("accepts exactly one argument", func(t *testing.T) {
+		err := installCmd.Args(installCmd, []string{"github.com/user/repo"})
+		assert.NoError(t, err)
+	})
+
+	t.Run("rejects two arguments", func(t *testing.T) {
+		err := installCmd.Args(installCmd, []string{"arg1", "arg2"})
+		assert.Error(t, err)
+	})
+}
+
+// TestInstallCmd_RunE_NoArgsInstallsEveryBundledSkill covers the CLI wiring
+// for "atmos ai skill install" with no <source>: it must reach
+// InstallAllBundled rather than erroring on a missing argument.
+func TestInstallCmd_RunE_NoArgsInstallsEveryBundledSkill(t *testing.T) {
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	// Project-scope client detection stats basePath (== os.Getwd()) for
+	// .claude/.vscode/.gemini signal directories. Without isolating CWD to an
+	// empty temp dir, this test would read whatever real project happens to
+	// be checked out (and, worse, distributeToClients would create real
+	// signal directories on disk under the actual source tree).
+	t.Chdir(t.TempDir())
+
+	uiOutput := setupSkillCommandUI(t)
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+
+	err := installCmd.RunE(installCmd, []string{})
+	require.NoError(t, err)
+	output := atmosansi.Strip(uiOutput.String())
+	assert.Contains(t, output, "Discovered")
+	assert.Contains(t, output, "skills installed successfully in",
+		"batch install should say where the skills landed, combined with the count on one line")
+	assert.Contains(t, output, filepath.Join("~", ".atmos", "skills"))
+	assert.NotContains(t, output, "atmos ai chat",
+		"a plain CLI install is never run from inside atmos ai chat, so this hint must never print")
+
+	// A representative skill actually landed on disk under the fake HOME.
+	assert.FileExists(t, filepath.Join(tempHome, ".atmos", "skills", "atmos-terraform", "SKILL.md"))
+}
+
+// TestInstallCmd_RunE_DistributingToShowsRealClientDirectory guards against
+// the exact bug reported live, where "Distributing to: claude-code" appeared
+// right above a "successfully in ~/.atmos/skills" line and read as if that
+// were claude-code's own directory, when claude-code actually reads skills
+// from ~/.claude/skills. The completion line (this test runs
+// non-interactively, so the spinner's in-progress-only text never renders --
+// only its completion message does) must show each client's real target
+// directory so the two are never confused.
+func TestInstallCmd_RunE_DistributingToShowsRealClientDirectory(t *testing.T) {
+	resetFlags := func() {
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+		_ = installCmd.Flags().Set("client", "")
+		_ = installCmd.Flags().Set("scope", "project")
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	uiOutput := setupSkillCommandUI(t)
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+	require.NoError(t, installCmd.Flags().Set("client", "claude-code"))
+	require.NoError(t, installCmd.Flags().Set("scope", "user"))
+
+	err := installCmd.RunE(installCmd, []string{})
+	require.NoError(t, err)
+
+	output := atmosansi.Strip(uiOutput.String())
+	assert.Contains(t, output, "claude-code")
+	assert.Contains(t, output, filepath.Join("~", ".claude", "skills"),
+		"the distribution line must show claude-code's actual skill directory, not Atmos's own ~/.atmos/skills store")
+}
+
+// TestInstallCmd_RunE_PathWithClientWarns covers the case where a user passes an
+// explicit --path alongside --client: --path takes full manual control and skips
+// auto-distribution, so --client silently did nothing before this warning existed.
+// The install must still succeed (silently discarding the flag is intentional --
+// only the lack of any explanation was the bug), but must warn so the user isn't
+// left wondering why nothing landed in their client's skill directory.
+func TestInstallCmd_RunE_PathWithClientWarns(t *testing.T) {
+	resetFlags := func() {
+		resetFlagChangedForTest(t, installCmd, "yes")
+		resetFlagChangedForTest(t, installCmd, "path")
+		resetStringSliceFlagForTest(t, installCmd)
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	uiOutput := setupSkillCommandUI(t)
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+	require.NoError(t, installCmd.Flags().Set("client", "claude-code"))
+	overridePath := filepath.Join(t.TempDir(), "custom-skills")
+	require.NoError(t, installCmd.Flags().Set("path", overridePath))
+
+	err := installCmd.RunE(installCmd, []string{"atmos-terraform"})
+	require.NoError(t, err)
+
+	output := atmosansi.Strip(uiOutput.String())
+	assert.Contains(t, output, "--path skips auto-distribution")
+	assert.Contains(t, output, "--client")
+
+	// --path is honored as full manual control: no client copy is created...
+	assert.NoFileExists(t, filepath.Join(tempHome, ".claude", "skills", "atmos-terraform", "SKILL.md"))
+	// ...and the skill lands only at the explicit --path location.
+	assert.FileExists(t, filepath.Join(overridePath, "atmos-terraform", "SKILL.md"))
+}
+
+// TestInstallCmd_RunE_PathWithoutDistributionFlagsDoesNotWarn covers the
+// unremarkable case: --path alone (no --client/--scope/--global/--all-clients
+// explicitly set) must not print the warning, since there is nothing being
+// silently ignored.
+func TestInstallCmd_RunE_PathWithoutDistributionFlagsDoesNotWarn(t *testing.T) {
+	resetFlags := func() {
+		resetFlagChangedForTest(t, installCmd, "yes")
+		resetFlagChangedForTest(t, installCmd, "path")
+		resetFlagChangedForTest(t, installCmd, "scope")
+		resetFlagChangedForTest(t, installCmd, "global")
+		resetFlagChangedForTest(t, installCmd, "all-clients")
+		resetStringSliceFlagForTest(t, installCmd)
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	uiOutput := setupSkillCommandUI(t)
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+	overridePath := filepath.Join(t.TempDir(), "custom-skills")
+	require.NoError(t, installCmd.Flags().Set("path", overridePath))
+
+	err := installCmd.RunE(installCmd, []string{"atmos-terraform"})
+	require.NoError(t, err)
+
+	output := atmosansi.Strip(uiOutput.String())
+	assert.NotContains(t, output, "skips auto-distribution")
+}
+
+// TestInstallCmd_RunE_AlreadyInstalledOmitsHintAndLocation covers the exact
+// screenshot bug: re-running install with everything already installed (0
+// new, 0 updated) must not claim a location or print the chat hint -- there
+// is nothing to report either did.
+func TestInstallCmd_RunE_AlreadyInstalledOmitsLocationWhenNothingInstalled(t *testing.T) {
+	resetFlags := func() {
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+	t.Chdir(t.TempDir()) // isolate project-scope client detection; see the sibling test above.
+
+	setupSkillCommandUI(t)
+	require.NoError(t, installCmd.Flags().Set("yes", "true"))
+	require.NoError(t, installCmd.RunE(installCmd, []string{}))
+
+	uiOutput := setupSkillCommandUI(t)
+	require.NoError(t, installCmd.RunE(installCmd, []string{}))
+
+	output := atmosansi.Strip(uiOutput.String())
+	assert.Contains(t, output, "0 skills installed")
+	assert.NotContains(t, output, filepath.Join(".atmos", "skills"),
+		"nothing was installed, so there's no location to report")
+	assert.NotContains(t, output, "atmos ai chat")
+}
+
+func TestInstallCmd_Examples(t *testing.T) {
+	// Verify the Example field contains usage examples.
+	assert.Contains(t, installCmd.Example, "atmos ai skill install cloudposse/atmos")
+	assert.Contains(t, installCmd.Example, "--force")
+	assert.Contains(t, installCmd.Example, "--yes")
+}
+
+func TestInstallCmd_SecuritySection(t *testing.T) {
+	// Verify security information is documented.
+	assert.Contains(t, installCmd.Long, "Security")
+	assert.Contains(t, installCmd.Long, "cannot execute arbitrary code")
+	assert.Contains(t, installCmd.Long, "prompted to confirm")
+}
+
+func TestInstallCmd_SourceFormats(t *testing.T) {
+	// Verify all documented source formats are mentioned.
+	assert.Contains(t, installCmd.Long, "Bundled skill by name")
+	assert.Contains(t, installCmd.Long, "user/repo")
+	assert.Contains(t, installCmd.Long, "user/repo@v1.2.3")
+	assert.Contains(t, installCmd.Long, "github.com/user/repo")
+	assert.Contains(t, installCmd.Long, "https://github.com/user/repo.git")
+}
+
+func TestInstallCmd_FlagParsing(t *testing.T) {
+	// Reset flags after each test.
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+
+	t.Run("force flag defaults to false", func(t *testing.T) {
+		resetFlags()
+		force, err := installCmd.Flags().GetBool("force")
+		require.NoError(t, err)
+		assert.False(t, force)
+	})
+
+	t.Run("force flag can be set to true", func(t *testing.T) {
+		resetFlags()
+		err := installCmd.Flags().Set("force", "true")
+		require.NoError(t, err)
+		force, err := installCmd.Flags().GetBool("force")
+		require.NoError(t, err)
+		assert.True(t, force)
+	})
+
+	t.Run("yes flag defaults to false", func(t *testing.T) {
+		resetFlags()
+		yes, err := installCmd.Flags().GetBool("yes")
+		require.NoError(t, err)
+		assert.False(t, yes)
+	})
+
+	t.Run("yes flag can be set to true", func(t *testing.T) {
+		resetFlags()
+		err := installCmd.Flags().Set("yes", "true")
+		require.NoError(t, err)
+		yes, err := installCmd.Flags().GetBool("yes")
+		require.NoError(t, err)
+		assert.True(t, yes)
+	})
+
+	t.Run("yes flag shorthand y works", func(t *testing.T) {
+		resetFlags()
+		flag := installCmd.Flags().Lookup("yes")
+		require.NotNil(t, flag)
+		assert.Equal(t, "y", flag.Shorthand)
+	})
+}
+
+func TestInstallCmd_FlagUsage(t *testing.T) {
+	t.Run("force flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("force")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "Reinstall")
+	})
+
+	t.Run("yes flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("yes")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "confirmation")
+	})
+
+	t.Run("path flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("path")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "install directory")
+	})
+
+	t.Run("client flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("client")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "AI client")
+	})
+
+	t.Run("all-clients flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("all-clients")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "AI clients")
+	})
+
+	t.Run("scope flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("scope")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "Distribution scope")
+	})
+
+	t.Run("global flag has usage description", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("global")
+		require.NotNil(t, flag)
+		assert.NotEmpty(t, flag.Usage)
+		assert.Contains(t, flag.Usage, "--scope user")
+	})
+}
+
+func TestInstallCmd_RunE_InvalidSource(t *testing.T) {
+	// Reset flags before test.
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+
+	tests := []struct {
+		name          string
+		source        string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:          "invalid source format",
+			source:        "invalid-source-format",
+			expectError:   true,
+			errorContains: "invalid skill source",
+		},
+		{
+			name:          "missing repo in github shorthand",
+			source:        "github.com/user",
+			expectError:   true,
+			errorContains: "invalid skill source",
+		},
+		{
+			name:          "too many path parts",
+			source:        "github.com/user/repo/extra/path",
+			expectError:   true,
+			errorContains: "invalid skill source",
+		},
+		{
+			name:          "unsupported host",
+			source:        "gitlab.com/user/repo",
+			expectError:   true,
+			errorContains: "invalid skill source",
+		},
+		{
+			name:          "empty source",
+			source:        "",
+			expectError:   true,
+			errorContains: "invalid skill source",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetFlags()
+
+			// Capture stdout to prevent output during tests.
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Run the command.
+			err := installCmd.RunE(installCmd, []string{tt.source})
+
+			w.Close()
+			os.Stdout = oldStdout
+
+			// Drain the pipe.
+			var buf bytes.Buffer
+			_, _ = io.Copy(&buf, r)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestInstallCmd_RunE_InvalidClientRejected covers the end-to-end wiring of
+// flags.WithValidValues("client", ...) + ValidateFlagValues: an unsupported
+// --client value must be rejected before the command does any work (network,
+// registry, or disk I/O), not silently ignored.
+func TestInstallCmd_RunE_InvalidClientRejected(t *testing.T) {
+	resetFlags := func() {
+		resetFlagChangedForTest(t, installCmd, "yes")
+		resetStringSliceFlagForTest(t, installCmd)
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	require.NoError(t, installCmd.Flags().Set("client", "bogus-name"))
+
+	err := installCmd.RunE(installCmd, []string{"atmos-terraform"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bogus-name")
+	assert.Contains(t, err.Error(), "client")
+}
+
+func TestInstallCmd_RunE_WithFlags(t *testing.T) {
+	// Reset flags after test.
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+
+	t.Run("with force flag set", func(t *testing.T) {
+		resetFlags()
+		err := installCmd.Flags().Set("force", "true")
+		require.NoError(t, err)
+
+		// Capture stdout.
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// Use valid source format that will fail at download stage.
+		err = installCmd.RunE(installCmd, []string{"github.com/nonexistent-user/nonexistent-repo"})
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Drain the pipe.
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+
+		// The command should proceed past flag parsing but fail at download.
+		// This exercises the flag-getting code paths.
+		assert.Error(t, err)
+		// Should fail at download, not at flag parsing.
+		assert.Contains(t, err.Error(), "download")
+	})
+
+	t.Run("with yes flag set", func(t *testing.T) {
+		resetFlags()
+		err := installCmd.Flags().Set("yes", "true")
+		require.NoError(t, err)
+
+		// Capture stdout.
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// Use valid source format.
+		err = installCmd.RunE(installCmd, []string{"github.com/nonexistent-user/nonexistent-repo"})
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Drain the pipe.
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+
+		// The command should proceed past flag parsing but fail at download.
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "download")
+	})
+
+	t.Run("with both flags set", func(t *testing.T) {
+		resetFlags()
+		err := installCmd.Flags().Set("force", "true")
+		require.NoError(t, err)
+		err = installCmd.Flags().Set("yes", "true")
+		require.NoError(t, err)
+
+		// Capture stdout.
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// Use valid source format.
+		err = installCmd.RunE(installCmd, []string{"github.com/nonexistent-user/nonexistent-repo"})
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Drain the pipe.
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+
+		// The command should proceed past flag parsing but fail at download.
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "download")
+	})
+}
+
+func TestInstallCmd_RunE_ValidSourceFormats(t *testing.T) {
+	// Reset flags before tests.
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+
+	// These tests verify that valid source formats are parsed correctly
+	// and the command progresses to the download stage (where it will fail).
+	validSources := []struct {
+		name   string
+		source string
+	}{
+		{
+			name:   "github shorthand",
+			source: "github.com/user/repo",
+		},
+		{
+			name:   "github shorthand with version tag",
+			source: "github.com/user/repo@v1.2.3",
+		},
+		{
+			name:   "github shorthand with branch",
+			source: "github.com/user/repo@main",
+		},
+		{
+			name:   "https URL",
+			source: "https://github.com/user/repo.git",
+		},
+		{
+			name:   "https URL without .git suffix",
+			source: "https://github.com/user/repo",
+		},
+	}
+
+	for _, tt := range validSources {
+		t.Run(tt.name, func(t *testing.T) {
+			resetFlags()
+			// Skip confirmation.
+			err := installCmd.Flags().Set("yes", "true")
+			require.NoError(t, err)
+
+			// Capture stdout.
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			err = installCmd.RunE(installCmd, []string{tt.source})
+
+			w.Close()
+			os.Stdout = oldStdout
+
+			// Drain the pipe.
+			var buf bytes.Buffer
+			_, _ = io.Copy(&buf, r)
+
+			// The command should proceed past source parsing.
+			// It will fail at download since the repo doesn't exist.
+			assert.Error(t, err)
+			// Should fail at download, not at source parsing.
+			assert.Contains(t, err.Error(), "download")
+		})
+	}
+}
+
+func TestInstallCmd_CommandRegistration(t *testing.T) {
+	// Verify the command is properly registered.
+	assert.NotNil(t, installCmd)
+	assert.NotNil(t, installCmd.RunE)
+	assert.NotNil(t, installCmd.Flags())
+}
+
+func TestInstallCmd_OutputDuringInstall(t *testing.T) {
+	uiOutput := setupSkillCommandUI(t)
+
+	// Reset flags.
+	forceFlag := installCmd.Flags().Lookup("force")
+	if forceFlag != nil {
+		_ = forceFlag.Value.Set("false")
+	}
+	yesFlag := installCmd.Flags().Lookup("yes")
+	if yesFlag != nil {
+		_ = yesFlag.Value.Set("false")
+	}
+
+	// Run with valid source format.
+	_ = installCmd.RunE(installCmd, []string{"github.com/cloudposse/test-skill"})
+
+	// Should print "Downloading skill from..." message.
+	assert.Contains(t, uiOutput.String(), "Downloading skills from")
+}
+
+func TestInstallCmd_RunENotNil(t *testing.T) {
+	require.NotNil(t, installCmd.RunE)
+}
+
+func TestInstallCmd_UseFieldCorrect(t *testing.T) {
+	assert.Equal(t, "install [source]", installCmd.Use)
+}
+
+func TestInstallCmd_ShortDescription(t *testing.T) {
+	assert.Equal(t, "Install bundled or GitHub-hosted AI skills", installCmd.Short)
+}
+
+func TestInstallCmd_LongDescriptionContainsExamples(t *testing.T) {
+	// Examples are in the Example field, not Long.
+	assert.NotEmpty(t, installCmd.Example, "Example field should contain usage examples")
+	assert.Contains(t, installCmd.Example, "atmos ai skill install")
+}
+
+func TestInstallCmd_LongDescriptionContainsSourceFormats(t *testing.T) {
+	assert.Contains(t, installCmd.Long, "Source formats:")
+}
+
+func TestInstallCmd_LongDescriptionContainsSecurityInfo(t *testing.T) {
+	assert.Contains(t, installCmd.Long, "Security:")
+}
+
+func TestInstallCmd_ValidatesFlagTypes(t *testing.T) {
+	// Test that invalid flag values are rejected.
+	t.Run("force flag rejects non-boolean", func(t *testing.T) {
+		err := installCmd.Flags().Set("force", "invalid")
+		assert.Error(t, err)
+	})
+
+	t.Run("yes flag rejects non-boolean", func(t *testing.T) {
+		err := installCmd.Flags().Set("yes", "invalid")
+		assert.Error(t, err)
+	})
+}
+
+func TestInstallCmd_FlagDefaults(t *testing.T) {
+	// Verify default values by checking DefValue.
+	t.Run("force default is false", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("force")
+		require.NotNil(t, flag)
+		assert.Equal(t, "false", flag.DefValue)
+	})
+
+	t.Run("yes default is false", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("yes")
+		require.NotNil(t, flag)
+		assert.Equal(t, "false", flag.DefValue)
+	})
+}
+
+func TestInstallCmd_RunE_InstallerInitFailure(t *testing.T) {
+	// Reset flags before test.
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+
+	t.Run("fails when home directory is unwritable", func(t *testing.T) {
+		resetFlags()
+
+		// Create a temp directory and make it unwritable.
+		tempHome := t.TempDir()
+
+		// Create .atmos/skills as a file (not a directory) to cause write failure.
+		atmosDir := filepath.Join(tempHome, ".atmos")
+		err := os.MkdirAll(atmosDir, 0o755)
+		require.NoError(t, err)
+
+		// Create skills as a file, not a directory, to cause registry creation to fail.
+		skillsFile := filepath.Join(atmosDir, "skills")
+		err = os.WriteFile(skillsFile, []byte("not a directory"), 0o644)
+		require.NoError(t, err)
+
+		// Set HOME to temp directory.
+		t.Setenv("HOME", tempHome)
+
+		// Reset homedir cache to pick up new HOME.
+		homedir.Reset()
+		homedir.DisableCache = true
+		t.Cleanup(func() {
+			homedir.Reset()
+			homedir.DisableCache = false
+		})
+
+		// Capture stdout.
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// Run the command - should fail during installer initialization.
+		err = installCmd.RunE(installCmd, []string{"github.com/user/repo"})
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Drain the pipe.
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+
+		// Verify we get an error about initialization.
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to initialize installer")
+	})
+}
+
+func TestInstallCmd_RunE_ContextUsage(t *testing.T) {
+	// Reset flags before test.
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+
+	t.Run("uses context in installer", func(t *testing.T) {
+		uiOutput := setupSkillCommandUI(t)
+		resetFlags()
+		_ = installCmd.Flags().Set("yes", "true")
+
+		// Run with a valid source - it will fail at download but shows context is used.
+		err := installCmd.RunE(installCmd, []string{"github.com/nonexistent/repo@v1.0.0"})
+
+		assert.Error(t, err)
+		// Verify output shows downloading started.
+		assert.Contains(t, uiOutput.String(), "Downloading skills from")
+	})
+}
+
+func TestInstallCmd_RunE_AllFlagCombinations(t *testing.T) {
+	// Reset flags helper.
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+
+	tests := []struct {
+		name  string
+		force bool
+		yes   bool
+	}{
+		{"neither flag", false, false},
+		{"force only", true, false},
+		{"yes only", false, true},
+		{"both flags", true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetFlags()
+
+			if tt.force {
+				require.NoError(t, installCmd.Flags().Set("force", "true"))
+			}
+			if tt.yes {
+				require.NoError(t, installCmd.Flags().Set("yes", "true"))
+			}
+
+			// Capture stdout.
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Run with valid source.
+			err := installCmd.RunE(installCmd, []string{"github.com/test-user/test-repo"})
+
+			w.Close()
+			os.Stdout = oldStdout
+
+			// Drain the pipe.
+			var buf bytes.Buffer
+			_, _ = io.Copy(&buf, r)
+
+			// All should fail at download.
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "download")
+		})
+	}
+}
+
+func TestInstallCmd_RunE_InstallOptionsPassthrough(t *testing.T) {
+	uiOutput := setupSkillCommandUI(t)
+
+	// Reset flags before test.
+	forceFlag := installCmd.Flags().Lookup("force")
+	if forceFlag != nil {
+		_ = forceFlag.Value.Set("true")
+	}
+	yesFlag := installCmd.Flags().Lookup("yes")
+	if yesFlag != nil {
+		_ = yesFlag.Value.Set("true")
+	}
+
+	// Run the command.
+	err := installCmd.RunE(installCmd, []string{"github.com/cloudposse/test-skill@v2.0.0"})
+
+	// Should proceed to download stage.
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "download")
+
+	// Verify download message was printed.
+	assert.Contains(t, uiOutput.String(), "Downloading skills from")
+}
+
+// TestInstallCmd_RunE_SuccessfulInstall tests the full successful install path.
+// This is more of a server test since it sets up a mock download.
+// Note: This test requires mocking the downloader which is complex, so we focus
+// on testing other aspects of the RunE function.
+func TestInstallCmd_RunE_FlagParsingSuccess(t *testing.T) {
+	// Reset flags helper.
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+
+	t.Run("force flag parsing succeeds", func(t *testing.T) {
+		resetFlags()
+
+		// Verify GetBool works correctly.
+		force, err := installCmd.Flags().GetBool("force")
+		require.NoError(t, err)
+		assert.False(t, force)
+
+		// Set to true and verify.
+		require.NoError(t, installCmd.Flags().Set("force", "true"))
+
+		force, err = installCmd.Flags().GetBool("force")
+		require.NoError(t, err)
+		assert.True(t, force)
+	})
+
+	t.Run("yes flag parsing succeeds", func(t *testing.T) {
+		resetFlags()
+
+		// Verify GetBool works correctly.
+		yes, err := installCmd.Flags().GetBool("yes")
+		require.NoError(t, err)
+		assert.False(t, yes)
+
+		// Set to true and verify.
+		require.NoError(t, installCmd.Flags().Set("yes", "true"))
+
+		yes, err = installCmd.Flags().GetBool("yes")
+		require.NoError(t, err)
+		assert.True(t, yes)
+	})
+}
+
+func TestInstallCmd_RunE_SuccessPathCoverage(t *testing.T) {
+	// This test exercises the path up to the point where installer.Install is called.
+	// Since installer.Install requires network access to download the skill,
+	// the successful return path (line 86) cannot be covered without mocking.
+
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+
+	t.Run("successful flag parsing leads to install attempt", func(t *testing.T) {
+		resetFlags()
+		require.NoError(t, installCmd.Flags().Set("force", "true"))
+		require.NoError(t, installCmd.Flags().Set("yes", "true"))
+
+		// Verify flags are correctly parsed.
+		force, err := installCmd.Flags().GetBool("force")
+		require.NoError(t, err)
+		assert.True(t, force)
+
+		yes, err := installCmd.Flags().GetBool("yes")
+		require.NoError(t, err)
+		assert.True(t, yes)
+
+		// Capture stdout.
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// Run the command - it will fail at download, but exercises all code paths.
+		err = installCmd.RunE(installCmd, []string{"github.com/testorg/testskill"})
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Drain the pipe.
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+
+		// Verify it proceeded past flag parsing and installer creation.
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "download")
+	})
+}
+
+// TestInstallCmd_ViperPrecedence tests that flags support Viper precedence (CLI > ENV > defaults).
+// With the StandardParser pattern, flags are read from Viper which supports env var overrides.
+func TestInstallCmd_ViperPrecedence(t *testing.T) {
+	t.Run("force flag defaults to false via Viper", func(t *testing.T) {
+		// Verify default value is false.
+		flag := installCmd.Flags().Lookup("force")
+		require.NotNil(t, flag)
+		assert.Equal(t, "false", flag.DefValue)
+	})
+
+	t.Run("yes flag defaults to false via Viper", func(t *testing.T) {
+		// Verify default value is false.
+		flag := installCmd.Flags().Lookup("yes")
+		require.NotNil(t, flag)
+		assert.Equal(t, "false", flag.DefValue)
+	})
+
+	t.Run("installParser is initialized", func(t *testing.T) {
+		require.NotNil(t, installParser, "installParser should be initialized by init()")
+	})
+
+	t.Run("env var binding for force flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_FORCE", "true")
+
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("force"), "force should be true from ATMOS_AI_SKILL_FORCE env var")
+	})
+
+	t.Run("env var binding for yes flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_YES", "true")
+
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("yes"), "yes should be true from ATMOS_AI_SKILL_YES env var")
+	})
+
+	t.Run("CLI flag overrides env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_FORCE", "true")
+
+		// Explicitly set CLI flag to false.
+		oldVal := installCmd.Flags().Lookup("force").Value.String()
+		t.Cleanup(func() {
+			_ = installCmd.Flags().Set("force", oldVal)
+		})
+		_ = installCmd.Flags().Set("force", "false")
+
+		v := viper.GetViper()
+		err := installParser.BindFlagsToViper(installCmd, v)
+		require.NoError(t, err)
+
+		assert.False(t, v.GetBool("force"), "CLI flag should override env var")
+	})
+
+	t.Run("path flag defaults to empty via Viper", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("path")
+		require.NotNil(t, flag)
+		assert.Equal(t, "", flag.DefValue)
+	})
+
+	t.Run("env var binding for path flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_PATH", "/tmp/custom-skills")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "/tmp/custom-skills", v.GetString("path"), "path should come from ATMOS_AI_SKILL_PATH env var")
+	})
+
+	t.Run("CLI path flag overrides env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_PATH", "/tmp/env-skills")
+
+		oldVal := installCmd.Flags().Lookup("path").Value.String()
+		t.Cleanup(func() {
+			_ = installCmd.Flags().Set("path", oldVal)
+		})
+		require.NoError(t, installCmd.Flags().Set("path", "/tmp/cli-skills"))
+
+		v := viper.GetViper()
+		err := installParser.BindFlagsToViper(installCmd, v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "/tmp/cli-skills", v.GetString("path"), "CLI flag should override env var")
+	})
+
+	t.Run("env var binding for client flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_CLIENT", "vscode")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"vscode"}, v.GetStringSlice("client"))
+	})
+
+	t.Run("env var binding for all-clients flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_ALL_CLIENTS", "true")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("all-clients"), "all-clients should be true from ATMOS_AI_SKILL_ALL_CLIENTS env var")
+	})
+
+	t.Run("scope flag defaults to project via Viper", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("scope")
+		require.NotNil(t, flag)
+		assert.Equal(t, "project", flag.DefValue)
+	})
+
+	t.Run("env var binding for scope flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_SCOPE", "user")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "user", v.GetString("scope"), "scope should come from ATMOS_AI_SKILL_SCOPE env var")
+	})
+
+	t.Run("CLI scope flag overrides env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_SCOPE", "user")
+
+		oldVal := installCmd.Flags().Lookup("scope").Value.String()
+		t.Cleanup(func() {
+			_ = installCmd.Flags().Set("scope", oldVal)
+		})
+		require.NoError(t, installCmd.Flags().Set("scope", "project"))
+
+		v := viper.GetViper()
+		err := installParser.BindFlagsToViper(installCmd, v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "project", v.GetString("scope"), "CLI flag should override env var")
+	})
+
+	t.Run("env var binding for global flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_GLOBAL", "true")
+
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("global"), "global should be true from ATMOS_AI_SKILL_GLOBAL env var")
+	})
+}

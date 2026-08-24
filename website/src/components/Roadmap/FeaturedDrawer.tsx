@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Link from '@docusaurus/Link';
 import { RiCloseLine, RiBookOpenLine, RiMegaphoneLine, RiGitPullRequestLine, RiFileTextLine } from 'react-icons/ri';
 import * as Icons from 'react-icons/ri';
+import DemoVideo from '@site/src/components/Video/DemoVideo';
 import styles from './styles.module.css';
 
 export interface FeaturedItem {
@@ -20,8 +21,10 @@ export interface FeaturedItem {
   changelog?: string;
   pr?: number;
   prd?: string;
-  /** Whether this feature is experimental (still being refined). */
+/** Whether this feature is experimental (still being refined). */
   experimental?: boolean;
+  /** Demo video ID (optional) - matches scene name in demos/scenes.yaml. */
+  demoId?: string;
 }
 
 interface FeaturedDrawerProps {
@@ -127,6 +130,16 @@ export default function FeaturedDrawer({
 
             <div className={styles.drawerContent}>
               <p className={styles.featuredDrawerTagline}>{item.tagline}</p>
+
+              {item.demoId && (
+                <div className={styles.drawerDemo}>
+                  <DemoVideo
+                    id={item.demoId}
+                    title={item.title}
+                    showCaption={false}
+                  />
+                </div>
+              )}
 
               {item.description && (
                 <p className={styles.drawerDescription}>

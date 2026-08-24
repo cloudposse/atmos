@@ -26,6 +26,20 @@ var (
 	ErrBindingShellLevelEnv  = errors.New("binding ATMOS_SHLVL env var error")
 )
 
+// ShellRunnerSpec configures a shell script execution.
+type ShellRunnerSpec struct {
+	// Context, when set, is passed to the interpreter so cancellation (e.g. a
+	// parallel step's fail-fast) stops the running script. Defaults to
+	// context.Background() when nil.
+	Context context.Context
+	Command string
+	Name    string
+	Dir     string
+	Env     []string
+	Stdout  io.Writer
+	Stderr  io.Writer
+}
+
 // MaxShellDepth is the maximum number of nested shell commands that can be executed .
 const MaxShellDepth = 10
 
@@ -45,7 +59,12 @@ func ExecuteShellAndReturnOutput(
 	if err != nil {
 		return "", err
 	}
-	env = append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
+	mergedEnv := os.Environ()
+	for _, envVar := range env {
+		key, value, _ := parseEnvVar(envVar)
+		mergedEnv = updateEnvVar(mergedEnv, key, value)
+	}
+	mergedEnv = updateEnvVar(mergedEnv, "ATMOS_SHLVL", strconv.Itoa(newShellLevel))
 
 	log.Debug("Executing", "command", command)
 
@@ -53,7 +72,7 @@ func ExecuteShellAndReturnOutput(
 		return "", nil
 	}
 
-	err = ShellRunner(command, name, dir, env, &b)
+	err = ShellRunner(command, name, dir, mergedEnv, &b)
 	if err != nil {
 		return "", err
 	}
@@ -61,33 +80,70 @@ func ExecuteShellAndReturnOutput(
 	return b.String(), nil
 }
 
+func parseEnvVar(envVar string) (string, string, bool) {
+	return strings.Cut(envVar, "=")
+}
+
+func updateEnvVar(env []string, key, value string) []string {
+	for i, envVar := range env {
+		existingKey, _, found := parseEnvVar(envVar)
+		if !found {
+			continue
+		}
+		// PATH is compared case-insensitively because Windows may store it as "Path".
+		if existingKey == key || (strings.EqualFold(key, "PATH") && strings.EqualFold(existingKey, key)) {
+			env[i] = existingKey + "=" + value
+			return env
+		}
+	}
+	return append(env, key+"="+value)
+}
+
 // ShellRunner uses mvdan.cc/sh/v3's parser and interpreter to run a shell script and divert its stdout .
 func ShellRunner(command string, name string, dir string, env []string, out io.Writer) error {
 	defer perf.Track(nil, "utils.ShellRunner")()
 
-	parser, err := syntax.NewParser().Parse(strings.NewReader(command), name)
+	return ShellRunnerWithWriters(&ShellRunnerSpec{
+		Command: command,
+		Name:    name,
+		Dir:     dir,
+		Env:     env,
+		Stdout:  out,
+		Stderr:  os.Stderr,
+	})
+}
+
+// ShellRunnerWithWriters uses mvdan.cc/sh/v3's parser and interpreter to run a shell script with explicit stdout/stderr writers.
+func ShellRunnerWithWriters(spec *ShellRunnerSpec) error {
+	defer perf.Track(nil, "utils.ShellRunnerWithWriters")()
+
+	parser, err := syntax.NewParser().Parse(strings.NewReader(spec.Command), spec.Name)
 	if err != nil {
 		return err
 	}
 
 	// Use provided environment directly to preserve PATH modifications
 	// If no environment provided, fall back to current process environment
-	environ := env
+	environ := spec.Env
 	if len(environ) == 0 {
 		environ = os.Environ()
 	}
 
 	listEnviron := expand.ListEnviron(environ...)
 	runner, err := interp.New(
-		interp.Dir(dir),
+		interp.Dir(spec.Dir),
 		interp.Env(listEnviron),
-		interp.StdIO(os.Stdin, out, os.Stderr),
+		interp.StdIO(os.Stdin, spec.Stdout, spec.Stderr),
 	)
 	if err != nil {
 		return err
 	}
 
-	err = runner.Run(context.Background(), parser)
+	runCtx := spec.Context
+	if runCtx == nil {
+		runCtx = context.Background()
+	}
+	err = runner.Run(runCtx, parser)
 	if err != nil {
 		// Check if the error is an interp.ExitStatus and preserve the exit code.
 		// Return a typed error that preserves the exit code.

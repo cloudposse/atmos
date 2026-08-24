@@ -3,10 +3,10 @@ package function
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 
-	"github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
+	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -23,7 +23,7 @@ func NewGitRootFunction() *GitRootFunction {
 	return &GitRootFunction{
 		BaseFunction: BaseFunction{
 			FunctionName:    TagRepoRoot,
-			FunctionAliases: []string{"git-root"},
+			FunctionAliases: []string{"git-root", TagGitRoot},
 			FunctionPhase:   PreMerge,
 		},
 	}
@@ -40,14 +40,11 @@ func (f *GitRootFunction) Execute(ctx context.Context, args string, execCtx *Exe
 
 	log.Debug("Executing repo-root function")
 
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel")
-
-	output, err := cmd.Output()
+	result, err := atmosGit.ProcessTagRoot(strings.TrimSpace(fmt.Sprintf("%s %s", atmosGit.YAMLFuncRepoRoot, args)))
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to get git repository root: %w", errors.ErrGitCommandFailed, err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGitRoot, err)
 	}
 
-	result := strings.TrimSpace(string(output))
 	log.Debug("Resolved repo-root", "path", result)
 
 	return result, nil

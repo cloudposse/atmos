@@ -1,0 +1,21 @@
+components:
+  terraform:
+    api:
+      metadata:
+        component: api
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+      secrets:
+        vars:
+          DATADOG_API_KEY:
+            description: "Datadog API key for monitoring"
+            sops: dev-sops
+            required: true
+          REDIS_URL:
+            description: "Redis connection string"
+            sops: dev-sops
+      vars:
+        # Resolved at runtime via the SOPS-backed !secret function.
+        datadog_api_key: !secret DATADOG_API_KEY
+        redis_url: !secret REDIS_URL | default "redis://localhost:6379"

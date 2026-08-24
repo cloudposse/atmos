@@ -29,7 +29,7 @@ jobs:
 
     steps:
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.IAM_ROLE_ARN }}
@@ -46,10 +46,10 @@ jobs:
         shell: bash
         env:
           PR_HEAD: ${{ github.head_ref }}
-        run: echo "##[set-output name=branch;]$(echo ${PR_HEAD#refs/heads/} | tr / -)"
+        run: echo "branch=$(echo ${PR_HEAD#refs/heads/} | tr / -)" >> $GITHUB_OUTPUT
 
       - name: Seek deployment
-        uses: cloudposse/github-action-seek-deployment@0.1.1
+        uses: cloudposse/github-action-seek-deployment@9c18326d279eaf1683777086a61ca3c744aeb246 # 0.1.1
         id: deployment
         with:
           environment: preview
@@ -58,7 +58,7 @@ jobs:
           status: success
 
       - name: Inactivate deployment
-        uses: chrnorm/deployment-status@9a72af4586197112e0491ea843682b5dc280d806 # v2.0.3
+        uses: chrnorm/deployment-status@6df8d036fd2fee9eb82936733953da1f8382b41e # v2.0.4
         if: ${{ steps.deployment.outputs.id != '' }}
         with:
           state: inactive

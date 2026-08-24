@@ -21,8 +21,8 @@ func TestGetGitHubOIDCToken_Success(t *testing.T) {
 		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", originalToken)
 	}()
 
-	// Set up test server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Set up TLS test server (HTTPS required by SSRF URL validation).
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request headers
 		assert.Equal(t, "Bearer test-request-token", r.Header.Get("Authorization"))
 		// Verify audience parameter is added
@@ -33,13 +33,13 @@ func TestGetGitHubOIDCToken_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create GitHub OIDC settings directly
+	// Create GitHub OIDC settings directly, injecting TLS-aware client.
 	githubOIDCSettings := schema.GithubOIDCSettings{
 		RequestURL:   server.URL + "?token=dummy",
 		RequestToken: "test-request-token",
 	}
 
-	token, err := getGitHubOIDCToken(githubOIDCSettings)
+	token, err := getGitHubOIDCToken(githubOIDCSettings, server.Client())
 	assert.NoError(t, err)
 	assert.Equal(t, "github-oidc-token-123", token)
 }
@@ -99,8 +99,8 @@ func TestGetGitHubOIDCToken_HTTPErrors(t *testing.T) {
 		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", originalToken)
 	}()
 
-	// Set up test server that returns an error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Set up TLS test server that returns an error (HTTPS required by SSRF URL validation).
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Internal Server Error"))
 	}))
@@ -112,7 +112,7 @@ func TestGetGitHubOIDCToken_HTTPErrors(t *testing.T) {
 			RequestToken: "test-token",
 		}
 
-		token, err := getGitHubOIDCToken(githubOIDCSettings)
+		token, err := getGitHubOIDCToken(githubOIDCSettings, server.Client())
 		assert.Error(t, err)
 		assert.Equal(t, "", token)
 		assert.ErrorIs(t, err, errUtils.ErrFailedToGetOIDCToken)
@@ -121,7 +121,8 @@ func TestGetGitHubOIDCToken_HTTPErrors(t *testing.T) {
 
 func TestGetGitHubOIDCToken_NetworkError(t *testing.T) {
 	githubOIDCSettings := schema.GithubOIDCSettings{
-		RequestURL:   "http://invalid-host-that-does-not-exist:12345?token=dummy",
+		// Use https:// scheme so URL validation passes; connection will fail at the network level.
+		RequestURL:   "https://invalid-host-that-does-not-exist:12345?token=dummy",
 		RequestToken: "test-token",
 	}
 
@@ -129,4 +130,40 @@ func TestGetGitHubOIDCToken_NetworkError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "", token)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToGetOIDCToken)
+}
+
+func TestGetGitHubOIDCToken_URLValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		requestURL  string
+		expectedErr error
+	}{
+		{
+			name:        "http scheme rejected",
+			requestURL:  "http://token.actions.githubusercontent.com/api/v1/token",
+			expectedErr: errUtils.ErrFailedToGetGitHubOIDCToken,
+		},
+		{
+			name:        "empty host rejected",
+			requestURL:  "https:///api/v1/token",
+			expectedErr: errUtils.ErrFailedToGetGitHubOIDCToken,
+		},
+		{
+			name:        "invalid URL rejected",
+			requestURL:  "://bad-url",
+			expectedErr: errUtils.ErrFailedToGetGitHubOIDCToken,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings := schema.GithubOIDCSettings{
+				RequestURL:   tt.requestURL,
+				RequestToken: "test-token",
+			}
+			token, err := getGitHubOIDCToken(settings)
+			assert.Error(t, err)
+			assert.Equal(t, "", token)
+			assert.ErrorIs(t, err, tt.expectedErr)
+		})
+	}
 }

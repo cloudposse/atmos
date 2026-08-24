@@ -8,6 +8,7 @@ import FileTree from './FileTree';
 import FileViewer from './FileViewer';
 import RelatedDocs from './RelatedDocs';
 import { findExampleByName, getExampleNameFromPath } from './utils';
+import GistDisclaimer from '@site/src/components/GistDisclaimer';
 import type { ExamplesTree, FileBrowserOptions, FileNode } from './types';
 import styles from './styles.module.css';
 
@@ -48,9 +49,15 @@ export default function FilePage({
           example={example}
           routeBasePath={routeBasePath}
           currentPath={fileData.path}
+          titleAsCode={optionsData.titleAsCode}
         />
         <main className={styles.mainContent}>
-          <BreadcrumbNav path={fileData.path} routeBasePath={routeBasePath} />
+          <BreadcrumbNav path={fileData.path} routeBasePath={routeBasePath} rootLabel={(optionsData.title || 'Examples').toLowerCase()} />
+
+          {optionsData.disclaimer && (
+            <GistDisclaimer text={optionsData.disclaimer} />
+          )}
+
           <FileViewer file={fileData} />
 
           {/* Show related documentation */}

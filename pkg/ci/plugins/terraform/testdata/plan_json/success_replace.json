@@ -1,0 +1,51 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.5.0",
+  "planned_values": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_instance.replaced",
+          "mode": "managed",
+          "type": "aws_instance",
+          "name": "replaced",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 1,
+          "values": {
+            "ami": "ami-new",
+            "instance_type": "t2.micro"
+          }
+        }
+      ]
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "aws_instance.replaced",
+      "mode": "managed",
+      "type": "aws_instance",
+      "name": "replaced",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["delete", "create"],
+        "before": {
+          "ami": "ami-old",
+          "instance_type": "t2.micro"
+        },
+        "after": {
+          "ami": "ami-new",
+          "instance_type": "t2.micro"
+        },
+        "after_unknown": {
+          "id": true,
+          "arn": true,
+          "public_ip": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": false
+      },
+      "action_reason": "replace_because_cannot_update"
+    }
+  ],
+  "output_changes": {}
+}

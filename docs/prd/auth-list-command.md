@@ -1087,7 +1087,7 @@ func validateMermaidStructure(mermaid string) error
 - Atmos Authentication Documentation: https://atmos.tools/cli/commands/auth/
 - CLAUDE.md: ../../CLAUDE.md - Atmos coding conventions
 - Error Handling Strategy: ./error-handling-strategy.md
-- Testing Strategy: ./testing-strategy.md
+- Testing Strategy: ./testability-refactoring-strategy.md
 - Charmbracelet Bubbles Table: https://github.com/charmbracelet/bubbles/tree/master/table
 - Charmbracelet Lipgloss: https://github.com/charmbracelet/lipgloss
 - Graphviz DOT Language: https://graphviz.org/doc/info/lang.html
@@ -1414,8 +1414,7 @@ atmos auth list --format graphviz > auth-graph.dot
 ### Next Steps
 
 - See full documentation: https://atmos.tools/cli/commands/auth/list
-- Configure authentication: https://atmos.tools/cli/commands/auth/
-- Learn about authentication providers: https://atmos.tools/core-concepts/auth-providers
+- Configure authentication: https://atmos.tools/cli/commands/auth/login
 
 ---
 

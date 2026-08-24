@@ -7,6 +7,7 @@ id: name
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
@@ -103,6 +104,8 @@ components:
 
 ## Examples
 
+<EmbedExample example="stack-names" title="Stack Names Example" />
+
 ### Migrating from Terragrunt
 
 When migrating from Terragrunt, your existing Terraform state is tied to specific workspace names. Use `name` to preserve these:
@@ -190,7 +193,7 @@ Stack names appear throughout Atmos:
 
 - **CLI**: `atmos terraform apply vpc -s my-stack-name`
 - **Listing**: `atmos list stacks` shows stack names
-- **Dependencies**: Reference stacks by name in `settings.depends_on`
+- **Dependencies**: Reference stacks by name with `dependencies.components[].stack`
 - **Terraform Workspaces**: Workspace names derive from stack names
 - **Describe Commands**: `atmos describe stacks` uses stack names as keys
 

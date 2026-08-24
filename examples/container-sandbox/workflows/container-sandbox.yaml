@@ -1,0 +1,54 @@
+name: Container Sandbox
+description: Run a workflow inside one shared container sandbox.
+
+workflows:
+  sandbox:
+    description: Demonstrates workflow-level container sandbox execution
+    container:
+      image: alpine:latest
+      shell: /bin/sh
+      workspace: /workspace
+      pull: missing
+      env:
+        SANDBOX_SCOPE: workflow
+    env:
+      WORKFLOW_MESSAGE: "hello from workflow env"
+    steps:
+      - name: container_context
+        type: shell
+        env:
+          STEP_MESSAGE: "hello from step env"
+        command: |
+          echo "container context:"
+          uname -a
+          echo "workspace: $(pwd)"
+          echo "workflow env: ${WORKFLOW_MESSAGE}"
+          echo "container env: ${SANDBOX_SCOPE}"
+          echo "step env: ${STEP_MESSAGE}"
+
+      - name: write_shared_file
+        type: shell
+        command: |
+          mkdir -p .sandbox
+          printf "created inside the workflow sandbox\n" > .sandbox/message.txt
+          echo "wrote .sandbox/message.txt"
+
+      - name: read_shared_file
+        type: shell
+        command: |
+          echo "container step can read:"
+          cat .sandbox/message.txt
+
+      - name: host_opt_out
+        type: shell
+        container: false
+        command: |
+          echo "host step opted out of the workflow sandbox"
+          echo "host can read the mounted workspace file:"
+          cat .sandbox/message.txt
+
+      - name: cleanup
+        type: shell
+        command: |
+          rm -rf .sandbox
+          echo "cleaned .sandbox"

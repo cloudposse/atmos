@@ -5,15 +5,45 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/go-github/v59/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/ansi"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
+
+// captureStderr redirects os.Stderr for the duration of fn and returns
+// everything written to it. Several formatter functions write UI output to
+// stderr via pkg/ui rather than returning it, so tests need this to assert
+// on the rendered content. ANSI escape codes are stripped since ui.Success/
+// ui.Info/etc. render with icons and color styling that can be enabled
+// under CI (e.g. TestFormatReleaseListText_NoReleasesAfterSynthetic broke
+// under CI=true when "No releases found" moved from a plain ui.Writeln to
+// a styled ui.Info) even though captured output isn't a real TTY.
+func captureStderr(t *testing.T, fn func() error) (string, error) {
+	t.Helper()
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+	defer func() { os.Stderr = oldStderr }()
+	defer r.Close()
+
+	fnErr := fn()
+
+	_ = w.Close()
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	return ansi.Strip(buf.String()), fnErr
+}
 
 func TestRenderMarkdownInline(t *testing.T) {
 	tests := []struct {
@@ -149,6 +179,41 @@ func TestCreateVersionTable(t *testing.T) {
 				assert.NotNil(t, table)
 			}
 		})
+	}
+}
+
+// TestCreateVersionTable_IndicatorColumnStaysNarrow guards against a regression where
+// lipgloss/table's auto-expand algorithm balloons the narrow indicator column (col 0)
+// to match the width of the other columns when the table is stretched to fill the
+// terminal width, producing a large gap before the VERSION column.
+func TestCreateVersionTable_IndicatorColumnStaysNarrow(t *testing.T) {
+	rows := [][]string{
+		{"●", "v1.0.0", "2025-01-01", "Release title"},
+		{" ", "v0.9.0", "2024-12-01", "A much longer title to force the table to stretch across a wide terminal"},
+	}
+
+	tbl, err := createVersionTable(rows)
+	require.NoError(t, err)
+
+	// lines[0] = header, lines[1] = header separator border, lines[2:] = data rows.
+	// Strip ANSI first: under CI=true the header/indicator styling renders with
+	// color codes (e.g. "\x1b[1mVERSION"), and byte-offset assertions below would
+	// otherwise count those escape bytes as part of the column position.
+	lines := strings.Split(ansi.Strip(tbl.String()), "\n")
+	require.GreaterOrEqual(t, len(lines), 4, "expected header + separator + 2 data rows")
+
+	wantIdx := indicatorColumnWidth + 1 // Indicator column width + col 1's left padding.
+
+	versionIdx := strings.Index(lines[0], "VERSION")
+	require.NotEqual(t, -1, versionIdx, "header line must contain VERSION")
+	assert.Equal(t, wantIdx, versionIdx, "VERSION header should start right after the fixed-width indicator column")
+
+	for i, wantValue := range []string{"v1.0.0", "v0.9.0"} {
+		dataLine := lines[i+2]
+		trimmed := strings.TrimLeft(dataLine, " ●")
+		// Count runes, not bytes: "●" is 3 bytes in UTF-8 but a single visible character.
+		valueIdx := utf8.RuneCountInString(dataLine) - utf8.RuneCountInString(trimmed)
+		assert.Equal(t, wantIdx, valueIdx, "row %d: %s should start right after the fixed-width indicator column", i, wantValue)
 	}
 }
 
@@ -557,6 +622,79 @@ func TestFormatReleaseDetailText_Prerelease(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, output, "v2.0.0-beta")
 	assert.Contains(t, output, "Pre-release")
+}
+
+// TestFormatReleaseListText_NoReleasesAfterSynthetic covers the
+// `len(releases) == 0` branch in formatReleaseListText. Under the default
+// pkgversion.Version ("test"), addCurrentVersionIfMissing always synthesizes
+// a current-version release, so an empty input never actually stays empty —
+// this branch is otherwise unreachable in tests. Temporarily clearing
+// pkgversion.Version makes addCurrentVersionIfMissing a no-op (mirrors the
+// mutation pattern used by pkg/version's own tests), letting an empty input
+// stay empty and exercise the "No releases found" message.
+func TestFormatReleaseListText_NoReleasesAfterSynthetic(t *testing.T) {
+	originalVersion := pkgversion.Version
+	pkgversion.Version = ""
+	defer func() { pkgversion.Version = originalVersion }()
+
+	output, err := captureStderr(t, func() error {
+		return formatReleaseListText([]*github.RepositoryRelease{})
+	})
+
+	require.NoError(t, err)
+	assert.Contains(t, output, "No releases found")
+}
+
+// TestFormatReleaseDetailText_CurrentVersion covers the "Current: ● Yes
+// (installed)" branch in formatReleaseDetailText, which only renders when
+// isCurrentVersion(release.GetTagName()) is true. Other tests in this file
+// use fixed tags like "v1.0.0" that never match pkgversion.Version.
+func TestFormatReleaseDetailText_CurrentVersion(t *testing.T) {
+	publishedAt := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+
+	release := &github.RepositoryRelease{
+		TagName:     github.String(pkgversion.Version),
+		Name:        github.String("Current Release"),
+		Body:        github.String("Release notes"),
+		PublishedAt: &github.Timestamp{Time: publishedAt},
+		HTMLURL:     github.String("https://github.com/cloudposse/atmos/releases/tag/current"),
+	}
+
+	output, err := captureStderr(t, func() error {
+		return formatReleaseDetailText(release)
+	})
+
+	require.NoError(t, err)
+	assert.Contains(t, output, "Current:")
+}
+
+// TestFormatReleaseDetailText_AssetsNoPlatformMatch covers the "No assets
+// found for %s/%s" branch: release.Assets is non-empty, but none of the
+// asset names match the current OS/arch, so filterAssetsByPlatform returns
+// an empty slice. TestFormatReleaseDetailText_NoAssets instead covers the
+// (len(release.Assets) == 0) case, which takes neither branch.
+func TestFormatReleaseDetailText_AssetsNoPlatformMatch(t *testing.T) {
+	publishedAt := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+
+	release := &github.RepositoryRelease{
+		TagName:     github.String("v1.0.0"),
+		Name:        github.String("Release 1.0.0"),
+		Body:        github.String("Release notes"),
+		PublishedAt: &github.Timestamp{Time: publishedAt},
+		HTMLURL:     github.String("https://github.com/cloudposse/atmos/releases/tag/v1.0.0"),
+		Assets: []*github.ReleaseAsset{
+			// A name with no OS/arch tokens at all, so it can never match
+			// filterAssetsByPlatform on any GOOS/GOARCH.
+			{Name: github.String("readme-notes.txt")},
+		},
+	}
+
+	output, err := captureStderr(t, func() error {
+		return formatReleaseDetailText(release)
+	})
+
+	require.NoError(t, err)
+	assert.Contains(t, output, "No assets found for")
 }
 
 // TestFormatReleaseDetailText_NoAssets tests formatting release without assets.

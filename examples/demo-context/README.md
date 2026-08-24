@@ -1,3 +1,14 @@
+---
+title: Configuration Context
+tags: [Stacks]
+description: >-
+  Compute stack names from context values with a name template, and inspect
+  how Atmos resolves configuration from multiple sources.
+cast:
+  file: /casts/examples/demo-context/name-template.cast
+  title: atmos configuration context
+---
+
 # Example: Demo Context
 
 Inspect how Atmos resolves configuration from multiple sources.
@@ -6,8 +17,8 @@ Learn more about [Describe Config](https://atmos.tools/cli/commands/describe/con
 
 ## What You'll See
 
-- [Context providers](https://atmos.tools/core-concepts/stacks/templates/#context) for dynamic values
-- [Name templates](https://atmos.tools/core-concepts/stacks/naming/) using context values
+- [Context providers](https://atmos.tools/stacks/templates#context) for dynamic values
+- [Name templates](https://atmos.tools/stacks/naming) using context values
 - Configuration merging from imports and mixins
 
 ## Try It
@@ -15,15 +26,19 @@ Learn more about [Describe Config](https://atmos.tools/cli/commands/describe/con
 ```shell
 cd examples/demo-context
 
-# See the resolved Atmos configuration
-atmos describe config
+# Stack names are computed from context values via the name template
+atmos describe config --format=yaml --query .stacks.name_template
 
-# Inspect component configuration
-atmos describe component demo -s acme-west-dev
+# See the stack names it produces
+atmos list stacks
 
-# See all stacks with naming
-atmos describe stacks
+# Inspect the resolved component configuration (--query focuses on vars)
+atmos describe component demo -s acme-west-dev --query .vars
 ```
+
+> [!TIP]
+> Run `atmos describe config` and `atmos describe component demo -s acme-west-dev`
+> without `--query` to see the full resolved configuration.
 
 ## Key Files
 

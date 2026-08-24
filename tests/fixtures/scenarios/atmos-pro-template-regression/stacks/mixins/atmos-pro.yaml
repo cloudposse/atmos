@@ -1,0 +1,38 @@
+# This mixin file tests the regression where {{ .atmos_component }} fails
+# when the file has a locals section (which populates context in 1.205).
+# In 1.204, templates were not processed during import for non-.tmpl files without context.
+# In 1.205, the locals feature inadvertently triggers template processing by adding
+# settings/vars/env to the context, causing this error:
+# "map has no entry for key atmos_component"
+
+# The presence of this locals section triggers the bug in 1.205
+# because extractAndAddLocalsToContext adds settings/vars/env to context
+# which makes len(context) > 0, triggering template processing.
+locals:
+  pro_enabled: true
+
+plan-wf-config: &plan-wf-config
+  atmos-terraform-plan.yaml:
+    inputs:
+      component: "{{ .atmos_component }}"
+      stack: "{{ .atmos_stack }}"
+
+apply-wf-config: &apply-wf-config
+  atmos-terraform-apply.yaml:
+    inputs:
+      component: "{{ .atmos_component }}"
+      stack: "{{ .atmos_stack }}"
+      github_environment: "{{ .atmos_stack }}"
+
+settings:
+  pro:
+    enabled: true
+    pull_request:
+      opened:
+        workflows: *plan-wf-config
+      synchronize:
+        workflows: *plan-wf-config
+      reopened:
+        workflows: *plan-wf-config
+      merged:
+        workflows: *apply-wf-config

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -285,6 +287,7 @@ func TestOIDCProvider_Environment(t *testing.T) {
 				clientID:       "client-456",
 				subscriptionID: "sub-789",
 				location:       "eastus",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{
 				"AZURE_TENANT_ID":       "tenant-123",
@@ -300,6 +303,7 @@ func TestOIDCProvider_Environment(t *testing.T) {
 				clientID:       "client-456",
 				subscriptionID: "",
 				location:       "",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{
 				"AZURE_TENANT_ID": "tenant-123",
@@ -313,6 +317,7 @@ func TestOIDCProvider_Environment(t *testing.T) {
 				clientID:       "",
 				subscriptionID: "",
 				location:       "",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{},
 		},
@@ -342,6 +347,7 @@ func TestOIDCProvider_PrepareEnvironment(t *testing.T) {
 				clientID:       "client-456",
 				subscriptionID: "sub-789",
 				location:       "eastus",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			inputEnv: map[string]string{
 				"HOME": "/home/user",
@@ -369,6 +375,7 @@ func TestOIDCProvider_PrepareEnvironment(t *testing.T) {
 				tenantID:       "tenant-123",
 				clientID:       "client-456",
 				subscriptionID: "sub-789",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			inputEnv: map[string]string{
 				"AZURE_CLIENT_SECRET":            "conflicting-secret",
@@ -404,6 +411,7 @@ func TestOIDCProvider_PrepareEnvironment(t *testing.T) {
 				clientID:       "client-456",
 				subscriptionID: "sub-789",
 				tokenFilePath:  "/custom/token/path",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			inputEnv: map[string]string{},
 			expectedContains: map[string]string{
@@ -676,7 +684,7 @@ func TestOIDCProvider_ExchangeToken(t *testing.T) {
 				assert.Equal(t, "client-456", r.FormValue("client_id"))
 				assert.Equal(t, clientAssertionTypeJWT, r.FormValue("client_assertion_type"))
 				assert.Equal(t, "test-federated-token", r.FormValue("client_assertion"))
-				assert.Equal(t, azureManagementScope, r.FormValue("scope"))
+				assert.Equal(t, azureCloud.PublicCloud.ManagementScope, r.FormValue("scope"))
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
@@ -700,7 +708,7 @@ func TestOIDCProvider_ExchangeToken(t *testing.T) {
 
 			// Call exchangeToken with management scope.
 			ctx := context.Background()
-			resp, err := provider.exchangeToken(ctx, "test-federated-token", azureManagementScope)
+			resp, err := provider.exchangeToken(ctx, "test-federated-token", azureCloud.PublicCloud.ManagementScope)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -768,8 +776,8 @@ func TestOIDCProvider_FetchGitHubActionsToken(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create test server.
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Create TLS test server (required by SSRF URL validation).
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				// Verify request.
 				assert.Equal(t, http.MethodGet, r.Method)
 				assert.Equal(t, "application/json", r.Header.Get("Accept"))
@@ -798,12 +806,13 @@ func TestOIDCProvider_FetchGitHubActionsToken(t *testing.T) {
 			t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", server.URL)
 			t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
 
-			// Create provider.
+			// Create provider with TLS-aware client to trust the test certificate.
 			provider := &oidcProvider{
-				name:     "test-oidc",
-				tenantID: "tenant-123",
-				clientID: "client-456",
-				audience: tt.audience,
+				name:       "test-oidc",
+				tenantID:   "tenant-123",
+				clientID:   "client-456",
+				audience:   tt.audience,
+				httpClient: server.Client(),
 			}
 
 			// Call fetchGitHubActionsToken.
@@ -865,6 +874,8 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 		serverResponse   interface{}
 		statusCode       int
 		expectError      bool
+		serverID         string
+		wantAKSScope     string
 		checkCredentials func(*testing.T, *authTypes.AzureCredentials)
 	}{
 		{
@@ -874,14 +885,22 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 				TokenType:   "Bearer",
 				ExpiresIn:   7200,
 			},
-			statusCode:  http.StatusOK,
-			expectError: false,
+			statusCode:   http.StatusOK,
+			expectError:  false,
+			serverID:     "custom-server-id",
+			wantAKSScope: "custom-server-id/.default",
 			checkCredentials: func(t *testing.T, creds *authTypes.AzureCredentials) {
 				assert.Equal(t, "azure-access-token-xyz", creds.AccessToken)
 				assert.Equal(t, "Bearer", creds.TokenType)
 				assert.Equal(t, "tenant-123", creds.TenantID)
 				assert.Equal(t, "sub-789", creds.SubscriptionID)
 				assert.NotEmpty(t, creds.Expiration)
+				// acquireAdditionalTokens exchanges the same federated token
+				// against the same test server for Graph/KeyVault/AKS scopes
+				// (the handler doesn't distinguish by scope), confirming the
+				// AKS-scope goroutine runs and populates AzureCredentials.
+				assert.NotEmpty(t, creds.AKSToken)
+				assert.NotEmpty(t, creds.AKSTokenExpiration)
 			},
 		},
 		{
@@ -894,8 +913,19 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			var scopes []string
+			var scopesMu sync.Mutex
+
 			// Create test server.
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if err := r.ParseForm(); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				scopesMu.Lock()
+				scopes = append(scopes, r.Form.Get("scope"))
+				scopesMu.Unlock()
+
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
 				_ = json.NewEncoder(w).Encode(tt.serverResponse)
@@ -911,10 +941,14 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 				location:       "eastus",
 				tokenFilePath:  tokenPath,
 				tokenEndpoint:  server.URL,
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			}
 
 			// Call Authenticate.
 			ctx := context.Background()
+			if tt.serverID != "" {
+				ctx = azureCloud.ContextWithAKSServerID(ctx, tt.serverID)
+			}
 			creds, err := provider.Authenticate(ctx)
 
 			if tt.expectError {
@@ -930,6 +964,9 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 
 			if tt.checkCredentials != nil {
 				tt.checkCredentials(t, azureCreds)
+			}
+			if tt.wantAKSScope != "" {
+				assert.Contains(t, scopes, tt.wantAKSScope)
 			}
 		})
 	}
@@ -970,6 +1007,7 @@ func TestOIDCProvider_GetTokenEndpoint(t *testing.T) {
 			tenantID:      "my-tenant-id",
 			clientID:      "client-456",
 			tokenEndpoint: "",
+			cloudEnv:      azureCloud.GetCloudEnvironment(""),
 		}
 
 		endpoint := provider.getTokenEndpoint()
@@ -1188,7 +1226,7 @@ func TestOIDCProvider_ExchangeToken_EdgeCases(t *testing.T) {
 			tokenEndpoint: server.URL,
 		}
 
-		_, err := provider.exchangeToken(context.Background(), "test-federated-token", azureManagementScope)
+		_, err := provider.exchangeToken(context.Background(), "test-federated-token", azureCloud.PublicCloud.ManagementScope)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 		assert.Contains(t, err.Error(), "empty access token")
@@ -1210,7 +1248,7 @@ func TestOIDCProvider_ExchangeToken_EdgeCases(t *testing.T) {
 			tokenEndpoint: server.URL,
 		}
 
-		_, err := provider.exchangeToken(context.Background(), "test-federated-token", azureManagementScope)
+		_, err := provider.exchangeToken(context.Background(), "test-federated-token", azureCloud.PublicCloud.ManagementScope)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 		assert.Contains(t, err.Error(), "failed to decode")
@@ -1225,6 +1263,7 @@ func TestOIDCProvider_PrepareEnvironment_EdgeCases(t *testing.T) {
 			clientID:       "client-456",
 			subscriptionID: "sub-789",
 			location:       "westus2",
+			cloudEnv:       azureCloud.GetCloudEnvironment(""),
 		}
 
 		// Create temporary token file.
@@ -1257,6 +1296,7 @@ func TestOIDCProvider_PrepareEnvironment_EdgeCases(t *testing.T) {
 			clientID:       "client-456",
 			subscriptionID: "sub-789",
 			tokenFilePath:  tokenPath,
+			cloudEnv:       azureCloud.GetCloudEnvironment(""),
 		}
 
 		env, err := provider.PrepareEnvironment(context.Background(), make(map[string]string))
@@ -1280,6 +1320,7 @@ func TestOIDCProvider_PrepareEnvironment_EdgeCases(t *testing.T) {
 			clientID:       "client-456",
 			subscriptionID: "sub-789",
 			tokenFilePath:  "", // Empty - should use env var.
+			cloudEnv:       azureCloud.GetCloudEnvironment(""),
 		}
 
 		env, err := provider.PrepareEnvironment(context.Background(), make(map[string]string))
@@ -1303,4 +1344,221 @@ func TestOIDCProvider_Authenticate_EdgeCases(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 	})
+}
+
+func TestOIDCProvider_FetchGitHubActionsToken_URLValidation(t *testing.T) {
+	provider := &oidcProvider{
+		name:     "test-oidc",
+		tenantID: "tenant-123",
+		clientID: "client-456",
+	}
+
+	t.Run("http scheme rejected", func(t *testing.T) {
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "http://token.actions.githubusercontent.com")
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
+
+		_, err := provider.fetchGitHubActionsToken()
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+		assert.Contains(t, err.Error(), "must use https scheme")
+	})
+
+	t.Run("empty hostname rejected", func(t *testing.T) {
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https:///path/to/token")
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
+
+		_, err := provider.fetchGitHubActionsToken()
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+		assert.Contains(t, err.Error(), "non-empty host")
+	})
+}
+
+func TestOIDCProvider_SovereignCloudEndpoints(t *testing.T) {
+	tests := []struct {
+		name          string
+		tenantID      string
+		clientID      string
+		cloudEnvName  string
+		tokenEndpoint string
+		expected      string
+	}{
+		{
+			name:         "US government token endpoint",
+			tenantID:     "gov-tenant-123",
+			clientID:     "client-456",
+			cloudEnvName: "usgovernment",
+			expected:     "https://login.microsoftonline.us/gov-tenant-123/oauth2/v2.0/token",
+		},
+		{
+			name:         "China cloud token endpoint",
+			tenantID:     "cn-tenant-456",
+			clientID:     "client-789",
+			cloudEnvName: "china",
+			expected:     "https://login.chinacloudapi.cn/cn-tenant-456/oauth2/v2.0/token",
+		},
+		{
+			name:          "custom endpoint overrides cloud environment",
+			tenantID:      "tenant-123",
+			clientID:      "client-456",
+			cloudEnvName:  "usgovernment",
+			tokenEndpoint: "https://custom.endpoint.example.com/token",
+			expected:      "https://custom.endpoint.example.com/token",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := &oidcProvider{
+				name:          "test-oidc",
+				tenantID:      tt.tenantID,
+				clientID:      tt.clientID,
+				cloudEnv:      azureCloud.GetCloudEnvironment(tt.cloudEnvName),
+				tokenEndpoint: tt.tokenEndpoint,
+			}
+
+			assert.Equal(t, tt.expected, provider.getTokenEndpoint())
+		})
+	}
+}
+
+func TestExtractOIDCConfig_CloudEnvironment(t *testing.T) {
+	tests := []struct {
+		name             string
+		spec             map[string]interface{}
+		expectedCloudEnv string
+	}{
+		{
+			name: "reads cloud_environment from spec",
+			spec: map[string]interface{}{
+				"tenant_id":         "tenant-123",
+				"client_id":         "client-456",
+				"cloud_environment": "usgovernment",
+			},
+			expectedCloudEnv: "usgovernment",
+		},
+		{
+			name: "empty cloud_environment when not specified",
+			spec: map[string]interface{}{
+				"tenant_id": "tenant-123",
+				"client_id": "client-456",
+			},
+			expectedCloudEnv: "",
+		},
+		{
+			name: "china cloud environment",
+			spec: map[string]interface{}{
+				"tenant_id":         "tenant-123",
+				"client_id":         "client-456",
+				"cloud_environment": "china",
+			},
+			expectedCloudEnv: "china",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := extractOIDCConfig(tt.spec)
+			assert.Equal(t, tt.expectedCloudEnv, cfg.CloudEnvironment)
+		})
+	}
+}
+
+func TestNewOIDCProvider_InvalidCloudEnvironment(t *testing.T) {
+	config := &schema.Provider{
+		Kind: "azure/oidc",
+		Spec: map[string]interface{}{
+			"tenant_id":         "tenant-123",
+			"client_id":         "client-456",
+			"cloud_environment": "publicc", // Typo.
+		},
+	}
+
+	_, err := NewOIDCProvider("test", config)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidProviderConfig)
+	assert.Contains(t, err.Error(), "unknown cloud_environment")
+	assert.Contains(t, err.Error(), "valid values are")
+}
+
+func TestOIDCProvider_Environment_SovereignCloud(t *testing.T) {
+	tests := []struct {
+		name              string
+		cloudEnvName      string
+		expectedEnvVars   map[string]string
+		unexpectedEnvVars []string
+	}{
+		{
+			name:         "usgovernment sets ARM_ENVIRONMENT",
+			cloudEnvName: "usgovernment",
+			expectedEnvVars: map[string]string{
+				"ARM_ENVIRONMENT":   "usgovernment",
+				"AZURE_ENVIRONMENT": "usgovernment",
+			},
+		},
+		{
+			name:         "china sets ARM_ENVIRONMENT",
+			cloudEnvName: "china",
+			expectedEnvVars: map[string]string{
+				"ARM_ENVIRONMENT":   "china",
+				"AZURE_ENVIRONMENT": "china",
+			},
+		},
+		{
+			name:              "public does not set sovereign env vars",
+			cloudEnvName:      "public",
+			unexpectedEnvVars: []string{"ARM_ENVIRONMENT", "AZURE_ENVIRONMENT"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &oidcProvider{
+				tenantID:       "tenant-123",
+				clientID:       "client-456",
+				subscriptionID: "sub-789",
+				location:       "eastus",
+				cloudEnv:       azureCloud.GetCloudEnvironment(tt.cloudEnvName),
+			}
+
+			env, err := p.Environment()
+			require.NoError(t, err)
+
+			for k, v := range tt.expectedEnvVars {
+				assert.Equal(t, v, env[k], "Expected %s=%s", k, v)
+			}
+
+			for _, k := range tt.unexpectedEnvVars {
+				_, exists := env[k]
+				assert.False(t, exists, "Expected %s to not be set", k)
+			}
+		})
+	}
+}
+
+// TestAzureProviders_IsAmbient verifies that both ambient Azure providers opt into the
+// auth manager's ambient handling, which suppresses keyring caching of their short-lived
+// tokens. Without this, `atmos auth login` replays a stale principal after the user runs
+// `az login` as a different account, or after the federated token is rotated — the Azure
+// analogue of issue #2695.
+//
+// The interactive device-code provider is deliberately NOT ambient: it runs its own
+// device flow and owns a purpose-built token cache (device_code_cache.go), so caching is
+// required for it to work at all.
+func TestAzureProviders_IsAmbient(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider authTypes.Provider
+		want     bool
+	}{
+		{name: "azure/cli is ambient", provider: &cliProvider{name: "az-cli"}, want: true},
+		{name: "azure/oidc is ambient", provider: &oidcProvider{name: "az-oidc"}, want: true},
+		{name: "azure/device-code is not ambient", provider: &deviceCodeProvider{name: "az-device"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, authTypes.ProviderIsAmbient(tt.provider))
+		})
+	}
 }

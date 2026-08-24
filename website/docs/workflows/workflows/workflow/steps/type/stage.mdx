@@ -1,0 +1,33 @@
+---
+title: stage
+sidebar_label: stage
+slug: /workflows/steps/type/stage
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `stage` step type prints numbered progress markers like `[Stage 1/3] Setup`, giving multi-step custom commands and workflows a clear sense of overall progress.
+</Intro>
+
+```yaml
+steps:
+  - name: setup
+    type: stage
+    title: Setup
+
+  - command: terraform init vpc
+
+  - name: deploy
+    type: stage
+    title: Deploy
+```
+
+## Fields
+
+<dl>
+  <dt>`title`</dt>
+  <dd>Optional stage label. Supports templates. When omitted, Atmos uses the step name.</dd>
+</dl>
+
+Atmos counts only steps with `type: stage` when rendering the stage total.

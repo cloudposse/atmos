@@ -1,0 +1,8 @@
+# Dev EKS stack — uses base defaults (no type overrides, should always work).
+import:
+  - orgs/acme/dev/_defaults
+  - catalog/eks-defaults
+
+vars:
+  environment: use1
+  stage: dev

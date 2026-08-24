@@ -1,0 +1,17 @@
+# This stack has NO explicit name and does NOT have tenant var.
+# The name_pattern requires tenant, so pattern validation will fail.
+# The code should fall back to using filename as the stack name.
+
+import:
+  - catalog/base
+
+vars:
+  # Note: NO tenant var here! Pattern "{tenant}-{environment}-{stage}" will fail.
+  environment: dev
+  stage: uw2
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.2.0.0/16"

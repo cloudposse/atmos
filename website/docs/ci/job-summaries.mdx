@@ -1,0 +1,282 @@
+---
+title: Job Summaries
+sidebar_label: Job Summaries
+description: Rich Markdown job summaries for Terraform plan, apply, test, Kubernetes, Helm, and Helmfile operations
+id: job-summaries
+slug: /ci/job-summaries
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+When CI mode is enabled, Atmos writes rich Markdown summaries to `$GITHUB_STEP_SUMMARY` with
+resource badges, collapsible diffs, command output, and clear warnings about destructive changes.
+Kubernetes, Helm, and Helmfile components write compact summaries for their native operations.
+</Intro>
+
+<Experimental />
+
+## Plan Summary
+
+A plan summary includes resource counts as inline badges, destruction warnings, and a collapsible
+resource list:
+
+```markdown
+## Plan: `vpc` in `plat-ue2-dev`
+
+[![create](https://shields.io/badge/CREATE-3-success?style=for-the-badge)](#)
+[![change](https://shields.io/badge/CHANGE-1-warning?style=for-the-badge)](#)
+[![destroy](https://shields.io/badge/DESTROY-2-critical?style=for-the-badge)](#)
+
+> [!CAUTION]
+> **Terraform will delete resources!**
+
+<details>
+<summary>Plan: 3 to add, 1 to change, 2 to destroy</summary>
+
+### Create
+- `aws_vpc.main`
+- `aws_subnet.public[0]`
+- `aws_subnet.public[1]`
+
+### Change
+- `aws_security_group.web`
+
+### Destroy
+- `aws_security_group.deprecated`
+- `aws_route.legacy`
+
+</details>
+```
+
+## Multi-component Plan Summary
+
+When `atmos terraform plan` runs more than one component through the dependency graph in CI
+(`--all`, `--components`, or `--query`), Atmos writes one deterministic aggregate summary after all
+scheduler workers finish. This avoids concurrent writes to `$GITHUB_STEP_SUMMARY` while preserving
+per-component detail.
+
+The aggregate summary includes:
+
+- Total component counts grouped as changed, failed, no changes, and skipped
+- Total resource counts across successful, non-skipped components
+- Failed, changed, no-change, and skipped component groups
+- A per-component table with stack, component, status, summary, resource counts, and duration
+- Collapsible details for failed and changed components
+
+Skipped dependency-blocked components are shown separately from failed components. If any component
+fails, the aggregate CI exit code is `1`; otherwise it is `2` when any component changed and `0`
+when every component completed with no changes.
+
+## Apply Summary
+
+Apply summaries show the result of the apply operation, including resource counts and any
+terraform outputs that were produced.
+
+## Test Summary
+
+`atmos terraform test` emits a pass/fail summary for the Terraform test framework
+(`*.tftest.hcl`). The summary shows total / passed / failed / skipped badges, a per-run results
+table (✅ pass, ❌ fail, ⏭️ skip), and inlines the failing assertions. This pairs naturally with
+[emulators](/stacks/components/emulator): point `terraform test` at a local emulator and the
+apply-backed `run` blocks execute — and report — entirely in CI without a cloud account.
+
+## Kubernetes Summary
+
+Kubernetes summaries are intentionally smaller than Terraform summaries. They are designed for
+humans reading the CI run, not for downstream workflow conditionals.
+
+For Kubernetes commands, Atmos writes:
+
+- `render`: rendered object count and object list
+- `plan` / `diff`: created, changed, and no-change object counts, plus a collapsible
+  **Kubernetes Diff** block with the per-object unified diff (GitHub renders the `+`/`-` lines
+  in green/red)
+- `apply` / `deploy`: applied or delivered object counts
+- `delete`: deleted and not-found object counts
+- `validate`: valid and invalid object counts
+- failures: an error section with the command failure
+
+The `plan`/`diff` diff is computed from the server-side dry-run against live cluster state, with
+server-managed noise (`managedFields`, `resourceVersion`, `status`, …) stripped. `Secret`
+objects are **omitted** from the diff so their data is never written to the (unmasked) job
+summary; they still appear in the object list with their action. Large diffs are truncated to
+their tail to stay within the platform job-summary size limit.
+
+Kubernetes CI summaries do not emit `$GITHUB_OUTPUT` variables, commit statuses, PR comments, or
+stored artifacts in v1.
+
+## Helm Summaries
+
+Native Helm components write summaries for these operations when `ci.enabled: true` and CI mode is
+detected or forced with `--ci`/`ATMOS_CI`:
+
+| Command | Summary template |
+|---------|------------------|
+| `template`, `render` | `helm.template` |
+| `diff`, `plan` | `helm.diff` |
+| `apply`, `deploy` | `helm.apply` |
+| `delete`, `destroy` | `helm.delete` |
+
+Helm summaries are summaries-only. They do not write `$GITHUB_OUTPUT` values, commit statuses, PR
+comments, or artifacts. The summary includes component, stack, command status, a local reproduction
+command, and Helm metadata such as release name, namespace, chart, target, object counts, object
+kinds, and rendered manifest size when available.
+
+## Helmfile Summaries
+
+Helmfile components write summaries for these operations when `ci.enabled: true` and CI mode is
+detected or forced with `--ci`/`ATMOS_CI`:
+
+| Command | Summary template |
+|---------|------------------|
+| `template` | `helmfile.template` |
+| `diff` | `helmfile.diff` |
+| `apply`, `sync`, `deploy` | `helmfile.apply` |
+| `destroy` | `helmfile.destroy` |
+
+Helmfile summaries are summaries-only. The summary includes component, stack, command status, a
+local reproduction command, and captured masked stdout/stderr in a collapsible section.
+
+## Configuration
+
+<dl>
+  <dt>`ci.enabled`</dt>
+  <dd>
+    Master switch for all native-CI integration (summaries, outputs, checks). It must be
+    `true` for any of them to run — the per-feature toggles below have no effect on their own.
+
+    **Default:** `false`
+  </dd>
+
+  <dt>`ci.summary.enabled`</dt>
+  <dd>
+    Enable or disable job summaries (requires `ci.enabled: true`).
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`ci.summary.template`</dt>
+  <dd>
+    Override the default summary template with a custom template file path.
+  </dd>
+</dl>
+
+## Template Customization
+
+Override the default plan and apply summary templates with your own Markdown templates.
+Templates use Go template syntax with access to plan/apply context data.
+
+### Custom Template Configuration
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  templates:
+    base_path: ".atmos/ci/templates"
+    terraform:
+      plan: "plan.md"
+      apply: "apply.md"
+    helm:
+      template: "helm-template.md"
+      diff: "helm-diff.md"
+      apply: "helm-apply.md"
+      delete: "helm-delete.md"
+    helmfile:
+      template: "helmfile-template.md"
+      diff: "helmfile-diff.md"
+      apply: "helmfile-apply.md"
+      destroy: "helmfile-destroy.md"
+```
+</File>
+
+<dl>
+  <dt>`ci.templates.base_path`</dt>
+  <dd>
+    Directory containing custom template files, relative to the repository root.
+
+    **Default:** `.atmos/ci/templates`
+  </dd>
+
+  <dt>`ci.templates.terraform.plan`</dt>
+  <dd>
+    Filename of the custom plan summary template within the base path.
+
+    **Default:** `plan.md` (built-in)
+  </dd>
+
+  <dt>`ci.templates.terraform.apply`</dt>
+  <dd>
+    Filename of the custom apply summary template within the base path.
+
+    **Default:** `apply.md` (built-in)
+  </dd>
+
+  <dt>`ci.templates.helm.*`</dt>
+  <dd>
+    Filenames of custom native Helm summary templates for `template`, `diff`, `apply`, and `delete`.
+  </dd>
+
+  <dt>`ci.templates.helmfile.*`</dt>
+  <dd>
+    Filenames of custom Helmfile summary templates for `template`, `diff`, `apply`, and `destroy`.
+  </dd>
+</dl>
+
+### Template Context
+
+Templates receive a context object for the operation being summarized. The built-in templates are
+located under `pkg/ci/plugins/*/templates/` in the Atmos source.
+
+#### Plan Template Variables
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `.Component` | string | Component name |
+| `.Stack` | string | Stack name |
+| `.Command` | string | Terraform command (`plan`) |
+| `.HasChanges` | bool | Whether the plan has changes |
+| `.Additions` | int | Number of resources to create |
+| `.Changes` | int | Number of resources to change |
+| `.Destructions` | int | Number of resources to destroy |
+| `.Imports` | int | Number of resources to import |
+| `.Summary` | string | One-line plan summary |
+| `.Resources` | object | Resource lists by action type |
+| `.Warnings` | []string | Terraform warning messages |
+
+#### Apply Template Variables
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `.Component` | string | Component name |
+| `.Stack` | string | Stack name |
+| `.Command` | string | Terraform command (`apply`) |
+| `.Success` | bool | Whether apply succeeded |
+| `.Summary` | string | One-line apply summary |
+| `.Resources` | object | Resource lists by action type |
+| `.Outputs` | map | Terraform outputs |
+| `.Warnings` | []string | Terraform warning messages |
+
+### Example Custom Template
+
+<File title=".atmos/ci/templates/plan.md">
+```markdown
+## {{ .Component }} / {{ .Stack }}
+
+{{ if .HasChanges }}
+**Changes detected:** {{ .Additions }} to add, {{ .Changes }} to change, {{ .Destructions }} to destroy
+
+{{ if gt .Destructions 0 }}
+> **Warning:** This plan destroys resources!
+{{ end }}
+{{ else }}
+No changes. Infrastructure is up-to-date.
+{{ end }}
+```
+</File>
+
+## Related
+
+- [Native CI Overview](/ci) - Feature overview
+- [CI Configuration](/cli/configuration/ci) - Full configuration reference

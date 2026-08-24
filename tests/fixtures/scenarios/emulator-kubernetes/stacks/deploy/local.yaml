@@ -1,0 +1,15 @@
+vars:
+  stage: local
+
+components:
+  emulator:
+    kubernetes:
+      driver: k3s
+      # Pin a non-standard host port for the Kubernetes API: the conventional 6443 may be
+      # taken by another local k3s. The container still serves the API on 6443. k3s runs
+      # privileged (a driver default); under a rootless runtime the manager swaps in the
+      # cgroup-nesting entrypoint automatically.
+      container:
+        ports:
+          - host: 16443
+            container: 6443

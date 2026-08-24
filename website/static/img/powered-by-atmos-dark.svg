@@ -1,0 +1,14 @@
+<svg width="194" height="48" viewBox="0 0 194 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Powered by atmos</title>
+  <desc id="desc">A dark Powered by atmos badge for light backgrounds.</desc>
+  <defs>
+    <linearGradient id="surface" x1="0" y1="0" x2="194" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#111820"/>
+      <stop offset="1" stop-color="#050914"/>
+    </linearGradient>
+  </defs>
+  <rect x="0.75" y="0.75" width="192.5" height="46.5" rx="12" fill="url(#surface)"/>
+  <rect x="0.75" y="0.75" width="192.5" height="46.5" rx="12" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="1.5"/>
+  <text x="22" y="29" fill="#b7c2cc" font-family="Inter, Arial, Helvetica, sans-serif" font-size="12.5" font-weight="600" letter-spacing="0.2">Powered by</text>
+  <text x="100" y="32" fill="#ffffff" font-family="Inter, Arial, Helvetica, sans-serif" font-size="26" font-weight="800" letter-spacing="0">atmos</text>
+</svg>

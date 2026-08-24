@@ -1,0 +1,43 @@
+.buttonGroup {
+  display: flex;
+  column-gap: 0.25rem;
+  position: absolute;
+  right: calc(var(--ifm-pre-padding) / 2);
+  top: calc(var(--ifm-pre-padding) / 2);
+}
+
+.buttonGroup button {
+  display: flex;
+  align-items: center;
+  background: var(--atmos-code-button-bg, var(--prism-background-color));
+  color: var(--atmos-code-button-color, var(--prism-color));
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.4rem;
+  line-height: 0;
+  transition: opacity var(--ifm-transition-fast) ease-in-out, border-color 120ms ease, background 120ms ease, color 120ms ease;
+  opacity: 0;
+}
+
+.buttonGroup button:focus-visible,
+.buttonGroup button:hover {
+  background: var(--ifm-color-emphasis-100);
+  opacity: 1 !important;
+}
+
+:global(html[data-theme='dark']) .buttonGroup button:focus-visible,
+:global(html[data-theme='dark']) .buttonGroup button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+:global(.theme-code-block:hover) .buttonGroup button {
+  opacity: 0.45;
+}
+
+/* Touch/coarse-pointer devices have no hover state, so reveal the actions
+   persistently instead of leaving them at opacity:0 and undiscoverable. */
+@media (hover: none), (pointer: coarse) {
+  .buttonGroup button {
+    opacity: 0.45;
+  }
+}

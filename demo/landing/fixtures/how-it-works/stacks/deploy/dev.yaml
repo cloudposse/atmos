@@ -1,0 +1,38 @@
+import:
+  - catalog/app/defaults
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    app:
+      vars:
+        stage: dev
+      settings:
+        # Dev-specific identity and secret store — not shared with prod.
+        identity: local-dev
+        secrets:
+          DB_PASSWORD:
+            store: app-secrets
+            description: Database password injected only at runtime.
+  # Same stack, four workload types — Atmos ships them all.
+  helmfile:
+    ingress:
+      vars:
+        stage: dev
+  packer:
+    ami:
+      settings:
+        packer:
+          template: main.pkr.hcl
+      vars:
+        stage: dev
+  ansible:
+    web:
+      settings:
+        ansible:
+          playbook: site.yml
+          inventory: inventory.ini
+      vars:
+        stage: dev

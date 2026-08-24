@@ -17,14 +17,15 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Check for vhs label
         id: labeled
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          labels=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels | jq -r '.[].name')
+          labels=$(jq -r '.pull_request.labels[]?.name' "$GITHUB_EVENT_PATH")
           if [[ $labels =~ "vhs" ]]; then
             echo "labeled=true" >> $GITHUB_OUTPUT
           else
@@ -34,19 +35,28 @@ jobs:
       - name: Get modified .tape files
         id: tapes
         env:
-          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          IS_LABELED: ${{ steps.labeled.outputs.labeled }}
         run: |
-          if [[ "${{ steps.labeled.outputs.labeled }}" == "true" ]]; then
-            echo "files=$(find . -path './build-harness' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)" >> $GITHUB_OUTPUT
+          # Landing-page tapes (demo/landing/**) are rendered by landing-demos.yaml,
+          # not here — exclude them so they never enter this matrix.
+          if [[ "$IS_LABELED" == "true" ]]; then
+            files=$(find . -path './build-harness' -prune -o -path './demo/landing' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)
           else
-            files=$(gh pr diff --name-only ${{ github.event.pull_request.number }} | (grep '\.tape$' | grep -v '(style|defaults)\.tape$' || true) | cut -d/ -f2-)
-            echo "files=$files" >> $GITHUB_OUTPUT
+            files=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep '\.tape$' | grep -vE '(^|/)(style|defaults)\.tape$' | grep -v '^demo/landing/' | cut -d/ -f2- || true)
           fi
+          # A multi-line value is invalid for $GITHUB_OUTPUT and would break the matrix
+          # split; collapse to a single space-separated line.
+          files=$(printf '%s' "$files" | tr '\n' ' ' | sed -E 's/ +/ /g; s/^ //; s/ $//')
+          echo "files=$files" >> "$GITHUB_OUTPUT"
 
       - name: Set up matrix
         id: create-matrix
+        env:
+          TAPE_FILES: ${{ steps.tapes.outputs.files }}
         run: |
-          echo "matrix=$(echo -n ${{ steps.tapes.outputs.files }} | jq -R -s -c 'split(" ")')" >> $GITHUB_OUTPUT
+          echo "matrix=$(echo -n "$TAPE_FILES" | jq -R -s -c 'split(" ")')" >> $GITHUB_OUTPUT
 
     outputs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}
@@ -63,23 +73,25 @@ jobs:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ matrix.file }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       - name: Install atmos
-        uses: jaxxstorm/action-install-gh-release@v1.14.0
+        uses: jaxxstorm/action-install-gh-release@cd6b2b78ad38bdd294341cda064ec0692b06215b # v1.14.0
         with: # Grab the latest version
           repo: cloudposse/atmos
           chmod: 0755
           extension-matching: disable
           rename-to: atmos
 
-      - uses: charmbracelet/vhs-action@v1
+      - uses: charmbracelet/vhs-action@5bc47255c016b6af28ad6b633ee9a07b79468804 # v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: ${{ matrix.file }}
           install-fonts: true
 
-      - uses: stefanzweifel/git-auto-commit-action@v4
+      - uses: stefanzweifel/git-auto-commit-action@3ea6ae190baf489ba007f7c92608f33ce20ef04a # v4
         id: auto-commit
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -92,9 +104,12 @@ jobs:
 
       - name: Add Image to Job Summary
         if: steps.auto-commit.outputs.changes_detected == 'true'
+        env:
+          GH_REPO: ${{ github.repository }}
+          COMMIT_HASH: ${{ steps.auto-commit.outputs.commit_hash }}
         run: |
           echo "## Demo GIF" >> $GITHUB_STEP_SUMMARY
-          echo "![Demo GIF](https://github.com/${{ github.repository }}/blob/${{ steps.auto-commit.outputs.commit_hash }}/docs/demo.gif?raw=true)" >> $GITHUB_STEP_SUMMARY
+          echo "![Demo GIF](https://github.com/${GH_REPO}/blob/${COMMIT_HASH}/docs/demo.gif?raw=true)" >> $GITHUB_STEP_SUMMARY
 
       - name: No changes
         if: steps.auto-commit.outputs.changes_detected == 'false'

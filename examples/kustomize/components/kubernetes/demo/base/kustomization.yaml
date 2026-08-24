@@ -1,0 +1,8 @@
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: atmos

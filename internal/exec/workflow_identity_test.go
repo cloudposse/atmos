@@ -8,6 +8,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tests "github.com/cloudposse/atmos/tests"
 )
 
 func TestWorkflowWithIdentity_ShellCommand(t *testing.T) {
@@ -137,6 +138,7 @@ func TestWorkflowWithIdentity_AtmosCommand(t *testing.T) {
 	if testing.Short() {
 		t.Skipf("Skipping integration test in short mode: spawns actual atmos subprocess")
 	}
+	tests.RequireExecutable(t, "atmos", "executing atmos workflow steps")
 
 	// Set up test fixture with auth configuration.
 	testDir := "../../tests/fixtures/scenarios/atmos-auth-mock"

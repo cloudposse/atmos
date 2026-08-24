@@ -503,14 +503,24 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 					return nil
 				},
 			}
-			// Register flag with shorthand (NO NoOptDefVal - we handle empty values manually).
+			// Register flag with shorthand (NO NoOptDefVal on the pflag itself - the
+			// empty-value("--identity=") resolution is driven generically by the
+			// registry's NoOptDefVal metadata, matched below).
 			cmd.Flags().StringP("identity", "i", "", "Identity selector")
 
 			// Create viper instance.
 			v := viper.New()
 
-			// Create empty registry for tests (no NoOptDefVal preprocessing needed in these tests).
+			// Register the identity flag in the registry with its NoOptDefVal so
+			// resolveNoOptDefValForEmptyFlags (which derives eligible flags generically
+			// from the registry, not a hard-coded name) knows to treat an explicit
+			// empty value ("--identity=") as the interactive-selection sentinel.
 			registry := NewFlagRegistry()
+			registry.Register(&StringFlag{
+				Name:        "identity",
+				Shorthand:   "i",
+				NoOptDefVal: "__SELECT__",
+			})
 
 			// Create parser with compatibility flags.
 			translator := compat.NewCompatibilityFlagTranslator(tt.compatibilityAlias)
@@ -528,6 +538,120 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 
 			// Verify positional args.
 			assert.Equal(t, tt.expectedPositional, result.PositionalArgs)
+		})
+	}
+}
+
+// TestFlagParser_ResolveNoOptDefValForEmptyFlags_NilRegistry verifies that Parse doesn't panic
+// when the parser has a nil registry: resolveNoOptDefValForEmptyFlags must bail out early via its
+// `p.registry == nil` guard rather than dereferencing a nil registry when deriving the set of
+// NoOptDefVal-eligible flags.
+func TestFlagParser_ResolveNoOptDefValForEmptyFlags_NilRegistry(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack name")
+
+	v := viper.New()
+	translator := compat.NewCompatibilityFlagTranslator(nil)
+	parser := NewAtmosFlagParser(cmd, v, translator, nil)
+
+	var err error
+	assert.NotPanics(t, func() {
+		_, err = parser.Parse([]string{"--stack", "dev"})
+	}, "Parse must not panic with a nil registry")
+
+	require.NoError(t, err)
+	assert.Equal(t, "dev", v.GetString("stack"), "flag parsing itself must still work without a registry")
+}
+
+// TestFlagParser_Reset verifies that Reset clears registered command flag state
+// so parsers can be reused cleanly between test runs.
+func TestFlagParser_Reset(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack name")
+
+	v := viper.New()
+	translator := compat.NewCompatibilityFlagTranslator(nil)
+	registry := NewFlagRegistry()
+	parser := NewAtmosFlagParser(cmd, v, translator, registry)
+
+	// Parse once to populate flags.
+	_, err := parser.Parse([]string{"--stack", "dev"})
+	require.NoError(t, err)
+	assert.Equal(t, "dev", v.GetString("stack"))
+
+	// Verify the flag is marked as Changed after the first parse.
+	flag := cmd.Flags().Lookup("stack")
+	require.NotNil(t, flag)
+	assert.True(t, flag.Changed, "flag should be Changed after first parse")
+	assert.Equal(t, "dev", flag.Value.String())
+
+	// Reset should not panic and must clear the Changed state and restore defaults.
+	assert.NotPanics(t, func() {
+		parser.Reset()
+	})
+
+	// After Reset, the flag's Changed state must be cleared and value back to default.
+	assert.False(t, flag.Changed, "flag Changed state must be false after Reset")
+	assert.Equal(t, "", flag.Value.String(), "flag value must be reset to default after Reset")
+	// Resetting the pflag clears the viper value bound via BindPFlags.
+	assert.Equal(t, "", v.GetString("stack"), "viper value must also be cleared after Reset")
+
+	// A second parse with no flags should not see the value from the first parse.
+	result, err := parser.Parse([]string{})
+	require.NoError(t, err)
+	assert.Equal(t, "", GetString(result.Flags, "stack"), "second parse must not inherit value from first parse")
+}
+
+// TestParsedConfig_GetArgsForTool verifies that GetArgsForTool combines positional
+// and separated args into the expected subprocess argument array.
+func TestParsedConfig_GetArgsForTool(t *testing.T) {
+	tests := []struct {
+		name           string
+		positionalArgs []string
+		separatedArgs  []string
+		want           []string
+	}{
+		{
+			name:           "positional only",
+			positionalArgs: []string{"plan", "vpc"},
+			separatedArgs:  []string{},
+			want:           []string{"plan", "vpc"},
+		},
+		{
+			name:           "separated only",
+			positionalArgs: []string{},
+			separatedArgs:  []string{"-var", "region=us-east-1"},
+			want:           []string{"-var", "region=us-east-1"},
+		},
+		{
+			name:           "both positional and separated",
+			positionalArgs: []string{"plan", "vpc"},
+			separatedArgs:  []string{"-var", "region=us-east-1", "-var-file", "prod.tfvars"},
+			want:           []string{"plan", "vpc", "-var", "region=us-east-1", "-var-file", "prod.tfvars"},
+		},
+		{
+			name:           "empty both",
+			positionalArgs: []string{},
+			separatedArgs:  []string{},
+			want:           []string{},
+		},
+		{
+			name:           "nil slices treated as empty",
+			positionalArgs: nil,
+			separatedArgs:  nil,
+			want:           []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pc := &ParsedConfig{
+				PositionalArgs: tt.positionalArgs,
+				SeparatedArgs:  tt.separatedArgs,
+			}
+
+			got := pc.GetArgsForTool()
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

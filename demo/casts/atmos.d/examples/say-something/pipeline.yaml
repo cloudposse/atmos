@@ -1,0 +1,61 @@
+commands:
+  - name: casts generate examples say-something pipeline
+    description: Regenerate the Say Something example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: pipeline
+        working_directory: "../../.context/cast-fixtures/say-something"
+        title: "Say Something: visible workflow announcements"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/say-something/pipeline.cast"
+        steps:
+          - type: simulate
+            text: "# say steps can also print announcements in logs"
+          - type: simulate
+            text: &pipeline_cmd atmos workflow pipeline -f say
+          - type: shell
+            name: pipeline
+            duration: 450ms
+            interval: 750ms
+            command: *pipeline_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples say-something pipeline
+  - name: casts validate examples say-something pipeline
+    description: Validate the Say Something example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/say-something/pipeline.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "atmos workflow pipeline -f say",
+              "Starting the build",
+              "Build finished successfully",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"say-something cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "[pipeline]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"say-something cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

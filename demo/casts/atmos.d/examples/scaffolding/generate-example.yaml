@@ -1,0 +1,183 @@
+commands:
+  - name: casts generate examples scaffolding generate-example
+    description: Regenerate the Scaffolding example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-generated-projects
+        working_directory: "../../.context/cast-fixtures/scaffolding"
+        output: none
+        command: rm -rf ../my-quick-app ../my-project
+      - type: cast
+        name: generate-example
+        working_directory: "../../.context/cast-fixtures/scaffolding"
+        title: "atmos scaffold: generate from a template"
+        mode: session
+        shell: /bin/sh
+        write_rate: 25ms
+        key_interval: 250ms
+        timeout: 60s
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+        env:
+          NO_COLOR: ''
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+          ATMOS_EXPERIMENTAL: silence
+          ATMOS_LOGS_LEVEL: Warning
+          PS1: '$ '
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/scaffolding/generate-example.cast"
+        steps:
+          - type: pause
+            duration: 500ms
+          - type: write
+            text: "# atmos.yaml-registered scaffold templates show up in the catalog"
+          - type: key
+            key: enter
+          - type: write
+            text: "atmos scaffold list"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Available Scaffold Templates"
+            timeout: 10s
+          - type: pause
+            duration: 500ms
+          - type: write
+            text: "# generate a new project from the template, overriding one prompt"
+          - type: key
+            key: enter
+          - type: write
+            text: "atmos scaffold generate example ../my-quick-app --set project_name=my-app --defaults"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Generated 3 files."
+            timeout: 10s
+          - type: pause
+            duration: 500ms
+          - type: write
+            text: "# or run it interactively and answer the prompts"
+          - type: key
+            key: enter
+          - type: write
+            text: "atmos scaffold generate example ../my-project"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Project name"
+            timeout: 10s
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: enter
+          - type: wait
+            text: "Terraform version"
+            timeout: 10s
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: enter
+          - type: wait
+            text: "Default AWS region"
+            timeout: 10s
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: down
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: enter
+          - type: wait
+            text: "Enable component vendoring"
+            timeout: 10s
+          - type: pause
+            duration: 350ms
+          - type: write
+            text: "y"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Vendor component version"
+            timeout: 10s
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: enter
+          - type: wait
+            text: "Generated"
+            timeout: 10s
+      - type: script
+        name: sanitize
+        interpreter: python3
+        script: |
+          import json
+          import os
+          from pathlib import Path
+
+          cast = Path("../../website/static/casts/examples/scaffolding/generate-example.cast")
+          repo_root = Path("../..").resolve()
+          roots = {str(repo_root), os.path.realpath(str(repo_root))}
+          roots.update("/private" + root for root in list(roots) if not root.startswith("/private"))
+
+          lines = cast.read_text().splitlines()
+          rewritten = [lines[0]]
+          for line in lines[1:]:
+              event = json.loads(line)
+              if event[1] in ("o", "e"):
+                  for root in sorted(roots, key=len, reverse=True):
+                      event[2] = event[2].replace(root, "/absolute/path/to/repo")
+              rewritten.append(json.dumps(event, separators=(",", ":")))
+          cast.write_text("\n".join(rewritten) + "\n")
+      - type: shell
+        name: validate
+        command: atmos casts validate examples scaffolding generate-example
+  - name: casts validate examples scaffolding generate-example
+    description: Validate the Scaffolding example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/scaffolding/generate-example.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          assert_colored(text, "README.md")
+          for needle in [
+              "# atmos.yaml-registered scaffold templates show up in the catalog",
+              "Available Scaffold Templates",
+              "example",
+              "# generate a new project from the template",
+              "Generating example in",
+              "Generated 3 files.",
+              "# or run it interactively and answer the prompts",
+              "Project name",
+              "Terraform version",
+              "Default AWS region",
+              "Enable component vendoring",
+              "Vendor component version",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"scaffolding generate-example cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
+              if bad in plain:
+                  raise SystemExit(f"scaffolding generate-example cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

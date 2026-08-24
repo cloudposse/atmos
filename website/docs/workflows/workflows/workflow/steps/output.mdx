@@ -1,0 +1,27 @@
+---
+title: output
+sidebar_label: output
+sidebar_position: 7
+slug: /workflows/steps/output
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The step-level `output` field overrides the workflow-level [output](/workflows/output) mode for a single step.
+</Intro>
+
+```yaml
+workflows:
+  verbose-deploy:
+    output: log
+    steps:
+      - name: plan
+        type: atmos
+        command: terraform plan vpc
+        output: viewport
+```
+
+Supported values are `raw`, `log`, `viewport`, and `none`. See workflow-level [output](/workflows/output) for the value definitions.
+
+Terminal-handoff steps such as `tty`, `interactive`, and `exec` own the terminal while they run, so normal output capture modes do not apply in the same way.

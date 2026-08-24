@@ -1,0 +1,17 @@
+**/.terraform/**
+**/.terraform.tfstate/**
+**/.terraform.tfstate.backup/**
+**/*.tfvars.json
+**/*.planfile
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/terraform.tfstate.d/**
+
+# Provider override files are generated at runtime by the emulator identity's
+# provider-config contributor (it injects the live emulator endpoint + dummy creds).
+**/*.tf.json
+
+# Keep the pinned provider lock tracked so recordings do not emit lock-file warnings.
+!components/terraform/bucket/.terraform.lock.hcl
+
+volume/**

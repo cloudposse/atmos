@@ -1,0 +1,40 @@
+---
+title: file
+sidebar_label: file
+slug: /workflows/steps/type/file
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `file` step type opens an interactive file picker, letting your custom commands and workflows prompt the user to choose a path instead of hard-coding it.
+</Intro>
+
+```yaml
+steps:
+  - name: manifest
+    type: file
+    prompt: Select manifest
+    path: stacks/workflows
+    extensions:
+      - .yaml
+      - .yml
+```
+
+## Fields
+
+<dl>
+  <dt>`prompt`</dt>
+  <dd>Required. Prompt text shown to the user.</dd>
+
+  <dt>`path`</dt>
+  <dd>Optional starting path.</dd>
+
+  <dt>`extensions`</dt>
+  <dd>Optional file extension filters.</dd>
+
+  <dt>`default`</dt>
+  <dd>Optional path returned in a non-TTY environment (e.g. CI) instead of prompting.</dd>
+</dl>
+
+Interactive steps require a TTY; in a non-TTY environment such as CI, the step uses its [`default`](/workflows/steps#interactive-steps-in-ci-non-tty) path if set and otherwise errors. Reference the selected path later with `{{ .steps.manifest.value }}`.

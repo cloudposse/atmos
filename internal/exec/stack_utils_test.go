@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -100,6 +101,92 @@ func TestBuildTerraformWorkspace(t *testing.T) {
 	}
 }
 
+// TestBuildTerraformWorkspace_IgnoreMissingTemplateValues verifies that the global
+// `templates.settings.ignore_missing_template_values` flag is honored when the stack
+// `name_template` is rendered to build the Terraform workspace.
+//
+// Regression test for #2345: the `ProcessTmpl` call site for the name template
+// hardcoded `ignoreMissingTemplateValues=false`, so a `name_template` that referenced
+// a missing key always errored even when the user set the global flag to `true`.
+func TestBuildTerraformWorkspace_IgnoreMissingTemplateValues(t *testing.T) {
+	// The template references `.vars.missing_key`, which is absent from the component section.
+	const nameTemplate = "{{ .vars.tenant }}-{{ .vars.missing_key }}"
+
+	newConfig := func(ignoreMissing bool) *schema.AtmosConfiguration {
+		return &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{WorkspacesEnabled: boolPtr(true)},
+			},
+			Stacks: schema.Stacks{NameTemplate: nameTemplate},
+			Templates: schema.Templates{
+				Settings: schema.TemplatesSettings{IgnoreMissingTemplateValues: ignoreMissing},
+			},
+		}
+	}
+
+	info := schema.ConfigAndStacksInfo{
+		ComponentBackendType: "s3",
+		Component:            "test-component",
+		Stack:                "dev/us-east-1",
+		ComponentSection: map[string]any{
+			"vars": map[string]any{"tenant": "acme"},
+		},
+	}
+
+	t.Run("flag disabled: missing template key errors", func(t *testing.T) {
+		_, err := BuildTerraformWorkspace(newConfig(false), info)
+		assert.Error(t, err, "with ignore_missing_template_values=false, a missing name_template key must error")
+	})
+
+	t.Run("flag enabled: missing template key tolerated", func(t *testing.T) {
+		workspace, err := BuildTerraformWorkspace(newConfig(true), info)
+		assert.NoError(t, err, "with ignore_missing_template_values=true, a missing name_template key must not error")
+		// `tenant` resolves; the missing key renders as `<no value>` (missingkey=default).
+		assert.Equal(t, "acme-<no value>", workspace, "tenant must resolve and the missing key must not abort rendering")
+	})
+}
+
+// TestBuildDependentStackNameFromDependsOnLegacy covers both resolution branches and the
+// unresolved path, which now returns a wrapped static error (errUtils.ErrInvalidDependsOn).
+func TestBuildDependentStackNameFromDependsOnLegacy(t *testing.T) {
+	allStacks := []string{"prod-ue1", "dev-ue1"}
+	componentsInStack := []string{"vpc", "eks"}
+
+	t.Run("resolves to a stack", func(t *testing.T) {
+		got, err := BuildDependentStackNameFromDependsOnLegacy("prod-ue1", allStacks, "dev-ue1", componentsInStack, "app")
+		assert.NoError(t, err)
+		assert.Equal(t, "prod-ue1", got)
+	})
+
+	t.Run("resolves to a component in the current stack", func(t *testing.T) {
+		got, err := BuildDependentStackNameFromDependsOnLegacy("vpc", allStacks, "dev-ue1", componentsInStack, "app")
+		assert.NoError(t, err)
+		assert.Equal(t, "dev-ue1-vpc", got)
+	})
+
+	t.Run("unresolved dependency returns ErrInvalidDependsOn", func(t *testing.T) {
+		_, err := BuildDependentStackNameFromDependsOnLegacy("nope", allStacks, "dev-ue1", componentsInStack, "app")
+		assert.ErrorIs(t, err, errUtils.ErrInvalidDependsOn)
+	})
+}
+
+// TestBuildDependentStackNameFromDependsOn covers the resolution and unresolved paths; the
+// unresolved path now returns a wrapped static error (errUtils.ErrInvalidSettingsDependsOn).
+func TestBuildDependentStackNameFromDependsOn(t *testing.T) {
+	allStacks := []string{"prod-ue1-vpc", "dev-ue1-eks"}
+
+	t.Run("resolves component in stack", func(t *testing.T) {
+		got, err := BuildDependentStackNameFromDependsOn("app", "dev-ue1", "vpc", "prod-ue1", allStacks)
+		assert.NoError(t, err)
+		assert.Equal(t, "prod-ue1-vpc", got)
+	})
+
+	t.Run("unresolved dependency returns ErrInvalidSettingsDependsOn", func(t *testing.T) {
+		_, err := BuildDependentStackNameFromDependsOn("app", "dev-ue1", "missing", "prod-ue1", allStacks)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidSettingsDependsOn)
+	})
+}
+
 func TestBuildComponentPath(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -182,6 +269,58 @@ func TestBuildComponentPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := BuildComponentPath(&tt.atmosConfig, &tt.componentSectionMap, tt.componentType)
 			assert.Equal(t, tt.expectedPath, result)
+		})
+	}
+}
+
+func TestBuildComponentPathWithFallback(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: string(filepath.Separator) + "base",
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "terraform",
+			},
+		},
+	}
+
+	tests := []struct {
+		name             string
+		componentSection map[string]any
+		fallback         []string
+		expected         string
+	}{
+		{
+			name: "uses fallback when component field is missing",
+			componentSection: map[string]any{
+				"source": map[string]any{"uri": "github.com/example/vpc"},
+				"vars":   map[string]any{"name": "test"},
+			},
+			fallback: []string{"vpc-sourced"},
+			expected: string(filepath.Separator) + filepath.Join("base", "terraform", "vpc-sourced"),
+		},
+		{
+			name: "explicit component field takes precedence over fallback",
+			componentSection: map[string]any{
+				"component": "vpc",
+				"vars":      map[string]any{"name": "test"},
+			},
+			fallback: []string{"vpc-production"},
+			expected: string(filepath.Separator) + filepath.Join("base", "terraform", "vpc"),
+		},
+		{
+			name: "returns empty when no component field and no fallback",
+			componentSection: map[string]any{
+				"vars": map[string]any{"name": "test"},
+			},
+			fallback: nil,
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := BuildComponentPath(&atmosConfig, &tt.componentSection, cfg.TerraformComponentType, tt.fallback...)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

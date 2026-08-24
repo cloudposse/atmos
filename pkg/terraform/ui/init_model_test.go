@@ -13,7 +13,7 @@ import (
 
 func TestNewInitModel(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("mycomponent", "mystack", "init", "", reader)
+	m := NewInitModel("mycomponent", "mystack", "init", reader)
 
 	assert.NotNil(t, m)
 	assert.Equal(t, "mycomponent", m.component)
@@ -28,7 +28,7 @@ func TestNewInitModel(t *testing.T) {
 
 func TestNewInitModel_WithWorkspace(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("mycomponent", "mystack", "workspace", "dev", reader)
+	m := NewInitModel("mycomponent", "mystack", "workspace", reader, WithWorkspace("dev"))
 
 	assert.Equal(t, "workspace", m.subCommand)
 	assert.Equal(t, "dev", m.workspace)
@@ -37,7 +37,7 @@ func TestNewInitModel_WithWorkspace(t *testing.T) {
 func TestNewInitModel_WithClock(t *testing.T) {
 	reader := strings.NewReader("")
 	clock := newTestClock()
-	m := NewInitModel("comp", "stack", "init", "", reader, WithInitClock(clock))
+	m := NewInitModel("comp", "stack", "init", reader, WithInitClock(clock))
 
 	assert.Equal(t, clock, m.clock)
 	assert.Equal(t, clock.Now(), m.startTime)
@@ -55,7 +55,7 @@ func TestInitModel_Update_KeyMsg_Quit(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reader := strings.NewReader("")
-			m := NewInitModel("comp", "stack", "init", "", reader)
+			m := NewInitModel("comp", "stack", "init", reader)
 
 			updated, cmd := m.Update(tt.key)
 			_ = updated.(InitModel)
@@ -67,7 +67,7 @@ func TestInitModel_Update_KeyMsg_Quit(t *testing.T) {
 
 func TestInitModel_Update_SpinnerTickMsg(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("comp", "stack", "init", "", reader)
+	m := NewInitModel("comp", "stack", "init", reader)
 
 	updated, cmd := m.Update(spinner.TickMsg{})
 	_ = updated.(InitModel)
@@ -77,7 +77,7 @@ func TestInitModel_Update_SpinnerTickMsg(t *testing.T) {
 
 func TestInitModel_Update_InitLineMsg_Initializing(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("comp", "stack", "init", "", reader)
+	m := NewInitModel("comp", "stack", "init", reader)
 
 	updated, cmd := m.Update(initLineMsg{line: "Initializing the backend..."})
 	model := updated.(InitModel)
@@ -89,7 +89,7 @@ func TestInitModel_Update_InitLineMsg_Initializing(t *testing.T) {
 
 func TestInitModel_Update_InitLineMsg_Provider(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("comp", "stack", "init", "", reader)
+	m := NewInitModel("comp", "stack", "init", reader)
 
 	updated, cmd := m.Update(initLineMsg{line: "- Installing hashicorp/aws v5.0.0..."})
 	model := updated.(InitModel)
@@ -101,7 +101,7 @@ func TestInitModel_Update_InitLineMsg_Provider(t *testing.T) {
 
 func TestInitModel_Update_InitLineMsg_Module(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("comp", "stack", "init", "", reader)
+	m := NewInitModel("comp", "stack", "init", reader)
 
 	updated, cmd := m.Update(initLineMsg{line: "* module.vpc in .terraform/modules"})
 	model := updated.(InitModel)
@@ -113,7 +113,7 @@ func TestInitModel_Update_InitLineMsg_Module(t *testing.T) {
 
 func TestInitModel_Update_InitLineMsg_Success(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("comp", "stack", "init", "", reader)
+	m := NewInitModel("comp", "stack", "init", reader)
 
 	updated, _ := m.Update(initLineMsg{line: "Terraform has been successfully initialized!"})
 	model := updated.(InitModel)
@@ -123,7 +123,7 @@ func TestInitModel_Update_InitLineMsg_Success(t *testing.T) {
 
 func TestInitModel_Update_InitLineMsg_MaxLines(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("comp", "stack", "init", "", reader)
+	m := NewInitModel("comp", "stack", "init", reader)
 
 	// Add more than initMaxLines (6) lines.
 	var model InitModel
@@ -141,7 +141,7 @@ func TestInitModel_Update_InitLineMsg_MaxLines(t *testing.T) {
 
 func TestInitModel_Update_InitLineMsg_EmptyLine(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("comp", "stack", "init", "", reader)
+	m := NewInitModel("comp", "stack", "init", reader)
 
 	updated, cmd := m.Update(initLineMsg{line: ""})
 	model := updated.(InitModel)
@@ -153,7 +153,7 @@ func TestInitModel_Update_InitLineMsg_EmptyLine(t *testing.T) {
 
 func TestInitModel_Update_InitLineMsg_PlainText(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("comp", "stack", "init", "", reader)
+	m := NewInitModel("comp", "stack", "init", reader)
 
 	updated, cmd := m.Update(initLineMsg{line: "Some random text that doesn't match patterns"})
 	model := updated.(InitModel)
@@ -166,7 +166,7 @@ func TestInitModel_Update_InitLineMsg_PlainText(t *testing.T) {
 
 func TestInitModel_Update_InitDoneMsg_Success(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("comp", "stack", "init", "", reader)
+	m := NewInitModel("comp", "stack", "init", reader)
 
 	updated, cmd := m.Update(initDoneMsg{exitCode: 0, err: nil})
 	model := updated.(InitModel)
@@ -179,7 +179,7 @@ func TestInitModel_Update_InitDoneMsg_Success(t *testing.T) {
 
 func TestInitModel_Update_InitDoneMsg_Error(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("comp", "stack", "init", "", reader)
+	m := NewInitModel("comp", "stack", "init", reader)
 
 	updated, cmd := m.Update(initDoneMsg{exitCode: 1, err: assert.AnError})
 	model := updated.(InitModel)
@@ -193,7 +193,7 @@ func TestInitModel_Update_InitDoneMsg_Error(t *testing.T) {
 func TestInitModel_View_InProgress(t *testing.T) {
 	clock := newTestClock()
 	reader := strings.NewReader("")
-	m := NewInitModel("myapp", "dev", "init", "", reader, WithInitClock(clock))
+	m := NewInitModel("myapp", "dev", "init", reader, WithInitClock(clock))
 
 	clock.advance(3 * time.Second)
 
@@ -208,7 +208,7 @@ func TestInitModel_View_InProgress(t *testing.T) {
 func TestInitModel_View_InProgress_WithCurrentOp(t *testing.T) {
 	clock := newTestClock()
 	reader := strings.NewReader("")
-	m := NewInitModel("myapp", "dev", "init", "", reader, WithInitClock(clock))
+	m := NewInitModel("myapp", "dev", "init", reader, WithInitClock(clock))
 	m.currentOp = "Initializing the backend..."
 
 	view := m.View()
@@ -219,7 +219,7 @@ func TestInitModel_View_InProgress_WithCurrentOp(t *testing.T) {
 func TestInitModel_View_InProgress_WithLines(t *testing.T) {
 	clock := newTestClock()
 	reader := strings.NewReader("")
-	m := NewInitModel("myapp", "dev", "init", "", reader, WithInitClock(clock))
+	m := NewInitModel("myapp", "dev", "init", reader, WithInitClock(clock))
 	m.lines = []string{"- Installing hashicorp/aws v5.0.0..."}
 
 	view := m.View()
@@ -230,7 +230,7 @@ func TestInitModel_View_InProgress_WithLines(t *testing.T) {
 func TestInitModel_View_Done_Success(t *testing.T) {
 	clock := newTestClock()
 	reader := strings.NewReader("")
-	m := NewInitModel("myapp", "dev", "init", "", reader, WithInitClock(clock))
+	m := NewInitModel("myapp", "dev", "init", reader, WithInitClock(clock))
 	m.done = true
 
 	clock.advance(5 * time.Second)
@@ -246,7 +246,7 @@ func TestInitModel_View_Done_Success(t *testing.T) {
 func TestInitModel_View_Done_Error(t *testing.T) {
 	clock := newTestClock()
 	reader := strings.NewReader("")
-	m := NewInitModel("myapp", "dev", "init", "", reader, WithInitClock(clock))
+	m := NewInitModel("myapp", "dev", "init", reader, WithInitClock(clock))
 	m.done = true
 	m.exitCode = 1
 	m.err = assert.AnError
@@ -263,7 +263,7 @@ func TestInitModel_View_Done_Error(t *testing.T) {
 func TestInitModel_View_Done_Workspace(t *testing.T) {
 	clock := newTestClock()
 	reader := strings.NewReader("")
-	m := NewInitModel("myapp", "dev", "workspace", "staging", reader, WithInitClock(clock))
+	m := NewInitModel("myapp", "dev", "workspace", reader, WithInitClock(clock), WithWorkspace("staging"))
 	m.done = true
 
 	clock.advance(1 * time.Second)
@@ -295,7 +295,7 @@ func TestInitModel_FormatAction(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			reader := strings.NewReader("")
-			m := NewInitModel("comp", "stack", tt.subCommand, tt.workspace, reader)
+			m := NewInitModel("comp", "stack", tt.subCommand, reader, WithWorkspace(tt.workspace))
 			result := m.formatAction()
 			assert.Equal(t, tt.expected, result)
 		})
@@ -304,7 +304,7 @@ func TestInitModel_FormatAction(t *testing.T) {
 
 func TestInitModel_GetError(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("comp", "stack", "init", "", reader)
+	m := NewInitModel("comp", "stack", "init", reader)
 	m.err = assert.AnError
 
 	assert.Equal(t, assert.AnError, m.GetError())
@@ -312,7 +312,7 @@ func TestInitModel_GetError(t *testing.T) {
 
 func TestInitModel_GetExitCode(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("comp", "stack", "init", "", reader)
+	m := NewInitModel("comp", "stack", "init", reader)
 	m.exitCode = 42
 
 	assert.Equal(t, 42, m.GetExitCode())
@@ -320,7 +320,7 @@ func TestInitModel_GetExitCode(t *testing.T) {
 
 func TestInitModel_Init(t *testing.T) {
 	reader := strings.NewReader("Initializing...\n")
-	m := NewInitModel("comp", "stack", "init", "", reader)
+	m := NewInitModel("comp", "stack", "init", reader)
 
 	cmd := m.Init()
 
@@ -330,7 +330,7 @@ func TestInitModel_Init(t *testing.T) {
 
 func TestInitModel_Update_LineWithANSI(t *testing.T) {
 	reader := strings.NewReader("")
-	m := NewInitModel("comp", "stack", "init", "", reader)
+	m := NewInitModel("comp", "stack", "init", reader)
 
 	// Line with ANSI codes should be stripped.
 	updated, _ := m.Update(initLineMsg{line: "\x1b[32m- Installing hashicorp/aws\x1b[0m"})

@@ -1,0 +1,69 @@
+---
+title: atmos version track status
+sidebar_position: 90
+sidebar_label: status
+sidebar_class_name: command
+description: Show lock and update status for a version track.
+---
+
+Show policy-aware lock and update status for each entry in a track.
+
+## Status Values
+
+<dl>
+  <dt>`current`</dt>
+  <dd>The locked version matches the policy-eligible target.</dd>
+
+  <dt>`update-available`</dt>
+  <dd>A policy-eligible update differs from the locked version. `update` would take it.</dd>
+
+  <dt>`newer-available (blocked)`</dt>
+  <dd>A newer version exists upstream, but policy holds it back. The entry still passes `verify`.</dd>
+
+  <dt>`unlocked`</dt>
+  <dd>The entry has no lock file record.</dd>
+
+  <dt>`locked`</dt>
+  <dd>The entry is locked, but its target could not be resolved.</dd>
+</dl>
+
+## Usage
+
+```shell
+atmos version track status [track] [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--group`</dt>
+  <dd>Limit status to entries in the named version group.</dd>
+
+  <dt>`--format string`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+</dl>
+
+## Examples
+
+```shell
+# Show status for prod
+atmos version track status prod
+
+# Show infrastructure group status as JSON
+atmos version track status prod --group=infrastructure --format=json
+```
+
+## Example Output
+
+In an interactive terminal, `--format=table` (the default) renders a styled table.
+Use `--format=csv` or `--format=tsv` for delimited output; piped table output remains a table.
+
+```shell
+> atmos version track status prod --format=csv
+Track,Name,Group,Desired,Locked,Resolved,Status,Message
+prod,checkout,infrastructure,v6,v6.1.0,v6.2.0,update-available,
+prod,nginx,infrastructure,1.x,1.29.0,1.30.0,newer-available (blocked),"1.30.0 released 3d ago; cooldown 14d has not elapsed"
+```
+
+Use `--format=yaml` or `--format=json` for the full-fidelity result, including fields the table
+omits (e.g. ecosystem, datasource, package).

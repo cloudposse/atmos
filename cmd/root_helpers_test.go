@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -13,56 +16,21 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui"
+	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
-
-// TestGetInvalidCommandName tests extraction of command names from error messages.
-func TestGetInvalidCommandName(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "standard error format",
-			input:    `unknown command "foobar" for "atmos"`,
-			expected: "foobar",
-		},
-		{
-			name:     "command with hyphens",
-			input:    `unknown command "my-custom-cmd" for "atmos"`,
-			expected: "my-custom-cmd",
-		},
-		{
-			name:     "empty quotes",
-			input:    `unknown command "" for "atmos"`,
-			expected: "",
-		},
-		{
-			name:     "no match",
-			input:    "some other error message",
-			expected: "",
-		},
-		{
-			name:     "multiple quoted strings (should extract first)",
-			input:    `unknown command "first" and "second"`,
-			expected: "first",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getInvalidCommandName(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
 
 // TestCleanupLogFile tests log file cleanup functionality.
 func TestCleanupLogFile(t *testing.T) {
@@ -320,6 +288,46 @@ func TestApplyProfilerEnvironmentOverrides(t *testing.T) {
 				Enabled:     true,
 			},
 		},
+		{
+			name: "profile type override is parsed",
+			atmosConfig: schema.AtmosConfiguration{
+				Profiler: profiler.Config{
+					ProfileType: profiler.ProfileTypeHeap,
+				},
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Host:        profiler.DefaultConfig().Host,
+				Port:        profiler.DefaultConfig().Port,
+				ProfileType: profiler.ProfileTypeHeap,
+				Enabled:     false,
+			},
+		},
+		{
+			name: "enabled override is applied",
+			atmosConfig: schema.AtmosConfiguration{
+				Profiler: profiler.Config{
+					Enabled: true,
+				},
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Host:        profiler.DefaultConfig().Host,
+				Port:        profiler.DefaultConfig().Port,
+				ProfileType: profiler.DefaultConfig().ProfileType,
+				Enabled:     true,
+			},
+		},
+		{
+			name: "invalid profile type returns parse error",
+			atmosConfig: schema.AtmosConfiguration{
+				Profiler: profiler.Config{
+					ProfileType: "invalid",
+				},
+			},
+			initial:     profiler.DefaultConfig(),
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -329,11 +337,13 @@ func TestApplyProfilerEnvironmentOverrides(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrParseFlag)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected.Host, config.Host)
 				assert.Equal(t, tt.expected.Port, config.Port)
 				assert.Equal(t, tt.expected.Enabled, config.Enabled)
+				assert.Equal(t, tt.expected.ProfileType, config.ProfileType)
 				if tt.expected.File != "" {
 					assert.Equal(t, tt.expected.File, config.File)
 				}
@@ -380,6 +390,58 @@ func TestApplyCLIFlagOverrides(t *testing.T) {
 			},
 		},
 		{
+			name: "override host flag",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("profiler-host", "", "")
+				cmd.Flags().Set("profiler-host", "127.0.0.1")
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Enabled:     false,
+				Host:        "127.0.0.1",
+				Port:        profiler.DefaultConfig().Port,
+				ProfileType: profiler.DefaultConfig().ProfileType,
+			},
+		},
+		{
+			name: "profile file flag enables file profiler",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("profile-file", "", "")
+				cmd.Flags().Set("profile-file", filepath.Join(os.TempDir(), "heap.prof"))
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Enabled:     true,
+				Host:        profiler.DefaultConfig().Host,
+				Port:        profiler.DefaultConfig().Port,
+				File:        filepath.Join(os.TempDir(), "heap.prof"),
+				ProfileType: profiler.DefaultConfig().ProfileType,
+			},
+		},
+		{
+			name: "profile type flag overrides type",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("profile-type", "", "")
+				cmd.Flags().Set("profile-type", "goroutine")
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Enabled:     false,
+				Host:        profiler.DefaultConfig().Host,
+				Port:        profiler.DefaultConfig().Port,
+				ProfileType: profiler.ProfileTypeGoroutine,
+			},
+		},
+		{
+			name: "invalid profile type flag returns parse error",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("profile-type", "", "")
+				cmd.Flags().Set("profile-type", "invalid")
+			},
+			initial:     profiler.DefaultConfig(),
+			expectError: true,
+		},
+		{
 			name: "no flags changed",
 			setupCmd: func(cmd *cobra.Command) {
 				cmd.Flags().Bool("profiler-enabled", false, "")
@@ -405,13 +467,57 @@ func TestApplyCLIFlagOverrides(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrParseFlag)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected.Enabled, config.Enabled)
 				assert.Equal(t, tt.expected.Port, config.Port)
+				assert.Equal(t, tt.expected.Host, config.Host)
+				assert.Equal(t, tt.expected.File, config.File)
+				assert.Equal(t, tt.expected.ProfileType, config.ProfileType)
 			}
 		})
 	}
+}
+
+func TestBuildProfilerConfigComposesConfigAndFlags(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("profiler-enabled", false, "")
+	cmd.Flags().Int("profiler-port", 0, "")
+	cmd.Flags().String("profiler-host", "", "")
+	cmd.Flags().String("profile-file", "", "")
+	cmd.Flags().String("profile-type", "", "")
+
+	assert.NoError(t, cmd.Flags().Set("profiler-port", "7070"))
+	assert.NoError(t, cmd.Flags().Set("profiler-host", "0.0.0.0"))
+	assert.NoError(t, cmd.Flags().Set("profile-file", filepath.Join(os.TempDir(), "trace.out")))
+	assert.NoError(t, cmd.Flags().Set("profile-type", "trace"))
+
+	config, err := buildProfilerConfig(cmd, &schema.AtmosConfiguration{
+		Profiler: profiler.Config{
+			Host:        "localhost",
+			Port:        6061,
+			ProfileType: profiler.ProfileTypeHeap,
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.True(t, config.Enabled)
+	assert.Equal(t, "0.0.0.0", config.Host)
+	assert.Equal(t, 7070, config.Port)
+	assert.Equal(t, filepath.Join(os.TempDir(), "trace.out"), config.File)
+	assert.Equal(t, profiler.ProfileTypeTrace, config.ProfileType)
+}
+
+func TestSetupProfilerSkipsWhenDisabledWithoutFile(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("profiler-enabled", false, "")
+	cmd.Flags().Int("profiler-port", 0, "")
+	cmd.Flags().String("profiler-host", "", "")
+	cmd.Flags().String("profile-file", "", "")
+	cmd.Flags().String("profile-type", "", "")
+
+	assert.NoError(t, setupProfiler(cmd, &schema.AtmosConfiguration{}))
 }
 
 // TestApplyProfileFileFlag tests profile file flag handling.
@@ -532,50 +638,82 @@ func TestHandleConfigInitError(t *testing.T) {
 	tests := []struct {
 		name        string
 		initErr     error
-		isVersion   bool
+		args        []string
 		expectError bool
 		expectNil   bool
 	}{
 		{
 			name:      "version command with error returns nil",
 			initErr:   errors.New("config error"),
-			isVersion: true,
+			args:      []string{"atmos", "version"},
 			expectNil: true,
+		},
+		{
+			name:      "version command after global flag with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "--config", "atmos.yaml", "version"},
+			expectNil: true,
+		},
+		{
+			name:      "config validate command with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "config", "validate"},
+			expectNil: true,
+		},
+		{
+			name:      "validate config command with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "validate", "config"},
+			expectNil: true,
+		},
+		{
+			name:      "validate schema config command with error returns nil",
+			initErr:   errors.New("config error"),
+			args:      []string{"atmos", "validate", "schema", "config"},
+			expectNil: true,
+		},
+		{
+			name:        "terraform passthrough arguments do not bypass config errors",
+			initErr:     errors.New("config error"),
+			args:        []string{"atmos", "terraform", "plan", "config", "validate"},
+			expectError: true,
+		},
+		{
+			name:        "root flag values do not bypass config errors",
+			initErr:     errors.New("config error"),
+			args:        []string{"atmos", "--config", "config", "validate"},
+			expectError: true,
+		},
+		{
+			name:        "custom command version flag preserves error",
+			initErr:     errors.New("config error"),
+			args:        []string{"atmos", "install", "--version", "1.2.3"},
+			expectError: true,
 		},
 		{
 			name:      "config not found returns nil",
 			initErr:   fmt.Errorf("wrapped: %w", cfg.NotFound),
-			isVersion: false,
+			args:      []string{"atmos", "terraform", "plan"},
 			expectNil: true,
 		},
 		{
 			name:        "invalid log level error preserved",
 			initErr:     fmt.Errorf("%w\nSupported levels: Info, Debug", log.ErrInvalidLogLevel),
-			isVersion:   false,
+			args:        []string{"atmos", "terraform", "plan"},
 			expectError: true,
 		},
 		{
 			name:        "other errors returned as-is",
 			initErr:     errors.New("some other error"),
-			isVersion:   false,
+			args:        []string{"atmos", "terraform", "plan"},
 			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore os.Args for version command detection.
-			originalArgs := os.Args
-			defer func() { os.Args = originalArgs }()
-
-			if tt.isVersion {
-				os.Args = []string{"atmos", "version"}
-			} else {
-				os.Args = []string{"atmos", "terraform", "plan"}
-			}
-
 			atmosConfig := &schema.AtmosConfiguration{}
-			err := handleConfigInitError(tt.initErr, atmosConfig)
+			err := handleConfigInitErrorWithArgs(tt.initErr, atmosConfig, tt.args)
 
 			switch {
 			case tt.expectNil:
@@ -587,6 +725,190 @@ func TestHandleConfigInitError(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestHandleConfigInitError_CIGitCloneBootstrap covers the pre-Cobra config-init
+// error path (Execute()'s first cfg.InitCliConfig call, before PersistentPreRun
+// ever runs). A no-argument `atmos git clone` under a detected CI provider must
+// tolerate a missing/unresolved profile here too, not just in PersistentPreRun's
+// later, cmd-aware handling (applyCIGitCloneBootstrap) -- the bootstrap clone runs
+// in an empty workspace (replacing actions/checkout) where atmos.yaml and any
+// profile it references cannot exist yet. Before this fix, ErrProfileNotFound hit
+// the final "return other errors as-is" branch and aborted Execute() before Cobra
+// ever resolved the command, so ATMOS_CI=true had no effect.
+func TestHandleConfigInitError_CIGitCloneBootstrap(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		ciEnabled bool
+		wantErr   bool
+	}{
+		{
+			name:      "bootstrap clone under CI tolerates profile not found",
+			args:      []string{"atmos", "git", "clone"},
+			ciEnabled: true,
+			wantErr:   false,
+		},
+		{
+			// The exact reported reproduction: a space-separated value flag
+			// (--depth 0) must not be misread as a positional repo argument.
+			name:      "bootstrap clone with --ci --depth 0 tolerates profile not found",
+			args:      []string{"atmos", "git", "clone", "--ci", "--depth", "0"},
+			ciEnabled: true,
+			wantErr:   false,
+		},
+		{
+			name:      "explicit repo argument is not the bootstrap case",
+			args:      []string{"atmos", "git", "clone", "flux-deploy"},
+			ciEnabled: true,
+			wantErr:   true,
+		},
+		{
+			name:      "bulk --all clone is not the bootstrap case",
+			args:      []string{"atmos", "git", "clone", "--all"},
+			ciEnabled: true,
+			wantErr:   true,
+		},
+		{
+			name:      "outside a detected CI provider the error is not swallowed",
+			args:      []string{"atmos", "git", "clone"},
+			ciEnabled: false,
+			wantErr:   true,
+		},
+		{
+			// Regression for the exact scenario CodeRabbit flagged: a CI clone
+			// with both a missing/invalid profile (ErrProfileNotFound here)
+			// and a malformed clone flag (--depth not-a-number) must not
+			// return this profile error -- doing so would make Execute()
+			// (cmd/root.go) return it immediately, before RootCmd.Execute()
+			// ever reaches Cobra's own flag parser, so the user would never
+			// see Cobra's clean "invalid argument ... for --depth" error.
+			// wantErr=false here means the profile error is tolerated so
+			// control reaches Cobra, not that provisioning succeeds.
+			name:      "malformed --depth flag tolerates profile not found so Cobra can report it",
+			args:      []string{"atmos", "git", "clone", "--depth", "not-a-number"},
+			ciEnabled: true,
+			wantErr:   false,
+		},
+		{
+			// Same as above, but outside a detected CI provider: a malformed
+			// clone flag must defer to Cobra's error regardless of CI.
+			name:      "malformed --depth flag tolerates profile not found outside CI too",
+			args:      []string{"atmos", "git", "clone", "--depth", "not-a-number"},
+			ciEnabled: false,
+			wantErr:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GITHUB_ACTIONS", strconv.FormatBool(tt.ciEnabled))
+			t.Setenv("ATMOS_CI", "true")
+
+			atmosConfig := &schema.AtmosConfiguration{}
+			err := handleConfigInitErrorWithArgs(errUtils.ErrProfileNotFound, atmosConfig, tt.args)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestIsCIGitCloneBootstrapArgs covers isCIGitCloneBootstrapArgs directly,
+// including the len(args) < 1 guard (no argv[0] at all), which
+// handleConfigInitErrorWithArgs's real callers (os.Args, always containing at
+// least the program name) never exercise but the helper must still handle
+// defensively since it's called with an explicit, test-controllable args slice.
+func TestIsCIGitCloneBootstrapArgs(t *testing.T) {
+	// These cases resolve to false before ever consulting CI detection
+	// (either the len(args) < 1 guard fires directly, or the shape doesn't
+	// match "git clone" / has a positional argument), so no env setup is
+	// needed for a deterministic result.
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "empty args slice returns false", args: []string{}, want: false},
+		{name: "nil args returns false", args: nil, want: false},
+		{name: "explicit repo argument is not the bootstrap case", args: []string{"atmos", "git", "clone", "flux-deploy"}, want: false},
+		{name: "not a git clone command", args: []string{"atmos", "terraform", "plan"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isCIGitCloneBootstrapArgs(tt.args))
+		})
+	}
+
+	t.Run("bootstrap clone with no extra args under detected CI", func(t *testing.T) {
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("ATMOS_CI", "true")
+		assert.True(t, isCIGitCloneBootstrapArgs([]string{"atmos", "git", "clone"}))
+	})
+}
+
+func TestIsBuiltinConfigValidationCommand(t *testing.T) {
+	newCommand := func(uses ...string) *cobra.Command {
+		root := &cobra.Command{Use: "atmos"}
+		current := root
+		for _, use := range uses {
+			child := &cobra.Command{Use: use}
+			current.AddCommand(child)
+			current = child
+		}
+		return current
+	}
+
+	tests := []struct {
+		name string
+		uses []string
+		args []string
+		want bool
+	}{
+		{name: "config validate", uses: []string{"config", "validate"}, want: true},
+		{name: "validate config", uses: []string{"validate", "config"}, want: true},
+		{name: "validate schema config", uses: []string{"validate", "schema"}, args: []string{"config"}, want: true},
+		{name: "validate schema other key", uses: []string{"validate", "schema"}, args: []string{"custom"}, want: false},
+		{name: "terraform passthrough", uses: []string{"terraform"}, args: []string{"plan", "config", "validate"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isBuiltinConfigValidationCommand(newCommand(tt.uses...), tt.args))
+		})
+	}
+}
+
+func TestIsBuiltinConfigValidationArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "too few arguments", args: []string{"atmos"}, want: false},
+		{name: "end of flags", args: []string{"atmos", "--", "config", "validate"}, want: false},
+		{name: "root boolean flag", args: []string{"atmos", "--verbose", "config", "validate"}, want: true},
+		{name: "missing root flag value", args: []string{"atmos", "--config"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isBuiltinConfigValidationArgs(tt.args))
+		})
+	}
+}
+
+func TestConfigForStartupLogger(t *testing.T) {
+	config := &schema.AtmosConfiguration{Logs: schema.Logs{File: "custom.log", Level: "Info"}}
+	assert.Same(t, config, configForStartupLogger(config, nil))
+
+	fallback := configForStartupLogger(config, errors.New("invalid config"))
+	assert.Equal(t, "/dev/stderr", fallback.Logs.File)
+	assert.Equal(t, "Warning", fallback.Logs.Level)
 }
 
 // TestSetupLogger_InvalidLogLevel tests error handling for invalid log levels.
@@ -1020,8 +1342,175 @@ func TestFindExperimentalParent(t *testing.T) {
 	}
 }
 
-// TestParseUseVersionFromArgsInternal tests --use-version flag parsing.
-func TestParseUseVersionFromArgsInternal(t *testing.T) {
+// testExperimentalProvider is a minimal CommandProvider for testing registry-based
+// experimental command detection.
+type testExperimentalProvider struct {
+	name string
+}
+
+func (p *testExperimentalProvider) GetCommand() *cobra.Command {
+	return &cobra.Command{Use: p.name}
+}
+
+func (p *testExperimentalProvider) GetName() string                { return p.name }
+func (p *testExperimentalProvider) GetGroup() string               { return "" }
+func (p *testExperimentalProvider) GetFlagsBuilder() flags.Builder { return nil }
+func (p *testExperimentalProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (p *testExperimentalProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
+}
+func (p *testExperimentalProvider) GetAliases() []internal.CommandAlias { return nil }
+func (p *testExperimentalProvider) IsExperimental() bool                { return true }
+
+// TestFindExperimentalParent_RegistryBased tests that registry-based experimental
+// detection only matches top-level built-in commands, not custom commands that
+// share the same name (issue #2315).
+func TestFindExperimentalParent_RegistryBased(t *testing.T) {
+	// Save and restore only the provider this test overrides.
+	prevProvider, hadPrev := internal.GetProvider("ai")
+	internal.Register(&testExperimentalProvider{name: "ai"})
+	t.Cleanup(func() {
+		if hadPrev {
+			internal.Register(prevProvider)
+		}
+	})
+
+	t.Run("top-level ai command is experimental", func(t *testing.T) {
+		// Simulate: atmos ai (root -> ai).
+		root := &cobra.Command{Use: "atmos"}
+		ai := &cobra.Command{Use: "ai"}
+		root.AddCommand(ai)
+
+		result := findExperimentalParent(ai)
+		assert.Equal(t, "ai", result)
+	})
+
+	t.Run("top-level ai subcommand inherits experimental", func(t *testing.T) {
+		// Simulate: atmos ai chat (root -> ai -> chat).
+		root := &cobra.Command{Use: "atmos"}
+		ai := &cobra.Command{Use: "ai"}
+		chat := &cobra.Command{Use: "chat"}
+		root.AddCommand(ai)
+		ai.AddCommand(chat)
+
+		result := findExperimentalParent(chat)
+		assert.Equal(t, "ai", result)
+	})
+
+	t.Run("custom command named ai under utils is NOT experimental", func(t *testing.T) {
+		// Simulate: atmos utils ai (root -> utils -> ai).
+		// This is the bug from issue #2315.
+		root := &cobra.Command{Use: "atmos"}
+		utils := &cobra.Command{Use: "utils"}
+		ai := &cobra.Command{Use: "ai"}
+		root.AddCommand(utils)
+		utils.AddCommand(ai)
+
+		result := findExperimentalParent(ai)
+		assert.Equal(t, "", result)
+	})
+
+	t.Run("custom command named ai fix under utils is NOT experimental", func(t *testing.T) {
+		// Simulate: atmos utils ai fix (root -> utils -> ai -> fix).
+		root := &cobra.Command{Use: "atmos"}
+		utils := &cobra.Command{Use: "utils"}
+		ai := &cobra.Command{Use: "ai"}
+		fix := &cobra.Command{Use: "fix"}
+		root.AddCommand(utils)
+		utils.AddCommand(ai)
+		ai.AddCommand(fix)
+
+		result := findExperimentalParent(fix)
+		assert.Equal(t, "", result)
+	})
+}
+
+func TestShowExperimentalCommandNotice_DeduplicatesCommand(t *testing.T) {
+	_ = NewTestKit(t)
+	t.Setenv("ATMOS_EXPERIMENTAL", "warn")
+	var output strings.Builder
+	originalWriteExperimentalNotice := writeExperimentalNotice
+	writeExperimentalNotice = func(feature string) {
+		output.WriteString(feature)
+		output.WriteByte('\n')
+	}
+	t.Cleanup(func() {
+		writeExperimentalNotice = originalWriteExperimentalNotice
+	})
+
+	command := &cobra.Command{
+		Use:         "experimental-notice-test",
+		Annotations: map[string]string{"experimental": "true"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Simulate an integration that invokes the root pre-run a second time.
+			RootCmd.PersistentPreRun(cmd, args)
+			return nil
+		},
+	}
+	RootCmd.AddCommand(command)
+	t.Cleanup(func() { RootCmd.RemoveCommand(command) })
+
+	runCommand := func() string {
+		output.Reset()
+		iolib.Reset()
+		RootCmd.SetArgs([]string{"experimental-notice-test"})
+		require.NoError(t, Execute())
+		return output.String()
+	}
+	t.Cleanup(iolib.Reset)
+
+	for range 2 {
+		output := runCommand()
+		assert.Equal(t, 1, strings.Count(output, "experimental-notice-test"))
+	}
+}
+
+func TestShowExperimentalCommandNotice_EdgeCases(t *testing.T) {
+	originalWriteExperimentalNotice := writeExperimentalNotice
+	var notices []string
+	writeExperimentalNotice = func(feature string) { notices = append(notices, feature) }
+	t.Cleanup(func() { writeExperimentalNotice = originalWriteExperimentalNotice })
+
+	showExperimentalCommandNotice(nil, "ignored")
+	assert.Empty(t, notices, "a nil command must not emit a notice")
+
+	command := &cobra.Command{Use: "experimental"}
+	showExperimentalCommandNotice(command, "experimental")
+	showExperimentalCommandNotice(command, "experimental")
+	assert.Equal(t, []string{"experimental"}, notices, "a command must emit at most one notice")
+	require.NotNil(t, command.Annotations)
+	assert.Equal(t, experimentalNoticeEmitted, command.Annotations[experimentalNoticeAnnotation])
+
+	child := &cobra.Command{Use: "child", Annotations: map[string]string{experimentalNoticeAnnotation: experimentalNoticeEmitted}}
+	command.AddCommand(child)
+	resetExperimentalCommandNotices(nil)
+	resetExperimentalCommandNotices(command)
+	assert.NotContains(t, command.Annotations, experimentalNoticeAnnotation)
+	assert.NotContains(t, child.Annotations, experimentalNoticeAnnotation)
+}
+
+// TestIsTopLevelCommand tests the isTopLevelCommand helper.
+func TestIsTopLevelCommand(t *testing.T) {
+	root := &cobra.Command{Use: "atmos"}
+	topLevel := &cobra.Command{Use: "ai"}
+	nested := &cobra.Command{Use: "chat"}
+	root.AddCommand(topLevel)
+	topLevel.AddCommand(nested)
+
+	assert.True(t, isTopLevelCommand(topLevel), "direct child of root should be top-level")
+	assert.False(t, isTopLevelCommand(nested), "grandchild of root should not be top-level")
+	assert.False(t, isTopLevelCommand(root), "root itself should not be top-level")
+
+	// Command with no parent.
+	orphan := &cobra.Command{Use: "orphan"}
+	assert.False(t, isTopLevelCommand(orphan), "command with no parent should not be top-level")
+}
+
+// TestParseUseVersionFromArgs tests --use-version flag parsing.
+func TestParseUseVersionFromArgs(t *testing.T) {
 	tests := []struct {
 		name     string
 		args     []string
@@ -1052,14 +1541,113 @@ func TestParseUseVersionFromArgsInternal(t *testing.T) {
 			args:     []string{"terraform", "--use-version"},
 			expected: "",
 		},
+		{
+			name:     "use-version with bare separator value returns empty",
+			args:     []string{"terraform", "--use-version", "--"},
+			expected: "",
+		},
+		{
+			name:     "use-version after bare -- is ignored",
+			args:     []string{"terraform", "--", "--use-version=1.2.3"},
+			expected: "",
+		},
+		{
+			name:     "use-version before bare -- is found",
+			args:     []string{"terraform", "--use-version=1.2.3", "--", "plan"},
+			expected: "1.2.3",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseUseVersionFromArgsInternal(tt.args)
+			result := pkgversion.ParseUseVersionFromArgs(tt.args)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestExecute_ReexecsExplicitUseVersionBeforeUnknownCommandResolution(t *testing.T) {
+	tests := []struct {
+		name  string
+		args  []string
+		env   string
+		value string
+	}{
+		{
+			name:  "env var",
+			args:  []string{"atmos", "future-secret", "list"},
+			env:   "ref:main",
+			value: "ref:main",
+		},
+		{
+			name:  "equals flag",
+			args:  []string{"atmos", "future-secret", "list", "--use-version=ref:main"},
+			value: "ref:main",
+		},
+		{
+			name:  "separate flag",
+			args:  []string{"atmos", "future-secret", "list", "--use-version", "ref:main"},
+			value: "ref:main",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			oldCheckAndReexec := checkAndReexec
+			t.Cleanup(func() {
+				checkAndReexec = oldCheckAndReexec
+			})
+
+			t.Setenv(pkgversion.VersionUseEnvVar, "")
+			if tt.env != "" {
+				t.Setenv(pkgversion.UseVersionEnvVar, tt.env)
+			} else {
+				t.Setenv(pkgversion.UseVersionEnvVar, "")
+			}
+
+			oldArgs := os.Args
+			t.Cleanup(func() {
+				os.Args = oldArgs
+			})
+
+			os.Args = tt.args
+			RootCmd.SetArgs(tt.args[1:])
+
+			reexecCalled := false
+			sentinel := errors.New("simulated re-exec")
+			checkAndReexec = func(config *schema.AtmosConfiguration) bool {
+				reexecCalled = true
+				assert.NotNil(t, config)
+				assert.Equal(t, tt.value, os.Getenv(pkgversion.VersionUseEnvVar))
+				panic(sentinel)
+			}
+
+			var recovered any
+			func() {
+				defer func() {
+					recovered = recover()
+				}()
+				_ = Execute()
+			}()
+
+			assert.Same(t, sentinel, recovered)
+			assert.True(t, reexecCalled)
+		})
+	}
+}
+
+func TestExecuteVersionSmoke(t *testing.T) {
+	_ = NewTestKit(t)
+
+	oldArgs := os.Args
+	t.Cleanup(func() {
+		os.Args = oldArgs
+	})
+	os.Args = []string{"atmos", "--version"}
+
+	assert.NoError(t, ExecuteVersion())
 }
 
 // TestBuildFlagDescription tests flag description building.
@@ -1382,6 +1970,42 @@ func TestGetTerminalWidth(t *testing.T) {
 	assert.LessOrEqual(t, width, 120) // Max width is 120
 }
 
+// TestGetTerminalWidthPrecedence covers the layout-width decision:
+// detected real terminal width > default, capped at Settings.Terminal.MaxWidth
+// when configured. A zero-value config must never be required for a sane result
+// (help renders without atmos.yaml).
+func TestGetTerminalWidthPrecedence(t *testing.T) {
+	originalConfig := atmosConfig
+	t.Cleanup(func() {
+		atmosConfig = originalConfig
+		ui.Reset()
+	})
+
+	t.Run("default when no terminal width is known", func(t *testing.T) {
+		ui.Reset() // TerminalWidth() returns 0 when uninitialized.
+		atmosConfig = schema.AtmosConfiguration{}
+		assert.Equal(t, 120, getTerminalWidth())
+	})
+
+	t.Run("MaxWidth config caps the width", func(t *testing.T) {
+		ui.Reset()
+		atmosConfig = schema.AtmosConfiguration{}
+		atmosConfig.Settings.Terminal.MaxWidth = 60
+		assert.Equal(t, 60, getTerminalWidth())
+	})
+
+	t.Run("COLUMNS is honored on non-TTY", func(t *testing.T) {
+		if terminal.New().IsTTY(terminal.Stdout) {
+			t.Skip("stdout is a real TTY; non-TTY fallback does not apply")
+		}
+		t.Setenv("COLUMNS", "90")
+		ui.ReinitFormatter()
+		t.Cleanup(ui.Reset)
+		atmosConfig = schema.AtmosConfiguration{}
+		assert.Equal(t, 90, getTerminalWidth())
+	})
+}
+
 // TestCalculateMaxFlagWidth tests flag width calculation.
 func TestCalculateMaxFlagWidth(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
@@ -1542,6 +2166,180 @@ func TestExperimentalModeHandling(t *testing.T) {
 				}, "Expected no os.Exit call")
 				assert.False(t, exitCalled, "Expected exit not to be called")
 			}
+		})
+	}
+}
+
+func TestCheckExperimentalSettings(t *testing.T) {
+	tests := []struct {
+		name             string
+		config           *schema.AtmosConfiguration
+		expectExit       bool
+		expectedExitCode int
+	}{
+		{
+			name:   "nil config",
+			config: nil,
+		},
+		{
+			name:   "no experimental settings",
+			config: &schema.AtmosConfiguration{},
+		},
+		{
+			name: "key delimiter silence mode",
+			config: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Experimental: "silence",
+					YAML:         schema.AtmosYAMLSettings{KeyDelimiter: "."},
+				},
+			},
+		},
+		{
+			name: "key delimiter warn mode",
+			config: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Experimental: "warn",
+					YAML:         schema.AtmosYAMLSettings{KeyDelimiter: "."},
+				},
+			},
+		},
+		{
+			name: "empty experimental mode defaults to warn",
+			config: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					YAML: schema.AtmosYAMLSettings{KeyDelimiter: "."},
+				},
+			},
+		},
+		{
+			name: "key delimiter disable mode exits",
+			config: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Experimental: "disable",
+					YAML:         schema.AtmosYAMLSettings{KeyDelimiter: "."},
+				},
+			},
+			expectExit:       true,
+			expectedExitCode: 1,
+		},
+		{
+			name: "edition pin warn mode",
+			config: &schema.AtmosConfiguration{
+				Edition: "2026-01",
+				Settings: schema.AtmosSettings{
+					Experimental: "warn",
+				},
+			},
+		},
+		{
+			name: "edition pin disable mode exits",
+			config: &schema.AtmosConfiguration{
+				Edition: "2026-01",
+				Settings: schema.AtmosSettings{
+					Experimental: "disable",
+				},
+			},
+			expectExit:       true,
+			expectedExitCode: 1,
+		},
+		{
+			name: "key delimiter error mode exits",
+			config: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Experimental: "error",
+					YAML:         schema.AtmosYAMLSettings{KeyDelimiter: "."},
+				},
+			},
+			expectExit:       true,
+			expectedExitCode: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			originalOsExit := errUtils.OsExit
+			defer func() {
+				errUtils.OsExit = originalOsExit
+			}()
+
+			var exitCalled bool
+			var exitCode int
+			errUtils.OsExit = func(code int) {
+				exitCalled = true
+				exitCode = code
+				panic(fmt.Sprintf("os.Exit(%d) called", code))
+			}
+
+			run := func() {
+				checkExperimentalSettings(tt.config)
+			}
+			if tt.expectExit {
+				assert.Panics(t, run)
+				assert.True(t, exitCalled)
+				assert.Equal(t, tt.expectedExitCode, exitCode)
+			} else {
+				assert.NotPanics(t, run)
+				assert.False(t, exitCalled)
+			}
+		})
+	}
+}
+
+// TestUnknownSubcommand verifies that only genuine unknown-subcommand errors
+// (ErrUnknownSubcommand, as produced by the registry executor's Cobra-error
+// conversion) are classified as such — and that a missing external executable
+// (ErrCommandNotFound, e.g. from `atmos auth exec -- <cmd>`) is NOT, so it never
+// gets rendered as "the command atmos requires a subcommand".
+func TestUnknownSubcommand(t *testing.T) {
+	tests := []struct {
+		name        string
+		err         error
+		wantCommand string
+		wantOK      bool
+	}{
+		{
+			name:   "nil error is not an unknown subcommand",
+			err:    nil,
+			wantOK: false,
+		},
+		{
+			name: "unknown subcommand with command context",
+			err: errUtils.Build(errUtils.ErrUnknownSubcommand).
+				WithContext("command", "foobar").
+				Err(),
+			wantCommand: "foobar",
+			wantOK:      true,
+		},
+		{
+			name: "wrapped unknown subcommand is still detected",
+			err: fmt.Errorf("wrapped: %w", errUtils.Build(errUtils.ErrUnknownSubcommand).
+				WithContext("command", "terrafrom").
+				Err()),
+			wantCommand: "terrafrom",
+			wantOK:      true,
+		},
+		{
+			// Regression: the reported bug. `atmos auth exec -- <missing-binary>`
+			// returns ErrCommandNotFound, which must NOT be treated as an unknown
+			// Atmos subcommand.
+			name: "missing external executable is not an unknown subcommand",
+			err: errUtils.Build(errUtils.ErrCommandNotFound).
+				WithContext("command", "uvx").
+				Err(),
+			wantOK: false,
+		},
+		{
+			name:   "unrelated error is not an unknown subcommand",
+			err:    errors.New("some other failure"),
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			command, ok := unknownSubcommand(tt.err)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantCommand, command)
 		})
 	}
 }

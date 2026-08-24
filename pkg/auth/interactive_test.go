@@ -4,13 +4,67 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
+// TestIsInteractive_InteractiveFlag tests that the --interactive flag is respected.
+func TestIsInteractive_InteractiveFlag(t *testing.T) {
+	// Preserve original viper state.
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	// Preserve and restore CI environment variables.
+	preservedEnv := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(preservedEnv)
+
+	t.Run("interactive flag set to false", func(t *testing.T) {
+		// When --interactive=false, isInteractive() should return false
+		// regardless of TTY or CI status.
+		viper.Set("interactive", false)
+		result := isInteractive()
+		assert.False(t, result, "isInteractive() should return false when --interactive=false")
+	})
+
+	t.Run("interactive flag set to true with no TTY", func(t *testing.T) {
+		// When --interactive=true but stdin is not a TTY (test environment),
+		// isInteractive() should still return false.
+		viper.Set("interactive", true)
+		result := isInteractive()
+		assert.False(t, result, "isInteractive() should return false when no TTY (test environment)")
+	})
+
+	t.Run("interactive flag set to true in CI", func(t *testing.T) {
+		// When --interactive=true but CI=true, isInteractive() should return false.
+		viper.Set("interactive", true)
+		t.Setenv("CI", "true")
+		result := isInteractive()
+		assert.False(t, result, "isInteractive() should return false when CI=true")
+	})
+
+	t.Run("interactive flag set to false overrides TTY", func(t *testing.T) {
+		// Even if we had a TTY (which we don't in tests), --interactive=false
+		// should make isInteractive() return false.
+		viper.Set("interactive", false)
+		result := isInteractive()
+		assert.False(t, result, "isInteractive() should return false when --interactive=false, regardless of TTY")
+	})
+}
+
 // TestIsInteractive tests the isInteractive() function with various TTY and CI configurations.
 func TestIsInteractive(t *testing.T) {
+	// Preserve original viper state.
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	// Set interactive to true to test TTY and CI behavior.
+	viper.Set("interactive", true)
 	tests := []struct {
 		name           string
 		setupEnv       func(*testing.T) func()
@@ -136,6 +190,14 @@ func TestIsInteractive(t *testing.T) {
 // TestIsInteractive_StdinBehavior documents the expected behavior with different stdin configurations.
 // Note: These are documentation tests - actual TTY behavior cannot be fully tested in unit tests.
 func TestIsInteractive_StdinBehavior(t *testing.T) {
+	// Preserve original viper state.
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	// Set interactive to true to test TTY and CI behavior.
+	viper.Set("interactive", true)
 	tests := []struct {
 		name                string
 		stdinDescription    string
@@ -205,12 +267,14 @@ func TestIsInteractive_StdinBehavior(t *testing.T) {
 			t.Logf("  Expected isInteractive(): %v", tt.expectedInteractive)
 
 			// The actual isInteractive() function checks:
-			// 1. term.IsTTYSupportForStdin() - Returns true if stdin is a TTY
-			// 2. !telemetry.IsCI() - Returns false if CI environment detected
+			// 1. viper.GetBool("interactive") - Returns true if --interactive flag is true
+			// 2. term.IsTTYSupportForStdin() - Returns true if stdin is a TTY
+			// 3. !telemetry.IsCI() - Returns false if CI environment detected
 			//
-			// Result: isInteractive() = (stdin is TTY) AND (not CI)
+			// Result: isInteractive() = (interactive flag is true) AND (stdin is TTY) AND (not CI)
 			//
 			// This means:
+			// - --interactive=false disables interactivity immediately
 			// - Stdout being piped does NOT affect interactivity (by design)
 			// - Users can pipe output while still providing interactive input
 			// - CI always disables interactivity regardless of TTY
@@ -220,6 +284,15 @@ func TestIsInteractive_StdinBehavior(t *testing.T) {
 
 // TestIsInteractive_Integration tests isInteractive() with actual CI environment variables.
 func TestIsInteractive_Integration(t *testing.T) {
+	// Preserve original viper state.
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	// Set interactive to true to test TTY and CI behavior.
+	viper.Set("interactive", true)
+
 	// Preserve original CI environment.
 	// Use t.Cleanup to ensure restoration happens after all t.Setenv cleanups.
 	preservedEnv := telemetry.PreserveCIEnvVars()
@@ -262,6 +335,15 @@ func TestIsInteractive_Integration(t *testing.T) {
 
 // TestIsInteractive_EdgeCases tests edge cases and boundary conditions.
 func TestIsInteractive_EdgeCases(t *testing.T) {
+	// Preserve original viper state.
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	// Set interactive to true to test TTY and CI behavior.
+	viper.Set("interactive", true)
+
 	// Preserve original CI environment.
 	// Use t.Cleanup to ensure restoration happens after all t.Setenv cleanups.
 	preservedEnv := telemetry.PreserveCIEnvVars()

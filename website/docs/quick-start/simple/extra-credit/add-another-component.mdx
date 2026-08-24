@@ -35,6 +35,7 @@ components:
       metadata:
         # Point to the Terraform component in `components/terraform/weather`
         component: weather
+        description: "First weather station component"
         # Inherit the defaults for all station components
         inherits:
           - station
@@ -47,6 +48,7 @@ components:
       metadata:
         # Point to the Terraform component in `components/terraform/weather`
         component: weather
+        description: "Second weather station component"
         # Inherit the defaults for all station components
         inherits:
           - station
@@ -58,14 +60,12 @@ components:
 
 In this example, we've included more information than necessary to demonstrate the concept. For instance, we explicitly added `inherits` to show how you can use multiple inheritance to merge multiple baseline configurations. We also specified the component path in both instances, even though it's already defined in the baseline configuration. This redundancy is just to emphasize that both are pointing to the same component.
 
-Then we can execute the following `atmos` commands to provision the two stations into the `dev` environment:
+Then we can deploy every component in the `dev` stack — including both stations — with the same bulk command you used in the main Quick Start:
 
 ```shell
-# Provision the first weather station
-atmos terraform apply station/1 -s dev
-# Provision the second weather station
-atmos terraform apply station/2 --stack dev
+atmos terraform deploy --all -s dev
 ```
-<Note>You can use the shorthand `-s` flag to specify the stack name, or the long form `--stack`. They both do the same thing</Note>
+
+<Note>Use a single-component command, such as `atmos terraform plan station/1 -s dev`, when you want to preview or operate on one specific instance.</Note>
 
 Sweet! You’ve just finished your first Atmos QuickStart tutorial. Now you're at a crossroads with two options: you can continue to the bonus materials for some extra credit, or dive deeper into the core concepts and learn the Atmos Fundamentals.

@@ -1,0 +1,120 @@
+---
+title: archive
+sidebar_label: archive
+slug: /workflows/steps/type/archive
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `archive` step type packages a directory or file into a zip, tar, or tgz archive — most commonly zipping a Lambda function's source into a deployable `handler.zip` before `terraform plan`/`apply`. It is implemented on the Go standard library only (`archive/zip`, `archive/tar`, `compress/gzip`), so it behaves identically on macOS, Linux, and Windows. No shelling out to `zip` or `tar`.
+</Intro>
+
+```yaml
+steps:
+  - name: package
+    type: archive
+    source: src/
+    destination: handler.zip
+    exclude:
+      - "**/*.test.js"
+      - "**/node_modules/**"
+```
+
+The step has no dedicated hook kind — use the generic [`kind: step` hook bridge](/stacks/hooks) to run it before Terraform, replacing a Terragrunt-style `before_hook` shell-out:
+
+```yaml
+hooks:
+  package:
+    kind: step
+    type: archive
+    events: [before.terraform.plan, before.terraform.apply, before.terraform.destroy]
+    with:
+      source: src/
+      destination: handler.zip
+```
+
+## Fields
+
+<dl>
+  <dt>`source`</dt>
+  <dd>Required. The directory or file to archive. Supports Go templates.</dd>
+
+  <dt>`destination`</dt>
+  <dd>Required. The archive file to write. Supports Go templates.</dd>
+
+  <dt>`action`</dt>
+  <dd>`replace` (default) always rebuilds `destination` fresh from `source`, overwriting any prior contents. `update` adds new/refreshed entries into an existing archive, leaving untouched entries as-is — supported only for `zip` and uncompressed `tar` (see [Update vs. replace](#update-vs-replace)). `create` and `extract` are reserved for a future release.</dd>
+
+  <dt>`format`</dt>
+  <dd>`zip`, `tar`, `tgz`, `tar.bz2`, or `tar.xz`. When omitted, inferred from `destination`'s extension (`.zip`, `.tar`, `.tar.gz`/`.tgz`, `.tar.bz2`/`.tbz2`, `.tar.xz`/`.txz`). Writing `tar.bz2`/`tar.xz` is not yet implemented — use `zip`, `tar`, or `tgz`.</dd>
+
+  <dt>`subpath`</dt>
+  <dd>Nests `source`'s content under this path inside the archive (e.g. `subpath: opt/nodejs` for a Lambda Layer). Supports Go templates.</dd>
+
+  <dt>`include`</dt>
+  <dd>Glob(s); when set, only matching files are archived. Evaluated after `exclude`.</dd>
+
+  <dt>`exclude`</dt>
+  <dd>Glob(s); matching files are dropped, evaluated before `include`.</dd>
+
+  <dt>`mtime`</dt>
+  <dd>`filesystem` (default), `epoch`, or `git`. Controls the modification-time metadata stamped into each archive entry. `filesystem` preserves the source's real mtime and permission bits (not deterministic). `epoch`/`git` also normalize permission bits, producing byte-identical output for identical content regardless of when or where it's built. See [Reproducible archives](#reproducible-archives). Supports Go templates.</dd>
+</dl>
+
+## Update vs. replace
+
+`update` can only add or refresh entries without rewriting the whole archive stream, which is possible for `zip` (each entry is compressed independently) and uncompressed `tar` (no compression at all). `tgz`, `tar.bz2`, and `tar.xz` wrap the *entire* tar byte stream in one continuous compression pass, so touching a single entry requires decompressing and recompressing everything — not meaningfully cheaper than `replace`. Selecting `update` on one of these formats fails with a typed error naming the format; it is never silently downgraded to a full rebuild.
+
+For the common "always rebuild this archive fresh before every plan/apply" use case, `replace` (the default) is the right choice on every format.
+
+## Reproducible archives
+
+By default, archived entries carry the source files' real modification time and permission bits. That means the same source content can produce a *different* archive — different bytes, different checksum — depending on when it was checked out and which machine built it: a fresh `git clone` sets every file's mtime to "now," and umask differences across environments change which permission bits land on disk. If anything downstream keys off the archive's hash (a Lambda deployment that only redeploys when the zip's checksum changes, a cache, a build-provenance check), a rebuild from identical source can look like a change when nothing actually changed.
+
+Set `mtime: epoch` or `mtime: git` to make the archive's bytes depend only on file *content*, not on when or where it was built. The name describes the mechanism, not an outcome: `mtime` is the modification-time metadata stamped into each *archive entry* — not the source files on disk, and not the archive file's own OS-level mtime.
+
+```yaml
+steps:
+  - name: package
+    type: archive
+    source: src/
+    destination: handler.zip
+    mtime: epoch
+```
+
+<dl>
+  <dt>`filesystem`</dt>
+  <dd>The default — same as omitting the field. Every entry carries the source file's real mtime and permission bits.</dd>
+
+  <dt>`epoch`</dt>
+  <dd>Every entry gets the same timestamp: the most recent Git commit that touched anything under `source`. Simplest option — one timestamp for the whole archive. Named after the [`SOURCE_DATE_EPOCH`](https://reproducible-builds.org/docs/source-date-epoch/) reproducible-builds convention, which this mirrors conceptually — one shared reference timestamp — even though the value comes from Git history here rather than an environment variable.</dd>
+
+  <dt>`git`</dt>
+  <dd>Each entry gets its own timestamp: the most recent Git commit that touched that specific file. Files with no Git history (generated output, `node_modules/`, compiled binaries) fall back to the same value `epoch` would use.</dd>
+</dl>
+
+`epoch` and `git` both also normalize permission bits — every entry becomes `0644`, or `0755` if the source file is executable — replacing whatever the source's actual umask-dependent mode happens to be. This is independent of the timestamp strategy, since inconsistent permission bits are just as capable of producing a different archive byte-for-byte.
+
+`source` must be inside a Git repository for either mode to use commit timestamps. Outside a repository, or for a path with no commit history, both modes fall back to a fixed reference date (1980-01-01, the earliest a zip entry can represent) rather than failing the step — reproducibility degrades gracefully instead of blocking the archive.
+
+`mtime` is opt-in and defaults to `filesystem` (real source mtime/mode) — existing workflows are unaffected.
+
+:::note
+`action: replace` + `mtime` is idempotent: the same `source` produces the same bytes on every rerun, because `replace` always rebuilds from scratch. `action: update` is **not** idempotent even with `mtime` set — its copied-forward entries keep whatever mtime/mode a prior write already gave them, and only the entries a given `update` call actually adds or refreshes are normalized, so the final bytes depend on the archive's history, not just `source`'s current content.
+:::
+
+## Result
+
+<dl>
+  <dt>`{{ .steps.<name>.value }}`</dt>
+  <dd>The resolved `destination` path.</dd>
+
+  <dt>`{{ .steps.<name>.metadata.action }}`</dt>
+  <dd>The action that ran (`replace` or `update`).</dd>
+</dl>
+
+## See also
+
+- [Manage lifecycle events with hooks](/stacks/hooks)
+- [Generate Terraform Files](/stacks/generate) — a sibling declarative-file-producing mechanism for text/templated files, rather than binary archives.

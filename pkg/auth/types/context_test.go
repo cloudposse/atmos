@@ -59,6 +59,21 @@ func TestWithAllowPrompts_Override(t *testing.T) {
 	assert.False(t, AllowPrompts(ctx), "Original context should still have prompts disabled")
 }
 
+func TestForceAWSWebflow(t *testing.T) {
+	assert.False(t, ForceAWSWebflow(context.Background()), "webflow must not be forced by default")
+
+	ctx := WithForceAWSWebflow(context.Background(), true)
+	assert.True(t, ForceAWSWebflow(ctx))
+
+	derivedCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	assert.True(t, ForceAWSWebflow(derivedCtx), "webflow flag must propagate through derived contexts")
+
+	assert.False(t, ForceAWSWebflow(WithForceAWSWebflow(ctx, false)), "child contexts may clear the flag")
+	wrongTypeCtx := context.WithValue(context.Background(), ContextKeyForceAWSWebflow, "true")
+	assert.False(t, ForceAWSWebflow(wrongTypeCtx), "unexpected context values must preserve the safe default")
+}
+
 // TestAllowPrompts_UseCaseNonInteractiveWhoami demonstrates the intended use case.
 // Whoami should use a non-interactive context to prevent credential prompts.
 func TestAllowPrompts_UseCaseNonInteractiveWhoami(t *testing.T) {
@@ -74,4 +89,19 @@ func TestAllowPrompts_UseCaseNonInteractiveWhoami(t *testing.T) {
 	// This is the expected behavior - no prompting in Whoami.
 	assert.False(t, AllowPrompts(nonInteractiveCtx),
 		"Whoami should use non-interactive context to prevent credential prompts")
+}
+
+// TestSuppressAuthErrors_DefaultFalse verifies default behavior for suppress flag.
+func TestSuppressAuthErrors_DefaultFalse(t *testing.T) {
+	ctx := context.Background()
+	assert.False(t, SuppressAuthErrors(ctx), "SuppressAuthErrors should return false by default")
+}
+
+// TestSuppressAuthErrors_Explicit verifies explicit settings.
+func TestSuppressAuthErrors_Explicit(t *testing.T) {
+	ctx := WithSuppressAuthErrors(context.Background(), true)
+	assert.True(t, SuppressAuthErrors(ctx), "SuppressAuthErrors should return true when explicitly set to true")
+
+	childCtx := WithSuppressAuthErrors(ctx, false)
+	assert.False(t, SuppressAuthErrors(childCtx), "SuppressAuthErrors should return false when explicitly set to false")
 }

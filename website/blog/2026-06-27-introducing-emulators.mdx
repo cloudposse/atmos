@@ -1,0 +1,154 @@
+---
+slug: introducing-emulators
+title: "Introducing Emulators: Run Real Cloud Infrastructure Locally"
+authors: [osterman]
+tags: [feature]
+date: 2026-06-27T12:00:00.000Z
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+
+A big challenge for infrastructure developers is how hard it is to iterate locally. Every
+`terraform apply` needs a real cloud account, costs real money, and touches a live environment. And in
+many enterprises developers don't have permission to the cloud at all, so they can't iterate locally
+even when they want to. Atmos emulators help with this: long-running, containerized stand-ins for AWS,
+GCP, Azure, Kubernetes, Vault, and an OCI registry that you provision as ordinary Atmos components — so
+you can run the **full Atmos workflow (auth, secrets, vendoring, toolchain, and `terraform apply`) on
+your laptop, with no cloud account and no credentials.**
+
+<!--truncate-->
+
+## The Problem
+
+Iterating on a Terraform component is always coupled to something real:
+
+- **A real account.** You can't `apply` without one, so even a small experiment starts with a
+  prerequisites checklist.
+- **Real money and real risk.** Standing resources up and tearing them down to test a change costs
+  money, and a mistake touches a live account.
+- **Onboarding friction.** A new contributor can't run the tutorial — or reproduce a bug — without
+  first being granted access to your infrastructure.
+- **The enterprise permission wall.** In many organizations developers simply aren't allowed near the
+  cloud environment. Local iteration isn't slow for them; it's impossible.
+
+Application developers reach for local databases, mock servers, and emulators to iterate without
+touching production — but those conveniences never really existed the same way for infrastructure. That
+was true until emulators became first class in Atmos.
+
+## The Solution
+
+An emulator is a new Atmos component kind. You declare it in a stack and drive it with the new
+`atmos emulator` command:
+
+```bash
+atmos emulator up aws -s local              # start a local AWS emulator
+atmos terraform apply s3-bucket -s local    # apply real Terraform against it — no AWS account
+atmos emulator down aws -s local            # stop it (state is kept by default)
+```
+
+Atmos wires the emulator into the rest of the system automatically:
+
+- **No credentials.** Atmos binds a local identity to the emulator and points both in-process cloud
+  calls and the Terraform provider at the emulator endpoint — so the same stacks that target real AWS
+  run unmodified against the emulator.
+- **The same stacks everywhere.** Because the emulator is bound through Atmos identity and provider
+  generation, your component code doesn't change between local and real cloud — laptop and CI run the
+  identical configuration.
+- **Persistent by default.** State survives `down`/`up`; `atmos emulator reset` wipes it, and
+  `--ephemeral` opts out per run.
+
+You can apply, destroy, and re-apply against a local cloud in seconds, without touching an account or
+spending money — and without waiting on anyone to grant you access.
+
+## Supported Emulators
+
+Built-in drivers cover the major clouds and the backing services your stacks lean on. The `driver`
+field on the component selects the image and target:
+
+| Service | Driver | Image | Notes |
+|---|---|---|---|
+| AWS | `floci/aws` | `floci/floci` | **Default** — free, MIT-licensed |
+| AWS | `ministack/aws` | `ministack/ministack` | Alternative AWS emulator |
+| AWS | `localstack/aws` | `localstack/localstack:3` | Opt-in / legacy |
+| GCP | `floci/gcp` | `floci/floci-gcp` | Storage, Pub/Sub, Firestore, Bigtable, Datastore |
+| Azure | `floci/az` | `floci/floci-az` | Blob / Storage |
+| Kubernetes | `k3s` | `rancher/k3s` | A real single-node cluster |
+| Vault / secrets | `openbao` | `openbao/openbao` | **Default** — MPL open-source fork |
+| Vault / secrets | `vault` | `hashicorp/vault` | Opt-in |
+| OCI / Terraform registry | `registry` | `registry:2` | Vendoring + the registry cache |
+
+The defaults are deliberately the free, open-source options (`floci/aws`, `openbao`) — reach for
+`localstack/aws` or `vault` only when you specifically need them. See the
+[emulator component reference](/stacks/components/emulator#supported-drivers--targets) for the full
+matrix, ports, and per-driver details.
+
+## What Emulators Are — and Aren't
+
+Emulators are built for the **happy path** — the common control-plane API surface your stacks actually
+exercise. That's where they shine, and for most local development and onboarding it's all you need. But
+it's worth being clear about what they are not:
+
+- **They're not bug-for-bug clones of the real clouds.** Edge cases, eventual-consistency quirks, and
+  the long tail of services and IAM nuances won't all be reproduced.
+- **They're not a substitute for a real pre-prod environment.** Validate against a real account before
+  production — emulators raise your confidence locally; they don't replace staging.
+- **Fidelity varies by service.** The more exotic the resource, the more likely you'll hit an
+  unimplemented corner.
+
+The point isn't 100% fidelity — it's being able to iterate quickly, for free, without cloud access, on
+the work you do every day.
+
+## Try It: the Advanced Quick Start
+
+The [advanced quick start](/quick-start/advanced) now deploys a **real event-driven AWS backend** — a KMS
+key, an encrypted S3 bucket, a DynamoDB table, an SNS topic, an SQS queue, and an SSM Parameter Store
+config — **entirely on your laptop, start to finish, with no AWS account and no credentials.**
+
+## Persistence and Reset
+
+Emulators persist their state by default. Atmos bind-mounts a per-instance host directory under the XDG
+cache (`$XDG_CACHE_HOME/atmos/emulator/<instance>`) onto each emulator's data directory, so resources,
+images, clusters, and secrets all survive a restart:
+
+```bash
+atmos emulator up registry -s local      # start the registry
+# ... push images ...
+atmos emulator down registry -s local    # stop it — state is kept
+atmos emulator up registry -s local      # back up — your images are still there
+```
+
+Use `reset` for a clean slate, or `--ephemeral` for a throwaway instance that never persists:
+
+```bash
+atmos emulator reset registry -s local --force
+atmos emulator up registry -s local --ephemeral
+```
+
+## How to Use It
+
+- `atmos emulator up <component> -s <stack>` to start an emulator, then run your normal
+  `atmos terraform …` commands against it.
+- `atmos emulator ps`, `logs`, and `exec` to inspect a running emulator (it outlives the `atmos`
+  process and is rediscovered by label — no local state files).
+- `atmos emulator reset <component> -s <stack>` to wipe persisted state.
+- `--ephemeral` (or `ephemeral: true` on the component) for a throwaway instance.
+
+See the [emulator component reference](/stacks/components/emulator) and the
+[`atmos emulator`](/cli/commands/emulator/usage) command docs for details.
+
+## What's New
+
+- **`atmos emulator list`** renders every emulator across your stacks in a clean table — a status dot, the image, and the container ID — so you can see what's running at a glance. Scope it to a single stack with `--stack`, or omit it to list everything. See the [`atmos emulator list`](/cli/commands/emulator/list) reference.
+- **Ready-to-run examples.** Two new examples let you try emulators without assembling a stack yourself: [`examples/emulator-aws`](https://github.com/cloudposse/atmos/tree/main/examples/emulator-aws) brings up a local AWS environment, and [`examples/emulator-k8s`](https://github.com/cloudposse/atmos/tree/main/examples/emulator-k8s) brings up a local Kubernetes (k3s) cluster and deploys into it.
+
+See the AWS emulator lifecycle in action:
+
+<CastPlayer src="/casts/examples/emulator-aws/lifecycle.cast" title="atmos emulator aws lifecycle" chrome controls scrubber />
+
+[View the full example](/examples/emulator-aws)
+
+And the Kubernetes emulator lifecycle:
+
+<CastPlayer src="/casts/examples/emulator-k8s/lifecycle.cast" title="atmos kubernetes emulator lifecycle" chrome controls scrubber />
+
+[View the full example](/examples/emulator-k8s)

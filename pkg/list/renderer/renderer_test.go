@@ -1,12 +1,15 @@
 package renderer
 
 import (
+	"strings"
 	"testing"
 	"text/template"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -34,6 +37,32 @@ func TestNew(t *testing.T) {
 	assert.NotNil(t, r)
 	assert.NotNil(t, r.output)
 	assert.Equal(t, format.FormatJSON, r.format)
+}
+
+// TestNew_WithTableOptions covers the Option-applying path: without any options, a
+// renderer's tableOptions must stay nil (styled tables fall back to their own
+// defaults); WithTableOptions must both be invoked by New's opts loop and set the
+// exact options struct passed in.
+func TestNew_WithTableOptions(t *testing.T) {
+	configs := []column.Config{
+		{Name: "Component", Value: "{{ .component }}"},
+	}
+	selector, err := column.NewSelector(configs, template.FuncMap{})
+	require.NoError(t, err)
+
+	noOpts := New([]filter.Filter{}, selector, []*sort.Sorter{}, format.FormatTable, "")
+	assert.Nil(t, noOpts.tableOptions, "tableOptions must stay nil when no Option is passed")
+
+	tableOptions := format.TableOptions{
+		SemanticCellStyling: false,
+		ColumnRoles:         []format.ColumnRole{format.ColumnRoleMuted},
+	}
+	withOpts := New(
+		[]filter.Filter{}, selector, []*sort.Sorter{}, format.FormatTable, "",
+		WithTableOptions(tableOptions),
+	)
+	require.NotNil(t, withOpts.tableOptions, "WithTableOptions must be applied by New's opts loop")
+	assert.Equal(t, tableOptions, *withOpts.tableOptions)
 }
 
 func TestRenderer_Render_Complete(t *testing.T) {
@@ -96,6 +125,71 @@ func TestRenderer_Render_NoFilters(t *testing.T) {
 
 	err = r.Render(testData)
 	assert.NoError(t, err)
+}
+
+func TestRenderer_RenderToString_PathsFormat(t *testing.T) {
+	testData := []map[string]any{
+		{"file": "atmos.d/integrations.yaml", "path": "integrations.github.enabled", "type": "bool", "value": "true"},
+		{"file": "atmos.yaml", "path": "logs.level", "type": "string", "value": "info"},
+		{"file": "atmos.yaml", "path": "components.terraform.base_path", "type": "string", "value": "components/terraform"},
+	}
+
+	configs := []column.Config{
+		{Name: "file", Value: "{{ .file }}"},
+		{Name: "path", Value: "{{ .path }}"},
+		{Name: "type", Value: "{{ .type }}"},
+		{Name: "value", Value: "{{ .value }}"},
+	}
+	selector, err := column.NewSelector(configs, column.BuildColumnFuncMap())
+	require.NoError(t, err)
+
+	r := New(
+		nil,
+		selector,
+		[]*sort.Sorter{
+			sort.NewSorter("file", sort.Ascending),
+			sort.NewSorter("path", sort.Ascending),
+		},
+		format.FormatPaths,
+		"",
+	)
+
+	output, err := r.RenderToString(testData)
+	require.NoError(t, err)
+	require.Equal(t, `atmos.d/integrations.yaml
+  integrations.github.enabled
+
+atmos.yaml
+  components.terraform.base_path
+  logs.level
+`, output)
+}
+
+func TestFormatStyledPathsIncludesTypeAndValue(t *testing.T) {
+	output := formatStyledPaths(
+		[]string{"file", "path", "type", "value"},
+		[][]string{
+			{"atmos.yaml", "logs.level", "string", "info"},
+			{"atmos.yaml", "settings", "object", "{2 keys}"},
+			{"atmos.yaml", "commands[0].steps[0]", "string", "echo one\necho two\n"},
+		},
+	)
+
+	require.Contains(t, output, "atmos.yaml")
+	require.Contains(t, output, "logs.level")
+	require.Contains(t, output, "info")
+	require.Contains(t, output, "settings")
+	require.Contains(t, output, "{2 keys}")
+	require.Contains(t, output, "echo one ... (2 lines)")
+
+	lines := strings.Split(output, "\n")
+	logLine := lines[1]
+	settingsLine := lines[2]
+	commandLine := lines[3]
+	require.Equal(t, strings.Index(logLine, "string"), strings.Index(settingsLine, "object"))
+	require.Equal(t, strings.Index(logLine, "string"), strings.Index(commandLine, "string"))
+	require.Equal(t, strings.Index(logLine, "info"), strings.Index(settingsLine, "{2 keys}"))
+	require.Equal(t, strings.Index(logLine, "info"), strings.Index(commandLine, "echo one"))
 }
 
 func TestRenderer_Render_NoSorters(t *testing.T) {
@@ -235,6 +329,34 @@ func TestRenderer_Render_TableFormat(t *testing.T) {
 
 	err = r.Render(testData)
 	assert.NoError(t, err)
+}
+
+// TestFormatStyledTableOrPlain_UsesTableOptionsOnTTY covers the r.tableOptions != nil
+// dispatch inside formatStyledTableOrPlain's interactive-terminal branch: when set (e.g.
+// via WithTableOptions), it must forward to CreateStyledTableWithOptions with those exact
+// options rather than falling back to CreateStyledTable's SemanticCellStyling:true default.
+func TestFormatStyledTableOrPlain_UsesTableOptionsOnTTY(t *testing.T) {
+	origForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", origForceTTY) })
+
+	headers := []string{"Component", "Enabled"}
+	rows := [][]string{{"vpc", "true"}, {"eks", "false"}}
+
+	options := format.TableOptions{
+		SemanticCellStyling: false,
+		ColumnRoles:         []format.ColumnRole{format.ColumnRoleIdentifier, format.ColumnRoleMuted},
+	}
+
+	withOptions := (&Renderer{tableOptions: &options}).formatStyledTableOrPlain(headers, rows)
+	assert.Equal(t, format.CreateStyledTableWithOptions(headers, rows, options), withOptions,
+		"a set tableOptions must be forwarded verbatim to CreateStyledTableWithOptions")
+	assert.Contains(t, withOptions, "Component")
+	assert.Contains(t, withOptions, "vpc")
+
+	withoutOptions := (&Renderer{}).formatStyledTableOrPlain(headers, rows)
+	assert.Equal(t, format.CreateStyledTable(headers, rows), withoutOptions,
+		"a nil tableOptions must fall back to CreateStyledTable's own default")
 }
 
 func TestRenderer_Render_InvalidColumnTemplate(t *testing.T) {
@@ -488,4 +610,89 @@ func TestRenderer_Render_FilterReturnsInvalidType(t *testing.T) {
 	err = r.Render(testData)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "filter returned invalid type")
+}
+
+func TestRenderer_RenderToString_NilSelector(t *testing.T) {
+	r := New(nil, nil, nil, format.FormatJSON, "")
+
+	_, err := r.RenderToString([]map[string]any{{"component": "vpc"}})
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	require.Contains(t, err.Error(), "nil column selector")
+}
+
+func TestFormatPlainPaths_MissingColumns(t *testing.T) {
+	// Neither "file" nor "path" columns present: fileIndex/pathIndex guard returns "".
+	output := formatPlainPaths(
+		[]string{"name", "value"},
+		[][]string{{"foo", "bar"}},
+	)
+	require.Empty(t, output)
+}
+
+func TestFormatPlainPaths_MixedValidAndShortRows(t *testing.T) {
+	// One row is missing the "path" column value entirely (shorter than the header
+	// count), the other rows are well-formed. The short row must be skipped while
+	// valid rows are still rendered, exercising both sides of the per-row bounds check.
+	output := formatPlainPaths(
+		[]string{"file", "path"},
+		[][]string{
+			{"atmos.yaml"}, // Too short: pathIndex (1) >= len(row) (1) -> skipped.
+			{"atmos.yaml", "logs.level"},
+			{"atmos.d.yaml", "settings.enabled"},
+		},
+	)
+	require.Equal(t, "atmos.yaml\n  logs.level\n\natmos.d.yaml\n  settings.enabled\n", output)
+}
+
+func TestFormatPlainPaths_AllRowsShort(t *testing.T) {
+	// Every row fails the bounds check, so no lines are ever appended and the
+	// len(lines) == 0 branch returns "".
+	output := formatPlainPaths(
+		[]string{"file", "path"},
+		[][]string{{"atmos.yaml"}, {}},
+	)
+	require.Empty(t, output)
+}
+
+func TestAppendStyledPathLine_MixedValidAndShortRows(t *testing.T) {
+	styles := styledPathStyles()
+	opts := styledPathLineOptions{
+		indexes: pathColumnIndexes{file: 0, path: 1, typ: 2, value: 3},
+		widths:  pathColumnWidths{path: 10, typ: 6},
+		styles:  &styles,
+	}
+
+	var lines []string
+	currentFile := ""
+
+	// Row shorter than required indexes: bounds check must reject it (ok == false),
+	// leaving lines/currentFile untouched.
+	nextLines, nextFile, ok := appendStyledPathLine(lines, currentFile, []string{"atmos.yaml"}, opts)
+	require.False(t, ok)
+	require.Equal(t, lines, nextLines)
+	require.Equal(t, currentFile, nextFile)
+
+	// A well-formed row is appended and becomes the new "current file": a file
+	// header line is emitted first, followed by the content line.
+	lines, currentFile, ok = appendStyledPathLine(nextLines, nextFile, []string{"atmos.yaml", "logs.level", "string", "info"}, opts)
+	require.True(t, ok)
+	require.Equal(t, "atmos.yaml", currentFile)
+	require.Len(t, lines, 2)
+	require.Contains(t, lines[0], "atmos.yaml")
+	require.Contains(t, lines[1], "logs.level")
+
+	// A second row for the same file does not repeat the file header.
+	lines, currentFile, ok = appendStyledPathLine(lines, currentFile, []string{"atmos.yaml", "settings", "object", ""}, opts)
+	require.True(t, ok)
+	require.Equal(t, "atmos.yaml", currentFile)
+	require.Len(t, lines, 3)
+
+	// A row for a new file inserts a blank separator line before the new file header.
+	lines, currentFile, ok = appendStyledPathLine(lines, currentFile, []string{"other.yaml", "path.a", "string", "x"}, opts)
+	require.True(t, ok)
+	require.Equal(t, "other.yaml", currentFile)
+	require.Len(t, lines, 6)
+	require.Empty(t, lines[3])
+	require.Contains(t, lines[4], "other.yaml")
 }

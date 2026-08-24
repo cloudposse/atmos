@@ -1,0 +1,92 @@
+---
+title: atmos git hooks install
+sidebar_label: install
+sidebar_class_name: command
+id: install
+slug: /cli/commands/git/hooks/install
+description: Install local .git/hooks shims that delegate to atmos git hooks run.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Write local `.git/hooks/<hook>` shim scripts for the hooks configured under [`git.hooks`](/cli/configuration/git#local-git-hooks). Each shim is a one-liner that delegates to `atmos git hooks run`, keeping all hook logic in `atmos.yaml` where it is versioned, shared, and executed through Atmos workflows and custom commands.
+</Intro>
+
+<CastPlayer title="atmos git hooks install --help" src="/casts/screengrabs/atmos-git-hooks-install--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos git hooks install [hook-name...] [flags]
+```
+
+Given this configuration:
+
+```yaml
+git:
+  hooks:
+    pre-commit:
+      command: atmos workflow pre-commit
+    commit-msg:
+      command: atmos workflow commit-msg -- "$1"
+```
+
+`install` writes a shim like this for each hook:
+
+```sh
+#!/bin/sh
+exec atmos git hooks run pre-commit "$@"
+```
+
+## Examples
+
+```shell
+# Install all hooks configured under git.hooks
+atmos git hooks install
+
+# Install only specific hooks
+atmos git hooks install pre-commit commit-msg
+
+# Overwrite existing hooks
+atmos git hooks install --force
+```
+
+## Behavior
+
+- Installs **all** configured hooks when no hook names are provided; only the requested hooks otherwise.
+- **Refuses to overwrite** an existing hook unless `--force` is passed.
+- Marks generated shim scripts executable.
+- Resolves the hooks directory through Git (`git rev-parse --git-path hooks`), so linked worktrees — where `.git` is a file and hooks live in the common dir — work correctly.
+- Does **not** manage `core.hooksPath`, but warns when it is set (for example, by Husky), because Git ignores `.git/hooks/*` shims in that case.
+
+:::warning PATH and GUI Git clients
+
+Shims invoke `atmos` from `PATH`. GUI Git clients (IDEs, Sourcetree) may run hooks with a different `PATH` than your shell. If hooks fail only from a GUI client, ensure the directory containing `atmos` is on the `PATH` the client uses — this is the most common failure mode for hook managers of this style.
+
+:::
+
+## Arguments
+
+<dl>
+    <dt>`hook-name...` <em>(optional)</em></dt>
+    <dd>
+        One or more Git hook names (`pre-commit`, `commit-msg`, `pre-push`, ...) to install. When omitted, all hooks configured under `git.hooks` are installed.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--force` / `-f` <em>(optional)</em></dt>
+    <dd>
+        Overwrite existing hook scripts. Without it, install refuses to replace a hook that already exists.
+        Environment variable: `ATMOS_GIT_HOOKS_FORCE`
+    </dd>
+</dl>
+
+## Related
+
+- [`atmos git hooks run`](/cli/commands/git/hooks/run) — what the generated shims execute
+- [`atmos git hooks uninstall`](/cli/commands/git/hooks/uninstall) — remove Atmos-generated shims
+- [Git Configuration](/cli/configuration/git#local-git-hooks) — the `git.hooks` section

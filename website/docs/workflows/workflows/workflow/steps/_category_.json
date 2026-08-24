@@ -1,0 +1,10 @@
+{
+  "label": "steps",
+  "position": 8,
+  "collapsible": true,
+  "collapsed": false,
+  "link": {
+    "type": "doc",
+    "id": "workflows/workflows/workflow/steps/index"
+  }
+}

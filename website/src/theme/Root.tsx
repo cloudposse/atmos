@@ -1,6 +1,9 @@
 import React from 'react';
 import Watermark from '@site/src/components/Watermark';
 import DefinitionLinkHandler from '@site/src/components/DefinitionLinkHandler';
+import SidebarScrollHandler from '@site/src/components/SidebarScrollHandler';
+import SidebarResizeHandler from '@site/src/components/SidebarResizeHandler';
+import CodeLineNumberPreference from '@site/src/components/CodeLineNumberPreference';
 
 /**
  * Root component that wraps the entire site.
@@ -12,6 +15,9 @@ export default function Root({ children }: { children: React.ReactNode }): JSX.E
       {children}
       <Watermark />
       <DefinitionLinkHandler />
+      <SidebarScrollHandler />
+      <SidebarResizeHandler />
+      <CodeLineNumberPreference />
     </>
   );
 }

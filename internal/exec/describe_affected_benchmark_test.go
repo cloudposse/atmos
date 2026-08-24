@@ -20,10 +20,11 @@ func BenchmarkFindAffectedParallel(b *testing.B) {
 			&remoteStacks,
 			atmosConfig,
 			changedFiles,
-			false, // includeSpaceliftAdminStacks
-			false, // includeSettings
-			"",    // stackToFilter
-			false, // excludeLocked
+			false,                // includeSpaceliftAdminStacks
+			false,                // includeSettings
+			"",                   // stackToFilter
+			false,                // excludeLocked
+			atmosConfig.BasePath, // gitRepoRoot
 		)
 		if err != nil {
 			b.Fatal(err)
@@ -37,7 +38,7 @@ func BenchmarkChangedFilesIndexCreation(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = newChangedFilesIndex(atmosConfig, changedFiles)
+		_ = newChangedFilesIndex(atmosConfig, changedFiles, atmosConfig.BasePath)
 	}
 }
 
@@ -64,7 +65,7 @@ func BenchmarkIsComponentFolderChanged(b *testing.B) {
 func BenchmarkIsComponentFolderChangedIndexed(b *testing.B) {
 	atmosConfig, _, _, changedFiles := setupBenchmarkData(b)
 	component := "vpc"
-	filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+	filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, atmosConfig.BasePath)
 	patternCache := newComponentPathPatternCache()
 
 	b.ResetTimer()

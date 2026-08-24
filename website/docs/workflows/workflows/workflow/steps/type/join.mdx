@@ -1,0 +1,37 @@
+---
+title: join
+sidebar_label: join
+slug: /workflows/steps/type/join
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `join` step type combines strings into a single value, a building block for assembling arguments, lists, or messages that later steps in your custom commands and workflows consume.
+</Intro>
+
+```yaml
+steps:
+  - name: targets
+    type: join
+    separator: ","
+    options:
+      - vpc
+      - eks
+      - rds
+```
+
+## Fields
+
+<dl>
+  <dt>`options`</dt>
+  <dd>Array of strings to resolve and join.</dd>
+
+  <dt>`separator`</dt>
+  <dd>Optional separator. Defaults to a newline.</dd>
+
+  <dt>`content`</dt>
+  <dd>Alternative single template source. When set, Atmos resolves and returns it as-is.</dd>
+</dl>
+
+Provide either `options` or `content`.

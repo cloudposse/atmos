@@ -48,6 +48,7 @@ func TestGitRootFunction_Metadata(t *testing.T) {
 	assert.Equal(t, PreMerge, fn.Phase())
 
 	aliases := fn.Aliases()
-	require.Len(t, aliases, 1)
-	assert.Equal(t, "git-root", aliases[0])
+	require.Len(t, aliases, 2)
+	assert.Contains(t, aliases, "git-root")
+	assert.Contains(t, aliases, TagGitRoot)
 }

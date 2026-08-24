@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Catalog file for my-component.
+# This file defines locals that reference .settings - which fails in issue #1991
+# because settings come from an imported mixin, not from this file.
+
+# NOTE: This is the problematic scenario from issue #1991.
+# The user expects .settings.substage to be available from the imported mixin,
+# but locals are resolved BEFORE the merge with imported files happens.
+
+# THIS IS THE KEY: Locals referencing .settings from imported files
+locals:
+  domain: '{{ .settings.substage }}.example.com'
+
+components:
+  terraform:
+    my-component:
+      metadata:
+        component: mock
+      vars:
+        domain: "{{ .locals.domain }}"
+        substage: "{{ .settings.substage }}"

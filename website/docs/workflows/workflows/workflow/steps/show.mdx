@@ -1,0 +1,28 @@
+---
+title: show
+sidebar_label: show
+sidebar_position: 8
+slug: /workflows/steps/show
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The step-level `show` field overrides the workflow-level [display settings](/workflows/show) for a single step.
+</Intro>
+
+```yaml
+workflows:
+  verbose-deploy:
+    show:
+      command: true
+      count: true
+    steps:
+      - name: plan
+        type: atmos
+        command: terraform plan vpc
+        show:
+          command: false
+```
+
+Step values deep-merge with workflow-level [show](/workflows/show). Only fields set on the step override the workflow value.

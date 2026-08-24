@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# A local Git server emulator (Gitea) as a stack-scoped Atmos component.
+# `atmos emulator up gitserver -s local` starts (or reuses) the Gitea container and
+# bootstraps it: a throwaway admin user (atmos/atmos) and an auto-initialized
+# `deployments` repository. Gitea serves Git over HTTP, which is what GitOps
+# controllers (Flux, Argo CD) require — a bare `git daemon` (git://) cannot be
+# watched by Flux.
+#
+# The host publishes Gitea on :3000 (pinned), so Atmos pushes to
+# http://atmos:atmos@localhost:3000/atmos/deployments.git. Flux runs inside k3s
+# pods, so it pulls through a Kubernetes Service/EndpointSlice backed by this
+# emulator's live container IP (see stacks/catalog/flux.yaml).
+components:
+  emulator:
+    gitserver:
+      driver: gitea
+      # Throwaway server: no persisted state across down/up. A fresh Gitea on each
+      # `up` keeps the demo deterministic (re-bootstrapped admin + repo every time).
+      ephemeral: true
+      container:
+        ports:
+          # Pin the host port so the remote URL in atmos.yaml is static.
+          - container: 3000
+            host: 3000

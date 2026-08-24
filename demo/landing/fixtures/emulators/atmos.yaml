@@ -1,0 +1,40 @@
+# Landing-page fixture for the "Containers & Emulators" demo (demo/landing/emulators.tape).
+#
+# It declares four local cloud emulators — AWS, GCP, Azure (all Floci) and
+# Kubernetes (k3s) — so `atmos emulator list` shows the whole local cloud at once,
+# then deploys a real resource to the AWS emulator. No cloud account required.
+#
+# Dedicated landing fixture (not an examples/* project) so it can be tuned for the
+# page. Modeled on examples/emulator-aws + examples/emulator-k8s.
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# The aws/emulator identity wires Terraform to the local AWS sandbox for the deploy
+# beat. The GCP/Azure/k3s emulators are brought up for the inventory shot only, so
+# they need no identity here.
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: aws
+      default: true

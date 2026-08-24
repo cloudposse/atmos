@@ -21,7 +21,7 @@ Previously, these files used hardcoded paths like `~/.atmos/`, which:
 
 ### Requirements
 
-1. **Follow XDG Base Directory Specification**: Implement the [freedesktop.org XDG standard](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
+1. **Follow XDG Base Directory Specification**: Implement the [freedesktop.org XDG standard](https://specifications.freedesktop.org/basedir/basedir-spec-latest.html)
 2. **Platform-aware defaults**: Use native conventions on macOS and Windows
 3. **Environment variable override**: Support both `XDG_*` and `ATMOS_XDG_*` variables
 4. **Backward compatibility**: Existing configurations continue to work
@@ -540,7 +540,7 @@ Additional documentation:
 ## Related Documents
 
 - [Keyring Backend System PRD](./keyring-backends.md) - Credential storage system that uses XDG for file backend
-- [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) - Official standard
+- [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/basedir-spec-latest.html) - Official standard
 - [github.com/adrg/xdg](https://github.com/adrg/xdg) - Go library used for platform defaults
 
 ## Changelog

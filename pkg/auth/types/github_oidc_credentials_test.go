@@ -70,9 +70,19 @@ func TestOIDCCredentials_IsExpired_WithSkew(t *testing.T) {
 	c2 := &OIDCCredentials{Token: jwtWithExp(far)}
 	assert.False(t, c2.IsExpired())
 
-	// No exp -> not expired.
-	c3 := &OIDCCredentials{Token: "header.payload."}
+	// No exp claim (valid JSON payload without `exp`) -> not expired.
+	emptyClaims := base64.RawURLEncoding.EncodeToString([]byte("{}"))
+	c3 := &OIDCCredentials{Token: "header." + emptyClaims + ".sig"}
 	assert.False(t, c3.IsExpired())
+
+	// Malformed JWT (payload fails base64 decode) -> fail closed (expired).
+	c4 := &OIDCCredentials{Token: "aGVh.Zm9v+notbase64.sig"}
+	assert.True(t, c4.IsExpired())
+
+	// Malformed JWT (payload is not valid JSON) -> fail closed (expired).
+	badJSON := base64.RawURLEncoding.EncodeToString([]byte("not-json"))
+	c5 := &OIDCCredentials{Token: "aGVh." + badJSON + ".sig"}
+	assert.True(t, c5.IsExpired())
 }
 
 func TestOIDCCredentials_BuildWhoamiInfo(t *testing.T) {

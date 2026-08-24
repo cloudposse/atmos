@@ -1,0 +1,57 @@
+---
+title: "!emulator"
+sidebar_position: 12
+sidebar_label: "!emulator"
+sidebar_class_name: command
+description: Retrieve connection information from a running Atmos emulator
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `!emulator` Atmos YAML function retrieves live connection information (endpoint, credentials,
+    kubeconfig) from a running [emulator](/cli/commands/emulator/up) component, referenced by name and
+    resolved relative to the current stack.
+</Intro>
+
+## Usage
+
+```yaml
+  # Retrieve a connection value from a running emulator component.
+  !emulator <component-ref> <key>
+```
+
+`<component-ref>` is the emulator component's name (resolved in the current stack). `<key>` is one of:
+
+- `endpoint` or `url` — the emulator's base URL
+- `host` — the emulator's host
+- `port` — the emulator's primary bound host port
+- `region` — the emulator's configured region (cloud emulators)
+- `project` — the emulator's configured project (cloud emulators)
+- `kubeconfig` — materializes a kubeconfig file for a Kubernetes-target emulator and returns its path
+- `env.<VAR>` — a single SDK environment variable from the emulator's connection profile (for example,
+  `env.AWS_ACCESS_KEY_ID`)
+
+## Examples
+
+```yaml
+vars:
+  # Point a component at a running LocalStack-style emulator instead of real AWS.
+  aws_endpoint: !emulator aws-emulator endpoint
+
+env:
+  # Pass emulator credentials through to Terraform as environment variables.
+  AWS_ACCESS_KEY_ID: !emulator aws-emulator env.AWS_ACCESS_KEY_ID
+  AWS_SECRET_ACCESS_KEY: !emulator aws-emulator env.AWS_SECRET_ACCESS_KEY
+
+  # Point kubectl/helm at a running k3s emulator.
+  KUBECONFIG: !emulator k3s-emulator kubeconfig
+```
+
+:::info
+The referenced emulator component must be running (`atmos emulator up`) before the function can resolve a value.
+:::
+
+## Related
+
+- [`atmos emulator up`](/cli/commands/emulator/up) — start emulator components
+- [`atmos emulator list`](/cli/commands/emulator/list) — list running emulators

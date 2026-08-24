@@ -56,6 +56,13 @@ func WithInitClock(c Clock) InitModelOption {
 	}
 }
 
+// WithWorkspace sets the workspace name (used for workspace select/new display).
+func WithWorkspace(workspace string) InitModelOption {
+	return func(m *InitModel) {
+		m.workspace = workspace
+	}
+}
+
 // initLineMsg wraps a line from init output.
 type initLineMsg struct {
 	line string
@@ -68,7 +75,8 @@ type initDoneMsg struct {
 }
 
 // NewInitModel creates a new init/workspace streaming model.
-func NewInitModel(component, stack, subCommand, workspace string, reader io.Reader, opts ...InitModelOption) *InitModel {
+// Use WithWorkspace to set the workspace name for workspace select/new commands.
+func NewInitModel(component, stack, subCommand string, reader io.Reader, opts ...InitModelOption) *InitModel {
 	defer perf.Track(nil, "terraform.ui.NewInitModel")()
 
 	// Use MiniDot spinner for init/workspace (more subtle, different from plan/apply).
@@ -89,7 +97,6 @@ func NewInitModel(component, stack, subCommand, workspace string, reader io.Read
 		component:  component,
 		stack:      stack,
 		subCommand: subCommand,
-		workspace:  workspace,
 		clock:      defaultClock(),
 	}
 
@@ -135,7 +142,7 @@ func (m *InitModel) readNextLine() tea.Cmd {
 func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" || msg.String() == "q" {
+		if isQuitKey(msg.String()) {
 			return m, tea.Quit
 		}
 
@@ -146,22 +153,7 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case initLineMsg:
 		// Strip ANSI codes from terraform output to prevent display corruption.
-		line := strings.TrimSpace(ansi.Strip(msg.line))
-		if line != "" {
-			// Track current operation for display.
-			if strings.HasPrefix(line, "Initializing") {
-				m.currentOp = line
-			} else if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") {
-				// Provider/module operations - add to viewport.
-				m.lines = append(m.lines, line)
-				// Keep only the last N lines.
-				if len(m.lines) > initMaxLines {
-					m.lines = m.lines[len(m.lines)-initMaxLines:]
-				}
-			} else if strings.Contains(line, "successfully initialized") {
-				m.currentOp = "Initialized successfully"
-			}
-		}
+		m.processInitLine(strings.TrimSpace(ansi.Strip(msg.line)))
 		return m, m.readNextLine()
 
 	case initDoneMsg:
@@ -172,6 +164,29 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// processInitLine updates the model's current operation and recent-lines viewport based
+// on a single line of init/workspace output.
+func (m *InitModel) processInitLine(line string) {
+	if line == "" {
+		return
+	}
+
+	switch {
+	case strings.HasPrefix(line, "Initializing"):
+		// Track current operation for display.
+		m.currentOp = line
+	case strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* "):
+		// Provider/module operations - add to viewport.
+		m.lines = append(m.lines, line)
+		// Keep only the last N lines.
+		if len(m.lines) > initMaxLines {
+			m.lines = m.lines[len(m.lines)-initMaxLines:]
+		}
+	case strings.Contains(line, "successfully initialized"):
+		m.currentOp = "Initialized successfully"
+	}
 }
 
 // View renders the model.
@@ -192,18 +207,19 @@ func (m *InitModel) renderProgress() string {
 	action := m.formatAction()
 
 	// Header line with spinner.
-	b.WriteString(fmt.Sprintf("%s %s %s/%s (%.1fs)\n",
+	fmt.Fprintf(
+		&b, "%s %s %s/%s (%.1fs)\n",
 		m.spinner.View(),
 		action,
 		m.stack,
 		m.component,
 		elapsed,
-	))
+	)
 
 	// Show current operation.
 	if m.currentOp != "" {
 		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
-		b.WriteString(fmt.Sprintf("  %s\n", dimStyle.Render(m.currentOp)))
+		fmt.Fprintf(&b, "  %s\n", dimStyle.Render(m.currentOp))
 	}
 
 	// Show recent provider/module lines (dimmed).
@@ -213,7 +229,7 @@ func (m *InitModel) renderProgress() string {
 		if runewidth.StringWidth(line) > initMaxLineWidth {
 			line = runewidth.Truncate(line, initTruncatedWidth, "...")
 		}
-		b.WriteString(fmt.Sprintf("    %s\n", dimStyle.Render(line)))
+		fmt.Fprintf(&b, "    %s\n", dimStyle.Render(line))
 	}
 
 	return b.String()
@@ -227,7 +243,8 @@ func (m *InitModel) renderComplete() string {
 	action := m.formatAction()
 
 	if m.err != nil || m.exitCode != 0 {
-		return atmosui.FormatErrorf("%s `%s/%s` failed",
+		return atmosui.FormatErrorf(
+			"%s `%s/%s` failed",
 			action,
 			m.stack,
 			m.component,
@@ -236,14 +253,16 @@ func (m *InitModel) renderComplete() string {
 
 	// For workspace command, "Selected" already implies completion, so don't add "completed".
 	if m.subCommand == "workspace" {
-		return atmosui.FormatSuccessf("%s `%s/%s`",
+		return atmosui.FormatSuccessf(
+			"%s `%s/%s`",
 			action,
 			m.stack,
 			m.component,
 		) + dimStyle.Render(fmt.Sprintf(" (%.1fs)", elapsed)) + "\n"
 	}
 
-	return atmosui.FormatSuccessf("%s `%s/%s` completed",
+	return atmosui.FormatSuccessf(
+		"%s `%s/%s` completed",
 		action,
 		m.stack,
 		m.component,

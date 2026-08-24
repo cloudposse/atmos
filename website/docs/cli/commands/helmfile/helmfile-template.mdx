@@ -1,0 +1,73 @@
+---
+title: atmos helmfile template
+sidebar_label: template
+sidebar_class_name: command
+id: template
+---
+
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  Render all Helm releases defined in a Helmfile component to Kubernetes
+  manifests by running `helmfile template` with the generated values file. The
+  rendered manifests are written to stdout by default, or delivered to a
+  provision target (such as a Git deployment repository monitored by ArgoCD) when
+  `--target` is set. This enables a GitOps workflow where CI renders manifests
+  from Helmfile components and publishes them to a deployment repository — the
+  producer side of GitOps.
+</Intro>
+
+## Usage
+
+```shell
+atmos helmfile template <component> --stack <stack> [options]
+```
+
+Render to stdout:
+
+```shell
+atmos helmfile template echo-server -s tenant1-ue2-dev
+```
+
+Deliver the rendered manifests to a provision target (e.g. a Git/ArgoCD repo):
+
+```shell
+atmos helmfile template echo-server -s tenant1-ue2-dev --target deployment-repo
+```
+
+Configure the target in the component's `provision` section:
+
+```yaml
+components:
+  helmfile:
+    echo-server:
+      provision:
+        default: cluster
+        targets:
+          cluster:
+            kind: kubernetes
+          deployment-repo:
+            kind: git
+            repository: deployments
+            path: "clusters/{{ .vars.stage }}/echo-server"
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--target` <em>(optional)</em></dt>
+  <dd>Provision target to deliver the rendered manifests to (e.g. a Git deployment repository). When omitted (or when the selected target is the cluster), the manifests are written to stdout.</dd>
+</dl>
+
+Any additional flags are passed through to `helmfile template`.
+
+:::info
+This command implements the request in
+[cloudposse/atmos#2069](https://github.com/cloudposse/atmos/issues/2069).
+Helmfile remains useful when you need its advanced orchestration features. For
+most new chart deployments, native [`atmos helm`](/cli/commands/helm/usage)
+provides the common workflow directly in Atmos.
+:::

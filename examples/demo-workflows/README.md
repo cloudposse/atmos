@@ -1,12 +1,20 @@
+---
+title: Workflows
+tags: [Automation]
+cast:
+  file: /casts/examples/demo-workflows/deploy.cast
+  title: atmos workflows
+---
+
 # Example: Demo Workflows
 
 Run multiple Atmos commands in sequence with a single command.
 
-Learn more about [Workflows](https://atmos.tools/core-concepts/workflows/).
+Learn more about [Workflows](https://atmos.tools/workflows).
 
 ## What You'll See
 
-- [Workflow definitions](https://atmos.tools/core-concepts/workflows/workflow-manifest/) in stack manifests
+- [Workflow definitions](https://atmos.tools/workflows/workflow-manifest) in stack manifests
 - Chaining multiple `atmos terraform` commands
 - Parameterized workflows with arguments
 

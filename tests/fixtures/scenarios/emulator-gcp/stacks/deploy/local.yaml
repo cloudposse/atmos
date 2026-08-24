@@ -1,0 +1,15 @@
+vars:
+  stage: local
+
+components:
+  emulator:
+    gcp:
+      driver: floci/gcp
+      project: atmos-emulator
+      # Pin a non-standard host port: the conventional 4588 is bound by the floci-gcp
+      # service container in CI, so this emulator must avoid colliding with it. The
+      # container still serves on 4588.
+      container:
+        ports:
+          - host: 14588
+            container: 4588

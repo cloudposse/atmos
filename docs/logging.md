@@ -486,6 +486,6 @@ logs:
 
 ## Structured and Semantic Logging
 
-Structured logs record events as key/value pairs so machines and humans can parse them. Semantic logging standardizes those keys so logs can be understood across tools and teams. Atmos uses the [Charm Logger](https://charm.sh/blog/the-charm-logger/) for this purpose.
+Structured logs record events as key/value pairs so machines and humans can parse them. Semantic logging standardizes those keys so logs can be understood across tools and teams. Atmos uses the [Charm Logger](https://charm.land/blog/the-charm-logger/) for this purpose.
 
 See [structured-logging.md](structured-logging.md) for detailed guidance and examples.

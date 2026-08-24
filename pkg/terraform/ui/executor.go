@@ -3,19 +3,15 @@ package ui
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
-	"strconv"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -24,7 +20,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // Terraform subcommand constants.
@@ -46,11 +41,7 @@ const (
 const (
 	fmtNewlineStr = "\n%s"
 	fmtDuration   = " (%.1fs)"
-)
-
-// Numeric constants.
-const (
-	floatBitSize = 64
+	fmtWrapErr    = "%w: %w"
 )
 
 // ExecuteOptions configures streaming execution.
@@ -66,29 +57,61 @@ type ExecuteOptions struct {
 	DryRun     bool     // If true, don't execute.
 }
 
-// Execute runs a terraform command with streaming UI output.
-// Returns an error with exit code preserved via errUtils.ExitCodeError.
-func Execute(ctx context.Context, opts *ExecuteOptions) error {
-	defer perf.Track(nil, "terraform.ui.Execute")()
-
-	// Check TTY availability.
+// checkStreamingUIPreconditions returns an error if the streaming UI cannot run in the
+// current environment (no TTY, or running in CI).
+func checkStreamingUIPreconditions() error {
 	if !term.IsTTYSupportForStdout() {
 		return errUtils.ErrStreamingNotSupported
 	}
-
-	// Check if in CI environment.
 	if telemetry.IsCI() {
 		return errUtils.ErrStreamingNotSupported
 	}
+	return nil
+}
 
-	if opts.DryRun {
-		return nil
+// extractExitCode extracts the process exit code from a command's wait error.
+// Returns (exitCode, nil) if err is nil or an *exec.ExitError; otherwise returns
+// (0, err) unchanged so the caller can propagate the original error.
+func extractExitCode(err error) (int, error) {
+	if err == nil {
+		return 0, nil
 	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return 0, err
+	}
+	return exitErr.ExitCode(), nil
+}
 
-	// Build args with -json flag.
-	args := buildArgsWithJSON(opts.Args, opts.SubCommand)
+// runTUIProgram runs a bubbletea program to completion, killing the given command's
+// process if the TUI itself fails to run.
+func runTUIProgram(model tea.Model, cmd *exec.Cmd) (tea.Model, error) {
+	p := tea.NewProgram(
+		model,
+		tea.WithOutput(iolib.UI),
+		tea.WithoutSignalHandler(),
+	)
 
-	// Create command.
+	finalModel, err := p.Run()
+	if err != nil {
+		// Kill the process if TUI failed.
+		_ = cmd.Process.Kill()
+		return nil, fmt.Errorf(fmtWrapErr, errUtils.ErrTUIRun, err)
+	}
+	return finalModel, nil
+}
+
+// streamStderrToLog copies lines from r to the Atmos debug logger.
+func streamStderrToLog(r io.Reader) {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		log.Debug(scanner.Text())
+	}
+}
+
+// newStreamingCommand creates and starts a terraform command with separate stdout/stderr
+// pipes: stdout is returned for JSON message streaming, stderr is streamed to the logger.
+func newStreamingCommand(ctx context.Context, opts *ExecuteOptions, args []string) (*exec.Cmd, io.ReadCloser, error) {
 	//nolint:gosec // intentional subprocess call - terraform command with validated args
 	cmd := exec.CommandContext(ctx, opts.Command, args...)
 	cmd.Dir = opts.WorkingDir
@@ -98,7 +121,7 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 	// Get stdout pipe for streaming.
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrStdoutPipe, err)
+		return nil, nil, fmt.Errorf(fmtWrapErr, errUtils.ErrStdoutPipe, err)
 	}
 
 	// Capture stderr for non-JSON diagnostics (backend errors, plugin failures, etc.).
@@ -106,50 +129,48 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 	// and some critical errors (Go runtime panics, plugin crashes) only appear on stderr.
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrStderrPipe, err)
+		return nil, nil, fmt.Errorf(fmtWrapErr, errUtils.ErrStderrPipe, err)
 	}
 
 	// Stream stderr to logger in background.
-	go func() {
-		scanner := bufio.NewScanner(stderrPipe)
-		for scanner.Scan() {
-			log.Debug(scanner.Text())
-		}
-	}()
+	go streamStderrToLog(stderrPipe)
 
-	// Start command.
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrCommandStart, err)
+		return nil, nil, fmt.Errorf(fmtWrapErr, errUtils.ErrCommandStart, err)
+	}
+
+	return cmd, stdout, nil
+}
+
+// Execute runs a terraform command with streaming UI output.
+// Returns an error with exit code preserved via errUtils.ExitCodeError.
+func Execute(ctx context.Context, opts *ExecuteOptions) error {
+	defer perf.Track(nil, "terraform.ui.Execute")()
+
+	if err := checkStreamingUIPreconditions(); err != nil {
+		return err
+	}
+	if opts.DryRun {
+		return nil
+	}
+
+	args := buildArgsWithJSON(opts.Args)
+	cmd, stdout, err := newStreamingCommand(ctx, opts, args)
+	if err != nil {
+		return err
 	}
 
 	// Create and run TUI model.
 	model := NewModel(opts.Component, opts.Stack, opts.SubCommand, stdout)
-
-	p := tea.NewProgram(
-		model,
-		tea.WithOutput(iolib.UI),
-		tea.WithoutSignalHandler(),
-	)
-
-	// Run TUI - this blocks until completion.
-	finalModel, err := p.Run()
+	finalModel, err := runTUIProgram(model, cmd)
 	if err != nil {
-		// Kill the process if TUI failed.
-		_ = cmd.Process.Kill()
-		return fmt.Errorf("%w: %w", errUtils.ErrTUIRun, err)
+		return err
 	}
 
-	// Wait for command to finish.
-	cmdErr := cmd.Wait()
-
-	// Get exit code.
-	var exitCode int
-	if cmdErr != nil {
-		exitErr, ok := cmdErr.(*exec.ExitError)
-		if !ok {
-			return cmdErr
-		}
-		exitCode = exitErr.ExitCode()
+	// Wait for command to finish and get exit code.
+	exitCode, err := extractExitCode(cmd.Wait())
+	if err != nil {
+		return err
 	}
 
 	// Check if model has an error.
@@ -158,6 +179,12 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 		return fmt.Errorf("%w: expected Model, got %T", errUtils.ErrUnexpectedModelType, finalModel)
 	}
 
+	return finalizeExecuteResult(opts, &m, exitCode)
+}
+
+// finalizeExecuteResult logs diagnostics, resolves the final exit code (preferring the
+// model's own captured exit code, if any), and displays apply outputs on success.
+func finalizeExecuteResult(opts *ExecuteOptions, m *Model, exitCode int) error {
 	// Log diagnostics after TUI completes (warnings appear after completion message).
 	m.LogDiagnostics()
 
@@ -176,84 +203,63 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 	}
 
 	// Display outputs after successful apply.
-	if opts.SubCommand == subCommandApply && exitCode == 0 {
+	if opts.SubCommand == subCommandApply {
 		displayOutputs(m.GetTracker())
 	}
 
 	return nil
 }
 
-// hasJSONFlag checks if the -json flag is present in arguments.
-func hasJSONFlag(args []string) bool {
-	for _, arg := range args {
-		if arg == flagJSON || strings.HasPrefix(arg, flagJSON+"=") {
-			return true
-		}
+// showPlanTree parses the given planfile and renders the dependency tree with a badge
+// summary. Silently does nothing if the planfile can't be parsed.
+func showPlanTree(ctx context.Context, opts *ExecuteOptions, planFile string) {
+	tree, treeErr := BuildDependencyTree(ctx, &TreeBuildOptions{
+		PlanfilePath:  planFile,
+		TerraformPath: opts.Command,
+		WorkingDir:    opts.WorkingDir,
+		Stack:         opts.Stack,
+		Component:     opts.Component,
+	})
+	if treeErr != nil {
+		return
 	}
-	return false
+
+	add, change, remove := tree.GetChangeSummary()
+	// Only render tree if there are changes; otherwise just show badge.
+	if add > 0 || change > 0 || remove > 0 {
+		ui.Writef(fmtNewlineStr, tree.RenderTree())
+	}
+	ui.Write(RenderChangeSummaryBadges(add, change, remove))
 }
 
-// hasCompactWarningsFlag checks if the -compact-warnings flag is present.
-func hasCompactWarningsFlag(args []string) bool {
-	for _, arg := range args {
-		if arg == flagCompactWarnings {
-			return true
-		}
+// executePlanWithUserFile runs plan using the caller-provided -out planfile, then
+// displays the dependency tree parsed from it.
+func executePlanWithUserFile(ctx context.Context, opts *ExecuteOptions, planFile string) error {
+	if err := Execute(ctx, opts); err != nil {
+		return err
 	}
-	return false
+	showPlanTree(ctx, opts, planFile)
+	return nil
 }
 
-// isJSONSubCommand returns true if the argument is a terraform subcommand that supports -json.
-func isJSONSubCommand(arg string) bool {
-	return arg == subCommandPlan || arg == subCommandApply || arg == subCommandInit || arg == "refresh"
-}
+// executePlanWithTempFile generates a temporary planfile, runs plan into it, displays the
+// dependency tree, then cleans up the temp file.
+func executePlanWithTempFile(ctx context.Context, opts *ExecuteOptions) error {
+	planFile := filepath.Join(opts.WorkingDir, fmt.Sprintf(".atmos-plan-%d.tfplan", time.Now().UnixNano()))
+	defer os.Remove(planFile)
 
-// buildRequiredFlags builds the list of flags that need to be added.
-func buildRequiredFlags(hasJSON, hasCompactWarnings bool) []string {
-	var flags []string
-	if !hasJSON {
-		flags = append(flags, flagJSON)
-	}
-	if !hasCompactWarnings {
-		flags = append(flags, flagCompactWarnings)
-	}
-	return flags
-}
+	// Add -out flag to args (copy slice to avoid modifying original).
+	planOpts := *opts
+	planOpts.Args = make([]string, len(opts.Args)+1)
+	copy(planOpts.Args, opts.Args)
+	planOpts.Args[len(opts.Args)] = "-out=" + planFile
 
-// buildArgsWithJSON adds the -json and -compact-warnings flags to the arguments.
-// -json enables structured JSON output for parsing.
-// -compact-warnings suppresses verbose human-readable warnings since we route
-// diagnostics through the Atmos logger via parsed JSON.
-func buildArgsWithJSON(args []string, subCommand string) []string {
-	hasJSON := hasJSONFlag(args)
-	hasCompactWarnings := hasCompactWarningsFlag(args)
-
-	// If both flags are already present, return as-is.
-	if hasJSON && hasCompactWarnings {
-		return args
+	if err := Execute(ctx, &planOpts); err != nil {
+		return err
 	}
 
-	requiredFlags := buildRequiredFlags(hasJSON, hasCompactWarnings)
-
-	// Find the position to insert flags (after the subcommand).
-	var result []string
-	inserted := false
-
-	for i, arg := range args {
-		result = append(result, arg)
-		// Insert flags after the subcommand (plan, apply, init, refresh).
-		if i == 0 && isJSONSubCommand(arg) {
-			result = append(result, requiredFlags...)
-			inserted = true
-		}
-	}
-
-	// If no subcommand was found at position 0, just prepend flags.
-	if !inserted {
-		return append(requiredFlags, args...)
-	}
-
-	return result
+	showPlanTree(ctx, opts, planFile)
+	return nil
 }
 
 // ExecutePlan runs terraform plan with streaming UI and displays the dependency tree.
@@ -262,80 +268,26 @@ func ExecutePlan(ctx context.Context, opts *ExecuteOptions) error {
 	defer perf.Track(nil, "terraform.ui.ExecutePlan")()
 
 	// Check if user already specified -out flag - if so, use their planfile.
-	userPlanFile := extractOutFlag(opts.Args)
-	if userPlanFile != "" {
-		// User specified their own planfile, run normally then show tree.
-		if err := Execute(ctx, opts); err != nil {
-			return err
-		}
-
-		// Display tree from user's planfile with badge summary.
-		tree, treeErr := BuildDependencyTree(ctx, userPlanFile, opts.Command, opts.WorkingDir, opts.Stack, opts.Component)
-		if treeErr == nil {
-			add, change, remove := tree.GetChangeSummary()
-			// Only render tree if there are changes; otherwise just show badge.
-			if add > 0 || change > 0 || remove > 0 {
-				_ = ui.Writef(fmtNewlineStr, tree.RenderTree())
-			}
-			_ = ui.Write(RenderChangeSummaryBadges(add, change, remove))
-		}
-
-		return nil
+	if userPlanFile := extractOutFlag(opts.Args); userPlanFile != "" {
+		return executePlanWithUserFile(ctx, opts, userPlanFile)
 	}
 
-	// Generate temp planfile path.
-	planFile := filepath.Join(opts.WorkingDir, fmt.Sprintf(".atmos-plan-%d.tfplan", time.Now().UnixNano()))
-
-	// Add -out flag to args (copy slice to avoid modifying original).
-	planOpts := *opts
-	planOpts.Args = make([]string, len(opts.Args)+1)
-	copy(planOpts.Args, opts.Args)
-	planOpts.Args[len(opts.Args)] = "-out=" + planFile
-
-	// Run plan with TUI.
-	if err := Execute(ctx, &planOpts); err != nil {
-		// Clean up planfile on error.
-		os.Remove(planFile)
-		return err
-	}
-
-	// Display tree from planfile with badge summary.
-	tree, treeErr := BuildDependencyTree(ctx, planFile, opts.Command, opts.WorkingDir, opts.Stack, opts.Component)
-	if treeErr == nil {
-		add, change, remove := tree.GetChangeSummary()
-		// Only render tree if there are changes; otherwise just show badge.
-		if add > 0 || change > 0 || remove > 0 {
-			_ = ui.Writef(fmtNewlineStr, tree.RenderTree())
-		}
-		_ = ui.Write(RenderChangeSummaryBadges(add, change, remove))
-	}
-
-	// Clean up temp planfile.
-	os.Remove(planFile)
-
-	return nil
+	return executePlanWithTempFile(ctx, opts)
 }
 
-// ExecuteInit runs terraform init with a spinner TUI that captures output.
-// The output is shown in a viewport that clears when init completes.
-func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
-	defer perf.Track(nil, "terraform.ui.ExecuteInit")()
+// initCommandResult holds the running init/workspace command along with the merged
+// output reader and a channel that closes once the command has finished.
+type initCommandResult struct {
+	cmd    *exec.Cmd
+	reader io.Reader
+	done   <-chan struct{}
+	err    *error
+}
 
-	// Check TTY availability.
-	if !term.IsTTYSupportForStdout() {
-		return errUtils.ErrStreamingNotSupported
-	}
-
-	// Check if in CI environment.
-	if telemetry.IsCI() {
-		return errUtils.ErrStreamingNotSupported
-	}
-
-	if opts.DryRun {
-		return nil
-	}
-
-	// Create command (no -json flag for init).
+// newInitCommand starts a terraform init/workspace command, merging stdout and stderr
+// into a single pipe so all output is captured by the TUI. The command is waited on in
+// a background goroutine so the TUI can stream output concurrently.
+func newInitCommand(ctx context.Context, opts *ExecuteOptions) (*initCommandResult, error) {
 	//nolint:gosec // intentional subprocess call - terraform command with validated args
 	cmd := exec.CommandContext(ctx, opts.Command, opts.Args...)
 	cmd.Dir = opts.WorkingDir
@@ -348,9 +300,8 @@ func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
 	cmd.Stdout = pw
 	cmd.Stderr = pw
 
-	// Start command.
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrCommandStart, err)
+		return nil, fmt.Errorf(fmtWrapErr, errUtils.ErrCommandStart, err)
 	}
 
 	// Capture exit code from the goroutine.
@@ -362,34 +313,39 @@ func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
 		close(cmdDone)
 	}()
 
-	// Create and run TUI model.
-	model := NewInitModel(opts.Component, opts.Stack, opts.SubCommand, opts.Workspace, pr)
+	return &initCommandResult{cmd: cmd, reader: pr, done: cmdDone, err: &cmdErr}, nil
+}
 
-	p := tea.NewProgram(
-		model,
-		tea.WithOutput(iolib.UI),
-		tea.WithoutSignalHandler(),
-	)
+// ExecuteInit runs terraform init with a spinner TUI that captures output.
+// The output is shown in a viewport that clears when init completes.
+func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
+	defer perf.Track(nil, "terraform.ui.ExecuteInit")()
 
-	// Run TUI - this blocks until completion.
-	finalModel, err := p.Run()
+	if err := checkStreamingUIPreconditions(); err != nil {
+		return err
+	}
+	if opts.DryRun {
+		return nil
+	}
+
+	res, err := newInitCommand(ctx, opts)
 	if err != nil {
-		// Kill the process if TUI failed.
-		_ = cmd.Process.Kill()
-		return fmt.Errorf("%w: %w", errUtils.ErrTUIRun, err)
+		return err
+	}
+
+	// Create and run TUI model.
+	model := NewInitModel(opts.Component, opts.Stack, opts.SubCommand, res.reader, WithWorkspace(opts.Workspace))
+	finalModel, err := runTUIProgram(model, res.cmd)
+	if err != nil {
+		return err
 	}
 
 	// Wait for command to finish (should already be done since pipe closed).
-	<-cmdDone
+	<-res.done
 
-	// Get exit code.
-	var exitCode int
-	if cmdErr != nil {
-		exitErr, ok := cmdErr.(*exec.ExitError)
-		if !ok {
-			return cmdErr
-		}
-		exitCode = exitErr.ExitCode()
+	exitCode, err := extractExitCode(*res.err)
+	if err != nil {
+		return err
 	}
 
 	// Check if model has an error.
@@ -414,55 +370,41 @@ func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
 	return nil
 }
 
-// extractOutFlag checks if -out flag is present and returns its value.
-func extractOutFlag(args []string) string {
-	for i, arg := range args {
-		if arg == "-out" && i+1 < len(args) {
-			return args[i+1]
-		}
-		if strings.HasPrefix(arg, "-out=") {
-			return strings.TrimPrefix(arg, "-out=")
-		}
+// isStreamingUIRequested determines whether the user has opted in to the streaming UI
+// via the --ui flag or atmos config, honoring an explicit --ui=false override.
+func isStreamingUIRequested(uiFlagSet, uiFlag, configEnabled bool) bool {
+	if uiFlagSet && !uiFlag {
+		return false
 	}
-	return ""
+	return (uiFlagSet && uiFlag) || configEnabled
+}
+
+// supportsStreamingUISubCommand returns true for subcommands with streaming UI support.
+// Refresh is excluded since it doesn't have good -json streaming support.
+func supportsStreamingUISubCommand(subCommand string) bool {
+	switch subCommand {
+	case subCommandPlan, subCommandApply, subCommandInit, subCommandDestroy:
+		return true
+	default:
+		return false
+	}
 }
 
 // ShouldUseStreamingUI determines if streaming UI should be used.
 // This checks the flag, config, TTY availability, and CI environment.
-func ShouldUseStreamingUI(uiFlagSet bool, uiFlag bool, configEnabled bool, subCommand string) bool {
+func ShouldUseStreamingUI(uiFlagSet, uiFlag, configEnabled bool, subCommand string) bool {
 	defer perf.Track(nil, "terraform.ui.ShouldUseStreamingUI")()
 
-	// Check if explicitly disabled via --ui=false flag.
-	if uiFlagSet && !uiFlag {
+	if !isStreamingUIRequested(uiFlagSet, uiFlag, configEnabled) {
 		return false
 	}
 
-	// Check if enabled via --ui flag OR config.
-	enabled := (uiFlagSet && uiFlag) || configEnabled
-	if !enabled {
+	// Auto-disable in CI environments or when stdout is not a TTY (piped output).
+	if telemetry.IsCI() || !term.IsTTYSupportForStdout() {
 		return false
 	}
 
-	// Auto-disable in CI environments.
-	if telemetry.IsCI() {
-		return false
-	}
-
-	// Auto-disable if stdout is not a TTY (piped output).
-	if !term.IsTTYSupportForStdout() {
-		return false
-	}
-
-	// Only enable for supported subcommands.
-	switch subCommand {
-	case subCommandPlan, subCommandApply, subCommandInit, subCommandDestroy:
-		return true
-	case "refresh":
-		// refresh doesn't have good -json streaming support.
-		return false
-	default:
-		return false
-	}
+	return supportsStreamingUISubCommand(subCommand)
 }
 
 // ExecuteApply runs terraform apply with optional confirmation.
@@ -488,83 +430,119 @@ func ExecuteApply(ctx context.Context, opts *ExecuteOptions) error {
 	return executeTwoPhaseApply(ctx, opts)
 }
 
-// executeTwoPhaseOperation executes a plan → confirm → apply workflow.
-// The isDestroy parameter determines whether this is a destroy operation (affects planfile name and confirmation).
-func executeTwoPhaseOperation(ctx context.Context, opts *ExecuteOptions, isDestroy bool) error {
-	// Generate temp planfile path.
-	planFilePattern := ".atmos-plan-%d.tfplan"
+// generateTwoPhasePlanFile builds a unique temp planfile path for the plan phase of a
+// two-phase apply/destroy operation.
+func generateTwoPhasePlanFile(workingDir string, isDestroy bool) string {
+	pattern := ".atmos-plan-%d.tfplan"
 	if isDestroy {
-		planFilePattern = ".atmos-destroy-%d.tfplan"
+		pattern = ".atmos-destroy-%d.tfplan"
 	}
-	planFile := filepath.Join(opts.WorkingDir, fmt.Sprintf(planFilePattern, time.Now().UnixNano()))
+	return filepath.Join(workingDir, fmt.Sprintf(pattern, time.Now().UnixNano()))
+}
 
-	// Phase 1: Run plan with TUI.
+// runTwoPhasePlan runs the plan phase (with -destroy when applicable) into planFile.
+func runTwoPhasePlan(ctx context.Context, opts *ExecuteOptions, planFile string, isDestroy bool) error {
 	var planArgs []string
 	if isDestroy {
 		planArgs = buildDestroyPlanArgs(opts.Args, planFile)
 	} else {
 		planArgs = buildPlanArgs(opts.Args, planFile)
 	}
+
 	planOpts := *opts
 	planOpts.Args = planArgs
-	planOpts.SubCommand = "plan"
+	planOpts.SubCommand = subCommandPlan
 
-	if err := Execute(ctx, &planOpts); err != nil {
-		// Clean up planfile on error.
-		os.Remove(planFile)
-		return err
+	return Execute(ctx, &planOpts)
+}
+
+// showTwoPhasePlanTree parses planFile and renders the dependency tree with badges.
+// Returns true if the plan has no changes. If the planfile can't be parsed, it returns
+// false so the caller proceeds to the confirmation phase (matching prior behavior).
+func showTwoPhasePlanTree(ctx context.Context, opts *ExecuteOptions, planFile string) bool {
+	tree, treeErr := BuildDependencyTree(ctx, &TreeBuildOptions{
+		PlanfilePath:  planFile,
+		TerraformPath: opts.Command,
+		WorkingDir:    opts.WorkingDir,
+		Stack:         opts.Stack,
+		Component:     opts.Component,
+	})
+	if treeErr != nil {
+		return false
 	}
 
-	// Phase 1.5: Parse planfile and check for changes.
-	tree, err := BuildDependencyTree(ctx, planFile, opts.Command, opts.WorkingDir, opts.Stack, opts.Component)
-	if err == nil {
-		// Check if there are any changes.
-		add, change, remove := tree.GetChangeSummary()
-		if add == 0 && change == 0 && remove == 0 {
-			// No changes to apply - show badge, outputs, and exit.
-			os.Remove(planFile)
-			_ = ui.Write(RenderChangeSummaryBadges(add, change, remove))
-			fetchAndDisplayOutputs(opts.Command, opts.WorkingDir)
-			return nil
-		}
-		// Display the dependency tree and badge summary.
-		_ = ui.Writef(fmtNewlineStr, tree.RenderTree())
-		_ = ui.Write(RenderChangeSummaryBadges(add, change, remove))
+	add, change, remove := tree.GetChangeSummary()
+	if add == 0 && change == 0 && remove == 0 {
+		// No changes to apply - show badge only.
+		ui.Write(RenderChangeSummaryBadges(add, change, remove))
+		return true
 	}
 
-	// Phase 2: Confirmation.
+	// Display the dependency tree and badge summary.
+	ui.Writef(fmtNewlineStr, tree.RenderTree())
+	ui.Write(RenderChangeSummaryBadges(add, change, remove))
+	return false
+}
+
+// confirmTwoPhaseOperation prompts the user to confirm the apply/destroy, printing a
+// cancellation message if declined.
+func confirmTwoPhaseOperation(isDestroy bool) (bool, error) {
 	var confirmed bool
+	var err error
 	if isDestroy {
 		confirmed, err = ConfirmDestroy()
 	} else {
 		confirmed, err = ConfirmApply()
 	}
 	if err != nil {
-		os.Remove(planFile)
-		return err
+		return false, err
 	}
+
 	if !confirmed {
-		os.Remove(planFile)
 		cancelMsg := "Apply cancelled"
 		if isDestroy {
 			cancelMsg = "Destroy cancelled"
 		}
-		_ = ui.Warning(cancelMsg)
+		ui.Warning(cancelMsg)
+	}
+
+	return confirmed, nil
+}
+
+// applyTwoPhasePlan runs the apply phase from the already-confirmed planFile.
+func applyTwoPhasePlan(ctx context.Context, opts *ExecuteOptions, planFile string) error {
+	applyOpts := *opts
+	applyOpts.Args = buildApplyArgs(planFile)
+	applyOpts.SubCommand = subCommandApply
+
+	return Execute(ctx, &applyOpts)
+}
+
+// executeTwoPhaseOperation executes a plan → confirm → apply workflow.
+// The isDestroy parameter determines whether this is a destroy operation (affects planfile name and confirmation).
+func executeTwoPhaseOperation(ctx context.Context, opts *ExecuteOptions, isDestroy bool) error {
+	planFile := generateTwoPhasePlanFile(opts.WorkingDir, isDestroy)
+	defer os.Remove(planFile)
+
+	if err := runTwoPhasePlan(ctx, opts, planFile, isDestroy); err != nil {
+		return err
+	}
+
+	if showTwoPhasePlanTree(ctx, opts, planFile) {
+		// No changes to apply - show current outputs and exit.
+		fetchAndDisplayOutputs(opts.Command, opts.WorkingDir)
 		return nil
 	}
 
-	// Phase 3: Apply the planfile.
-	applyArgs := buildApplyArgs(planFile)
-	applyOpts := *opts
-	applyOpts.Args = applyArgs
-	applyOpts.SubCommand = subCommandApply
+	confirmed, err := confirmTwoPhaseOperation(isDestroy)
+	if err != nil {
+		return err
+	}
+	if !confirmed {
+		return nil
+	}
 
-	err = Execute(ctx, &applyOpts)
-
-	// Cleanup planfile.
-	os.Remove(planFile)
-
-	return err
+	return applyTwoPhasePlan(ctx, opts, planFile)
 }
 
 func executeTwoPhaseApply(ctx context.Context, opts *ExecuteOptions) error {
@@ -595,19 +573,25 @@ func executeTwoPhaseDestroy(ctx context.Context, opts *ExecuteOptions) error {
 
 func executeWithPlanFile(ctx context.Context, opts *ExecuteOptions, planFile string) error {
 	// Parse planfile and check for changes.
-	tree, err := BuildDependencyTree(ctx, planFile, opts.Command, opts.WorkingDir, opts.Stack, opts.Component)
+	tree, err := BuildDependencyTree(ctx, &TreeBuildOptions{
+		PlanfilePath:  planFile,
+		TerraformPath: opts.Command,
+		WorkingDir:    opts.WorkingDir,
+		Stack:         opts.Stack,
+		Component:     opts.Component,
+	})
 	if err == nil {
 		// Check if there are any changes.
 		add, change, remove := tree.GetChangeSummary()
 		if add == 0 && change == 0 && remove == 0 {
 			// No changes to apply - show badge, outputs, and exit.
-			_ = ui.Write(RenderChangeSummaryBadges(add, change, remove))
+			ui.Write(RenderChangeSummaryBadges(add, change, remove))
 			fetchAndDisplayOutputs(opts.Command, opts.WorkingDir)
 			return nil
 		}
 		// Display the dependency tree and badge summary.
-		_ = ui.Writef(fmtNewlineStr, tree.RenderTree())
-		_ = ui.Write(RenderChangeSummaryBadges(add, change, remove))
+		ui.Writef(fmtNewlineStr, tree.RenderTree())
+		ui.Write(RenderChangeSummaryBadges(add, change, remove))
 	}
 
 	// Confirm.
@@ -616,319 +600,10 @@ func executeWithPlanFile(ctx context.Context, opts *ExecuteOptions, planFile str
 		return err
 	}
 	if !confirmed {
-		_ = ui.Warning("Apply cancelled")
+		ui.Warning("Apply cancelled")
 		return nil
 	}
 
 	// Execute apply.
 	return Execute(ctx, opts)
-}
-
-func hasFlag(args []string, flag string) bool {
-	for _, arg := range args {
-		if arg == flag {
-			return true
-		}
-	}
-	return false
-}
-
-func extractPlanFile(args []string) string {
-	// Look for a planfile argument (positional argument that's a file path).
-	// Also check for --from-plan or --planfile flags.
-	for i, arg := range args {
-		if arg == "--from-plan" || arg == "--planfile" {
-			if i+1 < len(args) {
-				return args[i+1]
-			}
-		}
-		if strings.HasPrefix(arg, "--from-plan=") {
-			return strings.TrimPrefix(arg, "--from-plan=")
-		}
-		if strings.HasPrefix(arg, "--planfile=") {
-			return strings.TrimPrefix(arg, "--planfile=")
-		}
-	}
-
-	// Check for positional planfile (last arg that looks like a file).
-	if len(args) > 1 {
-		lastArg := args[len(args)-1]
-		if !strings.HasPrefix(lastArg, "-") && strings.HasSuffix(lastArg, ".tfplan") {
-			return lastArg
-		}
-	}
-
-	return ""
-}
-
-func buildPlanArgs(args []string, planFile string) []string {
-	// Convert apply args to plan args.
-	// Let append handle capacity growth to avoid integer overflow concerns.
-	var result []string
-
-	// Replace "apply" with "plan".
-	for i, arg := range args {
-		switch {
-		case i == 0 && arg == subCommandApply:
-			result = append(result, subCommandPlan)
-		case arg == flagAutoApprove:
-			// Skip -auto-approve for plan.
-			continue
-		default:
-			result = append(result, arg)
-		}
-	}
-
-	// Add -out flag.
-	result = append(result, "-out="+planFile)
-
-	return result
-}
-
-func buildApplyArgs(planFile string) []string {
-	// Simple apply with planfile - no -auto-approve needed since planfile is provided.
-	return []string{subCommandApply, planFile}
-}
-
-func buildDestroyPlanArgs(args []string, planFile string) []string {
-	// Convert destroy args to plan -destroy args.
-	// Let append handle capacity growth to avoid integer overflow concerns.
-	var result []string
-
-	// Replace "destroy" with "plan" and add -destroy flag.
-	for i, arg := range args {
-		switch {
-		case i == 0 && arg == subCommandDestroy:
-			result = append(result, subCommandPlan, "-destroy")
-		case arg == flagAutoApprove:
-			// Skip -auto-approve for plan.
-			continue
-		default:
-			result = append(result, arg)
-		}
-	}
-
-	// Add -out flag.
-	result = append(result, "-out="+planFile)
-
-	return result
-}
-
-// displayOutputs renders terraform outputs after apply using a styled table.
-func displayOutputs(tracker *ResourceTracker) {
-	outputs := tracker.GetOutputs()
-	if outputs == nil || len(outputs.Outputs) == 0 {
-		return
-	}
-
-	// Build rows for the table.
-	var rows [][]string
-	for name, output := range outputs.Outputs {
-		var value string
-		if output.Sensitive {
-			value = "<sensitive>"
-		} else {
-			value = formatOutputValue(output.Value)
-		}
-		rows = append(rows, []string{name, value})
-	}
-
-	// Sort rows by output name for consistent display.
-	sort.Slice(rows, func(i, j int) bool {
-		return rows[i][0] < rows[j][0]
-	})
-
-	// Create and display the table with semantic cell styling.
-	headers := []string{"Output", "Value"}
-	tableStr := createOutputsTable(headers, rows)
-	_ = ui.Writef("\n%s\n", tableStr)
-}
-
-// fetchAndDisplayOutputs fetches outputs using terraform output -json and displays them.
-// This is used when there are no changes to apply but we still want to show current outputs.
-func fetchAndDisplayOutputs(command, workingDir string) {
-	// Run terraform output -json to get current outputs.
-	cmd := exec.Command(command, "output", "-json")
-	cmd.Dir = workingDir
-
-	outputBytes, err := cmd.Output()
-	if err != nil {
-		// Silently ignore errors - outputs might not exist yet.
-		return
-	}
-
-	// Parse the JSON output.
-	var outputs map[string]OutputValue
-	if err := json.Unmarshal(outputBytes, &outputs); err != nil {
-		return
-	}
-
-	if len(outputs) == 0 {
-		return
-	}
-
-	// Build rows for the table.
-	var rows [][]string
-	for name, output := range outputs {
-		var value string
-		if output.Sensitive {
-			value = "<sensitive>"
-		} else {
-			value = formatOutputValue(output.Value)
-		}
-		rows = append(rows, []string{name, value})
-	}
-
-	// Sort rows by output name for consistent display.
-	sort.Slice(rows, func(i, j int) bool {
-		return rows[i][0] < rows[j][0]
-	})
-
-	// Create and display the table with semantic cell styling.
-	headers := []string{"Output", "Value"}
-	tableStr := createOutputsTable(headers, rows)
-	_ = ui.Writef("\n%s\n", tableStr)
-}
-
-// formatOutputValue formats an output value for display in a table.
-func formatOutputValue(value any) string {
-	switch v := value.(type) {
-	case string:
-		return v
-	case float64:
-		// JSON numbers are float64.
-		if v == float64(int64(v)) {
-			return fmt.Sprintf("%d", int64(v))
-		}
-		return fmt.Sprintf("%g", v)
-	case bool:
-		return fmt.Sprintf("%t", v)
-	case nil:
-		return "null"
-	default:
-		// For complex types (maps, arrays), use JSON.
-		data, err := json.MarshalIndent(v, "", "  ")
-		if err != nil {
-			return fmt.Sprintf("%v", v)
-		}
-		return string(data)
-	}
-}
-
-// createOutputsTable creates a table with semantic cell styling for terraform outputs.
-func createOutputsTable(headers []string, rows [][]string) string {
-	styles := theme.GetCurrentStyles()
-
-	config := theme.TableConfig{
-		Style:       theme.TableStyleMinimal,
-		ShowBorders: false,
-		ShowHeader:  true,
-		Styles:      styles,
-		StyleFunc:   createOutputsStyleFunc(rows, styles),
-	}
-
-	return theme.CreateTable(&config, headers, rows)
-}
-
-// createOutputsStyleFunc returns a styling function for the outputs table.
-func createOutputsStyleFunc(rows [][]string, styles *theme.StyleSet) func(int, int) lipgloss.Style {
-	return func(row, col int) lipgloss.Style {
-		baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
-
-		if styles == nil {
-			return baseStyle
-		}
-
-		// Header row styling.
-		if row == -1 {
-			return baseStyle.Inherit(styles.TableHeader)
-		}
-
-		// First column (output name) uses standard row styling.
-		if col == 0 {
-			return baseStyle.Inherit(styles.TableRow)
-		}
-
-		// Value column (col 1) - apply semantic styling based on content.
-		if row >= 0 && row < len(rows) && col < len(rows[row]) {
-			value := rows[row][col]
-			return getOutputCellStyle(value, baseStyle, styles)
-		}
-
-		return baseStyle.Inherit(styles.TableRow)
-	}
-}
-
-// getOutputCellStyle returns the appropriate style for an output value cell.
-//
-//nolint:gocritic // lipgloss.Style is designed to be passed by value (immutable)
-func getOutputCellStyle(value string, baseStyle lipgloss.Style, styles *theme.StyleSet) lipgloss.Style {
-	contentType := detectOutputContentType(value)
-
-	switch contentType {
-	case outputContentTypeBoolean:
-		if value == "true" {
-			return baseStyle.Foreground(styles.Success.GetForeground())
-		}
-		return baseStyle.Foreground(styles.Error.GetForeground())
-
-	case outputContentTypeNumber:
-		return baseStyle.Foreground(styles.Info.GetForeground())
-
-	case outputContentTypeSensitive:
-		return baseStyle.Foreground(styles.Muted.GetForeground())
-
-	case outputContentTypeNull:
-		return baseStyle.Foreground(styles.Muted.GetForeground())
-
-	default:
-		return baseStyle.Inherit(styles.TableRow)
-	}
-}
-
-// outputContentType represents the type of content in an output value cell.
-type outputContentType int
-
-const (
-	outputContentTypeDefault outputContentType = iota
-	outputContentTypeBoolean
-	outputContentTypeNumber
-	outputContentTypeSensitive
-	outputContentTypeNull
-)
-
-// detectOutputContentType determines the content type of an output value.
-func detectOutputContentType(value string) outputContentType {
-	if value == "" {
-		return outputContentTypeDefault
-	}
-
-	// Check for sensitive marker.
-	if value == "<sensitive>" {
-		return outputContentTypeSensitive
-	}
-
-	// Check for null.
-	if value == "null" {
-		return outputContentTypeNull
-	}
-
-	// Check for booleans.
-	if value == "true" || value == "false" {
-		return outputContentTypeBoolean
-	}
-
-	// Check for numbers (integers or floats).
-	if isNumericString(value) {
-		return outputContentTypeNumber
-	}
-
-	return outputContentTypeDefault
-}
-
-// isNumericString checks if a string represents a number.
-func isNumericString(s string) bool {
-	// Try to parse as float (covers both integers and floats).
-	_, err := strconv.ParseFloat(s, floatBitSize)
-	return err == nil
 }

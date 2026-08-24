@@ -41,7 +41,7 @@ func TestShouldUseStreamingUI_SupportedCommands(t *testing.T) {
 
 func TestBuildArgsWithJSON_AddsFlagForPlan(t *testing.T) {
 	args := []string{"plan", "-out", "plan.out"}
-	result := buildArgsWithJSON(args, "plan")
+	result := buildArgsWithJSON(args)
 	assert.Contains(t, result, "-json")
 	assert.Contains(t, result, "-compact-warnings")
 	// Flags should be after "plan".
@@ -52,7 +52,7 @@ func TestBuildArgsWithJSON_AddsFlagForPlan(t *testing.T) {
 
 func TestBuildArgsWithJSON_AddsFlagForApply(t *testing.T) {
 	args := []string{"apply", "-auto-approve"}
-	result := buildArgsWithJSON(args, "apply")
+	result := buildArgsWithJSON(args)
 	assert.Contains(t, result, "-json")
 	assert.Contains(t, result, "-compact-warnings")
 	assert.Equal(t, "apply", result[0])
@@ -62,7 +62,7 @@ func TestBuildArgsWithJSON_AddsFlagForApply(t *testing.T) {
 
 func TestBuildArgsWithJSON_AddsFlagForInit(t *testing.T) {
 	args := []string{"init", "-reconfigure"}
-	result := buildArgsWithJSON(args, "init")
+	result := buildArgsWithJSON(args)
 	assert.Contains(t, result, "-json")
 	assert.Contains(t, result, "-compact-warnings")
 	assert.Equal(t, "init", result[0])
@@ -72,7 +72,7 @@ func TestBuildArgsWithJSON_AddsFlagForInit(t *testing.T) {
 
 func TestBuildArgsWithJSON_AddsFlagForRefresh(t *testing.T) {
 	args := []string{"refresh"}
-	result := buildArgsWithJSON(args, "refresh")
+	result := buildArgsWithJSON(args)
 	assert.Contains(t, result, "-json")
 	assert.Contains(t, result, "-compact-warnings")
 	assert.Equal(t, "refresh", result[0])
@@ -82,7 +82,7 @@ func TestBuildArgsWithJSON_AddsFlagForRefresh(t *testing.T) {
 
 func TestBuildArgsWithJSON_DoesNotDuplicateFlag(t *testing.T) {
 	args := []string{"plan", "-json", "-compact-warnings", "-out", "plan.out"}
-	result := buildArgsWithJSON(args, "plan")
+	result := buildArgsWithJSON(args)
 	// Count flag occurrences.
 	jsonCount := 0
 	compactCount := 0
@@ -100,7 +100,7 @@ func TestBuildArgsWithJSON_DoesNotDuplicateFlag(t *testing.T) {
 
 func TestBuildArgsWithJSON_AddsCompactWarningsWhenOnlyJSONPresent(t *testing.T) {
 	args := []string{"plan", "-json", "-out", "plan.out"}
-	result := buildArgsWithJSON(args, "plan")
+	result := buildArgsWithJSON(args)
 	assert.Contains(t, result, "-json")
 	assert.Contains(t, result, "-compact-warnings")
 	// -json should still be at position 1, -compact-warnings added after.
@@ -110,7 +110,7 @@ func TestBuildArgsWithJSON_AddsCompactWarningsWhenOnlyJSONPresent(t *testing.T) 
 func TestBuildArgsWithJSON_NoSubcommandAtStart(t *testing.T) {
 	// Edge case: args don't start with a recognized subcommand.
 	args := []string{"-var", "foo=bar"}
-	result := buildArgsWithJSON(args, "other")
+	result := buildArgsWithJSON(args)
 	assert.Contains(t, result, "-json")
 	assert.Contains(t, result, "-compact-warnings")
 	// In this case, flags should be prepended.

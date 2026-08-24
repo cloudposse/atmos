@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Staging stack configuration
+# - vpc: deployable
+# - eks: not present in this stack
+# - rds: deployable
+
+vars:
+  stage: staging
+
+import:
+  - catalog/vpc
+  - catalog/rds
+
+components:
+  terraform:
+    vpc:
+      vars:
+        vpc_cidr: "10.2.0.0/16"
+        environment: "staging"
+
+    rds:
+      vars:
+        db_name: "staging-db"
+        instance_class: "db.t3.small"

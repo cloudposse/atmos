@@ -1,0 +1,78 @@
+---
+slug: list-skip-flag
+title: "Selective YAML Function Bypass with --skip on `atmos list`"
+authors: [osterman]
+tags: [feature, dx]
+date: 2026-05-15T00:00:00.000Z
+---
+
+Every `atmos list` subcommand that processes stack manifests now accepts `--skip <yaml-function>` and the matching
+`ATMOS_SKIP` env var, mirroring the surface already exposed by `atmos describe affected`, `atmos describe component`,
+and `atmos describe stacks`. Use it to bypass a single YAML function while leaving the rest of YAML function
+processing — including `!template` — fully enabled.
+
+<!--truncate-->
+
+## What Changed
+
+Five commands gained the flag:
+
+- `atmos list instances`
+- `atmos list components`
+- `atmos list metadata`
+- `atmos list sources`
+- `atmos list stacks`
+
+`atmos list affected` already had `--skip`; with this release, the flag surface lines up across the family. The
+existing `ATMOS_AFFECTED_SKIP` env var continues to work on `list affected` for backward compatibility.
+
+## Why This Matters
+
+`--process-functions=false` is a blunt instrument. It turns off **all** YAML function evaluation — including
+`!template`, which many users rely on to compute settings like `settings.pro.enabled` to a real boolean.
+
+The concrete motivating failure: `atmos list instances --upload` in CI, against a repo where a few component
+sections include `!terraform.state` calls. The upload itself doesn't need those backends to resolve, but it does
+need `settings.pro.enabled` (computed via `!template`) to be a real boolean so Atmos Pro accepts the payload.
+Before this release, that was a stuck combination:
+
+- `--process-functions=true` (default) → the upload tries to talk to a remote backend and fails.
+- `--process-functions=false` → `!template` stops evaluating, so `settings.pro.enabled` arrives as a literal
+  string and Atmos Pro rejects it with `expected boolean but received invalid value (string)`.
+
+With `--skip`, you can name the single function you want to bypass and leave everything else on:
+
+```bash
+atmos list instances --upload --skip terraform.state
+```
+
+## How to Use It
+
+Skip a single function:
+
+```bash
+atmos list instances --upload --skip terraform.state
+```
+
+Skip multiple:
+
+```bash
+atmos list stacks --skip terraform.state --skip terraform.output
+```
+
+Or via env var (handy in CI workflows):
+
+```bash
+ATMOS_SKIP=terraform.state atmos list instances --upload
+```
+
+The flag accepts the same function names as `atmos describe stacks --skip`. The value is the YAML function name
+without the leading `!` (for example `terraform.state`, `terraform.output`, `store`).
+
+Docs for each command list the flag in full: [`atmos list instances`](/cli/commands/list/list-instances),
+[`atmos list components`](/cli/commands/list/components), [`atmos list metadata`](/cli/commands/list/list-metadata),
+[`atmos list sources`](/cli/commands/list/sources), and [`atmos list stacks`](/cli/commands/list/stacks).
+
+## Get Involved
+
+Found an issue or have a feature request? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

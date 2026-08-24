@@ -155,6 +155,49 @@ func TestGetTemplateContent(t *testing.T) {
 	}
 }
 
+func TestGetTemplateContent_Remote(t *testing.T) {
+	templateContent := "This is a remote template."
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(templateContent))
+	}))
+	defer server.Close()
+
+	atmosConfig := schema.AtmosConfiguration{}
+	got, err := getTemplateContent(&atmosConfig, server.URL+"/README.md.gotmpl", "")
+	if err != nil {
+		t.Fatalf("getTemplateContent failed: %v", err)
+	}
+	if got != templateContent {
+		t.Errorf("Expected template %q, got %q", templateContent, got)
+	}
+}
+
+func TestFetchTemplate_ConfiguredTemplateFailure(t *testing.T) {
+	docsGen := schema.DocsGenerate{
+		Template: "./missing-template.gotmpl",
+	}
+
+	_, err := fetchTemplate(&schema.AtmosConfiguration{}, &docsGen, t.TempDir())
+	if err == nil {
+		t.Fatal("expected missing configured template to return an error")
+	}
+	if !strings.Contains(err.Error(), "missing-template.gotmpl") {
+		t.Errorf("expected error to include template path, got %v", err)
+	}
+}
+
+func TestFetchTemplate_DefaultWhenUnconfigured(t *testing.T) {
+	docsGen := schema.DocsGenerate{}
+
+	got, err := fetchTemplate(&schema.AtmosConfiguration{}, &docsGen, t.TempDir())
+	if err != nil {
+		t.Fatalf("expected default template without error, got %v", err)
+	}
+	if got != defaultDocsTemplate() {
+		t.Errorf("expected default template, got %q", got)
+	}
+}
+
 // TestApplyTerraformDocs_Disabled tests that when terraform docs are disabled, nothing is added.
 func TestApplyTerraformDocs_Disabled(t *testing.T) {
 	docsGen := schema.DocsGenerate{
@@ -232,6 +275,110 @@ func TestGenerateDocument_WithInjectedRenderer(t *testing.T) {
 	expected := "mock rendered for TestProject"
 	if !strings.Contains(string(data), expected) {
 		t.Errorf("Expected output to contain %q, got %q", expected, string(data))
+	}
+}
+
+// TestGenerateDocument_DefaultTemplateFallback_RealRenderer exercises the default fallback
+// template through the real defaultTemplateRenderer (gomplate), not mockRenderer. It guards
+// against regressions where the fallback template references bare fields (e.g. ".name")
+// instead of going through the "config" datasource, which ProcessTmplWithDatasourcesGomplate
+// requires (root "." is bound to the outer Env wrapper, not mergedData).
+func TestGenerateDocument_DefaultTemplateFallback_RealRenderer(t *testing.T) {
+	targetDir := t.TempDir()
+
+	tmpYAML, err := os.CreateTemp("", "test-docs-input-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpYAML.Name())
+	yamlContent := "name: TestProject\ndescription: \"A test project\"\n"
+	if _, err := tmpYAML.WriteString(yamlContent); err != nil {
+		t.Fatal(err)
+	}
+	tmpYAML.Close()
+
+	atmosConfig := schema.AtmosConfiguration{
+		Docs: schema.Docs{
+			Generate: map[string]schema.DocsGenerate{
+				"readme": {
+					BaseDir:  ".",
+					Input:    []any{tmpYAML.Name()},
+					Template: "", // No template configured: use the default fallback template.
+					Output:   "TEST_README_DEFAULT.md",
+					Terraform: schema.TerraformDocsReadmeSettings{
+						Enabled: false,
+					},
+				},
+			},
+		},
+	}
+
+	docsGenerate := atmosConfig.Docs.Generate["readme"]
+	if err := generateDocument(&atmosConfig, targetDir, &docsGenerate, defaultTemplateRenderer{}); err != nil {
+		t.Fatalf("generateDocument failed: %v", err)
+	}
+
+	outputPath := filepath.Join(targetDir, "TEST_README_DEFAULT.md")
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read generated README: %v", err)
+	}
+
+	got := string(data)
+	if !strings.Contains(got, "TestProject") {
+		t.Errorf("expected output to contain merged name %q, got %q", "TestProject", got)
+	}
+	if !strings.Contains(got, "A test project") {
+		t.Errorf("expected output to contain merged description, got %q", got)
+	}
+}
+
+// TestGenerateDocument_TemplateFetchFailsReturnsError verifies that when a configured
+// template fails to fetch, generateDocument surfaces the error instead of silently
+// falling back to the default template — a fetch failure should fail loudly (e.g. in CI)
+// rather than mask a real problem (a typo'd path, a flaky download) behind a default doc.
+func TestGenerateDocument_TemplateFetchFailsReturnsError(t *testing.T) {
+	targetDir := t.TempDir()
+
+	tmpYAML, err := os.CreateTemp("", "test-docs-input-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpYAML.Name())
+	yamlContent := "name: TestProject\ndescription: \"A test project\"\n"
+	if _, err := tmpYAML.WriteString(yamlContent); err != nil {
+		t.Fatal(err)
+	}
+	tmpYAML.Close()
+
+	atmosConfig := schema.AtmosConfiguration{
+		Docs: schema.Docs{
+			Generate: map[string]schema.DocsGenerate{
+				"readme": {
+					BaseDir:  ".",
+					Input:    []any{tmpYAML.Name()},
+					Template: filepath.Join(targetDir, "does-not-exist.gotmpl"),
+					Output:   "TEST_README_FALLBACK.md",
+					Terraform: schema.TerraformDocsReadmeSettings{
+						Enabled: false,
+					},
+				},
+			},
+		},
+	}
+
+	docsGenerate := atmosConfig.Docs.Generate["readme"]
+	err = generateDocument(&atmosConfig, targetDir, &docsGenerate, defaultTemplateRenderer{})
+	if err == nil {
+		t.Fatal("expected generateDocument to return an error for a missing configured template")
+	}
+	if !strings.Contains(err.Error(), "does-not-exist.gotmpl") {
+		t.Errorf("expected error to include template path, got %v", err)
+	}
+
+	outputPath := filepath.Join(targetDir, "TEST_README_FALLBACK.md")
+	if _, err := os.Stat(outputPath); !os.IsNotExist(err) {
+		t.Errorf("expected no output file to be written on template fetch failure")
 	}
 }
 
@@ -492,5 +639,17 @@ common: remote
 				}
 			}
 		})
+	}
+}
+
+func TestMergeInputs_MissingLocalInputFails(t *testing.T) {
+	dg := &schema.DocsGenerate{Input: []any{"missing.yaml"}}
+
+	_, err := mergeInputs(&schema.AtmosConfiguration{}, t.TempDir(), dg)
+	if err == nil {
+		t.Fatal("expected missing configured input to return an error")
+	}
+	if !strings.Contains(err.Error(), "missing.yaml") {
+		t.Errorf("expected error to include input path, got %v", err)
 	}
 }

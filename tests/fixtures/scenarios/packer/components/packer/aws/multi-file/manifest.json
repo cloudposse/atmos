@@ -1,0 +1,14 @@
+{
+  "builds": [
+    {
+      "name": "test",
+      "builder_type": "amazon-ebs",
+      "build_time": 1700000000,
+      "files": null,
+      "artifact_id": "us-east-2:ami-0123456789abcdef0",
+      "packer_run_uuid": "test-uuid-multi-file",
+      "custom_data": null
+    }
+  ],
+  "last_run_uuid": "test-uuid-multi-file"
+}

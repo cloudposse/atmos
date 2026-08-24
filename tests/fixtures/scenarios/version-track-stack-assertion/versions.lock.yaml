@@ -1,0 +1,20 @@
+version: 1
+tracks:
+  default:
+    widget:
+      version: "1.0.0"
+      ecosystem: oci
+      datasource: oci
+      package: library/widget
+  dev:
+    widget:
+      version: "2.0.0"
+      ecosystem: oci
+      datasource: oci
+      package: library/widget
+  prod:
+    widget:
+      version: "1.0.0"
+      ecosystem: oci
+      datasource: oci
+      package: library/widget

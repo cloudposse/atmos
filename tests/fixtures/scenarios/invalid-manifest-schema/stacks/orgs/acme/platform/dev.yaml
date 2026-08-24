@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Deliberately violates the atmos-manifest JSON Schema: `name` must be a
+# string (`/properties/name/type`), but is a number here. `components:` is a
+# well-formed map, so this reaches the JSON-Schema validator itself rather
+# than the earlier ad-hoc "components must be a map" structural check --
+# see docs/prd/native-ci/phases/validate-command-parity.md for why that
+# distinction matters.
+
+name: 12345
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"

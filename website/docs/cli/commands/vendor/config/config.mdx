@@ -1,0 +1,61 @@
+---
+title: atmos vendor config
+sidebar_label: config
+sidebar_class_name: command
+id: config
+description: Read, edit, and list raw vendor manifest config by dot-notation path — the canonical CRUD+list interface for vendor.yaml.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+`atmos vendor config` is the **canonical** command set for reading, editing, and
+listing raw settings in `vendor.yaml` using arbitrary dot-notation paths (e.g.
+`spec.sources[0].version`). [`atmos vendor get`](/cli/commands/vendor/vendor-get) and
+[`atmos vendor set`](/cli/commands/vendor/vendor-set) are convenience aliases that
+resolve a **component name** to its `spec.sources[N].version` path and delegate to
+`get`/`set` here, so you don't have to know the source's index in the manifest.
+Use `atmos vendor config` directly when you need to address a path that isn't a
+component's pinned version (tags, source URLs, `included_paths`, etc.), or when you
+want `list`/`format`, which have no component-name shortcut.
+</Intro>
+
+<CastPlayer title="atmos vendor config --help" src="/casts/screengrabs/atmos-vendor-config--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos vendor config get <path> [--file <manifest>]
+atmos vendor config set <path> <value> [--type <type>] [--file <manifest>]
+atmos vendor config delete <path> [--file <manifest>]
+atmos vendor config format [--file <manifest>]
+atmos vendor config list [path-pattern] [--format <format>] [--file <manifest>]
+```
+
+## Subcommands
+
+<DocCardList />
+
+## Examples
+
+```shell
+# Read a raw value by path.
+atmos vendor config get spec.sources[0].version
+
+# Set a raw value by path.
+atmos vendor config set spec.sources[0].version v1.2.3
+
+# Delete a raw value by path.
+atmos vendor config delete spec.sources[0].tags
+
+# Format the root and imported vendor manifest files.
+atmos vendor config format
+
+# List every editable path across the vendor manifest set.
+atmos vendor config list
+```
+
+## Related
+
+- [`atmos vendor get`](/cli/commands/vendor/vendor-get), [`atmos vendor set`](/cli/commands/vendor/vendor-set) — component-name aliases that resolve to `get`/`set` here.

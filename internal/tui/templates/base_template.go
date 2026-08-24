@@ -9,6 +9,7 @@ const (
 	SubCommandAliases
 	Examples
 	AvailableCommands
+	CustomCommands
 	Flags
 	GlobalFlags
 	AdditionalHelpTopics
@@ -16,12 +17,18 @@ const (
 	Footer
 )
 
+const formatCommandsTemplateEnd = `"}}{{end}}`
+
 func GenerateFromBaseTemplate(parts []HelpTemplateSections) string {
 	template := ""
 	for _, value := range parts {
 		template += getSection(value)
 	}
 	return template + "\n"
+}
+
+func formatCommandsTemplate(listType string) string {
+	return `{{formatCommands .Commands "` + listType + formatCommandsTemplateEnd
 }
 
 func getSection(section HelpTemplateSections) string {
@@ -35,7 +42,7 @@ func getSection(section HelpTemplateSections) string {
 
 {{HeadingStyle "Additional help topics:"}}
 
-{{formatCommands .Commands "additionalHelpTopics"}}{{end}}`
+` + formatCommandsTemplate(commandListTypeAdditionalHelpTopics)
 	case Aliases:
 		return `{{if gt (len .Aliases) 0}}
 
@@ -47,14 +54,21 @@ func getSection(section HelpTemplateSections) string {
 
 {{HeadingStyle "Subcommand Aliases:"}}
 
-{{formatCommands .Commands "subcommandAliases"}}{{end}}`
+` + formatCommandsTemplate(commandListTypeSubcommandAliases)
 	case AvailableCommands:
-		return `{{if .HasAvailableSubCommands}}
+		return `{{if (hasCommands .Commands "` + commandListTypeBuiltInCommands + `")}}
 
 
-{{HeadingStyle "Available Commands:"}}
+{{HeadingStyle "BUILT-IN COMMANDS"}}
 
-{{formatCommands .Commands "availableCommands"}}{{end}}`
+` + formatCommandsTemplate(commandListTypeBuiltInCommands)
+	case CustomCommands:
+		return `{{if (hasCommands .Commands "` + commandListTypeCustomCommands + `")}}
+
+
+{{HeadingStyle "CUSTOM COMMANDS"}}
+
+` + formatCommandsTemplate(commandListTypeCustomCommands)
 	case Examples:
 		return `{{if .HasExample}}
 
@@ -80,7 +94,7 @@ func getSection(section HelpTemplateSections) string {
 
 {{HeadingStyle "Native "}}{{HeadingStyle .Use}}{{HeadingStyle " Commands:"}}
 
-{{formatCommands .Commands "native"}}{{end}}`
+` + formatCommandsTemplate(commandListTypeNative)
 	case Usage:
 		return `
 {{HeadingStyle "Usage:"}}

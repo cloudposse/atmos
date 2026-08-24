@@ -10,8 +10,21 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
+// spaceChar is the literal single-space string. It's extracted into a constant since it's
+// reused across icon placeholders, indentation, and join separators.
+const spaceChar = " "
+
 // iconPlaceholder is used as a placeholder when no action icon is needed.
-const iconPlaceholder = " "
+const iconPlaceholder = spaceChar
+
+// twoSpaceIndent is the indent added for nested content (JSON lines, multi-line diffs).
+const twoSpaceIndent = "  "
+
+// newlineStr is the literal newline string, reused when splitting/joining multi-line output.
+const newlineStr = "\n"
+
+// fmtIndentedSymbolLine formats an indented "<symbol> <line>" row (used by diff rendering).
+const fmtIndentedSymbolLine = "%s%s %s\n"
 
 // RenderTree renders the tree as a string with box-drawing characters.
 // Uses a two-column layout: action symbol (fixed width) | tree structure.
@@ -25,20 +38,20 @@ func (t *DependencyTree) RenderTreeWithConfig(config *RenderConfig) string {
 
 	var b strings.Builder
 
-	// Styles.
+	// Header style.
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan)).Bold(true)
-	treeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)) // Dark gray for branches.
 
 	// Render stack/component header (cyan, bold) - aligned with tree.
 	fmt.Fprintf(&b, "     %s\n", headerStyle.Render(t.Stack+"/"+t.Component))
 
 	// Render resource tree.
-	renderChildren(&b, t.Root.Children, "", treeStyle, config)
+	renderChildren(&b, t.Root.Children, "", config)
 	return b.String()
 }
 
-//nolint:gocritic // lipgloss.Style is designed to be passed by value (immutable)
-func renderChildren(b *strings.Builder, nodes []*TreeNode, prefix string, treeStyle lipgloss.Style, config *RenderConfig) {
+func renderChildren(b *strings.Builder, nodes []*TreeNode, prefix string, config *RenderConfig) {
+	config = resolveRenderConfig(config)
+
 	for i, node := range nodes {
 		isLastChild := i == len(nodes)-1
 
@@ -58,28 +71,29 @@ func renderChildren(b *strings.Builder, nodes []*TreeNode, prefix string, treeSt
 		// Build tree line: "  +  ├── resource_name"
 		// Column 1: 2 spaces + symbol + 2 spaces (5 chars total for alignment)
 		// Column 2: tree prefix + connector + resource address
-		treeLine := treeStyle.Render(prefix+connector) + node.Address
+		treeLine := config.TreeStyle.Render(prefix+connector) + node.Address
 
 		fmt.Fprintf(b, "  %s  %s\n", symbol, treeLine)
 
 		// Render attribute changes below the resource.
 		if len(node.Changes) > 0 {
-			renderAttributeChanges(b, node.Changes, childPrefix, len(node.Children) > 0 || !isLastChild, treeStyle, config)
+			renderAttributeChanges(b, node.Changes, childPrefix, config)
 		}
 
 		// Render children.
 		if len(node.Children) > 0 {
-			renderChildren(b, node.Children, childPrefix, treeStyle, config)
+			renderChildren(b, node.Children, childPrefix, config)
 		}
 
 		// Add blank line after resource block if not compact mode.
-		if config != nil && !config.Compact && !isLastChild {
-			b.WriteString("\n")
+		if !config.Compact && !isLastChild {
+			b.WriteString(newlineStr)
 		}
 	}
 }
 
-// RenderConfig holds configuration for tree rendering.
+// RenderConfig holds configuration for tree rendering, including display options and the
+// styles used to render create/update/delete attribute changes.
 type RenderConfig struct {
 	// ShowAttributeBar shows a thick ┃ bar alongside attributes.
 	ShowAttributeBar bool
@@ -87,177 +101,269 @@ type RenderConfig struct {
 	Compact bool
 	// MaxLines controls collapsing of large JSON values (0 = show all).
 	MaxLines int
+
+	// CreateStyle, UpdateStyle, DeleteStyle, DimStyle, TreeStyle, and BarStyle are the
+	// styles used when rendering the tree and attribute changes. Populated with defaults
+	// by resolveRenderConfig when not explicitly set.
+	CreateStyle lipgloss.Style
+	UpdateStyle lipgloss.Style
+	DeleteStyle lipgloss.Style
+	DimStyle    lipgloss.Style
+	TreeStyle   lipgloss.Style
+	BarStyle    lipgloss.Style
+}
+
+// resolveRenderConfig returns a fully-populated RenderConfig, preserving any caller-provided
+// display options (Compact, ShowAttributeBar, MaxLines) while filling in default styles.
+func resolveRenderConfig(config *RenderConfig) *RenderConfig {
+	resolved := &RenderConfig{
+		CreateStyle: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen)),
+		UpdateStyle: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorYellow)),
+		DeleteStyle: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed)),
+		DimStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)),
+		TreeStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)),
+		BarStyle:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray)),
+	}
+	if config != nil {
+		resolved.ShowAttributeBar = config.ShowAttributeBar
+		resolved.Compact = config.Compact
+		resolved.MaxLines = config.MaxLines
+	}
+	return resolved
+}
+
+// diffStyles bundles the create/delete styles used when rendering a line-by-line diff.
+type diffStyles struct {
+	Create lipgloss.Style
+	Delete lipgloss.Style
+}
+
+// diffStylesFromConfig extracts the create/delete styles from a resolved RenderConfig.
+func diffStylesFromConfig(config *RenderConfig) *diffStyles {
+	return &diffStyles{Create: config.CreateStyle, Delete: config.DeleteStyle}
+}
+
+// attrRenderContext bundles the layout (indent/bar) and style configuration shared across
+// all attribute-change renderers for a single tree node.
+type attrRenderContext struct {
+	Indent string
+	Bar    string
+	Config *RenderConfig
+}
+
+// attrStyleInfo bundles the per-change key style and "forces replacement" annotation,
+// computed once and shared by every rendering branch for that change.
+type attrStyleInfo struct {
+	KeyStyle   lipgloss.Style
+	Annotation string
+}
+
+// attributeWidths holds the column widths used to align rendered attribute rows.
+type attributeWidths struct {
+	Key    int
+	OldVal int
+}
+
+// attrRenderMeta bundles positional/formatting metadata for rendering a single complex
+// (map/array) attribute change.
+type attrRenderMeta struct {
+	Indent     string
+	Bar        string
+	Annotation string
+	KeyStyle   lipgloss.Style
+	Config     *RenderConfig
+}
+
+// attributeKeyStyle returns the style used for an attribute key, based on the change type:
+// green for a new attribute, red for a deleted attribute, yellow for an update (including
+// unknown/computed values).
+func attributeKeyStyle(change *AttributeChange, config *RenderConfig) lipgloss.Style {
+	switch {
+	case change.Before == nil && change.After != nil:
+		return config.CreateStyle
+	case change.Before != nil && change.After == nil && !change.Unknown:
+		return config.DeleteStyle
+	default:
+		return config.UpdateStyle
+	}
+}
+
+// forcesReplacementAnnotation renders the "# forces replacement" annotation for a change,
+// or an empty string if the change doesn't force replacement.
+func forcesReplacementAnnotation(change *AttributeChange) string {
+	if !change.ForcesReplacement {
+		return ""
+	}
+	replaceStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOrange))
+	return spaceChar + replaceStyle.Render("# forces replacement")
+}
+
+// formattedAttributeChange precomputes the rendering-relevant details for a single
+// attribute change, avoiding repeated formatting work in the main render loop.
+type formattedAttributeChange struct {
+	change    *AttributeChange
+	oldVal    string
+	newVal    string
+	isMulti   bool
+	isComplex bool
+}
+
+// formatOneAttributeChange precomputes the rendering-relevant details for a single change.
+func formatOneAttributeChange(change *AttributeChange) formattedAttributeChange {
+	_, beforeIsMultiline := getRawStringValue(change.Before, change.Sensitive)
+	afterStr, afterIsMultiline := getRawStringValue(change.After, change.Sensitive)
+	if change.Unknown {
+		afterStr = "(known after apply)"
+		afterIsMultiline = false
+	}
+
+	isMulti := beforeIsMultiline || afterIsMultiline
+	isComplex := isComplexValue(change.Before) || isComplexValue(change.After)
+
+	var oldVal, newVal string
+	if !isMulti && !isComplex {
+		oldVal = formatSimpleValue(change.Before, change.Sensitive)
+		newVal = afterStr
+		if newVal == "" {
+			newVal = formatSimpleValue(change.After, change.Sensitive)
+		}
+	}
+
+	return formattedAttributeChange{
+		change:    change,
+		oldVal:    oldVal,
+		newVal:    newVal,
+		isMulti:   isMulti,
+		isComplex: isComplex,
+	}
+}
+
+// precomputeAttributeFormatting formats every change once up front, computing the key and
+// old-value column widths needed for aligned single-line rendering.
+func precomputeAttributeFormatting(changes []*AttributeChange) (formatted []formattedAttributeChange, maxKeyWidth, maxOldValWidth int) {
+	formatted = make([]formattedAttributeChange, len(changes))
+	for i, change := range changes {
+		if len(change.Key) > maxKeyWidth {
+			maxKeyWidth = len(change.Key)
+		}
+
+		fc := formatOneAttributeChange(change)
+		if len(fc.oldVal) > maxOldValWidth {
+			maxOldValWidth = len(fc.oldVal)
+		}
+		formatted[i] = fc
+	}
+
+	return formatted, maxKeyWidth, maxOldValWidth
 }
 
 // renderAttributeChanges renders attribute-level changes with clean indentation.
 // Uses simple indentation instead of tree continuation characters for cleaner output.
-func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, prefix string, hasMoreContent bool, treeStyle lipgloss.Style, config *RenderConfig) {
-	// Styles for keys only (values are not colorized).
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
-	createStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen))
-	updateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorYellow))
-	deleteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
-	barStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
+func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, prefix string, config *RenderConfig) {
+	config = resolveRenderConfig(config)
 
 	// Calculate base indent for attributes (aligned with tree structure).
 	// Base indent: 5 spaces (for "  ●  ") + prefix length + 4 (for "├── ").
-	baseIndent := strings.Repeat(" ", 5+len(prefix)+4)
+	baseIndent := strings.Repeat(spaceChar, 5+len(prefix)+4)
 
 	// Build attribute bar if enabled.
 	var attrBar string
-	if config != nil && config.ShowAttributeBar {
-		attrBar = barStyle.Render("┃") + " "
+	if config.ShowAttributeBar {
+		attrBar = config.BarStyle.Render("┃") + spaceChar
 	}
 
-	// Calculate max key width for alignment.
-	maxKeyWidth := 0
-	for _, change := range changes {
-		if len(change.Key) > maxKeyWidth {
-			maxKeyWidth = len(change.Key)
-		}
-	}
-
-	// Pre-compute all formatted values for column width calculation.
-	type formattedChange struct {
-		change    *AttributeChange
-		oldVal    string
-		newVal    string
-		isMulti   bool
-		isComplex bool
-		beforeML  bool
-		afterML   bool
-	}
-	formatted := make([]formattedChange, len(changes))
-
-	maxOldValWidth := 0
-	for i, change := range changes {
-		_, beforeIsMultiline := getRawStringValue(change.Before, change.Sensitive)
-		afterStr, afterIsMultiline := getRawStringValue(change.After, change.Sensitive)
-		if change.Unknown {
-			afterStr = "(known after apply)"
-			afterIsMultiline = false
-		}
-
-		isMulti := beforeIsMultiline || afterIsMultiline
-		isComplex := isComplexValue(change.Before) || isComplexValue(change.After)
-
-		var oldVal, newVal string
-		if !isMulti && !isComplex {
-			oldVal = formatSimpleValue(change.Before, change.Sensitive)
-			newVal = afterStr
-			if newVal == "" {
-				newVal = formatSimpleValue(change.After, change.Sensitive)
-			}
-			if len(oldVal) > maxOldValWidth {
-				maxOldValWidth = len(oldVal)
-			}
-		}
-
-		formatted[i] = formattedChange{
-			change:    change,
-			oldVal:    oldVal,
-			newVal:    newVal,
-			isMulti:   isMulti,
-			isComplex: isComplex,
-			beforeML:  beforeIsMultiline,
-			afterML:   afterIsMultiline,
-		}
-	}
+	formatted, maxKeyWidth, maxOldValWidth := precomputeAttributeFormatting(changes)
+	ctx := attrRenderContext{Indent: baseIndent, Bar: attrBar, Config: config}
+	widths := attributeWidths{Key: maxKeyWidth, OldVal: maxOldValWidth}
 
 	for _, fc := range formatted {
-		change := fc.change
+		renderOneAttributeChange(b, fc, ctx, widths)
+	}
+}
 
-		// Determine key style based on change type (color indicates change type).
-		// - Green: new attribute (before=nil, after!=nil)
-		// - Red: deleted attribute (before!=nil, after=nil, NOT unknown)
-		// - Yellow: updated attribute (both have values, or unknown computed value)
-		var keyStyle lipgloss.Style
-		switch {
-		case change.Before == nil && change.After != nil:
-			keyStyle = createStyle
-		case change.Before != nil && change.After == nil && !change.Unknown:
-			keyStyle = deleteStyle
-		default:
-			keyStyle = updateStyle
-		}
+// renderOneAttributeChange renders a single (precomputed) attribute change: complex
+// (map/array) values as pretty-printed JSON, multi-line values as a line-by-line diff, and
+// everything else as a single aligned "key  old → new" row.
+func renderOneAttributeChange(b *strings.Builder, fc formattedAttributeChange, ctx attrRenderContext, widths attributeWidths) {
+	info := &attrStyleInfo{
+		KeyStyle:   attributeKeyStyle(fc.change, ctx.Config),
+		Annotation: forcesReplacementAnnotation(fc.change),
+	}
 
-		// Pad key for alignment.
-		paddedKey := fmt.Sprintf("%-*s", maxKeyWidth, change.Key)
+	switch {
+	case fc.isComplex:
+		meta := &attrRenderMeta{Indent: ctx.Indent, Bar: ctx.Bar, Annotation: info.Annotation, KeyStyle: info.KeyStyle, Config: ctx.Config}
+		renderComplexAttributeChange(b, fc.change, meta, diffStylesFromConfig(ctx.Config))
+	case fc.isMulti:
+		renderMultilineAttributeChange(b, fc.change, ctx, info)
+	default:
+		renderSingleLineAttributeChange(b, fc, ctx, info, widths)
+	}
+}
 
-		// Build "# forces replacement" annotation if applicable.
-		var forcesReplacementAnnotation string
-		if change.ForcesReplacement {
-			replaceStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOrange))
-			forcesReplacementAnnotation = " " + replaceStyle.Render("# forces replacement")
-		}
+// renderSingleLineAttributeChange renders "key  old → new" on a single aligned row.
+func renderSingleLineAttributeChange(b *strings.Builder, fc formattedAttributeChange, ctx attrRenderContext, info *attrStyleInfo, widths attributeWidths) {
+	paddedKey := fmt.Sprintf("%-*s", widths.Key, fc.change.Key)
+	paddedOldVal := fmt.Sprintf("%-*s", widths.OldVal, fc.oldVal)
 
-		// Handle complex JSON values (maps, arrays).
-		if fc.isComplex {
-			renderComplexAttributeChange(b, change, baseIndent, attrBar, keyStyle, dimStyle, createStyle, deleteStyle, forcesReplacementAnnotation, config)
-			continue
-		}
+	fmt.Fprintf(
+		b, "%s%s%s %s  %s  %s%s\n",
+		ctx.Indent,
+		ctx.Bar,
+		info.KeyStyle.Render(paddedKey),
+		ctx.Config.DimStyle.Render(paddedOldVal),
+		ctx.Config.DimStyle.Render("→"),
+		fc.newVal,
+		info.Annotation,
+	)
+}
 
-		// Check if we need multi-line rendering.
-		if fc.isMulti {
-			// Multi-line rendering: show key on first line, then each value line.
-			fmt.Fprintf(b, "%s%s%s%s\n",
-				baseIndent,
-				attrBar,
-				keyStyle.Render(paddedKey),
-				forcesReplacementAnnotation,
-			)
+// renderMultilineAttributeChange renders a multi-line string value: the key on its own
+// line, followed by a line-by-line diff (or a pure addition/deletion) of the content.
+func renderMultilineAttributeChange(b *strings.Builder, change *AttributeChange, ctx attrRenderContext, info *attrStyleInfo) {
+	fmt.Fprintf(
+		b, "%s%s%s%s\n",
+		ctx.Indent,
+		ctx.Bar,
+		info.KeyStyle.Render(change.Key),
+		info.Annotation,
+	)
 
-			beforeStr, _ := getRawStringValue(change.Before, change.Sensitive)
-			afterStr, _ := getRawStringValue(change.After, change.Sensitive)
-			if change.Unknown {
-				afterStr = "(known after apply)"
-			}
+	beforeStr, _ := getRawStringValue(change.Before, change.Sensitive)
+	afterStr, _ := getRawStringValue(change.After, change.Sensitive)
+	if change.Unknown {
+		afterStr = "(known after apply)"
+	}
 
-			hasBeforeContent := beforeStr != "" && beforeStr != "(none)"
-			hasAfterContent := afterStr != "" && afterStr != "(none)"
+	hasBeforeContent := beforeStr != "" && beforeStr != "(none)"
+	hasAfterContent := afterStr != "" && afterStr != "(none)"
 
-			// Render diff based on what content we have.
-			contentIndent := baseIndent + "  "
-			if attrBar != "" {
-				contentIndent = baseIndent + attrBar + "  "
-			}
-			switch {
-			case hasBeforeContent && hasAfterContent:
-				renderMultilineDiffSimple(b, beforeStr, afterStr, contentIndent, createStyle, deleteStyle, config)
-			case hasBeforeContent:
-				renderMultilineValueSimple(b, beforeStr, contentIndent, "-", deleteStyle, config)
-			case hasAfterContent:
-				renderMultilineValueSimple(b, afterStr, contentIndent, "+", createStyle, config)
-			}
-		} else {
-			// Single-line rendering: old → new on same line with aligned columns.
-			paddedOldVal := fmt.Sprintf("%-*s", maxOldValWidth, fc.oldVal)
+	// Render diff based on what content we have.
+	contentIndent := ctx.Indent + twoSpaceIndent
+	if ctx.Bar != "" {
+		contentIndent = ctx.Indent + ctx.Bar + twoSpaceIndent
+	}
 
-			fmt.Fprintf(b, "%s%s%s %s  %s  %s%s\n",
-				baseIndent,
-				attrBar,
-				keyStyle.Render(paddedKey),
-				dimStyle.Render(paddedOldVal),
-				dimStyle.Render("→"),
-				fc.newVal,
-				forcesReplacementAnnotation,
-			)
-		}
+	styles := diffStylesFromConfig(ctx.Config)
+	switch {
+	case hasBeforeContent && hasAfterContent:
+		renderMultilineDiffSimple(b, beforeStr, afterStr, contentIndent, styles)
+	case hasBeforeContent:
+		renderMultilineValueSimple(b, beforeStr, contentIndent, "-", &styles.Delete)
+	case hasAfterContent:
+		renderMultilineValueSimple(b, afterStr, contentIndent, "+", &styles.Create)
 	}
 }
 
 // renderComplexAttributeChange renders a complex attribute (map/array) with pretty-printed JSON.
-//
-//nolint:gocritic // lipgloss.Style is designed to be passed by value (immutable)
-func renderComplexAttributeChange(b *strings.Builder, change *AttributeChange, baseIndent, attrBar string,
-	keyStyle, dimStyle, createStyle, deleteStyle lipgloss.Style, annotation string, config *RenderConfig,
-) {
+func renderComplexAttributeChange(b *strings.Builder, change *AttributeChange, meta *attrRenderMeta, styles *diffStyles) {
 	// Write key line.
-	fmt.Fprintf(b, "%s%s%s%s\n",
-		baseIndent,
-		attrBar,
-		keyStyle.Render(change.Key),
-		annotation,
+	fmt.Fprintf(
+		b, "%s%s%s%s\n",
+		meta.Indent,
+		meta.Bar,
+		meta.KeyStyle.Render(change.Key),
+		meta.Annotation,
 	)
 
 	// Format values as JSON lines.
@@ -266,32 +372,32 @@ func renderComplexAttributeChange(b *strings.Builder, change *AttributeChange, b
 
 	// Apply collapsing if configured.
 	maxLines := 0
-	if config != nil {
-		maxLines = config.MaxLines
+	if meta.Config != nil {
+		maxLines = meta.Config.MaxLines
 	}
 	beforeLines = collapseIfNeeded(beforeLines, maxLines)
 	afterLines = collapseIfNeeded(afterLines, maxLines)
 
 	// Content indent for JSON lines.
-	contentIndent := baseIndent + "  "
-	if attrBar != "" {
-		contentIndent = baseIndent + attrBar + "  "
+	contentIndent := meta.Indent + twoSpaceIndent
+	if meta.Bar != "" {
+		contentIndent = meta.Indent + meta.Bar + twoSpaceIndent
 	}
 
 	// Render based on what content we have.
 	switch {
 	case len(beforeLines) > 0 && len(afterLines) > 0:
 		// Both have values - show diff.
-		renderJSONDiff(b, beforeLines, afterLines, contentIndent, createStyle, deleteStyle, config)
+		renderJSONDiff(b, beforeLines, afterLines, contentIndent, styles)
 	case len(beforeLines) > 0:
 		// Only before (deletion).
 		for _, line := range beforeLines {
-			fmt.Fprintf(b, "%s%s %s\n", contentIndent, deleteStyle.Render("-"), line)
+			fmt.Fprintf(b, fmtIndentedSymbolLine, contentIndent, styles.Delete.Render("-"), line)
 		}
 	case len(afterLines) > 0:
 		// Only after (creation).
 		for _, line := range afterLines {
-			fmt.Fprintf(b, "%s%s %s\n", contentIndent, createStyle.Render("+"), line)
+			fmt.Fprintf(b, fmtIndentedSymbolLine, contentIndent, styles.Create.Render("+"), line)
 		}
 	}
 }
@@ -301,9 +407,15 @@ func linesMatch(before, after []string, i, j int) bool {
 	return i < len(before) && j < len(after) && before[i] == after[j]
 }
 
+// diffCursor tracks the current read position in the before/after line slices while
+// collecting a run of changed lines.
+type diffCursor struct {
+	I, J int
+}
+
 // collectChanges collects deleted and added lines until the next matching line.
-func collectChanges(before, after []string, iStart, jStart int) (deleted, added []string, i, j int) {
-	i, j = iStart, jStart
+func collectChanges(before, after []string, start diffCursor) (deleted, added []string, next diffCursor) {
+	i, j := start.I, start.J
 	for i < len(before) || j < len(after) {
 		if linesMatch(before, after, i, j) {
 			break
@@ -317,46 +429,44 @@ func collectChanges(before, after []string, iStart, jStart int) (deleted, added 
 			j++
 		}
 	}
-	return deleted, added, i, j
+	return deleted, added, diffCursor{I: i, J: j}
+}
+
+// transformLines applies transform to every line, returning lines unchanged if transform is nil.
+func transformLines(lines []string, transform func(string) string) []string {
+	if transform == nil {
+		return lines
+	}
+	out := make([]string, len(lines))
+	for i, line := range lines {
+		out[i] = transform(line)
+	}
+	return out
 }
 
 // renderDiffLines outputs deleted and added lines to the builder.
-//
-//nolint:gocritic // lipgloss.Style is designed to be passed by value (immutable)
-func renderDiffLines(b *strings.Builder, deleted, added []string, indent string,
-	deleteStyle, createStyle lipgloss.Style, transform func(string) string,
-) {
+func renderDiffLines(b *strings.Builder, deleted, added []string, indent string, styles *diffStyles) {
 	for _, line := range deleted {
-		if transform != nil {
-			line = transform(line)
-		}
-		fmt.Fprintf(b, "%s%s %s\n", indent, deleteStyle.Render("-"), line)
+		fmt.Fprintf(b, fmtIndentedSymbolLine, indent, styles.Delete.Render("-"), line)
 	}
 	for _, line := range added {
-		if transform != nil {
-			line = transform(line)
-		}
-		fmt.Fprintf(b, "%s%s %s\n", indent, createStyle.Render("+"), line)
+		fmt.Fprintf(b, fmtIndentedSymbolLine, indent, styles.Create.Render("+"), line)
 	}
 }
 
 // renderJSONDiff renders a line-by-line diff of JSON content.
-//
-//nolint:gocritic // lipgloss.Style is designed to be passed by value (immutable)
-func renderJSONDiff(b *strings.Builder, beforeLines, afterLines []string, indent string,
-	createStyle, deleteStyle lipgloss.Style, config *RenderConfig,
-) {
-	i, j := 0, 0
-	for i < len(beforeLines) || j < len(afterLines) {
-		if linesMatch(beforeLines, afterLines, i, j) {
-			fmt.Fprintf(b, "%s  %s\n", indent, beforeLines[i])
-			i++
-			j++
+func renderJSONDiff(b *strings.Builder, beforeLines, afterLines []string, indent string, styles *diffStyles) {
+	cursor := diffCursor{}
+	for cursor.I < len(beforeLines) || cursor.J < len(afterLines) {
+		if linesMatch(beforeLines, afterLines, cursor.I, cursor.J) {
+			fmt.Fprintf(b, "%s  %s\n", indent, beforeLines[cursor.I])
+			cursor.I++
+			cursor.J++
 			continue
 		}
 		var deleted, added []string
-		deleted, added, i, j = collectChanges(beforeLines, afterLines, i, j)
-		renderDiffLines(b, deleted, added, indent, deleteStyle, createStyle, nil)
+		deleted, added, cursor = collectChanges(beforeLines, afterLines, cursor)
+		renderDiffLines(b, deleted, added, indent, styles)
 	}
 }
 
@@ -371,44 +481,36 @@ func makeTruncator(maxWidth int) func(string) string {
 }
 
 // renderMultilineDiffSimple renders a simple line-by-line diff with clean indentation.
-//
-//nolint:gocritic // lipgloss.Style is designed to be passed by value (immutable)
-func renderMultilineDiffSimple(b *strings.Builder, before, after, indent string,
-	createStyle, deleteStyle lipgloss.Style, config *RenderConfig,
-) {
+func renderMultilineDiffSimple(b *strings.Builder, before, after, indent string, styles *diffStyles) {
 	maxWidth := getMaxLineWidth()
-	beforeLines := strings.Split(before, "\n")
-	afterLines := strings.Split(after, "\n")
+	beforeLines := strings.Split(before, newlineStr)
+	afterLines := strings.Split(after, newlineStr)
 	truncateLine := makeTruncator(maxWidth)
 
-	i, j := 0, 0
-	for i < len(beforeLines) || j < len(afterLines) {
-		if linesMatch(beforeLines, afterLines, i, j) {
-			fmt.Fprintf(b, "%s  %s\n", indent, truncateLine(beforeLines[i]))
-			i++
-			j++
+	cursor := diffCursor{}
+	for cursor.I < len(beforeLines) || cursor.J < len(afterLines) {
+		if linesMatch(beforeLines, afterLines, cursor.I, cursor.J) {
+			fmt.Fprintf(b, "%s  %s\n", indent, truncateLine(beforeLines[cursor.I]))
+			cursor.I++
+			cursor.J++
 			continue
 		}
 		var deleted, added []string
-		deleted, added, i, j = collectChanges(beforeLines, afterLines, i, j)
-		renderDiffLines(b, deleted, added, indent, deleteStyle, createStyle, truncateLine)
+		deleted, added, cursor = collectChanges(beforeLines, afterLines, cursor)
+		renderDiffLines(b, transformLines(deleted, truncateLine), transformLines(added, truncateLine), indent, styles)
 	}
 }
 
 // renderMultilineValueSimple renders multi-line content with clean indentation.
-//
-//nolint:gocritic // lipgloss.Style is designed to be passed by value (immutable)
-func renderMultilineValueSimple(b *strings.Builder, content, indent, symbol string,
-	symbolStyle lipgloss.Style, config *RenderConfig,
-) {
+func renderMultilineValueSimple(b *strings.Builder, content, indent, symbol string, symbolStyle *lipgloss.Style) {
 	maxWidth := getMaxLineWidth()
-	lines := strings.Split(content, "\n")
+	lines := strings.Split(content, newlineStr)
 
 	for _, line := range lines {
 		if maxWidth > 3 && len(line) > maxWidth {
 			line = line[:maxWidth-3] + "..."
 		}
-		fmt.Fprintf(b, "%s%s %s\n", indent, symbolStyle.Render(symbol), line)
+		fmt.Fprintf(b, fmtIndentedSymbolLine, indent, symbolStyle.Render(symbol), line)
 	}
 }
 
@@ -474,61 +576,53 @@ func countActions(node *TreeNode, add, change, remove *int) {
 	}
 }
 
+// noChangesBadge renders the "NO CHANGES" badge shown when a plan has no changes.
+func noChangesBadge() string {
+	return lipgloss.NewStyle().
+		Background(lipgloss.Color(theme.ColorDarkGray)).
+		Foreground(lipgloss.Color(theme.ColorWhite)).
+		Bold(true).
+		Padding(0, 1).
+		Render("NO CHANGES")
+}
+
+// changeBadge renders a single "<count> <LABEL>" badge with a background color and a
+// contrasting, accessible text color.
+func changeBadge(bgColor, text string) string {
+	return lipgloss.NewStyle().
+		Background(lipgloss.Color(bgColor)).
+		Foreground(lipgloss.Color(getContrastTextColor(bgColor))).
+		Bold(true).
+		Padding(0, 1).
+		Render(text)
+}
+
+// buildChangeBadges renders one badge per non-zero change count.
+func buildChangeBadges(add, change, remove int) []string {
+	var badges []string
+	if add > 0 {
+		badges = append(badges, changeBadge(theme.ColorGreen, fmt.Sprintf("%d ADD", add)))
+	}
+	if change > 0 {
+		badges = append(badges, changeBadge(theme.ColorYellow, fmt.Sprintf("%d CHANGE", change)))
+	}
+	if remove > 0 {
+		badges = append(badges, changeBadge(theme.ColorRed, fmt.Sprintf("%d DELETE", remove)))
+	}
+	return badges
+}
+
 // RenderChangeSummaryBadges renders a badge-style change summary.
 // Shows "NO CHANGES" badge if all counts are zero.
 // Format: "  1 ADD 2 CHANGE 1 DELETE" with colored badges (green/yellow/red backgrounds).
 func RenderChangeSummaryBadges(add, change, remove int) string {
 	defer perf.Track(nil, "terraform.ui.RenderChangeSummaryBadges")()
 
-	var badges []string
-
-	// If no changes, show a "NO CHANGES" badge.
-	if add == 0 && change == 0 && remove == 0 {
-		noChangesBadge := lipgloss.NewStyle().
-			Background(lipgloss.Color(theme.ColorDarkGray)).
-			Foreground(lipgloss.Color(theme.ColorWhite)).
-			Bold(true).
-			Padding(0, 1).
-			Render("NO CHANGES")
-		badges = append(badges, noChangesBadge)
-	} else {
-		// Badge styles with background colors and contrasting text.
-		if add > 0 {
-			addBadge := lipgloss.NewStyle().
-				Background(lipgloss.Color(theme.ColorGreen)).
-				Foreground(lipgloss.Color(getContrastTextColor(theme.ColorGreen))).
-				Bold(true).
-				Padding(0, 1).
-				Render(fmt.Sprintf("%d ADD", add))
-			badges = append(badges, addBadge)
-		}
-
-		if change > 0 {
-			changeBadge := lipgloss.NewStyle().
-				Background(lipgloss.Color(theme.ColorYellow)).
-				Foreground(lipgloss.Color(getContrastTextColor(theme.ColorYellow))).
-				Bold(true).
-				Padding(0, 1).
-				Render(fmt.Sprintf("%d CHANGE", change))
-			badges = append(badges, changeBadge)
-		}
-
-		if remove > 0 {
-			removeBadge := lipgloss.NewStyle().
-				Background(lipgloss.Color(theme.ColorRed)).
-				Foreground(lipgloss.Color(getContrastTextColor(theme.ColorRed))).
-				Bold(true).
-				Padding(0, 1).
-				Render(fmt.Sprintf("%d DELETE", remove))
-			badges = append(badges, removeBadge)
-		}
+	badges := []string{noChangesBadge()}
+	if add > 0 || change > 0 || remove > 0 {
+		badges = buildChangeBadges(add, change, remove)
 	}
 
 	// Join badges with a space, add blank line above and below, and indent 2 spaces.
-	return "\n  " + strings.Join(badges, " ") + "\n\n"
-}
-
-// defaultTreeStyle returns the default tree branch style (for testing).
-func defaultTreeStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
+	return "\n  " + strings.Join(badges, spaceChar) + "\n\n"
 }

@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Abstract component defaults. Each deploy stack imports this and promotes the
+# components to `type: real`, so `atmos terraform deploy` (with no component) offers
+# all three in the interactive component picker. No per-component identity binding:
+# `local-aws` is the default identity (atmos.yaml), so every component runs against
+# the local AWS emulator automatically.
+components:
+  terraform:
+    s3-bucket:
+      metadata:
+        type: abstract
+        component: s3-bucket
+      vars: {}
+    dynamodb-table:
+      metadata:
+        type: abstract
+        component: dynamodb-table
+      vars: {}
+    sqs-queue:
+      metadata:
+        type: abstract
+        component: sqs-queue
+      vars: {}

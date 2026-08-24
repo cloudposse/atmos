@@ -1,7 +1,5 @@
 package store
 
-import "strings"
-
 // Store defines the common interface for all store implementations.
 //
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_store.go -package=store
@@ -14,24 +12,69 @@ type Store interface {
 	GetKey(key string) (any, error)
 }
 
-// StoreFactory is a function type to initialize a new store.
-type StoreFactory func(options map[string]any) (Store, error)
+// DeletableStore extends Store with the ability to remove a value. Backends that support
+// deletion (SSM, ASM, Vault, Azure Key Vault, GCP Secret Manager) implement this; backends
+// that don't may return ErrDeleteNotSupported. The secrets CLI (`atmos secret delete`)
+// requires it.
+type DeletableStore interface {
+	Store
+	// Delete removes the value for a specific stack, component, and key combination.
+	Delete(stack string, component string, key string) error
+}
 
-// nolint
-// getKey generates a key for the store. First it splits the stack by the stack delimiter (from atmos.yaml),
-// then it splits the component if it contains a "/",
-// then it appends the key to the parts,
-// then it joins the parts with the final delimiter.
-func getKey(prefix string, stackDelimiter string, stack string, component string, key string, finalDelimiter string) (string, error) { //nolint
-	stackParts := strings.Split(stack, stackDelimiter)
-	componentParts := strings.Split(component, "/")
+// StatusStore extends Store with an existence check used by `atmos secret list`/`validate`
+// to report whether a declared secret has been initialized.
+//
+// Has MUST determine existence without retrieving or decrypting the value: it uses a
+// metadata/describe API (e.g. SSM GetParameter with WithDecryption=false, Secrets Manager
+// DescribeSecret, GCP GetSecretVersion) so that listing never requires a decrypt-capable
+// identity (no kms:Decrypt) and never registers a plaintext value with the masker.
+type StatusStore interface {
+	Store
+	// Has reports whether a value exists for a specific stack, component, and key, without
+	// retrieving or decrypting the value.
+	Has(stack string, component string, key string) (bool, error)
+}
 
-	parts := append([]string{prefix}, stackParts...)
-	parts = append(parts, componentParts...)
-	parts = append(parts, key)
+// LocalStore is an optional marker for stores whose existence check (Has) needs no network
+// access and no authentication — e.g. the OS keychain. `atmos secret list` treats local
+// stores as always-safe to check (free), and reports non-local (remote) stores as Unknown
+// unless verification is explicitly requested (`--verify`). Remote stores must NOT implement it.
+type LocalStore interface {
+	Store
+	// IsLocal reports whether the store operates without network access or authentication.
+	IsLocal() bool
+}
 
-	joinedKey := strings.Join(parts, finalDelimiter)
-	finalKey := strings.ReplaceAll(joinedKey, "//", "/")
+// SecretAwareStore is implemented by stores that change their at-rest behavior when used as
+// a secret backend (e.g. AWS SSM writes a SecureString instead of a String). The registry
+// calls SetSecret(true) for stores configured with `secret: true`.
+type SecretAwareStore interface {
+	Store
+	// SetSecret marks the store as a secret backend so writes use the sensitive at-rest variant.
+	SetSecret(secret bool)
+}
 
-	return finalKey, nil
+// ListableStore is implemented by stores that can enumerate the keys stored under a
+// stack/component scope (or globally when both are empty). Not every backend can enumerate keys
+// cheaply or safely (see each provider's Keys implementation for details) — 1Password never
+// implements this (its addressing is opaque op:// reference templates, not the getKey() scheme
+// every other backend shares), and the keychain store's default (system/OS) backend returns
+// ErrListNotSupported at runtime even though it implements the interface. Keys returns key names
+// only; fetch a value with Get/GetKey.
+type ListableStore interface {
+	Store
+	// Keys lists the keys under a stack/component scope (or globally when both are empty).
+	Keys(stack, component string) ([]string, error)
+}
+
+// ValueListableStore is implemented by stores whose ListableStore.Keys enumeration is only safe
+// to pair with per-key Get calls in some execution contexts. GitHubActionsStore's Get requires a
+// GitHub Actions runner; outside one it implements this to report false so ListKeyValues can
+// fail fast with ErrListNotSupported instead of aborting mid-enumeration on the first Get error.
+type ValueListableStore interface {
+	ListableStore
+	// ValueListingSupported reports whether Get can currently be called for every key Keys
+	// returns.
+	ValueListingSupported() bool
 }

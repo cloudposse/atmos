@@ -1,14 +1,15 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -139,17 +140,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 				return err
 			}
 
-			if len(GetStackNamePattern(&atmosConfig)) < 1 {
-				return errors.New("stack name pattern must be provided in `stacks.name_pattern` CLI config or `ATMOS_STACKS_NAME_PATTERN` ENV variable")
-			}
-
-			stack, err := cfg.GetStackNameFromContextAndStackNamePattern(
-				kubeconfigContext.Namespace,
-				kubeconfigContext.Tenant,
-				kubeconfigContext.Environment,
-				kubeconfigContext.Stage,
-				GetStackNamePattern(&atmosConfig),
-			)
+			stack, err := resolveStackFromContext(&atmosConfig, &kubeconfigContext)
 			if err != nil {
 				return err
 			}
@@ -182,13 +173,31 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 		if kubeconfigPath == "" {
 			kubeconfigPath = fmt.Sprintf("%s/%s-kubecfg", atmosConfig.Components.Helmfile.KubeconfigPath, kubeconfigContext.Stack)
 		}
-		// `clusterName` can be overridden on the command line
+		// `clusterName` can be overridden on the command line.
+		// Determine cluster name with precedence:
+		// 1. --name flag (already set above)
+		// 2. cluster_name in config
+		// 3. cluster_name_template expanded (Go template syntax)
+		// 4. cluster_name_pattern expanded (deprecated, logs warning)
 		if clusterName == "" {
-			clusterName = cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.ClusterNamePattern)
+			//nolint:gocritic // if-else chain is clearer than switch for checking different variables
+			if atmosConfig.Components.Helmfile.ClusterName != "" {
+				clusterName = atmosConfig.Components.Helmfile.ClusterName
+			} else if atmosConfig.Components.Helmfile.ClusterNameTemplate != "" {
+				clusterName, err = ProcessTmpl(&atmosConfig, "cluster_name_template", atmosConfig.Components.Helmfile.ClusterNameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
+				if err != nil {
+					return fmt.Errorf("failed to process cluster_name_template: %w", err)
+				}
+			} else if atmosConfig.Components.Helmfile.ClusterNamePattern != "" {
+				log.Warn("cluster_name_pattern is deprecated, use cluster_name_template with Go template syntax instead")
+				clusterName = cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.ClusterNamePattern)
+			}
 		}
-		// `profile` can be overridden on the command line
-		// `--role-arn` suppresses `profile` being automatically set
-		if profile == "" && roleArn == "" {
+		// `profile` can be overridden on the command line.
+		// `--role-arn` suppresses `profile` being automatically set.
+		// Note: helm_aws_profile_pattern is deprecated, use --identity flag instead.
+		if profile == "" && roleArn == "" && atmosConfig.Components.Helmfile.HelmAwsProfilePattern != "" {
+			log.Warn("helm_aws_profile_pattern is deprecated, use --identity flag instead")
 			profile = cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.HelmAwsProfilePattern)
 		}
 		// `region` can be overridden on the command line
@@ -229,7 +238,12 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 		args = append(args, fmt.Sprintf("--region=%s", region))
 	}
 
-	err = ExecuteShellCommand(atmosConfig, "aws", args, shellCommandWorkingDir, nil, dryRun, "")
+	// Resolve aws through toolchain so it works when installed via `atmos toolchain install`.
+	tenv, tenvErr := dependencies.ForComponent(&atmosConfig, configAndStacksInfo.ComponentType, configAndStacksInfo.StackSection, configAndStacksInfo.ComponentSection)
+	if tenvErr != nil {
+		return tenvErr
+	}
+	err = ExecuteShellCommand(atmosConfig, tenv.Resolve("aws"), args, shellCommandWorkingDir, tenv.EnvVars(), dryRun, "")
 	if err != nil {
 		return err
 	}
@@ -240,4 +254,34 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 	}
 
 	return nil
+}
+
+// resolveStackFromContext calculates the logical stack name from the namespace/tenant/environment/stage
+// context when no `--stack` was provided on the command line.
+// Precedence: stacks.name_template (Go template) > stacks.name_pattern (deprecated, token-based) > error.
+func resolveStackFromContext(atmosConfig *schema.AtmosConfiguration, kubeconfigContext *schema.AwsEksUpdateKubeconfigContext) (string, error) {
+	switch {
+	case GetStackNameTemplate(atmosConfig) != "":
+		ctx := map[string]any{
+			"vars": map[string]any{
+				"namespace":   kubeconfigContext.Namespace,
+				"tenant":      kubeconfigContext.Tenant,
+				"environment": kubeconfigContext.Environment,
+				"stage":       kubeconfigContext.Stage,
+			},
+		}
+		return ProcessTmpl(atmosConfig, "name-template-from-context", GetStackNameTemplate(atmosConfig), ctx, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
+
+	case GetStackNamePattern(atmosConfig) != "":
+		return cfg.GetStackNameFromContextAndStackNamePattern(
+			kubeconfigContext.Namespace,
+			kubeconfigContext.Tenant,
+			kubeconfigContext.Environment,
+			kubeconfigContext.Stage,
+			GetStackNamePattern(atmosConfig),
+		)
+
+	default:
+		return "", errUtils.ErrMissingStackNameTemplateAndPattern
+	}
 }

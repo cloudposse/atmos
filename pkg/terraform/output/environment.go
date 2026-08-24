@@ -1,13 +1,16 @@
 package output
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
 )
 
 // EnvironmentSetup handles environment variable configuration for terraform execution.
@@ -54,7 +57,8 @@ func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, auth
 
 	// Add auth-based environment variables if authContext is provided.
 	if authContext != nil && authContext.AWS != nil {
-		log.Debug("Adding auth-based environment variables",
+		log.Debug(
+			"Adding auth-based environment variables",
 			"profile", authContext.AWS.Profile,
 			"credentials_file", authContext.AWS.CredentialsFile,
 			"config_file", authContext.AWS.ConfigFile,
@@ -67,11 +71,18 @@ func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, auth
 			authContext.AWS.ConfigFile,
 			authContext.AWS.Region,
 		)
+		// The S3 backend is initialized by `terraform output` as well as by
+		// plan/apply. Preserve the identity endpoint so post-execution hooks
+		// keep reading emulator-backed state instead of falling back to AWS.
+		if authContext.AWS.EndpointURL != "" {
+			environMap["AWS_ENDPOINT_URL_S3"] = authContext.AWS.EndpointURL
+		}
 	}
 
 	// Add/override environment variables from the component's env section.
 	if len(config.Env) > 0 {
-		log.Debug("Adding environment variables from component",
+		log.Debug(
+			"Adding environment variables from component",
 			"source", "env section",
 			"count", len(config.Env),
 		)
@@ -80,8 +91,93 @@ func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, auth
 		}
 	}
 
-	log.Debug("Resolved final environment variables",
+	// When components.terraform.init.pass_vars is enabled, export the component's
+	// vars as TF_VAR_* so the internal `terraform init` (run while resolving
+	// !terraform.output) can satisfy init-time variable dependencies — e.g. a
+	// module whose `version`/`source` is bound to var.foo. The main terraform
+	// path passes -var-file on init for this; the output executor runs init via
+	// the terraform-exec library, which cannot pass a var-file to init, so vars
+	// are forwarded through the environment instead. See issue #1412.
+	if config.PassVars && len(config.Vars) > 0 {
+		addTerraformVarsToEnv(environMap, config.Vars)
+	}
+
+	log.Debug(
+		"Resolved final environment variables",
 		"count", len(environMap),
 	)
 	return environMap, nil
+}
+
+// configurePluginCache applies the shared provider-cache policy to an internal
+// terraform-output subprocess. A component-specific override wins; otherwise
+// it preserves the command path's OS environment then atmos.yaml global-env
+// precedence. Resolved component env normally includes the global env, so the
+// override helper distinguishes an inherited value from a component override.
+func configurePluginCache(atmosConfig *schema.AtmosConfiguration, config *ComponentConfig, environMap map[string]string) tfplugin.Cache {
+	override, overrideSet := pluginCacheOverride(atmosConfig, config)
+	cache := tfplugin.Resolve(atmosConfig, override, overrideSet)
+
+	if cache.Automatic {
+		for key, value := range cache.Environment {
+			environMap[key] = value
+		}
+		return cache
+	}
+
+	// An explicit global setting may not be present in config.Env when this
+	// package is called directly, so always make the resolved override visible
+	// to the child process.
+	if overrideSet && cache.Directory != "" {
+		environMap[tfplugin.CacheDirEnv] = cache.Directory
+	}
+	return cache
+}
+
+func pluginCacheOverride(atmosConfig *schema.AtmosConfiguration, config *ComponentConfig) (string, bool) {
+	if config != nil && config.Env != nil {
+		if value, ok := config.Env[tfplugin.CacheDirEnv]; ok {
+			configured := fmt.Sprintf("%v", value)
+			if atmosConfig == nil || atmosConfig.Env[tfplugin.CacheDirEnv] != configured {
+				return configured, true
+			}
+		}
+	}
+	if value, ok := os.LookupEnv(tfplugin.CacheDirEnv); ok {
+		return value, true
+	}
+	if atmosConfig != nil {
+		value, ok := atmosConfig.Env[tfplugin.CacheDirEnv]
+		return value, ok
+	}
+	return "", false
+}
+
+// addTerraformVarsToEnv writes each component var into environMap as a TF_VAR_*
+// entry. String values are passed through verbatim; all other types (bool,
+// number, list, map) are JSON-encoded, which Terraform/OpenTofu accept for the
+// corresponding variable types. Existing TF_VAR_* entries are not overwritten so
+// that an explicit env-section override always wins.
+func addTerraformVarsToEnv(environMap map[string]string, vars map[string]any) {
+	for name, value := range vars {
+		key := "TF_VAR_" + name
+		if _, exists := environMap[key]; exists {
+			continue
+		}
+		environMap[key] = encodeTerraformVarValue(value)
+	}
+}
+
+// encodeTerraformVarValue renders a single var value for a TF_VAR_* environment
+// variable. Strings are used as-is; everything else is JSON-encoded, falling back
+// to fmt formatting if JSON marshaling fails.
+func encodeTerraformVarValue(value any) string {
+	if s, ok := value.(string); ok {
+		return s
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("%v", value)
+	}
+	return string(encoded)
 }

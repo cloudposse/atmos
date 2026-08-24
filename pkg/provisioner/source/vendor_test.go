@@ -2,7 +2,9 @@ package source
 
 import (
 	"context"
+	"errors"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,7 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/oci/ocitest"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
 func TestResolveSourceURI(t *testing.T) {
@@ -69,6 +73,14 @@ func TestResolveSourceURI(t *testing.T) {
 			},
 			expected: "github.com/cloudposse/terraform-aws-components//modules/vpc",
 		},
+		{
+			name: "URI without ref, git ref SHA version specified",
+			sourceSpec: &schema.VendorComponentSource{
+				Uri:     "github.com/my-org/my-repo//components/terraform/vpc",
+				Version: "0123456789abcdef0123456789abcdef01234567",
+			},
+			expected: "github.com/my-org/my-repo//components/terraform/vpc?ref=0123456789abcdef0123456789abcdef01234567",
+		},
 	}
 
 	for _, tt := range tests {
@@ -77,6 +89,427 @@ func TestResolveSourceURI(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestVendorSourceWithReplaceTargetFalseFailsWhenTargetExists(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# source\n"), 0o644))
+
+	targetDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "existing.tf"), []byte("# existing\n"), 0o644))
+
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceDir}, targetDir, WithReplaceTarget(false))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+
+	content, readErr := os.ReadFile(filepath.Join(targetDir, "existing.tf"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "# existing\n", string(content))
+}
+
+func TestVendorSourceRejectsMalformedFileURI(t *testing.T) {
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: "file://[::1"}, filepath.Join(t.TempDir(), "target"))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceInvalidSpec))
+}
+
+// TestVendorSourceNonLocalWithReplaceTargetFalseFailsWhenTargetExists drives the
+// pre-download replaceTarget-false check inside VendorSource itself (as opposed to
+// the analogous check in copySourceToTarget/prepareVendorTarget, which only runs for
+// local directory sources and is covered separately above). A go-getter "shorthand"
+// URI like "github.com/org/repo" is not a local path (vendor.IsLocalPath returns
+// false) and is not an existing local directory, so localDirectorySource returns
+// ok=false and VendorSource falls through to its own os.Stat(targetDir) check,
+// which fires before any network access is attempted.
+func TestVendorSourceNonLocalWithReplaceTargetFalseFailsWhenTargetExists(t *testing.T) {
+	targetDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "existing.tf"), []byte("# existing\n"), 0o644))
+
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: "github.com/cloudposse/does-not-matter"}, targetDir, WithReplaceTarget(false))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+	assert.False(t, errors.Is(err, errUtils.ErrSourceProvision), "must fail on the pre-download exists-check, not a download attempt")
+
+	content, readErr := os.ReadFile(filepath.Join(targetDir, "existing.tf"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "# existing\n", string(content))
+}
+
+// TestVendorSourceNonLocalReportsTargetInspectFailure drives the "failed to inspect
+// target directory" branch inside VendorSource itself (os.Stat returns a non-NotExist
+// error) using the same non-local shorthand URI as above, so the pre-download check
+// runs against a targetDir with a plain FILE as an intermediate directory component,
+// since os.Stat on a path with a file-as-parent fails identically (ENOTDIR/ERROR_DIRECTORY)
+// on Unix and Windows, so this is cross-platform without chmod tricks.
+func TestVendorSourceNonLocalReportsTargetInspectFailure(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a directory"), 0o644))
+	targetDir := filepath.Join(blocker, "target")
+
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: "github.com/cloudposse/does-not-matter"}, targetDir, WithReplaceTarget(false))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+	assert.False(t, errors.Is(err, errUtils.ErrSourceProvision), "must fail on the pre-download inspect-check, not a download attempt")
+}
+
+func TestVendorSourceWithReplaceTargetFalseFailsWhenTargetStatFails(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# source\n"), 0o644))
+
+	// Create a plain file where a directory component of targetDir is expected,
+	// so os.Stat(targetDir) fails with a non-NotExist error (ENOTDIR) on all platforms.
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a directory"), 0o644))
+	targetDir := filepath.Join(blocker, "target")
+
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceDir}, targetDir, WithReplaceTarget(false))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+}
+
+func TestVendorSourceWithRetryConfig(t *testing.T) {
+	maxAttempts := 2
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{
+		Uri:   filepath.Join(t.TempDir(), "missing"),
+		Retry: &schema.RetryConfig{MaxAttempts: &maxAttempts},
+	}, filepath.Join(t.TempDir(), "target"))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceProvision))
+}
+
+func TestVendorSourceSupportsRelativeLocalPath(t *testing.T) {
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	rootDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(rootDir, "fixtures", "demo"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "fixtures", "demo", "README.md"), []byte("demo\n"), 0o644))
+	require.NoError(t, os.Chdir(rootDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(originalDir))
+	})
+
+	targetDir := filepath.Join(rootDir, "workdirs", "demo")
+	err = VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: "fixtures/demo"}, targetDir)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(targetDir, "README.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "demo\n", string(content))
+}
+
+func TestVendorSourceSupportsFileURIDirectory(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(sourceDir, "nested"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "nested", "main.tf"), []byte("# source\n"), 0o644))
+
+	sourceURL := url.URL{Scheme: "file", Path: filepath.ToSlash(sourceDir)}
+	targetDir := filepath.Join(t.TempDir(), "workdir")
+
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceURL.String()}, targetDir)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(targetDir, "nested", "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# source\n", string(content))
+}
+
+func TestLocalDirectorySourceHandlesLocalhostFileURIAndNonDirectories(t *testing.T) {
+	sourceDir := t.TempDir()
+	sourceURL := url.URL{Scheme: "file", Host: "localhost", Path: filepath.ToSlash(sourceDir)}
+
+	localDir, ok, err := localDirectorySource(sourceURL.String())
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, filepath.Clean(sourceDir), localDir)
+
+	sourceFile := filepath.Join(t.TempDir(), "main.tf")
+	require.NoError(t, os.WriteFile(sourceFile, []byte("# source\n"), 0o644))
+	localDir, ok, err = localDirectorySource(sourceFile)
+	require.NoError(t, err)
+	assert.False(t, ok)
+	assert.Empty(t, localDir)
+
+	localDir, ok, err = localDirectorySource("file://example.com/tmp/source")
+	require.NoError(t, err)
+	assert.False(t, ok)
+	assert.Empty(t, localDir)
+}
+
+func TestFileURIPathRejectsMalformedURI(t *testing.T) {
+	_, err := fileURIPath("file://[::1")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceInvalidSpec))
+}
+
+func TestVendorSourceRejectsUnsafeTargets(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# source\n"), 0o644))
+
+	for _, target := range []string{"", ".", "./", "..", "../..", filepath.Join("..", "target"), string(filepath.Separator)} {
+		t.Run(target, func(t *testing.T) {
+			err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceDir}, target)
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, errUtils.ErrUnsafeVendorTarget))
+		})
+	}
+}
+
+func TestFileURIPathSupportsWindowsDrivePaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		uri      string
+		expected string
+	}{
+		{
+			name:     "opaque drive path",
+			uri:      "file:C:/Users/runneradmin/AppData/Local/Temp/atmos-source",
+			expected: "C:/Users/runneradmin/AppData/Local/Temp/atmos-source",
+		},
+		{
+			name:     "drive path as host",
+			uri:      "file://D:/Temp/atmos-source",
+			expected: "D:/Temp/atmos-source",
+		},
+		{
+			name:     "drive path with leading slash",
+			uri:      "file:///D:/Temp/atmos-source",
+			expected: "D:/Temp/atmos-source",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, err := fileURIPath(tt.uri)
+			require.NoError(t, err)
+
+			assert.Equal(t, filepath.FromSlash(tt.expected), path)
+		})
+	}
+}
+
+func TestIsWindowsDriveHostFalseCases(t *testing.T) {
+	for _, host := range []string{"", "C", "1:", "server", "C::"} {
+		t.Run(host, func(t *testing.T) {
+			assert.False(t, isWindowsDriveHost(host))
+		})
+	}
+}
+
+func TestVendorSourceRejectsNilAndEmptySource(t *testing.T) {
+	err := VendorSource(context.Background(), nil, nil, filepath.Join(t.TempDir(), "target"))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrNilParam))
+
+	err = VendorSource(context.Background(), nil, &schema.VendorComponentSource{}, filepath.Join(t.TempDir(), "target"))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceInvalidSpec))
+}
+
+func TestVendorSourceReplacesExistingTargetWhenEnabled(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "new.txt"), []byte("new\n"), 0o644))
+
+	targetDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "old.txt"), []byte("old\n"), 0o644))
+
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceDir}, targetDir)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(targetDir, "old.txt"))
+	assert.True(t, os.IsNotExist(err))
+	content, err := os.ReadFile(filepath.Join(targetDir, "new.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "new\n", string(content))
+}
+
+func TestVendorSourceReportsDownloadFailure(t *testing.T) {
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: filepath.Join(t.TempDir(), "missing")}, filepath.Join(t.TempDir(), "target"))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceProvision))
+	assert.Contains(t, err.Error(), "failed to download")
+}
+
+func TestVendorSourceOCI_Success(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "test/component:v1", map[string]string{
+		"main.tf": "# OCI_MARKER\n",
+	})
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{
+		Uri: "oci://" + imageRef,
+	}, targetDir)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(targetDir, "main.tf"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "OCI_MARKER")
+}
+
+// TestVendorSourceOCI_OpenTofuModulePackage_Success is a regression test for
+// pulling a component from an OCI registry that distributes modules in
+// OpenTofu's native "install modules from OCI registries" format (artifactType
+// application/vnd.opentofu.modulepkg, a ZIP-archive layer with media type
+// "archive/zip" -- see https://opentofu.org). Atmos's OCI puller previously
+// assumed every layer was a tar+gzip stream and failed with "archive/tar:
+// invalid tar header" against real registries publishing this format (e.g.
+// registry.defenseunicorns.com's terraform-aws-uds-vpc module).
+func TestVendorSourceOCI_OpenTofuModulePackage_Success(t *testing.T) {
+	imageRef := ocitest.NewZipRegistry(t, "test/tofu-module:v1", map[string]string{
+		"main.tf": "# OPENTOFU_MODULEPKG_MARKER\n",
+	})
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{
+		Uri: "oci://" + imageRef,
+	}, targetDir)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(targetDir, "main.tf"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "OPENTOFU_MODULEPKG_MARKER")
+}
+
+func TestVendorSourceOCI_DownloadFailure(t *testing.T) {
+	// Port 1 is a privileged port nothing is listening on in test environments;
+	// the connection is refused immediately (deterministic, no timeout wait).
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{
+		Uri: "oci://127.0.0.1:1/nonexistent/image:v1",
+	}, filepath.Join(t.TempDir(), "target"))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceProvision))
+}
+
+// TestVendorSourcePostDownloadReplaceTargetFalseFailsWhenTargetExists exercises the
+// second replaceTarget-false guard (after a successful download via go-getter, not the
+// short-circuit local-directory path). A file:// URI pointing at a single file (not a
+// directory) is not treated as a local directory source, so VendorSource proceeds
+// through go-getter's FileGetter before reaching the post-download target checks.
+func TestVendorSourcePostDownloadReplaceTargetFalseFailsWhenTargetExists(t *testing.T) {
+	srcDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "main.tf")
+	require.NoError(t, os.WriteFile(srcFile, []byte("# source\n"), 0o644))
+	sourceURL := url.URL{Scheme: "file", Path: filepath.ToSlash(srcFile)}
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	require.NoError(t, os.WriteFile(targetDir, []byte("existing"), 0o644))
+
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceURL.String()}, targetDir, WithReplaceTarget(false))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+}
+
+// TestVendorSourcePostDownloadReplacesExistingFileTarget verifies the post-download
+// path removes an existing target (even a plain file) when replacement is enabled,
+// exercising the `os.RemoveAll(targetDir)` success branch after a real download.
+func TestVendorSourcePostDownloadReplacesExistingFileTarget(t *testing.T) {
+	srcDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "main.tf")
+	require.NoError(t, os.WriteFile(srcFile, []byte("# new source\n"), 0o644))
+	sourceURL := url.URL{Scheme: "file", Path: filepath.ToSlash(srcFile)}
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	require.NoError(t, os.WriteFile(targetDir, []byte("old"), 0o644))
+
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceURL.String()}, targetDir)
+	require.NoError(t, err)
+
+	// The old file target must be gone; replaced by a directory (go-getter downloads
+	// a single-file source into the temp staging dir, which CopyToTarget then copies
+	// through to targetDir as a directory).
+	info, statErr := os.Stat(targetDir)
+	require.NoError(t, statErr)
+	assert.True(t, info.IsDir())
+}
+
+func TestCopyToTargetCreatesParentDirectoryAndWrapsCopyErrors(t *testing.T) {
+	targetDir := filepath.Join(t.TempDir(), "nested", "target")
+	err := copyToTarget(filepath.Join(t.TempDir(), "missing"), targetDir, &schema.VendorComponentSource{})
+	require.Error(t, err)
+}
+
+// TestCopyToTargetWrapsMkdirAllFailure drives copyToTarget's own MkdirAll error
+// wrapping (distinct from vendor.CopyToTarget's internal errors), by pointing dstDir
+// at a path with a plain FILE as an intermediate directory component, since os.MkdirAll
+// on such a path fails identically on Unix and Windows (no chmod tricks needed).
+func TestCopyToTargetWrapsMkdirAllFailure(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a directory"), 0o644))
+	targetDir := filepath.Join(blocker, "nested", "target")
+
+	err := copyToTarget(t.TempDir(), targetDir, &schema.VendorComponentSource{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create target parent directory")
+}
+
+// TestCopyToTargetReplacesExistingTargetDirectory drives the os.Stat/os.RemoveAll
+// success branch (dstDir already exists and must be replaced) before copying.
+func TestCopyToTargetReplacesExistingTargetDirectory(t *testing.T) {
+	srcDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "new.txt"), []byte("new\n"), 0o644))
+
+	targetDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "old.txt"), []byte("old\n"), 0o644))
+
+	err := copyToTarget(srcDir, targetDir, &schema.VendorComponentSource{})
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(targetDir, "old.txt"))
+	assert.True(t, os.IsNotExist(err))
+	content, err := os.ReadFile(filepath.Join(targetDir, "new.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "new\n", string(content))
+}
+
+func TestCopySourceToTargetWrapsCopyErrors(t *testing.T) {
+	targetDir := filepath.Join(t.TempDir(), "target")
+	err := copySourceToTarget(filepath.Join(t.TempDir(), "missing"), targetDir, &schema.VendorComponentSource{}, vendorSourceOptions{replaceTarget: true})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+}
+
+func TestPrepareVendorTargetRejectsExistingTargetWithoutReplace(t *testing.T) {
+	targetDir := t.TempDir()
+	err := prepareVendorTarget(targetDir, vendorSourceOptions{replaceTarget: false})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+}
+
+func TestPrepareVendorTargetWrapsMkdirAllFailure(t *testing.T) {
+	// Create a plain file where a parent directory component is expected, so
+	// os.MkdirAll(filepath.Dir(targetDir), ...) fails identically on all platforms.
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a directory"), 0o644))
+	targetDir := filepath.Join(blocker, "nested", "target")
+
+	err := prepareVendorTarget(targetDir, vendorSourceOptions{replaceTarget: true})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+}
+
+func TestPrepareVendorTargetWrapsStatFailure(t *testing.T) {
+	// targetDir's parent is a plain file, so os.Stat(targetDir) fails with a
+	// non-NotExist error (ENOTDIR) after MkdirAll(filepath.Dir(targetDir)) succeeds
+	// (the dir component that MkdirAll needs already exists as the tempdir itself).
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a directory"), 0o644))
+	targetDir := filepath.Join(blocker, "target")
+
+	err := prepareVendorTarget(targetDir, vendorSourceOptions{replaceTarget: true})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+}
+
+// TestHandleExistingVendorTargetReplacesFileTarget verifies replaceTarget=true
+// removes an existing target that is a plain file (not just a directory).
+func TestHandleExistingVendorTargetReplacesFileTarget(t *testing.T) {
+	targetFile := filepath.Join(t.TempDir(), "target")
+	require.NoError(t, os.WriteFile(targetFile, []byte("data"), 0o644))
+
+	err := handleExistingVendorTarget(targetFile, vendorSourceOptions{replaceTarget: true})
+	require.NoError(t, err)
+	_, statErr := os.Stat(targetFile)
+	assert.True(t, os.IsNotExist(statErr))
 }
 
 func TestNormalizeURI(t *testing.T) {
@@ -106,15 +539,20 @@ func TestNormalizeURI(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "multiple triple slashes (only first replaced)",
+			// Six slashes: go-getter's SourceDirSubdir splits on first // yielding
+			// source="github.com/cloudposse/terraform-aws-vpc" subdir="///".
+			// NormalizeURI then reassembles as source + "//" + subdir = ".../////" (5 slashes).
+			// This is a pathological edge case; real URIs use at most ///.
+			name:     "multiple triple slashes",
 			uri:      "github.com/cloudposse/terraform-aws-vpc//////",
-			expected: "github.com/cloudposse/terraform-aws-vpc//.///",
+			expected: "github.com/cloudposse/terraform-aws-vpc/////",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := normalizeURI(tt.uri)
+			// Uses the same shared code path as regular vendoring.
+			result := vendor.NormalizeURI(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -122,35 +560,27 @@ func TestNormalizeURI(t *testing.T) {
 
 func TestCreateSkipFunc(t *testing.T) {
 	tests := []struct {
-		name       string
-		sourceSpec *schema.VendorComponentSource
-		fileName   string
-		isDir      bool
-		expected   bool
+		name          string
+		includedPaths []string
+		excludedPaths []string
+		fileName      string
+		isDir         bool
+		expected      bool
 	}{
 		{
-			name: "skip .git directory",
-			sourceSpec: &schema.VendorComponentSource{
-				Uri: "github.com/example/repo",
-			},
+			name:     "skip .git directory",
 			fileName: ".git",
 			isDir:    true,
 			expected: true,
 		},
 		{
-			name: "no patterns - don't skip regular file",
-			sourceSpec: &schema.VendorComponentSource{
-				Uri: "github.com/example/repo",
-			},
+			name:     "no patterns - don't skip regular file",
 			fileName: "main.tf",
 			isDir:    false,
 			expected: false,
 		},
 		{
-			name: "no patterns - don't skip regular directory",
-			sourceSpec: &schema.VendorComponentSource{
-				Uri: "github.com/example/repo",
-			},
+			name:     "no patterns - don't skip regular directory",
 			fileName: "modules",
 			isDir:    true,
 			expected: false,
@@ -165,7 +595,7 @@ func TestCreateSkipFunc(t *testing.T) {
 				isDir: tt.isDir,
 			}
 
-			skipFunc := createSkipFunc("/tmp/src", tt.sourceSpec)
+			skipFunc := vendor.CreateSkipFunc("/tmp/src", tt.includedPaths, tt.excludedPaths)
 			result, err := skipFunc(info, "/tmp/src/"+tt.fileName, "/tmp/dst/"+tt.fileName)
 
 			assert.NoError(t, err)
@@ -190,95 +620,155 @@ func (m *mockFileInfo) ModTime() time.Time { return time.Time{} }
 func (m *mockFileInfo) IsDir() bool        { return m.isDir }
 func (m *mockFileInfo) Sys() any           { return nil }
 
-// TestMatchesPatterns tests glob pattern matching against file paths.
-func TestMatchesPatterns(t *testing.T) {
+// TestPatternMatching tests glob pattern matching using the shared vendor code.
+func TestPatternMatching(t *testing.T) {
 	tests := []struct {
-		name        string
-		relPath     string
-		patterns    []string
-		patternType string
-		expected    bool
+		name     string
+		relPath  string
+		patterns []string
+		testType string // "include" or "exclude"
+		expected bool   // true = pattern matches the file
 	}{
 		{
-			name:        "exact match",
-			relPath:     "main.tf",
-			patterns:    []string{"main.tf"},
-			patternType: "included_paths",
-			expected:    true,
+			name:     "exact match",
+			relPath:  "main.tf",
+			patterns: []string{"main.tf"},
+			testType: "include",
+			expected: true,
 		},
 		{
-			name:        "wildcard match",
-			relPath:     "main.tf",
-			patterns:    []string{"*.tf"},
-			patternType: "included_paths",
-			expected:    true,
+			name:     "wildcard match",
+			relPath:  "main.tf",
+			patterns: []string{"*.tf"},
+			testType: "include",
+			expected: true,
 		},
 		{
-			name:        "no match",
-			relPath:     "main.go",
-			patterns:    []string{"*.tf"},
-			patternType: "included_paths",
-			expected:    false,
+			name:     "no match",
+			relPath:  "main.go",
+			patterns: []string{"*.tf"},
+			testType: "include",
+			expected: false,
 		},
 		{
-			name:        "nested path match by basename",
-			relPath:     "modules/vpc/main.tf",
-			patterns:    []string{"*.tf"},
-			patternType: "included_paths",
-			expected:    true,
+			name:     "single star does not match nested path",
+			relPath:  "modules/vpc/main.tf",
+			patterns: []string{"*.tf"},
+			testType: "include",
+			expected: false,
 		},
 		{
-			name:        "empty patterns",
-			relPath:     "main.tf",
-			patterns:    []string{},
-			patternType: "included_paths",
-			expected:    false,
+			name:     "doublestar matches nested path",
+			relPath:  "modules/vpc/main.tf",
+			patterns: []string{"**/*.tf"},
+			testType: "include",
+			expected: true,
 		},
 		{
-			name:        "multiple patterns - first matches",
-			relPath:     "main.tf",
-			patterns:    []string{"*.tf", "*.go"},
-			patternType: "included_paths",
-			expected:    true,
+			name:     "empty patterns",
+			relPath:  "main.tf",
+			patterns: []string{},
+			testType: "include",
+			expected: false,
 		},
 		{
-			name:        "multiple patterns - second matches",
-			relPath:     "main.go",
-			patterns:    []string{"*.tf", "*.go"},
-			patternType: "included_paths",
-			expected:    true,
+			name:     "multiple patterns - first matches",
+			relPath:  "main.tf",
+			patterns: []string{"*.tf", "*.go"},
+			testType: "include",
+			expected: true,
 		},
 		{
-			name:        "multiple patterns - none match",
-			relPath:     "main.py",
-			patterns:    []string{"*.tf", "*.go"},
-			patternType: "included_paths",
-			expected:    false,
+			name:     "multiple patterns - second matches",
+			relPath:  "main.go",
+			patterns: []string{"*.tf", "*.go"},
+			testType: "include",
+			expected: true,
 		},
 		{
-			name:        "pattern with directory component",
-			relPath:     "modules/vpc",
-			patterns:    []string{"modules/*"},
-			patternType: "excluded_paths",
-			expected:    true,
+			name:     "multiple patterns - none match",
+			relPath:  "main.py",
+			patterns: []string{"*.tf", "*.go"},
+			testType: "include",
+			expected: false,
+		},
+		{
+			name:     "pattern with directory component",
+			relPath:  "modules/vpc",
+			patterns: []string{"modules/*"},
+			testType: "exclude",
+			expected: true,
+		},
+		{
+			name:     "doublestar pattern matches root-level file",
+			relPath:  "providers.tf",
+			patterns: []string{"**/providers.tf"},
+			testType: "exclude",
+			expected: true,
+		},
+		{
+			name:     "doublestar pattern matches nested file",
+			relPath:  "modules/vpc/providers.tf",
+			patterns: []string{"**/providers.tf"},
+			testType: "exclude",
+			expected: true,
+		},
+		{
+			name:     "doublestar pattern matches deeply nested file",
+			relPath:  "a/b/c/providers.tf",
+			patterns: []string{"**/providers.tf"},
+			testType: "exclude",
+			expected: true,
+		},
+		{
+			name:     "doublestar wildcard matches any extension at any depth",
+			relPath:  "docs/guide.md",
+			patterns: []string{"**/*.md"},
+			testType: "exclude",
+			expected: true,
+		},
+		{
+			name:     "doublestar wildcard matches root-level extension",
+			relPath:  "README.md",
+			patterns: []string{"**/*.md"},
+			testType: "exclude",
+			expected: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := matchesPatterns(tt.relPath, tt.patterns, tt.patternType)
+			var result bool
+			if tt.testType == "include" {
+				if len(tt.patterns) == 0 {
+					result = false
+				} else {
+					// ShouldIncludeFile returns (true=skip, nil) when file doesn't match.
+					// So matches = !skip.
+					skip, err := vendor.ShouldIncludeFile(tt.patterns, tt.relPath)
+					assert.NoError(t, err)
+					result = !skip
+				}
+			} else {
+				// ShouldExcludeFile returns (true=skip, nil) when file matches an exclude pattern.
+				skip, err := vendor.ShouldExcludeFile(tt.patterns, tt.relPath)
+				assert.NoError(t, err)
+				result = skip
+			}
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-// TestMatchesPatterns_InvalidPattern tests handling of invalid glob patterns.
-func TestMatchesPatterns_InvalidPattern(t *testing.T) {
+// TestPatternMatching_InvalidPattern tests handling of invalid glob patterns.
+func TestPatternMatching_InvalidPattern(t *testing.T) {
 	// Invalid pattern with unclosed bracket.
 	invalidPattern := "[invalid"
-	result := matchesPatterns("main.tf", []string{invalidPattern}, "test_patterns")
-	// Should return false (no match) and not panic.
-	assert.False(t, result, "Invalid pattern should not match")
+	skip, err := vendor.ShouldExcludeFile([]string{invalidPattern}, "main.tf")
+	// Should return an error for invalid patterns.
+	assert.Error(t, err, "Invalid pattern should return an error")
+	// Should not skip (exclude) the file when pattern is invalid.
+	assert.False(t, skip, "Invalid pattern should not cause file to be skipped")
 }
 
 // TestCopyToTarget tests copying files from source to target directory.
@@ -422,12 +912,7 @@ func TestCopyToTarget_OverwritesExisting(t *testing.T) {
 
 // TestCreateSkipFunc_IncludedPaths tests skip function with included_paths patterns.
 func TestCreateSkipFunc_IncludedPaths(t *testing.T) {
-	sourceSpec := &schema.VendorComponentSource{
-		Uri:           "github.com/example/repo",
-		IncludedPaths: []string{"*.tf"},
-	}
-
-	skipFunc := createSkipFunc("/tmp/src", sourceSpec)
+	skipFunc := vendor.CreateSkipFunc("/tmp/src", []string{"*.tf"}, nil)
 
 	// .tf file should NOT be skipped (matches included pattern).
 	info := &mockFileInfo{name: "main.tf", isDir: false}
@@ -450,12 +935,7 @@ func TestCreateSkipFunc_IncludedPaths(t *testing.T) {
 
 // TestCreateSkipFunc_ExcludedPaths tests skip function with excluded_paths patterns.
 func TestCreateSkipFunc_ExcludedPaths(t *testing.T) {
-	sourceSpec := &schema.VendorComponentSource{
-		Uri:           "github.com/example/repo",
-		ExcludedPaths: []string{"*.md", "*.txt"},
-	}
-
-	skipFunc := createSkipFunc("/tmp/src", sourceSpec)
+	skipFunc := vendor.CreateSkipFunc("/tmp/src", nil, []string{"*.md", "*.txt"})
 
 	// .tf file should NOT be skipped (not in excluded patterns).
 	info := &mockFileInfo{name: "main.tf", isDir: false}
@@ -543,13 +1023,7 @@ func TestCopyToTarget_WithIncludedPaths(t *testing.T) {
 
 // TestCreateSkipFunc_CombinedPatterns tests skip function with both included and excluded paths.
 func TestCreateSkipFunc_CombinedPatterns(t *testing.T) {
-	sourceSpec := &schema.VendorComponentSource{
-		Uri:           "github.com/example/repo",
-		IncludedPaths: []string{"*.tf", "*.md"},
-		ExcludedPaths: []string{"README.md"},
-	}
-
-	skipFunc := createSkipFunc("/tmp/src", sourceSpec)
+	skipFunc := vendor.CreateSkipFunc("/tmp/src", []string{"*.tf", "*.md"}, []string{"README.md"})
 
 	// main.tf should NOT be skipped (matches included, not in excluded).
 	info := &mockFileInfo{name: "main.tf", isDir: false}
@@ -574,6 +1048,49 @@ func TestCreateSkipFunc_CombinedPatterns(t *testing.T) {
 	skip, err = skipFunc(info, "/tmp/src/main.go", "/tmp/dst/main.go")
 	assert.NoError(t, err)
 	assert.True(t, skip, "main.go should be skipped (not in included)")
+}
+
+// TestCopyToTarget_WithDoublestarExcludedPaths tests that ** patterns work for excluded_paths.
+func TestCopyToTarget_WithDoublestarExcludedPaths(t *testing.T) {
+	// Create source directory with providers.tf at multiple levels.
+	srcDir := t.TempDir()
+	err := os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("# main"), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(srcDir, "providers.tf"), []byte("# root providers"), 0o644)
+	require.NoError(t, err)
+
+	// Create nested directory with providers.tf.
+	modulesDir := filepath.Join(srcDir, "modules", "vpc")
+	err = os.MkdirAll(modulesDir, 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(modulesDir, "main.tf"), []byte("# vpc module"), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(modulesDir, "providers.tf"), []byte("# vpc providers"), 0o644)
+	require.NoError(t, err)
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+
+	sourceSpec := &schema.VendorComponentSource{
+		Uri:           "github.com/example/repo",
+		ExcludedPaths: []string{"**/providers.tf"},
+	}
+
+	err = copyToTarget(srcDir, targetDir, sourceSpec)
+	require.NoError(t, err)
+
+	// main.tf files should be copied.
+	_, err = os.Stat(filepath.Join(targetDir, "main.tf"))
+	assert.NoError(t, err, "root main.tf should be copied")
+
+	_, err = os.Stat(filepath.Join(targetDir, "modules", "vpc", "main.tf"))
+	assert.NoError(t, err, "nested main.tf should be copied")
+
+	// providers.tf should NOT be copied at any level.
+	_, err = os.Stat(filepath.Join(targetDir, "providers.tf"))
+	assert.True(t, os.IsNotExist(err), "root providers.tf should be excluded")
+
+	_, err = os.Stat(filepath.Join(targetDir, "modules", "vpc", "providers.tf"))
+	assert.True(t, os.IsNotExist(err), "nested providers.tf should be excluded")
 }
 
 // TestCopyToTarget_WithCombinedPatterns tests copying with both include and exclude patterns.

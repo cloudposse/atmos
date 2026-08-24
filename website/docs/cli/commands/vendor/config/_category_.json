@@ -1,0 +1,8 @@
+{
+  "label": "config",
+  "className": "command",
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/vendor/config/config"
+  }
+}

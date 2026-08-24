@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 
@@ -14,8 +15,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
+	pkgversion "github.com/cloudposse/atmos/pkg/version"
 	"github.com/spf13/cobra"
 )
 
@@ -162,7 +163,9 @@ func executeProLock(a *ProLockCmdArgs, apiClient pro.AtmosProAPIClientInterface,
 		return errors.Join(errUtils.ErrFailedToLockStack, err)
 	}
 
-	u.PrintfMessageToTUI("\n%s Stack '%s' successfully locked\n\n", theme.Styles.Checkmark, lock.Data.Key)
+	ui.Writeln("")
+	ui.Successf("Stack '%s' successfully locked", lock.Data.Key)
+	ui.Writeln("")
 	log.Debug("Stack lock acquired", "key", lock.Data.Key, "lockID", lock.Data.ID, "expires", lock.Data.ExpiresAt)
 
 	return nil
@@ -206,7 +209,9 @@ func executeProUnlock(a *ProUnlockCmdArgs, apiClient pro.AtmosProAPIClientInterf
 		return errors.Join(errUtils.ErrFailedToUnlockStack, err)
 	}
 
-	u.PrintfMessageToTUI("\n%s Stack '%s' successfully unlocked\n\n", theme.Styles.Checkmark, dto.Key)
+	ui.Writeln("")
+	ui.Successf("Stack '%s' successfully unlocked", dto.Key)
+	ui.Writeln("")
 	log.Debug("Stack lock released", "key", dto.Key)
 
 	return nil
@@ -214,11 +219,6 @@ func executeProUnlock(a *ProUnlockCmdArgs, apiClient pro.AtmosProAPIClientInterf
 
 // uploadStatus uploads the terraform results to the pro API.
 func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
-	// Only upload if exit code is 0 (no changes) or 2 (changes)
-	if exitCode != 0 && exitCode != 2 {
-		return nil
-	}
-
 	// Get the git repository info
 	repoInfo, err := gitRepo.GetLocalRepoInfo()
 	if err != nil {
@@ -242,6 +242,9 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 	// Create the DTO
 	dto := dtos.InstanceStatusUploadRequest{
 		AtmosProRunID: atmosProRunID,
+		AtmosVersion:  pkgversion.Version,
+		AtmosOS:       runtime.GOOS,
+		AtmosArch:     runtime.GOARCH,
 		GitSHA:        gitSHA,
 		RepoURL:       repoInfo.RepoUrl,
 		RepoName:      repoInfo.RepoName,
@@ -249,7 +252,8 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 		RepoHost:      repoInfo.RepoHost,
 		Stack:         info.Stack,
 		Component:     info.Component,
-		HasDrift:      exitCode == 2,
+		Command:       info.SubCommand,
+		ExitCode:      exitCode,
 	}
 
 	// Upload the status
@@ -262,8 +266,8 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 
 // shouldUploadStatus determines if status should be uploaded.
 func shouldUploadStatus(info *schema.ConfigAndStacksInfo) bool {
-	// Only upload for plan command
-	if info.SubCommand != "plan" {
+	// Only upload for plan and apply commands.
+	if info.SubCommand != "plan" && info.SubCommand != "apply" {
 		return false
 	}
 

@@ -1,0 +1,41 @@
+base_path: "./"
+
+# Atmos ships any workload, not just Terraform — the demo lists all four component
+# types side by side to prove it.
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+  helmfile:
+    base_path: "components/helmfile"
+  packer:
+    base_path: "components/packer"
+  ansible:
+    base_path: "components/ansible"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.stage }}"
+
+auth:
+  identities:
+    local-dev:
+      kind: ambient
+      default: true
+
+stores:
+  app-secrets:
+    kind: keychain
+    secret: true
+    options:
+      backend: file
+      file: .demo-secrets.json
+
+logs:
+  file: "/dev/stderr"
+  level: Info

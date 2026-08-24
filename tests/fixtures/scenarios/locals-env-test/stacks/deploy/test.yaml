@@ -1,0 +1,27 @@
+# Test fixture for environment variable access in locals.
+# Uses a unique env var (ATMOS_TEST_ENV_VAR) to avoid caching issues.
+#
+# Note: Uses single quotes for vars to avoid YAML escape sequence issues
+# when env vars contain backslashes (e.g., Windows paths like C:\Users\...).
+
+vars:
+  stage: test
+
+locals:
+  # Access a test-specific environment variable set by t.Setenv.
+  # This value won't contain backslashes, so it's safe.
+  test_env_value: '{{ env "ATMOS_TEST_ENV_VAR" | default "not-set" }}'
+
+  # Access HOME which should be set on most systems.
+  # On Windows, HOME may contain backslashes, so we use single quotes.
+  home_dir: '{{ env "HOME" | default "/tmp" }}'
+
+components:
+  terraform:
+    env-test:
+      metadata:
+        component: mock
+      vars:
+        # Use single quotes to preserve backslashes in Windows paths
+        test_env_value: '{{ .locals.test_env_value }}'
+        home_dir: '{{ .locals.home_dir }}'

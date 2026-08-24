@@ -396,7 +396,7 @@ func displayContainerInfo(config *Config, containerInfo *container.Info) {
 	}
 
 	if len(info) > 0 {
-		_ = ui.Info(strings.Join(info, "\n"))
+		ui.Info(strings.Join(info, "\n"))
 	}
 }
 

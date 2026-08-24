@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  - name: deprecated config compatibility validates config
+    enabled: true
+    snapshot: false
+    description: Supported deprecated atmos.yaml fields warn but remain valid.
+    workdir: fixtures/scenarios/deprecated-config-compatibility
+    command: atmos
+    args: [validate, config]
+    expect:
+      exit_code: 0
+      stderr:
+        - "provider_type.*deprecated"
+        - "cluster_name_pattern.*deprecated"
+        - "helm_aws_profile_pattern.*deprecated"
+        - "docs.max-width.*deprecated"
+        - "docs.pagination.*deprecated"
+        - "no_color.*deprecated"
+        - "name_pattern.*deprecated"
+        - "version.providers.legacy.type.*deprecated"
+
+  - name: deprecated config compatibility validates stacks
+    enabled: true
+    snapshot: false
+    description: Supported deprecated stack fields and Terraform compatibility options remain valid.
+    workdir: fixtures/scenarios/deprecated-config-compatibility
+    command: atmos
+    args: [validate, stacks]
+    expect:
+      exit_code: 0
+      stderr:
+        - "application.depends_on.*deprecated"
+        - "application.settings.depends_on.*deprecated"

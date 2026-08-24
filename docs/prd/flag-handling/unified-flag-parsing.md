@@ -18,7 +18,7 @@ This document contains historical design that has been partially superseded:
 - Precedence order (flags > env > config > defaults)
 
 **FOR CURRENT IMPLEMENTATION**:
-- See `../unified-flag-parsing-refactoring.md` for up-to-date architecture
+- See `./unified-flag-parsing.md` for up-to-date architecture
 - Below content kept for historical context and design rationale
 
 ---
@@ -2609,10 +2609,11 @@ func NewTerraformCmd(
 - [Sting of the Viper: Cobra and Viper Integration](https://carolynvanslyck.com/blog/2020/08/sting-of-the-viper/)
 - [Docker CLI TopLevelCommand Pattern](https://github.com/docker/cli/blob/master/cli/cobra.go)
 - [Testing Flag Parsing in Go](https://eli.thegreenplace.net/2020/testing-flag-parsing-in-go-programs/)
-- [Functional Options Pattern](https://www.codingexplorations.com/blog/functional-options-pattern-go)
+- [Functional options in the command registry](./command-registry-colocation.md#functional-options)
+- [Functional Options for Friendly APIs](https://dave.cheney.net/2014/10/17/functional-options-for-friendly-apis)
 - Atmos existing PRDs:
   - `docs/prd/command-registry-pattern.md` - Command registration system
-  - `docs/prd/testing-strategy.md` - Testing approach and coverage
+  - `docs/prd/testability-refactoring-strategy.md` - Testing approach and coverage
   - `docs/prd/flag-handling/` - Strongly-typed interpreter system (NEW)
     - `global-flags-pattern.md` - Global flags handling via embedding
     - `global-flags-examples.md` - Real-world examples with --logs-level and --identity

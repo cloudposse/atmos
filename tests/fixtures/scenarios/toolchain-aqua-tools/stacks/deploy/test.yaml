@@ -1,0 +1,3 @@
+# Minimal stack for toolchain testing
+vars:
+  stage: test

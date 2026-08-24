@@ -1,36 +1,58 @@
+
 # Incorrect Usage
 
 **Error:** Unknown command non-existent for atmos
 
 Valid subcommands are:
 
-• about
-• atlantis
-• auth
-• aws
-• completion
-• describe
-• devcontainer
-• docs
-• env
-• helmfile
-• help
-• list
-• packer
-• pro
-• profile
-• show
-• support
-• terraform
-• tf
-• tf-custom
-• theme
-• toolchain
-• validate
-• vendor
-• version
-• workflow
+  • about
+  • ai
+  • ansible
+  • atlantis
+  • auth
+  • aws
+  • azure
+  • cast
+  • ci
+  • completion
+  • composition
+  • config
+  • container
+  • describe
+  • devcontainer
+  • docs
+  • emulator
+  • env
+  • gcp
+  • git
+  • helm
+  • helmfile
+  • help
+  • init
+  • kubernetes
+  • list
+  • lsp
+  • mcp
+  • packer
+  • pro
+  • profile
+  • sbom
+  • scaffold
+  • secret
+  • stack
+  • store
+  • support
+  • terraform
+  • theme
+  • toolchain
+  • validate
+  • vendor
+  • version
+  • workflow
 
-## Hints
+## Usage
+
+ atmos [flags]
+ atmos [sub-command] [flags]
 
 💡 Run atmos --help for usage

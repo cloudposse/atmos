@@ -11,6 +11,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // LocalAdapter handles local filesystem imports.
@@ -27,7 +29,7 @@ func (l *LocalAdapter) Schemes() []string {
 //
 //nolint:revive // argument-limit: matches ImportAdapter interface signature.
 func (l *LocalAdapter) Resolve(
-	_ context.Context, importPath, basePath, tempDir string, currentDepth, maxDepth int,
+	_ context.Context, importPath, basePath, tempDir string, currentDepth, maxDepth int, atmosConfig *schema.AtmosConfiguration,
 ) ([]config.ResolvedPaths, error) {
 	defer perf.Track(nil, "adapters.LocalAdapter.Resolve")()
 
@@ -38,7 +40,7 @@ func (l *LocalAdapter) Resolve(
 	resolvedPath := l.resolveImportPath(importPath, basePath)
 	paths, err := config.SearchAtmosConfig(resolvedPath)
 	if err != nil {
-		log.Debug("failed to resolve local import path", "path", importPath, "err", err)
+		log.Debug("failed to resolve local import path", "path", config.SanitizeImport(importPath), "err", err)
 		return nil, errUtils.ErrResolveLocal
 	}
 
@@ -48,6 +50,7 @@ func (l *LocalAdapter) Resolve(
 		v.SetConfigFile(path)
 		v.SetConfigType("yaml")
 		if err := v.ReadInConfig(); err != nil {
+			ui.Warningf("Skipping config file `%s`: %v\nCommands or configuration defined in this file will not be available until the error is fixed", path, err)
 			log.Debug("failed to load local config", "path", path, "error", err)
 			continue
 		}
@@ -57,7 +60,7 @@ func (l *LocalAdapter) Resolve(
 		})
 
 		nestedPaths := l.processNestedImports(v, nestedImportParams{
-			basePath: basePath, tempDir: tempDir, currentDepth: currentDepth, maxDepth: maxDepth, path: path,
+			basePath: basePath, tempDir: tempDir, currentDepth: currentDepth, maxDepth: maxDepth, path: path, atmosConfig: atmosConfig,
 		})
 		resolvedPaths = append(resolvedPaths, nestedPaths...)
 	}
@@ -82,6 +85,7 @@ type nestedImportParams struct {
 	basePath, tempDir      string
 	currentDepth, maxDepth int
 	path                   string
+	atmosConfig            *schema.AtmosConfiguration
 }
 
 // processNestedImports handles nested import statements in a config file.
@@ -90,11 +94,12 @@ func (l *LocalAdapter) processNestedImports(v *viper.Viper, p nestedImportParams
 	if len(imports) == 0 {
 		return nil
 	}
-	importBasePath := v.GetString("base_path")
-	if importBasePath == "" {
-		importBasePath = p.basePath
+	importBasePath, err := config.ResolveConfigImportBasePath(v.GetString("base_path"), p.path, p.basePath)
+	if err != nil {
+		log.Debug("failed to resolve nested import base path", "path", p.path, "error", err)
+		return nil
 	}
-	nestedPaths, err := config.ProcessImportsFromAdapter(importBasePath, imports, p.tempDir, p.currentDepth+1, p.maxDepth)
+	nestedPaths, err := config.ProcessImportsFromAdapter(p.atmosConfig, importBasePath, imports, p.tempDir, p.currentDepth+1, p.maxDepth)
 	if err != nil {
 		log.Debug("failed to process nested imports from", "path", p.path, "error", err)
 		return nil

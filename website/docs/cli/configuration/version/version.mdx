@@ -3,7 +3,7 @@ title: Version
 sidebar_position: 90
 sidebar_label: version
 sidebar_class_name: command
-description: Configure version checking, update notifications, and version constraints for Atmos CLI.
+description: Configure Atmos CLI version behavior and Atmos-managed software versions.
 id: version
 slug: /cli/configuration/version
 ---
@@ -11,7 +11,7 @@ import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 
 <Intro>
-The `version` section configures how Atmos handles version management, including automatic update checking and version constraint enforcement to ensure consistent behavior across teams and environments.
+The `version` section configures how Atmos handles version management, including automatic update checking, version constraint enforcement, Atmos self-management, and Atmos-managed software versions.
 </Intro>
 
 ## Configuration
@@ -19,6 +19,9 @@ The `version` section configures how Atmos handles version management, including
 <File title="atmos.yaml">
 ```yaml
 version:
+  # Pin project to a specific Atmos version
+  use: "1.199.0"
+
   # Automatic update checking
   check:
     enabled: true
@@ -29,6 +32,42 @@ version:
     require: ">=1.100.0"
     enforcement: fatal
     message: "Please upgrade Atmos to use this configuration."
+
+  # Managed software versions
+  track: prod
+  lock_file: versions.lock.yaml
+  providers:
+    dockerhub:
+      kind: docker
+      url: registry-1.docker.io
+  defaults:
+    update:
+      strategy: patch
+      cooldown: 14d
+  groups:
+    infrastructure:
+      ecosystems: [toolchain, github/actions, oci]
+      update:
+        strategy: minor
+  tracks:
+    prod:
+      dependencies:
+        checkout:
+          ecosystem: github/actions
+          package: actions/checkout
+          desired: v6
+          update:
+            pin: sha
+  dependencies:
+    opentofu:
+      ecosystem: toolchain
+      datasource: toolchain
+      package: opentofu
+      desired: "~1.10"
+  files:
+    - manager: github-actions
+      paths:
+        - .github/workflows/*.yaml
 ```
 </File>
 
@@ -36,12 +75,30 @@ version:
 
 | Section | Description |
 |---------|-------------|
+| [Use](/cli/configuration/version/use) | Pin project to a specific Atmos version |
 | [Check](/cli/configuration/version/check) | Automatic version checking and update notifications |
 | [Constraint](/cli/configuration/version/constraint) | Enforce Atmos version requirements for your configuration |
+| [Managed Versions](/cli/configuration/version/managed-versions) | Manage software versions whether Atmos installs them locally or only tracks and renders them into files |
+| [Providers](/cli/configuration/version/providers) | Configure version lookup backends such as GitHub, Docker Hub, OCI registries, and ECR |
+| [Defaults](/cli/configuration/version/defaults) | Set shared update policy, include/exclude rules, prerelease handling, and labels |
+| [Groups](/cli/configuration/version/groups) | Batch related version updates under shared policies |
+| [Dependencies](/cli/configuration/version/dependencies) | Define the base catalog of software versions Atmos tracks |
+| [Tracks](/cli/configuration/version/tracks) | Override catalog entries per environment or release lane |
+| [Files](/cli/configuration/version/files) | Configure file managers that render locked versions into project files |
+| [Lock File](/cli/configuration/version/lock-file) | Configure and understand `versions.lock.yaml` |
 
 ## Environment Variables
 
 <dl>
+  <dt>`ATMOS_USE_VERSION`</dt>
+  <dd>Specify which version of Atmos to use. Env var equivalent of `--use-version` flag.</dd>
+
+  <dt>`ATMOS_VERSION_USE`</dt>
+  <dd>Internal env var set by the `--use-version` flag. Highest precedence in version resolution.</dd>
+
+  <dt>`ATMOS_VERSION`</dt>
+  <dd>Convenience alias matching `tfenv`/`goenv` conventions. Lower precedence than `ATMOS_VERSION_USE`.</dd>
+
   <dt>`ATMOS_VERSION_CHECK_ENABLED`</dt>
   <dd>Enable or disable automatic version checking.</dd>
 
@@ -53,3 +110,5 @@ version:
 
 - [CLI Configuration](/cli/configuration) — Overview of CLI configuration
 - [`atmos version`](/cli/commands/version/usage) — Display version and check for updates
+- [`atmos version track`](/cli/commands/version/track) — Manage external version tracks and locks
+- [Atmos Version Management](/howto/atmos-version-management) — How-to guide with profiles

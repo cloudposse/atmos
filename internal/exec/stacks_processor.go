@@ -58,3 +58,76 @@ func (d *DefaultStacksProcessor) ExecuteDescribeStacks(
 		authManager,
 	)
 }
+
+// ExecuteDescribeStacksScoped delegates to the package-level scoped variant,
+// which lets components excluded by the tags/labels filters skip evaluation
+// entirely (the early-skip gate) instead of being row-filtered afterwards.
+//
+//nolint:revive // Signature matches ExecuteDescribeStacksScoped.
+func (d *DefaultStacksProcessor) ExecuteDescribeStacksScoped(
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+	ignoreMissingFiles bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	authDisabled bool,
+	tagsFilter []string,
+	labelsFilter map[string]string,
+) (map[string]any, error) {
+	return ExecuteDescribeStacksScoped(
+		atmosConfig,
+		filterByStack,
+		components,
+		componentTypes,
+		sections,
+		ignoreMissingFiles,
+		processTemplates,
+		processYamlFunctions,
+		includeEmptyStacks,
+		skip,
+		authManager,
+		authDisabled,
+		tagsFilter,
+		labelsFilter,
+		DescribeStacksErrorOptions{},
+	)
+}
+
+// ExecuteDescribeStacksWithAuthDisabled delegates to the package-level auth-disabled variant.
+//
+//nolint:revive // Signature matches ExecuteDescribeStacksWithAuthDisabled.
+func (d *DefaultStacksProcessor) ExecuteDescribeStacksWithAuthDisabled(
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+	ignoreMissingFiles bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	authDisabled bool,
+) (map[string]any, error) {
+	return ExecuteDescribeStacksWithAuthDisabled(
+		atmosConfig,
+		filterByStack,
+		components,
+		componentTypes,
+		sections,
+		ignoreMissingFiles,
+		processTemplates,
+		processYamlFunctions,
+		includeEmptyStacks,
+		skip,
+		authManager,
+		authDisabled,
+	)
+}

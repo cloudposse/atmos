@@ -500,11 +500,11 @@ atmos devcontainer shell backend-api --instance test-1
 All containers will be labeled for easy identification:
 
 ```text
-com.atmos.type=devcontainer
-com.atmos.devcontainer.name=default
-com.atmos.devcontainer.instance=default
-com.atmos.workspace=/path/to/workspace
-com.atmos.created=2025-10-21T10:30:00Z
+tools.atmos.type=devcontainer
+tools.atmos.devcontainer.name=default
+tools.atmos.devcontainer.instance=default
+tools.atmos.workspace=/path/to/workspace
+tools.atmos.created=2025-10-21T10:30:00Z
 ```
 
 ## Command Structure
@@ -1231,8 +1231,8 @@ devcontainer:
 ## References
 
 - [Development Containers Specification](https://containers.dev/)
-- [Docker CLI Reference](https://docs.docker.com/engine/reference/commandline/cli/)
+- [Docker CLI Reference](https://docs.docker.com/reference/cli/docker/)
 - [Podman CLI Reference](https://docs.podman.io/en/latest/Commands.html)
-- [Atmos Component Registry Pattern](docs/prd/component-registry-pattern.md)
-- [Atmos Command Registry Pattern](docs/prd/command-registry-pattern.md)
-- [Atmos YAML Functions](https://atmos.tools/core-concepts/stacks/templates) - `!include` documentation
+- [Atmos Component Registry Pattern](./component-registry-pattern.md)
+- [Atmos Command Registry Pattern](./command-registry-pattern.md)
+- [Atmos YAML Functions](https://atmos.tools/stacks/templates) - `!include` documentation

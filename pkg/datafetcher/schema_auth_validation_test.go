@@ -1,0 +1,346 @@
+package datafetcher
+
+import (
+	"encoding/json"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/xeipuuv/gojsonschema"
+)
+
+// TestManifestSchema_AuthDefinitionExists verifies the embedded manifest schema
+// contains the auth definition with the needs field.
+func TestManifestSchema_AuthDefinitionExists(t *testing.T) {
+	fetcher := &atmosFetcher{}
+	data, err := fetcher.FetchData("atmos://schema/atmos/manifest/1.0")
+	require.NoError(t, err, "Failed to fetch embedded manifest schema")
+
+	var schemaMap map[string]interface{}
+	err = json.Unmarshal(data, &schemaMap)
+	require.NoError(t, err, "Failed to parse manifest schema JSON")
+
+	definitions, ok := schemaMap["definitions"].(map[string]interface{})
+	require.True(t, ok, "Schema should have definitions")
+
+	// Verify component_auth definition exists.
+	auth, ok := definitions["component_auth"].(map[string]interface{})
+	require.True(t, ok, "Schema should have 'component_auth' definition")
+	assert.Equal(t, "component_auth", auth["title"])
+
+	// Verify auth is referenced from terraform_component_manifest.
+	tfManifest, ok := definitions["terraform_component_manifest"].(map[string]interface{})
+	require.True(t, ok, "Schema should have terraform_component_manifest")
+
+	oneOf, ok := tfManifest["oneOf"].([]interface{})
+	require.True(t, ok, "terraform_component_manifest should have oneOf array")
+	// Find the object variant (not the !include string variant).
+	var objectVariant map[string]interface{}
+	for _, v := range oneOf {
+		variant, vOK := v.(map[string]interface{})
+		if !vOK {
+			continue
+		}
+		if variant["type"] == "object" {
+			objectVariant = variant
+			break
+		}
+	}
+	require.NotNil(t, objectVariant, "terraform_component_manifest should have an object variant")
+
+	props, ok := objectVariant["properties"].(map[string]interface{})
+	require.True(t, ok, "object variant should have properties")
+	_, hasAuth := props["auth"]
+	assert.True(t, hasAuth, "terraform_component_manifest should have 'auth' property")
+}
+
+// TestManifestSchema_AuthIdentityRequiredField verifies the auth_identity definition
+// includes the required field with correct type constraint.
+func TestManifestSchema_AuthIdentityRequiredField(t *testing.T) {
+	fetcher := &atmosFetcher{}
+	data, err := fetcher.FetchData("atmos://schema/atmos/manifest/1.0")
+	require.NoError(t, err)
+
+	var schemaMap map[string]interface{}
+	err = json.Unmarshal(data, &schemaMap)
+	require.NoError(t, err)
+
+	definitions, ok := schemaMap["definitions"].(map[string]interface{})
+	require.True(t, ok, "schema should have definitions")
+	identity, ok := definitions["auth_identity"].(map[string]interface{})
+	require.True(t, ok, "schema should have auth_identity definition")
+	oneOf, ok := identity["oneOf"].([]interface{})
+	require.True(t, ok, "auth_identity should have oneOf array")
+
+	// Find the object variant.
+	var objectVariant map[string]interface{}
+	for _, v := range oneOf {
+		variant, vOK := v.(map[string]interface{})
+		if !vOK {
+			continue
+		}
+		if variant["type"] == "object" {
+			objectVariant = variant
+			break
+		}
+	}
+	require.NotNil(t, objectVariant)
+
+	props, ok := objectVariant["properties"].(map[string]interface{})
+	require.True(t, ok, "object variant should have properties")
+
+	// Verify required field.
+	requiredProp, ok := props["required"].(map[string]interface{})
+	require.True(t, ok, "auth_identity should have 'required' property")
+	assert.Equal(t, "boolean", requiredProp["type"], "required should be a boolean")
+
+	// Verify other identity fields exist.
+	_, hasDefault := props["default"]
+	assert.True(t, hasDefault, "auth_identity should have 'default' property")
+
+	_, hasKind := props["kind"]
+	assert.True(t, hasKind, "auth_identity should have 'kind' property")
+}
+
+// TestManifestSchema_ValidAuthConfig validates a realistic auth config
+// with needs against the embedded JSON schema.
+func TestManifestSchema_ValidAuthConfig(t *testing.T) {
+	fetcher := &atmosFetcher{}
+	schemaData, err := fetcher.FetchData("atmos://schema/atmos/manifest/1.0")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name      string
+		manifest  map[string]interface{}
+		expectErr bool
+		errField  string
+	}{
+		{
+			name: "component with required identities",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"terraform": map[string]interface{}{
+						"vpc-peering": map[string]interface{}{
+							"vars": map[string]interface{}{
+								"enabled": true,
+							},
+							"auth": map[string]interface{}{
+								"providers": map[string]interface{}{
+									"github-oidc": map[string]interface{}{
+										"kind": "github/oidc",
+									},
+								},
+								"identities": map[string]interface{}{
+									"core-network/terraform": map[string]interface{}{
+										"kind":     "aws/assume-role",
+										"default":  true,
+										"required": true,
+									},
+									"plat-prod/terraform": map[string]interface{}{
+										"kind":     "aws/assume-role",
+										"required": true,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErr: false,
+		},
+		{
+			name: "helmfile component with identity guard",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"helmfile": map[string]interface{}{
+						"example-release": map[string]interface{}{
+							"vars": map[string]interface{}{},
+							"auth": map[string]interface{}{
+								"require_identity": true,
+							},
+						},
+					},
+				},
+			},
+			expectErr: false,
+		},
+		{
+			name: "identity guard rejects non-boolean values",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"helmfile": map[string]interface{}{
+						"example-release": map[string]interface{}{
+							"vars": map[string]interface{}{},
+							"auth": map[string]interface{}{
+								"require_identity": "yes",
+							},
+						},
+					},
+				},
+			},
+			expectErr: true,
+			errField:  "require_identity",
+		},
+		{
+			name: "native helm component with identity guard and standard sections",
+			manifest: map[string]interface{}{
+				"helm": map[string]interface{}{
+					"locals": map[string]interface{}{
+						"default_namespace": "default",
+					},
+				},
+				"components": map[string]interface{}{
+					"helm": map[string]interface{}{
+						"example-release": map[string]interface{}{
+							"chart":     "example-chart",
+							"namespace": "default",
+							"locals": map[string]interface{}{
+								"release_suffix": "example",
+							},
+							"secrets": map[string]interface{}{
+								"vars": map[string]interface{}{},
+							},
+							"auth": map[string]interface{}{
+								"require_identity": true,
+							},
+						},
+					},
+				},
+			},
+			expectErr: false,
+		},
+		{
+			name: "native helm identity guard rejects non-boolean values",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"helm": map[string]interface{}{
+						"example-release": map[string]interface{}{
+							"chart":     "example-chart",
+							"namespace": "default",
+							"auth": map[string]interface{}{
+								"require_identity": "yes",
+							},
+						},
+					},
+				},
+			},
+			expectErr: true,
+			errField:  "require_identity",
+		},
+		{
+			name: "component with empty auth",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"terraform": map[string]interface{}{
+						"simple": map[string]interface{}{
+							"vars": map[string]interface{}{},
+							"auth": map[string]interface{}{},
+						},
+					},
+				},
+			},
+			expectErr: false,
+		},
+		{
+			name: "component without auth",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"terraform": map[string]interface{}{
+						"basic": map[string]interface{}{
+							"vars": map[string]interface{}{},
+						},
+					},
+				},
+			},
+			expectErr: false,
+		},
+		{
+			name: "identity with invalid required type (string instead of boolean)",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"terraform": map[string]interface{}{
+						"bad-required": map[string]interface{}{
+							"auth": map[string]interface{}{
+								"identities": map[string]interface{}{
+									"broken": map[string]interface{}{
+										"kind":     "aws/assume-role",
+										"required": "yes", // Should be boolean, not string.
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			docJSON, err := json.Marshal(tt.manifest)
+			require.NoError(t, err)
+
+			schemaLoader := gojsonschema.NewBytesLoader(schemaData)
+			docLoader := gojsonschema.NewBytesLoader(docJSON)
+
+			result, err := gojsonschema.Validate(schemaLoader, docLoader)
+			require.NoError(t, err, "Schema validation should not error")
+
+			if tt.expectErr {
+				assert.False(t, result.Valid(), "Expected validation errors")
+				if tt.errField != "" {
+					fields := make([]string, 0, len(result.Errors()))
+					for _, desc := range result.Errors() {
+						fields = append(fields, desc.Field())
+					}
+					assert.Contains(t, strings.Join(fields, " "), tt.errField)
+				}
+			} else {
+				if !result.Valid() {
+					for _, desc := range result.Errors() {
+						t.Logf("Validation error: %s", desc)
+					}
+				}
+				assert.True(t, result.Valid(), "Expected valid document")
+			}
+		})
+	}
+}
+
+// TestAtmosSchema_ValidGKEIntegration verifies valid and invalid GKE auth manifests.
+func TestAtmosSchema_ValidGKEIntegration(t *testing.T) {
+	fetcher := &atmosFetcher{}
+	schemaData, err := fetcher.FetchData("atmos://schema/atmos/config/1.0")
+	require.NoError(t, err)
+
+	document := map[string]interface{}{
+		"auth": map[string]interface{}{
+			"integrations": map[string]interface{}{
+				"example-gke": map[string]interface{}{
+					"kind": "gcp/gke",
+					"via":  map[string]interface{}{"identity": "example-deployer"},
+					"spec": map[string]interface{}{
+						"cluster": map[string]interface{}{
+							"name":       "example-cluster",
+							"project_id": "example-project",
+							"location":   "us-central1",
+							"alias":      "example",
+							"kubeconfig": map[string]interface{}{
+								"path":   filepath.Join(t.TempDir(), "example-kubeconfig"),
+								"update": "replace",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	documentJSON, err := json.Marshal(document)
+	require.NoError(t, err)
+	result, err := gojsonschema.Validate(gojsonschema.NewBytesLoader(schemaData), gojsonschema.NewBytesLoader(documentJSON))
+	require.NoError(t, err)
+	assert.True(t, result.Valid(), "GKE integration config should satisfy the embedded schema: %v", result.Errors())
+}

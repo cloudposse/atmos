@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+components:
+  terraform:
+    mycomponent:
+      metadata:
+        component: mock
+      # Atmos resolves and installs OpenTofu before executing the component and
+      # adds it to PATH — no hashicorp/setup-terraform needed. Pin an exact
+      # version so the plan job and apply job apply the same planfile with the
+      # same tofu version (a planfile is only safely applied by the version that
+      # produced it).
+      dependencies:
+        tools:
+          opentofu: "1.11.6"
+      vars:
+        foo: "foo catalog default"
+        bar: "bar catalog default"
+        baz: "baz catalog default"

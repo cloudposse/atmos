@@ -1,0 +1,53 @@
+vars:
+  # Drives the `name_template` in atmos.yaml, so this stack is `local`.
+  stage: local
+
+components:
+  container:
+    # Abstract base — catalog defaults shared by web services. Cannot be deployed
+    # directly; concrete components inherit it via `metadata.inherits`.
+    web/defaults:
+      metadata:
+        type: abstract
+      run:
+        ports:
+          - host: 8080
+            container: 80
+
+    # A long-running web service. `image`, `run`, and `env` are first-class
+    # component sections (NOT under `vars`) — consistent with the container step.
+    # It inherits `run.ports` from the abstract base (deep-merged).
+    api:
+      metadata:
+        inherits:
+          - web/defaults
+      composition: storefront
+      image: nginx:alpine
+      env:
+        NGINX_ENTRYPOINT_QUIET_LOGS: "1"
+      run:
+        # Keep the container running across failures (Docker Compose `restart`).
+        restart:
+          policy: unless-stopped
+        # First-class health check, mirroring the Docker Compose `healthcheck`
+        # shape. nginx:alpine ships busybox `wget`, so this probes the web root.
+        # `atmos container ps`/`list` surface the resulting HEALTH state.
+        healthcheck:
+          test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+          interval: 30s
+          timeout: 5s
+          retries: 3
+          start_period: 10s
+
+    # A background worker built from the local Dockerfile. `build` produces the
+    # image referenced by `image`; `run.command` keeps it alive.
+    worker:
+      composition: storefront
+      image: atmos-container-worker:local
+      build:
+        context: .
+        dockerfile: Dockerfile
+        tags:
+          - atmos-container-worker:local
+      run:
+        command: sleep 3600

@@ -1,0 +1,33 @@
+---
+title: junit
+sidebar_label: junit
+slug: /workflows/steps/type/junit
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `junit` step ingests JUnit XML from a test runner, writes a CI step summary, and emits inline
+annotations for test failures when the CI provider supports them.
+</Intro>
+
+```yaml
+steps:
+  - name: publish test results
+    type: junit
+    title: Terraform tests
+    files:
+      - .artifacts/junit/*.xml
+    action: all
+```
+
+## Fields
+
+| Field | Description |
+| --- | --- |
+| `files` | Required list of JUnit XML paths or glob patterns. |
+| `action` | `all` (default), `summary`, or `annotate`. |
+| `title` | Optional CI summary title; defaults to `Test results`. |
+
+The step fails when no files match or a matched document is not valid JUnit XML. It remains useful
+outside CI because it prints a concise local test summary.

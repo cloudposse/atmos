@@ -8,18 +8,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 func TestCLITerraformClean(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
