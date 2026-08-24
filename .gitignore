@@ -134,6 +134,7 @@ TEST_QUALITY_*.md
 /.lintroller
 tools/lintroller/.lintroller
 .golangci/lintroller/lintroller
+tools/gomodcheck/.gomodcheck
 /custom-gcl
 
 # golangci-lint per-worktree cache + lock isolation (see
