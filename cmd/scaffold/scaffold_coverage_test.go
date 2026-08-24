@@ -15,233 +15,10 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
-
-// Note: The dry-run preview functions require UI initialization which
-// is done at runtime. Testing them requires integration tests.
-// Here we test the helper functions that don't require UI.
-
-// TestLoadDryRunValues tests loading values for dry-run.
-func TestLoadDryRunValues(t *testing.T) {
-	tests := []struct {
-		name        string
-		config      *templates.Configuration
-		vars        map[string]interface{}
-		expectError bool
-	}{
-		{
-			name: "no scaffold config",
-			config: &templates.Configuration{
-				Files: []templates.File{{Path: "test.txt"}},
-			},
-			vars:        map[string]interface{}{"key": "value"},
-			expectError: false,
-		},
-		{
-			name: "with scaffold config and defaults",
-			config: &templates.Configuration{
-				Files: []templates.File{
-					{
-						Path: config.ScaffoldConfigFileName,
-						Content: `apiVersion: atmos/v1
-kind: AtmosScaffoldConfig
-metadata:
-  name: test
-spec:
-  fields:
-    - name: project_name
-      type: string
-      default: default-name
-`,
-					},
-				},
-			},
-			vars:        map[string]interface{}{},
-			expectError: false,
-		},
-		{
-			name: "invalid scaffold config",
-			config: &templates.Configuration{
-				Files: []templates.File{
-					{
-						Path:    config.ScaffoldConfigFileName,
-						Content: "invalid: yaml: content: [",
-					},
-				},
-			},
-			vars:        map[string]interface{}{},
-			expectError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			values, _, err := loadDryRunValues(tt.config, tt.vars)
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, values)
-			}
-		})
-	}
-}
-
-// TestLoadDryRunValues_ReturnsScaffoldConfig verifies loadDryRunValues also
-// hands back the parsed *config.ScaffoldConfig (not just the merged values),
-// so the dry-run preview can gate/render files with it exactly like real
-// generation does. Nil when the template declares no scaffold.yaml at all.
-func TestLoadDryRunValues_ReturnsScaffoldConfig(t *testing.T) {
-	withConfig := &templates.Configuration{
-		Files: []templates.File{
-			{
-				Path: config.ScaffoldConfigFileName,
-				Content: `apiVersion: atmos/v1
-kind: AtmosScaffoldConfig
-metadata:
-  name: test
-spec:
-  fields:
-    - name: project_name
-      type: string
-      default: default-name
-`,
-			},
-		},
-	}
-	_, scaffoldConfig, err := loadDryRunValues(withConfig, map[string]interface{}{})
-	require.NoError(t, err)
-	require.NotNil(t, scaffoldConfig)
-	assert.Equal(t, "test", scaffoldConfig.Metadata.Name)
-
-	withoutConfig := &templates.Configuration{Files: []templates.File{{Path: "test.txt"}}}
-	_, scaffoldConfig, err = loadDryRunValues(withoutConfig, map[string]interface{}{})
-	require.NoError(t, err)
-	assert.Nil(t, scaffoldConfig)
-}
-
-// TestFindScaffoldConfigFile tests finding scaffold config in file list.
-func TestFindScaffoldConfigFile(t *testing.T) {
-	tests := []struct {
-		name     string
-		files    []templates.File
-		expected bool
-	}{
-		{
-			name: "config exists",
-			files: []templates.File{
-				{Path: "file1.txt"},
-				{Path: config.ScaffoldConfigFileName},
-				{Path: "file2.txt"},
-			},
-			expected: true,
-		},
-		{
-			name: "config does not exist",
-			files: []templates.File{
-				{Path: "file1.txt"},
-				{Path: "file2.txt"},
-			},
-			expected: false,
-		},
-		{
-			name:     "empty file list",
-			files:    []templates.File{},
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := findScaffoldConfigFile(tt.files)
-			if tt.expected {
-				assert.NotNil(t, result)
-			} else {
-				assert.Nil(t, result)
-			}
-		})
-	}
-}
-
-// TestRenderFilePath tests file path rendering with variables.
-func TestRenderFilePath(t *testing.T) {
-	tests := []struct {
-		name     string
-		path     string
-		values   map[string]interface{}
-		expected string
-	}{
-		{
-			name:     "simple path no variables",
-			path:     "path/to/file.txt",
-			values:   map[string]interface{}{},
-			expected: "path/to/file.txt",
-		},
-		{
-			name:     "path with single Config variable",
-			path:     "{{ .Config.project_name }}/file.txt",
-			values:   map[string]interface{}{"project_name": "my-project"},
-			expected: "my-project/file.txt",
-		},
-		{
-			name: "path with multiple Config variables",
-			path: "{{ .Config.namespace }}/{{ .Config.environment }}/{{ .Config.app }}.yaml",
-			values: map[string]interface{}{
-				"namespace":   "prod",
-				"environment": "staging",
-				"app":         "api",
-			},
-			expected: "prod/staging/api.yaml",
-		},
-		{
-			name:     "path with numeric Config variable",
-			path:     "{{ .Config.count }}/file.txt",
-			values:   map[string]interface{}{"count": 42},
-			expected: "42/file.txt", // The engine renders non-string values too.
-		},
-		{
-			name:     "invalid template falls back to raw path",
-			path:     "{{ .Config.unterminated /file.txt",
-			values:   map[string]interface{}{},
-			expected: "{{ .Config.unterminated /file.txt", // Parse error -> raw path returned.
-		},
-	}
-
-	processor := engine.NewProcessor()
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := renderFilePath(processor, tt.path, nil, tt.values)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-// TestRenderFilePath_CustomDelimiters reproduces the dry-run bug where a file
-// path using a template's declared spec.delimiters (e.g. "[[" / "]]" instead
-// of the Go-template default "{{" / "}}") renders raw and unsubstituted in
-// the `--dry-run` preview, even though real generation renders it correctly.
-func TestRenderFilePath_CustomDelimiters(t *testing.T) {
-	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(`apiVersion: atmos/v1
-kind: AtmosScaffoldConfig
-metadata:
-  name: custom-delims
-spec:
-  delimiters: ["[[", "]]"]
-  fields:
-    - name: service
-      type: input
-      default: svc-default
-`)
-	require.NoError(t, err)
-
-	processor := engine.NewProcessor()
-	result := renderFilePath(processor, "cmd/[[ .Config.service ]]/main.go", scaffoldConfig, map[string]interface{}{"service": "svc-x"})
-	assert.Equal(t, "cmd/svc-x/main.go", result)
-}
 
 // TestResolveTargetDirectory tests target directory resolution.
 func TestResolveTargetDirectory(t *testing.T) {
@@ -336,120 +113,52 @@ func TestSelectGenerateTemplate_NonInteractiveRequiresName(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrTemplateNameRequired)
 }
 
-func TestRenderDryRunPreview_RendersHeaderAndFileList(t *testing.T) {
-	cfg := &templates.Configuration{
-		Name:        "demo",
-		Description: "demo scaffold",
-		Files: []templates.File{
-			{
-				Path: config.ScaffoldConfigFileName,
-				Content: `apiVersion: atmos/v1
-kind: AtmosScaffoldConfig
-metadata:
-  name: demo
-spec:
-  fields:
-    - name: project_name
-      type: input
-      default: demo-default
-`,
-			},
-			{Path: "{{ .Config.project_name }}/README.md", Content: "hello"},
-			{Path: "static/file.txt", Content: "static"},
-		},
-	}
+// TestExecuteScaffoldGenerate_DryRunNonexistentTargetDirectory proves the
+// primary real-world dry-run use case still works: previewing generation
+// into a target directory that doesn't exist yet (nested, so its parents
+// don't exist either). Its validation, filesystem.ValidateTargetDirectory,
+// returns nil immediately for a missing path, so routing dry-run through the
+// real generation path (now true for every --dry-run, not just --dry-run
+// --update) must not require the target to pre-exist.
+func TestExecuteScaffoldGenerate_DryRunNonexistentTargetDirectory(t *testing.T) {
+	targetDir := filepath.Join(t.TempDir(), "does", "not", "exist", "yet")
 
-	err := renderDryRunPreview(cfg, t.TempDir(), map[string]interface{}{"project_name": "demo-project"})
+	err := executeScaffoldGenerate(&scaffoldGenerateOptions{
+		templateName:   "simple",
+		targetDir:      targetDir,
+		dryRun:         true,
+		interactive:    false,
+		useDefaults:    true,
+		templateValues: map[string]interface{}{"project_name": "demo"},
+	})
+
 	require.NoError(t, err)
+	assert.NoFileExists(t, filepath.Join(targetDir, "README.md"), "dry-run must not write any files")
 }
 
-// TestCollectDryRunFiles_ExcludesDirectories reproduces the bug where a
-// directory entry in the template's file tree (IsDirectory: true) was
-// counted and listed as a generated file by the dry-run preview, even though
-// real generation (pkg/generator/ui) skips directory entries outright -- the
-// engine creates parent directories implicitly while writing each real file.
-func TestCollectDryRunFiles_ExcludesDirectories(t *testing.T) {
-	cfg := &templates.Configuration{
-		Files: []templates.File{
-			{Path: "deploy", IsDirectory: true},
-			{Path: "deploy/values.yaml", Content: "a: b"},
-		},
-	}
+// TestExecuteScaffoldGenerate_DryRunNonEmptyTargetWithoutForceOrUpdate_Errors
+// proves plain `--dry-run` (no --update) now reflects the same
+// filesystem.ValidateTargetDirectory check a real run performs: previewing
+// against an existing, non-empty target directory without --force or
+// --update fails exactly like the real run it's meant to preview would fail.
+// Before routing dry-run through the real generation path, the standalone
+// preview implementation never checked the target directory's state at all
+// and would happily list files regardless.
+func TestExecuteScaffoldGenerate_DryRunNonEmptyTargetWithoutForceOrUpdate_Errors(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "existing.txt"), []byte("x"), 0o600))
 
-	paths := collectDryRunFiles(engine.NewProcessor(), cfg, nil, map[string]interface{}{})
-	assert.Equal(t, []string{"deploy/values.yaml"}, paths)
-}
+	err := executeScaffoldGenerate(&scaffoldGenerateOptions{
+		templateName:   "simple",
+		targetDir:      dir,
+		dryRun:         true,
+		interactive:    false,
+		useDefaults:    true,
+		templateValues: map[string]interface{}{"project_name": "demo"},
+	})
 
-// TestCollectDryRunFiles_RespectsWhenCondition reproduces the bug where a
-// file gated by a false spec.files[].when condition was still listed/counted
-// by the dry-run preview, even though real generation
-// (pkg/generator/ui's processSingleFileEntry) would skip it.
-func TestCollectDryRunFiles_RespectsWhenCondition(t *testing.T) {
-	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(`apiVersion: atmos/v1
-kind: AtmosScaffoldConfig
-metadata:
-  name: conditional
-spec:
-  fields:
-    - name: include_optional
-      type: confirm
-      default: false
-  files:
-    - path: optional.yml
-      when: "answers.include_optional == true"
-`)
-	require.NoError(t, err)
-
-	cfg := &templates.Configuration{
-		Files: []templates.File{
-			{Path: config.ScaffoldConfigFileName, Content: "n/a"},
-			{Path: "required.yml", Content: "a: b"},
-			{Path: "optional.yml", Content: "c: d"},
-		},
-	}
-
-	paths := collectDryRunFiles(engine.NewProcessor(), cfg, scaffoldConfig, map[string]interface{}{"include_optional": false})
-	assert.Equal(t, []string{"required.yml"}, paths)
-
-	paths = collectDryRunFiles(engine.NewProcessor(), cfg, scaffoldConfig, map[string]interface{}{"include_optional": true})
-	assert.ElementsMatch(t, []string{"required.yml", "optional.yml"}, paths)
-}
-
-// TestCollectDryRunFiles_HonorsTargetOverride reproduces the bug where the
-// dry-run preview always rendered a discovered file's own Path, ignoring
-// spec.files[].target -- which overrides the output path in real generation
-// (pkg/generator/ui's FileOutputPath/processFileEntry). Without this, a
-// template using target to relocate a file previewed the wrong path.
-func TestCollectDryRunFiles_HonorsTargetOverride(t *testing.T) {
-	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(`apiVersion: atmos/v1
-kind: AtmosScaffoldConfig
-metadata:
-  name: retargeted
-spec:
-  fields:
-    - name: service_name
-      type: input
-      default: demo
-  files:
-    - path: values.yaml.tmpl
-      target: "deploy/{{ .Config.service_name }}/values.yaml"
-`)
-	require.NoError(t, err)
-
-	cfg := &templates.Configuration{
-		Files: []templates.File{
-			{Path: config.ScaffoldConfigFileName, Content: "n/a"},
-			{Path: "values.yaml.tmpl", Content: "a: b"},
-		},
-	}
-
-	paths := collectDryRunFiles(engine.NewProcessor(), cfg, scaffoldConfig, map[string]interface{}{"service_name": "demo"})
-
-	assert.Equal(t, []string{"deploy/demo/values.yaml"}, paths)
-}
-
-func TestPrintFilePath_WithoutTargetDir(t *testing.T) {
-	printFilePath("", "relative/file.txt")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTargetDirectoryNotEmpty)
 }
 
 func TestExecuteScaffoldGenerate_DryRunBuiltInTemplate(t *testing.T) {
@@ -607,22 +316,29 @@ func TestMaybeInitGeneratedGitRepository_PropagatesInitGitError(t *testing.T) {
 	assert.NoFileExists(t, storage.ScaffoldMetadataPath(dir), "InitGitRepository failure must prevent PinInitialBaseRef from running")
 }
 
-// TestRenderDryRunPreview_PropagatesLoadDryRunValuesError reproduces an
-// invalid scaffold.yaml in the selected template (unparseable YAML):
-// renderDryRunPreview must propagate loadDryRunValues's error instead of
-// proceeding to renderDryRunFileList with a nil scaffoldConfig/mergedValues.
-func TestRenderDryRunPreview_PropagatesLoadDryRunValuesError(t *testing.T) {
-	selectedConfig := &templates.Configuration{
+// TestExecuteScaffoldGenerate_DryRunPropagatesInvalidScaffoldConfig
+// reproduces an invalid scaffold.yaml in the selected template (unparseable
+// YAML): routing dry-run through the real generation path must still
+// surface a parse error immediately, rather than silently proceeding to
+// preview an empty file list.
+func TestExecuteScaffoldGenerate_DryRunPropagatesInvalidScaffoldConfig(t *testing.T) {
+	_, _, scaffoldUI, err := loadScaffoldTemplates("")
+	require.NoError(t, err)
+
+	cfg := &templates.Configuration{
 		Name: "broken",
 		Files: []templates.File{
 			{Path: config.ScaffoldConfigFileName, Content: "not: valid: yaml: ["},
 		},
 	}
 
-	err := renderDryRunPreview(selectedConfig, t.TempDir(), map[string]interface{}{})
+	scaffoldUI.SetDryRun(true)
+	err = executeTemplateGeneration(cfg, t.TempDir(), &scaffoldGenerateOptions{
+		dryRun:      true,
+		useDefaults: true,
+	}, scaffoldUI)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrScaffoldParseYAML)
 }
 
 func TestScaffoldListAndValidateRunE(t *testing.T) {
@@ -638,37 +354,6 @@ spec:
 `), 0o600))
 
 	require.NoError(t, scaffoldValidateCmd.RunE(&cobra.Command{}, []string{dir}))
-}
-
-// TestExecuteScaffoldGenerateWithDryRun tests dry-run flag integration.
-func TestExecuteScaffoldGenerateWithDryRun(t *testing.T) {
-	// Create a temporary directory for testing
-	tempDir := t.TempDir()
-
-	// Create a simple template directory
-	templateDir := filepath.Join(tempDir, "templates", "test-template")
-	err := os.MkdirAll(templateDir, 0o755)
-	require.NoError(t, err)
-
-	// Create a scaffold.yaml
-	scaffoldYAML := `name: Test Template
-description: A test template
-version: 1.0.0
-fields:
-  project_name:
-    type: string
-    default: test-project
-`
-	err = os.WriteFile(filepath.Join(templateDir, "scaffold.yaml"), []byte(scaffoldYAML), 0o644)
-	require.NoError(t, err)
-
-	// Create a template file
-	err = os.WriteFile(filepath.Join(templateDir, "README.md"), []byte("# {{.project_name}}"), 0o644)
-	require.NoError(t, err)
-
-	// Note: Full integration test would require setting up the command context
-	// This is a structural test to ensure the dry-run code path exists
-	assert.NotNil(t, renderDryRunPreview)
 }
 
 // TestSelectTemplateErrors tests error handling in template selection.
@@ -1005,6 +690,64 @@ func TestExecuteTemplateGeneration_UpdateFlag_PreservesCommittedEdit(t *testing.
 	require.NoError(t, err)
 	assert.Contains(t, string(merged), "appName: svc-x", "the template's own change must still apply")
 	assert.Contains(t, string(merged), "runner: self-hosted", "the user's committed customization must survive --update")
+}
+
+// TestExecuteTemplateGeneration_DryRunMatrixExpansion proves the CodeRabbit-
+// reported gap is fixed at the cmd/scaffold routing level, not just inside
+// pkg/generator/ui: a plain `--dry-run` (no --update) run of a template
+// whose scaffold.yaml declares spec.files[].matrix (with a matrix-driven
+// spec.files[].target) goes through the exact same real generation path a
+// non-dry-run run uses, so it accounts for every matrix-expanded output
+// instead of the single, unexpanded path the old standalone preview
+// (collectDryRunFiles) used to report. Proven by comparing a real run of the
+// template (which writes one file per matrix value) against a dry-run of
+// the identical template, which must write nothing to either its own target
+// directory or any matrix-expanded subpath.
+func TestExecuteTemplateGeneration_DryRunMatrixExpansion(t *testing.T) {
+	_, _, scaffoldUI, err := loadScaffoldTemplates("")
+	require.NoError(t, err)
+
+	scaffoldYAML := `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: matrix-template
+spec:
+  files:
+    - path: deploy.yaml
+      target: "deploy/{{ .matrix.region }}.yaml"
+      matrix:
+        region: [us-east-1, us-west-2, eu-west-1]
+`
+	cfg := &templates.Configuration{
+		Name: "matrix-template",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: scaffoldYAML, Permissions: 0o644},
+			{Path: "deploy.yaml", Content: "region: {{ .matrix.region }}\n", IsTemplate: true, Permissions: 0o644},
+		},
+	}
+	regions := []string{"us-east-1", "us-west-2", "eu-west-1"}
+
+	// A real run writes one file per matrix value.
+	realDir := t.TempDir()
+	require.NoError(t, executeTemplateGeneration(cfg, realDir, &scaffoldGenerateOptions{useDefaults: true}, scaffoldUI))
+	for _, region := range regions {
+		content, readErr := os.ReadFile(filepath.Join(realDir, "deploy", region+".yaml"))
+		require.NoError(t, readErr, "real generation must write deploy/%s.yaml", region)
+		assert.Equal(t, "region: "+region+"\n", string(content))
+	}
+
+	// The same template, previewed with plain --dry-run (no --update),
+	// must not write any of those matrix-expanded files -- while still
+	// succeeding, proving it accounted for (rather than erroring on, or
+	// silently dropping) the matrix expansion.
+	dryDir := t.TempDir()
+	scaffoldUI.SetDryRun(true)
+	defer scaffoldUI.SetDryRun(false)
+	err = executeTemplateGeneration(cfg, dryDir, &scaffoldGenerateOptions{useDefaults: true, dryRun: true}, scaffoldUI)
+	require.NoError(t, err)
+	for _, region := range regions {
+		assert.NoFileExists(t, filepath.Join(dryDir, "deploy", region+".yaml"), "dry-run must not write deploy/%s.yaml", region)
+	}
 }
 
 // scaffoldGitInit initializes dir as a git repository using go-git (no

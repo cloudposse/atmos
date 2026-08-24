@@ -940,52 +940,6 @@ func TestDetermineScaffoldPathsToValidate(t *testing.T) {
 	}
 }
 
-func TestLoadDryRunValues_ErrorPaths(t *testing.T) {
-	tests := []struct {
-		name        string
-		config      *templates.Configuration
-		vars        map[string]interface{}
-		expectError bool
-	}{
-		{
-			name: "scaffold config with invalid YAML",
-			config: &templates.Configuration{
-				Files: []templates.File{
-					{
-						Path:    "scaffold.yaml",
-						Content: "invalid: [unclosed yaml",
-					},
-				},
-			},
-			vars:        map[string]interface{}{},
-			expectError: true,
-		},
-		{
-			name: "no scaffold config file",
-			config: &templates.Configuration{
-				Files: []templates.File{
-					{Path: "README.md", Content: "# Test"},
-				},
-			},
-			vars:        map[string]interface{}{"var1": "value1"},
-			expectError: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			values, _, err := loadDryRunValues(tt.config, tt.vars)
-
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, values)
-			}
-		})
-	}
-}
-
 func TestParseSetFlag_AllBranches(t *testing.T) {
 	tests := []struct {
 		name        string

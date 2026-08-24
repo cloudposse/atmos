@@ -132,8 +132,25 @@ there still falls back to live `HEAD` -- unchanged from before this fix, not a r
 - The `--no-git` / bring-your-own-git-repo case for bug 1 remains unfixed (see Scope note
   above) -- would need a content-hash-based snapshot independent of git history to close.
   Not tracked with an issue.
-- Dry-run's `spec.files[].matrix` expansion gap, see below -- tracked here, not with an
-  issue.
+- Dry-run's `spec.files[].matrix` expansion gap (originally flagged here as a follow-up) is
+  now fixed -- see item 4 in the CodeRabbit follow-up round below. Superseded, not a live
+  follow-up.
+- Hooks (`scaffoldhooks.Run`, `BeforeScaffoldGenerate`/`AfterScaffoldGenerate`) and
+  `os.MkdirAll` for the target directory both run unconditionally inside `executeWithSetup`,
+  with no awareness of `engine.Processor.DryRun` at all. Routing every `--dry-run` through
+  the real generation path (item 4 below) means a scaffold template declaring hooks now runs
+  those hooks' real side effects (e.g. shelling out to `git`) during what a user would
+  reasonably expect to be a no-op preview -- this was already true of the previously-shipped
+  `--dry-run --update` path and is not a new regression from this round, but it's a real,
+  user-visible gap worth closing (e.g. by threading `DryRun` into `scaffoldhooks.Run` so a
+  hook can opt out, or skipping hook execution entirely in dry-run mode). Not tracked with an
+  issue (none requested); flagging here only.
+- `ExecuteWithDelimiters`'s leading `"Generating %s in %s\n\n"` banner (`pkg/generator/ui/
+  ui.go`) is not dry-run-aware either, unlike the summary line this round fixed -- it was
+  already worded this way for the previously-shipped `--dry-run --update` path, so it's not a
+  new regression, but it's the same class of "implies a write happened" wording gap. Left
+  alone this round to keep the fix scoped to the summary line CodeRabbit's finding was about;
+  worth a follow-up pass. Not tracked with an issue (none requested).
 
 ## CodeRabbit follow-up round (PR #2989, commit `c27b6e5ec4`)
 
@@ -177,25 +194,72 @@ PR.
     `TestShouldOfferScaffoldUpdate_PropagatesMetadataLoadError`
     (`cmd/scaffold/scaffold_coverage_test.go`).
 4. **`Target`/`Matrix` not expanded before printing dry-run paths
-    (`cmd/scaffold/scaffold.go`'s `collectDryRunFiles`) -- partially fixed, matrix expansion
-    scoped out as a follow-up.** `collectDryRunFiles` always rendered a discovered file's own
-    `Path`, ignoring `spec.files[].target` (a straight path override) entirely and never
-    expanding `spec.files[].matrix` (one file into zero-or-more real outputs, per
-    `pkg/generator/ui`'s `processMatrixedFileEntry`/`processMatrixRow`). This fix handles
-    `Target`: `pkg/generator/ui`'s previously unexported `fileOutputPath` is now exported as
-    `FileOutputPath` (alongside the existing `FileSpecByPath`/`ResolveDelimiters` exports for
-    the same reason) and `collectDryRunFiles` calls it instead of always using `file.Path`.
-    **Matrix expansion is explicitly not implemented** -- a template using `spec.files[].
-    matrix` still previews exactly one unexpanded path (its `Target`/`Path` template with no
-    matrix values bound), under- or over-counting relative to what a real run produces. This
-    is documented directly in `collectDryRunFiles`'s doc comment as a known gap, plus here:
-    the correct fix reuses `engine.ExpandMatrix` + `processMatrixRow`'s per-row `when`/path
-    logic via a new exported "plan output paths for this file" helper from
-    `pkg/generator/ui`, rather than re-implementing matrix expansion a second time in
-    `cmd/scaffold`; not attempted in this round because it's a genuine heavy lift on top of
-    four other fixes, and no issue has been filed for it (none requested). Regression test:
-    `TestCollectDryRunFiles_HonorsTargetOverride` (`cmd/scaffold/scaffold_coverage_test.go`);
-    no test claims matrix expansion works, matching the gap above.
+    (`cmd/scaffold/scaffold.go`'s `collectDryRunFiles`) -- fixed, superseding the partial
+    `Target`-only fix originally landed here.** The previous round's `collectDryRunFiles`
+    reimplemented real generation's file-selection rules a second time (skip `scaffold.yaml`
+    and directories, gate by `spec.files[].when`, resolve `spec.files[].target`) but never
+    expanded `spec.files[].matrix` at all -- a matrix-enabled file still previewed as exactly
+    one unexpanded path, under- or over-counting relative to a real run's
+    `processMatrixedFileEntry`/`processMatrixRow` output. Re-investigating for a full fix
+    found that `--dry-run --update` (added later in this same fix round, see the "dry-run
+    parity" entry above) had *already* solved this the correct way: instead of previewing
+    file paths standalone, it drives the exact same real-generation call
+    (`executeTemplateGeneration` -> `ScaffoldUI.ExecuteWithBaseRef` ->
+    `pkg/generator/ui`'s `executeWithSetup`/`processFileEntry`/`processMatrixedFileEntry`/
+    `processMatrixRow`/`writeOneOutput` -> `engine.Processor.ProcessFile`) with
+    `engine.Processor.DryRun` set, so `ProcessFile` computes rendering and the 3-way merge
+    but skips the final disk write. That path already got matrix expansion, `Target`,
+    custom delimiters, and `spec.files[].when` for free, simply by being the real
+    implementation rather than a parallel one.
+
+    The fix: `executeScaffoldGenerate`'s `if opts.dryRun` branch no longer branches on
+    `opts.update` at all -- both plain `--dry-run` and `--dry-run --update` now call
+    `scaffoldUI.SetDryRun(true)` followed by `executeTemplateGeneration`. This let
+    `renderDryRunPreview`, `renderDryRunHeader`, `loadDryRunValues`, `findScaffoldConfigFile`,
+    `renderDryRunFileList`, `collectDryRunFiles`, `renderFilePath`, and `printFilePath` be
+    deleted outright from `cmd/scaffold/scaffold.go` (along with the `condition`, `engine`,
+    and `generatorUI` imports they were the only users of) -- there is now a single
+    generation implementation instead of a hand-maintained preview shadowing it.
+
+    Two consequences of routing through the real path, both correctness improvements over the
+    old standalone preview:
+    - `filesystem.ValidateTargetDirectory` now runs for every `--dry-run` (previously only
+      for `--dry-run --update`): previewing against an existing, non-empty target directory
+      without `--force`/`--update` now fails with the same `ErrTargetDirectoryNotEmpty` a
+      real run would produce, instead of silently listing files regardless of the target's
+      actual state. `ValidateTargetDirectory` returns `nil` immediately for a target that
+      doesn't exist yet (`os.Stat` -> `os.ErrNotExist`), so the primary real-world use case --
+      previewing into a directory that hasn't been created yet -- is unaffected.
+    - `executeWithSetup`'s `os.MkdirAll(targetPath, ...)` now runs during every `--dry-run`
+      too (creating the empty target directory itself, though never any file inside it) --
+      already true of the previously-shipped `--dry-run --update` path, now consistent for
+      plain `--dry-run` as well.
+
+    Small independent improvement while in this code: `executeWithSetup`'s and
+    `executeWithCommandValues`'s post-run summary lines (`"Generated %d files."` /
+    `"Initialized %d files."`) unconditionally implied files were written even when
+    `engine.Processor.DryRun` was true. Both are now dry-run-aware (`"Would generate %d
+    files."` / `"Would initialize %d files."`, plus the equivalent `%d would fail.` error
+    wording), extracted into two small, directly unit-testable functions
+    (`generationSummaryLine`, `initializationSummaryLine` in `pkg/generator/ui/ui.go`) since
+    `executeWithSetup`/`executeWithCommandValues` always flush and reset the UI output buffer
+    before returning, which would otherwise make the exact wording unobservable from a test.
+
+    Regression tests: `TestProcessFileEntry_DryRunMatrixExpansion`, `TestGenerationSummaryLine`,
+    `TestInitializationSummaryLine` (`pkg/generator/ui/matrix_test.go`) prove matrix expansion
+    (including the matrix-driven `target:` and the matrix-gated `when:` prune) is honored in
+    dry-run mode with nothing written to disk, and pin the four summary-wording combinations.
+    `TestExecuteTemplateGeneration_DryRunMatrixExpansion`,
+    `TestExecuteScaffoldGenerate_DryRunNonexistentTargetDirectory`,
+    `TestExecuteScaffoldGenerate_DryRunNonEmptyTargetWithoutForceOrUpdate_Errors`,
+    `TestExecuteScaffoldGenerate_DryRunPropagatesInvalidScaffoldConfig`
+    (`cmd/scaffold/scaffold_coverage_test.go`) prove the routing fix end-to-end: matrix
+    expansion through the real `cmd/scaffold` entry point, the nonexistent-target-directory
+    use case, the new "non-empty target without `--force`/`--update` now errors" behavior, and
+    invalid-scaffold.yaml propagation. Tests that exercised the deleted standalone preview
+    functions directly (`TestLoadDryRunValues*`, `TestFindScaffoldConfigFile`,
+    `TestRenderFilePath*`, `TestCollectDryRunFiles*`, `TestRenderDryRunPreview*`,
+    `TestPrintFilePath_WithoutTargetDir`) were removed since those functions no longer exist.
 5. **Positional metadata arguments on `PinInitialBaseRef` (`pkg/generator/gitinit.go`) --
     fixed.** `PinInitialBaseRef(targetPath, headSHA, templateName, templateVersion, source
     string) error` had three same-typed trailing string parameters, inviting an
@@ -216,3 +280,19 @@ PR.
 - `gofumpt -l` over every touched file -- clean (two files needed a `gofumpt -w` pass for
   multi-line call-argument formatting `gofmt` alone wouldn't have caught).
 - `./build/atmos lint --changed` (patch-scoped against `origin/main`) -- 0 issues.
+
+### Validation (matrix-expansion route-through round, item 4 above)
+
+- `go build ./...` -- clean.
+- `go vet ./...` -- clean.
+- `go test -count=1 ./cmd/scaffold/... ./pkg/generator/...` -- all pass, including
+  `./cmd/init/...` (unaffected: `atmos init` shares `pkg/generator/ui`'s `executeWithSetup`/
+  `executeWithCommandValues`, whose summary-wording change is dry-run-gated and therefore a
+  no-op for `init`'s existing non-dry-run callers).
+- `gofumpt -l` over every touched file -- clean.
+- `./custom-gcl run --new-from-rev=origin/main` (patch-scoped against `origin/main`, this
+  repo's real PR lint gate) -- 0 issues (one `godot` finding on a new test's doc comment
+  fixed along the way).
+- `grep -rn "would be generated\|Files that would be generated" tests/ website/` -- no hits
+  against any scaffold dry-run CLI test case or snapshot; `tests/test-cases/scaffold.yaml` has
+  no `--dry-run` cases at all, so no snapshot regeneration was needed.

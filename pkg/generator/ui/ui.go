@@ -704,6 +704,25 @@ func (ui *InitUI) generateSuggestedDirectoryWithValues(config *tmpl.Configuratio
 	return currentDirPrefix + filepath.Base(config.Name)
 }
 
+// initializationSummaryLine formats executeWithCommandValues's post-run
+// summary line. When dryRun is true nothing was actually written to disk, so
+// the line is worded as a preview ("Would initialize") instead of a
+// completed action -- otherwise it reads identically to the pre-dry-run-aware
+// wording. Split out of executeWithCommandValues so the four wording
+// combinations are unit-testable without needing to capture UI output.
+func initializationSummaryLine(dryRun bool, successCount, errorCount int) string {
+	switch {
+	case errorCount > 0 && dryRun:
+		return fmt.Sprintf("Would initialize %d files. %d would fail.\n", successCount, errorCount)
+	case errorCount > 0:
+		return fmt.Sprintf("Initialized %d files. Failed to initialize %d files.\n", successCount, errorCount)
+	case dryRun:
+		return fmt.Sprintf("Would initialize %d files.\n", successCount)
+	default:
+		return fmt.Sprintf("Initialized %d files.\n", successCount)
+	}
+}
+
 // executeWithCommandValues processes files using command-line template values.
 //
 //nolint:revive // function-length: file processing loop with error handling
@@ -752,16 +771,15 @@ func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, tar
 		}
 	}
 
-	// Print summary
+	// Print summary. In dry-run mode nothing was actually written to disk, so
+	// the wording says "would" instead of implying files were initialized.
 	ui.writeOutput(newlineStr)
+	ui.writeOutput("%s", initializationSummaryLine(ui.processor.DryRun, successCount, errorCount))
 	if errorCount > 0 {
-		ui.writeOutput("Initialized %d files. Failed to initialize %d files.\n", successCount, errorCount)
 		ui.flushOutput()
 		return errUtils.Build(errUtils.ErrInitializationPartialFailure).
 			WithExplanationf("Failed to initialize %d files", errorCount).
 			Err()
-	} else {
-		ui.writeOutput("Initialized %d files.\n", successCount)
 	}
 
 	// Flush all output before rendering README
@@ -1196,6 +1214,26 @@ func (ui *InitUI) writeOneOutput(
 	return success, failed, nil
 }
 
+// generationSummaryLine formats executeWithSetup's post-run summary line.
+// When dryRun is true nothing was actually written to disk, so the line is
+// worded as a preview ("Would generate") instead of a completed action --
+// otherwise it reads identically to the pre-dry-run-aware wording. Split out
+// of executeWithSetup so the four wording combinations are unit-testable
+// without needing to capture UI output (executeWithSetup flushes and resets
+// ui.output before returning in every branch).
+func generationSummaryLine(dryRun bool, successCount, errorCount int) string {
+	switch {
+	case errorCount > 0 && dryRun:
+		return fmt.Sprintf("Would generate %d files. %d would fail.\n", successCount, errorCount)
+	case errorCount > 0:
+		return fmt.Sprintf("Generated %d files. Failed to generate %d files.\n", successCount, errorCount)
+	case dryRun:
+		return fmt.Sprintf("Would generate %d files.\n", successCount)
+	default:
+		return fmt.Sprintf("Generated %d files.\n", successCount)
+	}
+}
+
 // executeWithSetup handles any scaffold configuration with interactive prompts.
 //
 //nolint:gocognit,revive,cyclop,funlen // complex orchestration function with multiple setup phases
@@ -1294,10 +1332,11 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		}
 	}
 
-	// Print summary.
+	// Print summary. In dry-run mode nothing was actually written to disk, so
+	// the wording says "would" instead of implying files were generated.
 	ui.writeOutput(newlineStr)
+	ui.writeOutput("%s", generationSummaryLine(ui.processor.DryRun, successCount, errorCount))
 	if errorCount > 0 {
-		ui.writeOutput("Generated %d files. Failed to generate %d files.\n", successCount, errorCount)
 		// Don't render README if there were errors - flush output and return error immediately.
 		ui.flushOutput()
 		// Post-generate hooks still get a chance to run on failure (e.g. a
@@ -1311,8 +1350,6 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 			WithCause(errors.Join(failureErrs...)).
 			WithExplanationf("Failed to generate files: %s", strings.Join(failedFiles, ", ")).
 			Err()
-	} else {
-		ui.writeOutput("Generated %d files.\n", successCount)
 	}
 
 	// Write the project record only after all files have been generated

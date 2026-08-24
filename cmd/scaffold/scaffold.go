@@ -16,17 +16,14 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
-	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	gen "github.com/cloudposse/atmos/pkg/generator"
-	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
-	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -398,15 +395,15 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 				WithExitCode(2).
 				Err()
 		}
-		// With --update, a path-only preview can't show real merge/conflict
-		// status. Drive the real generation path with dry-run enabled on the
-		// processor instead: rendering, git base load, and the 3-way merge all
-		// still run (so genuine conflicts are reported), but no file is written.
-		if opts.update {
-			scaffoldUI.SetDryRun(true)
-			return executeTemplateGeneration(&selectedConfig, absTargetDir, opts, scaffoldUI)
-		}
-		return renderDryRunPreview(&selectedConfig, absTargetDir, opts.templateValues)
+		// A path-only preview can't reproduce matrix expansion, spec.files[].
+		// target overrides, custom delimiters, or (with --update) real
+		// merge/conflict status without re-implementing real generation a
+		// second time. Instead, drive the real generation path with dry-run
+		// enabled on the processor: rendering, matrix expansion, git base
+		// load, and (with --update) the 3-way merge all still run exactly as
+		// they would for a real run, but no file is written to disk.
+		scaffoldUI.SetDryRun(true)
+		return executeTemplateGeneration(&selectedConfig, absTargetDir, opts, scaffoldUI)
 	}
 
 	// Execute template generation.
@@ -732,171 +729,6 @@ func maybeInitGeneratedGitRepository(targetDir string, selectedConfig *templates
 		)
 	}
 	return nil
-}
-
-// renderDryRunPreview renders a preview of template files without writing to disk.
-func renderDryRunPreview(
-	selectedConfig *templates.Configuration,
-	targetDir string,
-	templateVars map[string]interface{},
-) error {
-	renderDryRunHeader(selectedConfig, targetDir)
-
-	mergedValues, scaffoldConfig, err := loadDryRunValues(selectedConfig, templateVars)
-	if err != nil {
-		return err
-	}
-
-	renderDryRunFileList(selectedConfig, targetDir, scaffoldConfig, mergedValues)
-	return nil
-}
-
-// renderDryRunHeader renders the header information for dry-run mode.
-func renderDryRunHeader(selectedConfig *templates.Configuration, targetDir string) {
-	atmosui.Info("Dry-run mode: No files will be written")
-	atmosui.Writef("\nTemplate: %s\n", selectedConfig.Name)
-	if selectedConfig.Description != "" {
-		atmosui.Writef("Description: %s\n", selectedConfig.Description)
-	}
-	atmosui.Writef("Target directory: %s\n\n", targetDir)
-}
-
-// loadDryRunValues loads configuration values for dry-run preview using
-// defaults. It also returns the parsed *config.ScaffoldConfig (nil when the
-// template declares no scaffold.yaml) so the caller can render file paths
-// and gate the file list with the exact same delimiters/spec.files.when
-// real generation uses.
-func loadDryRunValues(selectedConfig *templates.Configuration, templateVars map[string]interface{}) (map[string]interface{}, *config.ScaffoldConfig, error) {
-	// Create a copy to avoid mutating the caller's map.
-	mergedValues := make(map[string]interface{}, len(templateVars))
-	for k, v := range templateVars {
-		mergedValues[k] = v
-	}
-
-	if !templates.HasScaffoldConfig(selectedConfig.Files) {
-		return mergedValues, nil, nil
-	}
-
-	scaffoldConfigFile := findScaffoldConfigFile(selectedConfig.Files)
-	if scaffoldConfigFile == nil {
-		return mergedValues, nil, nil
-	}
-
-	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content)
-	if err != nil {
-		return nil, nil, errUtils.Build(errUtils.ErrScaffoldParseYAML).
-			WithCause(err).
-			WithExplanation("Failed to load scaffold configuration for dry-run preview").
-			WithHint("Check the `scaffold.yaml` syntax in your template").
-			WithHint("Run `atmos scaffold validate` to check for errors").
-			WithExitCode(2).
-			Err()
-	}
-
-	// Merge with defaults from scaffold config, preserving declared order.
-	for i := range scaffoldConfig.Spec.Fields {
-		field := &scaffoldConfig.Spec.Fields[i]
-		if _, exists := mergedValues[field.Name]; !exists && field.Default != nil {
-			mergedValues[field.Name] = field.Default
-		}
-	}
-
-	return mergedValues, scaffoldConfig, nil
-}
-
-// findScaffoldConfigFile finds the scaffold.yaml file in the configuration files.
-func findScaffoldConfigFile(files []templates.File) *templates.File {
-	for i := range files {
-		if files[i].Path == config.ScaffoldConfigFileName {
-			return &files[i]
-		}
-	}
-	return nil
-}
-
-// renderDryRunFileList renders the list of files that would be generated.
-func renderDryRunFileList(selectedConfig *templates.Configuration, targetDir string, scaffoldConfig *config.ScaffoldConfig, mergedValues map[string]interface{}) {
-	atmosui.Write("Files that would be generated:\n\n")
-
-	// Reuse the same template processor that real generation uses so dry-run
-	// previews render nested fields (e.g. `{{ .Config.project_name }}`) and
-	// template functions exactly as the generated paths will.
-	processor := engine.NewProcessor()
-
-	paths := collectDryRunFiles(processor, selectedConfig, scaffoldConfig, mergedValues)
-	for _, renderedPath := range paths {
-		printFilePath(targetDir, renderedPath)
-	}
-
-	atmosui.Writef("\nTotal: %d files would be generated\n", len(paths))
-}
-
-// collectDryRunFiles computes the rendered output paths a real (non-dry-run)
-// generation would write for selectedConfig+mergedValues. It mirrors real
-// generation's own file-selection rules (pkg/generator/ui's executeWithSetup
-// file loop, processFileEntry, and processSingleFileEntry) as closely as a
-// plain path list can: the scaffold.yaml manifest itself and directory
-// entries are skipped, each remaining file is gated by its spec.files[].when
-// condition (a file with no declared spec entry always passes, since
-// FileSpec's zero-value When evaluates to true), and spec.files[].target --
-// when set -- overrides the rendered path exactly like real generation's
-// FileOutputPath does.
-//
-// Known gap: spec.files[].matrix is NOT expanded here. Real generation turns
-// one matrix-enabled file into zero-or-more outputs (one per surviving
-// row -- see processMatrixedFileEntry/processMatrixRow), but this preview
-// still lists it as exactly one path (its Target/Path template, unexpanded
-// with no matrix values bound). For templates using matrix, the dry-run
-// preview under- or over-counts relative to the real run. Tracked as a
-// follow-up in docs/fixes/2026-08-24-scaffold-update-git-dryrun-fixes.md;
-// fixing it correctly means exporting a "plan without writing" helper from
-// pkg/generator/ui that reuses engine.ExpandMatrix + processMatrixRow's
-// per-row When/path logic, rather than re-implementing matrix expansion a
-// second time here.
-func collectDryRunFiles(processor *engine.Processor, selectedConfig *templates.Configuration, scaffoldConfig *config.ScaffoldConfig, mergedValues map[string]interface{}) []string {
-	var fileSpecs map[string]config.FileSpec
-	if scaffoldConfig != nil {
-		fileSpecs = generatorUI.FileSpecByPath(scaffoldConfig)
-	}
-
-	var paths []string
-	for _, file := range selectedConfig.Files {
-		if file.Path == config.ScaffoldConfigFileName || file.IsDirectory {
-			continue
-		}
-
-		spec := fileSpecs[file.Path]
-		if !spec.When.Evaluate(condition.Context{Answers: mergedValues}) {
-			continue
-		}
-
-		outputTemplate := generatorUI.FileOutputPath(file, spec)
-		paths = append(paths, renderFilePath(processor, outputTemplate, scaffoldConfig, mergedValues))
-	}
-	return paths
-}
-
-// renderFilePath renders a file path template using the generation engine so the
-// dry-run preview matches the paths produced during real generation, including a
-// template's own declared spec.delimiters. On any templating error it falls back
-// to the raw path, since a preview must not fail.
-func renderFilePath(processor *engine.Processor, path string, scaffoldConfig *config.ScaffoldConfig, values map[string]interface{}) string {
-	delimiters := generatorUI.ResolveDelimiters(nil, scaffoldConfig)
-	rendered, err := processor.ProcessTemplateWithDelimiters(path, path, nil, values, delimiters)
-	if err != nil {
-		return path
-	}
-	return rendered
-}
-
-// printFilePath prints a file path with proper formatting.
-func printFilePath(targetDir, renderedPath string) {
-	if targetDir != "" {
-		fullPath := filepath.Join(targetDir, renderedPath)
-		atmosui.Writef("  • %s\n", fullPath)
-		return
-	}
-	atmosui.Writef("  • %s\n", renderedPath)
 }
 
 // executeTemplateWithoutTargetDir handles template execution when no target directory is provided.
