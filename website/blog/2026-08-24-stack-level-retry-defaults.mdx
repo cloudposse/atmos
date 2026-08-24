@@ -1,0 +1,69 @@
+---
+slug: stack-level-retry-defaults
+title: "Set one retry policy for a whole stack"
+date: 2026-08-24T12:00:00.000Z
+authors: [osterman]
+tags: [enhancement]
+---
+
+A transient registry blip doesn't hit one component — it hits all of them at once. A scheduled drift-detection run, a bulk `apply`, a CI job: dozens of components query the same registry within the same few seconds, and one dropped connection can fail the entire batch. Component retry already recovers from that automatically, but sharing one policy across a whole stack meant repeating the same block on every component, wiring up a shared abstract base component, or reaching for a mixin — even when the goal was as simple as "every component in this stack gets this policy."
+
+<!--truncate-->
+
+## The Problem
+
+Component retry matches transient failures against `conditions` regex patterns and retries with backoff, so a 502 during `terraform init` recovers on its own instead of failing your pipeline. That works well for one component. Sharing the same policy across many components in a stack was harder: copy the `retry:` block onto every component, or restructure unrelated components to share an abstract base just so they'd inherit one, or set up a mixin file with `overrides.retry` and import it everywhere. None of those match the actual ask, which is usually just "this stack's components should all recover the same way."
+
+## The Fix
+
+Stacks now accept a top-level `retry:` block, the same way they already accept top-level `vars`, `metadata`, and `hooks`. Set it once at the root of a stack manifest and every component in that stack picks it up:
+
+```yaml title="stacks/deploy/prod.yaml"
+retry:
+  max_attempts: 5
+  backoff_strategy: exponential
+  initial_delay: 2s
+  max_delay: 30s
+  conditions:
+    - /Bad Gateway/
+    - /GOAWAY/
+    - /could not query provider registry/
+
+components:
+  terraform:
+    vpc:
+      # ...
+    transit-gateway:
+      # ...
+```
+
+A component's own `retry:` still wins on any key it sets, and inherits everything else from the stack default — a component that only overrides `max_attempts` still gets the stack's `conditions` list. The full precedence order, lowest to highest, is: stack-level default → abstract base component → concrete component → `overrides.retry`.
+
+## How to Use It
+
+Add `retry:` to the root of any stack manifest, alongside `vars:` and `components:`. No mixin file, no shared base component, no per-component copies:
+
+```yaml title="stacks/deploy/prod.yaml"
+retry:
+  max_attempts: 3
+  conditions:
+    - /Bad Gateway/
+    - /connection reset/
+
+components:
+  terraform:
+    vpc:
+      vars:
+        name: vpc
+    rds:
+      vars:
+        name: rds
+```
+
+Both `vpc` and `rds` retry on the same conditions without either one declaring `retry:` itself. If one component needs a different policy, set `retry:` directly on that component — its values win, and any keys it doesn't set still fall back to the stack default.
+
+The mixin pattern from the [component retry docs](/stacks/components/terraform/retry#stack-level-defaults) is still the right tool when a policy should apply to only part of a stack, not the whole thing.
+
+## Get Involved
+
+Open a discussion in the [Atmos repo](https://github.com/cloudposse/atmos) or drop a note in the SweetOps Slack if you run into a retry scenario the current scoping (stack, base component, component, overrides) doesn't cover well.
