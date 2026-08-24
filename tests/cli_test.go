@@ -1353,12 +1353,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Validate outputs
 	if !verifyExitCode(t, tc.Expect.ExitCode, exitCode) {
 		t.Errorf("Description: %s", tc.Description)
-		if stdout.Len() > 0 {
-			t.Errorf("Captured stdout:\n%s", stdout.String())
-		}
-		if stderr.Len() > 0 {
-			t.Errorf("Captured stderr:\n%s", stderr.String())
-		}
+		dumpCapturedOutput(t, &stdout, &stderr)
 	}
 
 	// Validate output based on TTY mode
@@ -1375,6 +1370,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Validate file existence
 	if !verifyFileExists(t, tc.Expect.FileExists) {
 		t.Errorf("Description: %s", tc.Description)
+		dumpCapturedOutput(t, &stdout, &stderr)
 	}
 
 	// Validate file not existence
@@ -1590,6 +1586,20 @@ func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPatte
 		}
 	}
 	return success
+}
+
+// dumpCapturedOutput prints the command's captured stdout/stderr into the test log. A
+// file_exists failure with an exit code that matched expectations (e.g. a vendor pull that
+// silently drops files for one source while reporting overall success) would otherwise leave
+// no trace of what the command itself printed, forcing a manual re-fetch of the raw CI log to
+// diagnose -- this makes that output part of the test failure itself.
+func dumpCapturedOutput(t *testing.T, stdout, stderr *bytes.Buffer) {
+	if stdout.Len() > 0 {
+		t.Errorf("Captured stdout:\n%s", stdout.String())
+	}
+	if stderr.Len() > 0 {
+		t.Errorf("Captured stderr:\n%s", stderr.String())
+	}
 }
 
 func verifyFileExists(t *testing.T, files []string) bool {
