@@ -52,6 +52,8 @@ func Components(stacksMap map[string]any) ([]map[string]any, error) {
 		components = append(components, extractComponentType(stackName, "ansible", componentsMap)...)
 		components = append(components, extractComponentType(stackName, "container", componentsMap)...)
 		components = append(components, extractComponentType(stackName, "emulator", componentsMap)...)
+		components = append(components, extractComponentType(stackName, "kubernetes", componentsMap)...)
+		components = append(components, extractComponentType(stackName, "helm", componentsMap)...)
 
 		// TODO: Add support for plugin component types from schema.Components.Plugins
 	}
@@ -310,6 +312,8 @@ func UniqueComponents(stacksMap map[string]any, stackPattern string) ([]map[stri
 		extractUniqueComponentType("ansible", componentsMap, seen)
 		extractUniqueComponentType("container", componentsMap, seen)
 		extractUniqueComponentType("emulator", componentsMap, seen)
+		extractUniqueComponentType("kubernetes", componentsMap, seen)
+		extractUniqueComponentType("helm", componentsMap, seen)
 	}
 
 	// Convert map to slice in deterministic order, sorted by the
@@ -455,6 +459,8 @@ func ComponentsForStack(stackName string, stacksMap map[string]any) ([]map[strin
 	components = append(components, extractComponentType(stackName, "ansible", componentsMap)...)
 	components = append(components, extractComponentType(stackName, "container", componentsMap)...)
 	components = append(components, extractComponentType(stackName, "emulator", componentsMap)...)
+	components = append(components, extractComponentType(stackName, "kubernetes", componentsMap)...)
+	components = append(components, extractComponentType(stackName, "helm", componentsMap)...)
 
 	if len(components) == 0 {
 		return nil, errUtils.ErrNoComponentsFound
