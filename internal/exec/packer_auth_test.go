@@ -11,7 +11,6 @@ import (
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	mockTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/tests"
 )
 
 // stubPackerAuthSeams replaces the auth-config and auth-manager creation seams so
@@ -96,8 +95,9 @@ func TestExecutePacker_PassesAuthManagerToProcessStacks(t *testing.T) {
 // A fake AuthManager injects a sentinel AWS credential via PrepareShellEnvironment;
 // the packer shell invocation is intercepted so no real packer binary runs.
 func TestExecutePacker_InjectsAuthCredentialsIntoSubprocessEnv(t *testing.T) {
-	tests.RequirePacker(t)
-
+	// No RequirePacker guard: executePackerShellCommand is replaced below, so no real
+	// Packer binary is launched, and the fixture declares no packer tool-dependencies,
+	// so the pre-exec pipeline (path resolution, validation, varfile) needs no binary.
 	const sentinel = "AWS_ACCESS_KEY_ID=ATMOS_AUTH_SENTINEL"
 
 	workDir := "../../tests/fixtures/scenarios/packer"

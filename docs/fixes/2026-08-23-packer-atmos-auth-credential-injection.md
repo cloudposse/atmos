@@ -10,7 +10,7 @@ never evaluated the merged `auth:` config, and never injected credentials into t
 subprocess environment. The packer process therefore inherited only the ambient environment,
 and its AWS datasources failed with:
 
-```
+```text
 Error: Datasource.Execute failed: No valid credential sources found
 
   on main.pkr.hcl line 99:
@@ -43,10 +43,9 @@ Tracing the three executors made the gap concrete:
   (→ `AuthManager.PrepareShellEnvironment`) into the subprocess env just before executing.
 - **packer** (`internal/exec/packer.go`): called `ProcessStacks(..., nil)` with a **nil**
   `AuthManager` and **never** prepared an authenticated environment. Two distinct failures:
-  1. YAML functions/stores (`!terraform.output`, `!store`, …) resolved during packer var
-     processing ran unauthenticated.
-  2. No AWS credentials were ever placed into the packer subprocess environment — the direct
-     cause of "No valid credential sources found".
+  (1) YAML functions/stores (`!terraform.output`, `!store`, …) resolved during packer var
+  processing ran unauthenticated; (2) no AWS credentials were ever placed into the packer
+  subprocess environment — the direct cause of "No valid credential sources found".
 
 The `AuthManager` interface docstring (`pkg/auth/types/interfaces.go:303`) explicitly lists
 Packer as a supported subprocess for `PrepareShellEnvironment`, so the interface contract and
