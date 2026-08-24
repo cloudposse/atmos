@@ -712,6 +712,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res.ComponentGenerate = map[string]any{"comp.yaml": map[string]any{"from": "component"}}
 		res.ComponentSourceSection = map[string]any{"version": "1.2.3"}
 		res.ComponentProvision = map[string]any{"timeout": "5m"}
+		res.ComponentOverridesProvision = map[string]any{"timeout": "10m", "note": "overridden"}
 		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 
@@ -733,7 +734,8 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		provision, ok := comp[cfg.ProvisionSectionName].(map[string]any)
 		require.True(t, ok, "provision section must be present for kubernetes")
 		assert.Equal(t, "global-wd", provision["workdir"])
-		assert.Equal(t, "5m", provision["timeout"])
+		assert.Equal(t, "10m", provision["timeout"], "overrides must win over concrete component provision")
+		assert.Equal(t, "overridden", provision["note"])
 	})
 
 	t.Run("validate-component-instance-false-overrides-base-true", func(t *testing.T) {

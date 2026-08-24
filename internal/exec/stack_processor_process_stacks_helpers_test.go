@@ -960,6 +960,70 @@ func TestProcessComponentOverrides_Retry(t *testing.T) {
 	})
 }
 
+// TestProcessComponentOverrides_Provision covers the provision-overrides extraction.
+// `provision` is only wired up for component types that support source/provision delivery
+// (see supportsSourceProvision), so it must populate ComponentOverridesProvision for those
+// types on success and produce a precise error on a non-map type.
+func TestProcessComponentOverrides_Provision(t *testing.T) {
+	t.Run("valid-overrides-provision-populates-result", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.HelmfileComponentType,
+			Component:     "app",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.OverridesSectionName: map[string]any{
+					cfg.ProvisionSectionName: map[string]any{
+						"workdir": "/tmp/override-wd",
+					},
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, processComponentOverrides(&opts, result))
+		require.NotNil(t, result.ComponentOverridesProvision)
+		assert.Equal(t, "/tmp/override-wd", result.ComponentOverridesProvision["workdir"])
+	})
+
+	t.Run("non-map-overrides-provision-returns-error", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.HelmfileComponentType,
+			Component:     "app",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.OverridesSectionName: map[string]any{
+					cfg.ProvisionSectionName: 42, // not a map.
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		err := processComponentOverrides(&opts, result)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "components.helmfile.app.overrides.provision")
+	})
+
+	t.Run("component-type-without-source-provision-ignores-provision-override", func(t *testing.T) {
+		// e.g. a component type outside supportsSourceProvision (like "ansible")
+		// must not populate ComponentOverridesProvision at all — even if the
+		// manifest happens to include a `provision:` key under `overrides:`.
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.AnsibleComponentType,
+			Component:     "playbook",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.OverridesSectionName: map[string]any{
+					cfg.ProvisionSectionName: map[string]any{"workdir": "/tmp/ignored"},
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, processComponentOverrides(&opts, result))
+		assert.Nil(t, result.ComponentOverridesProvision)
+	})
+}
+
 func TestProcessComponentInheritance(t *testing.T) {
 	tests := []struct {
 		name                 string

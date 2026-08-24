@@ -513,6 +513,7 @@ var (
 	ErrInvalidComponentOverridesRequiredVersion   = errors.New("invalid component overrides required_version attribute")
 	ErrInvalidComponentOverridesHooks             = errors.New("invalid component overrides hooks section")
 	ErrInvalidComponentOverridesGenerate          = errors.New("invalid component overrides generate section")
+	ErrInvalidComponentOverridesProvision         = errors.New("invalid component overrides provision section")
 	ErrInvalidComponentAttribute                  = errors.New("invalid component attribute")
 	ErrInvalidComponentMetadataComponent          = errors.New("invalid component metadata.component attribute")
 	ErrInvalidSpaceLiftSettings                   = errors.New("invalid spacelift settings section")

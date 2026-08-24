@@ -143,6 +143,9 @@ type ComponentProcessorResult struct {
 	ComponentSourceSection                 map[string]any
 	BaseComponentSourceSection             map[string]any
 	BaseComponentProvisionSection          map[string]any
+	// ComponentOverridesProvision holds the provision section from the component's
+	// `overrides:` block, which wins over both base and concrete component provision config.
+	ComponentOverridesProvision map[string]any
 	// ComponentRetry holds the raw retry configuration from the concrete component
 	// (decoded to a typed *schema.RetryConfig only after deep-merge with base + overrides).
 	ComponentRetry map[string]any
