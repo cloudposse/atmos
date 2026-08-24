@@ -114,6 +114,28 @@ func createTestUI(t *testing.T) *InitUI {
 	return NewInitUI(ioCtx, term)
 }
 
+// TestResolveTargetPath_NonEmptyTargetPathIsPassthrough exercises the
+// exported ResolveTargetPath wrapper (added so cmd/scaffold can resolve the
+// real target directory before defaultBaseRef needs it -- see
+// resolveInteractiveBaseRef in cmd/scaffold). When targetPath is already
+// non-empty, resolveTargetPath's own doc comment guarantees it is a no-op:
+// no prompt runs and the caller-supplied targetPath/cmdTemplateValues/
+// useDefaults come back unchanged. This is the one branch ResolveTargetPath
+// can exercise without a real TTY (the empty-targetPath branch always
+// prompts interactively).
+func TestResolveTargetPath_NonEmptyTargetPathIsPassthrough(t *testing.T) {
+	ui := createTestUI(t)
+	dir := t.TempDir()
+	values := map[string]interface{}{"project_name": "demo"}
+
+	gotPath, gotValues, gotUseDefaults, err := ui.ResolveTargetPath(&templates.Configuration{Name: "demo"}, dir, true, true, values)
+
+	require.NoError(t, err)
+	assert.Equal(t, dir, gotPath)
+	assert.Equal(t, values, gotValues)
+	assert.True(t, gotUseDefaults)
+}
+
 func TestNewInitUI(t *testing.T) {
 	ui := createTestUI(t)
 

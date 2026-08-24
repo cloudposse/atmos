@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 )
 
@@ -56,6 +57,59 @@ func TestInitGitRepository_SkipsInsideExistingRepo(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "nested target should not get its own .git")
 }
 
+// TestInitGitRepository_EmptyTargetPathReturnsError reproduces the
+// InitGitOptions.TargetPath validation guard: InitGitRepository must reject
+// an empty target path up front, before ever touching git.PlainInit, rather
+// than letting go-git fail with an opaque error about the current directory.
+func TestInitGitRepository_EmptyTargetPathReturnsError(t *testing.T) {
+	skipped, headSHA, err := InitGitRepository(InitGitOptions{TargetPath: ""})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitTargetPathInvalid)
+	assert.False(t, skipped)
+	assert.Empty(t, headSHA)
+}
+
+// TestInitGitRepository_PlainInitErrorWraps reproduces a corrupt/blocked
+// .git path (e.g. a leftover regular file named ".git" instead of a
+// directory -- something a prior interrupted `git init` or manual copy can
+// leave behind): git.PlainInit fails, and InitGitRepository must wrap that
+// failure as ErrGitWorkdirNotInitialized instead of silently swallowing it
+// or panicking on the nil *Repository.
+func TestInitGitRepository_PlainInitErrorWraps(t *testing.T) {
+	dir := t.TempDir()
+	// A regular file (not a directory) at .git blocks git.PlainInit from
+	// creating the real git directory structure underneath it, while still
+	// letting isInsideGitRepository correctly report false (it's not a valid
+	// git dir, just a name collision), so InitGitRepository proceeds to
+	// PlainInit and observes the failure.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".git"), []byte("blocker"), 0o600))
+
+	skipped, headSHA, err := InitGitRepository(InitGitOptions{TargetPath: dir, TemplateName: "basic"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitWorkdirNotInitialized)
+	assert.False(t, skipped)
+	assert.Empty(t, headSHA)
+}
+
+// TestInitGitRepository_CommitErrorWraps reproduces generating into a
+// directory with zero files: wt.AddGlob(".") still succeeds (it always
+// matches the root "." itself, even when empty), but wt.Commit then fails
+// with "nothing to commit" against a clean working tree. InitGitRepository
+// must surface that as ErrGitArtifactWrite rather than returning a bogus
+// empty-but-successful headSHA that PinInitialBaseRef would go on to persist.
+func TestInitGitRepository_CommitErrorWraps(t *testing.T) {
+	dir := t.TempDir() // Intentionally empty: no files for the commit to include.
+
+	skipped, headSHA, err := InitGitRepository(InitGitOptions{TargetPath: dir, TemplateName: "basic"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitArtifactWrite)
+	assert.False(t, skipped)
+	assert.Empty(t, headSHA)
+}
+
 func TestInitialCommitMessage_NoVersion(t *testing.T) {
 	assert.Equal(t, "Initial commit from atmos init (basic)", initialCommitMessage("basic", ""))
 }
@@ -77,6 +131,26 @@ func TestPinInitialBaseRef_WritesMetadata(t *testing.T) {
 	assert.Equal(t, "basic", metadata.Template.Name)
 	assert.Equal(t, "1.0.0", metadata.Template.Version)
 	assert.Equal(t, "embedded", metadata.Template.Source)
+}
+
+// TestPinInitialBaseRef_PropagatesSaveError reproduces a metadata write
+// failure (here, a regular file blocking the .atmos/scaffold directory
+// storage.MetadataStorage.Save needs to create) surfacing through
+// PinInitialBaseRef as ErrMetadataSave instead of being silently swallowed
+// -- a swallowed failure here would leave --update permanently unable to
+// find a pin, silently falling back to the live-HEAD bug PinInitialBaseRef
+// exists to fix.
+func TestPinInitialBaseRef_PropagatesSaveError(t *testing.T) {
+	dir := t.TempDir()
+	// A regular file at .atmos blocks os.MkdirAll from creating
+	// .atmos/scaffold underneath it.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".atmos"), []byte("blocker"), 0o600))
+
+	err := PinInitialBaseRef(dir, "abc123", WithTemplateName("basic"))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMetadataSave)
+	assert.NoFileExists(t, storage.ScaffoldMetadataPath(dir), "the blocked write must not silently succeed")
 }
 
 func TestPinInitialBaseRef_NoopWhenSkipped(t *testing.T) {

@@ -551,6 +551,79 @@ func TestScaffoldGenerateRunE_MalformedSetFlag(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
 }
 
+// TestScaffoldGenerateRunE_UpdateFlagWithPositionalTarget_ResolvesBaseRef
+// covers the RunE-level "if update && target != \"\"" pre-resolution branch:
+// when --update is combined with a positional target directory, RunE must
+// resolve defaultBaseRef itself (rather than deferring to the interactive
+// flow, which never runs for a positional target) before generation. With no
+// pinned metadata at the target, defaultBaseRef falls back to "HEAD" and
+// generation (here, dry-run) must still succeed.
+func TestScaffoldGenerateRunE_UpdateFlagWithPositionalTarget_ResolvesBaseRef(t *testing.T) {
+	cmd := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+
+	err := scaffoldGenerateCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.NoError(t, err)
+}
+
+// TestScaffoldGenerateRunE_UpdateFlagWithPositionalTarget_PropagatesBaseRefError
+// reproduces a corrupt .atmos/scaffold/metadata.yaml at the target directory:
+// RunE's eager defaultBaseRef resolution (for --update with a positional
+// target) must propagate that error immediately instead of silently falling
+// back to "HEAD" and letting generation proceed against a damaged pin.
+func TestScaffoldGenerateRunE_UpdateFlagWithPositionalTarget_PropagatesBaseRefError(t *testing.T) {
+	dir := t.TempDir()
+	metadataPath := storage.ScaffoldMetadataPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
+	require.NoError(t, os.WriteFile(metadataPath, []byte("not: valid: yaml: ["), 0o600))
+
+	cmd := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+
+	err := scaffoldGenerateCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+}
+
+// TestMaybeInitGeneratedGitRepository_PropagatesInitGitError reproduces
+// InitGitRepository failing (a leftover regular file named ".git" blocks
+// git.PlainInit) and asserts maybeInitGeneratedGitRepository returns that
+// error directly instead of proceeding to call PinInitialBaseRef with a
+// bogus empty headSHA.
+func TestMaybeInitGeneratedGitRepository_PropagatesInitGitError(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".git"), []byte("blocker"), 0o600))
+
+	cfg := &templates.Configuration{Name: "demo"}
+	err := maybeInitGeneratedGitRepository(dir, cfg, &scaffoldGenerateOptions{git: true})
+
+	require.Error(t, err)
+	assert.NoFileExists(t, storage.ScaffoldMetadataPath(dir), "InitGitRepository failure must prevent PinInitialBaseRef from running")
+}
+
+// TestRenderDryRunPreview_PropagatesLoadDryRunValuesError reproduces an
+// invalid scaffold.yaml in the selected template (unparseable YAML):
+// renderDryRunPreview must propagate loadDryRunValues's error instead of
+// proceeding to renderDryRunFileList with a nil scaffoldConfig/mergedValues.
+func TestRenderDryRunPreview_PropagatesLoadDryRunValuesError(t *testing.T) {
+	selectedConfig := &templates.Configuration{
+		Name: "broken",
+		Files: []templates.File{
+			{Path: config.ScaffoldConfigFileName, Content: "not: valid: yaml: ["},
+		},
+	}
+
+	err := renderDryRunPreview(selectedConfig, t.TempDir(), map[string]interface{}{})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldParseYAML)
+}
+
 func TestScaffoldListAndValidateRunE(t *testing.T) {
 	require.NoError(t, scaffoldListCmd.RunE(&cobra.Command{}, nil))
 
