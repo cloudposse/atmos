@@ -102,6 +102,10 @@ To avoid this situation, use the mixin `mixins/stage/prod` and always use the ap
 
 Mixins are not limited to `vars`. Use the [`overrides`](/design-patterns/configuration-composition/component-overrides) section to share a [retry](/stacks/components/terraform/retry) policy across components that do not share a common base component.
 
+:::tip Sharing retry with the whole stack? Skip the mixin
+If the retry policy should apply to every component in the stack, put `retry:` at the stack-manifest root instead — see [Stack-Level Defaults](/stacks/components/terraform/retry#stack-level-defaults). No mixin file or import needed. Reach for the mixin pattern below when the policy should apply to only part of a stack.
+:::
+
 For example, define retry conditions tuned for transient provider-registry failures in a mixin named `mixins/policy/registry-retry.yaml`:
 
 ```yaml title="mixins/policy/registry-retry.yaml"
