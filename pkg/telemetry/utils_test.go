@@ -61,6 +61,7 @@ func TestGetTelemetryFromConfig(t *testing.T) {
 
 // TestCaptureCmdString tests capturing command telemetry with string command and CI environment.
 func TestCaptureCmdString(t *testing.T) {
+	isolateTelemetryCache(t)
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -108,6 +109,7 @@ func TestCaptureCmdString(t *testing.T) {
 
 // TestCaptureCmdErrorString tests capturing command telemetry when an error occurs.
 func TestCaptureCmdErrorString(t *testing.T) {
+	isolateTelemetryCache(t)
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -193,6 +195,7 @@ func TestCaptureCmdFailureStringDisabledWithEnvvar(t *testing.T) {
 
 // TestGetTelemetryFromConfigTokenWithEnvvar tests telemetry configuration with custom token, endpoint, and enabled status via environment variables.
 func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
+	isolateTelemetryCache(t)
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -257,6 +260,8 @@ func TestGetTelemetryFromConfigIntergration(t *testing.T) {
 // TestCaptureCmd tests the captureCmd function for successful command execution
 // by setting up mock expectations and verifying telemetry data is captured correctly.
 func TestCaptureCmd(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -313,6 +318,8 @@ func TestCaptureCmd(t *testing.T) {
 // TestCaptureCmdError tests the captureCmd function for failed command execution
 // by setting up mock expectations and verifying error telemetry data is captured correctly.
 func TestCaptureCmdError(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -432,6 +439,8 @@ func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 // has not been shown before. It verifies that the first call returns the expected disclosure message
 // and subsequent calls return empty strings (indicating the disclosure has been marked as shown).
 func TestTelemetryDisclosureMessage(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -457,6 +466,8 @@ func TestTelemetryDisclosureMessage(t *testing.T) {
 // TestTelemetryDisclosureMessageShown tests that no disclosure message is returned when
 // the telemetry disclosure has already been shown to the user.
 func TestTelemetryDisclosureMessageShown(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	// Preserve and restore CI environment variables to avoid interference
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -477,6 +488,8 @@ func TestTelemetryDisclosureMessageShown(t *testing.T) {
 // TestTelemetryDisclosureMessageHideForCI tests that disclosure messages are suppressed
 // when running in a CI environment (when CI environment variable is set to "true").
 func TestTelemetryDisclosureMessageHideForCI(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -499,6 +512,8 @@ func TestTelemetryDisclosureMessageHideForCI(t *testing.T) {
 // TestTelemetryDisclosureMessageHideIfTelemetryDisabled tests that disclosure messages are suppressed
 // when telemetry is disabled.
 func TestTelemetryDisclosureMessageHideIfTelemetryDisabled(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
