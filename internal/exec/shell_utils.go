@@ -16,10 +16,10 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
 	xterm "golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/diagnostics"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
@@ -142,9 +142,9 @@ func ExecuteShellCommand(
 	defer perf.Track(&atmosConfig, "exec.ExecuteShellCommand")()
 
 	disableMasking := false
-	if viper.IsSet("mask") {
-		disableMasking = !viper.GetBool("mask")
-	} else if viper.IsSet("settings.terminal.mask.enabled") {
+	if cfg.GlobalViper().IsSet("mask") {
+		disableMasking = !cfg.GlobalViper().GetBool("mask")
+	} else if cfg.GlobalViper().IsSet("settings.terminal.mask.enabled") {
 		disableMasking = !atmosConfig.Settings.Terminal.Mask.Enabled
 	}
 	ioLayer.ApplyMaskingConfig(&ioLayer.Config{
@@ -730,7 +730,7 @@ func ExecAuthShellCommand(
 	log.Debug("Setting the ENV vars in the shell")
 
 	// Warn about masking limitations in interactive TTY sessions.
-	maskingEnabled := viper.GetBool("mask")
+	maskingEnabled := cfg.GlobalViper().GetBool("mask")
 	if maskingEnabled {
 		log.Debug("Interactive TTY session - output masking is not available due to TTY limitations")
 	}

@@ -19,6 +19,12 @@ import (
 // one per graph node -- under --max-concurrency > 1, so every access to the
 // singleton must go through GlobalViper() to avoid "concurrent map writes" panics.
 //
+// This applies even to reads/writes of unrelated keys: viper.Set/Get traverse
+// and mutate ONE shared underlying map (Viper.override) via deepSearch, and Go
+// maps are not safe for any concurrent read/write access, regardless of which
+// key each goroutine touches -- a write to "vendor.update.execution.mode" can
+// still race with a concurrent read of an unrelated key like "mask".
+//
 // Deliberately does not cache *viper.Viper in a field: tests (and
 // viper.Reset()-calling production paths) replace viper's default instance at
 // runtime, so every method re-resolves viper.GetViper() under the lock rather
@@ -49,6 +55,12 @@ func (s *SafeViper) GetStringSlice(key string) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return viper.GetViper().GetStringSlice(key)
+}
+
+func (s *SafeViper) IsSet(key string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return viper.GetViper().IsSet(key)
 }
 
 var globalViper = &SafeViper{}
