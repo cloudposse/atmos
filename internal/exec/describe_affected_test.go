@@ -279,6 +279,17 @@ func shouldSkipRepoCopyPath(src string) bool {
 	if strings.Contains(src, sep+"website"+sep+"build") {
 		return true
 	}
+	// Terraform state (*.tfstate, *.tfstate.backup, and the .tfstate.d workspace
+	// directory) is gitignored -- not part of "the repository" these tests diff --
+	// and is actively written by concurrently-running acceptance tests exercising
+	// the same fixture components. Copying it is both pointless for a git-diff-based
+	// affected-components comparison and a Windows file-lock race: another test's live
+	// terraform apply can hold the file open exactly when the copy tries to read it,
+	// failing with "The process cannot access the file because another process has
+	// locked a portion of the file."
+	if strings.Contains(filepath.Base(src), ".tfstate") {
+		return true
+	}
 	return false
 }
 
