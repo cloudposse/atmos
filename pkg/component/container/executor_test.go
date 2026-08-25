@@ -89,7 +89,7 @@ func TestExecuteUp_CreatesAndStarts(t *testing.T) {
 	require.NoError(t, ExecuteUp(context.Background(), infoFor("api")))
 }
 
-func TestExecuteUp_ResolvesRelativeBindMountAgainstProjectRoot(t *testing.T) {
+func TestExecuteUp_ResolvesRelativeBindMountAgainstComponentPath(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	rt := NewMockRuntime(ctrl)
@@ -104,7 +104,7 @@ func TestExecuteUp_ResolvesRelativeBindMountAgainstProjectRoot(t *testing.T) {
 			},
 		},
 	}
-	withStubsConfig(t, &schema.AtmosConfiguration{BasePathAbsolute: projectRoot}, section, nil, rt)
+	withStubsConfig(t, &schema.AtmosConfiguration{ContainerDirAbsolutePath: projectRoot}, section, nil, rt)
 
 	gomock.InOrder(
 		rt.EXPECT().List(gomock.Any(), ctr.DiscoveryFilter("dev", "container", "api")).Return([]ctr.Info{}, nil),
@@ -239,6 +239,7 @@ func TestExecuteBuild_CallsRuntime(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	rt := NewMockRuntime(ctrl)
+	componentRoot := t.TempDir()
 	section := map[string]any{
 		"build": map[string]any{
 			"context": "app", "dockerfile": "Dockerfile", "tags": []any{"img:1"}, "engine": "buildx",
@@ -252,11 +253,12 @@ func TestExecuteBuild_CallsRuntime(t *testing.T) {
 			},
 		},
 	}
-	withStubs(t, section, nil, rt)
+	withStubsConfig(t, &schema.AtmosConfiguration{ContainerDirAbsolutePath: componentRoot}, section, nil, rt)
 
 	rt.EXPECT().Build(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, b *ctr.BuildConfig) error {
-			assert.Equal(t, "app", b.Context)
+			assert.Equal(t, filepath.Join(componentRoot, "app"), b.Context)
+			assert.Equal(t, filepath.Join(componentRoot, "app", "Dockerfile"), b.Dockerfile)
 			assert.Equal(t, []string{"img:1"}, b.Tags)
 			require.NotNil(t, b.Driver)
 			assert.Equal(t, "component-builder", b.Driver.Name)
@@ -685,4 +687,83 @@ func TestResolvedRuntime_ForwardsEnvToEnvSetterRuntime(t *testing.T) {
 
 func TestDefaultStopTimeoutValue(t *testing.T) {
 	assert.Equal(t, 10*time.Second, defaultStopTimeout)
+}
+
+func TestResolveComponentPath_DelegatesToJITProvisioning(t *testing.T) {
+	origProvision := provisionAndResolveComponentPath
+	t.Cleanup(func() { provisionAndResolveComponentPath = origProvision })
+
+	expectedPath := filepath.Join(t.TempDir(), "resolved")
+	provisionAndResolveComponentPath = func(
+		_ context.Context,
+		_ *schema.AtmosConfiguration,
+		_ *schema.ConfigAndStacksInfo,
+		componentType, fallbackComponentPath string,
+	) (string, bool, error) {
+		assert.Equal(t, "container", componentType)
+		assert.Contains(t, fallbackComponentPath, filepath.Join("components", "container", "api"))
+		return expectedPath, true, nil
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+		Components: schema.Components{
+			Container: schema.ContainerComponentsConfig{BasePath: filepath.Join("components", "container")},
+		},
+	}
+	path, exists, err := resolveComponentPath(context.Background(), atmosConfig, &schema.ConfigAndStacksInfo{FinalComponent: "api"})
+
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, expectedPath, path)
+}
+
+func TestBuildConfig_AbsolutePathsPassThroughUnchanged(t *testing.T) {
+	absContext := filepath.Join(t.TempDir(), "app")
+	absDockerfile := filepath.Join(absContext, "Dockerfile.custom")
+	r := &resolved{spec: ContainerSpec{Build: &schema.ContainerBuildStep{Context: absContext, Dockerfile: absDockerfile}}}
+
+	buildConfig := r.buildConfig(filepath.Join(t.TempDir(), "component-root"))
+
+	require.NotNil(t, buildConfig)
+	assert.Equal(t, absContext, buildConfig.Context)
+	assert.Equal(t, absDockerfile, buildConfig.Dockerfile)
+}
+
+func TestBuildConfig_EmptyContextAndDockerfileDefaultBeforeAnchoring(t *testing.T) {
+	componentRoot := t.TempDir()
+	r := &resolved{spec: ContainerSpec{Build: &schema.ContainerBuildStep{}}}
+
+	buildConfig := r.buildConfig(componentRoot)
+
+	require.NotNil(t, buildConfig)
+	assert.Equal(t, componentRoot, buildConfig.Context)
+	assert.Equal(t, filepath.Join(componentRoot, "Dockerfile"), buildConfig.Dockerfile)
+}
+
+func TestBuildConfig_RelativeDockerfileResolvesAgainstAnchoredContext(t *testing.T) {
+	componentRoot := t.TempDir()
+	r := &resolved{spec: ContainerSpec{Build: &schema.ContainerBuildStep{Context: "app", Dockerfile: "docker/Dockerfile.prod"}}}
+
+	buildConfig := r.buildConfig(componentRoot)
+
+	require.NotNil(t, buildConfig)
+	assert.Equal(t, filepath.Join(componentRoot, "app"), buildConfig.Context)
+	assert.Equal(t, filepath.Join(componentRoot, "app", "docker", "Dockerfile.prod"), buildConfig.Dockerfile)
+}
+
+func TestBuildConfig_NilBuildReturnsNil(t *testing.T) {
+	r := &resolved{spec: ContainerSpec{}}
+	assert.Nil(t, r.buildConfig(t.TempDir()))
+}
+
+func TestMounts_EmptyComponentPathLeavesSourcesUnanchored(t *testing.T) {
+	r := &resolved{spec: ContainerSpec{Run: &schema.ContainerRunStep{
+		Mounts: []schema.ContainerMount{{Type: "bind", Source: "app/public", Target: "/app/public"}},
+	}}}
+
+	mounts := r.mounts("")
+
+	require.Len(t, mounts, 1)
+	assert.Equal(t, "app/public", mounts[0].Source)
 }

@@ -8,6 +8,15 @@ type ContainerConfig struct {
 	Runtime ContainerRuntimeConfig `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
 }
 
+// ContainerComponentsConfig configures `components.container` — the base
+// directory for container component build/run assets, mirroring
+// Terraform/Helmfile/Packer/Ansible/Kubernetes/Helm's own `base_path`.
+type ContainerComponentsConfig struct {
+	// BasePath is the base directory for container component assets, relative
+	// to the Atmos project root. Defaults to "components/container".
+	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+}
+
 // Composition declares a named multi-service system. Components join a
 // composition via their first-class `composition:` field. The `Services` list is
 // a closed contract for membership (declaring membership in an unlisted service
