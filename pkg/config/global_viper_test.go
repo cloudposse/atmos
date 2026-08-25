@@ -100,3 +100,42 @@ func TestSafeViperView_ConsistentSnapshotUnderConcurrentWriters(t *testing.T) {
 
 	wg.Wait()
 }
+
+// TestSafeViperView_CallbackCannotRecoverConcreteViper proves View's
+// ViperReader argument cannot be type-asserted back to *viper.Viper. Passing
+// *viper.Viper itself through the ViperReader interface would only hide Set
+// behind a narrower static type -- a callback could still recover it via a
+// type assertion and call Set while holding only View's read lock, racing
+// against a concurrent Set()/View() the same way the interface exists to
+// prevent. View must pass an unexported adapter instead, which callers
+// outside pkg/config cannot name to assert against.
+func TestSafeViperView_CallbackCannotRecoverConcreteViper(t *testing.T) {
+	GlobalViper().View(func(v ViperReader) {
+		_, ok := v.(*viper.Viper)
+		assert.False(t, ok, "View's ViperReader argument must not be assertable back to *viper.Viper")
+	})
+}
+
+// TestSafeViperView_GetStringSliceIsCloned proves GetStringSlice (both
+// directly on SafeViper and via View's ViperReader) returns a copy the
+// caller can freely mutate, not Viper's own backing array -- spf13/viper's
+// GetStringSlice can return an existing []string value without cloning it,
+// so handing that out under the lock would let a caller corrupt shared
+// config state after the lock is released, with no Set() call to guard.
+func TestSafeViperView_GetStringSliceIsCloned(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	viper.Set("some.slice", []string{"a", "b"})
+
+	direct := GlobalViper().GetStringSlice("some.slice")
+	direct[0] = "mutated-direct"
+
+	var viaView []string
+	GlobalViper().View(func(v ViperReader) {
+		viaView = v.GetStringSlice("some.slice")
+	})
+	viaView[0] = "mutated-view"
+
+	assert.Equal(t, []string{"a", "b"}, GlobalViper().GetStringSlice("some.slice"),
+		"mutating a returned slice must not corrupt Viper's own stored value")
+}

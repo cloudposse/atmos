@@ -51,10 +51,14 @@ func (s *SafeViper) GetBool(key string) bool {
 	return viper.GetViper().GetBool(key)
 }
 
+// GetStringSlice returns a clone of the requested key's string slice: viper's
+// own GetStringSlice can return its value's existing backing array rather
+// than a copy, and handing that out under the lock would let a caller mutate
+// shared Viper state after the lock is released.
 func (s *SafeViper) GetStringSlice(key string) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return viper.GetViper().GetStringSlice(key)
+	return slices.Clone(viper.GetViper().GetStringSlice(key))
 }
 
 func (s *SafeViper) IsSet(key string) bool {
@@ -70,10 +74,39 @@ func (s *SafeViper) IsSet(key string) bool {
 // write lock, defeating the whole point of View. Extend with more read
 // methods as callers need them; never add a mutator here.
 type ViperReader interface {
+	// IsSet reports whether key has an explicit value from any source (flag,
+	// env, config, override) -- unlike a plain Get, it does not count a
+	// registered default as "set".
 	IsSet(key string) bool
+	// GetBool returns key's value coerced to bool. Returns false if unset.
 	GetBool(key string) bool
+	// GetString returns key's value coerced to string. Returns "" if unset.
 	GetString(key string) string
+	// GetStringSlice returns key's value coerced to []string, cloned so the
+	// caller cannot mutate Viper's own backing array. Returns nil if unset.
 	GetStringSlice(key string) []string
+}
+
+// viperReaderAdapter wraps *viper.Viper to satisfy ViperReader without
+// exposing the concrete *viper.Viper type to View callbacks. Passing
+// *viper.Viper itself through the ViperReader interface would only hide Set
+// behind a narrower static type -- Go interfaces retain their dynamic type,
+// so a callback could still type-assert the value back to *viper.Viper and
+// call Set while holding only View's read lock. Because viperReaderAdapter is
+// unexported, code outside this package cannot name it to assert against it,
+// so it cannot recover the underlying *viper.Viper this way.
+type viperReaderAdapter struct {
+	v *viper.Viper
+}
+
+func (a viperReaderAdapter) IsSet(key string) bool { return a.v.IsSet(key) }
+
+func (a viperReaderAdapter) GetBool(key string) bool { return a.v.GetBool(key) }
+
+func (a viperReaderAdapter) GetString(key string) string { return a.v.GetString(key) }
+
+func (a viperReaderAdapter) GetStringSlice(key string) []string {
+	return slices.Clone(a.v.GetStringSlice(key))
 }
 
 // View executes fn with a read lock held on the global Viper singleton,
@@ -86,7 +119,7 @@ type ViperReader interface {
 func (s *SafeViper) View(fn func(v ViperReader)) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	fn(viper.GetViper())
+	fn(viperReaderAdapter{v: viper.GetViper()})
 }
 
 var globalViper = &SafeViper{}
