@@ -312,39 +312,56 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # jobTimeout/stepTimeout are this job's own and its "Acceptance
+        # tests" step's per-platform timeout-minutes budgets (shard 1 gets a
+        # flat override at each site instead, since it does more work
+        # regardless of platform -- see the "Acceptance tests with coverage"
+        # step). Kept here, one pair of numbers per platform, instead of a
+        # `matrix.flavor.target == 'windows' && X || Y` ternary repeated at
+        # every timeout-minutes site: that's exactly how the job-level and
+        # step-level Windows budgets drifted out of sync before (the job
+        # budget once exactly equaled the step budget, leaving zero slack for
+        # setup/cache-save around the step -- see docs/fixes for that
+        # incident). Sharding splits the acceptance suite's runtime across
+        # parallel jobs, but each shard still pays the same fixed per-job
+        # overhead (checkout, toolchain installs, `atmos build deps`) that
+        # used to be amortized over one long-running job. Give shards real
+        # headroom above their expected fraction of the pre-sharding budgets
+        # (Linux ~90m, windows ~105m, macos ~85m for the unsharded suite -
+        # see git history on this comment) rather than dividing those numbers
+        # by the shard count exactly. Windows also distributes the tests
+        # package's non-CLI top-level tests and internal/exec's top-level
+        # tests across all shards; both binaries are compiled once in the
+        # build job, so each shard executes only its assigned tests without
+        # paying a cold compile/link penalty. Windows is also the slowest
+        # platform for this suite's post-job Go module/build cache save
+        # (much slower on Windows than Linux/macOS -- see
+        # terraform-registry-cache's own timeout comment). windows'
+        # stepTimeout=55 was set by measuring real job timings across 5
+        # consecutive runs on this CI provider's (spot instance) Windows
+        # runners: typical shards land 10-18min, but 20-30min is a routine
+        # occurrence (not a fixed "slow shard" -- shards 1, 2, 4, 5, 8, and 9
+        # each independently hit 26-28min across different runs), and two
+        # separate shards were cancelled at 39m57s/40m8s after their own
+        # tests had already printed PASS -- genuine runner-pool variance
+        # hitting the wall, not a hang. jobTimeout then adds real headroom
+        # above stepTimeout for the setup/cache-save overhead around it,
+        # rather than matching it 1:1.
         flavor:
-          - { os: "ubuntu-latest", target: linux }
-          - { os: "windows-latest", target: windows }
-          - { os: "macos-15", target: macos }
+          - { os: "ubuntu-latest", target: linux, jobTimeout: 40, stepTimeout: 30 }
+          - { os: "windows-latest", target: windows, jobTimeout: 65, stepTimeout: 55 }
+          - { os: "macos-15", target: macos, jobTimeout: 40, stepTimeout: 30 }
         # tests/cli_test.go's TestCLICommands splits its ~388 CLI-driven subtests
         # across these shards by bin-packing each test case's workdir
         # (assignWorkdirsToShards, see ATMOS_TEST_SHARD/ATMOS_TEST_SHARD_COUNT
         # below); keep this list and env.TEST_SHARD_COUNT in sync if the shard
         # count ever changes.
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    # Sharding splits the acceptance suite's runtime across parallel jobs, but each
-    # shard still pays the same fixed per-job overhead (checkout, toolchain installs,
-    # `atmos build deps`) that used to be amortized over one long-running job. Give
-    # shards real headroom above their expected fraction of the pre-sharding budgets
-    # (Linux ~90m, windows ~105m, macos ~85m for the unsharded suite - see git history
-    # on this comment) rather than dividing those numbers by the shard count exactly.
-    #
-    # Windows also distributes the tests package's non-CLI top-level tests and
-    # internal/exec's top-level tests across all shards. Both binaries are
-    # compiled once in the build job, so each shard executes only its assigned
-    # tests without paying a cold compile/link penalty.
-    #
-    # Non-shard-1 Windows raised 40 -> 65: the old 40 exactly equaled the
-    # "Acceptance tests" step's own (pre-fix) 40min budget below, leaving zero
-    # slack in the *job's* overall budget for checkout/toolchain setup before
-    # the step, or the post-job Go module/build cache save after it -- which
-    # this file's terraform-registry-cache job already documents as much
-    # slower on Windows and able to expire a job mid-save even after the test
-    # step itself already passed. That's exactly what was observed here twice
-    # (cancelled at 39m57s/40m8s, both after the acceptance step had already
-    # printed PASS). See the "Acceptance tests" step's own timeout comment
-    # below for the measured per-shard timing data this is based on.
-    timeout-minutes: ${{ matrix.shard == 1 && 65 || (matrix.flavor.target == 'windows' && 65 || 40) }}
+    # Shard 1 does somewhat more work than other shards regardless of
+    # platform (see the "Acceptance tests with coverage" step below), so it
+    # keeps a flat, higher budget here instead of reading matrix.flavor's
+    # jobTimeout.
+    timeout-minutes: ${{ matrix.shard == 1 && 65 || matrix.flavor.jobTimeout }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
@@ -463,23 +480,13 @@ jobs:
       - name: Acceptance tests
         # windows-latest is the slowest target for this suite too (see the
         # Build job's timeout comment above): before sharding, runs of the
-        # unsharded step were observed between 37m43s and 60m17s. Give Windows
-        # real slack per shard too; macOS shards finish faster so their budget
-        # stays lower. Shard 1 still does somewhat more work than other shards
-        # (see the "Acceptance tests with coverage" step above), so it keeps
-        # extra headroom regardless of OS.
-        #
-        # Non-shard-1 Windows budget raised 40 -> 55 after measuring real job
-        # timings across 5 consecutive runs on this CI provider's (spot
-        # instance) Windows runners: typical shards land 10-18min, but 20-30min
-        # is a routine occurrence (not a fixed "slow shard" -- shards 1, 2, 4,
-        # 5, 8, and 9 each independently hit 26-28min across different runs),
-        # and two separate shards were cancelled at 39m57s/40m8s after their
-        # own tests had already printed PASS -- i.e. genuine runner-pool
-        # variance hitting the wall, not a hang. 55min gives real headroom
-        # over the observed ~30min tail without matching shard 1's full 60min,
-        # since shard 1 does legitimately more baseline work.
-        timeout-minutes: ${{ matrix.shard == 1 && 60 || (matrix.flavor.target == 'windows' && 55 || 30) }}
+        # unsharded step were observed between 37m43s and 60m17s. Per-platform
+        # budgets (stepTimeout) live on the flavor matrix above, alongside the
+        # measured timing data and incident history behind them -- shard 1
+        # still gets a flat, higher override here regardless of platform,
+        # since it does somewhat more work (see the "Acceptance tests with
+        # coverage" step above).
+        timeout-minutes: ${{ matrix.shard == 1 && 60 || matrix.flavor.stepTimeout }}
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         shell: bash
         env:
