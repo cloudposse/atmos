@@ -345,8 +345,14 @@ jobs:
         # hitting the wall, not a hang. jobTimeout then adds real headroom
         # above stepTimeout for the setup/cache-save overhead around it,
         # rather than matching it 1:1.
+        # linux's jobTimeout is 50, not 40: its "Acceptance tests with
+        # coverage" step below (linux-only) has its own coverageStepTimeout
+        # budget of 40, and a job timeout merely equal to a step's own budget
+        # leaves zero slack for checkout/toolchain setup before the step or
+        # cache-save after it -- exactly the bug already fixed once for
+        # Windows here (see this matrix's own history).
         flavor:
-          - { os: "ubuntu-latest", target: linux, jobTimeout: 40, stepTimeout: 30 }
+          - { os: "ubuntu-latest", target: linux, jobTimeout: 50, stepTimeout: 30, coverageStepTimeout: 40 }
           - { os: "windows-latest", target: windows, jobTimeout: 65, stepTimeout: 55 }
           - { os: "macos-15", target: macos, jobTimeout: 40, stepTimeout: 30 }
         # tests/cli_test.go's TestCLICommands splits its ~388 CLI-driven subtests
@@ -474,7 +480,9 @@ jobs:
       # The Mage target owns package/test allocation, precompiled suites, and
       # native coverage collection so both workflow paths stay identical.
       - name: Acceptance tests with coverage
-        timeout-minutes: ${{ matrix.shard == 1 && 60 || 40 }}
+        # coverageStepTimeout lives on the linux flavor entry above,
+        # alongside why the job-level budget needs to exceed it.
+        timeout-minutes: ${{ matrix.stepTimeoutOverride || matrix.flavor.coverageStepTimeout }}
         if: matrix.flavor.target == 'linux'
         shell: bash
         env:
