@@ -8,6 +8,7 @@ import (
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -999,7 +1000,11 @@ func TestRenderAttributeChanges_MultilineOnlyAddition(t *testing.T) {
 
 	renderAttributeChanges(&b, changes, "", &RenderConfig{ShowAttributeBar: true})
 
-	result := b.String()
+	// resolveRenderConfig falls back to styled (colored) Create/Delete symbols when
+	// RenderConfig leaves them unset, which inserts an ANSI reset between the "+"/"-"
+	// symbol and the line text; strip it so the marker+text substring checks below are
+	// independent of whether the terminal the test runs under supports color.
+	result := ansi.Strip(b.String())
 	assert.Contains(t, result, "script")
 	assert.Contains(t, result, "+ line1")
 	assert.Contains(t, result, "...", "a line longer than the max width must be truncated")
@@ -1016,7 +1021,9 @@ func TestRenderAttributeChanges_MultilineOnlyDeletion(t *testing.T) {
 
 	renderAttributeChanges(&b, changes, "", nil)
 
-	result := b.String()
+	// See TestRenderAttributeChanges_MultilineOnlyAddition: strip ANSI styling so the
+	// marker+text substring checks don't depend on terminal color support.
+	result := ansi.Strip(b.String())
 	assert.Contains(t, result, "script")
 	assert.Contains(t, result, "- line1")
 	assert.Contains(t, result, "- line2")
