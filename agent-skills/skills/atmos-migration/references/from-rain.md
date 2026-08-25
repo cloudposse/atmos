@@ -20,35 +20,35 @@ and `website/docs/stacks/components/aws-cloudformation.mdx` for the stack-config
 ## Core Principles (Rain-Specific)
 
 1. **Templates are not preprocessed.** `aws/cloudformation` reads a component's `template:` file
-   as raw bytes (`os.ReadFile`) and submits it to the CloudFormation API — Atmos never rewrites,
-   merges, or macro-expands the template body. This is a deliberate design boundary, not a gap: it
-   means every `!Rain::*` directive (which Rain resolves by *preprocessing* the template before
-   submission) has no direct drop-in replacement at the same layer. The fix in every case is to
-   move the substitution **out of the template body** and into a layer Atmos or CloudFormation
-   itself already handles — Atmos stack config (`parameters:`, `!env`, `!template`, inheritance)
-   for anything CloudFormation Parameters can express, or CloudFormation's own native
-   `Fn::Transform`/`AWS::Include` intrinsic for template-fragment reuse.
+  as raw bytes (`os.ReadFile`) and submits it to the CloudFormation API — Atmos never rewrites,
+  merges, or macro-expands the template body. This is a deliberate design boundary, not a gap: it
+  means every `!Rain::*` directive (which Rain resolves by *preprocessing* the template before
+  submission) has no direct drop-in replacement at the same layer. The fix in every case is to
+  move the substitution **out of the template body** and into a layer Atmos or CloudFormation
+  itself already handles — Atmos stack config (`parameters:`, `!env`, `!template`, inheritance)
+  for anything CloudFormation Parameters can express, or CloudFormation's own native
+  `Fn::Transform`/`AWS::Include` intrinsic for template-fragment reuse.
 2. **Existing templates and parameter files are `!include`d or pointed at, never rewritten.**
-   Point `template:` at the existing `.yaml`/`.json` template file unchanged (after resolving any
-   `!Rain::` directives per the table below). If the user has a Rain/CFN parameters JSON file
-   (`--parameters` flag or `Parameters.json`), pull it into the component's `parameters:` section
-   with `!include`. Migration is opt-in, matching the Terraform migration guide's philosophy — see
-   [from-native-terraform.md](from-native-terraform.md) Core Principle 2 for the identical stance.
+  Point `template:` at the existing `.yaml`/`.json` template file unchanged (after resolving any
+  `!Rain::` directives per the table below). If the user has a Rain/CFN parameters JSON file
+  (`--parameters` flag or `Parameters.json`), pull it into the component's `parameters:` section
+  with `!include`. Migration is opt-in, matching the Terraform migration guide's philosophy — see
+  [from-native-terraform.md](from-native-terraform.md) Core Principle 2 for the identical stance.
 3. **No 1:1 CLI compatibility.** `atmos aws cloudformation` verbs are Atmos-native — see the verb
-   cross-reference table below. Do not tell a user to alias `rain` to `atmos aws cfn`; flag names,
-   output shape, and confirmation semantics differ.
+  cross-reference table below. Do not tell a user to alias `rain` to `atmos aws cfn`; flag names,
+  output shape, and confirmation semantics differ.
 4. **Template packaging is size-triggered, not full `aws cloudformation package`/Rain `pkg`
-   parity.** `apply`/`deploy` auto-uploads the **template body itself** to the component's
-   `kind: aws/s3` provision target when it exceeds CloudFormation's 51,200-byte inline limit
-   (`pkg/component/aws/cloudformation/packaging.go`). It does **not** currently rewrite local-asset
-   references inside the template (Lambda source zips, nested-stack templates referenced by
-   relative path) the way `aws cloudformation package` or Rain's `pkg`/`!Rain::S3` do. Tell users
-   who rely on that: pre-upload those assets to S3 out-of-band (a hook, a build step, or a
-   pre-existing pipeline) and reference the resulting S3 location directly in the template until a
-   future phase closes this gap. Do not claim full asset-packaging parity — it does not exist yet.
+  parity.** `apply`/`deploy` auto-uploads the **template body itself** to the component's
+  `kind: aws/s3` provision target when it exceeds CloudFormation's 51,200-byte inline limit
+  (`pkg/component/aws/cloudformation/packaging.go`). It does **not** currently rewrite local-asset
+  references inside the template (Lambda source zips, nested-stack templates referenced by
+  relative path) the way `aws cloudformation package` or Rain's `pkg`/`!Rain::S3` do. Tell users
+  who rely on that: pre-upload those assets to S3 out-of-band (a hook, a build step, or a
+  pre-existing pipeline) and reference the resulting S3 location directly in the template until a
+  future phase closes this gap. Do not claim full asset-packaging parity — it does not exist yet.
 5. **Crawl → walk → run**, same arc as every other migration reference: get to a working
-   `atmos aws cloudformation plan`/`deploy` first, defer `provision:` targets, StackSets,
-   inheritance, and catalogs until the user has a concrete need.
+  `atmos aws cloudformation plan`/`deploy` first, defer `provision:` targets, StackSets,
+  inheritance, and catalogs until the user has a concrete need.
 
 ## `!Rain::` Directive Mapping
 
@@ -185,29 +185,29 @@ mapped to" rather than guessing.
 
 1. **Install Atmos.** See `atmos.tools/install`.
 2. **Resolve `!Rain::` directives** in every template being migrated, per the table above. A
-   template still containing `!Rain::*` tags is not valid CloudFormation and will fail at
-   `render`/`validate`.
+  template still containing `!Rain::*` tags is not valid CloudFormation and will fail at
+  `render`/`validate`.
 3. **Create `atmos.yaml`** pointing `components."aws/cloudformation".base_path` at wherever the
-   templates already live — no forced reorganization, same stance as
-   [from-native-terraform.md](from-native-terraform.md).
+  templates already live — no forced reorganization, same stance as
+  [from-native-terraform.md](from-native-terraform.md).
 4. **Create one stack file** for one environment, pointing `template:` at the existing (now
-   directive-free) template file:
-   ```yaml
-   # stacks/dev.yaml
-   components:
-     "aws/cloudformation":
-       vpc:
-         template: template.yaml
-         stack_name: acme-plat-dev-vpc
-         parameters: !include ../params/dev-parameters.json
-         capabilities:
-           - CAPABILITY_IAM
-   ```
+  directive-free) template file:
+  ```yaml
+  # stacks/dev.yaml
+  components:
+    "aws/cloudformation":
+      vpc:
+        template: template.yaml
+        stack_name: acme-plat-dev-vpc
+        parameters: !include ../params/dev-parameters.json
+        capabilities:
+          - CAPABILITY_IAM
+  ```
 5. **Run `atmos aws cloudformation plan vpc -s dev`** and compare the predicted changeset against
-   what `rain diff`/`aws cloudformation deploy --no-execute-changeset` produced before.
+  what `rain diff`/`aws cloudformation deploy --no-execute-changeset` produced before.
 6. **Run `atmos aws cloudformation deploy vpc -s dev`** and confirm the end-of-deploy Outputs
-   summary matches what the stack already had deployed (via `rain cat`/console) before the
-   migration.
+  summary matches what the stack already had deployed (via `rain cat`/console) before the
+  migration.
 
 ## Common Gotchas
 
