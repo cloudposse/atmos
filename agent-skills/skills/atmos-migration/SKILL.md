@@ -13,6 +13,7 @@ references:
   - references/from-component-updater.md
   - references/from-mise.md
   - references/from-aqua.md
+  - references/from-rain.md
 ---
 
 # Migrating to Atmos
@@ -35,6 +36,7 @@ For full prose tutorials aimed at end users, link to:
 - [Migrating from Terragrunt](https://atmos.tools/migration/terragrunt) (not covered by this skill)
 - Migrating from Terramate -- covered by this skill via
   [references/from-terramate.md](references/from-terramate.md) (no atmos.tools tutorial yet)
+- [Migrating from Rain / Raw CloudFormation](https://atmos.tools/migration/from-rain)
 
 ## Terraform or OpenTofu
 
@@ -88,6 +90,7 @@ different reference:
 | `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
 | mise config (`mise.toml`, `.mise.toml`, `.mise/config.toml`, `.tool-versions`) for tool versions | [from-mise.md](references/from-mise.md) |
 | `aqua.yaml` (Aqua CLI) for tool versions                             | [from-aqua.md](references/from-aqua.md) |
+| User is migrating off Rain / raw CloudFormation                      | [from-rain.md](references/from-rain.md) |
 
 The remote-state-bridge pattern is what makes **progressive, component-by-component migration**
 possible. Without it, a team is forced into a big-bang cutover. Cover it any time the user has
@@ -208,3 +211,5 @@ Things to push back on if a user (or another agent) proposes them during migrati
   vars from mise to the Atmos toolchain
 - [References/from-aqua.md](references/from-aqua.md) -- migrating tool versions from Aqua CLI's
   `aqua.yaml` to the Atmos toolchain
+- [References/from-rain.md](references/from-rain.md) -- the `!Rain::` directive mapping table and
+  Rain-to-`aws/cloudformation` verb cross-reference
