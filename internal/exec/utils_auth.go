@@ -11,6 +11,7 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -230,4 +231,51 @@ func handleMergeError(componentSection, globalAuthSection, componentAuthSection 
 		return globalAuthSection
 	}
 	return map[string]any{}
+}
+
+// resolveDefaultIdentity resolves the default identity. A lookup failure is fatal
+// only when the caller explicitly requested the select-default path; for an
+// implicit empty identity the requested value is returned so execution can
+// continue without identity.
+//
+// Shared by the helmfile and packer subprocess executors (and any other
+// non-terraform command layer) so credential injection stays consistent.
+func resolveDefaultIdentity(authManager auth.AuthManager, requested string) (string, error) {
+	defaultIdentity, err := authManager.GetDefaultIdentity(false)
+	if err == nil {
+		return defaultIdentity, nil
+	}
+	if requested == cfg.IdentityFlagSelectValue {
+		return "", fmt.Errorf("%w: resolve default identity: %w", errUtils.ErrAuthenticationFailed, err)
+	}
+	return requested, nil
+}
+
+// prepareComponentAuthEnvironment augments envVars with the auth credentials for the
+// resolved identity so a component subprocess (helmfile, packer, etc.) inherits
+// file-based credentials (AWS_PROFILE/AWS_SHARED_CREDENTIALS_FILE), regions, and
+// emulator/static credentials from Atmos Auth.
+//
+// It is a no-op when there is no auth manager or when auth is explicitly disabled,
+// mirroring the terraform pre-hook's disabled-identity short-circuit. An empty or
+// "select" identity falls back to the stack's default identity.
+func prepareComponentAuthEnvironment(authManager auth.AuthManager, identity string, envVars []string) ([]string, error) {
+	if authManager == nil {
+		return envVars, nil
+	}
+	if identity == "" || identity == cfg.IdentityFlagSelectValue {
+		resolved, err := resolveDefaultIdentity(authManager, identity)
+		if err != nil {
+			return nil, err
+		}
+		identity = resolved
+	}
+	if identity == "" || identity == cfg.IdentityFlagDisabledValue {
+		return envVars, nil
+	}
+	preparedEnv, err := authManager.PrepareShellEnvironment(context.Background(), identity, envVars)
+	if err != nil {
+		return nil, fmt.Errorf("%w: prepare component environment for identity %q: %w", errUtils.ErrAuthenticationFailed, identity, err)
+	}
+	return preparedEnv, nil
 }
