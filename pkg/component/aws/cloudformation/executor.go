@@ -111,15 +111,20 @@ var operationsSkippingAuth = map[Operation]bool{
 // template file from disk would be pure overhead — a source checkout or
 // provisioning failure must not block any of them.
 var operationsSkippingTemplateLoad = map[Operation]bool{
-	OperationDelete:           true,
-	OperationOutput:           true,
-	OperationChangesetExecute: true,
-	OperationChangesetList:    true,
-	OperationChangesetDelete:  true,
-	OperationDriftDetect:      true,
-	OperationDriftDescribe:    true,
-	OperationGetTemplate:      true,
-	OperationGetPolicy:        true,
+	OperationDelete:            true,
+	OperationOutput:            true,
+	OperationChangesetExecute:  true,
+	OperationChangesetList:     true,
+	OperationChangesetDelete:   true,
+	OperationDriftDetect:       true,
+	OperationDriftDescribe:     true,
+	OperationGetTemplate:       true,
+	OperationGetPolicy:         true,
+	OperationStackSetDelete:    true,
+	OperationStackSetInstances: true,
+	OperationTree:              true,
+	OperationLogs:              true,
+	OperationWatch:             true,
 }
 
 // resolveSpecAndTemplate builds the SDK-ready stackSpec and — for every
@@ -240,6 +245,45 @@ var operationHandlers = map[Operation]operationHandler{
 	OperationGetPolicy: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 		return runGetPolicy(octx.Ctx, client, spec.StackName, summary)
 	},
+	OperationStackSetCreate: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		ssCfg, err := resolveStackSetTargetFromContext(octx)
+		if err != nil {
+			return summary, err
+		}
+		return runStackSetCreate(octx.Ctx, client, spec, ssCfg, summary)
+	},
+	OperationStackSetUpdate: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		ssCfg, err := resolveStackSetTargetFromContext(octx)
+		if err != nil {
+			return summary, err
+		}
+		return runStackSetUpdate(octx.Ctx, client, spec, ssCfg, summary)
+	},
+	OperationStackSetDelete: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return runStackSetDelete(octx.Ctx, client, spec.StackName, summary)
+	},
+	OperationStackSetInstances: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return runStackSetInstances(octx.Ctx, client, spec.StackName, summary)
+	},
+	OperationTree: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return runTree(octx.Ctx, client, spec.StackName, summary)
+	},
+	OperationLogs: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		chart, _ := octx.Flags["chart"].(bool)
+		return runLogs(octx.Ctx, client, spec.StackName, chart, summary)
+	},
+	OperationWatch: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return runWatch(octx.Ctx, client, spec.StackName, summary)
+	},
+}
+
+// resolveStackSetTargetFromContext resolves the `kind: aws/stackset` provision
+// target for stackset create/update, reading provision.targets from the
+// component section and the --target flag the same way deliverApply does.
+func resolveStackSetTargetFromContext(octx *opContext) (*stackSetConfig, error) {
+	provisionSection, _ := octx.Info.ComponentSection[cfg.ProvisionSectionName].(map[string]any)
+	flagTarget, _ := octx.Flags[targetKey].(string)
+	return resolveStackSetTarget(provisionSection, flagTarget)
 }
 
 // changesetNameFlag extracts the required --changeset-name flag value.
