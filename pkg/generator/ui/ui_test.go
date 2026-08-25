@@ -512,6 +512,70 @@ spec:
 	})
 }
 
+// TestExecuteWithSetup_DryRunHasNoPersistentSideEffects reproduces a bug
+// where `--dry-run` (routed through executeWithSetup with DryRun set, same
+// as a real run) suppressed only individual file writes -- it still created
+// the target directory via os.MkdirAll, ran both before- and after-generate
+// hooks (arbitrary user-configured commands), and wrote the
+// .atmos/scaffold.yaml project record. A later real --update against that
+// same directory would then wrongly treat a merely-previewed target as an
+// already-generated project. None of those persistent effects may happen
+// during a preview.
+func TestExecuteWithSetup_DryRunHasNoPersistentSideEffects(t *testing.T) {
+	beforeCalls := &[]string{}
+	runnerstep.Register(&hookMarkerHandler{
+		BaseHandler: runnerstep.NewBaseHandler("dry-run-before-hook", runnerstep.CategoryOutput, false),
+		calls:       beforeCalls,
+	})
+	afterCalls := &[]string{}
+	runnerstep.Register(&hookMarkerHandler{
+		BaseHandler: runnerstep.NewBaseHandler("dry-run-after-hook", runnerstep.CategoryOutput, false),
+		calls:       afterCalls,
+	})
+
+	scaffoldYAML := `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: dry-run-side-effects
+spec:
+  hooks:
+    before:
+      events: [before.scaffold.generate]
+      kind: step
+      type: dry-run-before-hook
+      with:
+        content: "before ran"
+    after:
+      events: [after.scaffold.generate]
+      kind: step
+      type: dry-run-after-hook
+      with:
+        content: "after ran"
+`
+	configuration := &templates.Configuration{
+		Name: "dry-run-side-effects",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: scaffoldYAML, Permissions: 0o644},
+			{Path: "generated.txt", Content: "generated", Permissions: 0o644},
+		},
+	}
+
+	ui := createTestUI(t)
+	ui.SetDryRun(true)
+	// A path that does not exist yet -- the primary preview-before-creating
+	// use case -- so a MkdirAll regression is directly observable, not just
+	// masked by t.TempDir() having already created the directory itself.
+	targetDir := filepath.Join(t.TempDir(), "not-yet-created")
+
+	err := ui.executeWithSetup(configuration, targetDir, false, false, true, "", map[string]interface{}{}, []string{"{{", "}}"})
+	require.NoError(t, err)
+
+	_, dirErr := os.Stat(targetDir)
+	assert.True(t, os.IsNotExist(dirErr), "dry-run must not create the target directory")
+	assert.Empty(t, *beforeCalls, "dry-run must not run before-generate hooks")
+	assert.Empty(t, *afterCalls, "dry-run must not run after-generate hooks")
+}
+
 // TestExecuteWithSetup_BasicTemplate_EnvironmentsGating exercises the real,
 // embedded "basic" init template end-to-end through executeWithSetup (not a
 // hand-built fixture) to verify its multiselect "environments" field and

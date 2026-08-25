@@ -1253,9 +1253,13 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 			Err()
 	}
 
-	// Create directory if needed
-	if err := os.MkdirAll(targetPath, dirPermissions); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+	// Create directory if needed. Skipped in dry-run: a preview must leave no
+	// trace on disk, including an otherwise-empty target directory that
+	// didn't exist before the preview ran.
+	if !ui.processor.DryRun {
+		if err := os.MkdirAll(targetPath, dirPermissions); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
 	}
 
 	// Load the scaffold configuration from embedded content (don't write to target folder)
@@ -1284,9 +1288,13 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 
 	// Run pre-generate hooks before any file is written: nothing has run yet
 	// (status: success), and a hook failure aborts before any write happens,
-	// so no rollback is needed.
-	if err := scaffoldhooks.Run(scaffoldHooks, hooks.BeforeScaffoldGenerate, mergedValues, "success", ui.skipHooks); err != nil {
-		return fmt.Errorf("pre-generate hook failed: %w", err)
+	// so no rollback is needed. Skipped in dry-run: hooks can run arbitrary
+	// commands (git operations, notifications, ...) that are real side
+	// effects a preview must never trigger.
+	if !ui.processor.DryRun {
+		if err := scaffoldhooks.Run(scaffoldHooks, hooks.BeforeScaffoldGenerate, mergedValues, "success", ui.skipHooks); err != nil {
+			return fmt.Errorf("pre-generate hook failed: %w", err)
+		}
 	}
 
 	// Process each file with rich configuration
@@ -1342,9 +1350,12 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		// Post-generate hooks still get a chance to run on failure (e.g. a
 		// cleanup step declaring when: always/failure); the implicit-success
 		// default on an unconditioned hook skips it here, matching hooks
-		// elsewhere in Atmos.
-		if hookErr := scaffoldhooks.Run(scaffoldHooks, hooks.AfterScaffoldGenerate, mergedValues, "failure", ui.skipHooks); hookErr != nil {
-			log.Warn("Post-generate hook failed", "error", hookErr)
+		// elsewhere in Atmos. Skipped in dry-run, same as the pre-generate
+		// hooks above.
+		if !ui.processor.DryRun {
+			if hookErr := scaffoldhooks.Run(scaffoldHooks, hooks.AfterScaffoldGenerate, mergedValues, "failure", ui.skipHooks); hookErr != nil {
+				log.Warn("Post-generate hook failed", "error", hookErr)
+			}
 		}
 		return errUtils.Build(errUtils.ErrScaffoldGeneration).
 			WithCause(errors.Join(failureErrs...)).
@@ -1354,15 +1365,21 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 
 	// Write the project record only after all files have been generated
 	// successfully so a partial run does not leave the directory looking
-	// fully initialised.
-	if err := config.SaveProjectRecord(targetPath, scaffoldConfig, embedsConfig.Source, baseRef, mergedValues); err != nil {
-		return fmt.Errorf("failed to save project record: %w", err)
-	}
+	// fully initialised. Skipped in dry-run: writing .atmos/scaffold.yaml
+	// would mark the preview target as already generated, so a later real
+	// --update against that same directory would wrongly treat it as an
+	// existing project instead of a fresh generate.
+	if !ui.processor.DryRun {
+		if err := config.SaveProjectRecord(targetPath, scaffoldConfig, embedsConfig.Source, baseRef, mergedValues); err != nil {
+			return fmt.Errorf("failed to save project record: %w", err)
+		}
 
-	// Run post-generate hooks after the project record is saved, so a hook
-	// (e.g. `git add .`) sees the generated .atmos/scaffold.yaml record too.
-	if err := scaffoldhooks.Run(scaffoldHooks, hooks.AfterScaffoldGenerate, mergedValues, "success", ui.skipHooks); err != nil {
-		return fmt.Errorf("post-generate hook failed: %w", err)
+		// Run post-generate hooks after the project record is saved, so a hook
+		// (e.g. `git add .`) sees the generated .atmos/scaffold.yaml record too.
+		// Skipped in dry-run, same as the pre-generate hooks above.
+		if err := scaffoldhooks.Run(scaffoldHooks, hooks.AfterScaffoldGenerate, mergedValues, "success", ui.skipHooks); err != nil {
+			return fmt.Errorf("post-generate hook failed: %w", err)
+		}
 	}
 
 	// Flush all output before rendering README.
