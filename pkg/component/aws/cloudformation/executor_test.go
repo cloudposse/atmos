@@ -521,6 +521,78 @@ func TestExecute_Single_Render_Success(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// Execute's full single-component happy path for fmt — the other operation
+// operationsSkippingAuth exempts from auth setup, alongside render — exercised
+// the same way TestExecute_Single_Render_Success exercises render.
+func TestExecute_Single_Fmt_Success(t *testing.T) {
+	tempDir := t.TempDir()
+	templateBody := "AWSTemplateFormatVersion: '2010-09-09'"
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "template.yaml"), []byte(templateBody), 0o644))
+
+	installExecutorSeamStubs(t, executorSeamStubs{
+		initCliConfig: func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+			info.ComponentIsEnabled = true
+			info.ComponentSection = map[string]any{"stack_name": "vpc", "template": "template.yaml"}
+			return info, nil
+		},
+		setupComponentAuthForCLI: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+			t.Fatal("fmt must never set up AWS auth")
+			return nil, nil
+		},
+		propagateAuth: func(_ *schema.ConfigAndStacksInfo, _ auth.AuthManager) {
+			t.Fatal("fmt must never propagate auth")
+		},
+		provisionAndResolveComponentPath: func(_ context.Context, _ provisioner.OutputWriters, _ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _, _ string) (string, bool, error) {
+			return tempDir, false, nil
+		},
+		getHooks: noopGetHooks,
+	})
+
+	ctx := &component.ExecutionContext{ConfigAndStacksInfo: schema.ConfigAndStacksInfo{ComponentFromArg: "vpc"}}
+	err := Execute(ctx, OperationFmt)
+	require.NoError(t, err, "fmt on an already-formatted template must succeed as a no-op")
+}
+
+// operationsSkippingAuth must contain exactly render and fmt — the only two
+// operations that never touch the CloudFormation API — and nothing else.
+func TestOperationsSkippingAuth_Contents(t *testing.T) {
+	assert.True(t, operationsSkippingAuth[OperationRender])
+	assert.True(t, operationsSkippingAuth[OperationFmt])
+	assert.Len(t, operationsSkippingAuth, 2, "adding an operation here must be a deliberate decision, not an accident")
+
+	for _, op := range []Operation{OperationDiff, OperationApply, OperationDelete, OperationValidate, OperationOutput} {
+		assert.False(t, operationsSkippingAuth[op], "operation %q must require auth setup", op)
+	}
+}
+
+// executeSingle must call auth setup for OperationDiff specifically (not just
+// "some non-render operation" as TestExecuteSingle_AuthSetupError already
+// covers via apply) — confirming the operationsSkippingAuth[operation] guard
+// is keyed correctly per-operation rather than by a broader default.
+func TestExecuteSingle_Diff_CallsAuthSetup(t *testing.T) {
+	authCalled := false
+	sentinel := errors.New("auth setup failed")
+	installExecutorSeamStubs(t, executorSeamStubs{
+		processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+			info.ComponentIsEnabled = true
+			info.ComponentSection = map[string]any{"stack_name": "vpc", "template": "template.yaml"}
+			return info, nil
+		},
+		setupComponentAuthForCLI: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+			authCalled = true
+			return nil, sentinel
+		},
+	})
+
+	err := executeSingle(&component.ExecutionContext{}, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, OperationDiff)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sentinel)
+	assert.True(t, authCalled, "OperationDiff must reach auth setup")
+}
+
 // executeSingle must skip validation/auth/resolution entirely and return nil
 // when the discovered component is disabled.
 func TestExecuteSingle_ComponentDisabled(t *testing.T) {

@@ -113,6 +113,7 @@ func TestComponentProvider_Execute_MapsSubcommandsToOperations(t *testing.T) {
 		{"drift-describe", OperationDriftDescribe},
 		{"get-template", OperationGetTemplate},
 		{"get-policy", OperationGetPolicy},
+		{"fmt", OperationFmt},
 	}
 
 	original := executeOperation
