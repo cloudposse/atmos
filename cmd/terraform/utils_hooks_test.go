@@ -18,9 +18,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -854,37 +856,132 @@ func TestWirePerComponentHook(t *testing.T) {
 	})
 }
 
+// TestTerraformCIModeEnabledSources table-drives terraformCIModeEnabled's
+// four signal sources (nil command, explicit --ci flag, Viper/env, native
+// CI-provider detection) and their precedence, including the explicit
+// --ci=false regression: it must be authoritative and win over ATMOS_CI/CI
+// env vars (via Viper) and native CI-provider detection alike -- e.g. a user
+// forcing human-readable output on a CI runner. Before that fix,
+// terraformCIModeEnabled only special-cased an explicit --ci=true, silently
+// re-enabling CI mode whenever Viper or native detection said true.
 func TestTerraformCIModeEnabledSources(t *testing.T) {
-	t.Run("nil command and no CI detection is false", func(t *testing.T) {
-		withoutCIDetection(t)
-		resetViperCI(t)
+	tests := []struct {
+		name       string
+		setupCI    func(t *testing.T)
+		viperCI    bool
+		nilCmd     bool
+		explicitCI *bool
+		want       bool
+	}{
+		{
+			name:    "nil command and no CI detection is false",
+			setupCI: withoutCIDetection,
+			nilCmd:  true,
+			want:    false,
+		},
+		{
+			name:       "cobra flag wins",
+			setupCI:    withoutCIDetection,
+			explicitCI: boolPtr(true),
+			want:       true,
+		},
+		{
+			name:    "viper ci enables mode",
+			setupCI: withoutCIDetection,
+			viperCI: true,
+			want:    true,
+		},
+		{
+			name:    "native GitHub Actions detection enables mode",
+			setupCI: withGitHubActionsDetection,
+			want:    true,
+		},
+		{
+			name:       "explicit --ci=false wins over viper ci=true",
+			setupCI:    withoutCIDetection,
+			viperCI:    true,
+			explicitCI: boolPtr(false),
+			want:       false,
+		},
+		{
+			name:       "explicit --ci=false wins over native GitHub Actions detection",
+			setupCI:    withGitHubActionsDetection,
+			explicitCI: boolPtr(false),
+			want:       false,
+		},
+	}
 
-		assert.False(t, terraformCIModeEnabled(nil))
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setupCI(t)
+			resetViperCI(t)
+			viper.Set("ci", tt.viperCI)
 
-	t.Run("cobra flag wins", func(t *testing.T) {
-		withoutCIDetection(t)
-		resetViperCI(t)
-		cmd := newHookTestCmd()
-		require.NoError(t, cmd.Flags().Set("ci", "true"))
+			var cmd *cobra.Command
+			if !tt.nilCmd {
+				cmd = newHookTestCmd()
+				if tt.explicitCI != nil {
+					require.NoError(t, cmd.Flags().Set("ci", strconv.FormatBool(*tt.explicitCI)))
+				}
+			}
 
-		assert.True(t, terraformCIModeEnabled(cmd))
-	})
+			assert.Equal(t, tt.want, terraformCIModeEnabled(cmd))
+		})
+	}
+}
 
-	t.Run("viper ci enables mode", func(t *testing.T) {
-		withoutCIDetection(t)
-		resetViperCI(t)
-		viper.Set("ci", true)
+// TestResolveCIMode table-drives resolveCIMode: an explicitly set --ci flag
+// (true or false) must be authoritative, falling back to Viper (ATMOS_CI/CI
+// env vars) only when the flag was never explicitly set.
+func TestResolveCIMode(t *testing.T) {
+	tests := []struct {
+		name       string
+		viperCI    bool
+		nilFlags   bool
+		explicitCI *bool
+		want       bool
+	}{
+		{
+			name:     "nil flags falls back to viper",
+			viperCI:  true,
+			nilFlags: true,
+			want:     true,
+		},
+		{
+			name:    "flag never set falls back to viper",
+			viperCI: true,
+			want:    true,
+		},
+		{
+			name:       "explicit --ci=true wins regardless of viper",
+			explicitCI: boolPtr(true),
+			want:       true,
+		},
+		{
+			name:       "explicit --ci=false wins over viper ci=true",
+			viperCI:    true,
+			explicitCI: boolPtr(false),
+			want:       false,
+		},
+	}
 
-		assert.True(t, terraformCIModeEnabled(newHookTestCmd()))
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetViperCI(t)
+			viper.Set("ci", tt.viperCI)
 
-	t.Run("native GitHub Actions detection enables mode", func(t *testing.T) {
-		withGitHubActionsDetection(t)
-		resetViperCI(t)
+			var flags *pflag.FlagSet
+			if !tt.nilFlags {
+				cmd := newHookTestCmd()
+				if tt.explicitCI != nil {
+					require.NoError(t, cmd.Flags().Set("ci", strconv.FormatBool(*tt.explicitCI)))
+				}
+				flags = cmd.Flags()
+			}
 
-		assert.True(t, terraformCIModeEnabled(newHookTestCmd()))
-	})
+			assert.Equal(t, tt.want, resolveCIMode(flags))
+		})
+	}
 }
 
 func TestTerraformPlanCIResultHandler(t *testing.T) {
