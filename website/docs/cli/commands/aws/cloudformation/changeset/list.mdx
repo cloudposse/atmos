@@ -1,0 +1,63 @@
+---
+title: atmos aws cloudformation changeset list
+sidebar_label: list
+sidebar_class_name: command
+id: list
+description: List a stack's changesets.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  List a CloudFormation stack's changesets (`ListChangeSets`), newest first —
+  each entry's name, status, and description.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation changeset list --help" src="/casts/screengrabs/atmos-aws-cloudformation-changeset-list--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation changeset list <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation changeset list vpc -s plat-ue2-dev
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>List changesets for all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>List changesets for affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+## Output
+
+If the stack has no changesets, `changeset list` prints a single line saying
+so instead of an empty table.
+
+:::note
+`changeset list` does not fire `before`/`after` hook events — only
+[`apply`](/cli/commands/aws/cloudformation/apply),
+[`diff`](/cli/commands/aws/cloudformation/diff), and
+[`delete`](/cli/commands/aws/cloudformation/delete) do.
+:::
