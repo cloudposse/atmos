@@ -3,9 +3,11 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -176,6 +178,15 @@ func TestBuildStagedPatchAndPackages(t *testing.T) {
 	})
 }
 
+// withFakeUserCacheDir points userCacheDirFunc at dir for the duration of
+// the calling test, restoring the original on cleanup.
+func withFakeUserCacheDir(t *testing.T, dir string) {
+	t.Helper()
+	restore := userCacheDirFunc
+	userCacheDirFunc = func() (string, error) { return dir, nil }
+	t.Cleanup(func() { userCacheDirFunc = restore })
+}
+
 func TestSetWorktreeIsolationEnv(t *testing.T) {
 	t.Run("shared cache opt-out returns empty map", func(t *testing.T) {
 		t.Setenv("ATMOS_LINT_SHARED_CACHE", "1")
@@ -184,16 +195,26 @@ func TestSetWorktreeIsolationEnv(t *testing.T) {
 		assert.Empty(t, env)
 	})
 
-	t.Run("default isolates cache and tmp under root", func(t *testing.T) {
+	t.Run("default isolates cache and tmp under the user cache dir, not root", func(t *testing.T) {
 		t.Setenv("ATMOS_LINT_SHARED_CACHE", "")
 		t.Setenv("GOLANGCI_LINT_CACHE", "")
+		fakeUserCache := t.TempDir()
+		withFakeUserCacheDir(t, fakeUserCache)
+
 		root := t.TempDir()
 		env, err := setWorktreeIsolationEnv(root)
 		require.NoError(t, err)
 
-		assert.Equal(t, filepath.Join(root, ".golangci-cache"), env["GOLANGCI_LINT_CACHE"])
-		tmpDir := filepath.Join(root, ".golangci-tmp")
-		assert.Equal(t, tmpDir, env["TMPDIR"])
+		wantBase := filepath.Join(fakeUserCache, "atmos-lint")
+		cacheDir := env["GOLANGCI_LINT_CACHE"]
+		tmpDir := env["TMPDIR"]
+		assert.True(t, strings.HasPrefix(cacheDir, wantBase+string(filepath.Separator)))
+		assert.Equal(t, "cache", filepath.Base(cacheDir))
+		assert.True(t, strings.HasPrefix(tmpDir, wantBase+string(filepath.Separator)))
+		assert.Equal(t, "tmp", filepath.Base(tmpDir))
+		assert.Equal(t, filepath.Dir(cacheDir), filepath.Dir(tmpDir), "cache and tmp share the same hashed worktree dir")
+		assert.False(t, strings.HasPrefix(cacheDir, root), "cache dir must not live inside the worktree")
+
 		info, statErr := os.Stat(tmpDir)
 		require.NoError(t, statErr)
 		assert.True(t, info.IsDir())
@@ -206,6 +227,7 @@ func TestSetWorktreeIsolationEnv(t *testing.T) {
 
 	t.Run("GOLANGCI_LINT_CACHE override respected", func(t *testing.T) {
 		t.Setenv("ATMOS_LINT_SHARED_CACHE", "")
+		withFakeUserCacheDir(t, t.TempDir())
 		custom := filepath.Join(t.TempDir(), "custom-cache")
 		t.Setenv("GOLANGCI_LINT_CACHE", custom)
 		env, err := setWorktreeIsolationEnv(t.TempDir())
@@ -213,15 +235,48 @@ func TestSetWorktreeIsolationEnv(t *testing.T) {
 		assert.Equal(t, custom, env["GOLANGCI_LINT_CACHE"])
 	})
 
-	t.Run("mkdir failure when root path component is a file", func(t *testing.T) {
+	t.Run("mkdir failure when cache root path component is a file", func(t *testing.T) {
 		t.Setenv("ATMOS_LINT_SHARED_CACHE", "")
 		t.Setenv("GOLANGCI_LINT_CACHE", "")
 		blocker := t.TempDir()
 		filePath := filepath.Join(blocker, "not-a-dir")
 		require.NoError(t, os.WriteFile(filePath, []byte("x"), 0o644))
-		_, err := setWorktreeIsolationEnv(filePath)
+		withFakeUserCacheDir(t, filePath)
+
+		_, err := setWorktreeIsolationEnv(t.TempDir())
 		require.Error(t, err)
 	})
+
+	t.Run("propagates user cache dir resolution failure", func(t *testing.T) {
+		t.Setenv("ATMOS_LINT_SHARED_CACHE", "")
+		t.Setenv("GOLANGCI_LINT_CACHE", "")
+		restore := userCacheDirFunc
+		userCacheDirFunc = func() (string, error) { return "", errors.New("no cache dir") }
+		t.Cleanup(func() { userCacheDirFunc = restore })
+
+		_, err := setWorktreeIsolationEnv(t.TempDir())
+		require.Error(t, err)
+	})
+}
+
+func TestWorktreeLintCacheRoot(t *testing.T) {
+	fakeUserCache := t.TempDir()
+	withFakeUserCacheDir(t, fakeUserCache)
+
+	rootA := t.TempDir()
+	rootB := t.TempDir()
+
+	dirA, err := worktreeLintCacheRoot(rootA)
+	require.NoError(t, err)
+	dirB, err := worktreeLintCacheRoot(rootB)
+	require.NoError(t, err)
+
+	assert.NotEqual(t, dirA, dirB, "distinct worktrees must not collide on the same cache dir")
+	assert.True(t, strings.HasPrefix(dirA, filepath.Join(fakeUserCache, "atmos-lint")))
+
+	dirAAgain, err := worktreeLintCacheRoot(rootA)
+	require.NoError(t, err)
+	assert.Equal(t, dirA, dirAAgain, "the same worktree root must hash to the same dir")
 }
 
 func TestRunGolangciLintPrecommit(t *testing.T) {
@@ -284,17 +339,19 @@ func TestRunGolangciLintPrecommit(t *testing.T) {
 	})
 
 	// TestRunGolangciLintPrecommit/isolation env error propagates covers the
-	// setWorktreeIsolationEnv failure branch: root has a path component that's
-	// a file, not a directory, so MkdirAll(".golangci-tmp") under it fails
-	// before any subprocess is invoked.
+	// setWorktreeIsolationEnv failure branch: the user-cache-dir root
+	// resolves to a file, not a directory, so MkdirAll(".../tmp") under it
+	// fails before any subprocess is invoked.
 	t.Run("isolation env error propagates", func(t *testing.T) {
 		t.Setenv("ATMOS_LINT_SHARED_CACHE", "")
 		t.Setenv("GOLANGCI_LINT_CACHE", "")
 		blocker := t.TempDir()
 		filePath := filepath.Join(blocker, "not-a-dir")
 		require.NoError(t, os.WriteFile(filePath, []byte("x"), 0o644))
+		withFakeUserCacheDir(t, filePath)
 
-		err := runGolangciLintPrecommit(filePath, "irrelevant-bin")
+		root := initGitRepoFixture(t)
+		err := runGolangciLintPrecommit(root, "irrelevant-bin")
 		require.Error(t, err)
 	})
 
