@@ -1,0 +1,33 @@
+---
+title: atmos aws cloudformation get
+sidebar_label: get
+sidebar_class_name: command
+id: get
+description: Fetch a deployed stack's template or policy.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import DocCardList from '@theme/DocCardList'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Fetch a deployed CloudFormation stack's template or stack policy directly from
+the CloudFormation API — the live, deployed artifacts, as opposed to
+[`render`](/cli/commands/aws/cloudformation/render), which only ever reads the
+local template file.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation get --help" src="/casts/screengrabs/atmos-aws-cloudformation-get--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation get template <component> --stack <stack>
+atmos aws cloudformation get policy <component> --stack <stack>
+```
+
+## Subcommands
+
+<DocCardList/>
