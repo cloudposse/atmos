@@ -3,6 +3,7 @@ package source
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -168,6 +169,21 @@ func VendorSource(
 	// directly; everything else still goes through go-getter.
 	if err := downloadSource(ctx, atmosConfig, sourceSpec, uri, tempDir); err != nil {
 		return err
+	}
+
+	// A go-getter source URI that resolves to a single file (e.g. a bare template
+	// URI like https://.../dns.yaml) is staged by ClientModeAny as the sole entry
+	// in tempDir, named by the URL's basename. Detect that shape here and write
+	// the file directly to targetDir, bypassing the directory-copy assumption the
+	// rest of this function makes. OCI sources are excluded: they distribute
+	// module/component packages, which stay directories even when a given
+	// package happens to contain only one file.
+	if !vendor.IsOCIURI(uri) {
+		if singleFile, ok, err := singleFileInDir(tempDir); err != nil {
+			return err
+		} else if ok {
+			return copySingleFileToTarget(singleFile, targetDir, vendorOpts)
+		}
 	}
 
 	// Ensure target parent directory exists.
@@ -393,6 +409,103 @@ func copySourceToTarget(
 	}
 
 	return nil
+}
+
+// singleFileInDir reports whether dir contains exactly one entry and that
+// entry is a regular file rather than a directory. Go-getter's ClientModeAny
+// stages a single-file source into a staging directory as one file named by
+// the URL's basename (see downloader.ClientModeAny), so this is how a
+// single-file `source:` is distinguished from a directory/archive source once
+// staged.
+func singleFileInDir(dir string) (string, bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false, errUtils.Build(errUtils.ErrSourceCopyFailed).
+			WithCause(err).
+			WithExplanation("Failed to inspect downloaded source").
+			WithContext("source", dir).
+			Err()
+	}
+	if len(entries) != 1 || entries[0].IsDir() {
+		return "", false, nil
+	}
+	return filepath.Join(dir, entries[0].Name()), true, nil
+}
+
+// copySingleFileToTarget writes a single downloaded or local file directly to
+// targetDir as a file. This backs the single-file `source:` shape (e.g.
+// `source: {uri: https://.../dns.yaml}` fetched directly as a component's
+// template file).
+func copySingleFileToTarget(srcFile, targetDir string, vendorOpts vendorSourceOptions) error {
+	if err := os.MkdirAll(filepath.Dir(targetDir), TargetDirPermissions); err != nil {
+		return errUtils.Build(errUtils.ErrSourceCopyFailed).
+			WithCause(err).
+			WithExplanation("Failed to create target parent directory").
+			WithContext("target", targetDir).
+			Err()
+	}
+
+	info, statErr := os.Stat(targetDir)
+	switch {
+	case statErr == nil:
+		if !vendorOpts.replaceTarget {
+			return errUtils.Build(errUtils.ErrSourceCopyFailed).
+				WithExplanation("Target already exists").
+				WithContext("target", targetDir).
+				WithHint("Remove the target or enable replacement before provisioning").
+				Err()
+		}
+		if info.IsDir() {
+			if err := os.RemoveAll(targetDir); err != nil {
+				return errUtils.Build(errUtils.ErrSourceCopyFailed).
+					WithCause(err).
+					WithExplanation("Failed to remove existing target directory").
+					WithContext("target", targetDir).
+					Err()
+			}
+		}
+	case !os.IsNotExist(statErr):
+		return errUtils.Build(errUtils.ErrSourceCopyFailed).
+			WithCause(statErr).
+			WithExplanation("Failed to inspect target directory").
+			WithContext("target", targetDir).
+			Err()
+	}
+
+	if err := copySingleFile(srcFile, targetDir); err != nil {
+		return errUtils.Build(errUtils.ErrSourceCopyFailed).
+			WithCause(err).
+			WithExplanation("Failed to copy source file to target").
+			WithContext("source", srcFile).
+			WithContext("target", targetDir).
+			Err()
+	}
+
+	return nil
+}
+
+// copySingleFile copies a single file from src to dst, preserving the source
+// file's permissions.
+func copySingleFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	srcInfo, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, srcInfo.Mode()) //nolint:gosec // G703: dst is the caller-provided, already-validated component target path, not tainted input.
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	return err
 }
 
 func prepareVendorTarget(targetDir string, vendorOpts vendorSourceOptions) error {
