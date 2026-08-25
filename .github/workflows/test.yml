@@ -333,7 +333,18 @@ jobs:
     # internal/exec's top-level tests across all shards. Both binaries are
     # compiled once in the build job, so each shard executes only its assigned
     # tests without paying a cold compile/link penalty.
-    timeout-minutes: ${{ matrix.shard == 1 && 65 || 40 }}
+    #
+    # Non-shard-1 Windows raised 40 -> 65: the old 40 exactly equaled the
+    # "Acceptance tests" step's own (pre-fix) 40min budget below, leaving zero
+    # slack in the *job's* overall budget for checkout/toolchain setup before
+    # the step, or the post-job Go module/build cache save after it -- which
+    # this file's terraform-registry-cache job already documents as much
+    # slower on Windows and able to expire a job mid-save even after the test
+    # step itself already passed. That's exactly what was observed here twice
+    # (cancelled at 39m57s/40m8s, both after the acceptance step had already
+    # printed PASS). See the "Acceptance tests" step's own timeout comment
+    # below for the measured per-shard timing data this is based on.
+    timeout-minutes: ${{ matrix.shard == 1 && 65 || (matrix.flavor.target == 'windows' && 65 || 40) }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
@@ -457,7 +468,18 @@ jobs:
         # stays lower. Shard 1 still does somewhat more work than other shards
         # (see the "Acceptance tests with coverage" step above), so it keeps
         # extra headroom regardless of OS.
-        timeout-minutes: ${{ matrix.shard == 1 && 60 || (matrix.flavor.target == 'windows' && 40 || 30) }}
+        #
+        # Non-shard-1 Windows budget raised 40 -> 55 after measuring real job
+        # timings across 5 consecutive runs on this CI provider's (spot
+        # instance) Windows runners: typical shards land 10-18min, but 20-30min
+        # is a routine occurrence (not a fixed "slow shard" -- shards 1, 2, 4,
+        # 5, 8, and 9 each independently hit 26-28min across different runs),
+        # and two separate shards were cancelled at 39m57s/40m8s after their
+        # own tests had already printed PASS -- i.e. genuine runner-pool
+        # variance hitting the wall, not a hang. 55min gives real headroom
+        # over the observed ~30min tail without matching shard 1's full 60min,
+        # since shard 1 does legitimately more baseline work.
+        timeout-minutes: ${{ matrix.shard == 1 && 60 || (matrix.flavor.target == 'windows' && 55 || 30) }}
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         shell: bash
         env:
