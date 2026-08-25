@@ -39,7 +39,7 @@ If component is not specified, prompts interactively for selection.`, cfg.TypeLa
   atmos %s source pull vpc --stack dev --force
 
   # Interactive: prompts for component and stack
-  atmos %s source pull`, cfg.ComponentType, cfg.ComponentType, cfg.ComponentType),
+  atmos %s source pull`, cfg.CLI(), cfg.CLI(), cfg.CLI()),
 		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executePull(cmd, args, cfg, parser)
