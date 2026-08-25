@@ -53,7 +53,23 @@ if git_dir="$(git rev-parse --git-dir 2>/dev/null)" &&
   export GOFLAGS="${GOFLAGS:--buildvcs=false}"
 fi
 
-go mod download
+# proxy.golang.org occasionally drops a request mid-stream (HTTP/2 "stream
+# error: ... INTERNAL_ERROR received from peer") -- a transient CDN/network
+# blip, not a real dependency problem -- which otherwise fails the whole
+# build outright. Retry a few times with a short cooldown, matching the
+# 3-attempt/15s-backoff convention already used for artifact downloads (see
+# .github/actions/download-artifact-retry).
+attempt=1
+max_attempts=3
+until go mod download; do
+  if [ "$attempt" -ge "$max_attempts" ]; then
+    echo "go mod download failed after $max_attempts attempts" >&2
+    exit 1
+  fi
+  echo "go mod download failed (attempt $attempt/$max_attempts), retrying in 15s..." >&2
+  sleep 15
+  attempt=$((attempt + 1))
+done
 mkdir -p build
 
 if [ -n "$goos" ] && [ -n "$goarch" ]; then
