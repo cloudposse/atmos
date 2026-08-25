@@ -1,0 +1,22 @@
+# Minimal fixture for testing the `!aws.cloudformation.output` YAML function
+# and atmos.Component(...).outputs' aws/cloudformation branch, both of which
+# resolve a target component's sections via ExecuteDescribeComponent and then
+# fetch its deployed Outputs through the cloudFormationOutputsGetter seam
+# (stubbed in tests — no real AWS call happens against this fixture).
+vars:
+  stage: test
+
+components:
+  "aws/cloudformation":
+    vpc:
+      metadata:
+        component: vpc
+      template: template.yaml
+      stack_name: "test-vpc"
+      settings:
+        aws_cloudformation:
+          region: us-east-1
+    no-stack-name:
+      metadata:
+        component: no-stack-name
+      template: template.yaml
