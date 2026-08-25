@@ -608,6 +608,17 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		return atmosConfig, err
 	}
 
+	// Validate components.terraform.flags against its raw viper map, not the just-unmarshalled
+	// atmosConfig.Components.Terraform.Flags: the typed TerraformFlags decode above silently
+	// drops any unrecognized key (e.g. a typo like `lock_timout`), so a global-level typo would
+	// otherwise never surface. Stack-level and component-level `flags:` typos are already caught
+	// later, once a component is resolved, by validateFlagsKeys in
+	// internal/exec/terraform_execute_helpers_args.go — this is the equivalent check for the
+	// fleet-wide default.
+	if err := schema.ValidateTerraformFlagsKeys(v.GetStringMap("components.terraform.flags")); err != nil {
+		return atmosConfig, fmt.Errorf("atmos.yaml components.terraform.flags: %w", err)
+	}
+
 	extractEnvMapsFromViper(v, &atmosConfig)
 
 	// Fix auth.identities after Viper unmarshal.
