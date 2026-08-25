@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -484,4 +485,13 @@ func TestWrapAPICallError_OtherError_PlainWrap(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 	assert.ErrorIs(t, err, awsErr)
 	assert.Empty(t, cockroachErrors.GetAllHints(err), "an unrecognized AWS error must not get an invented hint")
+}
+
+// timeValue must return the zero time.Time for a nil pointer and the pointee
+// value for a non-nil one.
+func TestTimeValue(t *testing.T) {
+	assert.True(t, timeValue(nil).IsZero())
+
+	ts := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	assert.Equal(t, ts, timeValue(&ts))
 }
