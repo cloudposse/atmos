@@ -1,0 +1,99 @@
+---
+title: atmos aws cloudformation stackset create
+sidebar_label: create
+sidebar_class_name: command
+id: create
+description: Create a StackSet, and its initial stack instances if configured.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Create a CloudFormation StackSet (`CreateStackSet`) from the resolved
+  `kind: aws/stackset` provision target's `accounts`/`regions`/
+  `permission_model`/role settings, plus the component's own
+  `template`/`parameters`/`capabilities`/`tags`. When the target declares both
+  `accounts` and `regions`, `stackset create` also creates the initial stack
+  instances (`CreateStackInstances`) across that account/region matrix and
+  waits for the operation to finish — the only verb that creates instances.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation stackset create --help" src="/casts/screengrabs/atmos-aws-cloudformation-stackset-create--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation stackset create <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation stackset create vpc -s plat-ue2-dev
+```
+
+Skip the interactive confirmation prompt:
+
+```shell
+atmos aws cloudformation stackset create vpc -s plat-ue2-dev --auto-approve
+```
+
+Disambiguate when the component declares more than one `kind: aws/stackset` target:
+
+```shell
+atmos aws cloudformation stackset create vpc -s plat-ue2-dev --target multi-account
+```
+
+Create StackSets for all or affected components in dependency order:
+
+```shell
+atmos aws cloudformation stackset create --all -s plat-ue2-dev
+atmos aws cloudformation stackset create --affected --base origin/main
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--target` <em>(optional)</em></dt>
+  <dd>The `kind: aws/stackset` provision target to use. Required when more than one is declared.</dd>
+
+  <dt>`--auto-approve` <em>(optional)</em></dt>
+  <dd>Skip the interactive confirmation prompt. Without it, `stackset create` prompts for confirmation on a TTY before creating the StackSet.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Create StackSets for all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Create StackSets for affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+## Behavior
+
+If the resolved target declares only `accounts` or only `regions` (not both),
+`stackset create` stops after creating the StackSet itself — no instances are
+created. Creating instances later requires deleting and re-creating the
+StackSet with both fields set; there is no separate "add instances" verb.
+
+The `CreateStackInstances` operation is polled every 3 seconds until it
+reaches a terminal status (`SUCCEEDED`/`FAILED`/`STOPPED`), and the command
+times out after 30 minutes if it hasn't.
+
+:::note
+`stackset create` does not fire `before`/`after` hook events — only
+[`apply`](/cli/commands/aws/cloudformation/apply),
+[`diff`](/cli/commands/aws/cloudformation/diff), and
+[`delete`](/cli/commands/aws/cloudformation/delete) do.
+:::
