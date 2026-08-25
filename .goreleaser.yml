@@ -32,6 +32,10 @@ builds:
       # usage by users in CI/CD systems like Terraform Cloud where
       # they are unable to install libraries.
       - CGO_ENABLED=0
+      # Link Go's native FIPS 140-3 validated crypto module and default
+      # release binaries to FIPS-enforcing (GODEBUG=fips140=on) at runtime.
+      # See docs/prd/fips-140-mode.md.
+      - GOFIPS140=latest
     mod_timestamp: '{{ .CommitTimestamp }}'
     goos:
       - 'linux'

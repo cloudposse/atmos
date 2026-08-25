@@ -17,6 +17,10 @@ const (
 	directoryPermissions = 0o755
 	defaultTestTimeout   = "40m"
 	cgoDisabled          = "CGO_ENABLED=0"
+	// Links Go's native FIPS 140-3 validated crypto module so acceptance-test
+	// binaries default to FIPS-enforcing (GODEBUG=fips140=on) at runtime,
+	// matching release builds. See docs/prd/fips-140-mode.md.
+	fips140Latest = "GOFIPS140=latest"
 )
 
 var (
@@ -42,7 +46,7 @@ func environment(name string) string {
 }
 
 func goCommandEnvironment(values ...string) []string {
-	return append([]string{cgoDisabled}, values...)
+	return append([]string{cgoDisabled, fips140Latest}, values...)
 }
 
 func writeStatus(format string, args ...any) error {

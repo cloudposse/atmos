@@ -53,7 +53,7 @@ jobs:
         # CGO_ENABLED=0: `go run .` builds the whole atmos binary graph, which pulls in
         # cgo-linked hardware-security-key deps (e.g. github.com/bearsh/hid) that need
         # system libudev headers this runner doesn't have. atmos itself always builds with
-        # CGO disabled (see .goreleaser.yml, scripts/build-atmos.sh); match that here too.
+        # CGO disabled (see .goreleaser.yml, magefiles/build.go); match that here too.
         env:
           CGO_ENABLED: "0"
         run: go run . stack schema website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json

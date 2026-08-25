@@ -1,0 +1,340 @@
+//go:build mage
+
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func envSliceToMap(env []string) map[string]string {
+	out := make(map[string]string, len(env))
+	for _, entry := range env {
+		name, value, ok := strings.Cut(entry, "=")
+		if ok {
+			out[name] = value
+		}
+	}
+	return out
+}
+
+// unsetEnv removes key from the process environment for the duration of the
+// test, restoring its prior value (or absence) on cleanup. Setting a
+// variable via t.Setenv can't express "unset": an empty string still leaves
+// the key present for os.LookupEnv, and still leaks an empty-valued entry
+// into subprocess environments built from os.Environ(). This repo's own dev
+// shell ambiently exports GOFLAGS=-buildvcs=false for worktrees, so tests
+// asserting a variable's absence-by-default need genuine unset semantics,
+// not just an empty value, to stay correct regardless of the ambient shell.
+func unsetEnv(t *testing.T, key string) {
+	t.Helper()
+	original, wasSet := os.LookupEnv(key)
+	require.NoError(t, os.Unsetenv(key))
+	t.Cleanup(func() {
+		if wasSet {
+			_ = os.Setenv(key, original)
+		} else {
+			_ = os.Unsetenv(key)
+		}
+	})
+}
+
+func TestBuildTargetConfig(t *testing.T) {
+	t.Run("unsupported target", func(t *testing.T) {
+		_, err := buildTargetConfig("bogus")
+		require.ErrorIs(t, err, errUnsupportedBuildTarget)
+		assert.Contains(t, err.Error(), "bogus")
+	})
+
+	cases := []struct {
+		name        string
+		target      string
+		ambientGOOS string
+		ambientArch string
+		wantGOOS    string
+		wantGOARCH  string
+		wantOutput  string
+	}{
+		{
+			name:       "default with no ambient GOOS/GOARCH",
+			target:     "default",
+			wantOutput: filepath.Join("build", "atmos"),
+		},
+		{
+			name:        "default passes through ambient GOOS",
+			target:      "default",
+			ambientGOOS: "linux",
+			wantGOOS:    "linux",
+			wantOutput:  filepath.Join("build", "atmos"),
+		},
+		{
+			name:       "linux pins GOOS",
+			target:     "linux",
+			wantGOOS:   "linux",
+			wantOutput: filepath.Join("build", "atmos"),
+		},
+		{
+			name:       "windows pins GOOS and .exe output",
+			target:     "windows",
+			wantGOOS:   "windows",
+			wantOutput: filepath.Join("build", "atmos.exe"),
+		},
+		{
+			name:       "macos pins GOOS",
+			target:     "macos",
+			wantGOOS:   "darwin",
+			wantOutput: filepath.Join("build", "atmos"),
+		},
+		{
+			name:        "macos-intel pins GOARCH regardless of ambient value",
+			target:      "macos-intel",
+			ambientArch: "arm64",
+			wantGOOS:    "darwin",
+			wantGOARCH:  "amd64",
+			wantOutput:  filepath.Join("build", "atmos"),
+		},
+		{
+			name:        "linux passes through ambient GOARCH",
+			target:      "linux",
+			ambientArch: "arm64",
+			wantGOOS:    "linux",
+			wantGOARCH:  "arm64",
+			wantOutput:  filepath.Join("build", "atmos"),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("GOOS", tc.ambientGOOS)
+			t.Setenv("GOARCH", tc.ambientArch)
+
+			config, err := buildTargetConfig(tc.target)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantGOOS, config.GOOS)
+			assert.Equal(t, tc.wantGOARCH, config.GOARCH)
+			assert.Equal(t, tc.wantOutput, config.Output)
+		})
+	}
+}
+
+func TestSetDefault(t *testing.T) {
+	t.Run("sets a default when the key is unset", func(t *testing.T) {
+		key := "ATMOS_MAGEFILES_TEST_UNSET_VAR"
+		_, alreadySet := os.LookupEnv(key)
+		require.False(t, alreadySet, "test precondition: %s must not be set", key)
+
+		env := map[string]string{}
+		setDefault(env, key, "fallback")
+		assert.Equal(t, "fallback", env[key])
+	})
+
+	t.Run("leaves an existing value untouched", func(t *testing.T) {
+		key := "ATMOS_MAGEFILES_TEST_SET_VAR"
+		t.Setenv(key, "explicit")
+
+		env := map[string]string{}
+		setDefault(env, key, "fallback")
+		_, ok := env[key]
+		assert.False(t, ok, "setDefault must not override an already-set environment variable")
+	})
+}
+
+func TestInWorktree(t *testing.T) {
+	t.Run("not a git repository", func(t *testing.T) {
+		assert.False(t, inWorktree(t.TempDir()))
+	})
+
+	t.Run("primary checkout is not a worktree", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		assert.False(t, inWorktree(root))
+	})
+
+	t.Run("linked worktree", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		worktreeDir := filepath.Join(t.TempDir(), "wt")
+		runGit(t, root, "worktree", "add", "-b", "wt-branch-inworktree", worktreeDir)
+		assert.True(t, inWorktree(worktreeDir))
+	})
+}
+
+func TestBuildBaseEnv(t *testing.T) {
+	t.Run("defaults outside a worktree", func(t *testing.T) {
+		unsetEnv(t, "GOFLAGS")
+		root := initGitRepoFixture(t)
+		env := envSliceToMap(buildBaseEnv(root))
+		assert.Equal(t, "0", env["CGO_ENABLED"])
+		assert.Equal(t, "latest", env["GOFIPS140"])
+		_, hasGoflags := env["GOFLAGS"]
+		assert.False(t, hasGoflags, "GOFLAGS should only default inside a worktree")
+	})
+
+	t.Run("respects existing overrides", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		t.Setenv("CGO_ENABLED", "1")
+		t.Setenv("GOFIPS140", "off")
+
+		env := envSliceToMap(buildBaseEnv(root))
+		_, hasCgo := env["CGO_ENABLED"]
+		assert.False(t, hasCgo, "an already-set CGO_ENABLED must not be re-added to the override map")
+		_, hasFips := env["GOFIPS140"]
+		assert.False(t, hasFips, "an already-set GOFIPS140 must not be re-added to the override map")
+	})
+
+	t.Run("defaults GOFLAGS inside a worktree", func(t *testing.T) {
+		unsetEnv(t, "GOFLAGS")
+		root := initGitRepoFixture(t)
+		worktreeDir := filepath.Join(t.TempDir(), "wt")
+		runGit(t, root, "worktree", "add", "-b", "wt-branch-baseenv", worktreeDir)
+
+		env := envSliceToMap(buildBaseEnv(worktreeDir))
+		assert.Equal(t, "-buildvcs=false", env["GOFLAGS"])
+	})
+}
+
+func TestRunIn(t *testing.T) {
+	t.Run("success streams args, env, and cwd through", func(t *testing.T) {
+		argsFile := setUpFakePathBinary(t, "footool")
+		dir := t.TempDir()
+
+		require.NoError(t, runIn(dir, []string{"FOO=bar"}, "footool", "arg1", "arg2"))
+
+		assert.Equal(t, []string{"arg1", "arg2"}, readFakeBinArgs(t, argsFile))
+		assert.Equal(t, "bar", readFakeBinEnv(t, argsFile)["FOO"])
+		wantDir, err := filepath.EvalSymlinks(dir)
+		require.NoError(t, err)
+		assert.Equal(t, wantDir, readFakeBinCwd(t, argsFile))
+	})
+
+	t.Run("propagates subprocess failure", func(t *testing.T) {
+		setUpFakePathBinary(t, "footool")
+		t.Setenv(fakeBinExitEnv, "1")
+
+		err := runIn(t.TempDir(), nil, "footool", "boom")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "footool boom")
+	})
+}
+
+func TestBuildBinary(t *testing.T) {
+	t.Run("propagates repo-root resolution failure", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		err := Build{}.Binary("default", "test")
+		require.ErrorIs(t, err, errMageRepoRootNotFound)
+	})
+
+	t.Run("propagates unsupported target error", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		t.Chdir(root)
+		err := Build{}.Binary("bogus", "test")
+		require.ErrorIs(t, err, errUnsupportedBuildTarget)
+	})
+
+	t.Run("propagates go mod download failure without attempting go build", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		argsFile := setUpFakePathBinary(t, "go")
+		t.Setenv(fakeBinExitEnv, "1")
+		t.Chdir(root)
+
+		err := Build{}.Binary("default", "test")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "mod download")
+		assert.Equal(t, []string{"mod", "download"}, readFakeBinArgs(t, argsFile),
+			"go build must not run once go mod download has failed")
+	})
+
+	t.Run("builds with default CGO/FIPS env, target GOOS, and version/commit ldflags", func(t *testing.T) {
+		unsetEnv(t, "GOARCH")
+		root := initGitRepoFixture(t)
+		wantCommit, err := execGitOutput(root, "rev-parse", "HEAD")
+		require.NoError(t, err)
+		argsFile := setUpFakePathBinary(t, "go")
+		t.Chdir(root)
+
+		require.NoError(t, Build{}.Binary("linux", "v1.2.3"))
+
+		wantLdflags := fmt.Sprintf("-X '%s.Version=v1.2.3' -X '%s.Commit=%s'",
+			versionLdflagsPackage, versionLdflagsPackage, wantCommit)
+		assert.Equal(t, []string{"build", "-o", filepath.Join("build", "atmos"), "-v", "-ldflags", wantLdflags},
+			readFakeBinArgs(t, argsFile))
+
+		env := readFakeBinEnv(t, argsFile)
+		assert.Equal(t, "0", env["CGO_ENABLED"])
+		assert.Equal(t, "latest", env["GOFIPS140"])
+		assert.Equal(t, "linux", env["GOOS"])
+		_, hasArch := env["GOARCH"]
+		assert.False(t, hasArch, "GOARCH must not be forced when the ambient environment doesn't set it")
+
+		// Resolve both sides (e.g. macOS's /var -> /private/var) before
+		// comparing: which side the OS resolves symlinks on isn't something
+		// worth pinning down here, only that they name the same directory.
+		wantRoot, err := filepath.EvalSymlinks(root)
+		require.NoError(t, err)
+		gotCwd, err := filepath.EvalSymlinks(readFakeBinCwd(t, argsFile))
+		require.NoError(t, err)
+		assert.Equal(t, wantRoot, gotCwd)
+
+		info, err := os.Stat(filepath.Join(root, "build"))
+		require.NoError(t, err)
+		assert.True(t, info.IsDir())
+	})
+
+	t.Run("windows target builds an .exe and defaults target/version when empty", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		argsFile := setUpFakePathBinary(t, "go")
+		t.Chdir(root)
+
+		require.NoError(t, Build{}.Binary("windows", ""))
+
+		args := readFakeBinArgs(t, argsFile)
+		require.Len(t, args, 6)
+		assert.Equal(t, filepath.Join("build", "atmos.exe"), args[2])
+		assert.Contains(t, args[5], "Version=test")
+		assert.Equal(t, "windows", readFakeBinEnv(t, argsFile)["GOOS"])
+	})
+
+	t.Run("macos-intel pins GOARCH=amd64 regardless of the ambient value", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		argsFile := setUpFakePathBinary(t, "go")
+		t.Setenv("GOARCH", "arm64")
+		t.Chdir(root)
+
+		require.NoError(t, Build{}.Binary("macos-intel", "test"))
+
+		env := readFakeBinEnv(t, argsFile)
+		assert.Equal(t, "darwin", env["GOOS"])
+		assert.Equal(t, "amd64", env["GOARCH"])
+	})
+
+	t.Run("respects an existing CGO_ENABLED/GOFIPS140 override", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		argsFile := setUpFakePathBinary(t, "go")
+		t.Setenv("CGO_ENABLED", "1")
+		t.Setenv("GOFIPS140", "off")
+		t.Chdir(root)
+
+		require.NoError(t, Build{}.Binary("default", "test"))
+
+		env := readFakeBinEnv(t, argsFile)
+		assert.Equal(t, "1", env["CGO_ENABLED"])
+		assert.Equal(t, "off", env["GOFIPS140"])
+	})
+
+	t.Run("sets GOFLAGS=-buildvcs=false when building from a worktree", func(t *testing.T) {
+		unsetEnv(t, "GOFLAGS")
+		root := initGitRepoFixture(t)
+		worktreeDir := filepath.Join(t.TempDir(), "wt")
+		runGit(t, root, "worktree", "add", "-b", "wt-branch-buildbinary", worktreeDir)
+		require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, "go.mod"), []byte(rootModuleDecl+"\n\ngo 1.26\n"), 0o644))
+		argsFile := setUpFakePathBinary(t, "go")
+		t.Chdir(worktreeDir)
+
+		require.NoError(t, Build{}.Binary("default", "test"))
+
+		assert.Equal(t, "-buildvcs=false", readFakeBinEnv(t, argsFile)["GOFLAGS"])
+	})
+}

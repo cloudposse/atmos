@@ -1,0 +1,59 @@
+---
+slug: fips-140-mode
+title: "Atmos binaries now build with Go's FIPS 140-3 crypto module by default"
+date: 2026-08-24T12:00:00.000Z
+authors: [osterman]
+tags: [security]
+---
+
+Federal agencies, financial institutions, and healthcare organizations are often required to run
+only cryptography that's been validated against FIPS 140, the U.S. government's standard for
+approved algorithms and key sizes. For a command-line tool built on a general-purpose language
+runtime, meeting that bar has traditionally meant compiling against a separate validated crypto
+library, or simply hoping the runtime's own TLS and encryption code happens to stick to approved
+algorithms.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos talks to a lot of TLS endpoints — cloud provider APIs, git servers, artifact registries,
+the Terraform module registry. Every one of those connections depends on the cryptography built
+into the Go runtime atmos is compiled with. Until now, nothing about that cryptography was
+validated or restricted to FIPS-approved algorithms; it just used whatever Go's standard library
+picked. Operators who needed a FIPS 140-3 claim for their toolchain had no way to get one from an
+official atmos release.
+
+## The Fix
+
+Every officially released atmos binary — along with every binary built from a checkout using
+`atmos build` — now links Go's own FIPS 140-3 validated cryptographic module and defaults to
+enforcing it at runtime. TLS connections, key generation, and hashing are restricted to
+FIPS-approved algorithms and key sizes automatically. No flag, environment variable, or config
+change is required.
+
+This covers the TLS and cryptography atmos itself uses for outbound connections. Declarative
+secrets management (`atmos secret keygen` and the age-based SOPS backend, along with the sealed
+values atmos pushes to GitHub Actions secrets) relies on its own encryption, chosen for
+compatibility with those specific ecosystems, and isn't yet covered by this enforcement — worth
+knowing if your compliance program needs FIPS validation across secrets handling too.
+
+## How to Use It
+
+Nothing to opt into — every current and future atmos release ships this way by default. If you're
+curious whether a given binary was built with it, any standard Go toolchain can tell you:
+
+```shell
+go version -m "$(command -v atmos)" | grep -i fips
+```
+
+```
+build   DefaultGODEBUG=fips140=on
+build   GOFIPS140=latest
+```
+
+## Get Involved
+
+Have feedback on this, or a compliance requirement it doesn't yet cover? [Open an
+issue](https://github.com/cloudposse/atmos/issues) or join the conversation in the [Cloud Posse
+community Slack](https://cloudposse.com/slack).

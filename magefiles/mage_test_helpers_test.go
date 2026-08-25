@@ -34,8 +34,9 @@ func TestMain(m *testing.M) {
 }
 
 // runFakeBinAndExit writes the process's own args (excluding argv[0]) to the
-// file named by fakeBinOutEnv, one per line, and its working directory to
-// that same path with a ".cwd" suffix, then exits with the code from
+// file named by fakeBinOutEnv, one per line, its working directory to that
+// same path with a ".cwd" suffix, and its full environment (one "K=V" pair
+// per line) with a ".env" suffix, then exits with the code from
 // fakeBinExitEnv (default 0). It never reaches the normal testing.M.Run path.
 func runFakeBinAndExit() {
 	if out := os.Getenv(fakeBinOutEnv); out != "" {
@@ -43,6 +44,7 @@ func runFakeBinAndExit() {
 		if cwd, err := os.Getwd(); err == nil {
 			_ = os.WriteFile(out+".cwd", []byte(cwd), 0o644)
 		}
+		_ = os.WriteFile(out+".env", []byte(strings.Join(os.Environ(), "\n")), 0o644)
 	}
 	if stdout := os.Getenv(fakeBinStdoutEnv); stdout != "" {
 		_, _ = os.Stdout.WriteString(stdout)
@@ -127,6 +129,23 @@ func readFakeBinCwd(t *testing.T, argsFile string) string {
 	data, err := os.ReadFile(argsFile + ".cwd")
 	require.NoError(t, err, "fake binary was not invoked")
 	return string(data)
+}
+
+// readFakeBinEnv reads back the environment the fake binary observed (via
+// os.Environ()) when it was invoked, as a name->value map. It fails the test
+// if the fake binary was never invoked.
+func readFakeBinEnv(t *testing.T, argsFile string) map[string]string {
+	t.Helper()
+	data, err := os.ReadFile(argsFile + ".env")
+	require.NoError(t, err, "fake binary was not invoked")
+	env := map[string]string{}
+	for _, line := range strings.Split(string(data), "\n") {
+		name, value, ok := strings.Cut(line, "=")
+		if ok {
+			env[name] = value
+		}
+	}
+	return env
 }
 
 // initGitRepoFixture creates a fresh git repo under a t.TempDir(), with a
