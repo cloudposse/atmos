@@ -1,0 +1,77 @@
+---
+title: atmos aws cloudformation fmt
+sidebar_label: fmt
+sidebar_class_name: command
+id: fmt
+description: Format the local template in place, or check formatting with --check.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Format the component's local template in place: a dependency-free, native
+  round-trip through the YAML parser that re-serializes the template with
+  consistent indentation, preserving comments and key order. There is no
+  `cfn-format` binary to shell out to (Rain's own formatter is archived along
+  with the rest of Rain), so this is entirely native.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation fmt --help" src="/casts/screengrabs/atmos-aws-cloudformation-fmt--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation fmt <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation fmt vpc -s plat-ue2-dev
+```
+
+Check whether the template is formatted without writing changes (for CI):
+
+```shell
+atmos aws cloudformation fmt vpc -s plat-ue2-dev --check
+```
+
+Format all or affected components' templates in dependency order:
+
+```shell
+atmos aws cloudformation fmt --all -s plat-ue2-dev
+atmos aws cloudformation fmt --affected --base origin/main --check
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--check` <em>(optional)</em></dt>
+  <dd>Report whether the template is formatted without writing changes. Exits non-zero if the template is not formatted — use this in CI instead of the default write-in-place behavior.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Format all `aws/cloudformation` components' templates in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Format affected `aws/cloudformation` components' templates and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+:::note
+`fmt` never calls the CloudFormation API and does not fire `before`/`after`
+hook events — only [`apply`](/cli/commands/aws/cloudformation/apply),
+[`diff`](/cli/commands/aws/cloudformation/diff), and
+[`delete`](/cli/commands/aws/cloudformation/delete) do.
+:::

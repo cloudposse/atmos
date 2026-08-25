@@ -1,0 +1,65 @@
+---
+title: atmos aws cloudformation get policy
+sidebar_label: policy
+sidebar_class_name: command
+id: policy
+description: Fetch the deployed stack's policy.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Fetch the deployed stack's current stack policy (`GetStackPolicy`) and write
+  it to stdout — the policy CloudFormation is actually enforcing, as opposed
+  to the `stack_policy` configured on the component (which `apply` only
+  applies after a successful deploy).
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation get policy --help" src="/casts/screengrabs/atmos-aws-cloudformation-get-policy--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation get policy <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation get policy vpc -s plat-ue2-dev
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Fetch the policy for all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Fetch the policy for affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+## Output
+
+If the stack has no policy set (CloudFormation's default), `get policy` prints
+a message saying so instead of an empty body.
+
+:::note
+`get policy` does not fire `before`/`after` hook events — only
+[`apply`](/cli/commands/aws/cloudformation/apply),
+[`diff`](/cli/commands/aws/cloudformation/diff), and
+[`delete`](/cli/commands/aws/cloudformation/delete) do.
+:::

@@ -1,0 +1,84 @@
+---
+title: atmos aws cloudformation drift detect
+sidebar_label: detect
+sidebar_class_name: command
+id: detect
+description: Run drift detection against the deployed stack.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Trigger a fresh CloudFormation drift detection (`DetectStackDrift`) against
+  the deployed stack and poll until it completes, then render the overall
+  drift status and drifted-resource count. Use
+  [`drift describe`](/cli/commands/aws/cloudformation/drift/describe)
+  afterward to see per-resource results.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation drift detect --help" src="/casts/screengrabs/atmos-aws-cloudformation-drift-detect--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation drift detect <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation drift detect vpc -s plat-ue2-dev
+```
+
+Fail the command (non-zero exit) when drift is found, for CI:
+
+```shell
+atmos aws cloudformation drift detect vpc -s plat-ue2-dev --fail-on-drift
+```
+
+Run drift detection for all or affected components in dependency order:
+
+```shell
+atmos aws cloudformation drift detect --all -s plat-ue2-dev --fail-on-drift
+atmos aws cloudformation drift detect --affected --base origin/main --fail-on-drift
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--fail-on-drift` <em>(optional)</em></dt>
+  <dd>Exit non-zero if drift is detected. Useful for CI drift-detection jobs.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Run drift detection for all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Run drift detection for affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+## Behavior
+
+`drift detect` polls CloudFormation every 3 seconds until the detection
+operation completes, and gives up after 15 minutes if it hasn't. A detection
+that itself fails (`DETECTION_FAILED`) is always an error, independent of
+`--fail-on-drift`.
+
+:::note
+`drift detect` does not fire `before`/`after` hook events — only
+[`apply`](/cli/commands/aws/cloudformation/apply),
+[`diff`](/cli/commands/aws/cloudformation/diff), and
+[`delete`](/cli/commands/aws/cloudformation/delete) do.
+:::
