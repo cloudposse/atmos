@@ -22,6 +22,15 @@ import (
 // do, and what this file's uploadPackage does for Phase 1.
 const templateInlineSizeLimit = 51200
 
+// newS3BackendFunc is a seam for testing: uploadPackage calls through this
+// var (rather than newS3Backend directly) so tests can inject a fake
+// artifact.Backend and exercise uploadPackage's digest/name/error-wrapping
+// logic without making a real network call to S3 (constructing the real
+// backend is fast/local, but Backend.Upload always attempts a live AWS API
+// call, which is exactly the kind of integration dependency CLAUDE.md's
+// Testing Strategy says to mock rather than exercise for real).
+var newS3BackendFunc = newS3Backend
+
 // packageUpload is the outcome of uploading a template to a `kind: aws/s3`
 // provision target: the URL CreateChangeSet's TemplateURL can reference, and a
 // SHA-256 digest for provenance.
@@ -51,7 +60,7 @@ func needsPackaging(templateBody string) bool {
 func uploadPackage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, s3Target *targetS3Config, templateBody string) (*packageUpload, error) {
 	defer perf.Track(atmosConfig, "cloudformation.uploadPackage")()
 
-	backend, err := newS3Backend(atmosConfig, info, s3Target)
+	backend, err := newS3BackendFunc(atmosConfig, info, s3Target)
 	if err != nil {
 		return nil, err
 	}

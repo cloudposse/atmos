@@ -111,6 +111,14 @@ func TestEvaluateChangeSetStatus(t *testing.T) {
 			wantDecision: changeSetPollError,
 			wantErr:      true,
 		},
+		{
+			// UPDATE_IN_PROGRESS (unlike CREATE_IN_PROGRESS/CREATE_PENDING) has no
+			// dedicated enum case above — it falls through to the suffix-based
+			// default branch, which must still classify it as "keep polling".
+			name:         "update in progress falls through to suffix match",
+			status:       cfntypes.ChangeSetStatus("UPDATE_IN_PROGRESS"),
+			wantDecision: changeSetPollContinue,
+		},
 	}
 
 	for _, tt := range tests {
@@ -192,6 +200,18 @@ func TestExecuteChangeSet_Error(t *testing.T) {
 	spec := &stackSpec{StackName: "vpc"}
 	result := &changeSetResult{ChangeSetName: "atmos-vpc-123"}
 	err := executeChangeSet(context.Background(), client, spec, result)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+}
+
+// waitForChangeSet must wrap a DescribeChangeSet API error with
+// ErrAwsCloudFormationChangeSetFailed rather than looping or panicking.
+func TestWaitForChangeSet_DescribeChangeSetError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
+
+	_, err := waitForChangeSet(context.Background(), client, "vpc", "atmos-vpc-123")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
 }
