@@ -34,6 +34,24 @@ import (
 // (each of these tests only pays the cost once, on its own success path).
 const sessionReadyWaitTimeout = "5s"
 
+// sessionReadyWaitTimeoutDuration is sessionReadyWaitTimeout pre-parsed, so a
+// test that must bound a *parent* context around a session wait action (as
+// opposed to the action's own Timeout field, which takes the string form
+// directly) can derive its deadline from the same value instead of
+// hardcoding a second literal that can silently drift out of sync -- see
+// waitForOutput in pkg/asciicast/session.go, which returns the parent
+// context's own error the moment it expires, even if the wait action's own,
+// longer Timeout hasn't elapsed yet.
+var sessionReadyWaitTimeoutDuration = mustParseDuration(sessionReadyWaitTimeout)
+
+func mustParseDuration(s string) time.Duration {
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+
 func TestCastValidateSessionWaitRequiresTextOrRegex(t *testing.T) {
 	h := &CastHandler{}
 	err := h.Validate(&schema.WorkflowStep{
@@ -2134,7 +2152,11 @@ func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// Must outlive the wait action's own sessionReadyWaitTimeout below: this
+	// parent context's deadline firing first would return ctx.Err() instead
+	// of ever giving the wait action its own, longer budget to succeed (see
+	// sessionReadyWaitTimeoutDuration's doc comment).
+	ctx, cancel := context.WithTimeout(context.Background(), sessionReadyWaitTimeoutDuration+2*time.Second)
 	defer cancel()
 
 	err = runCastSessionMode(ctx, &schema.WorkflowStep{
