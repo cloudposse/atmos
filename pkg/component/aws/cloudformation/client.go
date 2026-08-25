@@ -30,9 +30,15 @@ type CloudFormationClient interface {
 
 // newClient constructs the real AWS SDK v2 CloudFormation client from a resolved
 // aws.Config (built in-process via environment.go, honoring the active identity's
-// credentials/endpoint — see the emulator-endpoint note there).
-func newClient(cfg aws.Config) CloudFormationClient { //nolint:gocritic // aws.Config-by-value matches cloudformation.NewFromConfig's own signature.
+// credentials). EndpointURL overrides the service endpoint (e.g. a Floci-emulated
+// CloudFormation endpoint) when set — see environment.go's resolveEndpointURL.
+func newClient(cfg aws.Config, endpointURL string) CloudFormationClient { //nolint:gocritic // aws.Config-by-value matches cloudformation.NewFromConfig's own signature.
 	defer perf.Track(nil, "cloudformation.newClient")()
 
-	return cloudformation.NewFromConfig(cfg)
+	var optFns []func(*cloudformation.Options)
+	if endpointURL != "" {
+		optFns = append(optFns, func(o *cloudformation.Options) { o.BaseEndpoint = aws.String(endpointURL) })
+	}
+
+	return cloudformation.NewFromConfig(cfg, optFns...)
 }

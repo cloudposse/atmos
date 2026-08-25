@@ -75,7 +75,7 @@ func authManagerForBulk(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	if err != nil {
 		return nil, err
 	}
-	info.AuthManager = authManager
+	propagateAuth(info, authManager)
 	return authManager, nil
 }
 

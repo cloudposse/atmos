@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -23,6 +25,7 @@ var (
 	initCliConfig                    = cfg.InitCliConfig
 	processStacks                    = e.ProcessStacks
 	setupComponentAuthForCLI         = e.SetupComponentAuthForCLI
+	propagateAuth                    = e.PropagateAuth
 	provisionAndResolveComponentPath = component.ProvisionAndResolveComponentPath
 	getHooks                         = hooks.GetHooks
 )
@@ -82,7 +85,7 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 		if err != nil {
 			return err
 		}
-		info.AuthManager = authManager
+		propagateAuth(info, authManager)
 	}
 
 	spec, err := resolveSpecAndTemplate(atmosConfig, info, operation)
@@ -181,7 +184,7 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 	if err != nil {
 		return summary, err
 	}
-	client := newClient(awsCfg)
+	client := newClient(awsCfg, resolveEndpointURL(octx.Info))
 
 	switch operation {
 	case OperationValidate:
@@ -209,7 +212,32 @@ func runDiff(ctx context.Context, client CloudFormationClient, spec *stackSpec, 
 	summary["changeset_id"] = result.ChangeSetID
 	summary["no_op"] = result.NoOp
 	summary["changes"] = result.Changes
+	renderDiffSummary(spec.StackName, result)
 	return summary, nil
+}
+
+// renderDiffSummary writes the changeset's predicted resource changes to the
+// data channel (stdout), one line per resource — the `plan`/`diff` counterpart
+// to renderOutputsSummary, without which those verbs produce no visible output
+// at all despite successfully creating and describing the changeset.
+func renderDiffSummary(stackName string, result *changeSetResult) {
+	if result.NoOp {
+		_ = data.Writeln(fmt.Sprintf("%s: no changes (changeset would be a no-op)", stackName))
+		return
+	}
+
+	_ = data.Writeln(fmt.Sprintf("%s: %d resource change(s)", stackName, len(result.Changes)))
+	for _, change := range result.Changes {
+		rc := change.ResourceChange
+		if rc == nil {
+			continue
+		}
+		line := fmt.Sprintf("  %-8s %-28s %s", rc.Action, aws.ToString(rc.ResourceType), aws.ToString(rc.LogicalResourceId))
+		if rc.Replacement != "" {
+			line += fmt.Sprintf(" (replacement: %s)", rc.Replacement)
+		}
+		_ = data.Writeln(line)
+	}
 }
 
 // runApply executes the changeset (creating or updating the stack) and renders

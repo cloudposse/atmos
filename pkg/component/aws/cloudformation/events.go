@@ -65,6 +65,14 @@ func streamStackEvents(ctx context.Context, client CloudFormationClient, stackNa
 func pollStackEvents(ctx context.Context, client CloudFormationClient, stackName string, seen map[string]bool) ([]cfntypes.StackEvent, cfntypes.StackStatus, error) {
 	eventsOut, err := client.DescribeStackEvents(ctx, &cloudformation.DescribeStackEventsInput{StackName: awsString(stackName)})
 	if err != nil {
+		// A delete can complete (and the stack disappear) faster than this poll loop's
+		// first iteration — observed against Floci, which drops a deleted stack's event
+		// history immediately rather than retaining it the way real AWS does. Treat "not
+		// found" here the same as the DescribeStacks not-found check below: the stack is
+		// gone, which is delete's successful terminal state, not an error.
+		if isStackNotFoundError(err) {
+			return nil, cfntypes.StackStatusDeleteComplete, nil
+		}
 		return nil, "", err
 	}
 
@@ -122,5 +130,5 @@ func printStackEvent(event *cfntypes.StackEvent) {
 		ui.Error(line)
 		return
 	}
-	ui.Write(line)
+	ui.Writeln(line)
 }
