@@ -91,6 +91,29 @@ func TestDisableTerminationProtection_Error(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
 }
 
+// currentStackStatus must wrap a DescribeStacks API error.
+func TestCurrentStackStatus_DescribeStacksError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
+
+	_, err := currentStackStatus(context.Background(), client, "vpc")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+}
+
+// currentStackStatus must error (not panic) when DescribeStacks returns no
+// matching stack.
+func TestCurrentStackStatus_NoStackFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+
+	_, err := currentStackStatus(context.Background(), client, "vpc")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "vpc")
+}
+
 func TestIsDeleteFailedStack(t *testing.T) {
 	assert.True(t, isDeleteFailedStack(cfntypes.StackStatusDeleteFailed))
 	assert.False(t, isDeleteFailedStack(cfntypes.StackStatusUpdateComplete))

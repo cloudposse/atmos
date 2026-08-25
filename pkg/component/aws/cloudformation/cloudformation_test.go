@@ -88,6 +88,44 @@ func TestComponentProvider_Execute_UnsupportedSubcommand(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidSpecificAwsCloudFormationComponent)
 }
 
+// Execute must map every supported subcommand (including its aliases) to the
+// correct Operation before dispatching through executeOperation.
+func TestComponentProvider_Execute_MapsSubcommandsToOperations(t *testing.T) {
+	tests := []struct {
+		subCommand string
+		want       Operation
+	}{
+		{"render", OperationRender},
+		{"diff", OperationDiff},
+		{"plan", OperationDiff},
+		{"apply", OperationApply},
+		{"deploy", OperationApply},
+		{"delete", OperationDelete},
+		{"destroy", OperationDelete},
+		{"validate", OperationValidate},
+		{"output", OperationOutput},
+		{"outputs", OperationOutput},
+	}
+
+	original := executeOperation
+	t.Cleanup(func() { executeOperation = original })
+
+	for _, tt := range tests {
+		t.Run(tt.subCommand, func(t *testing.T) {
+			var got Operation
+			executeOperation = func(_ *component.ExecutionContext, op Operation) error {
+				got = op
+				return nil
+			}
+
+			p := &ComponentProvider{}
+			err := p.Execute(&component.ExecutionContext{SubCommand: tt.subCommand})
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestComponentProvider_IsRegistered(t *testing.T) {
 	provider, ok := component.GetProvider(cfg.CloudFormationComponentType)
 	require.True(t, ok, "aws/cloudformation provider should self-register via init()")
