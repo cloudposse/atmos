@@ -213,7 +213,7 @@ func TestDefaultWorkdirManager_CleanAllWorkdirs(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := manager.CleanAllWorkdirs(atmosConfig)
+	err := manager.CleanAllWorkdirs(atmosConfig, false)
 	require.NoError(t, err)
 
 	// Verify workdir base is removed.
@@ -227,8 +227,32 @@ func TestDefaultWorkdirManager_CleanAllWorkdirs_NoWorkdirs(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := manager.CleanAllWorkdirs(atmosConfig)
+	err := manager.CleanAllWorkdirs(atmosConfig, false)
 	require.NoError(t, err) // Should not error if nothing to clean.
+}
+
+// TestDefaultWorkdirManager_CleanAllWorkdirs_DryRun is a regression test for the bug where
+// "atmos terraform workdir clean --all --dry-run" silently ignored --dry-run and deleted every
+// workdir anyway: CleanAllWorkdirs previously took no dryRun parameter at all. A dry run must
+// leave every workdir on disk untouched.
+func TestDefaultWorkdirManager_CleanAllWorkdirs_DryRun(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	workdirBase := filepath.Join(tmpDir, provWorkdir.WorkdirPath, "terraform")
+	require.NoError(t, os.MkdirAll(filepath.Join(workdirBase, "dev-vpc"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workdirBase, "prod-vpc"), 0o755))
+
+	manager := NewDefaultWorkdirManager()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	err := manager.CleanAllWorkdirs(atmosConfig, true)
+	require.NoError(t, err)
+
+	// Every workdir must still exist -- a dry run must never delete anything.
+	_, err = os.Stat(filepath.Join(workdirBase, "dev-vpc"))
+	assert.NoError(t, err, "dry run must not remove dev-vpc")
+	_, err = os.Stat(filepath.Join(workdirBase, "prod-vpc"))
+	assert.NoError(t, err, "dry run must not remove prod-vpc")
 }
 
 // Test ListWorkdirs with file instead of directory (should be skipped).
@@ -489,7 +513,7 @@ func TestDefaultWorkdirManager_CleanAllWorkdirs_RemoveAllError(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := manager.CleanAllWorkdirs(atmosConfig)
+	err := manager.CleanAllWorkdirs(atmosConfig, false)
 	// This may or may not error depending on OS behavior.
 	_ = err
 }

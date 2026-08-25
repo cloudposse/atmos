@@ -137,7 +137,7 @@ func TestCleanAllWorkdirs_Success(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := CleanAllWorkdirs(atmosConfig)
+	err := CleanAllWorkdirs(atmosConfig, false)
 	require.NoError(t, err)
 
 	// Verify entire workdir base removed.
@@ -145,12 +145,63 @@ func TestCleanAllWorkdirs_Success(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "workdir base should be removed")
 }
 
+// TestCleanAllWorkdirs_DryRun is a regression test for the bug where
+// "atmos terraform workdir clean --all --dry-run" silently ignored --dry-run and deleted every
+// workdir anyway -- CleanAllWorkdirs previously took no dryRun parameter at all, unlike its
+// sibling CleanExpiredWorkdirs. A dry run must leave every workdir on disk untouched and report
+// what it would have removed (see listAllWorkdirNames).
+func TestCleanAllWorkdirs_DryRun(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	workdirBase := filepath.Join(tmpDir, WorkdirPath)
+	require.NoError(t, os.MkdirAll(filepath.Join(workdirBase, "terraform", "vpc"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workdirBase, "terraform", "s3"), 0o755))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	err := CleanAllWorkdirs(atmosConfig, true)
+	require.NoError(t, err)
+
+	// Every workdir must still exist -- a dry run must never delete anything.
+	_, err = os.Stat(filepath.Join(workdirBase, "terraform", "vpc"))
+	assert.NoError(t, err, "dry run must not remove the vpc workdir")
+	_, err = os.Stat(filepath.Join(workdirBase, "terraform", "s3"))
+	assert.NoError(t, err, "dry run must not remove the s3 workdir")
+}
+
+func TestListAllWorkdirNames(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	workdirBase := filepath.Join(tmpDir, WorkdirPath)
+	require.NoError(t, os.MkdirAll(filepath.Join(workdirBase, "terraform", "dev-vpc"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workdirBase, "terraform", "dev-s3"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workdirBase, "helmfile", "dev-nginx"), 0o755))
+	// A stray file alongside the workdir directories must be skipped, not reported as a workdir.
+	require.NoError(t, os.WriteFile(filepath.Join(workdirBase, "terraform", "stray.txt"), []byte("x"), 0o644))
+
+	names := listAllWorkdirNames(workdirBase)
+
+	assert.Equal(t, []string{
+		filepath.Join("helmfile", "dev-nginx"),
+		filepath.Join("terraform", "dev-s3"),
+		filepath.Join("terraform", "dev-vpc"),
+	}, names)
+}
+
+func TestListAllWorkdirNames_MissingBase(t *testing.T) {
+	// A nonexistent base must return an empty, non-nil-panicking list rather than erroring --
+	// this is a best-effort informational listing, not a source of truth for whether anything
+	// exists to clean (that check happens before CleanAllWorkdirs calls it).
+	names := listAllWorkdirNames(filepath.Join(t.TempDir(), "does-not-exist"))
+	assert.Empty(t, names)
+}
+
 func TestCleanAllWorkdirs_NoWorkdirs(t *testing.T) {
 	tmpDir := t.TempDir()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
 	// Should not error when no workdirs exist.
-	err := CleanAllWorkdirs(atmosConfig)
+	err := CleanAllWorkdirs(atmosConfig, false)
 	require.NoError(t, err)
 }
 
@@ -166,7 +217,7 @@ func TestCleanAllWorkdirs_EmptyBasePath(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: ""}
 
-	err := CleanAllWorkdirs(atmosConfig)
+	err := CleanAllWorkdirs(atmosConfig, false)
 	require.NoError(t, err)
 }
 
@@ -289,7 +340,7 @@ func TestCleanAllWorkdirs_ErrorType(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := CleanAllWorkdirs(atmosConfig)
+	err := CleanAllWorkdirs(atmosConfig, false)
 	require.Error(t, err, "expected permission error to occur")
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
 }

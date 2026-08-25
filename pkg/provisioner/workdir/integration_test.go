@@ -841,7 +841,7 @@ func TestCleanAllWorkdirs(t *testing.T) {
 	}
 
 	// Clean all workdirs.
-	err = CleanAllWorkdirs(atmosConfig)
+	err = CleanAllWorkdirs(atmosConfig, false)
 	require.NoError(t, err)
 
 	// Verify all workdirs were removed.
@@ -864,7 +864,7 @@ func TestCleanAllWorkdirs_NoWorkdirsExist(t *testing.T) {
 	}
 
 	// Clean all workdirs should succeed gracefully when no workdirs exist.
-	err = CleanAllWorkdirs(atmosConfig)
+	err = CleanAllWorkdirs(atmosConfig, false)
 	require.NoError(t, err, "CleanAllWorkdirs should handle non-existent .workdir gracefully")
 }
 
