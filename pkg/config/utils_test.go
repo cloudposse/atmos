@@ -539,6 +539,59 @@ func TestProcessEnvVars_TerraformFlags(t *testing.T) {
 		err := processEnvVars(config)
 		require.Error(t, err)
 	})
+
+	t.Run("invalid refresh value errors", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH", "not-a-boolean")
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.Error(t, err)
+	})
+
+	t.Run("invalid compact_warnings value errors", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS", "not-a-boolean")
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.Error(t, err)
+	})
+
+	t.Run("env vars override preconfigured values", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT", "10m")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK", "true")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM", "8")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH", "true")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS", "false")
+
+		preconfiguredParallelism := 2
+		preconfiguredLock := false
+		preconfiguredRefresh := false
+		config := &schema.AtmosConfiguration{
+			Schemas: make(map[string]interface{}),
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					Flags: schema.TerraformFlags{
+						LockTimeout:     "1m",
+						Lock:            &preconfiguredLock,
+						Parallelism:     &preconfiguredParallelism,
+						Refresh:         &preconfiguredRefresh,
+						CompactWarnings: true,
+					},
+				},
+			},
+		}
+
+		err := processEnvVars(config)
+		require.NoError(t, err)
+
+		assert.Equal(t, "10m", config.Components.Terraform.Flags.LockTimeout)
+		require.NotNil(t, config.Components.Terraform.Flags.Lock)
+		assert.True(t, *config.Components.Terraform.Flags.Lock)
+		require.NotNil(t, config.Components.Terraform.Flags.Parallelism)
+		assert.Equal(t, 8, *config.Components.Terraform.Flags.Parallelism)
+		require.NotNil(t, config.Components.Terraform.Flags.Refresh)
+		assert.True(t, *config.Components.Terraform.Flags.Refresh)
+		// The env var must override the preconfigured CompactWarnings=true with false.
+		assert.False(t, config.Components.Terraform.Flags.CompactWarnings)
+	})
 }
 
 func TestFindAllStackConfigsInPathsForStack(t *testing.T) {

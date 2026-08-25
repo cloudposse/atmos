@@ -274,6 +274,46 @@ func buildWorkspaceSubcommandArgs(info *schema.ConfigAndStacksInfo, allArgsAndFl
 	return allArgsAndFlags
 }
 
+// subcommandArgsParams bundles the inputs dispatchSubcommandArgs needs to route to the
+// correct per-subcommand argument builder. It exists so dispatchSubcommandArgs itself
+// stays within the repo's argument-limit lint threshold instead of forwarding every
+// individual value as its own parameter.
+type subcommandArgsParams struct {
+	atmosConfig      *schema.AtmosConfiguration
+	info             *schema.ConfigAndStacksInfo
+	varFile          string
+	planFile         string
+	uploadStatusFlag bool
+	componentPath    *string
+	opts             []ShellCommandOption
+}
+
+// dispatchSubcommandArgs routes to the per-subcommand argument builder based on
+// p.info.SubCommand, keeping buildTerraformCommandArgs a short, flat orchestration
+// function per CLAUDE.md's cyclomatic-complexity guidance.
+func dispatchSubcommandArgs(allArgsAndFlags []string, p *subcommandArgsParams) ([]string, error) {
+	switch p.info.SubCommand {
+	case "plan":
+		return buildPlanSubcommandArgs(p.atmosConfig, p.info, allArgsAndFlags, p.varFile, p.planFile, p.uploadStatusFlag)
+	case "destroy":
+		return buildDestroySubcommandArgs(p.info, allArgsAndFlags, p.varFile)
+	case "refresh":
+		return buildRefreshSubcommandArgs(p.info, allArgsAndFlags, p.varFile)
+	case "import":
+		return buildImportSubcommandArgs(p.info, allArgsAndFlags, p.varFile)
+	case "test":
+		return append(allArgsAndFlags, varFileFlag, p.varFile), nil
+	case subcommandApply:
+		return buildApplySubcommandArgs(p.info, allArgsAndFlags, p.varFile)
+	case subcommandInit:
+		return buildInitSubcommandArgs(p.atmosConfig, p.info, allArgsAndFlags, p.varFile, p.componentPath, p.opts...)
+	case subcommandWorkspace:
+		return buildWorkspaceSubcommandArgs(p.info, allArgsAndFlags), nil
+	default:
+		return allArgsAndFlags, nil
+	}
+}
+
 // buildTerraformCommandArgs constructs the complete argument list for the main terraform
 // command based on the subcommand.  For the "init" subcommand it also runs provisioners
 // and may update *componentPath via the workdir provisioner.
@@ -295,48 +335,17 @@ func buildTerraformCommandArgs(
 		uploadStatusFlag = parseUploadStatusFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
 	}
 
-	switch info.SubCommand {
-	case "plan":
-		allArgsAndFlags, err = buildPlanSubcommandArgs(atmosConfig, info, allArgsAndFlags, varFile, planFile, uploadStatusFlag)
-		if err != nil {
-			return nil, false, err
-		}
-
-	case "destroy":
-		allArgsAndFlags, err = buildDestroySubcommandArgs(info, allArgsAndFlags, varFile)
-		if err != nil {
-			return nil, false, err
-		}
-
-	case "refresh":
-		allArgsAndFlags, err = buildRefreshSubcommandArgs(info, allArgsAndFlags, varFile)
-		if err != nil {
-			return nil, false, err
-		}
-
-	case "import":
-		allArgsAndFlags, err = buildImportSubcommandArgs(info, allArgsAndFlags, varFile)
-		if err != nil {
-			return nil, false, err
-		}
-
-	case "test":
-		allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
-
-	case subcommandApply:
-		allArgsAndFlags, err = buildApplySubcommandArgs(info, allArgsAndFlags, varFile)
-		if err != nil {
-			return nil, false, err
-		}
-
-	case subcommandInit:
-		allArgsAndFlags, err = buildInitSubcommandArgs(atmosConfig, info, allArgsAndFlags, varFile, componentPath, opts...)
-		if err != nil {
-			return nil, false, err
-		}
-
-	case subcommandWorkspace:
-		allArgsAndFlags = buildWorkspaceSubcommandArgs(info, allArgsAndFlags)
+	allArgsAndFlags, err = dispatchSubcommandArgs(allArgsAndFlags, &subcommandArgsParams{
+		atmosConfig:      atmosConfig,
+		info:             info,
+		varFile:          varFile,
+		planFile:         planFile,
+		uploadStatusFlag: uploadStatusFlag,
+		componentPath:    componentPath,
+		opts:             opts,
+	})
+	if err != nil {
+		return nil, false, err
 	}
 
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)

@@ -332,7 +332,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK", componentsTerraformFlagsLock)
 		componentsTerraformFlagsLockBool, err := strconv.ParseBool(componentsTerraformFlagsLock)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK: %w", errUtils.ErrInvalidConfig, err)
 		}
 		atmosConfig.Components.Terraform.Flags.Lock = &componentsTerraformFlagsLockBool
 	}
@@ -343,7 +343,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM", componentsTerraformFlagsParallelism)
 		componentsTerraformFlagsParallelismInt, err := strconv.Atoi(componentsTerraformFlagsParallelism)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM: %w", errUtils.ErrInvalidConfig, err)
 		}
 		atmosConfig.Components.Terraform.Flags.Parallelism = &componentsTerraformFlagsParallelismInt
 	}
@@ -354,7 +354,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH", componentsTerraformFlagsRefresh)
 		componentsTerraformFlagsRefreshBool, err := strconv.ParseBool(componentsTerraformFlagsRefresh)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH: %w", errUtils.ErrInvalidConfig, err)
 		}
 		atmosConfig.Components.Terraform.Flags.Refresh = &componentsTerraformFlagsRefreshBool
 	}
@@ -365,7 +365,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS", componentsTerraformFlagsCompactWarnings)
 		componentsTerraformFlagsCompactWarningsBool, err := strconv.ParseBool(componentsTerraformFlagsCompactWarnings)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS: %w", errUtils.ErrInvalidConfig, err)
 		}
 		atmosConfig.Components.Terraform.Flags.CompactWarnings = componentsTerraformFlagsCompactWarningsBool
 	}

@@ -421,8 +421,9 @@ components:
 ```
 
 Precedence (lowest to highest): Terraform's own built-in default < `atmos.yaml`
-`components.terraform.flags` < stack-level `terraform.flags` < a component's own
-`flags:` block < an explicit CLI-typed flag (e.g.
+`components.terraform.flags` < an `ATMOS_COMPONENTS_TERRAFORM_FLAGS_*` environment
+variable (overrides the `atmos.yaml` value) < stack-level `terraform.flags` < a
+component's own `flags:` block < an explicit CLI-typed flag (e.g.,
 `atmos terraform plan vpc -s plat-ue2-dev -- -lock-timeout=30s`), which always wins.
 
 Not every flag applies to every subcommand — Atmos only injects a flag where Terraform
