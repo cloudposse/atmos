@@ -469,10 +469,7 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentKind 
 	case cfg.AnsibleSectionName:
 		return atmosConfig.Components.Ansible.BasePath
 	case cfg.ContainerSectionName:
-		// The typed `components.container` config (ContainerConfig) exposes no
-		// base_path field, so container components always use the conventional
-		// base path.
-		return "components/container"
+		return atmosConfig.Components.Container.BasePath
 	case cfg.EmulatorSectionName:
 		// Emulator components are stack-defined services, not filesystem-backed
 		// component source trees. Leave component_path unset until a real source
