@@ -10,6 +10,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -269,6 +270,13 @@ func TestScaffoldGenerateRunE_MalformedSetFlag(t *testing.T) {
 // pinned metadata at the target, defaultBaseRef falls back to "HEAD" and
 // generation (here, dry-run) must still succeed.
 func TestScaffoldGenerateRunE_UpdateFlagWithPositionalTarget_ResolvesBaseRef(t *testing.T) {
+	// RunE binds this test's flags to the global viper.GetViper() singleton
+	// (BindFlagsToViper), which outlives the test unless reset -- cmd.NewTestKit
+	// only restores RootCmd state and isn't available to this package (it
+	// would create an import cycle back into cmd). Reset viper directly so a
+	// later test reading the same keys doesn't see this test's bound values.
+	t.Cleanup(func() { viper.Reset() })
+
 	cmd := &cobra.Command{}
 	scaffoldGenerateParser.RegisterFlags(cmd)
 	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
@@ -285,6 +293,9 @@ func TestScaffoldGenerateRunE_UpdateFlagWithPositionalTarget_ResolvesBaseRef(t *
 // target) must propagate that error immediately instead of silently falling
 // back to "HEAD" and letting generation proceed against a damaged pin.
 func TestScaffoldGenerateRunE_UpdateFlagWithPositionalTarget_PropagatesBaseRefError(t *testing.T) {
+	// See the sibling test above for why this reset is needed.
+	t.Cleanup(func() { viper.Reset() })
+
 	dir := t.TempDir()
 	metadataPath := storage.ScaffoldMetadataPath(dir)
 	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
