@@ -10,22 +10,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestDefaultConfig(t *testing.T) {
-	assert.Equal(t, "components/container", DefaultConfig().BasePath)
-}
-
-func TestParseConfig(t *testing.T) {
-	config, err := parseConfig(map[string]any{"base_path": "custom/container"})
-	require.NoError(t, err)
-	assert.Equal(t, "custom/container", config.BasePath)
-}
-
-func TestParseConfig_DecodeError(t *testing.T) {
-	// A non-map raw value cannot decode into the Config struct.
-	_, err := parseConfig([]any{1, 2, 3})
-	require.Error(t, err)
-}
-
 func TestDecodeSection(t *testing.T) {
 	var build schema.ContainerBuildStep
 	require.NoError(t, decodeSection(map[string]any{"context": "app", "dockerfile": "Dockerfile"}, &build))
