@@ -289,6 +289,12 @@ func TestExtractReferences(t *testing.T) {
 			prefix:   "",
 			expected: []string{"module.network.module.vpc"}, // First module path is extracted.
 		},
+		{
+			name:     "nested module reference ending exactly at the module keyword",
+			refs:     []string{"module.a.module"}, // Malformed/edge case: no name follows the last "module".
+			prefix:   "",
+			expected: []string{"module.a.module"}, // Falls back to returning the reference unchanged.
+		},
 	}
 
 	for _, tt := range tests {
@@ -949,6 +955,199 @@ func TestCountActions_SingleNode(t *testing.T) {
 			assert.Equal(t, tt.expectRemove, remove)
 		})
 	}
+}
+
+// TestRenderChildren_CompactMode_NoBlankLines verifies Compact: true suppresses the blank
+// line that would otherwise separate non-last resource blocks.
+func TestRenderChildren_CompactMode_NoBlankLines(t *testing.T) {
+	var b strings.Builder
+	nodes := []*TreeNode{
+		{Address: "aws_vpc.main", Action: "create"},
+		{Address: "aws_security_group.default", Action: "update"},
+	}
+
+	renderChildren(&b, nodes, "", &RenderConfig{Compact: true})
+
+	result := b.String()
+	assert.NotContains(t, result, "\n\n", "compact mode must not add blank lines between resources")
+}
+
+// TestRenderAttributeChanges_WithAttributeBar verifies ShowAttributeBar renders the "┃" bar
+// alongside each attribute row.
+func TestRenderAttributeChanges_WithAttributeBar(t *testing.T) {
+	var b strings.Builder
+	changes := []*AttributeChange{
+		{Key: "name", Before: "old", After: "new"},
+	}
+
+	renderAttributeChanges(&b, changes, "", &RenderConfig{ShowAttributeBar: true})
+
+	result := b.String()
+	assert.Contains(t, result, "┃")
+	assert.Contains(t, result, "name")
+}
+
+// TestRenderAttributeChanges_MultilineOnlyAddition verifies a purely-added multi-line value
+// (Before nil, After multi-line) renders every line with a "+" marker via
+// renderMultilineValueSimple, including truncation of lines exceeding the max width.
+func TestRenderAttributeChanges_MultilineOnlyAddition(t *testing.T) {
+	var b strings.Builder
+	longLine := strings.Repeat("a", 150)
+	changes := []*AttributeChange{
+		{Key: "script", Before: nil, After: "line1\n" + longLine, Unknown: false},
+	}
+
+	renderAttributeChanges(&b, changes, "", &RenderConfig{ShowAttributeBar: true})
+
+	result := b.String()
+	assert.Contains(t, result, "script")
+	assert.Contains(t, result, "+ line1")
+	assert.Contains(t, result, "...", "a line longer than the max width must be truncated")
+	assert.NotContains(t, result, longLine, "the untruncated long line must not appear verbatim")
+}
+
+// TestRenderAttributeChanges_MultilineOnlyDeletion verifies a purely-removed multi-line value
+// (Before multi-line, After nil) renders every line with a "-" marker.
+func TestRenderAttributeChanges_MultilineOnlyDeletion(t *testing.T) {
+	var b strings.Builder
+	changes := []*AttributeChange{
+		{Key: "script", Before: "line1\nline2", After: nil, Unknown: false},
+	}
+
+	renderAttributeChanges(&b, changes, "", nil)
+
+	result := b.String()
+	assert.Contains(t, result, "script")
+	assert.Contains(t, result, "- line1")
+	assert.Contains(t, result, "- line2")
+}
+
+// TestRenderAttributeChanges_ComplexValue_Create verifies a map/array attribute that's newly
+// added (Before nil) is rendered as pretty-printed JSON lines, each prefixed with "+".
+func TestRenderAttributeChanges_ComplexValue_Create(t *testing.T) {
+	var b strings.Builder
+	changes := []*AttributeChange{
+		{Key: "tags", Before: nil, After: map[string]interface{}{"Name": "main", "Env": "dev"}},
+	}
+
+	renderAttributeChanges(&b, changes, "", nil)
+
+	result := b.String()
+	assert.Contains(t, result, "tags")
+	assert.Contains(t, result, "+")
+	assert.Contains(t, result, "Name")
+}
+
+// TestRenderAttributeChanges_ComplexValue_Delete verifies a map/array attribute that's
+// removed (After nil) is rendered as pretty-printed JSON lines, each prefixed with "-".
+func TestRenderAttributeChanges_ComplexValue_Delete(t *testing.T) {
+	var b strings.Builder
+	changes := []*AttributeChange{
+		{Key: "tags", Before: map[string]interface{}{"Name": "main"}, After: nil},
+	}
+
+	renderAttributeChanges(&b, changes, "", nil)
+
+	result := b.String()
+	assert.Contains(t, result, "tags")
+	assert.Contains(t, result, "-")
+	assert.Contains(t, result, "Name")
+}
+
+// TestRenderAttributeChanges_ComplexValue_Update verifies a map/array attribute present on
+// both sides is rendered as a line-by-line JSON diff (renderJSONDiff), also exercising the
+// attribute-bar content-indent branch (ShowAttributeBar: true).
+func TestRenderAttributeChanges_ComplexValue_Update(t *testing.T) {
+	var b strings.Builder
+	changes := []*AttributeChange{
+		{
+			Key:    "tags",
+			Before: map[string]interface{}{"Name": "old", "Shared": "same"},
+			After:  map[string]interface{}{"Name": "new", "Shared": "same"},
+		},
+	}
+
+	renderAttributeChanges(&b, changes, "", &RenderConfig{ShowAttributeBar: true})
+
+	result := b.String()
+	assert.Contains(t, result, "tags")
+	assert.Contains(t, result, "old")
+	assert.Contains(t, result, "new")
+	// The unchanged "Shared" key/value should appear exactly once (matched line, no diff markers).
+	assert.Equal(t, 1, strings.Count(result, "Shared"))
+}
+
+// TestRenderMultilineDiffSimple_LongLineTruncated verifies makeTruncator's truncation branch:
+// a line exceeding the max content width is cut short and suffixed with "...".
+func TestRenderMultilineDiffSimple_LongLineTruncated(t *testing.T) {
+	var b strings.Builder
+	longBefore := strings.Repeat("x", 150)
+	longAfter := strings.Repeat("y", 150)
+	before := "short\n" + longBefore
+	after := "short\n" + longAfter
+	createStyle := lipgloss.NewStyle()
+	deleteStyle := lipgloss.NewStyle()
+
+	renderMultilineDiffSimple(&b, before, after, "", &diffStyles{Create: createStyle, Delete: deleteStyle})
+
+	result := b.String()
+	assert.Contains(t, result, "...")
+	assert.NotContains(t, result, longBefore, "the full untruncated deleted line should not appear")
+	assert.NotContains(t, result, longAfter, "the full untruncated added line should not appear")
+}
+
+// TestTransformLines_NilTransform verifies transformLines returns the input slice unchanged
+// when no transform function is supplied (the identity path used defensively but never
+// actually reached by the current call site, which always passes a non-nil truncator).
+func TestTransformLines_NilTransform(t *testing.T) {
+	lines := []string{"a", "b", "c"}
+	result := transformLines(lines, nil)
+	assert.Equal(t, lines, result)
+}
+
+// TestTransformLines_WithTransform verifies transformLines applies the transform to every line.
+func TestTransformLines_WithTransform(t *testing.T) {
+	lines := []string{"a", "bb"}
+	result := transformLines(lines, strings.ToUpper)
+	assert.Equal(t, []string{"A", "BB"}, result)
+}
+
+// TestRenderChildren_WithAttributeChanges verifies renderChildren delegates to
+// renderAttributeChanges when a node carries attribute-level changes (rather than only
+// exercising renderAttributeChanges directly, bypassing the tree-rendering call site).
+func TestRenderChildren_WithAttributeChanges(t *testing.T) {
+	var b strings.Builder
+	nodes := []*TreeNode{
+		{
+			Address: "aws_instance.web",
+			Action:  "update",
+			Changes: []*AttributeChange{
+				{Key: "instance_type", Before: "t2.micro", After: "t2.small"},
+			},
+		},
+	}
+
+	renderChildren(&b, nodes, "", nil)
+
+	result := b.String()
+	assert.Contains(t, result, "aws_instance.web")
+	assert.Contains(t, result, "instance_type")
+}
+
+// TestRenderAttributeChanges_MultilineUnknown verifies a multi-line Before value paired with
+// Unknown: true (After computed at apply time) renders "(known after apply)" as the after side
+// of the diff rather than leaving it blank.
+func TestRenderAttributeChanges_MultilineUnknown(t *testing.T) {
+	var b strings.Builder
+	changes := []*AttributeChange{
+		{Key: "cert", Before: "line1\nline2", After: nil, Unknown: true},
+	}
+
+	renderAttributeChanges(&b, changes, "", nil)
+
+	result := b.String()
+	assert.Contains(t, result, "cert")
+	assert.Contains(t, result, "(known after apply)")
 }
 
 func TestCountActions_Recursive(t *testing.T) {

@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -343,6 +345,97 @@ func TestInitModel_Init(t *testing.T) {
 
 	// Init should return a batch command.
 	assert.NotNil(t, cmd)
+}
+
+// TestInitModel_ReadNextLine_ReturnsLine verifies the tea.Cmd returned by readNextLine
+// actually produces an initLineMsg when the scanner has a line available. Init()/Update()
+// alone never execute the returned command, so this invokes it directly.
+func TestInitModel_ReadNextLine_ReturnsLine(t *testing.T) {
+	reader := strings.NewReader("Initializing the backend...\n")
+	m := NewInitModel("comp", "stack", "init", reader)
+
+	msg := m.readNextLine()()
+
+	lineMsg, ok := msg.(initLineMsg)
+	require.True(t, ok, "expected initLineMsg, got %T", msg)
+	assert.Equal(t, "Initializing the backend...", lineMsg.line)
+}
+
+// TestInitModel_ReadNextLine_ScannerError verifies a scanner read error is surfaced as a
+// failed initDoneMsg rather than silently treated as a clean EOF.
+func TestInitModel_ReadNextLine_ScannerError(t *testing.T) {
+	readErr := errors.New("boom")
+	reader := iotest.ErrReader(readErr)
+	m := NewInitModel("comp", "stack", "init", reader)
+
+	msg := m.readNextLine()()
+
+	doneMsg, ok := msg.(initDoneMsg)
+	require.True(t, ok, "expected initDoneMsg, got %T", msg)
+	assert.Equal(t, 1, doneMsg.exitCode)
+	require.Error(t, doneMsg.err)
+}
+
+// TestInitModel_ReadNextLine_EOF verifies a clean end of input produces a successful
+// initDoneMsg (exit code 0, no error).
+func TestInitModel_ReadNextLine_EOF(t *testing.T) {
+	reader := strings.NewReader("")
+	m := NewInitModel("comp", "stack", "init", reader)
+
+	msg := m.readNextLine()()
+
+	doneMsg, ok := msg.(initDoneMsg)
+	require.True(t, ok, "expected initDoneMsg, got %T", msg)
+	assert.Equal(t, 0, doneMsg.exitCode)
+	assert.NoError(t, doneMsg.err)
+}
+
+// TestInitModel_Update_UnhandledMsg verifies messages that don't match any known case (e.g. a
+// terminal resize) leave the model untouched and return a nil command.
+func TestInitModel_Update_UnhandledMsg(t *testing.T) {
+	reader := strings.NewReader("")
+	m := NewInitModel("comp", "stack", "init", reader)
+
+	updated, cmd := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	model := updated.(InitModel)
+
+	assert.Nil(t, cmd)
+	assert.False(t, model.done)
+}
+
+// TestInitModel_View_InProgress_TruncatesLongLines verifies lines exceeding the display width
+// are truncated with an ellipsis rather than wrapping and corrupting the layout.
+func TestInitModel_View_InProgress_TruncatesLongLines(t *testing.T) {
+	clock := newTestClock()
+	reader := strings.NewReader("")
+	m := NewInitModel("myapp", "dev", "init", reader, WithInitClock(clock))
+	longLine := "- " + strings.Repeat("x", 100)
+	m.lines = []string{longLine}
+
+	view := m.View()
+
+	assert.Contains(t, view, "...")
+	assert.NotContains(t, view, longLine, "the full untruncated line should not appear")
+}
+
+// TestInitModel_View_Done_Cancelled verifies the cancelled-completion branch of
+// renderComplete, distinct from both the success and error completion messages.
+func TestInitModel_View_Done_Cancelled(t *testing.T) {
+	clock := newTestClock()
+	reader := strings.NewReader("")
+	m := NewInitModel("myapp", "dev", "init", reader, WithInitClock(clock))
+	m.done = true
+	m.cancelled = true
+
+	clock.advance(4 * time.Second)
+
+	view := m.View()
+
+	assert.Contains(t, view, "cancelled")
+	assert.Contains(t, view, "dev/myapp")
+	assert.Contains(t, view, "4.0s")
+	assert.NotContains(t, view, "failed")
+	assert.NotContains(t, view, "completed")
 }
 
 func TestInitModel_Update_LineWithANSI(t *testing.T) {

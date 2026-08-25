@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -357,6 +358,213 @@ func TestModel_View_Done_Destroy(t *testing.T) {
 	view := m.View()
 
 	assert.Contains(t, view, "Destroy")
+}
+
+// TestModel_View_Done_Cancelled verifies finalView renders the "cancelled" branch (as opposed
+// to the success/error branches) when the user quit via Ctrl-C/q.
+func TestModel_View_Done_Cancelled(t *testing.T) {
+	clock := newTestClock()
+	reader := strings.NewReader("")
+	m := NewModel("myapp", "dev", "apply", reader, WithClock(clock))
+	m.done = true
+	m.cancelled = true
+
+	view := m.View()
+
+	assert.Contains(t, view, "cancelled")
+	assert.Contains(t, view, "dev/myapp")
+	assert.Contains(t, view, "Apply")
+}
+
+// TestModel_View_Done_WithFailedResource verifies renderErrorSummary lists each failed
+// resource's address and error message (distinct from the general diagnostics rendered via
+// LogDiagnostics after the TUI exits).
+func TestModel_View_Done_WithFailedResource(t *testing.T) {
+	clock := newTestClock()
+	reader := strings.NewReader("")
+	m := NewModel("myapp", "dev", "apply", reader, WithClock(clock))
+	m.done = true
+
+	m.tracker.HandleMessage(&PlannedChangeMessage{
+		Change: PlannedChange{
+			Resource: ResourceAddr{Addr: "aws_instance.web"},
+			Action:   "create",
+		},
+	})
+	m.tracker.HandleMessage(&ApplyStartMessage{
+		Hook: ApplyHook{
+			Resource: ResourceAddr{Addr: "aws_instance.web"},
+			Action:   "create",
+		},
+	})
+	m.tracker.HandleMessage(&ApplyErroredMessage{
+		BaseMessage: BaseMessage{Message: "Error: creating EC2 instance: timeout"},
+		Hook: ApplyHook{
+			Resource: ResourceAddr{Addr: "aws_instance.web"},
+			Action:   "create",
+		},
+	})
+
+	view := m.View()
+
+	assert.Contains(t, view, "aws_instance.web")
+	assert.Contains(t, view, "Error: creating EC2 instance: timeout")
+}
+
+// TestModel_GetCompletedResources verifies only completed and errored resources are returned,
+// in tracker order, since pending/in-progress/refreshing resources are still shown on the
+// spinner header line rather than as a completed line.
+func TestModel_GetCompletedResources(t *testing.T) {
+	reader := strings.NewReader("")
+	m := NewModel("comp", "stack", "plan", reader)
+
+	m.tracker.HandleMessage(&PlannedChangeMessage{
+		Change: PlannedChange{Resource: ResourceAddr{Addr: "aws_vpc.pending"}, Action: "create"},
+	})
+	m.tracker.HandleMessage(&PlannedChangeMessage{
+		Change: PlannedChange{Resource: ResourceAddr{Addr: "aws_vpc.done"}, Action: "create"},
+	})
+	m.tracker.HandleMessage(&ApplyStartMessage{
+		Hook: ApplyHook{Resource: ResourceAddr{Addr: "aws_vpc.done"}, Action: "create"},
+	})
+	m.tracker.HandleMessage(&ApplyCompleteMessage{
+		Hook: ApplyHook{Resource: ResourceAddr{Addr: "aws_vpc.done"}, Action: "create"},
+	})
+	m.tracker.HandleMessage(&PlannedChangeMessage{
+		Change: PlannedChange{Resource: ResourceAddr{Addr: "aws_vpc.failed"}, Action: "create"},
+	})
+	m.tracker.HandleMessage(&ApplyStartMessage{
+		Hook: ApplyHook{Resource: ResourceAddr{Addr: "aws_vpc.failed"}, Action: "create"},
+	})
+	m.tracker.HandleMessage(&ApplyErroredMessage{
+		BaseMessage: BaseMessage{Message: "boom"},
+		Hook:        ApplyHook{Resource: ResourceAddr{Addr: "aws_vpc.failed"}, Action: "create"},
+	})
+
+	completed := m.getCompletedResources()
+
+	require.Len(t, completed, 2)
+	assert.Equal(t, "aws_vpc.done", completed[0].Address)
+	assert.Equal(t, "aws_vpc.failed", completed[1].Address)
+}
+
+// TestModel_View_Progress_ShowsCurrentActivity verifies progressHeaderLine appends the
+// "<Verb> <address> (Ns)" activity suffix while a resource is still in progress.
+//
+// Note: the resource tracker stamps ApplyStartMessage's StartTime with the real wall clock
+// (not the injected Clock), so this test can't assert an exact elapsed duration - it only
+// verifies the activity verb/address are surfaced on the header line.
+func TestModel_View_Progress_ShowsCurrentActivity(t *testing.T) {
+	reader := strings.NewReader("")
+	m := NewModel("myapp", "dev", "apply", reader)
+	m.width = 120
+
+	m.tracker.HandleMessage(&PlannedChangeMessage{
+		Change: PlannedChange{Resource: ResourceAddr{Addr: "aws_vpc.main"}, Action: "create"},
+	})
+	m.tracker.HandleMessage(&ApplyStartMessage{
+		Hook: ApplyHook{Resource: ResourceAddr{Addr: "aws_vpc.main"}, Action: "create"},
+	})
+
+	view := ansi.Strip(m.View())
+
+	assert.Contains(t, view, "Creating")
+	assert.Contains(t, view, "aws_vpc.main")
+}
+
+// TestModel_ProgressHeaderLine_GapClamping verifies a width too small to fit the left/right
+// content never produces a negative-length gap (cellsRemaining <= 0 leaves the gap empty
+// instead of panicking on strings.Repeat with a negative count).
+func TestModel_ProgressHeaderLine_GapClamping(t *testing.T) {
+	reader := strings.NewReader("")
+	m := NewModel("comp", "stack", "plan", reader)
+
+	m.width = 1
+	narrow := ansi.Strip(m.progressHeaderLine())
+
+	m.width = 300
+	wide := ansi.Strip(m.progressHeaderLine())
+
+	assert.Less(t, len(narrow), len(wide), "an overflowing width must not produce a negative-length gap")
+}
+
+// TestModel_ProgressHeaderLine_DefaultWidth verifies width falls back to defaultTermWidth
+// (120) when the model hasn't yet received a tea.WindowSizeMsg (width left at its zero value).
+func TestModel_ProgressHeaderLine_DefaultWidth(t *testing.T) {
+	reader := strings.NewReader("")
+	m := NewModel("comp", "stack", "plan", reader)
+	require.Equal(t, 0, m.width, "width must start unset for this test to exercise the default-width fallback")
+
+	header := ansi.Strip(m.progressHeaderLine())
+
+	assert.LessOrEqual(t, len(header), defaultTermWidth+5, "header should be padded to roughly the default width, not left unpadded")
+}
+
+// TestRenderResource_AllStates exercises every ResourceState branch of renderResource,
+// including the two ways elapsed time is derived for a completed resource: ElapsedSecs,
+// or a fallback computed as EndTime minus StartTime.
+func TestRenderResource_AllStates(t *testing.T) {
+	clock := newTestClock()
+	reader := strings.NewReader("")
+	m := NewModel("comp", "stack", "plan", reader, WithClock(clock))
+
+	tests := []struct {
+		name       string
+		res        *ResourceOperation
+		expectVerb string
+		expectTime string
+	}{
+		{
+			name:       "pending",
+			res:        &ResourceOperation{Address: "aws_vpc.main", Action: "create", State: ResourceStatePending},
+			expectVerb: "Create",
+		},
+		{
+			name:       "refreshing",
+			res:        &ResourceOperation{Address: "aws_vpc.main", Action: "create", State: ResourceStateRefreshing, StartTime: clock.Now()},
+			expectVerb: "Refreshing",
+		},
+		{
+			name:       "in_progress",
+			res:        &ResourceOperation{Address: "aws_vpc.main", Action: "update", State: ResourceStateInProgress, StartTime: clock.Now()},
+			expectVerb: "Updating",
+		},
+		{
+			name:       "complete_with_elapsed_secs",
+			res:        &ResourceOperation{Address: "aws_vpc.main", Action: "create", State: ResourceStateComplete, ElapsedSecs: 3},
+			expectVerb: "Created",
+			expectTime: "3.0s",
+		},
+		{
+			name: "complete_with_endtime_fallback",
+			res: &ResourceOperation{
+				Address: "aws_vpc.main", Action: "create", State: ResourceStateComplete,
+				StartTime: clock.Now(), EndTime: clock.Now().Add(4 * time.Second),
+			},
+			expectVerb: "Created",
+			expectTime: "4.0s",
+		},
+		{
+			name:       "error",
+			res:        &ResourceOperation{Address: "aws_vpc.main", Action: "create", State: ResourceStateError},
+			expectVerb: "Failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Advance the clock so Since()-based elapsed times (in_progress/refreshing) are non-zero.
+			clock.advance(2 * time.Second)
+
+			result := ansi.Strip(m.renderResource(tt.res))
+
+			assert.Contains(t, result, tt.res.Address)
+			assert.Contains(t, result, tt.expectVerb)
+			if tt.expectTime != "" {
+				assert.Contains(t, result, tt.expectTime)
+			}
+		})
+	}
 }
 
 func TestFormatActionVerb(t *testing.T) {

@@ -53,6 +53,9 @@ const logKeyStack = "stack"
 // --verify-plan=false).
 const verifyPlanFlagName = "verify-plan"
 
+// ciFlagName is the --ci flag (and its ATMOS_CI/CI-bound viper key) that forces CI mode.
+const ciFlagName = "ci"
+
 // multiComponentPlaceholder satisfies the legacy compound-subcommand parser while
 // fleet options are applied immediately afterward. It never reaches Terraform.
 const multiComponentPlaceholder = "__atmos_multi_component__"
@@ -195,9 +198,9 @@ var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, arg
 		log.Warn("hook failed on error path", "error", err)
 	}
 
-	forceCIMode, _ := cmd_.Flags().GetBool("ci")
+	forceCIMode, _ := cmd_.Flags().GetBool(ciFlagName)
 	if !forceCIMode {
-		forceCIMode = viper.GetBool("ci")
+		forceCIMode = viper.GetBool(ciFlagName)
 	}
 
 	// Extract the exit code from the command error. errUtils.GetExitCode unwraps
@@ -385,10 +388,10 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	// Read directly from Cobra flag (not Viper) because pflags are only bound
 	// to Viper in RunE via BindFlagsToViper. During PreRunE, Viper doesn't
 	// yet see the Cobra flag value — only env vars and defaults.
-	forceCIMode, _ := cmd_.Flags().GetBool("ci")
+	forceCIMode, _ := cmd_.Flags().GetBool(ciFlagName)
 	if !forceCIMode {
 		// Fall back to Viper for env var support (ATMOS_CI, CI).
-		forceCIMode = viper.GetBool("ci")
+		forceCIMode = viper.GetBool(ciFlagName)
 	}
 
 	// Read the verify-plan flag early (same pattern as --ci above). PreRunE runs
@@ -479,9 +482,9 @@ func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, inf
 		return
 	}
 
-	forceCIMode, _ := cmd_.Flags().GetBool("ci")
+	forceCIMode, _ := cmd_.Flags().GetBool(ciFlagName)
 	if !forceCIMode {
-		forceCIMode = viper.GetBool("ci")
+		forceCIMode = viper.GetBool(ciFlagName)
 	}
 
 	// Before-event hook (e.g., before.terraform.deploy): no command has run yet,
@@ -609,9 +612,9 @@ func (n *terraformNodeHooks) runUserHooksForNodeWithWriters(atmosConfig *schema.
 // errors are advisory only (unrelated to a hook's on_failure setting) and are
 // only logged, matching existing CI-hook behavior.
 func (n *terraformNodeHooks) runCIHooksForNode(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
-	forceCIMode, _ := n.cmd.Flags().GetBool("ci")
+	forceCIMode, _ := n.cmd.Flags().GetBool(ciFlagName)
 	if !forceCIMode {
-		forceCIMode = viper.GetBool("ci")
+		forceCIMode = viper.GetBool(ciFlagName)
 	}
 
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
@@ -704,12 +707,12 @@ func terraformAggregateEvent(command string) h.HookEvent {
 func terraformCIModeEnabled(cmd *cobra.Command) bool {
 	forceCIMode := false
 	if cmd != nil {
-		forceCIMode, _ = cmd.Flags().GetBool("ci")
+		forceCIMode, _ = cmd.Flags().GetBool(ciFlagName)
 	}
 	if forceCIMode {
 		return true
 	}
-	if viper.GetBool("ci") {
+	if viper.GetBool(ciFlagName) {
 		return true
 	}
 	return ci.IsCI()

@@ -103,6 +103,18 @@ func extractExitCode(err error) (int, error) {
 	return exitErr.ExitCode(), nil
 }
 
+// execCommandContext creates the exec.Cmd used to run terraform subprocesses. It is a
+// package-level var (mirroring exec.CommandContext's signature) so tests can substitute a
+// fake subprocess - e.g. the test binary itself, per this package's self-re-exec pattern in
+// TestKillIfCancelled_KillsRealProcess - instead of spawning a real terraform binary.
+var execCommandContext = exec.CommandContext
+
+// runTeaProgram runs the given bubbletea program to completion. It is a package-level var so
+// tests can inject a fake that returns immediately instead of driving a real terminal.
+var runTeaProgram = func(p *tea.Program) (tea.Model, error) {
+	return p.Run()
+}
+
 // cancellableModel is implemented by TUI models that can report whether the user explicitly
 // cancelled the run (Ctrl-C/q) rather than the underlying terraform command completing on its
 // own. Bubbletea returns models by value, so this must be satisfied by the value type.
@@ -121,7 +133,7 @@ func runTUIProgram(model tea.Model, cmd *exec.Cmd) (tea.Model, bool, error) {
 		tea.WithoutSignalHandler(),
 	)
 
-	finalModel, err := p.Run()
+	finalModel, err := runTeaProgram(p)
 	if err != nil {
 		// Kill the process if TUI failed.
 		_ = cmd.Process.Kill()
@@ -160,8 +172,7 @@ func streamStderrToLog(r io.Reader) {
 // newStreamingCommand creates and starts a terraform command with separate stdout/stderr
 // pipes: stdout is returned for JSON message streaming, stderr is streamed to the logger.
 func newStreamingCommand(ctx context.Context, opts *ExecuteOptions, args []string) (*exec.Cmd, io.ReadCloser, error) {
-	//nolint:gosec // intentional subprocess call - terraform command with validated args
-	cmd := exec.CommandContext(ctx, opts.Command, args...)
+	cmd := execCommandContext(ctx, opts.Command, args...)
 	cmd.Dir = opts.WorkingDir
 	cmd.Env = opts.Env
 	cmd.Stdin = os.Stdin // Allow interactive terraform commands.
@@ -339,8 +350,7 @@ type initCommandResult struct {
 // into a single pipe so all output is captured by the TUI. The command is waited on in
 // a background goroutine so the TUI can stream output concurrently.
 func newInitCommand(ctx context.Context, opts *ExecuteOptions) (*initCommandResult, error) {
-	//nolint:gosec // intentional subprocess call - terraform command with validated args
-	cmd := exec.CommandContext(ctx, opts.Command, opts.Args...)
+	cmd := execCommandContext(ctx, opts.Command, opts.Args...)
 	cmd.Dir = opts.WorkingDir
 	cmd.Env = opts.Env
 	cmd.Stdin = os.Stdin // Allow interactive terraform commands.

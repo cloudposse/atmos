@@ -1,11 +1,15 @@
 package ui
 
 import (
+	"context"
+	"os"
 	"testing"
 
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestBuildTreeFromPlan_Empty(t *testing.T) {
@@ -181,6 +185,303 @@ func TestBuildTreeFromPlan_SortedByAddress(t *testing.T) {
 	assert.Equal(t, "a_resource.first", tree.Root.Children[0].Address)
 	assert.Equal(t, "m_resource.middle", tree.Root.Children[1].Address)
 	assert.Equal(t, "z_resource.last", tree.Root.Children[2].Address)
+}
+
+// TestBuildDependencyTree_Success verifies BuildDependencyTree shells out to `terraform show
+// -json`, parses the output, and builds a tree from it. The test binary itself stands in for
+// terraform (see testmain_test.go's _ATMOS_TEST_TF_SHOW_JSON handling) so the test stays
+// cross-platform and doesn't depend on a real terraform install.
+func TestBuildDependencyTree_Success(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	planJSON := `{"format_version":"1.2","resource_changes":[{"address":"aws_vpc.main","mode":"managed","change":{"actions":["create"]}}]}`
+	t.Setenv("_ATMOS_TEST_TF_SHOW_JSON", planJSON)
+
+	opts := &TreeBuildOptions{
+		PlanfilePath:  "plan.tfplan",
+		TerraformPath: exePath,
+		WorkingDir:    t.TempDir(),
+		Stack:         "dev",
+		Component:     "vpc",
+	}
+
+	tree, err := BuildDependencyTree(context.Background(), opts)
+
+	require.NoError(t, err)
+	require.NotNil(t, tree)
+	assert.Equal(t, "dev", tree.Stack)
+	assert.Equal(t, "vpc", tree.Component)
+	require.Len(t, tree.Root.Children, 1)
+	assert.Equal(t, "aws_vpc.main", tree.Root.Children[0].Address)
+}
+
+// TestBuildDependencyTree_CommandFailure verifies a non-zero exit from `terraform show` is
+// wrapped in errUtils.ErrCommandStart rather than silently ignored.
+func TestBuildDependencyTree_CommandFailure(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	t.Setenv("_ATMOS_TEST_EXIT_ONE", "1")
+
+	opts := &TreeBuildOptions{
+		PlanfilePath:  "plan.tfplan",
+		TerraformPath: exePath,
+		WorkingDir:    t.TempDir(),
+		Stack:         "dev",
+		Component:     "vpc",
+	}
+
+	tree, err := BuildDependencyTree(context.Background(), opts)
+
+	require.Error(t, err)
+	assert.Nil(t, tree)
+	assert.ErrorIs(t, err, errUtils.ErrCommandStart)
+}
+
+// TestBuildDependencyTree_InvalidJSON verifies malformed `terraform show -json` output is
+// wrapped in errUtils.ErrParseTerraformOutput rather than panicking.
+func TestBuildDependencyTree_InvalidJSON(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	t.Setenv("_ATMOS_TEST_TF_SHOW_JSON", "{not valid json")
+
+	opts := &TreeBuildOptions{
+		PlanfilePath:  "plan.tfplan",
+		TerraformPath: exePath,
+		WorkingDir:    t.TempDir(),
+		Stack:         "dev",
+		Component:     "vpc",
+	}
+
+	tree, err := BuildDependencyTree(context.Background(), opts)
+
+	require.Error(t, err)
+	assert.Nil(t, tree)
+	assert.ErrorIs(t, err, errUtils.ErrParseTerraformOutput)
+}
+
+// TestResourceChangeAction covers the composite-action (replace) and edge-case branches of
+// resourceChangeAction that aren't already exercised indirectly via buildTreeFromPlan tests.
+func TestResourceChangeAction(t *testing.T) {
+	tests := []struct {
+		name     string
+		rc       *tfjson.ResourceChange
+		expected string
+	}{
+		{
+			name:     "nil change",
+			rc:       &tfjson.ResourceChange{Change: nil},
+			expected: noOpAction,
+		},
+		{
+			name:     "no actions",
+			rc:       &tfjson.ResourceChange{Change: &tfjson.Change{Actions: []tfjson.Action{}}},
+			expected: noOpAction,
+		},
+		{
+			name:     "single read action",
+			rc:       &tfjson.ResourceChange{Change: &tfjson.Change{Actions: []tfjson.Action{tfjson.ActionRead}}},
+			expected: "read",
+		},
+		{
+			name:     "two actions is replace",
+			rc:       &tfjson.ResourceChange{Change: &tfjson.Change{Actions: []tfjson.Action{tfjson.ActionCreate, tfjson.ActionDelete}}},
+			expected: "replace",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := resourceChangeAction(tt.rc)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestExtractForcesReplacement covers the malformed-path branches (non-slice entries, empty
+// slices, non-string first elements) that plan JSON should never produce but the function
+// defensively skips rather than panicking on.
+func TestExtractForcesReplacement(t *testing.T) {
+	tests := []struct {
+		name         string
+		replacePaths []interface{}
+		expected     map[string]bool
+	}{
+		{
+			name:         "nil paths",
+			replacePaths: nil,
+			expected:     map[string]bool{},
+		},
+		{
+			name:         "valid top-level path",
+			replacePaths: []interface{}{[]interface{}{"ami"}},
+			expected:     map[string]bool{"ami": true},
+		},
+		{
+			name:         "malformed path entry is skipped",
+			replacePaths: []interface{}{"not-a-slice"},
+			expected:     map[string]bool{},
+		},
+		{
+			name:         "empty path slice is skipped",
+			replacePaths: []interface{}{[]interface{}{}},
+			expected:     map[string]bool{},
+		},
+		{
+			name:         "non-string first element is skipped",
+			replacePaths: []interface{}{[]interface{}{42}},
+			expected:     map[string]bool{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractForcesReplacement(tt.replacePaths)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestExtractDependencies_NilModuleCall verifies a ModuleCall whose Module field wasn't
+// resolved (nil) is skipped rather than causing a nil pointer dereference.
+func TestExtractDependencies_NilModuleCall(t *testing.T) {
+	module := &tfjson.ConfigModule{
+		Resources: []*tfjson.ConfigResource{
+			{Address: "aws_vpc.main"},
+		},
+		ModuleCalls: map[string]*tfjson.ModuleCall{
+			"broken": {Module: nil},
+		},
+	}
+
+	dependsOn := make(map[string][]string)
+
+	extractDependencies(module, "", dependsOn)
+
+	// aws_vpc.main has no DependsOn/expressions, and the nil module call contributes nothing.
+	assert.Empty(t, dependsOn)
+}
+
+// TestBuildTreeFromPlan_WithConfig_UsesRelationships verifies buildTreeFromPlan's
+// config-present branch delegates to buildRelationships (rather than attachAllToRoot) when the
+// plan carries a resolved Config/RootModule, nesting a dependent resource under its dependency.
+func TestBuildTreeFromPlan_WithConfig_UsesRelationships(t *testing.T) {
+	plan := &tfjson.Plan{
+		ResourceChanges: []*tfjson.ResourceChange{
+			{
+				Address: "aws_vpc.main",
+				Mode:    tfjson.ManagedResourceMode,
+				Change:  &tfjson.Change{Actions: []tfjson.Action{tfjson.ActionCreate}},
+			},
+			{
+				Address: "aws_subnet.a",
+				Mode:    tfjson.ManagedResourceMode,
+				Change:  &tfjson.Change{Actions: []tfjson.Action{tfjson.ActionCreate}},
+			},
+		},
+		Config: &tfjson.Config{
+			RootModule: &tfjson.ConfigModule{
+				Resources: []*tfjson.ConfigResource{
+					{Address: "aws_vpc.main"},
+					{Address: "aws_subnet.a", DependsOn: []string{"aws_vpc.main"}},
+				},
+			},
+		},
+	}
+
+	tree := buildTreeFromPlan(plan, "dev", "vpc")
+
+	require.Len(t, tree.Root.Children, 1, "only the root-level aws_vpc.main should be a direct child")
+	vpcNode := tree.Root.Children[0]
+	assert.Equal(t, "aws_vpc.main", vpcNode.Address)
+	require.Len(t, vpcNode.Children, 1)
+	assert.Equal(t, "aws_subnet.a", vpcNode.Children[0].Address)
+}
+
+// TestBuildRelationships_DependencyNotInChangeSet verifies a resource that depends on
+// something outside the change set (e.g. an unchanged resource) falls through to being
+// attached at the root, exercising the "dependency not tracked" continue branch.
+func TestBuildRelationships_DependencyNotInChangeSet(t *testing.T) {
+	tree := &DependencyTree{
+		Root:  &TreeNode{Address: "root"},
+		nodes: map[string]*TreeNode{},
+	}
+
+	subnetNode := &TreeNode{Address: "aws_subnet.a", Action: "create"}
+	tree.nodes["aws_subnet.a"] = subnetNode
+
+	plan := &tfjson.Plan{
+		Config: &tfjson.Config{
+			RootModule: &tfjson.ConfigModule{
+				Resources: []*tfjson.ConfigResource{
+					// aws_vpc.main is not part of this change set (e.g. already exists/unchanged).
+					{Address: "aws_subnet.a", DependsOn: []string{"aws_vpc.main"}},
+				},
+			},
+		},
+	}
+
+	buildRelationships(tree, plan)
+
+	assert.Contains(t, tree.Root.Children, subnetNode, "resource with an untracked dependency must attach to root")
+	assert.Equal(t, tree.Root, subnetNode.Parent)
+}
+
+// TestExtractDependencies_ImplicitFromExpressions verifies dependencies referenced through
+// expression attributes (not just explicit depends_on) are captured.
+func TestExtractDependencies_ImplicitFromExpressions(t *testing.T) {
+	module := &tfjson.ConfigModule{
+		Resources: []*tfjson.ConfigResource{
+			{
+				Address: "aws_subnet.a",
+				Expressions: map[string]*tfjson.Expression{
+					"vpc_id": {
+						ExpressionData: &tfjson.ExpressionData{
+							References: []string{"aws_vpc.main.id"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	dependsOn := make(map[string][]string)
+	extractDependencies(module, "", dependsOn)
+
+	require.Contains(t, dependsOn, "aws_subnet.a")
+	assert.Contains(t, dependsOn["aws_subnet.a"], "aws_vpc.main")
+}
+
+// TestExtractDependencies_NestedModuleWithExistingPrefix verifies the nested child-module
+// prefix is joined onto an already-non-empty prefix (as happens on recursive calls beyond the
+// first nesting level), rather than only ever starting from an empty prefix.
+func TestExtractDependencies_NestedModuleWithExistingPrefix(t *testing.T) {
+	module := &tfjson.ConfigModule{
+		ModuleCalls: map[string]*tfjson.ModuleCall{
+			"subnet": {
+				Module: &tfjson.ConfigModule{
+					Resources: []*tfjson.ConfigResource{
+						{Address: "aws_subnet.private", DependsOn: []string{"aws_vpc.main"}},
+					},
+				},
+			},
+		},
+	}
+
+	dependsOn := make(map[string][]string)
+	extractDependencies(module, "module.network", dependsOn)
+
+	require.Contains(t, dependsOn, "module.network.module.subnet.aws_subnet.private")
+}
+
+// TestNormalizeModuleReference_NoModuleKeyword covers the otherwise-unreachable-in-practice
+// default branch: a reference with fewer than 2 dot-separated parts and no "module" keyword
+// at all falls through the moduleCount and length checks and is returned unchanged.
+func TestNormalizeModuleReference_NoModuleKeyword(t *testing.T) {
+	result := normalizeModuleReference("weird")
+	assert.Equal(t, "weird", result)
 }
 
 func TestBuildRelationships_WithDependencies(t *testing.T) {

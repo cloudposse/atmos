@@ -1,7 +1,10 @@
 package ui
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 func TestShouldUseStreamingUI_ExplicitlyDisabled(t *testing.T) {
@@ -506,4 +510,713 @@ func TestKillIfCancelled_LeavesProcessRunningWhenNotCancelled(t *testing.T) {
 	killIfCancelled(false, cmd)
 
 	require.NoError(t, cmd.Wait(), "process should exit on its own after its 2s sleep, undisturbed")
+}
+
+// ptrInt returns a pointer to i, used by table-driven tests that need to distinguish
+// "no expectation" (nil) from "expect exit code 0" (non-nil, pointing at 0).
+func ptrInt(i int) *int {
+	return &i
+}
+
+// TestStreamStderrToLog_LogsEachLine verifies streamStderrToLog forwards every line read from
+// the given reader to the Atmos debug logger, so terraform's stderr diagnostics (backend
+// errors, plugin crashes) aren't silently dropped.
+func TestStreamStderrToLog_LogsEachLine(t *testing.T) {
+	origLevel := log.GetLevel()
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	log.SetLevel(log.DebugLevel)
+	t.Cleanup(func() {
+		log.SetOutput(os.Stderr)
+		log.SetLevel(origLevel)
+	})
+
+	streamStderrToLog(strings.NewReader("first diagnostic line\nsecond diagnostic line\n"))
+
+	output := buf.String()
+	assert.Contains(t, output, "first diagnostic line")
+	assert.Contains(t, output, "second diagnostic line")
+}
+
+// TestNewStreamingCommand_StartsRealProcess verifies newStreamingCommand actually starts the
+// subprocess and returns a readable stdout pipe, using the test binary itself (per this
+// repo's self-re-exec pattern) instead of a real terraform binary.
+func TestNewStreamingCommand_StartsRealProcess(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	opts := &ExecuteOptions{
+		Command:    exePath,
+		WorkingDir: t.TempDir(),
+		Env:        append(os.Environ(), "_ATMOS_TEST_SLEEP_SECONDS=0"),
+	}
+
+	cmd, stdout, err := newStreamingCommand(context.Background(), opts, []string{"-test.run=^$"})
+	require.NoError(t, err)
+	require.NotNil(t, cmd)
+	require.NotNil(t, stdout)
+
+	data, readErr := io.ReadAll(stdout)
+	require.NoError(t, readErr)
+	assert.Empty(t, data, "fake subprocess writes nothing to stdout")
+
+	require.NoError(t, cmd.Wait(), "fake subprocess should exit 0")
+}
+
+// TestNewStreamingCommand_StartError verifies a nonexistent binary surfaces ErrCommandStart
+// instead of a raw exec error, so callers can rely on the sentinel for classification.
+func TestNewStreamingCommand_StartError(t *testing.T) {
+	opts := &ExecuteOptions{
+		Command:    filepath.Join(t.TempDir(), "nonexistent-terraform-binary"),
+		WorkingDir: t.TempDir(),
+	}
+
+	cmd, stdout, err := newStreamingCommand(context.Background(), opts, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCommandStart)
+	assert.Nil(t, cmd)
+	assert.Nil(t, stdout)
+}
+
+// TestNewStreamingCommand_StdoutPipeError uses the execCommandContext DI seam to return a cmd
+// whose Stdout is already set, which makes the real cmd.StdoutPipe() call fail - verifying
+// that failure is wrapped in ErrStdoutPipe rather than surfacing raw.
+func TestNewStreamingCommand_StdoutPipeError(t *testing.T) {
+	orig := execCommandContext
+	t.Cleanup(func() { execCommandContext = orig })
+	execCommandContext = func(ctx context.Context, name string, arg ...string) *exec.Cmd {
+		cmd := exec.CommandContext(ctx, name, arg...)
+		cmd.Stdout = &bytes.Buffer{} // Pre-set so cmd.StdoutPipe() fails.
+		return cmd
+	}
+
+	opts := &ExecuteOptions{Command: "unused-because-of-seam", WorkingDir: t.TempDir()}
+	cmd, stdout, err := newStreamingCommand(context.Background(), opts, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStdoutPipe)
+	assert.Nil(t, cmd)
+	assert.Nil(t, stdout)
+}
+
+// TestNewStreamingCommand_StderrPipeError mirrors TestNewStreamingCommand_StdoutPipeError for
+// the stderr pipe, which is used to stream diagnostics to the logger.
+func TestNewStreamingCommand_StderrPipeError(t *testing.T) {
+	orig := execCommandContext
+	t.Cleanup(func() { execCommandContext = orig })
+	execCommandContext = func(ctx context.Context, name string, arg ...string) *exec.Cmd {
+		cmd := exec.CommandContext(ctx, name, arg...)
+		cmd.Stderr = &bytes.Buffer{} // Pre-set so cmd.StderrPipe() fails.
+		return cmd
+	}
+
+	opts := &ExecuteOptions{Command: "unused-because-of-seam", WorkingDir: t.TempDir()}
+	cmd, stdout, err := newStreamingCommand(context.Background(), opts, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStderrPipe)
+	assert.Nil(t, cmd)
+	assert.Nil(t, stdout)
+}
+
+// TestNewInitCommand_StartsRealProcessAndMergesOutput verifies newInitCommand starts the
+// subprocess, merges stdout/stderr into a single reader, and reports completion via the done
+// channel and captured error pointer.
+func TestNewInitCommand_StartsRealProcessAndMergesOutput(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	opts := &ExecuteOptions{
+		Command:    exePath,
+		Args:       []string{"-test.run=^$"},
+		WorkingDir: t.TempDir(),
+		Env:        append(os.Environ(), "_ATMOS_TEST_SLEEP_SECONDS=0"),
+	}
+
+	res, err := newInitCommand(context.Background(), opts)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	data, readErr := io.ReadAll(res.reader)
+	require.NoError(t, readErr)
+	assert.Empty(t, data, "fake subprocess writes nothing")
+
+	<-res.done
+	require.NoError(t, *res.err, "fake subprocess should exit 0")
+}
+
+// TestNewInitCommand_StartError verifies a nonexistent binary surfaces ErrCommandStart.
+func TestNewInitCommand_StartError(t *testing.T) {
+	opts := &ExecuteOptions{
+		Command:    filepath.Join(t.TempDir(), "nonexistent-terraform-binary"),
+		WorkingDir: t.TempDir(),
+	}
+
+	res, err := newInitCommand(context.Background(), opts)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCommandStart)
+	assert.Nil(t, res)
+}
+
+// TestRunTUIProgram_TUIErrorKillsProcess verifies that when the injected tea.Program runner
+// fails, runTUIProgram kills the still-running subprocess and wraps the error in ErrTUIRun -
+// otherwise a TUI crash would leave terraform running invisibly in the background.
+func TestRunTUIProgram_TUIErrorKillsProcess(t *testing.T) {
+	origRun := runTeaProgram
+	t.Cleanup(func() { runTeaProgram = origRun })
+	sentinelErr := errors.New("tui crashed")
+	runTeaProgram = func(p *tea.Program) (tea.Model, error) {
+		return nil, sentinelErr
+	}
+
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	cmd := exec.Command(exePath, "-test.run=^$")
+	cmd.Env = append(os.Environ(), "_ATMOS_TEST_SLEEP_SECONDS=30")
+	require.NoError(t, cmd.Start())
+
+	finalModel, cancelled, runErr := runTUIProgram(noCancelModel{}, cmd)
+
+	require.Error(t, runErr)
+	assert.ErrorIs(t, runErr, errUtils.ErrTUIRun)
+	assert.ErrorIs(t, runErr, sentinelErr)
+	assert.Nil(t, finalModel)
+	assert.False(t, cancelled)
+
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- cmd.Wait() }()
+	select {
+	case werr := <-waitDone:
+		require.Error(t, werr, "process should have been killed after the TUI run failed")
+	case <-time.After(5 * time.Second):
+		t.Fatal("subprocess was not killed within 5s after TUI run error")
+	}
+}
+
+// TestRunTUIProgram_CancelledKillsProcess verifies that when the final model reports the user
+// cancelled (Ctrl-C/q), runTUIProgram kills the still-running subprocess and reports cancelled.
+func TestRunTUIProgram_CancelledKillsProcess(t *testing.T) {
+	origRun := runTeaProgram
+	t.Cleanup(func() { runTeaProgram = origRun })
+	runTeaProgram = func(p *tea.Program) (tea.Model, error) {
+		return Model{cancelled: true}, nil
+	}
+
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	cmd := exec.Command(exePath, "-test.run=^$")
+	cmd.Env = append(os.Environ(), "_ATMOS_TEST_SLEEP_SECONDS=30")
+	require.NoError(t, cmd.Start())
+
+	finalModel, cancelled, runErr := runTUIProgram(NewModel("comp", "stack", "plan", strings.NewReader("")), cmd)
+
+	require.NoError(t, runErr)
+	assert.True(t, cancelled)
+	m, ok := finalModel.(Model)
+	require.True(t, ok)
+	assert.True(t, m.Cancelled())
+
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- cmd.Wait() }()
+	select {
+	case werr := <-waitDone:
+		require.Error(t, werr, "process should have been killed after cancellation")
+	case <-time.After(5 * time.Second):
+		t.Fatal("subprocess was not killed within 5s after cancellation")
+	}
+}
+
+// TestRunTUIProgram_SuccessLeavesProcessRunning verifies the normal (non-cancelled,
+// non-error) path does not kill the subprocess - Execute() still needs to Wait() on it.
+func TestRunTUIProgram_SuccessLeavesProcessRunning(t *testing.T) {
+	origRun := runTeaProgram
+	t.Cleanup(func() { runTeaProgram = origRun })
+	runTeaProgram = func(p *tea.Program) (tea.Model, error) {
+		return Model{}, nil // Finished on its own, not cancelled.
+	}
+
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	cmd := exec.Command(exePath, "-test.run=^$")
+	cmd.Env = append(os.Environ(), "_ATMOS_TEST_SLEEP_SECONDS=1")
+	require.NoError(t, cmd.Start())
+
+	finalModel, cancelled, runErr := runTUIProgram(NewModel("comp", "stack", "plan", strings.NewReader("")), cmd)
+
+	require.NoError(t, runErr)
+	assert.False(t, cancelled)
+	_, ok := finalModel.(Model)
+	require.True(t, ok)
+
+	require.NoError(t, cmd.Wait(), "process should exit on its own after its 1s sleep, undisturbed")
+}
+
+// TestFinalizeExecuteResult covers finalizeExecuteResult's branches: a model-captured error
+// takes precedence, a model-captured exit code overrides the wait exit code, a non-zero wait
+// exit code is returned when the model has none, and a successful apply displays outputs
+// while a successful plan does not error.
+func TestFinalizeExecuteResult(t *testing.T) {
+	tests := []struct {
+		name         string
+		opts         *ExecuteOptions
+		model        *Model
+		exitCode     int
+		wantErrIs    error
+		wantExitCode *int
+	}{
+		{
+			name:      "model error takes precedence over exit code",
+			opts:      &ExecuteOptions{SubCommand: subCommandApply},
+			model:     &Model{tracker: NewResourceTracker(), err: errUtils.ErrTUIRun},
+			exitCode:  0,
+			wantErrIs: errUtils.ErrTUIRun,
+		},
+		{
+			name:         "model exit code overrides wait exit code",
+			opts:         &ExecuteOptions{SubCommand: subCommandApply},
+			model:        &Model{tracker: NewResourceTracker(), exitCode: 3},
+			exitCode:     0,
+			wantExitCode: ptrInt(3),
+		},
+		{
+			name:         "non-zero wait exit code returned when model has none",
+			opts:         &ExecuteOptions{SubCommand: subCommandPlan},
+			model:        &Model{tracker: NewResourceTracker()},
+			exitCode:     2,
+			wantExitCode: ptrInt(2),
+		},
+		{
+			name:     "apply success displays outputs without error",
+			opts:     &ExecuteOptions{SubCommand: subCommandApply},
+			model:    &Model{tracker: NewResourceTracker()},
+			exitCode: 0,
+		},
+		{
+			name:     "plan success does not attempt to display outputs",
+			opts:     &ExecuteOptions{SubCommand: subCommandPlan},
+			model:    &Model{tracker: NewResourceTracker()},
+			exitCode: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := finalizeExecuteResult(tt.opts, tt.model, tt.exitCode)
+			switch {
+			case tt.wantErrIs != nil:
+				require.Error(t, err)
+				assert.ErrorIs(t, err, tt.wantErrIs)
+			case tt.wantExitCode != nil:
+				require.Error(t, err)
+				var exitErr errUtils.ExitCodeError
+				require.ErrorAs(t, err, &exitErr)
+				assert.Equal(t, *tt.wantExitCode, exitErr.Code)
+			default:
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestFinalizeExecuteInitResult covers finalizeExecuteInitResult's branches: a non-ExitError
+// wait error propagates unchanged, an unexpected model type is rejected, a model-captured
+// error takes precedence, a model-captured exit code overrides the wait exit code, and a
+// clean completion returns nil.
+func TestFinalizeExecuteInitResult(t *testing.T) {
+	t.Run("non-exit wait error propagates", func(t *testing.T) {
+		sentinel := errors.New("wait failed")
+		err := finalizeExecuteInitResult(noCancelModel{}, sentinel)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, sentinel)
+	})
+
+	t.Run("unexpected model type", func(t *testing.T) {
+		err := finalizeExecuteInitResult(noCancelModel{}, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrUnexpectedModelType)
+	})
+
+	t.Run("model error takes precedence", func(t *testing.T) {
+		err := finalizeExecuteInitResult(InitModel{err: errUtils.ErrTUIRun}, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrTUIRun)
+	})
+
+	t.Run("model exit code overrides wait exit code", func(t *testing.T) {
+		err := finalizeExecuteInitResult(InitModel{exitCode: 7}, nil)
+		require.Error(t, err)
+		var exitErr errUtils.ExitCodeError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, 7, exitErr.Code)
+	})
+
+	t.Run("clean completion returns nil", func(t *testing.T) {
+		err := finalizeExecuteInitResult(InitModel{}, nil)
+		assert.NoError(t, err)
+	})
+}
+
+// TestGenerateTwoPhasePlanFile verifies the apply and destroy planfile name patterns differ
+// and both land in the requested working directory.
+func TestGenerateTwoPhasePlanFile(t *testing.T) {
+	dir := t.TempDir()
+
+	applyFile := generateTwoPhasePlanFile(dir, false)
+	destroyFile := generateTwoPhasePlanFile(dir, true)
+
+	assert.Equal(t, dir, filepath.Dir(applyFile))
+	assert.Equal(t, dir, filepath.Dir(destroyFile))
+	assert.True(t, strings.HasPrefix(filepath.Base(applyFile), ".atmos-plan-"), "apply planfile: %s", applyFile)
+	assert.True(t, strings.HasSuffix(applyFile, ".tfplan"))
+	assert.True(t, strings.HasPrefix(filepath.Base(destroyFile), ".atmos-destroy-"), "destroy planfile: %s", destroyFile)
+	assert.True(t, strings.HasSuffix(destroyFile, ".tfplan"))
+}
+
+// TestShowPlanTree_ToleratesUnparsablePlan verifies showPlanTree does not panic when the
+// planfile can't be parsed (e.g. no real terraform binary available) - it should silently do
+// nothing, per its documented contract.
+func TestShowPlanTree_ToleratesUnparsablePlan(t *testing.T) {
+	opts := &ExecuteOptions{
+		Command:    filepath.Join(t.TempDir(), "nonexistent-terraform-binary"),
+		WorkingDir: t.TempDir(),
+		Component:  "comp",
+		Stack:      "stack",
+	}
+
+	assert.NotPanics(t, func() {
+		showPlanTree(context.Background(), opts, filepath.Join(opts.WorkingDir, "plan.tfplan"))
+	})
+}
+
+// TestShowPlanTree_RendersTreeWhenChangesExist verifies showPlanTree renders both the
+// dependency tree and the change-summary badge when the parsed plan has changes. The test
+// binary stands in for `terraform show -json` (testmain_test.go's _ATMOS_TEST_TF_SHOW_JSON
+// handling, also used by TestBuildDependencyTree_Success in tree_builder_test.go).
+func TestShowPlanTree_RendersTreeWhenChangesExist(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	stderr := captureUIOutput(t)
+
+	planJSON := `{"format_version":"1.2","resource_changes":[` +
+		`{"address":"aws_vpc.main","mode":"managed","change":{"actions":["create"]}}]}`
+	t.Setenv("_ATMOS_TEST_TF_SHOW_JSON", planJSON)
+
+	opts := &ExecuteOptions{Command: exePath, WorkingDir: t.TempDir(), Component: "vpc", Stack: "dev"}
+
+	showPlanTree(context.Background(), opts, "plan.tfplan")
+
+	output := stderr.String()
+	assert.Contains(t, output, "aws_vpc.main", "dependency tree should be rendered")
+	assert.Contains(t, output, "1 ADD", "change-summary badge should reflect the one create")
+}
+
+// TestShowPlanTree_NoChangesShowsBadgeOnly verifies showPlanTree renders only the "NO CHANGES"
+// badge (no tree) when the parsed plan has no resource changes.
+func TestShowPlanTree_NoChangesShowsBadgeOnly(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	stderr := captureUIOutput(t)
+
+	t.Setenv("_ATMOS_TEST_TF_SHOW_JSON", `{"format_version":"1.2","resource_changes":[]}`)
+
+	opts := &ExecuteOptions{Command: exePath, WorkingDir: t.TempDir()}
+
+	showPlanTree(context.Background(), opts, "plan.tfplan")
+
+	assert.Contains(t, stderr.String(), "NO CHANGES")
+}
+
+// TestShowTwoPhasePlanTree_ReturnsFalseWhenPlanCannotBeParsed verifies an unparsable plan
+// falls through to the confirmation phase (returns false) rather than being mistaken for a
+// no-changes plan, matching the function's documented "prior behavior" contract.
+func TestShowTwoPhasePlanTree_ReturnsFalseWhenPlanCannotBeParsed(t *testing.T) {
+	opts := &ExecuteOptions{
+		Command:    filepath.Join(t.TempDir(), "nonexistent-terraform-binary"),
+		WorkingDir: t.TempDir(),
+	}
+
+	noChanges := showTwoPhasePlanTree(context.Background(), opts, filepath.Join(opts.WorkingDir, "plan.tfplan"))
+
+	assert.False(t, noChanges)
+}
+
+// TestShowTwoPhasePlanTree_NoChangesReturnsTrue verifies a successfully parsed plan with zero
+// changes is reported as "no changes" (true) and renders only the badge.
+func TestShowTwoPhasePlanTree_NoChangesReturnsTrue(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	stderr := captureUIOutput(t)
+
+	t.Setenv("_ATMOS_TEST_TF_SHOW_JSON", `{"format_version":"1.2","resource_changes":[]}`)
+
+	opts := &ExecuteOptions{Command: exePath, WorkingDir: t.TempDir()}
+
+	noChanges := showTwoPhasePlanTree(context.Background(), opts, "plan.tfplan")
+
+	assert.True(t, noChanges)
+	assert.Contains(t, stderr.String(), "NO CHANGES")
+}
+
+// TestShowTwoPhasePlanTree_WithChangesReturnsFalse verifies a successfully parsed plan with
+// changes is reported as "has changes" (false) and renders the dependency tree plus badge.
+func TestShowTwoPhasePlanTree_WithChangesReturnsFalse(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	stderr := captureUIOutput(t)
+
+	planJSON := `{"format_version":"1.2","resource_changes":[` +
+		`{"address":"aws_s3_bucket.main","mode":"managed","change":{"actions":["delete"]}}]}`
+	t.Setenv("_ATMOS_TEST_TF_SHOW_JSON", planJSON)
+
+	opts := &ExecuteOptions{Command: exePath, WorkingDir: t.TempDir()}
+
+	noChanges := showTwoPhasePlanTree(context.Background(), opts, "plan.tfplan")
+
+	assert.False(t, noChanges)
+	output := stderr.String()
+	assert.Contains(t, output, "aws_s3_bucket.main")
+	assert.Contains(t, output, "1 DELETE")
+}
+
+// TestConfirmTwoPhaseOperation_PropagatesConfirmError verifies both the apply and destroy
+// branches select the correct underlying confirm function and propagate its error (stdin
+// isn't a TTY in a `go test` process) instead of swallowing it.
+func TestConfirmTwoPhaseOperation_PropagatesConfirmError(t *testing.T) {
+	tests := []struct {
+		name      string
+		isDestroy bool
+	}{
+		{"apply", false},
+		{"destroy", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			confirmed, err := confirmTwoPhaseOperation(tt.isDestroy)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
+			assert.False(t, confirmed)
+		})
+	}
+}
+
+// TestApplyTwoPhasePlan_PropagatesExecuteError verifies applyTwoPhasePlan builds the apply
+// options and delegates to Execute, propagating its error rather than swallowing it.
+func TestApplyTwoPhasePlan_PropagatesExecuteError(t *testing.T) {
+	opts := &ExecuteOptions{WorkingDir: t.TempDir()}
+
+	err := applyTwoPhasePlan(context.Background(), opts, filepath.Join(opts.WorkingDir, "plan.tfplan"))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
+}
+
+// TestRunTwoPhasePlan_DoesNotMutateCallerArgs is an aliasing/isolation regression test:
+// runTwoPhasePlan copies opts before rewriting Args for the plan phase, for both the apply
+// (plain plan) and destroy (-destroy plan) branches, so the caller's original Args slice must
+// be left untouched.
+func TestRunTwoPhasePlan_DoesNotMutateCallerArgs(t *testing.T) {
+	tests := []struct {
+		name      string
+		isDestroy bool
+	}{
+		{"plan", false},
+		{"destroy", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			origArgs := []string{"apply", "-auto-approve", "-var", "x=1"}
+			opts := &ExecuteOptions{
+				Args:       append([]string(nil), origArgs...),
+				WorkingDir: t.TempDir(),
+			}
+			planFile := filepath.Join(opts.WorkingDir, "plan.tfplan")
+
+			err := runTwoPhasePlan(context.Background(), opts, planFile, tt.isDestroy)
+
+			require.Error(t, err, "fails fast: no TTY for the streaming UI in `go test`")
+			assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
+			assert.Equal(t, origArgs, opts.Args, "runTwoPhasePlan must not mutate the caller's Args slice")
+		})
+	}
+}
+
+// TestExecuteTwoPhaseOperation_PropagatesPlanPhaseError verifies both the apply and destroy
+// two-phase flows propagate a plan-phase failure (and safely no-op the deferred planfile
+// cleanup for a file that was never created).
+func TestExecuteTwoPhaseOperation_PropagatesPlanPhaseError(t *testing.T) {
+	tests := []struct {
+		name      string
+		isDestroy bool
+	}{
+		{"apply", false},
+		{"destroy", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := &ExecuteOptions{WorkingDir: t.TempDir()}
+			err := executeTwoPhaseOperation(context.Background(), opts, tt.isDestroy)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
+		})
+	}
+}
+
+// TestExecuteTwoPhaseApply_DelegatesToOperation and TestExecuteTwoPhaseDestroy_DelegatesToOperation
+// verify the isDestroy wiring for the two thin wrapper functions used by ExecuteApply/ExecuteDestroy.
+func TestExecuteTwoPhaseApply_DelegatesToOperation(t *testing.T) {
+	opts := &ExecuteOptions{WorkingDir: t.TempDir()}
+	err := executeTwoPhaseApply(context.Background(), opts)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
+}
+
+func TestExecuteTwoPhaseDestroy_DelegatesToOperation(t *testing.T) {
+	opts := &ExecuteOptions{WorkingDir: t.TempDir()}
+	err := executeTwoPhaseDestroy(context.Background(), opts)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
+}
+
+// TestExecuteWithPlanFile_PropagatesConfirmError verifies executeWithPlanFile tolerates an
+// unparsable planfile (skips the tree display) and then propagates the confirmation error.
+func TestExecuteWithPlanFile_PropagatesConfirmError(t *testing.T) {
+	opts := &ExecuteOptions{
+		Command:    filepath.Join(t.TempDir(), "nonexistent-terraform-binary"),
+		WorkingDir: t.TempDir(),
+	}
+
+	err := executeWithPlanFile(context.Background(), opts, filepath.Join(opts.WorkingDir, "plan.tfplan"))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
+}
+
+// TestExecuteWithPlanFile_WithChangesRendersTreeThenPropagatesConfirmError verifies that when
+// the planfile parses successfully and has changes, executeWithPlanFile renders the tree
+// before falling through to the (TTY-gated, thus failing) confirmation step.
+func TestExecuteWithPlanFile_WithChangesRendersTreeThenPropagatesConfirmError(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	stderr := captureUIOutput(t)
+
+	planJSON := `{"format_version":"1.2","resource_changes":[` +
+		`{"address":"aws_vpc.main","mode":"managed","change":{"actions":["create"]}}]}`
+	t.Setenv("_ATMOS_TEST_TF_SHOW_JSON", planJSON)
+
+	opts := &ExecuteOptions{Command: exePath, WorkingDir: t.TempDir()}
+
+	runErr := executeWithPlanFile(context.Background(), opts, "plan.tfplan")
+
+	require.Error(t, runErr)
+	assert.ErrorIs(t, runErr, errUtils.ErrStreamingNotSupported)
+	assert.Contains(t, stderr.String(), "aws_vpc.main")
+}
+
+// TestExecuteWithPlanFile_NoChangesDisplaysOutputsAndReturnsNil verifies that when the
+// planfile parses successfully with zero changes, executeWithPlanFile shows the "no changes"
+// badge, attempts to display current outputs, and returns nil without ever calling Execute
+// (i.e. without needing the streaming UI's TTY precondition to hold).
+func TestExecuteWithPlanFile_NoChangesDisplaysOutputsAndReturnsNil(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	stderr := captureUIOutput(t)
+
+	// Reused for both the "terraform show -json" (tree parse) and "terraform output -json"
+	// (fetchAndDisplayOutputs) subprocess calls - both hit the fake-subprocess env gate in
+	// testmain_test.go regardless of which args are passed. A minimal valid tfjson.Plan (no
+	// resource_changes) satisfies the tree parser; it also unmarshals into an empty
+	// map[string]OutputValue for fetchAndDisplayOutputs, since format_version is simply an
+	// unused extra key from that call's point of view.
+	const emptyPlanJSON = `{"format_version":"1.2"}`
+	t.Setenv("_ATMOS_TEST_TF_SHOW_JSON", emptyPlanJSON)
+
+	opts := &ExecuteOptions{
+		Command:    exePath,
+		WorkingDir: t.TempDir(),
+		Env:        append(os.Environ(), "_ATMOS_TEST_TF_SHOW_JSON="+emptyPlanJSON),
+	}
+
+	runErr := executeWithPlanFile(context.Background(), opts, "plan.tfplan")
+
+	require.NoError(t, runErr)
+	assert.Contains(t, stderr.String(), "NO CHANGES")
+}
+
+// TestExecute_FailsFastWhenNotTTY verifies Execute checks streaming UI preconditions (no TTY
+// in a `go test` process) before doing any real work.
+func TestExecute_FailsFastWhenNotTTY(t *testing.T) {
+	opts := &ExecuteOptions{Command: "terraform", WorkingDir: t.TempDir()}
+
+	err := Execute(context.Background(), opts)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
+}
+
+// TestExecuteInit_FailsFastWhenNotTTY mirrors TestExecute_FailsFastWhenNotTTY for ExecuteInit.
+func TestExecuteInit_FailsFastWhenNotTTY(t *testing.T) {
+	opts := &ExecuteOptions{Command: "terraform", WorkingDir: t.TempDir(), SubCommand: subCommandInit}
+
+	err := ExecuteInit(context.Background(), opts)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
+}
+
+// TestExecutePlan_PropagatesError covers both ExecutePlan branches - a caller-provided -out
+// planfile and the generated-temp-file default - verifying each wires through to Execute
+// (which fails fast with no TTY) instead of silently doing nothing.
+func TestExecutePlan_PropagatesError(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"user-provided -out planfile", []string{"plan", "-out=myplan.tfplan"}},
+		{"generated temp planfile", []string{"plan"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := &ExecuteOptions{Command: "terraform", Args: tt.args, WorkingDir: t.TempDir()}
+			err := ExecutePlan(context.Background(), opts)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
+		})
+	}
+}
+
+// TestExecuteApply_AutoApprove_PropagatesExecuteError is a regression test: prior coverage
+// only exercised the confirmation-required path (see TestExecuteApply_FailsFastWhenStdinNotTTY);
+// this covers the -auto-approve branch, which skips confirmation and calls Execute directly.
+func TestExecuteApply_AutoApprove_PropagatesExecuteError(t *testing.T) {
+	opts := &ExecuteOptions{
+		Command:    "terraform",
+		Args:       []string{"apply", "-auto-approve"},
+		WorkingDir: t.TempDir(),
+	}
+
+	err := ExecuteApply(context.Background(), opts)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
+}
+
+// TestExecuteDestroy_AutoApprove_PropagatesExecuteError mirrors
+// TestExecuteApply_AutoApprove_PropagatesExecuteError for ExecuteDestroy.
+func TestExecuteDestroy_AutoApprove_PropagatesExecuteError(t *testing.T) {
+	opts := &ExecuteOptions{
+		Command:    "terraform",
+		Args:       []string{"destroy", "-auto-approve"},
+		WorkingDir: t.TempDir(),
+	}
+
+	err := ExecuteDestroy(context.Background(), opts)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
 }
