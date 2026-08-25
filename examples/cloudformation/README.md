@@ -4,6 +4,9 @@ tags: [Emulators, Components]
 description: >-
   Deploy a native aws/cloudformation component — no external binary, no AWS
   account or credentials required — against a local Floci AWS emulator.
+cast:
+  file: /casts/examples/cloudformation/lifecycle.cast
+  title: atmos aws cloudformation lifecycle
 ---
 
 ## Notes

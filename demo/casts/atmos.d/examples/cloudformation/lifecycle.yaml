@@ -1,0 +1,123 @@
+commands:
+  - name: casts generate examples cloudformation lifecycle
+    description: Regenerate the CloudFormation lifecycle cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-stale-state
+        working_directory: &cloudformation_fixture "../../.context/cast-fixtures/cloudformation"
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: |
+          atmos --logs-level=Off aws cloudformation delete demo -s local --auto-approve || true
+          atmos --logs-level=Off emulator down aws -s local || true
+      - type: cast
+        name: lifecycle
+        working_directory: *cloudformation_fixture
+        title: CloudFormation lifecycle
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/cloudformation/lifecycle.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# start a local `AWS` emulator, declared in the local stack"
+          - type: simulate
+            text: &emulator_up_cmd atmos emulator up aws -s local --ephemeral
+          - type: shell
+            name: emulator-up
+            duration: 450ms
+            interval: 750ms
+            command: *emulator_up_cmd
+          - type: simulate
+            text: "# deploy a real CloudFormation stack against it, no `AWS` account needed"
+          - type: simulate
+            text: &cloudformation_deploy_cmd atmos aws cloudformation deploy demo -s local
+          - type: shell
+            name: cloudformation-deploy
+            duration: 550ms
+            interval: 900ms
+            command: *cloudformation_deploy_cmd
+          - type: simulate
+            text: &cloudformation_output_cmd atmos aws cloudformation output demo -s local
+          - type: shell
+            name: cloudformation-output
+            duration: 450ms
+            interval: 750ms
+            command: *cloudformation_output_cmd
+          - type: simulate
+            text: "# tear it down when you're done"
+          - type: simulate
+            text: &cloudformation_delete_cmd atmos aws cloudformation delete demo -s local --auto-approve
+          - type: shell
+            name: cloudformation-delete
+            duration: 450ms
+            interval: 750ms
+            command: *cloudformation_delete_cmd
+          - type: simulate
+            text: &emulator_down_cmd atmos emulator down aws -s local
+          - type: shell
+            name: emulator-down
+            when: always
+            duration: 450ms
+            interval: 750ms
+            command: *emulator_down_cmd
+      - type: script
+        name: sanitize-runtime-values
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/examples/cloudformation/lifecycle.cast")
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)
+      - type: shell
+        name: validate
+        command: atmos casts validate examples cloudformation lifecycle
+  - name: casts validate examples cloudformation lifecycle
+    description: Validate the CloudFormation lifecycle cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/cloudformation/lifecycle.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          assert_colored(text, "emulator aws is up")
+          for needle in [
+              "# start a local `AWS` emulator",
+              "# deploy a real CloudFormation stack against it, no `AWS` account needed",
+              "emulator aws is up",
+              "emulator aws is up at http://127.0.0.1:",
+              "CREATE_IN_PROGRESS",
+              "CREATE_COMPLETE",
+              "ParameterName",
+              "Stage",
+              "local",
+              "emulator aws is down",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"cloudformation lifecycle cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "Error:", "[cloudformation-deploy]", "[cloudformation-delete]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"cloudformation lifecycle cast contains {bad!r}")
+          for placeholder in ["<image>", "<container>", "<port>"]:
+              if placeholder in plain:
+                  raise SystemExit(f"cloudformation lifecycle cast contains placeholder {placeholder!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)
