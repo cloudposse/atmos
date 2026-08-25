@@ -42,12 +42,12 @@ func loadConfigViaMergeConfig(t *testing.T, tempDir string) *schema.AtmosConfigu
 	// The !include function resolves relative paths against the working directory.
 	t.Chdir(tempDir)
 
-	// mergeConfigFile tracks merged files in a package-level slice for case-map
-	// extraction; reset it like LoadConfig does at the start of each load.
-	resetMergedConfigFiles()
-
 	v := viper.New()
 	v.SetConfigType(yamlType)
+
+	// mergeConfigFile tracks merged files in a per-v tracker for case-map
+	// extraction; register one for v like LoadConfig does at the start of each load.
+	resetMergedConfigFiles(v)
 	require.NoError(t, mergeConfig(v, tempDir, CliConfigFileName, true))
 
 	var cfg schema.AtmosConfiguration

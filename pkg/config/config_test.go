@@ -1349,6 +1349,12 @@ func TestParentTraversalResolvesRelativeToConfigDir(t *testing.T) {
 		expectedComponentsPath := filepath.Join(cwd, "components", "terraform")
 		assert.Equal(t, expectedComponentsPath, cfg.TerraformDirAbsolutePath,
 			"Terraform components path should be at repo root (CWD), not inside config/")
+
+		// ContainerDirAbsolutePath should be computed the same way, from the
+		// default components/container base_path.
+		expectedContainerPath := filepath.Join(cwd, "components", "container")
+		assert.Equal(t, expectedContainerPath, cfg.ContainerDirAbsolutePath,
+			"Container components path should be at repo root (CWD), not inside config/")
 	})
 
 	t.Run("base_path with .. should resolve relative to atmos.yaml location", func(t *testing.T) {
