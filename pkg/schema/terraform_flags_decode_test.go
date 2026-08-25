@@ -91,6 +91,16 @@ func TestDecodeTerraformFlags_UnknownFieldsIgnored(t *testing.T) {
 	assert.Equal(t, "1m", got.LockTimeout)
 }
 
+// TestDecodeTerraformFlags_DecodeErrorForUnconvertibleValue covers mapstructure's decode
+// error branch: a value that WeaklyTypedInput still cannot coerce into the target field's
+// type (a non-numeric string into *int) must surface as an error joined with
+// ErrInvalidTerraformFlagsConfig, not panic or silently zero out the field.
+func TestDecodeTerraformFlags_DecodeErrorForUnconvertibleValue(t *testing.T) {
+	_, err := DecodeTerraformFlags(map[string]any{"parallelism": "not-a-number"})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidTerraformFlagsConfig))
+}
+
 // TestValidateTerraformFlagsKeys_UnknownKeyErrors verifies that a typo like `lock_timout`
 // is caught by this separate validation function, since DecodeTerraformFlags itself
 // silently ignores it (see TestDecodeTerraformFlags_UnknownFieldsIgnored). Discovered via

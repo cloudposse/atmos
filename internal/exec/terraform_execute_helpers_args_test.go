@@ -585,6 +585,77 @@ func TestBuildTerraformCommandArgs_Flags_UnknownKey_Errors(t *testing.T) {
 	assert.Contains(t, err.Error(), "lock_timout")
 }
 
+// TestBuildTerraformCommandArgs_Flags_UnknownKey_Errors_PerSubcommand exercises the same
+// unknown-key validation as TestBuildTerraformCommandArgs_Flags_UnknownKey_Errors but for
+// apply/destroy/refresh/import — each subcommand builder calls validateFlagsKeys
+// independently (buildApplySubcommandArgs, buildDestroySubcommandArgs,
+// buildRefreshSubcommandArgs, buildImportSubcommandArgs), so each has its own error-return
+// branch that must be exercised on its own.
+func TestBuildTerraformCommandArgs_Flags_UnknownKey_Errors_PerSubcommand(t *testing.T) {
+	tests := []struct {
+		subCommand string
+	}{
+		{subCommand: subcommandApply},
+		{subCommand: "destroy"},
+		{subCommand: "refresh"},
+		{subCommand: "import"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.subCommand, func(t *testing.T) {
+			atmosConfig := schema.AtmosConfiguration{}
+			info := schema.ConfigAndStacksInfo{
+				SubCommand: tt.subCommand,
+				ComponentSection: schema.AtmosSectionMapType{
+					cfg.FlagsSectionName: map[string]any{
+						"lock_timeout": "5m",
+						"lock_timout":  "77m",
+					},
+				},
+			}
+			componentPath := "/tmp/my-component"
+
+			_, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidComponentFlags)
+			assert.Contains(t, err.Error(), "lock_timout")
+		})
+	}
+}
+
+// TestBuildTerraformCommandArgs_Flags_InvalidLockTimeout_Errors_PerSubcommand exercises the
+// same invalid-duration validation as TestBuildTerraformCommandArgs_Flags_InvalidLockTimeout_Errors
+// but for apply/destroy/refresh/import — each subcommand builder calls appendLockTimeoutFlag
+// independently and wraps its error separately, so each call site's error-return branch must
+// be exercised on its own.
+func TestBuildTerraformCommandArgs_Flags_InvalidLockTimeout_Errors_PerSubcommand(t *testing.T) {
+	tests := []struct {
+		subCommand string
+	}{
+		{subCommand: subcommandApply},
+		{subCommand: "destroy"},
+		{subCommand: "refresh"},
+		{subCommand: "import"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.subCommand, func(t *testing.T) {
+			atmosConfig := schema.AtmosConfiguration{}
+			info := schema.ConfigAndStacksInfo{
+				SubCommand: tt.subCommand,
+				Flags:      schema.TerraformFlags{LockTimeout: "not-a-duration"},
+			}
+			componentPath := "/tmp/my-component"
+
+			_, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidComponentFlags)
+		})
+	}
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // appendApplyPlanFileArg
 // ──────────────────────────────────────────────────────────────────────────────
