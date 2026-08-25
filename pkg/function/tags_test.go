@@ -44,6 +44,7 @@ func TestAllTags(t *testing.T) {
 		TagAwsCallerIdentityUserID,
 		TagAwsRegion,
 		TagAwsOrganizationID,
+		TagAwsCloudFormationOutput,
 		TagEmulator,
 		TagVersion,
 		TagTags,
@@ -93,6 +94,7 @@ func TestIsValidTag(t *testing.T) {
 		TagAwsCallerIdentityUserID,
 		TagAwsRegion,
 		TagAwsOrganizationID,
+		TagAwsCloudFormationOutput,
 		TagEmulator,
 		TagVersion,
 	}
