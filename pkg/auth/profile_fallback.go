@@ -10,7 +10,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -67,7 +66,7 @@ func (m *manager) buildFallbackAtmosConfig() *schema.AtmosConfiguration {
 	return &schema.AtmosConfiguration{
 		CliConfigPath: m.cliConfigPath,
 		Profiles: schema.ProfilesConfig{
-			BasePath: viper.GetString("profiles.base_path"),
+			BasePath: cfg.GlobalViper().GetString("profiles.base_path"),
 		},
 	}
 }
