@@ -18,6 +18,8 @@ Atmos can be extended to support any number of custom CLI commands. Custom comma
 
 One great way to use custom commands is to tie all your miscellaneous scripts into one consistent CLI interface. Then you can kiss those ugly, inconsistent arguments to bash scripts goodbye — just wire up the commands in `atmos` to call the script. Developers can then run `atmos help` and discover every available command.
 
+Paired with [workflows](/workflows), custom commands turn Atmos into a full task runner — the same tool that plans your infrastructure can replace Make, Just, or Taskfile for everything else your team runs.
+
 ## Simple Example
 
 Adding the following to `atmos.yaml` introduces a new `hello` command:
