@@ -11,10 +11,12 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -479,4 +481,44 @@ func TestAuthenticateForToken_NilAuthConfig(t *testing.T) {
 	_, err := authenticateForToken(ctx, nil, "", "test-identity")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToInitializeAuthManager)
+}
+
+func TestAuthenticateForToken_SelectValueResolvesViaGetDefaultIdentity(t *testing.T) {
+	// A bare --identity (carrying the select sentinel) must resolve to a concrete identity via
+	// GetDefaultIdentity(forceSelect=true) -- which is what triggers the interactive picker --
+	// instead of being passed straight to Authenticate (which would fail to find an identity
+	// literally named "__SELECT__").
+	ctrl := gomock.NewController(t)
+	mgr := types.NewMockAuthManager(ctrl)
+	mgr.EXPECT().GetDefaultIdentity(true).Return("dev-admin", nil)
+	mgr.EXPECT().Authenticate(gomock.Any(), "dev-admin").
+		Return(&types.WhoamiInfo{Credentials: &types.AzureCredentials{}}, nil)
+
+	orig := newAuthManagerFn
+	newAuthManagerFn = func(*schema.AuthConfig, types.CredentialStore, types.Validator, *schema.ConfigAndStacksInfo, string) (types.AuthManager, error) {
+		return mgr, nil
+	}
+	t.Cleanup(func() { newAuthManagerFn = orig })
+
+	creds, err := authenticateForToken(context.Background(), &schema.AuthConfig{}, "", cfg.IdentityFlagSelectValue)
+	require.NoError(t, err)
+	assert.NotNil(t, creds)
+}
+
+func TestAuthenticateForToken_SelectValuePropagatesSelectionError(t *testing.T) {
+	// If GetDefaultIdentity fails (e.g. no TTY for interactive selection), the error must
+	// propagate rather than falling through to the empty-identity default lookup.
+	ctrl := gomock.NewController(t)
+	mgr := types.NewMockAuthManager(ctrl)
+	mgr.EXPECT().GetDefaultIdentity(true).Return("", errUtils.ErrIdentitySelectionRequiresTTY)
+
+	orig := newAuthManagerFn
+	newAuthManagerFn = func(*schema.AuthConfig, types.CredentialStore, types.Validator, *schema.ConfigAndStacksInfo, string) (types.AuthManager, error) {
+		return mgr, nil
+	}
+	t.Cleanup(func() { newAuthManagerFn = orig })
+
+	_, err := authenticateForToken(context.Background(), &schema.AuthConfig{}, "", cfg.IdentityFlagSelectValue)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrIdentitySelectionRequiresTTY)
 }
