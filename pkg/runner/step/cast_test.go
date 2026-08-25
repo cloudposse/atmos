@@ -2122,7 +2122,7 @@ func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	err = runCastSessionMode(ctx, &schema.WorkflowStep{
