@@ -273,14 +273,39 @@ func ExecutePacker(
 	// "executable file not found in $PATH", because exec.Command resolves the
 	// binary via the process's real PATH at call time, not via the PATH=...
 	// entry later added to envVars.
-	return ExecuteShellCommand(
+	return executePackerCommandWithRetry(&atmosConfig, info, tenv, retryExecParams{
+		allArgsAndFlags: allArgsAndFlags,
+		componentPath:   componentPath,
+		envVars:         envVars,
+	})
+}
+
+// executePackerCommandWithRetry runs the resolved packer subcommand through
+// ExecuteShellCommandWithRetry. Extracted from ExecutePacker so the retry wiring can
+// be unit-tested directly with a fake invoke, without standing up ExecutePacker's full
+// stack-processing/toolchain preamble or requiring a real packer binary.
+func executePackerCommandWithRetry(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	tenv *dependencies.ToolchainEnvironment,
+	params retryExecParams,
+) error {
+	return ExecuteShellCommandWithRetry(
 		atmosConfig,
-		tenv.Resolve(info.Command),
-		allArgsAndFlags,
-		componentPath,
-		envVars,
-		info.DryRun,
-		info.RedirectStdErr,
+		info,
+		info.SubCommand,
+		func(o ...ShellCommandOption) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				tenv.Resolve(info.Command),
+				params.allArgsAndFlags,
+				params.componentPath,
+				params.envVars,
+				info.DryRun,
+				info.RedirectStdErr,
+				o...,
+			)
+		},
 		WithEnvironment(info.SanitizedEnv),
 	)
 }

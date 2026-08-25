@@ -403,7 +403,7 @@ func TestExecuteShellCommandWithRetry_NilConfig_RunsOnce(t *testing.T) {
 		return errors.New("boom")
 	}
 
-	err := executeShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
+	err := ExecuteShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
 	require.Error(t, err)
 	assert.Equal(t, 1, called, "no retry config = exactly one attempt")
 }
@@ -422,7 +422,7 @@ func TestExecuteShellCommandWithRetry_NoConditions_RunsOnce(t *testing.T) {
 		return errors.New("boom")
 	}
 
-	err := executeShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
+	err := ExecuteShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
 	require.Error(t, err)
 	assert.Equal(t, 1, called, "empty conditions = no retry (safe default)")
 }
@@ -448,7 +448,7 @@ func TestExecuteShellCommandWithRetry_MatchingError_Retries(t *testing.T) {
 		return errors.New("install failed")
 	}
 
-	err := executeShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
+	err := ExecuteShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
 	require.Error(t, err)
 	assert.Equal(t, 3, called, "matching error must retry until max_attempts")
 }
@@ -473,7 +473,7 @@ func TestExecuteShellCommandWithRetry_NonMatchingError_FailsFast(t *testing.T) {
 		return errors.New("plan failed")
 	}
 
-	err := executeShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
+	err := ExecuteShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
 	require.Error(t, err)
 	assert.Equal(t, 1, called, "non-matching error must fail fast on the first attempt")
 }
@@ -502,7 +502,7 @@ func TestExecuteShellCommandWithRetry_RecoveryAfterTransient(t *testing.T) {
 		return nil
 	}
 
-	err := executeShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
+	err := ExecuteShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
 	require.NoError(t, err)
 	assert.Equal(t, 3, called, "must stop retrying as soon as an attempt succeeds")
 }
@@ -523,7 +523,7 @@ func TestExecuteShellCommandWithRetry_InvalidRegex_FailsFast(t *testing.T) {
 		t.Fatal("invoke must not be called when conditions regex is invalid")
 		return nil
 	}
-	err := executeShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
+	err := ExecuteShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidConfig),
 		"invalid regex must surface as ErrInvalidConfig, got: %v", err)
@@ -556,9 +556,53 @@ func TestExecuteShellCommandWithRetry_BufferResetBetweenAttempts(t *testing.T) {
 		return errors.New("real failure")
 	}
 
-	err := executeShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
+	err := ExecuteShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke)
 	require.Error(t, err)
 	assert.Equal(t, 2, called, "buffer must reset so attempt 2's non-matching error stops the loop")
+}
+
+// TestExecuteShellCommandWithRetry_ComposesWithCallerCapture verifies that a
+// caller-supplied stdout/stderr capture writer (e.g. helmfile capturing output for a
+// NodeHooks.After callback) keeps receiving the full output even when retry is also
+// configured. Before this was fixed, retry's own WithStdoutCapture/WithStderrCapture
+// silently replaced the caller's writer (last option wins), so a helmfile component
+// with both a NodeHooks hook and a retry policy would see the hook always fed an
+// empty string.
+func TestExecuteShellCommandWithRetry_ComposesWithCallerCapture(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(2),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+
+	var callerStdout, callerStderr bytes.Buffer
+	baseOpts := []ShellCommandOption{
+		WithStdoutCapture(&callerStdout),
+		WithStderrCapture(&callerStderr),
+	}
+
+	called := 0
+	fakeInvoke := func(opts ...ShellCommandOption) error {
+		called++
+		cfg := applyOptsForTest(opts)
+		_, _ = cfg.stdoutCapture.Write([]byte("some progress\n"))
+		if called == 1 {
+			_, _ = cfg.stderrCapture.Write([]byte("502 Bad Gateway"))
+			return errors.New("transient")
+		}
+		_, _ = cfg.stderrCapture.Write([]byte("ok"))
+		return nil
+	}
+
+	err := ExecuteShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke, baseOpts...)
+	require.NoError(t, err)
+	assert.Equal(t, 2, called)
+	assert.Contains(t, callerStdout.String(), "some progress",
+		"caller's stdout capture must still receive output when retry is also configured")
+	assert.Contains(t, callerStderr.String(), "ok",
+		"caller's stderr capture must still receive output when retry is also configured")
 }
 
 // Compile-time guarantee that we are exercising the same `shellCommandConfig`

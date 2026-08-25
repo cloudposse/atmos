@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -324,4 +325,108 @@ func TestExecuteHelmfileNodeHooks_AfterErrorDroppedWhenExecAlreadyFailed(t *test
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, afterErr, "the after-hook error must be dropped when the exec error already won")
 	assert.Error(t, nodeHooks.afterExecErr, "After must have been called with the real (non-nil) exec error")
+}
+
+// TestExecuteHelmfileCommandWithRetry_MatchingError_Retries proves the retry wiring added
+// to ExecuteHelmfile actually triggers through the real call chain
+// (executeHelmfileCommandWithRetry -> ExecuteShellCommandWithRetry -> ExecuteShellCommand),
+// not just that the shared helper works in isolation. Uses the test binary itself as the
+// "helmfile" command (cross-platform, no real helmfile install needed) via the
+// _ATMOS_TEST_EXIT_ONE/_ATMOS_TEST_STDERR TestMain gate.
+func TestExecuteHelmfileCommandWithRetry_MatchingError_Retries(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	info := &schema.ConfigAndStacksInfo{
+		Command:    exePath,
+		SubCommand: "sync",
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(3),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+	envVars := []string{
+		"_ATMOS_TEST_EXIT_ONE=1",
+		"_ATMOS_TEST_STDERR=Error: 502 Bad Gateway returned",
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	err = executeHelmfileCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
+		allArgsAndFlags: []string{"sync"},
+		componentPath:   t.TempDir(),
+		envVars:         envVars,
+	})
+	require.Error(t, err, "all 3 attempts fail in this fixture, so the final error must propagate")
+}
+
+// TestExecuteHelmfileCommandWithRetry_NonMatchingError_FailsFast proves a real helmfile
+// failure whose output does not match `conditions` is NOT retried through the real call
+// chain -- the counter file lets us assert exactly one subprocess invocation happened.
+func TestExecuteHelmfileCommandWithRetry_NonMatchingError_FailsFast(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	counterFile := filepath.Join(t.TempDir(), "counter")
+
+	info := &schema.ConfigAndStacksInfo{
+		Command:    exePath,
+		SubCommand: "sync",
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(3),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+	envVars := []string{
+		"_ATMOS_TEST_COUNTER_FILE=" + counterFile,
+		"_ATMOS_TEST_EXIT_ONE=1",
+		"_ATMOS_TEST_STDERR=permission denied",
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	err = executeHelmfileCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
+		allArgsAndFlags: []string{"sync"},
+		componentPath:   t.TempDir(),
+		envVars:         envVars,
+	})
+	require.Error(t, err)
+
+	counterBytes, readErr := os.ReadFile(counterFile)
+	require.NoError(t, readErr)
+	assert.Len(t, counterBytes, 1, "non-matching error must fail fast on the first attempt")
+}
+
+// TestExecuteHelmfileCommandWithRetry_ComposesWithNodeHooksCapture proves that
+// executeHelmfileCommandWithRetry's caller-supplied NodeHooks capture buffers (shellOpts)
+// still receive output when retry is also configured -- guards the
+// ExecuteShellCommandWithRetry MultiWriter composition fix at the actual helmfile call site,
+// not just in the shared helper's own unit tests.
+func TestExecuteHelmfileCommandWithRetry_ComposesWithNodeHooksCapture(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	info := &schema.ConfigAndStacksInfo{
+		Command:    exePath,
+		SubCommand: "sync",
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(2),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+	envVars := []string{
+		"_ATMOS_TEST_EXIT_ONE=1",
+		"_ATMOS_TEST_STDERR=502 Bad Gateway",
+	}
+
+	var nodeHooksStderr bytes.Buffer
+	shellOpts := []ShellCommandOption{WithStderrCapture(&nodeHooksStderr)}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	err = executeHelmfileCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
+		allArgsAndFlags: []string{"sync"},
+		componentPath:   t.TempDir(),
+		envVars:         envVars,
+	}, shellOpts...)
+	require.Error(t, err)
+	assert.Contains(t, nodeHooksStderr.String(), "502 Bad Gateway",
+		"the NodeHooks-style caller capture buffer must still receive output when retry is also active")
 }

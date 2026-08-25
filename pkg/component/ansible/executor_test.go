@@ -1,6 +1,7 @@
 package ansible
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -1232,4 +1233,68 @@ func TestPrepareEnvVars(t *testing.T) {
 		// Should have at least ATMOS_CLI_CONFIG_PATH and ATMOS_BASE_PATH.
 		assert.GreaterOrEqual(t, len(envVars), 2)
 	})
+}
+
+// TestExecutePlaybookCommandWithRetry_MatchingError_Retries proves the retry wiring added
+// to ExecutePlaybook actually triggers through the real call chain
+// (executePlaybookCommandWithRetry -> e.ExecuteShellCommandWithRetry -> e.ExecuteShellCommand),
+// not just that the shared helper works in isolation. Uses the test binary itself as the
+// "ansible-playbook" command (cross-platform, no real ansible install needed) via the
+// _ATMOS_TEST_EXIT_ONE/_ATMOS_TEST_STDERR TestMain gate (see testmain_test.go).
+func TestExecutePlaybookCommandWithRetry_MatchingError_Retries(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	maxAttempts := 3
+	info := &schema.ConfigAndStacksInfo{
+		Command:    exePath,
+		SubCommand: "playbook",
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: &maxAttempts,
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+	cmdArgs := &CommandArgs{Command: exePath, Args: []string{"playbook"}}
+	envVars := []string{
+		"_ATMOS_TEST_EXIT_ONE=1",
+		"_ATMOS_TEST_STDERR=Error: 502 Bad Gateway returned",
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	err = executePlaybookCommandWithRetry(&atmosConfig, info, cmdArgs, t.TempDir(), envVars)
+	require.Error(t, err, "all 3 attempts fail in this fixture, so the final error must propagate")
+}
+
+// TestExecutePlaybookCommandWithRetry_NonMatchingError_FailsFast proves a real ansible
+// failure whose output does not match `conditions` is NOT retried through the real call
+// chain -- the counter file lets us assert exactly one subprocess invocation happened.
+func TestExecutePlaybookCommandWithRetry_NonMatchingError_FailsFast(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	counterFile := filepath.Join(t.TempDir(), "counter")
+
+	maxAttempts := 3
+	info := &schema.ConfigAndStacksInfo{
+		Command:    exePath,
+		SubCommand: "playbook",
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: &maxAttempts,
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+	cmdArgs := &CommandArgs{Command: exePath, Args: []string{"playbook"}}
+	envVars := []string{
+		"_ATMOS_TEST_COUNTER_FILE=" + counterFile,
+		"_ATMOS_TEST_EXIT_ONE=1",
+		"_ATMOS_TEST_STDERR=permission denied",
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	err = executePlaybookCommandWithRetry(&atmosConfig, info, cmdArgs, t.TempDir(), envVars)
+	require.Error(t, err)
+
+	counterBytes, readErr := os.ReadFile(counterFile)
+	require.NoError(t, readErr)
+	assert.Len(t, counterBytes, 1, "non-matching error must fail fast on the first attempt")
 }

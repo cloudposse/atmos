@@ -922,3 +922,70 @@ func TestExecutePacker_ComponentMetadata(t *testing.T) {
 		})
 	}
 }
+
+// TestExecutePackerCommandWithRetry_MatchingError_Retries proves the retry wiring added
+// to ExecutePacker actually triggers through the real call chain (executePackerCommandWithRetry
+// -> ExecuteShellCommandWithRetry -> ExecuteShellCommand), not just that the shared helper
+// works in isolation. Uses the test binary itself as the "packer" command (cross-platform,
+// no real packer install needed) via the _ATMOS_TEST_EXIT_ONE/_ATMOS_TEST_STDERR TestMain gate.
+func TestExecutePackerCommandWithRetry_MatchingError_Retries(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	info := &schema.ConfigAndStacksInfo{
+		Command:    exePath,
+		SubCommand: "build",
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(3),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+		ComponentEnvList: []string{
+			"_ATMOS_TEST_EXIT_ONE=1",
+			"_ATMOS_TEST_STDERR=Error: 502 Bad Gateway returned",
+		},
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	err = executePackerCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
+		allArgsAndFlags: []string{"build"},
+		componentPath:   t.TempDir(),
+		envVars:         info.ComponentEnvList,
+	})
+	require.Error(t, err, "all 3 attempts fail in this fixture, so the final error must propagate")
+}
+
+// TestExecutePackerCommandWithRetry_NonMatchingError_FailsFast proves a real packer
+// failure whose output does not match `conditions` is NOT retried through the real call
+// chain -- the counter file lets us assert exactly one subprocess invocation happened.
+func TestExecutePackerCommandWithRetry_NonMatchingError_FailsFast(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	counterFile := filepath.Join(t.TempDir(), "counter")
+
+	info := &schema.ConfigAndStacksInfo{
+		Command:    exePath,
+		SubCommand: "build",
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(3),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+		ComponentEnvList: []string{
+			"_ATMOS_TEST_COUNTER_FILE=" + counterFile,
+			"_ATMOS_TEST_EXIT_ONE=1",
+			"_ATMOS_TEST_STDERR=permission denied",
+		},
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	err = executePackerCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
+		allArgsAndFlags: []string{"build"},
+		componentPath:   t.TempDir(),
+		envVars:         info.ComponentEnvList,
+	})
+	require.Error(t, err)
+
+	counterBytes, readErr := os.ReadFile(counterFile)
+	require.NoError(t, readErr)
+	assert.Len(t, counterBytes, 1, "non-matching error must fail fast on the first attempt")
+}
