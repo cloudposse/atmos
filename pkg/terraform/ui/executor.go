@@ -460,21 +460,29 @@ func supportsStreamingUISubCommand(subCommand string) bool {
 	}
 }
 
-// ShouldUseStreamingUI determines if streaming UI should be used.
-// This checks the flag, config, TTY availability, and CI environment.
-func ShouldUseStreamingUI(uiFlagSet, uiFlag, configEnabled bool, subCommand string) bool {
-	defer perf.Track(nil, "terraform.ui.ShouldUseStreamingUI")()
+// WouldAttemptStreamingUI reports whether the streaming UI would actually be launched for
+// this invocation, independent of which specific subcommand/phase is running: the user (or
+// atmos config) opted in, and the environment can support it (a real TTY, not CI). Callers
+// that need to reject a combination before dispatch (e.g. --ui with concurrent multi-component
+// execution, which would race multiple full-screen TUI sessions for the same terminal) use
+// this instead of ShouldUseStreamingUI, since the exact phase/gate isn't known yet at that point.
+func WouldAttemptStreamingUI(uiFlagSet, uiFlag, configEnabled bool) bool {
+	defer perf.Track(nil, "terraform.ui.WouldAttemptStreamingUI")()
 
 	if !isStreamingUIRequested(uiFlagSet, uiFlag, configEnabled) {
 		return false
 	}
 
 	// Auto-disable in CI environments or when stdout is not a TTY (piped output).
-	if telemetry.IsCI() || !term.IsTTYSupportForStdout() {
-		return false
-	}
+	return !telemetry.IsCI() && term.IsTTYSupportForStdout()
+}
 
-	return supportsStreamingUISubCommand(subCommand)
+// ShouldUseStreamingUI determines if streaming UI should be used.
+// This checks the flag, config, TTY availability, and CI environment.
+func ShouldUseStreamingUI(uiFlagSet, uiFlag, configEnabled bool, subCommand string) bool {
+	defer perf.Track(nil, "terraform.ui.ShouldUseStreamingUI")()
+
+	return WouldAttemptStreamingUI(uiFlagSet, uiFlag, configEnabled) && supportsStreamingUISubCommand(subCommand)
 }
 
 // UIRequestedButUnsupported reports whether the user explicitly opted in to the streaming UI

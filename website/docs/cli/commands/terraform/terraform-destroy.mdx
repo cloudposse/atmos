@@ -189,6 +189,8 @@ Using `--include-dependencies` with destroy also destroys the shared prerequisit
 
         The UI automatically disables when output is piped, in CI environments, or when running unsupported commands.
 
+        `--ui` errors when combined with `--max-concurrency` greater than `1`, since concurrently-scheduled components can't share one terminal for their full-screen UI sessions. Use `--max-concurrency 1` (the default) with `--ui`, or drop `--ui` to run concurrently.
+
         ```shell
         atmos terraform destroy vpc -s dev --ui
         ```

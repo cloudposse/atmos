@@ -243,6 +243,8 @@ components:
     - Running in CI environments (`CI=true`)
     - Using commands that don't support JSON streaming (`refresh`)
 
+    `--ui` is rejected with an error (not a silent fallback) when combined with `--max-concurrency` greater than `1`: concurrently-scheduled components would each try to take over the same terminal with their own full-screen UI session. Use `--max-concurrency 1` (the default) with `--ui`, or drop `--ui` to run components concurrently.
+
     **Environment variable:** `ATMOS_TERRAFORM_UI`
     **Command-line flag:** `--ui`
     **Default:** `false`
