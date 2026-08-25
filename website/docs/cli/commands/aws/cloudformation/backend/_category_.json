@@ -1,0 +1,8 @@
+{
+  "label": "backend",
+  "className": "command",
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/aws/cloudformation/backend/backend"
+  }
+}

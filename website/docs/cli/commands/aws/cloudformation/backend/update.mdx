@@ -1,0 +1,60 @@
+---
+title: atmos aws cloudformation backend update
+sidebar_label: update
+sidebar_class_name: command
+id: update
+description: Reapply secure defaults to the component's template-packaging backend bucket.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Apply configuration changes to the existing S3 bucket referenced by the
+  component's resolved `kind: aws/s3` provision target — versioning,
+  encryption, and public-access-block settings are brought in line with
+  Atmos's secure defaults. `backend update` and [`backend
+  create`](/cli/commands/aws/cloudformation/backend/create) dispatch through
+  the identical idempotent code path; `update` exists as the explicit,
+  intention-revealing verb for "make sure this bucket's settings are still
+  correct."
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation backend update --help" src="/casts/screengrabs/atmos-aws-cloudformation-backend-update--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation backend update <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation backend update vpc -s plat-ue2-dev
+```
+
+Disambiguate when the component declares more than one `kind: aws/s3` target:
+
+```shell
+atmos aws cloudformation backend update vpc -s plat-ue2-dev --target artifacts
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--target` <em>(optional)</em></dt>
+  <dd>The `kind: aws/s3` provision target to use. Required when more than one is declared.</dd>
+
+  <dt>`--identity`, `-i` <em>(optional)</em></dt>
+  <dd>Atmos identity to authenticate with.</dd>
+</dl>
+
+## Behavior
+
+See [`backend create`](/cli/commands/aws/cloudformation/backend/create) for
+the full description of what settings are applied and how the bucket already
+existing is handled.

@@ -1,0 +1,61 @@
+---
+title: atmos aws cloudformation backend create
+sidebar_label: create
+sidebar_class_name: command
+id: create
+description: Provision the S3 bucket used by the component's template-packaging backend.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Create or update the S3 bucket referenced by the component's resolved `kind:
+  aws/s3` provision target, applying secure defaults: versioning enabled,
+  AES-256 encryption, and all four public-access-block settings enabled. If
+  the bucket already exists, its settings are brought in line with these
+  defaults rather than left as-is — this operation is idempotent, and can
+  safely be run again.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation backend create --help" src="/casts/screengrabs/atmos-aws-cloudformation-backend-create--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation backend create <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation backend create vpc -s plat-ue2-dev
+```
+
+Disambiguate when the component declares more than one `kind: aws/s3` target:
+
+```shell
+atmos aws cloudformation backend create vpc -s plat-ue2-dev --target artifacts
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--target` <em>(optional)</em></dt>
+  <dd>The `kind: aws/s3` provision target to use. Required when more than one is declared.</dd>
+
+  <dt>`--identity`, `-i` <em>(optional)</em></dt>
+  <dd>Atmos identity to authenticate with.</dd>
+</dl>
+
+## Behavior
+
+`backend create` resolves the component's stack configuration to find its
+`kind: aws/s3` provision target(s), then provisions the bucket through the
+same registered S3 backend provisioner `atmos terraform backend create` uses
+— no separate backend implementation exists for CloudFormation. If the bucket
+already existed, a warning explains which existing settings (versioning,
+encryption, public access, tags) are being overwritten.
