@@ -49,6 +49,12 @@ components:
 Container components can participate in hooks, compositions, workflows, and stack-specific config
 the same way other Atmos component types do.
 
+Relative `build.context`, `build.dockerfile`, and `run.mounts[].source` resolve against the
+component's own directory — `components.container.base_path` (default `components/container`) joined
+with `component:`/`metadata.component`, the same mechanism Terraform/Helmfile/Kubernetes/Helm use —
+not the directory `atmos` is invoked from. A component declaring `source:` is auto-provisioned into a
+workdir (same JIT support as other component types), and that workdir becomes the anchor instead.
+
 ## Commands
 
 | Command | Purpose |
