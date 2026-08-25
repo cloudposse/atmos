@@ -1,0 +1,63 @@
+---
+title: atmos aws cloudformation changeset delete
+sidebar_label: delete
+sidebar_class_name: command
+id: delete
+description: Delete a named changeset without touching the stack.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Delete a named changeset (`DeleteChangeSet`) without touching the stack
+  itself. Use this to clean up changesets created with
+  [`changeset create`](/cli/commands/aws/cloudformation/changeset/create) that
+  you decided not to execute.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation changeset delete --help" src="/casts/screengrabs/atmos-aws-cloudformation-changeset-delete--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation changeset delete <component> --stack <stack> --changeset-name <name> [options]
+```
+
+```shell
+atmos aws cloudformation changeset delete vpc -s plat-ue2-dev --changeset-name vpc-2026-08-25
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--changeset-name` <em>(required)</em></dt>
+  <dd>Name of the changeset to delete.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Delete the named changeset for all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Delete the named changeset for affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+:::note
+`changeset delete` does not fire `before`/`after` hook events — only
+[`apply`](/cli/commands/aws/cloudformation/apply),
+[`diff`](/cli/commands/aws/cloudformation/diff), and
+[`delete`](/cli/commands/aws/cloudformation/delete) do.
+:::
