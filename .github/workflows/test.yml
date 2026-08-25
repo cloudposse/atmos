@@ -518,24 +518,76 @@ jobs:
 
   # Sharding the `test` job fans it out into TEST_SHARD_COUNT x 3 per-leg checks.
   # Keep the three historical required-check names as compatibility aliases so
-  # branch protection does not need to change. Each alias gates on the complete
-  # matrix result, so every OS/shard must pass before any alias succeeds.
+  # branch protection does not need to change. `needs.test.result` aggregates
+  # every OS/shard combination in the `test` matrix into a single verdict, so
+  # relying on it here would fail all three aliases whenever any single shard on
+  # any OS fails, not just the OS actually affected. Query the run's actual
+  # per-job results instead, so each alias only fails for its own OS's shards.
   test-required:
     name: ${{ matrix.check }}
     needs: [test, terraform-registry-cache]
     runs-on: ubuntu-latest
     if: ${{ always() }}
+    # `gh api .../actions/runs/.../jobs` (below) hits the REST API for this
+    # run's job list and needs actions:read - unlike needs.<job>.result, which
+    # is ambient but only exposes the whole matrix job's aggregated verdict.
+    permissions:
+      actions: read
     strategy:
       fail-fast: false
       matrix:
         check: ["Acceptance Tests (linux)", "Acceptance Tests (macos)", "Acceptance Tests (windows)"]
     steps:
-      - name: Check test matrix result
+      - name: Check per-OS test matrix result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECK: ${{ matrix.check }}
         run: |
-          if [ "${{ needs.test.result }}" != "success" ]; then
-            echo "test matrix result was '${{ needs.test.result }}'"
+          set -euo pipefail
+
+          # Derive the OS token (e.g. "linux") from the legacy check name
+          # (e.g. "Acceptance Tests (linux)") instead of a separate matrix
+          # field, so internal/ci/acceptance/verify.go's
+          # workflowRequiredCheckPattern - which requires this job's matrix
+          # to stay a literal `check: [...]` list - keeps matching.
+          target=${CHECK#Acceptance Tests (}
+          target=${target%)}
+          export TARGET="$target"
+
+          mapfile -t shard_jobs < <(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs" \
+            --paginate \
+            --jq ".jobs[] | select(.name | startswith(\"Acceptance Tests (\" + env.TARGET + \", shard\")) | [.name, .conclusion] | @tsv")
+
+          # Fail loudly if the job list itself looks wrong (renamed job, API
+          # hiccup, shard count drift) rather than silently treating a missing
+          # shard as a pass.
+          job_count=${#shard_jobs[@]}
+          if [ "$job_count" -ne "$TEST_SHARD_COUNT" ]; then
+            echo "expected $TEST_SHARD_COUNT '$TARGET' shard jobs, found $job_count"
+            printf '%s\n' "${shard_jobs[@]}"
             exit 1
           fi
+
+          failed=()
+          for job in "${shard_jobs[@]}"; do
+            conclusion=${job##*$'\t'}
+            if [ "$conclusion" != "success" ]; then
+              failed+=("$job")
+            fi
+          done
+
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "the following '$TARGET' shard jobs did not succeed:"
+            printf '%s\n' "${failed[@]}"
+            exit 1
+          fi
+
+      - name: Check terraform-registry-cache result
+        # terraform-registry-cache only runs a linux/windows matrix (no macos
+        # leg - see its `matrix.flavor` above), so its aggregated result must
+        # not gate the macos alias.
+        if: matrix.check != 'Acceptance Tests (macos)'
+        run: |
           if [ "${{ needs.terraform-registry-cache.result }}" != "success" ]; then
             echo "terraform-registry-cache result was '${{ needs.terraform-registry-cache.result }}'"
             exit 1
