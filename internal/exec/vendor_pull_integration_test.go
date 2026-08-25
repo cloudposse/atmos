@@ -3,6 +3,7 @@ package exec
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -81,8 +82,12 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 	// Check for OCI authentication (GitHub token) for pulling images from ghcr.io.
 	tests.RequireOCIAuthentication(t)
 
-	// Change to test fixture directory.
-	workDir := "../../tests/fixtures/scenarios/vendor"
+	// Run against a private copy of the scenario rather than the shared, git-tracked fixture
+	// directly: tests/test-cases/vendor-test.yaml's "atmos_vendor_pull" acceptance test targets
+	// the same directory, and on Windows CI the "tests" and "internal/exec" packages run
+	// concurrently (internal/ci/acceptance/run.go's runWindowsShard), so both were racing to
+	// write/clean up the same component paths.
+	workDir := vendorPullWorkflowSandbox(t, "../../tests/fixtures/scenarios/vendor")
 	t.Chdir(workDir)
 
 	// Set up vendor pull command with global flags.
@@ -124,14 +129,8 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 		assert.FileExists(t, file, "Expected file should exist: %s", file)
 	}
 
-	// Clean up vendored files.
-	t.Cleanup(func() {
-		for _, file := range expectedFiles {
-			// Remove individual files and their parent directories.
-			dir := filepath.Dir(file)
-			os.RemoveAll(dir)
-		}
-	})
+	// No manual cleanup needed: workDir is a t.TempDir() copy, removed automatically
+	// (along with everything vendor pull wrote under it) when the test ends.
 
 	// Test 2: Dry-run flag should not fail.
 	err = flags.Set("dry-run", "true")
@@ -149,6 +148,41 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 
 	err = ExecuteVendorPullCommand(cmd, []string{})
 	require.NoError(t, err, "Tag filtering should execute without error")
+}
+
+// vendorPullWorkflowSandbox copies the vendor scenario's config (atmos.yaml, vendor.yaml, and the
+// imported vendor/vendor2.yaml) from srcDir into a private t.TempDir(), rewriting vendor.yaml's two
+// local-filesystem source references to absolute paths. Those sources are resolved relative to
+// wherever vendor.yaml physically lives on disk (internal/exec/vendor_utils.go's
+// vendorConfigFilePath), so copying the file verbatim to an arbitrary temp directory would break
+// them; an already-absolute source path is instead returned as-is by pkg/utils.JoinPath. Returns
+// the sandbox directory to run the test from.
+func vendorPullWorkflowSandbox(t *testing.T, srcDir string) string {
+	t.Helper()
+
+	mockComponentPath, err := filepath.Abs(filepath.Join(srcDir, "..", "..", "components", "terraform", "mock"))
+	require.NoError(t, err, "Failed to resolve absolute path to the shared mock component fixture")
+
+	dstDir := t.TempDir()
+
+	atmosYAML, err := os.ReadFile(filepath.Join(srcDir, "atmos.yaml"))
+	require.NoError(t, err, "Failed to read atmos.yaml fixture")
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, "atmos.yaml"), atmosYAML, 0o644), "Failed to write atmos.yaml copy")
+
+	vendorYAML, err := os.ReadFile(filepath.Join(srcDir, "vendor.yaml"))
+	require.NoError(t, err, "Failed to read vendor.yaml fixture")
+	rewritten := strings.NewReplacer(
+		"file:///../../../fixtures/components/terraform/mock", mockComponentPath,
+		"../../../fixtures/components/terraform/mock", mockComponentPath,
+	).Replace(string(vendorYAML))
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, "vendor.yaml"), []byte(rewritten), 0o644), "Failed to write vendor.yaml copy")
+
+	vendor2YAML, err := os.ReadFile(filepath.Join(srcDir, "vendor", "vendor2.yaml"))
+	require.NoError(t, err, "Failed to read vendor/vendor2.yaml fixture")
+	require.NoError(t, os.MkdirAll(filepath.Join(dstDir, "vendor"), 0o755), "Failed to create vendor subdirectory")
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, "vendor", "vendor2.yaml"), vendor2YAML, 0o644), "Failed to write vendor2.yaml copy")
+
+	return dstDir
 }
 
 // TestVendorPullTripleSlashNormalization tests end-to-end triple-slash URI normalization.
