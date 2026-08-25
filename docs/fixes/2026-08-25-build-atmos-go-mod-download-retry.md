@@ -43,16 +43,31 @@ with a 15s cooldown between each, used because `actions/download-artifact` only 
   failing loudly with attempt-count context if all three attempts are exhausted. The script's
   `set -eu` doesn't short-circuit this, since a command used as a `while`/`until` condition is
   exempt from `set -e`'s early-exit behavior.
+- Follow-up (same day): the initial commit indented the new lines with spaces, matching the rest
+  of the file -- but `.editorconfig` declares `indent_style = tab` for `*.sh`, and the whole file
+  had actually been space-indented all along. That was never caught before because
+  `atmos-validate-editorconfig` only runs `--affected` (files changed since the merge-base), and
+  nothing had touched this file in a triggering diff until this fix did. Converted every indented
+  line in the file from 2-space indentation to tabs (one tab per indent level, per
+  `indent_size = 2`) so the pre-commit hook and CI's "Validation (affected)" job both pass. A
+  repo-wide (non-`--affected`) `atmos validate editorconfig` run turned up thousands of unrelated
+  pre-existing violations elsewhere (mostly Markdown blog posts) that are out of scope here --
+  scoped this fix to the one file `--affected` actually flags, matching what CI runs.
 
 ## Validation
 
-- `shellcheck -s sh scripts/build-atmos.sh` -- clean.
+- `shellcheck -s sh scripts/build-atmos.sh` -- clean, before and after the tab conversion.
 - `sh scripts/build-atmos.sh default test` -- happy path still builds `build/atmos` successfully
-  and it runs (`./build/atmos version`).
+  and it runs (`./build/atmos version`), both before and after the tab conversion.
 - Isolated the retry loop's control flow with a fake `go` shell function and verified both paths
   directly: (1) failing twice then succeeding on the 3rd attempt recovers and continues normally;
   (2) failing on all 3 attempts prints the failure-count message and exits 1 (does not silently
-  swallow a genuine, persistent failure).
+  swallow a genuine, persistent failure). Re-verified after the tab conversion too.
+- `./build/atmos validate --affected --exclude 'tests/fixtures/**' --exclude '**/*.go' --format
+  rich` (the exact command the `atmos-validate-editorconfig` pre-commit hook runs) -- passes
+  cleanly after the tab conversion; failed with dozens of "Wrong indentation type" errors on this
+  file before it.
+- Patch-scoped `./custom-gcl run --new-from-rev=origin/main` -- 0 issues.
 
 ## Follow-ups
 
