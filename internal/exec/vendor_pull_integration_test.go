@@ -162,6 +162,11 @@ func vendorPullWorkflowSandbox(t *testing.T, srcDir string) string {
 
 	mockComponentPath, err := filepath.Abs(filepath.Join(srcDir, "..", "..", "components", "terraform", "mock"))
 	require.NoError(t, err, "Failed to resolve absolute path to the shared mock component fixture")
+	// Embed as forward slashes: on Windows filepath.Abs returns backslashes, and a raw
+	// backslash inside a double-quoted YAML string is parsed as an escape sequence
+	// ("yaml: line N: found unknown escape character"). Forward slashes parse fine in YAML
+	// and are accepted by Go's path/filesystem functions on Windows too.
+	mockComponentURI := filepath.ToSlash(mockComponentPath)
 
 	dstDir := t.TempDir()
 
@@ -172,8 +177,8 @@ func vendorPullWorkflowSandbox(t *testing.T, srcDir string) string {
 	vendorYAML, err := os.ReadFile(filepath.Join(srcDir, "vendor.yaml"))
 	require.NoError(t, err, "Failed to read vendor.yaml fixture")
 	rewritten := strings.NewReplacer(
-		"file:///../../../fixtures/components/terraform/mock", mockComponentPath,
-		"../../../fixtures/components/terraform/mock", mockComponentPath,
+		"file:///../../../fixtures/components/terraform/mock", mockComponentURI,
+		"../../../fixtures/components/terraform/mock", mockComponentURI,
 	).Replace(string(vendorYAML))
 	require.NoError(t, os.WriteFile(filepath.Join(dstDir, "vendor.yaml"), []byte(rewritten), 0o644), "Failed to write vendor.yaml copy")
 
