@@ -282,15 +282,19 @@ func shouldSkipRepoCopyPath(src string) bool {
 	return false
 }
 
-// copyRepoWithRetry copies the live repository at src into dest, retrying a few times
-// if the copy fails because a source file vanished mid-copy. The source is the actual
-// checked-out repository, which can have transient files appear and disappear under
-// .git/objects/pack while git performs routine background housekeeping (e.g. an
-// automatic repack writes tmp_pack_*/tmp_idx_*/tmp_rev_* files and renames or removes
-// them within milliseconds). The otiai10/copy directory walk stats every entry it
-// lists, so it can observe one of these files mid-flight and fail the whole copy with
-// "no such file or directory". Retrying a moment later almost always succeeds, since
-// the transient file is long gone by the next attempt.
+// copyRepoWithRetry copies the live repository at src into dest, retrying a few times if the
+// copy hits a transient error. The source is the actual checked-out repository, which can have:
+//   - files appear and disappear under .git/objects/pack while git performs routine background
+//     housekeeping (e.g. an automatic repack writes tmp_pack_*/tmp_idx_*/tmp_rev_* files and
+//     renames or removes them within milliseconds) -- the otiai10/copy directory walk stats every
+//     entry it lists, so it can observe one of these files mid-flight and fail with
+//     "no such file or directory" (os.IsNotExist).
+//   - fixture files locked by another concurrently running test's terraform process (e.g. a
+//     terraform.tfstate under tests/fixtures/scenarios/plan-diff held open mid-plan/apply), which
+//     on Windows surfaces as a sharing/lock violation rather than IsNotExist.
+//
+// Retrying a moment later almost always succeeds, since the transient file is long gone, or the
+// lock released, by the next attempt.
 func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
 	t.Helper()
 
@@ -298,7 +302,7 @@ func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
 	var err error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		err = cp.Copy(src, dest, *opts)
-		if err == nil || !os.IsNotExist(err) {
+		if err == nil || !isTransientRepoCopyError(err) {
 			return err
 		}
 		if attempt == maxAttempts {
@@ -309,6 +313,28 @@ func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
 		time.Sleep(50 * time.Millisecond)
 	}
 	return err
+}
+
+// isTransientRepoCopyError reports whether err is expected to resolve on its own shortly, and so
+// is worth retrying rather than failing the test outright. Windows reports a locked file via its
+// error message text rather than a portable sentinel/errno, so this matches on that text the same
+// way pkg/git/worktree.go's isTransientWorktreeRemoveError does for transient worktree-removal
+// errors.
+func isTransientRepoCopyError(err error) bool {
+	if os.IsNotExist(err) {
+		return true
+	}
+	lower := strings.ToLower(err.Error())
+	transientPatterns := []string{
+		"another process has locked a portion of the file",
+		"being used by another process",
+	}
+	for _, p := range transientPatterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // setupDescribeAffectedTest sets up the test environment for describe affected tests.
