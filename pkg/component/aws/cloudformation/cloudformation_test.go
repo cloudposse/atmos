@@ -105,6 +105,14 @@ func TestComponentProvider_Execute_MapsSubcommandsToOperations(t *testing.T) {
 		{"validate", OperationValidate},
 		{"output", OperationOutput},
 		{"outputs", OperationOutput},
+		{"changeset-create", OperationChangesetCreate},
+		{"changeset-execute", OperationChangesetExecute},
+		{"changeset-list", OperationChangesetList},
+		{"changeset-delete", OperationChangesetDelete},
+		{"drift-detect", OperationDriftDetect},
+		{"drift-describe", OperationDriftDescribe},
+		{"get-template", OperationGetTemplate},
+		{"get-policy", OperationGetPolicy},
 	}
 
 	original := executeOperation

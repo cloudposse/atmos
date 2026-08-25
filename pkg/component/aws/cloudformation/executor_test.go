@@ -3,9 +3,12 @@ package cloudformation
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -630,6 +633,31 @@ func TestRunOperation_Apply_ConfirmationDeclined(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
 }
 
+// runOperation must, once confirmation passes and a client is built, look up
+// and actually invoke the matching operationHandlers entry (not just resolve
+// it) — asserted here by confirming the underlying (real, unreachable)
+// endpoint was actually hit rather than merely that runOperation returns.
+func TestRunOperation_DispatchesToHandler(t *testing.T) {
+	// A real server, closed immediately: the port is guaranteed to refuse
+	// connections, so the real AWS SDK call the dispatched handler makes fails
+	// fast and deterministically rather than depending on network access.
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	unreachable := srv.URL
+	srv.Close()
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{
+			"settings": map[string]any{"aws_cloudformation": map[string]any{"region": "us-east-1"}},
+		},
+		AuthContext: &schema.AuthContext{AWS: &schema.AWSAuthContext{EndpointURL: unreachable}},
+	}
+	spec := &stackSpec{StackName: "vpc"}
+	octx := &opContext{Ctx: context.Background(), Info: info, Flags: map[string]any{}}
+
+	_, err := runOperation(octx, OperationGetPolicy, spec)
+	require.Error(t, err, "the dispatched handler must have actually called the (unreachable) endpoint and surfaced its failure")
+}
+
 func TestRunOperation_Render_NoAPICalls(t *testing.T) {
 	// Render must never touch the AWS API — no mock expectations set means any
 	// call would fail the test via gomock's unexpected-call panic.
@@ -638,4 +666,227 @@ func TestRunOperation_Render_NoAPICalls(t *testing.T) {
 	summary, err := runOperation(octx, OperationRender, spec)
 	require.NoError(t, err)
 	assert.Equal(t, spec.TemplateBody, summary["template"])
+}
+
+// changesetNameFlag must extract the string --changeset-name flag, defaulting
+// to "" for both an absent key and a wrong-typed value.
+func TestChangesetNameFlag(t *testing.T) {
+	assert.Equal(t, "my-cs", changesetNameFlag(map[string]any{"changeset-name": "my-cs"}))
+	assert.Empty(t, changesetNameFlag(map[string]any{}))
+	assert.Empty(t, changesetNameFlag(map[string]any{"changeset-name": 123}))
+}
+
+// operationHandlers must map every Phase 2 Operation to a handler that
+// delegates to the matching run*/validateTemplate call — exercised here
+// through the map lookup itself (runOperation's real dispatch path), not by
+// calling the underlying run* function directly.
+func TestOperationHandlers_Dispatch(t *testing.T) {
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+	octx := &opContext{Ctx: context.Background(), Flags: map[string]any{}}
+
+	tests := []struct {
+		name  string
+		op    Operation
+		setup func(m *MockCloudFormationClient)
+		check func(t *testing.T, summary map[string]any)
+	}{
+		{
+			name: "validate",
+			op:   OperationValidate,
+			setup: func(m *MockCloudFormationClient) {
+				m.EXPECT().ValidateTemplate(gomock.Any(), gomock.Any()).Return(&cloudformation.ValidateTemplateOutput{}, nil)
+			},
+		},
+		{
+			name: "diff",
+			op:   OperationDiff,
+			setup: func(m *MockCloudFormationClient) {
+				m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+				m.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil)
+				m.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+					Status: cfntypes.ChangeSetStatusCreateComplete,
+				}, nil)
+			},
+			check: func(t *testing.T, summary map[string]any) {
+				assert.False(t, summary["no_op"].(bool))
+			},
+		},
+		{
+			name: "delete",
+			op:   OperationDelete,
+			setup: func(m *MockCloudFormationClient) {
+				m.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
+				m.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
+				m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+			},
+			check: func(t *testing.T, summary map[string]any) {
+				assert.Equal(t, string(cfntypes.StackStatusDeleteComplete), summary["final_status"])
+			},
+		},
+		{
+			name: "output",
+			op:   OperationOutput,
+			setup: func(m *MockCloudFormationClient) {
+				m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+			},
+		},
+		{
+			name: "changeset-create",
+			op:   OperationChangesetCreate,
+			setup: func(m *MockCloudFormationClient) {
+				m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+				m.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil)
+				m.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+					Status: cfntypes.ChangeSetStatusCreateComplete,
+				}, nil)
+			},
+		},
+		{
+			name: "changeset-list",
+			op:   OperationChangesetList,
+			setup: func(m *MockCloudFormationClient) {
+				m.EXPECT().ListChangeSets(gomock.Any(), gomock.Any()).Return(&cloudformation.ListChangeSetsOutput{}, nil)
+			},
+		},
+		{
+			name: "drift-describe",
+			op:   OperationDriftDescribe,
+			setup: func(m *MockCloudFormationClient) {
+				m.EXPECT().DescribeStackResourceDrifts(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackResourceDriftsOutput{}, nil)
+			},
+		},
+		{
+			name: "get-template",
+			op:   OperationGetTemplate,
+			setup: func(m *MockCloudFormationClient) {
+				m.EXPECT().GetTemplate(gomock.Any(), gomock.Any()).Return(&cloudformation.GetTemplateOutput{TemplateBody: awsString("body")}, nil)
+			},
+		},
+		{
+			name: "get-policy",
+			op:   OperationGetPolicy,
+			setup: func(m *MockCloudFormationClient) {
+				m.EXPECT().GetStackPolicy(gomock.Any(), gomock.Any()).Return(&cloudformation.GetStackPolicyOutput{}, nil)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			client := NewMockCloudFormationClient(ctrl)
+			tt.setup(client)
+
+			handler, ok := operationHandlers[tt.op]
+			require.True(t, ok, "operationHandlers must have an entry for %q", tt.op)
+
+			captureStdout(t, func() {
+				summary, err := handler(octx, client, spec, map[string]any{})
+				require.NoError(t, err)
+				if tt.check != nil {
+					tt.check(t, summary)
+				}
+			})
+		})
+	}
+}
+
+// operationHandlers' changeset-execute entry must thread the --changeset-name
+// flag through to runChangesetExecute (via changesetNameFlag).
+func TestOperationHandlers_ChangesetExecute_ThreadsChangesetNameFlag(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	var gotChangeSetName *string
+	gomock.InOrder(
+		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, input *cloudformation.DescribeChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeChangeSetOutput, error) {
+				gotChangeSetName = input.ChangeSetName
+				return &cloudformation.DescribeChangeSetOutput{Status: cfntypes.ChangeSetStatusCreateComplete}, nil
+			},
+		),
+		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
+	)
+
+	spec := &stackSpec{StackName: "vpc"}
+	octx := &opContext{Ctx: context.Background(), Flags: map[string]any{"changeset-name": "my-named-cs"}}
+
+	handler, ok := operationHandlers[OperationChangesetExecute]
+	require.True(t, ok)
+	_, err := handler(octx, client, spec, map[string]any{})
+	require.NoError(t, err)
+	require.NotNil(t, gotChangeSetName)
+	assert.Equal(t, "my-named-cs", *gotChangeSetName)
+}
+
+// operationHandlers' changeset-delete entry must thread the --changeset-name
+// flag through to runChangesetDelete (via changesetNameFlag).
+func TestOperationHandlers_ChangesetDelete_ThreadsChangesetNameFlag(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	var gotChangeSetName *string
+	client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, input *cloudformation.DeleteChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.DeleteChangeSetOutput, error) {
+			gotChangeSetName = input.ChangeSetName
+			return &cloudformation.DeleteChangeSetOutput{}, nil
+		},
+	)
+
+	spec := &stackSpec{StackName: "vpc"}
+	octx := &opContext{Ctx: context.Background(), Flags: map[string]any{"changeset-name": "doomed-cs"}}
+
+	handler, ok := operationHandlers[OperationChangesetDelete]
+	require.True(t, ok)
+	_, err := handler(octx, client, spec, map[string]any{})
+	require.NoError(t, err)
+	require.NotNil(t, gotChangeSetName)
+	assert.Equal(t, "doomed-cs", *gotChangeSetName)
+}
+
+// operationHandlers' drift-detect entry must thread the --fail-on-drift flag
+// through to runDriftDetect, both when set and when absent.
+func TestOperationHandlers_DriftDetect_ThreadsFailOnDriftFlag(t *testing.T) {
+	shrinkDriftTiming(t, time.Millisecond, time.Minute)
+
+	tests := []struct {
+		name        string
+		flags       map[string]any
+		driftStatus cfntypes.StackDriftStatus
+		wantErr     bool
+	}{
+		{"fail-on-drift set, stack drifted", map[string]any{"fail-on-drift": true}, cfntypes.StackDriftStatusDrifted, true},
+		{"fail-on-drift absent, stack drifted", map[string]any{}, cfntypes.StackDriftStatusDrifted, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			client := NewMockCloudFormationClient(ctrl)
+			client.EXPECT().DetectStackDrift(gomock.Any(), gomock.Any()).Return(&cloudformation.DetectStackDriftOutput{
+				StackDriftDetectionId: awsString("detection-1"),
+			}, nil)
+			client.EXPECT().DescribeStackDriftDetectionStatus(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackDriftDetectionStatusOutput{
+				DetectionStatus:  cfntypes.StackDriftDetectionStatusDetectionComplete,
+				StackDriftStatus: tt.driftStatus,
+			}, nil)
+
+			spec := &stackSpec{StackName: "vpc"}
+			octx := &opContext{Ctx: context.Background(), Flags: tt.flags}
+
+			handler, ok := operationHandlers[OperationDriftDetect]
+			require.True(t, ok)
+			captureStdout(t, func() {
+				_, err := handler(octx, client, spec, map[string]any{})
+				if tt.wantErr {
+					require.Error(t, err)
+					assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationDriftDetected)
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		})
+	}
 }
