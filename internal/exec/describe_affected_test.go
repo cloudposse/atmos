@@ -284,20 +284,19 @@ func shouldSkipRepoCopyPath(src string) bool {
 	return false
 }
 
-// copyRepoWithRetry copies the live repository at src into dest, retrying a few times
-// on known-transient copy failures. The source is the actual checked-out repository,
-// which can have transient files appear and disappear under .git/objects/pack while
-// git performs routine background housekeeping (e.g. an automatic repack writes
-// tmp_pack_*/tmp_idx_*/tmp_rev_* files and renames or removes them within
-// milliseconds). The otiai10/copy directory walk stats every entry it lists, so it can
-// observe one of these files mid-flight and fail the whole copy with "no such file or
-// directory". Separately, on Windows, some of the shared fixture files under src (e.g.
-// a component's terraform.tfstate) can be open in another concurrently running test at
-// the exact moment this copy walks it -- Windows enforces mandatory file locking far
-// more strictly than Unix, so the walk's read fails outright with "The process cannot
-// access the file because another process has locked a portion of the file" instead of
-// racing cleanly. Retrying a moment later almost always succeeds in both cases, since
-// the transient file (or lock) is long gone by the next attempt.
+// copyRepoWithRetry copies the live repository at src into dest, retrying a few times if the
+// copy hits a transient error. The source is the actual checked-out repository, which can have:
+//   - files appear and disappear under .git/objects/pack while git performs routine background
+//     housekeeping (e.g. an automatic repack writes tmp_pack_*/tmp_idx_*/tmp_rev_* files and
+//     renames or removes them within milliseconds) -- the otiai10/copy directory walk stats every
+//     entry it lists, so it can observe one of these files mid-flight and fail with
+//     "no such file or directory" (os.ErrNotExist, possibly wrapped).
+//   - fixture files locked by another concurrently running test's terraform process (e.g. a
+//     terraform.tfstate under tests/fixtures/scenarios/plan-diff held open mid-plan/apply), which
+//     on Windows surfaces as a sharing/lock violation rather than IsNotExist.
+//
+// Retrying a moment later almost always succeeds, since the transient file is long gone, or the
+// lock released, by the next attempt.
 func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
 	t.Helper()
 
@@ -318,18 +317,20 @@ func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
 	return err
 }
 
-// isTransientRepoCopyError reports whether a copyRepoWithRetry failure is a known
-// transient condition worth retrying, rather than a genuine failure to surface
-// immediately. See copyRepoWithRetry's doc comment for the two known causes.
+// isTransientRepoCopyError reports whether err is expected to resolve on its own shortly, and so
+// is worth retrying rather than failing the test outright. See copyRepoWithRetry's doc comment
+// for the two known causes. Windows reports a locked file via its error message text rather than
+// a portable sentinel/errno, so this matches on that text the same way pkg/git/worktree.go's
+// isTransientWorktreeRemoveError does for transient worktree-removal errors.
 func isTransientRepoCopyError(err error) bool {
 	if err == nil {
 		return false
 	}
+	// errors.Is (not os.IsNotExist) so a wrapped os.ErrNotExist is still recognized --
+	// os.IsNotExist does not reliably unwrap.
 	if errors.Is(err, os.ErrNotExist) {
 		return true
 	}
-	// Windows-only error text for ERROR_LOCK_VIOLATION / ERROR_SHARING_VIOLATION
-	// surfacing through a plain file read during the copy walk.
 	lower := strings.ToLower(err.Error())
 	transientPatterns := []string{
 		"another process has locked a portion of the file",
