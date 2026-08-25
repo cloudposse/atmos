@@ -2113,6 +2113,7 @@ type BaseComponentConfig struct {
 	BaseComponentPlugins                   any
 	BaseComponentRender                    AtmosSectionMapType
 	BaseComponentHelm                      AtmosSectionMapType
+	BaseComponentCloudFormation            AtmosSectionMapType
 	FinalBaseComponentName                 string
 	BaseComponentCommand                   string
 	BaseComponentBackendType               string
