@@ -313,10 +313,8 @@ jobs:
       fail-fast: false
       matrix:
         # jobTimeout/stepTimeout are this job's own and its "Acceptance
-        # tests" step's per-platform timeout-minutes budgets (shard 1 gets a
-        # flat override at each site instead, since it does more work
-        # regardless of platform -- see the "Acceptance tests with coverage"
-        # step). Kept here, one pair of numbers per platform, instead of a
+        # tests" step's per-platform timeout-minutes budgets, kept here (one
+        # pair of numbers per platform) instead of a
         # `matrix.flavor.target == 'windows' && X || Y` ternary repeated at
         # every timeout-minutes site: that's exactly how the job-level and
         # step-level Windows budgets drifted out of sync before (the job
@@ -357,11 +355,23 @@ jobs:
         # below); keep this list and env.TEST_SHARD_COUNT in sync if the shard
         # count ever changes.
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    # Shard 1 does somewhat more work than other shards regardless of
-    # platform (see the "Acceptance tests with coverage" step below), so it
-    # keeps a flat, higher budget here instead of reading matrix.flavor's
-    # jobTimeout.
-    timeout-minutes: ${{ matrix.shard == 1 && 65 || matrix.flavor.jobTimeout }}
+        # Shard 1 does somewhat more work than every other shard, regardless
+        # of platform (see the "Acceptance tests with coverage" step below),
+        # so it needs a higher timeout than any flavor's own jobTimeout/
+        # stepTimeout. An include entry naming only `shard` (not `flavor`)
+        # applies its extra keys to every matrix combination whose shard
+        # matches -- all three platforms' shard-1 jobs here -- without
+        # widening the matrix with new combinations; see GitHub's own
+        # "Expanding configurations" docs for this exact partial-match
+        # pattern. jobTimeoutOverride/stepTimeoutOverride are read in
+        # preference to matrix.flavor.jobTimeout/stepTimeout below, so the
+        # override lives here as data instead of a `shard == 1 &&` branch
+        # duplicated at each timeout-minutes site.
+        include:
+          - shard: 1
+            jobTimeoutOverride: 65
+            stepTimeoutOverride: 60
+    timeout-minutes: ${{ matrix.jobTimeoutOverride || matrix.flavor.jobTimeout }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
@@ -481,12 +491,10 @@ jobs:
         # windows-latest is the slowest target for this suite too (see the
         # Build job's timeout comment above): before sharding, runs of the
         # unsharded step were observed between 37m43s and 60m17s. Per-platform
-        # budgets (stepTimeout) live on the flavor matrix above, alongside the
-        # measured timing data and incident history behind them -- shard 1
-        # still gets a flat, higher override here regardless of platform,
-        # since it does somewhat more work (see the "Acceptance tests with
-        # coverage" step above).
-        timeout-minutes: ${{ matrix.shard == 1 && 60 || matrix.flavor.stepTimeout }}
+        # budgets (stepTimeout) and shard 1's override (stepTimeoutOverride)
+        # both live on the matrix above, alongside the measured timing data
+        # and incident history behind them.
+        timeout-minutes: ${{ matrix.stepTimeoutOverride || matrix.flavor.stepTimeout }}
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         shell: bash
         env:
