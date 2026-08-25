@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/aws/cloudformation/backend"
 	"github.com/cloudposse/atmos/cmd/aws/cloudformation/source"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -95,6 +96,7 @@ func init() {
 	CloudFormationCmd.AddCommand(newOperationCommand("watch", "watch", "Attach to a stack's in-progress (or already-terminal) operation and stream events"))
 	CloudFormationCmd.AddCommand(newListCmd())
 	CloudFormationCmd.AddCommand(source.GetSourceCommand())
+	CloudFormationCmd.AddCommand(backend.GetBackendCommand())
 }
 
 // newChangesetCmd is the `atmos aws cloudformation changeset` verb group: manual
