@@ -1,6 +1,6 @@
 ---
 title: Component Retry
-description: Automatically retry transient Terraform errors with configurable backoff and pattern matching.
+description: Automatically retry transient subprocess errors with configurable backoff and pattern matching.
 id: retry
 slug: /stacks/components/terraform/retry
 ---
@@ -11,14 +11,20 @@ import Intro from '@site/src/components/Intro'
 Configure per-component retry behavior so transient failures — provider download 502s, S3 backend timeouts, registry rate limits — recover automatically without manual re-runs.
 </Intro>
 
-Terraform commands often fail with transient infrastructure errors that have nothing to do with the Terraform code. The most common is a 502 Bad Gateway during `terraform init`:
+Terraform, Helmfile, Packer, and Ansible commands often fail with transient infrastructure errors that have nothing to do with the component's own configuration. The most common is a 502 Bad Gateway during `terraform init`:
 
 ```text
 Error: Failed to install provider … 502 Bad Gateway returned from
 https://github.com/opentofu/terraform-provider-local/releases/...
 ```
 
-Configure a `retry` block on the component and Atmos will retry each subprocess invocation (init, workspace, plan/apply) when the captured output matches one of the regex patterns you list as recoverable.
+Configure a `retry` block on the component and Atmos will retry each subprocess invocation (init, workspace, plan/apply, sync, build, playbook run — whatever the component type shells out to) when the captured output matches one of the regex patterns you list as recoverable.
+
+## Supported component types
+
+`retry` works the same way for every component type that shells out to a binary: **Terraform, Helmfile, Packer, and Ansible**.
+
+Native **Kubernetes** and native **Helm** components do not shell out — they call Go SDKs directly, with no subprocess to capture and pattern-match. `retry` is not wired up for them yet.
 
 ## Usage
 
@@ -42,14 +48,14 @@ components:
 
 ## How it works
 
-When `retry.conditions` is configured, each call Atmos makes to the terraform/tofu binary is wrapped in an independent retry loop:
+When `retry.conditions` is configured, each call Atmos makes to the component's underlying binary (terraform/tofu, helmfile, packer, or ansible-playbook) is wrapped in an independent retry loop:
 
 1. The subprocess runs as usual; its stdout and stderr stream to the user **and** are captured into an in-memory buffer.
 2. When the subprocess exits with a non-zero status, the captured output is matched against every regex in `conditions`.
 3. If at least one pattern matches, Atmos waits for the configured backoff and retries.
 4. If no pattern matches, the error is returned immediately — real failures (`terraform plan` exit-code 2, schema errors, permission denials) are never silently retried.
 
-Each subprocess invocation has its own retry loop. Retrying `terraform init` does not consume the `apply` retry budget.
+Each subprocess invocation has its own retry loop. Retrying `terraform init` does not consume the `apply` retry budget — the same isolation applies across any two invocations for any component type.
 
 ## Provider registry failures
 
@@ -129,15 +135,23 @@ components:
 
     vpc:
       metadata:
-        component: base/network
-      # vpc inherits the base retry block.
+        inherits:
+          - base/network
+      # vpc inherits the base retry block. `metadata.inherits` pulls in
+      # base/network's config; `metadata.component` alone does not — it only
+      # selects which Terraform source to use, not which config to inherit.
 
     transit-gateway:
       metadata:
-        component: base/network
+        inherits:
+          - base/network
       retry:
-        # Override only the fields we care about. `conditions` is appended to,
-        # `max_attempts` is replaced.
+        # Scalars are replaced: max_attempts becomes 5. `conditions` is a
+        # list, so it follows settings.list_merge_strategy — by default
+        # (replace) this list replaces the base's conditions entirely,
+        # leaving only /TLS handshake timeout/. Set
+        # `settings.list_merge_strategy: append` to accumulate conditions
+        # across layers instead of replacing them.
         max_attempts: 5
         conditions:
           - /TLS handshake timeout/
@@ -169,6 +183,30 @@ components:
 Precedence, lowest to highest: stack-root `retry` → abstract base component `retry` → concrete component `retry` → `overrides.retry`. A more specific layer wins on a conflicting key. Non-conflicting keys from lower layers still apply — a component that only sets its own `max_attempts` still inherits the stack-root `conditions` list.
 
 Stack-root `retry` is scoped to the manifest file, and to any file that imports it — the same scoping rule as global `vars`, `metadata`, and `hooks`. Use a [mixin](/howto/mixins) instead when the policy should apply to only some components in a stack, not the whole stack.
+
+### Opting a component out
+
+`retry` merges as a deep merge, like every other section. An empty override does not turn retry off:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      retry: {}
+      # This does NOT disable an inherited retry policy. An empty map
+      # contributes no keys to the merge, so the component still gets the
+      # full stack-root or base-component retry policy unchanged.
+```
+
+To opt a single component out of an inherited policy, set `max_attempts: 1` on that component. A budget of one attempt means the first failure is returned immediately, regardless of `conditions`:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      retry:
+        max_attempts: 1
+```
 
 ## When NOT to use retry
 
