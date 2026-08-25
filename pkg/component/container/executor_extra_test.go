@@ -185,6 +185,92 @@ func TestExecuteBuild_RuntimeError(t *testing.T) {
 	require.Error(t, ExecuteBuild(context.Background(), infoFor("api")))
 }
 
+// stubProvisionError forces resolveComponentPath's JIT-provisioning step to
+// fail, exercising the error path each of ExecuteBuild/ExecuteRun/ExecuteUp
+// takes when resolveComponentPath itself errors.
+func stubProvisionError(t *testing.T) {
+	t.Helper()
+	orig := provisionAndResolveComponentPath
+	t.Cleanup(func() { provisionAndResolveComponentPath = orig })
+	provisionAndResolveComponentPath = func(context.Context, *schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string) (string, bool, error) {
+		return "", false, assert.AnError
+	}
+}
+
+func TestExecuteBuild_ResolveComponentPathError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	rt := NewMockRuntime(ctrl)
+	section := map[string]any{"build": map[string]any{"context": "app", "tags": []any{"img:1"}}}
+	withStubs(t, section, nil, rt)
+	stubProvisionError(t)
+
+	require.Error(t, ExecuteBuild(context.Background(), infoFor("api")))
+}
+
+func TestExecuteRun_ResolveComponentPathError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	rt := NewMockRuntime(ctrl)
+	section := map[string]any{"image": "alpine", "run": map[string]any{"command": "echo hi"}}
+	withStubs(t, section, nil, rt)
+	stubProvisionError(t)
+
+	require.Error(t, ExecuteRun(context.Background(), infoFor("api")))
+}
+
+func TestExecuteUp_ResolveComponentPathError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	rt := NewMockRuntime(ctrl)
+	withStubs(t, map[string]any{"image": "alpine"}, nil, rt)
+	stubProvisionError(t)
+
+	require.Error(t, ExecuteUp(context.Background(), infoFor("api")))
+}
+
+func TestExecuteRun_EnsureImageBuildFails(t *testing.T) {
+	// Covers ExecuteRun's ensureImage error branch: an image that's missing
+	// locally and fails to build must surface the build error, not proceed to
+	// run a nonexistent image.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	rt := NewMockRuntime(ctrl)
+	section := map[string]any{
+		"image": "img:1",
+		"build": map[string]any{"context": "app"},
+		"run":   map[string]any{"command": "echo hi"},
+	}
+	withStubs(t, section, nil, rt)
+
+	gomock.InOrder(
+		rt.EXPECT().ImageInspect(gomock.Any(), "img:1").Return(nil, errors.New("no such image")),
+		rt.EXPECT().Build(gomock.Any(), gomock.Any()).Return(assert.AnError),
+	)
+
+	require.Error(t, ExecuteRun(context.Background(), infoFor("api")))
+}
+
+func TestExecuteUp_EnsureImageBuildFails(t *testing.T) {
+	// Covers ExecuteUp's ensureImage error branch, mirroring
+	// TestExecuteRun_EnsureImageBuildFails for the long-lived-container path.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	rt := NewMockRuntime(ctrl)
+	section := map[string]any{
+		"image": "img:1",
+		"build": map[string]any{"context": "app"},
+	}
+	withStubs(t, section, nil, rt)
+
+	gomock.InOrder(
+		rt.EXPECT().ImageInspect(gomock.Any(), "img:1").Return(nil, errors.New("no such image")),
+		rt.EXPECT().Build(gomock.Any(), gomock.Any()).Return(assert.AnError),
+	)
+
+	require.Error(t, ExecuteUp(context.Background(), infoFor("api")))
+}
+
 func TestExecuteRestart_StartError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
