@@ -3884,6 +3884,19 @@
             }
           ]
         },
+        "container": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContainerComponentsConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "list": {
           "anyOf": [
             {
@@ -4103,6 +4116,23 @@
       },
       "type": "object",
       "description": "ConsoleConfig defines web console access configuration for providers."
+    },
+    "ContainerComponentsConfig": {
+      "properties": {
+        "base_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "BasePath is the base directory for container component assets, relative\nto the Atmos project root. Defaults to \"components/container\"."
+        }
+      },
+      "type": "object",
+      "description": "ContainerComponentsConfig configures `components.container` — the base\ndirectory for container component build/run assets, mirroring\nTerraform/Helmfile/Packer/Ansible/Kubernetes/Helm's own `base_path`."
     },
     "ContainerConfig": {
       "properties": {
@@ -16430,6 +16460,16 @@
         },
         {
           "$ref": "#/$defs/yamlFunction"
+        }
+      ]
+    },
+    "containerDirAbsolutePath": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
         }
       ]
     },
