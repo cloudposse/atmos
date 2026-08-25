@@ -72,6 +72,15 @@ func ListDeployedStacks(
 		return nil, err
 	}
 
+	return annotateManagedStacks(stacks, configuredStackNames), nil
+}
+
+// annotateManagedStacks converts raw ListStacks summaries into
+// DeployedStackSummary entries, annotating each one's Managed field against
+// configuredStackNames. Split out of ListDeployedStacks so the annotation
+// logic (a pure function) is testable independent of AWS config/client
+// construction.
+func annotateManagedStacks(stacks []cfntypes.StackSummary, configuredStackNames map[string]bool) []DeployedStackSummary {
 	summaries := make([]DeployedStackSummary, 0, len(stacks))
 	for i := range stacks {
 		s := &stacks[i]
@@ -82,7 +91,7 @@ func ListDeployedStacks(
 			Managed:   configuredStackNames[name],
 		})
 	}
-	return summaries, nil
+	return summaries
 }
 
 // toStackStatuses converts CLI-provided status strings to the SDK's enum type.
