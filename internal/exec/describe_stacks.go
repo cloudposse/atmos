@@ -475,6 +475,11 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentKind 
 		// component source trees. Leave component_path unset until a real source
 		// path is configured.
 		return ""
+	case cfg.CloudFormationSectionName:
+		// A template path is as meaningful a "base path" as a Terraform root
+		// module. Deliberately not fixing this for helm/kubernetes here — the
+		// PRD scopes that out; they remain "" as a pre-existing, unrelated gap.
+		return atmosConfig.Components.CloudFormation.BasePath
 	default:
 		return ""
 	}

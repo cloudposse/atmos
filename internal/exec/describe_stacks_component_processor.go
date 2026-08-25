@@ -331,6 +331,7 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 		{cfg.HelmSectionName, processComponentTypeOpts{applyMetadataInheritance: true}},
 		{cfg.ContainerSectionName, processComponentTypeOpts{}},
 		{cfg.EmulatorSectionName, processComponentTypeOpts{}},
+		{cfg.CloudFormationSectionName, processComponentTypeOpts{applyMetadataInheritance: true}},
 	}
 
 	for _, te := range typeEntries {
@@ -1244,6 +1245,7 @@ func hasStackExplicitComponents(stackSection map[string]any) bool {
 		cfg.HelmSectionName,
 		cfg.ContainerSectionName,
 		cfg.EmulatorSectionName,
+		cfg.CloudFormationSectionName,
 	} {
 		if typeMap, ok := comps[typeName].(map[string]any); ok && len(typeMap) > 0 {
 			return true

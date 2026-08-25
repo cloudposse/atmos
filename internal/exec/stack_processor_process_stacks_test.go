@@ -1749,6 +1749,136 @@ func TestProcessStackConfig_HelmIsBuiltInNotCustomPassthrough(t *testing.T) {
 	assert.Equal(t, []any{"global-hook"}, hooks["before"])
 }
 
+// TestProcessStackConfig_CloudFormationIsBuiltInNotCustomPassthrough guards the
+// same silent-section-drop failure mode as its Helm counterpart above, for the
+// aws/cloudformation component type.
+func TestProcessStackConfig_CloudFormationIsBuiltInNotCustomPassthrough(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"role": "default-role",
+		},
+		cfg.HooksSectionName: map[string]any{
+			"before": []any{"global-hook"},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.TemplateSectionName:  "template.yaml",
+					cfg.StackNameSectionName: "acme-plat-ue2-dev-vpc",
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	cloudformation, ok := components[cfg.CloudFormationComponentType].(map[string]any)
+	require.True(t, ok, "result must contain aws/cloudformation components")
+	vpc, ok := cloudformation["vpc"].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must exist")
+
+	// Only the built-in aws/cloudformation processing path merges stack-global
+	// auth/hooks into the component. The custom-type passthrough loop does not
+	// touch these sections at all, so their absence here is the signal that
+	// `components."aws/cloudformation"` was clobbered by that loop.
+	auth, ok := vpc[cfg.AuthSectionName].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must have a merged auth section from stack-global auth, got: %v", vpc[cfg.AuthSectionName])
+	assert.Equal(t, "default-role", auth["role"])
+
+	hooks, ok := vpc[cfg.HooksSectionName].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must have a merged hooks section from stack-global hooks, got: %v", vpc[cfg.HooksSectionName])
+	assert.Equal(t, []any{"global-hook"}, hooks["before"])
+}
+
+// TestProcessStackConfig_CloudFormationAllSectionsSurvive guards all of the
+// section-whitelist plumbing sites at once (stack_processor_process_stacks.go,
+// _helpers.go, _helpers_extraction.go, _helpers_inheritance.go, _utils.go,
+// _cache.go, _merge.go): every first-class aws/cloudformation section must
+// survive end-to-end stack processing, since a silent drop at any one site is
+// otherwise invisible.
+func TestProcessStackConfig_CloudFormationAllSectionsSurvive(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.TemplateSectionName:              "template.yaml",
+					cfg.StackNameSectionName:             "acme-plat-ue2-dev-vpc",
+					cfg.ParametersSectionName:            map[string]any{"CidrBlock": "10.0.0.0/16"},
+					cfg.CapabilitiesSectionName:          []any{"CAPABILITY_IAM"},
+					cfg.TagsSectionName:                  map[string]any{"Team": "platform"},
+					cfg.StackPolicySectionName:           map[string]any{"file": "stack-policy.json"},
+					cfg.RoleArnSectionName:               "arn:aws:iam::123456789012:role/cfn-deploy",
+					cfg.NotificationArnsSectionName:      []any{"arn:aws:sns:us-east-2:123456789012:notify"},
+					cfg.DisableRollbackSectionName:       true,
+					cfg.TerminationProtectionSectionName: true,
+					cfg.TimeoutInMinutesSectionName:      30,
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	cloudformation, ok := components[cfg.CloudFormationComponentType].(map[string]any)
+	require.True(t, ok, "result must contain aws/cloudformation components")
+	vpc, ok := cloudformation["vpc"].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must exist")
+
+	assert.Equal(t, "template.yaml", vpc[cfg.TemplateSectionName])
+	assert.Equal(t, "acme-plat-ue2-dev-vpc", vpc[cfg.StackNameSectionName])
+	assert.Equal(t, map[string]any{"CidrBlock": "10.0.0.0/16"}, vpc[cfg.ParametersSectionName])
+	assert.Equal(t, []any{"CAPABILITY_IAM"}, vpc[cfg.CapabilitiesSectionName])
+	assert.Equal(t, map[string]any{"Team": "platform"}, vpc[cfg.TagsSectionName])
+	assert.Equal(t, map[string]any{"file": "stack-policy.json"}, vpc[cfg.StackPolicySectionName])
+	assert.Equal(t, "arn:aws:iam::123456789012:role/cfn-deploy", vpc[cfg.RoleArnSectionName])
+	assert.Equal(t, []any{"arn:aws:sns:us-east-2:123456789012:notify"}, vpc[cfg.NotificationArnsSectionName])
+	assert.Equal(t, true, vpc[cfg.DisableRollbackSectionName])
+	assert.Equal(t, true, vpc[cfg.TerminationProtectionSectionName])
+	assert.Equal(t, 30, vpc[cfg.TimeoutInMinutesSectionName])
+}
+
 // componentHooks extracts the merged hooks section for a terraform component
 // from a ProcessStackConfig result. It fails the test if the component or its
 // hooks section is missing, so inheritance assertions read cleanly.
