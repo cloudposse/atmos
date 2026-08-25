@@ -9,23 +9,31 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// CloudFormationClient is the narrow subset of the AWS SDK v2 CloudFormation API
-// used by this component type. Phase 1 covers the core lifecycle (changeset-driven
-// apply/deploy, delete, validate, describe); later phases extend this interface
-// (drift, stack sets, GetTemplate/GetStackPolicy, ListStacks) without touching
-// callers that only need the Phase 1 subset.
+// CloudFormationClient is the subset of the AWS SDK v2 CloudFormation API used
+// by this component type. Phase 1 covered the core lifecycle (changeset-driven
+// apply/deploy, delete, validate, describe); Phase 2 adds explicit changeset
+// management, drift detection, template/policy retrieval, and account-wide
+// listing. Stack sets remain out of scope (Phase 3).
 //
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=mock_client_test.go -package=cloudformation -source=client.go CloudFormationClient
 type CloudFormationClient interface {
 	CreateChangeSet(ctx context.Context, params *cloudformation.CreateChangeSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error)
 	DescribeChangeSet(ctx context.Context, params *cloudformation.DescribeChangeSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeChangeSetOutput, error)
 	ExecuteChangeSet(ctx context.Context, params *cloudformation.ExecuteChangeSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.ExecuteChangeSetOutput, error)
+	ListChangeSets(ctx context.Context, params *cloudformation.ListChangeSetsInput, optFns ...func(*cloudformation.Options)) (*cloudformation.ListChangeSetsOutput, error)
+	DeleteChangeSet(ctx context.Context, params *cloudformation.DeleteChangeSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DeleteChangeSetOutput, error)
 	DescribeStacks(ctx context.Context, params *cloudformation.DescribeStacksInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error)
 	DescribeStackEvents(ctx context.Context, params *cloudformation.DescribeStackEventsInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeStackEventsOutput, error)
 	DeleteStack(ctx context.Context, params *cloudformation.DeleteStackInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DeleteStackOutput, error)
 	ValidateTemplate(ctx context.Context, params *cloudformation.ValidateTemplateInput, optFns ...func(*cloudformation.Options)) (*cloudformation.ValidateTemplateOutput, error)
 	UpdateTerminationProtection(ctx context.Context, params *cloudformation.UpdateTerminationProtectionInput, optFns ...func(*cloudformation.Options)) (*cloudformation.UpdateTerminationProtectionOutput, error)
 	SetStackPolicy(ctx context.Context, params *cloudformation.SetStackPolicyInput, optFns ...func(*cloudformation.Options)) (*cloudformation.SetStackPolicyOutput, error)
+	GetTemplate(ctx context.Context, params *cloudformation.GetTemplateInput, optFns ...func(*cloudformation.Options)) (*cloudformation.GetTemplateOutput, error)
+	GetStackPolicy(ctx context.Context, params *cloudformation.GetStackPolicyInput, optFns ...func(*cloudformation.Options)) (*cloudformation.GetStackPolicyOutput, error)
+	ListStacks(ctx context.Context, params *cloudformation.ListStacksInput, optFns ...func(*cloudformation.Options)) (*cloudformation.ListStacksOutput, error)
+	DetectStackDrift(ctx context.Context, params *cloudformation.DetectStackDriftInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DetectStackDriftOutput, error)
+	DescribeStackDriftDetectionStatus(ctx context.Context, params *cloudformation.DescribeStackDriftDetectionStatusInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeStackDriftDetectionStatusOutput, error)
+	DescribeStackResourceDrifts(ctx context.Context, params *cloudformation.DescribeStackResourceDriftsInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeStackResourceDriftsOutput, error)
 }
 
 // newClient constructs the real AWS SDK v2 CloudFormation client from a resolved

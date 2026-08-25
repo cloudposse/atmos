@@ -886,6 +886,7 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncAwsCallerIdentityUserID,
 		AtmosYamlFuncAwsRegion,
 		AtmosYamlFuncAwsOrganizationID,
+		AtmosYamlFuncAwsCloudFormationOutput,
 		AtmosYamlFuncEmulator,
 		AtmosYamlFuncVersion,
 		AtmosYamlFuncTags,

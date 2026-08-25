@@ -279,6 +279,7 @@ func TestAllSupportedYamlTagsList(t *testing.T) {
 		"!aws.caller_identity_user_id",
 		"!aws.region",
 		"!aws.organization_id",
+		"!aws.cloudformation.output",
 		"!emulator",
 		"!version",
 		"!tags",

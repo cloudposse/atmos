@@ -95,21 +95,37 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 	return runWithHooks(ctx, atmosConfig, info, operation, spec)
 }
 
+// operationsSkippingTemplateLoad are operations that act on a deployed stack by
+// name/ID (delete, output, explicit changeset execute/list/delete, drift, get)
+// and never send a local template to CloudFormation, so resolving the
+// component's on-disk path (including JIT source provisioning) and loading the
+// template file from disk would be pure overhead — a source checkout or
+// provisioning failure must not block any of them.
+var operationsSkippingTemplateLoad = map[Operation]bool{
+	OperationDelete:           true,
+	OperationOutput:           true,
+	OperationChangesetExecute: true,
+	OperationChangesetList:    true,
+	OperationChangesetDelete:  true,
+	OperationDriftDetect:      true,
+	OperationDriftDescribe:    true,
+	OperationGetTemplate:      true,
+	OperationGetPolicy:        true,
+}
+
 // resolveSpecAndTemplate builds the SDK-ready stackSpec and — for every
-// operation except delete and output, neither of which touches local files —
-// resolves the component's on-disk path (including JIT source provisioning),
-// loads the template body, registers NoEcho values with the masker, and loads
-// the stack policy. Delete only needs spec.StackName (already set by
-// buildStackSpec) and output only needs the deployed stack's name, so both
-// return immediately: a source checkout or provisioning failure must not
-// block deleting a stack or reading its outputs.
+// operation not in operationsSkippingTemplateLoad — resolves the component's
+// on-disk path (including JIT source provisioning), loads the template body,
+// registers NoEcho values with the masker, and loads the stack policy.
+// Operations in operationsSkippingTemplateLoad only need spec fields already
+// set by buildStackSpec (e.g. StackName), so they return immediately.
 func resolveSpecAndTemplate(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) (*stackSpec, error) {
 	spec, err := buildStackSpec(info.ComponentSection)
 	if err != nil {
 		return nil, err
 	}
 
-	if operation == OperationDelete || operation == OperationOutput {
+	if operationsSkippingTemplateLoad[operation] {
 		return spec, nil
 	}
 
@@ -169,6 +185,59 @@ func eventsFor(operation Operation) (hooks.HookEvent, hooks.HookEvent) {
 	}
 }
 
+// operationHandler runs one mutating/read operation against an already-built
+// CloudFormationClient and stackSpec.
+type operationHandler func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error)
+
+// operationHandlers maps every non-render Operation to its handler. A map
+// dispatch keeps runOperation a flat lookup instead of a long switch.
+var operationHandlers = map[Operation]operationHandler{
+	OperationValidate: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return summary, validateTemplate(octx.Ctx, client, spec.TemplateBody)
+	},
+	OperationDiff: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return runDiff(octx.Ctx, client, spec, summary)
+	},
+	OperationApply: runApply,
+	OperationDelete: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return runDelete(octx.Ctx, client, octx.Flags, spec, summary)
+	},
+	OperationOutput: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return runOutput(octx.Ctx, client, spec.StackName, octx.Flags, summary)
+	},
+	OperationChangesetCreate: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return runChangesetCreate(octx.Ctx, client, spec, summary)
+	},
+	OperationChangesetExecute: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return runChangesetExecute(octx.Ctx, client, spec, changesetNameFlag(octx.Flags), summary)
+	},
+	OperationChangesetList: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return runChangesetList(octx.Ctx, client, spec, summary)
+	},
+	OperationChangesetDelete: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return runChangesetDelete(octx.Ctx, client, spec, changesetNameFlag(octx.Flags), summary)
+	},
+	OperationDriftDetect: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		failOnDrift, _ := octx.Flags["fail-on-drift"].(bool)
+		return runDriftDetect(octx.Ctx, client, spec.StackName, failOnDrift, summary)
+	},
+	OperationDriftDescribe: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return runDriftDescribe(octx.Ctx, client, spec.StackName, summary)
+	},
+	OperationGetTemplate: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return runGetTemplate(octx.Ctx, client, spec.StackName, octx.Flags, summary)
+	},
+	OperationGetPolicy: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
+		return runGetPolicy(octx.Ctx, client, spec.StackName, summary)
+	},
+}
+
+// changesetNameFlag extracts the required --changeset-name flag value.
+func changesetNameFlag(flags map[string]any) string {
+	name, _ := flags["changeset-name"].(string)
+	return name
+}
+
 // runOperation dispatches to the requested aws/cloudformation operation.
 func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[string]any, error) {
 	summary := map[string]any{"stack_name": spec.StackName}
@@ -189,20 +258,11 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 	}
 	client := newClient(awsCfg, resolveEndpointURL(octx.Info))
 
-	switch operation {
-	case OperationValidate:
-		return summary, validateTemplate(octx.Ctx, client, spec.TemplateBody)
-	case OperationDiff:
-		return runDiff(octx.Ctx, client, spec, summary)
-	case OperationApply:
-		return runApply(octx, client, spec, summary)
-	case OperationDelete:
-		return runDelete(octx.Ctx, client, octx.Flags, spec, summary)
-	case OperationOutput:
-		return runOutput(octx.Ctx, client, spec.StackName, octx.Flags, summary)
-	default:
+	handler, ok := operationHandlers[operation]
+	if !ok {
 		return summary, fmt.Errorf("%w: %q", errUtils.ErrInvalidSpecificAwsCloudFormationComponent, operation)
 	}
+	return handler(octx, client, spec, summary)
 }
 
 // runDiff creates (or reuses) a changeset and renders the predicted changes
