@@ -1,0 +1,73 @@
+---
+title: atmos aws cloudformation diff
+sidebar_label: diff
+sidebar_class_name: command
+id: diff
+description: Preview the changes an apply would make to a CloudFormation stack.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Create (or reuse) a CloudFormation changeset for the component and render the
+  predicted changes, without executing it. `diff` authenticates and calls the
+  CloudFormation API — it previews what `apply` would actually do to the live
+  stack, unlike [`render`](/cli/commands/aws/cloudformation/render), which never
+  leaves the local template.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation diff --help" src="/casts/screengrabs/atmos-aws-cloudformation-diff--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation diff <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation diff vpc -s plat-ue2-dev
+```
+
+Diff all or affected components in dependency order:
+
+```shell
+atmos aws cloudformation diff --all -s plat-ue2-dev
+atmos aws cloudformation diff --affected --base origin/main
+```
+
+Diff components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos aws cloudformation diff --all --tags production,tier-1
+atmos aws cloudformation diff --affected --labels cost-center=platform
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Diff all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Diff affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+:::note
+[`atmos aws cloudformation plan`](/cli/commands/aws/cloudformation/plan) is an alias for `diff`.
+Both fire the `before.aws/cloudformation.diff`/`after.aws/cloudformation.diff` hook events.
+:::

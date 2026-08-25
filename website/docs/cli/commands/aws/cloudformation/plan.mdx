@@ -1,0 +1,44 @@
+---
+title: atmos aws cloudformation plan
+sidebar_label: plan
+sidebar_class_name: command
+id: plan
+description: Alias for `atmos aws cloudformation diff` — preview the changes an apply would make.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Preview changes an apply would make to a CloudFormation stack. `plan` is an
+  alias for [`diff`](/cli/commands/aws/cloudformation/diff): it creates (or
+  reuses) a changeset and renders the predicted changes without executing it.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation plan --help" src="/casts/screengrabs/atmos-aws-cloudformation-plan--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation plan <component> --stack <stack> [options]
+atmos aws cloudformation plan vpc -s plat-ue2-dev
+
+# Plan components filtered by tags or labels (composes with --all/--affected)
+atmos aws cloudformation plan --all --tags production,tier-1
+atmos aws cloudformation plan --affected --labels cost-center=platform
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
+  <dd>Process multiple `aws/cloudformation` components in dependency order. See [`diff`](/cli/commands/aws/cloudformation/diff).</dd>
+
+  <dt>`--tags` / `--labels` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` or `key:value` pairs, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+</dl>

@@ -1,0 +1,86 @@
+---
+title: atmos aws cloudformation output
+sidebar_label: output
+sidebar_class_name: command
+id: output
+description: Show a deployed CloudFormation stack's Outputs.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Show the deployed stack's `Outputs` (`DescribeStacks`), formatted for
+  consumption by shells, other tools, or other Atmos components. `apply`
+  renders this same view automatically at the end of a successful deploy.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation output --help" src="/casts/screengrabs/atmos-aws-cloudformation-output--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation output <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation output vpc -s plat-ue2-dev
+```
+
+Choose an output format:
+
+```shell
+atmos aws cloudformation output vpc -s plat-ue2-dev --format=json
+atmos aws cloudformation output vpc -s plat-ue2-dev --format=env
+atmos aws cloudformation output vpc -s plat-ue2-dev --format=github
+```
+
+Flatten nested Outputs into compound keys, or uppercase every key:
+
+```shell
+atmos aws cloudformation output vpc -s plat-ue2-dev --format=dotenv --flatten --uppercase
+```
+
+Show output for all or affected components:
+
+```shell
+atmos aws cloudformation output --all -s plat-ue2-dev
+atmos aws cloudformation output --affected --base origin/main
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--format` <em>(optional, default `table`)</em></dt>
+  <dd>Output format: `json`, `yaml`, `hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table`, or `github`.</dd>
+
+  <dt>`--flatten` <em>(optional)</em></dt>
+  <dd>Flatten nested Outputs into compound keys.</dd>
+
+  <dt>`--uppercase` <em>(optional)</em></dt>
+  <dd>Uppercase Output keys.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Show Outputs for all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Show Outputs for affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+:::note
+`outputs` is accepted as an alias for `output`.
+:::

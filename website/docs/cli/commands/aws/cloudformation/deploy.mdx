@@ -1,0 +1,52 @@
+---
+title: atmos aws cloudformation deploy
+sidebar_label: deploy
+sidebar_class_name: command
+id: deploy
+description: Apply a CloudFormation stack with --auto-approve.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Create or update the CloudFormation stack for a component. `deploy` is an
+  alias for [`apply`](/cli/commands/aws/cloudformation/apply) that defaults
+  `--auto-approve` to `true`, matching the established `terraform deploy` =
+  "apply with auto-approve" convention — useful for CI, where nothing is
+  present to answer an interactive prompt.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation deploy --help" src="/casts/screengrabs/atmos-aws-cloudformation-deploy--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation deploy <component> --stack <stack> [options]
+atmos aws cloudformation deploy vpc -s plat-ue2-dev
+
+# Deploy components filtered by tags or labels (composes with --all/--affected)
+atmos aws cloudformation deploy --all --tags production,tier-1
+atmos aws cloudformation deploy --affected --labels cost-center=platform
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--target` <em>(optional)</em></dt>
+  <dd>Provision target to deliver to. Defaults to `provision.default`, otherwise the implicit direct-deploy target.</dd>
+
+  <dt>`--auto-approve` <em>(optional, defaults to `true`)</em></dt>
+  <dd>Skip the interactive confirmation prompt. Pass `--auto-approve=false` to require confirmation, just like `apply` without the flag.</dd>
+
+  <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
+  <dd>Process multiple `aws/cloudformation` components in dependency order. See [`apply`](/cli/commands/aws/cloudformation/apply).</dd>
+
+  <dt>`--tags` / `--labels` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` or `key:value` pairs, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+</dl>
