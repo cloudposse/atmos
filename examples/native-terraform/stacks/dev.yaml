@@ -12,3 +12,7 @@ components:
   terraform:
     vpc:
       vars: !include ../components/terraform/vpc/envs/dev.tfvars
+      # Per-component override: dev iterates quickly, so allow more concurrent
+      # operations than the fleet-wide default.
+      flags:
+        parallelism: 4

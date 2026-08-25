@@ -27,6 +27,20 @@ func hasCompatFlag(additional []string, flag string) bool {
 		slices.ContainsFunc(additional, func(s string) bool { return strings.HasPrefix(s, flag+"=") })
 }
 
+// validateFlagsKeys checks the component's raw `flags:` map (before it was decoded into
+// info.Flags) for unrecognized keys, e.g. a typo like `lock_timout`. Called from each
+// subcommand builder that consumes declarative flags defaults, once the component is
+// definitively resolved — schema.DecodeTerraformFlags itself silently ignores unknown
+// keys because it's also called from the tolerant stack-name-candidate search in
+// internal/exec/utils.go, which would otherwise swallow this error into a confusing
+// "component not found" message.
+func validateFlagsKeys(info *schema.ConfigAndStacksInfo) error {
+	if err := schema.ValidateTerraformFlagsKeys(info.ComponentSection[cfg.FlagsSectionName]); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrInvalidComponentFlags, err)
+	}
+	return nil
+}
+
 // appendLockTimeoutFlag appends -lock-timeout when info.Flags.LockTimeout is set
 // and the user didn't already type -lock-timeout on the CLI. Returns an error if
 // the configured value isn't a valid Go duration.
@@ -92,6 +106,10 @@ func buildPlanSubcommandArgs( //nolint:revive // argument-limit: uploadStatusFla
 	varFile, planFile string,
 	uploadStatusFlag bool,
 ) ([]string, error) {
+	if err := validateFlagsKeys(info); err != nil {
+		return nil, err
+	}
+
 	allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 
 	if !slices.Contains(info.AdditionalArgsAndFlags, outFlag) &&
@@ -130,6 +148,10 @@ func buildApplySubcommandArgs(
 	allArgsAndFlags []string,
 	varFile string,
 ) ([]string, error) {
+	if err := validateFlagsKeys(info); err != nil {
+		return nil, err
+	}
+
 	if !info.UseTerraformPlan {
 		allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 	}
@@ -154,6 +176,10 @@ func buildApplySubcommandArgs(
 // subcommand: varfile plus all five declarative flags defaults (destroy supports the
 // same flag set as plan/apply).
 func buildDestroySubcommandArgs(info *schema.ConfigAndStacksInfo, allArgsAndFlags []string, varFile string) ([]string, error) {
+	if err := validateFlagsKeys(info); err != nil {
+		return nil, err
+	}
+
 	allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 
 	var err error
@@ -173,6 +199,10 @@ func buildDestroySubcommandArgs(info *schema.ConfigAndStacksInfo, allArgsAndFlag
 // subcommand: varfile plus lock-timeout, lock, parallelism, compact-warnings. There is
 // no -refresh flag on `terraform refresh` itself (refresh IS what this subcommand does).
 func buildRefreshSubcommandArgs(info *schema.ConfigAndStacksInfo, allArgsAndFlags []string, varFile string) ([]string, error) {
+	if err := validateFlagsKeys(info); err != nil {
+		return nil, err
+	}
+
 	allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 
 	var err error
@@ -191,6 +221,10 @@ func buildRefreshSubcommandArgs(info *schema.ConfigAndStacksInfo, allArgsAndFlag
 // subcommand: varfile plus only lock-timeout and lock — `terraform import` does not
 // support -parallelism, -refresh, or -compact-warnings.
 func buildImportSubcommandArgs(info *schema.ConfigAndStacksInfo, allArgsAndFlags []string, varFile string) ([]string, error) {
+	if err := validateFlagsKeys(info); err != nil {
+		return nil, err
+	}
+
 	allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 
 	var err error

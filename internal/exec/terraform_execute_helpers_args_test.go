@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -555,6 +556,33 @@ func TestBuildTerraformCommandArgs_Flags_InvalidLockTimeout_Errors(t *testing.T)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidComponentFlags)
+}
+
+// TestBuildTerraformCommandArgs_Flags_UnknownKey_Errors verifies a typo'd flags key (e.g.
+// `lock_timout`) errors loudly at argv-build time instead of silently no-op'ing. Decoding
+// itself ignores unknown keys (see schema.DecodeTerraformFlags' own tests) because it's
+// also used by internal/exec's tolerant stack-name-candidate search, which would otherwise
+// swallow this error into a confusing "component not found" message — so this check reads
+// the raw ComponentSection map directly rather than the already-decoded info.Flags, which
+// by construction never contains the typo'd key. Discovered via field-testing PR #2992.
+func TestBuildTerraformCommandArgs_Flags_UnknownKey_Errors(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "plan",
+		ComponentSection: schema.AtmosSectionMapType{
+			cfg.FlagsSectionName: map[string]any{
+				"lock_timeout": "5m",
+				"lock_timout":  "77m",
+			},
+		},
+	}
+	componentPath := "/tmp/my-component"
+
+	_, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidComponentFlags)
+	assert.Contains(t, err.Error(), "lock_timout")
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

@@ -76,8 +76,12 @@ func TestDecodeTerraformFlags_NotAMap(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrInvalidTerraformFlagsConfig))
 }
 
-// TestDecodeTerraformFlags_UnknownFieldsIgnored documents that mapstructure is
-// configured without ErrorUnused, so extra keys decode successfully without error.
+// TestDecodeTerraformFlags_UnknownFieldsIgnored documents that DecodeTerraformFlags
+// itself ignores unrecognized keys rather than erroring. This is deliberate: it's also
+// called from internal/exec's tolerant stack-name-candidate search, which treats any
+// error as "wrong candidate, try the next one" — an error here would be silently
+// swallowed into a confusing "component not found" message. Typo detection is a separate
+// concern; see TestValidateTerraformFlagsKeys.
 func TestDecodeTerraformFlags_UnknownFieldsIgnored(t *testing.T) {
 	got, err := DecodeTerraformFlags(map[string]any{
 		"lock_timeout":           "1m",
@@ -85,4 +89,38 @@ func TestDecodeTerraformFlags_UnknownFieldsIgnored(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "1m", got.LockTimeout)
+}
+
+// TestValidateTerraformFlagsKeys_UnknownKeyErrors verifies that a typo like `lock_timout`
+// is caught by this separate validation function, since DecodeTerraformFlags itself
+// silently ignores it (see TestDecodeTerraformFlags_UnknownFieldsIgnored). Discovered via
+// field-testing PR #2992, where such a typo was silently ignored end-to-end with no error
+// or warning anywhere in the default `terraform plan` workflow.
+func TestValidateTerraformFlagsKeys_UnknownKeyErrors(t *testing.T) {
+	err := ValidateTerraformFlagsKeys(map[string]any{
+		"lock_timeout": "1m",
+		"lock_timout":  "5m",
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidTerraformFlagsConfig))
+	assert.Contains(t, err.Error(), "lock_timout")
+}
+
+// TestValidateTerraformFlagsKeys_AllKnownKeysValid verifies every real field name passes.
+func TestValidateTerraformFlagsKeys_AllKnownKeysValid(t *testing.T) {
+	err := ValidateTerraformFlagsKeys(map[string]any{
+		"lock_timeout":     "5m",
+		"lock":             true,
+		"parallelism":      4,
+		"refresh":          false,
+		"compact_warnings": true,
+	})
+	require.NoError(t, err)
+}
+
+// TestValidateTerraformFlagsKeys_NilOrNonMap verifies this function defers entirely to
+// DecodeTerraformFlags for nil/non-map inputs rather than erroring itself.
+func TestValidateTerraformFlagsKeys_NilOrNonMap(t *testing.T) {
+	assert.NoError(t, ValidateTerraformFlagsKeys(nil))
+	assert.NoError(t, ValidateTerraformFlagsKeys("not-a-map"))
 }

@@ -7,6 +7,10 @@ components:
     deploy_run_init: true
     init_run_reconfigure: true
     auto_generate_backend_file: false
+    # Fleet-wide default: retry a held state lock for up to 5 minutes instead of
+    # failing immediately (Terraform's own -lock-timeout default is 0s).
+    flags:
+      lock_timeout: "5m"
 
 stacks:
   base_path: "stacks"

@@ -61,6 +61,10 @@ components:
 ```shell
 # one-off override still works exactly as before, and always wins
 atmos terraform plan vpc -s plat-ue2-dev -- -lock-timeout=30s
+
+# environment variable overrides the atmos.yaml default — handy for a per-CI-job
+# tweak without touching the fleet-wide config
+ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT=2m atmos terraform plan vpc -s plat-ue2-dev
 ```
 
 ## Get Involved
