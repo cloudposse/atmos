@@ -1614,14 +1614,17 @@ var (
 	ErrHelmBaselineRead              = errors.New("failed to read helm diff baseline")
 
 	// Native aws/cloudformation component errors.
-	ErrMissingAwsCloudFormationTemplate          = errors.New("aws/cloudformation component is missing a 'template' reference")
-	ErrMissingAwsCloudFormationStackName         = errors.New("aws/cloudformation component is missing a 'stack_name'")
-	ErrInvalidAwsCloudFormationCapabilities      = errors.New("invalid aws/cloudformation capabilities")
-	ErrInvalidAwsCloudFormationSettings          = errors.New("invalid aws/cloudformation settings")
-	ErrInvalidComponentsAwsCloudFormation        = errors.New("invalid 'components.aws/cloudformation' section")
-	ErrInvalidSpecificAwsCloudFormationComponent = errors.New("invalid aws/cloudformation component configuration")
-	ErrAwsCloudFormationChangeSetFailed          = errors.New("aws/cloudformation changeset failed")
-	ErrAwsCloudFormationDriftDetected            = errors.New("aws/cloudformation stack has drifted")
+	ErrMissingAwsCloudFormationTemplate           = errors.New("aws/cloudformation component is missing a 'template' reference")
+	ErrMissingAwsCloudFormationStackName          = errors.New("aws/cloudformation component is missing a 'stack_name'")
+	ErrInvalidAwsCloudFormationCapabilities       = errors.New("invalid aws/cloudformation capabilities")
+	ErrInvalidAwsCloudFormationSettings           = errors.New("invalid aws/cloudformation settings")
+	ErrInvalidComponentsAwsCloudFormation         = errors.New("invalid 'components.aws/cloudformation' section")
+	ErrInvalidSpecificAwsCloudFormationComponent  = errors.New("invalid aws/cloudformation component configuration")
+	ErrAwsCloudFormationChangeSetFailed           = errors.New("aws/cloudformation changeset failed")
+	ErrAwsCloudFormationDriftDetected             = errors.New("aws/cloudformation stack has drifted")
+	ErrAwsCloudFormationFlagsMutuallyExclusive    = errors.New("--all and --affected are mutually exclusive")
+	ErrAwsCloudFormationComponentArgWithSelection = errors.New("component argument cannot be used with --all, --affected, --tags, or --labels")
+	ErrAwsCloudFormationComponentArgRequired      = errors.New("requires exactly one component argument unless --all or --affected is set")
 )
 
 // Stack dependency (`depends_on`) resolution errors.

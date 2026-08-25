@@ -172,6 +172,10 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 		return summary, nil
 	}
 
+	if err := requireConfirmation(operation, spec.StackName, octx.Flags); err != nil {
+		return summary, err
+	}
+
 	region := resolveRegion(octx.Info.ComponentSection)
 	awsCfg, err := buildAWSConfig(octx.Ctx, octx.Info, region)
 	if err != nil {

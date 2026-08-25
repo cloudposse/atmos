@@ -3,6 +3,7 @@ package aws
 import (
 	"github.com/spf13/cobra"
 
+	awscloudformation "github.com/cloudposse/atmos/cmd/aws/cloudformation"
 	awscompliance "github.com/cloudposse/atmos/cmd/aws/compliance"
 	"github.com/cloudposse/atmos/cmd/aws/ecr"
 	"github.com/cloudposse/atmos/cmd/aws/eks"
@@ -38,6 +39,9 @@ func init() {
 
 	// Add Compliance subcommand from the compliance subpackage.
 	awsCmd.AddCommand(awscompliance.ComplianceCmd)
+
+	// Add CloudFormation subcommand (alias "cfn") from the cloudformation subpackage.
+	awsCmd.AddCommand(awscloudformation.CloudFormationCmd)
 
 	// Register this command with the registry.
 	internal.Register(&AWSCommandProvider{})
