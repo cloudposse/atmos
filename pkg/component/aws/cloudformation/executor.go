@@ -92,7 +92,7 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 		return err
 	}
 
-	if operation != OperationRender {
+	if !operationsSkippingAuth[operation] {
 		authManager, err := setupComponentAuthForCLI(atmosConfig, info)
 		if err != nil {
 			return err
@@ -124,6 +124,15 @@ func validateComponentOperation(info *schema.ConfigAndStacksInfo, operation Oper
 		return fmt.Errorf("%w: component %q is locked", errUtils.ErrInvalidSpecificAwsCloudFormationComponent, info.ComponentFromArg)
 	}
 	return nil
+}
+
+// operationsSkippingAuth are operations that never call the CloudFormation API
+// and so need no active identity: render (client-side template rendering) and
+// fmt (a local YAML round-trip, no different from running it against a file
+// with a text editor).
+var operationsSkippingAuth = map[Operation]bool{
+	OperationRender: true,
+	OperationFmt:    true,
 }
 
 // operationsSkippingTemplateLoad are operations that act on a deployed stack by
@@ -169,6 +178,7 @@ func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfig
 		return nil, err
 	}
 
+	spec.TemplateAbsPath = resolveTemplateFilePath(componentPath, spec)
 	spec.TemplateBody, err = loadTemplateBody(componentPath, spec)
 	if err != nil {
 		return nil, err
@@ -276,6 +286,9 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 	if operation == OperationRender {
 		summary["template"] = spec.TemplateBody
 		return summary, data.Write(spec.TemplateBody)
+	}
+	if operation == OperationFmt {
+		return runFmt(spec, octx.Flags, summary)
 	}
 
 	// Even diff/validate can write remote changesets or packaged templates.
