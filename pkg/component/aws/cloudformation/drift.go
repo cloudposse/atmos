@@ -14,12 +14,14 @@ import (
 )
 
 // driftPollInterval is how often DescribeStackDriftDetectionStatus is polled
-// while a drift-detection operation is in progress.
-const driftPollInterval = 3 * time.Second
+// while a drift-detection operation is in progress. A var (not const) so
+// tests can shrink it and exercise the polling loop without a real 3s sleep.
+var driftPollInterval = 3 * time.Second
 
 // driftDetectionTimeout bounds how long a single drift detection may run before
-// this command gives up watching it.
-const driftDetectionTimeout = 15 * time.Minute
+// this command gives up watching it. A var (not const) so tests can shrink it
+// to exercise the timeout branch without waiting 15 real minutes.
+var driftDetectionTimeout = 15 * time.Minute
 
 // driftDetectionResult is the outcome of running (or re-fetching the status of)
 // a drift detection operation.

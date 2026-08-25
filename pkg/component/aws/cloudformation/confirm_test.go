@@ -50,6 +50,43 @@ func TestRequireConfirmation_AutoApproveSkipsPrompt(t *testing.T) {
 	require.NoError(t, requireConfirmation(OperationDelete, "vpc", flags))
 }
 
+// changeset-execute must prompt for confirmation, using the distinct "execute
+// changeset against" verb, and must skip the prompt when --auto-approve is set.
+func TestRequireConfirmation_ChangesetExecutePrompts(t *testing.T) {
+	var gotMessage string
+	original := confirmOperation
+	confirmOperation = func(message string) (bool, error) {
+		gotMessage = message
+		return true, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	require.NoError(t, requireConfirmation(OperationChangesetExecute, "vpc", map[string]any{}))
+	assert.Contains(t, gotMessage, "execute changeset against")
+	assert.Contains(t, gotMessage, "vpc")
+}
+
+// changeset-execute must respect --auto-approve like apply/delete.
+func TestRequireConfirmation_ChangesetExecuteAutoApproveSkipsPrompt(t *testing.T) {
+	original := confirmOperation
+	confirmOperation = func(_ string) (bool, error) {
+		t.Fatal("confirmOperation must not be called when --auto-approve is set")
+		return false, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	require.NoError(t, requireConfirmation(OperationChangesetExecute, "vpc", map[string]any{"auto-approve": true}))
+}
+
+// changeset-execute must abort with ErrUserAborted when declined, same as
+// apply/delete.
+func TestRequireConfirmation_ChangesetExecuteDeclinedAborts(t *testing.T) {
+	stubConfirmOperation(t, false, nil)
+	err := requireConfirmation(OperationChangesetExecute, "vpc", map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
 // A confirmed prompt allows the operation to proceed.
 func TestRequireConfirmation_ConfirmedProceeds(t *testing.T) {
 	stubConfirmOperation(t, true, nil)
