@@ -1,0 +1,69 @@
+---
+title: atmos aws cloudformation get template
+sidebar_label: template
+sidebar_class_name: command
+id: template
+description: Fetch the deployed stack's template.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Fetch the deployed stack's template (`GetTemplate`) and write it to stdout.
+  By default this is the fully-processed template CloudFormation actually
+  deployed — the same shape a diff against the local render should compare
+  against — not the user-submitted source.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation get template --help" src="/casts/screengrabs/atmos-aws-cloudformation-get-template--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation get template <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation get template vpc -s plat-ue2-dev
+```
+
+Fetch the original, user-submitted template instead of the processed one:
+
+```shell
+atmos aws cloudformation get template vpc -s plat-ue2-dev --original
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--original` <em>(optional)</em></dt>
+  <dd>Fetch the user-submitted template instead of the processed one CloudFormation deployed.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Fetch the template for all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Fetch the template for affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+:::note
+`get template` does not fire `before`/`after` hook events — only
+[`apply`](/cli/commands/aws/cloudformation/apply),
+[`diff`](/cli/commands/aws/cloudformation/diff), and
+[`delete`](/cli/commands/aws/cloudformation/delete) do.
+:::
