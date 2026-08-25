@@ -135,16 +135,14 @@ there still falls back to live `HEAD` -- unchanged from before this fix, not a r
 - Dry-run's `spec.files[].matrix` expansion gap (originally flagged here as a follow-up) is
   now fixed -- see item 4 in the CodeRabbit follow-up round below. Superseded, not a live
   follow-up.
-- Hooks (`scaffoldhooks.Run`, `BeforeScaffoldGenerate`/`AfterScaffoldGenerate`) and
-  `os.MkdirAll` for the target directory both run unconditionally inside `executeWithSetup`,
-  with no awareness of `engine.Processor.DryRun` at all. Routing every `--dry-run` through
-  the real generation path (item 4 below) means a scaffold template declaring hooks now runs
-  those hooks' real side effects (e.g. shelling out to `git`) during what a user would
-  reasonably expect to be a no-op preview -- this was already true of the previously-shipped
-  `--dry-run --update` path and is not a new regression from this round, but it's a real,
-  user-visible gap worth closing (e.g. by threading `DryRun` into `scaffoldhooks.Run` so a
-  hook can opt out, or skipping hook execution entirely in dry-run mode). Not tracked with an
-  issue (none requested); flagging here only.
+- ~~Hooks and `os.MkdirAll` run unconditionally regardless of dry-run~~ -- **fixed** in a
+  later CodeRabbit round on this same PR (a `potential_issue` finding against this exact
+  entry, since routing every `--dry-run` through the real generation path meant a scaffold
+  template's hooks now ran their real side effects during what a user would reasonably
+  expect to be a no-op preview). `executeWithSetup` now checks `!ui.processor.DryRun` before
+  `os.MkdirAll`, `BeforeScaffoldGenerate`, `AfterScaffoldGenerate`, and
+  `config.SaveProjectRecord` -- none of them run during a dry run. See
+  `TestExecuteWithSetup_DryRunHasNoPersistentSideEffects` (`pkg/generator/ui/ui_test.go`).
 - `ExecuteWithDelimiters`'s leading `"Generating %s in %s\n\n"` banner (`pkg/generator/ui/
   ui.go`) is not dry-run-aware either, unlike the summary line this round fixed -- it was
   already worded this way for the previously-shipped `--dry-run --update` path, so it's not a
@@ -230,10 +228,12 @@ PR.
       actual state. `ValidateTargetDirectory` returns `nil` immediately for a target that
       doesn't exist yet (`os.Stat` -> `os.ErrNotExist`), so the primary real-world use case --
       previewing into a directory that hasn't been created yet -- is unaffected.
-    - `executeWithSetup`'s `os.MkdirAll(targetPath, ...)` now runs during every `--dry-run`
-      too (creating the empty target directory itself, though never any file inside it) --
-      already true of the previously-shipped `--dry-run --update` path, now consistent for
-      plain `--dry-run` as well.
+    - `executeWithSetup`'s `os.MkdirAll(targetPath, ...)` initially ran during every
+      `--dry-run` too (creating the empty target directory itself, though never any file
+      inside it), matching the previously-shipped `--dry-run --update` path's existing
+      behavior at the time. A later CodeRabbit round on this same PR flagged that as a
+      real persistent-side-effect bug (see the Follow-ups entry above) -- `MkdirAll` is
+      now skipped entirely in dry-run, alongside hooks and project-record persistence.
 
     Small independent improvement while in this code: `executeWithSetup`'s and
     `executeWithCommandValues`'s post-run summary lines (`"Generated %d files."` /
