@@ -269,14 +269,19 @@ func stripTemplateMagicComment(content string) string {
 	return strings.Join(filtered, "\n")
 }
 
-// excludedTemplateDirNames lists directory names that are never part of a
+// excludedTemplateEntryNames lists entry names that are never part of a
 // template's own content and must be skipped while walking a template
-// source. `.git` shows up when a template directory was itself cloned, or
-// when a `git::` remote source is fetched into a fresh temp dir (the
-// go-getter clone path leaves `.git` in place, unlike its update path) --
-// without this exclusion its objects/refs/config get copied into every
-// generated project.
-var excludedTemplateDirNames = map[string]bool{
+// source, regardless of whether the entry is a directory or a regular file.
+// `.git` shows up as a directory when a template directory was itself
+// cloned, or when a `git::` remote source is fetched into a fresh temp dir
+// (the go-getter clone path leaves `.git` in place, unlike its update path)
+// -- without this exclusion its objects/refs/config get copied into every
+// generated project. It shows up as a plain *file* (containing a `gitdir:
+// ...` pointer) when the template source is a git linked worktree, so this
+// must match by name alone, before any directory check -- excluding only
+// directories would let a linked worktree's `.git` file through, copying a
+// path back into the source repository's own worktree bookkeeping.
+var excludedTemplateEntryNames = map[string]bool{
 	".git": true,
 }
 
@@ -290,7 +295,7 @@ func readTemplateFiles(fsys fs.FS, templatePath string) ([]File, error) {
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() && excludedTemplateDirNames[entry.Name()] {
+		if excludedTemplateEntryNames[entry.Name()] {
 			continue
 		}
 

@@ -501,3 +501,33 @@ func TestLoadConfigurationFromDir_ExcludesGitDirectory(t *testing.T) {
 	assert.Contains(t, paths, "main.go")
 	assert.Contains(t, paths, "deploy/values/default.yaml")
 }
+
+// TestLoadConfigurationFromDir_ExcludesGitWorktreeFile reproduces a bug where
+// a template source that is itself a git *linked worktree* (as opposed to a
+// full clone) leaked its `.git` into generated output. A linked worktree's
+// `.git` is a plain regular file (containing a `gitdir: ...` pointer back at
+// the real repository's `.git/worktrees/<name>`), not a directory -- an
+// exclusion that only matched directories named `.git` let this through.
+func TestLoadConfigurationFromDir_ExcludesGitWorktreeFile(t *testing.T) {
+	dir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644))
+
+	// Simulate a linked worktree's .git: a regular file, not a directory.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: /path/to/repo/.git/worktrees/example\n"), 0o644))
+
+	cfg, err := LoadConfigurationFromDir("test-template", dir)
+	require.NoError(t, err)
+
+	for _, file := range cfg.Files {
+		assert.NotEqual(t, ".git", filepath.ToSlash(file.Path), "loaded configuration must not include a linked worktree's .git file")
+	}
+
+	var paths []string
+	for _, file := range cfg.Files {
+		if !file.IsDirectory {
+			paths = append(paths, filepath.ToSlash(file.Path))
+		}
+	}
+	assert.Contains(t, paths, "main.go")
+}
