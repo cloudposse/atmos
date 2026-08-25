@@ -91,8 +91,9 @@ type Version struct {
 }
 
 // isFIPSBuild reports whether this binary was built with GOFIPS140 set (see
-// docs/prd/fips-140-mode.md), which links Go's native FIPS 140-3 validated
-// crypto module and defaults the binary to FIPS-enforcing mode at runtime.
+// docs/prd/fips-140-mode.md), which links Go's native FIPS 140-3 crypto
+// module and defaults the binary to FIPS-enforcing mode at runtime. This
+// reflects FIPS 140-3 mode being enabled, not a CMVP compliance certification.
 func isFIPSBuild() bool {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {

@@ -4,21 +4,22 @@
 
 Every atmos binary (dev builds, official releases, CI test binaries, and the sharded
 acceptance-test harness) is now built with `GOFIPS140=latest`, which links Go's native
-FIPS 140-3 validated cryptographic module and defaults the resulting binary to
-FIPS-enforcing mode (`GODEBUG=fips140=on`) at runtime, with no extra flag required by
-the user. This hardens the TLS/crypto surface atmos uses to talk to cloud providers,
-git servers, and artifact registries for operators in regulated environments. It does
-**not**, by itself, make Atmos's secrets subsystem FIPS 140-3 compliant — see
+FIPS 140-3 crypto module and defaults the resulting binary to FIPS-enforcing mode
+(`GODEBUG=fips140=on`) at runtime, with no extra flag required by the user. This hardens
+the TLS/crypto surface atmos uses to talk to cloud providers, git servers, and artifact
+registries for operators in regulated environments. This establishes **FIPS 140-3 mode**
+for that surface; it is **not**, by itself, a CMVP compliance certification for the atmos
+binary, and it does **not** make Atmos's secrets subsystem FIPS 140-3 compliant — see
 [Known Limitation](#known-limitation-age--nacl-secrets-encryption) below.
 
 ## Problem Statement
 
 Operators in regulated environments (US federal, financial services, healthcare) are
 often required to run only FIPS 140-validated cryptography. Go 1.24 added a native,
-in-tree FIPS 140-3 validated crypto module (`crypto/internal/fips140/...`), selectable
-at build time via `GOFIPS140` and enforced at runtime via `GODEBUG=fips140`. Atmos
-(Go 1.26.4) previously built with no FIPS wiring at all, so no atmos binary could make
-a FIPS 140-3 claim.
+in-tree FIPS 140-3 crypto module (`crypto/internal/fips140/...`), selectable at build
+time via `GOFIPS140` and enforced at runtime via `GODEBUG=fips140`. Atmos (Go 1.26.4)
+previously built with no FIPS wiring at all, so no atmos binary could make a FIPS 140-3
+mode claim.
 
 ## Design Goals
 
@@ -38,6 +39,25 @@ PBKDF2. Atmos's own use of this surface was already FIPS-compatible before this 
 all production EC key generation uses the FIPS-approved P-256 curve, all real
 `crypto/rand` usage is correct) — this change makes that compatibility enforced by
 default rather than incidental.
+
+`GOFIPS140=latest` tracks whatever FIPS module snapshot ships with the Go toolchain used
+for the build, not a version pinned to a specific CMVP validation certificate. That's the
+right default for "always get Go's newest FIPS module," but it also means the claim this
+change makes is **"this binary runs in FIPS 140-3 mode"**, not **"this binary is a
+CMVP-certified FIPS 140-3 module."** A stricter compliance program that needs the latter
+would pin `GOFIPS140` to a specific validated module version (e.g. `GOFIPS140=v1.0.0`)
+instead of `latest`; that's a deliberate tradeoff for a future change, not something this
+PR does.
+
+## Platform Exclusion: windows/386
+
+`crypto/internal/fips140.Supported()` rejects `windows/386` outright — that platform lacks
+a CPU jitter entropy source good enough for FIPS mode — and `check.init()` panics at
+process startup once `GODEBUG=fips140=on` is in effect (the default this change bakes in).
+Building that combination with FIPS enabled would therefore produce a binary that crashes
+immediately on launch rather than one that's merely non-FIPS. `magefiles/build.go`
+(`Build.Binary`) rejects a resolved `windows/386` target whenever `GOFIPS140` will be
+enabled, and `.goreleaser.yml` excludes `windows/386` from the release matrix entirely.
 
 ## Known Limitation: age / NaCl Secrets Encryption
 
@@ -73,9 +93,15 @@ Every distinct Go-toolchain build invocation in the repo sets `GOFIPS140`:
 | `.github/workflows/screengrabs.yaml` | The one CI spot with a raw `go build`, bypassing `atmos build` |
 | `.atmos.d/test.yaml` (`go_auto_env` anchor, plus `short-cover`/`race`) | `atmos test short/coverage/race/magefiles` |
 | `internal/ci/acceptance/command.go` (`goCommandEnvironment()`) | Sharded acceptance-test binaries built via `mage acceptance:*` |
+| `.github/workflows/website-deploy-prod.yml` / `website-preview-build.yml` | Throwaway `go run .` invocations that generate the website's schema JSON files (not a distributed artifact); set for consistency with every other build here, not because these processes make TLS calls |
 
-`go.mod` has no `godebug`-directive equivalent for `fips140` (confirmed against
-go.dev/doc/godebug), so there's nothing to set there.
+Go does support a `godebug (fips140=on)` block in `go.mod` (see go.dev/doc/godebug), but
+that only sets the *runtime default* for `GODEBUG=fips140`, not the build-time FIPS module
+selection — it's the equivalent of what `GOFIPS140=latest` already gives every atmos binary
+automatically (a FIPS-enforcing default with no user-set `GODEBUG` needed), and it still
+requires `GOFIPS140` at build time to actually link the FIPS module in the first place. Since
+every build site here already sets `GOFIPS140`, adding a `go.mod` `godebug` block would be
+redundant, not a substitute.
 
 ## Verification
 

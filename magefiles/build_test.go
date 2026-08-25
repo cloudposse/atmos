@@ -74,6 +74,18 @@ func TestBuildTargetConfig(t *testing.T) {
 			wantOutput:  filepath.Join("build", "atmos"),
 		},
 		{
+			// Regression test: the default target used to hardcode
+			// build/atmos regardless of GOOS, so an ambient GOOS=windows
+			// build (e.g. cross-compiling without the explicit "windows"
+			// target) produced a Windows PE binary at a Unix-style output
+			// path instead of build/atmos.exe.
+			name:        "default resolves .exe output when ambient GOOS is windows",
+			target:      "default",
+			ambientGOOS: "windows",
+			wantGOOS:    "windows",
+			wantOutput:  filepath.Join("build", "atmos.exe"),
+		},
+		{
 			name:       "linux pins GOOS",
 			target:     "linux",
 			wantGOOS:   "linux",
@@ -120,6 +132,36 @@ func TestBuildTargetConfig(t *testing.T) {
 			assert.Equal(t, tc.wantOutput, config.Output)
 		})
 	}
+}
+
+func TestCheckFIPSTargetSupported(t *testing.T) {
+	t.Run("rejects windows/386 when GOFIPS140 will be enabled", func(t *testing.T) {
+		err := checkFIPSTargetSupported(buildTarget{GOOS: "windows", GOARCH: "386"}, []string{"GOFIPS140=latest"})
+		require.ErrorIs(t, err, errFIPSUnsupportedTarget)
+		assert.Contains(t, err.Error(), "GOOS=windows")
+		assert.Contains(t, err.Error(), "GOARCH=386")
+	})
+
+	t.Run("allows windows/386 when GOFIPS140 is explicitly off", func(t *testing.T) {
+		err := checkFIPSTargetSupported(buildTarget{GOOS: "windows", GOARCH: "386"}, []string{"GOFIPS140=off"})
+		require.NoError(t, err)
+	})
+
+	t.Run("allows windows/386 when GOFIPS140 is off in the ambient environment", func(t *testing.T) {
+		t.Setenv("GOFIPS140", "off")
+		err := checkFIPSTargetSupported(buildTarget{GOOS: "windows", GOARCH: "386"}, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("allows windows/amd64 under FIPS", func(t *testing.T) {
+		err := checkFIPSTargetSupported(buildTarget{GOOS: "windows", GOARCH: "amd64"}, []string{"GOFIPS140=latest"})
+		require.NoError(t, err)
+	})
+
+	t.Run("allows any target when GOOS/GOARCH aren't pinned and the host isn't windows/386", func(t *testing.T) {
+		err := checkFIPSTargetSupported(buildTarget{}, []string{"GOFIPS140=latest"})
+		require.NoError(t, err)
+	})
 }
 
 func TestSetDefault(t *testing.T) {
@@ -322,6 +364,34 @@ func TestBuildBinary(t *testing.T) {
 		env := readFakeBinEnv(t, argsFile)
 		assert.Equal(t, "1", env["CGO_ENABLED"])
 		assert.Equal(t, "off", env["GOFIPS140"])
+	})
+
+	t.Run("rejects GOOS=windows GOARCH=386 under the default FIPS-enabled build without invoking go", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		argsFile := setUpFakePathBinary(t, "go")
+		t.Setenv("GOOS", "windows")
+		t.Setenv("GOARCH", "386")
+		t.Chdir(root)
+
+		err := Build{}.Binary("default", "test")
+		require.ErrorIs(t, err, errFIPSUnsupportedTarget)
+		_, statErr := os.Stat(argsFile)
+		assert.True(t, os.IsNotExist(statErr), "go must never be invoked once the FIPS/target check rejects the build")
+	})
+
+	t.Run("builds GOOS=windows GOARCH=386 when GOFIPS140=off is set explicitly", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		argsFile := setUpFakePathBinary(t, "go")
+		t.Setenv("GOOS", "windows")
+		t.Setenv("GOARCH", "386")
+		t.Setenv("GOFIPS140", "off")
+		t.Chdir(root)
+
+		require.NoError(t, Build{}.Binary("default", "test"))
+
+		args := readFakeBinArgs(t, argsFile)
+		assert.Equal(t, filepath.Join("build", "atmos.exe"), args[2])
+		assert.Equal(t, "off", readFakeBinEnv(t, argsFile)["GOFIPS140"])
 	})
 
 	t.Run("sets GOFLAGS=-buildvcs=false when building from a worktree", func(t *testing.T) {

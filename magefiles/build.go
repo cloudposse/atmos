@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/magefile/mage/mg"
@@ -17,7 +18,10 @@ import (
 // Build groups targets that produce the atmos binary.
 type Build mg.Namespace
 
-var errUnsupportedBuildTarget = errors.New("mage: unsupported build target")
+var (
+	errUnsupportedBuildTarget = errors.New("mage: unsupported build target")
+	errFIPSUnsupportedTarget  = errors.New("mage: GOFIPS140 does not support this GOOS/GOARCH")
+)
 
 const (
 	// The Go package whose Version/Commit vars get stamped via -ldflags,
@@ -26,6 +30,12 @@ const (
 	buildOutputDir        = "build"
 	atmosBinaryName       = "atmos"
 	directoryPermissions  = 0o755
+
+	goosLinux   = "linux"
+	goosWindows = "windows"
+	goosDarwin  = "darwin"
+	goarch386   = "386"
+	goarchAMD64 = "amd64"
 )
 
 // Binary builds the atmos binary for target ("default", "linux", "windows",
@@ -50,11 +60,15 @@ func (Build) Binary(target, version string) error {
 		return err
 	}
 
+	baseEnv := buildBaseEnv(root)
+
+	if err := checkFIPSTargetSupported(targetConfig, baseEnv); err != nil {
+		return err
+	}
+
 	// Best-effort: empty when not building from a git checkout, matching the
 	// previous shell script's `git rev-parse HEAD 2>/dev/null || true`.
 	commit, _ := sh.Output("git", "-C", root, "rev-parse", "HEAD")
-
-	baseEnv := buildBaseEnv(root)
 
 	if err := runIn(root, baseEnv, "go", "mod", "download"); err != nil {
 		return err
@@ -88,24 +102,58 @@ type buildTarget struct {
 	Output string
 }
 
-// buildTargetConfig maps a build target name to its buildTarget.
+// buildTargetConfig maps a build target name to its buildTarget. The output
+// path always uses the .exe suffix when the target resolves to GOOS=windows
+// — whether windows was pinned explicitly (the "windows" target) or reached
+// via ambient GOOS=windows on the "default" target — matching what `go
+// build` itself names a Windows binary.
 func buildTargetConfig(target string) (buildTarget, error) {
 	ambientGOARCH := os.Getenv("GOARCH")
-	defaultOutput := filepath.Join(buildOutputDir, atmosBinaryName)
 	switch target {
 	case "default":
-		return buildTarget{GOOS: os.Getenv("GOOS"), GOARCH: ambientGOARCH, Output: defaultOutput}, nil
+		goos := os.Getenv("GOOS")
+		return buildTarget{GOOS: goos, GOARCH: ambientGOARCH, Output: outputPathFor(resolvedGOOS(goos))}, nil
 	case "linux":
-		return buildTarget{GOOS: "linux", GOARCH: ambientGOARCH, Output: defaultOutput}, nil
+		return buildTarget{GOOS: goosLinux, GOARCH: ambientGOARCH, Output: outputPathFor(goosLinux)}, nil
 	case "windows":
-		return buildTarget{GOOS: "windows", GOARCH: ambientGOARCH, Output: filepath.Join(buildOutputDir, atmosBinaryName+".exe")}, nil
+		return buildTarget{GOOS: goosWindows, GOARCH: ambientGOARCH, Output: outputPathFor(goosWindows)}, nil
 	case "macos":
-		return buildTarget{GOOS: "darwin", GOARCH: ambientGOARCH, Output: defaultOutput}, nil
+		return buildTarget{GOOS: goosDarwin, GOARCH: ambientGOARCH, Output: outputPathFor(goosDarwin)}, nil
 	case "macos-intel":
-		return buildTarget{GOOS: "darwin", GOARCH: "amd64", Output: defaultOutput}, nil
+		return buildTarget{GOOS: goosDarwin, GOARCH: goarchAMD64, Output: outputPathFor(goosDarwin)}, nil
 	default:
 		return buildTarget{}, fmt.Errorf("%w: %s (expected one of: default, linux, windows, macos, macos-intel)", errUnsupportedBuildTarget, target)
 	}
+}
+
+// resolvedGOOS returns goos, falling back to the current process's GOOS
+// (runtime.GOOS) when goos is empty — i.e. when a target doesn't pin GOOS
+// and the ambient GOOS environment variable isn't set either, matching what
+// `go build` itself would target.
+func resolvedGOOS(goos string) string {
+	if goos == "" {
+		return runtime.GOOS
+	}
+	return goos
+}
+
+// resolvedGOARCH returns goarch, falling back to runtime.GOARCH when empty,
+// mirroring resolvedGOOS.
+func resolvedGOARCH(goarch string) string {
+	if goarch == "" {
+		return runtime.GOARCH
+	}
+	return goarch
+}
+
+// outputPathFor returns the build output path for goos: atmos.exe on
+// Windows, atmos everywhere else.
+func outputPathFor(goos string) string {
+	name := atmosBinaryName
+	if goos == goosWindows {
+		name += ".exe"
+	}
+	return filepath.Join(buildOutputDir, name)
 }
 
 // buildBaseEnv returns the env overrides shared by `go mod download` and
@@ -134,6 +182,48 @@ func setDefault(env map[string]string, key, value string) {
 	if _, ok := os.LookupEnv(key); !ok {
 		env[key] = value
 	}
+}
+
+// checkFIPSTargetSupported rejects building for a GOOS/GOARCH combination
+// that Go's native FIPS 140-3 module doesn't support at runtime, when the
+// build will actually enable it. The windows/386 combination lacks a CPU
+// jitter entropy source good enough for FIPS mode: crypto/internal/fips140's
+// Supported() function panics on process init once GODEBUG=fips140=on (the
+// default baked in by GOFIPS140=latest, see docs/prd/fips-140-mode.md), so a
+// windows/386 binary built with FIPS enabled would crash immediately at
+// startup rather than silently skip FIPS mode. The baseEnv slice is
+// consulted first, since it carries the GOFIPS140 default this build is
+// about to apply; the ambient environment is the fallback for a value the
+// caller already set explicitly.
+func checkFIPSTargetSupported(target buildTarget, baseEnv []string) error {
+	goos := resolvedGOOS(target.GOOS)
+	goarch := resolvedGOARCH(target.GOARCH)
+	if goos != goosWindows || goarch != goarch386 {
+		return nil
+	}
+
+	fips := envValue(baseEnv, "GOFIPS140")
+	if fips == "" {
+		fips = os.Getenv("GOFIPS140")
+	}
+	if fips == "" || fips == "off" {
+		return nil
+	}
+
+	return fmt.Errorf("%w: GOOS=windows GOARCH=386 GOFIPS140=%s (set GOFIPS140=off to build this target anyway)",
+		errFIPSUnsupportedTarget, fips)
+}
+
+// envValue returns the value of key in env (a "KEY=VALUE" slice as returned
+// by buildBaseEnv), or "" if key isn't present.
+func envValue(env []string, key string) string {
+	prefix := key + "="
+	for _, entry := range env {
+		if value, ok := strings.CutPrefix(entry, prefix); ok {
+			return value
+		}
+	}
+	return ""
 }
 
 // inWorktree reports whether root is a linked git worktree (as opposed to
