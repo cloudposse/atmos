@@ -37,6 +37,10 @@ const (
 	flagCompactWarnings = "-compact-warnings"
 )
 
+// cancelledExitCode is returned when the user explicitly cancels a streaming run (Ctrl-C/q),
+// matching the conventional shell exit code for SIGINT (128 + 2).
+const cancelledExitCode = 130
+
 // Format string constants.
 const (
 	fmtNewlineStr = "\n%s"
@@ -55,6 +59,9 @@ type ExecuteOptions struct {
 	SubCommand string   // "plan", "apply", "init", "refresh", "workspace".
 	Workspace  string   // Workspace name (for workspace select/new).
 	DryRun     bool     // If true, don't execute.
+	// RenderConfig controls dependency-tree rendering (compact spacing, attribute bar,
+	// max lines). Nil uses RenderTreeWithConfig's built-in defaults.
+	RenderConfig *RenderConfig
 }
 
 // checkStreamingUIPreconditions returns an error if the streaming UI cannot run in the
@@ -64,6 +71,19 @@ func checkStreamingUIPreconditions() error {
 		return errUtils.ErrStreamingNotSupported
 	}
 	if telemetry.IsCI() {
+		return errUtils.ErrStreamingNotSupported
+	}
+	return nil
+}
+
+// checkConfirmationPreconditions returns an error if a confirmation prompt (ConfirmApply/
+// ConfirmDestroy) will not be possible - i.e. stdin isn't a TTY. Callers that will need
+// confirmation should check this BEFORE running the (potentially expensive, real-work) plan
+// phase, so a non-interactive stdin fails fast instead of running the plan twice: once via
+// streaming (which then fails at the confirmation step) and once again via the plain fallback
+// path triggered by that failure.
+func checkConfirmationPreconditions() error {
+	if !term.IsTTYSupportForStdin() {
 		return errUtils.ErrStreamingNotSupported
 	}
 	return nil
@@ -83,9 +103,18 @@ func extractExitCode(err error) (int, error) {
 	return exitErr.ExitCode(), nil
 }
 
-// runTUIProgram runs a bubbletea program to completion, killing the given command's
-// process if the TUI itself fails to run.
-func runTUIProgram(model tea.Model, cmd *exec.Cmd) (tea.Model, error) {
+// cancellableModel is implemented by TUI models that can report whether the user explicitly
+// cancelled the run (Ctrl-C/q) rather than the underlying terraform command completing on its
+// own. Bubbletea returns models by value, so this must be satisfied by the value type.
+type cancellableModel interface {
+	Cancelled() bool
+}
+
+// runTUIProgram runs a bubbletea program to completion, killing the given command's process
+// if the TUI itself fails to run, or if the user explicitly cancelled (Ctrl-C/q) - otherwise
+// the command would keep running invisibly after control returns to the caller. The second
+// return value reports whether the run was cancelled.
+func runTUIProgram(model tea.Model, cmd *exec.Cmd) (tea.Model, bool, error) {
 	p := tea.NewProgram(
 		model,
 		tea.WithOutput(iolib.UI),
@@ -96,9 +125,28 @@ func runTUIProgram(model tea.Model, cmd *exec.Cmd) (tea.Model, error) {
 	if err != nil {
 		// Kill the process if TUI failed.
 		_ = cmd.Process.Kill()
-		return nil, fmt.Errorf(fmtWrapErr, errUtils.ErrTUIRun, err)
+		return nil, false, fmt.Errorf(fmtWrapErr, errUtils.ErrTUIRun, err)
 	}
-	return finalModel, nil
+
+	cancelled := modelWasCancelled(finalModel)
+	killIfCancelled(cancelled, cmd)
+
+	return finalModel, cancelled, nil
+}
+
+// modelWasCancelled reports whether the given final TUI model indicates the user explicitly
+// cancelled the run, defaulting to false for models that don't implement cancellableModel.
+func modelWasCancelled(finalModel tea.Model) bool {
+	cm, ok := finalModel.(cancellableModel)
+	return ok && cm.Cancelled()
+}
+
+// killIfCancelled kills cmd's process when cancelled is true, so a subprocess left running
+// after the user quits the TUI doesn't keep running invisibly in the background.
+func killIfCancelled(cancelled bool, cmd *exec.Cmd) {
+	if cancelled {
+		_ = cmd.Process.Kill()
+	}
 }
 
 // streamStderrToLog copies lines from r to the Atmos debug logger.
@@ -162,13 +210,18 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 
 	// Create and run TUI model.
 	model := NewModel(opts.Component, opts.Stack, opts.SubCommand, stdout)
-	finalModel, err := runTUIProgram(model, cmd)
+	finalModel, cancelled, err := runTUIProgram(model, cmd)
 	if err != nil {
 		return err
 	}
 
-	// Wait for command to finish and get exit code.
-	exitCode, err := extractExitCode(cmd.Wait())
+	// Wait for command to finish (reaps the process; if cancelled, it was just killed above).
+	waitErr := cmd.Wait()
+	if cancelled {
+		return errUtils.ExitCodeError{Code: cancelledExitCode}
+	}
+
+	exitCode, err := extractExitCode(waitErr)
 	if err != nil {
 		return err
 	}
@@ -227,7 +280,7 @@ func showPlanTree(ctx context.Context, opts *ExecuteOptions, planFile string) {
 	add, change, remove := tree.GetChangeSummary()
 	// Only render tree if there are changes; otherwise just show badge.
 	if add > 0 || change > 0 || remove > 0 {
-		ui.Writef(fmtNewlineStr, tree.RenderTree())
+		ui.Writef(fmtNewlineStr, tree.RenderTreeWithConfig(opts.RenderConfig))
 	}
 	ui.Write(RenderChangeSummaryBadges(add, change, remove))
 }
@@ -333,20 +386,29 @@ func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
 
 	// Create and run TUI model.
 	model := NewInitModel(opts.Component, opts.Stack, opts.SubCommand, res.reader, WithWorkspace(opts.Workspace))
-	finalModel, err := runTUIProgram(model, res.cmd)
+	finalModel, cancelled, err := runTUIProgram(model, res.cmd)
 	if err != nil {
 		return err
 	}
 
-	// Wait for command to finish (should already be done since pipe closed).
+	// Wait for command to finish (should already be done since pipe closed; if cancelled, the
+	// process was just killed above, which unblocks the background cmd.Wait() goroutine).
 	<-res.done
+	if cancelled {
+		return errUtils.ExitCodeError{Code: cancelledExitCode}
+	}
 
-	exitCode, err := extractExitCode(*res.err)
+	return finalizeExecuteInitResult(finalModel, *res.err)
+}
+
+// finalizeExecuteInitResult resolves the final exit code (preferring the model's own captured
+// exit code, if any) and returns an error for any non-zero result.
+func finalizeExecuteInitResult(finalModel tea.Model, waitErr error) error {
+	exitCode, err := extractExitCode(waitErr)
 	if err != nil {
 		return err
 	}
 
-	// Check if model has an error.
 	m, ok := finalModel.(InitModel)
 	if !ok {
 		return fmt.Errorf("%w: expected InitModel, got %T", errUtils.ErrUnexpectedModelType, finalModel)
@@ -405,6 +467,17 @@ func ShouldUseStreamingUI(uiFlagSet, uiFlag, configEnabled bool, subCommand stri
 	return supportsStreamingUISubCommand(subCommand)
 }
 
+// UIRequestedButUnsupported reports whether the user explicitly opted in to the streaming UI
+// (via --ui or atmos config) for a subcommand that doesn't support it (e.g. refresh), as
+// opposed to streaming simply being unrequested, disabled by CI, or unavailable due to no TTY.
+// Callers use this to warn the user instead of silently falling back to the plain execution
+// path with no explanation.
+func UIRequestedButUnsupported(uiFlagSet, uiFlag, configEnabled bool, subCommand string) bool {
+	defer perf.Track(nil, "terraform.ui.UIRequestedButUnsupported")()
+
+	return isStreamingUIRequested(uiFlagSet, uiFlag, configEnabled) && !supportsStreamingUISubCommand(subCommand)
+}
+
 // ExecuteApply runs terraform apply with optional confirmation.
 // If -auto-approve is not present and not using --from-plan, it runs:
 // (1) terraform plan -json -out=<temp> (with TUI)
@@ -417,6 +490,11 @@ func ExecuteApply(ctx context.Context, opts *ExecuteOptions) error {
 	// Check if -auto-approve is in args - skip confirmation.
 	if hasFlag(opts.Args, flagAutoApprove) {
 		return Execute(ctx, opts)
+	}
+
+	// Every remaining path below requires confirmation; fail fast if it won't be possible.
+	if err := checkConfirmationPreconditions(); err != nil {
+		return err
 	}
 
 	// Check if applying from existing plan - show tree and confirm.
@@ -477,7 +555,7 @@ func showTwoPhasePlanTree(ctx context.Context, opts *ExecuteOptions, planFile st
 	}
 
 	// Display the dependency tree and badge summary.
-	ui.Writef(fmtNewlineStr, tree.RenderTree())
+	ui.Writef(fmtNewlineStr, tree.RenderTreeWithConfig(opts.RenderConfig))
 	ui.Write(RenderChangeSummaryBadges(add, change, remove))
 	return false
 }
@@ -561,6 +639,11 @@ func ExecuteDestroy(ctx context.Context, opts *ExecuteOptions) error {
 		return Execute(ctx, opts)
 	}
 
+	// The two-phase flow below requires confirmation; fail fast if it won't be possible.
+	if err := checkConfirmationPreconditions(); err != nil {
+		return err
+	}
+
 	// Two-phase: Plan → Tree → Confirm → Apply.
 	return executeTwoPhaseDestroy(ctx, opts)
 }
@@ -588,7 +671,7 @@ func executeWithPlanFile(ctx context.Context, opts *ExecuteOptions, planFile str
 			return nil
 		}
 		// Display the dependency tree and badge summary.
-		ui.Writef(fmtNewlineStr, tree.RenderTree())
+		ui.Writef(fmtNewlineStr, tree.RenderTreeWithConfig(opts.RenderConfig))
 		ui.Write(RenderChangeSummaryBadges(add, change, remove))
 	}
 

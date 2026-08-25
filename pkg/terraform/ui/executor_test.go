@@ -1,10 +1,19 @@
 package ui
 
 import (
+	"context"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestShouldUseStreamingUI_ExplicitlyDisabled(t *testing.T) {
@@ -37,6 +46,31 @@ func TestShouldUseStreamingUI_SupportedCommands(t *testing.T) {
 		// But we're testing the command filtering logic.
 		result := ShouldUseStreamingUI(false, false, false, cmd)
 		assert.False(t, result, "command %s needs enabled flag or config to use streaming UI", cmd)
+	}
+}
+
+func TestUIRequestedButUnsupported(t *testing.T) {
+	tests := []struct {
+		name       string
+		uiFlagSet  bool
+		uiFlag     bool
+		config     bool
+		subCommand string
+		expect     bool
+	}{
+		{name: "refresh with --ui=true", uiFlagSet: true, uiFlag: true, subCommand: "refresh", expect: true},
+		{name: "refresh via config", config: true, subCommand: "refresh", expect: true},
+		{name: "refresh with --ui=false", uiFlagSet: true, uiFlag: false, subCommand: "refresh", expect: false},
+		{name: "refresh not requested at all", subCommand: "refresh", expect: false},
+		{name: "apply with --ui=true (supported)", uiFlagSet: true, uiFlag: true, subCommand: "apply", expect: false},
+		{name: "destroy with --ui=true (supported)", uiFlagSet: true, uiFlag: true, subCommand: "destroy", expect: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := UIRequestedButUnsupported(tt.uiFlagSet, tt.uiFlag, tt.config, tt.subCommand)
+			assert.Equal(t, tt.expect, result)
+		})
 	}
 }
 
@@ -79,6 +113,21 @@ func TestBuildArgsWithJSON_AddsFlagForRefresh(t *testing.T) {
 	assert.Equal(t, "refresh", result[0])
 	assert.Equal(t, "-json", result[1])
 	assert.Equal(t, "-compact-warnings", result[2])
+}
+
+// TestBuildArgsWithJSON_AddsFlagForDestroy is a regression test: isJSONSubCommand
+// previously omitted "destroy", so -json/-compact-warnings were prepended BEFORE the
+// subcommand instead of after it (e.g. "-json -compact-warnings destroy -auto-approve"),
+// which terraform's CLI rejects outright ("Invalid flags before the subcommand").
+func TestBuildArgsWithJSON_AddsFlagForDestroy(t *testing.T) {
+	args := []string{"destroy", "-auto-approve"}
+	result := buildArgsWithJSON(args)
+	assert.Contains(t, result, "-json")
+	assert.Contains(t, result, "-compact-warnings")
+	assert.Equal(t, "destroy", result[0])
+	assert.Equal(t, "-json", result[1])
+	assert.Equal(t, "-compact-warnings", result[2])
+	assert.Equal(t, "-auto-approve", result[3])
 }
 
 func TestBuildArgsWithJSON_DoesNotDuplicateFlag(t *testing.T) {
@@ -356,4 +405,105 @@ func TestFormatOutputValue(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestExecuteApply_FailsFastWhenStdinNotTTY is a regression test: previously ExecuteApply
+// (without -auto-approve) always ran the full streaming plan phase before discovering, only
+// at the confirmation step, that stdin wasn't a TTY - duplicating real plan/refresh work and
+// then falling back to a plain re-run that also fails. In a `go test` process stdin is not a
+// TTY, so this exercises the fast-fail path directly: it must return quickly with
+// ErrStreamingNotSupported, never attempting to spawn a real terraform subprocess.
+func TestExecuteApply_FailsFastWhenStdinNotTTY(t *testing.T) {
+	opts := &ExecuteOptions{
+		Command:    "terraform",
+		Args:       []string{"apply"}, // no -auto-approve: confirmation would be required.
+		WorkingDir: t.TempDir(),
+		SubCommand: subCommandApply,
+	}
+
+	err := ExecuteApply(context.Background(), opts)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
+}
+
+// TestExecuteDestroy_FailsFastWhenStdinNotTTY mirrors TestExecuteApply_FailsFastWhenStdinNotTTY
+// for the destroy two-phase flow.
+func TestExecuteDestroy_FailsFastWhenStdinNotTTY(t *testing.T) {
+	opts := &ExecuteOptions{
+		Command:    "terraform",
+		Args:       []string{"destroy"}, // no -auto-approve: confirmation would be required.
+		WorkingDir: t.TempDir(),
+		SubCommand: subCommandDestroy,
+	}
+
+	err := ExecuteDestroy(context.Background(), opts)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
+}
+
+// noCancelModel is a minimal tea.Model that does not implement cancellableModel, used to
+// verify modelWasCancelled defaults safely to false for models that don't opt in.
+type noCancelModel struct{}
+
+func (noCancelModel) Init() tea.Cmd                       { return nil }
+func (noCancelModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return noCancelModel{}, nil }
+func (noCancelModel) View() string                        { return "" }
+
+func TestModelWasCancelled(t *testing.T) {
+	t.Run("cancelled via key press", func(t *testing.T) {
+		m := NewModel("comp", "stack", "plan", strings.NewReader(""))
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+		assert.True(t, modelWasCancelled(updated))
+	})
+
+	t.Run("done on its own, not cancelled", func(t *testing.T) {
+		m := NewModel("comp", "stack", "plan", strings.NewReader(""))
+		updated, _ := m.Update(doneMsg{exitCode: 0})
+		assert.False(t, modelWasCancelled(updated))
+	})
+
+	t.Run("model without Cancelled() defaults to false", func(t *testing.T) {
+		assert.False(t, modelWasCancelled(noCancelModel{}))
+	})
+}
+
+// TestKillIfCancelled_KillsRealProcess verifies a cancelled run actually terminates a
+// long-running subprocess instead of leaving it running invisibly in the background - this
+// is the fix for a real hang where Ctrl-C during a streaming apply never stopped terraform.
+func TestKillIfCancelled_KillsRealProcess(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	cmd := exec.Command(exePath, "-test.run=^$")
+	cmd.Env = append(os.Environ(), "_ATMOS_TEST_SLEEP_SECONDS=30")
+	require.NoError(t, cmd.Start())
+
+	killIfCancelled(true, cmd)
+
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- cmd.Wait() }()
+
+	select {
+	case err := <-waitDone:
+		require.Error(t, err, "a killed process should report a non-nil wait error")
+	case <-time.After(5 * time.Second):
+		t.Fatal("subprocess (30s sleep) was not killed within 5s - killIfCancelled did not stop it")
+	}
+}
+
+// TestKillIfCancelled_LeavesProcessRunningWhenNotCancelled verifies the normal (non-cancelled)
+// path leaves the subprocess alone, since Execute() still needs to wait for it to finish.
+func TestKillIfCancelled_LeavesProcessRunningWhenNotCancelled(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	cmd := exec.Command(exePath, "-test.run=^$")
+	cmd.Env = append(os.Environ(), "_ATMOS_TEST_SLEEP_SECONDS=2")
+	require.NoError(t, cmd.Start())
+
+	killIfCancelled(false, cmd)
+
+	require.NoError(t, cmd.Wait(), "process should exit on its own after its 2s sleep, undisturbed")
 }

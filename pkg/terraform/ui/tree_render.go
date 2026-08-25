@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -112,6 +113,27 @@ type RenderConfig struct {
 	DimStyle    lipgloss.Style
 	TreeStyle   lipgloss.Style
 	BarStyle    lipgloss.Style
+}
+
+// BuildRenderConfig translates atmos.yaml's components.terraform.ui.{compact,
+// show_attribute_bar,max_lines} into a RenderConfig, applying the documented defaults
+// (compact=true, show_attribute_bar=false) when left unset.
+func BuildRenderConfig(uiConfig schema.TerraformUI) *RenderConfig {
+	defer perf.Track(nil, "terraform.ui.BuildRenderConfig")()
+
+	compact := true
+	if uiConfig.Compact != nil {
+		compact = *uiConfig.Compact
+	}
+	showAttributeBar := false
+	if uiConfig.ShowAttributeBar != nil {
+		showAttributeBar = *uiConfig.ShowAttributeBar
+	}
+	return &RenderConfig{
+		Compact:          compact,
+		ShowAttributeBar: showAttributeBar,
+		MaxLines:         uiConfig.MaxLines,
+	}
 }
 
 // resolveRenderConfig returns a fully-populated RenderConfig, preserving any caller-provided

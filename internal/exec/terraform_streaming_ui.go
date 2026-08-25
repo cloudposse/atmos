@@ -7,11 +7,13 @@ package exec
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfui "github.com/cloudposse/atmos/pkg/terraform/ui"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // streamingExecRequest bundles the arguments executeStreamingOrShell needs beyond
@@ -55,20 +57,31 @@ func executeStreamingOrShell(atmosConfig *schema.AtmosConfiguration, info *schem
 	}
 
 	retryActive := info.ComponentRetrySection != nil && len(info.ComponentRetrySection.Conditions) > 0
-	if retryActive || !tfui.ShouldUseStreamingUI(info.UIFlagExplicitlySet, info.UIEnabled, atmosConfig.Components.Terraform.UI.Enabled, req.gatePhase) {
+	if retryActive {
+		return runShell()
+	}
+
+	if !tfui.ShouldUseStreamingUI(info.UIFlagExplicitlySet, info.UIEnabled, atmosConfig.Components.Terraform.UI.Enabled, req.gatePhase) {
+		// Warn only when the user actually asked for streaming (flag/config) on a subcommand
+		// that doesn't support it (e.g. refresh) - not for the ordinary unrequested/CI/no-TTY
+		// cases, which should stay silent.
+		if tfui.UIRequestedButUnsupported(info.UIFlagExplicitlySet, info.UIEnabled, atmosConfig.Components.Terraform.UI.Enabled, req.gatePhase) {
+			ui.Warning(fmt.Sprintf("Streaming UI (--ui) is not supported for 'terraform %s'; using standard output instead", req.subCommand))
+		}
 		return runShell()
 	}
 
 	execOpts := &tfui.ExecuteOptions{
-		Command:    info.Command,
-		Args:       req.args,
-		WorkingDir: req.componentPath,
-		Env:        info.ComponentEnvList,
-		Component:  info.FinalComponent,
-		Stack:      info.Stack,
-		SubCommand: req.subCommand,
-		Workspace:  req.workspace,
-		DryRun:     info.DryRun,
+		Command:      info.Command,
+		Args:         req.args,
+		WorkingDir:   req.componentPath,
+		Env:          info.ComponentEnvList,
+		Component:    info.FinalComponent,
+		Stack:        info.Stack,
+		SubCommand:   req.subCommand,
+		Workspace:    req.workspace,
+		DryRun:       info.DryRun,
+		RenderConfig: tfui.BuildRenderConfig(atmosConfig.Components.Terraform.UI),
 	}
 
 	ctx := shellCommandContext(req.shellOpts...)

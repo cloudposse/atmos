@@ -26,7 +26,8 @@ func hasCompactWarningsFlag(args []string) bool {
 
 // isJSONSubCommand returns true if the argument is a terraform subcommand that supports -json.
 func isJSONSubCommand(arg string) bool {
-	return arg == subCommandPlan || arg == subCommandApply || arg == subCommandInit || arg == "refresh"
+	return arg == subCommandPlan || arg == subCommandApply || arg == subCommandInit ||
+		arg == subCommandDestroy || arg == "refresh"
 }
 
 // buildRequiredFlags builds the list of flags that need to be added.

@@ -58,11 +58,28 @@ func TestInitModel_Update_KeyMsg_Quit(t *testing.T) {
 			m := NewInitModel("comp", "stack", "init", reader)
 
 			updated, cmd := m.Update(tt.key)
-			_ = updated.(InitModel)
+			model := updated.(InitModel)
 
+			assert.True(t, model.done)
+			assert.True(t, model.Cancelled(), "quitting via key press must mark the run as cancelled so the caller kills the subprocess")
 			assert.NotNil(t, cmd) // Should return tea.Quit.
 		})
 	}
+}
+
+// TestInitModel_Update_InitDoneMsg_NotCancelled ensures the command finishing on its own
+// (initDoneMsg) is never mistaken for a user cancellation - otherwise a normal completion
+// would report a bogus "cancelled" exit code instead of the real one.
+func TestInitModel_Update_InitDoneMsg_NotCancelled(t *testing.T) {
+	reader := strings.NewReader("")
+	m := NewInitModel("comp", "stack", "init", reader)
+
+	updated, cmd := m.Update(initDoneMsg{exitCode: 0, err: nil})
+	model := updated.(InitModel)
+
+	assert.True(t, model.done)
+	assert.False(t, model.Cancelled(), "the command finishing on its own must not be treated as a cancellation")
+	assert.NotNil(t, cmd) // Should return tea.Quit.
 }
 
 func TestInitModel_Update_SpinnerTickMsg(t *testing.T) {

@@ -7,6 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestResolveRenderConfig_NilUsesDefaults(t *testing.T) {
@@ -25,6 +27,34 @@ func TestResolveRenderConfig_HonorsCallerStyles(t *testing.T) {
 	// Styles the caller left at zero value still fall back to defaults.
 	defaults := resolveRenderConfig(nil)
 	assert.Equal(t, defaults.DeleteStyle, resolved.DeleteStyle, "unset DeleteStyle should still use the default")
+}
+
+// TestBuildRenderConfig_DefaultsWhenUnset is a regression test: every RenderTree() call site
+// previously hardcoded RenderTreeWithConfig(nil), so components.terraform.ui.{compact,
+// show_attribute_bar,max_lines} in atmos.yaml were parsed and documented but never actually
+// read at render time. BuildRenderConfig is what wires them up; this locks in the documented
+// defaults (compact=true, show_attribute_bar=false) when the config fields are left unset.
+func TestBuildRenderConfig_DefaultsWhenUnset(t *testing.T) {
+	result := BuildRenderConfig(schema.TerraformUI{})
+
+	assert.True(t, result.Compact, "compact must default to true per the documented contract")
+	assert.False(t, result.ShowAttributeBar, "show_attribute_bar must default to false")
+	assert.Equal(t, 0, result.MaxLines, "max_lines must default to 0 (show all)")
+}
+
+func TestBuildRenderConfig_HonorsExplicitValues(t *testing.T) {
+	compactFalse := false
+	showBarTrue := true
+
+	result := BuildRenderConfig(schema.TerraformUI{
+		Compact:          &compactFalse,
+		ShowAttributeBar: &showBarTrue,
+		MaxLines:         5,
+	})
+
+	assert.False(t, result.Compact, "explicit compact=false must be honored")
+	assert.True(t, result.ShowAttributeBar, "explicit show_attribute_bar=true must be honored")
+	assert.Equal(t, 5, result.MaxLines)
 }
 
 func TestColorizedActionSymbol(t *testing.T) {

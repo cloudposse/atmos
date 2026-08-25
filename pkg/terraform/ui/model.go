@@ -35,6 +35,7 @@ type Model struct {
 	err       error
 	exitCode  int
 	done      bool
+	cancelled bool
 	startTime time.Time
 	component string // Component name for display.
 	stack     string // Stack name for display.
@@ -166,7 +167,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if isQuitKey(msg.String()) {
+			// Mark cancelled (as opposed to doneMsg, which means the command finished on
+			// its own) so the caller knows to kill the still-running subprocess instead of
+			// waiting for it to finish invisibly in the background.
 			m.done = true
+			m.cancelled = true
 			return m, tea.Quit
 		}
 
@@ -230,4 +235,13 @@ func (m *Model) GetError() error {
 // GetTracker returns the resource tracker.
 func (m *Model) GetTracker() *ResourceTracker {
 	return m.tracker
+}
+
+// Cancelled reports whether the user explicitly quit (Ctrl-C/q) rather than the underlying
+// terraform command completing on its own. Value receiver: bubbletea returns models by
+// value, so this must be callable on the Model value stored in the tea.Model interface.
+//
+//nolint:gocritic // bubbletea models must be passed by value
+func (m Model) Cancelled() bool {
+	return m.cancelled
 }

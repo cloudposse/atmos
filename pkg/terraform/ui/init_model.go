@@ -27,6 +27,14 @@ const (
 
 	// ANSI escape sequences for terminal control.
 	initClearToEOL = "\x1b[K" // Clear from cursor to end of line.
+
+	// Format string for the elapsed-time suffix shown on completion lines.
+	initFmtElapsed = " (%.1fs)"
+
+	// Terminates each completion line. Kept outside the styled dimStyle.Render() call (not
+	// folded into initFmtElapsed) so the newline isn't part of the ANSI-styled span - only
+	// the "(Ns)" text itself should be dimmed.
+	initTrailingNewline = "\n"
 )
 
 // InitModel is the bubbletea model for streaming terraform init/workspace output.
@@ -36,6 +44,7 @@ type InitModel struct {
 	lines      []string
 	currentOp  string // Current operation (e.g., "Initializing the backend...")
 	done       bool
+	cancelled  bool
 	err        error
 	exitCode   int
 	startTime  time.Time
@@ -143,6 +152,11 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if isQuitKey(msg.String()) {
+			// Mark cancelled (as opposed to initDoneMsg, which means the command finished
+			// on its own) so the caller knows to kill the still-running subprocess instead
+			// of waiting for it to finish invisibly in the background.
+			m.done = true
+			m.cancelled = true
 			return m, tea.Quit
 		}
 
@@ -242,13 +256,22 @@ func (m *InitModel) renderComplete() string {
 	// Format the action description.
 	action := m.formatAction()
 
+	if m.cancelled {
+		return atmosui.FormatWarningf(
+			"%s `%s/%s` cancelled",
+			action,
+			m.stack,
+			m.component,
+		) + dimStyle.Render(fmt.Sprintf(initFmtElapsed, elapsed)) + initTrailingNewline
+	}
+
 	if m.err != nil || m.exitCode != 0 {
 		return atmosui.FormatErrorf(
 			"%s `%s/%s` failed",
 			action,
 			m.stack,
 			m.component,
-		) + dimStyle.Render(fmt.Sprintf(" (%.1fs)", elapsed)) + "\n"
+		) + dimStyle.Render(fmt.Sprintf(initFmtElapsed, elapsed)) + initTrailingNewline
 	}
 
 	// For workspace command, "Selected" already implies completion, so don't add "completed".
@@ -258,7 +281,7 @@ func (m *InitModel) renderComplete() string {
 			action,
 			m.stack,
 			m.component,
-		) + dimStyle.Render(fmt.Sprintf(" (%.1fs)", elapsed)) + "\n"
+		) + dimStyle.Render(fmt.Sprintf(initFmtElapsed, elapsed)) + initTrailingNewline
 	}
 
 	return atmosui.FormatSuccessf(
@@ -266,7 +289,7 @@ func (m *InitModel) renderComplete() string {
 		action,
 		m.stack,
 		m.component,
-	) + dimStyle.Render(fmt.Sprintf(" (%.1fs)", elapsed)) + "\n"
+	) + dimStyle.Render(fmt.Sprintf(initFmtElapsed, elapsed)) + initTrailingNewline
 }
 
 // formatAction returns a human-readable action description.
@@ -296,4 +319,13 @@ func (m *InitModel) GetError() error {
 // GetExitCode returns the exit code.
 func (m *InitModel) GetExitCode() int {
 	return m.exitCode
+}
+
+// Cancelled reports whether the user explicitly quit (Ctrl-C/q) rather than the underlying
+// terraform command completing on its own. Value receiver: bubbletea returns models by
+// value, so this must be callable on the InitModel value stored in the tea.Model interface.
+//
+//nolint:gocritic // bubbletea models must be passed by value
+func (m InitModel) Cancelled() bool {
+	return m.cancelled
 }

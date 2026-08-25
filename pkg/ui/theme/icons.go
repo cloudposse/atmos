@@ -12,5 +12,4 @@ const (
 	IconInfo         = "▶" // Information indicator.
 	IconExperimental = "🧪" // Experimental feature indicator (test tube).
 	IconColorBlock   = "█" // Color palette block character.
-	IconRefresh      = "↻" // Refresh/recreate indicator.
 )

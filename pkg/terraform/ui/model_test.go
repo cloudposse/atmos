@@ -106,9 +106,25 @@ func TestModel_Update_KeyMsg_Quit(t *testing.T) {
 			model := updated.(Model)
 
 			assert.True(t, model.done)
+			assert.True(t, model.Cancelled(), "quitting via key press must mark the run as cancelled so the caller kills the subprocess")
 			assert.NotNil(t, cmd) // Should return tea.Quit.
 		})
 	}
+}
+
+// TestModel_Update_DoneMsg_NotCancelled ensures the command finishing on its own (doneMsg)
+// is never mistaken for a user cancellation - otherwise a normal completion would report a
+// bogus "cancelled" exit code instead of the real one.
+func TestModel_Update_DoneMsg_NotCancelled(t *testing.T) {
+	reader := strings.NewReader("")
+	m := NewModel("comp", "stack", "plan", reader)
+
+	updated, cmd := m.Update(doneMsg{exitCode: 0, err: nil})
+	model := updated.(Model)
+
+	assert.True(t, model.done)
+	assert.False(t, model.Cancelled(), "the command finishing on its own must not be treated as a cancellation")
+	assert.NotNil(t, cmd) // Should return tea.Quit.
 }
 
 func TestModel_Update_MessageMsg(t *testing.T) {

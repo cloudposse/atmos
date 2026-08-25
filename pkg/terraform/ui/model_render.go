@@ -46,7 +46,7 @@ func (m *Model) progressView() string {
 	for _, res := range resources {
 		if res.State == ResourceStateComplete || res.State == ResourceStateError {
 			b.WriteString(m.renderResource(res))
-			b.WriteString("\n")
+			b.WriteString(newlineStr)
 		}
 	}
 
@@ -270,9 +270,18 @@ func (m *Model) finalView() string {
 	// Condensed summary.
 	// Note: Diagnostic details (errors/warnings from terraform) are shown via LogDiagnostics() after the TUI completes.
 	// But failed resources (apply errors with address info) are shown inline below.
-	if m.tracker.HasErrors() {
+	switch {
+	case m.cancelled:
+		b.WriteString(atmosui.FormatWarningf(
+			"%s `%s/%s` cancelled",
+			command,
+			m.stack,
+			m.component,
+		))
+		b.WriteString(newlineStr)
+	case m.tracker.HasErrors():
 		m.renderErrorSummary(&b, command, elapsed)
-	} else {
+	default:
 		m.renderSuccessSummary(&b, command, summary, elapsed)
 	}
 
@@ -302,7 +311,7 @@ func (m *Model) renderErrorSummary(b *strings.Builder, command string, elapsed f
 		errorCount,
 		elapsed,
 	))
-	b.WriteString("\n")
+	b.WriteString(newlineStr)
 
 	// Show failed resources (different from diagnostics - these have resource addresses).
 	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
@@ -340,7 +349,7 @@ func (m *Model) renderSuccessSummary(b *strings.Builder, command string, summary
 		))
 	}
 	b.WriteString(dimStyle.Render(fmt.Sprintf(fmtDurationSuffix, elapsed)))
-	b.WriteString("\n")
+	b.WriteString(newlineStr)
 }
 
 // capitalizeCommand returns the command with the first letter capitalized.
