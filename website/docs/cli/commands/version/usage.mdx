@@ -78,6 +78,21 @@ To check the version of Terraform, Helmfile, or other tools, use their native co
     <dd>Specify the output format: `yaml` or `json`.</dd>
 </dl>
 
+```shell
+atmos version --format=json
+```
+
+```json
+{
+  "version": "1.226.1",
+  "os": "darwin",
+  "arch": "arm64",
+  "fips": true
+}
+```
+
+The `fips` field reports whether this binary was built with Go's FIPS 140-3 validated cryptographic module linked in and enforced by default at runtime — every official release binary is. See [this announcement](/changelog/fips-140-mode) for what that does and doesn't cover.
+
 :::tip
 To find the latest version of Atmos, go to the [releases](https://github.com/cloudposse/atmos/releases) page on GitHub.
 For help with installing the latest version of Atmos, check out our [installation](/install) page.

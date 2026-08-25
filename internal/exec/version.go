@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"fmt"
 	"runtime"
+	"runtime/debug"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -85,7 +86,32 @@ type Version struct {
 	Version       string `json:"version" yaml:"version"`
 	OS            string `json:"os" yaml:"os"`
 	Arch          string `json:"arch" yaml:"arch"`
+	FIPS          bool   `json:"fips" yaml:"fips"`
 	UpdateVersion string `json:"update_version,omitempty" yaml:"update_version,omitempty"`
+}
+
+// isFIPSBuild reports whether this binary was built with GOFIPS140 set (see
+// docs/prd/fips-140-mode.md), which links Go's native FIPS 140-3 validated
+// crypto module and defaults the binary to FIPS-enforcing mode at runtime.
+func isFIPSBuild() bool {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return false
+	}
+	return fipsSettingEnabled(info.Settings)
+}
+
+// fipsSettingEnabled reports whether settings (as returned by
+// debug.BuildInfo.Settings) records a GOFIPS140 build setting other than
+// unset or "off". Split out from isFIPSBuild so the decision logic can be
+// unit tested without depending on how the test binary itself was built.
+func fipsSettingEnabled(settings []debug.BuildSetting) bool {
+	for _, setting := range settings {
+		if setting.Key == "GOFIPS140" {
+			return setting.Value != "" && setting.Value != "off"
+		}
+	}
+	return false
 }
 
 func (v versionExec) isCheckVersionEnabled(forceCheck bool) bool {
@@ -162,6 +188,7 @@ func (v versionExec) displayVersionInFormat(forceCheck bool, format string) erro
 		Version: version.Version,
 		OS:      runtime.GOOS,
 		Arch:    runtime.GOARCH,
+		FIPS:    isFIPSBuild(),
 	}
 	if v, ok := v.GetLatestVersion(forceCheck); ok {
 		version.UpdateVersion = strings.TrimPrefix(v, "v")

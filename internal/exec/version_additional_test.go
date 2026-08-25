@@ -1,10 +1,14 @@
 package exec
 
 import (
+	"bytes"
+	"encoding/json"
+	"runtime/debug"
 	"testing"
 
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -279,4 +283,80 @@ func TestCheckRelease_WithVersionTrimming(t *testing.T) {
 			v.checkRelease()
 		})
 	}
+}
+
+// TestFipsSettingEnabled covers every branch of the GOFIPS140 build-setting
+// decision: unset entirely, present but "off", present and empty, and
+// present with a real value (e.g. "latest", or a pinned module version).
+func TestFipsSettingEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		settings []debug.BuildSetting
+		want     bool
+	}{
+		{
+			name:     "no GOFIPS140 setting at all",
+			settings: []debug.BuildSetting{{Key: "CGO_ENABLED", Value: "0"}},
+			want:     false,
+		},
+		{
+			name:     "GOFIPS140=off",
+			settings: []debug.BuildSetting{{Key: "GOFIPS140", Value: "off"}},
+			want:     false,
+		},
+		{
+			name:     "GOFIPS140 present but empty",
+			settings: []debug.BuildSetting{{Key: "GOFIPS140", Value: ""}},
+			want:     false,
+		},
+		{
+			name:     "GOFIPS140=latest",
+			settings: []debug.BuildSetting{{Key: "GOFIPS140", Value: "latest"}},
+			want:     true,
+		},
+		{
+			name:     "GOFIPS140 pinned to a specific module version",
+			settings: []debug.BuildSetting{{Key: "GOFIPS140", Value: "v1.0.0"}},
+			want:     true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, fipsSettingEnabled(tt.settings))
+		})
+	}
+}
+
+// TestIsFIPSBuild exercises the debug.ReadBuildInfo() integration itself; it
+// can only assert that it runs without panicking and returns a bool, since
+// whether the running test binary was built with GOFIPS140 depends on how
+// the test suite was invoked (see .atmos.d/test.yaml vs a bare `go test`).
+// The decision logic itself is covered deterministically by
+// TestFipsSettingEnabled above.
+func TestIsFIPSBuild(t *testing.T) {
+	assert.IsType(t, false, isFIPSBuild())
+}
+
+// TestDisplayVersionInFormat_FIPSField verifies the JSON/YAML output's fips
+// field reflects isFIPSBuild(), rather than silently carrying the zero value.
+func TestDisplayVersionInFormat_FIPSField(t *testing.T) {
+	var stdout bytes.Buffer
+	streams := &vendorModelTestStreams{stdout: &stdout, stderr: &bytes.Buffer{}}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+
+	v := versionExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		getLatestGitHubRepoRelease: func() (string, error) {
+			return "", errors.New("no update check in this test")
+		},
+	}
+
+	require.NoError(t, v.displayVersionInFormat(false, "json"))
+
+	var decoded Version
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &decoded))
+	assert.Equal(t, isFIPSBuild(), decoded.FIPS)
 }

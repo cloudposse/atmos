@@ -40,11 +40,27 @@ knowing if your compliance program needs FIPS validation across secrets handling
 
 ## How to Use It
 
-Nothing to opt into — every current and future atmos release ships this way by default. If you're
-curious whether a given binary was built with it, any standard Go toolchain can tell you:
+Nothing to opt into — every current and future atmos release ships this way by default. To confirm
+it on any binary, ask atmos itself:
 
 ```shell
-go version -m "$(command -v atmos)" | grep -i fips
+atmos version --format=json
+```
+
+```json
+{
+  "version": "1.226.1",
+  "os": "darwin",
+  "arch": "arm64",
+  "fips": true
+}
+```
+
+If you'd rather check without atmos installed yet — say, auditing a downloaded binary — any
+standard Go toolchain can tell you the same thing:
+
+```shell
+go version -m ./atmos | grep -i fips
 ```
 
 ```

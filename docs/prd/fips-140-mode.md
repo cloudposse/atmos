@@ -86,3 +86,11 @@ against GitHub), and an identical set of pre-existing local-environment test tim
 in both the FIPS and non-FIPS runs (confirming this change introduces no new test
 regressions). `go version -m` on a binary built via `atmos build` confirms
 `GOFIPS140=latest` and `DefaultGODEBUG=fips140=on` are baked in.
+
+## User-Facing Verification
+
+`atmos version --format=json` (and `--format=yaml`) exposes a `fips` boolean field
+(`internal/exec/version.go`, `isFIPSBuild`/`fipsSettingEnabled`), read from
+`runtime/debug.ReadBuildInfo().Settings` at startup — the same `GOFIPS140` build
+setting `go version -m` reports — so users don't need a Go toolchain installed to
+confirm a given atmos binary enforces FIPS.
