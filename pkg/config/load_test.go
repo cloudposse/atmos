@@ -1468,12 +1468,9 @@ func TestMergeDefaultImports_GitRoot(t *testing.T) {
 }
 
 func TestPreserveCaseSensitiveMaps(t *testing.T) {
-	// Clear any previously tracked files at start of each test.
-	resetMergedConfigFiles()
-
 	t.Run("does nothing when no config file used", func(t *testing.T) {
-		resetMergedConfigFiles()
 		v := viper.New()
+		resetMergedConfigFiles(v)
 		atmosConfig := &schema.AtmosConfiguration{}
 
 		preserveCaseSensitiveMaps(v, atmosConfig)
@@ -1481,7 +1478,6 @@ func TestPreserveCaseSensitiveMaps(t *testing.T) {
 	})
 
 	t.Run("preserves env variable case", func(t *testing.T) {
-		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 		configPath := filepath.Join(tempDir, "atmos.yaml")
 
@@ -1501,6 +1497,7 @@ components:
 		require.NoError(t, err)
 
 		v := viper.New()
+		resetMergedConfigFiles(v)
 		v.SetConfigFile(configPath)
 		err = v.ReadInConfig()
 		require.NoError(t, err)
@@ -1518,7 +1515,6 @@ components:
 	})
 
 	t.Run("preserves auth identity case", func(t *testing.T) {
-		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 		configPath := filepath.Join(tempDir, "atmos.yaml")
 
@@ -1543,6 +1539,7 @@ components:
 		require.NoError(t, err)
 
 		v := viper.New()
+		resetMergedConfigFiles(v)
 		v.SetConfigFile(configPath)
 		err = v.ReadInConfig()
 		require.NoError(t, err)
@@ -1564,7 +1561,6 @@ components:
 	})
 
 	t.Run("merges case mappings from tracked imported files", func(t *testing.T) {
-		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 
 		// Create first import file with some env vars.
@@ -1587,12 +1583,14 @@ env:
 		err = os.WriteFile(importFile2, []byte(import2Content), 0o644)
 		require.NoError(t, err)
 
-		// Track both files as if they were merged during import processing.
-		trackMergedConfigFile(importFile1)
-		trackMergedConfigFile(importFile2)
-
 		// Viper has no config file set, but we have tracked files.
 		v := viper.New()
+		resetMergedConfigFiles(v)
+
+		// Track both files as if they were merged during import processing.
+		trackMergedConfigFile(v, importFile1)
+		trackMergedConfigFile(v, importFile2)
+
 		atmosConfig := &schema.AtmosConfiguration{}
 
 		preserveCaseSensitiveMaps(v, atmosConfig)
@@ -1608,7 +1606,6 @@ env:
 	})
 
 	t.Run("later imports override earlier imports for overlapping keys", func(t *testing.T) {
-		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 
 		// Create first import file with an env var using one case.
@@ -1629,11 +1626,13 @@ env:
 		err = os.WriteFile(importFile2, []byte(import2Content), 0o644)
 		require.NoError(t, err)
 
-		// Track both files in order.
-		trackMergedConfigFile(importFile1)
-		trackMergedConfigFile(importFile2)
-
 		v := viper.New()
+		resetMergedConfigFiles(v)
+
+		// Track both files in order.
+		trackMergedConfigFile(v, importFile1)
+		trackMergedConfigFile(v, importFile2)
+
 		atmosConfig := &schema.AtmosConfiguration{}
 
 		preserveCaseSensitiveMaps(v, atmosConfig)
@@ -1645,7 +1644,6 @@ env:
 	})
 
 	t.Run("main config file is included when not tracked", func(t *testing.T) {
-		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 		configPath := filepath.Join(tempDir, "atmos.yaml")
 
@@ -1659,6 +1657,7 @@ env:
 		require.NoError(t, err)
 
 		v := viper.New()
+		resetMergedConfigFiles(v)
 		v.SetConfigFile(configPath)
 		err = v.ReadInConfig()
 		require.NoError(t, err)
@@ -1674,7 +1673,6 @@ env:
 	})
 
 	t.Run("skips unreadable files gracefully", func(t *testing.T) {
-		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 
 		// Create a valid import file.
@@ -1686,11 +1684,13 @@ env:
 		err := os.WriteFile(validFile, []byte(validContent), 0o644)
 		require.NoError(t, err)
 
-		// Track a non-existent file and the valid file.
-		trackMergedConfigFile(filepath.Join(tempDir, "nonexistent.yaml"))
-		trackMergedConfigFile(validFile)
-
 		v := viper.New()
+		resetMergedConfigFiles(v)
+
+		// Track a non-existent file and the valid file.
+		trackMergedConfigFile(v, filepath.Join(tempDir, "nonexistent.yaml"))
+		trackMergedConfigFile(v, validFile)
+
 		atmosConfig := &schema.AtmosConfiguration{}
 
 		// Should skip the unreadable file gracefully.
@@ -1703,7 +1703,6 @@ env:
 	})
 
 	t.Run("preserves auth identities from imported files", func(t *testing.T) {
-		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 
 		// Create import file with auth identities.
@@ -1721,9 +1720,10 @@ auth:
 		err := os.WriteFile(importFile, []byte(importContent), 0o644)
 		require.NoError(t, err)
 
-		trackMergedConfigFile(importFile)
-
 		v := viper.New()
+		resetMergedConfigFiles(v)
+		trackMergedConfigFile(v, importFile)
+
 		atmosConfig := &schema.AtmosConfiguration{}
 
 		preserveCaseSensitiveMaps(v, atmosConfig)

@@ -74,6 +74,9 @@ var (
 				Provider:          "kubectl",
 				AutoGenerateFiles: false,
 			},
+			Container: schema.ContainerComponentsConfig{
+				BasePath: "components/container",
+			},
 		},
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "replace",
