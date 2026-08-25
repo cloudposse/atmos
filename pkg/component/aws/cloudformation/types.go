@@ -32,4 +32,6 @@ const (
 	OperationGetTemplate Operation = "get-template"
 	// OperationGetPolicy fetches the deployed stack's policy.
 	OperationGetPolicy Operation = "get-policy"
+	// OperationFmt formats the local template in place (or checks formatting with --check).
+	OperationFmt Operation = "fmt"
 )

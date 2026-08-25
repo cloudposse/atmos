@@ -1665,6 +1665,7 @@ var (
 	ErrAwsCloudFormationComponentArgRequired      = errors.New("requires exactly one component argument unless --all, --affected, --tags, or --labels is set")
 	ErrAwsCloudFormationIdentityResolutionFailed  = errors.New("aws/cloudformation component requested an identity, but the auth manager could not resolve it")
 	ErrAwsCloudFormationAPICallFailed             = errors.New("aws/cloudformation API call failed")
+	ErrAwsCloudFormationFmtNotClean               = errors.New("aws/cloudformation template is not formatted")
 )
 
 // Stack dependency (`depends_on`) resolution errors.

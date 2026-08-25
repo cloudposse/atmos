@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/aws/cloudformation/source"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -83,6 +84,9 @@ func init() {
 	CloudFormationCmd.AddCommand(newChangesetCmd())
 	CloudFormationCmd.AddCommand(newDriftCmd())
 	CloudFormationCmd.AddCommand(newGetCmd())
+	CloudFormationCmd.AddCommand(newOperationCommand("fmt", "fmt", "Format the local template in place (or check formatting with --check)"))
+	CloudFormationCmd.AddCommand(newListCmd())
+	CloudFormationCmd.AddCommand(source.GetSourceCommand())
 }
 
 // newChangesetCmd is the `atmos aws cloudformation changeset` verb group: manual
@@ -235,6 +239,10 @@ func operationSpecificFlagOptions(use, subCommand string) []flags.Option {
 		return []flags.Option{
 			flags.WithBoolFlag("original", "", false, "Fetch the user-submitted template instead of the processed one."),
 		}
+	case "fmt":
+		return []flags.Option{
+			flags.WithBoolFlag("check", "", false, "Report whether the template is formatted without writing changes (non-zero exit if not)."),
+		}
 	default:
 		return nil
 	}
@@ -319,7 +327,7 @@ func runOperation(cmd *cobra.Command, subCommand string, args []string) error {
 
 func getOperationFlags(cmd *cobra.Command) map[string]any {
 	result := make(map[string]any)
-	for _, name := range []string{flagAll, flagAffected, "include-dependents", "clone-target-ref", flagAutoApprove, "disable-termination-protection", "flatten", "uppercase", "fail-on-drift", "original"} {
+	for _, name := range []string{flagAll, flagAffected, "include-dependents", "clone-target-ref", flagAutoApprove, "disable-termination-protection", "flatten", "uppercase", "fail-on-drift", "original", "check"} {
 		if flag := cmd.Flag(name); flag != nil {
 			result[name] = flag.Value.String() == valueTrue
 		}
