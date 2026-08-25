@@ -1,0 +1,86 @@
+---
+title: atmos aws cloudformation apply
+sidebar_label: apply
+sidebar_class_name: command
+id: apply
+description: Create or update a CloudFormation stack via a changeset.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Create or update the CloudFormation stack for a component: create (or reuse)
+  a changeset and execute it. After a successful apply, Atmos applies the
+  component's `stack_policy` (if set) and renders the stack's Outputs — the
+  same view [`output`](/cli/commands/aws/cloudformation/output) renders on
+  demand.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation apply --help" src="/casts/screengrabs/atmos-aws-cloudformation-apply--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation apply <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation apply vpc -s plat-ue2-dev
+```
+
+Skip the interactive confirmation prompt:
+
+```shell
+atmos aws cloudformation apply vpc -s plat-ue2-dev --auto-approve
+```
+
+Apply all or affected components in dependency order:
+
+```shell
+atmos aws cloudformation apply --all -s plat-ue2-dev
+atmos aws cloudformation apply --affected --base origin/main
+```
+
+Apply components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos aws cloudformation apply --all --tags production,tier-1
+atmos aws cloudformation apply --affected --labels cost-center=platform
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--target` <em>(optional)</em></dt>
+  <dd>Provision target to deliver to. Defaults to `provision.default`, otherwise the implicit direct-deploy target.</dd>
+
+  <dt>`--auto-approve` <em>(optional)</em></dt>
+  <dd>Skip the interactive confirmation prompt. Without it, `apply` prompts for confirmation on a TTY before executing the changeset.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Apply all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Apply affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+:::note
+[`atmos aws cloudformation deploy`](/cli/commands/aws/cloudformation/deploy) is an alias for `apply`
+that defaults `--auto-approve` to `true`. Both fire the
+`before.aws/cloudformation.apply`/`after.aws/cloudformation.apply` hook events.
+:::

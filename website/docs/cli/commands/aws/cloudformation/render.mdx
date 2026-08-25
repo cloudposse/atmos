@@ -1,0 +1,72 @@
+---
+title: atmos aws cloudformation render
+sidebar_label: render
+sidebar_class_name: command
+id: render
+description: Render the local CloudFormation template client-side, with no AWS API calls.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Render the component's local template — resolved from `template:` and, when
+  `source:` is set, JIT-provisioned first — without calling any AWS API. `render`
+  does not authenticate, so it works offline and without AWS credentials.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation render --help" src="/casts/screengrabs/atmos-aws-cloudformation-render--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation render <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation render vpc -s plat-ue2-dev
+```
+
+Render all or affected components in dependency order:
+
+```shell
+atmos aws cloudformation render --all -s plat-ue2-dev
+atmos aws cloudformation render --affected --base origin/main
+```
+
+Render components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos aws cloudformation render --all --tags production,tier-1
+atmos aws cloudformation render --affected --labels cost-center=platform
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Render all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Render affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+:::note
+`render` skips authentication and never calls the CloudFormation API. To preview
+the changes an `apply` would actually make against the deployed stack, use
+[`diff`](/cli/commands/aws/cloudformation/diff) (alias [`plan`](/cli/commands/aws/cloudformation/plan)).
+:::

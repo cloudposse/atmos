@@ -1,0 +1,81 @@
+---
+title: CloudFormation Configuration
+sidebar_position: 8
+sidebar_label: aws/cloudformation
+sidebar_class_name: command
+id: aws-cloudformation
+description: Configure native aws/cloudformation component behavior in atmos.yaml.
+---
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
+import Experimental from "@site/src/components/Experimental";
+
+<Intro>
+  Tell Atmos where native `aws/cloudformation` component files live. This
+  project-wide setting keeps stack files focused on what to deploy, while
+  `atmos.yaml` defines where CloudFormation components are found. Stacks are
+  deployed directly through the AWS SDK for Go v2, so no `aws` CLI or
+  `cfn`/`sam`/`Rain` binary is required.
+</Intro>
+
+<Experimental />
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    # Base path to native aws/cloudformation component directories (where local
+    # templates live). Defaults to components/cloudformation.
+    base_path: components/cloudformation
+```
+</File>
+
+The `aws/cloudformation` key must be quoted in YAML because it contains a `/`.
+
+## Configuration Reference
+
+<dl>
+  <dt>`base_path`</dt>
+  <dd>
+    Base directory for native `aws/cloudformation` components. A component's
+    `template:` (and, when set, `stack_policy.file:`) resolve relative to its
+    component directory under this base path. Defaults to
+    <code>components/cloudformation</code>.
+  </dd>
+</dl>
+
+Component-level fields — `template`, `stack_name`, `parameters`, `capabilities`,
+`tags`, `stack_policy`, `role_arn`, `notification_arns`, `disable_rollback`,
+`termination_protection`, `timeout_in_minutes`, `source`, `provision`, `auth`,
+and `dependencies` — are configured per stack, not in `atmos.yaml`. See
+[CloudFormation stack configuration](/stacks/components/aws-cloudformation).
+
+## Region Resolution
+
+CloudFormation API calls need an AWS region. Atmos resolves it in this order,
+most specific wins:
+
+1. `settings.aws_cloudformation.region` on the component
+2. The active identity's region
+3. The AWS SDK's default credential/region chain (`AWS_REGION`, shared config)
+
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      settings:
+        aws_cloudformation:
+          region: us-west-2
+      # ...
+```
+
+There is no per-component account override outside stack sets — the account is
+always the active identity's account.
+
+See the [`atmos aws cloudformation`](/cli/commands/aws/cloudformation)
+command reference and the
+[CloudFormation stack configuration](/stacks/components/aws-cloudformation) for
+component-level fields.

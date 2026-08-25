@@ -95,6 +95,15 @@ commands:
           atmos aws eks update-kubeconfig --help
           atmos aws security --help
           atmos aws security analyze --help
+          atmos aws cloudformation --help
+          atmos aws cloudformation render --help
+          atmos aws cloudformation plan --help
+          atmos aws cloudformation diff --help
+          atmos aws cloudformation apply --help
+          atmos aws cloudformation deploy --help
+          atmos aws cloudformation delete --help
+          atmos aws cloudformation validate --help
+          atmos aws cloudformation output --help
           atmos completion --help
           atmos describe --help
           atmos describe affected --help
@@ -497,6 +506,15 @@ commands:
           atmos aws eks update-kubeconfig --help
           atmos aws security --help
           atmos aws security analyze --help
+          atmos aws cloudformation --help
+          atmos aws cloudformation render --help
+          atmos aws cloudformation plan --help
+          atmos aws cloudformation diff --help
+          atmos aws cloudformation apply --help
+          atmos aws cloudformation deploy --help
+          atmos aws cloudformation delete --help
+          atmos aws cloudformation validate --help
+          atmos aws cloudformation output --help
           atmos completion --help
           atmos describe --help
           atmos describe affected --help

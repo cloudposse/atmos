@@ -1,0 +1,96 @@
+---
+title: atmos aws cloudformation delete
+sidebar_label: delete
+sidebar_class_name: command
+id: delete
+description: Delete a CloudFormation stack.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Delete the CloudFormation stack for a component (`DeleteStack`), then stream
+  stack events until the stack is gone. Termination protection is always
+  respected — Atmos never disables it silently.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation delete --help" src="/casts/screengrabs/atmos-aws-cloudformation-delete--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation delete <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation delete vpc -s plat-ue2-dev
+```
+
+Skip the interactive confirmation prompt:
+
+```shell
+atmos aws cloudformation delete vpc -s plat-ue2-dev --auto-approve
+```
+
+Retry a `DELETE_FAILED` stack, retaining resources that could not be deleted:
+
+```shell
+atmos aws cloudformation delete vpc -s plat-ue2-dev --retain-resources=SecurityGroup,ManualDbSnapshot
+```
+
+Delete a stack protected by `termination_protection: true`:
+
+```shell
+atmos aws cloudformation delete vpc -s plat-ue2-dev --disable-termination-protection
+```
+
+Delete components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos aws cloudformation delete --all --tags production,tier-1
+atmos aws cloudformation delete --affected --labels cost-center=platform
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--auto-approve` <em>(optional)</em></dt>
+  <dd>Skip the interactive confirmation prompt. Without it, `delete` prompts for confirmation on a TTY before deleting the stack.</dd>
+
+  <dt>`--retain-resources` <em>(optional)</em></dt>
+  <dd>Comma-separated logical IDs of resources to retain. Only valid when the stack is in `DELETE_FAILED` status — CloudFormation rejects it otherwise.</dd>
+
+  <dt>`--disable-termination-protection` <em>(optional)</em></dt>
+  <dd>
+    Disable termination protection before deleting. If the component's
+    `termination_protection` is `true`, `delete` fails with an actionable hint
+    instead of silently disabling protection — pass this flag as an explicit
+    escape hatch, or set `termination_protection: false` in the stack
+    configuration and re-apply first.
+  </dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Delete all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Delete affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+:::note
+`delete` fires the `before.aws/cloudformation.delete`/`after.aws/cloudformation.delete` hook events.
+:::
