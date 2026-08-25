@@ -104,6 +104,7 @@ var subCommandOperations = map[string]Operation{
 	"drift-describe":    OperationDriftDescribe,
 	"get-template":      OperationGetTemplate,
 	"get-policy":        OperationGetPolicy,
+	"fmt":               OperationFmt,
 }
 
 // Execute runs the requested subcommand for an aws/cloudformation component.

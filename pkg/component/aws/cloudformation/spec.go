@@ -18,6 +18,7 @@ import (
 type stackSpec struct {
 	StackName             string
 	TemplatePath          string
+	TemplateAbsPath       string
 	TemplateBody          string
 	Parameters            []cfntypes.Parameter
 	Capabilities          []cfntypes.Capability
