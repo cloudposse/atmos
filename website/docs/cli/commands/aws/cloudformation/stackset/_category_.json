@@ -1,0 +1,8 @@
+{
+  "label": "stackset",
+  "className": "command",
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/aws/cloudformation/stackset/stackset"
+  }
+}

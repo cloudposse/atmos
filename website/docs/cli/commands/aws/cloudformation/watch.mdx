@@ -1,0 +1,76 @@
+---
+title: atmos aws cloudformation watch
+sidebar_label: watch
+sidebar_class_name: command
+id: watch
+description: Attach to a stack's in-progress (or already-terminal) operation and stream events.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Attach to a stack's operation and stream its events until the stack reaches
+  a terminal status — whether that operation is currently in progress,
+  already finished, or was started outside Atmos entirely (the AWS Console, a
+  CI pipeline running raw `aws cloudformation`, another teammate's terminal).
+  This is distinct from
+  [`apply`](/cli/commands/aws/cloudformation/apply)/[`deploy`](/cli/commands/aws/cloudformation/deploy)/[`delete`](/cli/commands/aws/cloudformation/delete)'s
+  automatic inline streaming, which only covers the operation that command
+  itself just started.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation watch --help" src="/casts/screengrabs/atmos-aws-cloudformation-watch--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation watch <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation watch vpc -s plat-ue2-dev
+```
+
+Watch all or affected components in dependency order:
+
+```shell
+atmos aws cloudformation watch --all -s plat-ue2-dev
+atmos aws cloudformation watch --affected --base origin/main
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Watch all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Watch affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+## Behavior
+
+If the stack ends in a failed status, `watch` exits non-zero, the same
+failure signal `apply`/`delete` give when the operation they started fails.
+
+:::note
+`watch` does not fire `before`/`after` hook events — only
+[`apply`](/cli/commands/aws/cloudformation/apply),
+[`diff`](/cli/commands/aws/cloudformation/diff), and
+[`delete`](/cli/commands/aws/cloudformation/delete) do.
+:::
