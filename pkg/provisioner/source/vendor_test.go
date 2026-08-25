@@ -400,8 +400,8 @@ func TestVendorSourcePostDownloadReplaceTargetFalseFailsWhenTargetExists(t *test
 }
 
 // TestVendorSourcePostDownloadReplacesExistingFileTarget verifies the post-download
-// path removes an existing target (even a plain file) when replacement is enabled,
-// exercising the `os.RemoveAll(targetDir)` success branch after a real download.
+// path replaces an existing target (even a plain file) when replacement is enabled,
+// exercising the single-file target-replacement branch after a real download.
 func TestVendorSourcePostDownloadReplacesExistingFileTarget(t *testing.T) {
 	srcDir := t.TempDir()
 	srcFile := filepath.Join(srcDir, "main.tf")
@@ -414,12 +414,52 @@ func TestVendorSourcePostDownloadReplacesExistingFileTarget(t *testing.T) {
 	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceURL.String()}, targetDir)
 	require.NoError(t, err)
 
-	// The old file target must be gone; replaced by a directory (go-getter downloads
-	// a single-file source into the temp staging dir, which CopyToTarget then copies
-	// through to targetDir as a directory).
+	// A single-file source (go-getter stages it as the sole entry in the temp
+	// staging dir) is written directly to targetDir as a file, not nested inside
+	// a directory named after targetDir.
 	info, statErr := os.Stat(targetDir)
 	require.NoError(t, statErr)
-	assert.True(t, info.IsDir())
+	assert.False(t, info.IsDir())
+	content, err := os.ReadFile(targetDir)
+	require.NoError(t, err)
+	assert.Equal(t, "# new source\n", string(content))
+}
+
+// TestVendorSourceSupportsSingleFileURI verifies the PRD's single-file source
+// shape (e.g. `source: {uri: https://.../dns.yaml}`): the fetched file is
+// written directly to targetDir as a file, not a directory containing the file.
+func TestVendorSourceSupportsSingleFileURI(t *testing.T) {
+	srcDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "dns.yaml")
+	require.NoError(t, os.WriteFile(srcFile, []byte("Resources: {}\n"), 0o644))
+	sourceURL := url.URL{Scheme: "file", Path: filepath.ToSlash(srcFile)}
+
+	targetDir := filepath.Join(t.TempDir(), "dns.yaml")
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceURL.String()}, targetDir)
+	require.NoError(t, err)
+
+	info, statErr := os.Stat(targetDir)
+	require.NoError(t, statErr)
+	assert.False(t, info.IsDir())
+	content, err := os.ReadFile(targetDir)
+	require.NoError(t, err)
+	assert.Equal(t, "Resources: {}\n", string(content))
+}
+
+// TestVendorSourceSingleFileURIReplaceTargetFalseFailsWhenTargetExists verifies
+// that WithReplaceTarget(false) is honored for the single-file source shape.
+func TestVendorSourceSingleFileURIReplaceTargetFalseFailsWhenTargetExists(t *testing.T) {
+	srcDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "dns.yaml")
+	require.NoError(t, os.WriteFile(srcFile, []byte("Resources: {}\n"), 0o644))
+	sourceURL := url.URL{Scheme: "file", Path: filepath.ToSlash(srcFile)}
+
+	targetDir := filepath.Join(t.TempDir(), "dns.yaml")
+	require.NoError(t, os.WriteFile(targetDir, []byte("existing"), 0o644))
+
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceURL.String()}, targetDir, WithReplaceTarget(false))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
 }
 
 func TestCopyToTargetCreatesParentDirectoryAndWrapsCopyErrors(t *testing.T) {
