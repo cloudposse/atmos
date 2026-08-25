@@ -551,3 +551,14 @@ func propagateAuth(configAndStacksInfo *schema.ConfigAndStacksInfo, authManager 
 		configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
 	}
 }
+
+// PropagateAuth exposes propagateAuth to command-layer callers outside this
+// package (e.g. the SDK-native aws/cloudformation component) that need
+// info.AuthContext populated, not just info.AuthManager, so identity-aware SDK
+// client construction (including Floci emulator endpoint routing) picks up the
+// active identity's resolved AuthContext.
+func PropagateAuth(configAndStacksInfo *schema.ConfigAndStacksInfo, authManager auth.AuthManager) {
+	defer perf.Track(nil, "exec.PropagateAuth")()
+
+	propagateAuth(configAndStacksInfo, authManager)
+}
