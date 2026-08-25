@@ -1,0 +1,556 @@
+---
+title: Migrating from Rain / Raw CloudFormation
+sidebar_position: 4
+sidebar_label: From Rain / CloudFormation
+description: How to migrate from Rain or raw CloudFormation to Atmos
+id: from-rain
+---
+import Experimental from '@site/src/components/Experimental'
+import FAQItem from '@site/src/components/FAQItem'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import TaskList from '@site/src/components/TaskList'
+import Terminal from '@site/src/components/Terminal'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+Rain is no longer actively maintained. If you built a deploy workflow around it — `rain deploy`, `rain watch`, a Makefile calling `rain fmt` in CI — that workflow now has no owner. Your CloudFormation templates are still good. What's gone is the CLI, the artifact-bucket bootstrapping, and the drift/changeset ergonomics Rain gave you on top of the raw AWS CLI. Atmos's native `aws/cloudformation` component type replaces that layer without asking you to rewrite a single resource.
+</Intro>
+
+<Experimental />
+
+## Why This Guide?
+
+AWS archived Rain upstream in 2026. If you're one of its users, you're likely facing one of two situations:
+
+- **You used Rain's CLI** (`deploy`, `diff`, `watch`, `fmt`, `ls`, `bootstrap`) to wrap the raw AWS CLI/API with something more usable, and now that tool has no future.
+- **You used Rain's `!Rain::` template directives** (`Constant`, `Env`, `Include`, `Embed`, `S3`, `Module`) to work around gaps in plain CloudFormation, and your templates won't deploy anywhere without first resolving those directives.
+
+This guide covers both. There is no Rain compatibility layer in Atmos — no `!Rain::` directive
+preprocessing, no Rain config-file support — so if your templates use directives, resolving them
+is the first real step, not an afterthought.
+
+## Crawl, Walk, Run
+
+- **Crawl**: Get a template deploying through Atmos in about 20 minutes (this guide)
+- **Walk**: Directive resolution, artifact-bucket provisioning, and cross-component Outputs
+- **Run**: Advanced features when you need them (StackSets, provision targets, inheritance)
+
+---
+
+## Crawl: Get Running in 20 Minutes
+
+### What You're Going To Do
+
+1. Install Atmos
+2. Resolve any `!Rain::` directives in your template (skip if you're on raw CloudFormation already)
+3. Create a minimal `atmos.yaml`
+4. Create one stack YAML file
+5. Run `atmos aws cloudformation plan`
+
+### Step 1: Install Atmos
+
+<Terminal>
+```bash
+# macOS/Linux (Homebrew)
+brew install atmos
+
+# Go
+go install github.com/cloudposse/atmos@latest
+
+# Or download from GitHub releases
+```
+</Terminal>
+
+See the full [Installation Guide](/install) for all options.
+
+### Step 2: Resolve `!Rain::` Directives (If Any)
+
+If your templates don't use `!Rain::` directives, skip to [Step 3](#step-3-create-minimal-atmosyaml).
+
+Atmos never preprocesses a CloudFormation template — `template:` points at a file that gets read
+and submitted to the CloudFormation API as-is. That means a template still containing `!Rain::*`
+tags is not valid CloudFormation as far as Atmos (or CloudFormation itself) is concerned. Resolve
+each directive to a plain-CloudFormation or Atmos-native equivalent first:
+
+| `!Rain::` directive | What it did | Atmos-native replacement |
+|---|---|---|
+| `Constant` | Injected a named constant's value into the template at preprocess time | A CloudFormation `Parameters:` entry, fed from the component's `parameters:` section in stack config |
+| `Env` | Injected an environment variable's value at preprocess time | Same as `Constant`, with the stack-config value set via [`!env`](/functions/yaml/env) |
+| `Include` | Merged an external JSON/YAML fragment into the template at preprocess time | CloudFormation's own native `Fn::Transform`/`AWS::Include` intrinsic for fragment reuse (a CloudFormation feature, not Rain- or Atmos-specific); AWS CDK for anything more structural |
+| `Embed` | Inlined a local file's contents as a string literal (e.g. Lambda inline code) at preprocess time | Inline the content directly with a YAML block scalar for small scripts; pre-upload larger assets to S3 and reference the URL directly |
+| `S3` | Uploaded a local file/directory to S3 and rewrote the reference at preprocess time | Partial support today — see [S3 Packaging Is Size-Triggered, Not Asset-Aware](#s3-packaging-is-size-triggered-not-asset-aware) below |
+| `Module` | Client-side, multi-file template composition (marked experimental in Rain's own docs) | Not supported — use AWS CDK for real modular template composition |
+
+#### Before/After: `Constant`/`Env` → Parameters
+
+<Tabs>
+  <TabItem value="before" label="Before (Rain)" default>
+    ```yaml
+    # template.yaml (Rain-preprocessed)
+    Resources:
+      Bucket:
+        Type: AWS::S3::Bucket
+        Properties:
+          BucketName: !Rain::Constant BucketNamePrefix-bucket
+          Tags:
+            - Key: Owner
+              Value: !Rain::Env DEPLOY_OWNER
+    ```
+  </TabItem>
+  <TabItem value="after" label="After (Atmos)">
+    ```yaml
+    # template.yaml (plain CloudFormation — no directives)
+    Parameters:
+      BucketNamePrefix:
+        Type: String
+      DeployOwner:
+        Type: String
+    Resources:
+      Bucket:
+        Type: AWS::S3::Bucket
+        Properties:
+          BucketName: !Sub "${BucketNamePrefix}-bucket"
+          Tags:
+            - Key: Owner
+              Value: !Ref DeployOwner
+    ```
+
+    ```yaml
+    # stacks/dev.yaml
+    components:
+      "aws/cloudformation":
+        my-bucket:
+          template: template.yaml
+          parameters:
+            BucketNamePrefix: acme-plat
+            DeployOwner: !env DEPLOY_OWNER
+    ```
+  </TabItem>
+</Tabs>
+
+#### Before/After: `Embed` → Inline Block Scalar
+
+<Tabs>
+  <TabItem value="before" label="Before (Rain)" default>
+    ```yaml
+    Resources:
+      Function:
+        Type: AWS::Lambda::Function
+        Properties:
+          Code:
+            ZipFile: !Rain::Embed handler.py
+    ```
+  </TabItem>
+  <TabItem value="after" label="After (Atmos)">
+    ```yaml
+    Resources:
+      Function:
+        Type: AWS::Lambda::Function
+        Properties:
+          Code:
+            ZipFile: |
+              def handler(event, context):
+                  return {"statusCode": 200}
+    ```
+
+    This is a one-time manual flatten. For anything beyond a few lines, package the function as a
+    real S3-hosted deployment artifact instead of inlining it.
+  </TabItem>
+</Tabs>
+
+### Step 3: Create Minimal atmos.yaml
+
+Point Atmos to where your CloudFormation templates live:
+
+<File title="atmos.yaml">
+```yaml
+base_path: "./"
+
+components:
+  "aws/cloudformation":
+    base_path: "components/cloudformation"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+```
+</File>
+
+:::tip[Customize Your Structure]
+If your templates already live in a directory like `cloudformation/` or `infra/`, point
+`components."aws/cloudformation".base_path` there directly instead of moving files.
+:::
+
+### Step 4: Create Your First Stack
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+name: dev
+
+components:
+  "aws/cloudformation":
+    vpc:
+      template: template.yaml
+      stack_name: acme-plat-dev-vpc
+      parameters:
+        CidrBlock: "10.0.0.0/16"
+      capabilities:
+        - CAPABILITY_IAM
+```
+</File>
+
+If you have an existing Rain/CloudFormation parameters JSON file, pull it in with `!include`
+instead of retyping the values:
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      template: template.yaml
+      stack_name: acme-plat-dev-vpc
+      parameters: !include ../../params/dev-parameters.json
+      capabilities:
+        - CAPABILITY_IAM
+```
+</File>
+
+The [`!include` function](/functions/yaml/include) parses JSON/YAML natively and resolves paths
+relative to the stack file — nothing about the parameters file needs to change.
+
+### Step 5: Run Atmos
+
+<Tabs>
+  <TabItem value="before" label="Before (Rain)" default>
+    ```bash
+    rain deploy template.yaml acme-plat-dev-vpc --params CidrBlock=10.0.0.0/16
+    rain diff template.yaml acme-plat-dev-vpc
+    ```
+  </TabItem>
+  <TabItem value="after" label="After (Atmos)">
+    ```bash
+    atmos aws cloudformation plan vpc -s dev
+    atmos aws cloudformation deploy vpc -s dev
+    ```
+
+    The `cfn` alias works everywhere `cloudformation` does: `atmos aws cfn deploy vpc -s dev`.
+  </TabItem>
+</Tabs>
+
+`deploy` streams per-resource stack events live as they converge — the same "watch it happen"
+experience Rain's own deploy animation gave you — and ends with a rendered summary of the stack's
+Outputs, so you get that view both at deploy time and on demand afterward with
+`atmos aws cloudformation output vpc -s dev`.
+
+**You're now running Atmos.**
+
+---
+
+## What Just Happened?
+
+### Key Differences at a Glance
+
+| Aspect | Rain | Atmos |
+|---|---|---|
+| **Templates** | `.yaml`/`.json`, optionally with `!Rain::*` directives | Same templates, directives resolved to plain CloudFormation |
+| **CLI** | `rain deploy/diff/watch/fmt/ls/bootstrap/...` | `atmos aws cloudformation <verb>` (alias `cfn`) — see the [verb cross-reference](#1-rain--atmos-verb-cross-reference) |
+| **Config** | `--params` flags or a parameters JSON file | Stack YAML `parameters:` (or `!include` the same JSON file unchanged) |
+| **Artifact bucket** | Auto-created silently on first use | Explicit `atmos aws cloudformation backend create`, or opt-in `provision.backend.enabled: true` |
+| **Environments** | Separate command invocations per stack name | Stack YAML files, with inheritance and imports |
+| **Cross-stack values** | Manual `aws cloudformation describe-stacks` calls | `atmos aws cloudformation output`, or `!aws.cloudformation.output` for cross-component consumption |
+
+### What Stays The Same
+
+- Your CloudFormation templates work as-is, once any `!Rain::` directives are resolved
+- Your resource definitions, intrinsic functions (`!Ref`, `!GetAtt`, `!Sub`, ...), and capabilities are untouched
+- Your existing parameters JSON file works unchanged via `!include`
+
+### What You Added
+
+- `atmos.yaml` — tells Atmos where your templates live
+- Stack YAML files — one per environment, replacing per-invocation `--params` flags
+
+---
+
+## Walk: Immediate Value
+
+### 1. Rain → Atmos Verb Cross-Reference
+
+| Rain command | Atmos-native equivalent | Notes |
+|---|---|---|
+| `rain deploy` | [`atmos aws cloudformation deploy`](/cli/commands/aws/cloudformation/deploy) | `deploy` = `apply` with `--auto-approve` implied |
+| `rain diff` | [`atmos aws cloudformation diff`](/cli/commands/aws/cloudformation/diff) (or `plan`) | Same operation, two names — both create and render a changeset without executing it |
+| `rain fmt` | [`atmos aws cloudformation fmt`](/cli/commands/aws/cloudformation/fmt) `[--check]` | Native comment-preserving YAML round-trip — there's no `cfn-format` binary to shell out to anymore |
+| `rain cat` | [`atmos aws cloudformation get template`](/cli/commands/aws/cloudformation/get/template) `[--original]` | Fetches the deployed stack's template via `GetTemplate` |
+| `rain ls` | [`atmos aws cloudformation list`](/cli/commands/aws/cloudformation/list) | Account-wide, annotated with whether each stack matches a configured component's `stack_name` |
+| `rain log` | [`atmos aws cloudformation logs`](/cli/commands/aws/cloudformation/logs) `[--chart]` | Combined event log across a stack and its nested stacks |
+| `rain watch` | [`atmos aws cloudformation watch`](/cli/commands/aws/cloudformation/watch) | Attaches to a stack's in-progress or already-terminal operation |
+| `rain tree` | [`atmos aws cloudformation tree`](/cli/commands/aws/cloudformation/tree) | Nested-stack/resource dependency graph |
+| `rain rm` | [`atmos aws cloudformation delete`](/cli/commands/aws/cloudformation/delete) | Respects `termination_protection` — never silently disables it |
+| `rain bootstrap` | [`atmos aws cloudformation backend create`](/cli/commands/aws/cloudformation/backend/create) | Provisions the S3 artifact bucket; `provision.backend.enabled: true` does it automatically instead |
+| `rain build` | Not supported — use [`atmos scaffold`](/cli/commands/scaffold/usage) | Skeleton-template generation is a dev-time concern, not a component-type verb |
+| `rain forecast` | Not supported — use `plan`/`diff` + `validate` | Changeset review plus server-side validation cover the same question |
+| `rain cc` (Cloud Control passthrough) | Not supported | No equivalent planned |
+
+:::note
+This table covers the Rain verbs referenced above. If you relied on a Rain subcommand not listed
+here, check the [full CLI command reference](/cli/commands/aws/cloudformation) —
+`atmos aws cloudformation` also ships verbs with no Rain precedent at all, like `output` and
+`drift detect`/`drift describe`, covered next.
+:::
+
+### 2. Outputs, On Demand
+
+Rain showed you a stack's Outputs at the end of `rain deploy`, but offered no way to get that view
+back afterward without a manual `describe-stacks` call. Atmos renders the same summary both at
+deploy time and on demand:
+
+<Terminal>
+```bash
+atmos aws cloudformation output vpc -s dev
+atmos aws cloudformation output vpc -s dev VpcId
+atmos aws cloudformation output vpc -s dev --format=github
+```
+</Terminal>
+
+Other components — Terraform, Helm, another CloudFormation stack — can consume those Outputs
+directly:
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    eks-vpc-link:
+      parameters:
+        VpcId: !aws.cloudformation.output vpc VpcId
+```
+</File>
+
+See the [`!aws.cloudformation.output` function](/functions/yaml/aws.cloudformation.output) for
+the full cross-component story, including the Terraform↔CloudFormation interop bridge.
+
+### 3. Drift Detection as a First-Class Verb
+
+Rain only implied drift support through its stack-monitoring workflow. Atmos exposes it directly:
+
+<Terminal>
+```bash
+atmos aws cloudformation drift detect vpc -s dev
+atmos aws cloudformation drift describe vpc -s dev
+```
+</Terminal>
+
+### 4. Provisioning the Artifact Bucket
+
+Rain auto-created its artifact bucket silently on first use. Atmos never does this by default —
+provision it explicitly, mirroring `atmos terraform backend create`:
+
+<Terminal>
+```bash
+atmos aws cloudformation backend create vpc -s dev
+```
+</Terminal>
+
+Or opt into the same automatic provisioning Terraform components get:
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      provision:
+        backend:
+          enabled: true
+        targets:
+          artifacts:
+            kind: aws/s3
+            bucket: acme-plat-cfn-artifacts
+```
+</File>
+
+### S3 Packaging Is Size-Triggered, Not Asset-Aware
+
+Be precise with yourself about this one before promising it to a team: `apply`/`deploy`
+automatically uploads the **template body itself** to the component's `kind: aws/s3` provision
+target when it exceeds CloudFormation's 51,200-byte inline limit — the same problem `aws
+cloudformation package`/Rain's `pkg` solve. What it does **not** do yet is rewrite local-asset
+references inside the template (Lambda source zips, nested-stack templates referenced by relative
+path) the way `!Rain::S3`, `aws cloudformation package`, or Rain's `pkg` do. If your templates
+depend on that, pre-upload those assets to S3 out-of-band — a hook, a build step, an existing
+pipeline — and reference the resulting S3 location directly in the template until asset-aware
+packaging ships.
+
+---
+
+## Run: When You're Ready
+
+### [StackSets](/cli/commands/aws/cloudformation/stackset)
+
+Multi-account/multi-region orchestration, once you need it:
+
+<Terminal>
+```bash
+atmos aws cloudformation stackset create vpc -s dev
+atmos aws cloudformation stackset instances vpc -s dev
+```
+</Terminal>
+
+### [Changesets](/cli/commands/aws/cloudformation/changeset), Managed Explicitly
+
+`apply`/`deploy` create and execute a changeset implicitly. For a two-phase pipeline (create and
+review in one job, execute in another), manage changesets directly:
+
+<Terminal>
+```bash
+atmos aws cloudformation changeset create vpc -s dev
+atmos aws cloudformation changeset execute vpc -s dev --changeset-name <name>
+```
+</Terminal>
+
+### Component Inheritance and Catalogs
+
+Reuse configuration across environments the same way Terraform/Helm components do:
+
+<File title="stacks/catalog/vpc-defaults.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    vpc-defaults:
+      metadata:
+        type: abstract
+      capabilities:
+        - CAPABILITY_IAM
+```
+</File>
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc-defaults
+      template: template.yaml
+      parameters:
+        CidrBlock: "10.0.0.0/16"
+```
+</File>
+
+See [Component Inheritance](/howto/inheritance) and the full
+[`aws/cloudformation` stack-configuration reference](/stacks/components/aws-cloudformation) for
+every available section.
+
+---
+
+## Why It's Worth It
+
+### Real Benefits You'll Feel Immediately
+
+- **No orphaned tool** — `aws/cloudformation` is SDK-native and maintained as part of Atmos, not a
+  third-party binary that can be archived out from under you
+- **Same "watch it happen" experience** — live per-resource event streaming during `apply`/`deploy`
+- **Outputs on demand** — the deploy-time summary is also a standing command, not a one-time view
+- **Drift detection as a first-class verb**, not an inferred side effect of monitoring
+- **One orchestration model** — the same `--all`/`--affected`/`depends_on` DAG ordering your
+  Terraform and Helm components already use, now covering CloudFormation stacks too
+
+---
+
+## What Atmos Won't Do
+
+- **Won't preprocess your templates** — every `!Rain::` directive must be resolved to plain
+  CloudFormation or Atmos-native config before a template is accepted
+- **Won't rewrite local asset references automatically** — see
+  [S3 Packaging Is Size-Triggered](#s3-packaging-is-size-triggered-not-asset-aware) above
+- **Won't give you a client-side module system** — use AWS CDK for genuine multi-file template
+  composition
+
+---
+
+## Migration Checklist
+
+<TaskList>
+- [ ] Install Atmos CLI ([Installation Guide](/install))
+- [ ] Resolve any `!Rain::` directives in templates being migrated
+- [ ] Create `atmos.yaml` pointing at your existing template location
+- [ ] Create your first stack YAML (start with dev)
+- [ ] Test with `atmos aws cloudformation plan <component> -s dev`
+- [ ] Deploy with `atmos aws cloudformation deploy <component> -s dev`
+- [ ] Confirm Outputs match what was already deployed (`atmos aws cloudformation output`)
+- [ ] Create remaining stack files (staging, prod)
+- [ ] (Optional) Provision the artifact bucket with `backend create` or `provision.backend.enabled: true`
+- [ ] (Optional) Explore inheritance and catalogs for shared configuration
+- [ ] (Optional) Set up StackSets for multi-account/multi-region delivery
+</TaskList>
+
+---
+
+## Next Steps
+
+**You just did Crawl** — you're running Atmos!
+
+**Walk**: Explore these next:
+- [`!aws.cloudformation.output`](/functions/yaml/aws.cloudformation.output) for cross-component values
+- [Drift Detection](/cli/commands/aws/cloudformation/drift)
+- [Artifact Bucket Provisioning](/cli/commands/aws/cloudformation/backend)
+
+**Run**: When you're ready for advanced features:
+- [StackSets](/cli/commands/aws/cloudformation/stackset)
+- [Component Inheritance](/howto/inheritance)
+- [`aws/cloudformation` Stack Configuration Reference](/stacks/components/aws-cloudformation)
+
+---
+
+## Common Questions
+
+<FAQItem question="Do I need to change my CloudFormation templates?">
+**Only if they use `!Rain::` directives.** Plain CloudFormation templates work as-is. Templates
+with `!Rain::Constant`/`Env`/`Include`/`Embed`/`S3`/`Module` need those directives resolved first —
+see the [directive mapping table](#step-2-resolve-rain-directives-if-any).
+</FAQItem>
+
+<FAQItem question="Can I keep using my parameters JSON file?">
+**Yes.** Use [`!include`](/functions/yaml/include) to pull it directly into the component's
+`parameters:` section:
+
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      parameters: !include dev-parameters.json
+```
+</FAQItem>
+
+<FAQItem question="Is there a Rain CLI compatibility mode?">
+**No.** `atmos aws cloudformation` verbs are Atmos-native. See the
+[Rain → Atmos verb cross-reference](#1-rain--atmos-verb-cross-reference) for the mapping, and
+don't alias `rain` to `atmos aws cfn` — flag names and output differ.
+</FAQItem>
+
+<FAQItem question="Does the artifact bucket get created automatically like Rain's did?">
+**Not by default.** Run `atmos aws cloudformation backend create` explicitly, or set
+`provision.backend.enabled: true` to opt into the same automatic provisioning Terraform components
+get. Atmos never creates cloud resources as a surprise side effect.
+</FAQItem>
+
+<FAQItem question="Is aws/cloudformation stable?">
+It's currently **experimental**. The verb surface and config shape are functional but may still
+change — check the [CLI command reference](/cli/commands/aws/cloudformation) for
+the current state before committing a production pipeline to it.
+</FAQItem>
+
+<FAQItem question="What if I'm not using Rain, just raw CloudFormation?">
+Skip [Step 2](#step-2-resolve-rain-directives-if-any) — you have no directives to resolve. The
+rest of this guide applies unchanged.
+</FAQItem>
+
+<FAQItem question="What if I'm migrating from Terraform instead?">
+See the [Migrating from Native Terraform](/migration/native-terraform) guide.
+</FAQItem>
