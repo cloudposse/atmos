@@ -22,19 +22,10 @@ a FIPS 140-3 claim.
 
 ## Design Goals
 
-1. **On by default, everywhere a binary is built** — dev builds, official release
-   binaries (goreleaser), and CI/test binaries (`atmos test`, sharded acceptance tests)
-   all get `GOFIPS140=latest` so there's one behavior to reason about, not an opt-in
-   variant most users never touch.
-2. **Zero required runtime flags** — `GOFIPS140=latest` at build time makes the
-   compiled binary default to `fips140=on` automatically; a user does not need to set
-   `GODEBUG=fips140=on` themselves.
-3. **Escape hatch preserved** — every build site sets `GOFIPS140` with a
-   `${GOFIPS140:-latest}`-style default (or the YAML/Go equivalent), matching the
-   existing `CGO_ENABLED` pattern, so it can still be overridden if ever needed.
-4. **Honest about scope** — this is stdlib TLS/crypto hardening, not a certified FIPS
-   140-3 compliance claim for the whole binary. The gap below must stay documented, not
-   quietly forgotten.
+1. **On by default, everywhere a binary is built** — dev builds, official release binaries (goreleaser), and CI/test binaries (`atmos test`, sharded acceptance tests) all get `GOFIPS140=latest` so there's one behavior to reason about, not an opt-in variant most users never touch.
+2. **Zero required runtime flags** — `GOFIPS140=latest` at build time makes the compiled binary default to `fips140=on` automatically; a user does not need to set `GODEBUG=fips140=on` themselves.
+3. **Escape hatch preserved** — every build site sets `GOFIPS140` with a `${GOFIPS140:-latest}`-style default (or the YAML/Go equivalent), matching the existing `CGO_ENABLED` pattern, so it can still be overridden if ever needed.
+4. **Honest about scope** — this is stdlib TLS/crypto hardening, not a certified FIPS 140-3 compliance claim for the whole binary. The gap below must stay documented, not quietly forgotten.
 
 ## What's Covered
 
