@@ -18,6 +18,8 @@ base_path: ".."
 components:
   terraform:
     base_path: "components/terraform"
+  container:
+    base_path: "components/container"
 
 stacks:
   base_path: "stacks"
