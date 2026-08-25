@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/project/config"
@@ -340,7 +341,14 @@ func TestProcessFileEntry_DryRunMatrixExpansion(t *testing.T) {
 		assert.True(t, os.IsNotExist(statErr), "dry-run must not write %s", relPath)
 	}
 
-	output := ui.output.String()
+	// Strip ANSI styling before asserting: reportWriteResult renders the
+	// bullet/checkmark and status text through lipgloss styles, whose color
+	// profile (and therefore whether escape codes appear at all) depends on
+	// the environment's detected terminal capabilities -- CI and local runs
+	// can disagree. A literal `path + " " + status` concatenation would only
+	// match when nothing is inserted between them, so strip color first and
+	// assert on the plain text every environment agrees on.
+	output := ansi.Strip(ui.output.String())
 	for _, want := range []string{
 		filepath.ToSlash(filepath.Join("deploy", "dev", "us-east-1.yaml")),
 		filepath.ToSlash(filepath.Join("deploy", "staging", "us-east-1.yaml")),
