@@ -5,10 +5,13 @@ import {
   RiShieldKeyholeLine,
   RiKey2Line,
   RiBox3Line,
+  RiCheckboxCircleLine,
   RiDatabase2Line,
   RiToolsLine,
+  RiLayoutGridLine,
   RiPriceTag3Line,
   RiTerminalBoxLine,
+  RiCloudLine,
   RiGitMergeLine,
   RiRobot2Line,
 } from 'react-icons/ri';
@@ -37,6 +40,13 @@ const BATTERIES = [
     to: '/cli/configuration/vendor',
   },
   {
+    icon: RiCheckboxCircleLine,
+    title: 'Validation',
+    desc: 'Catch misconfigurations before they ship — JSON Schema and OPA policies validate stacks, EditorConfig and actionlint check formatting and CI workflows.',
+    tag: 'JSON SCHEMA · OPA · EDITORCONFIG · ACTIONLINT',
+    to: '/validation/validating',
+  },
+  {
     icon: RiDatabase2Line,
     title: 'Caching & Mirroring',
     desc: 'A native build cache plus a transparent Terraform provider and module registry mirror — warm in CI, instant on your laptop.',
@@ -51,6 +61,13 @@ const BATTERIES = [
     to: '/cli/configuration/toolchain',
   },
   {
+    icon: RiLayoutGridLine,
+    title: 'Scaffolding',
+    desc: 'Generate components, stacks, and entire projects from versioned templates, then re-apply them later with three-way merges when the template changes.',
+    tag: 'INIT · GENERATE · THREE-WAY MERGE',
+    to: '/cli/commands/scaffold/usage',
+  },
+  {
     icon: RiPriceTag3Line,
     title: 'Version Management',
     desc: 'Tracks software versions whether Atmos installs the tool locally or only renders the version into workflows, images, and config files.',
@@ -60,9 +77,16 @@ const BATTERIES = [
   {
     icon: RiTerminalBoxLine,
     title: 'Workflows & Automation',
-    desc: 'Run, automate, and chain anything — 25+ step types and custom commands orchestrate tasks across every component.',
-    tag: '25+ STEP TYPES · CUSTOM COMMANDS',
+    desc: 'Run, automate, and chain anything — 35+ step types and custom commands orchestrate tasks across every component.',
+    tag: '35+ STEP TYPES · CUSTOM COMMANDS',
     to: '/workflows',
+  },
+  {
+    icon: RiCloudLine,
+    title: 'Emulators',
+    desc: 'Run AWS, GCP, Azure, and Kubernetes emulators locally — plan and apply against them with no cloud account and no bill.',
+    tag: 'AWS · GCP · AZURE · K8S',
+    to: '/cli/commands/emulator/usage',
   },
   {
     icon: RiGitMergeLine,
