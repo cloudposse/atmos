@@ -193,11 +193,11 @@ func BenchmarkCheckHelmfileConfig(b *testing.B) {
 	}
 }
 
-func TestPrepareHelmfileAuthEnvironment(t *testing.T) {
+func TestPrepareComponentAuthEnvironment(t *testing.T) {
 	baseEnv := []string{"PATH=/bin"}
 
 	t.Run("nil manager returns original env", func(t *testing.T) {
-		got, err := prepareHelmfileAuthEnvironment(nil, "dev", baseEnv)
+		got, err := prepareComponentAuthEnvironment(nil, "dev", baseEnv)
 		require.NoError(t, err)
 		assert.Equal(t, baseEnv, got)
 	})
@@ -206,7 +206,7 @@ func TestPrepareHelmfileAuthEnvironment(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		manager := mockTypes.NewMockAuthManager(ctrl)
 
-		got, err := prepareHelmfileAuthEnvironment(manager, cfg.IdentityFlagDisabledValue, baseEnv)
+		got, err := prepareComponentAuthEnvironment(manager, cfg.IdentityFlagDisabledValue, baseEnv)
 		require.NoError(t, err)
 		assert.Equal(t, baseEnv, got)
 	})
@@ -219,7 +219,7 @@ func TestPrepareHelmfileAuthEnvironment(t *testing.T) {
 			PrepareShellEnvironment(gomock.Any(), "dev", baseEnv).
 			Return(prepared, nil)
 
-		got, err := prepareHelmfileAuthEnvironment(manager, "dev", baseEnv)
+		got, err := prepareComponentAuthEnvironment(manager, "dev", baseEnv)
 		require.NoError(t, err)
 		assert.Equal(t, prepared, got)
 	})
@@ -233,7 +233,7 @@ func TestPrepareHelmfileAuthEnvironment(t *testing.T) {
 			PrepareShellEnvironment(gomock.Any(), "default", baseEnv).
 			Return(prepared, nil)
 
-		got, err := prepareHelmfileAuthEnvironment(manager, "", baseEnv)
+		got, err := prepareComponentAuthEnvironment(manager, "", baseEnv)
 		require.NoError(t, err)
 		assert.Equal(t, prepared, got)
 	})
@@ -243,7 +243,7 @@ func TestPrepareHelmfileAuthEnvironment(t *testing.T) {
 		manager := mockTypes.NewMockAuthManager(ctrl)
 		manager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
 
-		got, err := prepareHelmfileAuthEnvironment(manager, "", baseEnv)
+		got, err := prepareComponentAuthEnvironment(manager, "", baseEnv)
 		require.NoError(t, err)
 		assert.Equal(t, baseEnv, got)
 	})
@@ -253,7 +253,7 @@ func TestPrepareHelmfileAuthEnvironment(t *testing.T) {
 		manager := mockTypes.NewMockAuthManager(ctrl)
 		manager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
 
-		got, err := prepareHelmfileAuthEnvironment(manager, cfg.IdentityFlagSelectValue, baseEnv)
+		got, err := prepareComponentAuthEnvironment(manager, cfg.IdentityFlagSelectValue, baseEnv)
 		require.Error(t, err)
 		assert.Nil(t, got)
 		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
@@ -267,7 +267,7 @@ func TestPrepareHelmfileAuthEnvironment(t *testing.T) {
 			PrepareShellEnvironment(gomock.Any(), "dev", baseEnv).
 			Return(nil, prepareErr)
 
-		got, err := prepareHelmfileAuthEnvironment(manager, "dev", baseEnv)
+		got, err := prepareComponentAuthEnvironment(manager, "dev", baseEnv)
 		require.Error(t, err)
 		assert.Nil(t, got)
 		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
