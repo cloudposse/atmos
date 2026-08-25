@@ -81,26 +81,40 @@ func (p *ComponentProvider) ValidateComponent(config map[string]any) error {
 	return validateComponentConfig(config)
 }
 
+// subCommandOperations maps every CLI subcommand string (including aliases) to
+// the Operation it dispatches. A map keeps Execute a flat lookup instead of a
+// long switch, and gives each subcommand's Operation a single source of truth
+// shared with the CLI layer.
+var subCommandOperations = map[string]Operation{
+	"render":            OperationRender,
+	"diff":              OperationDiff,
+	"plan":              OperationDiff,
+	"apply":             OperationApply,
+	"deploy":            OperationApply,
+	"delete":            OperationDelete,
+	"destroy":           OperationDelete,
+	"validate":          OperationValidate,
+	"output":            OperationOutput,
+	"outputs":           OperationOutput,
+	"changeset-create":  OperationChangesetCreate,
+	"changeset-execute": OperationChangesetExecute,
+	"changeset-list":    OperationChangesetList,
+	"changeset-delete":  OperationChangesetDelete,
+	"drift-detect":      OperationDriftDetect,
+	"drift-describe":    OperationDriftDescribe,
+	"get-template":      OperationGetTemplate,
+	"get-policy":        OperationGetPolicy,
+}
+
 // Execute runs the requested subcommand for an aws/cloudformation component.
 func (p *ComponentProvider) Execute(ctx *component.ExecutionContext) error {
 	defer perf.Track(ctx.AtmosConfig, "cloudformation.Execute")()
 
-	switch ctx.SubCommand {
-	case "render":
-		return executeOperation(ctx, OperationRender)
-	case "diff", "plan":
-		return executeOperation(ctx, OperationDiff)
-	case "apply", "deploy":
-		return executeOperation(ctx, OperationApply)
-	case "delete", "destroy":
-		return executeOperation(ctx, OperationDelete)
-	case "validate":
-		return executeOperation(ctx, OperationValidate)
-	case "output", "outputs":
-		return executeOperation(ctx, OperationOutput)
-	default:
+	operation, ok := subCommandOperations[ctx.SubCommand]
+	if !ok {
 		return fmt.Errorf("%w: %q", errUtils.ErrInvalidSpecificAwsCloudFormationComponent, ctx.SubCommand)
 	}
+	return executeOperation(ctx, operation)
 }
 
 // GenerateArtifacts is a no-op for aws/cloudformation components (the template
@@ -113,5 +127,9 @@ func (p *ComponentProvider) GenerateArtifacts(_ *component.ExecutionContext) err
 // GetAvailableCommands returns the subcommands aws/cloudformation components support.
 func (p *ComponentProvider) GetAvailableCommands() []string {
 	defer perf.Track(nil, "cloudformation.GetAvailableCommands")()
-	return []string{"render", "diff", "plan", "apply", "deploy", "delete", "validate", "output"}
+	return []string{
+		"render", "diff", "plan", "apply", "deploy", "delete", "validate", "output",
+		"changeset-create", "changeset-execute", "changeset-list", "changeset-delete",
+		"drift-detect", "drift-describe", "get-template", "get-policy",
+	}
 }

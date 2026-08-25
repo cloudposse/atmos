@@ -1621,6 +1621,7 @@ var (
 	ErrInvalidComponentsAwsCloudFormation         = errors.New("invalid 'components.aws/cloudformation' section")
 	ErrInvalidSpecificAwsCloudFormationComponent  = errors.New("invalid aws/cloudformation component configuration")
 	ErrAwsCloudFormationChangeSetFailed           = errors.New("aws/cloudformation changeset failed")
+	ErrAwsCloudFormationChangeSetNotFound         = errors.New("aws/cloudformation changeset not found")
 	ErrAwsCloudFormationDriftDetected             = errors.New("aws/cloudformation stack has drifted")
 	ErrAwsCloudFormationFlagsMutuallyExclusive    = errors.New("--all and --affected are mutually exclusive")
 	ErrAwsCloudFormationComponentArgWithSelection = errors.New("component argument cannot be used with --all, --affected, --tags, or --labels")

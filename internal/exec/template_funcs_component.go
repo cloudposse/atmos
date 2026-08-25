@@ -139,6 +139,18 @@ func componentFunc(
 		}
 
 		sections = lo.Assign(sections, outputs)
+	} else if componentType == cfg.CloudFormationComponentType {
+		var cfnAuthContext *schema.AuthContext
+		if resolvedAuthMgr != nil {
+			if si := resolvedAuthMgr.GetStackInfo(); si != nil {
+				cfnAuthContext = si.AuthContext
+			}
+		}
+		cfnOutputs, err := cloudFormationOutputsForSections(atmosConfig, component, sections, cfnAuthContext)
+		if err != nil {
+			return nil, fmt.Errorf("atmos.Component(%s, %s) failed to get aws/cloudformation outputs: %w", component, stack, err)
+		}
+		sections = lo.Assign(sections, map[string]any{cfg.OutputsSectionName: cfnOutputs})
 	}
 
 	// Cache the result
