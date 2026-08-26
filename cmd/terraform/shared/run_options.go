@@ -112,7 +112,7 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		UI:                      v.GetBool("ui"),
 	}
 
-	labels, err := tags.ParseLabelsFlag(v.GetString("labels"))
+	labels, err := tags.ParseLabelsFlag(v.GetStringSlice("labels"))
 	if err != nil {
 		return nil, err
 	}

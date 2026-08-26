@@ -43,11 +43,11 @@ var vendorCleanCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		labelsCsv, err := cmd.Flags().GetString("labels")
+		labelsSlice, err := cmd.Flags().GetStringSlice("labels")
 		if err != nil {
 			return err
 		}
-		labels, err := pkgtags.ParseLabelsFlag(labelsCsv)
+		labels, err := pkgtags.ParseLabelsFlag(labelsSlice)
 		if err != nil {
 			return err
 		}
@@ -120,7 +120,7 @@ func init() {
 		flags.WithStringFlag("file", "", "", "Vendor manifest file (default: ./vendor.yaml)"),
 		flags.WithStringFlag("tags", "", "", "Clean only components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
 		flags.WithStringFlag("stack", "s", "", "Clean only components belonging to the specified stack"),
-		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
+		flags.WithStringSliceFlag("labels", "", nil, vendorLabelsFlagHelp),
 		flags.WithBoolFlag("force", "", false, "Delete modified lock-owned files"),
 		flags.WithBoolFlag("dry-run", "", false, "Show files that would be removed"),
 	)

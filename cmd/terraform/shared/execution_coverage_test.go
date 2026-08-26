@@ -150,8 +150,9 @@ func TestParseAndApplyRunOptions(t *testing.T) {
 
 func TestParseRunOptions_InvalidLabelsFlagReturnsError(t *testing.T) {
 	v := viper.New()
-	// tags.ParseLabelsFlag expects comma-separated key=value pairs; a bare
-	// key with no "=" is invalid.
+	// tags.ParseLabelsFlag expects a slice of key=value pairs (as pflag's StringSlice
+	// flag type hands it, comma-split within an occurrence); a bare key with no "=" is
+	// invalid regardless of how many elements the slice ends up with.
 	v.Set("labels", "not-a-valid-label")
 
 	opts, err := ParseRunOptions(v)

@@ -43,10 +43,15 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	commandLineLabels, err := flags.GetString("labels")
+	commandLineLabelsSlice, err := flags.GetStringSlice("labels")
 	if err != nil {
 		return err
 	}
+	// commandLineLabels stays a single comma-joined string here because it's only ever
+	// forwarded verbatim as one `--labels=...` occurrence to nested workflow/atmos
+	// invocations (see workflowCommandFilters below), never parsed into a map in this
+	// file -- the downstream --labels flag (also a StringSlice) comma-splits it again.
+	commandLineLabels := strings.Join(commandLineLabelsSlice, ",")
 	processStacks := commandLineStack != ""
 
 	// InitCliConfig finds and merges CLI configurations in the following order:

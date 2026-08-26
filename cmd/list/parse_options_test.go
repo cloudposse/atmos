@@ -134,7 +134,7 @@ func TestParseMetadataOptions(t *testing.T) {
 		opts := parseMetadataOptions(cmd, v)
 
 		assert.Equal(t, []string{"network"}, opts.Tags)
-		assert.Equal(t, "team:platform", opts.LabelsRaw)
+		assert.Equal(t, []string{"team:platform"}, opts.LabelsRaw)
 	})
 }
 
@@ -195,7 +195,7 @@ func TestParseSourcesOptions(t *testing.T) {
 		opts := parseSourcesOptions(cmd, v, nil)
 
 		assert.Equal(t, []string{"network"}, opts.Tags)
-		assert.Equal(t, "team:platform", opts.LabelsRaw)
+		assert.Equal(t, []string{"team:platform"}, opts.LabelsRaw)
 	})
 }
 
@@ -262,7 +262,7 @@ func TestParseDependenciesOptions(t *testing.T) {
 		opts := parseDependenciesOptions(cmd, v, nil)
 
 		assert.Equal(t, []string{"network", "tier-1"}, opts.Tags)
-		assert.Equal(t, "team:platform", opts.LabelsRaw, "labels stay raw until parsed in the RunE closure")
+		assert.Equal(t, []string{"team:platform"}, opts.LabelsRaw, "labels stay raw until parsed in the RunE closure")
 	})
 }
 
@@ -320,7 +320,7 @@ func TestParseStacksOptions(t *testing.T) {
 		opts := parseStacksOptions(cmd, v)
 
 		assert.Equal(t, []string{"network", "tier-1"}, opts.Tags)
-		assert.Equal(t, "team:platform", opts.LabelsRaw, "labels stay raw until parsed at execution time")
+		assert.Equal(t, []string{"team:platform"}, opts.LabelsRaw, "labels stay raw until parsed at execution time")
 	})
 
 	t.Run("invalid_error_mode_value_rejected", func(t *testing.T) {
