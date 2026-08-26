@@ -149,6 +149,65 @@ func TestConvertToJson(t *testing.T) {
 	}
 }
 
+// TestJSONToMapOfInterfaces covers decoding JSON documents into a map, including the
+// error paths for malformed JSON and non-object top-level values.
+func TestJSONToMapOfInterfaces(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    schema.AtmosSectionMapType
+		wantErr bool
+	}{
+		{
+			name:  "simple object",
+			input: `{"hello": "world"}`,
+			want:  schema.AtmosSectionMapType{"hello": "world"},
+		},
+		{
+			name:  "nested object",
+			input: `{"a": {"b": [1, 2, 3]}, "c": true}`,
+			want: schema.AtmosSectionMapType{
+				"a": map[string]any{"b": []any{float64(1), float64(2), float64(3)}},
+				"c": true,
+			},
+		},
+		{
+			name:  "empty object",
+			input: `{}`,
+			want:  schema.AtmosSectionMapType{},
+		},
+		{
+			name:    "invalid json",
+			input:   "Not JSON",
+			wantErr: true,
+		},
+		{
+			name:    "top-level array is not an object",
+			input:   `["a", "b"]`,
+			wantErr: true,
+		},
+		{
+			name:    "empty string",
+			input:   "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := JSONToMapOfInterfaces(tt.input)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, result)
+		})
+	}
+}
+
 // TestPrintAsJSONSimple tests the fast-path JSON printing without syntax highlighting.
 func TestPrintAsJSONSimple(t *testing.T) {
 	tests := []struct {

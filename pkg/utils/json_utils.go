@@ -149,3 +149,19 @@ func ConvertFromJSON(jsonString string) (any, error) {
 	}
 	return data, nil
 }
+
+// JSONToMapOfInterfaces takes a JSON-encoded string as input and returns a map of string
+// keys to values. Unlike ConvertFromJSON, it always decodes into a map, so it returns an
+// error for JSON documents whose top-level value is not an object.
+//
+// It is part of the public API relied on by external consumers of the Atmos Go library
+// (for example, the `cloudposse/terraform-provider-utils` Terraform provider).
+func JSONToMapOfInterfaces(input string) (schema.AtmosSectionMapType, error) {
+	defer perf.Track(nil, "utils.JSONToMapOfInterfaces")()
+
+	var data schema.AtmosSectionMapType
+	if err := json.Unmarshal([]byte(input), &data); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
