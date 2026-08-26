@@ -16,10 +16,10 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
 	xterm "golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/diagnostics"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
@@ -128,6 +128,26 @@ func WithEnvironment(env []string) ShellCommandOption {
 	}
 }
 
+// resolveMaskingDisabled decides whether output masking should be disabled.
+// The --mask/ATMOS_MASK flag/env override wins when set, otherwise
+// settings.terminal.mask.enabled (from atmos.yaml) applies. The presence
+// check (IsSet) and value read (GetBool) run together under one
+// cfg.GlobalViper().View call so a concurrent LoadConfig Set() between the
+// two can never combine one snapshot's presence result with a different
+// snapshot's value -- masking is security-sensitive, so this decision must
+// never be made from a torn read.
+func resolveMaskingDisabled(atmosConfig *schema.AtmosConfiguration) bool {
+	disableMasking := false
+	cfg.GlobalViper().View(func(v cfg.ViperReader) {
+		if v.IsSet("mask") {
+			disableMasking = !v.GetBool("mask")
+		} else if v.IsSet("settings.terminal.mask.enabled") {
+			disableMasking = !atmosConfig.Settings.Terminal.Mask.Enabled
+		}
+	})
+	return disableMasking
+}
+
 // ExecuteShellCommand prints and executes the provided command with args and flags.
 func ExecuteShellCommand(
 	atmosConfig schema.AtmosConfiguration,
@@ -141,14 +161,8 @@ func ExecuteShellCommand(
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteShellCommand")()
 
-	disableMasking := false
-	if viper.IsSet("mask") {
-		disableMasking = !viper.GetBool("mask")
-	} else if viper.IsSet("settings.terminal.mask.enabled") {
-		disableMasking = !atmosConfig.Settings.Terminal.Mask.Enabled
-	}
 	ioLayer.ApplyMaskingConfig(&ioLayer.Config{
-		DisableMasking: disableMasking,
+		DisableMasking: resolveMaskingDisabled(&atmosConfig),
 		AtmosConfig:    atmosConfig,
 	})
 
@@ -730,7 +744,7 @@ func ExecAuthShellCommand(
 	log.Debug("Setting the ENV vars in the shell")
 
 	// Warn about masking limitations in interactive TTY sessions.
-	maskingEnabled := viper.GetBool("mask")
+	maskingEnabled := cfg.GlobalViper().GetBool("mask")
 	if maskingEnabled {
 		log.Debug("Interactive TTY session - output masking is not available due to TTY limitations")
 	}
