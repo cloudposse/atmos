@@ -31,12 +31,55 @@ func TestValidateComponentConfig(t *testing.T) {
 		},
 		{
 			name:    "missing stack_name",
-			config:  map[string]any{"template": "template.yaml"},
+			config:  map[string]any{"path": "template.yaml"},
 			wantErr: errUtils.ErrMissingAwsCloudFormationStackName,
 		},
 		{
-			name:   "valid",
-			config: map[string]any{"template": "template.yaml", "stack_name": "vpc"},
+			name:   "valid with path",
+			config: map[string]any{"path": "template.yaml", "stack_name": "vpc"},
+		},
+		{
+			name: "valid with inline string template",
+			config: map[string]any{
+				"template":   "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n",
+				"stack_name": "vpc",
+			},
+		},
+		{
+			name: "valid with inline map template",
+			config: map[string]any{
+				"template": map[string]any{
+					"Resources": map[string]any{
+						"Bucket": map[string]any{"Type": "AWS::S3::Bucket"},
+					},
+				},
+				"stack_name": "vpc",
+			},
+		},
+		{
+			name: "template and path both set",
+			config: map[string]any{
+				"template":   "Resources: {}\n",
+				"path":       "template.yaml",
+				"stack_name": "vpc",
+			},
+			wantErr: errUtils.ErrAwsCloudFormationTemplateAndPathMutuallyExclusive,
+		},
+		{
+			name: "inline template invalid yaml",
+			config: map[string]any{
+				"template":   "template.yaml",
+				"stack_name": "vpc",
+			},
+			wantErr: errUtils.ErrInvalidAwsCloudFormationSettings,
+		},
+		{
+			name: "inline template missing Resources",
+			config: map[string]any{
+				"template":   "AWSTemplateFormatVersion: '2010-09-09'\n",
+				"stack_name": "vpc",
+			},
+			wantErr: errUtils.ErrAwsCloudFormationTemplateMissingResources,
 		},
 	}
 
@@ -52,13 +95,20 @@ func TestValidateComponentConfig(t *testing.T) {
 	}
 }
 
+// validateTemplate must print a success confirmation naming the stack — a
+// successful validation otherwise produced zero output, indistinguishable
+// from a hang short of checking the exit code.
 func TestValidateTemplate(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().ValidateTemplate(gomock.Any(), gomock.Any()).Return(&cloudformation.ValidateTemplateOutput{}, nil)
 
-	err := validateTemplate(context.Background(), client, "AWSTemplateFormatVersion: '2010-09-09'")
-	require.NoError(t, err)
+	out := captureStderr(t, func() {
+		err := validateTemplate(context.Background(), client, "vpc", "AWSTemplateFormatVersion: '2010-09-09'")
+		require.NoError(t, err)
+	})
+	assert.Contains(t, out, "vpc")
+	assert.Contains(t, out, "template is valid")
 }
 
 func TestValidateTemplate_Error(t *testing.T) {
@@ -66,7 +116,7 @@ func TestValidateTemplate_Error(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().ValidateTemplate(gomock.Any(), gomock.Any()).Return(nil, errors.New("invalid template"))
 
-	err := validateTemplate(context.Background(), client, "not a template")
+	err := validateTemplate(context.Background(), client, "vpc", "not a template")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidSpecificAwsCloudFormationComponent)
 }

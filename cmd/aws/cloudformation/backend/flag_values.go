@@ -13,6 +13,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// flagAutoApprove is create/update's skip-confirmation flag, matching
+// cmd/aws/cloudformation's own flagAutoApprove naming convention.
+const flagAutoApprove = "auto-approve"
+
 // stackFlagCompletion reuses cmd/terraform/shared's generic stack-name
 // completion (component/stack listing is not terraform-specific despite the
 // package's name — cmd/terraform/backend already reuses it verbatim).

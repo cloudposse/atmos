@@ -96,6 +96,21 @@ func (m *MockProvisioner) EXPECT() *MockProvisionerMockRecorder {
 	return m.recorder
 }
 
+// BackendExists mocks base method.
+func (m *MockProvisioner) BackendExists(ctx context.Context, params *CreateBackendParams) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BackendExists", ctx, params)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BackendExists indicates an expected call of BackendExists.
+func (mr *MockProvisionerMockRecorder) BackendExists(ctx, params any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BackendExists", reflect.TypeOf((*MockProvisioner)(nil).BackendExists), ctx, params)
+}
+
 // CreateBackend mocks base method.
 func (m *MockProvisioner) CreateBackend(ctx context.Context, params *CreateBackendParams) error {
 	m.ctrl.T.Helper()

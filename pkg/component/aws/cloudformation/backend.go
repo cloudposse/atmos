@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -15,6 +17,12 @@ import (
 // registered S3 backend type as `atmos terraform backend` — no new backend
 // type is introduced for CFN's `kind: aws/s3` provision-target vocabulary.
 const backendTypeS3 = "s3"
+
+// backendMapKey is the raw-map key for a componentConfig's/synthetic
+// backend-config map's "backend" section, at both provision.backend (the
+// enabled flag) and top-level backend (bucket/region) — the same shape
+// Terraform's own auto-provision hook reads.
+const backendMapKey = "backend"
 
 // ResolveS3BackendTarget finds the `kind: aws/s3` provision target that `atmos
 // aws cloudformation backend` commands manage: the single declared target, or
@@ -101,14 +109,109 @@ func BuildSyntheticBackendConfig(s3cfg *targetS3Config, componentConfig map[stri
 
 	return map[string]any{
 		"backend_type": backendTypeS3,
-		"backend": map[string]any{
+		backendMapKey: map[string]any{
 			"bucket": s3cfg.Bucket,
 			"region": resolveBackendRegion(s3cfg, componentConfig, authContext),
 		},
 		"provision": map[string]any{
-			"backend": map[string]any{"enabled": true},
+			backendMapKey: map[string]any{"enabled": true},
 		},
+		// state_file_suffix/state_file_label override pkg/provisioner/backend/s3_delete.go's
+		// default ".tfstate"/"Terraform state file(s)" deletion-warning wording, which is
+		// meaningless for a CFN artifact bucket (it holds packaged templates, not Terraform
+		// state). Empty suffix disables the sub-count/mention entirely.
+		"state_file_suffix": "",
+		"state_file_label":  "",
 	}
+}
+
+// isBackendProvisionEnabled reports whether a raw component config declares
+// `provision.backend.enabled: true` — the same top-level, sibling-to-targets
+// shape Terraform's own auto-provision hook reads
+// (pkg/provisioner/backend_hook.go's unexported isBackendProvisionEnabled;
+// duplicated here rather than exported, since it's a two-key raw-map read).
+func isBackendProvisionEnabled(componentConfig map[string]any) bool {
+	provisionSection, ok := componentConfig["provision"].(map[string]any)
+	if !ok {
+		return false
+	}
+	backendSection, ok := provisionSection[backendMapKey].(map[string]any)
+	if !ok {
+		return false
+	}
+	enabled, ok := backendSection["enabled"].(bool)
+	return ok && enabled
+}
+
+// autoProvisionArgs bundles autoProvisionBackendIfEnabled's inputs to stay
+// under this repo's 5-argument function limit. The target S3Target MUST be
+// the same one deliverApply already resolved via resolvePackagingTarget —
+// never re-resolved independently, so auto-provisioning can never target a
+// different bucket than the one apply is about to upload to.
+type autoProvisionArgs struct {
+	AtmosConfig     *schema.AtmosConfiguration
+	S3Target        *targetS3Config
+	ComponentConfig map[string]any
+	AuthContext     *schema.AuthContext
+	Component       string
+	Stack           string
+}
+
+// autoProvisionBackendIfEnabled provisions the aws/s3 packaging target's
+// bucket when the component declares `provision.backend.enabled: true` and
+// the bucket doesn't already exist yet — the auto-provisioning behavior
+// website/docs/migration/from-rain.mdx documents. Mirrors Terraform's own
+// auto-provision hook (pkg/provisioner/backend_hook.go's autoProvisionBackend:
+// existence-check-then-create, never reconciling an already-existing bucket
+// on every single call) rather than calling provisioner.ProvisionWithParams
+// unconditionally, which always reconciles and would cost every apply an AWS
+// round-trip + spinner even once the bucket is already provisioned.
+//
+// Failure modes: enabled flag absent — silent no-op (unchanged behavior for
+// every component not opting in). Existence-check failure — logged and
+// deferred to uploadPackage's own error one step later (matches Terraform
+// hook's own leniency: a transient check failure shouldn't block apply when
+// the real answer will surface momentarily anyway). Creation failure — hard
+// error; apply must not silently continue into uploadPackage against a
+// bucket that may not exist.
+
+func autoProvisionBackendIfEnabled(ctx context.Context, args autoProvisionArgs) error {
+	defer perf.Track(args.AtmosConfig, "cloudformation.autoProvisionBackendIfEnabled")()
+
+	if !isBackendProvisionEnabled(args.ComponentConfig) {
+		return nil
+	}
+
+	synthetic := BuildSyntheticBackendConfig(args.S3Target, args.ComponentConfig, args.AuthContext)
+	backendBlock, _ := synthetic[backendMapKey].(map[string]any)
+
+	exists, err := backend.S3BackendExists(ctx, args.AtmosConfig, backendBlock, args.AuthContext)
+	if err != nil {
+		log.Debug("Backend existence check failed; deferring to template upload", "error", err, "bucket", args.S3Target.Bucket)
+		return nil
+	}
+	if exists {
+		return nil
+	}
+
+	describeFunc := func(string, string) (map[string]any, error) {
+		return synthetic, nil
+	}
+	if err := provisioner.ProvisionWithParams(&provisioner.ProvisionParams{
+		AtmosConfig:       args.AtmosConfig,
+		ProvisionerType:   backendMapKey,
+		Component:         args.Component,
+		Stack:             args.Stack,
+		DescribeComponent: describeFunc,
+		AuthContext:       args.AuthContext,
+	}); err != nil {
+		return errUtils.Build(errUtils.ErrInvalidAwsCloudFormationSettings).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("Failed to auto-provision the %q S3 backend (provision.backend.enabled: true)", args.S3Target.Bucket)).
+			WithHint("Run `atmos aws cloudformation backend create` to see the full error, or set provision.backend.enabled: false and provision it manually.").
+			Err()
+	}
+	return nil
 }
 
 // resolveBackendRegion implements BuildSyntheticBackendConfig's documented
@@ -152,7 +255,7 @@ func DescribeS3BackendTarget(
 	defer perf.Track(atmosConfig, "cloudformation.DescribeS3BackendTarget")()
 
 	synthetic := BuildSyntheticBackendConfig(s3cfg, componentConfig, authContext)
-	backendBlock, _ := synthetic["backend"].(map[string]any)
+	backendBlock, _ := synthetic[backendMapKey].(map[string]any)
 
 	exists, err := backend.S3BackendExists(ctx, atmosConfig, backendBlock, authContext)
 	if err != nil {

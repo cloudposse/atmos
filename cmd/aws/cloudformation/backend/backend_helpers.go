@@ -112,6 +112,10 @@ type Provisioner interface {
 	DeleteBackend(ctx context.Context, params *DeleteBackendParams) error
 	DescribeBackend(ctx context.Context, params *DescribeBackendParams) error
 	ListBackends(ctx context.Context, params *ListBackendsParams) error
+	// BackendExists reports whether the target bucket already exists — used by
+	// create/update to decide whether a confirmation prompt is needed before
+	// reconciling (and overwriting) an existing bucket's defaults.
+	BackendExists(ctx context.Context, params *CreateBackendParams) (bool, error)
 }
 
 // defaultProvisioner implements Provisioner using production code: the
@@ -142,6 +146,20 @@ func (d *defaultProvisioner) CreateBackend(_ context.Context, params *CreateBack
 		DescribeComponent: describeFunc,
 		AuthContext:       params.AuthContext,
 	})
+}
+
+func (d *defaultProvisioner) BackendExists(ctx context.Context, params *CreateBackendParams) (bool, error) {
+	provisionSection, _ := params.ComponentConfig[cfg.ProvisionSectionName].(map[string]any)
+	s3cfg, err := pkgcfn.ResolveS3BackendTarget(provisionSection, params.Target)
+	if err != nil {
+		return false, err
+	}
+
+	status, err := pkgcfn.DescribeS3BackendTarget(ctx, params.AtmosConfig, s3cfg, params.ComponentConfig, params.AuthContext)
+	if err != nil {
+		return false, err
+	}
+	return status.Exists, nil
 }
 
 func (d *defaultProvisioner) DeleteBackend(_ context.Context, params *DeleteBackendParams) error {

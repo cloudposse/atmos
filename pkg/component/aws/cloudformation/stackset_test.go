@@ -159,7 +159,7 @@ func TestRunStackSetCreate_CreateStackSetError(t *testing.T) {
 	ssCfg := &stackSetConfig{Name: "mine", PermissionModel: defaultPermissionModel}
 	_, err := runStackSetCreate(context.Background(), client, spec, ssCfg, map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // runStackSetCreate must stop after CreateStackSet (never call
@@ -239,7 +239,7 @@ func TestRunStackSetInstancesCreate_APIError(t *testing.T) {
 	ssCfg := &stackSetConfig{Accounts: []string{"111111111111"}, Regions: []string{"us-east-1"}}
 	_, err := runStackSetInstancesCreate(context.Background(), client, "mine", ssCfg, map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // runStackSetInstancesCreate's happy path: creates instances then polls to
@@ -283,7 +283,7 @@ func TestRunStackSetInstancesCreate_OperationPollFails(t *testing.T) {
 	ssCfg := &stackSetConfig{Accounts: []string{"111111111111"}, Regions: []string{"us-east-1"}}
 	_, err := runStackSetInstancesCreate(context.Background(), client, "mine", ssCfg, map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 }
 
 // runStackSetUpdate must wrap an UpdateStackSet API error.
@@ -296,7 +296,7 @@ func TestRunStackSetUpdate_APIError(t *testing.T) {
 	ssCfg := &stackSetConfig{PermissionModel: defaultPermissionModel}
 	_, err := runStackSetUpdate(context.Background(), client, spec, ssCfg, map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // runStackSetUpdate's happy path: updates then polls to SUCCEEDED.
@@ -323,7 +323,7 @@ func TestRunStackSetUpdate_Success(t *testing.T) {
 }
 
 // runStackSetUpdate must return an error wrapping
-// ErrAwsCloudFormationStackSetFailed when the operation polls to FAILED.
+// ErrAwsCloudFormationOperationFailed when the operation polls to FAILED.
 func TestRunStackSetUpdate_OperationFails(t *testing.T) {
 	shrinkStackSetTiming(t, time.Millisecond, time.Minute)
 
@@ -340,7 +340,7 @@ func TestRunStackSetUpdate_OperationFails(t *testing.T) {
 	ssCfg := &stackSetConfig{PermissionModel: defaultPermissionModel}
 	_, err := runStackSetUpdate(context.Background(), client, spec, ssCfg, map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 }
 
 // runStackSetDelete must skip DeleteStackInstances entirely (going straight
@@ -405,7 +405,7 @@ func TestRunStackSetDelete_DeleteInstancesError(t *testing.T) {
 
 	_, err := runStackSetDelete(context.Background(), client, "mine", map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // runStackSetDelete must wrap a DeleteStackSet API error.
@@ -417,7 +417,7 @@ func TestRunStackSetDelete_DeleteStackSetError(t *testing.T) {
 
 	_, err := runStackSetDelete(context.Background(), client, "mine", map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // runStackSetDelete must propagate a listStackSetInstances (ListStackInstances)
@@ -431,7 +431,7 @@ func TestRunStackSetDelete_ListInstancesError(t *testing.T) {
 
 	_, err := runStackSetDelete(context.Background(), client, "mine", map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // runStackSetDelete must propagate a pollStackSetOperation failure (the
@@ -457,7 +457,7 @@ func TestRunStackSetDelete_OperationPollFails(t *testing.T) {
 
 	_, err := runStackSetDelete(context.Background(), client, "mine", map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 }
 
 // runStackSetInstances must propagate a listStackSetInstances failure.
@@ -468,7 +468,7 @@ func TestRunStackSetInstances_ListError(t *testing.T) {
 
 	_, err := runStackSetInstances(context.Background(), client, "mine", map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // runStackSetInstances must render a "no stack instances" line when the
@@ -571,7 +571,7 @@ func TestListStackSetInstances_Error(t *testing.T) {
 
 	_, err := listStackSetInstances(context.Background(), client, "mine")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // instanceAccountsRegions/mapKeys must dedup accounts/regions shared across
@@ -618,7 +618,7 @@ func TestPollStackSetOperation_Failed(t *testing.T) {
 
 	_, err := pollStackSetOperation(context.Background(), client, "mine", "op-1")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 }
 
 // pollStackSetOperation must return a wrapped error on STOPPED.
@@ -631,7 +631,7 @@ func TestPollStackSetOperation_Stopped(t *testing.T) {
 
 	_, err := pollStackSetOperation(context.Background(), client, "mine", "op-1")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 }
 
 // pollStackSetOperation must keep polling (not return) while RUNNING, then
@@ -687,7 +687,7 @@ func TestPollStackSetOperation_Timeout(t *testing.T) {
 
 	_, err := pollStackSetOperation(context.Background(), client, "mine", "op-1")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 	assert.Contains(t, err.Error(), "timed out")
 }
 
@@ -699,7 +699,7 @@ func TestPollStackSetOperation_APIError(t *testing.T) {
 
 	_, err := pollStackSetOperation(context.Background(), client, "mine", "op-1")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // pollStackSetOperation must error (not nil-pointer-dereference) when
@@ -711,7 +711,7 @@ func TestPollStackSetOperation_NilOperation(t *testing.T) {
 
 	_, err := pollStackSetOperation(context.Background(), client, "mine", "op-1")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // nilIfEmpty must return nil for an empty string and a pointer to the value

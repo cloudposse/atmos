@@ -69,8 +69,8 @@ See the full [Installation Guide](/install) for all options.
 
 If your templates don't use `!Rain::` directives, skip to [Step 3](#step-3-create-minimal-atmosyaml).
 
-Atmos never preprocesses a CloudFormation template — `template:` points at a file that gets read
-and submitted to the CloudFormation API as-is. That means a template still containing `!Rain::*`
+Atmos never preprocesses a file-based CloudFormation template — `path:` points at a file that gets
+read and submitted to the CloudFormation API as-is. That means a template still containing `!Rain::*`
 tags is not valid CloudFormation as far as Atmos (or CloudFormation itself) is concerned. Resolve
 each directive to a plain-CloudFormation or Atmos-native equivalent first:
 
@@ -122,7 +122,7 @@ each directive to a plain-CloudFormation or Atmos-native equivalent first:
     components:
       "aws/cloudformation":
         my-bucket:
-          template: template.yaml
+          path: template.yaml
           parameters:
             BucketNamePrefix: acme-plat
             DeployOwner: !env DEPLOY_OWNER
@@ -195,7 +195,7 @@ name: dev
 components:
   "aws/cloudformation":
     vpc:
-      template: template.yaml
+      path: template.yaml
       stack_name: acme-plat-dev-vpc
       parameters:
         CidrBlock: "10.0.0.0/16"
@@ -212,7 +212,7 @@ instead of retyping the values:
 components:
   "aws/cloudformation":
     vpc:
-      template: template.yaml
+      path: template.yaml
       stack_name: acme-plat-dev-vpc
       parameters: !include ../../params/dev-parameters.json
       capabilities:
@@ -437,7 +437,7 @@ components:
         component: vpc
         inherits:
           - vpc-defaults
-      template: template.yaml
+      path: template.yaml
       parameters:
         CidrBlock: "10.0.0.0/16"
 ```

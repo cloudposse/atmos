@@ -351,8 +351,11 @@ func TestRunLogs_MergesAndSortsAcrossStacks(t *testing.T) {
 		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 	}, nil)
 
-	out := captureStderr(t, func() {
-		summary, err := runLogs(context.Background(), client, "root", false, map[string]any{})
+	// logs is a data command (docs/io-and-ui-output.md); its non-chart output
+	// must go to stdout, not stderr — captureStdout (not captureStderr) is the
+	// regression guard for that.
+	out := captureStdout(t, func() {
+		summary, err := runLogs(context.Background(), client, "root", logsOptions{}, map[string]any{})
 		require.NoError(t, err)
 		assert.Equal(t, 2, summary["event_count"])
 	})
@@ -398,12 +401,38 @@ func TestRunLogs_ChartMode(t *testing.T) {
 	}, nil)
 
 	out := captureStdout(t, func() {
-		summary, err := runLogs(context.Background(), client, "root", true, map[string]any{})
+		summary, err := runLogs(context.Background(), client, "root", logsOptions{Chart: true}, map[string]any{})
 		require.NoError(t, err)
 		assert.Equal(t, 2, summary["event_count"])
 	})
 	assert.Contains(t, out, "MyBucket")
 	assert.Contains(t, out, "CREATE_IN_PROGRESS -> CREATE_COMPLETE")
+}
+
+// runLogs with follow=true must dispatch to followLogs (the continuous-tail
+// path) after building the stack tree once, rather than the one-shot path.
+func TestRunLogs_Follow_DispatchesToFollowLogs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString("root")}).Return(&cloudformation.ListStackResourcesOutput{}, nil)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("e1"), LogicalResourceId: awsString("RootResource"), ResourceStatus: cfntypes.ResourceStatusCreateComplete},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	out := captureStdout(t, func() {
+		summary, err := runLogs(ctx, client, "root", logsOptions{Follow: true}, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, 1, summary["event_count"])
+	})
+	assert.Contains(t, out, "RootResource")
 }
 
 // runLogs must propagate a buildStackTree failure.
@@ -412,7 +441,7 @@ func TestRunLogs_BuildTreeError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
 
-	_, err := runLogs(context.Background(), client, "root", false, map[string]any{})
+	_, err := runLogs(context.Background(), client, "root", logsOptions{}, map[string]any{})
 	require.Error(t, err)
 }
 
@@ -423,7 +452,7 @@ func TestRunLogs_PollStackEventsError(t *testing.T) {
 	client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackResourcesOutput{}, nil)
 	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
 
-	_, err := runLogs(context.Background(), client, "root", false, map[string]any{})
+	_, err := runLogs(context.Background(), client, "root", logsOptions{}, map[string]any{})
 	require.Error(t, err)
 }
 
@@ -472,7 +501,7 @@ func TestRunWatch_FailedStatus(t *testing.T) {
 
 	_, err := runWatch(context.Background(), client, "root", map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 }
 
 // runWatch must propagate a streamStackEvents failure.

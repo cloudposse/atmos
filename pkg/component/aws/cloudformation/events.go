@@ -49,7 +49,7 @@ func streamStackEvents(ctx context.Context, client CloudFormationClient, stackNa
 		}
 
 		if time.Now().After(deadline) {
-			return status, fmt.Errorf("%w: timed out watching stack events", errUtils.ErrAwsCloudFormationChangeSetFailed)
+			return status, fmt.Errorf("%w: timed out watching stack events", errUtils.ErrAwsCloudFormationOperationFailed)
 		}
 		select {
 		case <-ctx.Done():
@@ -113,20 +113,29 @@ func isFailedStackStatus(status cfntypes.StackStatus) bool {
 	return strings.Contains(s, "FAILED") || strings.Contains(s, "ROLLBACK")
 }
 
-// printStackEvent renders one CREATE_IN_PROGRESS -> CREATE_COMPLETE-style transition
-// line on the UI channel (stderr) — see docs/io-and-ui-output.md.
-func printStackEvent(event *cfntypes.StackEvent) {
+// formatStackEventLine renders one CREATE_IN_PROGRESS -> CREATE_COMPLETE-style
+// transition line, plus whether the event represents a failure. Pure formatting,
+// no I/O — callers pick the output channel (see printStackEvent for the UI/stderr
+// channel watch uses, and runLogs for the data/stdout channel logs uses).
+func formatStackEventLine(event *cfntypes.StackEvent) (line string, failed bool) {
 	logicalID := stringValue(event.LogicalResourceId)
 	resourceType := stringValue(event.ResourceType)
 	status := string(event.ResourceStatus)
 	reason := stringValue(event.ResourceStatusReason)
 
-	line := fmt.Sprintf("%s (%s): %s", logicalID, resourceType, status)
+	line = fmt.Sprintf("%s (%s): %s", logicalID, resourceType, status)
 	if reason != "" {
 		line += " — " + reason
 	}
+	return line, strings.Contains(status, "FAILED")
+}
 
-	if strings.Contains(status, "FAILED") {
+// printStackEvent renders one stack event on the UI channel (stderr) — see
+// docs/io-and-ui-output.md. Used by watch, which is live human-facing status,
+// not pipeable data.
+func printStackEvent(event *cfntypes.StackEvent) {
+	line, failed := formatStackEventLine(event)
+	if failed {
 		ui.Error(line)
 		return
 	}

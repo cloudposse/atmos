@@ -65,7 +65,7 @@ func TestComponentProvider_ListComponents_NoComponents(t *testing.T) {
 func TestComponentProvider_ValidateComponent(t *testing.T) {
 	p := &ComponentProvider{}
 	require.Error(t, p.ValidateComponent(map[string]any{}))
-	require.NoError(t, p.ValidateComponent(map[string]any{"template": "t.yaml", "stack_name": "vpc"}))
+	require.NoError(t, p.ValidateComponent(map[string]any{"path": "t.yaml", "stack_name": "vpc"}))
 }
 
 // GetAvailableCommands must stay in sync with subCommandOperations — every

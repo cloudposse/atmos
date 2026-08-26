@@ -82,6 +82,9 @@ func TestDeleteOptionsFromFlags(t *testing.T) {
 	assert.False(t, empty.DisableTerminationProtection)
 }
 
+// runDiff must delete the preview changeset it creates after rendering the
+// diff — unlike changeset create, diff's changeset has no reason to outlive
+// the command, and leaving it would leak an AWS object on every run.
 func TestRunDiff(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
@@ -94,6 +97,7 @@ func TestRunDiff(t *testing.T) {
 			{Type: cfntypes.ChangeTypeResource},
 		},
 	}, nil)
+	client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteChangeSetOutput{}, nil)
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
 	summary, err := runDiff(context.Background(), client, spec, map[string]any{})
@@ -115,6 +119,25 @@ func TestRunDiff_CreateChangeSetError(t *testing.T) {
 	_, err := runDiff(context.Background(), client, spec, map[string]any{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+}
+
+// runDiff must not fail the command when the preview changeset's own cleanup
+// fails — the diff already succeeded and was rendered; a delete failure is
+// surfaced as a warning, not propagated as a command error.
+func TestRunDiff_CleanupFailureIsNonFatal(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+	client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil)
+	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+		Status: cfntypes.ChangeSetStatusCreateComplete,
+	}, nil)
+	client.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
+
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+	_, err := runDiff(context.Background(), client, spec, map[string]any{})
+	require.NoError(t, err)
 }
 
 func TestRunDelete(t *testing.T) {
@@ -144,6 +167,7 @@ func TestRunDelete_FailedStatus(t *testing.T) {
 	spec := &stackSpec{StackName: "vpc"}
 	_, err := runDelete(context.Background(), client, map[string]any{}, spec, map[string]any{})
 	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 }
 
 // expectDescribeStacksWithVpcIDOutput sets up the single DescribeStacks call
@@ -171,20 +195,17 @@ func TestRunOutput(t *testing.T) {
 	assert.Equal(t, map[string]any{"VpcId": "vpc-123"}, summary["outputs"])
 }
 
-// runOutput must propagate a renderOutputsSummary failure (e.g. an
-// unsupported --format) as an error instead of reporting success with no
-// rendered output.
-func TestRunOutput_RenderError(t *testing.T) {
+// runOutput must propagate an invalid --format as a command error instead of
+// swallowing it — a bad format previously exited 0 with empty stdout.
+func TestRunOutput_InvalidFormatPropagatesError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 
-	outputKey := "VpcId"
-	outputVal := "vpc-123"
-	expectDescribeStacksWithVpcIDOutput(client, &outputKey, &outputVal)
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
 
-	_, err := runOutput(context.Background(), client, "vpc", map[string]any{"format": "not-a-real-format"}, map[string]any{})
+	_, err := runOutput(context.Background(), client, "vpc", map[string]any{"format": "bogus"}, map[string]any{})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "format CloudFormation outputs")
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
 }
 
 // renderDiffSummary must report a no-op changeset without listing any
@@ -586,7 +607,8 @@ func TestRenderOutputsSummary_FlattenUppercaseAndFormatError(t *testing.T) {
 
 	err := renderOutputsSummary(map[string]any{"id": "vpc-123"}, map[string]any{"format": "not-a-real-format"})
 	require.Error(t, err, "an unsupported format must be returned as an error, not swallowed")
-	assert.Contains(t, err.Error(), "format CloudFormation outputs")
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "failed to format outputs")
 }
 
 // stubProvisionAndResolveComponentPath overrides the provisionAndResolveComponentPath
@@ -610,7 +632,7 @@ func TestResolveSpecAndTemplate_DeleteSkipsTemplateLoad(t *testing.T) {
 	stubProvisionAndResolveComponentPath(t, "", errors.New("provisioning must not be attempted for delete"))
 
 	info := &schema.ConfigAndStacksInfo{
-		ComponentSection: map[string]any{"stack_name": "vpc", "template": "template.yaml"},
+		ComponentSection: map[string]any{"stack_name": "vpc", "path": "template.yaml"},
 	}
 	spec, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, OperationDelete)
 	require.NoError(t, err)
@@ -647,7 +669,7 @@ func TestResolveSpecAndTemplate_LoadsTemplateAndPolicy(t *testing.T) {
 	info := &schema.ConfigAndStacksInfo{
 		ComponentSection: map[string]any{
 			"stack_name":   "vpc",
-			"template":     "template.yaml",
+			"path":         "template.yaml",
 			"stack_policy": map[string]any{"file": "policy.json"},
 			"parameters":   map[string]any{"DbPassword": "supersecret"},
 		},
@@ -663,7 +685,7 @@ func TestResolveSpecAndTemplate_ProvisionError(t *testing.T) {
 	sentinel := errors.New("clone failed")
 	stubProvisionAndResolveComponentPath(t, "", sentinel)
 
-	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"stack_name": "vpc", "template": "template.yaml"}}
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"stack_name": "vpc", "path": "template.yaml"}}
 	_, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, OperationApply)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, sentinel)
@@ -674,7 +696,7 @@ func TestResolveSpecAndTemplate_ProvisionError(t *testing.T) {
 func TestResolveSpecAndTemplate_BuildSpecError(t *testing.T) {
 	stubProvisionAndResolveComponentPath(t, t.TempDir(), nil)
 
-	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"template": "template.yaml"}}
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"path": "template.yaml"}}
 	_, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, OperationApply)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMissingAwsCloudFormationStackName)
@@ -685,7 +707,7 @@ func TestResolveSpecAndTemplate_BuildSpecError(t *testing.T) {
 func TestResolveSpecAndTemplate_MissingTemplateFile(t *testing.T) {
 	stubProvisionAndResolveComponentPath(t, t.TempDir(), nil)
 
-	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"stack_name": "vpc", "template": "missing.yaml"}}
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"stack_name": "vpc", "path": "missing.yaml"}}
 	_, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, OperationApply)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMissingAwsCloudFormationTemplate)
@@ -700,7 +722,7 @@ func TestResolveSpecAndTemplate_MissingStackPolicyFile(t *testing.T) {
 	info := &schema.ConfigAndStacksInfo{
 		ComponentSection: map[string]any{
 			"stack_name":   "vpc",
-			"template":     "template.yaml",
+			"path":         "template.yaml",
 			"stack_policy": map[string]any{"file": "missing-policy.json"},
 		},
 	}
@@ -814,7 +836,7 @@ func TestExecute_Single_Render_Success(t *testing.T) {
 		},
 		processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 			info.ComponentIsEnabled = true
-			info.ComponentSection = map[string]any{"stack_name": "vpc", "template": "template.yaml"}
+			info.ComponentSection = map[string]any{"stack_name": "vpc", "path": "template.yaml"}
 			return info, nil
 		},
 		setupComponentAuthForCLI: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
@@ -849,7 +871,7 @@ func TestExecute_Single_Fmt_Success(t *testing.T) {
 		},
 		processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 			info.ComponentIsEnabled = true
-			info.ComponentSection = map[string]any{"stack_name": "vpc", "template": "template.yaml"}
+			info.ComponentSection = map[string]any{"stack_name": "vpc", "path": "template.yaml"}
 			return info, nil
 		},
 		setupComponentAuthForCLI: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
@@ -892,7 +914,7 @@ func TestExecuteSingle_Diff_CallsAuthSetup(t *testing.T) {
 	installExecutorSeamStubs(t, executorSeamStubs{
 		processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 			info.ComponentIsEnabled = true
-			info.ComponentSection = map[string]any{"stack_name": "vpc", "template": "template.yaml"}
+			info.ComponentSection = map[string]any{"stack_name": "vpc", "path": "template.yaml"}
 			return info, nil
 		},
 		setupComponentAuthForCLI: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
@@ -965,7 +987,7 @@ func TestExecuteSingle_AuthSetupError(t *testing.T) {
 	installExecutorSeamStubs(t, executorSeamStubs{
 		processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 			info.ComponentIsEnabled = true
-			info.ComponentSection = map[string]any{"stack_name": "vpc", "template": "template.yaml"}
+			info.ComponentSection = map[string]any{"stack_name": "vpc", "path": "template.yaml"}
 			return info, nil
 		},
 		setupComponentAuthForCLI: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
@@ -992,7 +1014,7 @@ func TestExecuteSingle_PropagatesAuthThenResolveSpecError(t *testing.T) {
 	installExecutorSeamStubs(t, executorSeamStubs{
 		processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 			info.ComponentIsEnabled = true
-			info.ComponentSection = map[string]any{"stack_name": "vpc", "template": "template.yaml"}
+			info.ComponentSection = map[string]any{"stack_name": "vpc", "path": "template.yaml"}
 			return info, nil
 		},
 		setupComponentAuthForCLI: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
@@ -1143,6 +1165,7 @@ func TestOperationHandlers_Dispatch(t *testing.T) {
 				m.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
 					Status: cfntypes.ChangeSetStatusCreateComplete,
 				}, nil)
+				m.EXPECT().DeleteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteChangeSetOutput{}, nil)
 			},
 			check: func(t *testing.T, summary map[string]any) {
 				assert.False(t, summary["no_op"].(bool))
