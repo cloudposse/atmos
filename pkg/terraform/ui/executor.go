@@ -19,6 +19,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -127,11 +128,20 @@ type cancellableModel interface {
 // the command would keep running invisibly after control returns to the caller. The second
 // return value reports whether the run was cancelled.
 func runTUIProgram(model tea.Model, cmd *exec.Cmd) (tea.Model, bool, error) {
-	p := tea.NewProgram(
-		model,
+	opts := []tea.ProgramOption{
 		tea.WithOutput(iolib.UI),
 		tea.WithoutSignalHandler(),
-	)
+	}
+	if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings) but there's no real
+		// controlling terminal for bubbletea to read input from: without this, its
+		// default input reader unconditionally opens /dev/tty and fails outright
+		// ("could not open a new TTY: open /dev/tty: device not configured"), even
+		// though this run never needs to read a keypress (e.g. -auto-approve).
+		// Mirrors the same guard in pkg/ui/spinner's tea.NewProgram construction.
+		opts = append(opts, tea.WithInput(nil))
+	}
+	p := tea.NewProgram(model, opts...)
 
 	finalModel, err := runTeaProgram(p)
 	if err != nil {

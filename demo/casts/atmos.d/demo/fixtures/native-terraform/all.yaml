@@ -10,6 +10,9 @@ commands:
         name: casts-fixtures-native-terraform-deploy
         command: atmos casts generate demo fixtures native-terraform deploy
       - type: shell
+        name: casts-fixtures-native-terraform-deploy-ui
+        command: atmos casts generate demo fixtures native-terraform deploy-ui
+      - type: shell
         name: casts-fixtures-native-terraform-output
         command: atmos casts generate demo fixtures native-terraform output
   - name: casts validate demo fixtures native-terraform
@@ -22,6 +25,9 @@ commands:
       - type: shell
         name: casts-fixtures-native-terraform-deploy
         command: atmos casts validate demo fixtures native-terraform deploy
+      - type: shell
+        name: casts-fixtures-native-terraform-deploy-ui
+        command: atmos casts validate demo fixtures native-terraform deploy-ui
       - type: shell
         name: casts-fixtures-native-terraform-output
         command: atmos casts validate demo fixtures native-terraform output

@@ -178,6 +178,20 @@ func TestParser_Next_InvalidJSON(t *testing.T) {
 	assert.True(t, errors.Is(result.Err, errUtils.ErrParseTerraformOutput), "expected ErrParseTerraformOutput sentinel")
 }
 
+// TestParser_Next_LineTooLong verifies a line exceeding maxScanTokenSize surfaces a clear,
+// actionable error (mentioning the buffer limit) instead of the raw bufio.ErrTooLong wrapped
+// generically, so a huge single output line doesn't abort streaming with a confusing message.
+func TestParser_Next_LineTooLong(t *testing.T) {
+	input := strings.Repeat("a", maxScanTokenSize+1) + "\n"
+	parser := NewParser(strings.NewReader(input))
+
+	result, err := parser.Next()
+	require.Nil(t, result)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrParseTerraformOutput), "expected ErrParseTerraformOutput sentinel")
+	assert.Contains(t, err.Error(), "buffer limit")
+}
+
 func TestParser_Next_UnknownType(t *testing.T) {
 	input := `{"@level":"info","@message":"Unknown","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"unknown_type"}` + "\n"
 	parser := NewParser(strings.NewReader(input))

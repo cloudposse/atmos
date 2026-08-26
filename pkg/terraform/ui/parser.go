@@ -3,6 +3,7 @@ package ui
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -10,6 +11,14 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// maxScanTokenSize caps large JSON lines (e.g. sizable resource states/diffs in big plans)
+// well above the default 64KB scanner limit, which trips bufio.ErrTooLong and aborts
+// streaming. The initial buffer starts small; bufio.Scanner grows it toward
+// maxScanTokenSize only as needed, so this doesn't pre-allocate 10MB per parser.
+const maxScanTokenSize = 10 * 1024 * 1024 // 10MB
+
+const initialScanBufSize = 64 * 1024 // 64KB
 
 // Parser reads and parses Terraform JSON streaming output.
 type Parser struct {
@@ -21,12 +30,6 @@ func NewParser(r io.Reader) *Parser {
 	defer perf.Track(nil, "terraform.ui.NewParser")()
 
 	scanner := bufio.NewScanner(r)
-	// Cap large JSON lines (e.g. sizable resource states/diffs in big plans) well above
-	// the default 64KB scanner limit, which trips bufio.ErrTooLong and aborts streaming.
-	// The initial buffer starts small; bufio.Scanner grows it toward maxScanTokenSize
-	// only as needed, so this doesn't pre-allocate 10MB per parser.
-	const maxScanTokenSize = 10 * 1024 * 1024 // 10MB
-	const initialScanBufSize = 64 * 1024      // 64KB
 	buf := make([]byte, initialScanBufSize)
 	scanner.Buffer(buf, maxScanTokenSize)
 	return &Parser{
@@ -50,6 +53,9 @@ func (p *Parser) Next() (*ParseResult, error) {
 	for {
 		if !p.scanner.Scan() {
 			if err := p.scanner.Err(); err != nil {
+				if errors.Is(err, bufio.ErrTooLong) {
+					return nil, fmt.Errorf("%w: a single output line exceeded the %dMB buffer limit", errUtils.ErrParseTerraformOutput, maxScanTokenSize/(1024*1024))
+				}
 				return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 			}
 			return nil, io.EOF
