@@ -61,22 +61,22 @@ Emulator). A typo'd `path:` is instead caught, with a clear file-naming error, b
 required for the feature to work end-to-end — unit tests alone didn't catch these since they
 construct `map[string]any` directly, bypassing real stack processing):
 1. `internal/exec/stack_processor_process_stacks_helpers_extraction.go`'s
-   `cloudFormationComponentSectionKeys` — the allowlist `extractCloudFormationComponentSection` uses
-   to carry native CFN fields through base-component inheritance — was missing the new `path` key,
-   so it was silently dropped from every component's merged config before `ComponentProvider.
-   ValidateComponent`/`Execute` ever saw it. Added `cfg.TemplatePathSectionName`.
+    `cloudFormationComponentSectionKeys` — the allowlist `extractCloudFormationComponentSection` uses
+    to carry native CFN fields through base-component inheritance — was missing the new `path` key,
+    so it was silently dropped from every component's merged config before `ComponentProvider.
+    ValidateComponent`/`Execute` ever saw it. Added `cfg.TemplatePathSectionName`.
 2. `internal/exec/describe_component.go`'s `FilterComputedFields` — the separate allowlist gating
-   `describe component`'s default (`describe.component.filter: schema`) output — was also missing
-   `path`, so `atmos describe component` silently hid it from users even after fix #1. Added
-   `cfg.TemplatePathSectionName` alongside the other CFN-specific keys already there.
+    `describe component`'s default (`describe.component.filter: schema`) output — was also missing
+    `path`, so `atmos describe component` silently hid it from users even after fix #1. Added
+    `cfg.TemplatePathSectionName` alongside the other CFN-specific keys already there.
 
-   Both are the same class of bug this session already found and fixed once for `provision`/`source`/
-   Helm's chart/values/values_files/repositories (see the pre-existing comments in
-   `FilterComputedFields` referencing that prior fix) — a new component-config key needs plumbing in
-   at least these two allowlists (in addition to the JSON schema and typed struct), confirmed via a
-   completely isolated, zero-inheritance repro fixture (a fresh `atmos.yaml`/stack outside this repo)
-   before landing the fix, to rule out anything specific to `examples/cloudformation`'s catalog/local
-   inheritance chain.
+    Both are the same class of bug this session already found and fixed once for `provision`/`source`/
+    Helm's chart/values/values_files/repositories (see the pre-existing comments in
+    `FilterComputedFields` referencing that prior fix) — a new component-config key needs plumbing in
+    at least these two allowlists (in addition to the JSON schema and typed struct), confirmed via a
+    completely isolated, zero-inheritance repro fixture (a fresh `atmos.yaml`/stack outside this repo)
+    before landing the fix, to rule out anything specific to `examples/cloudformation`'s catalog/local
+    inheritance chain.
 
 **Fixtures/docs (breaking-rename update):**
 - `examples/cloudformation/stacks/catalog/demo.yaml`: `demo`/`demo-broken`'s `template:
