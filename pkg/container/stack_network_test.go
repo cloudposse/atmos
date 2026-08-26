@@ -170,3 +170,135 @@ func TestAttachSharedNetwork_SharesNetworkAcrossKinds(t *testing.T) {
 	assert.Equal(t, containerNetworks[0].Name, emulatorNetworks[0].Name)
 	assert.NotEqual(t, containerNetworks[0].Aliases, emulatorNetworks[0].Aliases)
 }
+
+// connectCall records one ConnectNetwork invocation on fakeConnectRuntime.
+type connectCall struct {
+	network     string
+	containerID string
+	aliases     []string
+}
+
+// fakeConnectRuntime extends fakeNetworkRuntime with NetworkConnector, recording
+// ConnectNetwork calls so tests can verify AttachSharedNetwork's
+// join-current-container-when-reuse-fails behavior (see
+// joinCurrentContainerToNetwork) without a real container runtime.
+type fakeConnectRuntime struct {
+	*fakeNetworkRuntime
+	connected  []connectCall
+	connectErr error
+}
+
+func (f *fakeConnectRuntime) ConnectNetwork(_ context.Context, network, containerID string, aliases []string) error {
+	f.connected = append(f.connected, connectCall{network: network, containerID: containerID, aliases: aliases})
+	return f.connectErr
+}
+
+// stubCurrentHostname overrides currentHostname for the duration of a test,
+// restoring the original on cleanup.
+func stubCurrentHostname(t *testing.T, hostname string, err error) {
+	t.Helper()
+	orig := currentHostname
+	currentHostname = func() (string, error) { return hostname, err }
+	t.Cleanup(func() { currentHostname = orig })
+}
+
+// TestAttachSharedNetwork_JoinsCurrentContainerWhenReuseFails proves the fix for
+// the job-container-on-default-bridge case: when Atmos is containerized but its
+// own current network can't be reused (bridge-only here), AttachSharedNetwork
+// must both ensure the dedicated per-stack network for the new container *and*
+// connect Atmos's own current container to that same network -- otherwise the
+// new container is reachable by alias only from other peers on that network,
+// never from Atmos's own (job) container.
+func TestAttachSharedNetwork_JoinsCurrentContainerWhenReuseFails(t *testing.T) {
+	t.Setenv(envUseCurrentContainerNetwork, "true")
+	stubCurrentHostname(t, "job-container-abc", nil)
+
+	base := &fakeNetworkRuntime{inspectInfo: &Info{Networks: []string{"bridge"}}}
+	rt := &fakeConnectRuntime{fakeNetworkRuntime: base}
+
+	var networks []NetworkAttachment
+	AttachSharedNetwork(context.Background(), rt, &networks, "fixtures", "aws")
+
+	assert.Equal(t, []string{"atmos-fixtures"}, rt.ensured)
+	assert.Equal(t, []NetworkAttachment{
+		{Name: "atmos-fixtures", Aliases: []string{"fixtures-aws"}},
+	}, networks)
+	if assert.Len(t, rt.connected, 1) {
+		assert.Equal(t, "atmos-fixtures", rt.connected[0].network)
+		assert.Equal(t, "job-container-abc", rt.connected[0].containerID)
+	}
+}
+
+// TestAttachSharedNetwork_NotContainerized_DoesNotJoinCurrentContainer proves
+// normal host-based (non-containerized) behavior is unchanged: even with a
+// runtime that supports NetworkConnector, the current-container join must not
+// be attempted when Atmos isn't (and hasn't opted into acting as if it were)
+// containerized.
+func TestAttachSharedNetwork_NotContainerized_DoesNotJoinCurrentContainer(t *testing.T) {
+	t.Setenv(envUseCurrentContainerNetwork, "")
+	restore := stubCurrentNetworkDetection(t, false)
+	defer restore()
+
+	rt := &fakeConnectRuntime{fakeNetworkRuntime: &fakeNetworkRuntime{}}
+	var networks []NetworkAttachment
+	AttachSharedNetwork(context.Background(), rt, &networks, "dev", "gitserver")
+
+	assert.Equal(t, []string{"atmos-dev"}, rt.ensured)
+	assert.Empty(t, rt.connected, "current container must not be joined when Atmos isn't containerized")
+}
+
+// TestAttachSharedNetwork_JoinIsNoOpWithoutNetworkConnector proves a runtime
+// that only implements NetworkEnsurer (not NetworkConnector) behaves exactly
+// as before this change: the dedicated network is still created, and no panic
+// or error results from the missing capability.
+func TestAttachSharedNetwork_JoinIsNoOpWithoutNetworkConnector(t *testing.T) {
+	t.Setenv(envUseCurrentContainerNetwork, "true")
+	stubCurrentHostname(t, "job-container-abc", nil)
+
+	rt := &fakeNetworkRuntime{inspectInfo: &Info{Networks: []string{"bridge"}}}
+	var networks []NetworkAttachment
+	assert.NotPanics(t, func() {
+		AttachSharedNetwork(context.Background(), rt, &networks, "dev", "gitserver")
+	})
+	assert.Equal(t, []string{"atmos-dev"}, rt.ensured)
+	assert.Equal(t, []NetworkAttachment{
+		{Name: "atmos-dev", Aliases: []string{"dev-gitserver"}},
+	}, networks)
+}
+
+// TestAttachSharedNetwork_JoinFailureIsBestEffort proves a failed
+// ConnectNetwork call never propagates as an error or blocks the new
+// container's own network attachment -- it only means the current container
+// stays unreachable-by-alias, same as if NetworkConnector weren't implemented.
+func TestAttachSharedNetwork_JoinFailureIsBestEffort(t *testing.T) {
+	t.Setenv(envUseCurrentContainerNetwork, "true")
+	stubCurrentHostname(t, "job-container-abc", nil)
+
+	base := &fakeNetworkRuntime{inspectInfo: &Info{Networks: []string{"bridge"}}}
+	rt := &fakeConnectRuntime{fakeNetworkRuntime: base, connectErr: errors.New("connect failed")}
+
+	var networks []NetworkAttachment
+	assert.NotPanics(t, func() {
+		AttachSharedNetwork(context.Background(), rt, &networks, "dev", "gitserver")
+	})
+	assert.Equal(t, []NetworkAttachment{
+		{Name: "atmos-dev", Aliases: []string{"dev-gitserver"}},
+	}, networks)
+}
+
+// TestAttachSharedNetwork_JoinSkippedWhenHostnameUnknown proves the join is
+// skipped (not attempted with an empty container ID) when the current
+// container's own hostname can't be determined, mirroring
+// CurrentContainerNetwork's own hostname short-circuit.
+func TestAttachSharedNetwork_JoinSkippedWhenHostnameUnknown(t *testing.T) {
+	t.Setenv(envUseCurrentContainerNetwork, "true")
+	stubCurrentHostname(t, "", assert.AnError)
+
+	base := &fakeNetworkRuntime{inspectInfo: &Info{Networks: []string{"bridge"}}}
+	rt := &fakeConnectRuntime{fakeNetworkRuntime: base}
+
+	var networks []NetworkAttachment
+	AttachSharedNetwork(context.Background(), rt, &networks, "dev", "gitserver")
+
+	assert.Empty(t, rt.connected)
+}

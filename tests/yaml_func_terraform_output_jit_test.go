@@ -42,7 +42,7 @@ func TestTerraformOutputJITWorkdir(t *testing.T) {
 	// Use filepath.Abs after t.Chdir so the path is CWD-independent.
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
-	workdirPath := filepath.Join(cwd, ".workdir", "terraform", "test-producer")
+	workdirPath := filepath.Join(cwd, ".workdir", "terraform", "test-producer-486d7adf")
 	_, statErr := os.Stat(workdirPath)
 	require.True(t, os.IsNotExist(statErr), "workdir should not exist before test runs")
 
