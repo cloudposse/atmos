@@ -746,8 +746,8 @@ func TestDetermineTargetDirectory_WorkdirEnabled(t *testing.T) {
 
 	result, err := DetermineTargetDirectory(atmosConfig, "terraform", "vpc", componentConfig)
 	require.NoError(t, err)
-	// Expecting: <tempDir>/.workdir/terraform/dev-vpc/
-	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "dev-vpc")
+	// Expecting: <tempDir>/.workdir/terraform/dev-vpc-bb03116d/.
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "dev-vpc-bb03116d")
 	assert.Equal(t, expected, result)
 }
 
@@ -778,7 +778,7 @@ func TestDetermineTargetDirectory_WorkdirUsesAtmosComponent(t *testing.T) {
 	// Pass the base component name, but expect the workdir to use atmos_component (instance name).
 	result, err := DetermineTargetDirectory(atmosConfig, "terraform", "demo-cluster-codepipeline", componentConfig)
 	require.NoError(t, err)
-	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "demo-dev-demo-hcluster-hcodepipeline-hiac")
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "demo-dev-demo-cluster-codepipeline-iac-9d3a9da4")
 	assert.Equal(t, expected, result)
 }
 
@@ -808,7 +808,7 @@ func TestDetermineTargetDirectory_WorkdirEnabledEmptyBasePath(t *testing.T) {
 	result, err := DetermineTargetDirectory(atmosConfig, "terraform", "vpc", componentConfig)
 	require.NoError(t, err)
 	// workdir.BuildPath(".", ...) resolves relative to "." rather than erroring.
-	expected := filepath.Join(workdir.WorkdirPath, "terraform", "dev-vpc")
+	expected := filepath.Join(workdir.WorkdirPath, "terraform", "dev-vpc-bb03116d")
 	assert.Equal(t, expected, result)
 }
 
