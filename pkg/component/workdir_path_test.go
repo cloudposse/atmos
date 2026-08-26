@@ -323,8 +323,9 @@ func TestBuildAndResolveWorkdirPath_ExistingDir(t *testing.T) {
 	// BuildAndResolveWorkdirPath itself would otherwise call the same BuildPath -- if it
 	// silently produced the wrong segment, setup and assertion would agree with each other
 	// (and each other only) without ever exercising the real encoding contract.
-	// "null-label-exports" injectively encodes to "null-hlabel-hexports" (literal "-" -> "-h").
-	expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-null-hlabel-hexports")
+	// "dev" + "null-label-exports" hashes (sha256, first 8 hex chars) to "83954218" --
+	// verified independently with `printf 'dev\x00null-label-exports' | shasum -a 256`.
+	expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-null-label-exports-83954218")
 	expectedCandidate := filepath.Join(expectedRoot, subpath)
 	require.NoError(t, os.MkdirAll(expectedCandidate, 0o755))
 
@@ -358,11 +359,11 @@ func TestBuildAndResolveWorkdirPath_AllComponentTypes(t *testing.T) {
 			stack := "dev"
 			componentName := "my-component"
 
-			// Independent oracle: "my-component" hand-encodes to "my-hcomponent"
-			// (literal "-" -> "-h"), computed here rather than via
-			// provWorkdir.BuildPath so this still catches a regression in
-			// BuildPath's own encoding.
-			expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, componentType, "dev-my-hcomponent")
+			// "dev" + "my-component" hashes (sha256, first 8 hex chars) to "586812c3" --
+			// verified independently with `printf 'dev\x00my-component' | shasum -a 256`,
+			// computed here rather than via provWorkdir.BuildPath so this still catches a
+			// regression in BuildPath's own encoding.
+			expectedRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, componentType, "dev-my-component-586812c3")
 			require.NoError(t, os.MkdirAll(expectedRoot, 0o755))
 
 			atmosConfig := &schema.AtmosConfiguration{BasePath: basePath}
@@ -402,11 +403,11 @@ func TestBuildAndResolveWorkdirPath_AllComponentTypesWithSubpath(t *testing.T) {
 			// segments so we never feed forward slashes into filepath.Join.
 			subpathYAML := "modules/foo"
 
-			// Independent oracle: "my-component" hand-encodes to "my-hcomponent"
-			// (literal "-" -> "-h"), computed here rather than via
-			// provWorkdir.BuildPath so this still catches a regression in
-			// BuildPath's own encoding.
-			workdirRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, componentType, "dev-my-hcomponent")
+			// "dev" + "my-component" hashes (sha256, first 8 hex chars) to "586812c3" --
+			// verified independently with `printf 'dev\x00my-component' | shasum -a 256`,
+			// computed here rather than via provWorkdir.BuildPath so this still catches a
+			// regression in BuildPath's own encoding.
+			workdirRoot := filepath.Join(basePath, provWorkdir.WorkdirPath, componentType, "dev-my-component-586812c3")
 			expectedCandidate := filepath.Join(workdirRoot, "modules", "foo")
 			require.NoError(t, os.MkdirAll(expectedCandidate, 0o755))
 
@@ -436,11 +437,12 @@ func TestBuildAndResolveWorkdirPath_InheritancePointerFallsBack(t *testing.T) {
 	basePath := t.TempDir()
 	stack := "dev"
 	componentName := "demo-cluster-codepipeline-iac"
-	// Independent oracle: "demo-cluster-codepipeline-iac" hand-encodes to
-	// "demo-hcluster-hcodepipeline-hiac" (literal "-" -> "-h"), computed here
-	// rather than via provWorkdir.BuildPath so this still catches a
-	// regression in BuildPath's own encoding.
-	root := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-demo-hcluster-hcodepipeline-hiac")
+	// "dev" + "demo-cluster-codepipeline-iac" hashes (sha256, first 8 hex chars) to
+	// "a654c9b7" -- verified independently with
+	// `printf 'dev\x00demo-cluster-codepipeline-iac' | shasum -a 256`, computed here
+	// rather than via provWorkdir.BuildPath so this still catches a regression in
+	// BuildPath's own encoding.
+	root := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-demo-cluster-codepipeline-iac-a654c9b7")
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	// Note: no "demo-cluster-codepipeline" subdirectory inside root.
 
@@ -468,11 +470,11 @@ func TestBuildAndResolveWorkdirPath_NonExistentDir(t *testing.T) {
 		BaseComponentPath: "exports",
 		ComponentSection:  map[string]any{},
 	}
-	// Independent oracle: "missing-component" hand-encodes to
-	// "missing-hcomponent" (literal "-" -> "-h"), computed here rather than
-	// via provWorkdir.BuildPath so this still catches a regression in
-	// BuildPath's own encoding.
-	expectedRoot := filepath.Join(atmosConfig.BasePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-missing-hcomponent")
+	// "dev" + "missing-component" hashes (sha256, first 8 hex chars) to "0fc0795a" --
+	// verified independently with `printf 'dev\x00missing-component' | shasum -a 256`,
+	// computed here rather than via provWorkdir.BuildPath so this still catches a
+	// regression in BuildPath's own encoding.
+	expectedRoot := filepath.Join(atmosConfig.BasePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-missing-component-0fc0795a")
 
 	candidate, exists, err := BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
 	require.NoError(t, err)
@@ -490,7 +492,12 @@ func TestBuildAndResolveWorkdirPath_RegularFileAtCandidate(t *testing.T) {
 	componentName := "corrupt"
 	subpath := "exports"
 
-	root := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, stack+"-"+componentName)
+	// root is built via the real BuildPath (not a hand-joined literal) because this test
+	// exercises BuildAndResolveWorkdirPath's stat-handling branch, not BuildPath's own
+	// encoding -- using the real function as the oracle here keeps it correct regardless of
+	// BuildPath's naming formula.
+	root, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, componentName, stack, nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	candidate := filepath.Join(root, subpath)
 	require.NoError(t, os.WriteFile(candidate, []byte("not a directory"), 0o644))
@@ -523,8 +530,11 @@ func TestBuildAndResolveWorkdirPath_StatErrorPropagates(t *testing.T) {
 	subpath := "exports"
 
 	// Create the workdir root, then chmod the parent so the candidate stat
-	// fails with EACCES rather than ENOENT.
-	root := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, stack+"-"+componentName)
+	// fails with EACCES rather than ENOENT. root is built via the real BuildPath (not a
+	// hand-joined literal) because this test exercises BuildAndResolveWorkdirPath's
+	// stat-handling branch, not BuildPath's own encoding.
+	root, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, componentName, stack, nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	require.NoError(t, os.Chmod(root, 0o000))
 	t.Cleanup(func() { _ = os.Chmod(root, 0o755) })
@@ -537,7 +547,7 @@ func TestBuildAndResolveWorkdirPath_StatErrorPropagates(t *testing.T) {
 		ComponentSection:  map[string]any{},
 	}
 
-	_, _, err := BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
+	_, _, err = BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
 		"non-ENOENT stat failures must wrap ErrWorkdirProvision")

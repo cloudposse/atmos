@@ -72,7 +72,7 @@ func TestJITSource_WorkdirWithLocalComponent(t *testing.T) {
 	// Check the workdir path where the component should have been provisioned.
 	// With source + workdir enabled, the workdir should contain files from REMOTE source,
 	// NOT from the local component we created above.
-	workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-hremote-hworkdir")
+	workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-remote-workdir-b01dcf0a")
 
 	// Verify workdir exists.
 	info, err := os.Stat(workdirPath)
@@ -203,7 +203,7 @@ func TestJITSource_WorkdirWithLocalComponent_AllSubcommands(t *testing.T) {
 			_ = cmd.Execute()
 
 			// Check the workdir path where the component should have been provisioned.
-			workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-hremote-hworkdir")
+			workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-remote-workdir-b01dcf0a")
 
 			// Verify workdir exists.
 			info, err := os.Stat(workdirPath)
@@ -255,7 +255,7 @@ func TestJITSource_GenerateVarfile(t *testing.T) {
 	require.NoError(t, err, "generate varfile should work with JIT-sourced components")
 
 	// Verify workdir was provisioned.
-	workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-hremote-hworkdir")
+	workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-remote-workdir-b01dcf0a")
 	info, err := os.Stat(workdirPath)
 	require.NoError(t, err, "Workdir should exist at %s", workdirPath)
 	require.True(t, info.IsDir(), "Workdir path should be a directory")
@@ -289,7 +289,7 @@ func TestJITSource_GenerateBackend(t *testing.T) {
 	}
 
 	// Verify workdir was provisioned by JIT source.
-	workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-hremote-hworkdir")
+	workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-remote-workdir-b01dcf0a")
 	info, statErr := os.Stat(workdirPath)
 	require.NoError(t, statErr, "Workdir should exist at %s (JIT provisioning should have run)", workdirPath)
 	require.True(t, info.IsDir(), "Workdir path should be a directory")
