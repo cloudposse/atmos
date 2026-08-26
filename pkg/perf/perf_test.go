@@ -790,18 +790,13 @@ func TestRecursiveFunctionTracking(t *testing.T) {
 		t.Errorf("expected total >= %v, got %v", expectedMinTime, metric.Total)
 	}
 
-	// Ensure the total time isn't massively inflated by overlapping-span double-counting
-	// (the real risk this check guards against, distinct from the Count check above).
-	// The ceiling scales with the number of underlying sleeps rather than a flat constant:
-	// time.Sleep(100µs) on a loaded Windows CI runner can actually take several
-	// milliseconds per call (observed ~8ms/call in CI, driven by OS timer-tick
-	// granularity, not by this package), so a fixed "2 seconds" ceiling flakes under
-	// contention even with zero counting bug. perCallCeiling is a generous per-sleep
-	// budget that still catches genuine multiplicative inflation (which would blow past
-	// it by orders of magnitude), just not ordinary Windows timer coarseness.
-	perCallCeiling := 30 * time.Millisecond
-	maxReasonableTotal := time.Duration(topLevelCalls*recursionDepth) * perCallCeiling
-	if metric.Total > maxReasonableTotal {
+	// Ensure the total time isn't massively inflated. The real inflation check is the
+	// Count assertion above -- Total already includes the full nested sleep chain even
+	// under the correct pattern, so this is a loose smoke check, not a precise timing
+	// assertion. Windows CI runners have coarse Sleep() granularity and scheduler jitter
+	// that can push 300 sleeps of 100µs well past a tight bound (observed: 2.24s against
+	// a 2s cap), so use a generous cap that still catches genuine multi-second hangs.
+	if metric.Total > 10*time.Second {
 		t.Errorf("total time suspiciously high: %v (may indicate counting issue)", metric.Total)
 	}
 }
@@ -998,10 +993,9 @@ func TestYAMLConfigProcessingRecursion(t *testing.T) {
 	}
 
 	// Ensure total isn't massively inflated. See TestRecursiveFunctionTracking for why
-	// the ceiling scales with the sleep count instead of using a flat constant.
-	perCallCeiling := 30 * time.Millisecond
-	maxReasonableTotal := time.Duration(topLevelCalls*importDepth) * perCallCeiling
-	if metric.Total > maxReasonableTotal {
+	// this is a loose smoke check (the Count assertion above is the real inflation
+	// detector) and why the cap needs generous headroom for Windows CI jitter.
+	if metric.Total > 5*time.Second {
 		t.Errorf("total time suspiciously high: %v", metric.Total)
 	}
 }

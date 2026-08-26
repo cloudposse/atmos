@@ -1271,15 +1271,16 @@ var (
 	ErrSourceMissing         = errors.New("source not configured for component")
 
 	// Workdir provisioner errors.
-	ErrSourceDownload   = errors.New("failed to download component source")
-	ErrSourceCacheRead  = errors.New("failed to read source cache")
-	ErrSourceCacheWrite = errors.New("failed to write source cache")
-	ErrInvalidSource    = errors.New("invalid source configuration")
-	ErrWorkdirCreation  = errors.New("failed to create working directory")
-	ErrWorkdirSync      = errors.New("failed to sync files to working directory")
-	ErrWorkdirMetadata  = errors.New("failed to read/write workdir metadata")
-	ErrWorkdirProvision = errors.New("workdir provisioning failed")
-	ErrWorkdirClean     = errors.New("failed to clean working directory")
+	ErrSourceDownload          = errors.New("failed to download component source")
+	ErrSourceCacheRead         = errors.New("failed to read source cache")
+	ErrSourceCacheWrite        = errors.New("failed to write source cache")
+	ErrInvalidSource           = errors.New("invalid source configuration")
+	ErrWorkdirCreation         = errors.New("failed to create working directory")
+	ErrWorkdirSync             = errors.New("failed to sync files to working directory")
+	ErrWorkdirMetadata         = errors.New("failed to read/write workdir metadata")
+	ErrWorkdirProvision        = errors.New("workdir provisioning failed")
+	ErrWorkdirClean            = errors.New("failed to clean working directory")
+	ErrWorkdirIdentityMismatch = errors.New("legacy workdir belongs to a different component/stack")
 
 	// Integration errors.
 	ErrIntegrationNotFound    = errors.New("integration not found")

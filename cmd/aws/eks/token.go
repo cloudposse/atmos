@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	pkgFlags "github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -35,6 +36,9 @@ var authenticateForTokenFn = authenticateForToken
 
 // getEKSTokenFn generates an EKS bearer token. Overridable in tests.
 var getEKSTokenFn = awsCloud.GetToken
+
+// newAuthManagerFn constructs the AuthManager used to authenticate for a token. Overridable in tests.
+var newAuthManagerFn = auth.NewAuthManager
 
 // tokenCmd generates a short-lived EKS bearer token for kubectl.
 var tokenCmd = &cobra.Command{
@@ -169,9 +173,16 @@ func authenticateForToken(ctx context.Context, authConfig *schema.AuthConfig, cl
 	credStore := credentials.NewCredentialStoreWithConfig(authConfig)
 	validator := validation.NewValidator()
 
-	mgr, err := auth.NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
+	mgr, err := newAuthManagerFn(authConfig, credStore, validator, authStackInfo, cliConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
+	}
+
+	// Resolve the interactive-selection sentinel (produced when --identity is passed without a
+	// value) to a concrete identity before falling back to the empty-identity default lookup.
+	identityName, err = auth.ResolveSelectedIdentity(mgr, identityName, cfg.IdentityFlagSelectValue)
+	if err != nil {
+		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrDefaultIdentity, err)
 	}
 
 	// If no identity specified, try to resolve default.
@@ -252,6 +263,11 @@ func exportAWSCredsToEnv(creds types.ICredentials) error {
 func init() {
 	tokenCmd.Flags().String("cluster-name", "", "EKS cluster name (required)")
 	tokenCmd.Flags().String("region", "", "AWS region (required)")
-	tokenCmd.Flags().StringP("identity", "i", "", "Atmos identity to authenticate with")
+
+	// Uses the shared flags.WithIdentityFlag() builder (rather than a hand-rolled
+	// Flags().StringP()) so bare --identity triggers the interactive selector like every
+	// other Atmos command.
+	pkgFlags.NewStandardParser(pkgFlags.WithIdentityFlag()).RegisterFlags(tokenCmd)
+
 	EksCmd.AddCommand(tokenCmd)
 }
