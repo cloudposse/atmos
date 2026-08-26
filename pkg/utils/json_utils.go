@@ -159,8 +159,12 @@ func ConvertFromJSON(jsonString string) (any, error) {
 // keys to values. Unlike ConvertFromJSON, it always decodes into a map, so it returns an
 // error for JSON documents whose top-level value is not an object.
 //
-// It is part of the public API relied on by external consumers of the Atmos Go library
-// (for example, the `cloudposse/terraform-provider-utils` Terraform provider).
+// PUBLIC API — DO NOT REMOVE. This function has no callers inside the Atmos repository, so
+// dead-code sweeps (for example, `go run golang.org/x/tools/cmd/deadcode@latest -test ./...`)
+// will report it as unused. It is retained intentionally because it is part of the public Go
+// API consumed by the external `cloudposse/terraform-provider-utils` provider. It was
+// previously dropped as "dead" code in PR #2608, which broke that provider; see
+// docs/fixes/2026-08-25-restore-public-provider-api-wrappers.md.
 func JSONToMapOfInterfaces(input string) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(nil, "utils.JSONToMapOfInterfaces")()
 
