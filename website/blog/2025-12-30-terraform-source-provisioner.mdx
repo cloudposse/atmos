@@ -220,11 +220,11 @@ With both source and workdir enabled, everything happens automatically:
 ```shell
 # Just run terraform - both source and workdir are provisioned automatically
 atmos terraform plan vpc -s dev
-# → Source provisioner: downloads to .workdir/terraform/dev-vpc/ (directly to workdir)
+# → Source provisioner: downloads to .workdir/terraform/dev-vpc-bb03116d/ (directly to workdir)
 # → Terraform runs in isolated workdir
 ```
 
-When source and workdir are both configured, the source provisioner downloads directly to the workdir location (`.workdir/terraform/<stack>-<component>/`), skipping the intermediate component directory.
+When source and workdir are both configured, the source provisioner downloads directly to the workdir location (`.workdir/terraform/<stack>-<component>-<hash>/`), skipping the intermediate component directory.
 
 For explicit control, you can still use the CLI:
 
@@ -245,7 +245,7 @@ wait
 
 ### Directory Structure
 
-After running the above commands, your project looks like:
+Putting it all together, a project mixing both patterns—some components vendored without workdir isolation, others using the combined source + workdir flow—looks like this:
 
 ```
 project/
@@ -258,13 +258,13 @@ project/
 │       └── eks-ami/                # Vendored by source pull
 ├── .workdir/                       # Created when workdir enabled
 │   ├── terraform/
-│   │   ├── dev-vpc/               # Isolated for dev stack
-│   │   ├── staging-vpc/           # Isolated for staging stack
-│   │   └── prod-vpc/              # Isolated for prod stack
+│   │   ├── dev-vpc-bb03116d/      # Isolated for dev stack
+│   │   ├── staging-vpc-8ce5e903/  # Isolated for staging stack
+│   │   └── prod-vpc-0e327247/     # Isolated for prod stack
 │   ├── helmfile/
-│   │   └── dev-nginx/             # Isolated for dev stack
+│   │   └── dev-nginx-cfcfbd1f/    # Isolated for dev stack
 │   └── packer/
-│       └── dev-eks-ami/           # Isolated for dev stack
+│       └── dev-eks-ami-62c3c999/  # Isolated for dev stack
 └── stacks/
     ├── dev.yaml
     ├── staging.yaml
