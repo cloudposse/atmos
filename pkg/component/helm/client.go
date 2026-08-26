@@ -132,8 +132,9 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseAct
 }
 
 // releaseOperationContext applies the effective lifecycle timeout to every
-// cluster-side Helm action. A zero timeout intentionally remains unbounded
-// during the timeout-default migration.
+// cluster-side Helm action. A zero timeout intentionally leaves the outer
+// action context unbounded during the migration; Helm then applies the
+// selected wait strategy's own zero-timeout behavior.
 func releaseOperationContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if timeout <= 0 {
 		return parent, func() {}
