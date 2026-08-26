@@ -187,6 +187,11 @@ func TestJSONToMapOfInterfaces(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "top-level null is not an object",
+			input:   "null",
+			wantErr: true,
+		},
+		{
 			name:    "empty string",
 			input:   "",
 			wantErr: true,

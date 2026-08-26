@@ -13,7 +13,7 @@ import (
 // `utils_aws_eks_update_kubeconfig` data source) can build an EKS kubeconfig from an
 // Atmos component/stack context without depending on Atmos internal packages.
 //
-// https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
+// See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html for details.
 func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconfigContext) error {
 	return e.ExecuteAwsEksUpdateKubeconfig(kubeconfigContext)
 }

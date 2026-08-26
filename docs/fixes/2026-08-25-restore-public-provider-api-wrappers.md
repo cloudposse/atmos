@@ -34,7 +34,9 @@ must embed the same Atmos deep-merge semantics as the Atmos CLI it is paired wit
   from an Atmos component/stack context without importing Atmos internal packages.
 - `pkg/utils/json_utils.go` — re-added `JSONToMapOfInterfaces`, which always decodes a JSON string
   into a `schema.AtmosSectionMapType` (and therefore errors on non-object top-level values, unlike
-  `ConvertFromJSON`).
+  `ConvertFromJSON`). A top-level JSON `null` unmarshals into a nil map without error, so the
+  function explicitly rejects it with the new `ErrJSONTopLevelNotObject` sentinel, guaranteeing
+  callers receive a non-nil object or an error.
 - `pkg/aws/aws_eks_update_kubeconfig_test.go` — added
   `TestExecuteAwsEksUpdateKubeconfig_ProfileAndRoleArnConflict`, which exercises the wrapper via its
   deterministic `profile`/`role-arn` conflict validation (no AWS credentials or network required).

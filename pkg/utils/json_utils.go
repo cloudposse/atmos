@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 
@@ -12,6 +13,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// ErrJSONTopLevelNotObject is returned by JSONToMapOfInterfaces when the JSON document
+// decodes to a nil map (for example, a top-level `null`), because the result is not an object.
+var ErrJSONTopLevelNotObject = errors.New("JSON top-level value is not an object")
 
 // PrintAsJSON prints the provided value as a JSON document to the console with syntax highlighting.
 // Use PrintAsJSONSimple for non-TTY output (pipes, redirects) to avoid expensive highlighting.
@@ -162,6 +167,11 @@ func JSONToMapOfInterfaces(input string) (schema.AtmosSectionMapType, error) {
 	var data schema.AtmosSectionMapType
 	if err := json.Unmarshal([]byte(input), &data); err != nil {
 		return nil, err
+	}
+	// A top-level JSON `null` unmarshals into a nil map without error; reject it so callers
+	// always receive a non-nil object or an error, matching this function's documented contract.
+	if data == nil {
+		return nil, ErrJSONTopLevelNotObject
 	}
 	return data, nil
 }
