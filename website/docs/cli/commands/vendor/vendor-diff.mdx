@@ -21,8 +21,9 @@ new version.
 ```shell
 atmos vendor diff --component <name> [--type <type>] [--from <ref>] [--to <ref>] [--diff-file <path>]
 atmos vendor diff --tags <tag1>,<tag2> [options]
-atmos vendor diff --stack <stack> [--labels <key>=<value>] [options]
+atmos vendor diff --stack <stack> [--labels <key>=<value>]... [options]
 atmos vendor diff --labels <key>=<value> [options]
+atmos vendor diff --labels <key1>=<value1> --labels <key2>=<value2> [options]
 ```
 
 `--from` defaults to the component's current pinned version and `--to` defaults to the
@@ -66,6 +67,9 @@ atmos vendor diff --tags networking
 atmos vendor diff --stack dev-us-west-2
 atmos vendor diff --labels tier=1
 
+# Repeat --labels to combine multiple selectors across occurrences.
+atmos vendor diff --labels tier=1 --labels cost-center=platform
+
 # Diff a stack's components, narrowed further by declared vendor.yaml tags.
 atmos vendor diff --stack dev-us-west-2 --tags networking
 ```
@@ -79,8 +83,8 @@ atmos vendor diff --stack dev-us-west-2 --tags networking
   <dd>Diff only components whose `vendor.yaml` source declares any of these comma-separated tags (matches any). An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.</dd>
   <dt>`--stack` / `-s` (string)</dt>
   <dd>Diff every component belonging to the specified stack. Composes with `--labels` to narrow further, and with `--tags` to filter by declared source tags. Mutually exclusive with `--component`.</dd>
-  <dt>`--labels` (string)</dt>
-  <dd>Diff every component whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs. Composes with `--stack` and `--tags`. Mutually exclusive with `--component`.</dd>
+  <dt>`--labels` (string, repeatable)</dt>
+  <dd>Diff every component whose stack `metadata.labels` match ALL of these `key=value` or `key:value` pairs — comma-separated within one occurrence, and/or repeated for more (`--labels tier=1 --labels cost-center=platform`). Composes with `--stack` and `--tags`. Mutually exclusive with `--component`.</dd>
   <dt>`--from` (string)</dt>
   <dd>Starting ref (tag, branch, or commit). Defaults to each component's current pinned version.</dd>
   <dt>`--to` (string)</dt>

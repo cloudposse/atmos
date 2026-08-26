@@ -135,11 +135,11 @@ func registerFilterFlags(registry *flags.FlagRegistry) {
 		Description: "Filter by tags (comma-separated, matches any): --tags=production,tier-1",
 		EnvVars:     []string{"ATMOS_TAGS"},
 	})
-	registry.Register(&flags.StringFlag{
+	registry.Register(&flags.StringSliceFlag{
 		Name:        "labels",
 		Shorthand:   "",
-		Default:     "",
-		Description: "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox",
+		Default:     nil,
+		Description: "Filter by labels (comma-separated key=value or key:value pairs within an occurrence, and/or repeated, matches all): --labels=cost-center=platform,compliance=sox or --labels cost-center=platform --labels compliance=sox",
 		EnvVars:     []string{"ATMOS_LABELS"},
 	})
 }

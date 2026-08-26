@@ -435,6 +435,6 @@ func TestParseInstancesOptions(t *testing.T) {
 		opts := parseInstancesOptions(cmd, v)
 
 		assert.Equal(t, []string{"network", "tier-1"}, opts.Tags)
-		assert.Equal(t, "team:platform", opts.LabelsRaw, "labels stay raw until parsed at filter-build time")
+		assert.Equal(t, []string{"team:platform"}, opts.LabelsRaw, "labels stay raw until parsed at filter-build time")
 	})
 }

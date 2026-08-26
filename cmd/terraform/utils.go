@@ -185,7 +185,7 @@ func isMultiComponentInvocation(cmd_ *cobra.Command) bool {
 		len(v.GetStringSlice("components")) > 0 ||
 		v.GetString("query") != "" ||
 		len(v.GetStringSlice("tags")) > 0 ||
-		v.GetString("labels") != ""
+		len(v.GetStringSlice("labels")) > 0
 }
 
 // applyPreResolvedComponent injects the interactively-selected component into info

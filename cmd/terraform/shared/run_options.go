@@ -107,7 +107,7 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		UploadStatus:            v.GetBool("upload-status"),
 	}
 
-	labels, err := tags.ParseLabelsFlag(v.GetString("labels"))
+	labels, err := tags.ParseLabelsFlag(v.GetStringSlice("labels"))
 	if err != nil {
 		return nil, err
 	}

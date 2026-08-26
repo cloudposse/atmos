@@ -91,10 +91,10 @@ type InstancesCommandOptions struct {
 	// Tags filters instances to those whose component metadata.tags contains
 	// at least one of these tags (any-match). Empty means no filter.
 	Tags []string
-	// LabelsRaw is the raw --labels flag value (comma-separated key=value or
-	// key:value pairs, all-match), parsed at filter-build time so an invalid
-	// value surfaces as a command error.
-	LabelsRaw string
+	// LabelsRaw is the raw --labels flag value (one element per pflag StringSlice
+	// occurrence/comma-split entry -- key=value or key:value pairs, all-match),
+	// parsed at filter-build time so an invalid value surfaces as a command error.
+	LabelsRaw []string
 	// IncludeDependencies/IncludeDependents expand the selection preview with
 	// the dependency closure, matching the terraform bulk commands (0 = off,
 	// -1 = unlimited, N>0 = N levels). With either set, the rendered rows are
@@ -793,7 +793,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	// only shape the rendered table, so allowing them alongside --upload would
 	// show a filtered table while silently uploading everything. Reject the
 	// combination outright (matching the matrix/tree guards below).
-	if upload && (len(opts.Tags) > 0 || opts.LabelsRaw != "") {
+	if upload && (len(opts.Tags) > 0 || len(opts.LabelsRaw) > 0) {
 		return fmt.Errorf("%w: --tags/--labels is not supported with --upload (the inventory upload is always unfiltered)", errUtils.ErrInvalidFlag)
 	}
 	if upload && opts.closureRequested() {
@@ -811,7 +811,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		if opts.Query != "" {
 			return fmt.Errorf("%w: --query is not supported with --format=matrix", errUtils.ErrInvalidFlag)
 		}
-		if len(opts.Tags) > 0 || opts.LabelsRaw != "" {
+		if len(opts.Tags) > 0 || len(opts.LabelsRaw) > 0 {
 			return fmt.Errorf("%w: --tags/--labels is not supported with --format=matrix", errUtils.ErrInvalidFlag)
 		}
 		if opts.closureRequested() {
@@ -840,7 +840,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		if opts.Query != "" {
 			return fmt.Errorf("%w: --query is not supported with --format=tree", errUtils.ErrInvalidFlag)
 		}
-		if len(opts.Tags) > 0 || opts.LabelsRaw != "" {
+		if len(opts.Tags) > 0 || len(opts.LabelsRaw) > 0 {
 			return fmt.Errorf("%w: --tags/--labels is not supported with --format=tree", errUtils.ErrInvalidFlag)
 		}
 		if opts.closureRequested() {
@@ -952,7 +952,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	// (closure members must not be re-pruned by the selectors that seeded them).
 	rowTags, rowLabelsRaw := opts.Tags, opts.LabelsRaw
 	if opts.closureRequested() {
-		rowTags, rowLabelsRaw = nil, ""
+		rowTags, rowLabelsRaw = nil, nil
 	}
 	filters, err := buildInstanceFilters(opts.FilterSpec, rowTags, rowLabelsRaw, &atmosConfig)
 	if err != nil {
@@ -1117,7 +1117,7 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 // evaluated per row; rows for which the expression is truthy are kept. Tags
 // use any-match, labels all-match semantics against the flattened `tags`/
 // `labels` row fields. Empty inputs produce no filters.
-func buildInstanceFilters(filterSpec string, tagsFilter []string, labelsRaw string, atmosConfig *schema.AtmosConfiguration) ([]filter.Filter, error) {
+func buildInstanceFilters(filterSpec string, tagsFilter []string, labelsRaw []string, atmosConfig *schema.AtmosConfiguration) ([]filter.Filter, error) {
 	var filters []filter.Filter
 	if filterSpec != "" {
 		f, err := filter.NewYQPredicateFilter(filterSpec, atmosConfig)

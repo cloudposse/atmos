@@ -156,7 +156,7 @@ func TestExecuteListInstancesCmd_InvalidLabelsFlag(t *testing.T) {
 		Cmd:       cmd,
 		Args:      []string{},
 		Format:    "table",
-		LabelsRaw: "not-a-valid-label",
+		LabelsRaw: []string{"not-a-valid-label"},
 	})
 
 	require.Error(t, err)
@@ -750,13 +750,13 @@ func TestExecuteListInstancesCmd_ClosurePreviewPropagatesError(t *testing.T) {
 // TestBuildInstanceFilters covers the YQ-predicate wiring of `--filter`.
 func TestBuildInstanceFilters(t *testing.T) {
 	t.Run("empty spec returns no filters", func(t *testing.T) {
-		result, err := buildInstanceFilters("", nil, "", nil)
+		result, err := buildInstanceFilters("", nil, nil, nil)
 		require.NoError(t, err)
 		assert.Nil(t, result)
 	})
 
 	t.Run("non-empty spec yields one YQ filter", func(t *testing.T) {
-		result, err := buildInstanceFilters(".component == \"vpc\"", nil, "", nil)
+		result, err := buildInstanceFilters(".component == \"vpc\"", nil, nil, nil)
 		require.NoError(t, err)
 		require.Len(t, result, 1)
 	})
@@ -885,7 +885,7 @@ func TestExecuteListInstancesCmd_TagsLabelsRejectedWithUploadTreeMatrix(t *testi
 		format    string
 		upload    bool
 		tags      []string
-		labelsRaw string
+		labelsRaw []string
 		wantMatch string
 	}{
 		{
@@ -896,7 +896,7 @@ func TestExecuteListInstancesCmd_TagsLabelsRejectedWithUploadTreeMatrix(t *testi
 		},
 		{
 			name:      "labels+upload rejected",
-			labelsRaw: "team=platform",
+			labelsRaw: []string{"team=platform"},
 			upload:    true,
 			wantMatch: "--tags/--labels is not supported with --upload",
 		},
@@ -909,7 +909,7 @@ func TestExecuteListInstancesCmd_TagsLabelsRejectedWithUploadTreeMatrix(t *testi
 		{
 			name:      "labels+matrix rejected",
 			format:    "matrix",
-			labelsRaw: "team=platform",
+			labelsRaw: []string{"team=platform"},
 			wantMatch: "--tags/--labels is not supported with --format=matrix",
 		},
 	}

@@ -23,6 +23,7 @@ const (
 	flagOutput   = "output"
 	flagAll      = "all"
 	flagAffected = "affected"
+	flagLabels   = "labels"
 	// The valueTrue const is the string representation of a set boolean flag.
 	valueTrue = "true"
 )
@@ -45,7 +46,7 @@ var helmCmd = &cobra.Command{
 }
 
 func init() {
-	helmParser = flags.NewStandardParser(flags.WithCommonFlags())
+	helmParser = flags.NewStandardParser(flags.WithStackFlag(), flags.WithDryRunFlag())
 	helmParser.RegisterPersistentFlags(helmCmd)
 
 	if err := helmParser.BindToViper(viper.GetViper()); err != nil {
@@ -137,7 +138,7 @@ func operationFlagOptions(name string) []flags.Option {
 		flags.WithStringFlag("ssh-key-password", "", "", "Password for the SSH private key used to clone the target ref for affected detection."),
 		flags.WithBoolFlag("clone-target-ref", "", false, "Clone the target ref instead of checking it out in the current repository for affected detection."),
 		flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
-		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+		flags.WithStringSliceFlag(flagLabels, "", nil, "Filter by labels (comma-separated key=value or key:value pairs within an occurrence, and/or repeated, matches all): --labels=cost-center=platform,compliance=sox or --labels cost-center=platform --labels compliance=sox"),
 	}
 
 	if name == "template" {
@@ -176,11 +177,11 @@ func validateOperationArgs(cmd *cobra.Command, args []string) error {
 	}
 
 	tagsFlag, _ := cmd.Flags().GetStringSlice("tags")
-	labelsFlag, _ := cmd.Flags().GetString("labels")
+	labelsFlag, _ := cmd.Flags().GetStringSlice(flagLabels)
 	if _, err := tags.ParseLabelsFlag(labelsFlag); err != nil {
 		return err
 	}
-	hasTagsOrLabels := len(tagsFlag) > 0 || labelsFlag != ""
+	hasTagsOrLabels := len(tagsFlag) > 0 || len(labelsFlag) > 0
 
 	if all || affected || hasTagsOrLabels {
 		return validateSelectionFlags(cmd, args)
@@ -195,8 +196,8 @@ func hasSelectionFlags(cmd *cobra.Command) bool {
 	all, _ := cmd.Flags().GetBool(flagAll)
 	affected, _ := cmd.Flags().GetBool(flagAffected)
 	tagsFlag, _ := cmd.Flags().GetStringSlice("tags")
-	labelsFlag, _ := cmd.Flags().GetString("labels")
-	return all || affected || len(tagsFlag) > 0 || labelsFlag != ""
+	labelsFlag, _ := cmd.Flags().GetStringSlice(flagLabels)
+	return all || affected || len(tagsFlag) > 0 || len(labelsFlag) > 0
 }
 
 // componentArgCompletion returns names for native Helm components, optionally
@@ -310,9 +311,9 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 	if tagsSlice, err := cmd.Flags().GetStringSlice("tags"); err == nil {
 		info.Tags = tags.ParseTagsFlag(strings.Join(tagsSlice, ","))
 	}
-	if labelsFlag := cmd.Flag("labels"); labelsFlag != nil {
+	if labelsSlice, err := cmd.Flags().GetStringSlice(flagLabels); err == nil {
 		// Error ignored: validateOperationArgs already rejected malformed --labels before RunE.
-		info.Labels, _ = tags.ParseLabelsFlag(labelsFlag.Value.String())
+		info.Labels, _ = tags.ParseLabelsFlag(labelsSlice)
 	}
 
 	return info

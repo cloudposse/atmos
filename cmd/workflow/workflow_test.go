@@ -14,5 +14,5 @@ func TestWorkflowSelectorFlags(t *testing.T) {
 
 	labels := workflowCmd.Flags().Lookup("labels")
 	require.NotNil(t, labels)
-	assert.Equal(t, "string", labels.Value.Type())
+	assert.Equal(t, "stringSlice", labels.Value.Type())
 }
