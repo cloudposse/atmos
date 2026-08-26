@@ -13,7 +13,6 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
-	"github.com/cloudposse/atmos/pkg/ci"
 	tfci "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"
 	"github.com/cloudposse/atmos/pkg/flags"
 	h "github.com/cloudposse/atmos/pkg/hooks"
@@ -81,14 +80,9 @@ For complete Terraform/OpenTofu documentation, see:
 		// (summary, outputs). The output is tee'd: the terminal still receives it in
 		// real time, and the buffer collects a copy for the CI summary parser.
 		// CI mode is active when the --ci flag or ATMOS_CI/CI env var is set, or a CI
-		// platform is auto-detected (e.g. GITHUB_ACTIONS=true).
-		ciMode, _ := cmd.Flags().GetBool("ci")
-		if !ciMode {
-			ciMode = v.GetBool("ci")
-		}
-		if !ciMode {
-			ciMode = ci.IsCI()
-		}
+		// platform is auto-detected (e.g. GITHUB_ACTIONS=true) -- terraformCIModeEnabled
+		// centralizes this so an explicit --ci=false stays authoritative here too.
+		ciMode := terraformCIModeEnabled(cmd)
 
 		// In CI, run `terraform/tofu test -json` for structured, tool-agnostic
 		// results (both tools support it) and capture stdout WITHOUT teeing — the

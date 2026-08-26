@@ -409,6 +409,7 @@ func TestGetComponentBasePath_AllCases(t *testing.T) {
 			Helmfile:  schema.Helmfile{BasePath: "components/helmfile"},
 			Packer:    schema.Packer{BasePath: "components/packer"},
 			Ansible:   schema.Ansible{BasePath: "components/ansible"},
+			Container: schema.ContainerComponentsConfig{BasePath: "components/container"},
 		},
 	}
 
@@ -420,6 +421,7 @@ func TestGetComponentBasePath_AllCases(t *testing.T) {
 		{cfg.HelmfileSectionName, "components/helmfile"},
 		{cfg.PackerSectionName, "components/packer"},
 		{cfg.AnsibleSectionName, "components/ansible"},
+		{cfg.ContainerSectionName, "components/container"},
 		{"unknown", ""},
 	}
 

@@ -132,6 +132,7 @@ type AtmosConfiguration struct {
 	AnsibleDirAbsolutePath        string             `yaml:"ansibleDirAbsolutePath,omitempty" json:"ansibleDirAbsolutePath,omitempty" mapstructure:"ansibleDirAbsolutePath"`
 	KubernetesDirAbsolutePath     string             `yaml:"kubernetesDirAbsolutePath,omitempty" json:"kubernetesDirAbsolutePath,omitempty" mapstructure:"kubernetesDirAbsolutePath"`
 	HelmDirAbsolutePath           string             `yaml:"helmDirAbsolutePath,omitempty" json:"helmDirAbsolutePath,omitempty" mapstructure:"helmDirAbsolutePath"`
+	ContainerDirAbsolutePath      string             `yaml:"containerDirAbsolutePath,omitempty" json:"containerDirAbsolutePath,omitempty" mapstructure:"containerDirAbsolutePath"`
 	VendorDirAbsolutePath         string             `yaml:"vendorDirAbsolutePath,omitempty" json:"vendorDirAbsolutePath,omitempty" mapstructure:"vendorDirAbsolutePath"`
 	WorkflowsDirAbsolutePath      string             `yaml:"workflowsDirAbsolutePath,omitempty" json:"workflowsDirAbsolutePath,omitempty" mapstructure:"workflowsDirAbsolutePath"`
 	StackConfigFilesRelativePaths []string           `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
@@ -1275,12 +1276,13 @@ type Helm struct {
 
 type Components struct {
 	// Built-in component types (legacy - will migrate to plugin model in future phases).
-	Terraform  Terraform  `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
-	Helmfile   Helmfile   `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
-	Packer     Packer     `yaml:"packer" json:"packer" mapstructure:"packer"`
-	Ansible    Ansible    `yaml:"ansible" json:"ansible" mapstructure:"ansible"`
-	Kubernetes Kubernetes `yaml:"kubernetes" json:"kubernetes" mapstructure:"kubernetes"`
-	Helm       Helm       `yaml:"helm" json:"helm" mapstructure:"helm"`
+	Terraform  Terraform                 `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
+	Helmfile   Helmfile                  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
+	Packer     Packer                    `yaml:"packer" json:"packer" mapstructure:"packer"`
+	Ansible    Ansible                   `yaml:"ansible" json:"ansible" mapstructure:"ansible"`
+	Kubernetes Kubernetes                `yaml:"kubernetes" json:"kubernetes" mapstructure:"kubernetes"`
+	Helm       Helm                      `yaml:"helm" json:"helm" mapstructure:"helm"`
+	Container  ContainerComponentsConfig `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
 
 	// List configuration for component listing.
 	List ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
@@ -1310,6 +1312,8 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 		return c.Kubernetes, true
 	case "helm":
 		return c.Helm, true
+	case "container":
+		return c.Container, true
 	default:
 		// Check plugin types.
 		if config, ok := c.Plugins[componentType]; ok {
