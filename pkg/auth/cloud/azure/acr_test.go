@@ -1,6 +1,7 @@
 package azure
 
 import (
+	"context"
 	"encoding/base64"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -107,6 +109,26 @@ func TestGetAuthorizationToken_EmptyRefreshToken(t *testing.T) {
 	_, err := GetAuthorizationToken(t.Context(), creds, "myregistry.azurecr.io")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrACRAuthFailed)
+}
+
+func TestLoadDefaultAzureCredentials_RetrieveFailureHasIdentityHint(t *testing.T) {
+	// A pre-canceled context makes token retrieval fail immediately (no real
+	// network/managed-identity calls), exercising the same failure branch hit
+	// when no Atmos identity is configured for ambient ACR login.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := LoadDefaultAzureCredentials(ctx)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrACRAuthFailed)
+	// azidentity's DefaultAzureCredential returns an aggregate error over each attempted
+	// credential's failure text rather than chaining context.Canceled via Unwrap(), so
+	// errors.Is(err, context.Canceled) does not hold here (unlike the AWS SDK case in
+	// ecr_test.go). Assert on the preserved cancellation message instead.
+	assert.Contains(t, err.Error(), "context canceled", "WithCause must preserve the original cancellation cause")
+
+	hints := strings.Join(errors.GetAllHints(err), "\n")
+	assert.Contains(t, hints, "atmos azure acr login --identity")
 }
 
 func TestBuildRegistryURL(t *testing.T) {
