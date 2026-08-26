@@ -125,21 +125,31 @@ func createAuthManagerInstance(authConfig *schema.AuthConfig, cliConfigPath stri
 	return authManager, nil
 }
 
+// ResolveSelectedIdentity resolves the interactive-selection sentinel (identityName == selectValue,
+// produced when --identity is passed without a value) to a concrete identity by prompting the
+// user via GetDefaultIdentity(forceSelect=true). Any other identityName passes through unchanged.
+//
+// Callers that need the resolved identity before authenticating (e.g. to check a credential cache
+// first) should call this directly instead of authenticateWithIdentity.
+func ResolveSelectedIdentity(authManager AuthManager, identityName, selectValue string) (string, error) {
+	defer perf.Track(nil, "auth.ResolveSelectedIdentity")()
+
+	if identityName != selectValue {
+		return identityName, nil
+	}
+	return authManager.GetDefaultIdentity(true)
+}
+
 // authenticateWithIdentity authenticates using the provided identity name.
 // Handles interactive selection if identity matches selectValue.
 func authenticateWithIdentity(authManager AuthManager, identityName string, selectValue string) error {
-	// Handle interactive selection if identity matches the select value.
-	forceSelect := identityName == selectValue
-	if forceSelect {
-		selectedIdentity, err := authManager.GetDefaultIdentity(forceSelect)
-		if err != nil {
-			return err
-		}
-		identityName = selectedIdentity
+	resolvedIdentity, err := ResolveSelectedIdentity(authManager, identityName, selectValue)
+	if err != nil {
+		return err
 	}
 
 	// Authenticate to populate AuthContext with credentials.
-	_, err := authManager.Authenticate(context.Background(), identityName)
+	_, err = authManager.Authenticate(context.Background(), resolvedIdentity)
 	return err
 }
 
