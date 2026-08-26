@@ -18,6 +18,7 @@ type Store interface {
 // preserve the store's structured-value contract.
 type RawStore interface {
 	Store
+	// GetRaw retrieves the original secret text without structured decoding.
 	GetRaw(stack string, component string, key string) (string, error)
 }
 
