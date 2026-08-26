@@ -114,6 +114,28 @@ func createTestUI(t *testing.T) *InitUI {
 	return NewInitUI(ioCtx, term)
 }
 
+// TestResolveTargetPath_NonEmptyTargetPathIsPassthrough exercises the
+// exported ResolveTargetPath wrapper (added so cmd/scaffold can resolve the
+// real target directory before defaultBaseRef needs it -- see
+// resolveInteractiveBaseRef in cmd/scaffold). When targetPath is already
+// non-empty, resolveTargetPath's own doc comment guarantees it is a no-op:
+// no prompt runs and the caller-supplied targetPath/cmdTemplateValues/
+// useDefaults come back unchanged. This is the one branch ResolveTargetPath
+// can exercise without a real TTY (the empty-targetPath branch always
+// prompts interactively).
+func TestResolveTargetPath_NonEmptyTargetPathIsPassthrough(t *testing.T) {
+	ui := createTestUI(t)
+	dir := t.TempDir()
+	values := map[string]interface{}{"project_name": "demo"}
+
+	gotPath, gotValues, gotUseDefaults, err := ui.ResolveTargetPath(&templates.Configuration{Name: "demo"}, dir, true, true, values)
+
+	require.NoError(t, err)
+	assert.Equal(t, dir, gotPath)
+	assert.Equal(t, values, gotValues)
+	assert.True(t, gotUseDefaults)
+}
+
 func TestNewInitUI(t *testing.T) {
 	ui := createTestUI(t)
 
@@ -488,6 +510,70 @@ spec:
 			t.Errorf("expected the post-generate hook to be skipped, got: %v", got)
 		}
 	})
+}
+
+// TestExecuteWithSetup_DryRunHasNoPersistentSideEffects reproduces a bug
+// where `--dry-run` (routed through executeWithSetup with DryRun set, same
+// as a real run) suppressed only individual file writes -- it still created
+// the target directory via os.MkdirAll, ran both before- and after-generate
+// hooks (arbitrary user-configured commands), and wrote the
+// .atmos/scaffold.yaml project record. A later real --update against that
+// same directory would then wrongly treat a merely-previewed target as an
+// already-generated project. None of those persistent effects may happen
+// during a preview.
+func TestExecuteWithSetup_DryRunHasNoPersistentSideEffects(t *testing.T) {
+	beforeCalls := &[]string{}
+	runnerstep.Register(&hookMarkerHandler{
+		BaseHandler: runnerstep.NewBaseHandler("dry-run-before-hook", runnerstep.CategoryOutput, false),
+		calls:       beforeCalls,
+	})
+	afterCalls := &[]string{}
+	runnerstep.Register(&hookMarkerHandler{
+		BaseHandler: runnerstep.NewBaseHandler("dry-run-after-hook", runnerstep.CategoryOutput, false),
+		calls:       afterCalls,
+	})
+
+	scaffoldYAML := `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: dry-run-side-effects
+spec:
+  hooks:
+    before:
+      events: [before.scaffold.generate]
+      kind: step
+      type: dry-run-before-hook
+      with:
+        content: "before ran"
+    after:
+      events: [after.scaffold.generate]
+      kind: step
+      type: dry-run-after-hook
+      with:
+        content: "after ran"
+`
+	configuration := &templates.Configuration{
+		Name: "dry-run-side-effects",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: scaffoldYAML, Permissions: 0o644},
+			{Path: "generated.txt", Content: "generated", Permissions: 0o644},
+		},
+	}
+
+	ui := createTestUI(t)
+	ui.SetDryRun(true)
+	// A path that does not exist yet -- the primary preview-before-creating
+	// use case -- so a MkdirAll regression is directly observable, not just
+	// masked by t.TempDir() having already created the directory itself.
+	targetDir := filepath.Join(t.TempDir(), "not-yet-created")
+
+	err := ui.executeWithSetup(configuration, targetDir, false, false, true, "", map[string]interface{}{}, []string{"{{", "}}"})
+	require.NoError(t, err)
+
+	_, dirErr := os.Stat(targetDir)
+	assert.True(t, os.IsNotExist(dirErr), "dry-run must not create the target directory")
+	assert.Empty(t, *beforeCalls, "dry-run must not run before-generate hooks")
+	assert.Empty(t, *afterCalls, "dry-run must not run after-generate hooks")
 }
 
 // TestExecuteWithSetup_BasicTemplate_EnvironmentsGating exercises the real,
