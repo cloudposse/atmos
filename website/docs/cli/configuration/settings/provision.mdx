@@ -43,7 +43,7 @@ settings:
 <dl>
   <dt>`settings.provision.workdir.enabled`</dt>
   <dd>
-    Global default for whether components run inside an isolated workdir under `.workdir/<componentType>/<stack>-<componentName>/`. When enabled, every component instance gets its own working directory, allowing concurrent runs without conflicts on `.terraform/`, lockfiles, or generated varfiles.
+    Global default for whether components run inside an isolated workdir under `.workdir/<componentType>/<stack>-<componentName>-<hash>/`. When enabled, every component instance gets its own working directory, allowing concurrent runs without conflicts on `.terraform/`, lockfiles, or generated varfiles.
 
     Component-level and toolchain-level settings override this default; a component can opt out with `provision.workdir.enabled: false`.
 

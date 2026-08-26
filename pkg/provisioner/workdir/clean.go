@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -73,8 +74,9 @@ func CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack strin
 	return nil
 }
 
-// CleanAllWorkdirs removes all working directories in the project.
-func CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error {
+// CleanAllWorkdirs removes all working directories in the project. If dryRun is true, it only
+// reports what would be removed -- via listAllWorkdirNames -- without deleting anything.
+func CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration, dryRun bool) error {
 	defer perf.Track(atmosConfig, "workdir.CleanAllWorkdirs")()
 
 	basePath := atmosConfig.BasePath
@@ -90,6 +92,15 @@ func CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error {
 		return nil
 	}
 
+	if dryRun {
+		names := listAllWorkdirNames(workdirBase)
+		ui.Info(fmt.Sprintf("Dry run: would clean %d workdir(s):", len(names)))
+		for _, name := range names {
+			ui.Info(fmt.Sprintf("  - %s", name))
+		}
+		return nil
+	}
+
 	ui.Info("Cleaning all workdirs")
 
 	if err := os.RemoveAll(workdirBase); err != nil {
@@ -102,6 +113,35 @@ func CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error {
 
 	ui.Success(fmt.Sprintf("Cleaned all workdirs: %s", workdirBase))
 	return nil
+}
+
+// listAllWorkdirNames returns "<componentType>/<name>" for every individual workdir directory
+// under workdirBase (e.g. "terraform/dev-vpc-bb03116d"), for CleanAllWorkdirs's dry-run report.
+// Best-effort: an unreadable componentType subdirectory is skipped rather than surfaced as an
+// error -- this listing is purely informational and must never block on something the real
+// (non-dry-run) os.RemoveAll doesn't care about either.
+func listAllWorkdirNames(workdirBase string) []string {
+	var names []string
+	componentTypes, err := os.ReadDir(workdirBase)
+	if err != nil {
+		return names
+	}
+	for _, componentType := range componentTypes {
+		if !componentType.IsDir() {
+			continue
+		}
+		entries, err := os.ReadDir(filepath.Join(workdirBase, componentType.Name()))
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				names = append(names, filepath.Join(componentType.Name(), entry.Name()))
+			}
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 // CleanOptions configures what to clean.
@@ -161,7 +201,7 @@ func Clean(atmosConfig *schema.AtmosConfiguration, opts CleanOptions) error {
 			errs = append(errs, err)
 		}
 	case opts.All:
-		if err := CleanAllWorkdirs(atmosConfig); err != nil {
+		if err := CleanAllWorkdirs(atmosConfig, opts.DryRun); err != nil {
 			errs = append(errs, err)
 		}
 	case opts.Component != "" && opts.Stack != "":
