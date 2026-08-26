@@ -15,6 +15,8 @@ import (
 	yaml "gopkg.in/yaml.v2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	runnerstep "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -1416,7 +1418,8 @@ func TestStepEngineRunsArchiveTypeWithBareRelativeWorkingDirectoryUsesProvisione
 	t.Chdir(wd)
 	terraformBasePath := filepath.Join(wd, "repo", "components", "terraform")
 
-	provisionedWorkdirPath := filepath.Join(wd, ".workdir", "terraform", "dev-vpc")
+	provisionedWorkdirPath, err := provWorkdir.BuildPath(wd, cfg.TerraformComponentType, "vpc", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Join(provisionedWorkdirPath, "artifacts", "src"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(provisionedWorkdirPath, "artifacts", "src", "handler.js"), []byte("exports.handler = 1;"), 0o644))
 

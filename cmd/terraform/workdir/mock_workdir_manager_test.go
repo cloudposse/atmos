@@ -41,17 +41,17 @@ func (m *MockWorkdirManager) EXPECT() *MockWorkdirManagerMockRecorder {
 }
 
 // CleanAllWorkdirs mocks base method.
-func (m *MockWorkdirManager) CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error {
+func (m *MockWorkdirManager) CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration, dryRun bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CleanAllWorkdirs", atmosConfig)
+	ret := m.ctrl.Call(m, "CleanAllWorkdirs", atmosConfig, dryRun)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CleanAllWorkdirs indicates an expected call of CleanAllWorkdirs.
-func (mr *MockWorkdirManagerMockRecorder) CleanAllWorkdirs(atmosConfig any) *gomock.Call {
+func (mr *MockWorkdirManagerMockRecorder) CleanAllWorkdirs(atmosConfig, dryRun any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanAllWorkdirs", reflect.TypeOf((*MockWorkdirManager)(nil).CleanAllWorkdirs), atmosConfig)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanAllWorkdirs", reflect.TypeOf((*MockWorkdirManager)(nil).CleanAllWorkdirs), atmosConfig, dryRun)
 }
 
 // CleanExpiredWorkdirs mocks base method.
