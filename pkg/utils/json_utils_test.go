@@ -153,10 +153,11 @@ func TestConvertToJson(t *testing.T) {
 // error paths for malformed JSON and non-object top-level values.
 func TestJSONToMapOfInterfaces(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		want    schema.AtmosSectionMapType
-		wantErr bool
+		name      string
+		input     string
+		want      schema.AtmosSectionMapType
+		wantErr   bool
+		wantErrIs error
 	}{
 		{
 			name:  "simple object",
@@ -187,9 +188,10 @@ func TestJSONToMapOfInterfaces(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "top-level null is not an object",
-			input:   "null",
-			wantErr: true,
+			name:      "top-level null is not an object",
+			input:     "null",
+			wantErr:   true,
+			wantErrIs: ErrJSONTopLevelNotObject,
 		},
 		{
 			name:    "empty string",
@@ -204,6 +206,9 @@ func TestJSONToMapOfInterfaces(t *testing.T) {
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, result)
+				if tt.wantErrIs != nil {
+					assert.ErrorIs(t, err, tt.wantErrIs)
+				}
 				return
 			}
 
