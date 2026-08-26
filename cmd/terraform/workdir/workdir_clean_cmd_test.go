@@ -425,8 +425,11 @@ func TestCleanAllWorkdirs_DryRunSuppressesSuccessMessage(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{}
 
+	ioCtx := initTestIOWithCapture(t)
 	err := cleanAllWorkdirs(atmosConfig, true)
 	assert.NoError(t, err)
+	assert.NotContains(t, ioCtx.stderr.String(), "All workdirs cleaned",
+		"dry run must not print the success message")
 }
 
 // Test cleanSpecificWorkdir success path.

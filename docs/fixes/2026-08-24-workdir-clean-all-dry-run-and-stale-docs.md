@@ -12,8 +12,8 @@ several blog posts describing the workdir directory-naming format (`website/docs
 `website/docs/cli/configuration/settings/provision.mdx`, all four
 `website/docs/cli/commands/terraform/workdir/*.mdx` pages, and three blog posts) still showed the
 pre-hash-suffix format (`<stack>-<component>`, e.g. `dev-vpc`) and, in several cases, CLI output
-that no longer matches the real command at all. Both were found during a field-test pass of PR
-#2985 (`osterman/fix-workdir-h-char-injection`, the workdir hash-suffix naming change).
+that no longer matches the real command at all. Both were found during a field-test pass of PR `#2985`
+(`osterman/fix-workdir-h-char-injection`, the workdir hash-suffix naming change).
 
 ## Context
 

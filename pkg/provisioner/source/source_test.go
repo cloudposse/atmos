@@ -746,7 +746,7 @@ func TestDetermineTargetDirectory_WorkdirEnabled(t *testing.T) {
 
 	result, err := DetermineTargetDirectory(atmosConfig, "terraform", "vpc", componentConfig)
 	require.NoError(t, err)
-	// Expecting: <tempDir>/.workdir/terraform/dev-vpc/
+	// Expecting: <tempDir>/.workdir/terraform/dev-vpc-bb03116d/.
 	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "dev-vpc-bb03116d")
 	assert.Equal(t, expected, result)
 }

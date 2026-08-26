@@ -86,7 +86,7 @@ func TestSourceWorkdir_DeleteMissingForce(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
 
 	// Create the target directory so delete has something to operate on.
-	// With workdir enabled, the target directory is .workdir/terraform/<stack>-<component>.
+	// With workdir enabled, the target directory is .workdir/terraform/<stack>-<component>-<hash>.
 	targetDir := filepath.Join(".workdir", "terraform", "dev-vpc-remote-workdir-b01dcf0a")
 	require.NoError(t, os.MkdirAll(targetDir, 0o755))
 	t.Cleanup(func() {

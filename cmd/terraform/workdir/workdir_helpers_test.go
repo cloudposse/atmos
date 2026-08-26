@@ -235,6 +235,9 @@ func TestDefaultWorkdirManager_CleanAllWorkdirs_NoWorkdirs(t *testing.T) {
 // "atmos terraform workdir clean --all --dry-run" silently ignored --dry-run and deleted every
 // workdir anyway: CleanAllWorkdirs previously took no dryRun parameter at all. A dry run must
 // leave every workdir on disk untouched.
+// Note: cmd.NewTestKit(t) cannot be used here due to a circular import (cmd imports this
+// package); this test also never touches cmd.RootCmd flags/args, so there is no shared state
+// to isolate.
 func TestDefaultWorkdirManager_CleanAllWorkdirs_DryRun(t *testing.T) {
 	tmpDir := t.TempDir()
 

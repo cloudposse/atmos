@@ -632,7 +632,7 @@ func TestExtractComponentPath(t *testing.T) {
 			},
 			// extractComponentPath is called with component="comp" (the instance name).
 			// BuildPath falls back to the instance name when atmos_component is absent.
-			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-comp"),
+			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-comp-0b439c8f"),
 		},
 		{
 			name:     "workdir enabled with atmos_component uses instance name in path",
