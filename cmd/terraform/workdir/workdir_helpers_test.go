@@ -90,8 +90,11 @@ func TestDefaultWorkdirManager_ListWorkdirs_NoWorkdirs(t *testing.T) {
 func TestDefaultWorkdirManager_GetWorkdirInfo(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	workdirBase := filepath.Join(tmpDir, provWorkdir.WorkdirPath, "terraform")
-	workdirPath := filepath.Join(workdirBase, "dev-vpc")
+	// workdirPath is built via the real BuildPath (not a hand-joined literal) since
+	// GetWorkdirInfo resolves the same way internally -- the fixture must exist at whatever
+	// path BuildPath actually computes for this component/stack.
+	workdirPath, err := provWorkdir.BuildPath(tmpDir, "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	metadata := provWorkdir.WorkdirMetadata{
@@ -112,7 +115,7 @@ func TestDefaultWorkdirManager_GetWorkdirInfo(t *testing.T) {
 
 	info, err := manager.GetWorkdirInfo(atmosConfig, "vpc", "dev", nil)
 	require.NoError(t, err)
-	assert.Equal(t, "dev-vpc", info.Name)
+	assert.Equal(t, filepath.Base(workdirPath), info.Name)
 	assert.Equal(t, "vpc", info.Component)
 	assert.Equal(t, "dev", info.Stack)
 	assert.Equal(t, "components/terraform/vpc", info.Source)
@@ -132,8 +135,10 @@ func TestDefaultWorkdirManager_GetWorkdirInfo_NotFound(t *testing.T) {
 func TestDefaultWorkdirManager_DescribeWorkdir(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	workdirBase := filepath.Join(tmpDir, provWorkdir.WorkdirPath, "terraform")
-	workdirPath := filepath.Join(workdirBase, "dev-vpc")
+	// workdirPath is built via the real BuildPath (not a hand-joined literal) since
+	// DescribeWorkdir resolves the same way internally.
+	workdirPath, err := provWorkdir.BuildPath(tmpDir, "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	metadata := provWorkdir.WorkdirMetadata{
@@ -161,15 +166,17 @@ func TestDefaultWorkdirManager_DescribeWorkdir(t *testing.T) {
 	assert.Contains(t, manifest, "vpc:")
 	assert.Contains(t, manifest, "metadata:")
 	assert.Contains(t, manifest, "workdir:")
-	assert.Contains(t, manifest, "name: dev-vpc")
+	assert.Contains(t, manifest, "name: "+filepath.Base(workdirPath))
 	assert.Contains(t, manifest, "source: components/terraform/vpc")
 }
 
 func TestDefaultWorkdirManager_CleanWorkdir(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	workdirBase := filepath.Join(tmpDir, provWorkdir.WorkdirPath, "terraform")
-	workdirPath := filepath.Join(workdirBase, "dev-vpc")
+	// workdirPath is built via the real BuildPath (not a hand-joined literal) since
+	// CleanWorkdir resolves the same way internally.
+	workdirPath, err := provWorkdir.BuildPath(tmpDir, "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	// Create a file in the workdir.
@@ -178,7 +185,7 @@ func TestDefaultWorkdirManager_CleanWorkdir(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := manager.CleanWorkdir(atmosConfig, "vpc", "dev", nil)
+	err = manager.CleanWorkdir(atmosConfig, "vpc", "dev", nil)
 	require.NoError(t, err)
 
 	// Verify workdir is removed.
@@ -206,7 +213,7 @@ func TestDefaultWorkdirManager_CleanAllWorkdirs(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := manager.CleanAllWorkdirs(atmosConfig)
+	err := manager.CleanAllWorkdirs(atmosConfig, false)
 	require.NoError(t, err)
 
 	// Verify workdir base is removed.
@@ -220,8 +227,35 @@ func TestDefaultWorkdirManager_CleanAllWorkdirs_NoWorkdirs(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := manager.CleanAllWorkdirs(atmosConfig)
+	err := manager.CleanAllWorkdirs(atmosConfig, false)
 	require.NoError(t, err) // Should not error if nothing to clean.
+}
+
+// TestDefaultWorkdirManager_CleanAllWorkdirs_DryRun is a regression test for the bug where
+// "atmos terraform workdir clean --all --dry-run" silently ignored --dry-run and deleted every
+// workdir anyway: CleanAllWorkdirs previously took no dryRun parameter at all. A dry run must
+// leave every workdir on disk untouched.
+// Note: cmd.NewTestKit(t) cannot be used here due to a circular import (cmd imports this
+// package); this test also never touches cmd.RootCmd flags/args, so there is no shared state
+// to isolate.
+func TestDefaultWorkdirManager_CleanAllWorkdirs_DryRun(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	workdirBase := filepath.Join(tmpDir, provWorkdir.WorkdirPath, "terraform")
+	require.NoError(t, os.MkdirAll(filepath.Join(workdirBase, "dev-vpc"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workdirBase, "prod-vpc"), 0o755))
+
+	manager := NewDefaultWorkdirManager()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	err := manager.CleanAllWorkdirs(atmosConfig, true)
+	require.NoError(t, err)
+
+	// Every workdir must still exist -- a dry run must never delete anything.
+	_, err = os.Stat(filepath.Join(workdirBase, "dev-vpc"))
+	assert.NoError(t, err, "dry run must not remove dev-vpc")
+	_, err = os.Stat(filepath.Join(workdirBase, "prod-vpc"))
+	assert.NoError(t, err, "dry run must not remove prod-vpc")
 }
 
 // Test ListWorkdirs with file instead of directory (should be skipped).
@@ -482,7 +516,7 @@ func TestDefaultWorkdirManager_CleanAllWorkdirs_RemoveAllError(t *testing.T) {
 	manager := NewDefaultWorkdirManager()
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := manager.CleanAllWorkdirs(atmosConfig)
+	err := manager.CleanAllWorkdirs(atmosConfig, false)
 	// This may or may not error depending on OS behavior.
 	_ = err
 }
@@ -492,8 +526,10 @@ func TestDefaultWorkdirManager_CleanAllWorkdirs_RemoveAllError(t *testing.T) {
 func TestDefaultWorkdirManager_DescribeWorkdir_ValidOutput(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	workdirBase := filepath.Join(tmpDir, provWorkdir.WorkdirPath, "terraform")
-	workdirPath := filepath.Join(workdirBase, "prod-s3")
+	// workdirPath is built via the real BuildPath (not a hand-joined literal) since
+	// DescribeWorkdir resolves the same way internally.
+	workdirPath, err := provWorkdir.BuildPath(tmpDir, "terraform", "s3", "prod", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	metadata := provWorkdir.WorkdirMetadata{
@@ -521,7 +557,7 @@ func TestDefaultWorkdirManager_DescribeWorkdir_ValidOutput(t *testing.T) {
 	assert.Contains(t, manifest, "s3:")
 	assert.Contains(t, manifest, "metadata:")
 	assert.Contains(t, manifest, "workdir:")
-	assert.Contains(t, manifest, "name: prod-s3")
+	assert.Contains(t, manifest, "name: "+filepath.Base(workdirPath))
 	assert.Contains(t, manifest, "source: components/terraform/s3")
 	assert.Contains(t, manifest, "content_hash: sha256:abc123")
 	assert.Contains(t, manifest, "2024-06-15")
