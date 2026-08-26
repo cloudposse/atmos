@@ -50,11 +50,11 @@ project/
 ├── components/terraform/vpc/      # Original component (untouched)
 │   └── main.tf
 └── .workdir/terraform/            # Isolated execution directories
-    ├── dev-vpc/                   # Instance 1
+    ├── dev-vpc-bb03116d/          # Instance 1
     │   ├── main.tf               # Copied from component
     │   ├── .terraform/           # Isolated state
     │   └── dev-vpc.terraform.tfvars.json
-    └── prod-vpc/                  # Instance 2
+    └── prod-vpc-0e327247/         # Instance 2
         ├── main.tf
         ├── .terraform/
         └── prod-vpc.terraform.tfvars.json
@@ -85,7 +85,7 @@ components:
 
 When `provision.workdir.enabled: true` is set, Atmos:
 
-1. Creates `.workdir/terraform/<stack>-<component>/` before `terraform init`
+1. Creates `.workdir/terraform/<stack>-<component>-<hash>/` before `terraform init`
 2. Copies the component files to the workdir
 3. Runs all Terraform commands in the isolated directory
 4. Keeps the original component directory pristine
