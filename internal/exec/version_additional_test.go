@@ -3,7 +3,6 @@ package exec
 import (
 	"bytes"
 	"encoding/json"
-	"runtime/debug"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -285,54 +284,11 @@ func TestCheckRelease_WithVersionTrimming(t *testing.T) {
 	}
 }
 
-// TestFipsSettingEnabled covers every branch of the GOFIPS140 build-setting
-// decision: unset entirely, present but "off", present and empty, and
-// present with a real value (e.g. "latest", or a pinned module version).
-func TestFipsSettingEnabled(t *testing.T) {
-	tests := []struct {
-		name     string
-		settings []debug.BuildSetting
-		want     bool
-	}{
-		{
-			name:     "no GOFIPS140 setting at all",
-			settings: []debug.BuildSetting{{Key: "CGO_ENABLED", Value: "0"}},
-			want:     false,
-		},
-		{
-			name:     "GOFIPS140=off",
-			settings: []debug.BuildSetting{{Key: "GOFIPS140", Value: "off"}},
-			want:     false,
-		},
-		{
-			name:     "GOFIPS140 present but empty",
-			settings: []debug.BuildSetting{{Key: "GOFIPS140", Value: ""}},
-			want:     false,
-		},
-		{
-			name:     "GOFIPS140=latest",
-			settings: []debug.BuildSetting{{Key: "GOFIPS140", Value: "latest"}},
-			want:     true,
-		},
-		{
-			name:     "GOFIPS140 pinned to a specific module version",
-			settings: []debug.BuildSetting{{Key: "GOFIPS140", Value: "v1.0.0"}},
-			want:     true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, fipsSettingEnabled(tt.settings))
-		})
-	}
-}
-
-// TestIsFIPSBuild exercises the debug.ReadBuildInfo() integration itself; it
-// can only assert that it runs without panicking and returns a bool, since
-// whether the running test binary was built with GOFIPS140 depends on how
-// the test suite was invoked (see .atmos.d/test.yaml vs a bare `go test`).
-// The decision logic itself is covered deterministically by
-// TestFipsSettingEnabled above.
+// TestIsFIPSBuild exercises the crypto/fips140.Enabled() integration itself;
+// it can only assert that it runs without panicking and returns a bool,
+// since whether FIPS 140-3 mode is actually active depends on how the test
+// binary was built (GOFIPS140) and any GODEBUG=fips140 override in effect
+// when the suite runs (see .atmos.d/test.yaml vs a bare `go test`).
 func TestIsFIPSBuild(t *testing.T) {
 	assert.IsType(t, false, isFIPSBuild())
 }

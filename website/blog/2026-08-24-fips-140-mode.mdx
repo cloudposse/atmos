@@ -28,9 +28,9 @@ official atmos release.
 
 Every officially released atmos binary — along with every binary built from a checkout using
 `atmos build` — now links Go's own FIPS 140-3 crypto module and defaults to enforcing FIPS
-140-3 mode at runtime. TLS connections, key generation, and hashing are restricted to
-FIPS-approved algorithms and key sizes automatically. No flag, environment variable, or config
-change is required.
+140-3 mode at runtime. Go standard-library TLS connections, key generation, and hashing are
+restricted to FIPS-approved algorithms and key sizes automatically. No flag, environment
+variable, or config change is required.
 
 This covers the TLS and cryptography atmos itself uses for outbound connections, and it's FIPS
 140-3 *mode* — enforced by Go's runtime — not a CMVP compliance certification for the atmos

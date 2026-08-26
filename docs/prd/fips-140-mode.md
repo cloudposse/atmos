@@ -116,7 +116,14 @@ regressions). `go version -m` on a binary built via `atmos build` confirms
 ## User-Facing Verification
 
 `atmos version --format=json` (and `--format=yaml`) exposes a `fips` boolean field
-(`internal/exec/version.go`, `isFIPSBuild`/`fipsSettingEnabled`), read from
-`runtime/debug.ReadBuildInfo().Settings` at startup — the same `GOFIPS140` build
-setting `go version -m` reports — so users don't need a Go toolchain installed to
-confirm a given atmos binary enforces FIPS.
+(`internal/exec/version.go`, `isFIPSBuild`), backed by `crypto/fips140.Enabled()` —
+Go's own runtime check for whether FIPS 140-3 mode is active in *this* process right
+now. `fips` is `true` only when the binary was built with `GOFIPS140` (linking the
+FIPS module in the first place) **and** that build-time default hasn't been overridden
+off via `GODEBUG=fips140=off` at invocation. A binary built without `GOFIPS140` always
+reports `fips: false`. This is intentionally a live-status check rather than a static
+build-setting read: `go version -m` (or `runtime/debug.ReadBuildInfo().Settings`) can
+only confirm the binary *includes* the FIPS module and defaults to FIPS mode — it
+cannot tell you whether a `GODEBUG=fips140=off` override is in effect for the running
+process. `fips` gives users that runtime-accurate answer without needing a Go
+toolchain installed.

@@ -163,6 +163,77 @@ func TestCheckFIPSTargetSupported(t *testing.T) {
 		err := checkFIPSTargetSupported(buildTarget{}, []string{"GOFIPS140=latest"})
 		require.NoError(t, err)
 	})
+
+	// Table-driven coverage for every GOOS/GOARCH combination
+	// crypto/internal/fips140.Supported() rejects at runtime init (see
+	// checkFIPSTargetSupported's doc comment for the source citation),
+	// beyond the windows/386 case already covered above.
+	rejectedCases := []struct {
+		name   string
+		target buildTarget
+	}{
+		{name: "js/wasm", target: buildTarget{GOOS: "js", GOARCH: "wasm"}},
+		{name: "wasip1/wasm", target: buildTarget{GOOS: "wasip1", GOARCH: "wasm"}},
+		{name: "openbsd/amd64", target: buildTarget{GOOS: "openbsd", GOARCH: "amd64"}},
+		{name: "openbsd/arm64", target: buildTarget{GOOS: "openbsd", GOARCH: "arm64"}},
+		{name: "aix/ppc64", target: buildTarget{GOOS: "aix", GOARCH: "ppc64"}},
+	}
+	for _, tc := range rejectedCases {
+		t.Run("rejects "+tc.name+" when GOFIPS140 will be enabled", func(t *testing.T) {
+			err := checkFIPSTargetSupported(tc.target, []string{"GOFIPS140=latest"})
+			require.ErrorIs(t, err, errFIPSUnsupportedTarget)
+			assert.Contains(t, err.Error(), "GOOS="+tc.target.GOOS)
+			assert.Contains(t, err.Error(), "GOARCH="+tc.target.GOARCH)
+		})
+
+		t.Run("allows "+tc.name+" when GOFIPS140 is explicitly off", func(t *testing.T) {
+			err := checkFIPSTargetSupported(tc.target, []string{"GOFIPS140=off"})
+			require.NoError(t, err)
+		})
+	}
+
+	supportedCases := []struct {
+		name   string
+		target buildTarget
+	}{
+		{name: "linux/amd64", target: buildTarget{GOOS: "linux", GOARCH: "amd64"}},
+		{name: "darwin/arm64", target: buildTarget{GOOS: "darwin", GOARCH: "arm64"}},
+		{name: "freebsd/amd64", target: buildTarget{GOOS: "freebsd", GOARCH: "amd64"}},
+	}
+	for _, tc := range supportedCases {
+		t.Run("allows "+tc.name+" under FIPS", func(t *testing.T) {
+			err := checkFIPSTargetSupported(tc.target, []string{"GOFIPS140=latest"})
+			require.NoError(t, err)
+		})
+	}
+}
+
+// TestFipsUnsupportedTarget covers fipsUnsupportedTarget's decision logic
+// directly, independent of the GOFIPS140-enabled gating in
+// checkFIPSTargetSupported.
+func TestFipsUnsupportedTarget(t *testing.T) {
+	tests := []struct {
+		name   string
+		goos   string
+		goarch string
+		want   bool
+	}{
+		{name: "windows/386 rejected", goos: "windows", goarch: "386", want: true},
+		{name: "windows/amd64 allowed", goos: "windows", goarch: "amd64", want: false},
+		{name: "windows/arm allowed (dropped by Go itself, not FIPS)", goos: "windows", goarch: "arm", want: false},
+		{name: "js/wasm rejected", goos: "js", goarch: "wasm", want: true},
+		{name: "wasip1/wasm rejected", goos: "wasip1", goarch: "wasm", want: true},
+		{name: "openbsd/amd64 rejected", goos: "openbsd", goarch: "amd64", want: true},
+		{name: "openbsd/arm64 rejected", goos: "openbsd", goarch: "arm64", want: true},
+		{name: "aix/ppc64 rejected", goos: "aix", goarch: "ppc64", want: true},
+		{name: "linux/amd64 allowed", goos: "linux", goarch: "amd64", want: false},
+		{name: "darwin/arm64 allowed", goos: "darwin", goarch: "arm64", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, fipsUnsupportedTarget(tt.goos, tt.goarch))
+		})
+	}
 }
 
 func TestSetDefault(t *testing.T) {

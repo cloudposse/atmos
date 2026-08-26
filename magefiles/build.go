@@ -35,8 +35,11 @@ const (
 	goosLinux   = "linux"
 	goosWindows = "windows"
 	goosDarwin  = "darwin"
+	goosOpenBSD = "openbsd"
+	goosAIX     = "aix"
 	goarch386   = "386"
 	goarchAMD64 = "amd64"
+	goarchWasm  = "wasm"
 
 	// The 3-attempt/15s-backoff convention already used for artifact
 	// downloads (.github/actions/download-artifact-retry). See
@@ -197,19 +200,31 @@ func setDefault(env map[string]string, key, value string) {
 
 // checkFIPSTargetSupported rejects building for a GOOS/GOARCH combination
 // that Go's native FIPS 140-3 module doesn't support at runtime, when the
-// build will actually enable it. The windows/386 combination lacks a CPU
-// jitter entropy source good enough for FIPS mode: crypto/internal/fips140's
-// Supported() function panics on process init once GODEBUG=fips140=on (the
-// default baked in by GOFIPS140=latest, see docs/prd/fips-140-mode.md), so a
-// windows/386 binary built with FIPS enabled would crash immediately at
-// startup rather than silently skip FIPS mode. The baseEnv slice is
-// consulted first, since it carries the GOFIPS140 default this build is
-// about to apply; the ambient environment is the fallback for a value the
-// caller already set explicitly.
+// build will actually enable it. Go's crypto/internal/fips140.Supported()
+// ($GOROOT/src/crypto/internal/fips140/fips140.go, verified against the Go
+// 1.26.4 toolchain) rejects:
+//   - GOARCH=wasm (js/wasm, wasip1/wasm, ...): no CPU jitter entropy source
+//     with a good enough timer.
+//   - GOOS=windows GOARCH=386: same missing-timer problem.
+//   - GOOS=openbsd (any GOARCH): OpenBSD's -fexecute-only W^X policy
+//     (golang.org/issue/70880).
+//   - GOOS=aix (any GOARCH).
+//
+// crypto/internal/fips140/check's init panics on that Supported() error once
+// GODEBUG=fips140=on is active (the default baked in by GOFIPS140=latest,
+// see docs/prd/fips-140-mode.md), so a binary built for any of these targets
+// with FIPS enabled would crash immediately at startup rather than silently
+// skip FIPS mode. None of atmos's own named build targets ("default",
+// "linux", "windows", "macos", "macos-intel") resolve to these GOOS/GOARCH
+// combinations, but the "default" target passes through ambient GOOS/GOARCH,
+// so a caller can still hit this by setting them explicitly. The baseEnv
+// slice is consulted first, since it carries the GOFIPS140 default this
+// build is about to apply; the ambient environment is the fallback for a
+// value the caller already set explicitly.
 func checkFIPSTargetSupported(target buildTarget, baseEnv []string) error {
 	goos := resolvedGOOS(target.GOOS)
 	goarch := resolvedGOARCH(target.GOARCH)
-	if goos != goosWindows || goarch != goarch386 {
+	if !fipsUnsupportedTarget(goos, goarch) {
 		return nil
 	}
 
@@ -221,8 +236,24 @@ func checkFIPSTargetSupported(target buildTarget, baseEnv []string) error {
 		return nil
 	}
 
-	return fmt.Errorf("%w: GOOS=windows GOARCH=386 GOFIPS140=%s (set GOFIPS140=off to build this target anyway)",
-		errFIPSUnsupportedTarget, fips)
+	return fmt.Errorf("%w: GOOS=%s GOARCH=%s GOFIPS140=%s (set GOFIPS140=off to build this target anyway)",
+		errFIPSUnsupportedTarget, goos, goarch, fips)
+}
+
+// fipsUnsupportedTarget reports whether goos/goarch is a combination Go's
+// FIPS 140-3 module rejects at runtime init, matching
+// crypto/internal/fips140.Supported() exactly (see checkFIPSTargetSupported
+// for the source citation and reasoning behind each case).
+func fipsUnsupportedTarget(goos, goarch string) bool {
+	switch {
+	case goarch == goarchWasm,
+		goos == goosWindows && goarch == goarch386,
+		goos == goosOpenBSD,
+		goos == goosAIX:
+		return true
+	default:
+		return false
+	}
 }
 
 // envValue returns the value of key in env (a "KEY=VALUE" slice as returned

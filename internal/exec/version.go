@@ -1,10 +1,10 @@
 package exec
 
 import (
+	"crypto/fips140"
 	_ "embed"
 	"fmt"
 	"runtime"
-	"runtime/debug"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -90,29 +90,16 @@ type Version struct {
 	UpdateVersion string `json:"update_version,omitempty" yaml:"update_version,omitempty"`
 }
 
-// isFIPSBuild reports whether this binary was built with GOFIPS140 set (see
-// docs/prd/fips-140-mode.md), which links Go's native FIPS 140-3 crypto
-// module and defaults the binary to FIPS-enforcing mode at runtime. This
-// reflects FIPS 140-3 mode being enabled, not a CMVP compliance certification.
+// isFIPSBuild reports whether FIPS 140-3 mode is actively enforced in this
+// running process right now (see docs/prd/fips-140-mode.md). It delegates to
+// crypto/fips140.Enabled(), which is true only when the binary was built
+// with GOFIPS140 (linking Go's native FIPS 140-3 crypto module) AND the
+// runtime hasn't had that default overridden off via GODEBUG=fips140=off.
+// A binary built without GOFIPS140 always reports false here, since the
+// FIPS module was never linked in. This reflects FIPS 140-3 mode being
+// active, not a CMVP compliance certification.
 func isFIPSBuild() bool {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return false
-	}
-	return fipsSettingEnabled(info.Settings)
-}
-
-// fipsSettingEnabled reports whether settings (as returned by
-// debug.BuildInfo.Settings) records a GOFIPS140 build setting other than
-// unset or "off". Split out from isFIPSBuild so the decision logic can be
-// unit tested without depending on how the test binary itself was built.
-func fipsSettingEnabled(settings []debug.BuildSetting) bool {
-	for _, setting := range settings {
-		if setting.Key == "GOFIPS140" {
-			return setting.Value != "" && setting.Value != "off"
-		}
-	}
-	return false
+	return fips140.Enabled()
 }
 
 func (v versionExec) isCheckVersionEnabled(forceCheck bool) bool {
