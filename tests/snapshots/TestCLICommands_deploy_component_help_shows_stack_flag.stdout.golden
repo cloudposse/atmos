@@ -16,7 +16,7 @@ FLAGS
 
   -h, --help             help for component
 
-      --identity string  Identity to use for authentication (overrides identity in command config)
+  -i, --identity string  Identity to use for authentication (use without value to select interactively)
 
   -s, --stack string     Name of the stack
 
@@ -97,5 +97,3 @@ GLOBAL FLAGS
 
   -v, --verbose                              Enable verbose error output with full context, stack traces, and detailed
                                              information
-
-
