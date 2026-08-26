@@ -4,6 +4,7 @@ package container
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -12,22 +13,28 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/composition"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	ctr "github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // Seams for testability — overridden in tests.
 var (
-	setupComponentAuthForCLI = e.SetupComponentAuthForCLI
-	processStacks            = e.ProcessStacks
-	detectRuntime            = ctr.DetectRuntimeWithPreferenceAndRecovery
-	initCliConfig            = cfg.InitCliConfig
-	describeStacks           = e.ExecuteDescribeStacks
+	setupComponentAuthForCLI         = e.SetupComponentAuthForCLI
+	processStacks                    = e.ProcessStacks
+	detectRuntime                    = ctr.DetectRuntimeWithPreferenceAndRecovery
+	initCliConfig                    = cfg.InitCliConfig
+	describeStacks                   = e.ExecuteDescribeStacks
+	provisionAndResolveComponentPath = func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType, fallbackComponentPath string) (string, bool, error) {
+		return component.ProvisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, info, componentType, fallbackComponentPath)
+	}
 )
 
 // defaultStopTimeout is the grace period for stop/restart/down operations.
@@ -120,21 +127,77 @@ func (r *resolved) runtime(ctx context.Context) (ctr.Runtime, error) {
 }
 
 // mounts returns runtime mounts with bind sources made absolute against the
-// Atmos project root. Podman remote clients resolve relative bind sources in
-// the Podman machine rather than on the client, which turns `app/public` into
-// a path such as `/var/home/core/app/public` on macOS.
-func (r *resolved) mounts() []ctr.Mount {
+// container component's own resolved directory (see resolveComponentPath).
+// Podman remote clients resolve relative bind sources in the Podman machine
+// rather than on the client, which turns `app/public` into a path such as
+// `/var/home/core/app/public` on macOS.
+func (r *resolved) mounts(componentPath string) []ctr.Mount {
 	mounts := r.spec.Mounts()
-	if r.atmosConfig.BasePathAbsolute == "" {
+	if componentPath == "" {
 		return mounts
 	}
 
 	for i := range mounts {
 		if mounts[i].Type == "bind" && mounts[i].Source != "" && !filepath.IsAbs(mounts[i].Source) {
-			mounts[i].Source = filepath.Join(r.atmosConfig.BasePathAbsolute, mounts[i].Source)
+			mounts[i].Source = filepath.Join(componentPath, mounts[i].Source)
 		}
 	}
 	return mounts
+}
+
+// buildConfig returns the build config with Context anchored to the container
+// component's own resolved directory (see resolveComponentPath) when
+// relative, and Dockerfile anchored to that resolved Context when relative —
+// the same Docker/Compose convention (and the same rule the workflow `type:
+// container` build step already applies) where a relative dockerfile path is
+// relative to the build context, not the component directory itself.
+func (r *resolved) buildConfig(componentPath string) *ctr.BuildConfig {
+	buildConfig := r.spec.ToBuildConfig()
+	if buildConfig == nil {
+		return nil
+	}
+
+	buildContext := buildConfig.Context
+	if buildContext == "" {
+		buildContext = "."
+	}
+	if !filepath.IsAbs(buildContext) {
+		buildContext = filepath.Join(componentPath, buildContext)
+	}
+	buildConfig.Context = buildContext
+
+	dockerfile := buildConfig.Dockerfile
+	if dockerfile == "" {
+		dockerfile = "Dockerfile"
+	}
+	if !filepath.IsAbs(dockerfile) {
+		dockerfile = filepath.Join(buildConfig.Context, dockerfile)
+	}
+	buildConfig.Dockerfile = dockerfile
+
+	return buildConfig
+}
+
+// resolveComponentPath resolves the container component's own directory,
+// mirroring the base_path + component:/metadata.component mechanism used by
+// terraform/helmfile/kubernetes/helm (pkg/utils.GetComponentPath), and layering
+// in JIT source-provisioning support: a component declaring `source:` is
+// auto-provisioned into a workdir via component.ProvisionAndResolveComponentPath,
+// exactly like the other component types; build.context/build.dockerfile and
+// run.mounts[].source are anchored against the returned path when relative.
+//
+// The returned existence flag is informational only for containers: unlike
+// terraform, a container component's resolved directory need not itself exist
+// (e.g. `build.context: ../shared-service` may point elsewhere entirely), so
+// callers should not treat exists=false as fatal.
+func resolveComponentPath(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, bool, error) {
+	defer perf.Track(atmosConfig, "container.resolveComponentPath")()
+
+	initialPath, err := u.GetComponentPath(atmosConfig, cfg.ContainerComponentType, info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		return "", false, errors.Join(errUtils.ErrPathResolution, fmt.Errorf("component path: %w", err))
+	}
+	return provisionAndResolveComponentPath(ctx, atmosConfig, info, cfg.ContainerComponentType, initialPath)
 }
 
 // ExecuteBuild builds the component image from the build configuration.
@@ -145,7 +208,11 @@ func ExecuteBuild(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-	buildConfig := r.spec.ToBuildConfig()
+	componentPath, _, err := resolveComponentPath(ctx, &r.atmosConfig, info)
+	if err != nil {
+		return err
+	}
+	buildConfig := r.buildConfig(componentPath)
 	if buildConfig == nil {
 		return fmt.Errorf("%w: component %q has no build configuration", errUtils.ErrComponentConfigInvalid, r.component)
 	}
@@ -253,6 +320,10 @@ func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
+	componentPath, _, err := resolveComponentPath(ctx, &r.atmosConfig, info)
+	if err != nil {
+		return err
+	}
 	image, err := r.requireImage()
 	if err != nil {
 		return err
@@ -269,14 +340,14 @@ func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-	if err := r.ensureImage(ctx, runtime, image); err != nil {
+	if err := r.ensureImage(ctx, runtime, image, componentPath); err != nil {
 		return err
 	}
 	runConfig := &ctr.EphemeralConfig{
 		Name:    ctr.RuntimeName(r.stack, cfg.ContainerComponentType, r.component),
 		Image:   image,
 		Command: []string{"/bin/sh", "-lc", r.spec.Run.Command},
-		Mounts:  r.mounts(),
+		Mounts:  r.mounts(componentPath),
 		Ports:   ports,
 		Env:     r.envList,
 		User:    r.runUser(),
@@ -298,6 +369,10 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
+	componentPath, _, err := resolveComponentPath(ctx, &r.atmosConfig, info)
+	if err != nil {
+		return err
+	}
 	image, err := r.requireImage()
 	if err != nil {
 		return err
@@ -314,7 +389,7 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		Image:         image,
 		Command:       command,
 		Ports:         ports,
-		Mounts:        r.mounts(),
+		Mounts:        r.mounts(componentPath),
 		Env:           r.env,
 		User:          r.runUser(),
 		Host:          r.spec.HostRuntime(),
@@ -330,7 +405,7 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	ctr.AttachSharedNetwork(ctx, runtime, &namedConfig.Networks, r.stack, r.component)
-	if err := r.ensureImage(ctx, runtime, image); err != nil {
+	if err := r.ensureImage(ctx, runtime, image, componentPath); err != nil {
 		return err
 	}
 	if err := spinner.ExecWithSpinnerDynamic(
@@ -547,7 +622,7 @@ func discover(ctx context.Context, info *schema.ConfigAndStacksInfo) (*discovere
 // `build` and the image is not already present locally. This lets `up` and
 // `run` work without a separate `build` step (build-before-start). Components
 // without a build (image-only) are pulled on demand by the runtime instead.
-func (r *resolved) ensureImage(ctx context.Context, runtime ctr.Runtime, image string) error {
+func (r *resolved) ensureImage(ctx context.Context, runtime ctr.Runtime, image, componentPath string) error {
 	if r.spec.Build == nil {
 		return nil
 	}
@@ -559,7 +634,7 @@ func (r *resolved) ensureImage(ctx context.Context, runtime ctr.Runtime, image s
 	} else if !ctr.IsImageMissingError(err) {
 		return fmt.Errorf("%w: inspect image %q for %q: %w", errUtils.ErrComponentExecutionFailed, image, r.component, err)
 	}
-	buildConfig := r.spec.ToBuildConfig()
+	buildConfig := r.buildConfig(componentPath)
 	if buildConfig == nil {
 		return nil
 	}

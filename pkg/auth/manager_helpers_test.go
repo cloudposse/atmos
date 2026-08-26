@@ -8,9 +8,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1519,4 +1521,55 @@ func TestCreateAndAuthenticateManagerWithStackScan_ConflictingDefaultsDiscarded(
 	scannedCopy := scanStackFilesForDefaults(authConfig, atmosConfig)
 	assert.Nil(t, scannedCopy, "scan must return nil when stacks disagree on default identity (Issue #2072 allAgree preserved)")
 	assert.True(t, authConfig.Identities["atmos-yaml-default"].Default, "atmos.yaml-level default must remain intact")
+}
+
+func TestResolveSelectedIdentity_PassthroughForConcreteName(t *testing.T) {
+	// A concrete identity name (not the sentinel) must pass through unchanged, without
+	// ever calling GetDefaultIdentity.
+	ctrl := gomock.NewController(t)
+	mgr := types.NewMockAuthManager(ctrl)
+
+	resolved, err := ResolveSelectedIdentity(mgr, "dev-admin", cfg.IdentityFlagSelectValue)
+
+	require.NoError(t, err)
+	assert.Equal(t, "dev-admin", resolved)
+}
+
+func TestResolveSelectedIdentity_PassthroughForEmptyName(t *testing.T) {
+	// Empty identity name (flag omitted entirely) is a distinct case from the select
+	// sentinel and must also pass through unchanged.
+	ctrl := gomock.NewController(t)
+	mgr := types.NewMockAuthManager(ctrl)
+
+	resolved, err := ResolveSelectedIdentity(mgr, "", cfg.IdentityFlagSelectValue)
+
+	require.NoError(t, err)
+	assert.Empty(t, resolved)
+}
+
+func TestResolveSelectedIdentity_PromptsForSentinel(t *testing.T) {
+	// The select sentinel (bare --identity) must resolve via GetDefaultIdentity(forceSelect=true),
+	// which is what triggers the interactive huh picker.
+	ctrl := gomock.NewController(t)
+	mgr := types.NewMockAuthManager(ctrl)
+	mgr.EXPECT().GetDefaultIdentity(true).Return("selected-identity", nil)
+
+	resolved, err := ResolveSelectedIdentity(mgr, cfg.IdentityFlagSelectValue, cfg.IdentityFlagSelectValue)
+
+	require.NoError(t, err)
+	assert.Equal(t, "selected-identity", resolved)
+}
+
+func TestResolveSelectedIdentity_PropagatesSelectionError(t *testing.T) {
+	// Errors from GetDefaultIdentity (e.g. ErrUserAborted, ErrIdentitySelectionRequiresTTY)
+	// must propagate unwrapped so callers can branch on errors.Is.
+	ctrl := gomock.NewController(t)
+	mgr := types.NewMockAuthManager(ctrl)
+	mgr.EXPECT().GetDefaultIdentity(true).Return("", errUtils.ErrUserAborted)
+
+	resolved, err := ResolveSelectedIdentity(mgr, cfg.IdentityFlagSelectValue, cfg.IdentityFlagSelectValue)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+	assert.Empty(t, resolved)
 }
