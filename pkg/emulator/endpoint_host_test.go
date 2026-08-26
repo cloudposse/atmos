@@ -119,10 +119,14 @@ func TestHostDockerInternalResolves_BoundedByTimeout(t *testing.T) {
 	elapsed := time.Since(start)
 
 	assert.False(t, got)
-	// Tight bound against the actual configured constant (not the safety net
-	// above) -- this fails if the timeout stops being applied at all, since
-	// elapsed would then jump to stubSafetyNet instead.
-	assert.Less(t, elapsed, hostDockerInternalLookupTimeout+time.Second,
+	// Bound against the actual configured constant (not the safety net above) --
+	// this fails if the timeout stops being applied at all, since elapsed would
+	// then jump to stubSafetyNet instead. The slack is generous (not 1s) because
+	// Windows CI runners have observed scheduler/context-cancellation jitter that
+	// pushed elapsed to just over a tight 1s margin (e.g., 3.04s against a 3s cap);
+	// stubSafetyNet is 10x the timeout, leaving ample room to still catch a real
+	// regression.
+	assert.Less(t, elapsed, hostDockerInternalLookupTimeout+3*time.Second,
 		"resolver context must actually be bounded by hostDockerInternalLookupTimeout")
 }
 

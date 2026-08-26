@@ -39,11 +39,11 @@ atmos terraform workdir list
 Example output:
 
 ```
-WORKDIR              COMPONENT    STACK    SOURCE    CREATED              UPDATED
-dev-vpc              vpc          dev      local     2024-01-15 10:30:00  2024-01-15 10:30:00
-staging-vpc          vpc          staging  local     2024-01-15 11:00:00  2024-01-15 11:00:00
-prod-vpc             vpc          prod     local     2024-01-15 12:00:00  2024-01-15 12:00:00
-dev-s3-bucket        s3-bucket    dev      local     2024-01-15 10:35:00  2024-01-15 10:35:00
+COMPONENT  STACK    TYPE   VERSION  LAST_ACCESSED     PATH
+vpc        dev      local  -        2026-01-15 10:30  .workdir/terraform/dev-vpc-bb03116d
+vpc        staging  local  -        2026-01-15 11:00  .workdir/terraform/staging-vpc-8ce5e903
+vpc        prod     local  -        2026-01-15 12:00  .workdir/terraform/prod-vpc-0e327247
+s3-bucket  dev      local  -        2026-01-15 10:35  .workdir/terraform/dev-s3-bucket-e00418a7
 ```
 
 ### Output as JSON
@@ -58,14 +58,16 @@ Example output:
 ```json
 [
   {
-    "name": "dev-vpc",
+    "name": "dev-vpc-bb03116d",
     "component": "vpc",
     "stack": "dev",
-    "source_type": "local",
     "source": "components/terraform/vpc",
-    "created_at": "2024-01-15T10:30:00Z",
-    "updated_at": "2024-01-15T10:30:00Z",
-    "content_hash": "abc123"
+    "source_type": "local",
+    "path": ".workdir/terraform/dev-vpc-bb03116d",
+    "content_hash": "a60bbfad57c32f1d7acd08defd9f0bb7",
+    "created_at": "2026-01-15T10:30:00Z",
+    "updated_at": "2026-01-15T10:30:00Z",
+    "last_accessed": "2026-01-15T10:30:00Z"
   }
 ]
 ```
@@ -81,12 +83,12 @@ atmos terraform workdir list --format yaml
 
 Each workdir entry includes:
 
-- **WORKDIR** - The workdir directory name (format: `<stack>-<component>`)
 - **COMPONENT** - The Terraform component name
 - **STACK** - The stack name where this workdir is used
-- **SOURCE** - The source type (`local` for local components)
-- **CREATED** - When the workdir was first created
-- **UPDATED** - When the workdir was last updated
+- **TYPE** - The source type (`local` for local components)
+- **VERSION** - The provisioned source version, if any (`-` for local components)
+- **LAST_ACCESSED** - When the workdir was last accessed
+- **PATH** - The workdir directory path, ending in `<stack>-<component>-<hash>` (the trailing hash keeps two component instances from colliding even when their `<stack>-<component>` prefixes look the same)
 
 ## Related Commands
 

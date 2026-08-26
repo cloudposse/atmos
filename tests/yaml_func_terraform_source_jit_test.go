@@ -114,7 +114,7 @@ func seedStateFile(t *testing.T, cwd string) {
   "resources": []
 }
 `
-	stateDir := filepath.Join(cwd, ".workdir", "terraform", "test-producer-hfrom-hsource", "terraform.tfstate.d", "test")
+	stateDir := filepath.Join(cwd, ".workdir", "terraform", "test-producer-from-source-b2f94c7d", "terraform.tfstate.d", "test")
 	require.NoError(t, os.MkdirAll(stateDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte(stateContent), 0o644))
 }
@@ -123,7 +123,7 @@ func seedStateFile(t *testing.T, cwd string) {
 // correctly when the producer component is configured with both source.uri and
 // provision.workdir.enabled: true.
 //
-// The state file lives in the JIT workdir (.workdir/terraform/test-producer-hfrom-hsource/),
+// The state file lives in the JIT workdir (.workdir/terraform/test-producer-from-source-b2f94c7d/),
 // not in components/terraform/. resolveLocalBackendComponentPath must derive the JIT path
 // even though the component was hydrated from an external source URI rather than a local
 // components/ directory.
@@ -160,7 +160,7 @@ func TestTerraformStateJITWorkdirFromSource(t *testing.T) {
 	//
 	// producer-from-source has provision.workdir.enabled: true + source.uri.
 	// resolveLocalBackendComponentPath must derive the JIT workdir path
-	// (.workdir/terraform/test-producer-hfrom-hsource/) and find the pre-seeded
+	// (.workdir/terraform/test-producer-from-source-b2f94c7d/) and find the pre-seeded
 	// state file there.
 	componentSection, err := e.ExecuteDescribeComponent(
 		&e.ExecuteDescribeComponentParams{
@@ -208,7 +208,7 @@ func TestTerraformOutputJITWorkdirFromSource(t *testing.T) {
 	tfoutput.ResetWorkdirProvisionCache()
 	e.ResetStateCache()
 
-	workdirPath := filepath.Join(cwd, ".workdir", "terraform", "test-producer-hfrom-hsource")
+	workdirPath := filepath.Join(cwd, ".workdir", "terraform", "test-producer-from-source-b2f94c7d")
 
 	// Remove any prior workdir so we verify it is freshly created.
 	require.NoError(t, os.RemoveAll(workdirPath))
