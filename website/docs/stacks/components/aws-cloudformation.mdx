@@ -46,11 +46,12 @@ dependencies, and be included in affected runs.
 
   <dt>[`hooks`](/stacks/hooks)</dt>
   <dd>
-    Lifecycle event handlers. `diff`, `apply`, and `delete` fire
-    `before`/`after` events (`before.aws/cloudformation.diff`,
-    `after.aws/cloudformation.apply`, and so on); `plan` and `deploy` fire the
-    same events as `diff` and `apply` respectively. `render`, `validate`, and
-    `output` do not fire hook events.
+    Lifecycle event handlers. Only `diff`/`plan`, `apply`/`deploy`, and
+    `delete` fire `before`/`after` events (`before.aws/cloudformation.diff`,
+    `after.aws/cloudformation.apply`, and so on) — every other verb, including
+    `render`, `validate`, `output`, `fmt`, `tree`, `logs`, `watch`,
+    `changeset *`, `drift *`, `get *`, `stackset *`, `list`, `backend *`, and
+    `source *`, does not fire hook events.
   </dd>
 
   <dt>`source`</dt>
@@ -60,7 +61,14 @@ dependencies, and be included in affected runs.
   </dd>
 
   <dt>`provision`</dt>
-  <dd>Delivery targets for `apply`/`deploy` — the account/region (default) or a Git deployment repository.</dd>
+  <dd>
+    Delivery targets: the account/region direct-deploy default, `kind: aws/s3`
+    (template packaging), or `kind: git` (a Git deployment repository) — all
+    selectable via `apply --target`. A fourth kind, `kind: aws/stackset`, is
+    *not* selected through `apply --target`; it's used exclusively by the
+    `stackset` verb group. See [Delivery Targets](#delivery-targets) below for
+    the full picture, including `provision.backend.enabled` auto-provisioning.
+  </dd>
 
   <dt>`auth`</dt>
   <dd>Component-level Atmos Auth providers, identities, and integrations.</dd>
@@ -77,8 +85,20 @@ system, unlike native Helm.
 ## CloudFormation-Specific Sections
 
 <dl>
-  <dt>`template` <em>(required)</em></dt>
-  <dd>Path to the CloudFormation template, relative to the component's base path.</dd>
+  <dt>`template` / `path` <em>(one required)</em></dt>
+  <dd>
+    The CloudFormation template, provided one of two mutually exclusive ways:
+
+    - `template` — an **inline** template body, either a literal string (a
+      `|` block scalar, YAML or JSON) or a structured YAML map. Because it's
+      inline stack config, it flows through Atmos's own `{{ }}` templating
+      pipeline before being sent to CloudFormation — file-based templates
+      (`path:`) do not get this.
+    - `path` — a **file reference**: the path to a template file, relative to
+      the component's base path.
+
+    Setting both is an error.
+  </dd>
 
   <dt>`stack_name`</dt>
   <dd>The explicit CloudFormation stack name. There is no legacy name-pattern interpolation — set the name you want directly (Go templates are supported, like any other stack field).</dd>
@@ -135,7 +155,7 @@ system, unlike native Helm.
 components:
   "aws/cloudformation":
     vpc:
-      template: template.yaml
+      path: template.yaml
       stack_name: "{{ .vars.stage }}-vpc"
       parameters:
         CidrBlock: "10.0.0.0/16"
@@ -153,6 +173,35 @@ components:
       dependencies:
         components:
           - vpc-flow-logs
+```
+</File>
+
+Inline templates skip the on-disk file entirely and support two forms — a
+literal string body, or a structured map:
+
+<File title="stacks/catalog/bucket.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    bucket-inline-string:
+      stack_name: "{{ .vars.stage }}-bucket"
+      template: |
+        AWSTemplateFormatVersion: '2010-09-09'
+        Resources:
+          Bucket:
+            Type: AWS::S3::Bucket
+            Properties:
+              BucketName: "{{ .vars.stage }}-bucket"
+
+    bucket-inline-map:
+      stack_name: "{{ .vars.stage }}-bucket-map"
+      template:
+        AWSTemplateFormatVersion: "2010-09-09"
+        Resources:
+          Bucket:
+            Type: AWS::S3::Bucket
+            Properties:
+              BucketName: "{{ .vars.stage }}-bucket-map"
 ```
 </File>
 
@@ -181,7 +230,7 @@ supported:
   <dd>
     Any go-getter URI (Git, HTTP archive, S3, OCI) pointing at a directory. The
     component directory (template, stack policy, and any local assets) is
-    vendored, and `template:` resolves relative to it, exactly like other
+    vendored, and `path:` resolves relative to it, exactly like other
     component types' `source:` behavior.
 
 ```yaml
@@ -191,7 +240,7 @@ components:
       source:
         uri: github.com/acme/cfn-templates.git//vpc?ref={{ .Version }}
         version: 1.2.0
-      template: template.yaml
+      path: template.yaml
 ```
   </dd>
 
@@ -199,7 +248,7 @@ components:
   <dd>
     When the `source.uri` resolves to exactly one file — a bare template URI,
     with no surrounding directory structure — Atmos fetches it directly as the
-    component's `template:` file. A CloudFormation component is often exactly
+    component's `path:` file. A CloudFormation component is often exactly
     one file, and demanding a directory structure around it would be
     ceremony.
 
@@ -211,7 +260,7 @@ components:
         uri: https://raw.githubusercontent.com/acme/cfn-templates/v1.2.0/dns.yaml
 ```
 
-  `template:` does not need to be set in the single-file case — Atmos names
+  `path:` does not need to be set in the single-file case — Atmos names
   the vendored file after the source URI's basename and uses it directly.
   </dd>
 </dl>
@@ -253,6 +302,30 @@ components:
             kind: aws/s3
             bucket: my-cfn-artifacts
             prefix: templates
+            region: us-east-1
+```
+
+    The bucket must exist before `apply`/`deploy` uploads to it — either
+    provision it explicitly with
+    [`atmos aws cloudformation backend create`](/cli/commands/aws/cloudformation/backend/create),
+    or set `provision.backend.enabled: true` (a sibling of `targets`, not
+    nested under a target) to have `apply`/`deploy` create it automatically
+    the first time it's missing. Auto-provisioning only runs the existence
+    check up front — it never reconciles a bucket that already exists, unlike
+    `backend create`/`update` run explicitly, which always re-applies the
+    secure defaults (versioning, encryption, public access blocking, tags).
+
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      provision:
+        backend:
+          enabled: true
+        targets:
+          packaged:
+            kind: aws/s3
+            bucket: my-cfn-artifacts
             region: us-east-1
 ```
   </dd>

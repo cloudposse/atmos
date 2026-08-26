@@ -181,6 +181,82 @@ func TestStreamStackEvents_ContextCancelled(t *testing.T) {
 	assert.Equal(t, cfntypes.StackStatusCreateInProgress, status, "the last-observed (non-terminal) status must still be returned")
 }
 
+// followLogs must propagate a pollStackEvents failure immediately, the same
+// as streamStackEvents.
+func TestFollowLogs_PollError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
+
+	_, err := followLogs(context.Background(), client, []string{"vpc"}, map[string]any{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "access denied")
+}
+
+// followLogs must return a nil error (not ctx.Err()) on cancellation — unlike
+// streamStackEvents, --follow's ctx.Done() is the expected tail -f style exit
+// (Ctrl+C), not an abnormal interruption of an in-progress operation.
+func TestFollowLogs_ContextCancelledReturnsNilAfterOnePoll(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("vpc")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("e1"), LogicalResourceId: awsString("Vpc"), ResourceStatus: cfntypes.ResourceStatusCreateComplete},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("vpc")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Already cancelled: one poll round happens, then the select must take ctx.Done().
+
+	out := captureStdout(t, func() {
+		summary, err := followLogs(ctx, client, []string{"vpc"}, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, 1, summary["event_count"])
+	})
+	// logs is a data command (docs/io-and-ui-output.md): --follow must write to
+	// stdout the same as the one-shot path, never stderr.
+	assert.Contains(t, out, "Vpc")
+}
+
+// followLogs must poll every stack in names independently, each with its own
+// dedup set, and merge the event count across all of them.
+func TestFollowLogs_PollsEveryStackIndependently(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("r1"), LogicalResourceId: awsString("RootResource"), ResourceStatus: cfntypes.ResourceStatusCreateComplete},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("c1"), LogicalResourceId: awsString("ChildResource"), ResourceStatus: cfntypes.ResourceStatusCreateComplete},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	out := captureStdout(t, func() {
+		summary, err := followLogs(ctx, client, []string{"root", "child"}, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, 2, summary["event_count"])
+	})
+	assert.Contains(t, out, "RootResource")
+	assert.Contains(t, out, "ChildResource")
+}
+
 func TestPollStackEvents_StackDeleted(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)

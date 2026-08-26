@@ -2,11 +2,15 @@ package cloudformation
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -15,6 +19,7 @@ import (
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -196,7 +201,7 @@ func TestDeployDirect_Success(t *testing.T) {
 	assert.False(t, result.NoOp)
 }
 
-// deployDirect must return an error wrapping ErrAwsCloudFormationChangeSetFailed
+// deployDirect must return an error wrapping ErrAwsCloudFormationOperationFailed
 // when the stack converges to a failed terminal status.
 func TestDeployDirect_FailedFinalStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -206,7 +211,7 @@ func TestDeployDirect_FailedFinalStatus(t *testing.T) {
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
 	_, err := deployDirect(context.Background(), client, spec)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 }
 
 // deliverApply must route to deployDirect (the implicit default target) when
@@ -265,6 +270,82 @@ func TestDeliverApply_DirectS3Selection_PublishOnly(t *testing.T) {
 	assert.Equal(t, "artifacts", summary[targetKey])
 	assert.Equal(t, "s3://my-bucket/dev/vpc/template-", summary["package_url"].(string)[:len("s3://my-bucket/dev/vpc/template-")])
 	assert.NotEmpty(t, summary["package_sha256"])
+}
+
+// deliverApply must auto-provision a missing aws/s3 backend bucket before
+// uploading to it, when the component declares provision.backend.enabled:
+// true — the behavior website/docs/migration/from-rain.mdx documents.
+func TestDeliverApply_AutoProvisionsMissingBackend(t *testing.T) {
+	t.Cleanup(backend.ResetS3ClientFactory)
+	s3Client := &createTrackingS3Client{fakeS3Client: fakeS3Client{headBucketErr: &types.NotFound{}}}
+	backend.SetS3ClientFactory(func(aws.Config, ...func(*s3.Options)) backend.S3ClientAPI { return s3Client })
+
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	mockBackend := artifact.NewMockBackend(ctrl)
+	mockBackend.EXPECT().Upload(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	stubNewS3Backend(t, mockBackend, nil)
+
+	octx := &opContext{
+		Ctx:         context.Background(),
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+			ComponentSection: map[string]any{
+				cfg.ProvisionSectionName: map[string]any{
+					"backend": map[string]any{"enabled": true},
+					"targets": map[string]any{
+						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket", "region": "us-east-1"},
+					},
+				},
+			},
+		},
+		Flags: map[string]any{targetKey: "artifacts"},
+	}
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+
+	_, _, err := deliverApply(octx, client, spec)
+	require.NoError(t, err)
+	assert.True(t, s3Client.createBucketCalled, "the missing backend bucket must be auto-provisioned before upload")
+}
+
+// deliverApply must fail (never reach uploadPackage against a possibly
+// nonexistent bucket) when auto-provisioning a missing backend fails.
+func TestDeliverApply_AutoProvisionFailure_AbortsBeforeUpload(t *testing.T) {
+	t.Cleanup(backend.ResetS3ClientFactory)
+	s3Client := &createTrackingS3Client{
+		fakeS3Client:    fakeS3Client{headBucketErr: &types.NotFound{}},
+		createBucketErr: errors.New("access denied"),
+	}
+	backend.SetS3ClientFactory(func(aws.Config, ...func(*s3.Options)) backend.S3ClientAPI { return s3Client })
+
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl) // no expectations: any call fails the test.
+
+	octx := &opContext{
+		Ctx:         context.Background(),
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+			ComponentSection: map[string]any{
+				cfg.ProvisionSectionName: map[string]any{
+					"backend": map[string]any{"enabled": true},
+					"targets": map[string]any{
+						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket", "region": "us-east-1"},
+					},
+				},
+			},
+		},
+		Flags: map[string]any{targetKey: "artifacts"},
+	}
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+
+	_, _, err := deliverApply(octx, client, spec)
+	require.Error(t, err)
+	assert.True(t, s3Client.createBucketCalled)
 }
 
 // deliverApply must package a large template through the resolved aws/s3

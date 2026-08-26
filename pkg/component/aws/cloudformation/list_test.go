@@ -72,7 +72,7 @@ func TestListDeployedStacks_Pagination(t *testing.T) {
 }
 
 // listDeployedStacks must wrap a ListStacks API error with
-// ErrAwsCloudFormationChangeSetFailed.
+// ErrAwsCloudFormationAPICallFailed.
 func TestListDeployedStacks_APIError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
@@ -82,7 +82,7 @@ func TestListDeployedStacks_APIError(t *testing.T) {
 
 	_, err := listDeployedStacks(context.Background(), client, nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 	assert.ErrorIs(t, err, sentinel)
 }
 

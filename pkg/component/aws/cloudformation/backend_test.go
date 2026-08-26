@@ -137,6 +137,12 @@ func TestBuildSyntheticBackendConfig(t *testing.T) {
 			backendEnabled, ok := provisionBlock["backend"].(map[string]any)
 			require.True(t, ok)
 			assert.Equal(t, true, backendEnabled["enabled"])
+
+			// A CFN artifact bucket holds packaged templates, not Terraform state —
+			// these overrides suppress pkg/provisioner/backend's default ".tfstate"/
+			// "Terraform state file(s)" deletion-warning wording for this backend.
+			assert.Equal(t, "", got["state_file_suffix"])
+			assert.Equal(t, "", got["state_file_label"])
 		})
 	}
 }

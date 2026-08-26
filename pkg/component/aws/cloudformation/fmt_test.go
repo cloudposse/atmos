@@ -164,3 +164,12 @@ func TestRunFmt_WriteFailure(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationFmtNotClean)
 }
+
+// runFmt must reject an inline (no-file) template with a clear error instead
+// of attempting to write to an empty TemplateAbsPath.
+func TestRunFmt_InlineTemplate_RequiresPath(t *testing.T) {
+	spec := &stackSpec{TemplateBody: "Resources: {}\n"}
+	_, err := runFmt(spec, map[string]any{}, map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationFmtRequiresPath)
+}

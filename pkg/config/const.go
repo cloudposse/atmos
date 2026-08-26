@@ -160,6 +160,7 @@ const (
 	// Native aws/cloudformation component sections.
 	CloudFormationSectionName        = "aws/cloudformation"
 	TemplateSectionName              = "template"
+	TemplatePathSectionName          = "path"
 	StackNameSectionName             = "stack_name"
 	ParametersSectionName            = "parameters"
 	CapabilitiesSectionName          = "capabilities"

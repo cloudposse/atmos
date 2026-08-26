@@ -104,6 +104,9 @@ linters:
             - "!**/pkg/ci/providers/github/**"
             - "!**/pkg/ci/planfile/github/**"
             - "!**/pkg/ci/planfile/s3/**"
+            # pkg/ci/artifact/s3 is the S3-backed CI artifact store; it legitimately
+            # depends on the AWS SDK, same rationale as pkg/ci/planfile/s3 above.
+            - "!**/pkg/ci/artifact/s3/**"
             - "!**/pkg/github/**"
             - "$test"
           deny:

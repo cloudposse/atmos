@@ -372,6 +372,7 @@ func extractHelmComponentSection(componentMap map[string]any) map[string]any {
 // final component config.
 var cloudFormationComponentSectionKeys = []string{
 	cfg.TemplateSectionName,
+	cfg.TemplatePathSectionName,
 	cfg.ParametersSectionName,
 	cfg.CapabilitiesSectionName,
 	cfg.TagsSectionName,

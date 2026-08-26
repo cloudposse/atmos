@@ -18,7 +18,7 @@ import (
 const kindAwsStackSet = "aws/stackset"
 
 // errWrapFmt is the shared fmt.Errorf format for wrapping an SDK error with
-// this file's stackset-failed sentinel.
+// one of this package's sentinel errors.
 const errWrapFmt = "%w: %w"
 
 // defaultPermissionModel is used when a stackset target doesn't set permission_model.
@@ -139,7 +139,7 @@ func runStackSetCreate(ctx context.Context, client CloudFormationClient, spec *s
 		ExecutionRoleName:     nilIfEmpty(ssCfg.ExecutionRoleName),
 	})
 	if err != nil {
-		return summary, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
+		return summary, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 	_ = data.Writeln(fmt.Sprintf("%s: stackset created", spec.StackName))
 	summary["stackset_name"] = spec.StackName
@@ -159,7 +159,7 @@ func runStackSetInstancesCreate(ctx context.Context, client CloudFormationClient
 		Regions:      ssCfg.Regions,
 	})
 	if err != nil {
-		return summary, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
+		return summary, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 	status, err := pollStackSetOperation(ctx, client, stackSetName, stringValue(out.OperationId))
 	summary["operation_status"] = string(status)
@@ -183,7 +183,7 @@ func runStackSetUpdate(ctx context.Context, client CloudFormationClient, spec *s
 		ExecutionRoleName:     nilIfEmpty(ssCfg.ExecutionRoleName),
 	})
 	if err != nil {
-		return summary, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
+		return summary, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 	status, err := pollStackSetOperation(ctx, client, spec.StackName, stringValue(out.OperationId))
 	summary["operation_status"] = string(status)
@@ -210,7 +210,7 @@ func runStackSetDelete(ctx context.Context, client CloudFormationClient, stackSe
 			RetainStacks: awsBool(false),
 		})
 		if err != nil {
-			return summary, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
+			return summary, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationAPICallFailed, err)
 		}
 		if _, err := pollStackSetOperation(ctx, client, stackSetName, stringValue(out.OperationId)); err != nil {
 			return summary, err
@@ -218,7 +218,7 @@ func runStackSetDelete(ctx context.Context, client CloudFormationClient, stackSe
 	}
 
 	if _, err := client.DeleteStackSet(ctx, &cloudformation.DeleteStackSetInput{StackSetName: awsString(stackSetName)}); err != nil {
-		return summary, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
+		return summary, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 	_ = data.Writeln(fmt.Sprintf("%s: stackset deleted", stackSetName))
 	summary["stackset_name"] = stackSetName
@@ -255,7 +255,7 @@ func listStackSetInstances(ctx context.Context, client CloudFormationClient, sta
 			NextToken:    nextToken,
 		})
 		if err != nil {
-			return nil, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
+			return nil, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationAPICallFailed, err)
 		}
 		instances = append(instances, out.Summaries...)
 		if out.NextToken == nil {
@@ -296,7 +296,7 @@ func pollStackSetOperation(ctx context.Context, client CloudFormationClient, sta
 			OperationId:  awsString(operationID),
 		})
 		if err != nil {
-			return "", fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
+			return "", fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationAPICallFailed, err)
 		}
 		if out.StackSetOperation == nil {
 			return "", fmt.Errorf("%w: DescribeStackSetOperation returned no operation for %s", errUtils.ErrAwsCloudFormationStackSetFailed, operationID)
@@ -307,11 +307,11 @@ func pollStackSetOperation(ctx context.Context, client CloudFormationClient, sta
 		case cfntypes.StackSetOperationStatusSucceeded:
 			return status, nil
 		case cfntypes.StackSetOperationStatusFailed, cfntypes.StackSetOperationStatusStopped:
-			return status, fmt.Errorf("%w: stackset operation %s ended in status %s", errUtils.ErrAwsCloudFormationStackSetFailed, operationID, status)
+			return status, fmt.Errorf("%w: stackset operation %s ended in status %s", errUtils.ErrAwsCloudFormationOperationFailed, operationID, status)
 		}
 
 		if time.Now().After(deadline) {
-			return status, fmt.Errorf("%w: timed out waiting for stackset operation %s", errUtils.ErrAwsCloudFormationStackSetFailed, operationID)
+			return status, fmt.Errorf("%w: timed out waiting for stackset operation %s", errUtils.ErrAwsCloudFormationOperationFailed, operationID)
 		}
 		select {
 		case <-ctx.Done():

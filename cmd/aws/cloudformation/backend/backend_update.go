@@ -41,7 +41,17 @@ encryption, and public access blocking to match secure defaults.`,
 		}
 		identity := flags.ParseGlobalFlags(cmd, v).Identity.Value()
 		target := v.GetString("target")
-		return executeCreateOrUpdate(ctx, result.Component, stack, identity, target)
+		autoApprove, autoApproveProvided := getCommandFlagBool(cmd, flagAutoApprove)
+		if !autoApproveProvided {
+			autoApprove = v.GetBool(flagAutoApprove)
+		}
+		return executeCreateOrUpdate(ctx, createOrUpdateArgs{
+			Component:   result.Component,
+			Stack:       stack,
+			Identity:    identity,
+			Target:      target,
+			AutoApprove: autoApprove,
+		})
 	},
 }
 
@@ -63,6 +73,7 @@ func init() {
 		flags.WithStackFlag(),
 		flags.WithIdentityFlag(),
 		flags.WithStringFlag("target", "", "", "The `kind: aws/s3` provision target to use. Required when more than one is declared."),
+		flags.WithBoolFlag(flagAutoApprove, "", false, "Skip the confirmation prompt when the target bucket already exists."),
 		flags.WithCompletionPrompt("stack", "Choose a stack", stackFlagCompletion),
 		flags.WithPositionalArgPrompt("component", "Choose an aws/cloudformation component", componentArgCompletion),
 	)

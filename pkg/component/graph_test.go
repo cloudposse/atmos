@@ -147,6 +147,47 @@ func TestExecuteGraphRunsComponentsInDependencyOrder(t *testing.T) {
 	}
 }
 
+// TestExecuteGraphNodeDispatchClearsTagsAndLabels guards against a real infinite-recursion
+// incident: each component package's top-level Execute() re-enters the bulk path whenever
+// len(info.Tags) > 0 || len(info.Labels) > 0, so a per-node dispatch that still carries the
+// original --tags/--labels selection recurses into executeBulk forever instead of running the
+// node. All/Affected were already cleared before this bug was found; Tags/Labels were not.
+func TestExecuteGraphNodeDispatchClearsTagsAndLabels(t *testing.T) {
+	// A minimal fixture with metadata.tags/metadata.labels so the node actually
+	// survives filterGraphByTagsAndLabels and reaches dispatch — a fixture with
+	// no matching tags would filter down to zero nodes and pass vacuously.
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{
+						cfg.MetadataSectionName: map[string]any{
+							"tags":   []any{"group-a"},
+							"labels": map[string]any{"k": "v"},
+						},
+					},
+				},
+			},
+		},
+	}
+	provider := &graphTestProvider{}
+
+	err := ExecuteGraph(context.Background(), &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          &schema.ConfigAndStacksInfo{Tags: []string{"group-a"}, Labels: map[string]string{"k": "v"}},
+		Stacks:        stacks,
+		ComponentType: cfg.KubernetesComponentType,
+		SubCommand:    "apply",
+	})
+
+	require.NoError(t, err)
+	require.Len(t, provider.calls, 1)
+	for _, call := range provider.calls {
+		assert.Empty(t, call.ConfigAndStacksInfo.Tags)
+		assert.Empty(t, call.ConfigAndStacksInfo.Labels)
+	}
+}
+
 func TestExecuteGraphValidatesRequiredOptions(t *testing.T) {
 	err := ExecuteGraph(context.Background(), &GraphExecutionOptions{Info: &schema.ConfigAndStacksInfo{}})
 	require.ErrorContains(t, err, "component provider is nil")

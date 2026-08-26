@@ -116,7 +116,7 @@ func runChangesetExecute(ctx context.Context, client CloudFormationClient, spec 
 	}
 	summary["final_status"] = string(status)
 	if isFailedStackStatus(status) {
-		return summary, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationChangeSetFailed, spec.StackName, status)
+		return summary, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationOperationFailed, spec.StackName, status)
 	}
 	return summary, nil
 }
