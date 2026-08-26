@@ -41,6 +41,13 @@ env:
   HELM_DIFF_VERSION: "v3.15.10"
   HELMFILE_VERSION: "v1.1.0"
   PACKER_VERSION: "1.14.2"
+  # helmfile's own `version` subcommand makes an outbound network call to GitHub to check
+  # for a newer release. On CI runners that call is a source of flakiness (e.g. "context
+  # deadline exceeded" on Windows runners) unrelated to anything this repo controls, and
+  # `TestExecuteHelmfile_Version` exercises the real binary. Disabling the notice skips the
+  # network call entirely (verified: no request is made when this is set), not just the
+  # printed message.
+  HELMFILE_UPGRADE_NOTICE_DISABLED: "true"
   # Number of parallel shards the `test` job's acceptance suite is split into per
   # OS (see tests/cli_test.go's testShard/testCaseShard and the `test` job's
   # matrix.shard list below, which must stay in sync with this count).
