@@ -92,11 +92,11 @@ type Version struct {
 
 // isFIPSBuild reports whether FIPS 140-3 mode is actively enforced in this
 // running process right now (see docs/prd/fips-140-mode.md). It delegates to
-// crypto/fips140.Enabled(), which is true only when the binary was built
-// with GOFIPS140 (linking Go's native FIPS 140-3 crypto module) AND the
-// runtime hasn't had that default overridden off via GODEBUG=fips140=off.
-// A binary built without GOFIPS140 always reports false here, since the
-// FIPS module was never linked in. This reflects FIPS 140-3 mode being
+// crypto/fips140.Enabled(). GOFIPS140 at build time (linking Go's native
+// FIPS 140-3 crypto module) sets the default, but GODEBUG=fips140=on can
+// enable FIPS mode at runtime even on a binary built without GOFIPS140, and
+// GODEBUG=fips140=off can disable a GOFIPS140-enabled binary's default — this
+// function reflects whichever wins. This reflects FIPS 140-3 mode being
 // active, not a CMVP compliance certification.
 func isFIPSBuild() bool {
 	return fips140.Enabled()
