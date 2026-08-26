@@ -222,10 +222,17 @@ func (p *Processor) ProcessFile(file File, targetPath string, force, update bool
 		return &FileSkippedError{Path: file.Path, RenderedPath: renderedPath}
 	}
 
-	// Prepare target path and directory
+	// Prepare target path and directory. Skipped in dry-run: a preview must
+	// leave no trace on disk, including parent directories that don't exist
+	// yet -- validateWriteTarget below tolerates a not-yet-created path fine
+	// (ResolveAndCleanBasePath falls back to the unresolved path when
+	// EvalSymlinks fails to find it), so nothing downstream requires the
+	// directory to actually exist for a dry run.
 	fullPath := filepath.Join(targetPath, renderedPath)
-	if err := ensureDirectory(fullPath); err != nil {
-		return err
+	if !p.DryRun {
+		if err := ensureDirectory(fullPath); err != nil {
+			return err
+		}
 	}
 
 	// Confine the write within targetPath and reject writing through a symlink.
@@ -249,7 +256,14 @@ func (p *Processor) ProcessFile(file File, targetPath string, force, update bool
 // can't be redirected outside the target directory (e.g. via a symlinked
 // intermediate directory) or through a symlink at the destination.
 func validateWriteTarget(fullPath, targetPath string) error {
-	realBase, err := u.ResolveAndCleanBasePath(targetPath)
+	// targetPath itself may not exist yet either -- e.g. a dry-run preview
+	// against a not-yet-created target directory never creates it on disk
+	// (engine.ensureDirectory is skipped when Processor.DryRun is set) --
+	// so it needs the same ancestor-resolution treatment as realDir below,
+	// or the two can independently fall back to differently-resolved forms
+	// of the same logical path (see resolveExistingAncestor's doc comment)
+	// and produce a false-positive mismatch.
+	realBase, err := resolveExistingAncestor(targetPath)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrPathTraversal).
 			WithCause(err).
@@ -258,7 +272,7 @@ func validateWriteTarget(fullPath, targetPath string) error {
 			Err()
 	}
 
-	realDir, err := u.ResolveAndCleanBasePath(filepath.Dir(fullPath))
+	realDir, err := resolveExistingAncestor(filepath.Dir(fullPath))
 	if err != nil {
 		return errUtils.Build(errUtils.ErrPathTraversal).
 			WithCause(err).
@@ -287,6 +301,46 @@ func validateWriteTarget(fullPath, targetPath string) error {
 	}
 
 	return nil
+}
+
+// resolveExistingAncestor resolves dir the same way u.ResolveAndCleanBasePath
+// does, but tolerates dir (or any number of its trailing path segments) not
+// existing on disk yet -- e.g. a nested subdirectory a dry-run never creates
+// (engine.ensureDirectory is skipped when Processor.DryRun is set), or, in a
+// real run, the first write into a brand-new subdirectory before its parent
+// exists. It walks up from dir to the nearest existing ancestor, resolves
+// that ancestor's own symlinks, and re-appends the non-existent suffix
+// as-is. This preserves validateWriteTarget's actual security property --
+// any symlink along the *existing* portion of the path is still resolved and
+// checked -- without requiring EvalSymlinks to succeed on a path that
+// legitimately doesn't exist yet.
+func resolveExistingAncestor(dir string) (string, error) {
+	suffix := ""
+	current := filepath.Clean(dir)
+	for {
+		if info, err := os.Stat(current); err == nil && info.IsDir() {
+			resolved, err := u.ResolveAndCleanBasePath(current)
+			if err != nil {
+				return "", err
+			}
+			if suffix == "" {
+				return resolved, nil
+			}
+			return filepath.Join(resolved, suffix), nil
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			// Reached the filesystem root without finding an existing
+			// ancestor (e.g. every component of dir is relative and none
+			// exist yet). Fall back to plain abs+clean resolution, matching
+			// u.ResolveAndCleanBasePath's own behavior when EvalSymlinks
+			// can't find the path at all.
+			return u.ResolveAndCleanBasePath(dir)
+		}
+		suffix = filepath.Join(filepath.Base(current), suffix)
+		current = parent
+	}
 }
 
 // writeFileSecure writes content to fullPath, closing the TOCTOU gap between
