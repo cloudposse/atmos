@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -277,16 +278,17 @@ func TestBuildBinary(t *testing.T) {
 	})
 
 	t.Run("propagates go mod download failure without attempting go build", func(t *testing.T) {
+		withNoSleep(t)
 		root := initGitRepoFixture(t)
-		argsFile := setUpFakePathBinary(t, "go")
-		t.Setenv(fakeBinExitEnv, "1")
+		argsFile := setUpFakePathBinaryFailingNTimes(t, goModDownloadMaxAttempts+5)
 		t.Chdir(root)
 
 		err := Build{}.Binary("default", "test")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "mod download")
 		assert.Equal(t, []string{"mod", "download"}, readFakeBinArgs(t, argsFile),
-			"go build must not run once go mod download has failed")
+			"go build must not run once go mod download has exhausted its retries")
+		assert.Equal(t, goModDownloadMaxAttempts, readFakeBinInvocationCount(t, argsFile))
 	})
 
 	t.Run("builds with default CGO/FIPS env, target GOOS, and version/commit ldflags", func(t *testing.T) {
@@ -406,5 +408,47 @@ func TestBuildBinary(t *testing.T) {
 		require.NoError(t, Build{}.Binary("default", "test"))
 
 		assert.Equal(t, "-buildvcs=false", readFakeBinEnv(t, argsFile)["GOFLAGS"])
+	})
+}
+
+// withNoSleep overrides goModDownloadSleep to a no-op for the duration of
+// the test, so retry-loop tests don't actually wait goModDownloadRetryDelay
+// between attempts.
+func withNoSleep(t *testing.T) {
+	t.Helper()
+	original := goModDownloadSleep
+	goModDownloadSleep = func(time.Duration) {}
+	t.Cleanup(func() { goModDownloadSleep = original })
+}
+
+func TestRunGoModDownload(t *testing.T) {
+	t.Run("succeeds on the first attempt", func(t *testing.T) {
+		withNoSleep(t)
+		argsFile := setUpFakePathBinaryFailingNTimes(t, 0)
+
+		require.NoError(t, runGoModDownload(t.TempDir(), nil))
+
+		assert.Equal(t, 1, readFakeBinInvocationCount(t, argsFile))
+	})
+
+	t.Run("recovers after transient failures", func(t *testing.T) {
+		withNoSleep(t)
+		argsFile := setUpFakePathBinaryFailingNTimes(t, goModDownloadMaxAttempts-1)
+
+		require.NoError(t, runGoModDownload(t.TempDir(), nil))
+
+		assert.Equal(t, goModDownloadMaxAttempts, readFakeBinInvocationCount(t, argsFile))
+	})
+
+	t.Run("fails after exhausting all attempts", func(t *testing.T) {
+		withNoSleep(t)
+		argsFile := setUpFakePathBinaryFailingNTimes(t, goModDownloadMaxAttempts+5)
+
+		err := runGoModDownload(t.TempDir(), nil)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed after 3 attempts")
+		assert.Equal(t, goModDownloadMaxAttempts, readFakeBinInvocationCount(t, argsFile),
+			"must not retry beyond goModDownloadMaxAttempts")
 	})
 }

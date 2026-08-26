@@ -43,6 +43,8 @@ atmos_cli_config:
     helm:
       base_path: ""
       auto_generate_files: false
+    container:
+      base_path: components/container
   stacks:
     base_path: stacks
     included_paths:

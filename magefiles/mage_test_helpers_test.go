@@ -20,10 +20,11 @@ import (
 // was invoked with to fakeBinOutEnv and exits, without ever shelling out to a
 // real tool or hardcoding a platform-specific binary like `true`/`sh`.
 const (
-	fakeBinEnv       = "ATMOS_MAGEFILES_FAKE_BIN"
-	fakeBinOutEnv    = "ATMOS_MAGEFILES_FAKE_BIN_OUT"
-	fakeBinExitEnv   = "ATMOS_MAGEFILES_FAKE_BIN_EXIT"
-	fakeBinStdoutEnv = "ATMOS_MAGEFILES_FAKE_BIN_STDOUT"
+	fakeBinEnv          = "ATMOS_MAGEFILES_FAKE_BIN"
+	fakeBinOutEnv       = "ATMOS_MAGEFILES_FAKE_BIN_OUT"
+	fakeBinExitEnv      = "ATMOS_MAGEFILES_FAKE_BIN_EXIT"
+	fakeBinStdoutEnv    = "ATMOS_MAGEFILES_FAKE_BIN_STDOUT"
+	fakeBinFailUntilEnv = "ATMOS_MAGEFILES_FAKE_BIN_FAIL_UNTIL"
 )
 
 // fakeBinEnvAllowlist is the exhaustive list of environment variable names
@@ -55,10 +56,14 @@ func TestMain(m *testing.M) {
 // file named by fakeBinOutEnv, one per line, its working directory to that
 // same path with a ".cwd" suffix, and the subset of its environment named in
 // fakeBinEnvAllowlist (one "K=V" pair per line, present vars only) with a
-// ".env" suffix, then exits with the code from fakeBinExitEnv (default 0).
-// It never reaches the normal testing.M.Run path. It deliberately never
-// dumps the full process environment (os.Environ()) — see
-// fakeBinEnvAllowlist's doc comment.
+// ".env" suffix. If fakeBinFailUntilEnv is set, it then tracks an
+// invocation count in a ".invocations" sibling file and exits 1 for every
+// call up to and including that count, exiting 0 from the next call onward —
+// letting tests exercise retry-then-succeed and retry-exhausted paths
+// deterministically. Otherwise it exits with the code from fakeBinExitEnv
+// (default 0). It never reaches the normal testing.M.Run path. It
+// deliberately never dumps the full process environment (os.Environ()) —
+// see fakeBinEnvAllowlist's doc comment.
 func runFakeBinAndExit() {
 	if out := os.Getenv(fakeBinOutEnv); out != "" {
 		_ = os.WriteFile(out, []byte(strings.Join(os.Args[1:], "\n")), 0o644)
@@ -75,6 +80,20 @@ func runFakeBinAndExit() {
 	}
 	if stdout := os.Getenv(fakeBinStdoutEnv); stdout != "" {
 		_, _ = os.Stdout.WriteString(stdout)
+	}
+	if failUntilRaw := os.Getenv(fakeBinFailUntilEnv); failUntilRaw != "" {
+		failUntil, _ := strconv.Atoi(failUntilRaw)
+		countFile := os.Getenv(fakeBinOutEnv) + ".invocations"
+		count := 0
+		if data, err := os.ReadFile(countFile); err == nil {
+			count, _ = strconv.Atoi(strings.TrimSpace(string(data)))
+		}
+		count++
+		_ = os.WriteFile(countFile, []byte(strconv.Itoa(count)), 0o644)
+		if count <= failUntil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	}
 	code := 0
 	if raw := os.Getenv(fakeBinExitEnv); raw != "" {
@@ -134,6 +153,32 @@ func setUpFakePathBinary(t *testing.T, name string) (argsFile string) {
 	t.Setenv(fakeBinOutEnv, argsFile)
 	t.Setenv(fakeBinExitEnv, "")
 	return argsFile
+}
+
+// setUpFakePathBinaryFailingNTimes is like setUpFakePathBinary(t, "go"), but
+// the fake binary exits 1 for its first failUntil invocations and exits 0
+// from the (failUntil+1)th invocation onward — used to exercise
+// retry-then-succeed and retry-exhausted code paths deterministically for
+// runGoModDownload, the only current caller of this retry behavior.
+func setUpFakePathBinaryFailingNTimes(t *testing.T, failUntil int) (argsFile string) {
+	t.Helper()
+	argsFile = setUpFakePathBinary(t, "go")
+	t.Setenv(fakeBinFailUntilEnv, strconv.Itoa(failUntil))
+	return argsFile
+}
+
+// readFakeBinInvocationCount reads back how many times the fake binary was
+// invoked in fail-until-N mode (see setUpFakePathBinaryFailingNTimes).
+// Returns 0 if it was never invoked in that mode.
+func readFakeBinInvocationCount(t *testing.T, argsFile string) int {
+	t.Helper()
+	data, err := os.ReadFile(argsFile + ".invocations")
+	if err != nil {
+		return 0
+	}
+	count, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	require.NoError(t, err)
+	return count
 }
 
 // readFakeBinArgs reads back the args recorded by a fake-bin invocation. It

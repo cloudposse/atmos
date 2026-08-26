@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
@@ -36,7 +37,17 @@ const (
 	goosDarwin  = "darwin"
 	goarch386   = "386"
 	goarchAMD64 = "amd64"
+
+	// The 3-attempt/15s-backoff convention already used for artifact
+	// downloads (.github/actions/download-artifact-retry). See
+	// docs/fixes/2026-08-25-build-atmos-go-mod-download-retry.md.
+	goModDownloadMaxAttempts = 3
+	goModDownloadRetryDelay  = 15 * time.Second
 )
+
+// goModDownloadSleep is a seam so tests can exercise the retry loop without
+// a real multi-second wait.
+var goModDownloadSleep = time.Sleep
 
 // Binary builds the atmos binary for target ("default", "linux", "windows",
 // "macos", or "macos-intel"), embedding version (and the current commit, when
@@ -70,7 +81,7 @@ func (Build) Binary(target, version string) error {
 	// previous shell script's `git rev-parse HEAD 2>/dev/null || true`.
 	commit, _ := sh.Output("git", "-C", root, "rev-parse", "HEAD")
 
-	if err := runIn(root, baseEnv, "go", "mod", "download"); err != nil {
+	if err := runGoModDownload(root, baseEnv); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Join(root, buildOutputDir), directoryPermissions); err != nil {
@@ -239,6 +250,29 @@ func inWorktree(root string) bool {
 		return false
 	}
 	return strings.TrimSpace(gitDir) != strings.TrimSpace(commonDir)
+}
+
+// runGoModDownload runs `go mod download` in dir, retrying up to
+// goModDownloadMaxAttempts times with a goModDownloadRetryDelay pause between
+// attempts, since the Go module proxy occasionally resets a request
+// mid-stream ("stream error: ... INTERNAL_ERROR received from peer") — a
+// transient CDN/network blip, not a real dependency problem — which would
+// otherwise fail the whole build outright on a single hiccup.
+func runGoModDownload(dir string, env []string) error {
+	var lastErr error
+	for attempt := 1; attempt <= goModDownloadMaxAttempts; attempt++ {
+		lastErr = runIn(dir, env, "go", "mod", "download")
+		if lastErr == nil {
+			return nil
+		}
+		if attempt == goModDownloadMaxAttempts {
+			break
+		}
+		fmt.Fprintf(os.Stderr, "go mod download failed (attempt %d/%d), retrying in %s...\n",
+			attempt, goModDownloadMaxAttempts, goModDownloadRetryDelay)
+		goModDownloadSleep(goModDownloadRetryDelay)
+	}
+	return fmt.Errorf("mage: go mod download failed after %d attempts: %w", goModDownloadMaxAttempts, lastErr)
 }
 
 // runIn runs name with args in dir, with extraEnv appended on top of the

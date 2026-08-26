@@ -345,13 +345,13 @@ func TestCleanCmd_Integration_All(t *testing.T) {
 	createTestWorkdir(t, tmpDir, "vpc", "dev")
 
 	mock := NewMockWorkdirManager(ctrl)
-	mock.EXPECT().CleanAllWorkdirs(gomock.Any()).Return(nil)
+	mock.EXPECT().CleanAllWorkdirs(gomock.Any(), false).Return(nil)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	err := workdirManager.CleanAllWorkdirs(&schema.AtmosConfiguration{})
+	err := workdirManager.CleanAllWorkdirs(&schema.AtmosConfiguration{}, false)
 	require.NoError(t, err)
 }
 

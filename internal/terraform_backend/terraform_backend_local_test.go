@@ -351,23 +351,28 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 	}{
 		{
 			// BuildPath("tempDir", "terraform", "null-label", "demo", sections) →
-			// tempDir/.workdir/terraform/demo-null-hlabel ("-" escapes to "-h").
+			// tempDir/.workdir/terraform/demo-null-label-6a7a8b7f ("demo"+"\x00"+"null-label"
+			// hashes, sha256 first 8 hex chars, to "6a7a8b7f" -- verified independently with
+			// `printf 'demo\x00null-label' | shasum -a 256`).
 			name:          "state exists, no _workdir_path (describe path — provisioner not yet run)",
-			workdirName:   "demo-null-hlabel",
+			workdirName:   "demo-null-label-6a7a8b7f",
 			componentName: "null-label",
 		},
 		{
 			// BuildPath must sanitize "/" in the component name to a single path
-			// segment (demo-ecs-scluster), not a real subdirectory (demo-ecs/cluster)
-			// -- otherwise this nested component's workdir sits one level deeper
-			// than a flat component's at the same stack, and any path computed
-			// relative to it (e.g. a relative local backend path) silently climbs
-			// to a different ancestor. "/" encodes to "-s" and a literal "-" encodes
-			// to "-h" (escaped before separators are encoded), so this can never
-			// collide with a differently-named component that uses a literal hyphen
-			// in the same spot.
+			// segment (demo-ecs-cluster-b5adc63e), not a real subdirectory
+			// (demo-ecs/cluster) -- otherwise this nested component's workdir sits
+			// one level deeper than a flat component's at the same stack, and any
+			// path computed relative to it (e.g. a relative local backend path)
+			// silently climbs to a different ancestor. "/" sanitizes to "-" (see
+			// sanitizeComponentNameForPath), and the hash suffix -- computed from
+			// the unsanitized name, "demo"+"\x00"+"ecs/cluster" hashes to
+			// "b5adc63e", verified independently with
+			// `printf 'demo\x00ecs/cluster' | shasum -a 256` -- keeps this from
+			// colliding with a differently-named component whose sanitized prefix
+			// happens to match.
 			name:          "nested component name does not shift the workdir root",
-			workdirName:   "demo-ecs-scluster",
+			workdirName:   "demo-ecs-cluster-b5adc63e",
 			componentName: "ecs/cluster",
 		},
 	}
@@ -500,7 +505,7 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 	t.Run("_workdir_path escaping BasePath falls through to derived path", func(t *testing.T) {
 		tempDir := t.TempDir()
 		// Create state at the DERIVED workdir path (not the escaping path).
-		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-hlabel",
+		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label-6a7a8b7f",
 			"terraform.tfstate.d", "demo")
 		require.NoError(t, os.MkdirAll(stateDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"),
@@ -540,7 +545,7 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 		require.NoError(t, os.Chdir(tempDir))
 		defer func() { _ = os.Chdir(origDir) }()
 
-		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-hlabel",
+		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label-6a7a8b7f",
 			"terraform.tfstate.d", "demo")
 		require.NoError(t, os.MkdirAll(stateDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"),
@@ -612,9 +617,9 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 	})
 
 	t.Run("atmos_stack with path traversal escaping BasePath falls through to static path", func(t *testing.T) {
-		// Security regression test: unlike atmos_component (whose "/" is now encoded to "-s"
-		// by workdir.escapeComponentNameForPath and so can no longer traverse), atmos_stack is
-		// not escaped at all -- it is only rejected by BuildPath's containWithinBase guard.
+		// Security regression test: unlike atmos_component (whose "/" is now sanitized to "-"
+		// by workdir.sanitizeComponentNameForPath and so can no longer traverse), atmos_stack is
+		// not sanitized at all -- it is only rejected by BuildPath's containWithinBase guard.
 		// A stack value with enough "../" segments to actually escape BasePath must cause
 		// provWorkdir.BuildPath to return errUtils.ErrPathTraversal, which
 		// resolveLocalBackendComponentPath must catch and fall through to the static path
