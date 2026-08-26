@@ -5,6 +5,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 // TestCoordinateForDeclaration_Scope proves a stack-scoped declaration drops the component segment
@@ -52,6 +56,36 @@ func TestCoordinateForDeclaration_Scope(t *testing.T) {
 	assert.Equal(t, referenceCoord, referenceCoordOther)
 	assert.Empty(t, referenceCoord.Stack)
 	assert.Empty(t, referenceCoord.Component)
+
+	ctrl := gomock.NewController(t)
+	mockStore := store.NewMockStore(ctrl)
+	mockStore.EXPECT().
+		Get("", "", globalReference.Reference).
+		Return("shared-value", nil).
+		Times(2)
+	config := &schema.AtmosConfiguration{
+		StoresConfig: store.StoresConfig{
+			"shared": {Kind: store.KindOnePassword, Secret: true},
+		},
+		Stores: store.StoreRegistry{"shared": mockStore},
+	}
+	section := map[string]any{
+		"secrets": map[string]any{
+			"vars": map[string]any{
+				globalReference.Name: map[string]any{
+					"store":     "shared",
+					"reference": globalReference.Reference,
+					"scope":     string(ScopeGlobal),
+				},
+			},
+		},
+	}
+	for _, context := range []struct{ stack, component string }{{"prod", "api"}, {"dev", "web"}} {
+		service := NewService(config, context.stack, context.component, section)
+		value, err := service.Get(globalReference.Name, ResolveOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, "shared-value", value)
+	}
 }
 
 // TestTagScope_StampsAndResolvesOverride proves position-derived scope tagging plus the standard
