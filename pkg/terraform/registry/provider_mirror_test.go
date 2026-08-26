@@ -133,9 +133,20 @@ func TestProviderMirror_VersionListsAllPlatforms(t *testing.T) {
 // regression to serial per-platform resolution (the root cause of a CI
 // screengrab failure: OpenTofu's own mirror-request deadline was exceeded
 // because a cold-cache version fetch resolved a dozen-plus platforms one
-// upstream round-trip at a time). With N platforms each taking `delay` to
-// resolve, a serial implementation takes at least N*delay; a concurrent one
-// takes roughly one delay regardless of N.
+// upstream round-trip at a time).
+//
+// This asserts peak concurrent in-flight downloads directly (an atomic
+// high-water-mark counter in the fake upstream's download handler) rather
+// than bounding wall-clock elapsed time. An earlier version of this test
+// compared elapsed time against a fraction of the N*delay serial floor, and
+// was tuned wider more than once chasing CI flakiness (a 784ms/750ms
+// threshold, then a 1.2s one) before still flaking at 2.7s on a loaded
+// Windows runner -- past the full serial floor a serial regression would
+// itself take, meaning no wall-clock threshold reliably separates the two
+// cases under real CI variance. Peak concurrency is a direct, load-agnostic
+// measurement of the property under test (serial code can never show more
+// than 1 in flight at once, concurrent code will), immune to how slow the
+// scheduler or network happens to be on a given run.
 func TestProviderMirror_VersionResolvesPlatformsConcurrently(t *testing.T) {
 	const (
 		platformCount = 10
@@ -153,6 +164,7 @@ func TestProviderMirror_VersionResolvesPlatformsConcurrently(t *testing.T) {
 	platformsJSON, err := json.Marshal(platforms)
 	require.NoError(t, err)
 
+	var current, peak int64
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/terraform.json", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"providers.v1":"/v1/providers/","modules.v1":"/v1/modules/"}`))
@@ -161,7 +173,16 @@ func TestProviderMirror_VersionResolvesPlatformsConcurrently(t *testing.T) {
 		_, _ = fmt.Fprintf(w, `{"versions":[{"version":"5.95.0","platforms":%s}]}`, platformsJSON)
 	})
 	mux.HandleFunc("/v1/providers/hashicorp/aws/5.95.0/download/", func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt64(&current, 1)
+		for {
+			p := atomic.LoadInt64(&peak)
+			if n <= p || atomic.CompareAndSwapInt64(&peak, p, n) {
+				break
+			}
+		}
 		time.Sleep(delay)
+		atomic.AddInt64(&current, -1)
+
 		seg := strings.Split(strings.TrimPrefix(r.URL.Path, "/v1/providers/hashicorp/aws/5.95.0/download/"), "/")
 		osName, arch := seg[0], seg[1]
 		resp := registryDownload{
@@ -182,25 +203,16 @@ func TestProviderMirror_VersionResolvesPlatformsConcurrently(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = srv.Shutdown(t.Context()) })
 
-	start := time.Now()
 	body := mustGet(t, srv.BaseURL()+"providers/registry.terraform.io/hashicorp/aws/5.95.0.json")
-	elapsed := time.Since(start)
 
 	var ver mirrorVersion
 	require.NoError(t, json.Unmarshal(body, &ver))
 	assert.Len(t, ver.Archives, platformCount, "all platforms should resolve")
 
-	// Bounded at 4/5 of the serial floor (not 1/2): a concurrent run should
-	// complete in roughly one delay plus scheduling/HTTP overhead, but CI
-	// runners -- Windows in particular -- occasionally add several hundred ms
-	// of that overhead under load. A tighter bound flaked at 784ms against a
-	// 750ms threshold despite being nowhere near the 1.5s serial floor it
-	// exists to catch; this keeps a wide, unambiguous gap from a true serial
-	// regression while tolerating realistic CI variance.
-	serialFloor := time.Duration(platformCount) * delay
-	assert.Less(t, elapsed, serialFloor*4/5,
-		"resolving %d platforms took %s - expected well under the %s serial floor, indicating platforms are fetched concurrently, not one at a time",
-		platformCount, elapsed, serialFloor)
+	// A serial implementation can never have more than 1 download in flight
+	// at once; anything higher proves platforms were fetched concurrently.
+	assert.Greater(t, int(atomic.LoadInt64(&peak)), 1,
+		"peak concurrent downloads was %d - platforms appear to be fetched one at a time, not concurrently", peak)
 }
 
 // TestFetchPlatformArchives_BoundsConcurrency guards against a malformed or
