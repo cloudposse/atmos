@@ -312,7 +312,7 @@ func maybeInitGeneratedProjectGit(targetDir string, selectedConfig *templates.Co
 	if !opts.git || targetDir == "" {
 		return nil
 	}
-	_, err := gen.InitGitRepository(gen.InitGitOptions{
+	_, _, err := gen.InitGitRepository(gen.InitGitOptions{
 		TargetPath:      targetDir,
 		TemplateName:    selectedConfig.Name,
 		TemplateVersion: selectedConfig.Version,
