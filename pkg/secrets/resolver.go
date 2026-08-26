@@ -23,7 +23,7 @@ const secretTag = "!secret"
 //  2. If the processing scope is an inspection command with masking enabled
 //     (stackInfo.SecretsMaskOnly), it returns the mask replacement WITHOUT retrieving the
 //     value from the backend — no provider call, no credentials required.
-//  3. Otherwise it resolves the backend
+//  3. Otherwise it resolves the backend.
 //     provider, retrieves the value, applies the optional path/default modifiers, registers
 //     the value (recursively) with the I/O masker, and returns it.
 func Resolve(atmosConfig *schema.AtmosConfiguration, input, currentStack string, stackInfo *schema.ConfigAndStacksInfo) (any, error) {

@@ -352,7 +352,7 @@ func (s *SecretsManagerStore) getRawByID(secretID string) (string, error) {
 		// Use %w for the underlying error so callers (e.g. Has) can detect ResourceNotFound.
 		return "", fmt.Errorf("%w '%s': %w", store.ErrGetSecret, secretID, err)
 	}
-	if output.SecretString == nil {
+	if output == nil || output.SecretString == nil {
 		return "", fmt.Errorf("%w '%s': empty secret string", store.ErrGetSecret, secretID)
 	}
 	return *output.SecretString, nil

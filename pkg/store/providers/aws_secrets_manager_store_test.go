@@ -26,6 +26,8 @@ type fakeSecretsManager struct {
 	delErr      error // returned by DeleteSecret when set.
 	listErr     error // returned by ListSecrets when set.
 
+	// nilOutputOnGet makes GetSecretValue return a nil output without an error.
+	nilOutputOnGet bool
 	// nilStringOnGet makes GetSecretValue return an output with a nil SecretString.
 	nilStringOnGet bool
 
@@ -61,6 +63,9 @@ func (f *fakeSecretsManager) GetSecretValue(_ context.Context, in *secretsmanage
 	f.getCalls++
 	if f.getErr != nil {
 		return nil, f.getErr
+	}
+	if f.nilOutputOnGet {
+		return nil, nil
 	}
 	id := aws.ToString(in.SecretId)
 	v, ok := f.data[id]
@@ -349,6 +354,14 @@ func TestSecretsManagerStore_GetRawPreservesPayload(t *testing.T) {
 			assert.Equal(t, tt.payload, got)
 		})
 	}
+}
+
+func TestSecretsManagerStore_GetRaw_NilOutput(t *testing.T) {
+	fake := newFakeSecretsManager()
+	fake.nilOutputOnGet = true
+
+	_, err := newTestASMStore(fake).GetRaw("prod", "api", "RAW")
+	assert.ErrorIs(t, err, store.ErrGetSecret)
 }
 
 func TestSecretsManagerStore_Get_NilSecretString(t *testing.T) {
