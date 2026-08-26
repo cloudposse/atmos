@@ -203,7 +203,7 @@ Atmos first performs its normal deep merge across type defaults, inheritance, an
 
 ### Command-Line Overrides
 
-The cluster-backed `apply` and `deploy` commands support:
+For an existing release, the cluster-backed `apply` and `deploy` commands support upgrade-specific overrides:
 
 ```shell
 atmos helm apply demo-api -s example-prod \
@@ -279,7 +279,13 @@ The target timeout default is five minutes, matching the Helm CLI. R1 introduces
 2. An explicit timeout at either level, including `0s`, suppresses the migration warning.
 3. Starting with Atmos v1.226.0, an omitted effective timeout resolves to `5m` and the migration warning is removed.
 
-An explicit effective timeout of `0s` disables the Helm action timeout. Negative durations are invalid. Documentation MUST warn that a zero timeout can leave hook or resource waits unbounded. This is especially important for delete: Helm 4's uninstall request does not accept the caller context, so a zero delete timeout can leave an uninstall wait unbounded after the caller stops waiting. Timeout errors MUST include the effective duration and identify the selected configuration path, such as `release.install.timeout` or the inherited `release.timeout`.
+An explicit effective timeout of `0s` disables Atmos's outer Helm action deadline and passes zero to the Helm SDK. Helm 4 then applies strategy-specific zero-timeout behavior:
+
+- `watcher` substitutes its 30-second SDK default for hook, ordinary resource, Job, and delete waits.
+- `hookOnly` uses the same 30-second fallback for hook waits and skips ordinary resource, Job, and delete waits.
+- `legacy` leaves hook, ordinary resource, Job, and delete waits unbounded unless the caller context is cancelled.
+
+Negative durations are invalid. Documentation MUST explain these strategy-specific semantics. This is especially important for delete: Helm 4's uninstall request does not accept the caller context, so a zero delete timeout with `legacy` can leave an uninstall wait unbounded after the caller stops waiting. Timeout errors MUST include the effective duration and identify the selected configuration path, such as `release.install.timeout` or the inherited `release.timeout`.
 
 The `release.history.max` default is `10`, matching the Helm CLI rather than the Helm SDK zero value. An explicit `0` disables history pruning. Negative values are invalid. Release notes MUST call out that an omitted value now bounds upgrade history and that users who require unlimited history must explicitly configure `0`.
 
@@ -379,7 +385,7 @@ Specifically, `timeout` does not govern:
 
 - Resolving or downloading an HTTP/OCI chart.
 - Loading a chart from disk.
-- Installing CRDs from a chart's `crds/` directory or waiting for the Kubernetes API to recognize them. Helm uses its own fixed 60-second CRD recognition wait before the release action timeout applies.
+- Installing CRDs from a chart's `crds/` directory or waiting for the Kubernetes API to recognize them. Before the release action timeout applies, Helm passes a fixed 60-second timeout to the selected waiter. `watcher` and `legacy` perform that recognition wait; `hookOnly` skips it because its ordinary resource wait is a no-op.
 - Client-side template/diff rendering.
 - Cloning, committing, or pushing an external delivery target.
 
@@ -582,13 +588,13 @@ Native Helm remains experimental. Existing manifests that omit `release` remain 
 
 - An omitted `release` tree retains `hookOnly`, `on_failure: keep`, no ordinary Job waiting, chart hooks enabled, and install CRD creation.
 - During v1.225.x, an omitted effective timeout preserves the current SDK zero value and emits a migration warning once per selected component per invocation. Starting with v1.226.0, the default becomes five minutes and the warning is removed.
-- An explicit `release.timeout: 0s` or operation-specific `timeout: 0s` preserves unbounded behavior without a migration warning.
+- An explicit `release.timeout: 0s` or operation-specific `timeout: 0s` preserves the SDK zero value without a migration warning; the effective wait behavior remains strategy-specific.
 - An omitted `release.history.max` changes from the SDK zero value to `10`; an explicit `0` preserves unlimited history.
 - Direct single-component commands and bulk commands resolve the same lifecycle configuration.
 - External GitOps delivery remains render-and-deliver and does not acquire release semantics.
 - Existing Atmos `hooks:` and `--skip-hooks` behavior is unchanged.
 
-The release notes must call out the timeout migration schedule and the new ten-revision history limit. A previously hanging hook may fail after the timeout transition, a workload that legitimately needs more time must configure a larger release-wide or operation timeout, and a release requiring unlimited history must configure `release.history.max: 0`.
+The release notes must call out the timeout migration schedule, strategy-specific zero-timeout behavior, and the new ten-revision history limit. A previously unbounded legacy hook may fail after the timeout transition, a workload that legitimately needs more time must configure a larger release-wide or operation timeout, and a release requiring unlimited history must configure `release.history.max: 0`.
 
 ## Security and Safety
 
@@ -605,8 +611,9 @@ The release notes must call out the timeout migration schedule and the new ten-r
 
 - Decode every release-wide and operation-specific field from a processed Helm component.
 - Verify built-in defaults, including `release.history.max: 10` and the staged timeout default.
-- Verify the v1.225.x phase: an omitted effective timeout remains unbounded and warns once per selected component per invocation, while explicit release-wide and operation-specific `0s` values remain unbounded without warning.
+- Verify the v1.225.x phase: an omitted effective timeout preserves the SDK zero value and warns once per selected component per invocation, while explicit release-wide and operation-specific `0s` values preserve that value without warning.
 - Verify the v1.226.0 phase: an omitted timeout resolves to `5m` without a migration warning.
+- Verify zero-timeout behavior by effective wait strategy: the 30-second watcher fallback, hook-only hook fallback and ordinary-wait no-ops, and unbounded legacy waits.
 - Verify stack-level `helm.release` defaults, abstract inheritance, concrete partial-tree overrides, and explicit `false` values.
 - Verify the full release tree merges before the selected operation overlays release-wide defaults.
 - Verify `release.install.timeout: 60m`, `release.upgrade.timeout: 10m`, and `release.delete.timeout: 5m` resolve independently for the same component.
@@ -669,7 +676,8 @@ Required scenarios:
 - Failed first install with `on_failure: uninstall` leaves no deployed release.
 - Failed upgrade with rollback restores the previous successful release.
 - Failed upgrade cleanup removes newly created resources.
-- CRD installation uses Helm's separate recognition wait and is not shortened by the release `timeout` value.
+- With `watcher` or `legacy`, CRD installation uses Helm's separate 60-second recognition wait and is not shortened by the release `timeout` value.
+- With `hookOnly`, CRD installation skips recognition waiting because the strategy's ordinary resource wait is a no-op.
 - Weighted hooks execute in ascending weight order on first install and upgrade.
 - Rollback and failed-install cleanup preserve resources marked `helm.sh/resource-policy: keep`.
 - `chart_hooks: false` prevents the fixture hooks from executing.
@@ -729,7 +737,7 @@ The phases below are independently mergeable implementation slices, not a requir
 | Risk                                                                     | Impact                                                                 | Mitigation                                                                                                                      |
 | ------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | Apply dry-run remains disconnected from cluster delivery                 | A command presented as non-mutating changes release or cluster state   | Phase 0 prerequisite and command-to-provider mutation regression test                                                           |
-| Five-minute default breaks long-running existing releases                | Apply begins failing where it previously waited indefinitely           | One-minor warning window; explicit effective `timeout: 0s`; actionable timeout errors; per-operation examples for slow installs |
+| Five-minute default breaks long-running existing releases                | Apply begins failing where it previously used SDK zero-timeout behavior | One-minor warning window; explicit effective `timeout: 0s`; actionable timeout errors; per-operation examples for slow installs |
 | Ten-revision history default prunes older release records                | Users lose rollback history they expected Atmos to retain indefinitely | Prominent release note; explicit `release.history.max: 0`; pruning tests against the Helm CLI-compatible default                |
 | `wait.jobs` appears effective under `hookOnly`                           | Users believe ordinary Jobs are gated when they are not                | Validate against the effective strategy and explain hook Jobs separately                                                        |
 | Rollback is mistaken for success                                         | Dependents run after the desired version failed                        | Always return node failure after recovery                                                                                       |
@@ -744,7 +752,7 @@ The phases below are independently mergeable implementation slices, not a requir
 
 - The release tree resolves through type defaults, inheritance, concrete components, selected-operation overlays, and highest-priority explicit CLI overrides.
 - `atmos helm apply --dry-run` and `delete --dry-run` do not mutate release state.
-- An omitted timeout remains unbounded with one warning per selected component per invocation in v1.225.x and resolves to `5m` without that warning from v1.226.0, while explicit `timeout: 0s` remains unbounded without a warning in both phases.
+- An omitted timeout preserves the SDK zero value with one warning per selected component per invocation in v1.225.x and resolves to `5m` without that warning from v1.226.0, while explicit `timeout: 0s` preserves the strategy-specific SDK behavior without a warning in both phases.
 - An omitted `release.history.max` prunes to ten revisions and explicit `0` remains unlimited.
 - One component can use independent install, upgrade, and delete timeouts without changing chart rendering or values.
 - Watcher readiness prevents dependent DAG nodes from starting before the prerequisite release is ready.
