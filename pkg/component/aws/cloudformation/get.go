@@ -26,7 +26,7 @@ func getDeployedTemplate(ctx context.Context, client CloudFormationClient, stack
 
 	out, err := client.GetTemplate(ctx, input)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+		return "", fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 	return stringValue(out.TemplateBody), nil
 }
@@ -38,7 +38,7 @@ func getDeployedStackPolicy(ctx context.Context, client CloudFormationClient, st
 
 	out, err := client.GetStackPolicy(ctx, &cloudformation.GetStackPolicyInput{StackName: awsString(stackName)})
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+		return "", fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 	return stringValue(out.StackPolicyBody), nil
 }
