@@ -68,10 +68,10 @@ func GetOutputs(ctx context.Context, region, stackName string, authContext *sche
 	client := newCloudFormationClient(awsCfg, endpointURL)
 	out, err := client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 	if len(out.Stacks) == 0 {
-		return nil, fmt.Errorf("%w: stack %q", errUtils.ErrAwsCloudFormationChangeSetFailed, stackName)
+		return nil, fmt.Errorf("%w: stack %q", errUtils.ErrAwsCloudFormationStackNotFound, stackName)
 	}
 
 	outputs := make(map[string]any, len(out.Stacks[0].Outputs))
