@@ -141,7 +141,7 @@ func validateTemplate(ctx context.Context, client CloudFormationClient, stackNam
 		TemplateBody: awsString(templateBody),
 	})
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrInvalidSpecificAwsCloudFormationComponent, err)
+		return fmt.Errorf(wrapFmt, errUtils.ErrInvalidSpecificAwsCloudFormationComponent, err)
 	}
 	ui.Success(fmt.Sprintf("%s: template is valid", stackName))
 	return nil
