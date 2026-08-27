@@ -52,7 +52,10 @@ func Detect() provider.Provider {
 			log.Debug("CI provider detected", "provider", p.Name())
 			return p
 		} else {
-			log.Debug("CI provider not detected", "provider", p.Name())
+			// Trace, not Debug: this now runs on every command startup (via the
+			// CI/Pro status banner), and a per-provider "not detected" line for
+			// every registered provider is noise at Debug level outside CI.
+			log.Trace("CI provider not detected", "provider", p.Name())
 		}
 	}
 	return nil
