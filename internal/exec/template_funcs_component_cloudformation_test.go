@@ -88,3 +88,33 @@ func TestComponentFunc_CloudFormationBranch_PassesResolvedAuthContext(t *testing
 	require.NotNil(t, gotAuth, "the enclosing AuthContext must reach cloudFormationOutputsForSections")
 	assert.Equal(t, "enclosing-identity", gotAuth.Profile)
 }
+
+// componentFunc's cache must be keyed on the resolved identity, not just stack+component: two
+// calls for the same aws/cloudformation target under two different enclosing identities (e.g.
+// two callers with different --identity) must each hit the outputs getter and must never return
+// the other identity's cached result.
+func TestComponentFunc_CloudFormationBranch_CacheKeyIncludesIdentity(t *testing.T) {
+	clearComponentFuncSyncMap(t)
+	atmosConfig := setupAwsCloudFormationOutputFixture(t)
+
+	ctrl := gomock.NewController(t)
+	mockGetter := NewMockCloudFormationOutputsGetter(ctrl)
+	mockGetter.EXPECT().GetOutputs(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _, _ string, authCtx *schema.AWSAuthContext) (map[string]any, error) {
+			return map[string]any{"VpcId": "vpc-" + authCtx.Profile}, nil
+		},
+	).Times(2)
+	stubCloudFormationOutputsGetter(t, mockGetter)
+
+	identityA := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "identity-a"}}
+	resultA, err := componentFunc(&atmosConfig, &schema.ConfigAndStacksInfo{AuthContext: identityA}, "vpc", "test")
+	require.NoError(t, err)
+	outputsA := resultA.(map[string]any)[cfg.OutputsSectionName].(map[string]any)
+	assert.Equal(t, "vpc-identity-a", outputsA["VpcId"])
+
+	identityB := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "identity-b"}}
+	resultB, err := componentFunc(&atmosConfig, &schema.ConfigAndStacksInfo{AuthContext: identityB}, "vpc", "test")
+	require.NoError(t, err)
+	outputsB := resultB.(map[string]any)[cfg.OutputsSectionName].(map[string]any)
+	assert.Equal(t, "vpc-identity-b", outputsB["VpcId"])
+}
