@@ -2696,18 +2696,20 @@ func writeIncidentFile(t *testing.T, dir, rel, content string) {
 // Returns the repo dir and the fork/head/advance/merge commit SHAs.
 func buildMergedPRIncidentRepo(t *testing.T) (string, map[string]string) {
 	t.Helper()
-	dir := t.TempDir()
 	// This repo has a real git worktree created and torn down inside it
 	// (ExecuteDescribeAffectedWithTargetRefCheckout). On Windows CI, a
-	// transient antivirus/indexing scan can briefly hold a lock on the
-	// worktree's administrative metadata (.git/worktrees/<name>/commondir)
-	// even after git itself reports the worktree successfully removed —
-	// t.TempDir()'s own cleanup only tries os.RemoveAll once and fails hard
-	// on that lock. Retry the removal proactively (mirroring the backoff
-	// pkg/git/worktree.go already uses for the same class of transient
-	// Windows lock) so the built-in t.TempDir() cleanup finds nothing left
-	// to remove. Registered immediately after t.TempDir(), so it runs
-	// first (t.Cleanup is LIFO).
+	// transient antivirus/indexing scan can hold a lock on the worktree's
+	// administrative metadata (.git/worktrees/<name>/commondir) well past
+	// both the production RemoveWorktree's own 20s retry and a matching
+	// 20s retry here (40s observed combined, in practice). Deliberately
+	// NOT using t.TempDir(): its built-in cleanup is a single-attempt,
+	// fatal-on-error os.RemoveAll that runs unconditionally after ours,
+	// which would turn an already-logged, deliberately-non-fatal leftover
+	// lock back into a failed test. Managing the dir with os.MkdirTemp
+	// keeps our retry-then-log-only cleanup authoritative; a leftover
+	// lock is left for the OS temp-directory reaper, not this test.
+	dir, err := os.MkdirTemp("", "TestDescribeAffectedCIBaseE2E") //nolint:lintroller // t.TempDir()'s own cleanup is fatal-on-error and would race the exact lock removeAllWithRetry exists to tolerate; see comment above.
+	require.NoError(t, err)
 	t.Cleanup(func() { removeAllWithRetry(t, dir) })
 	runIncidentGit(t, dir, "init", "-b", "main")
 	runIncidentGit(t, dir, "remote", "add", "origin", "https://github.com/example/incident.git")
