@@ -2638,6 +2638,34 @@ func TestUploadErrorsWhenNoCredentials(t *testing.T) {
 	assert.Contains(t, allHints, "atmos.tools/pro")
 }
 
+// removeAllWithRetry removes dir, retrying with backoff on failure. Mirrors
+// the retry budget pkg/git/worktree.go uses for the same class of transient
+// Windows lock (a just-exited git/antivirus process briefly holding a handle
+// open on a file inside a just-torn-down git worktree's administrative
+// directory). A failure after the full budget is logged, not fatal — it
+// leaves cleanup to whatever runs next (e.g. t.TempDir()'s own attempt),
+// which is the pre-existing behavior this helper is layered in front of.
+func removeAllWithRetry(t *testing.T, dir string) {
+	t.Helper()
+	delay := 200 * time.Millisecond
+	const maxDelay = 2 * time.Second
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		err := os.RemoveAll(dir)
+		if err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Logf("removeAllWithRetry: giving up removing %s after retries: %v", dir, err)
+			return
+		}
+		time.Sleep(delay)
+		if delay *= 2; delay > maxDelay {
+			delay = maxDelay
+		}
+	}
+}
+
 // runIncidentGit runs a git command in dir for the CI-base E2E fixtures below.
 func runIncidentGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
@@ -2669,6 +2697,18 @@ func writeIncidentFile(t *testing.T, dir, rel, content string) {
 func buildMergedPRIncidentRepo(t *testing.T) (string, map[string]string) {
 	t.Helper()
 	dir := t.TempDir()
+	// This repo has a real git worktree created and torn down inside it
+	// (ExecuteDescribeAffectedWithTargetRefCheckout). On Windows CI, a
+	// transient antivirus/indexing scan can briefly hold a lock on the
+	// worktree's administrative metadata (.git/worktrees/<name>/commondir)
+	// even after git itself reports the worktree successfully removed —
+	// t.TempDir()'s own cleanup only tries os.RemoveAll once and fails hard
+	// on that lock. Retry the removal proactively (mirroring the backoff
+	// pkg/git/worktree.go already uses for the same class of transient
+	// Windows lock) so the built-in t.TempDir() cleanup finds nothing left
+	// to remove. Registered immediately after t.TempDir(), so it runs
+	// first (t.Cleanup is LIFO).
+	t.Cleanup(func() { removeAllWithRetry(t, dir) })
 	runIncidentGit(t, dir, "init", "-b", "main")
 	runIncidentGit(t, dir, "remote", "add", "origin", "https://github.com/example/incident.git")
 
