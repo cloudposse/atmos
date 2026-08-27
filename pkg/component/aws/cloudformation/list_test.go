@@ -3,6 +3,7 @@ package cloudformation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -172,8 +173,9 @@ func TestRenderDeployedStacksList_Populated(t *testing.T) {
 	out := captureStdout(t, func() {
 		RenderDeployedStacksList(stacks)
 	})
-	assert.Contains(t, out, "managed")
-	assert.Contains(t, out, "vpc")
-	assert.Contains(t, out, "unmanaged")
-	assert.Contains(t, out, "orphaned-stack")
+	// "managed" is a substring of "unmanaged", so assert full rendered lines
+	// (not bare substrings) to actually distinguish the two rows, rather than
+	// a check that would still pass if vpc's row were also marked unmanaged.
+	assert.Contains(t, out, fmt.Sprintf("%-9s %-30s %s", "managed", "CREATE_COMPLETE", "vpc"))
+	assert.Contains(t, out, fmt.Sprintf("%-9s %-30s %s", "unmanaged", "UPDATE_COMPLETE", "orphaned-stack"))
 }
