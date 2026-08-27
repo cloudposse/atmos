@@ -18,7 +18,7 @@ func describeStackOutputs(ctx context.Context, client CloudFormationClient, stac
 
 	out, err := client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: awsString(stackName)})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 	if len(out.Stacks) == 0 {
 		return map[string]any{}, nil

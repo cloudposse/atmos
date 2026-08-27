@@ -135,5 +135,5 @@ func TestApplyTerminationProtection_Error(t *testing.T) {
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: true}
 	err := applyTerminationProtection(context.Background(), client, spec)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }

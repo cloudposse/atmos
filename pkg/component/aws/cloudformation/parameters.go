@@ -4,6 +4,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -43,6 +44,7 @@ func noEchoParameterNames(templateBody string) map[string]bool {
 	}
 
 	if err := yaml.Unmarshal([]byte(templateBody), &doc); err != nil {
+		log.Debug("NoEcho detection skipped: template did not parse as YAML/JSON", "error", err)
 		return nil
 	}
 
