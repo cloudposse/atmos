@@ -343,3 +343,129 @@ func TestResolveBase_ClosedUnmergedPR(t *testing.T) {
 	assert.Equal(t, sourcePayloadBaseSHA, res.Source)
 	assert.Equal(t, f.mainAdvance, res.SHA)
 }
+
+// TestResolveMergedPRBase_HeadCheckout_NoMergeCommitSHA covers a merged PR
+// with the head SHA checked out whose event payload has no
+// merge_commit_sha (a degenerate payload): mergedPRForkPoint has nothing to
+// anchor on (ErrNoMergeCommitSHA), mergedPRHeadAnchoredBase propagates the
+// error, and resolveMergedPRBase must Warn and fall back to the payload
+// base.sha tier instead of silently guessing a base.
+func TestResolveMergedPRBase_HeadCheckout_NoMergeCommitSHA(t *testing.T) {
+	f := buildMergedPRFixture(t)
+	runGitCmd(t, f.dir, "checkout", f.prHead)
+	t.Chdir(f.dir)
+	setMergedPREvent(t, f, "") // No merge_commit_sha in the payload.
+
+	res, err := NewProvider().ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, f.mainAdvance, res.SHA, "falls back to payload base.sha")
+	assert.Equal(t, sourcePayloadBaseSHA, res.Source)
+	assert.Equal(t, checkoutPRHead, res.Checkout)
+}
+
+// TestResolveMergedPRBase_HeadCheckout_MergeCommitNotFetchable covers a
+// merge_commit_sha that names a commit neither present locally nor
+// fetchable (the fixture repo has no "origin" remote): mergedPRForkPoint's
+// CommitParents lookup fails, the FetchCommit recovery attempt also fails,
+// and the original error must propagate rather than falling through with a
+// wrong SHA.
+func TestResolveMergedPRBase_HeadCheckout_MergeCommitNotFetchable(t *testing.T) {
+	f := buildMergedPRFixture(t)
+	runGitCmd(t, f.dir, "checkout", f.prHead)
+	t.Chdir(f.dir)
+	setMergedPREvent(t, f, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+
+	res, err := NewProvider().ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, f.mainAdvance, res.SHA, "falls back to payload base.sha when the merge commit can't be resolved or fetched")
+	assert.Equal(t, sourcePayloadBaseSHA, res.Source)
+}
+
+// TestResolveMergedPRBase_HeadCheckout_MergeCommitHasNoParents covers a
+// merge_commit_sha that resolves locally but has no parents — using the
+// fixture's own fork-point commit (its very first, parentless commit) as a
+// stand-in for a degenerate/rewritten-history merge commit — where
+// mergedPRForkPoint must return ErrCommitHasNoParents rather than computing
+// merge-base against a nonexistent parent.
+func TestResolveMergedPRBase_HeadCheckout_MergeCommitHasNoParents(t *testing.T) {
+	f := buildMergedPRFixture(t)
+	runGitCmd(t, f.dir, "checkout", f.prHead)
+	t.Chdir(f.dir)
+	setMergedPREvent(t, f, f.forkPoint) // forkPoint has no parent.
+
+	res, err := NewProvider().ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, f.mainAdvance, res.SHA, "falls back to payload base.sha when the merge commit has no parent to anchor on")
+	assert.Equal(t, sourcePayloadBaseSHA, res.Source)
+}
+
+// TestResolveMergedPRBase_FastForwardMerge_NoPayloadBaseSHA covers a
+// fast-forward-merged PR (merge_commit_sha == head.sha) whose event payload
+// is missing base.sha: mergedPRHeadAnchoredBase has no anchor to compute
+// the fork point from and must return ErrNoPayloadBaseSHA, triggering the
+// Warn-and-fallback path down to the last-resort target-branch ref.
+func TestResolveMergedPRBase_FastForwardMerge_NoPayloadBaseSHA(t *testing.T) {
+	f := buildMergedPRFixture(t)
+	runGitCmd(t, f.dir, "checkout", f.ffHead)
+	t.Chdir(f.dir)
+
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+	payload := map[string]any{
+		"action": "closed",
+		"pull_request": map[string]any{
+			"merged":           true,
+			"merge_commit_sha": f.ffHead, // == head.sha: the FF signature.
+			"head":             map[string]any{"sha": f.ffHead},
+			"base":             map[string]any{"ref": "main"}, // NOTE: no "sha".
+		},
+	}
+	t.Setenv("GITHUB_EVENT_PATH", writeEventPayload(t, payload))
+
+	res, err := NewProvider().ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Empty(t, res.SHA)
+	assert.Equal(t, "refs/remotes/origin/main", res.Ref)
+	assert.Equal(t, sourceGitHubBaseRef, res.Source)
+	assert.Equal(t, checkoutPRHead, res.Checkout)
+}
+
+// TestResolveMergedPRBase_FastForwardMerge_BaseSHANotFetchable covers a
+// fast-forward-merged PR whose payload base.sha names a commit that is
+// neither present locally nor fetchable: forkPointFromAnchor's CommitParents
+// lookup and FetchCommit recovery both fail, and mergedPRHeadAnchoredBase
+// must propagate that error rather than silently falling through.
+func TestResolveMergedPRBase_FastForwardMerge_BaseSHANotFetchable(t *testing.T) {
+	f := buildMergedPRFixture(t)
+	runGitCmd(t, f.dir, "checkout", f.ffHead)
+	t.Chdir(f.dir)
+
+	const fakeBaseSHA = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+	payload := map[string]any{
+		"action": "closed",
+		"pull_request": map[string]any{
+			"merged":           true,
+			"merge_commit_sha": f.ffHead,
+			"head":             map[string]any{"sha": f.ffHead},
+			"base":             map[string]any{"ref": "main", "sha": fakeBaseSHA},
+		},
+	}
+	t.Setenv("GITHUB_EVENT_PATH", writeEventPayload(t, payload))
+
+	res, err := NewProvider().ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, fakeBaseSHA, res.SHA, "falls back to the payload base.sha itself when its fork-point anchor can't be resolved or fetched")
+	assert.Equal(t, sourcePayloadBaseSHA, res.Source)
+}

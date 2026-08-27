@@ -1251,6 +1251,53 @@ func TestExecuteDescribeAffectedLocalRepoHeadError(t *testing.T) {
 	})
 }
 
+// TestExecuteDescribeAffected_RebaseOntoWorktreeFails verifies that
+// executeDescribeAffected propagates a hard error — rather than silently
+// mis-locating BASE's stacks — when rebaseConfigPathsOntoWorktree fails
+// because the config's absolute paths do not live under the local repo
+// root that ExecuteDescribeStacksWithOptions (the HEAD-side pass) just
+// processed successfully.
+func TestExecuteDescribeAffected_RebaseOntoWorktreeFails(t *testing.T) {
+	// A real, minimal atmos project so the first ExecuteDescribeStacksWithOptions
+	// call (against the original, HEAD-side paths) succeeds and execution reaches
+	// the BASE-worktree re-basing step.
+	atmosConfig := buildDescribeStacksDegradationFixture(t)
+
+	// localRepoFileSystemPath deliberately points at a directory unrelated to
+	// the fixture project atmosConfig's absolute paths were derived from.
+	// rebaseOnePathOntoWorktree then computes those absolute paths relative to
+	// this unrelated directory, which climbs out via "..", and
+	// rebaseConfigPathsOntoWorktree must fail hard.
+	unrelatedRepoDir := t.TempDir()
+
+	localRepo := createMockRepoWithHead(t)
+	remoteRepo := createMockRepoWithHead(t)
+
+	affected, localHead, remoteHead, err := executeDescribeAffected(
+		&atmosConfig,
+		unrelatedRepoDir,
+		t.TempDir(),
+		localRepo,
+		remoteRepo,
+		false,
+		false,
+		"",
+		false,
+		false,
+		nil,
+		false,
+		nil,
+		false,
+		DescribeStacksErrorOptions{},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitPathEscapesWorktree)
+	assert.Nil(t, affected)
+	assert.Nil(t, localHead)
+	assert.Nil(t, remoteHead)
+}
+
 func TestExecuteDescribeAffectedRemoteRepoHeadError(t *testing.T) {
 	t.Run("fails when remote repo Head() returns error", func(t *testing.T) {
 		localRepo := createMockRepoWithHead(t)
@@ -2117,4 +2164,29 @@ func TestRebaseOnePathOntoWorktree(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrGitPathEscapesWorktree)
 	})
+}
+
+// TestRebaseConfigPathsOntoWorktree_PathEscapesRepo verifies that
+// rebaseConfigPathsOntoWorktree itself surfaces (rather than swallows) the
+// per-path error from rebaseOnePathOntoWorktree: a config with one absolute
+// path outside the repo root must fail the whole call, not just skip that
+// one field.
+func TestRebaseConfigPathsOntoWorktree_PathEscapesRepo(t *testing.T) {
+	repo := t.TempDir()
+	worktree := t.TempDir()
+	outside := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePathAbsolute:         filepath.Join(repo, "."),
+		StacksBaseAbsolutePath:   filepath.Join(repo, "stacks"),
+		TerraformDirAbsolutePath: filepath.Join(repo, "components", "terraform"),
+		// This one is genuinely outside repo — the whole call must error.
+		HelmfileDirAbsolutePath: outside,
+		PackerDirAbsolutePath:   filepath.Join(repo, "components", "packer"),
+	}
+
+	err := rebaseConfigPathsOntoWorktree(atmosConfig, repo, worktree)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitPathEscapesWorktree)
 }

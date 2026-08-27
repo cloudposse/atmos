@@ -61,6 +61,26 @@ func TestCommitParents(t *testing.T) {
 		_, _, err := CommitParents(dir, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
 		assert.Error(t, err)
 	})
+
+	// NOTE: resolveCommit's CommitObject-fails-after-ResolveRevision-succeeds
+	// branch (the "getting commit %s" error) is not covered by a test: go-git's
+	// ResolveRevision already validates the target is commit-ish internally —
+	// resolving a tree object's hex SHA (verified experimentally) fails at
+	// ResolveRevision itself with "reference not found", never reaching
+	// CommitObject. That branch is unreachable via any real revision string
+	// without corrupting the local object store, so it is intentionally left
+	// untested (defensive code, not a gap in real-world coverage).
+}
+
+// TestCommitParents_OpenRepoFails verifies that CommitParents surfaces a
+// wrapped error (rather than panicking or silently succeeding) when repoDir
+// is not inside any git repository.
+func TestCommitParents_OpenRepoFails(t *testing.T) {
+	dir := t.TempDir() // No `git init` — not a repository.
+
+	_, _, err := CommitParents(dir, "HEAD")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "opening local repo")
 }
 
 func TestMergeBaseSHAs(t *testing.T) {
@@ -90,6 +110,35 @@ func TestMergeBaseSHAs(t *testing.T) {
 		_, err := MergeBaseSHAs(dir, featureSHA, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
 		assert.Error(t, err)
 	})
+
+	// Distinct from the revB case above: revA is the one that fails to resolve.
+	t.Run("unresolvable revA errors", func(t *testing.T) {
+		_, err := MergeBaseSHAs(dir, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", featureSHA)
+		assert.Error(t, err)
+	})
+
+	// Two orphan histories in the same repo are each individually resolvable
+	// but share no common ancestor — MergeBase succeeds without error yet
+	// returns zero results, which MergeBaseSHAs must turn into ErrNoCommonAncestor
+	// rather than an empty-but-successful SHA.
+	t.Run("no common ancestor", func(t *testing.T) {
+		runGit(t, dir, "checkout", "--orphan", "unrelated")
+		runGit(t, dir, "rm", "-rf", ".")
+		unrelatedSHA := commitTestFile(t, dir, "u.txt", "u", "unrelated orphan commit")
+
+		_, err := MergeBaseSHAs(dir, unrelatedSHA, mainSHA)
+		require.ErrorIs(t, err, ErrNoCommonAncestor)
+	})
+}
+
+// TestMergeBaseSHAs_OpenRepoFails verifies that MergeBaseSHAs surfaces a
+// wrapped error when repoDir is not inside any git repository.
+func TestMergeBaseSHAs_OpenRepoFails(t *testing.T) {
+	dir := t.TempDir() // No `git init` — not a repository.
+
+	_, err := MergeBaseSHAs(dir, "HEAD", "HEAD")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "opening local repo")
 }
 
 // gitObjectExists reports whether sha resolves to a commit object already
