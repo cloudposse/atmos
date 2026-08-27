@@ -14,8 +14,9 @@ var updateParser *flags.StandardParser
 var updateCmd = &cobra.Command{
 	Use:   "update [component]",
 	Short: "Update the template-packaging backend bucket",
-	Long: `Apply configuration changes to the existing S3 bucket referenced by the
-component's "kind: aws/s3" provision target.
+	Long: `Apply configuration changes to the S3 bucket referenced by the component's
+"kind: aws/s3" provision target — creating it first if it doesn't exist yet
+(the same shared create-or-update path "backend create" uses).
 
 This operation is idempotent and updates bucket settings like versioning,
 encryption, and public access blocking to match secure defaults.`,

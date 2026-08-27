@@ -74,11 +74,12 @@ upload to.
 
 Live verification surfaced a **separate, pre-existing bug**, unrelated to this fix and confirmed to
 reproduce identically with auto-provisioning uninvolved (bucket already existing): `apply`'s template
-upload (`packaging.go`'s `uploadPackage` → `pkg/ci/artifact`'s S3 store) fails against Floci with
-`no EC2 IMDS role found` — its S3 client isn't routed through the active identity's Floci-scoped
+upload (`packaging.go`'s `uploadPackage` → `pkg/ci/artifact`'s S3 store) failed against Floci with
+`no EC2 IMDS role found` — its S3 client wasn't routed through the active identity's Floci-scoped
 credentials/endpoint the way `pkg/provisioner/backend`'s S3 client (used by both `backend create` and
-this fix's auto-provision path) correctly is. Not fixed here — out of scope for this change, and per
-the user's standing preference this isn't filed as a GitHub issue without explicit authorization.
-Worth a dedicated fix pass: compare `packaging.go`'s S3 client construction against
-`pkg/provisioner/backend/s3.go`'s (which does honor the identity's endpoint override, per
-`s3_endpoint_e2e_test.go`'s regression test) to find where the wiring diverges.
+this fix's auto-provision path) correctly is.
+
+**Resolved** the same day — see
+[`2026-08-25-artifact-s3-store-endpoint-override.md`](2026-08-25-artifact-s3-store-endpoint-override.md):
+`pkg/ci/artifact/s3`'s store now threads the identity's `EndpointURL` override into its client the
+same way `pkg/provisioner/backend`'s S3 client already did. No further follow-up needed.
