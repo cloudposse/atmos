@@ -88,7 +88,7 @@ func TestDisableTerminationProtection_Error(t *testing.T) {
 
 	err := disableTerminationProtection(context.Background(), client, "vpc")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // currentStackStatus must wrap a DescribeStacks API error.
@@ -99,7 +99,7 @@ func TestCurrentStackStatus_DescribeStacksError(t *testing.T) {
 
 	_, err := currentStackStatus(context.Background(), client, "vpc")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // currentStackStatus must error (not panic) when DescribeStacks returns no

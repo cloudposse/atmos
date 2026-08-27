@@ -1626,6 +1626,7 @@ var (
 	ErrAwsCloudFormationComponentArgWithSelection = errors.New("component argument cannot be used with --all, --affected, --tags, or --labels")
 	ErrAwsCloudFormationComponentArgRequired      = errors.New("requires exactly one component argument unless --all or --affected is set")
 	ErrAwsCloudFormationIdentityResolutionFailed  = errors.New("aws/cloudformation component requested an identity, but the auth manager could not resolve it")
+	ErrAwsCloudFormationAPICallFailed             = errors.New("aws/cloudformation API call failed")
 )
 
 // Stack dependency (`depends_on`) resolution errors.

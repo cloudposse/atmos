@@ -63,7 +63,7 @@ func deleteStack(ctx context.Context, client CloudFormationClient, spec *stackSp
 	}
 
 	if _, err := client.DeleteStack(ctx, input); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 	return nil
 }
@@ -79,7 +79,7 @@ func disableTerminationProtection(ctx context.Context, client CloudFormationClie
 		EnableTerminationProtection: awsBool(false),
 	})
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 	return nil
 }
@@ -94,7 +94,7 @@ func isDeleteFailedStack(status cfntypes.StackStatus) bool {
 func currentStackStatus(ctx context.Context, client CloudFormationClient, stackName string) (cfntypes.StackStatus, error) {
 	out, err := client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: awsString(stackName)})
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+		return "", fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 	if len(out.Stacks) == 0 {
 		return "", fmt.Errorf("%w: stack %s not found", errUtils.ErrAwsCloudFormationChangeSetFailed, stackName)
