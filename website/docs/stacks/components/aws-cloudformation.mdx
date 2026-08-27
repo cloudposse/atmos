@@ -274,7 +274,10 @@ components:
     `kind: git`, an `aws/stackset` target is **not** selected through
     `apply --target` — it is used exclusively by the
     [`atmos aws cloudformation stackset`](/cli/commands/aws/cloudformation/stackset)
-    verb group (`create`/`update`/`delete`/`instances`).
+    verb group, and only by `create`/`update`, which resolve it to learn the
+    target accounts/regions/permission model. `delete` and `instances` act
+    directly on `stack_name` (the StackSet's own name) and don't resolve or
+    require a `provision.targets` entry.
 
 ```yaml
 components:
