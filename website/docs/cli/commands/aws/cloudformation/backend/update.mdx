@@ -10,10 +10,11 @@ import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-  Apply configuration changes to the existing S3 bucket referenced by the
-  component's resolved `kind: aws/s3` provision target — versioning,
-  encryption, and public-access-block settings are brought in line with
-  Atmos's secure defaults. `backend update` and [`backend
+  Apply configuration changes to the S3 bucket referenced by the component's
+  resolved `kind: aws/s3` provision target — creating it first if it doesn't
+  exist yet, then bringing its versioning, encryption, and
+  public-access-block settings in line with Atmos's secure defaults.
+  `backend update` and [`backend
   create`](/cli/commands/aws/cloudformation/backend/create) dispatch through
   the identical idempotent code path; `update` exists as the explicit,
   intention-revealing verb for "make sure this bucket's settings are still
