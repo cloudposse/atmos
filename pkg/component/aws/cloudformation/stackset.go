@@ -101,19 +101,28 @@ func stackSetConfigFromTarget(name string, block map[string]any) *stackSetConfig
 	return cfg
 }
 
-// toStringSlice normalizes a []any (as decoded from YAML) to []string.
+// toStringSlice normalizes a YAML-decoded `accounts:`/`regions:` value to
+// []string. Accepts a list ([]any, the documented shape) or a single scalar
+// string (a common shorthand for a one-element list) — anything else (a
+// number, a map, etc.) returns nil rather than silently guessing.
 func toStringSlice(v any) []string {
-	items, ok := v.([]any)
-	if !ok {
+	switch val := v.(type) {
+	case string:
+		if val == "" {
+			return nil
+		}
+		return []string{val}
+	case []any:
+		result := make([]string, 0, len(val))
+		for _, item := range val {
+			if s, ok := item.(string); ok {
+				result = append(result, s)
+			}
+		}
+		return result
+	default:
 		return nil
 	}
-	result := make([]string, 0, len(items))
-	for _, item := range items {
-		if s, ok := item.(string); ok {
-			result = append(result, s)
-		}
-	}
-	return result
 }
 
 // runStackSetCreate creates the StackSet, then creates stack instances in the
@@ -288,6 +297,9 @@ func pollStackSetOperation(ctx context.Context, client CloudFormationClient, sta
 		})
 		if err != nil {
 			return "", fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
+		}
+		if out.StackSetOperation == nil {
+			return "", fmt.Errorf("%w: DescribeStackSetOperation returned no operation for %s", errUtils.ErrAwsCloudFormationStackSetFailed, operationID)
 		}
 
 		status := out.StackSetOperation.Status

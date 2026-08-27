@@ -282,10 +282,11 @@ func TestRenderStackTree_MultiLevel(t *testing.T) {
 	}
 
 	out := captureStdout(t, func() { renderStackTree(tree, "") })
-	assert.Contains(t, out, "root")
-	assert.Contains(t, out, "├─ child-a")
-	assert.Contains(t, out, "└─ child-b")
-	assert.Contains(t, out, "grandchild-a1")
+	// Assert the full rendered tree, not just bare substrings — a
+	// substring-only check would still pass if grandchild-a1 printed without
+	// its own branch glyph/continuation prefix (the actual bug this guards).
+	want := "root\n├─ child-a\n│  └─ grandchild-a1\n└─ child-b\n"
+	assert.Equal(t, want, out)
 }
 
 // runTree's happy path: populates summary["tree"] and propagates
