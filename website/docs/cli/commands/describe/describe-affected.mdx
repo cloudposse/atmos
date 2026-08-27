@@ -32,7 +32,8 @@ The deprecated `--ref` and `--sha` flags are still supported for backward compat
 
 :::tip Zero-Config CI
 When `ci.enabled` is `true` in `atmos.yaml`, the base commit is automatically resolved from the CI environment:
-- **Pull requests**: Compares against the **fork point** of the PR branch (`git merge-base HEAD origin/<target>`). This works correctly even when the PR is out of date with the target branch — only commits the PR introduced are reported as affected, never commits that landed on `<target>` after the PR was forked. In shallow CI checkouts (`actions/checkout@v6` defaults to `fetch-depth: 1`), Atmos transparently fetches the target branch on demand.
+- **Open pull requests**: Compares against the **fork point** of the PR branch (`git merge-base HEAD origin/<target>`). This works correctly even when the PR is out of date with the target branch — only commits the PR introduced are reported as affected, never commits that landed on `<target>` after the PR was forked. In shallow CI checkouts (`actions/checkout@v6` defaults to `fetch-depth: 1`), Atmos transparently fetches the target branch on demand.
+- **Merged pull requests**: Atmos first classifies which commit the workflow checked out (the PR head, the merge commit, or GitHub's synthetic `refs/pull/<n>/merge` test merge) and picks the strategy that yields the PR's **net** change for that checkout — anchored on `pull_request.merge_commit_sha` from the event payload, never on the moving tip of `<target>` (which already contains the merge). This keeps multi-commit PRs correct: a final commit that reverts an earlier one contributes nothing to the diff.
 - **Push events**: Compares against the previous commit
 - **Merge groups**: Compares against the merge queue base
 
@@ -140,13 +141,25 @@ resolution logic.
 
 | Event | Base Resolution |
 |-------|----------------|
-| `pull_request` (opened/synchronize) | `git merge-base(HEAD, origin/<target>)` — fork point. Falls back to `event.pull_request.base.sha` if merge-base is unavailable. |
-| `pull_request` (closed/merged) | `git merge-base`, then `HEAD~1` for merge-commit checkouts |
+| `pull_request` (opened/synchronize, or closed without merging) | `git merge-base(HEAD, origin/<target>)` — fork point. Falls back to `event.pull_request.base.sha` if merge-base is unavailable. |
+| `pull_request` (closed and merged) | Checkout-classified (see below) — anchored on `event.pull_request.merge_commit_sha`, never on the moving tip of `<target>` |
 | `push` | Previous HEAD from event payload (`before`) |
 | `push` (force-push) | Parent of current commit (`HEAD~1`) |
-| `merge_group` | Target branch (`GITHUB_BASE_REF`) |
+| `merge_group` | Merge queue base (`event.merge_group.base_sha`) |
 
-The `pull_request` strategy uses `git merge-base` as the gold standard. When the local repository is a shallow checkout (the default for `actions/checkout@v6`), Atmos automatically runs a targeted `git fetch origin <target>` and retries — you do not need to set `fetch-depth: 0` on your checkout step. If even the auto-fetch fails (offline runner, deeply orphaned history), Atmos falls back to `event.pull_request.base.sha` from the event payload, which is at worst stale by however many commits have landed on `<target>` since the PR was last synced.
+The open-PR strategy uses `git merge-base` as the gold standard. When the local repository is a shallow checkout (the default for `actions/checkout@v6`), Atmos automatically runs a targeted `git fetch origin <target>` and retries — you do not need to set `fetch-depth: 0` on your checkout step. If even the auto-fetch fails (offline runner, deeply orphaned history), Atmos falls back to `event.pull_request.base.sha` from the event payload, which is at worst stale by however many commits have landed on `<target>` since the PR was last synced.
+
+**Merged pull requests** cannot compare against `origin/<target>` — after the merge, the target branch already contains the PR, so that comparison degenerates. Instead, Atmos classifies which commit the workflow actually checked out and resolves the base that yields the PR's **net** change for that checkout:
+
+| Checked-out commit | Base |
+|--------------------|------|
+| The PR head (`pull_request.head.sha`) | `merge-base(HEAD, merge_commit_sha^1)` — the true fork point, correct for merge, squash, and rebase strategies |
+| The PR head, fast-forward merge (`merge_commit_sha` equals `head.sha`) | `merge-base(HEAD, base.sha)` — the fork point via the payload's pre-merge target commit |
+| The merge commit (`pull_request.merge_commit_sha`) | Its first parent — the pre-merge target tip |
+| GitHub's synthetic `refs/pull/<n>/merge` test merge | Its first parent — the target tip the merge was built on |
+| Anything else | `event.pull_request.base.sha`, with a warning |
+
+The classification is included in the `Auto-detected CI base` log line (`checkout=head.sha|merge-commit|synthetic-merge|unknown`), so an unexpected affected set can be diagnosed from a single log line.
 
 **Example workflow** — no `--ref` or `--sha` needed:
 

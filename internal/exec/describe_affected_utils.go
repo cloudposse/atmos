@@ -2,7 +2,9 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -14,6 +16,79 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// evalSymlinksBestEffort resolves symlinks in path even when the full path
+// does not exist, by resolving the deepest existing ancestor and re-appending
+// the non-existent remainder. The plain filepath.EvalSymlinks errors on
+// missing paths, and unused helmfile/packer default dirs routinely do not exist.
+func evalSymlinksBestEffort(path string) string {
+	remainder := ""
+	current := path
+	for {
+		resolved, err := filepath.EvalSymlinks(current)
+		if err == nil {
+			return filepath.Join(resolved, remainder)
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			// Nothing along the path resolves — return the input unchanged.
+			return path
+		}
+		remainder = filepath.Join(filepath.Base(current), remainder)
+		current = parent
+	}
+}
+
+// rebaseOnePathOntoWorktree maps one absolute config path from the local repo
+// onto the BASE worktree checkout.
+//
+// Both sides are symlink-normalized before computing the relative path: the
+// repo root typically comes from git (symlink-resolved) while config paths
+// derive from the CWD as the shell reported it (logical, unresolved), and
+// mixing the two forms makes filepath.Rel produce a `..`-climbing path.
+// Joined onto the worktree, that path either lands on a nonexistent dir (the
+// BASE scan finds no stack manifests and EVERY component is reported as
+// affected) or clamps at the filesystem root and lands back on the HEAD repo
+// (BASE == HEAD and NOTHING is reported as affected). Both are silent, so a
+// path that still escapes after normalization is a hard error — it cannot be
+// represented inside the BASE checkout.
+func rebaseOnePathOntoWorktree(localRepoAbs, currentAbs, worktreePath string) (string, error) {
+	rel, err := filepath.Rel(evalSymlinksBestEffort(localRepoAbs), evalSymlinksBestEffort(currentAbs))
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf(
+			"%w: config path %q is outside the repository root %q and cannot be located in the BASE checkout %q",
+			errUtils.ErrGitPathEscapesWorktree, currentAbs, localRepoAbs, worktreePath,
+		)
+	}
+	return filepath.Join(worktreePath, rel), nil
+}
+
+// rebaseConfigPathsOntoWorktree points atmosConfig's absolute paths at the
+// BASE worktree checkout, preserving each path's location relative to the
+// repository root. The caller saves and restores the original values.
+func rebaseConfigPathsOntoWorktree(atmosConfig *schema.AtmosConfiguration, localRepoAbs, worktreePath string) error {
+	targets := []struct {
+		current string
+		set     func(string)
+	}{
+		{atmosConfig.BasePathAbsolute, func(p string) { atmosConfig.BasePath = p; atmosConfig.BasePathAbsolute = p }},
+		{atmosConfig.StacksBaseAbsolutePath, func(p string) { atmosConfig.StacksBaseAbsolutePath = p }},
+		{atmosConfig.TerraformDirAbsolutePath, func(p string) { atmosConfig.TerraformDirAbsolutePath = p }},
+		{atmosConfig.HelmfileDirAbsolutePath, func(p string) { atmosConfig.HelmfileDirAbsolutePath = p }},
+		{atmosConfig.PackerDirAbsolutePath, func(p string) { atmosConfig.PackerDirAbsolutePath = p }},
+	}
+	for _, target := range targets {
+		rebased, err := rebaseOnePathOntoWorktree(localRepoAbs, target.current, worktreePath)
+		if err != nil {
+			return err
+		}
+		target.set(rebased)
+	}
+	return nil
+}
 
 func executeDescribeAffected(
 	atmosConfig *schema.AtmosConfiguration,
@@ -82,40 +157,15 @@ func executeDescribeAffected(
 	currentStacksPackerDirAbsolutePath := atmosConfig.PackerDirAbsolutePath
 	currentStacksStackConfigFilesAbsolutePaths := atmosConfig.StackConfigFilesAbsolutePaths
 
-	// Compute the relative paths from the git repo root to the current absolute paths.
-	// This handles the case where atmos is run from a subdirectory (e.g., -C examples/demo-stacks).
-	// We need to preserve the subdirectory path when constructing remote paths.
-	baseRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentBasePathAbsolute)
-	if err != nil {
+	// Re-base the config's absolute paths onto the BASE checkout, preserving
+	// each path's location relative to the repo root. This handles the case
+	// where atmos is run from a subdirectory (e.g., -C examples/demo-stacks).
+	// BasePath and BasePathAbsolute must be updated so that !include can
+	// resolve files relative to the base path in the remote repo (fix for
+	// GitHub issue #2090).
+	if err := rebaseConfigPathsOntoWorktree(atmosConfig, localRepoFileSystemPathAbs, remoteRepoFileSystemPath); err != nil {
 		return nil, nil, nil, err
 	}
-	stacksRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentStacksBaseAbsolutePath)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	terraformRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentStacksTerraformDirAbsolutePath)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	helmfileRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentStacksHelmfileDirAbsolutePath)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	packerRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentStacksPackerDirAbsolutePath)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// Update paths to point to the remote repo dir using the computed relative paths.
-	// BasePath and BasePathAbsolute must be updated so that !include can resolve files
-	// relative to the base path in the remote repo (fix for GitHub issue #2090).
-	remoteBasePath := filepath.Join(remoteRepoFileSystemPath, baseRelPath)
-	atmosConfig.BasePath = remoteBasePath
-	atmosConfig.BasePathAbsolute = remoteBasePath
-	atmosConfig.StacksBaseAbsolutePath = filepath.Join(remoteRepoFileSystemPath, stacksRelPath)
-	atmosConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, terraformRelPath)
-	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, helmfileRelPath)
-	atmosConfig.PackerDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, packerRelPath)
 
 	// Re-scan the BASE (remote) directory for stack config files.
 	// This is necessary to detect deleted stacks - files that exist in BASE but not in HEAD.

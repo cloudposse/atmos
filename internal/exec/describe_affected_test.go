@@ -5,7 +5,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -2633,4 +2636,197 @@ func TestUploadErrorsWhenNoCredentials(t *testing.T) {
 	assert.Contains(t, allHints, "id-token: write")
 	assert.Contains(t, allHints, "ATMOS_PRO_WORKSPACE_ID")
 	assert.Contains(t, allHints, "atmos.tools/pro")
+}
+
+// runIncidentGit runs a git command in dir for the CI-base E2E fixtures below.
+func runIncidentGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	base := []string{"-c", "commit.gpgsign=false", "-c", "user.name=Test", "-c", "user.email=t@t.co"}
+	cmd := osexec.Command("git", append(base, args...)...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, string(out))
+	return strings.TrimSpace(string(out))
+}
+
+// writeIncidentFile writes a file (creating parents) inside the fixture repo.
+func writeIncidentFile(t *testing.T, dir, rel, content string) {
+	t.Helper()
+	path := filepath.Join(dir, filepath.FromSlash(rel))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+}
+
+// buildMergedPRIncidentRepo builds a self-contained git repo with a small
+// atmos project reproducing the merged multi-commit PR incident shape:
+//
+//	main:    fork ──────────────── advance ── mergeCommit
+//	     \                                   /
+//	feature:  org-wide change ── revert+README
+//
+// The PR's net diff is README only, so the correct affected set is empty.
+// Returns the repo dir and the fork/head/advance/merge commit SHAs.
+func buildMergedPRIncidentRepo(t *testing.T) (string, map[string]string) {
+	t.Helper()
+	dir := t.TempDir()
+	runIncidentGit(t, dir, "init", "-b", "main")
+	runIncidentGit(t, dir, "remote", "add", "origin", "https://github.com/example/incident.git")
+
+	writeIncidentFile(t, dir, "atmos.yaml", `
+base_path: "."
+components:
+  terraform:
+    base_path: components/terraform
+stacks:
+  base_path: stacks
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+ci:
+  enabled: true
+`)
+	writeIncidentFile(t, dir, "stacks/catalog/defaults.yaml", "terraform:\n  vars:\n    org_tag: dynamodb\n")
+	writeIncidentFile(t, dir, "stacks/deploy/dev.yaml", `
+import:
+  - catalog/defaults
+vars:
+  stage: dev
+components:
+  terraform:
+    c1:
+      vars: {size: small}
+    c2:
+      vars: {size: small}
+`)
+	writeIncidentFile(t, dir, "stacks/deploy/prod.yaml", `
+import:
+  - catalog/defaults
+vars:
+  stage: prod
+components:
+  terraform:
+    c1:
+      vars: {size: large}
+    c2:
+      vars: {size: large}
+`)
+	tf := "variable \"org_tag\" { default = \"\" }\n"
+	writeIncidentFile(t, dir, "components/terraform/c1/main.tf", tf)
+	writeIncidentFile(t, dir, "components/terraform/c2/main.tf", tf)
+	runIncidentGit(t, dir, "add", "-A")
+	runIncidentGit(t, dir, "commit", "-qm", "baseline")
+	fork := runIncidentGit(t, dir, "rev-parse", "HEAD")
+
+	runIncidentGit(t, dir, "checkout", "-qb", "feature")
+	writeIncidentFile(t, dir, "stacks/catalog/defaults.yaml", "terraform:\n  vars:\n    org_tag: s3-lockfile\n")
+	runIncidentGit(t, dir, "add", "-A")
+	runIncidentGit(t, dir, "commit", "-qm", "org-wide change")
+	writeIncidentFile(t, dir, "stacks/catalog/defaults.yaml", "terraform:\n  vars:\n    org_tag: dynamodb\n")
+	writeIncidentFile(t, dir, "README.md", "docs only\n")
+	runIncidentGit(t, dir, "add", "-A")
+	runIncidentGit(t, dir, "commit", "-qm", "revert org-wide change; add README")
+	head := runIncidentGit(t, dir, "rev-parse", "HEAD")
+
+	runIncidentGit(t, dir, "checkout", "-q", "main")
+	writeIncidentFile(t, dir, "stacks/deploy/prod.yaml", `
+import:
+  - catalog/defaults
+vars:
+  stage: prod
+components:
+  terraform:
+    c1:
+      vars: {size: xlarge}
+    c2:
+      vars: {size: xlarge}
+`)
+	runIncidentGit(t, dir, "add", "-A")
+	runIncidentGit(t, dir, "commit", "-qm", "main advance")
+	advance := runIncidentGit(t, dir, "rev-parse", "HEAD")
+	runIncidentGit(t, dir, "merge", "-q", "--no-ff", head, "-m", "merge PR")
+	mergeCommit := runIncidentGit(t, dir, "rev-parse", "HEAD")
+
+	return dir, map[string]string{
+		"fork": fork, "head": head, "advance": advance, "merge": mergeCommit,
+	}
+}
+
+// describeAffectedInRepo initializes the CLI config for the repo at cwdPath
+// and runs the real checkout-based describe-affected flow against baseSHA.
+func describeAffectedInRepo(t *testing.T, cwdPath, baseSHA string) []schema.Affected {
+	t.Helper()
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", cwdPath)
+	t.Setenv("ATMOS_BASE_PATH", cwdPath)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCheckout(
+		&atmosConfig, "", baseSHA, "main",
+		false, false, "", false, false, nil, false, nil, true,
+	)
+	require.NoError(t, err)
+	return affected
+}
+
+// TestDescribeAffectedCIBaseE2E exercises the full merged-PR flow end to end:
+// a real git repo, a real GitHub event payload, real base auto-detection, and
+// the real checkout-based affected computation — the wiring no unit test
+// covers on its own.
+func TestDescribeAffectedCIBaseE2E(t *testing.T) {
+	repoDir, shas := buildMergedPRIncidentRepo(t)
+	runIncidentGit(t, repoDir, "checkout", "-q", shas["head"]) // head.sha checkout, like the documented workflow
+
+	t.Run("merged PR resolves fork point and reports zero affected", func(t *testing.T) {
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
+		eventPath := filepath.Join(t.TempDir(), "event.json")
+		payload := `{"action":"closed","pull_request":{"merged":true,"merge_commit_sha":"` + shas["merge"] +
+			`","head":{"sha":"` + shas["head"] + `"},"base":{"ref":"main","sha":"` + shas["advance"] + `"}}}`
+		require.NoError(t, os.WriteFile(eventPath, []byte(payload), 0o644))
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+		t.Setenv("GITHUB_EVENT_PATH", eventPath)
+		t.Setenv("GITHUB_BASE_REF", "main")
+		t.Chdir(repoDir)
+
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		}
+		resolveBaseFromCI(describe)
+		assert.Equal(t, shas["fork"], describe.SHA,
+			"merged-PR base must be the fork point, not the PR's previous commit")
+		assert.Equal(t, shas["head"], describe.HeadSHAOverride)
+
+		affected := describeAffectedInRepo(t, repoDir, describe.SHA)
+		assert.Empty(t, affected, "net PR diff is README only — nothing is affected")
+	})
+
+	t.Run("repo under symlinked path re-bases BASE paths correctly", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation requires elevation on Windows")
+		}
+		link := filepath.Join(t.TempDir(), "link-repo")
+		require.NoError(t, os.Symlink(repoDir, link))
+		t.Chdir(link)
+
+		// go-git reports the symlink-RESOLVED repo root while the config
+		// paths keep the logical (symlinked) form from the CWD. Mixing the
+		// two makes filepath.Rel produce a `..`-climbing path; depending on
+		// depth, joining it onto the BASE worktree lands on a nonexistent
+		// dir (BASE treated as empty → EVERYTHING affected) or clamps at
+		// the filesystem root and lands back on the HEAD repo (BASE ==
+		// HEAD → NOTHING affected). Diffing against "advance" (which
+		// genuinely differs from HEAD in the prod stack only) discriminates
+		// the correct result from both failure modes.
+		affected := describeAffectedInRepo(t, link, shas["advance"])
+		slugs := make([]string, 0, len(affected))
+		for _, a := range affected {
+			slugs = append(slugs, a.StackSlug)
+		}
+		sort.Strings(slugs)
+		assert.Equal(t, []string{"prod-c1", "prod-c2"}, slugs,
+			"symlinked CWD must yield the same affected set as a plain path: prod only")
+	})
 }

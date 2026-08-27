@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -2055,4 +2056,65 @@ func TestProcessComponentsSourceAndProvisionChanges(t *testing.T) {
 			assert.Equal(t, tt.expectedReason, affected[0].Affected)
 		})
 	}
+}
+
+func TestEvalSymlinksBestEffort(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevation on Windows")
+	}
+
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(real, link))
+	// t.TempDir itself may sit behind symlinks (e.g. /var -> /private/var on
+	// macOS), so compare against the fully resolved form.
+	realResolved, err := filepath.EvalSymlinks(real)
+	require.NoError(t, err)
+
+	t.Run("resolves an existing symlinked path", func(t *testing.T) {
+		assert.Equal(t, realResolved, evalSymlinksBestEffort(link))
+	})
+
+	t.Run("resolves the existing ancestor of a missing path", func(t *testing.T) {
+		missing := filepath.Join(link, "does", "not", "exist")
+		want := filepath.Join(realResolved, "does", "not", "exist")
+		assert.Equal(t, want, evalSymlinksBestEffort(missing))
+	})
+
+	t.Run("returns unresolvable input unchanged", func(t *testing.T) {
+		in := filepath.Join(string(filepath.Separator), "definitely-missing-root-pr2380", "x")
+		assert.Equal(t, in, evalSymlinksBestEffort(in))
+	})
+}
+
+func TestRebaseOnePathOntoWorktree(t *testing.T) {
+	repo := t.TempDir()
+	worktree := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, "stacks"), 0o755))
+
+	t.Run("maps a repo-relative path into the worktree", func(t *testing.T) {
+		got, err := rebaseOnePathOntoWorktree(repo, filepath.Join(repo, "stacks"), worktree)
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(worktree, "stacks"), got)
+	})
+
+	t.Run("symlinked config path maps to the same worktree location", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation requires elevation on Windows")
+		}
+		link := filepath.Join(t.TempDir(), "repo-link")
+		require.NoError(t, os.Symlink(repo, link))
+		// Mixed forms: resolved repo root, logical (symlinked) config path —
+		// the exact mismatch that used to produce a `..`-climbing rel path.
+		got, err := rebaseOnePathOntoWorktree(repo, filepath.Join(link, "stacks"), worktree)
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(worktree, "stacks"), got)
+	})
+
+	t.Run("path genuinely outside the repo is a hard error, never a silent guess", func(t *testing.T) {
+		outside := t.TempDir()
+		_, err := rebaseOnePathOntoWorktree(repo, outside, worktree)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrGitPathEscapesWorktree)
+	})
 }
