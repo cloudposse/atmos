@@ -2,6 +2,7 @@ package git
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -91,10 +92,19 @@ func TestMergeBaseSHAs(t *testing.T) {
 	})
 }
 
+// gitObjectExists reports whether sha resolves to a commit object already
+// present in dir's local object database (loose or packed), without requiring
+// any ref to point at it.
+func gitObjectExists(dir, sha string) bool {
+	cmd := exec.Command("git", gitTestArgs("cat-file", "-e", sha+"^{commit}")...)
+	cmd.Dir = dir
+	return cmd.Run() == nil
+}
+
 func TestFetchCommit(t *testing.T) {
 	originDir := t.TempDir()
 	runGit(t, originDir, "init", "-b", "main")
-	originSHA := commitTestFile(t, originDir, "a.txt", "a", "origin commit")
+	commitTestFile(t, originDir, "a.txt", "a", "origin initial commit")
 	// Local path remotes reject want-by-SHA unless explicitly allowed —
 	// hosted forges (GitHub et al.) allow reachable SHAs.
 	runGit(t, originDir, "config", "uploadpack.allowAnySHA1InWant", "true")
@@ -103,8 +113,22 @@ func TestFetchCommit(t *testing.T) {
 	runGit(t, cloneDir, "clone", originDir, ".")
 
 	t.Run("fetches an existing commit by SHA", func(t *testing.T) {
-		err := FetchCommit(cloneDir, originSHA)
+		// Commit the target object on origin AFTER cloneDir already exists, so the
+		// clone genuinely lacks it — exercising the real "narrow checkout missing
+		// an object" recovery path FetchCommit exists for. Committing it before the
+		// clone (as the original version of this test did) would make the clone
+		// already contain the object, so the assertion would pass even if
+		// FetchCommit were a no-op.
+		targetSHA := commitTestFile(t, originDir, "b.txt", "b", "origin commit added after clone")
+
+		require.False(t, gitObjectExists(cloneDir, targetSHA),
+			"target commit must be missing from the clone before FetchCommit for this test to be meaningful")
+
+		err := FetchCommit(cloneDir, targetSHA)
 		assert.NoError(t, err)
+
+		assert.True(t, gitObjectExists(cloneDir, targetSHA),
+			"target commit should be resolvable in the clone after FetchCommit")
 	})
 
 	t.Run("rejects a malformed SHA before invoking git", func(t *testing.T) {

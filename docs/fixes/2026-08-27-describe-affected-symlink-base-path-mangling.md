@@ -5,7 +5,7 @@
 ## Issue
 
 Running `atmos describe affected` from a repository whose working directory
-involves a symlink (e.g. macOS `/tmp` → `/private/tmp`, `/var` →
+involves a symlink (e.g., macOS `/tmp` → `/private/tmp`, `/var` →
 `/private/var`, a symlinked home or workspace directory) silently produced a
 wrong affected set. Depending on filesystem depth, one of two opposite
 failures occurred:

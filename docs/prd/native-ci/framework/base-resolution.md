@@ -64,11 +64,11 @@ ResolveBase() (*BaseResolution, error)
 
 ## FR-12: GitHub Actions Base Resolution
 
-**Requirement**: The GitHub provider resolves the base commit from GitHub Actions environment variables and event payload. For pull request events, the primary strategy is `git merge-base` — the only approach that is correct regardless of checkout strategy and merge method.
+**Requirement**: The GitHub provider resolves the base commit from GitHub Actions environment variables and event payload. For open and closed-unmerged pull request events, the primary strategy is `git merge-base` — the only approach that is correct regardless of checkout strategy and merge method. Merged pull requests use a different strategy entirely (see "Merged pull requests: checkout classification" below), because merge-base against the target branch degenerates once the target already contains the PR.
 
 ### Why merge-base is the gold standard
 
-The purpose of base resolution is to answer: "what is the fork point — the commit where this PR's changes diverge from the target branch?" This determines which stacks are affected by the PR. `git merge-base HEAD origin/<target>` answers this question correctly in all scenarios.
+The purpose of base resolution is to answer: "what is the fork point — the commit where this PR's changes diverge from the target branch?" This determines which stacks are affected by the PR. For open and closed-unmerged PRs, `git merge-base HEAD origin/<target>` answers this question correctly in all scenarios. Merged PRs are the exception — see "Merged pull requests: checkout classification" below.
 
 ### Rejected approaches
 

@@ -20,7 +20,7 @@ for Atmos Pro upload correlation) with `fetch-depth: 0`.
 
 The run logs showed the difference directly:
 
-```
+```text
 # synchronize event (correct):
 Auto-detected CI base ... source="merge-base(HEAD, origin/main)"
 ✓ Uploaded 0 affected component(s)

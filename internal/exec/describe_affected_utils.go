@@ -157,6 +157,22 @@ func executeDescribeAffected(
 	currentStacksPackerDirAbsolutePath := atmosConfig.PackerDirAbsolutePath
 	currentStacksStackConfigFilesAbsolutePaths := atmosConfig.StackConfigFilesAbsolutePaths
 
+	// Guarantee atmosConfig's original paths are restored on every return path (including
+	// early errors from re-basing or BASE stack processing below), not just the success
+	// path. Without this, an error return would leave atmosConfig pointing at the BASE
+	// worktree's paths, which are deleted once the worktree is torn down by the caller.
+	// This is redundant with (but does not replace) the explicit restore further below,
+	// which must run before findAffected is called with the original (HEAD) paths.
+	defer func() {
+		atmosConfig.BasePath = currentBasePath
+		atmosConfig.BasePathAbsolute = currentBasePathAbsolute
+		atmosConfig.StacksBaseAbsolutePath = currentStacksBaseAbsolutePath
+		atmosConfig.TerraformDirAbsolutePath = currentStacksTerraformDirAbsolutePath
+		atmosConfig.HelmfileDirAbsolutePath = currentStacksHelmfileDirAbsolutePath
+		atmosConfig.PackerDirAbsolutePath = currentStacksPackerDirAbsolutePath
+		atmosConfig.StackConfigFilesAbsolutePaths = currentStacksStackConfigFilesAbsolutePaths
+	}()
+
 	// Re-base the config's absolute paths onto the BASE checkout, preserving
 	// each path's location relative to the repo root. This handles the case
 	// where atmos is run from a subdirectory (e.g., -C examples/demo-stacks).
