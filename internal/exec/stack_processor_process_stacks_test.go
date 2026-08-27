@@ -1811,6 +1811,64 @@ func TestProcessStackConfig_CloudFormationIsBuiltInNotCustomPassthrough(t *testi
 	assert.Equal(t, []any{"global-hook"}, hooks["before"])
 }
 
+// TestProcessStackConfig_CloudFormationReceivesGlobalSecrets guards the
+// buildCloudFormationOpts closure's ComponentProcessorOptions.GlobalSecrets
+// wiring — terraform/helmfile/packer/ansible's equivalent builders already set
+// it, but aws/cloudformation's builder omitted it, so stack-level `secrets:`
+// silently never reached aws/cloudformation components at all.
+func TestProcessStackConfig_CloudFormationReceivesGlobalSecrets(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.SecretsSectionName: map[string]any{
+			"vars": map[string]any{
+				"DB_PASSWORD": map[string]any{"sops": "vault"},
+			},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.TemplateSectionName:  "template.yaml",
+					cfg.StackNameSectionName: "acme-plat-ue2-dev-vpc",
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	cloudformation, ok := components[cfg.CloudFormationComponentType].(map[string]any)
+	require.True(t, ok, "result must contain aws/cloudformation components")
+	vpc, ok := cloudformation["vpc"].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must exist")
+
+	secretsSection, ok := vpc[cfg.SecretsSectionName].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must have a merged secrets section from stack-global secrets, got: %v", vpc[cfg.SecretsSectionName])
+	vars, ok := secretsSection["vars"].(map[string]any)
+	require.True(t, ok, "secrets.vars must be a map")
+	_, ok = vars["DB_PASSWORD"].(map[string]any)
+	require.True(t, ok, "DB_PASSWORD must have flowed from stack-global secrets into the aws/cloudformation component")
+}
+
 // TestProcessStackConfig_CloudFormationAllSectionsSurvive guards all of the
 // section-whitelist plumbing sites at once (stack_processor_process_stacks.go,
 // _helpers.go, _helpers_extraction.go, _helpers_inheritance.go, _utils.go,
