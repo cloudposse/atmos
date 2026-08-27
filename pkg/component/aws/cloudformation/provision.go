@@ -57,12 +57,11 @@ func deliverApply(octx *opContext, client CloudFormationClient, spec *stackSpec)
 		return summary, result, err
 	}
 
-	s3Target, err := resolvePackagingTarget(provisionSection, selected)
-	if err != nil {
-		return summary, nil, err
-	}
-
 	if needsPackaging(spec.TemplateBody) || selected.Kind == kindAwsS3 {
+		s3Target, err := resolvePackagingTarget(provisionSection, selected)
+		if err != nil {
+			return summary, nil, err
+		}
 		pkg, err := uploadPackage(octx.Ctx, octx.AtmosConfig, octx.Info, s3Target, spec.TemplateBody)
 		if err != nil {
 			return summary, nil, err
