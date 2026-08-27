@@ -73,7 +73,7 @@ func listAllStackResources(ctx context.Context, client CloudFormationClient, sta
 			NextToken: nextToken,
 		})
 		if err != nil {
-			return nil, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+			return nil, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationAPICallFailed, err)
 		}
 		resources = append(resources, out.StackResourceSummaries...)
 		if out.NextToken == nil {
