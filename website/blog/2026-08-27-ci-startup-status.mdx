@@ -6,29 +6,27 @@ tags: [feature, dx]
 date: 2026-08-27T12:00:00.000Z
 ---
 
-Two pipelines can look identical in the run summary — green checkmarks, no errors — and still be
-running in completely different worlds. One reorganized its workflow YAML months ago and quietly
-dropped the line that turns CI mode on; nobody noticed because nothing errors, it just falls back
-to the old behavior. The other never moved off the GitHub Actions steps that were the recommended
-integration for years, unaware that the newer, native path replacing them exists and does the same
-work with none of the wrapper scripts. Both teams find out the hard way — a status check that used
-to show up stops appearing, or a drift alert never fires.
+A CI setting that doesn't take effect looks exactly like one that does. Nothing errors, the
+pipeline finishes green, and the log gives no sign either way — the only evidence is something
+downstream quietly not happening. That's been true of two Atmos settings in particular: flip
+`ci.enabled` off by accident during a workflow refactor, or never wire up an Atmos Pro workspace in
+the first place, and the first symptom is a status check or an upload that isn't there, discovered
+days later.
+
+The same lack of feedback is why migration off the older `cloudposse/github-action-atmos-*`
+marketplace actions has been slower than it should be. Those actions were the recommended way to
+run Atmos in GitHub Actions for years. Native CI has since replaced them with a more capable,
+better-tested integration, but nothing in a pipeline still calling into the old actions ever says
+so.
 
 <!--truncate-->
 
 ## The Problem
 
-Whether Native CI mode and Atmos Pro are actually active has always been invisible until
-something that depends on them fails to show up. There was no single place in a CI run's log to
-confirm either was on, so misconfiguration surfaced as an absence — a missing check, a missing
-upload — rather than a clear signal at the top of the run.
-
-Teams still calling into the older `cloudposse/github-action-atmos-*` marketplace actions have the
-same blind spot in reverse. Those actions were the recommended integration for years and are now
-in maintenance-only mode, while Native CI has kept shipping — richer job summaries, drift
-detection, and end-to-end testing of the CI integration itself as part of the Atmos core test
-suite, something a separate wrapper action could never get for free. There was no in-pipeline
-signal telling teams the ground had shifted under them.
+Confirming any of it meant checking for side effects after the fact: did the expected status check
+show up, did the drift upload happen, is this pipeline still wired to a marketplace action. None of
+that was visible from the CI run itself, so a misconfigured pipeline was only ever discovered
+because something else broke first.
 
 ## The Fix
 
@@ -51,10 +49,10 @@ actions should treat this as a prompt to move now, not eventually.
 
 ## How to Use It
 
-There's nothing to configure — the banner appears automatically at the top of every CI run, and
-it's a complete no-op on a local machine. It reads the same [`ci`](/cli/configuration/ci) and
-[`settings.pro`](/cli/configuration/settings/pro) configuration you already have, so what it
-reports always matches your actual setup.
+There's nothing to configure — the banner appears automatically at the start of every `atmos`
+command you run inside a detected CI provider, and it's a complete no-op on a local machine. It
+reads the same [`ci`](/cli/configuration/ci) and [`settings.pro`](/cli/configuration/settings/pro)
+configuration you already have, so what it reports always matches your actual setup.
 
 ## Get Involved
 
