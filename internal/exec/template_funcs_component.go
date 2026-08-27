@@ -62,14 +62,6 @@ func componentFunc(
 	maskOnly := configAndStacksInfo != nil && configAndStacksInfo.SecretsMaskOnly
 	authDisabled := authdeferred.AuthDisabled(atmosConfig.AuthManager) || (configAndStacksInfo != nil && configAndStacksInfo.AuthDisabled)
 	functionName := fmt.Sprintf("atmos.Component(%s, %s)", component, stack)
-	var infoAuthContext *schema.AuthContext
-	if configAndStacksInfo != nil {
-		infoAuthContext = configAndStacksInfo.AuthContext
-	}
-	kinds := refcache.KindsFor(maskOnly)
-	cacheKey := refcache.NewKey(atmosConfig, stack, component)
-	cacheKey.Auth = refcache.AuthScope(infoAuthContext, nil, authDisabled)
-	cacheKey.Inspection = maskOnly
 
 	log.Debug("Executing template function", "function", functionName)
 
@@ -90,6 +82,34 @@ func componentFunc(
 	}
 	defer resolution.Pop(atmosConfig)
 
+	// Resolve the AuthManager for this nested component. The target's own auth section (when it
+	// declares a default identity) overrides the enclosing component's propagated AuthContext,
+	// mirroring !terraform.state / !terraform.output via resolveAuthManagerForNestedComponent.
+	// Without this, atmos.Component() always reused the enclosing component's credentials verbatim,
+	// even for a target that authenticates independently.
+	var resolvedAuthMgr auth.AuthManager
+	var valueCache *deferred.ValueCache
+	if authdeferred.IsDeferred(atmosConfig.AuthManager) {
+		var err error
+		resolvedAuthMgr, valueCache, err = deferredTargetAuthAndCache(atmosConfig, component, stack, &authContextWrapper{stackInfo: configAndStacksInfo})
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		resolvedAuthMgr = resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, resolveAuthManagerForNestedComponent)
+	}
+	kinds := refcache.KindsFor(maskOnly)
+	if cached, ok := valueCache.Load(kinds.Component); ok {
+		return cached, nil
+	}
+
+	// Resolve identity before the eager cache lookup so distinct callers cannot
+	// share output values. Deferred mode uses its target-bound value cache above.
+	authContext := resolvedTargetAuthContext(atmosConfig, resolvedAuthMgr, nil, authDisabled)
+	cacheKey := refcache.NewKey(atmosConfig, stack, component)
+	cacheKey.Auth = refcache.AuthScope(authContext, resolvedAuthMgr, authDisabled)
+	cacheKey.Inspection = maskOnly
+
 	// Inspection placeholders and resolved execution values use separate cache partitions.
 	var existingSections any
 	var found bool
@@ -109,26 +129,6 @@ func componentFunc(
 		}
 
 		return existingSections, nil
-	}
-
-	// Resolve the AuthManager for this nested component. The target's own auth section (when it
-	// declares a default identity) overrides the enclosing component's propagated AuthContext,
-	// mirroring !terraform.state / !terraform.output via resolveAuthManagerForNestedComponent.
-	// Without this, atmos.Component() always reused the enclosing component's credentials verbatim,
-	// even for a target that authenticates independently.
-	var resolvedAuthMgr auth.AuthManager
-	var valueCache *deferred.ValueCache
-	if authdeferred.IsDeferred(atmosConfig.AuthManager) {
-		var err error
-		resolvedAuthMgr, valueCache, err = deferredTargetAuthAndCache(atmosConfig, component, stack, &authContextWrapper{stackInfo: configAndStacksInfo})
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		resolvedAuthMgr = resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, resolveAuthManagerForNestedComponent)
-	}
-	if cached, ok := valueCache.Load(kinds.Component); ok {
-		return cached, nil
 	}
 
 	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
@@ -161,7 +161,6 @@ func componentFunc(
 			// Execute `terraform output` using the resolved AuthContext: the target's own if it
 			// authenticated independently, otherwise the enclosing component's (propagated from the
 			// --identity flag).
-			authContext := resolvedTargetAuthContext(atmosConfig, resolvedAuthMgr, nil, authDisabled)
 			terraformOutputs, err = componentFuncOutputsExecutor.ExecuteWithSections(atmosConfig, component, stack, sections, authContext)
 			if err != nil {
 				return nil, fmt.Errorf("atmos.Component(%s, %s) failed to get terraform outputs: %w", component, stack, err)
@@ -174,13 +173,7 @@ func componentFunc(
 
 		sections = lo.Assign(sections, outputs)
 	} else if componentType == cfg.CloudFormationComponentType {
-		var cfnAuthContext *schema.AuthContext
-		if resolvedAuthMgr != nil {
-			if si := resolvedAuthMgr.GetStackInfo(); si != nil {
-				cfnAuthContext = si.AuthContext
-			}
-		}
-		cfnOutputs, err := cloudFormationOutputsForSections(atmosConfig, component, sections, cfnAuthContext)
+		cfnOutputs, err := cloudFormationOutputsForSections(atmosConfig, component, sections, authContext)
 		if err != nil {
 			return nil, fmt.Errorf("atmos.Component(%s, %s) failed to get aws/cloudformation outputs: %w", component, stack, err)
 		}
@@ -206,6 +199,26 @@ func componentFunc(
 	}
 
 	return sections, nil
+}
+
+// authCacheKeySuffix derives a cache-key fragment from the resolved AuthContext, so
+// componentFunc's cache never conflates two calls to the same stack+component that resolved to
+// different identities/regions. Empty when authContext is nil (no identity resolved), matching
+// the pre-existing stack+component-only key for that common case.
+func authCacheKeySuffix(authContext *schema.AuthContext) string {
+	if authContext == nil {
+		return ""
+	}
+	switch {
+	case authContext.AWS != nil:
+		return fmt.Sprintf("aws:%s:%s", authContext.AWS.Profile, authContext.AWS.Region)
+	case authContext.Azure != nil:
+		return fmt.Sprintf("azure:%s:%s", authContext.Azure.Profile, authContext.Azure.SubscriptionID)
+	case authContext.GCP != nil:
+		return fmt.Sprintf("gcp:%s", authContext.GCP.ProjectID)
+	default:
+		return ""
+	}
 }
 
 // componentFuncAuthResolver builds the AuthManager for a nested target — used by atmos.Component()
