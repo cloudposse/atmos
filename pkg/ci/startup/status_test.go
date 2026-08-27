@@ -29,9 +29,13 @@ func (ts *testStreams) Error() stdio.Writer     { return ts.stderr }
 func (ts *testStreams) RawOutput() stdio.Writer { return ts.stdout }
 func (ts *testStreams) RawError() stdio.Writer  { return ts.stderr }
 
-// initTestUI wires the UI formatter to a captured stderr buffer.
+// initTestUI wires the UI formatter to a captured stderr buffer. NO_COLOR forces
+// plain-text output so assertions on literal message text are deterministic
+// regardless of the host environment's own color-support detection (CI runners
+// like GitHub Actions are detected as color-capable even when writing to a buffer).
 func initTestUI(t *testing.T) *bytes.Buffer {
 	t.Helper()
+	t.Setenv("NO_COLOR", "1")
 
 	stderr := &bytes.Buffer{}
 	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: &bytes.Buffer{}, stderr: stderr}
