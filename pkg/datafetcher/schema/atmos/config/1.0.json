@@ -8771,7 +8771,7 @@
               "type": "null"
             }
           ],
-          "description": "Region overrides the bucket's region (aws/s3 kind; defaults to the active identity's region)."
+          "description": "Region is the bucket's region (aws/s3 kind). Required: it builds the\nhttps:// TemplateURL CreateChangeSet needs for a packaged template, and\nunlike the CloudFormation client's own region resolution there is no\nreliable way to recover it after the S3 upload has already happened."
         },
         "accounts": {
           "anyOf": [
