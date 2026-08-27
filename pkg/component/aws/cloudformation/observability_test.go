@@ -104,7 +104,7 @@ func TestBuildStackTree_APIError(t *testing.T) {
 
 	_, err := buildStackTree(context.Background(), client, "root", 0)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // buildStackTree must propagate an error from a recursive call (a nested
@@ -123,7 +123,7 @@ func TestBuildStackTree_RecursiveCallError(t *testing.T) {
 
 	_, err := buildStackTree(context.Background(), client, "root", 0)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // buildStackTree must stop recursing once maxNestedStackDepth is reached,
@@ -238,7 +238,7 @@ func TestListAllStackResources_Error(t *testing.T) {
 
 	_, err := listAllStackResources(context.Background(), client, "root")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // flattenStackNames must return just the root's name for a single node.
