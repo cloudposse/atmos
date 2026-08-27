@@ -259,6 +259,45 @@ func TestWaitForChangeSet_DescribeChangeSetError(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
 }
 
+// waitForChangeSet must follow DescribeChangeSet's NextToken and collect every
+// page's Changes — a changeset with enough resource changes to paginate would
+// otherwise silently under-report the diff a user reviews before approving apply.
+func TestWaitForChangeSet_FollowsPagination(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	page1Change := cfntypes.Change{Type: cfntypes.ChangeTypeResource}
+	page2Change := cfntypes.Change{Type: cfntypes.ChangeTypeResource}
+	nextToken := "page-2-token"
+
+	gomock.InOrder(
+		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, input *cloudformation.DescribeChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeChangeSetOutput, error) {
+				assert.Nil(t, input.NextToken)
+				return &cloudformation.DescribeChangeSetOutput{
+					Status:    cfntypes.ChangeSetStatusCreateComplete,
+					Changes:   []cfntypes.Change{page1Change},
+					NextToken: &nextToken,
+				}, nil
+			},
+		),
+		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, input *cloudformation.DescribeChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeChangeSetOutput, error) {
+				require.NotNil(t, input.NextToken)
+				assert.Equal(t, nextToken, *input.NextToken)
+				return &cloudformation.DescribeChangeSetOutput{
+					Status:  cfntypes.ChangeSetStatusCreateComplete,
+					Changes: []cfntypes.Change{page2Change},
+				}, nil
+			},
+		),
+	)
+
+	result, err := waitForChangeSet(context.Background(), client, "vpc", "atmos-vpc-123", cfntypes.ChangeSetTypeCreate)
+	require.NoError(t, err)
+	assert.Equal(t, []cfntypes.Change{page1Change, page2Change}, result.Changes)
+}
+
 func TestSanitizeChangeSetSuffix(t *testing.T) {
 	assert.Equal(t, "acme-plat-ue2-dev-vpc", sanitizeChangeSetSuffix("acme-plat-ue2-dev-vpc"))
 	assert.Equal(t, "acme-plat-vpc", sanitizeChangeSetSuffix("acme_plat-vpc"), "non-alphanumeric-non-hyphen characters (e.g. underscore) become hyphens")
