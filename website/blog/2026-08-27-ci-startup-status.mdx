@@ -6,18 +6,17 @@ tags: [feature, dx]
 date: 2026-08-27T12:00:00.000Z
 ---
 
-A CI setting that doesn't take effect looks exactly like one that does. Nothing errors, the
-pipeline finishes green, and the log gives no sign either way — the only evidence is something
-downstream quietly not happening. That's been true of two Atmos settings in particular: flip
-`ci.enabled` off by accident during a workflow refactor, or never wire up an Atmos Pro workspace in
-the first place, and the first symptom is a status check or an upload that isn't there, discovered
-days later.
+GitHub Actions is the most popular way teams run Atmos in CI, and a lot of those pipelines are
+still calling into the original `cloudposse/github-action-atmos-*` actions. Those actions were the
+recommendation for years, but they're no longer where investment goes — Native CI replaced them
+with a more capable, end-to-end-tested integration, and plenty of teams don't know it exists, let
+alone that the actions they're on are effectively on life support.
 
-The same lack of feedback is why migration off the older `cloudposse/github-action-atmos-*`
-marketplace actions has been slower than it should be. Those actions were the recommended way to
-run Atmos in GitHub Actions for years. Native CI has since replaced them with a more capable,
-better-tested integration, but nothing in a pipeline still calling into the old actions ever says
-so.
+Even teams already on Native CI run into a quieter version of the same problem: a setting that
+doesn't take effect looks exactly like one that does. Flip `ci.enabled` off by accident during a
+workflow refactor, or never wire up an Atmos Pro workspace in the first place, and nothing errors —
+the pipeline finishes green, and the first symptom is a status check or an upload that isn't there,
+discovered days later.
 
 <!--truncate-->
 
