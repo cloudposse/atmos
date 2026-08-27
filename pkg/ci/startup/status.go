@@ -1,7 +1,8 @@
 // Package startup prints a short status banner when Atmos runs inside a
 // detected CI provider, reporting Native CI mode, Atmos Pro, and legacy
 // GitHub Action usage. It composes pkg/ci and pkg/ci/providers/github, which
-// import each other and cannot depend on one another for this.
+// pkg/ci cannot import directly: pkg/ci/providers/github already imports
+// pkg/ci to register itself, so the reverse import would create a cycle.
 package startup
 
 import (
