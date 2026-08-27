@@ -25,7 +25,7 @@ depends on that."
 |---|---|
 | `gh stack init` | Initializes a stack with the current branch as layer 1 (based on the trunk, usually `main`) |
 | `gh stack add <branch>` | Creates and checks out a new branch on top of the current top of the stack |
-| `gh stack submit` | Pushes every branch and creates/updates every PR in the stack at once |
+| `gh stack submit` | Pushes every branch and creates/updates every PR in the stack (4 sequential steps: push branches, create PRs, update base branches, create/update the stack object — not atomic; a mid-run failure can leave some branches pushed with no PR yet, or a partially-updated stack. Rerunning is safe — it picks up wherever it left off) |
 | `gh stack view` | Shows the full stack (branches, PR numbers, merge-readiness) |
 | `gh stack checkout` / `gh stack switch` | Moves between branches in the stack |
 | `gh stack rebase` / `gh stack sync` | Fetches trunk, cascades a rebase across every branch in the stack |
@@ -35,18 +35,24 @@ depends on that."
 
 ### 1. Switching stack layers does NOT clear your staged changes
 
-`gh stack checkout`/`switch` is a thin wrapper over `git checkout`. Git does not reset the index on
-checkout — it only touches files that differ between the two branches. If you have staged (or
-unstaged) changes for **files that are identical on both branches**, those changes silently ride
-along to whatever branch you land on next.
+`gh stack checkout`/`switch` is more than a thin `git checkout` wrapper — it resolves stack numbers,
+PR numbers, and PR URLs, fetches branches and sets up local stack tracking when a stack isn't tracked
+locally yet, and offers an interactive picker when run with no argument. But once it resolves *which*
+branch to land on, the actual switch still goes through git's own checkout, which does not reset the
+index or the working tree — it only touches files that differ between the two branches. If you have
+staged **or unstaged** changes for **files that are identical on both branches**, those changes
+silently ride along to whatever branch you land on next.
 
 This is exactly how a real incident happened: branch-1 changes were `git add`ed, the commit failed
 (see gotcha #2), the session ran `gh stack checkout <parent-branch>` to fix something unrelated, and
 those still-staged branch-1 files rode along and got swept into the parent's commit.
 
-**Rule: before switching stack layers, get to a clean state first** — either commit what you have, or
-`git restore --staged .` to unstage everything. Never switch layers mid-edit with a dirty index for
-work you haven't finished placing.
+**Rule: before switching stack layers, get to a genuinely clean state first** — commit what you have.
+`git restore --staged .` alone is not enough: it unstages, but leaves any working-tree modifications
+in place, which still ride along the same way staged changes do. If some changes truly aren't ready
+to commit, they need to be fully removed from the working tree (discarded, or moved out of the repo)
+before switching — never switch layers mid-edit with dirty state for work you haven't finished
+placing.
 
 **After every stack checkout, verify before you commit:**
 ```bash
@@ -95,27 +101,34 @@ specific file list), **that is ground truth — do not "disprove" it with local 
 conclude it's a stale/false positive.** A real incident: `git merge-tree --write-tree
 origin/<parent> origin/<child>` succeeded cleanly (exit 0, no conflicts) and `git merge-base
 --is-ancestor` confirmed a strict fast-forward relationship between the two branch tips — which
-led to concluding GitHub's report was wrong. It wasn't. `gh stack sync`/`gh stack rebase`
-immediately reproduced the exact same conflict, in the exact same files GitHub had listed.
+led to concluding GitHub's report was wrong. It wasn't. `gh stack rebase` immediately reproduced
+the exact same conflict, in the exact same files GitHub had listed.
 
 **Why the local check was misleading, not GitHub:** a pairwise `merge-tree` between two branches'
 *current* committed tips only proves those two exact commits merge cleanly *as they are right now*.
 It says nothing about what happens once the stack's lower layers get rebased onto the current tip
-of `main` — which is exactly what GitHub's own mergeability check (and `gh stack sync`/`rebase`)
-account for, and what actually determines whether the stack can merge. If `main` has moved forward
-since the stack was built, a real conflict can exist between "phase N rebased onto phase N-1
-rebased onto current main" even though "phase N vs phase N-1's original commits" shows none. Check
-whether `main` has advanced past the stack's base with `git merge-base --is-ancestor origin/main
+of `main` — which is exactly what GitHub's own mergeability check (and `gh stack rebase`) account
+for, and what actually determines whether the stack can merge. If `main` has moved forward since
+the stack was built, a real conflict can exist between "phase N rebased onto phase N-1 rebased onto
+current main" even though "phase N vs phase N-1's original commits" shows none. Check whether
+`main` has advanced past the stack's base with `git merge-base --is-ancestor origin/main
 origin/<bottom-layer-branch>` before trusting a clean pairwise diff as proof of anything — if it's
 not an ancestor, `main` has moved and the pairwise check is not asking the right question.
 
-**Rule:** the moment GitHub reports a conflict, go straight to `gh stack sync` (to reproduce and
-confirm which layer conflicts) then `gh stack rebase` (to resolve it interactively) — don't spend
-time trying to locally falsify the report first. If `gh stack sync`/`rebase` also reports zero
-conflicts, only then is it reasonable to treat GitHub's cached state as stale and worth a recheck
-after a short wait (GitHub's own mergeability computation can lag a `gh stack submit` push by a few
-seconds, but it resolves in well under a minute — if it's still wrong after that, resolve via
-`gh stack rebase` rather than continuing to wait).
+**Rule:** the moment GitHub reports a conflict, go straight to `gh stack rebase` — it reproduces
+the real, current mergeability question (does each layer still rebase cleanly onto its rebased
+parent and the current tip of `main`) and resolves it interactively in the same step. Don't spend
+time trying to locally falsify the report first, and **don't reach for `gh stack sync` as a
+"read-only" probe** — sync is not read-only: per its own `--help`, it fetches, reconciles the
+remote stack with your local one, cascade-rebases, and then **pushes every branch atomically**
+(`--force-with-lease --atomic`) and syncs PR state on GitHub. Running it just to "see what
+conflicts" can force-push branches and mutate remote PR/stack state as a side effect — only run
+it when you actually intend those effects (e.g. after resolving conflicts and wanting a full
+fetch+rebase+push+PR-sync in one step). `gh stack rebase` alone reproduces the conflict locally
+without pushing anything; use it for diagnosis, and again to actually resolve. If `gh stack
+rebase` reports zero conflicts, only then is it reasonable to treat GitHub's cached state as stale
+and worth a recheck after a short wait (GitHub's own mergeability computation can lag a
+`gh stack submit` push by a few seconds, but it resolves in well under a minute).
 
 When resolving the conflicts `gh stack rebase` surfaces, prefer **keeping both sides** over picking
 one — in this repo, stacked layers usually add independent, coexisting things to the same shared
