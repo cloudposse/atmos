@@ -46,14 +46,14 @@ wrong answers above.
 `internal/exec/describe_affected_utils.go`:
 
 1. **Symlink normalization**: both sides of the `filepath.Rel` computation
-   are passed through `evalSymlinksBestEffort`, which resolves symlinks even
-   for paths that don't fully exist (resolves the deepest existing ancestor
-   and re-appends the remainder — unused helmfile/packer default dirs
-   routinely don't exist).
+    are passed through `evalSymlinksBestEffort`, which resolves symlinks even
+    for paths that don't fully exist (resolves the deepest existing ancestor
+    and re-appends the remainder — unused helmfile/packer default dirs
+    routinely don't exist).
 2. **Escape guard**: if a computed relative path still starts with `..`
-   after normalization (a config path genuinely outside the repository), the
-   re-basing returns a hard error wrapping `errUtils.ErrGitPathEscapesWorktree`
-   naming both paths — never a silent guess in either direction.
+    after normalization (a config path genuinely outside the repository), the
+    re-basing returns a hard error wrapping `errUtils.ErrGitPathEscapesWorktree`
+    naming both paths — never a silent guess in either direction.
 
 The re-basing block was extracted into testable helpers
 (`rebaseConfigPathsOntoWorktree`, `rebaseOnePathOntoWorktree`,

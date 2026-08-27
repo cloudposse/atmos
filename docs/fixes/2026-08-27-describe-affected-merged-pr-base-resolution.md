@@ -38,19 +38,19 @@ chain is only correct under an *assumed* checkout, and nothing verified which
 checkout the workflow actually did.**
 
 1. **Merge-base against `origin/<target>` degenerates after the merge.** For
-   a merge-commit (or queue) merge, the PR head becomes an ancestor of the
-   target branch, so `merge-base(HEAD, origin/<target>) == HEAD` —
-   `ErrHeadOnTargetBranch` — and the gold-standard tier always falls through
-   on exactly the events where correctness matters most.
+    a merge-commit (or queue) merge, the PR head becomes an ancestor of the
+    target branch, so `merge-base(HEAD, origin/<target>) == HEAD` —
+    `ErrHeadOnTargetBranch` — and the gold-standard tier always falls through
+    on exactly the events where correctness matters most.
 
 2. **The `HEAD~1` fallback assumed the merge commit was checked out.** The
-   documented workflow checks out `head.sha` instead (it must, for Atmos Pro
-   upload correlation — a conflict the PRD had already noted). With the PR
-   head checked out, `HEAD~1` is the PR's *own previous commit*, so the
-   "diff" is the PR's **final commit alone**, not its net change. A final
-   commit that reverts an earlier org-wide change therefore re-reports the
-   entire reverted blast radius as affected. (The same shape can also
-   under-detect: changes in earlier commits become invisible.)
+    documented workflow checks out `head.sha` instead (it must, for Atmos Pro
+    upload correlation — a conflict the PRD had already noted). With the PR
+    head checked out, `HEAD~1` is the PR's *own previous commit*, so the
+    "diff" is the PR's **final commit alone**, not its net change. A final
+    commit that reverts an earlier org-wide change therefore re-reports the
+    entire reverted blast radius as affected. (The same shape can also
+    under-detect: changes in earlier commits become invisible.)
 
 Merge queues do not avoid this: GitHub still fires `pull_request closed
 (merged)` after the queue lands the PR, and a queue merge commit has the PR
