@@ -604,6 +604,70 @@ func TestConditionJSONEmptyRoundTrip(t *testing.T) {
 	assert.True(t, decoded.IsZero())
 }
 
+// TestConditionYAMLMarshalRoundTrip verifies a Condition survives being
+// marshaled to YAML and decoded back, evaluating identically to the
+// original. The marshaled shape mirrors Condition.MarshalJSON's node.value()
+// reconstruction (a bare CEL string always canonicalizes to the
+// "!cel <expr>" form) -- the same normalization cloneCommand
+// (cmd/cmd_utils.go) relies on when it JSON round-trips a custom command's
+// Task.When on every invocation.
+func TestConditionYAMLMarshalRoundTrip(t *testing.T) {
+	tests := []struct {
+		name     string
+		original Condition
+		want     any
+	}{
+		{"predicate", Must("ci"), "ci"},
+		{"cel", Must("answers.topology == 'multi'"), "!cel answers.topology == 'multi'"},
+		{"all", Must([]any{"ci", "success"}), map[string]any{"all": []any{"ci", "success"}}},
+		{
+			"any/not",
+			Must(map[string]any{"any": []any{"ci", map[string]any{"not": "failure"}}}),
+			map[string]any{"any": []any{"ci", map[string]any{"not": "failure"}}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := yaml.Marshal(conditionConfig{When: tt.original})
+			require.NoError(t, err)
+
+			var generic struct {
+				When any `yaml:"when"`
+			}
+			require.NoError(t, yaml.Unmarshal(data, &generic))
+			assert.Equal(t, tt.want, generic.When)
+
+			var decoded conditionConfig
+			require.NoError(t, yaml.Unmarshal(data, &decoded))
+
+			// The decoded condition must evaluate identically to the original
+			// across representative facts, proving the round trip is lossless.
+			for _, ctx := range []Context{
+				{CI: true, Status: PredicateSuccess, Answers: map[string]any{"topology": "multi"}},
+				{CI: false, Status: PredicateFailure, Answers: map[string]any{"topology": "single"}},
+			} {
+				assert.Equal(t, tt.original.Evaluate(ctx), decoded.When.Evaluate(ctx))
+			}
+		})
+	}
+}
+
+func TestConditionYAMLEmptyMarshalRoundTrip(t *testing.T) {
+	data, err := yaml.Marshal(conditionConfig{})
+	require.NoError(t, err)
+
+	var generic struct {
+		When any `yaml:"when"`
+	}
+	require.NoError(t, yaml.Unmarshal(data, &generic))
+	assert.Nil(t, generic.When)
+
+	var decoded conditionConfig
+	require.NoError(t, yaml.Unmarshal(data, &decoded))
+	assert.True(t, decoded.When.IsZero())
+}
+
 func TestConditionJSONRejectsMalformedInput(t *testing.T) {
 	var decoded Condition
 	require.Error(t, json.Unmarshal([]byte("{"), &decoded))
