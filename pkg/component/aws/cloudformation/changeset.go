@@ -20,6 +20,10 @@ const changeSetPollInterval = 2 * time.Second
 // changeSetTimeout bounds how long changeset creation may take before giving up.
 const changeSetTimeout = 5 * time.Minute
 
+// wrapFmt is the shared "%w: %w" format for wrapping a sentinel error around an
+// underlying AWS API error, used throughout this file's changeset API calls.
+const wrapFmt = "%w: %w"
+
 // changeSetResult is the outcome of creating (and describing) a changeset.
 type changeSetResult struct {
 	ChangeSetID   string
@@ -122,7 +126,7 @@ func createChangeSet(ctx context.Context, client CloudFormationClient, spec *sta
 	}
 
 	if _, err := client.CreateChangeSet(ctx, input); err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+		return nil, fmt.Errorf(wrapFmt, errUtils.ErrAwsCloudFormationChangeSetFailed, err)
 	}
 
 	return waitForChangeSet(ctx, client, spec.StackName, name, changeSetType)
@@ -149,7 +153,7 @@ func waitForChangeSet(ctx context.Context, client CloudFormationClient, stackNam
 			StackName:     awsString(stackName),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+			return nil, fmt.Errorf(wrapFmt, errUtils.ErrAwsCloudFormationChangeSetFailed, err)
 		}
 
 		result := &changeSetResult{
@@ -163,6 +167,12 @@ func waitForChangeSet(ctx context.Context, client CloudFormationClient, stackNam
 		}
 
 		if decision, err := evaluateChangeSetStatus(result); decision != changeSetPollContinue {
+			if err == nil && out.NextToken != nil {
+				pageArgs := changeSetPageArgs{Client: client, StackName: stackName, Name: name, NextToken: out.NextToken}
+				if pageErr := fetchRemainingChangeSetPages(ctx, pageArgs, result); pageErr != nil {
+					return result, pageErr
+				}
+			}
 			return result, err
 		}
 
@@ -175,6 +185,40 @@ func waitForChangeSet(ctx context.Context, client CloudFormationClient, stackNam
 		case <-time.After(changeSetPollInterval):
 		}
 	}
+}
+
+// changeSetPageArgs bundles fetchRemainingChangeSetPages' parameters to stay
+// under this repo's 5-argument function limit.
+type changeSetPageArgs struct {
+	Client    CloudFormationClient
+	StackName string
+	Name      string
+	NextToken *string
+}
+
+// fetchRemainingChangeSetPages follows DescribeChangeSet's NextToken, appending
+// each page's Changes to result — a changeset with enough resource changes to
+// paginate would otherwise silently under-report the diff a user reviews before
+// approving apply. Called once the changeset has reached a terminal, successful
+// status; a page-fetch error still leaves result populated with what was
+// gathered so far.
+func fetchRemainingChangeSetPages(ctx context.Context, args changeSetPageArgs, result *changeSetResult) error {
+	defer perf.Track(nil, "cloudformation.fetchRemainingChangeSetPages")()
+
+	nextToken := args.NextToken
+	for nextToken != nil {
+		out, err := args.Client.DescribeChangeSet(ctx, &cloudformation.DescribeChangeSetInput{
+			ChangeSetName: awsString(args.Name),
+			StackName:     awsString(args.StackName),
+			NextToken:     nextToken,
+		})
+		if err != nil {
+			return fmt.Errorf(wrapFmt, errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+		}
+		result.Changes = append(result.Changes, out.Changes...)
+		nextToken = out.NextToken
+	}
+	return nil
 }
 
 // evaluateChangeSetStatus classifies a changeset's current status: done (terminal
@@ -226,7 +270,7 @@ func executeChangeSet(ctx context.Context, client CloudFormationClient, spec *st
 
 	_, err := client.ExecuteChangeSet(ctx, input)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+		return fmt.Errorf(wrapFmt, errUtils.ErrAwsCloudFormationChangeSetFailed, err)
 	}
 	return nil
 }
