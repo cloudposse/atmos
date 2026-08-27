@@ -435,6 +435,51 @@ func TestRunLogs_Follow_DispatchesToFollowLogs(t *testing.T) {
 	assert.Contains(t, out, "RootResource")
 }
 
+// followLogs must merge and chronologically sort events collected across every
+// stack within a single poll iteration, not just write each stack's events as
+// soon as they're fetched (which would print in poll order, not event-time
+// order, whenever an earlier-polled stack's events are actually newer than a
+// later-polled stack's).
+func TestFollowLogs_MergesAndSortsAcrossStacksPerIteration(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	rootLater := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	childEarlier := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+
+	// "root" is polled before "child" (names order), but child's event has the
+	// earlier timestamp — the output must still print child before root.
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("root-1"), LogicalResourceId: awsString("RootResource"), Timestamp: &rootLater},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("child-1"), LogicalResourceId: awsString("ChildResource"), Timestamp: &childEarlier},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	out := captureStdout(t, func() {
+		summary, err := followLogs(ctx, client, []string{"root", "child"}, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, 2, summary["event_count"])
+	})
+
+	childIdx := indexOf(t, out, "ChildResource")
+	rootIdx := indexOf(t, out, "RootResource")
+	assert.Less(t, childIdx, rootIdx, "events must be merged in chronological order, not poll order")
+}
+
 // runLogs must propagate a buildStackTree failure.
 func TestRunLogs_BuildTreeError(t *testing.T) {
 	ctrl := gomock.NewController(t)

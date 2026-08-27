@@ -198,15 +198,20 @@ func followLogs(ctx context.Context, client CloudFormationClient, names []string
 
 	eventCount := 0
 	for {
+		var batch []cfntypes.StackEvent
 		for _, name := range names {
 			events, _, err := pollStackEvents(ctx, client, name, seen[name])
 			if err != nil {
 				return summary, err
 			}
-			for i := range events {
-				writeLogLine(&events[i])
-				eventCount++
-			}
+			batch = append(batch, events...)
+		}
+		sort.Slice(batch, func(i, j int) bool {
+			return timeValue(batch[i].Timestamp).Before(timeValue(batch[j].Timestamp))
+		})
+		for i := range batch {
+			writeLogLine(&batch[i])
+			eventCount++
 		}
 		summary["event_count"] = eventCount
 
