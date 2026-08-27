@@ -191,6 +191,49 @@ func TestExecuteChangeSet(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// executeChangeSet must not set DisableRollback on ExecuteChangeSet when
+// OnStackFailure was already set on the CREATE changeset (spec.DisableRollback
+// with a new stack) — AWS's API rejects a changeset execution that specifies
+// both, so setting both unconditionally would make disable_rollback: true
+// always fail on stack creation.
+func TestExecuteChangeSet_CreateWithDisableRollback_OmitsDisableRollback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, input *cloudformation.ExecuteChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.ExecuteChangeSetOutput, error) {
+			assert.Nil(t, input.DisableRollback, "DisableRollback must be omitted when OnStackFailure was set on the CREATE changeset")
+			return &cloudformation.ExecuteChangeSetOutput{}, nil
+		},
+	)
+
+	spec := &stackSpec{StackName: "vpc", DisableRollback: true}
+	result := &changeSetResult{ChangeSetName: "atmos-vpc-123", ChangeSetType: cfntypes.ChangeSetTypeCreate}
+	err := executeChangeSet(context.Background(), client, spec, result)
+	require.NoError(t, err)
+}
+
+// executeChangeSet must still set DisableRollback for an UPDATE changeset —
+// OnStackFailure is a CreateChangeSet-only, CREATE-only parameter, so no
+// conflict exists there.
+func TestExecuteChangeSet_UpdateWithDisableRollback_SetsDisableRollback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, input *cloudformation.ExecuteChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.ExecuteChangeSetOutput, error) {
+			require.NotNil(t, input.DisableRollback)
+			assert.True(t, *input.DisableRollback)
+			return &cloudformation.ExecuteChangeSetOutput{}, nil
+		},
+	)
+
+	spec := &stackSpec{StackName: "vpc", DisableRollback: true}
+	result := &changeSetResult{ChangeSetName: "atmos-vpc-123", ChangeSetType: cfntypes.ChangeSetTypeUpdate}
+	err := executeChangeSet(context.Background(), client, spec, result)
+	require.NoError(t, err)
+}
+
 func TestExecuteChangeSet_Error(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
@@ -211,7 +254,7 @@ func TestWaitForChangeSet_DescribeChangeSetError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
 
-	_, err := waitForChangeSet(context.Background(), client, "vpc", "atmos-vpc-123")
+	_, err := waitForChangeSet(context.Background(), client, "vpc", "atmos-vpc-123", cfntypes.ChangeSetTypeCreate)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
 }
