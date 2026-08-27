@@ -8,15 +8,15 @@ date: 2026-08-27T12:00:00.000Z
 
 GitHub Actions is the most popular way teams run Atmos in CI, and a lot of those pipelines are
 still calling into the original `cloudposse/github-action-atmos-*` actions. Those actions were the
-recommendation for years, but they're no longer where investment goes — Native CI replaced them
-with a more capable, end-to-end-tested integration, and plenty of teams don't know it exists, let
-alone that the actions they're on are effectively on life support.
+recommendation for years. They're no longer where investment goes — [Native CI](/ci) replaced them
+with a more capable, end-to-end-tested integration. Plenty of teams don't know it exists, let alone
+that the actions they're on are effectively on life support.
 
 Even teams already on Native CI run into a quieter version of the same problem: a setting that
-doesn't take effect looks exactly like one that does. Flip `ci.enabled` off by accident during a
-workflow refactor, or never wire up an Atmos Pro workspace in the first place, and nothing errors —
-the pipeline finishes green, and the first symptom is a status check or an upload that isn't there,
-discovered days later.
+doesn't take effect looks exactly like one that does. Maybe `ci.enabled` is set on one profile but
+not another, or an Atmos Pro workspace never got configured in the first place — nothing errors
+either way. The pipeline finishes green, and the first symptom is a status check or an upload
+that isn't there, discovered days later.
 
 <!--truncate-->
 
