@@ -102,7 +102,7 @@ func TestGetOutputs_StackNotFound(t *testing.T) {
 
 	_, err := GetOutputs(context.Background(), "us-east-1", "missing-stack", nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackNotFound)
 	assert.Contains(t, err.Error(), "missing-stack")
 }
 
@@ -118,7 +118,7 @@ func TestGetOutputs_APIError(t *testing.T) {
 
 	_, err := GetOutputs(context.Background(), "us-east-1", "vpc", nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 	assert.ErrorIs(t, err, sentinel)
 }
 

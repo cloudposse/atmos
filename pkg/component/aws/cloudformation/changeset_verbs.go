@@ -122,7 +122,7 @@ func runChangesetExecute(ctx context.Context, client CloudFormationClient, spec 
 }
 
 // runChangesetList lists a stack's changesets, newest first (ListChangeSets'
-// own ordering), rendering each one's name, status, and creation time.
+// own ordering), rendering each one's name, status, and description.
 func runChangesetList(ctx context.Context, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 	summaries, err := listChangeSets(ctx, client, spec.StackName)
 	if err != nil {

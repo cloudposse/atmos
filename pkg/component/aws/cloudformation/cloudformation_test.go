@@ -2,6 +2,7 @@ package cloudformation
 
 import (
 	"context"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -67,13 +68,23 @@ func TestComponentProvider_ValidateComponent(t *testing.T) {
 	require.NoError(t, p.ValidateComponent(map[string]any{"template": "t.yaml", "stack_name": "vpc"}))
 }
 
+// GetAvailableCommands must stay in sync with subCommandOperations — every
+// dispatchable subcommand (including aliases like "destroy"/"outputs") must be
+// reported, so callers like pkg/composition's verb-allowlist check don't
+// reject a subcommand Execute actually supports.
 func TestComponentProvider_GetAvailableCommands(t *testing.T) {
 	p := &ComponentProvider{}
 	commands := p.GetAvailableCommands()
-	assert.Contains(t, commands, "apply")
-	assert.Contains(t, commands, "delete")
-	assert.Contains(t, commands, "output")
-	assert.Contains(t, commands, "validate")
+
+	want := make([]string, 0, len(subCommandOperations))
+	for name := range subCommandOperations {
+		want = append(want, name)
+	}
+	sort.Strings(want)
+	assert.Equal(t, want, commands)
+	assert.Contains(t, commands, "destroy")
+	assert.Contains(t, commands, "outputs")
+	assert.Contains(t, commands, "fmt")
 }
 
 func TestComponentProvider_GenerateArtifacts_NoOp(t *testing.T) {

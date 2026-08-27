@@ -125,12 +125,15 @@ func (p *ComponentProvider) GenerateArtifacts(_ *component.ExecutionContext) err
 	return nil
 }
 
-// GetAvailableCommands returns the subcommands aws/cloudformation components support.
+// GetAvailableCommands returns the subcommands aws/cloudformation components
+// support, derived from subCommandOperations so this list can never drift out
+// of sync with what Execute actually dispatches.
 func (p *ComponentProvider) GetAvailableCommands() []string {
 	defer perf.Track(nil, "cloudformation.GetAvailableCommands")()
-	return []string{
-		"render", "diff", "plan", "apply", "deploy", "delete", "validate", "output",
-		"changeset-create", "changeset-execute", "changeset-list", "changeset-delete",
-		"drift-detect", "drift-describe", "get-template", "get-policy",
+	commands := make([]string, 0, len(subCommandOperations))
+	for name := range subCommandOperations {
+		commands = append(commands, name)
 	}
+	sort.Strings(commands)
+	return commands
 }
