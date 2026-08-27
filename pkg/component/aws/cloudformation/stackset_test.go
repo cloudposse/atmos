@@ -139,9 +139,11 @@ func TestStackSetConfigFromTarget(t *testing.T) {
 // asserted explicitly rather than merely "doesn't panic").
 func TestToStringSlice(t *testing.T) {
 	assert.Nil(t, toStringSlice(nil))
-	assert.Nil(t, toStringSlice("not-a-slice"))
+	assert.Nil(t, toStringSlice(""))
+	assert.Nil(t, toStringSlice(42))
 	assert.Equal(t, []string{"a", "b"}, toStringSlice([]any{"a", "b"}))
 	assert.Equal(t, []string{"a", "c"}, toStringSlice([]any{"a", 42, "c", true}), "non-string entries must be silently dropped")
+	assert.Equal(t, []string{"123456789012"}, toStringSlice("123456789012"), "a single scalar string is a one-element list, not silently dropped")
 }
 
 // runStackSetCreate must wrap a CreateStackSet API error and never attempt
@@ -694,6 +696,18 @@ func TestPollStackSetOperation_APIError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().DescribeStackSetOperation(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
+
+	_, err := pollStackSetOperation(context.Background(), client, "mine", "op-1")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+}
+
+// pollStackSetOperation must error (not nil-pointer-dereference) when
+// DescribeStackSetOperation returns a nil StackSetOperation.
+func TestPollStackSetOperation_NilOperation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStackSetOperation(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackSetOperationOutput{}, nil)
 
 	_, err := pollStackSetOperation(context.Background(), client, "mine", "op-1")
 	require.Error(t, err)
