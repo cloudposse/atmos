@@ -1668,6 +1668,7 @@ var (
 	ErrAwsCloudFormationFmtNotClean               = errors.New("aws/cloudformation template is not formatted")
 	ErrAwsCloudFormationFmtWriteFailed            = errors.New("aws/cloudformation failed to write formatted template")
 	ErrAwsCloudFormationStackNotFound             = errors.New("aws/cloudformation stack not found")
+	ErrAwsCloudFormationStackSetFailed            = errors.New("aws/cloudformation stackset operation failed")
 )
 
 // Stack dependency (`depends_on`) resolution errors.
