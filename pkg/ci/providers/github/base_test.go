@@ -682,20 +682,33 @@ func TestResolveBase_PullRequest_OpenSync_NoHeadInPayload(t *testing.T) {
 
 // TestExtractPRMerged tests the extractPRMerged helper function.
 func TestExtractPRMerged(t *testing.T) {
-	t.Run("merged true", func(t *testing.T) {
-		payload := map[string]any{"pull_request": map[string]any{"merged": true}}
-		assert.True(t, extractPRMerged(payload))
-	})
+	tests := []struct {
+		name    string
+		payload map[string]any
+		want    bool
+	}{
+		{
+			name:    "merged true",
+			payload: map[string]any{"pull_request": map[string]any{"merged": true}},
+			want:    true,
+		},
+		{
+			name:    "merged false",
+			payload: map[string]any{"pull_request": map[string]any{"merged": false}},
+			want:    false,
+		},
+		{
+			name:    "missing pull_request key",
+			payload: map[string]any{"action": "closed"},
+			want:    false, // no pull_request key must not be treated as merged.
+		},
+	}
 
-	t.Run("merged false", func(t *testing.T) {
-		payload := map[string]any{"pull_request": map[string]any{"merged": false}}
-		assert.False(t, extractPRMerged(payload))
-	})
-
-	t.Run("missing pull_request key", func(t *testing.T) {
-		payload := map[string]any{"action": "closed"}
-		assert.False(t, extractPRMerged(payload), "no pull_request key must not be treated as merged")
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, extractPRMerged(tt.payload))
+		})
+	}
 }
 
 // writeEventPayload writes a JSON event payload to a temp file and returns the path.

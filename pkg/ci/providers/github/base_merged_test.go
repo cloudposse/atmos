@@ -369,8 +369,8 @@ func TestResolveMergedPRBase_HeadCheckout_NoMergeCommitSHA(t *testing.T) {
 // merge_commit_sha that names a commit neither present locally nor
 // fetchable (the fixture repo has no "origin" remote): mergedPRForkPoint's
 // CommitParents lookup fails, the FetchCommit recovery attempt also fails,
-// and the original error must propagate rather than falling through with a
-// wrong SHA.
+// and resolveMergedPRBase must warn and fall back to payload base.sha
+// rather than falling through with a wrong SHA.
 func TestResolveMergedPRBase_HeadCheckout_MergeCommitNotFetchable(t *testing.T) {
 	f := buildMergedPRFixture(t)
 	runGitCmd(t, f.dir, "checkout", f.prHead)
@@ -442,7 +442,8 @@ func TestResolveMergedPRBase_FastForwardMerge_NoPayloadBaseSHA(t *testing.T) {
 // fast-forward-merged PR whose payload base.sha names a commit that is
 // neither present locally nor fetchable: forkPointFromAnchor's CommitParents
 // lookup and FetchCommit recovery both fail, and mergedPRHeadAnchoredBase
-// must propagate that error rather than silently falling through.
+// must fall back to the payload base.sha itself rather than silently
+// guessing a different base.
 func TestResolveMergedPRBase_FastForwardMerge_BaseSHANotFetchable(t *testing.T) {
 	f := buildMergedPRFixture(t)
 	runGitCmd(t, f.dir, "checkout", f.ffHead)
