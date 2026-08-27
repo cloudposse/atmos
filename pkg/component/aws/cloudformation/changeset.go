@@ -31,6 +31,11 @@ type changeSetResult struct {
 	// NoOp is true when CloudFormation reports the changeset would make no
 	// changes (a stack already matching the desired state) — apply is a no-op.
 	NoOp bool
+	// ChangeSetType records whether this changeset creates a new stack or
+	// updates an existing one — executeChangeSet needs this to know whether
+	// OnStackFailure was already set on CreateChangeSet (CREATE-only), which
+	// AWS's API forbids combining with ExecuteChangeSet's DisableRollback.
+	ChangeSetType cfntypes.ChangeSetType
 }
 
 // changeSetName generates a unique, stack-scoped changeset name for this operation.
@@ -120,7 +125,7 @@ func createChangeSet(ctx context.Context, client CloudFormationClient, spec *sta
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
 	}
 
-	return waitForChangeSet(ctx, client, spec.StackName, name)
+	return waitForChangeSet(ctx, client, spec.StackName, name, changeSetType)
 }
 
 // changeSetPollDecision is the outcome of inspecting one DescribeChangeSet poll.
@@ -134,7 +139,7 @@ const (
 
 // waitForChangeSet polls DescribeChangeSet until the changeset finishes computing
 // (CREATE_COMPLETE, FAILED, or a no-op "didn't contain changes" failure).
-func waitForChangeSet(ctx context.Context, client CloudFormationClient, stackName, name string) (*changeSetResult, error) {
+func waitForChangeSet(ctx context.Context, client CloudFormationClient, stackName, name string, changeSetType cfntypes.ChangeSetType) (*changeSetResult, error) {
 	defer perf.Track(nil, "cloudformation.waitForChangeSet")()
 
 	deadline := time.Now().Add(changeSetTimeout)
@@ -154,6 +159,7 @@ func waitForChangeSet(ctx context.Context, client CloudFormationClient, stackNam
 			Status:        out.Status,
 			StatusReason:  stringValue(out.StatusReason),
 			Changes:       out.Changes,
+			ChangeSetType: changeSetType,
 		}
 
 		if decision, err := evaluateChangeSetStatus(result); decision != changeSetPollContinue {
@@ -210,7 +216,11 @@ func executeChangeSet(ctx context.Context, client CloudFormationClient, spec *st
 		ChangeSetName: awsString(result.ChangeSetName),
 		StackName:     awsString(spec.StackName),
 	}
-	if spec.DisableRollback {
+	// AWS rejects an ExecuteChangeSet that sets DisableRollback when OnStackFailure
+	// was already set on the CREATE changeset (createChangeSet does this for the same
+	// spec.DisableRollback/CREATE combination) — omit it here to avoid that conflict.
+	onStackFailureAlreadySet := spec.DisableRollback && result.ChangeSetType == cfntypes.ChangeSetTypeCreate
+	if spec.DisableRollback && !onStackFailureAlreadySet {
 		input.DisableRollback = awsBool(true)
 	}
 
