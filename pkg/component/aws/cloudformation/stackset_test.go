@@ -711,7 +711,7 @@ func TestPollStackSetOperation_NilOperation(t *testing.T) {
 
 	_, err := pollStackSetOperation(context.Background(), client, "mine", "op-1")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // nilIfEmpty must return nil for an empty string and a pointer to the value

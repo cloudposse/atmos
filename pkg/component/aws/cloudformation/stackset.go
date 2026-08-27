@@ -299,7 +299,7 @@ func pollStackSetOperation(ctx context.Context, client CloudFormationClient, sta
 			return "", fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationAPICallFailed, err)
 		}
 		if out.StackSetOperation == nil {
-			return "", fmt.Errorf("%w: DescribeStackSetOperation returned no operation for %s", errUtils.ErrAwsCloudFormationStackSetFailed, operationID)
+			return "", fmt.Errorf("%w: DescribeStackSetOperation returned no operation for %s", errUtils.ErrAwsCloudFormationAPICallFailed, operationID)
 		}
 
 		status := out.StackSetOperation.Status
