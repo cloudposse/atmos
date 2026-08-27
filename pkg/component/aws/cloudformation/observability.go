@@ -96,17 +96,24 @@ func flattenStackNames(node *stackNode) []string {
 // renderStackTree writes an indented tree of a stack and its nested stacks.
 func renderStackTree(node *stackNode, prefix string) {
 	_ = data.Writeln(prefix + node.StackName)
-	for i, child := range node.Children {
+	renderStackTreeChildren(node.Children, prefix)
+}
+
+// renderStackTreeChildren renders every descendant of a node with the
+// appropriate ├─/└─ branch glyph and continuation prefix at every depth,
+// recursing into each child's own children the same way — not just one level
+// deep, which would leave grandchildren+ printed as bare lines with no
+// branch glyph.
+func renderStackTreeChildren(children []*stackNode, prefix string) {
+	for i, child := range children {
 		branch := "├─ "
 		nextPrefix := prefix + "│  "
-		if i == len(node.Children)-1 {
+		if i == len(children)-1 {
 			branch = "└─ "
 			nextPrefix = prefix + "   "
 		}
 		_ = data.Writeln(prefix + branch + child.StackName)
-		for _, grandchild := range child.Children {
-			renderStackTree(grandchild, nextPrefix)
-		}
+		renderStackTreeChildren(child.Children, nextPrefix)
 	}
 }
 
