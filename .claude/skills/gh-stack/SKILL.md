@@ -1,6 +1,6 @@
 ---
 name: gh-stack
-description: "Split large work (e.g. a multi-phase PRD) into a sequence of reviewable, dependent PRs using GitHub's gh stack CLI (github/gh-stack) in this repo: gh stack init/add/submit/checkout/rebase/merge, plus two repo-specific gotchas that cause commits to land on the wrong branch. Invoke before starting stacked-branch work, or when a gh stack command fails unexpectedly (e.g. an unrelated file failing pre-commit)."
+description: "Split large work (e.g. a multi-phase PRD) into a sequence of reviewable, dependent PRs using GitHub's gh stack CLI (github/gh-stack) in this repo: gh stack init/add/submit/checkout/rebase/merge, plus three repo-specific gotchas that cause commits to land on the wrong branch or a GitHub-reported conflict to get wrongly dismissed as a false positive. Invoke before starting stacked-branch work, or when a gh stack command fails unexpectedly (e.g. an unrelated file failing pre-commit), or when GitHub reports a PR conflict."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -31,7 +31,7 @@ depends on that."
 | `gh stack rebase` / `gh stack sync` | Fetches trunk, cascades a rebase across every branch in the stack |
 | `gh stack merge` | Merges one or more ready PRs in the stack (doesn't require merging the whole stack at once) |
 
-## Two gotchas that will bite you in this repo
+## Three gotchas that will bite you in this repo
 
 ### 1. Switching stack layers does NOT clear your staged changes
 
@@ -86,6 +86,42 @@ fast-forward brings in (they won't, if the parent commit only touched files you 
 Once the upper layer has real commits of its own, use `gh stack rebase`/`gh stack sync` instead (after
 committing or unstaging first, per gotcha #1) — that's the tool built for cascading a real rebase
 across every branch in the stack.
+
+### 3. Trust GitHub's `mergeable`/conflict report over a local pairwise branch comparison
+
+When GitHub shows a PR as having conflicts (`gh pr view <num> --json mergeable` returns
+`CONFLICTING`, or the PR page shows "This branch has conflicts that must be resolved" with a
+specific file list), **that is ground truth — do not "disprove" it with local git commands and
+conclude it's a stale/false positive.** A real incident: `git merge-tree --write-tree
+origin/<parent> origin/<child>` succeeded cleanly (exit 0, no conflicts) and `git merge-base
+--is-ancestor` confirmed a strict fast-forward relationship between the two branch tips — which
+led to concluding GitHub's report was wrong. It wasn't. `gh stack sync`/`gh stack rebase`
+immediately reproduced the exact same conflict, in the exact same files GitHub had listed.
+
+**Why the local check was misleading, not GitHub:** a pairwise `merge-tree` between two branches'
+*current* committed tips only proves those two exact commits merge cleanly *as they are right now*.
+It says nothing about what happens once the stack's lower layers get rebased onto the current tip
+of `main` — which is exactly what GitHub's own mergeability check (and `gh stack sync`/`rebase`)
+account for, and what actually determines whether the stack can merge. If `main` has moved forward
+since the stack was built, a real conflict can exist between "phase N rebased onto phase N-1
+rebased onto current main" even though "phase N vs phase N-1's original commits" shows none. Check
+whether `main` has advanced past the stack's base with `git merge-base --is-ancestor origin/main
+origin/<bottom-layer-branch>` before trusting a clean pairwise diff as proof of anything — if it's
+not an ancestor, `main` has moved and the pairwise check is not asking the right question.
+
+**Rule:** the moment GitHub reports a conflict, go straight to `gh stack sync` (to reproduce and
+confirm which layer conflicts) then `gh stack rebase` (to resolve it interactively) — don't spend
+time trying to locally falsify the report first. If `gh stack sync`/`rebase` also reports zero
+conflicts, only then is it reasonable to treat GitHub's cached state as stale and worth a recheck
+after a short wait (GitHub's own mergeability computation can lag a `gh stack submit` push by a few
+seconds, but it resolves in well under a minute — if it's still wrong after that, resolve via
+`gh stack rebase` rather than continuing to wait).
+
+When resolving the conflicts `gh stack rebase` surfaces, prefer **keeping both sides** over picking
+one — in this repo, stacked layers usually add independent, coexisting things to the same shared
+file (e.g. two different component types each adding their own `case` in the same switch
+statement, or their own field in the same struct). A conflict here is almost never "which change is
+correct," it's "both changes are correct and need to be merged together textually."
 
 ## PR labeling across a stack
 
