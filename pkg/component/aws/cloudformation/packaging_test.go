@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -69,6 +70,23 @@ func TestNewS3Backend_WithIdentity(t *testing.T) {
 	backend, err := newS3Backend(atmosConfig, info, s3Target)
 	require.NoError(t, err)
 	require.NotNil(t, backend)
+}
+
+// newS3Backend must fail loudly, not silently fall back to the default (ambient)
+// credential chain, when info.Identity names a specific identity but
+// info.AuthManager doesn't implement types.AuthManager — e.g. left nil by a bug
+// elsewhere, or a test double of the wrong shape. Falling back silently would
+// upload the packaged template using whatever ambient AWS credentials happen to
+// be available (the CI runner's own role, a developer's default profile)
+// instead of the identity the component explicitly requested.
+func TestNewS3Backend_IdentitySetButAuthManagerWrongType_Errors(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{Identity: "deploy-role", AuthManager: nil}
+	s3Target := &targetS3Config{Bucket: "my-bucket"}
+
+	_, err := newS3Backend(atmosConfig, info, s3Target)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationIdentityResolutionFailed)
 }
 
 // newS3Backend must propagate the underlying store's validation error (e.g. a

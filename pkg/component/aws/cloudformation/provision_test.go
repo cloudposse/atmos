@@ -351,11 +351,54 @@ func TestDeliverApply_PackagingTargetResolutionError(t *testing.T) {
 		},
 		Flags: map[string]any{targetKey: "gitops"},
 	}
-	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+	// Must exceed templateInlineSizeLimit: resolvePackagingTarget only runs when
+	// packaging is actually needed (or kind: aws/s3 was selected directly) — a
+	// small, inline-sized template never reaches packaging-target resolution at
+	// all, so it wouldn't exercise this error path (see
+	// TestDeliverApply_GitTarget_SmallTemplate_NoPackagingTargetNeeded).
+	spec := &stackSpec{StackName: "vpc", TemplateBody: strings.Repeat("a", templateInlineSizeLimit+1)}
 
 	_, result, err := deliverApply(octx, client, spec)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+	assert.Nil(t, result)
+}
+
+// deliverApply must not require a `kind: aws/s3` provision target at all when
+// delivering to a `kind: git` target with a small, inline-sized template —
+// deliverToExternalTarget writes spec.TemplateBody directly, never touching the
+// S3-packaged reference, so packaging-target resolution has nothing to do here.
+// Previously resolvePackagingTarget ran unconditionally for any non-CloudFormation-
+// kind target, so a git-only setup with no aws/s3 target configured failed even
+// though packaging was never needed — asserted here (same pattern as
+// TestDeliverApply_ExternalTarget_PackagesLargeTemplate) by letting real git
+// delivery fail on its own missing-repository validation: reaching
+// ErrGitRepositoryNotFound (not ErrInvalidAwsCloudFormationSettings about a
+// missing aws/s3 target) proves packaging-target resolution was correctly
+// skipped.
+func TestDeliverApply_GitTarget_SmallTemplate_NoPackagingTargetNeeded(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl) // no expectations: git delivery never touches CloudFormation.
+
+	octx := &opContext{
+		Ctx:         context.Background(),
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentSection: map[string]any{
+				cfg.ProvisionSectionName: map[string]any{
+					"targets": map[string]any{
+						"gitops": map[string]any{"kind": "git"},
+					},
+				},
+			},
+		},
+		Flags: map[string]any{targetKey: "gitops"},
+	}
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+
+	_, result, err := deliverApply(octx, client, spec)
+	require.Error(t, err, "the git target has no repository configured")
+	assert.ErrorIs(t, err, errUtils.ErrGitRepositoryNotFound)
 	assert.Nil(t, result)
 }
 

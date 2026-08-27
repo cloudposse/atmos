@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	artifact "github.com/cloudposse/atmos/pkg/ci/artifact"
 	s3store "github.com/cloudposse/atmos/pkg/ci/artifact/s3"
@@ -111,10 +112,16 @@ func newS3Backend(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAnd
 	}
 
 	if info.Identity != "" {
-		if authManager, ok := info.AuthManager.(types.AuthManager); ok {
-			opts.Identity = info.Identity
-			opts.Resolver = authbridge.NewResolver(authManager, info)
+		authManager, ok := info.AuthManager.(types.AuthManager)
+		if !ok {
+			// Fail loudly rather than silently falling back to s3store's default
+			// (ambient) credential chain — that would upload the packaged template
+			// using whatever AWS credentials happen to be available in the
+			// environment instead of the identity the component explicitly requested.
+			return nil, fmt.Errorf("%w: identity %q", errUtils.ErrAwsCloudFormationIdentityResolutionFailed, info.Identity)
 		}
+		opts.Identity = info.Identity
+		opts.Resolver = authbridge.NewResolver(authManager, info)
 	}
 
 	return s3store.NewStore(opts)
