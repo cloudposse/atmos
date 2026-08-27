@@ -163,6 +163,19 @@ func (c Condition) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.node.value())
 }
 
+// MarshalYAML preserves conditions when manifests (e.g. scaffold project
+// records) are marshaled back to YAML, reconstructing the original
+// string/list/map form. Condition's only field (`node`) is unexported, so
+// yaml.v3 has nothing to reflect without this method.
+//
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func (c Condition) MarshalYAML() (any, error) {
+	if c.node == nil {
+		return nil, nil
+	}
+	return c.node.value(), nil
+}
+
 // UnmarshalJSON supports JSON config files and internal command cloning.
 //
 //nolint:lintroller // This package cannot import perf because schema aliases condition.
