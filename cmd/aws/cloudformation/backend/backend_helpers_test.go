@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -273,4 +274,23 @@ func TestDefaultProvisioner_ListBackends_Empty(t *testing.T) {
 		require.NoError(t, err)
 	})
 	assert.Contains(t, out, "No `kind: aws/s3` provision targets declared.")
+}
+
+// renderBackendStatuses must reject an unrecognized --format value with an
+// error, rather than silently falling through to the table renderer (the
+// same "bad --format is silently swallowed" bug class fixed elsewhere in
+// this feature for `output`'s renderOutputsSummary).
+func TestRenderBackendStatuses_UnknownFormat(t *testing.T) {
+	err := renderBackendStatuses("bogus", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+}
+
+func TestRenderBackendStatuses_KnownFormats(t *testing.T) {
+	for _, format := range []string{"json", "yaml", "table", ""} {
+		t.Run(format, func(t *testing.T) {
+			err := renderBackendStatuses(format, nil)
+			require.NoError(t, err)
+		})
+	}
 }

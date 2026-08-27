@@ -5,6 +5,7 @@ package backend
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -261,8 +262,10 @@ func renderBackendStatuses(format string, statuses []*pkgcfn.S3BackendStatus) er
 		return data.WriteJSON(statuses)
 	case "yaml", "":
 		return data.WriteYAML(statuses)
-	default:
+	case "table":
 		return renderBackendStatusesTable(statuses)
+	default:
+		return fmt.Errorf("%w: %q (supported: json, yaml, table)", errUtils.ErrInvalidFlagValue, format)
 	}
 }
 
