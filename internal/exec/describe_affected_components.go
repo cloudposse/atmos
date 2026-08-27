@@ -55,6 +55,7 @@ const (
 	affectedReasonStackDependencies           = "stack.dependencies"
 
 	// Affected reasons for aws/cloudformation-specific sections.
+	affectedReasonStackStackName             = "stack.stack_name"
 	affectedReasonStackTemplate              = "stack.template"
 	affectedReasonStackParameters            = "stack.parameters"
 	affectedReasonStackCapabilities          = "stack.capabilities"
@@ -90,6 +91,7 @@ const (
 	sectionNameRepos     = "repositories"
 
 	// Section name constants for aws/cloudformation-specific isEqual comparisons.
+	sectionNameStackName             = "stack_name"
 	sectionNameTemplate              = "template"
 	sectionNameParameters            = "parameters"
 	sectionNameCapabilities          = "capabilities"
@@ -792,12 +794,10 @@ func processCloudFormationComponentsIndexed(
 }
 
 // addCloudFormationSectionAffected checks the aws/cloudformation-specific
-// first-class sections (template, parameters, capabilities, tags,
+// first-class sections (stack_name, template, parameters, capabilities, tags,
 // stack_policy, role_arn, notification_arns, disable_rollback,
 // termination_protection, timeout_in_minutes) for inline config changes
 // between the remote and current stacks, mirroring addHelmSectionAffected.
-//
-//nolint:dupl // Same per-type section-check table shape as addHelmSectionAffected/addKubernetesSectionAffected, with aws/cloudformation's own section/reason list.
 func addCloudFormationSectionAffected(
 	affected *[]schema.Affected,
 	atmosConfig *schema.AtmosConfiguration,
@@ -813,6 +813,7 @@ func addCloudFormationSectionAffected(
 		name   string
 		reason string
 	}{
+		{sectionNameStackName, affectedReasonStackStackName},
 		{sectionNameTemplate, affectedReasonStackTemplate},
 		{sectionNameParameters, affectedReasonStackParameters},
 		{sectionNameCapabilities, affectedReasonStackCapabilities},
