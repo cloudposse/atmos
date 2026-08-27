@@ -1,0 +1,63 @@
+---
+slug: ci-startup-status
+title: "See CI and Atmos Pro Status at a Glance"
+authors: [osterman]
+tags: [feature, dx]
+date: 2026-08-27T12:00:00.000Z
+---
+
+Two pipelines can look identical in the run summary — green checkmarks, no errors — and still be
+running in completely different worlds. One reorganized its workflow YAML months ago and quietly
+dropped the line that turns CI mode on; nobody noticed because nothing errors, it just falls back
+to the old behavior. The other never moved off the GitHub Actions steps that were the recommended
+integration for years, unaware that the newer, native path replacing them exists and does the same
+work with none of the wrapper scripts. Both teams find out the hard way — a status check that used
+to show up stops appearing, or a drift alert never fires.
+
+<!--truncate-->
+
+## The Problem
+
+Whether Native CI mode and Atmos Pro are actually active has always been invisible until
+something that depends on them fails to show up. There was no single place in a CI run's log to
+confirm either was on, so misconfiguration surfaced as an absence — a missing check, a missing
+upload — rather than a clear signal at the top of the run.
+
+Teams still calling into the older `cloudposse/github-action-atmos-*` marketplace actions have the
+same blind spot in reverse. Those actions were the recommended integration for years and are now
+in maintenance-only mode, while Native CI has kept shipping — richer job summaries, drift
+detection, and end-to-end testing of the CI integration itself as part of the Atmos core test
+suite, something a separate wrapper action could never get for free. There was no in-pipeline
+signal telling teams the ground had shifted under them.
+
+## The Fix
+
+Atmos now prints a short status banner the moment it detects it's running inside a CI provider:
+the version, whether Native CI mode is on or off, and whether Atmos Pro is configured. If it's
+invoked from one of the older marketplace actions, it also warns directly in the run log and
+points at migrating to Native CI — which has more features, gets tested end-to-end as part of the
+Atmos core test suite, and is where all future investment is going. Teams still on the legacy
+actions should treat this as a prompt to move now, not eventually.
+
+```text
+▶ Atmos version 1.31.0 linux/amd64
+✓ Atmos CI is enabled; learn more at https://atmos.tools/ci
+✗ Atmos Pro is disabled; learn more at https://atmos.tools/pro
+```
+
+```text
+⚠ Detected legacy action cloudposse/github-action-atmos-terraform-plan; migrate to Native CI for better performance — learn more at https://atmos.tools/ci
+```
+
+## How to Use It
+
+There's nothing to configure — the banner appears automatically at the top of every CI run, and
+it's a complete no-op on a local machine. It reads the same [`ci`](/cli/configuration/ci) and
+[`settings.pro`](/cli/configuration/settings/pro) configuration you already have, so what it
+reports always matches your actual setup.
+
+## Get Involved
+
+Atmos is open source and we'd love your feedback. Join the conversation in the
+[Cloud Posse community](https://cloudposse.com/slack) or open an issue on
+[GitHub](https://github.com/cloudposse/atmos).
