@@ -40,7 +40,7 @@ func detectDrift(ctx context.Context, client CloudFormationClient, stackName str
 
 	out, err := client.DetectStackDrift(ctx, &cloudformation.DetectStackDriftInput{StackName: awsString(stackName)})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationDriftDetected, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 
 	detectionID := stringValue(out.StackDriftDetectionId)
@@ -56,7 +56,7 @@ func pollDriftDetection(ctx context.Context, client CloudFormationClient, detect
 			StackDriftDetectionId: awsString(detectionID),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationDriftDetected, err)
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 		}
 
 		result := &driftDetectionResult{
@@ -73,11 +73,11 @@ func pollDriftDetection(ctx context.Context, client CloudFormationClient, detect
 			result.DetectionDone = true
 			return result, nil
 		case cfntypes.StackDriftDetectionStatusDetectionFailed:
-			return result, fmt.Errorf("%w: %s", errUtils.ErrAwsCloudFormationDriftDetected, result.StatusReason)
+			return result, fmt.Errorf("%w: %s", errUtils.ErrAwsCloudFormationAPICallFailed, result.StatusReason)
 		}
 
 		if time.Now().After(deadline) {
-			return result, fmt.Errorf("%w: timed out waiting for drift detection", errUtils.ErrAwsCloudFormationDriftDetected)
+			return result, fmt.Errorf("%w: timed out waiting for drift detection", errUtils.ErrAwsCloudFormationAPICallFailed)
 		}
 		select {
 		case <-ctx.Done():
@@ -101,7 +101,7 @@ func describeResourceDrifts(ctx context.Context, client CloudFormationClient, st
 			NextToken: nextToken,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationDriftDetected, err)
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 		}
 		drifts = append(drifts, out.StackResourceDrifts...)
 		if out.NextToken == nil {

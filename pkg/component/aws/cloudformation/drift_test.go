@@ -63,7 +63,7 @@ func TestDetectDrift_StartError(t *testing.T) {
 
 	_, err := detectDrift(context.Background(), client, "vpc")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationDriftDetected)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // pollDriftDetection must wrap a DescribeStackDriftDetectionStatus API error.
@@ -74,7 +74,7 @@ func TestPollDriftDetection_APIError(t *testing.T) {
 
 	_, err := pollDriftDetection(context.Background(), client, "detection-1")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationDriftDetected)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // pollDriftDetection must report DETECTION_FAILED as an error, carrying the
@@ -89,7 +89,7 @@ func TestPollDriftDetection_DetectionFailed(t *testing.T) {
 
 	result, err := pollDriftDetection(context.Background(), client, "detection-1")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationDriftDetected)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 	assert.Contains(t, err.Error(), "internal failure")
 	assert.False(t, result.DetectionDone)
 }
@@ -131,7 +131,7 @@ func TestPollDriftDetection_Timeout(t *testing.T) {
 
 	_, err := pollDriftDetection(context.Background(), client, "detection-1")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationDriftDetected)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 	assert.Contains(t, err.Error(), "timed out")
 }
 
@@ -185,7 +185,7 @@ func TestDescribeResourceDrifts_Error(t *testing.T) {
 
 	_, err := describeResourceDrifts(context.Background(), client, "vpc")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationDriftDetected)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // runDriftDetect's happy path (no --fail-on-drift): renders the summary line
