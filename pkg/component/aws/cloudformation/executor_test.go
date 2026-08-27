@@ -213,6 +213,7 @@ func TestRunApply_Success(t *testing.T) {
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 		}, nil),
+		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{
 				Outputs: []cfntypes.Output{{OutputKey: &outputKey, OutputValue: &outputVal}},
@@ -252,6 +253,7 @@ func TestRunApply_SetsStackPolicy(t *testing.T) {
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 		}, nil),
 		client.EXPECT().SetStackPolicy(gomock.Any(), gomock.Any()).Return(&cloudformation.SetStackPolicyOutput{}, nil),
+		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
 	)
 

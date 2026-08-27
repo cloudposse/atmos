@@ -262,6 +262,10 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 		}
 	}
 
+	if err := applyTerminationProtection(octx.Ctx, client, spec); err != nil {
+		return summary, err
+	}
+
 	outputs, err := describeStackOutputs(octx.Ctx, client, spec.StackName)
 	if err != nil {
 		return summary, err

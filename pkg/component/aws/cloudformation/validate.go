@@ -53,6 +53,26 @@ func setStackPolicy(ctx context.Context, client CloudFormationClient, spec *stac
 	return nil
 }
 
+// applyTerminationProtection reconciles the stack's actual termination-protection
+// state with spec.TerminationProtection. CreateChangeSet/ExecuteChangeSet have no
+// termination-protection parameter, so this runs as a follow-up UpdateTerminationProtection
+// call after every successful apply — the same shape setStackPolicy uses for stack
+// policy. Called unconditionally (not just when true) so config stays the source of
+// truth: removing termination_protection from a component actually disables it on the
+// next apply, instead of only stopping enforcement by Atmos's own delete command.
+func applyTerminationProtection(ctx context.Context, client CloudFormationClient, spec *stackSpec) error {
+	defer perf.Track(nil, "cloudformation.applyTerminationProtection")()
+
+	_, err := client.UpdateTerminationProtection(ctx, &cloudformation.UpdateTerminationProtectionInput{
+		StackName:                   awsString(spec.StackName),
+		EnableTerminationProtection: awsBool(spec.TerminationProtection),
+	})
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+	}
+	return nil
+}
+
 // validateTemplate calls the server-side ValidateTemplate API (syntax +
 // capability discovery) — an API-backed check, not a local linter. Local
 // linting (cfn-lint/cfn-guard) is not built into this component type; users
