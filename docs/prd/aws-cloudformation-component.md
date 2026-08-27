@@ -95,7 +95,7 @@ sharpens one priority:
   answer for reusable multi-file template composition).
 - No bespoke `type: cloudformation` workflow step. Every existing component type — including the
   SDK-native `helm`/`kubernetes` — is invoked from workflows, hooks, and custom commands via the
-  generic `type: atmos` step (e.g. `command: cloudformation deploy <component>`); CloudFormation
+  generic `type: atmos` step (e.g. `command: aws cloudformation deploy <component>`); CloudFormation
   follows the same pattern.
 - No stack import/adoption (`ImportExistingResources`, adopting pre-existing unmanaged stacks or
   resources into an Atmos-managed stack). Real demand exists, but resource import is its own design
@@ -444,6 +444,11 @@ requiring users to manage changesets by hand. The explicit `changeset create/exe
 verbs exist for users who want manual control (e.g. a two-phase deploy pipeline: create + review in
 one job, execute in another).
 
+Templates using macros/transforms (`Fn::Transform`, `AWS::Serverless` a.k.a. SAM) work through this
+same changeset flow with no special-cased handling: `CreateChangeSet` expands the macro as part of
+computing the changeset given `CAPABILITY_AUTO_EXPAND` in `capabilities:`, the same as any other
+required capability.
+
 ### Live Progress Streaming
 
 `apply`/`deploy`/`delete` stream per-resource stack events live while the operation converges
@@ -546,10 +551,15 @@ exporting secrets as environment variables does not apply. Instead:
 - Secrets flow into **`parameters:` values** via `!secret` (see the `DbPassword` line in
   [Public Interface](#public-interface)), resolved at stack-processing time and passed directly in the
   `CreateStack`/`CreateChangeSet` API call's parameter list.
-- Parameters declared `NoEcho` in the template are **masked in every rendered surface** — `plan`/
-  `diff` changeset rendering, `describe stacks`/`describe component` output, logs — through the
-  existing Gitleaks-backed masking pipeline, plus explicit registration of resolved `!secret` values
-  with the masker (the same guarantee the secrets subsystem provides elsewhere).
+- CloudFormation's own `NoEcho` only affects the AWS Console's parameter display — it does **not**
+  redact the value from `DescribeStacks`/`DescribeChangeSet` API responses, and a NoEcho parameter's
+  value can still resurface unmasked in a stack's `Outputs`/resource `Metadata` if the template wires
+  it there. Atmos does its own masking on top: parameters declared `NoEcho` in the template are
+  registered with the masker **by value**, so every rendered surface — `plan`/`diff` changeset
+  rendering, `describe stacks`/`describe component` output, `output`/`atmos.Component()` results,
+  logs — masks that value wherever it reappears, not just the original parameter field, through the
+  existing Gitleaks-backed masking pipeline (the same guarantee the secrets subsystem provides
+  elsewhere for resolved `!secret` values).
 - The `env:` section remains supported for its normal cross-type uses (hooks, `!exec`, template
   functions), but is **not** a secret-delivery channel for the CloudFormation API itself.
 
@@ -592,9 +602,15 @@ required for a working `plan`/`apply`/`delete` loop.
 
 ### Rollback & Stack Policy
 
-`disable_rollback`, `on_failure` behavior (`DO_NOTHING`/`ROLLBACK`/`DELETE` at stack-creation time),
-and `stack_policy` (protecting specific resources from update during `UpdateStack`) are first-class
-config fields (see [Public Interface](#public-interface)), mapped directly to their SDK equivalents.
+`disable_rollback` and `stack_policy` are first-class config fields (see
+[Public Interface](#public-interface)). Every deploy goes through `CreateChangeSet` +
+`ExecuteChangeSet` (never a direct `CreateStack`/`UpdateStack`, see [Changesets](#changesets)), so
+`disable_rollback: true` maps to whichever of `CreateChangeSet`'s `OnStackFailure` (stack creation)
+or `ExecuteChangeSet`'s `DisableRollback` (stack update) applies to the changeset's detected type —
+the two are mutually exclusive on a single changeset, so only one is ever set. `stack_policy` has no
+`CreateChangeSet`/`ExecuteChangeSet` parameter at all; it's applied via a follow-up `SetStackPolicy`
+call after a successful apply, the same "no changeset parameter, so it's a follow-up call" shape
+[termination_protection](#delete-semantics) uses.
 
 ### Validate Semantics
 
@@ -616,6 +632,11 @@ its own design, not through this verb.
   field and re-apply first (or use an explicit `--disable-termination-protection` escape hatch that
   calls `UpdateTerminationProtection` before deleting). Silent auto-disable would defeat the point of
   the setting.
+- **Applying `termination_protection`**: like `stack_policy`, neither `CreateChangeSet` nor
+  `ExecuteChangeSet` has a termination-protection parameter, so `termination_protection` is
+  reconciled via a follow-up `UpdateTerminationProtection` call after every successful apply —
+  unconditionally, not just when `true`, so unsetting it in config actually disables it on the next
+  apply rather than only stopping enforcement at `delete`.
 
 ### Parameter Typing
 
