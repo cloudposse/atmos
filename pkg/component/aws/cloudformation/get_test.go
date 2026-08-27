@@ -60,7 +60,7 @@ func TestGetDeployedTemplate_Error(t *testing.T) {
 
 	_, err := getDeployedTemplate(context.Background(), client, "vpc", false)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // getDeployedStackPolicy must return the policy body on success, including
@@ -98,7 +98,7 @@ func TestGetDeployedStackPolicy_Error(t *testing.T) {
 
 	_, err := getDeployedStackPolicy(context.Background(), client, "vpc")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
 // runGetTemplate must write the template body to the data channel and
