@@ -97,7 +97,7 @@ duplicates — same action, same version pin, same `prerelease == false` gate, b
 - **GoReleaser OSS, not Pro.** Confirmed against GoReleaser's own Pro-feature list: the only Pro-gated
   features relevant to Atmos are the native `--nightly` flag and native CloudSmith push — both have
   straightforward OSS workarounds (below). Everything else Atmos needs (`builds`, `archives`, `checksum`,
-  `nfpms`, `brews`, `scoops`, `dockers`/`docker_manifests`, `sboms`, `signs`, native `changelog:`) is OSS.
+  `nfpms`, `homebrew_casks`, `scoops`, `dockers_v2`, `sboms`, `signs`, native `changelog:`) is OSS.
 - **No shared/"meta" config repo** (unlike Charmbracelet's `charmbracelet/meta` two-repo model). GoReleaser
   Pro's `includes: from_url` remote-config feature exists specifically to support that pattern — since we're
   not using it, that's one more reason Pro isn't needed. `.goreleaser.yml` stays a normal, complete, in-repo
@@ -125,8 +125,9 @@ checkout (fetch-depth: 0, needed for changelog + tag history)
 
 Everything above the `cloudsmith-cli push` line is one GoReleaser invocation, but that invocation itself
 fans out to several independent external publishers, not one atomic operation: builds, archives, checksums,
-`nfpms:` packages, Homebrew tap push (`brews:`), Docker multi-arch build+push
-(`dockers:`/`docker_manifests:`), cosign signing of the checksums file (`signs:`, keyless/OIDC — no static
+`nfpms:` packages, Homebrew tap push (`homebrew_casks:`), Docker multi-arch build+push
+(`dockers_v2:`, which builds and pushes a single multi-platform manifest directly — no separate
+`docker_manifests:` step needed), cosign signing of the checksums file (`signs:`, keyless/OIDC — no static
 key), SBOMs of every archive (`sboms:`, syft-backed), and the GitHub Release itself (`release:` block,
 already configured with `draft: true`/`prerelease: auto` in today's `.goreleaser.yml`) all happen within
 that one run — but a failure partway through can still leave some of those publishers updated and others
@@ -145,24 +146,22 @@ nfpms:
     maintainer: "Cloud Posse <hello@cloudposse.com>"
     file_name_template: "{{ .ConventionalFileName }}"
 
-brews:
+homebrew_casks:
   - repository:
       owner: cloudposse
       name: homebrew-tap
-    directory: Formula
+    directory: Casks
     homepage: "https://atmos.tools"
-    # replaces build.yml's dawidd6/action-homebrew-bump-formula job
+    # replaces build.yml's dawidd6/action-homebrew-bump-formula job; `brews:` (Homebrew
+    # Formulas) is deprecated as of GoReleaser v2.10 in favor of `homebrew_casks:`.
 
-dockers:
-  - image_templates: ["ghcr.io/cloudposse/atmos:{{ .Version }}-amd64"]
-    goarch: amd64
-    build_flag_templates: ["--platform=linux/amd64"]
-  - image_templates: ["ghcr.io/cloudposse/atmos:{{ .Version }}-arm64"]
-    goarch: arm64
-    build_flag_templates: ["--platform=linux/arm64"]
-docker_manifests:
-  - name_template: "ghcr.io/cloudposse/atmos:{{ .Version }}"
-    image_templates: ["...{{ .Version }}-amd64", "...{{ .Version }}-arm64"]
+dockers_v2:
+  - images: ["ghcr.io/cloudposse/atmos"]
+    tags: ["{{ .Version }}"]
+    platforms: ["linux/amd64", "linux/arm64"]
+    # dockers_v2 builds and pushes the multi-platform manifest directly via `docker buildx
+    # build --push` — no separate docker_manifests: block needed. Supersedes the legacy
+    # `dockers:`/`docker_manifests:` pair, deprecated as of GoReleaser v2.18.
 
 sboms:
   - artifacts: archive
@@ -175,7 +174,9 @@ signs:
 docker_signs:
   - cmd: cosign
     args: ["sign", "--yes", "${artifact}"]
-    artifacts: manifests
+    # "" targets images built by dockers_v2; "manifests" targets the legacy
+    # dockers/docker_manifests pipeline instead and would leave dockers_v2 images unsigned.
+    artifacts: ""
 ```
 
 (Sketch, not final — exact `nfpm` metadata, Homebrew tap repo permissions/token, and Docker build args need
@@ -208,7 +209,7 @@ others not. What's known today, and what still needs confirming during implement
   the existing draft rather than create a duplicate — this PRD already relies on that draft-then-publish
   behavior elsewhere.
 - **Homebrew tap, Docker registry, Cloudsmith**: retry behavior is not yet confirmed and is called out as an
-  open question below — whether a retried `brews:` push creates a duplicate tap commit, whether a retried
+  open question below — whether a retried `homebrew_casks:` push creates a duplicate tap commit, whether a retried
   Docker push of an identical digest is a no-op, and whether Cloudsmith accepts or rejects a re-push of an
   already-published package version.
 - **Cleanup**: a run that fails partway through (e.g. Docker pushed, Cloudsmith push failed, no retry
@@ -221,8 +222,8 @@ others not. What's known today, and what still needs confirming during implement
 |---|---|---|
 | Binary build+archive+checksum | `cloudposse/.github` (external, invisible) | `.github/workflows/release.yml`, in-repo |
 | Signing/SBOM | `build.yml`'s downstream re-fetch job | Native `signs:`/`sboms:` inside the GoReleaser run |
-| Homebrew | `build.yml`'s `dawidd6/action-homebrew-bump-formula` job | Native `brews:` block |
-| Docker build+sign | `build.yml`'s `docker` job (build→pull→sign) | Native `dockers:`/`docker_manifests:`/`docker_signs:` |
+| Homebrew | `build.yml`'s `dawidd6/action-homebrew-bump-formula` job | Native `homebrew_casks:` block |
+| Docker build+sign | `build.yml`'s `docker` job (build→pull→sign) | Native `dockers_v2:`/`docker_signs:` |
 | deb/rpm/apk | Unknown external pipeline | Native `nfpms:` + explicit CloudSmith push step, in-repo |
 | Scoop | Unknown external pipeline | Deferred — flagged as open question below |
 | Changelog + semver | release-drafter via `cloudposse/.github` chain | **Unchanged** — release-drafter, config/invocation TBD (see below) |
@@ -236,9 +237,9 @@ others not. What's known today, and what still needs confirming during implement
 1. **Binaries + native signing/SBOM.** Stand up `release.yml`, move `builds`/`archives`/`checksum`/`signs`/
     `sboms` into `.goreleaser.yml`, retire `build.yml`'s `sign-and-attest-release` job. This alone fixes the
     headline security gap and is independently shippable.
-2. **Docker.** Fold `build.yml`'s `docker` job into GoReleaser's `dockers:`/`docker_manifests:`/
-    `docker_signs:`, keep the Trivy scan step immediately after. Retire `build.yml`'s `docker` job.
-3. **Homebrew.** Native `brews:` block, retire `build.yml`'s `homebrew` job.
+2. **Docker.** Fold `build.yml`'s `docker` job into GoReleaser's `dockers_v2:`/`docker_signs:`, keep the
+    Trivy scan step immediately after. Retire `build.yml`'s `docker` job.
+3. **Homebrew.** Native `homebrew_casks:` block, retire `build.yml`'s `homebrew` job.
 4. **Packages.** Add `nfpms:` + CloudSmith push step, reclaiming deb/rpm/apk.
 5. **Nightly + feature prereleases.** Point `nightlybuilds.yml`/`feature-release.yml` at the new workflow;
     implement the real-tag nightly workaround.
@@ -261,7 +262,7 @@ Each phase should land as its own PR, verified via the `release/feature` label m
   the security-critical part — could be its own follow-up PRD.
 - **Per-publisher retry/idempotency.** Confirmed: the build stage is always safe to retry in full, and a
   retried GitHub Release publish is expected to update the existing draft rather than duplicate it. Not yet
-  confirmed: whether a retried `brews:` push creates a duplicate Homebrew tap commit, whether a retried
+  confirmed: whether a retried `homebrew_casks:` push creates a duplicate Homebrew tap commit, whether a retried
   Docker push of an identical digest is a no-op, and whether Cloudsmith accepts or rejects a re-push of an
   already-published package version — each needs verifying against the real tooling during implementation,
   along with a documented manual-cleanup procedure for a run that fails partway through the publish stage.
@@ -280,7 +281,7 @@ Each phase should land as its own PR, verified via the `release/feature` label m
 - ~~**Homebrew tap token.**~~ **Resolved**: `GH_BOT_TOKEN` already exists as a secret in the `release`
   environment (confirmed via `gh api repos/cloudposse/atmos/environments/release/secrets`) — it's exactly
   what `build.yml`'s current `homebrew` job already uses (`build.yml:42`,
-  `dawidd6/action-homebrew-bump-formula`) to push to `cloudposse/homebrew-tap`. `brews:` needs the same write
+  `dawidd6/action-homebrew-bump-formula`) to push to `cloudposse/homebrew-tap`. `homebrew_casks:` needs the same write
   access to the same repo, so this credential carries over directly; Phase 3 is not credential-blocked.
 - **CloudSmith credentials/repo names.** Entirely unknown from this repo today; needs whoever owns the
   current external pipeline (or CloudSmith account access) to supply the actual repo/org names and an API
