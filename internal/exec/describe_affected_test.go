@@ -2642,9 +2642,8 @@ func TestUploadErrorsWhenNoCredentials(t *testing.T) {
 // the retry budget pkg/git/worktree.go uses for the same class of transient
 // Windows lock (a just-exited git/antivirus process briefly holding a handle
 // open on a file inside a just-torn-down git worktree's administrative
-// directory). A failure after the full budget is logged, not fatal — it
-// leaves cleanup to whatever runs next (e.g. t.TempDir()'s own attempt),
-// which is the pre-existing behavior this helper is layered in front of.
+// directory). A failure after the full budget is logged, not fatal. The
+// directory is left for the operating system's temporary-directory reaper.
 func removeAllWithRetry(t *testing.T, dir string) {
 	t.Helper()
 	delay := 200 * time.Millisecond
