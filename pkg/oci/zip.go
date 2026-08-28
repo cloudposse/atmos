@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
@@ -45,10 +44,6 @@ func extractZip(reader io.Reader, extractPath string) error {
 	}
 
 	for _, file := range zipReader.File {
-		if strings.Contains(file.Name, "..") {
-			log.Warn("Skipping potential directory traversal attempt", "filename", file.Name)
-			continue
-		}
 		if err := processZipFile(file, extractPath); err != nil {
 			return err
 		}

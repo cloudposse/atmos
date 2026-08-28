@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
@@ -33,10 +32,6 @@ func untar(reader io.Reader, extractPath string) error {
 		if err != nil {
 			log.Error("Error reading tar header", "error", err)
 			return err
-		}
-		if strings.Contains(header.Name, "..") {
-			log.Warn("Skipping potential directory traversal attempt", "filename", header.Name)
-			continue
 		}
 		if err := processTarHeader(header, tarReader, extractPath); err != nil {
 			return err

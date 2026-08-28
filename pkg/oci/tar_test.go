@@ -47,17 +47,43 @@ func TestExtractTarball_WritesFiles(t *testing.T) {
 	assert.Contains(t, string(nested), "output")
 }
 
-func TestExtractTarball_SkipsDirectoryTraversal(t *testing.T) {
+// TestExtractTarball_RejectsDirectoryTraversal exercises processTarHeader's
+// SafeJoin containment check: untar has no ".."-substring prefilter of its
+// own (removed -- it was overbroad and dropped valid filenames like
+// "..hidden.txt", see TestExtractTarball_ExtractsFilenameContainingDotDot),
+// so SafeJoin is the sole gate and must fail loudly rather than silently skip.
+func TestExtractTarball_RejectsDirectoryTraversal(t *testing.T) {
 	dest := t.TempDir()
 	tarBuf := writeTestTar(t, map[string]string{
 		"../../etc/passwd": "malicious\n",
 	})
 
+	err := extractTarball(tarBuf, dest)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidFilePath)
+
+	entries, readErr := os.ReadDir(dest)
+	require.NoError(t, readErr)
+	assert.Empty(t, entries, "traversal entry must not be written to dest")
+}
+
+// TestExtractTarball_ExtractsFilenameContainingDotDot is a regression test: a
+// valid filename that merely contains ".." as a substring without it being a
+// full path-traversal component (e.g. "..hidden.txt") must still be
+// extracted. SafeJoin already rejects only actual ".." path components; the
+// removed prefilter in untar used to reject this too, via a much broader
+// substring check.
+func TestExtractTarball_ExtractsFilenameContainingDotDot(t *testing.T) {
+	dest := t.TempDir()
+	tarBuf := writeTestTar(t, map[string]string{
+		"..hidden.txt": "content\n",
+	})
+
 	require.NoError(t, extractTarball(tarBuf, dest))
 
-	entries, err := os.ReadDir(dest)
+	content, err := os.ReadFile(filepath.Join(dest, "..hidden.txt"))
 	require.NoError(t, err)
-	assert.Empty(t, entries, "traversal entry must not be written to dest")
+	assert.Equal(t, "content\n", string(content))
 }
 
 // TestExtractTarball_RejectsAbsolutePath exercises processTarHeader's
