@@ -38,6 +38,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -1588,6 +1589,23 @@ func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPatte
 	return success
 }
 
+// maxDiagOutputLen caps diagnostic output written to the test log. Child processes run under
+// test inherit secrets such as GITHUB_TOKEN (see the Env setup above), so uncapped output could
+// also flood CI logs if a command misbehaves and prints unbounded data.
+const maxDiagOutputLen = 8192
+
+// redactAndCapDiagOutput masks known secrets (e.g. GITHUB_TOKEN, forwarded to every child
+// process under test) out of diagnostic output and truncates it to maxDiagOutputLen before it's
+// written to the test log, so a failing command that prints its environment can't leak a token
+// into CI logs.
+func redactAndCapDiagOutput(s string) string {
+	masked := iolib.MaskString(s)
+	if len(masked) > maxDiagOutputLen {
+		masked = masked[:maxDiagOutputLen] + "...[truncated]"
+	}
+	return masked
+}
+
 // dumpCapturedOutput prints the command's captured stdout/stderr into the test log. A
 // file_exists failure with an exit code that matched expectations (e.g. a vendor pull that
 // silently drops files for one source while reporting overall success) would otherwise leave
@@ -1595,10 +1613,10 @@ func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPatte
 // diagnose -- this makes that output part of the test failure itself.
 func dumpCapturedOutput(t *testing.T, stdout, stderr *bytes.Buffer) {
 	if stdout.Len() > 0 {
-		t.Errorf("Captured stdout:\n%s", stdout.String())
+		t.Errorf("Captured stdout:\n%s", redactAndCapDiagOutput(stdout.String()))
 	}
 	if stderr.Len() > 0 {
-		t.Errorf("Captured stderr:\n%s", stderr.String())
+		t.Errorf("Captured stderr:\n%s", redactAndCapDiagOutput(stderr.String()))
 	}
 }
 
@@ -1607,35 +1625,10 @@ func verifyFileExists(t *testing.T, files []string) bool {
 	for _, file := range files {
 		if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
 			t.Errorf("Reason: Expected file does not exist: %q", file)
-			logMissingFileDiag(t, file)
 			success = false
 		}
 	}
 	return success
-}
-
-// logMissingFileDiag is a TEMPORARY diagnostic aid for the Windows-only silent vendor-pull
-// failure (https://github.com/cloudposse/atmos/pull/2958): pkg/vendoring/install's own
-// instrumentation proves the file exists on disk at every checkpoint through the end of the
-// installing process, so this checks what the *test harness's own process* sees at the moment of
-// the file_exists assertion -- its CWD, the resolved absolute path, and (if the file is genuinely
-// absent) the parent directory's actual listing. Remove once root-caused.
-func logMissingFileDiag(t *testing.T, file string) {
-	t.Helper()
-	cwd, cwdErr := os.Getwd()
-	abs, absErr := filepath.Abs(file)
-	t.Errorf("VENDOR_DIAG_MISSING file=%q cwd=%q cwdErr=%v abs=%q absErr=%v", file, cwd, cwdErr, abs, absErr)
-	parent := filepath.Dir(file)
-	entries, readErr := os.ReadDir(parent)
-	if readErr != nil {
-		t.Errorf("VENDOR_DIAG_MISSING parent=%q readDirErr=%v", parent, readErr)
-		return
-	}
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		names = append(names, e.Name())
-	}
-	t.Errorf("VENDOR_DIAG_MISSING parent=%q entries=%v", parent, names)
 }
 
 func verifyFileNotExists(t *testing.T, files []string) bool {

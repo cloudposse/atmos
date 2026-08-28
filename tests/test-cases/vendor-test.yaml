@@ -23,11 +23,6 @@ tests:
     args:
       - "vendor"
       - "pull"
-    # TEMPORARY: activates logVendorDiagDir (pkg/vendoring/install/atmos.go) to capture the
-    # fetched-vs-copied directory listing around a Windows-only silent vendor-pull failure. Remove
-    # once root-caused (see the function's doc comment).
-    env:
-      ATMOS_VENDOR_DEBUG_DIAG: "1"
     preconditions:
       - "github_token"
     expect:

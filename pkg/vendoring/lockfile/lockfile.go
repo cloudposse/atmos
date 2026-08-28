@@ -25,7 +25,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/downloader"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendor"
@@ -640,10 +639,6 @@ func Replace(config *schema.AtmosConfiguration, id string, artifact Artifact) er
 		return err
 	}
 	previous, hadPrevious := lock.Artifacts[id]
-	//nolint:forbidigo // Throwaway diagnostic toggle, not an Atmos config option; removed with this block once root-caused (see pkg/vendoring/install/atmos.go's logVendorDiagDir).
-	if os.Getenv("ATMOS_VENDOR_DEBUG_DIAG") != "" {
-		log.Warn("VENDOR_DIAG_REPLACE", "id", id, "newTarget", artifact.Target, "hadPrevious", hadPrevious, "previousTarget", previous.Target, "previousName", previous.Name)
-	}
 	if hadPrevious {
 		artifact.Order = previous.Order
 	} else {
@@ -702,10 +697,6 @@ func pruneStaleArtifactFiles(config *schema.AtmosConfiguration, lock *LockFile, 
 		}
 		if !matches(file, path, info) {
 			return fmt.Errorf(errWrapQuotedFormat, ErrStaleLockOwnedFileModified, path)
-		}
-		//nolint:forbidigo // Throwaway diagnostic toggle, not an Atmos config option; removed with this block once root-caused (see pkg/vendoring/install/atmos.go's logVendorDiagDir).
-		if os.Getenv("ATMOS_VENDOR_DEBUG_DIAG") != "" {
-			log.Warn("VENDOR_DIAG_PRUNE", "id", id, "removing", path)
 		}
 		if err := os.Remove(path); err != nil {
 			return fmt.Errorf(errWrapPathFormat, ErrRemoveLockOwnedFile, path, err)
