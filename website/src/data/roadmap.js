@@ -561,7 +561,7 @@ export const roadmapConfig = {
       tagline: 'Rigorous testing, AI-assisted development, and stability',
       description:
         '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. In 2026, critical high-complexity functions are being refactored with 100% coverage. Embracing AI-assisted development while maintaining high standards.',
-      progress: 77,
+      progress: 79,
       status: 'in-progress',
       milestones: [
         { label: 'Test coverage from <20% to 74%', status: 'shipped', quarter: 'q1-2025', description: 'Test coverage improved from less than 20% to 74% over the course of 2025.', category: 'featured', priority: 'high', benefits: 'Fewer regressions reach users. Changes can be made confidently knowing tests catch issues.' },
@@ -577,6 +577,7 @@ export const roadmapConfig = {
         { label: '80%+ test coverage', status: 'in-progress', quarter: 'q1-2026', description: 'Targeting 80%+ test coverage with focus on critical paths and edge cases.', category: 'featured', priority: 'high', benefits: 'Even more confidence in changes. Edge cases are covered before users hit them.' },
         { label: '3.5× faster deep merge (hot-path)', status: 'shipped', quarter: 'q1-2026', pr: 2201, changelog: 'faster-deep-merge', description: 'Replace the reflection-based mergo pre-copy loop with a single-pass, reflection-free native merge for the hot path. Reduces N full pre-copies per merge to 1 and eliminates mergo reflection overhead. Note: mergo is still used in merge_yaml_functions.go and devcontainer/config_loader.go — full removal is tracked separately.', benefits: 'Faster atmos describe component, terraform plan, apply, and any command that reads stacks. Impact scales with stack depth and import chain length.' },
         { label: 'Migrate remaining mergo call-sites; drop mergo', status: 'in-progress', quarter: 'q2-2026', issue: 2242, description: 'Migrate merge_yaml_functions.go and devcontainer/config_loader.go from dario.cat/mergo to the native deep-merge. Once complete, remove the mergo dependency entirely.', benefits: 'Fully reflection-free merge path. Simpler dependency tree and one fewer transitive vulnerability surface.' },
+        { label: 'FIPS 140-3 crypto module on by default', status: 'shipped', quarter: 'q3-2026', changelog: 'fips-140-mode', description: 'Every official release binary, and every binary built from a checkout via `atmos build`, now links Go\'s native FIPS 140-3 validated cryptographic module and defaults to enforcing it at runtime — no flag required.', benefits: 'Meets FIPS 140-3 cryptography requirements out of the box for regulated environments (federal, financial services, healthcare) without a custom build.' },
       ],
       issues: [],
       prs: [],
