@@ -92,7 +92,14 @@ nfpms:
     homepage: https://atmos.tools
     description: Terraform Orchestration Tool for DevOps
     license: APACHE2
-    file_name_template: '{{ .ConventionalFileName }}'
+    # ConventionalFileName renders a prerelease version's hyphen as a tilde
+    # (Debian version-ordering convention, e.g. 1.2.3~test.9) for nightly and
+    # feature-release builds. GitHub rewrites tildes to dots in uploaded asset
+    # filenames, which would otherwise no longer match the SHA256SUMS entry
+    # generated from the pre-upload filename. GoReleaser's "replace" template
+    # func is strings.ReplaceAll(s, old, new) -- call it directly (not piped)
+    # so .ConventionalFileName lands in the s position, not old/new.
+    file_name_template: '{{ replace .ConventionalFileName "~" "-" }}'
 
 sboms:
   - artifacts: archive
