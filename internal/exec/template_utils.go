@@ -70,7 +70,12 @@ func ProcessTmpl(
 	}
 	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
 
-	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
+	leftDelimiter, rightDelimiter, err := resolveTemplateDelimiters(cfg.Templates.Settings.Delimiters)
+	if err != nil {
+		return "", err
+	}
+
+	t, err := template.New(tmplName).Funcs(funcs).Delims(leftDelimiter, rightDelimiter).Parse(tmplValue)
 	if err != nil {
 		return "", err
 	}
@@ -320,7 +325,18 @@ func ProcessTmplWithDatasources(
 		// Process the template
 		t := template.New(tmplName).Funcs(funcs)
 
-		leftDelimiter, rightDelimiter, err := resolveTemplateDelimiters(atmosConfig.Templates.Settings.Delimiters)
+		// templateSettings.Delimiters comes from the merge.Merge above, which encodes both
+		// sides through mapstructure first -- so an unset stack-level Delimiters (nil) becomes
+		// an explicit "delimiters: []" key that wins the merge over a populated CLI-level
+		// value, same root cause as Env's mapstructure:"-" workaround a few lines up. Fall back
+		// to the CLI-level config so a stack manifest that doesn't set delimiters at all doesn't
+		// silently revert to Go's default "{{"/"}}".
+		configuredDelimiters := templateSettings.Delimiters
+		if len(configuredDelimiters) == 0 {
+			configuredDelimiters = atmosConfig.Templates.Settings.Delimiters
+		}
+
+		leftDelimiter, rightDelimiter, err := resolveTemplateDelimiters(configuredDelimiters)
 		if err != nil {
 			return "", err
 		}

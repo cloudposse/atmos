@@ -414,6 +414,90 @@ config:
 	assert.Contains(t, result, "test")
 }
 
+// TestProcessTmplWithDatasources_DelimitersFromCLIConfig tests that custom delimiters
+// configured only at the CLI (atmos.yaml) level are honored when the stack manifest doesn't
+// set any of its own. Regression test: merge.Merge encodes both sides of the merge through
+// mapstructure first, so an unset stack-level Delimiters (nil) becomes an explicit
+// "delimiters: []" key that -- without a fallback -- wins the merge over the populated
+// CLI-level value and silently reverts rendering to Go's default "{{"/"}}".
+func TestProcessTmplWithDatasources_DelimitersFromCLIConfig(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled:     true,
+				Delimiters:  []string{"[[", "]]"},
+				Evaluations: 1,
+			},
+		},
+	}
+
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
+	settingsSection := schema.Settings{} // No stack-level delimiters override.
+
+	tmplValue := `
+config:
+  value: '[[ .name ]]'
+`
+	tmplData := map[string]any{"name": "test"}
+
+	result, err := ProcessTmplWithDatasources(
+		atmosConfig,
+		configAndStacksInfo,
+		settingsSection,
+		"test-delimiters-cli",
+		tmplValue,
+		tmplData,
+		true,
+	)
+
+	require.NoError(t, err)
+	assert.Contains(t, result, "test")
+}
+
+// TestProcessTmplWithDatasources_DelimitersFromStackManifest tests that stack manifest
+// settings can override the CLI config's delimiters, per templates.settings.delimiters
+// precedence (same override relationship already covered for Env above).
+func TestProcessTmplWithDatasources_DelimitersFromStackManifest(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled:    true,
+				Delimiters: []string{"[[", "]]"},
+			},
+		},
+	}
+
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
+
+	// Stack manifest overrides the CLI config's delimiters with a different pair.
+	settingsSection := schema.Settings{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Delimiters: []string{"<<", ">>"},
+			},
+		},
+	}
+
+	tmplValue := `
+config:
+  value: '<< .name >>'
+`
+	tmplData := map[string]any{"name": "test"}
+
+	result, err := ProcessTmplWithDatasources(
+		atmosConfig,
+		configAndStacksInfo,
+		settingsSection,
+		"test-delimiters-stack-override",
+		tmplValue,
+		tmplData,
+		true,
+	)
+
+	require.NoError(t, err)
+	assert.Contains(t, result, "test")
+}
+
 // TestProcessTmplWithDatasources_EnvVarsInEvaluationLoop tests that env vars are
 // properly re-extracted when template settings are re-decoded in the evaluation loop.
 func TestProcessTmplWithDatasources_EnvVarsInEvaluationLoop(t *testing.T) {
