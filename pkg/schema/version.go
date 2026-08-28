@@ -105,7 +105,7 @@ type VersionEntry struct {
 // VersionFileRule maps a file manager to the paths it maintains, so a single
 // `atmos version track apply` sweeps every version-managed file.
 type VersionFileRule struct {
-	// Manager is the file manager name (github-actions, marker, template).
+	// Manager is the file manager name (github-actions, json, marker, template).
 	Manager string `yaml:"manager,omitempty" mapstructure:"manager" json:"manager,omitempty"`
 	// Paths are glob patterns (doublestar) relative to the project root.
 	Paths []string `yaml:"paths,omitempty" mapstructure:"paths" json:"paths,omitempty"`
@@ -152,7 +152,7 @@ type Version struct {
 	Tracks       map[string]VersionTrack `yaml:"tracks,omitempty" mapstructure:"tracks" json:"tracks,omitempty"`
 
 	// Files declares which project files the file managers maintain. When
-	// empty, managers with default paths (github-actions, template) run over
-	// those defaults.
+	// omitted, managers with default paths (github-actions, template) run over
+	// those defaults. An explicit empty list (files: []) manages zero files.
 	Files []VersionFileRule `yaml:"files,omitempty" mapstructure:"files" json:"files,omitempty"`
 }
