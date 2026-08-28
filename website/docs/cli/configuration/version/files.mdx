@@ -28,13 +28,24 @@ version:
         - Dockerfile
         - scripts/**/*.sh
 
+    - manager: json
+      paths:
+        - agent-skills/.claude-plugin/plugin.json
+        - .claude-plugin/marketplace.json
+      options:
+        set:
+          - path: version
+            from: atmos
+
     - manager: template
       paths:
         - "**/*.tmpl"
 ```
 </File>
 
-When `version.files` is empty, managers with default paths run over those defaults.
+When `version.files` is omitted, managers with default paths run over those defaults. An explicit `files: []` is different from omitting the key: it means "manage zero files," and suppresses the default-path fallback.
+
+`version.files`, like every other `atmos.yaml` setting, follows [Atmos's standard import precedence](/cli/configuration/imports#merge-order): the main `atmos.yaml`'s own value always wins over an [`import:`](/cli/configuration/imports) fragment or `atmos.d/` file that also sets `version.files`, including `files: []`. An imported fragment can only supply `version.files` when the main file doesn't mention the key at all — it can never override or clear a list the main file already declares.
 
 ## Managers
 
@@ -44,6 +55,9 @@ When `version.files` is empty, managers with default paths run over those defaul
 
   <dt>`marker`</dt>
   <dd>Rewrites version tokens on lines annotated with `atmos:version` comments.</dd>
+
+  <dt>`json`</dt>
+  <dd>Writes locked values into JSON files at configured field paths, preserving formatting and key order.</dd>
 
   <dt>`template`</dt>
   <dd>Renders `*.tmpl` source files to sibling files using the `.version` context.</dd>
@@ -128,6 +142,89 @@ version:
     </File>
   </TabItem>
 </Tabs>
+
+## Updating JSON Files
+
+The `json` manager writes locked values into JSON files at configured field paths, using [sjson](https://github.com/tidwall/sjson)/[gjson](https://github.com/tidwall/gjson) dot-path syntax. Unlike a full JSON parse and re-serialize, `sjson` patches only the targeted field and leaves the rest of the file's bytes — formatting, key order, whitespace — untouched.
+
+<File title="atmos.yaml">
+```yaml
+version:
+  dependencies:
+    atmos:
+      ecosystem: github/actions
+      datasource: github-releases
+      provider: github
+      package: cloudposse/atmos
+      desired: "~1.160"
+
+  files:
+    - manager: json
+      paths:
+        - agent-skills/.claude-plugin/plugin.json
+      options:
+        set:
+          - path: version
+            from: atmos
+```
+</File>
+
+`atmos version track apply prod` writes the resolved value at the configured path:
+
+<Tabs>
+  <TabItem value="single" label="Single Field" default>
+    <File title="agent-skills/.claude-plugin/plugin.json">
+    ```json
+    {
+      "name": "atmos",
+      "version": "1.160.0",
+      "license": "Apache-2.0"
+    }
+    ```
+    </File>
+    Only the `version` value's bytes change — every other key, its ordering, and any unusual spacing in the file is preserved exactly.
+  </TabItem>
+  <TabItem value="multiple" label="Multiple Fields">
+    A file can have more than one managed field — each just needs its own `set` entry, and a rule can list more than one target file:
+
+    <File title="atmos.yaml">
+    ```yaml
+      files:
+        - manager: json
+          paths:
+            - package.json
+          options:
+            set:
+              - path: version
+                from: cli
+              - path: engines.node
+                from: node
+    ```
+    </File>
+
+    <File title="package.json">
+    ```json
+    {
+      "name": "example",
+      "version": "2.5.0",
+      "engines": {
+        "node": "20.11.0"
+      }
+    }
+    ```
+    </File>
+  </TabItem>
+</Tabs>
+
+`path` follows sjson/gjson dot syntax: dots nest into objects, a bare number indexes into an array, and a literal dot inside a key name is escaped as `\.`. `path` is always a YAML string — quote numeric segments (`path: "0"`), or the value decodes as a YAML integer and fails validation.
+
+A simple `path` (no wildcards) that doesn't exist yet in the file is created rather than rejected, so double-check `path` for typos — a misspelled path silently adds a new field instead of updating the intended one. Wildcard/query paths (`items.#.version`, `*`, `?`, `@`) update every matching location when the path resolves against the current document, but error instead of silently doing nothing when it resolves to nothing — for example, an empty array or a missing parent key.
+
+A few configurations are rejected outright rather than risking silent data loss:
+
+- **Array-append paths** (any `-1` segment) — there's no way to tell "already applied" from "not yet applied" by reading the array back, so every `apply` would append another element forever.
+- **A `path` whose current value is an object or array** — writing a scalar there would silently discard the whole subtree. Target the specific field inside it instead (`engines.node`, not `engines`).
+- **Two `set` entries targeting the same `path`** — the second write would otherwise silently discard the first.
 
 ## Updating GitHub Action Workflows
 
