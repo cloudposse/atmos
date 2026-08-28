@@ -16,7 +16,7 @@ FLAGS
 
   -h, --help             help for provision
 
-      --identity string  Identity to use for authentication (overrides identity in command config)
+  -i, --identity string  Identity to use for authentication (use without value to select interactively)
 
 
 GLOBAL FLAGS

@@ -19,6 +19,12 @@ const (
 	defaultTestTimeout   = "40m"
 	cgoDisabled          = "CGO_ENABLED=0"
 
+	// Links Go's native FIPS 140-3 crypto module so acceptance-test binaries
+	// default to FIPS-enforcing mode (GODEBUG=fips140=on) at runtime, matching
+	// release builds. This is FIPS 140-3 mode, not a CMVP compliance
+	// certification. See docs/prd/fips-140-mode.md.
+	fips140Latest = "GOFIPS140=latest"
+
 	// Retry bounds for the known-benign Windows race handled by isTransientWindowsUnlinkError.
 	transientUnlinkRetries = 2
 	transientUnlinkDelay   = 2 * time.Second
@@ -48,7 +54,7 @@ func environment(name string) string {
 }
 
 func goCommandEnvironment(values ...string) []string {
-	return append([]string{cgoDisabled}, values...)
+	return append([]string{cgoDisabled, fips140Latest}, values...)
 }
 
 func writeStatus(format string, args ...any) error {

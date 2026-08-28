@@ -292,3 +292,36 @@ func TestGoCommandEnvironmentDisablesCGO(t *testing.T) {
 		t.Fatalf("CGO_ENABLED = %q, want 0", got)
 	}
 }
+
+// TestGoCommandEnvironmentSetsGOFIPS140 verifies acceptance-test binaries
+// link Go's native FIPS 140-3 crypto module by default, matching release
+// builds. See docs/prd/fips-140-mode.md.
+func TestGoCommandEnvironmentSetsGOFIPS140(t *testing.T) {
+	t.Setenv("GOFIPS140", "off")
+
+	output, err := newCommandRunner().output(t.Context(), t.TempDir(), goCommandEnvironment(), "go", "env", "GOFIPS140")
+	if err != nil {
+		t.Fatalf("read Go environment: %v", err)
+	}
+	if got := strings.TrimSpace(output); got != "latest" {
+		t.Fatalf("GOFIPS140 = %q, want latest", got)
+	}
+}
+
+func TestGoCommandEnvironmentIncludesExtraValues(t *testing.T) {
+	env := goCommandEnvironment("GOCOVERDIR=/tmp/coverage")
+
+	found := false
+	for _, entry := range env {
+		if entry == "GOCOVERDIR=/tmp/coverage" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("goCommandEnvironment(%q) = %v, want it to include the extra value", "GOCOVERDIR=/tmp/coverage", env)
+	}
+	if len(env) != 3 {
+		t.Fatalf("goCommandEnvironment with one extra value returned %d entries, want 3 (CGO_ENABLED, GOFIPS140, extra): %v", len(env), env)
+	}
+}
