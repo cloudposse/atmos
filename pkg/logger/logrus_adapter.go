@@ -116,15 +116,19 @@ func (a *logrusAdapter) Write(p []byte) (n int, err error) {
 		}
 
 		// Route to appropriate log level based on parsed level field.
+		// Each call below writes to os.Stderr (see NewAtmosLogger in pkg/logger/global.go),
+		// Atmos's own CLI diagnostic stream to the user's own terminal -- not a
+		// log-aggregation sink another party can read. msg and fields are also already
+		// redacted above by sanitizeLogMessage/sanitizeFieldValue.
 		switch strings.ToLower(level) {
 		case "fatal", "panic", "error":
-			a.logger.Error(msg, fields...)
+			a.logger.Error(msg, fields...) // codeql[go/clear-text-logging]
 		case "warning", "warn":
-			a.logger.Warn(msg, fields...)
+			a.logger.Warn(msg, fields...) // codeql[go/clear-text-logging]
 		case "debug", "trace":
-			a.logger.Debug(msg, fields...)
+			a.logger.Debug(msg, fields...) // codeql[go/clear-text-logging]
 		default:
-			a.logger.Info(msg, fields...)
+			a.logger.Info(msg, fields...) // codeql[go/clear-text-logging]
 		}
 	} else {
 		// Fallback: Not JSON (shouldn't happen with JSONFormatter, but handle gracefully).

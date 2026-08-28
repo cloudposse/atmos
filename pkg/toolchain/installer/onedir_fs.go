@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/archiveutil"
 )
 
 // materializeSymlinks creates archive symlinks after the tree is moved.
@@ -110,14 +112,10 @@ func materializeHardLinks(root string, links []pendingHardLink) error {
 
 // extractHardLink materializes a tar hard link relative to root.
 func extractHardLink(linkPath, linkname, dest string) error {
-	// linkname is an archive-relative target. Reject absolute targets explicitly
-	// (filepath.Join's handling of absolute paths differs across platforms), just
-	// as createValidatedSymlink does for symlinks.
-	if filepath.IsAbs(linkname) {
-		return fmt.Errorf("%w: absolute hard link target not allowed: %s -> %s", ErrFileOperation, linkPath, linkname)
-	}
-	target := filepath.Join(dest, linkname)
-	if !isSafePath(target, dest) {
+	// linkname is an archive-relative target; SafeJoin rejects absolute targets
+	// and any ".." traversal, just as createValidatedSymlink does for symlinks.
+	target, err := archiveutil.SafeJoin(dest, linkname)
+	if err != nil {
 		return fmt.Errorf("%w: illegal hard link target: %s -> %s", ErrFileOperation, linkPath, linkname)
 	}
 	if err := os.MkdirAll(filepath.Dir(linkPath), defaultMkdirPermissions); err != nil {

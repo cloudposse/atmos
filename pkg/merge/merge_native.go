@@ -4,20 +4,16 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/safenum"
 )
 
-// safeCap returns a capacity hint of a+b, clamped to maxCapHint to prevent
-// OOM panics from oversize make() calls.
-// The hint is only used for make() capacity; append() will grow the backing array as needed.
+// maxCapHint bounds the make() capacity hint safeCap returns, to prevent OOM
+// panics from oversize allocations. The hint is only used for make()
+// capacity; append() will grow the backing array as needed.
 const maxCapHint = 1 << 24 // 16 M entries — realistic upper bound for atmos configs
 
 func safeCap(a, b int) int {
-	// Guard against integer overflow: if b > maxCapHint-a, then a+b > maxCapHint.
-	// This single check is sufficient; no second guard is needed.
-	if b > maxCapHint-a {
-		return maxCapHint
-	}
-	return a + b
+	return safenum.Cap(a, b, maxCapHint)
 }
 
 // deepMergeNative performs a deep merge of src into dst in place.

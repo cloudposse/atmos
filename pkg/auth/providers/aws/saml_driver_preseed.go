@@ -23,6 +23,7 @@ import (
 	"github.com/playwright-community/playwright-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/archiveutil"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -343,8 +344,8 @@ func extractZipSingleEntry(archive []byte, entryName, destPath string) error {
 // safeDriverJoin joins an archive entry name onto the driver directory,
 // rejecting entries that would escape it.
 func safeDriverJoin(driverDir, entryName string) (string, error) {
-	diskPath := filepath.Join(driverDir, filepath.FromSlash(entryName))
-	if !strings.HasPrefix(diskPath, filepath.Clean(driverDir)+string(os.PathSeparator)) {
+	diskPath, err := archiveutil.SafeJoin(driverDir, entryName)
+	if err != nil {
 		return "", fmt.Errorf("%w: archive entry %q escapes the driver directory", errUtils.ErrPlaywrightDriverSeed, entryName)
 	}
 	return diskPath, nil

@@ -18,6 +18,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/gabriel-vasile/mimetype"
 
+	"github.com/cloudposse/atmos/pkg/archiveutil"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -342,8 +343,8 @@ func readZipSymlinkTarget(f *zip.File) (string, error) {
 }
 
 func validatePath(name, dest string) (string, error) {
-	fpath := filepath.Join(dest, name)
-	if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
+	fpath, err := archiveutil.SafeJoin(dest, name)
+	if err != nil {
 		return "", fmt.Errorf("%w: illegal file path: %s", ErrFileOperation, name)
 	}
 	return fpath, nil
@@ -441,9 +442,8 @@ func unpackTarGz(src, dest string) ([]pendingSymlink, []pendingHardLink, error) 
 }
 
 func extractEntry(tr *tar.Reader, header *tar.Header, dest string, symlinks *[]pendingSymlink, hardLinks *[]pendingHardLink) error {
-	//nolint:gosec // G305: Path is validated by isSafePath check on next line.
-	targetPath := filepath.Join(dest, header.Name)
-	if !isSafePath(targetPath, dest) {
+	targetPath, err := archiveutil.SafeJoin(dest, header.Name)
+	if err != nil {
 		return fmt.Errorf("%w: illegal file path: %s", ErrFileOperation, header.Name)
 	}
 
@@ -462,11 +462,6 @@ func extractEntry(tr *tar.Reader, header *tar.Header, dest string, symlinks *[]p
 		ui.Warningf("Skipping unknown type: %s", header.Name)
 		return nil
 	}
-}
-
-func isSafePath(path, dest string) bool {
-	cleanDest := filepath.Clean(dest) + string(os.PathSeparator)
-	return strings.HasPrefix(filepath.Clean(path), cleanDest)
 }
 
 func extractDir(path string, header *tar.Header) error {

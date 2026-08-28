@@ -296,41 +296,6 @@ func TestValidatePath(t *testing.T) {
 	}
 }
 
-func TestIsSafePath(t *testing.T) {
-	tests := []struct {
-		name     string
-		path     string
-		dest     string
-		expected bool
-	}{
-		{
-			name:     "safe path within dest",
-			path:     "/tmp/extract/subdir/file",
-			dest:     "/tmp/extract",
-			expected: true,
-		},
-		{
-			name:     "path outside dest",
-			path:     "/etc/passwd",
-			dest:     "/tmp/extract",
-			expected: false,
-		},
-		{
-			name:     "path traversal",
-			path:     "/tmp/extract/../../../etc/passwd",
-			dest:     "/tmp/extract",
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isSafePath(tt.path, tt.dest)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestFindBinaryInDir(t *testing.T) {
 	t.Run("finds binary in root", func(t *testing.T) {
 		tmpDir := t.TempDir()

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/archiveutil"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
 )
 
@@ -59,14 +60,9 @@ func extractZip(reader io.Reader, extractPath string) error {
 // processZipFile processes a zip.File entry and writes the corresponding file
 // to the destination directory.
 func processZipFile(file *zip.File, extractPath string) error {
-	// Normalize and clean the extraction base path to remove any redundant separators or ".." sequences.
-	cleanExtractPath := filepath.Clean(extractPath)
-	// Clean the file path inside the archive to prevent directory traversal attacks.
-	cleanFileName := filepath.Clean(file.Name)
-	filePath := filepath.Join(cleanExtractPath, cleanFileName)
-	// Ensure the target path is within the intended extraction directory.
-	if !strings.HasPrefix(filePath, cleanExtractPath) {
-		return fmt.Errorf("%w: %s", ErrInvalidFilePath, filePath)
+	filePath, err := archiveutil.SafeJoin(extractPath, file.Name)
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalidFilePath, file.Name)
 	}
 
 	if file.FileInfo().IsDir() {

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/archiveutil"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
 	"github.com/pkg/errors"
 )
@@ -47,15 +48,9 @@ func untar(reader io.Reader, extractPath string) error {
 
 // processTarHeader processes a tar header and writes the corresponding file to the destination directory.
 func processTarHeader(header *tar.Header, tarReader *tar.Reader, extractPath string) error {
-	// Normalize and clean the extraction base path to remove any redundant separators or ".." sequences.
-	cleanExtractPath := filepath.Clean(extractPath)
-	// Clean the file path inside the archive to prevent directory traversal attacks.
-	cleanHeaderName := filepath.Clean(header.Name)
-	// Clean the file path inside the archive to prevent directory traversal attacks.
-	filePath := filepath.Join(cleanExtractPath, cleanHeaderName)
-	// Ensure the target path is within the intended extraction directory.
-	if !strings.HasPrefix(filePath, cleanExtractPath) {
-		return fmt.Errorf("%w: %s", ErrInvalidFilePath, filePath)
+	filePath, err := archiveutil.SafeJoin(extractPath, header.Name)
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalidFilePath, header.Name)
 	}
 	switch header.Typeflag {
 	case tar.TypeDir:
