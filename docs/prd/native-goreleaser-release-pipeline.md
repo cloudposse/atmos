@@ -126,8 +126,10 @@ checkout (fetch-depth: 0, needed for changelog + tag history)
   → upload dist/ as a workflow artifact (debugging, short retention)
 ```
 
-Everything above the `cloudsmith-cli push` line is one GoReleaser invocation, but that invocation itself
-fans out to several independent external publishers, not one atomic operation: builds, archives, checksums,
+The `goreleaser/goreleaser-action` step is one GoReleaser invocation (the syft step immediately after it
+is a separate, independent step against the pushed image digest, not part of that invocation — see
+above), but the invocation itself fans out to several independent external publishers, not one atomic
+operation: builds, archives, checksums,
 `nfpms:` packages, Homebrew tap push (`homebrew_casks:`), Docker multi-arch build+push
 (`dockers_v2:`, which builds and pushes a single multi-platform manifest directly — no separate
 `docker_manifests:` step needed), cosign signing of the checksums file (`signs:`, keyless/OIDC — no static
