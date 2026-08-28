@@ -1,6 +1,7 @@
 package lockfile
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -19,6 +20,10 @@ const (
 	dirPermissions = 0o755
 	// FilePermissions is the default permission for files.
 	filePermissions = 0o644
+	// YamlIndent matches pkg/utils.DefaultYAMLIndent. It's duplicated here (rather than
+	// importing pkg/utils) to avoid an import cycle: pkg/utils imports pkg/version, which
+	// imports pkg/toolchain.
+	yamlIndent = 2
 )
 
 // Error definitions for the lockfile package.
@@ -224,7 +229,7 @@ func Save(filePath string, lockFile *LockFile) error {
 	lockFile.Metadata.AtmosVersion = atmosVersion()
 	lockFile.Metadata.Platform = runtime.GOOS + "_" + runtime.GOARCH
 
-	data, err := yaml.Marshal(lockFile)
+	data, err := marshalYAMLIndented(lockFile)
 	if err != nil {
 		return fmt.Errorf("failed to marshal lock file: %w", err)
 	}
@@ -248,6 +253,22 @@ func Save(filePath string, lockFile *LockFile) error {
 	}
 
 	return nil
+}
+
+// marshalYAMLIndented marshals v with the repo's 2-space YAML indent standard. A bare
+// yaml.Marshal defaults to yaml.v3's 4-space indent, which drifted toolchain.lock.yaml away
+// from every other Atmos-generated YAML file.
+func marshalYAMLIndented(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(yamlIndent)
+	if err := encoder.Encode(v); err != nil {
+		return nil, err
+	}
+	if err := encoder.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // atmosVersion reads build metadata without importing pkg/version. Keeping the
