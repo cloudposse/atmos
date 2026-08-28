@@ -810,8 +810,10 @@ func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 	// session_windows.go) can itself take several seconds under
 	// sharded/parallel CI load before any scripted action even runs, and the
 	// subsequent write->echo->match round trip needs more headroom than a
-	// local run would suggest. Both the overall context and each "wait"
-	// action's own timeout need real margin.
+	// local run would suggest. The outer context must also exceed the wait
+	// step's own timeout with margin, or it silently caps the wait short
+	// regardless of what the step's Timeout says (see waitForOutput's race
+	// between ctx.Done() and the step's own deadline timer).
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	err = RunSession(ctx, &SessionOptions{
@@ -821,7 +823,7 @@ func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 		Actions: []SessionAction{
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: "8s"},
+			{Type: "wait", Text: "ready", Timeout: "10s"},
 		},
 	})
 	if err != nil {
@@ -845,11 +847,12 @@ func TestRunSessionAppliesDirectoryAndEnvironment(t *testing.T) {
 	cwdPattern := "cwd=(" + regexp.QuoteMeta(dir) + "|" + regexp.QuoteMeta(expectedDir) + ")"
 	t.Setenv(asciicastSessionHelperEnv, "1")
 
-	// See the matching comment in TestRunSessionExecutesScriptedShellActions:
-	// Windows CI needs more headroom than Unix both for spawning the real
-	// child process and for the write -> echo -> match round trip, for the
-	// overall context and each "wait" action's own timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	// See the matching comment in TestRunSessionExecutesScriptedShellActions.
+	// This test has two sequential "wait" steps, so the outer context must
+	// exceed the *sum* of both steps' own timeouts with margin, or it
+	// silently caps the second wait short regardless of what its own
+	// Timeout says.
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	err = RunSession(ctx, &SessionOptions{
 		Shell: shell,
@@ -866,8 +869,8 @@ func TestRunSessionAppliesDirectoryAndEnvironment(t *testing.T) {
 			{Type: "pause", Duration: "300ms"},
 			{Type: "write", Text: "print context", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Regex: cwdPattern, Timeout: "8s"},
-			{Type: "wait", Text: "marker=from-session", Timeout: "8s"},
+			{Type: "wait", Regex: cwdPattern, Timeout: "10s"},
+			{Type: "wait", Text: "marker=from-session", Timeout: "10s"},
 		},
 	})
 	if err != nil {

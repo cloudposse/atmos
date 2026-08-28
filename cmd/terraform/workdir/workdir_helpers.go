@@ -81,8 +81,9 @@ type WorkdirManager interface {
 	// provWorkdir.BuildPath; see GetWorkdirInfo's doc comment. May be nil.
 	CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack string, componentConfig map[string]any) error
 
-	// CleanAllWorkdirs removes all workdirs.
-	CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error
+	// CleanAllWorkdirs removes all workdirs. If dryRun is true, only reports what would be
+	// cleaned.
+	CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration, dryRun bool) error
 
 	// CleanExpiredWorkdirs removes workdirs older than the specified TTL.
 	// If dryRun is true, only reports what would be cleaned.
@@ -314,26 +315,14 @@ func (m *DefaultWorkdirManager) CleanWorkdir(atmosConfig *schema.AtmosConfigurat
 	return nil
 }
 
-// CleanAllWorkdirs removes all workdirs.
-func (m *DefaultWorkdirManager) CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error {
+// CleanAllWorkdirs removes all workdirs. If dryRun is true, only reports what would be cleaned.
+// Delegates to provWorkdir.CleanAllWorkdirs -- the single canonical implementation -- the same
+// way CleanExpiredWorkdirs below already delegates to provWorkdir.CleanExpiredWorkdirs, rather
+// than reimplementing removal (and dryRun handling) a second time here.
+func (m *DefaultWorkdirManager) CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration, dryRun bool) error {
 	defer perf.Track(atmosConfig, "workdir.CleanAllWorkdirs")()
 
-	workdirBase := filepath.Join(atmosConfig.BasePath, provWorkdir.WorkdirPath, terraformSubdir)
-
-	// Check if workdir directory exists.
-	if _, err := os.Stat(workdirBase); os.IsNotExist(err) {
-		return nil // Nothing to clean.
-	}
-
-	if err := os.RemoveAll(workdirBase); err != nil {
-		return errUtils.Build(errUtils.ErrWorkdirClean).
-			WithCause(err).
-			WithExplanation("Failed to remove all workdirs").
-			WithContext("path", workdirBase).
-			Err()
-	}
-
-	return nil
+	return provWorkdir.CleanAllWorkdirs(atmosConfig, dryRun)
 }
 
 // CleanExpiredWorkdirs removes workdirs older than the specified TTL.

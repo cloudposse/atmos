@@ -61,10 +61,10 @@ Clean workdirs that haven't been accessed in a week:
 
 ```bash
 $ atmos terraform workdir clean --expired --ttl=7d
-Cleaning expired workdirs (TTL: 7d)...
-  ✓ Removed dev-nginx (last accessed 14 days ago)
-  ✓ Removed staging-api (last accessed 10 days ago)
-Cleaned 2 expired workdirs
+Cleaning 2 expired workdir(s) (TTL: 7d)...
+✓ Removed dev-nginx-cfcfbd1f (last accessed 14d 2h ago)
+✓ Removed staging-api-c28f3444 (last accessed 10d 5h ago)
+Cleaned 2 expired workdir(s)
 ```
 
 Preview what would be cleaned with dry-run:
@@ -72,8 +72,8 @@ Preview what would be cleaned with dry-run:
 ```bash
 $ atmos terraform workdir clean --expired --ttl=7d --dry-run
 Dry run: would clean 2 expired workdir(s) (TTL: 7d):
-  - dev-nginx (last accessed 14d 2h)
-  - staging-api (last accessed 10d 5h)
+dev-nginx-cfcfbd1f (last accessed 14d 2h ago)
+staging-api-c28f3444 (last accessed 10d 5h ago)
 ```
 
 ### Enhanced Workdir Information
@@ -84,13 +84,13 @@ View detailed workdir information:
 $ atmos terraform workdir show vpc --stack dev
 ✓ Workdir Status
 
-  Name            dev-vpc
+  Name            dev-vpc-bb03116d
   Component       vpc
   Stack           dev
   Source Type     remote
   Source URI      github.com/cloudposse/terraform-aws-vpc//src
   Source Version  0.25.0
-  Path            .workdir/terraform/dev-vpc
+  Path            .workdir/terraform/dev-vpc-bb03116d
   Created         2026-01-20 10:00:00 UTC
   Updated         2026-01-22 14:30:00 UTC
   Last Accessed   2026-01-22 14:30:00 UTC
@@ -101,8 +101,8 @@ List workdirs with version and access information:
 ```bash
 $ atmos terraform workdir list
 COMPONENT   STACK   TYPE     VERSION   LAST_ACCESSED        PATH
-vpc         dev     remote   0.25.0    2026-01-22 14:30     .workdir/terraform/dev-vpc
-my-local    dev     local    -         2026-01-22 10:15     .workdir/terraform/dev-my-local
+vpc         dev     remote   0.25.0    2026-01-22 14:30     .workdir/terraform/dev-vpc-bb03116d
+my-local    dev     local    -         2026-01-22 10:15     .workdir/terraform/dev-my-local-f5cd33a0
 ```
 
 ## TTL Format
