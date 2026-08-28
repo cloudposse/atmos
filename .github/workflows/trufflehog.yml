@@ -39,4 +39,11 @@ jobs:
       - name: TruffleHog
         uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318 # v3.97.0
         with:
+          # The action's own docker invocation defaults to the mutable
+          # ghcr.io/trufflesecurity/trufflehog:latest tag; pin image+version to
+          # the immutable digest for the scanner image matching this action's
+          # pinned v3.97.0 release, so the actual scanning binary is SHA-pinned
+          # too, not just the action wrapper.
+          image: ghcr.io/trufflesecurity/trufflehog@sha256
+          version: ff4c95e9df7d645daf2140e3ca1039031c63106268d5fbb25feb43ceca1bcc33
           extra_args: --results=verified

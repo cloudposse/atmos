@@ -105,6 +105,6 @@ repos:
   # Local complement to the TruffleHog CI scan (.github/workflows/trufflehog.yml):
   # catches secrets before they're committed, not just before they're pushed.
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.30.1
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # v8.30.1
     hooks:
       - id: gitleaks
