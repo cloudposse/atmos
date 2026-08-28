@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -496,6 +497,54 @@ config:
 
 	require.NoError(t, err)
 	assert.Contains(t, result, "test")
+}
+
+// TestProcessTmplWithDatasources_DelimitersExplicitEmptyResetsToDefault tests that a stack
+// manifest explicitly setting `delimiters: []` resets to Go's default "{{"/"}}" rather than
+// falling back to the CLI config's custom delimiters. Loads the empty value through real YAML
+// unmarshaling (not a Go literal) because yaml.v3 decodes `delimiters: []` into a non-nil,
+// zero-length slice distinct from an absent key (which stays nil) -- the two must be
+// distinguishable for "stack didn't set it, defer to CLI" vs "stack explicitly reset it" to work.
+func TestProcessTmplWithDatasources_DelimitersExplicitEmptyResetsToDefault(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled:    true,
+				Delimiters: []string{"[[", "]]"},
+			},
+		},
+	}
+
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
+
+	var settingsSection schema.Settings
+	err := yaml.Unmarshal([]byte(`
+templates:
+  settings:
+    delimiters: []
+`), &settingsSection)
+	require.NoError(t, err)
+	require.NotNil(t, settingsSection.Templates.Settings.Delimiters, "delimiters: [] must decode to a non-nil empty slice, not nil")
+	require.Empty(t, settingsSection.Templates.Settings.Delimiters)
+
+	tmplValue := `
+config:
+  value: '{{ .name }}'
+`
+	tmplData := map[string]any{"name": "test"}
+
+	result, err := ProcessTmplWithDatasources(
+		atmosConfig,
+		configAndStacksInfo,
+		settingsSection,
+		"test-delimiters-explicit-reset",
+		tmplValue,
+		tmplData,
+		true,
+	)
+
+	require.NoError(t, err)
+	assert.Contains(t, result, "test", "explicit delimiters: [] should render with Go's default {{ }}, not the CLI's [[ ]]")
 }
 
 // TestProcessTmplWithDatasources_EnvVarsInEvaluationLoop tests that env vars are

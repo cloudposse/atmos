@@ -70,12 +70,7 @@ func ProcessTmpl(
 	}
 	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
 
-	leftDelimiter, rightDelimiter, err := resolveTemplateDelimiters(cfg.Templates.Settings.Delimiters)
-	if err != nil {
-		return "", err
-	}
-
-	t, err := template.New(tmplName).Funcs(funcs).Delims(leftDelimiter, rightDelimiter).Parse(tmplValue)
+	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
 		return "", err
 	}
@@ -325,14 +320,15 @@ func ProcessTmplWithDatasources(
 		// Process the template
 		t := template.New(tmplName).Funcs(funcs)
 
-		// templateSettings.Delimiters comes from the merge.Merge above, which encodes both
-		// sides through mapstructure first -- so an unset stack-level Delimiters (nil) becomes
-		// an explicit "delimiters: []" key that wins the merge over a populated CLI-level
-		// value, same root cause as Env's mapstructure:"-" workaround a few lines up. Fall back
-		// to the CLI-level config so a stack manifest that doesn't set delimiters at all doesn't
-		// silently revert to Go's default "{{"/"}}".
-		configuredDelimiters := templateSettings.Delimiters
-		if len(configuredDelimiters) == 0 {
+		// Read delimiters from the pre-merge struct fields directly, not templateSettings
+		// (decoded from the merge.Merge above): that merge encodes both sides through
+		// mapstructure first, so an unset stack-level Delimiters (nil) becomes an explicit
+		// "delimiters: []" key indistinguishable from a stack manifest that deliberately sets
+		// `delimiters: []` to reset to Go's default "{{"/"}}" -- same root cause as Env's
+		// mapstructure:"-" workaround a few lines up. Stack-level nil means "not set, defer to
+		// CLI config"; stack-level non-nil (including explicitly empty) means "stack decides."
+		configuredDelimiters := settingsSection.Templates.Settings.Delimiters
+		if configuredDelimiters == nil {
 			configuredDelimiters = atmosConfig.Templates.Settings.Delimiters
 		}
 

@@ -8,8 +8,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Unix-specific test moved to template_utils_unix_test.go:
@@ -223,42 +221,6 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
 	}
 	expected = "Project: Atmos"
-	if result != expected {
-		t.Errorf("Expected result to be %q, got %q", expected, result)
-	}
-}
-
-// TestProcessTmpl_HonorsCustomDelimiters tests that ProcessTmpl parses templates using the
-// configured templates.settings.delimiters, not Go's hardcoded default "{{"/"}}". Without
-// this, a project configured with custom delimiters would have expressions in this code path
-// (e.g. name templates, import paths, vendor sources) emitted as plain text instead of
-// evaluated -- see IsGolangTemplate, which needs the same treatment for the same reason.
-func TestProcessTmpl_HonorsCustomDelimiters(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{
-		Templates: schema.Templates{
-			Settings: schema.TemplatesSettings{
-				Delimiters: []string{"[[", "]]"},
-			},
-		},
-	}
-
-	result, err := ProcessTmpl(atmosConfig, "test-custom-delimiters", "Hello [[ .name ]]!", map[string]any{"name": "Atmos"}, false)
-	if err != nil {
-		t.Fatalf("ProcessTmpl returned error: %v", err)
-	}
-	expected := "Hello Atmos!"
-	if result != expected {
-		t.Errorf("Expected result to be %q, got %q", expected, result)
-	}
-
-	// Default Go template delimiters must still be rejected as literal text once custom
-	// delimiters are configured, confirming Delims() actually took effect rather than the
-	// default parser also matching by coincidence.
-	result, err = ProcessTmpl(atmosConfig, "test-default-delims-not-evaluated", "Hello {{ .name }}!", map[string]any{"name": "Atmos"}, false)
-	if err != nil {
-		t.Fatalf("ProcessTmpl returned error: %v", err)
-	}
-	expected = "Hello {{ .name }}!"
 	if result != expected {
 		t.Errorf("Expected result to be %q, got %q", expected, result)
 	}
