@@ -27,6 +27,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
@@ -175,10 +176,11 @@ func Save(config *schema.AtmosConfiguration, lock *LockFile) error {
 	if err := normalizeSaveArtifacts(config, lock); err != nil {
 		return err
 	}
-	data, err := yaml.Marshal(lock)
+	y, err := utils.ConvertToYAML(lock, utils.YAMLOptions{Indent: utils.DefaultYAMLIndent})
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, ErrMarshalVendorLock, err)
 	}
+	data := []byte(y)
 	return writeLockFileAtomically(Path(config), data)
 }
 
