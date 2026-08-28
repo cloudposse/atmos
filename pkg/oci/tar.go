@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/archiveutil"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
 	"github.com/pkg/errors"
 )
@@ -48,7 +48,7 @@ func untar(reader io.Reader, extractPath string) error {
 
 // processTarHeader processes a tar header and writes the corresponding file to the destination directory.
 func processTarHeader(header *tar.Header, tarReader *tar.Reader, extractPath string) error {
-	filePath, err := archiveutil.SafeJoin(extractPath, header.Name)
+	filePath, err := filesystem.SafeJoin(extractPath, header.Name)
 	if err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidFilePath, header.Name)
 	}

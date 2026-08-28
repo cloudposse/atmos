@@ -18,7 +18,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/gabriel-vasile/mimetype"
 
-	"github.com/cloudposse/atmos/pkg/archiveutil"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -343,7 +343,7 @@ func readZipSymlinkTarget(f *zip.File) (string, error) {
 }
 
 func validatePath(name, dest string) (string, error) {
-	fpath, err := archiveutil.SafeJoin(dest, name)
+	fpath, err := filesystem.SafeJoin(dest, name)
 	if err != nil {
 		return "", fmt.Errorf("%w: illegal file path: %s", ErrFileOperation, name)
 	}
@@ -442,7 +442,7 @@ func unpackTarGz(src, dest string) ([]pendingSymlink, []pendingHardLink, error) 
 }
 
 func extractEntry(tr *tar.Reader, header *tar.Header, dest string, symlinks *[]pendingSymlink, hardLinks *[]pendingHardLink) error {
-	targetPath, err := archiveutil.SafeJoin(dest, header.Name)
+	targetPath, err := filesystem.SafeJoin(dest, header.Name)
 	if err != nil {
 		return fmt.Errorf("%w: illegal file path: %s", ErrFileOperation, header.Name)
 	}

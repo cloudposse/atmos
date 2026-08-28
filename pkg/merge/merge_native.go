@@ -10,7 +10,7 @@ import (
 // maxCapHint bounds the make() capacity hint safeCap returns, to prevent OOM
 // panics from oversize allocations. The hint is only used for make()
 // capacity; append() will grow the backing array as needed.
-const maxCapHint = 1 << 24 // 16 M entries — realistic upper bound for atmos configs
+const maxCapHint = 1 << 24 // 16 M entries — realistic upper bound for atmos configs.
 
 func safeCap(a, b int) int {
 	return safenum.Cap(a, b, maxCapHint)

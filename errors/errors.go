@@ -896,7 +896,7 @@ var (
 	ErrComputeRelativePath = errors.New("failed to compute relative path")
 	ErrFileOperation       = errors.New("file operation failed")
 
-	// Archive extraction safety errors (pkg/archiveutil).
+	// Archive extraction safety errors (pkg/filesystem).
 	ErrArchiveEntryEscapesDest = errors.New("archive entry escapes destination directory")
 
 	// OCI/Container image errors.

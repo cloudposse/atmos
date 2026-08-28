@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/archiveutil"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
 )
 
@@ -60,7 +60,7 @@ func extractZip(reader io.Reader, extractPath string) error {
 // processZipFile processes a zip.File entry and writes the corresponding file
 // to the destination directory.
 func processZipFile(file *zip.File, extractPath string) error {
-	filePath, err := archiveutil.SafeJoin(extractPath, file.Name)
+	filePath, err := filesystem.SafeJoin(extractPath, file.Name)
 	if err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidFilePath, file.Name)
 	}

@@ -1,9 +1,4 @@
-// Package archiveutil provides shared safety helpers for extracting archive
-// entries (zip, tar) to the filesystem. It is intentionally a leaf package
-// (depending only on errors/perf) so every archive-extracting package in the
-// module -- including pkg/oci, which pkg/archive transitively depends on via
-// pkg/downloader -- can import it without an import cycle.
-package archiveutil
+package filesystem
 
 import (
 	"fmt"
@@ -34,7 +29,7 @@ import (
 // empirically closing alert #5230 and must not be refactored into a shared
 // call.
 func SafeJoin(destDir, entryName string) (string, error) {
-	defer perf.Track(nil, "archiveutil.SafeJoin")()
+	defer perf.Track(nil, "filesystem.SafeJoin")()
 
 	if filepath.IsAbs(entryName) || strings.HasPrefix(entryName, "/") || strings.HasPrefix(entryName, "\\") {
 		return "", fmt.Errorf(errUtils.ErrWrapWithNameFormat, errUtils.ErrArchiveEntryEscapesDest, entryName)
@@ -53,10 +48,14 @@ func SafeJoin(destDir, entryName string) (string, error) {
 
 	// Defense in depth: given the guards above (no absolute path, no backslash, no ".."
 	// component), Join+Clean of destDir with a purely relative, dot-dot-free entry name
-	// can never actually escape destDir, so this branch is unreachable in practice. It's
-	// kept anyway as a second, independent check in case a future edit weakens or
-	// reorders the guards above.
-	if target != cleanDestDir && !strings.HasPrefix(target, cleanDestDir+string(os.PathSeparator)) {
+	// can never actually let target escape destDir. This re-verifies that via
+	// filepath.Rel rather than a string-prefix comparison, since a naive
+	// `strings.HasPrefix(target, cleanDestDir+separator)` check incorrectly rejects a
+	// valid target when cleanDestDir is a root path with no room for a trailing
+	// separator to appear before the next path segment (destDir "." or "" -> cleanDestDir
+	// "." with target "file", or destDir "/" with target "/file").
+	rel, err := filepath.Rel(cleanDestDir, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 		return "", fmt.Errorf(errUtils.ErrWrapWithNameFormat, errUtils.ErrArchiveEntryEscapesDest, entryName)
 	}
 
