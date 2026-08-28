@@ -80,6 +80,7 @@ jobs:
           echo "$PWD/build" >> "$GITHUB_PATH"
         env:
           CGO_ENABLED: "0"
+          GOFIPS140: latest
 
       - name: Regenerate screengrab casts
         run: |
