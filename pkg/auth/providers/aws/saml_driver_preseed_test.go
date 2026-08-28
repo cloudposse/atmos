@@ -365,13 +365,40 @@ func TestExtractNpmPackageFailures(t *testing.T) {
 	}
 }
 
+// TestExtractNpmPackage_RejectsWriteThroughPreExistingSymlink is a
+// regression test for CWE-59 (symlink-following): safeDriverJoin only
+// validates an entry name lexically, so before extraction switched to
+// os.Root, a pre-existing symlink inside driverDir pointing outside it let a
+// plain-looking entry name like "package/link/evil.txt" escape driverDir via
+// os.MkdirAll/os.OpenFile following the symlink -- os.Root refuses to resolve
+// a path through a symlink that would leave the root.
+func TestExtractNpmPackage_RejectsWriteThroughPreExistingSymlink(t *testing.T) {
+	driverDir := t.TempDir()
+	outside := t.TempDir()
+	// Extracted entries live under "package/" (extractNpmPackage's own
+	// top-level-directory convention), so the symlink must sit there too.
+	require.NoError(t, os.MkdirAll(filepath.Join(driverDir, "package"), 0o755))
+	require.NoError(t, os.Symlink(outside, filepath.Join(driverDir, "package", "link")))
+
+	body := makeTgz(t, map[string]string{"package/link/evil.txt": "escaped"})
+	err := extractNpmPackage(body, driverDir)
+	require.Error(t, err)
+
+	_, statErr := os.Stat(filepath.Join(outside, "evil.txt"))
+	assert.True(t, os.IsNotExist(statErr), "entry must not be written through the symlink to outside")
+}
+
 func TestExtractNpmPackageWriteFailure(t *testing.T) {
 	driverDir := filepath.Join(t.TempDir(), "driver-file")
 	require.NoError(t, os.WriteFile(driverDir, []byte("not a directory"), 0o644))
 
+	// extractNpmPackage now creates/opens driverDir as an os.Root up front (for
+	// symlink-safe writes), so a driverDir that's actually a file fails there,
+	// earlier and more specifically than the old "could not create directory"
+	// error from deep inside writePreseedFile.
 	err := extractNpmPackage(makeTgz(t, map[string]string{"package/cli.js": "cli"}), driverDir)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "could not create directory")
+	assert.Contains(t, err.Error(), "could not create driver directory")
 }
 
 func TestSeedNodeBinaryShortCircuits(t *testing.T) {
@@ -437,48 +464,59 @@ func TestVerifyNodeChecksumDownloadFailure(t *testing.T) {
 }
 
 func TestExtractTarGzSingleEntryFailures(t *testing.T) {
-	destPath := filepath.Join(t.TempDir(), "node")
+	driverDir := t.TempDir()
 
-	err := extractTarGzSingleEntry([]byte("not a gzip"), "node/bin/node", destPath)
+	err := extractTarGzSingleEntry([]byte("not a gzip"), "node/bin/node", driverDir, "node")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not read Node.js archive")
 
-	err = extractTarGzSingleEntry(makeGzip(t, "not a tar stream"), "node/bin/node", destPath)
+	err = extractTarGzSingleEntry(makeGzip(t, "not a tar stream"), "node/bin/node", driverDir, "node")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not read Node.js archive")
 
-	err = extractTarGzSingleEntry(makeTgz(t, map[string]string{"other": "content"}), "node/bin/node", destPath)
+	err = extractTarGzSingleEntry(makeTgz(t, map[string]string{"other": "content"}), "node/bin/node", driverDir, "node")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
 	assert.Contains(t, err.Error(), "entry node/bin/node not found")
 }
 
 func TestExtractZipSingleEntry(t *testing.T) {
-	destPath := filepath.Join(t.TempDir(), "node.exe")
-	err := extractZipSingleEntry(makeZip(t, map[string]string{"node/node.exe": "zip node"}), "node/node.exe", destPath)
+	driverDir := t.TempDir()
+	err := extractZipSingleEntry(makeZip(t, map[string]string{"node/node.exe": "zip node"}), "node/node.exe", driverDir, "node.exe")
 	require.NoError(t, err)
-	body, err := os.ReadFile(destPath)
+	body, err := os.ReadFile(filepath.Join(driverDir, "node.exe"))
 	require.NoError(t, err)
 	assert.Equal(t, "zip node", string(body))
 
-	err = extractZipSingleEntry(makeZip(t, map[string]string{"other": "content"}), "node/node.exe", filepath.Join(t.TempDir(), "missing.exe"))
+	err = extractZipSingleEntry(makeZip(t, map[string]string{"other": "content"}), "node/node.exe", t.TempDir(), "missing.exe")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
 	assert.Contains(t, err.Error(), "entry node/node.exe not found")
 
-	err = extractZipSingleEntry([]byte("not a zip"), "node/node.exe", filepath.Join(t.TempDir(), "bad.exe"))
+	err = extractZipSingleEntry([]byte("not a zip"), "node/node.exe", t.TempDir(), "bad.exe")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not read Node.js archive")
 }
 
 func TestWritePreseedFileCopyError(t *testing.T) {
-	err := writePreseedFile(filepath.Join(t.TempDir(), "node"), errorReader{}, preseedFileMode)
+	root, err := os.OpenRoot(t.TempDir())
+	require.NoError(t, err)
+	defer root.Close()
+
+	err = writePreseedFile(root, "node", errorReader{}, preseedFileMode)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not write file")
 }
 
 func TestWritePreseedFileOpenError(t *testing.T) {
-	err := writePreseedFile(t.TempDir(), bytes.NewReader([]byte("node")), preseedFileMode)
+	outer := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(outer, "innerdir"), 0o755))
+	root, err := os.OpenRoot(outer)
+	require.NoError(t, err)
+	defer root.Close()
+
+	// "innerdir" already exists as a directory, so opening it as a file fails.
+	err = writePreseedFile(root, "innerdir", bytes.NewReader([]byte("node")), preseedFileMode)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not create file")
 }

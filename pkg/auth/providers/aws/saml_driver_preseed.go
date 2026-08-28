@@ -141,12 +141,24 @@ func verifyNpmIntegrity(body []byte, integrity string) error {
 
 // extractNpmPackage extracts the regular files under the tarball's top-level
 // package/ directory into driverDir, preserving file modes.
+//
+// Writes go through an os.Root opened on driverDir rather than plain
+// os.MkdirAll/os.OpenFile: safeDriverJoin only validates the entry name
+// lexically, so without os.Root a pre-existing symlink inside driverDir
+// pointing outside it could let an entry's write escape driverDir -- os.Root's
+// methods refuse to resolve a path that escapes the root, symlinks included.
 func extractNpmPackage(tgz []byte, driverDir string) error {
 	gzReader, err := gzip.NewReader(bytes.NewReader(tgz))
 	if err != nil {
 		return fmt.Errorf("could not read playwright-core archive: %w", err)
 	}
 	defer gzReader.Close()
+
+	root, err := openPreseedRoot(driverDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
 
 	tarReader := tar.NewReader(gzReader)
 	extracted := false
@@ -163,11 +175,13 @@ func extractNpmPackage(tgz []byte, driverDir string) error {
 		if header.Typeflag != tar.TypeReg || !strings.HasPrefix(header.Name, "package/") {
 			continue
 		}
-		diskPath, err := safeDriverJoin(driverDir, header.Name)
-		if err != nil {
+		// safeDriverJoin's returned absolute path isn't used since writes go
+		// through root by relative name instead; only the validation matters here.
+		if _, err := safeDriverJoin(driverDir, header.Name); err != nil {
 			return err
 		}
-		if err := writePreseedFile(diskPath, tarReader, header.FileInfo().Mode()); err != nil {
+		relPath := filepath.FromSlash(header.Name)
+		if err := writePreseedFile(root, relPath, tarReader, header.FileInfo().Mode()); err != nil {
 			return err
 		}
 		extracted = true
@@ -218,10 +232,10 @@ func seedNodeBinary(driverDir string) error {
 	log.Debug("Seeding Playwright driver Node.js runtime", "archive", archiveName, "dir", driverDir)
 	if runtime.GOOS == windowsOS {
 		// The Windows archive is a zip with node.exe at "<archiveDir>/node.exe".
-		return extractZipSingleEntry(body, archiveDir+"/node.exe", nodePath)
+		return extractZipSingleEntry(body, archiveDir+"/node.exe", driverDir, nodeName)
 	}
 	// Unix archives are gzipped tars with the binary at "<archiveDir>/bin/node".
-	return extractTarGzSingleEntry(body, archiveDir+"/bin/node", nodePath)
+	return extractTarGzSingleEntry(body, archiveDir+"/bin/node", driverDir, nodeName)
 }
 
 // verifyNodeChecksum checks a nodejs.org archive against the release's
@@ -296,13 +310,19 @@ func hostUsesMuslLibc() bool {
 }
 
 // extractTarGzSingleEntry extracts one named entry from a gzipped tar into
-// destPath as an executable file.
-func extractTarGzSingleEntry(archive []byte, entryName, destPath string) error {
+// relDestPath (relative to driverDir) as an executable file.
+func extractTarGzSingleEntry(archive []byte, entryName, driverDir, relDestPath string) error {
 	gzReader, err := gzip.NewReader(bytes.NewReader(archive))
 	if err != nil {
 		return fmt.Errorf("could not read Node.js archive: %w", err)
 	}
 	defer gzReader.Close()
+
+	root, err := openPreseedRoot(driverDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
 
 	tarReader := tar.NewReader(gzReader)
 	for {
@@ -314,19 +334,26 @@ func extractTarGzSingleEntry(archive []byte, entryName, destPath string) error {
 			return fmt.Errorf("could not read Node.js archive: %w", err)
 		}
 		if header.Typeflag == tar.TypeReg && header.Name == entryName {
-			return writePreseedFile(destPath, tarReader, preseedFileMode)
+			return writePreseedFile(root, relDestPath, tarReader, preseedFileMode)
 		}
 	}
 	return fmt.Errorf("%w: entry %s not found in Node.js archive", errUtils.ErrPlaywrightDriverSeed, entryName)
 }
 
-// extractZipSingleEntry extracts one named entry from a zip into destPath as an
-// executable file.
-func extractZipSingleEntry(archive []byte, entryName, destPath string) error {
+// extractZipSingleEntry extracts one named entry from a zip into relDestPath
+// (relative to driverDir) as an executable file.
+func extractZipSingleEntry(archive []byte, entryName, driverDir, relDestPath string) error {
 	zipReader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
 	if err != nil {
 		return fmt.Errorf("could not read Node.js archive: %w", err)
 	}
+
+	root, err := openPreseedRoot(driverDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+
 	for _, zipFile := range zipReader.File {
 		if zipFile.Name != entryName {
 			continue
@@ -336,9 +363,22 @@ func extractZipSingleEntry(archive []byte, entryName, destPath string) error {
 			return fmt.Errorf("could not open Node.js archive entry: %w", err)
 		}
 		defer file.Close()
-		return writePreseedFile(destPath, file, preseedFileMode)
+		return writePreseedFile(root, relDestPath, file, preseedFileMode)
 	}
 	return fmt.Errorf("%w: entry %s not found in Node.js archive", errUtils.ErrPlaywrightDriverSeed, entryName)
+}
+
+// openPreseedRoot creates driverDir if needed and opens it as an os.Root, so
+// writePreseedFile's writes cannot follow a symlink out of driverDir.
+func openPreseedRoot(driverDir string) (*os.Root, error) {
+	if err := os.MkdirAll(driverDir, preseedFileMode); err != nil {
+		return nil, fmt.Errorf("could not create driver directory: %w", err)
+	}
+	root, err := os.OpenRoot(driverDir)
+	if err != nil {
+		return nil, fmt.Errorf("could not open driver directory root: %w", err)
+	}
+	return root, nil
 }
 
 // safeDriverJoin joins an archive entry name onto the driver directory,
@@ -351,12 +391,13 @@ func safeDriverJoin(driverDir, entryName string) (string, error) {
 	return diskPath, nil
 }
 
-// writePreseedFile writes reader contents to path, creating parent directories.
-func writePreseedFile(path string, reader io.Reader, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), preseedFileMode); err != nil {
+// writePreseedFile writes reader contents to relPath within root, creating
+// parent directories.
+func writePreseedFile(root *os.Root, relPath string, reader io.Reader, mode os.FileMode) error {
+	if err := root.MkdirAll(filepath.Dir(relPath), preseedFileMode); err != nil {
 		return fmt.Errorf("could not create directory: %w", err)
 	}
-	outFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode.Perm())
+	outFile, err := root.OpenFile(relPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode.Perm())
 	if err != nil {
 		return fmt.Errorf("could not create file: %w", err)
 	}

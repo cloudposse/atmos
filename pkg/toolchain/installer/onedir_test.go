@@ -1378,7 +1378,10 @@ func TestOnedir_ErrorPaths(t *testing.T) {
 		writeFileUnder(t, base, "real", "data")
 		fileAsParent := filepath.Join(base, "iamafile")
 		require.NoError(t, os.WriteFile(fileAsParent, []byte("x"), 0o644))
-		err := extractHardLink(filepath.Join(fileAsParent, "child"), "real", base)
+		root, err := os.OpenRoot(base)
+		require.NoError(t, err)
+		defer root.Close()
+		err = extractHardLink(root, "iamafile/child", "real", base)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -1652,39 +1655,52 @@ func TestExtractHardLink(t *testing.T) {
 	t.Run("links to an existing target", func(t *testing.T) {
 		dest := t.TempDir()
 		writeFileUnder(t, dest, "real.bin", "DATA")
+		root, err := os.OpenRoot(dest)
+		require.NoError(t, err)
+		defer root.Close()
 
-		linkPath := filepath.Join(dest, "hard.bin")
-		require.NoError(t, extractHardLink(linkPath, "real.bin", dest))
+		require.NoError(t, extractHardLink(root, "hard.bin", "real.bin", dest))
 
-		got, err := os.ReadFile(linkPath)
+		got, err := os.ReadFile(filepath.Join(dest, "hard.bin"))
 		require.NoError(t, err)
 		assert.Equal(t, "DATA", string(got))
 	})
 
 	t.Run("rejects a target that escapes dest", func(t *testing.T) {
 		dest := t.TempDir()
-		err := extractHardLink(filepath.Join(dest, "h"), "../../../../etc/passwd", dest)
+		root, err := os.OpenRoot(dest)
+		require.NoError(t, err)
+		defer root.Close()
+
+		err = extractHardLink(root, "h", "../../../../etc/passwd", dest)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
 
 	t.Run("rejects an absolute target", func(t *testing.T) {
 		dest := t.TempDir()
+		root, err := os.OpenRoot(dest)
+		require.NoError(t, err)
+		defer root.Close()
+
 		// A genuinely OS-absolute target (volume-qualified on Windows).
 		absTarget := filepath.Join(t.TempDir(), "outside")
 		require.True(t, filepath.IsAbs(absTarget))
-		err := extractHardLink(filepath.Join(dest, "h"), absTarget, dest)
+		err = extractHardLink(root, "h", absTarget, dest)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
 
 	t.Run("returns an error when the target is missing", func(t *testing.T) {
 		dest := t.TempDir()
-		linkPath := filepath.Join(dest, "h")
-		err := extractHardLink(linkPath, "not-there", dest)
+		root, err := os.OpenRoot(dest)
+		require.NoError(t, err)
+		defer root.Close()
+
+		err = extractHardLink(root, "h", "not-there", dest)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrToolNotFound)
-		_, err = os.Lstat(linkPath)
+		_, err = os.Lstat(filepath.Join(dest, "h"))
 		assert.True(t, os.IsNotExist(err))
 	})
 }

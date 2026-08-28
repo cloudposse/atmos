@@ -28,6 +28,13 @@ const maxZipEntrySize = 512 * 1024 * 1024 // 512 MiB.
 // extractZip extracts a ZIP archive read from reader into the destination
 // directory. Since zip.Reader requires io.ReaderAt plus a known size, the
 // archive is buffered in memory first, bounded by maxZipArchiveSize.
+//
+// Writes go through an os.Root opened on extractPath rather than plain
+// os.MkdirAll/os.Create: SafeJoin only validates the entry name lexically, so
+// without os.Root a malicious archive could plant a symlink via one entry
+// (e.g. "link" -> "/etc") and have a later entry (e.g. "link/passwd") follow
+// it out of extractPath -- os.Root's methods refuse to resolve a path that
+// escapes the root, symlinks included.
 func extractZip(reader io.Reader, extractPath string) error {
 	data, err := io.ReadAll(io.LimitReader(reader, maxZipArchiveSize+1))
 	if err != nil {
@@ -43,8 +50,17 @@ func extractZip(reader io.Reader, extractPath string) error {
 		return fmt.Errorf("failed to parse zip archive: %w", err)
 	}
 
+	if err := os.MkdirAll(extractPath, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to create extraction directory %s: %w", extractPath, err)
+	}
+	root, err := os.OpenRoot(extractPath)
+	if err != nil {
+		return fmt.Errorf("failed to open extraction root %s: %w", extractPath, err)
+	}
+	defer root.Close()
+
 	for _, file := range zipReader.File {
-		if err := processZipFile(file, extractPath); err != nil {
+		if err := processZipFile(root, file, extractPath); err != nil {
 			return err
 		}
 	}
@@ -53,43 +69,46 @@ func extractZip(reader io.Reader, extractPath string) error {
 }
 
 // processZipFile processes a zip.File entry and writes the corresponding file
-// to the destination directory.
-func processZipFile(file *zip.File, extractPath string) error {
-	filePath, err := filesystem.SafeJoin(extractPath, file.Name)
-	if err != nil {
+// to the destination directory via root.
+func processZipFile(root *os.Root, file *zip.File, extractPath string) error {
+	// SafeJoin validates the entry name (rejects absolute paths, backslashes,
+	// and ".." components); the resulting path itself isn't used since writes
+	// go through root by relative name instead.
+	if _, err := filesystem.SafeJoin(extractPath, file.Name); err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidFilePath, file.Name)
 	}
+	relPath := filepath.FromSlash(file.Name)
 
 	if file.FileInfo().IsDir() {
-		return createDirectory(filePath)
+		return createDirectory(root, relPath)
 	}
 
-	return createFileFromZip(filePath, file)
+	return createFileFromZip(root, relPath, file)
 }
 
-// createFileFromZip writes the contents of a zip.File to a file at the
-// specified path. It also sets the file mode.
-func createFileFromZip(filePath string, file *zip.File) error {
+// createFileFromZip writes the contents of a zip.File to relPath within root.
+// It also sets the file mode.
+func createFileFromZip(root *os.Root, relPath string, file *zip.File) error {
 	if file.UncompressedSize64 > maxZipEntrySize {
-		return fmt.Errorf("%w: %s (declared %d bytes, max %d)", errUtils.ErrArchiveEntryTooLarge, filePath, file.UncompressedSize64, maxZipEntrySize)
+		return fmt.Errorf("%w: %s (declared %d bytes, max %d)", errUtils.ErrArchiveEntryTooLarge, relPath, file.UncompressedSize64, maxZipEntrySize)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
-		log.Error("Failed to create parent directory for file", "path", filePath, "error", err)
-		return fmt.Errorf("failed to create parent directory for %s: %w", filePath, err)
+	if err := root.MkdirAll(filepath.Dir(relPath), os.ModePerm); err != nil {
+		log.Error("Failed to create parent directory for file", "path", relPath, "error", err)
+		return fmt.Errorf("failed to create parent directory for %s: %w", relPath, err)
 	}
 
 	src, err := file.Open()
 	if err != nil {
-		log.Error("Failed to open zip entry", "path", filePath, "error", err)
-		return fmt.Errorf("failed to open zip entry %s: %w", filePath, err)
+		log.Error("Failed to open zip entry", "path", relPath, "error", err)
+		return fmt.Errorf("failed to open zip entry %s: %w", relPath, err)
 	}
 	defer src.Close()
 
-	writer, err := os.Create(filePath)
+	writer, err := root.Create(relPath)
 	if err != nil {
-		log.Error("Failed to create file", "path", filePath, "error", err)
-		return fmt.Errorf("failed to create file %s: %w", filePath, err)
+		log.Error("Failed to create file", "path", relPath, "error", err)
+		return fmt.Errorf("failed to create file %s: %w", relPath, err)
 	}
 	defer writer.Close()
 
@@ -98,18 +117,17 @@ func createFileFromZip(filePath string, file *zip.File) error {
 	// exceeds the declared size (or the declaration was understated/forged).
 	_, err = io.CopyN(writer, src, maxZipEntrySize+1)
 	if err != nil && !errors.Is(err, io.EOF) {
-		log.Error("Failed to write file contents", "path", filePath, "error", err)
-		return fmt.Errorf("failed to write file contents to %s: %w", filePath, err)
+		log.Error("Failed to write file contents", "path", relPath, "error", err)
+		return fmt.Errorf("failed to write file contents to %s: %w", relPath, err)
 	}
 	if err == nil {
-		return fmt.Errorf("%w: %s (exceeded %d bytes during extraction)", errUtils.ErrArchiveEntryTooLarge, filePath, maxZipEntrySize)
+		return fmt.Errorf("%w: %s (exceeded %d bytes during extraction)", errUtils.ErrArchiveEntryTooLarge, relPath, maxZipEntrySize)
 	}
 
 	// Remove setuid/setgid bits for security; standard cross-platform.
 	newMode := file.Mode() &^ (os.ModeSetuid | os.ModeSetgid)
-	// Set permissions using os.Chmod for all platforms.
-	if err := os.Chmod(filePath, newMode); err != nil {
-		log.Error("Failed to set file permissions", "path", filePath, "error", err)
+	if err := root.Chmod(relPath, newMode); err != nil {
+		log.Error("Failed to set file permissions", "path", relPath, "error", err)
 	}
 	return nil
 }

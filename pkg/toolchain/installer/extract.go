@@ -275,6 +275,13 @@ func Unzip(src, dest string) error {
 }
 
 // unpackZip extracts files and returns deferred symlink entries.
+//
+// Writes go through an os.Root opened on dest rather than plain
+// os.MkdirAll/os.OpenFile: validatePath only validates the entry name
+// lexically, so without os.Root a pre-existing symlink inside dest (or a
+// hard link materialized by a prior entry) could let a later entry's write
+// escape dest -- os.Root's methods refuse to resolve a path that escapes the
+// root, symlinks included.
 func unpackZip(src, dest string) ([]pendingSymlink, error) {
 	defer perf.Track(nil, "toolchain.unpackZip")()
 
@@ -286,23 +293,34 @@ func unpackZip(src, dest string) ([]pendingSymlink, error) {
 	}
 	defer r.Close()
 
+	if err := os.MkdirAll(dest, os.ModePerm); err != nil {
+		return nil, fmt.Errorf("%w: failed to create extraction directory: %w", ErrFileOperation, err)
+	}
+	root, err := os.OpenRoot(dest)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to open extraction root: %w", ErrFileOperation, err)
+	}
+	defer root.Close()
+
 	var symlinks []pendingSymlink
 	for _, f := range r.File {
-		if err := extractZipFile(f, dest, maxDecompressedSize, &symlinks); err != nil {
+		if err := extractZipFile(root, f, dest, maxDecompressedSize, &symlinks); err != nil {
 			return nil, err
 		}
 	}
 	return symlinks, nil
 }
 
-func extractZipFile(f *zip.File, dest string, maxSize int64, symlinks *[]pendingSymlink) error {
-	fpath, err := validatePath(f.Name, dest)
-	if err != nil {
+func extractZipFile(root *os.Root, f *zip.File, dest string, maxSize int64, symlinks *[]pendingSymlink) error {
+	// validatePath's returned absolute path isn't used since writes go
+	// through root by relative name instead; only the validation matters here.
+	if _, err := validatePath(f.Name, dest); err != nil {
 		return err
 	}
+	relPath := filepath.FromSlash(f.Name)
 
 	if f.FileInfo().IsDir() {
-		return os.MkdirAll(fpath, os.ModePerm)
+		return root.MkdirAll(relPath, os.ModePerm)
 	}
 
 	if f.Mode()&os.ModeSymlink != 0 {
@@ -314,11 +332,11 @@ func extractZipFile(f *zip.File, dest string, maxSize int64, symlinks *[]pending
 		return nil
 	}
 
-	if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+	if err := root.MkdirAll(filepath.Dir(relPath), os.ModePerm); err != nil {
 		return err
 	}
 
-	return copyFileContents(f, fpath, maxSize)
+	return copyFileContents(root, relPath, f, maxSize)
 }
 
 // readZipSymlinkTarget reads a zip symlink target, bounded to
@@ -350,14 +368,14 @@ func validatePath(name, dest string) (string, error) {
 	return fpath, nil
 }
 
-func copyFileContents(f *zip.File, fpath string, maxSize int64) error {
+func copyFileContents(root *os.Root, relPath string, f *zip.File, maxSize int64) error {
 	rc, err := f.Open()
 	if err != nil {
 		return err
 	}
 	defer rc.Close()
 
-	outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+	outFile, err := root.OpenFile(relPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
 	if err != nil {
 		return err
 	}
@@ -407,6 +425,13 @@ func ExtractTarGz(src, dest string) error {
 }
 
 // unpackTarGz extracts files and returns deferred symlink entries.
+//
+// Writes go through an os.Root opened on dest rather than plain
+// os.MkdirAll/os.OpenFile: SafeJoin only validates the entry name lexically,
+// so without os.Root a pre-existing symlink inside dest (or a hard link
+// materialized by a prior entry) could let a later entry's write escape
+// dest -- os.Root's methods refuse to resolve a path that escapes the root,
+// symlinks included.
 func unpackTarGz(src, dest string) ([]pendingSymlink, []pendingHardLink, error) {
 	defer perf.Track(nil, "toolchain.unpackTarGz")()
 
@@ -422,8 +447,16 @@ func unpackTarGz(src, dest string) ([]pendingSymlink, []pendingHardLink, error) 
 	}
 	defer gzr.Close()
 
-	var symlinks []pendingSymlink
-	var hardLinks []pendingHardLink
+	if err := os.MkdirAll(dest, os.ModePerm); err != nil {
+		return nil, nil, fmt.Errorf("%w: failed to create extraction directory: %w", ErrFileOperation, err)
+	}
+	root, err := os.OpenRoot(dest)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: failed to open extraction root: %w", ErrFileOperation, err)
+	}
+	defer root.Close()
+
+	var deferred deferredEntries
 	tr := tar.NewReader(gzr)
 	for {
 		header, err := tr.Next()
@@ -434,29 +467,31 @@ func unpackTarGz(src, dest string) ([]pendingSymlink, []pendingHardLink, error) 
 			return nil, nil, fmt.Errorf("%w: error reading tar: %w", ErrFileOperation, err)
 		}
 
-		if err := extractEntry(tr, header, dest, &symlinks, &hardLinks); err != nil {
+		if err := extractEntry(root, tr, header, dest, &deferred); err != nil {
 			return nil, nil, err
 		}
 	}
-	return symlinks, hardLinks, nil
+	return deferred.symlinks, deferred.hardLinks, nil
 }
 
-func extractEntry(tr *tar.Reader, header *tar.Header, dest string, symlinks *[]pendingSymlink, hardLinks *[]pendingHardLink) error {
-	targetPath, err := filesystem.SafeJoin(dest, header.Name)
-	if err != nil {
+func extractEntry(root *os.Root, tr *tar.Reader, header *tar.Header, dest string, deferred *deferredEntries) error {
+	// SafeJoin's returned absolute path isn't used since writes go through
+	// root by relative name instead; only the validation matters here.
+	if _, err := filesystem.SafeJoin(dest, header.Name); err != nil {
 		return fmt.Errorf("%w: illegal file path: %s", ErrFileOperation, header.Name)
 	}
+	relPath := filepath.FromSlash(header.Name)
 
 	switch header.Typeflag {
 	case tar.TypeDir:
-		return extractDir(targetPath, header)
+		return extractDir(root, relPath, header)
 	case tar.TypeReg:
-		return extractFile(tr, targetPath, header)
+		return extractFile(root, tr, relPath, header)
 	case tar.TypeSymlink:
-		*symlinks = append(*symlinks, pendingSymlink{rel: header.Name, target: header.Linkname})
+		deferred.symlinks = append(deferred.symlinks, pendingSymlink{rel: header.Name, target: header.Linkname})
 		return nil
 	case tar.TypeLink:
-		*hardLinks = append(*hardLinks, pendingHardLink{rel: header.Name, target: header.Linkname})
+		deferred.hardLinks = append(deferred.hardLinks, pendingHardLink{rel: header.Name, target: header.Linkname})
 		return nil
 	default:
 		ui.Warningf("Skipping unknown type: %s", header.Name)
@@ -464,18 +499,18 @@ func extractEntry(tr *tar.Reader, header *tar.Header, dest string, symlinks *[]p
 	}
 }
 
-func extractDir(path string, header *tar.Header) error {
+func extractDir(root *os.Root, relPath string, header *tar.Header) error {
 	// Validate header.Mode.
 	if header.Mode < 0 || header.Mode > maxUnixPermissions {
-		return fmt.Errorf("%w: invalid mode %d for %s: must be between 0 and %o", ErrFileOperation, header.Mode, path, maxUnixPermissions)
+		return fmt.Errorf("%w: invalid mode %d for %s: must be between 0 and %o", ErrFileOperation, header.Mode, relPath, maxUnixPermissions)
 	}
 
 	// Safe conversion to os.FileMode.
-	return os.MkdirAll(path, os.FileMode(header.Mode))
+	return root.MkdirAll(relPath, os.FileMode(header.Mode))
 }
 
-func extractFile(tr *tar.Reader, path string, header *tar.Header) error {
-	if err := os.MkdirAll(filepath.Dir(path), defaultMkdirPermissions); err != nil {
+func extractFile(root *os.Root, tr *tar.Reader, relPath string, header *tar.Header) error {
+	if err := root.MkdirAll(filepath.Dir(relPath), defaultMkdirPermissions); err != nil {
 		return fmt.Errorf("%w: failed to create parent directory: %w", ErrFileOperation, err)
 	}
 	// Validate header.Mode is within uint32 range.
@@ -483,7 +518,7 @@ func extractFile(tr *tar.Reader, path string, header *tar.Header) error {
 		return fmt.Errorf("%w: header.Mode out of uint32 range: %d", ErrFileOperation, header.Mode)
 	}
 
-	outFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+	outFile, err := root.OpenFile(relPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
 	if err != nil {
 		return fmt.Errorf("%w: failed to create file: %w", ErrFileOperation, err)
 	}

@@ -88,12 +88,24 @@ func windowsSymlinkFallback(resolvedTarget, linkPath, originalLinkPath string) e
 }
 
 // materializeHardLinks creates deferred tar hard links after extraction.
+//
+// Writes go through an os.Root opened on root rather than plain
+// os.MkdirAll/os.Link: a pre-existing symlink inside root pointing outside it
+// could otherwise let a hard-link entry's parent-directory creation or link
+// placement escape root -- os.Root's methods refuse to resolve a path that
+// escapes the root, symlinks included.
 func materializeHardLinks(root string, links []pendingHardLink) error {
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return fmt.Errorf("%w: failed to open root %s: %w", ErrFileOperation, root, err)
+	}
+	defer r.Close()
+
 	remaining := links
 	for len(remaining) > 0 {
 		next := make([]pendingHardLink, 0, len(remaining))
 		for _, link := range remaining {
-			err := extractHardLink(filepath.Join(root, link.rel), link.target, root)
+			err := extractHardLink(r, link.rel, link.target, root)
 			if errors.Is(err, ErrToolNotFound) {
 				next = append(next, link)
 				continue
@@ -110,28 +122,56 @@ func materializeHardLinks(root string, links []pendingHardLink) error {
 	return nil
 }
 
-// extractHardLink materializes a tar hard link relative to root.
-func extractHardLink(linkPath, linkname, dest string) error {
+// extractHardLink materializes a tar hard link at relLinkPath within root.
+func extractHardLink(root *os.Root, relLinkPath, linkname, dest string) error {
 	// linkname is an archive-relative target; SafeJoin rejects absolute targets
 	// and any ".." traversal, just as createValidatedSymlink does for symlinks.
-	target, err := filesystem.SafeJoin(dest, linkname)
-	if err != nil {
-		return fmt.Errorf("%w: illegal hard link target: %s -> %s", ErrFileOperation, linkPath, linkname)
+	// The resulting absolute path isn't used since writes go through root by
+	// relative name instead.
+	if _, err := filesystem.SafeJoin(dest, linkname); err != nil {
+		return fmt.Errorf("%w: illegal hard link target: %s -> %s", ErrFileOperation, relLinkPath, linkname)
 	}
-	if err := os.MkdirAll(filepath.Dir(linkPath), defaultMkdirPermissions); err != nil {
+	relTarget := filepath.FromSlash(linkname)
+
+	if err := root.MkdirAll(filepath.Dir(relLinkPath), defaultMkdirPermissions); err != nil {
 		return fmt.Errorf("%w: failed to create parent directory: %w", ErrFileOperation, err)
 	}
-	_ = os.Remove(linkPath)
+	_ = root.Remove(relLinkPath)
 
-	if err := os.Link(target, linkPath); err == nil {
+	if err := root.Link(relTarget, relLinkPath); err == nil {
 		return nil
 	}
 
-	info, statErr := os.Stat(target)
+	info, statErr := root.Stat(relTarget)
 	if statErr != nil {
 		return fmt.Errorf("%w: hard link target not found: %s", ErrToolNotFound, linkname)
 	}
-	return copyRegularFile(target, linkPath, info.Mode().Perm())
+	return copyRegularFileInRoot(root, relTarget, relLinkPath, info.Mode().Perm())
+}
+
+// copyRegularFileInRoot copies a single file within root, creating parents
+// and preserving mode. Used by extractHardLink's fallback when a hard link
+// cannot be created (e.g. across devices).
+func copyRegularFileInRoot(root *os.Root, srcRel, dstRel string, mode os.FileMode) error {
+	in, err := root.Open(srcRel)
+	if err != nil {
+		return fmt.Errorf("%w: failed to open %s: %w", ErrFileOperation, srcRel, err)
+	}
+	defer in.Close()
+
+	if err := root.MkdirAll(filepath.Dir(dstRel), defaultMkdirPermissions); err != nil {
+		return fmt.Errorf("%w: failed to create parent directory: %w", ErrFileOperation, err)
+	}
+	out, err := root.OpenFile(dstRel, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	if err != nil {
+		return fmt.Errorf("%w: failed to create %s: %w", ErrFileOperation, dstRel, err)
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return fmt.Errorf("%w: failed to copy %s: %w", ErrFileOperation, srcRel, err)
+	}
+	return nil
 }
 
 // moveTree relocates a directory tree, preferring a fast same-filesystem rename

@@ -193,3 +193,29 @@ func TestExtractTarball_DirectoryEntryFailsWhenParentDirBlocked(t *testing.T) {
 	err := extractTarball(&buf, dest)
 	require.Error(t, err)
 }
+
+// TestExtractTarball_RejectsWriteThroughPreExistingSymlink is a regression
+// test for CWE-59 (symlink-following): SafeJoin only validates an entry name
+// lexically, so before extraction switched to os.Root, a pre-existing
+// symlink inside dest pointing outside it (e.g. left over from a prior run,
+// or planted via an unrelated mechanism) let a plain-looking entry name like
+// "link/evil.txt" escape dest via os.MkdirAll/os.Create following the
+// symlink -- os.Root refuses to resolve a path through a symlink that would
+// leave the root.
+func TestExtractTarball_RejectsWriteThroughPreExistingSymlink(t *testing.T) {
+	dest := t.TempDir()
+	outside := t.TempDir()
+
+	link := filepath.Join(dest, "link")
+	require.NoError(t, os.Symlink(outside, link))
+
+	tarBuf := writeTestTar(t, map[string]string{
+		"link/evil.txt": "escaped\n",
+	})
+
+	err := extractTarball(tarBuf, dest)
+	require.Error(t, err)
+
+	_, statErr := os.Stat(filepath.Join(outside, "evil.txt"))
+	assert.True(t, os.IsNotExist(statErr), "entry must not be written through the symlink to outside")
+}
