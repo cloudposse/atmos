@@ -982,7 +982,13 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if _, exists := tc.Env["GIT_CONFIG_COUNT"]; !exists {
 		if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
 			// Disable credential helper (prevents osxkeychain hangs/popups) and inject token.
-			basicAuth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + githubToken))
+			gitBasicAuthCredential := "x-access-token:" + githubToken
+			basicAuth := base64.StdEncoding.EncodeToString([]byte(gitBasicAuthCredential))
+			// pkg/io's masker auto-registers plain GITHUB_TOKEN and base64(GITHUB_TOKEN), but
+			// GIT_CONFIG_VALUE_1 below embeds base64("x-access-token:"+GITHUB_TOKEN) -- a
+			// different byte sequence the prefix changes the encoding of, so it needs its own
+			// registration or redactAndCapDiagOutput can't catch it in captured child output.
+			iolib.RegisterSecret(gitBasicAuthCredential)
 			tc.Env["GIT_CONFIG_COUNT"] = "2"
 			tc.Env["GIT_CONFIG_KEY_0"] = "credential.helper"
 			tc.Env["GIT_CONFIG_VALUE_0"] = ""
@@ -2017,10 +2023,11 @@ func TestUnwrapMarkdownProseLinesPreservesSemanticBoundaries(t *testing.T) {
 // behavior in isolation from the CLI test harness that normally calls it.
 func TestRedactAndCapDiagOutput(t *testing.T) {
 	tests := []struct {
-		name   string
-		secret string // if set, registered as GITHUB_TOKEN (via a fresh masker) before the call
-		input  string
-		check  func(t *testing.T, got string)
+		name           string
+		secret         string // if set, registered as GITHUB_TOKEN (via a fresh masker) before the call.
+		registerSecret string // if set, registered directly via iolib.RegisterSecret before the call.
+		input          string
+		check          func(t *testing.T, got string)
 	}{
 		{
 			name:  "empty input",
@@ -2040,6 +2047,21 @@ func TestRedactAndCapDiagOutput(t *testing.T) {
 			name:   "registered secret is redacted",
 			secret: "ghp_test-secret-token-value",
 			input:  "before ghp_test-secret-token-value after",
+			check: func(t *testing.T, got string) {
+				assert.NotContains(t, got, "ghp_test-secret-token-value")
+				assert.Contains(t, got, iolib.MaskReplacement)
+			},
+		},
+		{
+			// Regression: GIT_CONFIG_VALUE_1 embeds base64("x-access-token:"+GITHUB_TOKEN), a
+			// different byte sequence than base64(GITHUB_TOKEN) alone -- the plain GITHUB_TOKEN
+			// registration (previous case) does not catch it without registering the full
+			// composite credential too.
+			name:           "registered git basic-auth credential is redacted",
+			registerSecret: "x-access-token:ghp_test-secret-token-value",
+			input: "before " + base64.StdEncoding.EncodeToString(
+				[]byte("x-access-token:ghp_test-secret-token-value"),
+			) + " after",
 			check: func(t *testing.T, got string) {
 				assert.NotContains(t, got, "ghp_test-secret-token-value")
 				assert.Contains(t, got, iolib.MaskReplacement)
@@ -2074,6 +2096,10 @@ func TestRedactAndCapDiagOutput(t *testing.T) {
 			if tt.secret != "" {
 				t.Setenv("GITHUB_TOKEN", tt.secret)
 				iolib.Reset()
+				t.Cleanup(iolib.Reset)
+			}
+			if tt.registerSecret != "" {
+				iolib.RegisterSecret(tt.registerSecret)
 				t.Cleanup(iolib.Reset)
 			}
 			tt.check(t, redactAndCapDiagOutput(tt.input))
