@@ -28,6 +28,7 @@ var (
 	ErrVersionNotLocked       = errUtils.ErrVersionNotLocked
 	ErrTrackNotVerified       = errUtils.ErrVersionTrackNotVerified
 	ErrDesiredVersionRequired = errUtils.ErrDesiredVersionRequired
+	ErrLockWriteFailed        = errUtils.ErrVersionLockWriteFailed
 )
 
 // EffectiveEntry is a version entry after defaults and groups are applied.
