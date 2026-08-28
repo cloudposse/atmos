@@ -1,0 +1,106 @@
+---
+slug: scaffold-dynamic-options
+title: "Prompt choices that follow earlier answers"
+date: 2026-08-28T12:00:00.000Z
+authors: [jorrite]
+tags: [feature]
+---
+
+Every interactive form with a fixed set of choices eventually hits the same problem: at some
+point, what a question *should* offer depends on how an earlier question was answered. List every
+possible environment when asking "which one deploys first," and people have to hunt through
+options they never actually set up. Show raw values like `dev` or `prod` just to avoid maintaining
+a separate label mapping, and people have to mentally translate those into what they actually
+mean. The only real fix is letting choices adapt to prior answers — and letting them look nicer
+than the underlying values.
+
+<!--truncate-->
+
+## The Problem
+
+In a scaffold template, `select` and `multiselect` fields normally take their choices from
+`options:`, a static list fixed at authoring time. That's fine when the choices really are fixed,
+but two situations don't fit:
+
+- Narrowing to a previous answer. Someone selects their environments (`dev`, `staging`,
+  `production`) via a `multiselect`; a later `select` field should default to offering just those chosen
+  environments — not the entire list the template supports.
+- Friendly labels vs. stored values. You want to display something readable while still storing
+  the actual value (`dev`/`staging`/`production`) that generated files and conditions rely on.
+  Previously this meant either showing raw values on screen, or hand-maintaining a separate label
+  mapping elsewhere in the template.
+
+A static `options:` list can't handle either case — it's decided once and never revisited.
+
+## The Fix
+
+A field's `options:` can now be computed dynamically, using the same `answers.`-dot-path syntax
+and Go-template conventions already available elsewhere in scaffold templates:
+
+```yaml
+spec:
+  fields:
+    - name: envs
+      type: multiselect
+      options: [dev, staging, prod]
+    - name: default_env
+      type: select
+      options: answers.envs
+```
+
+If someone picks `staging` and `prod`, `default_env` will only offer those two — `dev` is
+excluded. The source field doesn't need to be a `multiselect`; a plain text input works too,
+combined with a template expression that converts it to a list:
+
+```yaml
+spec:
+  fields:
+    - name: csv_regions
+      type: input
+      default: "eu-west-1,us-east-1"
+    - name: default_region
+      type: select
+      options: '{{ splitList "," answers.csv_regions }}'
+```
+
+Both forms resolve `options:` based on whatever was supplied for the earlier field, whether
+answers come from an interactive prompt or are passed in non-interactively.
+
+The same `options:` field also accepts a list of label/value pairs, so what's displayed and what's
+stored can differ:
+
+```yaml
+spec:
+  fields:
+    - name: envs
+      type: multiselect
+      options:
+        - label: Development
+          value: dev
+        - label: Staging
+          value: staging
+        - label: Production
+          value: prod
+    - name: default_env
+      type: select
+      options: answers.envs
+```
+
+Here, `envs` displays "Development," "Staging," and "Production" while storing
+`dev`/`staging`/`production` everywhere they're actually needed — generated files, `when:`
+conditions, and other fields' `options:`. Since `default_env` pulls its choices dynamically from
+`envs`, it inherits those same friendly labels for whatever was picked, rather than falling back
+to raw stored values.
+
+## How to Use It
+
+Point `options:` at `answers.<field>` (or a template expression) on any `select`/`multiselect`
+field to source its choices from an earlier answer instead of a fixed list, and switch a plain
+string list to label/value object entries wherever the stored value and the display text should
+differ. See the [`atmos scaffold generate`](/cli/commands/scaffold/generate) docs for the full
+field reference.
+
+## Get Involved
+
+[Open an issue](https://github.com/cloudposse/atmos/issues) with feedback, or share templates that
+put dynamic options to use in your own projects.

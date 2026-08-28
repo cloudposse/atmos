@@ -39,6 +39,13 @@ and `pkg/generator/` for the source of truth on current behavior.
 - `pkg/generator` package (shared with `atmos init`)
 
 **Also implemented, shipped after this PRD was first written**:
+- `spec.fields[].options:` dynamic sourcing and `{label, value}` option
+  objects — a `select`/`multiselect` field's `options:` can be an
+  `answers.<name>` dot-path, a Go-template expression (rendered via the same
+  `Processor.RenderAnswersListExpression` mechanism `matrix:` axes use), or a
+  list of `{label, value}` objects instead of plain strings, with label
+  recovery through a direct dot-path reference. See "Dynamic and Label/Value
+  `options:`" below.
 - `spec.fields[].when:` and `spec.files[].when:` — declarative conditional
   prompting and file generation, gated on prompt answers via the same CEL
   `when:` engine workflows/hooks/custom commands use (`pkg/condition`)
@@ -430,6 +437,146 @@ supports the same `when:` mechanism to gate whether a specific auto-discovered f
 generated. Compound conditions use CEL's `&&`/`||`/`!` (the `{all:/any:/not:}` map form
 pkg/condition also parses is not accepted by the scaffold JSON Schema).
 
+### Dynamic and Label/Value `options:`
+
+**Status**: Implemented and shipped. A `select`/`multiselect` field's
+`options:` (`FieldDefinition.Options` in `pkg/project/config/config.go`) can
+be more than a static list of plain strings: it can be sourced dynamically
+from an earlier answer, and its entries can carry a separate display label.
+
+**Dynamic sourcing**: exactly the two dynamic forms `spec.files[].matrix:`
+axes already support (see "Dynamic File Generation (`matrix`)" below) —
+`options:` deliberately mirrors that convention rather than inventing a new
+one:
+
+- An `answers.<path>` dot-path string, resolved the same way a matrix axis's
+  dot-path is: the referenced value must already be list-shaped (a
+  `multiselect` answer, or a structured value supplied through `--set` or a
+  `spec.values` preset that was never declared as a field at all).
+- A Go-template expression (any string containing `{{`), rendered through the
+  identical `Processor.RenderAnswersListExpression` mechanism a `matrix:` axis
+  expression uses, with `answers` exposed the same way.
+
+```yaml
+spec:
+  fields:
+    - name: envs
+      type: multiselect
+      options: [dev, staging, prod]
+
+    # Sourced from the prior multiselect answer -- only ever offers
+    # environments the user actually selected above.
+    - name: default_env
+      type: select
+      options: "answers.envs"
+```
+
+```yaml
+spec:
+  fields:
+    - name: csv_regions
+      type: input
+      label: Comma-separated list of regions
+      default: "eu-west-1,us-east-1"
+
+    # Free-text source: any Sprig/Gomplate function is available, so a plain
+    # string answer becomes a list-shaped options source the same way a
+    # matrix axis expression does.
+    - name: default_region
+      type: select
+      options: '{{ splitList "," answers.csv_regions }}'
+```
+
+Unlike `matrix:` axes, both the interactive huh-based form and the headless
+`--set`/`--defaults` validation path (`ValidateFieldValues`) support dynamic
+`options:`. In the interactive form, a scaffold prompts fields one at a
+time (each its own `huh.Group`/page), so this isn't a same-screen live
+update — it's a guarantee that a later field's choices correctly reflect
+whatever the user ultimately answered for an earlier field by the time that
+later field is actually shown or validated. A later field's `OptionsFunc`
+is bound (via `optionsBindings`/`referencedAnswerNames` in
+`pkg/project/config/form.go`) to the pointer of every field its source
+references, so its option list resolves correctly regardless of source
+field type — not just `multiselect`, but `select`, `input`, and `confirm`
+too (`pkg/project/config/dynamic_options_huh_test.go` drives this through
+huh's real `Update` cycle, not just the resolution closure, for each of
+those source types).
+
+**Label/value option objects**: an `options:` list entry can be a
+`{label, value}` object (the new `FieldOption` type) instead of a plain
+string, mirroring `huh.NewOption(label, value)` — `value` is required and is
+what's stored in `answers`/passed to templates; `label` is what's displayed
+and defaults to `value` when omitted:
+
+```yaml
+spec:
+  fields:
+    - name: envs
+      type: select
+      options:
+        - label: Development
+          value: dev
+        - label: Staging
+          value: staging
+        - value: prod # No label -- displays as "prod".
+```
+
+**Label recovery through a dot-path**: when a later field's `options:`
+sources from an earlier `{label, value}`-based field via a *direct*,
+single-segment `answers.<name>` dot-path (not a deeper path like
+`answers.nested.envs`, and not a template expression), the labels are
+recovered onto the filtered subset of values actually present in that
+answer:
+
+```yaml
+spec:
+  fields:
+    - name: envs
+      type: multiselect
+      options:
+        - label: Development
+          value: dev
+        - label: Staging
+          value: staging
+        - label: Production
+          value: prod
+
+    # envs answer is [dev, staging] -> default_env offers "Development" and
+    # "Staging" (recovered labels, filtered to the selected values) -- not
+    # "Production", and not the raw "dev"/"staging" values.
+    - name: default_env
+      type: select
+      options: "answers.envs"
+```
+
+Labels never reach `answers`/templates — only values do, structurally
+guaranteed by how huh's own option binding works (`Value(&value)` only ever
+writes back an option's `Value`, never its `Label`), not just documented
+behavior (`pkg/project/config/form.go`'s `toHuhOptions`).
+
+**Non-goals / limitations**:
+- **No field-declaration-order validation at load time.** A dot-path's root
+  name is never checked against field order when the scaffold loads —
+  deliberately: load time can't distinguish a genuine forward/self-reference
+  mistake from a legitimate `spec.values`-preset or `--set`-supplied value
+  that was never declared as a field at all (see `validateFieldOptionsSource`'s
+  doc comment in `pkg/project/config/validation.go`). A forward reference (or
+  a field referencing itself) loads successfully and degrades gracefully at
+  runtime instead of erroring: a not-yet-resolved answer is `nil`, which
+  resolves to an empty option list — no constraint, any value accepted —
+  rather than a validation failure.
+- **No label propagation through a chain of dynamic references.** Label
+  recovery only looks at a *direct* single-segment dot-path's immediately
+  referenced field. If a third field sources its `options:` from
+  `default_env` (itself dynamically sourced from `envs`), labels are not
+  chased back through that second hop — it degrades to `label == value`.
+- **No label propagation through the template-expression form.** A
+  Go-template expression's renderer only ever produces plain strings — Sprig
+  and Gomplate functions like `splitList` can't produce structured
+  `{label, value}` pairs — so a template-expression-sourced field's options
+  always have `label == value`, even if the referenced answer's own field
+  used `{label, value}` objects.
+
 ### Dynamic File Generation (`matrix`)
 
 **Status**: Implemented and shipped. It reuses the exact axis shape the workflow
@@ -600,7 +747,7 @@ into a list — so a value containing whitespace, commas, or quotes survives int
 with no escaping rule for template authors to learn or a custom encoding to maintain.
 This requires an axis expression to be exactly one value-producing action (no
 surrounding literal text, no `if`/`range`/`with`, no variable assignment);
-`RenderMatrixAxisExpression` rejects anything else with a clear error before ever
+`RenderAnswersListExpression` rejects anything else with a clear error before ever
 rendering it.
 
 **Behavior**:
@@ -1048,6 +1195,10 @@ Location: `website/docs/cli/commands/scaffold.mdx`
 - Dynamic default values (computed from other inputs) — still future
 - ✅ **Shipped**: dynamic file generation over a Cartesian product of axes
   (`spec.files[].matrix:`, see "Dynamic File Generation (`matrix`)" above)
+- ✅ **Shipped**: dynamic `options:` sourcing (an `answers.*` dot-path or a
+  Go-template expression) and `{label, value}` option objects with label
+  recovery through a direct dot-path (`spec.fields[].options:`, see "Dynamic
+  and Label/Value `options:`" above)
 
 ### IDE Integration
 
