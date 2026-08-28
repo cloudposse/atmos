@@ -60,6 +60,10 @@ commands:
         env: &go_auto_env
           GOTOOLCHAIN: &go_auto_toolchain auto
           CGO_ENABLED: &go_cgo_disabled "0"
+          # Link Go's native FIPS 140-3 validated crypto module so test
+          # binaries default to FIPS-enforcing (GODEBUG=fips140=on) at
+          # runtime, matching release builds. See docs/prd/fips-140-mode.md.
+          GOFIPS140: &go_fips140 latest
         flags:
           - name: cover
             type: bool
@@ -126,6 +130,7 @@ commands:
         env:
           GOTOOLCHAIN: *go_auto_toolchain
           CGO_ENABLED: *go_cgo_disabled
+          GOFIPS140: *go_fips140
           GOCOVERDIR: coverage
         steps:
           - type: atmos
@@ -173,6 +178,7 @@ commands:
         env:
           GOTOOLCHAIN: *go_auto_toolchain
           CGO_ENABLED: "1"
+          GOFIPS140: *go_fips140
         steps:
           - type: atmos
             command: build deps
