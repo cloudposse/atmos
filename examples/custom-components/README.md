@@ -45,7 +45,7 @@ examples/custom-components/
     ```
 
 3. Expected output:
-    ```
+    ```text
     Component: deploy-app
     Stack: dev
     App: myapp
