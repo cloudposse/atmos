@@ -53,9 +53,13 @@ jobs:
         # CGO_ENABLED=0: `go run .` builds the whole atmos binary graph, which pulls in
         # cgo-linked hardware-security-key deps (e.g. github.com/bearsh/hid) that need
         # system libudev headers this runner doesn't have. atmos itself always builds with
-        # CGO disabled (see .goreleaser.yml, scripts/build-atmos.sh); match that here too.
+        # CGO disabled (see .goreleaser.yml, magefiles/build.go); match that here too.
+        # GOFIPS140=latest: match every other Go-toolchain build invocation in the repo
+        # (see docs/prd/fips-140-mode.md) so this throwaway schema-generation process
+        # behaves identically to a real atmos build/test binary.
         env:
           CGO_ENABLED: "0"
+          GOFIPS140: latest
         run: go run . stack schema website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
       - name: Generate atmos-config schema
@@ -65,6 +69,7 @@ jobs:
         # configuration structs by `go generate ./pkg/config/schema`.
         env:
           CGO_ENABLED: "0"
+          GOFIPS140: latest
         run: go run . config schema website/static/schemas/atmos/atmos-config/1.0/atmos-config.json
 
       - name: Install Dependencies and Build Website
