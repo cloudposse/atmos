@@ -127,6 +127,28 @@ func convertRawEnvToStringMap(envRaw any) map[string]string {
 	return result
 }
 
+// convertRawDelimitersToStringSlice converts a raw delimiters value (any) decoded from rendered
+// YAML to []string. Handles []any (the common case from YAML unmarshaling into AtmosSectionMapType)
+// and []string; non-string elements are skipped. A present-but-empty or all-non-string sequence
+// returns a non-nil empty slice (distinct from an absent key, which callers check separately via
+// map key presence) so resolveTemplateDelimiters' existing empty-means-default fallback applies.
+func convertRawDelimitersToStringSlice(delimitersRaw any) []string {
+	result := []string{}
+
+	switch delimiters := delimitersRaw.(type) {
+	case []any:
+		for _, v := range delimiters {
+			if s, ok := v.(string); ok {
+				result = append(result, s)
+			}
+		}
+	case []string:
+		result = append(result, delimiters...)
+	}
+
+	return result
+}
+
 // extractEnvFromRawMap extracts the env map from a raw settings map[string]any.
 // This is needed because mapstructure:"-" on TemplatesSettings.Env causes
 // mapstructure.Decode to silently drop the env field.
@@ -259,6 +281,19 @@ func ProcessTmplWithDatasources(
 	evaluations, _ := lo.Coalesce(atmosConfig.Templates.Settings.Evaluations, 1)
 	result := tmplValue
 
+	// effectiveDelimiters carries the resolved delimiter pair across evaluation passes. It
+	// starts from the pre-merge struct fields directly (nil stack-level Delimiters means "not
+	// set, defer to CLI config"; non-nil, including explicitly empty, means "stack decides" --
+	// see the Delimiters comment below for why templateSettings.Delimiters itself isn't used
+	// here), then is only overwritten when a pass's own rendered output explicitly declares a
+	// "settings.templates.settings.delimiters" key -- so a template that introduces new
+	// delimiters on its first pass has them honored on the next pass, without a pass that
+	// renders no such section silently reverting to the original config.
+	effectiveDelimiters := settingsSection.Templates.Settings.Delimiters
+	if effectiveDelimiters == nil {
+		effectiveDelimiters = atmosConfig.Templates.Settings.Delimiters
+	}
+
 	// Set environment variables for template processing before the loop.
 	// Restore originals when the function returns.
 	if len(templateSettings.Env) > 0 {
@@ -320,19 +355,7 @@ func ProcessTmplWithDatasources(
 		// Process the template
 		t := template.New(tmplName).Funcs(funcs)
 
-		// Read delimiters from the pre-merge struct fields directly, not templateSettings
-		// (decoded from the merge.Merge above): that merge encodes both sides through
-		// mapstructure first, so an unset stack-level Delimiters (nil) becomes an explicit
-		// "delimiters: []" key indistinguishable from a stack manifest that deliberately sets
-		// `delimiters: []` to reset to Go's default "{{"/"}}" -- same root cause as Env's
-		// mapstructure:"-" workaround a few lines up. Stack-level nil means "not set, defer to
-		// CLI config"; stack-level non-nil (including explicitly empty) means "stack decides."
-		configuredDelimiters := settingsSection.Templates.Settings.Delimiters
-		if configuredDelimiters == nil {
-			configuredDelimiters = atmosConfig.Templates.Settings.Delimiters
-		}
-
-		leftDelimiter, rightDelimiter, err := resolveTemplateDelimiters(configuredDelimiters)
+		leftDelimiter, rightDelimiter, err := resolveTemplateDelimiters(effectiveDelimiters)
 		if err != nil {
 			return "", err
 		}
@@ -393,6 +416,15 @@ func ProcessTmplWithDatasources(
 								extraLoopKeys[k] = struct{}{}
 							}
 						}
+					}
+
+					// Only update effectiveDelimiters when this pass's own rendered output
+					// explicitly declared a delimiters key -- a pass whose output has no
+					// "settings.templates.settings.delimiters" section at all must leave the
+					// prior pass's resolved delimiters in place for the next pass, not silently
+					// reset them to nil/empty.
+					if rawDelimiters, hasDelimiters := resultMapSettingsTemplatesSettings["delimiters"]; hasDelimiters {
+						effectiveDelimiters = convertRawDelimitersToStringSlice(rawDelimiters)
 					}
 				}
 			}

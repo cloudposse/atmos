@@ -547,6 +547,55 @@ config:
 	assert.Contains(t, result, "test", "explicit delimiters: [] should render with Go's default {{ }}, not the CLI's [[ ]]")
 }
 
+// TestProcessTmplWithDatasources_DelimitersChangedMidEvaluationLoop tests that delimiters a
+// first evaluation pass introduces via its own rendered "settings.templates.settings.delimiters"
+// section are honored on the next pass, not silently reset to the original config. Regression
+// test: effectiveDelimiters previously reset from settingsSection (a fixed, pre-loop value) on
+// every pass instead of carrying a pass's own rendered delimiters forward.
+func TestProcessTmplWithDatasources_DelimitersChangedMidEvaluationLoop(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled:     true,
+				Evaluations: 2, // Multiple evaluations: pass 1 introduces new delimiters, pass 2 must use them.
+			},
+		},
+	}
+
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
+	settingsSection := schema.Settings{}
+
+	// Pass 1 uses the default "{{"/"}}" (nothing configured yet) to resolve `.name` and to
+	// render the literal `delimiters: ["<<", ">>"]` section itself (no templating needed on
+	// that section -- it's already the desired literal value). `<< .other >>` is untouched by
+	// pass 1 (its delimiters don't match "<<"/">>") and must be resolved by pass 2 using the
+	// newly-declared delimiters.
+	tmplValue := `
+settings:
+  templates:
+    settings:
+      delimiters: ["<<", ">>"]
+config:
+  first: '{{ .name }}'
+  second: '<< .other >>'
+`
+	tmplData := map[string]any{"name": "test-name", "other": "test-other"}
+
+	result, err := ProcessTmplWithDatasources(
+		atmosConfig,
+		configAndStacksInfo,
+		settingsSection,
+		"test-delimiters-mid-loop-change",
+		tmplValue,
+		tmplData,
+		true,
+	)
+
+	require.NoError(t, err)
+	assert.Contains(t, result, "test-name", "pass 1 should resolve .name with the default {{ }}")
+	assert.Contains(t, result, "test-other", "pass 2 should resolve << .other >> using the delimiters pass 1 declared")
+}
+
 // TestProcessTmplWithDatasources_EnvVarsInEvaluationLoop tests that env vars are
 // properly re-extracted when template settings are re-decoded in the evaluation loop.
 func TestProcessTmplWithDatasources_EnvVarsInEvaluationLoop(t *testing.T) {
