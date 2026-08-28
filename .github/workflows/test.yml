@@ -1480,6 +1480,12 @@ jobs:
   release:
     needs: [test, terraform-registry-cache, kubernetes-e2e, lint, mock, k3s, floci, floci-go, docker, validate, container-step, magefiles]
     if: github.event_name == 'push'
+    # Workflow-level default above is read-only. id-token: write is needed
+    # here: cosign's keyless OIDC signing (in shared-go-auto-release.yml's
+    # goreleaser job, invoked below) reads the runner's OIDC token-minting
+    # endpoint, which is gated purely by this job's own id-token permission.
+    permissions:
+      id-token: write
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@49ac8cd5c4cf74abdbf24a80027cd3bde811133a # main
     with:
       publish: false
