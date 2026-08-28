@@ -162,7 +162,7 @@ experimental = true
 | `mise prune` | No direct equivalent | Atmos has no command that removes only unused versions. |
 | `mise exec <tool>@<version> -- <command>` | `atmos toolchain exec <tool>@<version> -- <command>` | Runs one command with a pinned tool version |
 | `mise run <task>` | `atmos <command>` | Runs the migrated custom command |
-| `mise env` | `atmos toolchain env` | Prints PATH and env settings for the shell |
+| `mise env` | `atmos toolchain env` | Prints PATH only. `mise env` also exports `[env]` table entries; migrate those to a stack or command `env:` block instead — see "What to NOT Do" below. `atmos env` is unrelated: it prints only atmos.yaml's own global `env:` section, not stack or command `env:` values. |
 | `mise activate` | `eval "$(atmos toolchain env --format=bash)"` in the shell startup file | Atmos has no activate daemon. Other formats: `fish`, `powershell`, `github`. |
 | `mise search <tool>` | `atmos toolchain search <tool>` | Searches all registries |
 | `mise registry` | `atmos toolchain registry list` or `registry search` | Lists or searches one registry |

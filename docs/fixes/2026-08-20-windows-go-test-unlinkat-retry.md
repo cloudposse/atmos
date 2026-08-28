@@ -7,7 +7,7 @@
 `Acceptance Tests (windows, shard 10/10)` (GitHub Job ID: 96582175875) failed even though every
 one of its 39 packages reported `ok`. The actual failure was Go's own toolchain diagnostic:
 
-```
+```text
 go: unlinkat C:\Users\RUNNER~1\AppData\Local\Temp\go-build860437867\b2679\list.test.exe: The process cannot access the file because it is being used by another process.
 ```
 
@@ -57,3 +57,24 @@ the same time.
 - `go test ./internal/ci/acceptance/...` passes, including the new retry tests.
 - `go build ./internal/ci/acceptance/...` and `go vet ./internal/ci/acceptance/...` clean.
 - `gofumpt -l` clean on both changed files.
+
+## Follow-up: scope the retry to `go test` invocations only
+
+A PR review (CodeRabbit) correctly flagged that `commandRunner.run`'s retry, as first written,
+applied to every call through the shared `run` helper -- including `go test -c` (which writes a
+persistent `-o` binary Go never auto-deletes), `go tool covdata merge`/`textfmt`, and precompiled
+`*.test.exe`/`cmd.test` binaries executed directly. None of those can hit the actual unlinkat
+race (only a bare, on-the-fly `go test <pkgs>` compiles-runs-deletes its own temp binary), so
+retrying them on a coincidental stderr match risked rerunning a command with real side effects
+(e.g. writing coverage data twice) or silently masking an unrelated failure that happened to
+mention both substrings.
+
+Fixed by replacing `run`'s four positional parameters (`dir`, `env`, `retryTransient`, `name`)
+with an explicit `runOptions{dir, env, retryTransient}` struct (also resolving a `revive`
+`argument-limit` violation from the extra bool), passed as `true` only from the two call sites
+that run bare `go test <pkgs>`: `runSourceTestGroup` (`run.go`) and `CollectCoverage`
+(`coverage.go`). Every other call site (`go test -c`, `go tool covdata`, and the three precompiled
+test binary executions) now explicitly passes `retryTransient: false`. Added
+`TestRunDoesNotRetryWhenNotRetryTransient` to `command_test.go`, which drives the same transient
+diagnostic through the helper subprocess with `retryTransient: false` and asserts `run` fails on
+the first attempt without ever invoking the command a second time.

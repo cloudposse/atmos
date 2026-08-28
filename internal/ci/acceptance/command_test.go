@@ -165,12 +165,12 @@ func TestRunRetriesTransientWindowsUnlinkError(t *testing.T) {
 
 	countFile := filepath.Join(t.TempDir(), "fail-count")
 	if err := os.WriteFile(countFile, []byte("1"), 0o600); err != nil {
-		t.Fatal(err)
+		t.Fatalf("write initial fail count to %s: %v", countFile, err)
 	}
 
 	runner := newHelperRunner(t)
 	env := []string{helperFailCountEnv + "=" + countFile}
-	if err := runner.run(context.Background(), t.TempDir(), env, exePath); err != nil {
+	if err := runner.run(context.Background(), runOptions{dir: t.TempDir(), env: env, retryTransient: true}, exePath); err != nil {
 		t.Fatalf("run() did not recover from a single transient failure: %v", err)
 	}
 }
@@ -184,12 +184,12 @@ func TestRunGivesUpAfterExhaustingRetries(t *testing.T) {
 	countFile := filepath.Join(t.TempDir(), "fail-count")
 	// One more failure than run() will retry, so the final attempt still fails.
 	if err := os.WriteFile(countFile, []byte(strconv.Itoa(transientUnlinkRetries+1)), 0o600); err != nil {
-		t.Fatal(err)
+		t.Fatalf("write initial fail count to %s: %v", countFile, err)
 	}
 
 	runner := newHelperRunner(t)
 	env := []string{helperFailCountEnv + "=" + countFile}
-	if err := runner.run(context.Background(), t.TempDir(), env, exePath); err == nil {
+	if err := runner.run(context.Background(), runOptions{dir: t.TempDir(), env: env, retryTransient: true}, exePath); err == nil {
 		t.Fatal("expected run() to fail once transient retries are exhausted")
 	}
 }
@@ -206,7 +206,42 @@ func TestRunDoesNotRetryUnrelatedFailures(t *testing.T) {
 
 	runner := newHelperRunner(t)
 	env := []string{helperFailCountEnv + "=" + countFile}
-	if err := runner.run(context.Background(), t.TempDir(), env, exePath); err == nil {
+	if err := runner.run(context.Background(), runOptions{dir: t.TempDir(), env: env, retryTransient: true}, exePath); err == nil {
 		t.Fatal("expected run() to fail for an unrelated (non-transient) error")
+	}
+}
+
+// TestRunDoesNotRetryWhenNotRetryTransient reproduces the risk CodeRabbit flagged:
+// commandRunner.run must never retry a non-`go test` invocation (precompiled test
+// binaries, `go test -c`, `go tool covdata`) even if its output happens to contain
+// both substrings isTransientWindowsUnlinkError matches -- retrying those could rerun
+// a command with real side effects or mask a genuine, unrelated failure. This drives
+// the helper to print the exact transient diagnostic on its first invocation, but with
+// retryTransient=false run() must still fail on that first attempt.
+func TestRunDoesNotRetryWhenNotRetryTransient(t *testing.T) {
+	exePath, err := os.Executable()
+	if err != nil {
+		t.Fatalf("resolve test binary path: %v", err)
+	}
+
+	countFile := filepath.Join(t.TempDir(), "fail-count")
+	if err := os.WriteFile(countFile, []byte("1"), 0o600); err != nil {
+		t.Fatalf("write initial fail count to %s: %v", countFile, err)
+	}
+
+	runner := newHelperRunner(t)
+	env := []string{helperFailCountEnv + "=" + countFile}
+	if err := runner.run(context.Background(), runOptions{dir: t.TempDir(), env: env}, exePath); err == nil {
+		t.Fatal("expected run() to fail immediately for a non-go-test invocation, even with a matching transient diagnostic")
+	}
+
+	// Confirm it was never retried: the helper only decrements the counter (and would
+	// have exited 0 on a second call) when actually invoked again.
+	remaining, err := os.ReadFile(countFile)
+	if err != nil {
+		t.Fatalf("read fail count from %s: %v", countFile, err)
+	}
+	if string(remaining) != "0" {
+		t.Fatalf("fail count = %q, want %q (run() must invoke the command exactly once)", remaining, "0")
 	}
 }

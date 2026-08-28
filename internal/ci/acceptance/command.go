@@ -35,6 +35,7 @@ var (
 	errCoverageData         = errors.New("invalid coverage data")
 	errShardPlan            = errors.New("invalid acceptance shard plan")
 	errRequiredArtifact     = errors.New("required acceptance artifact")
+	errCommandFailed        = errors.New("command failed")
 )
 
 type commandRunner struct {
@@ -65,19 +66,37 @@ func writeStatus(format string, args ...any) error {
 	return nil
 }
 
-// run executes name/args, retrying on the known-benign Windows race where `go test`
-// (or a precompiled *.test.exe it invoked) fails to delete its own temp binary after
-// every test case has already reported ok/FAIL -- see isTransientWindowsUnlinkError.
-// Retrying is safe here: by the time that error appears, the process under test has
+// runOptions configures how commandRunner.run executes a command.
+type runOptions struct {
+	// dir is the working directory for the command.
+	dir string
+	// env is appended to the current process environment for the command.
+	env []string
+	// retryTransient enables the known-benign Windows go-test unlinkat retry (see
+	// run's doc comment). Note: it must be false for anything other than a bare
+	// `go test <pkgs>` invocation -- `go test -c` (which writes a persistent binary
+	// Go never deletes), `go tool covdata`, and precompiled *.test.exe binaries run
+	// directly cannot hit this specific race, and blindly retrying them on a
+	// coincidental stderr match could rerun a command with real side effects (e.g.
+	// writing coverage data) or mask a genuine, unrelated failure that happens to
+	// mention both substrings.
+	retryTransient bool
+}
+
+// run executes name/args in opts.dir with opts.env appended to the current
+// environment. When opts.retryTransient is true, it also retries on the known-benign
+// Windows race where a bare `go test` invocation fails to delete its own temp binary
+// after every test case has already reported ok/FAIL -- see isTransientWindowsUnlinkError.
+// Retrying is safe there: by the time that error appears, the process under test has
 // already exited and its actual pass/fail result was already written to stdout, so a
 // retry re-runs already-cached work rather than masking a real failure.
-func (r commandRunner) run(ctx context.Context, dir string, env []string, name string, args ...string) error {
+func (r commandRunner) run(ctx context.Context, opts runOptions, name string, args ...string) error {
 	var lastErr error
 	for attempt := 0; attempt <= transientUnlinkRetries; attempt++ {
 		var stderrCapture bytes.Buffer
 		cmd := exec.CommandContext(ctx, name, args...) // #nosec G702 -- CI executes only repository-selected tools and test binaries.
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), env...)
+		cmd.Dir = opts.dir
+		cmd.Env = append(os.Environ(), opts.env...)
 		cmd.Stdin = r.stdin
 		cmd.Stdout = r.stdout
 		cmd.Stderr = io.MultiWriter(r.stderr, &stderrCapture)
@@ -85,8 +104,8 @@ func (r commandRunner) run(ctx context.Context, dir string, env []string, name s
 		if err == nil {
 			return nil
 		}
-		lastErr = fmt.Errorf("run %s: %w", commandString(name, args), err)
-		if attempt == transientUnlinkRetries || !isTransientWindowsUnlinkError(stderrCapture.String()) {
+		lastErr = fmt.Errorf("%w: run %s: %w", errCommandFailed, commandString(name, args), err)
+		if attempt == transientUnlinkRetries || !opts.retryTransient || !isTransientWindowsUnlinkError(stderrCapture.String()) {
 			return lastErr
 		}
 		_, _ = fmt.Fprintf(r.stderr, "::warning::retrying %s after a transient Windows go-test cleanup race (attempt %d/%d): %v\n",
