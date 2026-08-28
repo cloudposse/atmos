@@ -4,16 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const exitCodeMetadata = "exit_code"
@@ -65,26 +68,14 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		return h.executeShellSessionStep(ctx, step, command, workDir, envVars)
 	}
 
-	// Create command - use shell to interpret the command string.
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
-
-	// Set working directory.
-	if workDir != "" {
-		cmd.Dir = workDir
-	}
-
-	// Set environment - inherit current environment and add custom vars.
-	cmd.Env = envVars
-
 	// Get output mode - use default log mode if not in workflow context.
 	mode := OutputMode(step.Output)
 	if mode == "" {
 		mode = OutputModeLog
 	}
 
-	// Execute with output mode handling.
 	writer := NewOutputModeWriter(mode, step.Name, step.Viewport, GetShowConfig(step, nil))
-	stdout, stderr, err := writer.Execute(cmd)
+	stdout, stderr, err := h.runInterpreter(ctx, writer, shellRunSpec{stepName: step.Name, command: command, workDir: workDir, env: envVars})
 	if err != nil {
 		return NewStepResult(stdout).
 			WithError(stderr).
@@ -97,6 +88,33 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		WithMetadata("stdout", stdout).
 		WithMetadata("stderr", stderr).
 		WithMetadata(exitCodeMetadata, 0), nil
+}
+
+// shellRunSpec holds the resolved inputs for a single shell execution.
+type shellRunSpec struct {
+	stepName string
+	command  string
+	workDir  string
+	env      []string
+}
+
+// runInterpreter executes a shell command through the in-process mvdan/sh
+// interpreter with secret masking, replacing a host `sh -c` subprocess. This
+// gives registry consumers (hooks, custom commands, parallel/matrix children)
+// the same cross-platform, masked, exit-code-preserving shell semantics the
+// workflow executor already used, instead of depending on the host `/bin/sh`.
+func (h *ShellHandler) runInterpreter(ctx context.Context, writer *OutputModeWriter, spec shellRunSpec) (string, string, error) {
+	return writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+		return u.ShellRunnerWithWriters(&u.ShellRunnerSpec{
+			Context: ctx,
+			Command: spec.command,
+			Name:    spec.stepName,
+			Dir:     spec.workDir,
+			Env:     spec.env,
+			Stdout:  iolib.MaskWriter(stdout),
+			Stderr:  iolib.MaskWriter(stderr),
+		})
+	})
 }
 
 // getExitCode extracts exit code from error.
@@ -163,25 +181,13 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 		return h.executeShellSessionStep(ctx, step, command, workDir, envVars)
 	}
 
-	// Create command.
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
-
-	// Set working directory.
-	if workDir != "" {
-		cmd.Dir = workDir
-	}
-
-	// Set environment.
-	cmd.Env = envVars
-
 	// Get output mode from step or workflow.
 	mode := GetOutputMode(step, workflow)
 	viewport := GetViewportConfig(step, workflow)
 	show := GetShowConfig(step, workflow)
 
-	// Execute with output mode handling.
 	writer := NewOutputModeWriter(mode, step.Name, viewport, show)
-	stdout, stderr, err := writer.Execute(cmd)
+	stdout, stderr, err := h.runInterpreter(ctx, writer, shellRunSpec{stepName: step.Name, command: command, workDir: workDir, env: envVars})
 	if err != nil {
 		return NewStepResult(stdout).
 			WithError(stderr).

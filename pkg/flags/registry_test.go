@@ -227,6 +227,26 @@ func TestFlagRegistry_RegisterFlags_WithNoOptDefVal(t *testing.T) {
 	assert.Equal(t, cfg.IdentityFlagSelectValue, flag.NoOptDefVal)
 }
 
+// TestFlagRegistry_RegisterFlags_StringSliceFlag_WithNoOptDefVal proves the *StringSliceFlag
+// branch in registerFlagToSet applies NoOptDefVal the same way as the *StringFlag branch
+// exercised by TestFlagRegistry_RegisterFlags_WithNoOptDefVal above -- required for flags like
+// --profile that support both `--profile foo` and a bare `--profile` (interactive picker).
+func TestFlagRegistry_RegisterFlags_StringSliceFlag_WithNoOptDefVal(t *testing.T) {
+	registry := NewFlagRegistry()
+	registry.Register(&StringSliceFlag{
+		Name:        "profile",
+		NoOptDefVal: cfg.IdentityFlagSelectValue,
+		Description: "Configuration profile(s)",
+	})
+
+	cmd := &cobra.Command{Use: "test"}
+	registry.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("profile")
+	require.NotNil(t, flag)
+	assert.Equal(t, cfg.IdentityFlagSelectValue, flag.NoOptDefVal)
+}
+
 func TestFlagRegistry_RegisterPersistentFlags(t *testing.T) {
 	registry := NewFlagRegistry()
 	registry.Register(&StringFlag{Name: "logs-level", Description: "Log level"})
@@ -439,4 +459,23 @@ func TestFlagRegistry_Validate(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestFlagRegistry_RegisterFlags_StringSliceShorthand proves slice flags register their declared
+// shorthand: registerFlagToSet must use StringSliceP, not the shorthand-dropping StringSlice
+// (regression: `atmos vendor update -c vpc` failed with "unknown shorthand flag: 'c'").
+func TestFlagRegistry_RegisterFlags_StringSliceShorthand(t *testing.T) {
+	registry := NewFlagRegistry()
+	registry.Register(&StringSliceFlag{Name: "component", Shorthand: "c", Default: []string{}})
+
+	cmd := &cobra.Command{Use: "test"}
+	registry.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("component")
+	require.NotNil(t, flag)
+	assert.Equal(t, "c", flag.Shorthand)
+	require.NoError(t, cmd.Flags().Parse([]string{"-c", "vpc"}))
+	values, err := cmd.Flags().GetStringSlice("component")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vpc"}, values)
 }

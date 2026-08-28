@@ -242,6 +242,7 @@ Atmos manages its own version through the re-exec pattern in `pkg/version/reexec
 - **Semver**: `1.199.0`, `v1.199.0` — installs from toolchain registry
 - **PR number**: `pr:2040` or just `2040` (auto-detected) — installs from GitHub Actions artifact
 - **Commit SHA**: `sha:ceb7526` or `ceb7526be` (auto-detected, 7-40 hex chars) — installs from GitHub Actions artifact
+- **Git ref**: `ref:main`, `ref:release/v1.199`, or `ref:v1.199.0` — resolves a branch or tag to its latest commit's GitHub Actions artifact
 
 **Architecture** (`pkg/version/reexec.go`):
 - `ReexecConfig` struct with dependency injection for testability (VersionFinder, VersionInstaller, ExecFunc, GetEnv, SetEnv)
@@ -1082,24 +1083,24 @@ settings:
 ### Mitigation Plan
 
 1. **Checksum Verification** (Phase 5)
-   - Fetch SHA256 checksums from releases
-   - Verify before extraction
-   - Fail installation on mismatch
+    - Fetch SHA256 checksums from releases
+    - Verify before extraction
+    - Fail installation on mismatch
 
 2. **Signature Verification** (Phase 5)
-   - Support GPG signature verification
-   - Vendor public keys for known tools
-   - Warn on unsigned binaries
+    - Support GPG signature verification
+    - Vendor public keys for known tools
+    - Warn on unsigned binaries
 
 3. **Secure Defaults**
-   - Require HTTPS for all downloads
-   - Validate download sources
-   - Sandbox extraction (already implemented: path validation, size limits)
+    - Require HTTPS for all downloads
+    - Validate download sources
+    - Sandbox extraction (already implemented: path validation, size limits)
 
 4. **Audit Trail**
-   - Log all tool installations
-   - Record checksums of installed binaries
-   - Enable tamper detection
+    - Log all tool installations
+    - Record checksums of installed binaries
+    - Enable tamper detection
 
 ---
 
@@ -1124,29 +1125,29 @@ settings:
 ### Test Categories
 
 1. **Unit Tests** (`toolchain/*_test.go`, `version/*_test.go`, `github/*_test.go`)
-   - Tool resolution logic
-   - Version constraint parsing
-   - Registry querying
-   - File operations
-   - Version spec parsing (PR, SHA, semver)
-   - Re-exec guard logic
-   - Artifact fetching with mock GitHub API
+    - Tool resolution logic
+    - Version constraint parsing
+    - Registry querying
+    - File operations
+    - Version spec parsing (PR, SHA, semver, ref)
+    - Re-exec guard logic
+    - Artifact fetching with mock GitHub API
 
 2. **Integration Tests**
-   - End-to-end tool installation
-   - Multi-version scenarios
-   - Registry fallback behavior
+    - End-to-end tool installation
+    - Multi-version scenarios
+    - Registry fallback behavior
 
 3. **Cross-Platform Tests**
-   - Linux, macOS, Windows
-   - Different architectures (amd64, arm64)
-   - Path handling via `filepath.Join()`
+    - Linux, macOS, Windows
+    - Different architectures (amd64, arm64)
+    - Path handling via `filepath.Join()`
 
 4. **Mock Infrastructure**
-   - Mock HTTP client for registry calls
-   - Mock file system for installation
-   - Mock GitHub API responses (`PullRequestService`, `ActionsService`)
-   - `ReexecConfig` with mock `VersionFinder`, `VersionInstaller`, `ExecFunc`
+    - Mock HTTP client for registry calls
+    - Mock file system for installation
+    - Mock GitHub API responses (`PullRequestService`, `ActionsService`)
+    - `ReexecConfig` with mock `VersionFinder`, `VersionInstaller`, `ExecFunc`
 
 ### Coverage Gaps
 

@@ -12,7 +12,8 @@ components:
 
 container:
   runtime:
-    auto_start: true
+    provider: auto # optional: auto (default), or pin docker|podman
+    # Auto-start is the default. Set auto_start: false to opt out.
 
 # A composition groups multiple services into one system. The `services:` list is
 # a CLOSED contract for membership (a component may only claim a service listed

@@ -16,19 +16,21 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
 	xterm "golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/diagnostics"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	process "github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/shell"
 	terminalpkg "github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -90,6 +92,31 @@ func WithProcessContext(ctx context.Context) ShellCommandOption {
 	}
 }
 
+func shellCommandContext(opts ...ShellCommandOption) context.Context {
+	var cfg shellCommandConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if cfg.ctx == nil {
+		return context.Background()
+	}
+	return cfg.ctx
+}
+
+func shellCommandOutputWriters(opts ...ShellCommandOption) provisioner.OutputWriters {
+	var cfg shellCommandConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if cfg.streams == nil {
+		return provisioner.OutputWriters{}
+	}
+	return provisioner.OutputWriters{
+		Stdout: cfg.streams.Stdout,
+		Stderr: cfg.streams.Stderr,
+	}
+}
+
 // WithEnvironment provides a pre-sanitized process environment for subprocess execution.
 // When provided, ExecuteShellCommand uses this instead of re-reading os.Environ().
 // Pass nil to fall back to the default os.Environ() behavior.
@@ -99,6 +126,26 @@ func WithEnvironment(env []string) ShellCommandOption {
 	return func(c *shellCommandConfig) {
 		c.processEnv = env
 	}
+}
+
+// resolveMaskingDisabled decides whether output masking should be disabled.
+// The --mask/ATMOS_MASK flag/env override wins when set, otherwise
+// settings.terminal.mask.enabled (from atmos.yaml) applies. The presence
+// check (IsSet) and value read (GetBool) run together under one
+// cfg.GlobalViper().View call so a concurrent LoadConfig Set() between the
+// two can never combine one snapshot's presence result with a different
+// snapshot's value -- masking is security-sensitive, so this decision must
+// never be made from a torn read.
+func resolveMaskingDisabled(atmosConfig *schema.AtmosConfiguration) bool {
+	disableMasking := false
+	cfg.GlobalViper().View(func(v cfg.ViperReader) {
+		if v.IsSet("mask") {
+			disableMasking = !v.GetBool("mask")
+		} else if v.IsSet("settings.terminal.mask.enabled") {
+			disableMasking = !atmosConfig.Settings.Terminal.Mask.Enabled
+		}
+	})
+	return disableMasking
 }
 
 // ExecuteShellCommand prints and executes the provided command with args and flags.
@@ -114,14 +161,8 @@ func ExecuteShellCommand(
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteShellCommand")()
 
-	disableMasking := false
-	if viper.IsSet("mask") {
-		disableMasking = !viper.GetBool("mask")
-	} else if viper.IsSet("settings.terminal.mask.enabled") {
-		disableMasking = !atmosConfig.Settings.Terminal.Mask.Enabled
-	}
 	ioLayer.ApplyMaskingConfig(&ioLayer.Config{
-		DisableMasking: disableMasking,
+		DisableMasking: resolveMaskingDisabled(&atmosConfig),
 		AtmosConfig:    atmosConfig,
 	})
 
@@ -421,6 +462,11 @@ func (w *synchronizedWriter) Write(p []byte) (int, error) {
 
 // ExecuteShellSpec configures shell execution.
 type ExecuteShellSpec struct {
+	// Context, when set, is threaded into the interpreter so cancellation
+	// (e.g. Ctrl-C on the top-level Cobra invocation) stops an in-flight
+	// shell step instead of letting it run to completion. Defaults to
+	// context.Background() when nil.
+	Context context.Context
 	Command string
 	Name    string
 	Dir     string
@@ -479,6 +525,7 @@ func ExecuteShellWithWriters(spec *ExecuteShellSpec) error {
 	}
 
 	return u.ShellRunnerWithWriters(&u.ShellRunnerSpec{
+		Context: spec.Context,
 		Command: spec.Command,
 		Name:    spec.Name,
 		Dir:     spec.Dir,
@@ -697,7 +744,7 @@ func ExecAuthShellCommand(
 	log.Debug("Setting the ENV vars in the shell")
 
 	// Warn about masking limitations in interactive TTY sessions.
-	maskingEnabled := viper.GetBool("mask")
+	maskingEnabled := cfg.GlobalViper().GetBool("mask")
 	if maskingEnabled {
 		log.Debug("Interactive TTY session - output masking is not available due to TTY limitations")
 	}
@@ -743,11 +790,11 @@ func printShellEnterMessage(identityName, providerName string) {
 		identityDisplay = fmt.Sprintf("%s %s", identityName, providerStyle.Render(fmt.Sprintf("(%s)", providerName)))
 	}
 
-	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "\n%s %s\n",
+	ui.Writef("\n%s %s\n",
 		headerStyle.Render("→ Entering Atmos shell with identity:"),
 		identityStyle.Render(identityDisplay))
 
-	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "%s\n\n",
+	ui.Writef("%s\n\n",
 		hintStyle.Render("  Type 'exit' to return to your normal shell"))
 }
 
@@ -765,7 +812,7 @@ func printShellExitMessage(identityName, providerName string) {
 		identityDisplay = fmt.Sprintf("%s (%s)", identityName, providerName)
 	}
 
-	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "\n%s %s\n\n",
+	ui.Writef("\n%s %s\n\n",
 		headerStyle.Render("← Exited Atmos shell for identity:"),
 		identityStyle.Render(identityDisplay))
 }

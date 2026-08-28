@@ -12,7 +12,7 @@ func TestDockerfileInstallsPython3Runtime(t *testing.T) {
 	content, err := os.ReadFile("../Dockerfile")
 	require.NoError(t, err)
 
-	assert.Contains(t, string(content), "--no-install-recommends curl git ca-certificates python3")
+	assert.Contains(t, string(content), "--no-install-recommends curl git ca-certificates docker.io python3")
 	assert.NotContains(t, string(content), "python3-pip")
 	assert.NotContains(t, string(content), "python3-venv")
 }

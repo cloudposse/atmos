@@ -54,6 +54,9 @@ The command is particularly useful for:
 
   <dt>`--process-functions`</dt>
   <dd>Enable/disable YAML functions processing in Atmos stack manifests (default `true`). YAML functions include `!terraform.state`, `!terraform.output`, `!store`, `!aws.*`, etc. This is distinct from Go template functions like `atmos.Component(...)`, which are controlled by `--process-templates`.<br/>Environment variable: `ATMOS_PROCESS_FUNCTIONS`</dd>
+
+  <dt>`--on-error`</dt>
+  <dd>How to handle a recoverable YAML-function error, such as a Terraform backend that has not been provisioned yet (default `strict`). `strict` fails the command on the first such error. `warn` substitutes `null` for the unresolved value, prints a warning naming the stack/component/function, and continues processing the rest of the stacks. Errors unrelated to backend provisioning (auth failures, malformed YAML, etc.) still fail the command in either mode.<br/>Environment variable: `ATMOS_LIST_ON_ERROR`</dd>
 </dl>
 
 ## Examples

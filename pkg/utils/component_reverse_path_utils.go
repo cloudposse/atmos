@@ -83,7 +83,7 @@ func validatePathIsNotConfigDirectory(atmosConfig *schema.AtmosConfiguration, ab
 			return errUtils.Build(errUtils.ErrPathNotInComponentDir).
 				WithExplanationf("Path points to the stacks configuration directory, not a component:  \n%s\n\nStacks directory:  \n%s",
 					absPath, stacksBasePath).
-				WithHint("Components are located in component directories (terraform, helmfile, packer)  \nChange to a component directory and use `.` or provide a path within a component directory").
+				WithHint("Components are located in component directories (terraform, helmfile, packer)\n\nChange to a component directory and use `.` or provide a path within a component directory").
 				WithContext("path", absPath).
 				WithContext("stacks_base", stacksBasePath).
 				WithExitCode(2).
@@ -98,7 +98,7 @@ func validatePathIsNotConfigDirectory(atmosConfig *schema.AtmosConfiguration, ab
 			return errUtils.Build(errUtils.ErrPathNotInComponentDir).
 				WithExplanationf("Path points to the workflows directory, not a component:  \n%s\n\nWorkflows directory:  \n%s",
 					absPath, workflowsBasePath).
-				WithHint("Components are located in component directories (terraform, helmfile, packer)  \nChange to a component directory and use `.` or provide a path within a component directory").
+				WithHint("Components are located in component directories (terraform, helmfile, packer)\n\nChange to a component directory and use `.` or provide a path within a component directory").
 				WithContext("path", absPath).
 				WithContext("workflows_base", workflowsBasePath).
 				WithExitCode(2).
@@ -191,7 +191,7 @@ func normalizePathForResolution(path string) (string, error) {
 // tryExtractComponentType attempts to extract component info for a specific component type.
 
 // ResolveAndCleanBasePath resolves a base path to absolute form and resolves symlinks.
-func resolveAndCleanBasePath(basePath string) (string, error) {
+func ResolveAndCleanBasePath(basePath string) (string, error) {
 	// Ensure base path is absolute.
 	if !filepath.IsAbs(basePath) {
 		basePathAbs, err := filepath.Abs(basePath)
@@ -282,7 +282,7 @@ func getResolvedBasePath(atmosConfig *schema.AtmosConfiguration, componentType s
 		return "", err
 	}
 
-	return resolveAndCleanBasePath(basePath)
+	return ResolveAndCleanBasePath(basePath)
 }
 
 // validatePathWithinBase validates that absPath is within basePath and returns the relative path.

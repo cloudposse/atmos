@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -36,6 +37,56 @@ func TestWorkdirHandlerExecuteProvisionsLocalSource(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(targetDir, "nested", "file.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "nested\n", string(content))
+}
+
+func TestWorkdirHandlerExecuteResolvesPathAgainstWorkingDirectory(t *testing.T) {
+	workDir := t.TempDir()
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "README.md"), []byte("demo\n"), 0o644))
+	t.Chdir(t.TempDir())
+
+	handler := &WorkdirHandler{BaseHandler: NewBaseHandler(schema.TaskTypeWorkdir, CategoryCommand, false)}
+	result, err := handler.Execute(context.Background(), &schema.WorkflowStep{
+		Name:             "fixture",
+		Type:             schema.TaskTypeWorkdir,
+		Source:           sourceDir,
+		Path:             "target",
+		WorkingDirectory: workDir,
+	}, NewVariables())
+
+	require.NoError(t, err)
+	want := filepath.Join(workDir, "target")
+	assert.Equal(t, want, result.Value)
+	assert.FileExists(t, filepath.Join(want, "README.md"))
+}
+
+func TestWorkdirHandlerExecuteResolvesRelativeSourceAgainstWorkingDirectory(t *testing.T) {
+	workDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(workDir, "srcdir"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "srcdir", "marker.txt"), []byte("from-working-directory\n"), 0o644))
+
+	// A same-named "srcdir" elsewhere (the process cwd) proves source
+	// anchors to WorkingDirectory, not cwd, when both exist.
+	cwd := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(cwd, "srcdir"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "srcdir", "marker.txt"), []byte("from-cwd\n"), 0o644))
+	t.Chdir(cwd)
+
+	handler := &WorkdirHandler{BaseHandler: NewBaseHandler(schema.TaskTypeWorkdir, CategoryCommand, false)}
+	result, err := handler.Execute(context.Background(), &schema.WorkflowStep{
+		Name:             "fixture",
+		Type:             schema.TaskTypeWorkdir,
+		Source:           "srcdir",
+		Path:             "target",
+		WorkingDirectory: workDir,
+	}, NewVariables())
+
+	require.NoError(t, err)
+	want := filepath.Join(workDir, "target")
+	assert.Equal(t, want, result.Value)
+	content, err := os.ReadFile(filepath.Join(want, "marker.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "from-working-directory\n", string(content))
 }
 
 func TestWorkdirHandlerExecuteRequiresResetForExistingTarget(t *testing.T) {
@@ -191,7 +242,7 @@ func TestWorkdirHandlerExecutePropagatesPathTemplateError(t *testing.T) {
 		Path:   "{{ range .steps }}",
 	}, NewVariables())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to resolve path")
+	assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 }
 
 func TestResolveWorkdirSourceValuePassesThroughUnknownTypes(t *testing.T) {

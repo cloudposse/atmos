@@ -297,13 +297,16 @@ func (f *IntFlag) GetCompletionFunc() func(*cobra.Command, []string, string) ([]
 //
 //	--config file1.yaml,file2.yaml
 type StringSliceFlag struct {
-	Name           string
-	Shorthand      string
-	Default        []string
-	Description    string
-	Required       bool
-	EnvVars        []string // Environment variables to bind.
-	CompletionFunc func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective)
+	Name                    string
+	Shorthand               string
+	Default                 []string
+	Description             string
+	Required                bool
+	NoOptDefVal             string // Value when flag used without argument (sentinel pattern, e.g. --profile picker).
+	NoOptDefValNoSpaceValue bool
+	EnvVars                 []string // Environment variables to bind.
+	ValidValues             []string // Valid values for each element of this flag (enforced during validation).
+	CompletionFunc          func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective)
 }
 
 // GetName implements Flag.
@@ -345,14 +348,14 @@ func (f *StringSliceFlag) IsRequired() bool {
 func (f *StringSliceFlag) GetNoOptDefVal() string {
 	defer perf.Track(nil, "flags.StringSliceFlag.GetNoOptDefVal")()
 
-	return "" // StringSlice flags don't use NoOptDefVal.
+	return f.NoOptDefVal
 }
 
 // GetNoOptDefValConsumesNextArg implements Flag.
 func (f *StringSliceFlag) GetNoOptDefValConsumesNextArg() bool {
 	defer perf.Track(nil, "flags.StringSliceFlag.GetNoOptDefValConsumesNextArg")()
 
-	return false
+	return !f.NoOptDefValNoSpaceValue
 }
 
 // GetEnvVars implements Flag.
@@ -362,11 +365,102 @@ func (f *StringSliceFlag) GetEnvVars() []string {
 	return f.EnvVars
 }
 
+// GetValidValues returns the list of valid values for each element of this flag.
+// Returns nil if no validation is needed.
+func (f *StringSliceFlag) GetValidValues() []string {
+	defer perf.Track(nil, "flags.StringSliceFlag.GetValidValues")()
+
+	return f.ValidValues
+}
+
 // GetCompletionFunc implements Flag.
 func (f *StringSliceFlag) GetCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	defer perf.Track(nil, "flags.StringSliceFlag.GetCompletionFunc")()
 
 	return f.CompletionFunc
+}
+
+// StringMapFlag represents a flag that accepts multiple key=value pairs.
+// Example: --set foo=bar --set baz=qux
+// Result: map[string]string{"foo": "bar", "baz": "qux"}
+//
+// This flag type is useful for commands that need to accept template variables
+// or configuration overrides in key=value format.
+//
+// Usage patterns:
+//   - Repeated flags: --set key1=val1 --set key2=val2
+//   - Comma-separated env: ATMOS_SET=key1=val1,key2=val2
+//   - Config file: set: {key1: val1, key2: val2}
+type StringMapFlag struct {
+	Name        string
+	Shorthand   string
+	Default     map[string]string
+	Description string
+	Required    bool
+	EnvVars     []string // Environment variables to bind.
+}
+
+// GetName implements Flag.
+func (f *StringMapFlag) GetName() string {
+	defer perf.Track(nil, "flags.StringMapFlag.GetName")()
+
+	return f.Name
+}
+
+// GetShorthand implements Flag.
+func (f *StringMapFlag) GetShorthand() string {
+	defer perf.Track(nil, "flags.StringMapFlag.GetShorthand")()
+
+	return f.Shorthand
+}
+
+// GetDescription implements Flag.
+func (f *StringMapFlag) GetDescription() string {
+	defer perf.Track(nil, "flags.StringMapFlag.GetDescription")()
+
+	return f.Description
+}
+
+// GetDefault implements Flag.
+func (f *StringMapFlag) GetDefault() interface{} {
+	defer perf.Track(nil, "flags.StringMapFlag.GetDefault")()
+
+	return f.Default
+}
+
+// IsRequired implements Flag.
+func (f *StringMapFlag) IsRequired() bool {
+	defer perf.Track(nil, "flags.StringMapFlag.IsRequired")()
+
+	return f.Required
+}
+
+// GetNoOptDefVal implements Flag.
+func (f *StringMapFlag) GetNoOptDefVal() string {
+	defer perf.Track(nil, "flags.StringMapFlag.GetNoOptDefVal")()
+
+	return "" // StringMap flags don't use NoOptDefVal.
+}
+
+// GetNoOptDefValConsumesNextArg implements Flag.
+func (f *StringMapFlag) GetNoOptDefValConsumesNextArg() bool {
+	defer perf.Track(nil, "flags.StringMapFlag.GetNoOptDefValConsumesNextArg")()
+
+	return false
+}
+
+// GetEnvVars implements Flag.
+func (f *StringMapFlag) GetEnvVars() []string {
+	defer perf.Track(nil, "flags.StringMapFlag.GetEnvVars")()
+
+	return f.EnvVars
+}
+
+// GetCompletionFunc implements Flag.
+func (f *StringMapFlag) GetCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	defer perf.Track(nil, "flags.StringMapFlag.GetCompletionFunc")()
+
+	return nil // StringMap flags don't use custom completion.
 }
 
 // positionalArgsConfig stores positional argument configuration.

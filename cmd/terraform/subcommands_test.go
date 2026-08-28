@@ -93,6 +93,25 @@ func TestSubcommandFlagSetup(t *testing.T) {
 	}
 }
 
+func TestMigrateCommandTreeRegistered(t *testing.T) {
+	migrateCmd, _, err := terraformCmd.Find([]string{"migrate"})
+	require.NoError(t, err)
+	require.NotNil(t, migrateCmd)
+	assert.Equal(t, "migrate", migrateCmd.Use)
+	assert.Equal(t, "true", migrateCmd.Annotations["experimental"], "migrate must be marked experimental")
+
+	for _, args := range [][]string{
+		{"migrate", "plan"},
+		{"migrate", "apply"},
+		{"migrate", "list"},
+	} {
+		cmd, _, findErr := terraformCmd.Find(args)
+		require.NoError(t, findErr)
+		require.NotNil(t, cmd)
+		assert.Equal(t, args[len(args)-1], cmd.Name())
+	}
+}
+
 // TestSubcommandParserSetup verifies that parsers are properly configured.
 func TestSubcommandParserSetup(t *testing.T) {
 	for _, tc := range getSubcommandTestCases() {
@@ -408,6 +427,39 @@ func TestNewTerraformPassthroughSubcommand(t *testing.T) {
 	assert.NotNil(t, cmd.RunE, "passthrough subcommand should have RunE")
 	assert.True(t, cmd.FParseErrWhitelist.UnknownFlags,
 		"passthrough subcommand should whitelist unknown flags")
+}
+
+func TestTerraformPassthroughLeafBindsMultiComponentFlags(t *testing.T) {
+	var lockCmd *cobra.Command
+	for _, cmd := range providersCmd.Commands() {
+		if cmd.Name() == "lock" {
+			lockCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, lockCmd)
+	found, _, err := providersCmd.Find([]string{"lock", "--all"})
+	require.NoError(t, err)
+	assert.Same(t, lockCmd, found, "Cobra must route providers lock to its passthrough leaf")
+
+	all := lockCmd.Flags().Lookup("all")
+	require.NotNil(t, all, "providers lock must define --all")
+	originalValue := all.Value.String()
+	originalChanged := all.Changed
+	t.Cleanup(func() {
+		require.NoError(t, all.Value.Set(originalValue))
+		all.Changed = originalChanged
+	})
+
+	require.NoError(t, all.Value.Set("true"))
+	all.Changed = true
+
+	v := viper.New()
+	require.NoError(t, terraformParser.BindFlagsToViper(lockCmd, v))
+	require.NoError(t, providersParser.BindFlagsToViper(lockCmd, v))
+	opts, err := ParseTerraformRunOptions(v)
+	require.NoError(t, err)
+	assert.True(t, opts.All, "the passthrough leaf must preserve --all")
 }
 
 // TestNewWorkspacePassthroughSubcommand tests the workspace-specific helper function

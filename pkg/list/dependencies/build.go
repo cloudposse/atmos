@@ -6,6 +6,7 @@ package dependencies
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/go-viper/mapstructure/v2"
 
@@ -14,6 +15,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 // NodeID returns the canonical, collision-safe node ID for a component in a
@@ -75,6 +77,33 @@ func BuildGraph(stacks map[string]any) (*dependency.Graph, error) {
 
 	graph.IdentifyRoots()
 	return graph, nil
+}
+
+// UnresolvedDependencySources returns, per stack, the sorted components whose
+// dependency declarations contain an unresolved (templated or YAML-function)
+// component/stack value. BuildGraph drops such edges — the literal target ID
+// matches no node. For the FORWARD direction the scoped-closure loop converges
+// anyway: the declaring component is already in the closure, so Phase C
+// evaluation resolves its edges. In the REVERSE direction the declaring
+// component is exactly the node the closure is trying to discover, so it must
+// be conservatively evaluated for its edges to materialize at all.
+func UnresolvedDependencySources(stacks map[string]any, leftDelim string) map[string][]string {
+	defer perf.Track(nil, "dependencies.UnresolvedDependencySources")()
+
+	sources := make(map[string][]string)
+	walkComponents(stacks, func(stackName, componentName string, componentSection map[string]any) {
+		deps := extractComponentDependencies(componentSection)
+		for i := range deps {
+			if tags.SelectorUnresolved(deps[i].Component, leftDelim) || tags.SelectorUnresolved(deps[i].Stack, leftDelim) {
+				sources[stackName] = append(sources[stackName], componentName)
+				break
+			}
+		}
+	})
+	for stackName := range sources {
+		sort.Strings(sources[stackName])
+	}
+	return sources
 }
 
 // walkComponents iterates over every concrete terraform component in the stacks

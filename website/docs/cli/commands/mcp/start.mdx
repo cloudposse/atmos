@@ -48,7 +48,7 @@ The `atmos mcp start` command starts the Atmos MCP server, enabling AI clients t
 
 The server supports two transport protocols:
 - **stdio** (default) — Standard input/output for desktop apps like Claude Desktop, VS Code, and Cursor
-- **http** — HTTP with Server-Sent Events (SSE) for remote access, shared servers, and CI/CD
+- **http** — Streamable HTTP for remote access, shared servers, and CI/CD
 
 ## Usage
 
@@ -86,7 +86,7 @@ atmos mcp start --transport http --host 127.0.0.1 --port 3000
 
 <dl>
   <dt>How it works</dt>
-  <dd>**stdio (default):** Client spawns Atmos as a subprocess; communication over stdin/stdout. **HTTP:** Atmos listens on an HTTP port with SSE.</dd>
+  <dd>**stdio (default):** Client spawns Atmos as a subprocess; communication over stdin/stdout. **HTTP:** Atmos listens on an HTTP port using the Streamable HTTP transport.</dd>
 
   <dt>Best for</dt>
   <dd>**stdio:** Desktop apps, local development. **HTTP:** Remote access, shared servers, CI/CD.</dd>
@@ -103,14 +103,11 @@ atmos mcp start --transport http --host 127.0.0.1 --port 3000
 When running with `--transport http`, the server exposes:
 
 <dl>
-  <dt>`GET /sse`</dt>
-  <dd>Server-Sent Events stream for client communication.</dd>
-
-  <dt>`POST /message`</dt>
-  <dd>JSON-RPC 2.0 message endpoint.</dd>
+  <dt>`/` (all methods)</dt>
+  <dd>The MCP endpoint. Handles the full Streamable HTTP protocol -- `POST` for client messages, `GET` to optionally upgrade to a server-initiated stream, `DELETE` to end a session -- all on this single path.</dd>
 
   <dt>`GET /health`</dt>
-  <dd>Returns `{"status":"healthy","clients":N}`. Use for monitoring and liveness probes.</dd>
+  <dd>Returns `{"status":"healthy"}`. Use for monitoring and liveness probes.</dd>
 </dl>
 
 :::warning HTTP Transport

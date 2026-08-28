@@ -1,0 +1,112 @@
+---
+title: "!labels"
+sidebar_position: 92
+sidebar_label: "!labels"
+sidebar_class_name: command
+description: Retrieve the current component's own metadata.labels as a map
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `!labels` YAML function returns the current component's own `metadata.labels` as a typed map
+(`map[string]string`), without the `!template '{{ toJson .metadata.labels }}'` boilerplate normally
+needed to get a properly-typed value out of a template expression.
+</Intro>
+
+## Usage
+
+The `!labels` function takes no parameters:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          cost-center: platform
+          compliance: sox
+      vars:
+        labels: !labels
+```
+
+## Arguments
+
+This function takes no arguments. It reads `metadata.labels` from the component it's used on.
+
+## How It Works
+
+When processing the `!labels` YAML function, Atmos reads the `labels` field from the component's
+own `metadata` section (the same `metadata.labels` used for `atmos list components --labels`
+filtering) and returns it as a `map[string]string`. If `metadata.labels` is unset, `!labels`
+returns an empty map rather than an error, consistent with labels being optional everywhere in
+Atmos.
+
+## Bridging `metadata.labels` into `vars.tags`
+
+The most common use of `!labels` is to bridge Atmos's own `metadata.labels` (used for CLI
+categorization and filtering) into the map-shaped `vars.tags`/`vars.labels` that
+`terraform-null-label`-style modules expect for actual cloud resource tagging:
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        tags: [production, networking]
+        labels:
+          Namespace: eg
+          Environment: prod
+          cost-center: platform
+      vars:
+        # var.tags (map, AWS/terraform-null-label convention) <- metadata.labels
+        tags: !labels
+```
+</File>
+
+:::note Why `vars.tags: !labels` isn't a typo
+Terraform/AWS-style modules call their map-shaped resource-tagging input `tags`
+(`var.tags map(string)`) — the same "AWS calls a map a tag" naming that Atmos's tags-vs-labels
+standard distinguishes: a list is a **tag**, a map is a **label**. So `!labels` — which returns
+the map — is what belongs in a module's `tags` variable. `!tags` returns Atmos's own `[]string`
+list and is for a different shape of consumer entirely.
+:::
+
+## Examples
+
+### Bridging into a Terraform module
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          cost-center: platform
+          compliance: sox
+      vars:
+        tags: !labels
+```
+</File>
+
+### No Labels Set
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    rds:
+      vars:
+        # labels will be {} (empty map, not an error)
+        labels: !labels
+```
+</File>
+
+## Related Functions
+
+- [!tags](/functions/yaml/tags) - Get the current component's own `metadata.tags` as a list
+- [!labels.keys](/functions/yaml/labels.keys) - Get the current component's `metadata.labels` keys
+- [!labels.values](/functions/yaml/labels.values) - Get the current component's `metadata.labels` values

@@ -21,6 +21,7 @@ export default function TimelineEntry({
   const formattedDate = new Date(date).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
+    timeZone: 'UTC',
   });
 
   return (

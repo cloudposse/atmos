@@ -1,0 +1,65 @@
+# atmos:template
+# Atmos configuration for [[ .Config.project_name ]] (Azure landing zone).
+# https://atmos.tools/cli/configuration
+
+base_path: "./"
+
+components:
+  terraform:
+    command: [[ .Config.terraform_command ]]
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+auth:
+  identities:
+    local:
+      kind: azure/emulator
+      emulator: azure
+      default: true
+    # Real Azure instead of the local emulator: run `az login` once,
+    # uncomment this identity and the provider below it, and run with
+    # `--identity azure` -- or move `default: true` here once configured.
+    # https://atmos.tools/cli/commands/auth
+    # azure:
+    #   kind: azure/subscription
+    #   via:
+    #     provider: azure-cli
+    #   principal:
+    #     subscription_id: "00000000-0000-0000-0000-000000000000"
+    #     location: "[[ .Config.location ]]"
+  # providers:
+  #   azure-cli:
+  #     kind: azure/cli
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+commands:
+  - name: test
+    description: Validate stacks, then provision and destroy every environment on the local emulator.
+    steps:
+      - atmos validate stacks
+      - atmos emulator up azure -s dev
+      - atmos terraform apply --all -s dev -auto-approve
+      - atmos terraform destroy --all -s dev -auto-approve
+      - atmos emulator down azure -s dev
+      - atmos emulator up azure -s staging
+      - atmos terraform apply --all -s staging -auto-approve
+      - atmos terraform destroy --all -s staging -auto-approve
+      - atmos emulator down azure -s staging
+      - atmos emulator up azure -s prod
+      - atmos terraform apply --all -s prod -auto-approve
+      - atmos terraform destroy --all -s prod -auto-approve
+      - atmos emulator down azure -s prod

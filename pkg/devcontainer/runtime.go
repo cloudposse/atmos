@@ -16,29 +16,32 @@ import (
 )
 
 // DetectRuntime detects the container runtime based on settings.
-// If runtimeSetting is specified ("docker" or "podman"), it uses that.
+// If runtimeSetting is specified ("auto", "docker", or "podman"), it uses that.
 // Otherwise, it auto-detects the runtime.
 func DetectRuntime(runtimeSetting string) (container.Runtime, error) {
 	defer perf.Track(nil, "devcontainer.DetectRuntime")()
 
 	ctx := context.Background()
 
-	runtime, err := container.DetectRuntimeWithPreference(ctx, runtimeSetting)
+	// Config loading promotes the default container.runtime.auto_start setting to
+	// the runtime detector, so devcontainers share the same Podman recovery path
+	// as container components and workflow steps.
+	runtime, err := container.DetectRuntimeWithPreferenceAndRecovery(ctx, runtimeSetting, false)
 	if err == nil {
 		return runtime, nil
 	}
 
-	if runtimeSetting != "" && runtimeSetting != string(container.TypeDocker) && runtimeSetting != string(container.TypePodman) {
+	if runtimeSetting != "" && runtimeSetting != string(container.TypeAuto) && runtimeSetting != string(container.TypeDocker) && runtimeSetting != string(container.TypePodman) {
 		return nil, errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
 			WithExplanationf("Invalid runtime setting `%s`", runtimeSetting).
-			WithHint("Runtime must be either `docker` or `podman`").
+			WithHint("Runtime must be `auto`, `docker`, or `podman`").
 			WithHint("Update the devcontainer configuration in `atmos.yaml` to use a valid runtime").
 			WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
 			WithExample(`components:
   devcontainer:
     my-dev:
       settings:
-        runtime: docker  # or podman`).
+        runtime: auto  # or docker, podman`).
 			WithContext("runtime_setting", runtimeSetting).
 			WithExitCode(2).
 			Err()

@@ -73,4 +73,4 @@ stacks:
     - "**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{tenant}-{environment}-{stage}"
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"

@@ -194,7 +194,7 @@ settings:
   key: overridden
 `)
 
-		_, err = processConfigImportsAndReapply(tempDir, v, content)
+		_, err = processConfigImportsAndReapply(tempDir, v, content, "")
 		assert.NoError(t, err)
 
 		// Verify content was reapplied
@@ -217,7 +217,7 @@ settings:
 		// Invalid YAML that will cause MergeConfig to fail
 		content := []byte("\x00invalid binary content")
 
-		_, err := processConfigImportsAndReapply(tempDir, v, content)
+		_, err := processConfigImportsAndReapply(tempDir, v, content, "")
 		assert.Error(t, err)
 		assert.True(t, errors.Is(err, errUtils.ErrMergeConfiguration), "Expected ErrMergeConfiguration error")
 	})

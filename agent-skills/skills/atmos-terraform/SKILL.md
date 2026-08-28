@@ -4,6 +4,7 @@ description: "Terraform and OpenTofu orchestration: plan/apply/deploy, workspace
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: orchestrators
 ---
 
 # Atmos Terraform and OpenTofu Orchestration
@@ -117,19 +118,19 @@ OpenTofu.
 When you run any `atmos terraform` command, Atmos performs the following sequence:
 
 1. **Resolves stack configuration** -- Reads and deep-merges all stack manifests to produce the fully resolved
-   configuration for the target component in the target stack.
+    configuration for the target component in the target stack.
 2. **Generates backend configuration** -- Writes a `backend.tf.json` file in the component directory with the
-   correct backend settings (S3 bucket, key, region, etc.) derived from the stack config.
+    correct backend settings (S3 bucket, key, region, etc.) derived from the stack config.
 3. **Generates variable file** -- Writes a `terraform.tfvars.json` file containing all `vars` defined for the
-   component in the stack.
+    component in the stack.
 4. **Provisions backend infrastructure** -- If `provision.backend.enabled: true`, creates the backend storage
-   (e.g., S3 bucket) before Terraform init.
+    (e.g., S3 bucket) before Terraform init.
 5. **Runs `terraform init`** -- Initializes the working directory with the generated backend config. Cleans
-   `.terraform/environment` first and optionally adds `-reconfigure`.
+    `.terraform/environment` first and optionally adds `-reconfigure`.
 6. **Selects or creates workspace** -- Calculates the Terraform workspace name from context variables and
-   selects it (or creates it if it does not exist).
+    selects it (or creates it if it does not exist).
 7. **Executes the requested command** -- Runs `terraform plan`, `apply`, `destroy`, etc. with the generated
-   varfile and any additional flags.
+    varfile and any additional flags.
 
 This means a single command like `atmos terraform plan vpc -s plat-ue2-dev` replaces what would normally
 require multiple manual steps: configuring the backend, writing tfvars, running init, selecting the workspace,
@@ -425,29 +426,29 @@ corresponding `ATMOS_COMPONENTS_TERRAFORM_*` environment variable override. See
 ## Best Practices
 
 1. **Use the two-stage plan/apply workflow for production.** Run `plan` first, review the output, then
-   `apply --from-plan` to ensure exactly the reviewed changes are applied.
+    `apply --from-plan` to ensure exactly the reviewed changes are applied.
 
 2. **Use `deploy` for automated pipelines.** It combines plan and apply with auto-approve, ideal for CI/CD.
 
 3. **Always preview multi-component operations with `--dry-run`** before executing `--all` or `--affected`.
 
 4. **Let Atmos manage backend configuration.** Set `auto_generate_backend_file: true` and define backend
-   settings in stack manifests rather than hardcoding in Terraform modules.
+    settings in stack manifests rather than hardcoding in Terraform modules.
 
 5. **Use `atmos describe component`** to debug configuration resolution issues. It shows the fully merged
-   result of all stack manifest inheritance.
+    result of all stack manifest inheritance.
 
 6. **Add generated files to .gitignore.** The `backend.tf.json` and `terraform.tfvars.json` files are
-   generated at runtime and should not be committed.
+    generated at runtime and should not be committed.
 
 7. **Use `atmos terraform shell`** for interactive debugging. It sets up the full context so you can
-   run native terraform commands directly.
+    run native terraform commands directly.
 
 8. **Enable backend provisioning** (`provision.backend.enabled: true`) to solve the Terraform bootstrap
-   problem and ensure backends exist before first use.
+    problem and ensure backends exist before first use.
 
 9. **Use source provisioning with workdirs** when components are pulled via `source`, especially in CI
-   or any multi-stack workflow that can run concurrently.
+    or any multi-stack workflow that can run concurrently.
 
 ## Additional Resources
 

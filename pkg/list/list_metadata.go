@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 // Default columns for list metadata if not specified in atmos.yaml.
@@ -108,6 +109,13 @@ type MetadataOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	Skip             []string
+	// Tags filters rows to components whose metadata.tags contains at least
+	// one of these tags (any-match). Empty means no filter.
+	Tags []string
+	// LabelsRaw is the raw --labels flag value (comma-separated key=value or
+	// key:value pairs, all-match), parsed at filter-build time so an invalid
+	// value surfaces as a command error.
+	LabelsRaw string
 }
 
 // ExecuteListMetadataCmd executes the list metadata command using the renderer pipeline.
@@ -121,7 +129,7 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	// Process instances (same as list instances, but we'll extract metadata).
 	// authDisabled is false here because `list metadata` doesn't expose
 	// --identity=false yet; parity with `list instances` (#2412) is a follow-up.
-	instances, err := processInstances(&atmosConfig, opts.AuthManager, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, opts.Stack, false)
+	instances, _, err := processInstances(&atmosConfig, opts.AuthManager, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, opts.Stack, false, nil, nil)
 	if err != nil {
 		return errors.Join(errUtils.ErrProcessInstances, err)
 	}
@@ -142,7 +150,7 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	}
 
 	// Build filters from filter specification.
-	filters, err := buildMetadataFilters(opts.Filter)
+	filters, err := buildMetadataFilters(opts.Tags, opts.LabelsRaw)
 	if err != nil {
 		return fmt.Errorf("failed to build filters: %w", err)
 	}
@@ -164,13 +172,23 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	return nil
 }
 
-// buildMetadataFilters creates filters from filter specification.
-// The filter spec format is currently undefined for metadata,
-// so this returns an empty filter list for now.
-func buildMetadataFilters(filterSpec string) ([]filter.Filter, error) {
-	// TODO: Implement filter parsing when filter spec format is defined.
-	// For now, return empty filter list.
-	return nil, nil
+// buildMetadataFilters creates filters from the `--tags` and `--labels`
+// flags. Tags use any-match, labels all-match semantics against the flattened
+// `tags`/`labels` row fields.
+// TODO: Also honor the `--filter` spec once its format is defined for metadata.
+func buildMetadataFilters(tagsFilter []string, labelsRaw string) ([]filter.Filter, error) {
+	var filters []filter.Filter
+	if len(tagsFilter) > 0 {
+		filters = append(filters, filter.NewTagFilter("tags", tagsFilter))
+	}
+	labels, err := tags.ParseLabelsFlag(labelsRaw)
+	if err != nil {
+		return nil, err
+	}
+	if len(labels) > 0 {
+		filters = append(filters, filter.NewLabelFilter("labels", labels))
+	}
+	return filters, nil
 }
 
 // buildMetadataSorters creates sorters from sort specification.

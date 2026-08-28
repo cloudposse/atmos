@@ -38,6 +38,7 @@ func autoProvisionBackend(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
+	writers OutputWriters,
 	_ *TerraformExecContext,
 ) error {
 	defer perf.Track(atmosConfig, "provisioner.autoProvisionBackend")()
@@ -88,16 +89,29 @@ func autoProvisionBackend(
 	// Capture provisioning result to display warnings after spinner completes.
 	// Warnings must be displayed AFTER the spinner to avoid concurrent output corruption.
 	var result *backend.ProvisionResult
-	err = spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+	operation := func() error {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer cancel()
 
 		var createErr error
 		result, createErr = createFunc(ctx, atmosConfig, backendConfig, authContext)
-		return createErr
-	})
+		if createErr != nil {
+			return fmt.Errorf("failed to provision %s backend: %w", backendType, createErr)
+		}
+		return nil
+	}
+	if OutputSuppressed(ctx) {
+		err = operation()
+	} else {
+		err = spinner.ExecWithSpinner(progressMsg, completedMsg, operation)
+	}
 	if err != nil {
 		return err
+	}
+
+	out := ui.New(writers.Stderr)
+	if OutputSuppressed(ctx) && writers.Stderr != nil {
+		out.Success(completedMsg)
 	}
 
 	// Display warnings AFTER spinner completes to avoid concurrent output issues.
@@ -105,7 +119,11 @@ func autoProvisionBackend(
 	// so any output during spinner execution would interleave and corrupt the display.
 	if result != nil {
 		for _, warning := range result.Warnings {
-			ui.Warning(warning)
+			if OutputSuppressed(ctx) && writers.Stderr != nil {
+				out.Warning(warning)
+			} else if !OutputSuppressed(ctx) {
+				ui.Warning(warning)
+			}
 		}
 	}
 

@@ -43,6 +43,47 @@ type Context struct {
 	Hook      string
 	Event     string
 	Env       map[string]string
+	// Answers carries caller-supplied structured facts (e.g. scaffold prompt
+	// answers) available to CEL expressions as the `answers` map. Unlike Env,
+	// values may be any type (string, bool, list, ...), not just strings.
+	Answers map[string]any
+	// Matrix carries one resolved matrix combination (e.g. a scaffold
+	// spec.files[].matrix row), available to CEL expressions as the `matrix`
+	// map, keyed by axis name. Empty outside a matrix context.
+	Matrix map[string]string
+	// OS is runtime.GOOS (e.g. "darwin", "linux", "windows"), letting `when:` replace a
+	// dedicated `platforms:` field, e.g. `when: "os == 'darwin'"`.
+	OS string
+	// Arch is runtime.GOARCH (e.g. "amd64", "arm64").
+	Arch string
+	// Platform is OS+"/"+Arch (e.g. "linux/amd64"), for a single combined comparison.
+	Platform string
+
+	// ChecksumChanged/TimestampChanged/PreconditionsSuccess/Sources/Artifacts carry the
+	// pkg/runner/freshness-computed facts for a step's `inputs:`/`artifacts:`/`preconditions:`,
+	// exposed to `when:` as checksum.changed / timestamp.changed / preconditions.success /
+	// sources / artifacts. Computed lazily -- callers should only populate the fact(s) a step's
+	// `when:` actually mentions (see MentionsCELIdentifier), leaving the rest at their zero value.
+	ChecksumChanged      bool
+	TimestampChanged     bool
+	PreconditionsSuccess bool
+	// Sources/Artifacts are structured per-file records (not bare paths) so `when:` can compare
+	// them directly, e.g. `sources.exists(s, artifacts.all(a, s.mtime > a.mtime))`, in addition
+	// to the simpler checksum.changed/timestamp.changed convenience facts computed from the same
+	// underlying data.
+	Sources   []FileFact
+	Artifacts []FileFact
+}
+
+// FileFact is a resolved file's identity exposed to `when:` as one entry of the `sources`/
+// `artifacts` CEL lists. Mtime is a Unix timestamp (seconds) -- deliberately modification time,
+// not ctime/atime/birthtime: mtime is the only one of the four that's both the correct staleness
+// signal (content changes update it; permission/rename-only changes on ctime would cause false
+// rebuilds) and portable via Go's stdlib (os.FileInfo.ModTime()) across every OS Atmos supports.
+type FileFact struct {
+	Path     string
+	Mtime    int64
+	Checksum string
 }
 
 // PredicateFunc evaluates a named condition predicate against runtime facts.
@@ -120,6 +161,19 @@ func (c Condition) MarshalJSON() ([]byte, error) {
 		return []byte("null"), nil
 	}
 	return json.Marshal(c.node.value())
+}
+
+// MarshalYAML preserves conditions when manifests (e.g. scaffold project
+// records) are marshaled back to YAML, reconstructing the original
+// string/list/map form. Condition's only field (`node`) is unexported, so
+// yaml.v3 has nothing to reflect without this method.
+//
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func (c Condition) MarshalYAML() (any, error) {
+	if c.node == nil {
+		return nil, nil
+	}
+	return c.node.value(), nil
 }
 
 // UnmarshalJSON supports JSON config files and internal command cloning.

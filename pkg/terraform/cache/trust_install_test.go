@@ -398,6 +398,69 @@ func TestRemoveTrust_WindowsGitHubActionsUsesCertutilEnterpriseRoot(t *testing.T
 	assert.Equal(t, []string{"-delstore", "-enterprise", "Root", certCommonName}, (*commands)[0].args)
 }
 
+// TestInstallTrust_WindowsGitHubActionsCertutilFailureFallsBackToNative proves the CI
+// path recovers when certutil fails (hosted runners occasionally hang it until the
+// command timeout kills it): the native crypt32 installer runs instead and the overall
+// install succeeds.
+func TestInstallTrust_WindowsGitHubActionsCertutilFailureFallsBackToNative(t *testing.T) {
+	commands := forceTrustPlatform(t, "windows", func(_ string, _ ...string) error {
+		return assert.AnError
+	})
+	forceGitHubActions(t, true)
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	require.NoError(t, os.WriteFile(cert, []byte("placeholder"), tlsCertPerm))
+	var gotPath string
+	forceWindowsTrustFuncs(t, func(path string) error {
+		gotPath = path
+		return nil
+	}, nil)
+
+	require.NoError(t, InstallTrust(cert))
+	require.Len(t, *commands, 1)
+	assert.Equal(t, "certutil", (*commands)[0].name)
+	assert.Equal(t, cert, gotPath, "native installer must run after certutil failure")
+}
+
+// TestInstallTrust_WindowsGitHubActionsReportsBothFailures proves both errors surface
+// when certutil and the native fallback fail.
+func TestInstallTrust_WindowsGitHubActionsReportsBothFailures(t *testing.T) {
+	forceTrustPlatform(t, "windows", func(_ string, _ ...string) error {
+		return assert.AnError
+	})
+	forceGitHubActions(t, true)
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	require.NoError(t, os.WriteFile(cert, []byte("placeholder"), tlsCertPerm))
+	forceWindowsTrustFuncs(t, func(_ string) error {
+		return errUtils.ErrInvalidConfig
+	}, nil)
+
+	err := InstallTrust(cert)
+	require.Error(t, err)
+	require.ErrorIs(t, err, assert.AnError)
+	assert.Contains(t, err.Error(), "native trust store fallback failed")
+}
+
+// TestRemoveTrust_WindowsGitHubActionsCertutilFailureFallsBackToNative mirrors the
+// install fallback for removal — it also covers a certificate that a fallback install
+// placed in the LocalMachine Root store, where certutil's enterprise delstore misses.
+func TestRemoveTrust_WindowsGitHubActionsCertutilFailureFallsBackToNative(t *testing.T) {
+	commands := forceTrustPlatform(t, "windows", func(_ string, _ ...string) error {
+		return assert.AnError
+	})
+	forceGitHubActions(t, true)
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	var gotPath string
+	forceWindowsTrustFuncs(t, nil, func(path string) error {
+		gotPath = path
+		return nil
+	})
+
+	require.NoError(t, RemoveTrust(cert))
+	require.Len(t, *commands, 1)
+	assert.Equal(t, "certutil", (*commands)[0].name)
+	assert.Equal(t, cert, gotPath, "native remover must run after certutil failure")
+}
+
 func TestWindowsTrustStoreStubsUnavailableOnNonWindows(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("non-Windows stubs are not compiled on Windows")

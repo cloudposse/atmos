@@ -1,0 +1,19 @@
+# Seed-only file, NOT compiled by Terraform (.tf.txt extension).
+#
+# Temporarily copy this over main.tf and apply to create random_pet.shared
+# in the source component's own local state. Then restore the real main.tf
+# (empty — the resource has moved out) and run the multi_state migration
+# from multi-state-target, which moves this resource's state entry into
+# multi-state-target's state file.
+#
+#   cp seed.main.tf.txt main.tf
+#   atmos terraform apply multi-state-source -s test -auto-approve
+#   git checkout -- main.tf   # or restore from the committed version
+#
+resource "random_pet" "shared" {
+  length = 2
+}
+
+output "shared_name" {
+  value = random_pet.shared.id
+}

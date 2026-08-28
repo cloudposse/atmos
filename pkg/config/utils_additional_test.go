@@ -459,7 +459,7 @@ func TestGetContextPrefix(t *testing.T) {
 			stackNamePattern: "",
 			stackFile:        "stacks/test.yaml",
 			expectError:      true,
-			errorContains:    "stack name pattern must be provided",
+			errorContains:    "needs to be specified",
 		},
 		{
 			name:             "missing namespace",
@@ -658,7 +658,7 @@ func TestGetStackNameFromContextAndStackNamePattern(t *testing.T) {
 			stage:            "prod",
 			stackNamePattern: "",
 			expectError:      true,
-			errorContains:    "stack name pattern must be provided",
+			errorContains:    "needs to be specified",
 		},
 		{
 			name:             "missing namespace",

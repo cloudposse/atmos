@@ -9,7 +9,8 @@ import "context"
 // emulator implementation, avoiding an import cycle.
 type EmulatorResolver interface {
 	// ResolveEmulator returns the SDK environment variables and/or a kubeconfig
-	// for the named emulator in the given stack. Returns an error if the emulator
-	// is not declared in the stack or is not running.
-	ResolveEmulator(ctx context.Context, stack, name string) (env map[string]string, kubeconfig []byte, err error)
+	// for the named running emulator. Emulator identities are project-scoped: the
+	// resolver finds the one active emulator with this name, independently of the
+	// stack that happens to be using the identity.
+	ResolveEmulator(ctx context.Context, name string) (env map[string]string, kubeconfig []byte, err error)
 }

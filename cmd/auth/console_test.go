@@ -13,6 +13,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	awsAuth "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -265,10 +266,11 @@ func TestGetConsoleProvider(t *testing.T) {
 	defer ctrl.Finish()
 
 	tests := []struct {
-		name          string
-		setupMock     func(*authTypes.MockAuthManager)
-		identityName  string
-		expectedError error
+		name             string
+		setupMock        func(*authTypes.MockAuthManager)
+		identityName     string
+		expectedProvider any
+		expectedError    error
 	}{
 		{
 			name: "AWS IAM Identity Center provider",
@@ -285,6 +287,15 @@ func TestGetConsoleProvider(t *testing.T) {
 			},
 			identityName:  "prod",
 			expectedError: nil,
+		},
+		{
+			name: "AWS user identity",
+			setupMock: func(m *authTypes.MockAuthManager) {
+				m.EXPECT().GetProviderKindForIdentity("cp-root/admin").Return(authTypes.ProviderKindAWSUser, nil)
+			},
+			identityName:     "cp-root/admin",
+			expectedProvider: &awsAuth.ConsoleURLGenerator{},
+			expectedError:    nil,
 		},
 		{
 			name: "Azure OIDC provider",
@@ -353,6 +364,9 @@ func TestGetConsoleProvider(t *testing.T) {
 			default:
 				assert.NoError(t, err)
 				assert.NotNil(t, provider)
+				if tt.expectedProvider != nil {
+					assert.IsType(t, tt.expectedProvider, provider)
+				}
 			}
 		})
 	}

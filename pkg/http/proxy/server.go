@@ -5,6 +5,8 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
+	stdlog "log"
 	"net"
 	"net/http"
 	"sync"
@@ -102,6 +104,11 @@ func (s *Server) Start(_ context.Context) (string, error) {
 	s.httpSrv = &http.Server{
 		Handler:           s,
 		ReadHeaderTimeout: s.opts.ReadHeaderTimeout,
+		// TLS verification failures are expected while the registry-cache trust
+		// preflight probes a newly generated local certificate. The caller turns
+		// that condition into an ErrorBuilder error with a concrete remediation,
+		// so avoid leaking the raw net/http handshake line to the terminal.
+		ErrorLog: stdlog.New(io.Discard, "", 0),
 	}
 
 	scheme := "http"

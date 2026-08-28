@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
@@ -189,7 +190,10 @@ func TestRenderMarkdownDescription(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := renderMarkdownDescription(tt.input)
-			if !strings.Contains(result, tt.contains) {
+			// Strip ANSI codes before checking text containment (Glamour wraps each word in styling,
+			// e.g. when CI=true forces color output even without a real TTY).
+			plainResult := ansi.Strip(result)
+			if !strings.Contains(plainResult, tt.contains) {
 				t.Errorf("Expected result to contain %q, got %q", tt.contains, result)
 			}
 		})
@@ -270,7 +274,9 @@ func TestPrintDescription(t *testing.T) {
 				if expected == "" {
 					expected = tt.short
 				}
-				if !strings.Contains(output, expected) {
+				// Strip ANSI codes before checking text containment (Glamour wraps each word in styling,
+				// e.g. when CI=true forces color output even without a real TTY).
+				if !strings.Contains(ansi.Strip(output), expected) {
 					t.Errorf("Expected output to contain %q", expected)
 				}
 			}
@@ -441,7 +447,10 @@ func TestPrintSubcommandAliases(t *testing.T) {
 				{Use: "destroy", Aliases: []string{"d", "del"}, Short: "Destroy resources", Run: func(cmd *cobra.Command, args []string) {}},
 			},
 			shouldPrint: true,
-			contains:    []string{"SUBCOMMAND ALIASES", "a", "Alias of"},
+			// "destroy" registers two aliases -- both must be listed, not just
+			// the first ("d"), otherwise "del" is silently undiscoverable via
+			// --help even though it works when invoked directly.
+			contains: []string{"SUBCOMMAND ALIASES", "a", "d", "del", "Alias of"},
 		},
 		{
 			name: "subcommands without aliases",

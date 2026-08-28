@@ -1,0 +1,16 @@
+base_path: .
+
+components:
+  terraform:
+    base_path: components/terraform
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - orgs/**/*
+
+logs:
+  level: Info
+
+profiles:
+  base_path: profiles

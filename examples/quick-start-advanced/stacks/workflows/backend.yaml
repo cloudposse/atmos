@@ -51,7 +51,7 @@ workflows:
           - command
         data:
           - task: Start sandbox
-            command: atmos emulator up aws -s <stack>
+            command: atmos emulator up aws -s local
           - task: Validate manifests
             command: atmos validate stacks
           - task: Deploy stack

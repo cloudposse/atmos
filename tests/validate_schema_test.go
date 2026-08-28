@@ -175,25 +175,32 @@ version: "1.0.0"
 	// Change to the temporary directory.
 	t.Chdir(tmpDir)
 
-	// Create a pipe to capture stderr to check if validation is executed correctly.
+	// Create pipes to capture stdout/stderr to prevent test output pollution.
+	oldStdout := os.Stdout
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
+	rOut, wOut, _ := os.Pipe()
+	rErr, wErr, _ := os.Pipe()
+	os.Stdout = wOut
+	os.Stderr = wErr
 
 	// Use SetArgs for Cobra command testing.
 	cmd.RootCmd.SetArgs([]string{"validate", "schema"})
 
 	err = cmd.Execute()
 
-	// Restore stderr.
-	w.Close()
+	// Restore stdout/stderr.
+	wOut.Close()
+	wErr.Close()
+	os.Stdout = oldStdout
 	os.Stderr = oldStderr
 
 	// Read the captured output.
-	var buf bytes.Buffer
-	_, readErr := buf.ReadFrom(r)
-	require.NoError(t, readErr)
-	output := buf.String()
+	var bufOut, bufErr bytes.Buffer
+	_, readErrOut := bufOut.ReadFrom(rOut)
+	_, readErrErr := bufErr.ReadFrom(rErr)
+	require.NoError(t, readErrOut)
+	require.NoError(t, readErrErr)
+	output := bufErr.String() // stderr contains validation messages
 
 	// Log output immediately if there's an error or error output.
 	if err != nil || bytes.Contains([]byte(output), []byte("ERRO")) {

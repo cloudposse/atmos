@@ -21,9 +21,10 @@ func validateRemoveInput(tool string) error {
 	return nil
 }
 
-// loadToolVersionsForRemoval loads the tool versions file and validates tool exists.
+// loadToolVersionsForRemoval loads the tool versions file while the caller holds
+// its exclusive lock, then validates that the tool exists.
 func loadToolVersionsForRemoval(filePath, tool string) (*ToolVersions, []string, error) {
-	toolVersions, err := LoadToolVersions(filePath)
+	toolVersions, err := loadToolVersionsUnlocked(filePath)
 	if err != nil {
 		return nil, nil, err
 	}

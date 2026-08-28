@@ -1,5 +1,4 @@
 import:
-  - catalog/emulator/aws
   - catalog/kms-key/defaults
   - catalog/s3-bucket/defaults
   - catalog/dynamodb-table/defaults

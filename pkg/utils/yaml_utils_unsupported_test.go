@@ -281,6 +281,10 @@ func TestAllSupportedYamlTagsList(t *testing.T) {
 		"!aws.organization_id",
 		"!emulator",
 		"!version",
+		"!tags",
+		"!labels",
+		"!labels.keys",
+		"!labels.values",
 	}
 
 	allYAMLTags := fntag.AllYAML()

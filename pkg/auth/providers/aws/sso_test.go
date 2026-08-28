@@ -15,6 +15,7 @@ import (
 
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 const (
@@ -681,6 +682,19 @@ func TestSpinnerModel_CheckResult(t *testing.T) {
 	assert.Equal(t, "test-token", pollRes.token.AccessToken)
 
 	close(resultChan)
+}
+
+// TestDisplayVerificationPlainText_NonCI_OpensBrowserMessage covers the
+// non-CI branch of displayVerificationPlainText, where a non-empty URL is
+// shown as a message about opening the browser rather than the plain
+// "Verification URL" message used under CI.
+func TestDisplayVerificationPlainText_NonCI_OpensBrowserMessage(t *testing.T) {
+	currentEnvVars := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(currentEnvVars)
+
+	assert.NotPanics(t, func() {
+		displayVerificationPlainText("ABCD-1234", "https://device.sso.us-east-1.amazonaws.com/")
+	})
 }
 
 func TestDisplayVerificationPlainText_EmptyValues(t *testing.T) {

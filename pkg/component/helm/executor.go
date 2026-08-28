@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -20,9 +21,11 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -47,14 +50,20 @@ var (
 	executeAffectedWithRefCheckout   = e.ExecuteDescribeAffectedWithTargetRefCheckout
 	executeGraph                     = component.ExecuteGraph
 	affectedHelmComponentsFunc       = affectedHelmComponents
-	provisionAndResolveComponentPath = component.ProvisionAndResolveComponentPath
-	dependenciesForComponent         = dependencies.ForComponent
-	getHooks                         = hooks.GetHooks
-	runCIHooks                       = hooks.RunCIHooks
-	renderChartManifest              = renderManifest
-	applyHelmRelease                 = applyRelease
-	deleteHelmRelease                = deleteRelease
-	setupRepositories                = setupHelmRepositories
+	provisionAndResolveComponentPath = func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType, fallbackComponentPath string) (string, bool, error) {
+		return component.ProvisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, info, componentType, fallbackComponentPath)
+	}
+	dependenciesForComponent = dependencies.ForComponent
+	getHooks                 = hooks.GetHooks
+	runCIHooks               = hooks.RunCIHooks
+	renderChartManifest      = renderManifest
+	applyHelmRelease         = applyRelease
+	deleteHelmRelease        = deleteRelease
+	setupRepositories        = setupHelmRepositories
+	// writeStatusLine emits human-readable apply/delete status on the UI channel (stderr) via the ui
+	// layer - not data.Write (stdout), which is reserved for pipeable command data. See
+	// docs/io-and-ui-output.md. ui.Success renders markdown inline (backticks, `((muted))`).
+	writeStatusLine = ui.Success
 )
 
 // renderTimeout bounds a single chart render/locate (which may download remote charts).
@@ -80,7 +89,7 @@ func Execute(ctx *component.ExecutionContext, operation Operation) error {
 	}
 	normalizeGlobalConfig(&atmosConfig)
 
-	if info.All || info.Affected {
+	if info.All || info.Affected || len(info.Tags) > 0 || len(info.Labels) > 0 {
 		return executeBulk(ctx, &atmosConfig, &info, operation)
 	}
 
@@ -94,7 +103,7 @@ func executeSingle(
 	info *schema.ConfigAndStacksInfo,
 	operation Operation,
 ) error {
-	if err := processStacksWithAuth(atmosConfig, info); err != nil {
+	if err := processStacksWithAuth(atmosConfig, info, operation, ctx.Flags); err != nil {
 		return err
 	}
 	if !info.ComponentIsEnabled {
@@ -123,18 +132,57 @@ func executeSingle(
 	if err != nil {
 		return err
 	}
-	envRestore := applyEnvironment(info.ComponentEnvSection, tenv.EnvVars())
-	authEnvRestore, err := applyAuthEnvironment(info)
+	restoreEnvironment, err := setupExecutionEnvironment(info, operation, ctx.Flags, tenv.EnvVars())
 	if err != nil {
-		envRestore()
 		return err
 	}
-	defer func() {
-		authEnvRestore()
-		envRestore()
-	}()
+	defer restoreEnvironment()
 
 	return runWithHooks(ctx, atmosConfig, info, operation, componentPath)
+}
+
+// setupExecutionEnvironment composes component, toolchain, auth, and endpoint-guard
+// environment changes and returns one restore function in reverse application order.
+func setupExecutionEnvironment(
+	info *schema.ConfigAndStacksInfo,
+	operation Operation,
+	flags map[string]any,
+	toolchainEnv []string,
+) (func(), error) {
+	envRestore := applyEnvironment(info.ComponentEnvSection, toolchainEnv)
+	internalEnvRestore := func() {}
+	authEnvRestore := func() {}
+	guardEnvRestore := func() {}
+	restore := func() {
+		guardEnvRestore()
+		authEnvRestore()
+		internalEnvRestore()
+		envRestore()
+	}
+
+	guarded, err := requireIdentityForOperation(info, operation, flags)
+	if err != nil {
+		restore()
+		return nil, err
+	}
+	if guarded {
+		internalEnvRestore = clearEnvironment(kube.ExpectedServerEnv, kube.EndpointGuardEnv)
+	}
+	resolvedAuthEnvRestore, err := applyAuthEnvironment(info)
+	if err != nil {
+		restore()
+		return nil, err
+	}
+	authEnvRestore = resolvedAuthEnvRestore
+	if guarded {
+		if os.Getenv(kube.ExpectedServerEnv) == "" { //nolint:forbidigo // Integration environment was just applied to this process.
+			restore()
+			return nil, fmt.Errorf("%w: the selected identity did not provision a GKE endpoint", errUtils.ErrKubernetesIdentityRequired)
+		}
+		guardEnvRestore = applyEnvironment(map[string]any{kube.EndpointGuardEnv: "true"}, nil)
+	}
+
+	return restore, nil
 }
 
 // runWithHooks runs the before/after hooks around chart rendering and the operation.
@@ -208,9 +256,11 @@ func runOperation(
 	case OperationApply:
 		applySummary, err := deliverApply(atmosConfig, info, ctx.Flags, spec)
 		mergeSummary(summary, applySummary)
+		emitOperationStatus(OperationApply, summary, err)
 		return summary, err
 	case OperationDelete:
 		err := deleteHelmRelease(spec.ReleaseName, spec.Namespace)
+		emitOperationStatus(OperationDelete, summary, err)
 		return summary, err
 	default:
 		return summary, fmt.Errorf("%w: %q", errUtils.ErrHelmUnsupportedOperation, operation)
@@ -388,13 +438,46 @@ func normalizeGlobalConfig(atmosConfig *schema.AtmosConfiguration) {
 	}
 }
 
-func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+// processStacksWithAuth resolves component auth settings before full stack processing.
+func processStacksWithAuth(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	operation Operation,
+	flags map[string]any,
+) error {
 	var authManager auth.AuthManager
-	if info.Identity != "" {
+	if hasExplicitIdentity(info) {
 		var err error
 		authManager, err = setupComponentAuthForCLI(atmosConfig, info)
 		if err != nil {
 			return err
+		}
+	} else if operationContactsCluster(operation, flags) {
+		// Discover the effective component auth block without evaluating templates or
+		// YAML functions. This lets disabled components short-circuit before auth and lets
+		// the opt-in guard fail closed before the full processing pass.
+		discovered, err := processStacks(atmosConfig, *info, true, false, false, nil, nil)
+		if err != nil {
+			return err
+		}
+		*info = discovered
+		required, err := requireIdentityForOperation(info, operation, flags)
+		if err != nil {
+			return err
+		}
+		if required {
+			if info.AuthDisabled || info.Identity == cfg.IdentityFlagDisabledValue {
+				return errUtils.ErrKubernetesIdentityRequired
+			}
+		}
+		if info.ComponentIsEnabled {
+			// Resolve a stack default identity for every live cluster operation, even when
+			// the component does not opt into require_identity. With no configured auth,
+			// this returns a nil manager and preserves ambient KUBECONFIG behavior.
+			authManager, err = setupComponentAuthForCLI(atmosConfig, info)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -404,7 +487,79 @@ func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.
 	}
 
 	*info = processedInfo
+	required, err := requireIdentityForOperation(info, operation, flags)
+	if err != nil {
+		return err
+	}
+	if !required {
+		return nil
+	}
+	if authManager == nil || info.Identity == "" {
+		return errUtils.ErrKubernetesIdentityRequired
+	}
 	return nil
+}
+
+// hasExplicitIdentity reports whether the invocation selected an identity directly.
+func hasExplicitIdentity(info *schema.ConfigAndStacksInfo) bool {
+	return info != nil && !info.AuthDisabled && info.Identity != "" && info.Identity != cfg.IdentityFlagDisabledValue
+}
+
+// shouldSetupComponentAuth reports whether a command may need component auth before
+// full stack processing. Live diff/apply/delete operations resolve a stack default;
+// an explicit identity also applies to offline operations such as template.
+func shouldSetupComponentAuth(info *schema.ConfigAndStacksInfo, operation Operation) bool {
+	return hasExplicitIdentity(info) || operationRequiresCluster(operation)
+}
+
+// operationRequiresCluster reports whether an operation can contact Kubernetes.
+// Diff baselines are refined by operationContactsCluster once flags are available.
+func operationRequiresCluster(operation Operation) bool {
+	switch operation {
+	case OperationApply, OperationDiff, OperationDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+// requireIdentityForOperation reports whether this Helm path must fail closed.
+func requireIdentityForOperation(info *schema.ConfigAndStacksInfo, operation Operation, flags map[string]any) (bool, error) {
+	if !operationContactsCluster(operation, flags) || info == nil || !info.ComponentIsEnabled {
+		return false, nil
+	}
+	if info.ComponentAuthSection == nil {
+		return false, nil
+	}
+	value, exists := info.ComponentAuthSection["require_identity"]
+	if !exists {
+		return false, nil
+	}
+	required, ok := value.(bool)
+	if !ok {
+		return false, fmt.Errorf("%w: auth.require_identity must be a boolean, got %T", errUtils.ErrInvalidComponentAuth, value)
+	}
+	return required, nil
+}
+
+// operationContactsCluster reports whether the selected operation and baseline
+// need Kubernetes API access. Template and explicitly offline diff baselines do not.
+func operationContactsCluster(operation Operation, flags map[string]any) bool {
+	if !operationRequiresCluster(operation) {
+		return false
+	}
+	switch operation {
+	case OperationApply, OperationDelete:
+		return true
+	case OperationDiff:
+		if flagString(flags, flagFromManifest) != "" {
+			return false
+		}
+		against := flagString(flags, flagAgainst)
+		return against == "" || against == againstRelease
+	default:
+		return false
+	}
 }
 
 func resolveComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
@@ -484,6 +639,39 @@ func runHelmCIHook(p helmCIHookParams) {
 		Aggregate:    summary,
 	}); err != nil {
 		log.Warn("CI hook execution failed", "component", p.info.ComponentFromArg, "error", err)
+	}
+}
+
+// emitOperationStatus prints a human-readable status line for a completed cluster operation so
+// apply/delete do not succeed silently. It writes only for apply/delete and only on success; the
+// template/diff operations already produce their own output. See docs/fixes/2026-08-14-native-helm-ux-fixes.md.
+func emitOperationStatus(operation Operation, summary map[string]any, opErr error) {
+	if opErr != nil {
+		return
+	}
+	msg := formatOperationStatus(operation, summary)
+	if msg == "" {
+		return
+	}
+	writeStatusLine(msg)
+}
+
+// formatOperationStatus builds the one-line status message for apply/delete from the operation
+// summary. It returns an empty string for operations that need no status line (template, diff).
+func formatOperationStatus(operation Operation, summary map[string]any) string {
+	release, _ := summary["release_name"].(string)
+	namespace, _ := summary["namespace"].(string)
+	switch operation {
+	case OperationApply:
+		msg := fmt.Sprintf("Applied Helm release `%s` to namespace `%s`", release, namespace)
+		if chart, ok := summary["chart"].(string); ok && chart != "" {
+			msg += fmt.Sprintf(" ((chart `%s`))", chart)
+		}
+		return msg
+	case OperationDelete:
+		return fmt.Sprintf("Deleted Helm release `%s` from namespace `%s`", release, namespace)
+	default:
+		return ""
 	}
 }
 
@@ -568,6 +756,29 @@ func applyEnvironment(componentEnv map[string]any, toolchainEnv []string) func()
 		}
 	}
 
+	return func() {
+		for key, value := range original {
+			if value == nil {
+				_ = os.Unsetenv(key)
+			} else {
+				_ = os.Setenv(key, *value)
+			}
+		}
+	}
+}
+
+// clearEnvironment removes keys and returns a function that restores their prior values.
+func clearEnvironment(keys ...string) func() {
+	original := make(map[string]*string, len(keys))
+	for _, key := range keys {
+		if value, exists := os.LookupEnv(key); exists {
+			valueCopy := value
+			original[key] = &valueCopy
+		} else {
+			original[key] = nil
+		}
+		_ = os.Unsetenv(key)
+	}
 	return func() {
 		for key, value := range original {
 			if value == nil {

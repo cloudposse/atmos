@@ -16,7 +16,7 @@ type fakeEmulatorResolver struct {
 	kubeconfig []byte
 }
 
-func (f *fakeEmulatorResolver) ResolveEmulator(_ context.Context, _, _ string) (map[string]string, []byte, error) {
+func (f *fakeEmulatorResolver) ResolveEmulator(_ context.Context, _ string) (map[string]string, []byte, error) {
 	return f.env, f.kubeconfig, nil
 }
 
@@ -40,7 +40,7 @@ func TestSetEmulatorResolver_RoundTrip(t *testing.T) {
 	assert.Same(t, want, defaultEmulatorResolver, "the exact registered resolver instance is stored")
 
 	// The stored resolver behaves like the registered one.
-	env, kubeconfig, err := defaultEmulatorResolver.ResolveEmulator(context.Background(), "dev", "aws")
+	env, kubeconfig, err := defaultEmulatorResolver.ResolveEmulator(context.Background(), "local/aws")
 	require.NoError(t, err)
 	assert.Equal(t, "http://localhost:1", env["AWS_ENDPOINT_URL"], "registered resolver's env round-trips")
 	assert.Nil(t, kubeconfig)
@@ -58,7 +58,7 @@ func TestSetEmulatorResolver_OverwritesPrevious(t *testing.T) {
 	SetEmulatorResolver(second)
 
 	assert.Same(t, second, defaultEmulatorResolver, "last registered resolver wins")
-	env, _, err := defaultEmulatorResolver.ResolveEmulator(context.Background(), "dev", "aws")
+	env, _, err := defaultEmulatorResolver.ResolveEmulator(context.Background(), "local/aws")
 	require.NoError(t, err)
 	assert.Equal(t, "second", env["K"])
 }
@@ -77,28 +77,22 @@ func TestSetEmulatorResolver_NilClearsResolver(t *testing.T) {
 }
 
 // stubResolverReceiver implements the emulatorResolverReceiver interface so the
-// interface contract (the manager injects resolver + stack) is exercised.
+// interface contract (the manager injects the resolver) is exercised.
 type stubResolverReceiver struct {
 	gotResolver types.EmulatorResolver
-	gotStack    string
 }
 
 func (s *stubResolverReceiver) SetEmulatorResolver(r types.EmulatorResolver) { s.gotResolver = r }
 
-func (s *stubResolverReceiver) SetStack(stack string) { s.gotStack = stack }
-
 // TestEmulatorResolverReceiver_Contract verifies an identity implementing the
-// emulatorResolverReceiver seam receives the injected resolver and stack — the
-// same injection path the auth manager uses.
+// emulatorResolverReceiver seam receives the injected resolver.
 func TestEmulatorResolverReceiver_Contract(t *testing.T) {
 	resolver := &fakeEmulatorResolver{}
 	var receiver emulatorResolverReceiver = &stubResolverReceiver{}
 
 	receiver.SetEmulatorResolver(resolver)
-	receiver.SetStack("dev")
 
 	stub, ok := receiver.(*stubResolverReceiver)
 	require.True(t, ok)
 	assert.Same(t, resolver, stub.gotResolver, "injected resolver reaches the receiver")
-	assert.Equal(t, "dev", stub.gotStack, "injected stack reaches the receiver")
 }

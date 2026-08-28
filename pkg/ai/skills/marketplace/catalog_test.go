@@ -35,7 +35,7 @@ func newBundledTestInstaller(t *testing.T) *Installer {
 
 // Compile-time sentinel: fails the build if any AvailableSkill field is renamed,
 // so the catalog tests below cannot silently reference stale fields.
-var _ = AvailableSkill{Name: "", DisplayName: "", Description: "", Version: "", Source: ""}
+var _ = AvailableSkill{Name: "", DisplayName: "", Description: "", Version: "", Source: "", Category: ""}
 
 func TestCatalog(t *testing.T) {
 	catalog, err := Catalog()
@@ -198,6 +198,124 @@ func TestInstall_BundledWithCustomName(t *testing.T) {
 	require.NoError(t, err)
 	installPath := filepath.Join(skillsDir, "my-tf")
 	assert.FileExists(t, filepath.Join(installPath, "SKILL.md"))
+}
+
+// TestInstallAllBundled covers `atmos ai skill install` with no <source>:
+// every bundled skill gets installed in one call, with a single upfront
+// confirmation rather than one per skill.
+func TestInstallAllBundled(t *testing.T) {
+	installer := newBundledTestInstaller(t)
+
+	catalog, err := Catalog()
+	require.NoError(t, err)
+	require.NotEmpty(t, catalog, "the embedded catalog must be non-empty for this test to be meaningful")
+
+	opts := &InstallOptions{SkipConfirm: true}
+	require.NoError(t, installer.InstallAllBundled(opts))
+
+	installed := installer.List()
+	assert.Len(t, installed, len(catalog))
+
+	// Spot-check a specific skill landed on disk and in the registry, not
+	// just that the count matches.
+	skill, err := installer.Get("atmos-terraform")
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(skill.Path, "SKILL.md"))
+
+	t.Run("re-running without --force skips everything already installed", func(t *testing.T) {
+		require.NoError(t, installer.InstallAllBundled(opts))
+		assert.Len(t, installer.List(), len(catalog), "no duplicates or new entries")
+	})
+
+	t.Run("re-running with --force reinstalls everything", func(t *testing.T) {
+		forceOpts := &InstallOptions{SkipConfirm: true, Force: true}
+		require.NoError(t, installer.InstallAllBundled(forceOpts))
+		assert.Len(t, installer.List(), len(catalog))
+	})
+}
+
+// TestInstallOneBundledSkill_Outcomes covers the three-way result
+// (installed/updated/skipped) the batch summary relies on to distinguish
+// fresh installs from --force updates and already-installed skips.
+func TestInstallOneBundledSkill_Outcomes(t *testing.T) {
+	installer := newBundledTestInstaller(t)
+
+	available, ok := LookupBundledSkill("atmos-terraform")
+	require.True(t, ok)
+
+	t.Run("fresh install reports outcomeInstalled", func(t *testing.T) {
+		opts := &InstallOptions{SkipConfirm: true}
+		assert.Equal(t, outcomeInstalled, installer.installOneBundledSkill(&available, opts, nil))
+	})
+
+	t.Run("already installed without --force reports outcomeSkipped", func(t *testing.T) {
+		opts := &InstallOptions{SkipConfirm: true}
+		assert.Equal(t, outcomeSkipped, installer.installOneBundledSkill(&available, opts, nil))
+	})
+
+	t.Run("already installed with --force reports outcomeUpdated", func(t *testing.T) {
+		opts := &InstallOptions{SkipConfirm: true, Force: true}
+		assert.Equal(t, outcomeUpdated, installer.installOneBundledSkill(&available, opts, nil))
+	})
+}
+
+// TestInstall_BundledSkill_ValidationFailureCleansUp covers the version-
+// compatibility gate that installBundledSkill now runs after materializing the
+// skill's files and before registering it. Real bundled-skill content never
+// declares an unsatisfiable compatibility.atmos requirement (nothing could
+// exercise this path otherwise), so a mockValidator is injected to force the
+// failure; the assertion is that the just-materialized directory is cleaned up
+// and the skill is never registered, matching the git single-skill path's
+// existing validate-before-register behavior.
+func TestInstall_BundledSkill_ValidationFailureCleansUp(t *testing.T) {
+	installer := newBundledTestInstaller(t)
+	installer.validator = &mockValidator{
+		validateFunc: func(_ string, _ *SkillMetadata) error {
+			return ErrIncompatibleVersion
+		},
+	}
+
+	err := installer.Install(context.Background(), "atmos-terraform", InstallOptions{SkipConfirm: true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "skill validation failed")
+	assert.True(t, errors.Is(err, ErrIncompatibleVersion))
+
+	// Not registered.
+	_, getErr := installer.Get("atmos-terraform")
+	assert.True(t, errors.Is(getErr, ErrSkillNotFound))
+
+	// The just-materialized directory was cleaned up, not left half-installed.
+	skillsDir, err := GetSkillsDir()
+	require.NoError(t, err)
+	_, statErr := os.Stat(filepath.Join(skillsDir, "atmos-terraform"))
+	assert.True(t, os.IsNotExist(statErr), "invalid bundled install must be removed, not left on disk")
+}
+
+// TestInstallOneBundledSkill_ValidationFailure covers the same validate-before-
+// register gate on the InstallAllBundled batch path (installOneBundledSkill),
+// which must report outcomeRejected (an expected, per-skill compatibility skip,
+// not a batch failure) and clean up rather than register an invalid skill.
+func TestInstallOneBundledSkill_ValidationFailure(t *testing.T) {
+	installer := newBundledTestInstaller(t)
+	installer.validator = &mockValidator{
+		validateFunc: func(_ string, _ *SkillMetadata) error {
+			return ErrIncompatibleVersion
+		},
+	}
+
+	available, ok := LookupBundledSkill("atmos-terraform")
+	require.True(t, ok)
+
+	opts := &InstallOptions{SkipConfirm: true}
+	assert.Equal(t, outcomeRejected, installer.installOneBundledSkill(&available, opts, nil))
+
+	_, getErr := installer.Get("atmos-terraform")
+	assert.True(t, errors.Is(getErr, ErrSkillNotFound))
+
+	skillsDir, err := GetSkillsDir()
+	require.NoError(t, err)
+	_, statErr := os.Stat(filepath.Join(skillsDir, "atmos-terraform"))
+	assert.True(t, os.IsNotExist(statErr), "invalid bundled install must be removed, not left on disk")
 }
 
 // TestInstall_BundledForceReplacesOnDiskDir covers the --force branch of

@@ -3,6 +3,7 @@ package skill
 import (
 	_ "embed"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	ai "github.com/cloudposse/atmos/cmd/ai"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -31,6 +33,16 @@ const (
 	detailLabelWidth = 13
 )
 
+// flagFormat is the name of the output-format flag.
+const flagFormat = "format"
+
+// validSkillListFormats lists the supported --format values. It is shared between
+// flag registration (CLI validation via flags.WithValidValues) and the explicit
+// check in RunE below, which is needed because a value sourced from Viper's
+// lower-precedence layers (ATMOS_AI_SKILL_FORMAT env var or config file) never
+// passes through the flag parser's "explicitly changed" validation path.
+var validSkillListFormats = []string{"table", "json", "yaml", "csv", "tsv"}
+
 // listParser handles flag parsing with Viper precedence for the list command.
 var listParser *flags.StandardParser
 
@@ -43,15 +55,18 @@ var listUsageMarkdown string
 // listEntry is the merged view of a skill: a catalog entry, an installed skill,
 // or both. It powers the available-vs-installed listing.
 type listEntry struct {
-	name          string
-	displayName   string
-	description   string
-	version       string
-	source        string
-	displaySource string
-	available     bool                        // True when part of the bundled catalog.
-	installed     bool                        // True when installed locally.
-	skill         *marketplace.InstalledSkill // Non-nil when installed.
+	name            string
+	displayName     string
+	description     string
+	version         string
+	catalogVersion  string // Catalog's current version; only set for catalog-tracked entries, used to detect updateAvailable.
+	source          string
+	displaySource   string
+	category        string
+	available       bool                        // True when part of the bundled catalog.
+	installed       bool                        // True when installed locally.
+	updateAvailable bool                        // True when an installed catalog skill's version differs from the catalog's current version.
+	skill           *marketplace.InstalledSkill // Non-nil when installed.
 }
 
 // listCmd represents the 'atmos ai skill list' command.
@@ -74,6 +89,15 @@ var listCmd = &cobra.Command{
 		detailed := v.GetBool("detailed")
 		installedOnly := v.GetBool("installed")
 
+		// Validate explicitly: the flag parser only validates values that came
+		// directly from the CLI flag, so an invalid ATMOS_AI_SKILL_FORMAT env var
+		// or config-file value must be checked here before it reaches the renderer.
+		formatValue := v.GetString(flagFormat)
+		if formatValue != "" && !slices.Contains(validSkillListFormats, formatValue) {
+			return fmt.Errorf("%w: %q (supported: %v)", errUtils.ErrInvalidFlagValue, formatValue, validSkillListFormats)
+		}
+		outputFormat := listformat.Format(formatValue)
+
 		// Create installer (which manages registry).
 		installer, err := marketplace.NewInstaller(version.Version)
 		if err != nil {
@@ -85,7 +109,7 @@ var listCmd = &cobra.Command{
 			return err
 		}
 
-		return renderSkillList(entries, installedOnly, detailed)
+		return renderSkillList(entries, installedOnly, detailed, outputFormat)
 	},
 }
 
@@ -96,6 +120,9 @@ func init() {
 		flags.WithEnvVars("detailed", "ATMOS_AI_SKILL_DETAILED"),
 		flags.WithBoolFlag("installed", "", false, "Show only installed skills"),
 		flags.WithEnvVars("installed", "ATMOS_AI_SKILL_INSTALLED"),
+		flags.WithStringFlag(flagFormat, "f", "", "Output format: table, json, yaml, csv, tsv"),
+		flags.WithEnvVars(flagFormat, "ATMOS_AI_SKILL_FORMAT"),
+		flags.WithValidValues(flagFormat, validSkillListFormats...),
 	)
 
 	// Register flags on the command.
@@ -131,19 +158,25 @@ func buildListEntries(installer *marketplace.Installer) ([]listEntry, error) {
 	for _, c := range catalog {
 		seen[c.Name] = true
 		e := listEntry{
-			name:          c.Name,
-			displayName:   c.DisplayName,
-			description:   c.Description,
-			version:       c.Version,
-			source:        c.Source,
-			displaySource: sourceBuiltIn,
-			available:     true,
+			name:           c.Name,
+			displayName:    c.DisplayName,
+			description:    c.Description,
+			version:        c.Version,
+			catalogVersion: c.Version,
+			source:         c.Source,
+			displaySource:  sourceBuiltIn,
+			category:       c.Category,
+			available:      true,
 		}
 		if s, ok := byName[c.Name]; ok {
 			e.installed = true
 			e.version = s.Version
 			e.source = s.Source
 			e.skill = s
+			// Same rule `atmos ai skill update` uses to decide whether to
+			// reinstall, so the "update available" indicator here always
+			// agrees with what update would actually do.
+			e.updateAvailable = marketplace.SkillVersionOutdated(s.Version, c.Version)
 		}
 		entries = append(entries, e)
 	}
@@ -172,15 +205,25 @@ func buildListEntries(installer *marketplace.Installer) ([]listEntry, error) {
 	return entries, nil
 }
 
-// renderSkillList renders the merged skill view honoring the --installed and
-// --detailed flags. Counts are computed from the full catalog before filtering
-// so the header is accurate regardless of which rows are shown.
-func renderSkillList(entries []listEntry, installedOnly, detailed bool) error {
+// renderSkillList renders the merged skill view honoring the --installed,
+// --detailed, and --format flags. Counts are computed from the full catalog
+// before filtering so the header is accurate regardless of which rows are
+// shown. Non-table formats (json/yaml/csv/tsv) skip the human-oriented
+// header, legend, and install hint, and ignore --detailed, since the
+// structured rows already carry every field.
+func renderSkillList(entries []listEntry, installedOnly, detailed bool, outputFormat listformat.Format) error {
 	available, installed := countEntries(entries)
 
 	display := entries
 	if installedOnly {
 		display = filterInstalled(entries)
+	}
+
+	// Dispatch structured formats before the empty-message check so json/yaml/csv/tsv
+	// stay machine-readable (e.g. an empty array) even when --installed matches
+	// nothing, instead of falling through to the human-readable prose message below.
+	if outputFormat != "" && outputFormat != listformat.FormatTable {
+		return renderSkillListStructured(display, outputFormat)
 	}
 
 	if len(display) == 0 {
@@ -234,6 +277,18 @@ func renderEntrySummaries(entries []listEntry) (string, error) {
 	return r.RenderToString(skillListRows(entries))
 }
 
+// renderSkillListStructured renders skills as structured data (json/yaml/csv/tsv),
+// skipping the human-oriented header, legend, and install hint used by the table view.
+func renderSkillListStructured(entries []listEntry, outputFormat listformat.Format) error {
+	selector, err := column.NewSelector(skillListColumns(), column.BuildColumnFuncMap())
+	if err != nil {
+		return fmt.Errorf("error creating skill list column selector: %w", err)
+	}
+
+	r := renderer.New(nil, selector, nil, outputFormat, "")
+	return r.Render(skillListRows(entries))
+}
+
 // countEntries returns the number of available (uninstalled catalog) and installed entries.
 // The available count includes only catalog entries that are not yet installed,
 // so the header legend matches the hollow-dot rows shown in the listing.
@@ -255,6 +310,7 @@ func skillListColumns() []column.Config {
 		{Name: "Name", Value: "{{ .name }}"},
 		{Name: "Source", Value: "{{ .source }}"},
 		{Name: "State", Value: "{{ .state }}"},
+		{Name: "Category", Value: "{{ .category }}"},
 	}
 }
 
@@ -270,6 +326,7 @@ func skillListRows(entries []listEntry) []map[string]any {
 			"name":          e.name,
 			"source":        e.displaySource,
 			"state":         entryState(&e),
+			"category":      e.category,
 		})
 	}
 	return rows
@@ -285,7 +342,11 @@ func entryState(e *listEntry) string {
 		status = "disabled"
 	}
 
-	return fmt.Sprintf("installed, %s (%s)", status, versionLabel(e.version))
+	state := fmt.Sprintf("installed, %s (%s)", status, versionLabel(e.version))
+	if e.updateAvailable {
+		state += " (update available)"
+	}
+	return state
 }
 
 func entryType(e *listEntry) string {
@@ -300,6 +361,16 @@ func versionLabel(version string) string {
 		return version
 	}
 	return "v" + version
+}
+
+// versionWithUpdateNote appends a note pointing at the catalog's current version
+// when e.updateAvailable, so the detailed view surfaces the same signal as the
+// summary table's "(update available)" state suffix.
+func versionWithUpdateNote(e *listEntry) string {
+	if !e.updateAvailable {
+		return e.version
+	}
+	return fmt.Sprintf("%s (update available: %s)", e.version, e.catalogVersion)
 }
 
 func legend() string {
@@ -335,7 +406,7 @@ func writeEntryDetail(b *strings.Builder, e *listEntry) {
 	b.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
 	writeDetailField(b, "Name", e.name)
-	writeDetailField(b, "Version", e.version)
+	writeDetailField(b, "Version", versionWithUpdateNote(e))
 	writeDetailField(b, "Source", e.source)
 	writeDetailField(b, "Type", entryType(e))
 	if e.description != "" {
@@ -368,6 +439,9 @@ func writeInstalledEntryDetail(b *strings.Builder, skill *marketplace.InstalledS
 	writeDetailField(b, "Installed", formatTime(skill.InstalledAt))
 	writeDetailField(b, "Last Updated", formatTime(skill.UpdatedAt))
 	writeDetailField(b, "Location", skill.Path)
+	if skill.MinAtmosVersion != "" {
+		writeDetailField(b, "Min Atmos", skill.MinAtmosVersion)
+	}
 }
 
 func writeSkillListOutput(content string) error {

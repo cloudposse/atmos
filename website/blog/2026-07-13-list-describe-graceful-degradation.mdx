@@ -1,0 +1,106 @@
+---
+slug: list-describe-graceful-degradation
+title: "list and describe Commands Degrade Gracefully by Default"
+authors: [osterman]
+tags: [enhancement, breaking-change]
+---
+
+Reading `!terraform.state` and `!terraform.output` can fail to resolve for a dozen
+different reasons — the backend hasn't been applied yet, your credentials aren't
+configured, you don't have access to the bucket, or the state you're reading just isn't
+the latest. Any one of those, on any one component, used to abort the *entire*
+`list`/`describe` command — every other stack you did want to see disappeared behind one
+unrelated failure.
+
+The `list` and `describe` commands now degrade gracefully by default: an unresolved value
+is shown as `(computed)` instead of aborting the command, with a one-line summary telling
+you how many values were affected.
+
+<!--truncate-->
+
+## The Problem
+
+Resolving `!terraform.state`/`!terraform.output` requires successfully reading real
+backend state, and there are many ways that read can fail: the backend hasn't been
+provisioned or applied yet, the caller isn't authenticated, the caller lacks access to the
+bucket or table, or the state simply doesn't have the output being asked for. Whatever the
+cause, that single failure used to take down the whole command, not just the one value
+that couldn't be resolved.
+
+The only workaround was `--process-functions=false`, which throws out every computed
+value, not just the unresolvable ones.
+
+## The Fix
+
+These commands — `list stacks`, `list components`, `list settings`, `describe stacks`,
+`describe affected`, `list affected`, and `describe dependents` — all now default to
+`--error-mode=warn`: a recoverable resolution failure is substituted with `(computed)` and
+processing continues.
+Every other error class — malformed YAML, misconfiguration, anything not classified
+recoverable — still fails the command exactly as before.
+
+```shell
+$ atmos list stacks
+  Stack       Bucket
+  dev         my-dev-bucket
+  staging     (computed)
+  prod        my-prod-bucket
+
+ ⚠ 1 value could not be determined and is shown as (computed). Run with
+   --logs-level=Debug for details, or --error-mode=strict to fail immediately instead.
+```
+
+The summary prints once at the end of the command, after the data — not once per
+degraded value. Full detail (which stack, component, function, and the underlying error)
+is always available via `--logs-level=Debug`, whether or not the summary is shown.
+
+## Three Modes
+
+The `--error-mode` flag accepts three values:
+
+- `warn` (default) — degrade, substitute `(computed)`, print the summary above.
+- `silent` — degrade the same way, but skip the summary. Debug logs still show the detail.
+- `strict` — the old behavior: the first unresolvable value fails the command immediately.
+
+```shell
+atmos list stacks --error-mode=strict
+atmos describe affected --error-mode=silent
+```
+
+That `(computed)` value isn't a raw `nil` slipping through — it's a typed value that renders
+consistently as `(computed)` in table, JSON, and YAML output alike, so scripts parsing
+`list ... --format=json` see a predictable string instead of `null` in one format and an
+empty string in another.
+
+## Setting a Project-Wide Default
+
+Passing `--error-mode` on every invocation gets old fast. Set a default in `atmos.yaml`,
+still overridable per-command by the flag or an env var. `list` and `describe` are
+independent command families with independent defaults — you might want `describe` strict
+in CI while `list` stays lenient for interactive use, or vice versa — so each gets its own
+setting:
+
+```yaml
+list:
+  error_mode: warn # strict | warn | silent — applies to list stacks/components/settings/affected
+
+describe:
+  error_mode: warn # strict | warn | silent — applies to describe stacks/affected/dependents
+```
+
+Precedence for `list` commands: `--error-mode` flag > `ATMOS_LIST_ERROR_MODE` env var >
+`list.error_mode` in `atmos.yaml` > `warn`. Precedence for `describe` commands is the same
+shape, with `ATMOS_DESCRIBE_ERROR_MODE` and `describe.error_mode` in place of the `list`
+equivalents.
+
+## Breaking Change
+
+If you relied on the previous hard-fail-on-first-error behavior — for example, a CI check
+that intentionally wanted `list stacks` to fail when a backend wasn't ready — set
+`--error-mode=strict` (or `list.error_mode: strict` / `describe.error_mode: strict` in
+`atmos.yaml`, matching the command family you rely on) to restore it explicitly.
+
+## Get Involved
+
+Try `atmos list stacks` against a stack you haven't fully provisioned yet, and let us know
+what you think in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

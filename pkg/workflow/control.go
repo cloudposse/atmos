@@ -392,6 +392,10 @@ func resolveControlStep(step *schema.WorkflowStep, matrix map[string]string, dat
 	if err != nil {
 		return resolved, err
 	}
+	resolved.WorkingDirectory, err = resolveControlTemplate(step.WorkingDirectory, step.Name, matrix, dataFunc)
+	if err != nil {
+		return resolved, err
+	}
 	if len(step.Env) > 0 {
 		envMap := make(map[string]string, len(step.Env))
 		for key, value := range step.Env {

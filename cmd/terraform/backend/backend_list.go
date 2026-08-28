@@ -20,12 +20,24 @@ var listCmd = &cobra.Command{
 	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
+		v := viper.GetViper()
+		if err := listParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
 		result, err := listParser.Parse(ctx, args)
 		if err != nil {
 			return err
 		}
 
-		return executeListCommandWithValues(result.Stack, result.Identity.Value(), result.Format)
+		stack := result.Stack
+		if stack == "" {
+			stack = getCommandFlagStack(cmd)
+		}
+		if stack == "" {
+			stack = v.GetString("stack")
+		}
+		identity := flags.ParseGlobalFlags(cmd, v).Identity.Value()
+		return executeListCommandWithValues(stack, identity, result.Format)
 	},
 }
 

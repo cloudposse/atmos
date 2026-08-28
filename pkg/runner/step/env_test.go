@@ -32,6 +32,30 @@ func TestEnvHandler_Execute(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Equal(t, "my_value", vars.Env["MY_VAR"])
+		resolved, resolveErr := vars.Resolve("{{ .env.MY_VAR }}")
+		require.NoError(t, resolveErr)
+		assert.Equal(t, "my_value", resolved)
+	})
+
+	t.Run("export false keeps value available to templates only", func(t *testing.T) {
+		export := false
+		step := &schema.WorkflowStep{
+			Name:   "template-only",
+			Type:   "env",
+			Export: &export,
+			Vars: map[string]string{
+				"EXISTING": "template-value",
+			},
+		}
+		vars := NewVariables()
+		vars.SetEnv("EXISTING", "process-value")
+
+		_, err := handler.Execute(context.Background(), step, vars)
+		require.NoError(t, err)
+		assert.Equal(t, "process-value", vars.Env["EXISTING"])
+		resolved, resolveErr := vars.Resolve("{{ .env.EXISTING }}")
+		require.NoError(t, resolveErr)
+		assert.Equal(t, "template-value", resolved)
 	})
 
 	t.Run("sets multiple environment variables", func(t *testing.T) {

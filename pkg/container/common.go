@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -276,6 +277,21 @@ func buildBuildArgs(config *BuildConfig) []string {
 	args := []string{"build"}
 	if config.Engine == "buildx" {
 		args = []string{"buildx", "build"}
+
+		if config.Driver != nil {
+			args = append(args, "--builder", effectiveDriverName(config.Driver))
+		}
+		if config.Cache != nil {
+			for _, entry := range config.Cache.From {
+				args = append(args, "--cache-from", joinAttrs(entry))
+			}
+			for _, entry := range config.Cache.To {
+				args = append(args, "--cache-to", joinAttrs(entry))
+			}
+		}
+		if config.Load {
+			args = append(args, "--load")
+		}
 	}
 
 	if config.NoCache {
@@ -309,6 +325,18 @@ func buildBuildArgs(config *BuildConfig) []string {
 func buildBakeArgs(config *BuildConfig) []string {
 	args := []string{"buildx", "bake"}
 
+	if config.Driver != nil {
+		args = append(args, "--builder", effectiveDriverName(config.Driver))
+	}
+	if config.Cache != nil {
+		for _, entry := range config.Cache.From {
+			args = append(args, "--set", "*.cache-from="+joinAttrs(entry))
+		}
+		for _, entry := range config.Cache.To {
+			args = append(args, "--set", "*.cache-to="+joinAttrs(entry))
+		}
+	}
+
 	for _, file := range appendFile(config.Bake.File, config.Bake.Files) {
 		args = append(args, "--file", file)
 	}
@@ -328,15 +356,64 @@ func buildBakeArgs(config *BuildConfig) []string {
 	if config.Bake.Print {
 		args = append(args, "--print")
 	}
-	for key, value := range config.Bake.Vars {
-		args = append(args, "--var", fmt.Sprintf(keyValueFormat, key, value))
-	}
 	for _, value := range config.Bake.Set {
 		args = append(args, "--set", value)
 	}
 
 	args = append(args, appendFile(config.Bake.Target, config.Bake.Targets)...)
 	return args
+}
+
+// bakeVarEnv converts bake variables into sorted "NAME=value" environment entries.
+// Docker buildx bake resolves an HCL `variable "NAME" { default = ... }` block from a
+// same-named OS environment variable — this has always been supported by every buildx
+// release, unlike the `--var` CLI flag, which was added later (buildx PR #3610) and is
+// missing from older ships like Debian Trixie's docker-buildx 0.13.1. Keys are sorted so
+// callers get deterministic command/environment construction.
+func bakeVarEnv(vars map[string]string) []string {
+	if len(vars) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(vars))
+	for k := range vars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	env := make([]string, 0, len(keys))
+	for _, k := range keys {
+		env = append(env, fmt.Sprintf(keyValueFormat, k, vars[k]))
+	}
+	return env
+}
+
+// defaultBuilderName is used for the Buildx builder instance when config.Driver.Name is
+// unset, so buildx create is idempotent (and its BuildKit cache persists) across separate
+// Atmos runs on the same host instead of leaking a freshly-named builder every build.
+const defaultBuilderName = "atmos"
+
+// effectiveDriverName returns the configured builder name, falling back to defaultBuilderName.
+func effectiveDriverName(driver *DriverConfig) string {
+	if driver.Name != "" {
+		return driver.Name
+	}
+	return defaultBuilderName
+}
+
+// joinAttrs joins a Buildx cache/driver-opt attribute map into `key=value,key=value` form.
+// Keys are sorted for deterministic output.
+func joinAttrs(attrs map[string]string) string {
+	keys := make([]string, 0, len(attrs))
+	for k := range attrs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	pairs := make([]string, 0, len(keys))
+	for _, k := range keys {
+		pairs = append(pairs, fmt.Sprintf(keyValueFormat, k, attrs[k]))
+	}
+	return strings.Join(pairs, ",")
 }
 
 func appendFile(first string, rest []string) []string {
@@ -377,6 +454,20 @@ func buildRemoveArgs(containerID string, force bool) []string {
 // Extracted to allow testing the argument building logic without executing commands.
 func buildStopArgs(containerID string, timeoutSecs int) []string {
 	return []string{"stop", "-t", fmt.Sprintf("%d", timeoutSecs), containerID}
+}
+
+// buildNetworkConnectArgs builds the arguments for a `network connect` operation,
+// attaching containerID to network with each alias registered as a DNS name on
+// it. This function is shared between Docker and Podman runtimes to avoid
+// duplication. Extracted to allow testing the argument building logic without
+// executing commands.
+func buildNetworkConnectArgs(network, containerID string, aliases []string) []string {
+	args := []string{"network", "connect"}
+	for _, alias := range aliases {
+		args = append(args, "--alias", alias)
+	}
+	args = append(args, network, containerID)
+	return args
 }
 
 // buildLogsArgs builds the arguments for a container logs operation.
@@ -480,6 +571,32 @@ func applyCommandEnv(cmd *exec.Cmd, env []string) {
 		return
 	}
 	cmd.Env = env
+}
+
+// bakeCommandEnv computes the full subprocess environment for a `docker buildx bake`
+// invocation that declares vars, by appending bakeVarEnv entries onto the runtime's base
+// env. It returns nil when there's nothing to inject (no Bake, or no Vars), letting the
+// caller leave cmd.Env untouched via applyCommandEnv's no-op-on-empty behavior.
+//
+// Since cmd.Env is a full replacement, not additive (see applyCommandEnv), base is copied
+// forward here rather than mutated in place: base is the runtime's shared, reusable env
+// field (e.g. DockerRuntime.env), and later commands on the same runtime instance — a
+// push or inspect after this build — must not inherit bake vars meant for this one build.
+// When base is empty the runtime has no configured env (SetEnv was never called), so
+// os.Environ() is used as the starting point instead — matching what an unmodified cmd.Env
+// would have inherited anyway.
+func bakeCommandEnv(base []string, config *BuildConfig) []string {
+	if config.Bake == nil || len(config.Bake.Vars) == 0 {
+		return nil
+	}
+	source := base
+	if len(source) == 0 {
+		source = os.Environ()
+	}
+	env := make([]string, 0, len(source)+len(config.Bake.Vars))
+	env = append(env, source...)
+	env = append(env, bakeVarEnv(config.Bake.Vars)...)
+	return env
 }
 
 // runExecCommand wires IO streams onto an already-built container exec command

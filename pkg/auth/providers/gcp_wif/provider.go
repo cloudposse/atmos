@@ -139,6 +139,15 @@ func (p *Provider) PreAuthenticate(_ types.AuthManager) error {
 	return nil
 }
 
+// IsAmbient satisfies types.AmbientProvider. WIF reads the OIDC token from ambient
+// state (an environment variable, a file, or a URL) on every call and exchanges it for
+// a short-lived access token. Persisting that token would let the auth manager replay a
+// stale principal after the ambient OIDC token is rotated, so the manager must never
+// cache credentials for chains rooted at this provider.
+func (p *Provider) IsAmbient() bool {
+	return true
+}
+
 // Authenticate obtains GCP credentials via WIF token exchange.
 func (p *Provider) Authenticate(ctx context.Context) (types.ICredentials, error) {
 	defer perf.Track(nil, "gcp_wif.Authenticate")()

@@ -1,0 +1,15 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: example
+  description: Test fixture exercising basic scaffold generation.
+spec:
+  fields:
+    - name: project_name
+      label: Project name
+      description: Name of the project.
+      type: input
+      required: true
+
+  files:
+    - path: config.yaml

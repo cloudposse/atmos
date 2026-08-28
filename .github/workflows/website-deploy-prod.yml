@@ -32,20 +32,20 @@ jobs:
     steps:
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.IAM_ROLE_ARN }}
           role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
 
       - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: "website/.nvmrc"
 
@@ -53,6 +53,67 @@ jobs:
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           version: 9
+
+      - name: Set up Go
+        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: "go.mod"
+
+      - name: Generate atmos-manifest schema
+        # website/static/schemas/atmos/atmos-manifest/ is gitignored (see .gitignore) — it is
+        # never hand-maintained or committed, only generated here from the embedded schema
+        # (pkg/datafetcher/schema/atmos/manifest/1.0.json), the single source of truth. The
+        # 1.0 path always floats to the schema shipped by the atmos version at HEAD.
+        # CGO_ENABLED=0: `go run .` builds the whole atmos binary graph, which pulls in
+        # cgo-linked hardware-security-key deps (e.g. github.com/bearsh/hid) that need
+        # system libudev headers this runner doesn't have. atmos itself always builds with
+        # CGO disabled (see .goreleaser.yml, magefiles/build.go); match that here too.
+        # GOFIPS140=latest: match every other Go-toolchain build invocation in the repo
+        # (see docs/prd/fips-140-mode.md) so this throwaway schema-generation process
+        # behaves identically to a real atmos build/test binary.
+        env:
+          CGO_ENABLED: "0"
+          GOFIPS140: latest
+        run: go run . stack schema website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+      - name: Publish pinned atmos-manifest schema snapshot
+        # Only on an actual GitHub release (not the push-to-main or workflow_dispatch
+        # triggers): publish an immutable, version-pinned snapshot alongside the floating
+        # 1.0 path, so users can pin `schemas.atmos.manifest` to the exact schema that
+        # shipped with a given atmos release instead of always tracking HEAD. Closes #2592.
+        if: ${{ github.event_name == 'release' }}
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          CGO_ENABLED: "0"
+          GOFIPS140: latest
+        run: |
+          version="${RELEASE_TAG#v}"
+          go run . stack schema "website/static/schemas/atmos/atmos-manifest/${version}/atmos-manifest.json"
+
+      - name: Generate atmos-config schema
+        # website/static/schemas/atmos/atmos-config/ is gitignored (see .gitignore) — it is
+        # never hand-maintained or committed, only generated here from the embedded schema
+        # (pkg/datafetcher/schema/atmos/config/1.0.json), itself generated from the Go
+        # configuration structs by `go generate ./pkg/config/schema`. The 1.0 path always
+        # floats to the schema shipped by the atmos version at HEAD.
+        env:
+          CGO_ENABLED: "0"
+          GOFIPS140: latest
+        run: go run . config schema website/static/schemas/atmos/atmos-config/1.0/atmos-config.json
+
+      - name: Publish pinned atmos-config schema snapshot
+        # Only on an actual GitHub release: publish an immutable, version-pinned snapshot
+        # alongside the floating 1.0 path, so users can pin `schemas.config` to the exact
+        # atmos.yaml schema that shipped with a given atmos release instead of tracking HEAD.
+        if: ${{ github.event_name == 'release' }}
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          CGO_ENABLED: "0"
+          GOFIPS140: latest
+        run: |
+          version="${RELEASE_TAG#v}"
+          go run . config schema "website/static/schemas/atmos/atmos-config/${version}/atmos-config.json"
 
       - name: Install Dependencies and Build Website
         run: |

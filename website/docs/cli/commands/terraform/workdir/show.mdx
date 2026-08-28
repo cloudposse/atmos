@@ -48,28 +48,32 @@ Example output:
 ```
 ✓ Workdir Status
 
-  Name          dev-vpc
-  Component     vpc
-  Stack         dev
-  Source        components/terraform/vpc
-  Path          .workdir/terraform/dev-vpc
-  Content Hash  abc123def456...
-  Created       2025-12-28 15:31:47 EST
-  Updated       2025-12-28 15:31:47 EST
+  Name           dev-vpc-bb03116d
+  Component      vpc
+  Stack          dev
+  Source Type    local
+  Source         components/terraform/vpc
+  Path           .workdir/terraform/dev-vpc-bb03116d
+  Content Hash   a60bbfad57c32f1d7acd08defd9f0bb7
+  Created        2025-12-28 15:31:47 EST
+  Updated        2025-12-28 15:31:47 EST
+  Last Accessed  2025-12-28 15:31:47 EST
 ```
 
 ## Understanding the Output
 
 The command displays:
 
-- **Name** - The workdir name (format: `<stack>-<component>`)
+- **Name** - The workdir directory name, ending in `<stack>-<component>-<hash>` (the trailing hash keeps two component instances from colliding even when their `<stack>-<component>` prefixes look the same)
 - **Component** - The Terraform component name
 - **Stack** - The stack this workdir belongs to
+- **Source Type** - The source type (`local` for local components)
 - **Source** - Original component location
 - **Path** - Relative path to the workdir
-- **Content Hash** - Hash of the workdir contents (partially masked for security)
+- **Content Hash** - Hash of the workdir contents
 - **Created** - Timestamp when the workdir was first created
 - **Updated** - Timestamp of the last update
+- **Last Accessed** - Timestamp when the workdir was last accessed
 
 ## Error Handling
 

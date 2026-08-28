@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"helm.sh/helm/v4/pkg/action"
@@ -15,7 +16,12 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
+
+// helmXDGSubdir is the atmos-managed Helm home under the XDG config/cache dirs
+// (e.g. ~/.config/atmos/helm and ~/.cache/atmos/helm/repository).
+const helmXDGSubdir = "helm"
 
 // chartSpec is the resolved input needed to render or deploy a Helm chart.
 type chartSpec struct {
@@ -39,8 +45,34 @@ type chartSpec struct {
 	Repositories []chartRepository
 }
 
-// newSettings builds Helm CLI environment settings honoring ambient HELM_* env.
-var newSettings = cli.New
+// newSettings builds Helm CLI environment settings. It honors ambient HELM_* env, but when the user
+// has NOT set HELM_REPOSITORY_CONFIG / HELM_REPOSITORY_CACHE it isolates Helm's repository config and
+// cache to an atmos-managed location instead of inheriting the user's global Helm config. This keeps
+// chart resolution reproducible (an unrelated repo in the user's global repositories.yaml cannot break
+// it via Helm's scanReposForURL) and stops atmos from mutating the user's global Helm repositories.
+// It is a var so tests can override it. See docs/fixes/2026-08-14-native-helm-ux-fixes.md.
+var newSettings = defaultSettings
+
+func defaultSettings() *cli.EnvSettings {
+	settings := cli.New()
+	isolateRepositoryConfig(settings)
+	return settings
+}
+
+// isolateRepositoryConfig points Helm's repository config/cache at the atmos-managed XDG location,
+// but only for the fields the user has not explicitly overridden via the corresponding HELM_* env var.
+func isolateRepositoryConfig(settings *cli.EnvSettings) {
+	if os.Getenv("HELM_REPOSITORY_CONFIG") == "" {
+		if dir := xdg.LookupXDGConfigDir(helmXDGSubdir); dir != "" {
+			settings.RepositoryConfig = filepath.Join(dir, "repositories.yaml")
+		}
+	}
+	if os.Getenv("HELM_REPOSITORY_CACHE") == "" {
+		if dir := xdg.LookupXDGCacheDir(filepath.Join(helmXDGSubdir, "repository")); dir != "" {
+			settings.RepositoryCache = dir
+		}
+	}
+}
 
 // renderManifest renders the chart to a multi-document manifest string without
 // contacting a cluster (client-side dry run, equivalent to `helm template`).

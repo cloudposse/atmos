@@ -118,6 +118,14 @@ func (m *ChatModel) handleMessage(msg tea.Msg, cmds *[]tea.Cmd) (bool, tea.Cmd) 
 	case statusMsg:
 		m.loadingText = string(msg)
 		return true, nil
+
+	case turnStepStartedMsg:
+		m.turnSteps = append(m.turnSteps, turnStep(msg))
+		return true, nil
+
+	case turnStepFinishedMsg:
+		m.finishLastTurnStep(msg.err)
+		return true, nil
 	}
 
 	return false, nil
@@ -176,6 +184,7 @@ func (m *ChatModel) handleSendMessage(msg sendMessageMsg) (bool, tea.Cmd) {
 	m.textarea.Reset()
 	m.isLoading = true
 	m.loadingText = "AI is thinking..."
+	m.turnSteps = m.turnSteps[:0] // Reuse backing array; new turn starts with an empty step log.
 	m.isCancelling = false
 
 	// Create cancellable context for this AI request.
@@ -283,6 +292,22 @@ func (m *ChatModel) handleCompactStatus(msg compactStatusMsg) bool {
 	return true
 }
 
+// finishLastTurnStep marks the most recently started turn step done/failed. Steps run
+// strictly sequentially within a turn, so "finished" always applies to the last entry.
+func (m *ChatModel) finishLastTurnStep(err error) {
+	if len(m.turnSteps) == 0 {
+		return
+	}
+	last := &m.turnSteps[len(m.turnSteps)-1]
+	last.duration = time.Since(last.startedAt)
+	if err != nil {
+		last.status = turnStepError
+		last.err = err
+		return
+	}
+	last.status = turnStepDone
+}
+
 // handleSpinnerTick handles spinner animation updates.
 func (m *ChatModel) handleSpinnerTick(msg spinner.TickMsg, cmds *[]tea.Cmd) bool {
 	if m.isLoading {
@@ -342,12 +367,13 @@ func (m *ChatModel) handleWindowResize(msg tea.WindowSizeMsg) {
 	m.width = msg.Width
 	m.height = msg.Height
 
-	// Fixed textarea height as requested (7 lines).
-	const textareaHeight = 7
+	// Fixed textarea content height (5 lines); the box's own top/bottom border adds 2 more
+	// rendered lines on top of this, for a total rendered height of 7.
+	const textareaContentHeight = 5
 
 	// Set textarea size.
 	m.textarea.SetWidth(msg.Width - 4)
-	m.textarea.SetHeight(textareaHeight)
+	m.textarea.SetHeight(textareaContentHeight)
 
 	viewportHeight := m.calculateViewportHeight(msg.Height)
 	m.updateViewportSize(msg.Width, viewportHeight)
@@ -356,16 +382,18 @@ func (m *ChatModel) handleWindowResize(msg tea.WindowSizeMsg) {
 	m.updateViewportContent()
 }
 
-// calculateViewportHeight calculates the viewport height from the total window height.
+// calculateViewportHeight calculates the viewport height from the total window height by
+// actually measuring the rendered header and footer, rather than hardcoding their line
+// counts — a hand-maintained line-count budget silently drifts out of sync every time
+// header/footer styling changes (padding, borders, conditional lines), leaving a growing
+// gap of unused space between the transcript and the footer instead of the footer sitting
+// flush at the bottom.
 func (m *ChatModel) calculateViewportHeight(totalHeight int) int {
-	// Use fixed heights for header and footer to avoid measurement issues:
-	// Header: title (1) + subtitle (1) + session info (1) + padding = 4 lines
-	// Footer: border (1) + top padding (1) + textarea (7) + newline (1) + help (1) + bottom padding (1) = 12 lines
-	// Separators: 2 newlines between header/viewport/footer = 2 lines
-	// Total non-viewport space: 4 + 12 + 2 = 18 lines.
-	const headerAndFooterHeight = 18
+	const separators = 2 // Blank-line separators between header/viewport/footer in View().
 
-	viewportHeight := totalHeight - headerAndFooterHeight
+	nonViewportHeight := lipgloss.Height(m.headerView()) + lipgloss.Height(m.footerView()) + separators
+
+	viewportHeight := totalHeight - nonViewportHeight
 	if viewportHeight < minViewportHeight {
 		viewportHeight = minViewportHeight
 	}
@@ -406,12 +434,7 @@ func (m *ChatModel) recreateMarkdownRenderer(windowWidth int) {
 		width = minMarkdownWidth
 	}
 
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(width),
-		glamour.WithColorProfile(lipgloss.ColorProfile()),
-		glamour.WithEmoji(),
-	)
+	renderer, err := glamour.NewTermRenderer(buildGlamourOptions(width, m.atmosConfig)...)
 	if err != nil {
 		log.Debugf("Failed to recreate markdown renderer on resize: %v", err)
 		return
@@ -424,7 +447,7 @@ func (m *ChatModel) recreateMarkdownRenderer(windowWidth int) {
 // View renders the chat interface.
 func (m *ChatModel) View() string {
 	if !m.ready {
-		return "\n  Initializing Atmos AI Chat..."
+		return fmt.Sprintf("\n  %s Initializing Atmos AI Chat...", m.spinner.View())
 	}
 
 	// Render appropriate view based on current mode.
@@ -486,11 +509,9 @@ func (m *ChatModel) footerView() string {
 		content = m.inputFooterContent()
 	}
 
-	footerStyle := lipgloss.NewStyle().
-		BorderTop(true).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(theme.ColorBorder)).
-		Padding(1, 0)
+	// No top border here: the input box frames itself, and a second horizontal rule right
+	// above it just reads as a redundant, disconnected line.
+	footerStyle := lipgloss.NewStyle().Padding(1, 0)
 
 	return footerStyle.Render(content)
 }
@@ -507,11 +528,15 @@ func (m *ChatModel) loadingFooterContent() string {
 		usageStr = fmt.Sprintf(" \u00b7 %s tokens", formatTokenCount(m.cumulativeUsage.TotalTokens))
 	}
 
-	loadingText := m.loadingText
-	if loadingText == "" {
-		loadingText = "AI is thinking..."
+	if len(m.turnSteps) == 0 {
+		loadingText := m.loadingText
+		if loadingText == "" {
+			loadingText = "AI is thinking..."
+		}
+		return fmt.Sprintf("%s %s%s %s", m.spinner.View(), loadingText, usageStr, cancelHint)
 	}
-	return fmt.Sprintf("%s %s%s %s", m.spinner.View(), loadingText, usageStr, cancelHint)
+
+	return m.renderTurnSteps(usageStr, cancelHint)
 }
 
 // inputFooterContent renders the footer with the input area.

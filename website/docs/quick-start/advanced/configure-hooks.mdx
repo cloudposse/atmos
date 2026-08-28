@@ -24,11 +24,11 @@ A hook binds a **kind** (the action) to one or more **events** (when it runs):
 ```yaml
 hooks:
   <name>:
-    events: [after-terraform-plan]   # when to run
+    events: [after.terraform.plan]   # when to run
     kind: trivy                       # what to run
 ```
 
-Common events are `after-terraform-plan` and `after-terraform-apply`. The built-in kinds cover the usual cases — no wiring required:
+Common events are `after.terraform.plan` and `after.terraform.apply`. The built-in kinds cover the usual cases — no wiring required:
 
 <dl>
   <dt>`checkov`, `trivy`, `kics`</dt>
@@ -54,7 +54,7 @@ terraform:
   hooks:
     security:
       events:
-        - after-terraform-plan
+        - after.terraform.plan
       kind: checkov   # or: trivy, kics
 ```
 </File>
@@ -89,7 +89,7 @@ components:
       hooks:
         publish-coordinates:
           events:
-            - after-terraform-apply   # run automatically after every apply
+            - after.terraform.apply   # run automatically after every apply
           kind: store
           name: config/ssm            # the store to write to
           outputs:

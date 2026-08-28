@@ -77,7 +77,7 @@ The destination depends on the argument form:
 | --- | --- |
 | Named managed repository (`atmos git clone flux-deploy`) | Automatic XDG workdir (`$XDG_CACHE_HOME/atmos/git/repositories/<name>`), captured by the [native CI cache](/cli/configuration/ci) |
 | Single configured repository (`atmos git clone` with exactly one repository outside CI) | Automatic XDG workdir (`$XDG_CACHE_HOME/atmos/git/repositories/<name>`) |
-| No-arg CI checkout replacement (`atmos git clone` with `ci.enabled: true` and detected CI metadata) | The **working directory** (e.g., `GITHUB_WORKSPACE`), exactly like `actions/checkout` |
+| No-arg CI checkout replacement (`atmos git clone` with CI checkout enabled and detected CI metadata) | The **working directory** (e.g., `GITHUB_WORKSPACE`), exactly like `actions/checkout` |
 | Ad hoc URI (`atmos git clone https://...`) | `<cwd>/<repo-name>`, like plain `git clone` |
 
 `--workdir=<path>` overrides the destination in all forms.
@@ -86,9 +86,14 @@ The destination depends on the argument form:
 
 When invoked with no argument in CI, `atmos git clone` infers the repository and ref from CI provider metadata. This requires:
 
-1. `ci.enabled: true` in `atmos.yaml`.
+1. CI checkout enabled by `ci.enabled: true`, `--ci`, or `ATMOS_CI=true`.
 2. A detected CI provider (for example, GitHub Actions).
 3. Repository metadata supplied by the provider.
+
+`--ci` and `ATMOS_CI=true` are useful before the repository is checked out, when its
+`atmos.yaml` is not available yet. `--ci=false` or `ATMOS_CI=false` explicitly opts out of the
+CI checkout path and uses normal no-argument repository resolution instead. The command-line flag
+takes precedence over `ATMOS_CI`.
 
 Outside CI, no-arg clone reconciles the single configured repository when exactly one repository exists under `git.repositories`. If zero or multiple repositories are configured, pass a repository name, URI, or `--all`.
 
@@ -124,7 +129,7 @@ Affected detection requires merge-base history. If [`atmos describe affected`](/
         - SCP-style: `git@github.com:acme/repo.git`
         - go-getter style: `git::https://github.com/acme/repo.git?ref=main&depth=1` — the `git::` prefix is stripped, `?ref=` maps to the branch/ref and `?depth=` to clone depth; unknown query parameters are rejected
 
-        When omitted: in CI (`ci.enabled: true` with a detected CI provider), performs the current-repository checkout; otherwise, reconciles the single configured repository when exactly one entry exists under [`git.repositories`](/cli/configuration/git). When zero or multiple repositories are configured, pass a repository name, a URI, or `--all`.
+        When omitted: with CI checkout enabled (`ci.enabled: true`, `--ci`, or `ATMOS_CI=true`) and a detected CI provider, performs the current-repository checkout; otherwise, reconciles the single configured repository when exactly one entry exists under [`git.repositories`](/cli/configuration/git). When zero or multiple repositories are configured, pass a repository name, a URI, or `--all`.
     </dd>
 </dl>
 
@@ -135,6 +140,12 @@ Affected detection requires merge-base history. If [`atmos describe affected`](/
     <dd>
         Clone/reconcile every repository configured under `git.repositories`, concurrently. Every repository is attempted; failures are aggregated and reported at the end. Mutually exclusive with a positional argument.
         Environment variable: `ATMOS_GIT_CLONE_ALL`
+    </dd>
+
+    <dt>`--ci` <em>(optional)</em></dt>
+    <dd>
+        Explicitly enable the current-repository CI checkout for a no-argument clone. Set `--ci=false` to opt out, even when CI is detected or `ci.enabled` is true. This selector does not change named, URI, or `--all` clones.
+        Environment variable: `ATMOS_CI`
     </dd>
 
     <dt>`--repo-uri` <em>(optional)</em></dt>

@@ -89,6 +89,12 @@ Each provider in the `providers` map supports the following settings:
 
 CLI providers invoke a locally installed AI tool as a subprocess. No API key needed — the CLI tool uses your existing subscription.
 
+:::note Bring your own CLI tool
+Atmos assumes you already have one of these CLI tools installed and authenticated — the same
+assumption it makes about `terraform` or `tofu`. Atmos does not install `claude`, `codex`,
+`copilot`, or `gemini`, or drive their login flows, on your behalf.
+:::
+
 <dl>
   <dt>**Claude Code** — `claude-code`</dt>
   <dd>Claude Pro/Max subscription. Full MCP support. Best for interactive development.</dd>
@@ -102,6 +108,38 @@ CLI providers invoke a locally installed AI tool as a subprocess. No API key nee
   <dt>**Gemini CLI** — `gemini-cli`</dt>
   <dd>Google account (free tier: 1K req/day). MCP blocked for personal accounts.</dd>
 </dl>
+
+### Default Provider
+
+`default_provider` is optional. When it's not set (and `ai.enabled: true`), Atmos looks for
+a CLI provider's binary on `PATH`, in this order, and uses the first one it finds:
+
+1. `claude-code` (`claude`)
+1. `codex-cli` (`codex`)
+1. `copilot-cli` (`copilot`)
+1. `gemini-cli` (`gemini`)
+
+If none are found, Atmos falls back to `anthropic`, which requires an `api_key`. Setting
+`default_provider` explicitly always overrides auto-detection.
+
+Setting `default_provider: "auto"` does the same thing as leaving it unset, but says so
+explicitly. Useful for a shared `atmos.yaml` (checked into git) where teammates use different
+CLI tools — `auto` documents that everyone's Atmos picks up whatever they have installed,
+rather than leaving the field blank and looking like it was never configured.
+
+This means a minimal config works out of the box for anyone with one of these CLI tools
+already installed and authenticated:
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  enabled: true
+```
+</File>
+
+Auto-detection only looks for the default binary name on `PATH`. If you point `binary` at
+a custom, non-`PATH` location, also set `default_provider` explicitly so Atmos doesn't fall
+through to a different provider.
 
 ### CLI Provider Settings
 

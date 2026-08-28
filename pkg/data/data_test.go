@@ -3,6 +3,7 @@ package data
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	stdio "io"
 	"testing"
 
@@ -242,18 +243,20 @@ func setupTestIO(t *testing.T) (stdout, stderr *bytes.Buffer, cleanup func()) {
 		t.Fatalf("failed to create I/O context: %v", err)
 	}
 
-	// Save old context.
+	// Save old context and renderer.
 	ioMu.Lock()
 	oldCtx := globalIOContext
+	oldRenderer := globalMarkdownRender
 	ioMu.Unlock()
 
 	// Initialize global writer.
 	InitWriter(ioCtx)
 
-	// Return cleanup function to restore old context.
+	// Return cleanup function to restore old context and renderer.
 	cleanup = func() {
 		ioMu.Lock()
 		globalIOContext = oldCtx
+		globalMarkdownRender = oldRenderer
 		ioMu.Unlock()
 	}
 
@@ -390,6 +393,246 @@ func TestWriteYAML(t *testing.T) {
 	}
 }
 
+func TestWriteUnmasked(t *testing.T) {
+	stdout, stderr, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	tests := []struct {
+		name    string
+		content string
+		want    string
+		wantErr bool
+	}{
+		{
+			name:    "content resembling a secret is left untouched",
+			content: "export AWS_SECRET_ACCESS_KEY='super-secret-value'\n",
+			want:    "export AWS_SECRET_ACCESS_KEY='super-secret-value'\n",
+			wantErr: false,
+		},
+		{
+			name:    "empty string",
+			content: "",
+			want:    "",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stdout.Reset()
+			stderr.Reset()
+
+			err := WriteUnmasked(tt.content)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("WriteUnmasked() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			got := stdout.String()
+			if got != tt.want {
+				t.Errorf("WriteUnmasked() output = %q, want %q", got, tt.want)
+			}
+
+			if stderr.Len() != 0 {
+				t.Errorf("WriteUnmasked() wrote to stderr: %q", stderr.String())
+			}
+		})
+	}
+}
+
+func TestWriteUnmasked_BypassesMasking(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	streams := &testStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: stdout,
+		stderr: stderr,
+	}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	if err != nil {
+		t.Fatalf("failed to create I/O context: %v", err)
+	}
+
+	// Save old context.
+	ioMu.Lock()
+	oldCtx := globalIOContext
+	ioMu.Unlock()
+
+	InitWriter(ioCtx)
+
+	defer func() {
+		ioMu.Lock()
+		globalIOContext = oldCtx
+		ioMu.Unlock()
+	}()
+
+	const secret = "super-secret-value"
+	ioCtx.Masker().RegisterValue(secret)
+	content := "export AWS_SECRET_ACCESS_KEY='" + secret + "'\n"
+
+	// Write() must mask a registered secret.
+	if err := Write(content); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if got := stdout.String(); got == content {
+		t.Errorf("Write() did not mask registered secret, got %q", got)
+	}
+
+	stdout.Reset()
+
+	// WriteUnmasked() must leave the same content untouched.
+	if err := WriteUnmasked(content); err != nil {
+		t.Fatalf("WriteUnmasked() error = %v", err)
+	}
+	if got := stdout.String(); got != content {
+		t.Errorf("WriteUnmasked() output = %q, want unmasked %q", got, content)
+	}
+}
+
+// stubWriter is a controllable io.Writer used to exercise WriteUnmasked's
+// write-error, short-write, and over-report-write edge cases, none of which a
+// bytes.Buffer-backed writer can ever produce on its own.
+type stubWriter struct {
+	n   int
+	err error
+}
+
+func (w *stubWriter) Write(_ []byte) (int, error) {
+	return w.n, w.err
+}
+
+func TestWriteUnmasked_WriterEdgeCases(t *testing.T) {
+	boom := errors.New("boom")
+
+	tests := []struct {
+		name    string
+		content string
+		stub    *stubWriter
+		verify  func(t *testing.T, err error)
+	}{
+		{
+			name:    "writer returns an error",
+			content: "export AWS_SECRET_ACCESS_KEY='value'",
+			stub:    &stubWriter{n: 4, err: boom},
+			verify: func(t *testing.T, err error) {
+				t.Helper()
+				if !errors.Is(err, errUtils.ErrWriteToStream) {
+					t.Errorf("WriteUnmasked() error = %v, want errors.Is match for ErrWriteToStream", err)
+				}
+				if !errors.Is(err, boom) {
+					t.Errorf("WriteUnmasked() error = %v, want errors.Is match for underlying write error", err)
+				}
+			},
+		},
+		{
+			name:    "short write with no error",
+			content: "export AWS_SECRET_ACCESS_KEY='value'",
+			stub:    &stubWriter{n: 4, err: nil},
+			verify: func(t *testing.T, err error) {
+				t.Helper()
+				if !errors.Is(err, errUtils.ErrWriteToStream) {
+					t.Errorf("WriteUnmasked() error = %v, want errors.Is match for ErrWriteToStream", err)
+				}
+				if !errors.Is(err, stdio.ErrShortWrite) {
+					t.Errorf("WriteUnmasked() error = %v, want errors.Is match for stdio.ErrShortWrite", err)
+				}
+			},
+		},
+		{
+			name:    "writer reports more bytes written than given - clamped, no error",
+			content: "hi",
+			stub:    &stubWriter{n: 999, err: nil},
+			verify: func(t *testing.T, err error) {
+				t.Helper()
+				if err != nil {
+					t.Errorf("WriteUnmasked() error = %v, want nil", err)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			streams := &testStreams{
+				stdin:  &bytes.Buffer{},
+				stdout: tt.stub,
+				stderr: &bytes.Buffer{},
+			}
+			ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+			if err != nil {
+				t.Fatalf("failed to create I/O context: %v", err)
+			}
+
+			ioMu.Lock()
+			oldCtx := globalIOContext
+			ioMu.Unlock()
+
+			InitWriter(ioCtx)
+
+			defer func() {
+				ioMu.Lock()
+				globalIOContext = oldCtx
+				ioMu.Unlock()
+			}()
+
+			err = WriteUnmasked(tt.content)
+			tt.verify(t, err)
+		})
+	}
+}
+
+func TestWriteUnmaskedf(t *testing.T) {
+	stdout, stderr, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	tests := []struct {
+		name    string
+		format  string
+		args    []interface{}
+		want    string
+		wantErr bool
+	}{
+		{
+			name:    "credential export line",
+			format:  "export %s='%s'\n",
+			args:    []interface{}{"AWS_SECRET_ACCESS_KEY", "super-secret-value"},
+			want:    "export AWS_SECRET_ACCESS_KEY='super-secret-value'\n",
+			wantErr: false,
+		},
+		{
+			name:    "no arguments",
+			format:  "static text",
+			args:    []interface{}{},
+			want:    "static text",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stdout.Reset()
+			stderr.Reset()
+
+			err := WriteUnmaskedf(tt.format, tt.args...)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("WriteUnmaskedf() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			got := stdout.String()
+			if got != tt.want {
+				t.Errorf("WriteUnmaskedf() output = %q, want %q", got, tt.want)
+			}
+
+			if stderr.Len() != 0 {
+				t.Errorf("WriteUnmaskedf() wrote to stderr: %q", stderr.String())
+			}
+		})
+	}
+}
+
 func TestGetIOContext_Panic(t *testing.T) {
 	// Save current global context.
 	ioMu.Lock()
@@ -424,6 +667,20 @@ func (m *mockMarkdownRenderer) Markdown(content string) (string, error) {
 		return m.renderFunc(content)
 	}
 	return "rendered: " + content, nil
+}
+
+// mockNoWrapMarkdownRenderer additionally implements noWrapMarkdownRenderer,
+// for testing MarkdownNoWrap's dedicated rendering path.
+type mockNoWrapMarkdownRenderer struct {
+	mockMarkdownRenderer
+	noWrapFunc func(string) (string, error)
+}
+
+func (m *mockNoWrapMarkdownRenderer) MarkdownNoWrap(content string) (string, error) {
+	if m.noWrapFunc != nil {
+		return m.noWrapFunc(content)
+	}
+	return "no-wrap: " + content, nil
 }
 
 func TestMarkdown(t *testing.T) {
@@ -555,6 +812,95 @@ func TestMarkdownf(t *testing.T) {
 	}
 }
 
+func TestMarkdownNoWrap(t *testing.T) {
+	stdout, stderr, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	mockRenderer := &mockNoWrapMarkdownRenderer{}
+	SetMarkdownRenderer(mockRenderer)
+
+	err := MarkdownNoWrap("https://example.com/long/url")
+	if err != nil {
+		t.Errorf("MarkdownNoWrap() error = %v", err)
+	}
+
+	want := "no-wrap: https://example.com/long/url"
+	if got := stdout.String(); got != want {
+		t.Errorf("MarkdownNoWrap() output = %q, want %q", got, want)
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("MarkdownNoWrap() wrote to stderr: %q", stderr.String())
+	}
+}
+
+func TestMarkdownNoWrapf(t *testing.T) {
+	stdout, stderr, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	mockRenderer := &mockNoWrapMarkdownRenderer{}
+	SetMarkdownRenderer(mockRenderer)
+
+	err := MarkdownNoWrapf("%s issues", "https://example.com")
+	if err != nil {
+		t.Errorf("MarkdownNoWrapf() error = %v", err)
+	}
+
+	want := "no-wrap: https://example.com issues"
+	if got := stdout.String(); got != want {
+		t.Errorf("MarkdownNoWrapf() output = %q, want %q", got, want)
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("MarkdownNoWrapf() wrote to stderr: %q", stderr.String())
+	}
+}
+
+// TestMarkdownNoWrap_FallsBackWithoutNoWrapSupport verifies that a renderer
+// implementing only MarkdownRenderer (not noWrapMarkdownRenderer) still works
+// via MarkdownNoWrap, falling back to the regular (word-wrapped) Markdown path
+// rather than erroring.
+func TestMarkdownNoWrap_FallsBackWithoutNoWrapSupport(t *testing.T) {
+	stdout, _, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	mockRenderer := &mockMarkdownRenderer{}
+	SetMarkdownRenderer(mockRenderer)
+
+	if err := MarkdownNoWrap("content"); err != nil {
+		t.Errorf("MarkdownNoWrap() error = %v", err)
+	}
+
+	want := "rendered: content"
+	if got := stdout.String(); got != want {
+		t.Errorf("MarkdownNoWrap() output = %q, want %q (fallback to Markdown)", got, want)
+	}
+}
+
+// TestMarkdownNoWrap_ErrorFallbackPreservesRendererOutput verifies that when
+// the no-wrap renderer returns an error, MarkdownNoWrap still writes whatever
+// content the renderer returned (its own trimmed/newline-terminated fallback)
+// rather than overriding it with raw, untrimmed input - the same class of bug
+// fixed in ui.MarkdownMessageNoWrap.
+func TestMarkdownNoWrap_ErrorFallbackPreservesRendererOutput(t *testing.T) {
+	stdout, _, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	mockRenderer := &mockNoWrapMarkdownRenderer{
+		noWrapFunc: func(content string) (string, error) {
+			return "degraded fallback\n", errors.New("mock render error")
+		},
+	}
+	SetMarkdownRenderer(mockRenderer)
+
+	if err := MarkdownNoWrap("content"); err != nil {
+		t.Errorf("MarkdownNoWrap() error = %v", err)
+	}
+
+	want := "degraded fallback\n"
+	if got := stdout.String(); got != want {
+		t.Errorf("MarkdownNoWrap() output = %q, want %q (renderer's own fallback, not raw content)", got, want)
+	}
+}
+
 func TestMarkdown_RendererNotInitialized(t *testing.T) {
 	stdout, stderr, cleanup := setupTestIO(t)
 	defer cleanup()
@@ -638,4 +984,62 @@ func TestMarkdown_ContextNotInitialized(t *testing.T) {
 	}()
 
 	_ = Markdown("# Test")
+}
+
+func TestMarkdownNoWrap_ContextNotInitialized(t *testing.T) {
+	// Save current context.
+	ioMu.Lock()
+	oldCtx := globalIOContext
+	globalIOContext = nil
+	ioMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		ioMu.Lock()
+		globalIOContext = oldCtx
+		ioMu.Unlock()
+	}()
+
+	// Should panic when context not initialized.
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("MarkdownNoWrap() did not panic when globalIOContext is nil")
+		}
+	}()
+
+	_ = MarkdownNoWrap("# Test")
+}
+
+func TestMarkdownNoWrap_RendererNotInitialized(t *testing.T) {
+	stdout, stderr, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	// Save old renderer.
+	ioMu.Lock()
+	oldRenderer := globalMarkdownRender
+	globalMarkdownRender = nil
+	ioMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		ioMu.Lock()
+		globalMarkdownRender = oldRenderer
+		ioMu.Unlock()
+	}()
+
+	err := MarkdownNoWrap("# Test")
+	if err == nil {
+		t.Error("MarkdownNoWrap() should return error when renderer not initialized")
+	}
+	if !errors.Is(err, errUtils.ErrUIFormatterNotInitialized) {
+		t.Errorf("MarkdownNoWrap() error = %v, want errors.Is match for ErrUIFormatterNotInitialized", err)
+	}
+
+	// Should not have written anything.
+	if stdout.Len() != 0 {
+		t.Errorf("MarkdownNoWrap() wrote to stdout: %q", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("MarkdownNoWrap() wrote to stderr: %q", stderr.String())
+	}
 }

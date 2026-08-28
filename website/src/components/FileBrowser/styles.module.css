@@ -74,6 +74,33 @@
   color: var(--ifm-heading-color);
 }
 
+/* Search (opt-in via the `searchable` plugin option) */
+.searchContainer {
+  margin: 0 0 1.5rem 0;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  border: 2px solid var(--ifm-color-emphasis-300);
+  border-radius: 8px;
+  background: var(--ifm-background-surface-color);
+  color: var(--ifm-font-color-base);
+  transition: border-color 0.2s ease;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--ifm-color-primary);
+}
+
+.searchResults {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--ifm-color-emphasis-600);
+}
+
 /* Filter Bar */
 .filterBar {
   display: flex;
@@ -142,6 +169,7 @@
 
 /* Example Card */
 .exampleCard {
+  position: relative;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -155,6 +183,27 @@
   display: flex;
   flex-direction: column;
   transition: all 0.2s ease;
+}
+
+/* "Copy as Markdown" icon button in a card's corner (enableCopyMarkdown
+   option) - hidden until the card is hovered/focused, so it doesn't compete
+   with the title at rest. Sits outside the card's <Link>s so a click never
+   triggers navigation (see CopyMarkdownButton's stopPropagation). */
+.exampleCardCopyButton {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.exampleCard:hover .exampleCardCopyButton,
+.exampleCard:focus-within .exampleCardCopyButton,
+.exampleCardCopyButton:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .exampleCard:hover {
@@ -215,6 +264,16 @@
   font-weight: 600;
   margin: 0;
   color: var(--ifm-heading-color);
+}
+
+/* Skill titles rendered as `/name` (titleAsCode option) keep the monospace
+   font but drop Infima's default inline-code background chip/border. */
+.exampleCardTitle code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
 }
 
 .exampleCardDescription {
@@ -315,9 +374,21 @@
 }
 
 /* Sidebar / File Tree */
+/* `.sidebar` only handles sticky positioning. The scrollable, rounded-corner
+   panel styling lives on the nested `.sidebarInner` instead of combining
+   position: sticky + overflow-y: auto + border-radius on one element --
+   that combination makes Chromium/WebKit render the element translucently
+   while scrolling (the underlying content bleeds through mid-scroll).
+   The viewport-based `max-height` also lives on `.sidebarInner` (not `.sidebar`)
+   so it is a definite constraint for this element itself: `.sidebar` has no
+   `height`, so a `height: 100%` child would resolve against it as `auto` and
+   let a long file tree grow the sidebar instead of scrolling inside it. */
 .sidebar {
   position: sticky;
   top: 80px;
+}
+
+.sidebarInner {
   max-height: calc(100vh - 100px);
   overflow-y: auto;
   background: var(--ifm-background-surface-color);
@@ -326,7 +397,7 @@
   padding: 1rem;
 }
 
-:global(html[data-theme='dark']) .sidebar {
+:global(html[data-theme='dark']) .sidebarInner {
   border-color: rgba(255, 255, 255, 0.08);
 }
 
@@ -334,6 +405,9 @@
   .sidebar {
     position: relative;
     top: 0;
+  }
+
+  .sidebarInner {
     max-height: none;
   }
 }
@@ -354,6 +428,16 @@
   font-weight: 600;
   color: var(--ifm-heading-color);
   text-decoration: none;
+}
+
+/* Skill titles rendered as `/name` (titleAsCode option) keep the monospace
+   font but drop Infima's default inline-code background chip/border. */
+.sidebarExampleLink code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
 }
 
 .sidebarExampleLink:hover {
@@ -654,6 +738,82 @@
 .externalIcon {
   font-size: 0.75rem;
   opacity: 0.7;
+}
+
+/* Page Toolbar (breadcrumb + page-level actions) */
+.pageToolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+/* .breadcrumb already carries its own margin-bottom; avoid doubling it when wrapped. */
+.pageToolbar .breadcrumb {
+  margin-bottom: 0;
+}
+
+/* Copy Markdown Button */
+.copyMarkdownButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(0, 0, 0, 0.05);
+  border: none;
+  border-radius: 6px;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.copyMarkdownButton:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+:global(html[data-theme='dark']) .copyMarkdownButton {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+:global(html[data-theme='dark']) .copyMarkdownButton:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.copyMarkdownIcon {
+  font-size: 1rem;
+}
+
+/* Icon-only variant (CopyMarkdownButton's iconOnly prop) - a compact button
+   for tight spaces like a card corner. Same translucent pill language as
+   .copyMarkdownButton/.githubButton/.filterButton, just square and unlabeled. */
+.copyMarkdownIconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.05);
+  border: none;
+  border-radius: 6px;
+  color: var(--ifm-color-emphasis-700);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.copyMarkdownIconButton:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+:global(html[data-theme='dark']) .copyMarkdownIconButton {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+:global(html[data-theme='dark']) .copyMarkdownIconButton:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* README Section */

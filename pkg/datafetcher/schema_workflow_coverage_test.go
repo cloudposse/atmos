@@ -31,7 +31,8 @@ import (
 var stepPolymorphicKeys = []string{"background", "for", "with"}
 
 // TestSchemaCoversWorkflowStepFields asserts every authored WorkflowStep YAML key is modeled as a
-// property in the canonical (website) schema's `workflow_step` definition.
+// property in the embedded schema's `workflow_step` definition (the single source of truth; the
+// website copy is generated from it).
 func TestSchemaCoversWorkflowStepFields(t *testing.T) {
 	props := workflowDefinitionProps(t, "workflow_step")
 	authored := authoredYAMLKeys(reflect.TypeOf(schema.WorkflowStep{}), stepPolymorphicKeys...)
@@ -63,18 +64,18 @@ func assertSchemaModelsFields(t *testing.T, defName string, props, authored map[
 	require.Emptyf(t, missing,
 		"the %q definition in the manifest JSON schema is missing %d authored field(s): %s.\n"+
 			"Add each as a property (with a description for IDE hover text) to\n"+
-			"website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json, or the schema will\n"+
+			"pkg/datafetcher/schema/atmos/manifest/1.0.json, or the schema will\n"+
 			"reject valid workflow files annotated with the published $schema (issue #2708).",
 		defName, len(missing), strings.Join(missing, ", "))
 }
 
-// workflowDefinitionProps returns the property-name set of a workflow definition in the website
+// workflowDefinitionProps returns the property-name set of a workflow definition in the embedded
 // schema, handling both the plain object shape (`workflow_step`) and the `oneOf: [string, object]`
 // !include shape (`workflow_manifest`).
 func workflowDefinitionProps(t *testing.T, defName string) map[string]struct{} {
 	t.Helper()
-	websiteSchema := loadWebsiteSchema(t)
-	defs, ok := websiteSchema["definitions"].(map[string]any)
+	embeddedSchema := loadEmbeddedSchema(t)
+	defs, ok := embeddedSchema["definitions"].(map[string]any)
 	require.True(t, ok, "schema should have definitions")
 	def, ok := defs[defName].(map[string]any)
 	require.Truef(t, ok, "schema should define %q", defName)

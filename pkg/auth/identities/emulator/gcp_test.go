@@ -62,9 +62,7 @@ func TestPostAuthenticate_GCPProjectFallback(t *testing.T) {
 	assert.False(t, ac.GCP.WithoutAuthentication, "absent CLOUDSDK_AUTH_DISABLE_CREDENTIALS -> false")
 }
 
-// TestPostAuthenticate_GCPSkipsWhenNoStack verifies that with no resolvable stack the
-// GCP auth context is left unpopulated (best-effort) rather than failing the auth flow.
-func TestPostAuthenticate_GCPSkipsWhenNoStack(t *testing.T) {
+func TestPostAuthenticate_GCPUsesProjectScopedIdentityWithoutStack(t *testing.T) {
 	id, err := New("local-gcp", &schema.Identity{Kind: types.IdentityKindGCPEmulator, Emulator: "gcp"})
 	require.NoError(t, err)
 	id.SetEmulatorResolver(&fakeResolver{env: map[string]string{"STORAGE_EMULATOR_HOST": "x"}})
@@ -73,5 +71,5 @@ func TestPostAuthenticate_GCPSkipsWhenNoStack(t *testing.T) {
 	require.NoError(t, id.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
 		AuthContext: ac, IdentityName: "local-gcp",
 	}))
-	assert.Nil(t, ac.GCP, "no stack -> GCP auth context left unpopulated")
+	assert.NotNil(t, ac.GCP)
 }

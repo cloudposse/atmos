@@ -13,13 +13,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/keyring"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
+	storeproviders "github.com/cloudposse/atmos/pkg/store/providers"
 )
 
 // newKeychainBackedConfig returns an AtmosConfiguration whose store registry has an in-memory
 // keychain store named "keychain" (no OS keychain required).
 func newKeychainBackedConfig(t *testing.T) *schema.AtmosConfiguration {
 	t.Helper()
-	kc, err := store.NewKeychainStore(&store.KeychainStoreOptions{Backend: keyring.TypeMemory})
+	kc, err := storeproviders.NewKeychainStore(&storeproviders.KeychainStoreOptions{Backend: keyring.TypeMemory})
 	require.NoError(t, err)
 	return &schema.AtmosConfiguration{Stores: store.StoreRegistry{"keychain": kc}}
 }

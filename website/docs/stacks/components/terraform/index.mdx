@@ -245,9 +245,9 @@ components:
       vars:
         cluster_name: acme-prod
         cluster_version: "1.28"
-      settings:
-        depends_on:
-          - component: vpc
+      dependencies:
+        components:
+          - name: vpc
       providers:
         aws:
           region: us-east-1

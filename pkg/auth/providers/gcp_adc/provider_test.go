@@ -745,3 +745,15 @@ func TestADC_FullAuthenticateLifecycle(t *testing.T) {
 	gcpCreds2 := creds2.(*types.GCPCredentials)
 	assert.Equal(t, "lifecycle-token", gcpCreds2.AccessToken)
 }
+
+// TestProvider_IsAmbient verifies that the ADC provider opts into the auth manager's
+// ambient handling, which suppresses keyring caching of its short-lived tokens. Without
+// this, `atmos auth login` replays a stale principal after the user switches accounts
+// with `gcloud auth application-default login` (issue #2695).
+func TestProvider_IsAmbient(t *testing.T) {
+	p, err := New(&types.GCPADCProviderSpec{})
+	require.NoError(t, err)
+
+	var ambient types.AmbientProvider = p
+	assert.True(t, ambient.IsAmbient(), "gcp/adc must report itself as ambient")
+}

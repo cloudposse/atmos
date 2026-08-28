@@ -2,9 +2,9 @@
 
 **Status**: 🟡 In Progress (kind system, scanner kinds, `--skip-hooks`, dependency auto-install, and workdir compatibility have shipped on the in-flight PR; Pro upload backend still pending — see Implementation Plan below)
 
-**Last Updated**: 2026-05-22
+**Last Updated**: 2026-07-24
 
-**Related PRDs**: [Hooks Component Scoping](./hooks-component-scoping.md) | [Tool Dependencies Integration](./tool-dependencies-integration.md) | [Native CI Integration](./native-ci-integration.md) | [CI Summary Templates](./ci-summary-templates.md)
+**Related PRDs**: [Hooks Component Scoping](./hooks-component-scoping.md) | [Tool Dependencies Integration](./tool-dependencies-integration.md) | [Native CI Integration](./native-ci-integration.md) | [CI Summary Templates](./ci-summary-templates.md) | [Run custom step types as component lifecycle hooks](./hooks-step-types.md) (the `kind: step` bridge — new hook capabilities like [`type: archive`](./archive-step.md) ship as step types, not new hook kinds)
 
 ## Overview
 
@@ -96,7 +96,51 @@ Two distinct interpolation surfaces:
 - `ATMOS_OUTPUT_DIR` — temp directory containing `ATMOS_OUTPUT_FILE` (for tools like KICS that write to a directory rather than a file)
 - `ATMOS_STACK`, `ATMOS_COMPONENT` — names
 
-Tools consume these directly (e.g. `infracost --path "$ATMOS_COMPONENT_PATH"`).
+Tools consume these directly (e.g. `infracost --path "$ATMOS_COMPONENT_PATH"`). `$ATMOS_COMPONENT_PATH` always reports `ComponentPath()`'s resolved path, whether or not that directory exists on disk — the path is resolved from the processed component metadata, so a stack-facing alias using `metadata.component` runs against its resolved local module (or provisioned workdir), not the alias name. The command-engine hook's own process working directory is a separate, more conservative decision: it uses that same resolved directory only when it actually exists on disk; otherwise the subprocess falls back to the ambient process working directory rather than refusing to start. This matters for a `when: always` after-hook that must still fire when the component was never provisioned — e.g. an early failure before Terraform ever reaches it (see `TestHelmfileRun_NodeHooksFallbackOnEarlyFailure`) — where hard-requiring the resolved directory to exist would silently prevent the hook from running at all.
+
+A `before.terraform.*` hook is a "run before Terraform" event, not a "run before the component's source is provisioned" event: when a component actually has hooks configured, `runUserHooks` provisions a JIT `source:` synchronously before firing any hook for that component, so both `$ATMOS_COMPONENT_PATH` and the hook's working directory resolve to a real, populated directory rather than one that would not exist until Terraform's own execution provisions it moments later. `before.terraform.init` is excluded from this pre-provisioning step — it is the source provisioner's own lifecycle event, and pre-provisioning ahead of it would fire it after the source already exists, inverting the one event whose entire point is to run before that. This pre-provisioning is best-effort: a failure here is only logged, not returned, since the Terraform command performs the same provisioning moments later and surfaces the authoritative error. When provisioning fails, the hook still runs — from the ambient working directory, per the fallback above — rather than being blocked by the very failure it might want to report on `when: always`.
+
+This pre-provisioning is scoped to components that have hooks: every terraform subcommand already provisions its own component independently in `RunE` (`ExecuteTerraform`), so triggering it unconditionally for every invocation — regardless of whether the component has hooks — raced a second, independent provisioning attempt against that one. For components with no hooks, that extra attempt had nothing to gain and nothing to synchronize against; observed effect was an intermittent failure to (re)populate the directory for subcommands with no hooks configured at all.
+
+Component/stack metadata resolution ahead of hook discovery (the `ProcessStacks` call in `prepareHookContext` that resolves `metadata.component`, described above) is similarly best-effort: on failure it logs and falls back to the unresolved component/stack rather than returning an error, so an objectively invalid stack or component (a scenario the command is going to reject anyway) is rejected by Terraform's own validation with its normal message, not by hook-context preparation with a different one.
+
+### `working_directory:` anchoring for step-backed hooks (`kind: step`/`kind: steps`)
+
+`kind: step`/`kind: steps` hooks (`pkg/hooks/step_engine.go`) bridge to the shared workflow/
+custom-command step registry (`pkg/runner/step`), and each step in that registry accepts its own
+`working_directory:`. Because hooks are always component-scoped — `ComponentPath(ctx)` (above) is
+always available — a relative `working_directory:` on a hook step follows the same
+Empty/Dot/Bare/Absolute value classification the
+[Base Path Resolution Semantics PRD](./base-path-resolution-semantics.md) defines for `base_path`,
+with **the component directory as a third possible anchor** alongside "config dir" and "CWD":
+
+| Value | Anchor |
+|---|---|
+| Empty (unset) | Component directory (`ComponentPath(ctx)`) |
+| Dot (`./foo`, `.`, `..`, `../foo`) | CWD — `exec.Cmd.Dir` already resolves a dot-prefixed relative `Dir` against the ambient process working directory, matching the "runtime source" convention the base-path PRD establishes for env vars/CLI flags |
+| Bare (`foo`, `foo/bar`) | Component directory — joined onto `ComponentPath(ctx)`, same anchor as the empty case |
+| Absolute | Passthrough, unchanged |
+
+```yaml
+hooks:
+  after-terraform-apply:
+    kind: step
+    type: shell
+    command: ./scripts/notify.sh    # dot-prefixed: runs from wherever `atmos` was invoked (CWD)
+    working_directory: scripts      # bare: runs from <component-dir>/scripts
+    # working_directory: ./scripts  # dot-prefixed: runs from <CWD>/scripts instead
+```
+
+Before this rule, a non-empty `working_directory:` — bare or dot-prefixed alike — fell straight
+through to `exec.Cmd`'s own default (relative to the ambient process CWD), silently identical
+regardless of prefix. That contradicted the *already-established* default for an **empty**
+`working_directory:` (component directory, per the table above) and meant `working_directory: foo`
+never actually ran inside the component the hook was scoped to. Implementation:
+`setDefaultStepWorkingDirectory`, `pkg/hooks/step_engine.go`.
+
+This anchoring is specific to hooks (`pkg/hooks`), not `pkg/runner/step` generally — a workflow or
+custom-command step's `working_directory:` has no component to anchor a bare value to, since
+workflows and custom commands aren't inherently component-scoped the way a hook is.
 
 ### Pro integration — implicit upload, kind-driven
 
@@ -433,3 +477,4 @@ Assertions:
 - [Native CI Integration](./native-ci-integration.md) — same philosophy: Atmos works identically locally and in CI; no wrapper scripts.
 - [CI Summary Templates](./ci-summary-templates.md) — summary envelope format borrows from CI plugin templates.
 - [Native CI Artifact Storage](./native-ci-artifact-storage.md) — `pkg/ci/artifact/` is the upload abstraction the Pro backend extends.
+- [Base Path Resolution Semantics](./base-path-resolution-semantics.md) — Empty/Dot/Bare/Absolute value classification, generalized here with the component directory as a third anchor for hook `working_directory:`.

@@ -17,18 +17,15 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Check for vhs label
         id: labeled
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          labels=$(gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" | jq -r '.[].name')
+          labels=$(jq -r '.pull_request.labels[]?.name' "$GITHUB_EVENT_PATH")
           if [[ $labels =~ "vhs" ]]; then
             echo "labeled=true" >> $GITHUB_OUTPUT
           else
@@ -38,8 +35,8 @@ jobs:
       - name: Get modified .tape files
         id: tapes
         env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           IS_LABELED: ${{ steps.labeled.outputs.labeled }}
         run: |
           # Landing-page tapes (demo/landing/**) are rendered by landing-demos.yaml,
@@ -47,7 +44,7 @@ jobs:
           if [[ "$IS_LABELED" == "true" ]]; then
             files=$(find . -path './build-harness' -prune -o -path './demo/landing' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)
           else
-            files=$(gh pr diff --name-only "$PR_NUMBER" | grep '\.tape$' | grep -vE '(^|/)(style|defaults)\.tape$' | grep -v '^demo/landing/' | cut -d/ -f2- || true)
+            files=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep '\.tape$' | grep -vE '(^|/)(style|defaults)\.tape$' | grep -v '^demo/landing/' | cut -d/ -f2- || true)
           fi
           # A multi-line value is invalid for $GITHUB_OUTPUT and would break the matrix
           # split; collapse to a single space-separated line.
@@ -76,7 +73,7 @@ jobs:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ matrix.file }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 

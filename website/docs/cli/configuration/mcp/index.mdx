@@ -66,7 +66,11 @@ The MCP server is **disabled by default**. Enabling AI features (`ai.enabled: tr
 
 ### Tool Settings
 
-The MCP server exposes all tools configured in `ai.tools`. See [AI Tools Configuration](/cli/configuration/ai/tools) for the full reference including `allowed_tools`, `blocked_tools`, and `require_confirmation`.
+The MCP server exposes tools configured in `ai.tools` — filtered/permissioned by `ai.tools.allowed`,
+`restricted`, and `blocked`, same as `atmos ai chat`. `ai.tools.enabled` does **not** gate the MCP
+server, though: `mcp.enabled: true` is this command's own, sufficient opt-in, so tools are always
+registered for MCP regardless of `ai.tools.enabled`. See [AI Tools Configuration](/cli/configuration/ai/tools)
+for the full reference.
 
 ---
 

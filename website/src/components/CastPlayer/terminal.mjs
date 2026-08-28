@@ -5,13 +5,13 @@
 //
 // This intentionally does not implement a full VT100/xterm emulator. It
 // supports exactly the escape sequences that Atmos's own recordings emit:
-// SGR styling, cursor show/hide, clear-line, and cursor-up/down (the
+// SGR styling, cursor show/hide, clear-line/display, and cursor-up/down (the
 // redraw mechanism Bubbletea and huh use for in-place full-screen updates —
 // move the cursor up N lines, then walk back down re-emitting only the lines
 // that changed). Anything else (horizontal cursor movement, absolute
-// positioning, erase-display, alternate-screen-buffer) is not emitted by any
-// cast this repo currently records, so it's left in the "ignore" bucket
-// rather than adding untested column/grid-addressing handling.
+// positioning, alternate-screen-buffer) is not emitted by any cast this repo
+// currently records, so it's left in the "ignore" bucket rather than adding
+// untested column/grid-addressing handling.
 
 export const CURSOR_MARKER = "";
 
@@ -65,6 +65,18 @@ export function replayTerminal(input) {
       setCurrentLine(CURSOR_MARKER);
     }
   };
+  // Huh clears a completed form with CSI K followed by CSI J. K has already
+  // erased the active row's suffix, so the line-level model only needs to
+  // blank rows below the cursor for default erase-display (CSI J / CSI 0J).
+  // Keeping the active row lets the following CR + CSI 2K redraw replace it
+  // normally, while removing stale menu rows from the previous form frame.
+  const clearDisplayAfterCursor = () => {
+    removeCursor();
+    for (let index = row + 1; index < lines.length; index += 1) {
+      lines[index] = "";
+    }
+    syncCursor();
+  };
   // Move the cursor `delta` rows (positive = down, negative = up). A row
   // that already exists keeps whatever content it has until something is
   // actually written to it (see `freshRow` above) — that's what lets a
@@ -105,6 +117,8 @@ export function replayTerminal(input) {
         if (!isDefault || freshRow) {
           clearLine();
         }
+      } else if (parsed.kind === "clearDisplay") {
+        clearDisplayAfterCursor();
       } else if (parsed.kind === "cursorShow") {
         cursorVisible = true;
         syncCursor();
@@ -189,6 +203,12 @@ export function parseEscape(input, start) {
   }
   if (final === "K") {
     return { kind: "clearLine", sequence, nextIndex: start + sequence.length };
+  }
+  if (final === "J") {
+    const param = sequence.slice(2, -1);
+    if (param === "" || param === "0") {
+      return { kind: "clearDisplay", sequence, nextIndex: start + sequence.length };
+    }
   }
   if (final === "A" || final === "B") {
     const param = sequence.slice(2, -1);

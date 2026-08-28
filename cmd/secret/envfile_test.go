@@ -12,13 +12,14 @@ import (
 )
 
 func TestParseEnvSecrets(t *testing.T) {
-	input := strings.NewReader("# comment\n\nA=1\nB=\"two\"\nC=three=with=eq\n")
+	input := strings.NewReader("# comment\n\nA=1 # inline comment\nB=\"two # retained\"\nC=three=with=eq\nD=fragment#retained\n")
 	got, err := parseEnvSecrets(input)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{
 		"A": "1",
-		"B": "two",
+		"B": "two # retained",
 		"C": "three=with=eq",
+		"D": "fragment#retained",
 	}, got)
 }
 

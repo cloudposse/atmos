@@ -91,7 +91,7 @@ func TestMergeContextInProcessYAMLConfigFile(t *testing.T) {
 	importsConfig := make(map[string]map[string]any)
 
 	// Process the YAML config file that imports conflicting configurations
-	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
+	_, err := ProcessYAMLConfigFile(
 		atmosConfig,
 		basePath,
 		filePath,
@@ -182,33 +182,16 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 	}
 }
 
-// inRepoManifestSchemaPath returns the absolute path to the in-repo Atmos manifest
-// JSON Schema (the same file CI passes via `--schemas-atmos-manifest`), resolved
-// source-file-relative so it is CWD-independent.
-func inRepoManifestSchemaPath(t *testing.T) string {
-	t.Helper()
-	_, callerFile, _, ok := runtime.Caller(0)
-	require.True(t, ok, "runtime.Caller(0) must succeed")
-	p := filepath.Join(filepath.Dir(callerFile), "..", "..",
-		"website", "static", "schemas", "atmos", "atmos-manifest", "1.0", "atmos-manifest.json")
-	abs, err := filepath.Abs(p)
-	require.NoError(t, err, "cannot resolve schema path")
-	require.FileExists(t, abs, "in-repo manifest schema must exist")
-	return abs
-}
-
 // TestValidateStacksSchemaValidationHasTeeth guards against the JSON Schema validation
 // in `atmos validate stacks` silently becoming a no-op (which would let CI stay green
 // while validating nothing). It is the negative-path counterpart to the CI `[validate]`
 // matrix, which only exercises the positive path (all example stacks must be valid).
 //
 // The invalid manifest is *structurally* valid (the `settings` section is free-form, so
-// the stack processor accepts a string for `settings.templates`) but violates the schema,
-// which requires `settings.templates` to be an object. The failure must therefore come
-// specifically from JSON Schema validation — not from the structural parser.
+// the stack processor accepts a string for `settings.templates`) but violates the schema:
+// that field must be either an object or an `!include` file reference. The failure must
+// therefore come specifically from JSON Schema validation — not from the structural parser.
 func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
-	schemaPath := inRepoManifestSchemaPath(t)
-
 	const validManifest = "vars:\n  stage: dev\n" +
 		"components:\n  terraform:\n    vpc:\n      vars:\n        name: vpc\n"
 	const invalidManifest = "vars:\n  stage: dev\n" +
@@ -216,9 +199,11 @@ func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
 		"components:\n  terraform:\n    vpc:\n      vars:\n        name: vpc\n"
 
 	// validate builds a fresh, isolated temp project for the given manifest and runs
-	// `atmos validate stacks` against it with the in-repo schema. A fresh directory per
-	// call sidesteps Atmos's per-path manifest memoization, so reusing this helper for
-	// both the valid and invalid manifest is sound.
+	// `atmos validate stacks` against it with the default embedded schema (no
+	// `schemas.atmos.manifest` override — the same schema `atmos validate stacks` uses
+	// for any user who hasn't configured one). A fresh directory per call sidesteps
+	// Atmos's per-path manifest memoization, so reusing this helper for both the valid
+	// and invalid manifest is sound.
 	validate := func(manifest string) error {
 		dir := t.TempDir()
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks", "deploy"), 0o755))
@@ -231,19 +216,92 @@ func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
 		t.Chdir(dir)
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 		require.NoError(t, err)
-		atmosConfig.SetSchemaRegistry("atmos", schema.SchemaRegistry{Manifest: schemaPath})
 		return ValidateStacks(&atmosConfig)
 	}
 
 	// Negative: a schema-invalid manifest must be rejected by JSON Schema validation.
+	// Assert on its user-facing `!include` diagnostic (not just any failure) —
+	// the ad-hoc structural parser (e.g. "invalid vars section", "invalid
+	// components section") never produces this message, so its presence proves
+	// the failure came from schema validation.
 	err := validate(invalidManifest)
 	require.Error(t, err, "schema-invalid manifest must fail validation")
-	require.Contains(t, err.Error(), "JSON Schema validation",
+	require.Contains(t, err.Error(), "settings.templates",
+		"failure must come from JSON Schema validation, not the structural parser")
+	require.Contains(t, err.Error(), "file references must use the !include YAML tag",
 		"failure must come from JSON Schema validation, not the structural parser")
 
 	// Positive control: a valid manifest must pass — proving the failure above is the
 	// manifest, not a broken harness.
 	require.NoError(t, validate(validManifest), "valid manifest must pass validation")
+}
+
+// TestValidateStacksAcceptsRequiredProvidersRetryAndKubernetesGenerate is the regression guard
+// for github.com/cloudposse/atmos/issues/2948: `required_version`/`required_providers`/`retry`
+// (stack-level `terraform:`, the shared `overrides` definition, and component-level) plus
+// stack-level `kubernetes.generate` were fully supported by the stack processor but rejected by
+// the embedded atmos-manifest JSON Schema's `additionalProperties: false`.
+//
+// This intentionally validates schema-acceptance only (via ValidateStacks, never
+// ExecuteTerraform) instead of reusing a shared fixture that also runs real `terraform
+// plan`/`apply` (like tests/fixtures/scenarios/atmos-stacks-validation, exercised by
+// TestExecuteTerraform_OpaValidation). Declaring `required_providers` on any component that
+// real terraform runs against makes Atmos auto-generate a `terraform_override.tf.json` file
+// *into that component's actual source directory* (internal/exec/terraform_utils.go's
+// generateRequiredProviders, invoked from the plan/apply pipeline) — for a shared, checked-in
+// fixture component that pollutes every other test reusing it for the rest of the CI run. This
+// test's manifest is schema-validated only, in an isolated t.TempDir(), so it carries none of
+// that risk.
+func TestValidateStacksAcceptsRequiredProvidersRetryAndKubernetesGenerate(t *testing.T) {
+	const manifest = "vars:\n  stage: dev\n" +
+		"terraform:\n" +
+		"  required_version: \">= 1.9.0\"\n" +
+		"  required_providers:\n" +
+		"    time:\n" +
+		"      source: hashicorp/time\n" +
+		"      version: \"~> 0.13\"\n" +
+		"  retry:\n" +
+		"    max_attempts: 2\n" +
+		"    backoff_strategy: constant\n" +
+		"  overrides:\n" +
+		"    required_version: \">= 1.9.0\"\n" +
+		"    required_providers:\n" +
+		"      time:\n" +
+		"        source: hashicorp/time\n" +
+		"        version: \"~> 0.13\"\n" +
+		"    retry:\n" +
+		"      max_attempts: 2\n" +
+		"kubernetes:\n" +
+		"  generate:\n" +
+		"    \"manifest.yaml\":\n" +
+		"      replicas: 1\n" +
+		"components:\n" +
+		"  terraform:\n" +
+		"    vpc:\n" +
+		"      vars:\n" +
+		"        name: vpc\n" +
+		"      required_version: \">= 1.9.0\"\n" +
+		"      required_providers:\n" +
+		"        azurerm:\n" +
+		"          source: hashicorp/azurerm\n" +
+		"          version: \"~> 4.12.0\"\n" +
+		"      retry:\n" +
+		"        max_attempts: 3\n" +
+		"        conditions:\n" +
+		"          - \"connection reset\"\n"
+
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks", "deploy"), 0o755))
+	atmosYAML := "base_path: \".\"\n" +
+		"stacks:\n  base_path: \"stacks\"\n  included_paths: [\"deploy/**/*\"]\n  name_pattern: \"{stage}\"\n" +
+		"logs:\n  level: \"Warning\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "stack.yaml"), []byte(manifest), 0o644))
+
+	t.Chdir(dir)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	require.NoError(t, ValidateStacks(&atmosConfig), "required_version/required_providers/retry/overrides/kubernetes.generate must pass schema validation")
 }
 
 func TestValidateStacksRejectsUnsupportedYamlFunction(t *testing.T) {
@@ -262,9 +320,92 @@ func TestValidateStacksRejectsUnsupportedYamlFunction(t *testing.T) {
 	t.Chdir(dir)
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
-	atmosConfig.SetSchemaRegistry("atmos", schema.SchemaRegistry{Manifest: inRepoManifestSchemaPath(t)})
 
 	err = ValidateStacks(&atmosConfig)
 	require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
 	require.Contains(t, err.Error(), "!envv")
+}
+
+func TestCheckComponentStackMapClassifiesInvalidConfig(t *testing.T) {
+	componentStackMap := map[string]map[string][]string{
+		"component": {
+			"stack": {"manifest-a", "manifest-b"},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		stacksMap     map[string]any
+		componentType string
+		expectedErr   error
+		contains      string
+	}{
+		{
+			name:          "missing manifest",
+			stacksMap:     map[string]any{},
+			componentType: cfg.TerraformSectionName,
+			expectedErr:   errUtils.ErrInvalidStackManifest,
+			contains:      "manifest-a",
+		},
+		{
+			name: "missing components",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{},
+			},
+			componentType: cfg.TerraformSectionName,
+			expectedErr:   errUtils.ErrComponentsSectionNotFound,
+			contains:      "manifest-a",
+		},
+		{
+			name: "missing terraform components type",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{cfg.ComponentsSectionName: map[string]any{}},
+			},
+			componentType: cfg.TerraformSectionName,
+			expectedErr:   errUtils.ErrInvalidComponentsTerraform,
+			contains:      "components.terraform",
+		},
+		{
+			name: "missing helmfile components type",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{cfg.ComponentsSectionName: map[string]any{}},
+			},
+			componentType: cfg.HelmfileSectionName,
+			expectedErr:   errUtils.ErrInvalidComponentsHelmfile,
+			contains:      "components.helmfile",
+		},
+		{
+			name: "missing component",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{
+					cfg.ComponentsSectionName: map[string]any{
+						cfg.TerraformSectionName: map[string]any{},
+					},
+				},
+			},
+			componentType: cfg.TerraformSectionName,
+			expectedErr:   errUtils.ErrComponentNotDefined,
+			contains:      "component",
+		},
+		{
+			// Only "terraform" and "helmfile" get a dedicated sentinel error; every
+			// other component type (e.g. packer) falls through to the generic
+			// ErrInvalidComponentsSection in validationComponentTypeError's default case.
+			name: "missing packer components type falls back to generic error",
+			stacksMap: map[string]any{
+				"manifest-a": map[string]any{cfg.ComponentsSectionName: map[string]any{}},
+			},
+			componentType: cfg.PackerSectionName,
+			expectedErr:   errUtils.ErrInvalidComponentsSection,
+			contains:      "components.packer",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := checkComponentStackMap(tt.stacksMap, tt.componentType, componentStackMap)
+			require.ErrorIs(t, err, tt.expectedErr)
+			assert.Contains(t, err.Error(), tt.contains)
+		})
+	}
 }

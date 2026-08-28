@@ -22,6 +22,10 @@ describe:
   settings:
     # Include empty values in the describe output
     include_empty: false
+    # Force full evaluation of every stack before filtering (disables the
+    # scope-before-evaluate optimization for --tags/--labels selections and
+    # `list dependencies`)
+    eager_evaluation: false
   affected:
     # Override which component sections `atmos describe affected` evaluates.
     # When set, this list fully replaces the built-in defaults.
@@ -40,6 +44,17 @@ describe:
   <dd>
     When set to `true`, includes fields with empty values (empty strings, empty arrays, null values) in the describe command output.
     Default: `false` (empty values are omitted for cleaner output).
+  </dd>
+
+  <dt>`settings.eager_evaluation`</dt>
+  <dd>
+    When set to `true`, disables the scope-before-evaluate optimization: every stack is fully evaluated (templates,
+    YAML functions, authentication) before `--tags`/`--labels` filtering and before `atmos list dependencies` computes
+    its dependency closure, matching the pre-optimization behavior. It also disables enforcement of the
+    [selector purity contract](/stacks/components/component-metadata#selector-purity), so existing manifests with
+    templated or function-based `metadata.tags`/`metadata.labels` keep working while you migrate them.
+    Use as a rollback switch if scoped evaluation misbehaves for your repository.
+    Default: `false`.
   </dd>
 
   <dt>`affected.sections`</dt>

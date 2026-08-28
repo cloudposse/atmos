@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"os"
 	"regexp"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -60,21 +59,4 @@ func ResolveYAMLFunc(atmosConfig *schema.AtmosConfiguration, name string, stackI
 
 	track := EffectiveTrackFromStack(atmosConfig, stackInfo)
 	return ResolveLocked(atmosConfig, track, name)
-}
-
-// RenderFile renders a template file with the .version context for a track.
-// It returns the rendered content; writing (or check-mode comparison) is the
-// caller's concern.
-func RenderFile(atmosConfig *schema.AtmosConfiguration, track, file string, render RenderFunc) (string, error) {
-	defer perf.Track(atmosConfig, "manager.RenderFile")()
-
-	content, err := os.ReadFile(file)
-	if err != nil {
-		return "", err
-	}
-	versionMap, err := VersionMap(atmosConfig, track)
-	if err != nil {
-		return "", err
-	}
-	return render(atmosConfig, file, string(content), map[string]any{"version": versionMap})
 }

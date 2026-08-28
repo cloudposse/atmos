@@ -123,7 +123,10 @@ func (c *Context) RunAnalysis(cmdErr error) bool {
 		if stderrCaptured != "" {
 			stderrCaptured += "\n"
 		}
-		stderrCaptured += formatted
+		// Format() leads with a blank line to visually separate the error
+		// block from prior terminal output -- that's a display-only concern
+		// and doesn't belong in the captured stderr sent to the AI provider.
+		stderrCaptured += strings.TrimLeft(formatted, "\n")
 	}
 
 	analyzeOutputFunc(c.atmosConfig, &AnalysisInput{

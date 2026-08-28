@@ -1,0 +1,60 @@
+---
+slug: azure-interactive-auth
+title: "Azure Interactive Browser Authentication"
+authors: [aknysh]
+tags: [feature]
+---
+
+Atmos now supports the `azure/interactive` provider — the same interactive browser login `az login` uses (authorization code + PKCE on a localhost redirect). One command, `atmos auth login`, opens your browser, signs you in, and sets up everything Terraform and the `az` CLI need.
+
+<!--truncate-->
+
+## Why This Matters
+
+**Device code is getting blocked**: Microsoft-managed Conditional Access policies now block the device code flow in many tenants (error `AADSTS530035`), so `azure/device-code` fails there. The interactive browser flow carries full Conditional Access context, so it keeps working.
+
+**One command instead of two**: `azure/cli` requires a pre-existing `az login` session. With `azure/interactive`, `atmos auth login` is the only command you run.
+
+**Silent repeat logins**: Atmos tries silent acquisition from the persisted MSAL cache first. Refresh tokens make repeat logins silent — no browser after the first sign-in.
+
+**Drop-in for az login**: Atmos writes the Azure CLI-compatible cache files (MSAL token cache and `azureProfile.json`), so after `atmos auth login` the `az` CLI works without ever running `az login`. Guest/B2B users are handled correctly using the real MSAL home account ID.
+
+## How to Use It
+
+```yaml
+auth:
+  providers:
+    azure-browser:
+      kind: azure/interactive
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        location: eastus
+
+  identities:
+    azure-dev:
+      default: true
+      kind: azure/subscription
+      via:
+        provider: azure-browser
+      principal:
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        location: eastus
+```
+
+Then authenticate:
+
+```shell
+atmos auth login
+```
+
+Atmos opens your default browser for sign-in (with MFA if configured), acquires Management, Graph, and Key Vault tokens, and caches them for azurerm, azuread, and azapi. Chain identities via `azure/subscription` exactly like the other Azure providers.
+
+The spec shape is identical to `azure/device-code`: `tenant_id` (required), plus optional `subscription_id`, `location`, `client_id` (defaults to the Azure CLI public client), and `cloud_environment` (`public`, `usgovernment`, or `china`).
+
+The flow requires an interactive terminal and a browser. For headless environments and CI/CD, keep using `azure/oidc`; where a browser can't be opened (e.g., SSH sessions), `azure/device-code` remains available.
+
+## Get Involved
+
+- Read the [provider documentation](/cli/configuration/auth/providers) and the [Azure Authentication tutorial](/tutorials/azure-authentication)
+- Report issues on [GitHub](https://github.com/cloudposse/atmos/issues)

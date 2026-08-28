@@ -1,0 +1,82 @@
+---
+slug: atmos-demo-workflows
+title: "See Atmos in Action"
+authors: [osterman]
+tags: [feature, dx]
+date: 2026-07-08T12:00:00.000Z
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+
+Start with the recording.
+
+<CastPlayer src="/casts/demo/fixtures/native-terraform/plan.cast" title="atmos terraform plan" chrome controls scrubber />
+
+That is the point of this update: the docs now have short terminal casts for the parts of Atmos that are easier to understand by watching them run.
+
+<!--truncate-->
+
+No big setup. No long pitch before the useful part. Open a page, press play, and see what happens.
+
+## New Recordings
+
+The first set covers the runs people usually want to inspect first:
+
+- plan
+- deploy
+- output
+- source pull
+- stack list
+- component details
+- stack details
+- local AWS demo
+
+Each cast is meant to answer the same question: what will I see when I run this?
+
+## Plan, Deploy, Output
+
+The plan cast starts the set. The next two show the follow-up runs:
+
+<CastPlayer src="/casts/demo/fixtures/native-terraform/deploy.cast" title="atmos terraform deploy" chrome controls scrubber />
+
+<CastPlayer src="/casts/demo/fixtures/native-terraform/output.cast" title="atmos terraform output" chrome controls scrubber />
+
+Together, they show the basic path from preview to apply to result.
+
+## Source Pull
+
+This cast shows the source pull by itself:
+
+<CastPlayer src="/casts/demo/fixtures/demo-vendoring/pull.cast" title="atmos vendor pull" chrome controls scrubber />
+
+It is intentionally plain. You can see what is fetched and what the terminal prints when it finishes.
+
+## Look Around First
+
+Sometimes the next step is to inspect the project before changing anything.
+
+<CastPlayer src="/casts/demo/fixtures/basic/list-stacks.cast" title="atmos list stacks" chrome controls scrubber />
+
+<CastPlayer src="/casts/demo/fixtures/basic/describe-component.cast" title="atmos describe component" chrome controls scrubber />
+
+<CastPlayer src="/casts/demo/fixtures/basic/describe-stacks.cast" title="atmos describe stacks" chrome controls scrubber />
+
+These casts show what Atmos sees before you ask it to do anything else.
+
+## Local AWS Demo
+
+The longest cast shows a full local AWS run:
+
+<CastPlayer src="/casts/examples/emulator-aws/lifecycle.cast" title="atmos emulator aws lifecycle" chrome controls scrubber />
+
+It brings the local service up, waits for it, runs against it, prints the result, and shuts it down.
+
+## Kept Current
+
+The recordings are made by Atmos:
+
+[github.com/cloudposse/atmos/blob/main/demo/casts/atmos.yaml](https://github.com/cloudposse/atmos/blob/main/demo/casts/atmos.yaml)
+
+That file builds the binary, prepares the demo files, records the casts, copies them into the website, and checks the result.
+
+The docs get a visible example. The repo gets a repeatable way to refresh it.

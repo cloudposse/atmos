@@ -3,11 +3,23 @@ package dependencies
 import (
 	"fmt"
 	"sort"
+	"strconv"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/tags"
+)
+
+const (
+	// Metadata subsection keys read by the --tags/--labels top-node filters.
+	tagsMetadataKey   = "tags"
+	labelsMetadataKey = "labels"
+
+	// FormatLevels renders each node's shortest graph distance from a selected root.
+	FormatLevels = "levels"
 )
 
 // Direction selects which dependency edges to display.
@@ -24,7 +36,7 @@ const (
 
 // Options configures dependency rendering.
 type Options struct {
-	// Format is the output format: tree (default), json, or yaml.
+	// Format is the output format: tree (default), json, yaml, or levels.
 	Format string
 	// Direction selects forward, reverse, or both edge directions.
 	Direction Direction
@@ -32,6 +44,18 @@ type Options struct {
 	Component string
 	// Stack optionally filters the top-level entries to a single stack.
 	Stack string
+	// Tags optionally filters the top-level entries to components whose
+	// metadata.tags contains at least one of these tags (any-match).
+	Tags []string
+	// Labels optionally filters the top-level entries to components whose
+	// metadata.labels contains every key=value pair (all-match).
+	Labels map[string]string
+	// LeftDelim/RightDelim are the configured template delimiters ("{{"/"}}"
+	// when empty), used to detect — and best-effort resolve — still-unresolved
+	// selector templates under custom 'templates.settings.delimiters'
+	// configurations.
+	LeftDelim  string
+	RightDelim string
 }
 
 // Render produces the dependency output for the given graph and options.
@@ -42,15 +66,96 @@ func Render(graph *dependency.Graph, opts Options) (string, error) {
 		return "", err
 	}
 
-	tops := selectTopNodes(graph, opts.Component, opts.Stack)
+	sel := &Selector{Stack: opts.Stack, Tags: opts.Tags, Labels: opts.Labels, LeftDelim: opts.LeftDelim, RightDelim: opts.RightDelim}
+	if opts.Component != "" {
+		sel.Components = []string{opts.Component}
+	}
+	tops := selectTopNodes(graph, sel)
 
 	switch opts.Format {
 	case "", string(format.FormatTree):
 		return renderTree(graph, tops, opts.Direction), nil
 	case string(format.FormatJSON), string(format.FormatYAML):
 		return renderStructured(graph, tops, opts)
+	case FormatLevels:
+		return renderLevels(graph, tops, opts.Direction), nil
 	default:
-		return "", fmt.Errorf("%w: %q (supported: tree, json, yaml)", errUtils.ErrInvalidFormat, opts.Format)
+		return "", fmt.Errorf("%w: %q (supported: tree, json, yaml, %s)", errUtils.ErrInvalidFormat, opts.Format, FormatLevels)
+	}
+}
+
+// renderLevels lists selected components and their shortest graph distance from
+// a selected root in the requested direction.
+func renderLevels(graph *dependency.Graph, tops []*dependency.Node, direction Direction) string {
+	levels := levelDistances(graph, tops, direction)
+	nodes := sortedLevelNodes(graph, levels)
+	rows := make([][]string, 0, len(nodes))
+	for _, node := range nodes {
+		rows = append(rows, []string{strconv.Itoa(levels[node.ID]), node.Stack, node.Component, node.Type})
+	}
+	return format.CreateStyledTable([]string{"Level", "Stack", "Component", "Type"}, rows)
+}
+
+// levelDistances BFS-computes each reachable node's shortest distance from any
+// of the selected roots (which sit at level 0) in the requested direction.
+func levelDistances(graph *dependency.Graph, tops []*dependency.Node, direction Direction) map[string]int {
+	levels := make(map[string]int, len(tops))
+	queue := make([]string, 0, len(tops))
+	for _, node := range tops {
+		if _, seen := levels[node.ID]; seen {
+			continue
+		}
+		levels[node.ID] = 0
+		queue = append(queue, node.ID)
+	}
+
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		node, exists := graph.GetNode(id)
+		if !exists {
+			continue
+		}
+		for _, nextID := range levelNeighbors(node, direction) {
+			if _, seen := levels[nextID]; seen {
+				continue
+			}
+			levels[nextID] = levels[id] + 1
+			queue = append(queue, nextID)
+		}
+	}
+	return levels
+}
+
+// sortedLevelNodes resolves the levelled node IDs and orders them by level,
+// then stack, then component for stable, readable output.
+func sortedLevelNodes(graph *dependency.Graph, levels map[string]int) []*dependency.Node {
+	nodes := make([]*dependency.Node, 0, len(levels))
+	for id := range levels {
+		if node, exists := graph.GetNode(id); exists {
+			nodes = append(nodes, node)
+		}
+	}
+	sort.Slice(nodes, func(i, j int) bool {
+		if levels[nodes[i].ID] != levels[nodes[j].ID] {
+			return levels[nodes[i].ID] < levels[nodes[j].ID]
+		}
+		if nodes[i].Stack != nodes[j].Stack {
+			return nodes[i].Stack < nodes[j].Stack
+		}
+		return nodes[i].Component < nodes[j].Component
+	})
+	return nodes
+}
+
+func levelNeighbors(node *dependency.Node, direction Direction) []string {
+	switch direction {
+	case DirectionForward:
+		return node.Dependencies
+	case DirectionReverse:
+		return node.Dependents
+	default:
+		return append(append([]string{}, node.Dependencies...), node.Dependents...)
 	}
 }
 
@@ -69,20 +174,70 @@ func normalizeDirection(opts *Options) error {
 }
 
 // selectTopNodes returns the sorted set of nodes to display as top-level entries,
-// honoring optional component and stack filters.
-func selectTopNodes(graph *dependency.Graph, component, stack string) []*dependency.Node {
+// honoring optional component, stack, tags, and labels filters. Tags/labels
+// filtering scopes which components appear as top-level tree entries (like
+// component/stack do); dependency subtrees still traverse the full graph.
+func selectTopNodes(graph *dependency.Graph, sel *Selector) []*dependency.Node {
 	var nodes []*dependency.Node
 	for _, node := range graph.Nodes {
-		if component != "" && node.Component != component {
-			continue
-		}
-		if stack != "" && node.Stack != stack {
+		if !sel.matches(node) {
 			continue
 		}
 		nodes = append(nodes, node)
 	}
 	sortNodes(nodes)
 	return nodes
+}
+
+// nodeMatchesTagsLabels reports whether the node's metadata.tags (any-match)
+// and metadata.labels (all-match) satisfy the filters. Node.Metadata holds
+// the entire raw component section (see BuildGraph), so the metadata
+// subsection is unwrapped first. A templated selector value is best-effort
+// resolved against the component's raw section data (the purity contract
+// limits selectors to simple templates, so this usually succeeds even on a
+// lightweight unevaluated graph); a value that still cannot be resolved
+// conservatively counts as a match — an unresolved selector must never
+// wrongly exclude a component. The final render/adapter pass sees fully
+// resolved values and filters exactly.
+func nodeMatchesTagsLabels(node *dependency.Node, tagsFilter []string, labelsFilter map[string]string, leftDelim, rightDelim string) bool {
+	if len(tagsFilter) == 0 && len(labelsFilter) == 0 {
+		return true
+	}
+
+	metadata, _ := node.Metadata[cfg.MetadataSectionName].(map[string]any)
+	rawTags, decidable := resolveNodeSelector(metadata[tagsMetadataKey], node.Metadata, len(tagsFilter) > 0, leftDelim, rightDelim)
+	if !decidable {
+		return true
+	}
+
+	// Narrow BEFORE the unresolved check only when narrowing is safe: a
+	// non-map labels value or a templated map key is undecidable, and an
+	// unresolved selector must never wrongly exclude a component.
+	narrowed, safe := tags.RequestedLabels(metadata[labelsMetadataKey], labelsFilter, leftDelim)
+	if len(labelsFilter) > 0 && !safe {
+		return true
+	}
+	rawLabels, decidable := resolveNodeSelector(any(narrowed), node.Metadata, len(labelsFilter) > 0, leftDelim, rightDelim)
+	if !decidable {
+		return true
+	}
+
+	return tags.MatchesTags(tags.ToStringSlice(rawTags), tagsFilter, tags.TagModeAny) &&
+		tags.MatchesLabels(tags.ToStringMap(rawLabels), labelsFilter)
+}
+
+// resolveNodeSelector best-effort resolves one selector value when its filter
+// is active. A decidable=false result means the value stayed unresolved and
+// the caller must conservatively count the node as a match.
+func resolveNodeSelector(raw any, data map[string]any, filterActive bool, leftDelim, rightDelim string) (value any, decidable bool) {
+	if !filterActive || !tags.SelectorUnresolved(raw, leftDelim) {
+		return raw, true
+	}
+	resolved, ok := tags.ResolveSelectorValue(raw, data, leftDelim, rightDelim)
+	if !ok {
+		return nil, false
+	}
+	return resolved, true
 }
 
 // sortNodes orders nodes by stack then component for stable, readable output.

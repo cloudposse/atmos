@@ -29,6 +29,7 @@ tests:
     workdir: "../examples/native-terraform"
     env:
       ATMOS_CLI_CONFIG_PATH: "."
+      ATMOS_DESCRIBE_COMPONENT_FILTER: "full"
     command: "atmos"
     args:
       - "describe"
@@ -56,6 +57,7 @@ tests:
     workdir: "../examples/native-terraform"
     env:
       ATMOS_CLI_CONFIG_PATH: "."
+      ATMOS_DESCRIBE_COMPONENT_FILTER: "full"
     command: "atmos"
     args:
       - "describe"

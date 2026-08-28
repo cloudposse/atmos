@@ -148,6 +148,7 @@ type ChatModel struct {
 	currentSkill         *skills.Skill         // Currently active skill
 	selectedSkillIdx     int                   // Selected skill index in skill selection UI
 	loadingText          string                // Text to display next to spinner
+	turnSteps            []turnStep            // Steps (AI calls + tool executions) in the current turn
 }
 
 // ChatMessage represents a single message in the chat.
@@ -181,7 +182,7 @@ func NewChatModel(p ChatModelParams) (*ChatModel, error) {
 		return nil, errUtils.ErrAIClientNil
 	}
 
-	renderer := initMarkdownRenderer()
+	renderer := initMarkdownRenderer(atmosConfig)
 	skillRegistry, currentSkill, err := initSkills(atmosConfig)
 	if err != nil {
 		return nil, err
@@ -238,10 +239,32 @@ func initViewport() viewport.Model {
 // initTextarea creates a new textarea with default settings.
 func initTextarea() textarea.Model {
 	ta := textarea.New()
-	ta.Placeholder = "Type your message... (Enter to send, Ctrl+J for new line, Ctrl+C to quit)"
+	// Keep this short: the full shortcut list (Enter/Ctrl+J/Ctrl+C included) is always
+	// visible on the help line below the box, so repeating it here is just noise.
+	ta.Placeholder = "Type your message..."
 	ta.Focus()
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 0 // No character limit.
+	// A real border frames the box on all sides; a repeated per-line prompt glyph would
+	// just double up on the border's own left edge.
+	ta.Prompt = ""
+
+	borderColor := lipgloss.Color(theme.GetBorderColor())
+	mutedColor := lipgloss.Color("240")
+	muted := theme.GetCurrentStyles().Muted
+
+	// Base wraps the whole rendered textarea (not per-line), so a border here renders as
+	// one connected box instead of the library's bare per-line prompt glyph.
+	// Clear CursorLine's default background too — it otherwise renders the placeholder as
+	// a fully-inverted block spanning the textarea's width.
+	ta.FocusedStyle.Base = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(borderColor).Padding(0, 1)
+	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	ta.FocusedStyle.Placeholder = muted
+
+	ta.BlurredStyle.Base = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(mutedColor).Padding(0, 1)
+	ta.BlurredStyle.CursorLine = lipgloss.NewStyle()
+	ta.BlurredStyle.Placeholder = muted
+
 	return ta
 }
 
@@ -249,19 +272,42 @@ func initTextarea() textarea.Model {
 func initSpinner() spinner.Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
+	s.Style = theme.GetCurrentStyles().Spinner
 	fps.Apply(&s)
 	return s
 }
 
-// initMarkdownRenderer creates a cached markdown renderer.
-func initMarkdownRenderer() *glamour.TermRenderer {
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(DefaultViewportWidth-4),
+// buildGlamourOptions returns glamour rendering options built from Atmos' own theme,
+// instead of glamour.WithAutoStyle(). AutoStyle probes the terminal for a dark background
+// over an OSC round-trip and silently falls back to its colorless "notty" style when that
+// probe fails or stdout isn't detected as a TTY — which happens in wrapped/embedded
+// terminals even though the rest of this TUI's plain lipgloss colors render just fine.
+// This mirrors the approach pkg/ui/formatter.go already uses for the CLI's other markdown
+// output.
+func buildGlamourOptions(width int, atmosConfig *schema.AtmosConfiguration) []glamour.TermRendererOption {
+	opts := []glamour.TermRendererOption{
+		glamour.WithWordWrap(width),
 		glamour.WithColorProfile(lipgloss.ColorProfile()),
 		glamour.WithEmoji(),
-	)
+	}
+
+	themeName := ""
+	if atmosConfig != nil {
+		themeName = atmosConfig.Settings.Terminal.Theme
+	}
+	if glamourStyle, err := theme.GetGlamourStyleForTheme(themeName); err == nil {
+		opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
+	} else {
+		log.Debugf("Failed to build theme-aware glamour style, falling back to auto style: %v", err)
+		opts = append(opts, glamour.WithAutoStyle())
+	}
+
+	return opts
+}
+
+// initMarkdownRenderer creates a cached markdown renderer.
+func initMarkdownRenderer(atmosConfig *schema.AtmosConfiguration) *glamour.TermRenderer {
+	renderer, err := glamour.NewTermRenderer(buildGlamourOptions(DefaultViewportWidth-4, atmosConfig)...)
 	if err != nil {
 		log.Debugf("Failed to create cached markdown renderer: %v", err)
 		return nil
@@ -427,8 +473,8 @@ func (m *ChatModel) addMessage(role, content string) {
 	// Capture the current provider for all non-system messages.
 	// This ensures complete conversation isolation when switching providers.
 	provider := ""
-	if role != roleSystem && m.sess != nil && m.sess.Provider != "" {
-		provider = m.sess.Provider
+	if role != roleSystem {
+		provider = m.getCurrentProvider()
 	}
 
 	message := ChatMessage{

@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"io"
 	"sort"
 	"sync"
 
@@ -57,6 +58,10 @@ type ExecContext struct {
 	// so the installed pinned versions take precedence over the operator's
 	// PATH. Empty when the component declares no hook dependencies.
 	ToolchainPATH string
+	// Stdout and Stderr receive subprocess output when a concurrent caller
+	// supplies serialized component writers. Nil uses the process streams.
+	Stdout io.Writer
+	Stderr io.Writer
 
 	// OutputFile is the temp file path the tool wrote structured output to.
 	// Populated by CommandEngine before calling ResultHandler.
@@ -175,6 +180,13 @@ type Kind struct {
 	Command     string
 	DefaultArgs []string
 	DefaultEnv  map[string]string
+
+	// CaptureStdout, when true, redirects the subprocess's stdout into
+	// ATMOS_OUTPUT_FILE instead of streaming it to the terminal. Use for tools
+	// that emit structured output (e.g. SARIF) to stdout and have no
+	// file-output flag (tflint). The kind's ResultHandler then reads it via
+	// sarif.DefaultOutputFile, same as file-output tools (trivy/checkov).
+	CaptureStdout bool
 
 	// OnFailure is the default failure mode if the hook doesn't override.
 	OnFailure string

@@ -116,3 +116,25 @@ func TestProvider_KindAndLogout(t *testing.T) {
 	assert.Equal(t, "atmos-pro", p.Name())
 	require.ErrorIs(t, p.Logout(context.Background()), errUtils.ErrLogoutNotSupported)
 }
+
+// TestProProvider_IsNotAmbient is a regression guard, not a coverage filler.
+//
+// The atmos/pro provider mints a SINGLE-USE OIDC token that cannot be re-exchanged, so
+// the auth manager's cached-credential reuse is load-bearing for it (see the
+// EnsureIdentityEnvironment contract in pkg/auth/types/interfaces.go). Opting this
+// provider into types.AmbientProvider would suppress that caching and break
+// authentication outright.
+//
+// It is superficially similar to the providers that ARE ambient — short-lived token, no
+// credential files — so this test pins the distinction that matters: what makes a
+// provider ambient is that it can re-resolve, not that its token is short-lived.
+func TestProProvider_IsNotAmbient(t *testing.T) {
+	p := &proProvider{name: "atmos-pro"}
+
+	assert.False(t, types.ProviderIsAmbient(p),
+		"atmos/pro mints single-use tokens and MUST stay cacheable")
+
+	_, isAmbient := any(p).(types.AmbientProvider)
+	assert.False(t, isAmbient,
+		"atmos/pro must not implement types.AmbientProvider at all")
+}

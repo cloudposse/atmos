@@ -9,7 +9,7 @@ stacks:
   base_path: "stacks"
   included_paths:
     - "**/*.yaml"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
 
 stores:
   secrets/gcp:

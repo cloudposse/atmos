@@ -7,6 +7,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
+	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -25,10 +26,19 @@ func processTagTerraformState(
 	return processTagTerraformStateWithContext(atmosConfig, input, currentStack, nil, stackInfo)
 }
 
-// isRecoverableTerraformError checks if an error is recoverable (can use YQ default).
+// isRecoverableTerraformError checks whether a lookup is recoverable because state or an
+// output genuinely does not exist yet. Authentication, credential-refresh, network, and
+// backend API failures must remain visible rather than silently using a fallback value.
 func isRecoverableTerraformError(err error) bool {
 	return errors.Is(err, errUtils.ErrTerraformStateNotProvisioned) ||
 		errors.Is(err, errUtils.ErrTerraformOutputNotFound)
+}
+
+// isRecoverableInWarnMode is the classification processNodesWithContext uses when the
+// caller selected --error-mode=warn/silent. Error mode only degrades a genuinely
+// unprovisioned state/output; it never hides credential or backend failures.
+func isRecoverableInWarnMode(err error) bool {
+	return isRecoverableTerraformError(err)
 }
 
 // hasYqDefault checks if a YQ expression contains a default (fallback) operator.
@@ -62,32 +72,20 @@ func processTagTerraformStateWithContext(
 	var stack string
 	var output string
 
-	// Split the string into slices based on any whitespace (one or more spaces, tabs, or newlines),
-	// while also ignoring leading and trailing whitespace.
-	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
-	parts, err := u.SplitStringByDelimiter(str, ' ')
+	parsed, err := fnparser.ParseTerraform(str)
 	if err != nil {
 		return nil, err
 	}
-
-	partsLen := len(parts)
-
-	switch partsLen {
-	case 3:
-		component = strings.TrimSpace(parts[0])
-		stack = strings.TrimSpace(parts[1])
-		output = strings.TrimSpace(parts[2])
-	case 2:
-		component = strings.TrimSpace(parts[0])
+	component = parsed.Component
+	stack = parsed.Stack
+	output = parsed.Expression
+	if stack == "" {
 		stack = currentStack
-		output = strings.TrimSpace(parts[1])
 		log.Debug(
 			"Executing Atmos YAML function with component and output parameters; using current stack",
 			"function", input,
 			"stack", currentStack,
 		)
-	default:
-		return nil, fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
 	// Check for circular dependencies if resolution context is provided.
@@ -106,6 +104,10 @@ func processTagTerraformStateWithContext(
 
 		// Defer pop to ensure we clean up even if there's an error.
 		defer resolutionCtx.Pop(atmosConfig)
+	}
+
+	if value, mocked, mockErr := resolveTerraformMockOutput(atmosConfig, stackInfo, stack, component, output); mocked {
+		return value, mockErr
 	}
 
 	// Extract authContext and authManager from stackInfo if available.

@@ -17,10 +17,14 @@ func expandMatrix(matrix map[string][]string) []map[string]string {
 	sort.Strings(axes)
 	rows := []map[string]string{{}}
 	for _, axis := range axes {
-		next := make([]map[string]string, 0, len(rows)*len(matrix[axis]))
+		// Capacity hint uses a single len() — CodeQL's allocation-size-overflow rule
+		// flags len(rows)*len(matrix[axis]); append grows the slice as needed.
+		next := make([]map[string]string, 0, len(rows))
 		for _, row := range rows {
 			for _, value := range matrix[axis] {
-				copied := make(map[string]string, len(row)+1)
+				// Size the map from a single len() — CodeQL flags len(row)+1; the map
+				// grows as needed for the extra axis key.
+				copied := make(map[string]string, len(row))
 				for k, v := range row {
 					copied[k] = v
 				}

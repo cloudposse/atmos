@@ -72,6 +72,7 @@ runs:
       uses: actions/github-script@v8
       with:
         github-token: ${{ github.token }}
+        retries: 3
         script: |
           const prNumber = context.issue.number;
           const owner = context.repo.owner;
@@ -97,6 +98,7 @@ runs:
           // Parse files to ignore
           const files_to_ignore = `${{ inputs.files_to_ignore }}`.split(/[\s\n]+/).filter(f => f);
 
+          try {
           // Get all PR files using pagination
           const files = await github.paginate(github.rest.pulls.listFiles, {
             owner,
@@ -211,4 +213,7 @@ runs:
           // Fail if XXL and configured to do so
           if (newLabel === xxl_label && fail_if_xxl) {
             core.setFailed(`PR is too large (${totalChanges} changes). Please consider breaking it up into smaller PRs.`);
+          }
+          } catch (error) {
+            core.warning(`Unable to apply a PR size label: ${error.message}`);
           }

@@ -4,12 +4,20 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// describeAffectedErrorModeParser is the minimal StandardParser wired to the
+// --error-mode flag; see cmd/describe_error_mode_flag.go for why this command
+// doesn't migrate to flags.NewStandardParser wholesale.
+var describeAffectedErrorModeParser *flags.StandardParser
 
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits.
 var describeAffectedCmd = &cobra.Command{
@@ -52,6 +60,12 @@ func init() {
 	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "Deprecated. Alias for `--logs-level=Debug`")
 	describeAffectedCmd.PersistentFlags().Bool("exclude-locked", false, "Exclude the locked components (`metadata.locked: true`) from the output")
 
+	describeAffectedErrorModeParser = newDescribeErrorModeParser()
+	describeAffectedErrorModeParser.RegisterPersistentFlags(describeAffectedCmd)
+	if err := describeAffectedErrorModeParser.BindToViper(viper.GetViper()); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
 	describeCmd.AddCommand(describeAffectedCmd)
 }
 
@@ -64,6 +78,13 @@ func getRunnableDescribeAffectedCmd(
 	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
+
+		// Resolve ATMOS_DESCRIBE_ERROR_MODE (via Viper) onto the --error-mode Cobra flag
+		// before parseDescribeAffectedCliArgs reads it, so the legacy cmd.Flags()-based
+		// parsing in internal/exec picks it up.
+		if err := resolveDescribeErrorModeFlag(cmd, viper.GetViper(), describeAffectedErrorModeParser); err != nil {
+			return err
+		}
 
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
 		if err != nil {

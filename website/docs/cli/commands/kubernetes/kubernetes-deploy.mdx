@@ -24,12 +24,8 @@ import CastPlayer from '@site/src/components/CastPlayer'
   `deploy` uses the same stack and `atmos.yaml` settings as `apply`, including
   manifest paths, variables, credentials, hooks, and dependency ordering.
   <div>
-    <PrimaryCTA to="/stacks/components/kubernetes">
-      Stack Configuration
-    </PrimaryCTA>
-    <PrimaryCTA to="/cli/configuration/components/kubernetes">
-      atmos.yaml Configuration
-    </PrimaryCTA>
+    <PrimaryCTA to="/stacks/components/kubernetes">Stack Configuration</PrimaryCTA>
+    <PrimaryCTA to="/cli/configuration/components/kubernetes">atmos.yaml Configuration</PrimaryCTA>
   </div>
 </ActionCard>
 
@@ -51,6 +47,13 @@ Use `deploy` when you want command language that matches an application deployme
 
 ```shell
 atmos kubernetes deploy argocd -s plat-ue2-dev
+```
+
+Deploy components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos kubernetes deploy --all --tags production,tier-1
+atmos kubernetes deploy --affected --labels cost-center=platform
 ```
 
 ## Deployment repositories (GitOps)
@@ -88,6 +91,47 @@ When `--target` is omitted, `provision.default` is used, otherwise the cluster.
 Credentials for cloning and pushing come from Atmos Auth (GitHub STS), so no
 tokens are stored in the manifests.
 
+### File vs. directory delivery (`split`)
+
+A git target's `path` can be either a directory (one file per rendered object) or
+the exact name of a single output file. Set `split` on the target to control
+which:
+
+<dl>
+  <dt>`split: true`</dt>
+  <dd>`path` is a directory; every rendered object is written to its own generated filename inside it.</dd>
+
+  <dt>`split: false`</dt>
+  <dd>`path` is the exact output file; every rendered object is merged into one multi-document YAML file written to that path.</dd>
+
+  <dt>unset (default)</dt>
+  <dd>
+    Inferred from `path`: if the last path segment looks like a manifest
+    filename (matches `/\.(ya?ml|json)$/i`, e.g. `kustomization.yaml`), `split`
+    defaults to `false`; otherwise it defaults to `true`, preserving the
+    directory behavior every existing configuration already relies on.
+  </dd>
+</dl>
+
+```yaml
+components:
+  kubernetes:
+    argocd:
+      provision:
+        targets:
+          deployment-repo:
+            kind: git
+            repository: deployments
+            path: "kustomize/overlays/{{ .vars.environment }}/kustomization.yaml"
+            # split is omitted here: the path ends in .yaml, so it is inferred
+            # as split: false and written as a single file, not a directory.
+            commit:
+              message: "Render manifests for {{ .vars.environment }}"
+```
+
+See [Generating a Kustomize component for GitOps](/stacks/components/kubernetes#generating-a-kustomize-component-for-gitops)
+for a complete walkthrough of this pattern.
+
 ## Flags
 
 <dl>
@@ -116,4 +160,18 @@ tokens are stored in the manifests.
 
   <dt>`--include-dependents` <em>(optional)</em></dt>
   <dd>With `--affected`, include dependent Kubernetes components.</dd>
+
+<dt>
+  `--tags` <em>(optional)</em>
+</dt>
+<dd>
+  Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.
+</dd>
+
+<dt>
+  `--labels` <em>(optional)</em>
+</dt>
+<dd>
+  Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
+</dd>
 </dl>

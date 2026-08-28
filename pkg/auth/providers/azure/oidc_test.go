@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -873,6 +874,8 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 		serverResponse   interface{}
 		statusCode       int
 		expectError      bool
+		serverID         string
+		wantAKSScope     string
 		checkCredentials func(*testing.T, *authTypes.AzureCredentials)
 	}{
 		{
@@ -882,14 +885,22 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 				TokenType:   "Bearer",
 				ExpiresIn:   7200,
 			},
-			statusCode:  http.StatusOK,
-			expectError: false,
+			statusCode:   http.StatusOK,
+			expectError:  false,
+			serverID:     "custom-server-id",
+			wantAKSScope: "custom-server-id/.default",
 			checkCredentials: func(t *testing.T, creds *authTypes.AzureCredentials) {
 				assert.Equal(t, "azure-access-token-xyz", creds.AccessToken)
 				assert.Equal(t, "Bearer", creds.TokenType)
 				assert.Equal(t, "tenant-123", creds.TenantID)
 				assert.Equal(t, "sub-789", creds.SubscriptionID)
 				assert.NotEmpty(t, creds.Expiration)
+				// acquireAdditionalTokens exchanges the same federated token
+				// against the same test server for Graph/KeyVault/AKS scopes
+				// (the handler doesn't distinguish by scope), confirming the
+				// AKS-scope goroutine runs and populates AzureCredentials.
+				assert.NotEmpty(t, creds.AKSToken)
+				assert.NotEmpty(t, creds.AKSTokenExpiration)
 			},
 		},
 		{
@@ -902,8 +913,19 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			var scopes []string
+			var scopesMu sync.Mutex
+
 			// Create test server.
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if err := r.ParseForm(); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				scopesMu.Lock()
+				scopes = append(scopes, r.Form.Get("scope"))
+				scopesMu.Unlock()
+
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
 				_ = json.NewEncoder(w).Encode(tt.serverResponse)
@@ -924,6 +946,9 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 
 			// Call Authenticate.
 			ctx := context.Background()
+			if tt.serverID != "" {
+				ctx = azureCloud.ContextWithAKSServerID(ctx, tt.serverID)
+			}
 			creds, err := provider.Authenticate(ctx)
 
 			if tt.expectError {
@@ -939,6 +964,9 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 
 			if tt.checkCredentials != nil {
 				tt.checkCredentials(t, azureCreds)
+			}
+			if tt.wantAKSScope != "" {
+				assert.Contains(t, scopes, tt.wantAKSScope)
 			}
 		})
 	}
@@ -1504,6 +1532,33 @@ func TestOIDCProvider_Environment_SovereignCloud(t *testing.T) {
 				_, exists := env[k]
 				assert.False(t, exists, "Expected %s to not be set", k)
 			}
+		})
+	}
+}
+
+// TestAzureProviders_IsAmbient verifies that both ambient Azure providers opt into the
+// auth manager's ambient handling, which suppresses keyring caching of their short-lived
+// tokens. Without this, `atmos auth login` replays a stale principal after the user runs
+// `az login` as a different account, or after the federated token is rotated — the Azure
+// analogue of issue #2695.
+//
+// The interactive device-code provider is deliberately NOT ambient: it runs its own
+// device flow and owns a purpose-built token cache (device_code_cache.go), so caching is
+// required for it to work at all.
+func TestAzureProviders_IsAmbient(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider authTypes.Provider
+		want     bool
+	}{
+		{name: "azure/cli is ambient", provider: &cliProvider{name: "az-cli"}, want: true},
+		{name: "azure/oidc is ambient", provider: &oidcProvider{name: "az-oidc"}, want: true},
+		{name: "azure/device-code is not ambient", provider: &deviceCodeProvider{name: "az-device"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, authTypes.ProviderIsAmbient(tt.provider))
 		})
 	}
 }

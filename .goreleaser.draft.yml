@@ -9,6 +9,12 @@ builds:
       # usage by users in CI/CD systems like Terraform Cloud where
       # they are unable to install libraries.
       - CGO_ENABLED=0
+      # Link Go's native FIPS 140-3 crypto module and default release binaries
+      # to FIPS-enforcing mode (GODEBUG=fips140=on) at runtime. This puts the
+      # binary in FIPS 140-3 mode; it is not by itself a CMVP compliance
+      # certification for atmos, and it does not cover the age/NaCl-based
+      # secrets encryption atmos also uses. See docs/prd/fips-140-mode.md.
+      - GOFIPS140=latest
     mod_timestamp: '{{ .CommitTimestamp }}'
     goos:
       - 'linux'
@@ -19,7 +25,9 @@ builds:
     binary: atmos
     ldflags:
       # Set `atmos` version to the GitHub release tag using Go `ldflags`
-      - '-s -w -X "github.com/cloudposse/atmos/pkg/version.Version={{.Version}}"'
+      # Commit pins the scaffold catalog's distributable templates to this
+      # release's exact commit.
+      - '-s -w -X "github.com/cloudposse/atmos/pkg/version.Version={{.Version}}" -X "github.com/cloudposse/atmos/pkg/version.Commit={{.Commit}}"'
 
 archives:
   - format: binary

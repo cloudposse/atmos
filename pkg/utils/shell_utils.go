@@ -28,6 +28,10 @@ var (
 
 // ShellRunnerSpec configures a shell script execution.
 type ShellRunnerSpec struct {
+	// Context, when set, is passed to the interpreter so cancellation (e.g. a
+	// parallel step's fail-fast) stops the running script. Defaults to
+	// context.Background() when nil.
+	Context context.Context
 	Command string
 	Name    string
 	Dir     string
@@ -135,7 +139,11 @@ func ShellRunnerWithWriters(spec *ShellRunnerSpec) error {
 		return err
 	}
 
-	err = runner.Run(context.Background(), parser)
+	runCtx := spec.Context
+	if runCtx == nil {
+		runCtx = context.Background()
+	}
+	err = runner.Run(runCtx, parser)
 	if err != nil {
 		// Check if the error is an interp.ExitStatus and preserve the exit code.
 		// Return a typed error that preserves the exit code.

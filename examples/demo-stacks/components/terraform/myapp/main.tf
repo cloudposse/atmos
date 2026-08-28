@@ -8,10 +8,11 @@ locals {
   url = format("https://wttr.in/%v?%v",
     urlencode(var.location), local.wttr_query,
   )
+  weather_endpoint = coalesce(var.weather_endpoint, local.url)
 }
 
 data "http" "weather" {
-  url = local.url
+  url = local.weather_endpoint
   request_headers = {
     User-Agent = "curl"
   }

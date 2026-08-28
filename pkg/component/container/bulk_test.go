@@ -285,5 +285,5 @@ func TestResolveBulkTargets_AllForwardsStack(t *testing.T) {
 	// --all returns every component from the described map (stub ignores the filter).
 	require.Len(t, targets, 3)
 	assert.Equal(t, "api", targets[0].component)
-	assert.Equal(t, instanceRow{stack: "prod", component: "api", image: "api:prod"}, targets[2])
+	assert.Equal(t, instanceRow{stack: "prod", component: "api", image: "api:prod", tags: []string{}, labels: map[string]string{}}, targets[2])
 }

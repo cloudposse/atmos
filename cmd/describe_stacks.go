@@ -6,12 +6,19 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// describeStacksErrorModeParser is the minimal StandardParser wired to the
+// --error-mode flag; see cmd/describe_error_mode_flag.go for why this command
+// doesn't migrate to flags.NewStandardParser wholesale.
+var describeStacksErrorModeParser *flags.StandardParser
 
 // describeStacksCmd describes configuration for stacks and components in the stacks
 var describeStacksCmd = &cobra.Command{
@@ -65,18 +72,31 @@ func getRunnableDescribeStacksCmd(
 			return err
 		}
 
+		// Resolve ATMOS_DESCRIBE_ERROR_MODE (via Viper) onto the --error-mode Cobra flag
+		// before it's read below, so the legacy cmd.Flags()-based parsing picks it up.
+		if err := resolveDescribeErrorModeFlag(cmd, viper.GetViper(), describeStacksErrorModeParser); err != nil {
+			return err
+		}
+
 		describe := &exec.DescribeStacksArgs{}
 		err = setCliArgsForDescribeStackCli(cmd.Flags(), describe)
 		if err != nil {
 			return err
 		}
 
-		// Only create auth manager when YAML functions are enabled or identity is explicitly requested.
-		// When functions are disabled (--process-functions=false), there are no YAML functions
-		// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
+		// Resolve --error-mode: explicit flag/env value wins, else atmos.yaml's
+		// describe.error_mode, else "warn".
+		describe.ErrorMode = exec.ResolveErrorMode(describe.ErrorMode, atmosConfig.Describe.ErrorMode)
+		if err := validateErrorMode(describe); err != nil {
+			return err
+		}
+
+		// Go templates (notably atmos.Component()) and YAML functions can both require
+		// credentials. Resolve the default identity whenever either processing path is
+		// enabled, or when the caller explicitly selected an identity.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
 		identityExplicit := cmd.Flags().Changed(cfg.IdentityFlagName)
-		if describe.ProcessYamlFunctions || identityExplicit {
+		if shouldCreateDescribeStacksAuthManager(describe.ProcessTemplates, describe.ProcessYamlFunctions, identityExplicit) {
 			// Category B: describe stacks operates on multiple stacks/components with no single
 			// target (component, stack) pair. Use the SCAN wrapper so stack-level default identities
 			// (including those declared in imported _defaults.yaml files) are discovered. See
@@ -95,6 +115,13 @@ func getRunnableDescribeStacksCmd(
 	}
 }
 
+// shouldCreateDescribeStacksAuthManager keeps the command-boundary auth policy explicit:
+// either evaluated path can need credentials, while a caller-selected identity must always
+// be honored even when evaluation is disabled.
+func shouldCreateDescribeStacksAuthManager(processTemplates, processYamlFunctions, identityExplicit bool) bool {
+	return processTemplates || processYamlFunctions || identityExplicit
+}
+
 func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {
 	flagsKeyValue := map[string]any{
 		"stack":                &describe.FilterByStack,
@@ -108,6 +135,7 @@ func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.Describe
 		"process-functions":    &describe.ProcessYamlFunctions,
 		"query":                &describe.Query,
 		"skip":                 &describe.Skip,
+		"error-mode":           &describe.ErrorMode,
 	}
 
 	// `true` by default.
@@ -147,6 +175,15 @@ func validateFormat(describe *exec.DescribeStacksArgs) error {
 	return nil
 }
 
+func validateErrorMode(describe *exec.DescribeStacksArgs) error {
+	switch describe.ErrorMode {
+	case "strict", "warn", "silent":
+		return nil
+	default:
+		return fmt.Errorf("%w: %q", exec.ErrInvalidErrorMode, describe.ErrorMode)
+	}
+}
+
 func init() {
 	describeStacksCmd.DisableFlagParsing = false
 
@@ -173,6 +210,12 @@ func init() {
 	describeStacksCmd.PersistentFlags().Bool("include-empty-stacks", false, "Include stacks with no components in the output")
 
 	describeStacksCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
+
+	describeStacksErrorModeParser = newDescribeErrorModeParser()
+	describeStacksErrorModeParser.RegisterPersistentFlags(describeStacksCmd)
+	if err := describeStacksErrorModeParser.BindToViper(viper.GetViper()); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
 
 	describeCmd.AddCommand(describeStacksCmd)
 }

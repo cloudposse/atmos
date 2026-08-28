@@ -8,6 +8,15 @@ type ContainerConfig struct {
 	Runtime ContainerRuntimeConfig `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
 }
 
+// ContainerComponentsConfig configures `components.container` — the base
+// directory for container component build/run assets, mirroring
+// Terraform/Helmfile/Packer/Ansible/Kubernetes/Helm's own `base_path`.
+type ContainerComponentsConfig struct {
+	// BasePath is the base directory for container component assets, relative
+	// to the Atmos project root. Defaults to "components/container".
+	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+}
+
 // Composition declares a named multi-service system. Components join a
 // composition via their first-class `composition:` field. The `Services` list is
 // a closed contract for membership (declaring membership in an unlisted service
@@ -20,13 +29,14 @@ type Composition struct {
 	Services []string `yaml:"services,omitempty" json:"services,omitempty" mapstructure:"services"`
 }
 
-// ContainerRuntimeConfig configures the container runtime provider (docker/podman).
+// ContainerRuntimeConfig configures the container runtime provider (auto/docker/podman).
 type ContainerRuntimeConfig struct {
-	// Provider selects the container runtime: "docker" | "podman" | "" (auto-detect:
-	// docker, then podman). A global default for the per-step `provider:` field.
+	// Provider selects the container runtime: "auto" | "docker" | "podman" | "".
+	// "auto" and "" auto-detect Docker, then Podman. A global default for the
+	// per-step `provider:` field.
 	Provider string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
 	// AutoStart lets Atmos auto-init/start the Podman machine when no running runtime
-	// is found, instead of failing. A global default for the per-step
+	// is found, instead of failing. Enabled by default; a global default for the per-step
 	// `runtime_auto_start:` field; also settable via ATMOS_CONTAINER_RUNTIME_AUTO_START.
 	AutoStart bool `yaml:"auto_start,omitempty" json:"auto_start,omitempty" mapstructure:"auto_start"`
 	// Host grants the container access to the host container runtime (Docker-out-of-Docker):

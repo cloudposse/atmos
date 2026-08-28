@@ -76,10 +76,9 @@ func TestDescribeComponent_NestedImportProvenance(t *testing.T) {
 
 	// Expected imports in the flattened list (order may vary). Most of these are
 	// nested: `orgs/acme/plat/_defaults` imports `catalog/backend`, which in turn
-	// imports every catalog component (kms-key, s3-bucket, …).
+	// imports the Terraform catalog components (kms-key, s3-bucket, …).
 	expectedImports := map[string]bool{
 		"catalog/backend":                 true,
-		"catalog/emulator/aws":            true, // Nested: from catalog/backend
 		"catalog/kms-key/defaults":        true, // Nested: from catalog/backend
 		"catalog/s3-bucket/defaults":      true, // Nested: from catalog/backend
 		"catalog/sns-topic/defaults":      true, // Nested: from catalog/backend

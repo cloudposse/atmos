@@ -2,13 +2,81 @@ package output
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
 )
+
+func TestConfigurePluginCache(t *testing.T) {
+	atmosCacheDir := filepath.Join(t.TempDir(), "atmos-cache")
+	componentCacheDir := filepath.Join(t.TempDir(), "component-cache")
+	processCacheDir := filepath.Join(t.TempDir(), "process-cache")
+	globalCacheDir := filepath.Join(t.TempDir(), "global-cache")
+
+	t.Run("applies automatic cache to internal output environment", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{Components: schema.Components{Terraform: schema.Terraform{
+			PluginCache:    true,
+			PluginCacheDir: atmosCacheDir,
+		}}}
+		environ := map[string]string{}
+
+		cache := configurePluginCache(atmosConfig, &ComponentConfig{}, environ)
+
+		assert.True(t, cache.Automatic)
+		assert.Equal(t, atmosCacheDir, environ[tfplugin.CacheDirEnv])
+		assert.Equal(t, "true", environ[tfplugin.CacheMayBreakLockFileEnv])
+	})
+
+	t.Run("preserves component cache override", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{Components: schema.Components{Terraform: schema.Terraform{
+			PluginCache:    true,
+			PluginCacheDir: atmosCacheDir,
+		}}}
+		environ := map[string]string{}
+
+		cache := configurePluginCache(atmosConfig, &ComponentConfig{Env: map[string]any{
+			tfplugin.CacheDirEnv: componentCacheDir,
+		}}, environ)
+
+		assert.False(t, cache.Automatic)
+		assert.Equal(t, componentCacheDir, environ[tfplugin.CacheDirEnv])
+		_, mayBreakSet := environ[tfplugin.CacheMayBreakLockFileEnv]
+		assert.False(t, mayBreakSet)
+	})
+
+	t.Run("process environment beats inherited global cache", func(t *testing.T) {
+		t.Setenv(tfplugin.CacheDirEnv, processCacheDir)
+		atmosConfig := &schema.AtmosConfiguration{
+			Env: map[string]string{tfplugin.CacheDirEnv: globalCacheDir},
+			Components: schema.Components{Terraform: schema.Terraform{
+				PluginCache: true,
+			}},
+		}
+		environ := map[string]string{}
+
+		cache := configurePluginCache(atmosConfig, &ComponentConfig{Env: map[string]any{
+			tfplugin.CacheDirEnv: globalCacheDir,
+		}}, environ)
+
+		assert.False(t, cache.Automatic)
+		assert.Equal(t, processCacheDir, environ[tfplugin.CacheDirEnv])
+	})
+
+	t.Run("disabled cache does not add cache environment", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{Components: schema.Components{Terraform: schema.Terraform{PluginCache: false}}}
+		environ := map[string]string{}
+
+		cache := configurePluginCache(atmosConfig, &ComponentConfig{}, environ)
+
+		assert.Empty(t, cache.Directory)
+		assert.Empty(t, environ)
+	})
+}
 
 func TestDefaultEnvironmentSetup_SetupEnvironment(t *testing.T) {
 	tests := []struct {
@@ -61,6 +129,7 @@ func TestDefaultEnvironmentSetup_SetupEnvironment(t *testing.T) {
 					Region:          "us-west-2",
 					CredentialsFile: "/path/to/credentials",
 					ConfigFile:      "/path/to/config",
+					EndpointURL:     "http://127.0.0.1:4566",
 				},
 			},
 			expectError: false,
@@ -70,6 +139,7 @@ func TestDefaultEnvironmentSetup_SetupEnvironment(t *testing.T) {
 				"AWS_DEFAULT_REGION":          "us-west-2",
 				"AWS_SHARED_CREDENTIALS_FILE": "/path/to/credentials",
 				"AWS_CONFIG_FILE":             "/path/to/config",
+				"AWS_ENDPOINT_URL_S3":         "http://127.0.0.1:4566",
 			},
 		},
 		{
@@ -201,6 +271,31 @@ func TestDefaultEnvironmentSetup_ComponentEnvOverridesParent(t *testing.T) {
 	val, ok := result["MY_VAR"]
 	assert.True(t, ok, "MY_VAR should be present")
 	assert.Equal(t, "component-value", val, "component env should override parent env")
+}
+
+// TestDefaultEnvironmentSetup_ComponentCLIArgsFiltered verifies command-specific
+// arguments configured for the main Terraform command do not reach terraform-exec's
+// internal output command. Terraform-exec rejects these environment variables.
+func TestDefaultEnvironmentSetup_ComponentCLIArgsFiltered(t *testing.T) {
+	setup := &defaultEnvironmentSetup{}
+	config := &ComponentConfig{
+		Env: map[string]any{
+			"ALLOWED_VAR":       "allowed-value",
+			"TF_CLI_ARGS":       "-no-color",
+			"TF_CLI_ARGS_apply": "-lock-timeout=5m",
+			"TF_CLI_ARGS_plan":  "-compact-warnings",
+			"TF_VAR_region":     "us-east-1",
+		},
+	}
+
+	result, err := setup.SetupEnvironment(config, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "allowed-value", result["ALLOWED_VAR"])
+	assert.Equal(t, "us-east-1", result["TF_VAR_region"])
+	assert.NotContains(t, result, "TF_CLI_ARGS")
+	assert.NotContains(t, result, "TF_CLI_ARGS_apply")
+	assert.NotContains(t, result, "TF_CLI_ARGS_plan")
 }
 
 // TestDefaultEnvironmentSetup_PassVars is a regression test for issue #1412:

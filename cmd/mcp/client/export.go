@@ -49,14 +49,12 @@ func executeMCPExport(cmd *cobra.Command, _ []string) error {
 
 	outputFile, _ := cmd.Flags().GetString("output")
 
-	// Delegate to the shared package builder so the exported .mcp.json
-	// matches what the in-process MCP client uses (env-key normalization,
-	// `atmos auth exec` wrapping for identity-having servers) and — most
-	// importantly — carries the toolchain PATH so IDE-spawned subprocesses
-	// can find `uvx` / `npx` from the Atmos toolchain. The cmd-local
-	// implementation that previously lived here silently dropped this.
-	toolchainPATH := buildToolchainPATH(&atmosConfig)
-	config := mcpclient.GenerateMCPConfig(atmosConfig.MCP.Servers, toolchainPATH)
+	// Delegate to the shared package builder so the exported .mcp.json matches
+	// what the in-process MCP client uses (env-key normalization, `atmos auth
+	// exec` wrapping for identity-having servers). No PATH override: baking an
+	// install-time snapshot of the local machine's PATH into a shared config
+	// file just made it non-portable across contributors' machines.
+	config := mcpclient.GenerateMCPConfig(atmosConfig.MCP.Servers, "")
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {

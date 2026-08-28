@@ -1,0 +1,11 @@
+name: Invalid GitHub Actions workflow
+
+on:
+  push:
+    branch: main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok

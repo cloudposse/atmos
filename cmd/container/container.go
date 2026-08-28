@@ -1,6 +1,9 @@
 package container
 
 import (
+	"context"
+	"strings"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -10,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 // containerParser handles flag parsing for shared container flags inherited by
@@ -108,10 +112,19 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 		info.DryRun = true
 	}
 
-	// `--all` is registered only on the bulk-capable lifecycle verbs, so read it
-	// directly from the executing command's flag (nil-safe for the other verbs).
+	// `--all`/`--tags`/`--labels` are registered only on the bulk-capable
+	// lifecycle verbs, so read them directly from the executing command's flags
+	// (nil-safe for the other verbs).
 	if allFlag := cmd.Flag("all"); allFlag != nil && allFlag.Value.String() == "true" {
 		info.All = true
+	}
+	if tagsSlice, err := cmd.Flags().GetStringSlice("tags"); err == nil {
+		info.Tags = tags.ParseTagsFlag(strings.Join(tagsSlice, ","))
+	}
+	if labelsFlag := cmd.Flag("labels"); labelsFlag != nil {
+		// Error ignored: the wrapped Args validator in buildVerbCmd already
+		// rejected a malformed --labels value before RunE.
+		info.Labels, _ = tags.ParseLabelsFlag(labelsFlag.Value.String())
 	}
 
 	return info
@@ -148,6 +161,16 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 	// --stack flag value is silently dropped (only ATMOS_STACK would be read).
 	if err := containerParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
 		return err
+	}
+	if parser, ok := componentPromptParsers[cmd]; ok {
+		parsed, err := parser.Parse(context.Background(), args)
+		if err != nil {
+			return err
+		}
+		positional, _ := flags.SplitArgsAtDash(cmd, args)
+		if len(positional) == 0 && len(parsed.GetPositionalArgs()) > 0 {
+			args = append([]string{parsed.Component}, args...)
+		}
 	}
 
 	info := initConfigAndStacksInfo(cmd, subCommand, args)

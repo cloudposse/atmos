@@ -1,0 +1,350 @@
+package source
+
+import (
+	"archive/zip"
+	"bytes"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+const sampleScaffold = `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: sample
+spec:
+  fields:
+    - name: project_name
+      type: input
+      default: demo
+`
+
+// writeSampleTemplate creates a minimal on-disk scaffold template and returns its directory.
+func writeSampleTemplate(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scaffold.yaml"), []byte(sampleScaffold), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file.txt"), []byte("hello"), 0o600))
+	return dir
+}
+
+func TestIsTemplateSource(t *testing.T) {
+	assert.True(t, IsTemplateSource("github.com/acme/template"))
+	assert.True(t, IsTemplateSource("git::https://example.com/acme/template.git"))
+	assert.True(t, IsTemplateSource("./local-template"))
+	assert.True(t, IsTemplateSource("/tmp/local-template"))
+	assert.False(t, IsTemplateSource("aws/landing-zone"))
+	assert.False(t, IsTemplateSource("basic"))
+}
+
+func TestWithRef(t *testing.T) {
+	assert.Equal(t, "github.com/acme/template?ref=v1.2.3", WithRef("github.com/acme/template", "v1.2.3"))
+	assert.Equal(t, "github.com/acme/template//scaffold?ref=v1.2.3", WithRef("github.com/acme/template//scaffold", "v1.2.3"))
+	assert.Equal(t, "github.com/acme/template?depth=1&ref=v1.2.3", WithRef("github.com/acme/template?depth=1", "v1.2.3"))
+	assert.Equal(t, "github.com/acme/template?ref=main", WithRef("github.com/acme/template?ref=main", "v1.2.3"))
+	assert.Equal(t, "./local", WithRef("./local", "v1.2.3"))
+}
+
+func hasSampleFile(files []templates.File) bool {
+	for _, f := range files {
+		if f.Path == "file.txt" {
+			return true
+		}
+	}
+	return false
+}
+
+func TestResolve_LocalPath(t *testing.T) {
+	dir := writeSampleTemplate(t)
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", dir, time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.True(t, hasSampleFile(cfg.Files), "local template files must be loaded")
+	assert.Equal(t, dir, cfg.Source, "local sources must record the original path")
+}
+
+func TestResolve_LocalPathDefaultTimeout(t *testing.T) {
+	dir := writeSampleTemplate(t)
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", dir, 0)
+	require.NoError(t, err)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.True(t, hasSampleFile(cfg.Files))
+}
+
+func TestResolve_FileURI(t *testing.T) {
+	dir := writeSampleTemplate(t)
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", "file://"+dir, time.Minute)
+	require.NoError(t, err)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.True(t, hasSampleFile(cfg.Files))
+}
+
+func TestResolve_BadLocalPathReturnsLoadError(t *testing.T) {
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "missing", filepath.Join(t.TempDir(), "missing"), time.Minute)
+	require.Error(t, err)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
+func TestResolve_LocalPathMissingScaffoldConfig(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("not a scaffold"), 0o600))
+
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "missing-scaffold", dir, time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldConfigMissing)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
+func TestResolve_OCIUnsupported(t *testing.T) {
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "x", "oci://ghcr.io/cloudposse/x:latest", time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldSourceUnsupported)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
+func TestResolve_RemoteFetchFailureCleansUp(t *testing.T) {
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "x", "git::file:///definitely/not/a/repo", time.Millisecond)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldFetchSource)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
+func TestHydrate_NoopForFullConfig(t *testing.T) {
+	stub := &templates.Configuration{Name: "x", Files: []templates.File{{Path: "a"}}}
+	cleanup, err := Hydrate(stub, "")
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	cleanup()
+	assert.Len(t, stub.Files, 1, "full configs are returned unchanged")
+}
+
+func TestHydrate_NoopForEmptySource(t *testing.T) {
+	stub := &templates.Configuration{Name: "x"}
+	cleanup, err := Hydrate(stub, "")
+	require.NoError(t, err)
+	cleanup()
+	assert.Empty(t, stub.Files)
+}
+
+func TestHydrate_LocalStub(t *testing.T) {
+	dir := writeSampleTemplate(t)
+
+	stub := &templates.Configuration{Name: "sample", Source: dir}
+	cleanup, err := Hydrate(stub, "")
+	require.NoError(t, err)
+	defer cleanup()
+	assert.True(t, hasSampleFile(stub.Files), "local stub must be hydrated from its source")
+	assert.Equal(t, dir, stub.Source, "hydrate's *stub = *resolved copy must preserve the original source")
+}
+
+func TestHydrate_LocalStubError(t *testing.T) {
+	stub := &templates.Configuration{Name: "missing", Source: filepath.Join(t.TempDir(), "missing")}
+
+	cleanup, err := Hydrate(stub, "")
+	require.Error(t, err)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
+// requireGitBinary skips the test when the git binary is unavailable. This guards
+// only the actual remote-fetch call: Resolve's `git::` remote path (resolver.go's
+// resolveRemote/fetchRemoteSource) goes through go-getter's git client
+// (pkg/downloader/get_git.go's CustomGitGetter.GetCustom), which explicitly requires
+// and shells out to a real git binary to clone via exec.LookPath and
+// exec.CommandContext. That is go-getter's own mechanism and orthogonal to how the
+// test fixture below is built, so it cannot be replaced with go-git here. Fixture
+// construction itself no longer needs the CLI at all -- see initSourceTestGitRepo.
+func requireGitBinary(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git binary not found on PATH; required by go-getter's git clone, not by fixture setup")
+	}
+}
+
+// initSourceTestGitRepo creates a local git repository on branch "main" with the given
+// files committed, using go-git (no external git binary) instead of shelling out --
+// mirroring the idiom in pkg/generator/gitinit.go's InitGitRepository. Setup failures
+// fail the test loudly via require.NoError rather than skipping, since go-git has no
+// external binary dependency that can be "unavailable".
+func initSourceTestGitRepo(t *testing.T, files map[string]string) string {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	repo, err := git.PlainInitWithOptions(repoDir, &git.PlainInitOptions{
+		InitOptions: git.InitOptions{DefaultBranch: plumbing.NewBranchReferenceName("main")},
+	})
+	require.NoError(t, err)
+
+	for name, content := range files {
+		path := filepath.Join(repoDir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+	require.NoError(t, wt.AddGlob("."))
+	_, err = wt.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test User",
+			Email: "test@example.com",
+			When:  time.Now(),
+		},
+	})
+	require.NoError(t, err)
+	return repoDir
+}
+
+func sourceTestGitFileURI(path string) string {
+	cleaned := filepath.ToSlash(filepath.Clean(path))
+	if filepath.VolumeName(path) != "" && cleaned != "" && cleaned[0] != '/' {
+		cleaned = "/" + cleaned
+	}
+	return (&url.URL{Scheme: "file", Path: cleaned}).String()
+}
+
+// TestResolve_RemoteGitSubdirSuccess exercises the remote-fetch branch of Resolve
+// (resolver.go's go-getter path) against a real local git remote using go-getter's
+// //subdir?ref= syntax — the exact mechanism `atmos init aws/app` relies on. No prior
+// test drove a successful fetch through this path; every other scaffold test sets
+// ATMOS_SCAFFOLD_SOURCE_OVERRIDE and bypasses it entirely.
+func TestResolve_RemoteGitSubdirSuccess(t *testing.T) {
+	repoDir := initSourceTestGitRepo(t, map[string]string{
+		"aws/app/scaffold.yaml": sampleScaffold,
+		"aws/app/file.txt":      "hello",
+	})
+	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/app?ref=main"
+
+	requireGitBinary(t)
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.True(t, hasSampleFile(cfg.Files), "remote git subdir template files must be loaded")
+}
+
+// TestResolve_RemoteGitExcludesGitDirectory reproduces a client-reported bug: fetching a
+// `git::` scaffold source (no subdir, mirroring the client's exact repro) must not copy
+// the fetched clone's own `.git` directory (objects, refs, hooks, and a `config` pointing
+// at the template's source repo) into the loaded template's file list -- it isn't part of
+// the template's content.
+func TestResolve_RemoteGitExcludesGitDirectory(t *testing.T) {
+	repoDir := initSourceTestGitRepo(t, map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+	src := "git::" + sourceTestGitFileURI(repoDir) + "?ref=main"
+
+	requireGitBinary(t)
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", src, time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.True(t, hasSampleFile(cfg.Files), "remote git template files must still be loaded")
+
+	for _, f := range cfg.Files {
+		assert.NotEqual(t, ".git", f.Path, "loaded configuration must not include the .git directory itself")
+		assert.False(t, strings.HasPrefix(f.Path, ".git/"), "loaded configuration must not include files under .git/, got %q", f.Path)
+	}
+}
+
+// zipArchive builds an in-memory ZIP archive containing the given files.
+// go-getter's HTTP getter unpacks a recognized archive extension (.zip
+// included) directly, so serving one over httptest.Server exercises a real
+// remote (ClientModeDir) fetch through resolveRemote without needing git or
+// any other external binary.
+func zipArchive(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, content := range files {
+		w, err := zw.Create(name)
+		require.NoError(t, err)
+		_, err = w.Write([]byte(content))
+		require.NoError(t, err)
+	}
+	require.NoError(t, zw.Close())
+	return buf.Bytes()
+}
+
+// TestResolve_RemoteRecordsOriginalSource pins the bug where a remote
+// (git::/https://) scaffold source ended up with Configuration.Source (and
+// therefore the persisted spec.source in .atmos/scaffold.yaml) set to the
+// ephemeral os.MkdirTemp download directory instead of the original source
+// string. That tempdir is removed by cleanup() as soon as the command
+// finishes, leaving spec.source pointing at nothing.
+//
+// Serves a ZIP archive from a local httptest.Server rather than using a git
+// fixture: the ".zip" extension is enough for go-getter's HTTP getter to
+// unpack it into the temp dir on its own, so this test never shells out to
+// git (or any other external binary) and stays hermetic/cross-platform.
+func TestResolve_RemoteRecordsOriginalSource(t *testing.T) {
+	archive := zipArchive(t, map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/zip")
+		_, _ = w.Write(archive)
+	}))
+	defer server.Close()
+
+	src := server.URL + "/template.zip"
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", src, time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	defer cleanup()
+	require.NotNil(t, cfg)
+
+	assert.True(t, hasSampleFile(cfg.Files), "remote archive template files must be loaded")
+	assert.Equal(t, src, cfg.Source, "remote sources must record the original source string, not the ephemeral fetch tempdir")
+}
+
+// TestResolve_RemoteGitSubdirMissing pins the exact failure mode reported for
+// `atmos init aws/app`: a valid git remote whose requested //subdir does not exist.
+func TestResolve_RemoteGitSubdirMissing(t *testing.T) {
+	repoDir := initSourceTestGitRepo(t, map[string]string{
+		"aws/app/scaffold.yaml": sampleScaffold,
+		"aws/app/file.txt":      "hello",
+	})
+	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/missing?ref=main"
+
+	requireGitBinary(t)
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/missing", src, time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldFetchSource)
+	require.NotNil(t, cleanup)
+	cleanup()
+}

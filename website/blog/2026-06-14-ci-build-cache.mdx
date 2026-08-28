@@ -1,0 +1,76 @@
+---
+slug: ci-build-cache
+title: "Faster CI: Atmos Caches Your Toolchain, Providers, and Modules"
+authors: [osterman]
+tags: [feature, dx]
+date: 2026-06-14T12:00:00.000Z
+---
+
+Atmos now plugs into your CI provider's native cache so your infrastructure pipelines run faster — automatically. Flip one setting and Atmos caches the toolchain it installs, the OpenTofu and Terraform providers your stacks download, the modules and vendored components they pull, remote stack imports, and everything else it would otherwise re-fetch from the internet on every run. Cold CI jobs go warm: the same pipeline stops waiting on the same downloads, and stops going red when an upstream registry has a bad minute.
+
+<!--truncate-->
+
+## Why This Matters
+
+Every CI job that starts cold re-downloads the same tools, providers, and modules from the same upstream sources — the [OpenTofu Registry](https://registry.opentofu.org) (`registry.opentofu.org`), OpenTofu releases, GitHub releases and the GitHub API, OCI registries, and more. That cold start is invisible until it isn't: a registry has a bad minute, GitHub rate-limits your token, a download stalls, and a pipeline that "just works" locally goes red in CI. Warming the cache changes that for you directly:
+
+- **Your jobs run faster.** Install the toolchain, download providers, and pull modules once — then reuse all of it across jobs and runs. The slow part of most Atmos runs is fetching providers and modules you already have; a warm cache skips it.
+- **Provider and module caches come along for free.** Atmos already enables a [shared provider plugin cache](/cli/configuration/components/terraform) by default (`TF_PLUGIN_CACHE_DIR` under `~/.cache/atmos`), and vendored components and remote modules land under the same root. Because `ci.cache` archives that root, your providers and modules are cached with zero extra wiring.
+- **Fewer flaky failures.** The majority of transient CI errors are upstream network blips. A warm cache simply doesn't make those requests, so there's nothing to flake.
+- **Reproducible, resilient builds.** A preserved cache is a durable, self-contained copy of every provider and module your stacks depend on. If an upstream version is yanked, a module repository disappears, or a registry has an outage, your pipelines keep building from the cache instead of failing — the same inputs produce the same result, whether or not the internet cooperates that day. Preserve the cache and you can keep shipping even when upstream artifacts go away entirely.
+- **Less traffic to external sites.** You stop hammering the OpenTofu Registry, GitHub, and registry mirrors on every run — gentler on the services you depend on and on any egress/bandwidth budgets you pay for.
+- **Fewer hits to the GitHub API — and less rate-limit risk.** When you fan out across many concurrent jobs, repeated upstream and GitHub API calls are exactly what trips rate limits. Caching collapses thousands of redundant requests into a handful, so you stop burning quota on downloads.
+- **You reuse immutable, already-verified artifacts.** Cache entries are write-once, and the key is derived from `toolchain.lock.yaml` plus the runner's OS/arch — so a cache hit gives you back the exact bytes you pulled and verified before, instead of re-pulling from the internet on every run. That's a smaller supply-chain attack surface, not just a speedup.
+
+None of this requires you to think about cache keys, paths, or eviction. You flip two settings; Atmos handles the rest. And at fleet scale — hundreds to thousands of OpenTofu and Terraform jobs per hour — these add up from "nice" to "the difference between a pipeline that scales and one that fights the platforms it runs on."
+
+## What Changed
+
+Atmos installs a toolchain (via `atmos toolchain`) and downloads other regenerable artifacts — vendored components, remote stack-import clones, provider and plugin caches — into a well-known cache root (`~/.cache/atmos`, honoring `XDG_CACHE_HOME`). In CI, every job re-fetches all of it from scratch.
+
+The new `ci.cache` configuration lets Atmos compute *what* to cache — a stable key derived from `toolchain.lock.yaml` plus the runner's OS/arch, the cache root, and restore-key fallbacks — so a native cache can persist it across jobs and runs. Define it once:
+
+```yaml title="atmos.yaml"
+ci:
+  cache:
+    enabled: true
+    key: "atmos-toolchain-{{.OS}}-{{.Arch}}-v1"
+    restore_keys:
+      - "atmos-toolchain-{{.OS}}-{{.Arch}}-"
+```
+
+## One Step in GitHub Actions
+
+The recommended way to use it is the Atmos-provided composite action — Atmos supplies the key and paths, native `actions/cache` does the storage, and it exposes **no runtime token** to your job:
+
+```yaml
+- uses: cloudposse/atmos/actions/cache@v1
+- run: atmos toolchain install --default helm/helm@v3.16.0
+```
+
+Prefer to wire it yourself? `atmos ci cache paths --format=github` emits the `key`, `path`, and `restore-keys` as step outputs for a plain `actions/cache` step.
+
+## Atmos-Managed Restore/Save
+
+Atmos can also *own* the storage with its own backend against the GitHub Actions **Cache Service v2** (the same service `actions/cache` uses):
+
+```bash
+atmos ci cache restore   # restore the cache root from the cache service
+atmos ci cache save      # archive the root and upload it under the key
+atmos ci cache list      # list cache entries (optionally by key prefix)
+atmos ci cache delete    # delete a cache entry by exact key
+```
+
+`restore` and `save` transfer cache content, so they — and the automatic `auto: both` lifecycle — need the runner's cache credentials (`ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL`), which GitHub withholds from `run:` steps. The Atmos [`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action exposes them (as scoped step outputs, or optionally as ambient env). Saves are write-once and idempotent — a cache hit on restore skips the save instead of re-uploading unchanged content.
+
+`list` and `delete`, by contrast, administer the cache over the public caches API, so they run **from your workstation** too — no runner required, just a GitHub token (`GITHUB_TOKEN` / `ATMOS_GITHUB_TOKEN`, or `gh auth login`). Use them to inspect or prune cache entries locally.
+
+**Which should you use?** The `actions/cache` path exposes no token and is the most secure; the Atmos-managed path hands you the cache-service credentials when you want Atmos in control. See the [four documented options and security ranking](/cli/configuration/ci/cache#github-actions-integration).
+
+## How to Use It
+
+- **Recommended:** add `cloudposse/atmos/actions/cache@v1` (one step) — no runtime token, native `actions/cache` storage.
+- **Explicit:** `atmos ci cache paths --format=github` → your own `actions/cache` step.
+- **Atmos-managed:** `cloudposse/atmos/actions/github-runtime@v1` + `atmos ci cache restore`/`save` (or `auto: both`).
+- The cache is **off by default** — opt in per repository with `ci.cache.enabled: true`.
+- The live backend is **GitHub Actions** today. Outside a cache-capable CI provider, the automatic cache lifecycle (`auto`) is a graceful no-op (with a debug log), so the same config is safe to run locally — but explicit commands like `save` and `restore` return a cache-unavailable error when not running in a supported CI runner. A generic backend for other providers is planned.

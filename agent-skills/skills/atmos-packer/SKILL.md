@@ -4,6 +4,7 @@ description: "Packer orchestration: init/build/validate/inspect/output, machine 
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: orchestrators
 ---
 
 # Atmos Packer Orchestration
@@ -17,16 +18,16 @@ Atmos resolves the full configuration from stack manifests and handles all of th
 When you run any `atmos packer` command, Atmos performs the following sequence:
 
 1. **Resolves stack configuration** -- Reads and deep-merges all stack manifests to produce the fully resolved
-   configuration for the target component in the target stack.
+    configuration for the target component in the target stack.
 2. **Generates variable file** -- Writes a variable file containing all `vars` defined for the component
-   in the stack, making them available to the Packer template.
+    in the stack, making them available to the Packer template.
 3. **Auto-provisions source (if configured)** -- If the component has a `source` field and the target
-   directory does not exist, Atmos downloads the component via JIT vendoring before proceeding.
+    directory does not exist, Atmos downloads the component via JIT vendoring before proceeding.
 4. **Resolves template path** -- Determines the Packer template to use from the `--template` flag,
-   `settings.packer.template` in the stack manifest, or defaults to `.` (all `*.pkr.hcl` files).
+    `settings.packer.template` in the stack manifest, or defaults to `.` (all `*.pkr.hcl` files).
 5. **Sets environment variables** -- Applies any `env` values defined in the stack configuration.
 6. **Executes the requested command** -- Runs `packer init`, `build`, `validate`, `inspect`, etc. with
-   the generated variable file and any additional flags.
+    the generated variable file and any additional flags.
 
 This means a single command like `atmos packer build ubuntu-base -s ue2-dev` replaces what would normally
 require manually writing variable files, configuring paths, and running packer directly.
@@ -433,25 +434,25 @@ PACKER_LOG=1 atmos packer build ubuntu-base -s ue2-dev
 ## Best Practices
 
 1. **Use directory mode for multi-file components.** Omit `--template` to let Packer load all
-   `*.pkr.hcl` files from the component directory.
+    `*.pkr.hcl` files from the component directory.
 
 2. **Validate before building.** Run `atmos packer validate` before `atmos packer build` to catch
-   syntax and configuration errors early.
+    syntax and configuration errors early.
 
 3. **Use stack inheritance for shared defaults.** Define base image configuration in catalog
-   manifests and override per environment.
+    manifests and override per environment.
 
 4. **Configure manifests for build tracking.** Use Packer's manifest post-processor to track
-   build artifacts, then query them with `atmos packer output`.
+    build artifacts, then query them with `atmos packer output`.
 
 5. **Use JIT vendoring for version control per environment.** The `source` field enables different
-   template versions for dev, staging, and production stacks.
+    template versions for dev, staging, and production stacks.
 
 6. **Pin production versions.** Keep production stacks on stable, tested versions while allowing
-   development stacks to use newer template versions.
+    development stacks to use newer template versions.
 
 7. **Use `atmos describe component`** to debug configuration resolution issues. It shows the fully
-   merged result of all stack manifest inheritance.
+    merged result of all stack manifest inheritance.
 
 ## Additional Resources
 

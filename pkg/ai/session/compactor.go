@@ -25,6 +25,8 @@ const (
 )
 
 // Compactor handles intelligent conversation history compaction.
+//
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type Compactor interface {
 	// ShouldCompact determines if compaction is needed based on current history.
 	ShouldCompact(messages []*Message, maxMessages int, config *CompactConfig) (bool, *CompactPlan)

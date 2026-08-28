@@ -287,6 +287,19 @@ func TestNewCredentialStoreWithConfig_NoopFallback(t *testing.T) {
 	}
 }
 
+// TestNewCredentialStoreWithConfig_UnknownKeyringTypeFallsBackToSystem covers
+// the switch's default branch: an unrecognized keyring type (neither
+// "memory", "file", nor "system") logs a warning and falls back to the
+// system keyring rather than failing outright.
+func TestNewCredentialStoreWithConfig_UnknownKeyringTypeFallsBackToSystem(t *testing.T) {
+	t.Setenv("ATMOS_KEYRING_TYPE", "totally-bogus-type")
+
+	store := NewCredentialStoreWithConfig(nil)
+
+	assert.NotNil(t, store)
+	assert.Equal(t, types.CredentialStoreTypeSystemKeyring, store.Type())
+}
+
 // TestNewKeyringAuthStore tests the deprecated backward-compatible function.
 func TestNewKeyringAuthStore(t *testing.T) {
 	store := NewKeyringAuthStore()

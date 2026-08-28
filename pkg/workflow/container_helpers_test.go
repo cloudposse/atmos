@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
@@ -304,6 +304,7 @@ func TestDefaultStringAndRuntimePreviewName(t *testing.T) {
 
 func TestValidRuntimePullCleanup(t *testing.T) {
 	assert.True(t, validRuntime(""))
+	assert.True(t, validRuntime(string(container.TypeAuto)))
 	assert.True(t, validRuntime(string(container.TypeDocker)))
 	assert.True(t, validRuntime(string(container.TypePodman)))
 	assert.False(t, validRuntime("containerd"))
@@ -373,14 +374,35 @@ func TestWriteEphemeralResult(t *testing.T) {
 	assert.NotPanics(t, func() {
 		writeEphemeralResult(params, &container.EphemeralResult{Stdout: "out", Stderr: "err"}, nil)
 	})
-	// TTY steps skip rendering.
-	ttyParams := &ContainerStepParams{
-		Step:        &schema.WorkflowStep{Name: "s", Tty: true},
-		WorkflowDef: &schema.WorkflowDefinition{Output: "none"},
+	var stdout, stderr bytes.Buffer
+	capturingParams := &ContainerStepParams{
+		Step:          &schema.WorkflowStep{Name: "s"},
+		WorkflowDef:   &schema.WorkflowDefinition{Output: "none"},
+		StdoutCapture: &stdout,
+		StderrCapture: &stderr,
 	}
-	assert.NotPanics(t, func() {
-		writeEphemeralResult(ttyParams, &container.EphemeralResult{Stdout: "x"}, nil)
-	})
+	writeEphemeralResult(capturingParams, &container.EphemeralResult{Stdout: "out", Stderr: "err"}, nil)
+	assert.Equal(t, "out", stdout.String())
+	assert.Equal(t, "err", stderr.String())
+	// Terminal-attached steps skip rendering and capture.
+	for _, step := range []*schema.WorkflowStep{
+		{Name: "tty", Tty: true},
+		{Name: "interactive", Interactive: true},
+	} {
+		terminalParams := &ContainerStepParams{
+			Step:          step,
+			WorkflowDef:   &schema.WorkflowDefinition{Output: "none"},
+			StdoutCapture: &stdout,
+			StderrCapture: &stderr,
+		}
+		stdout.Reset()
+		stderr.Reset()
+		assert.NotPanics(t, func() {
+			writeEphemeralResult(terminalParams, &container.EphemeralResult{Stdout: "x"}, nil)
+		})
+		assert.Empty(t, stdout.String())
+		assert.Empty(t, stderr.String())
+	}
 }
 
 func TestContainerSessionCleanup(t *testing.T) {
@@ -470,6 +492,7 @@ func TestRunStepContainerOverride_UsesRuntimeEnvWithFakeDocker(t *testing.T) {
 		Mode: testhelpers.FakeContainerRuntimeWorkflowEnv,
 	})
 
+	var stdout, stderr bytes.Buffer
 	err := RunStepContainerOverride(context.Background(), &ContainerStepParams{
 		WorkflowDef: &schema.WorkflowDefinition{Output: "none"},
 		Step: &schema.WorkflowStep{
@@ -479,10 +502,14 @@ func TestRunStepContainerOverride_UsesRuntimeEnvWithFakeDocker(t *testing.T) {
 				Provider: string(container.TypeDocker),
 			},
 		},
-		Command:    "echo hi",
-		RuntimeEnv: []string{"ATMOS_FAKE_AUTH=present"},
+		Command:       "echo hi",
+		RuntimeEnv:    []string{"ATMOS_FAKE_AUTH=present"},
+		StdoutCapture: &stdout,
+		StderrCapture: &stderr,
 	})
 	require.NoError(t, err)
+	assert.Contains(t, stdout.String(), "container stdout")
+	assert.Empty(t, stderr.String())
 }
 
 func TestExecShell_NilGuards(t *testing.T) {
@@ -514,80 +541,4 @@ func TestExecShell_DryRunWhenIDEqualsName(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, fake.command) // Exec not called.
-}
-
-func TestExecutor_CleanupWorkflowContainer(t *testing.T) {
-	// nil session is a no-op.
-	require.NoError(t, (&Executor{}).cleanupWorkflowContainer(true))
-
-	// With a session, Cleanup runs and the reference is cleared (idempotent teardown).
-	e := &Executor{containerSession: &ContainerSession{backend: &fakeContainer{id: "id", name: "name"}}}
-	require.NoError(t, e.cleanupWorkflowContainer(true))
-	assert.Nil(t, e.containerSession)
-}
-
-func TestExecutor_EnsureWorkflowContainerReturnsCached(t *testing.T) {
-	existing := &ContainerSession{backend: &fakeContainer{id: "id", name: "name"}}
-	e := &Executor{containerSession: existing}
-
-	got, err := e.ensureWorkflowContainer(&WorkflowParams{Ctx: context.Background()}, nil)
-	require.NoError(t, err)
-	assert.Same(t, existing, got)
-}
-
-func TestExecutor_RunShellStepHostPath(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	runner := NewMockCommandRunner(ctrl)
-	runner.EXPECT().RunShell("echo hi", "wf-step-0", "/wd", []string{"E=1"}, false).Return(nil)
-
-	e := &Executor{runner: runner}
-	params := &WorkflowParams{
-		Ctx:                context.Background(),
-		Workflow:           "wf",
-		WorkflowDefinition: &schema.WorkflowDefinition{}, // no workflow-level container.
-	}
-	step := &schema.WorkflowStep{Name: "s"} // no step container override.
-	cmdParams := &runCommandParams{command: "echo hi", stepEnv: []string{"E=1"}, workingDirectory: "/wd"}
-
-	require.NoError(t, e.runShellStep(params, step, cmdParams, "/wd"))
-}
-
-func TestExecutor_RunShellStep_ContainerOverrideDryRun(t *testing.T) {
-	e := &Executor{}
-	params := &WorkflowParams{
-		Ctx:                context.Background(),
-		AtmosConfig:        &schema.AtmosConfiguration{},
-		WorkflowDefinition: &schema.WorkflowDefinition{},
-		Opts:               ExecuteOptions{DryRun: true},
-	}
-	// A step-level container override routes to RunStepContainerOverride; dry-run
-	// short-circuits before any real runtime.
-	step := &schema.WorkflowStep{Name: "s", Container: &schema.WorkflowContainer{Image: "alpine"}}
-	cmdParams := &runCommandParams{command: "echo hi", workingDirectory: "."}
-
-	require.NoError(t, e.runShellStep(params, step, cmdParams, "."))
-}
-
-func TestExecutor_RunShellStep_WorkflowContainerExec(t *testing.T) {
-	// A cached dry-run session (backend ID == Name) makes ExecShell preview and
-	// return without invoking the runtime.
-	e := &Executor{containerSession: &ContainerSession{
-		backend:       &fakeContainer{id: "same", name: "same"},
-		config:        &schema.WorkflowContainer{Workspace: "/workspace"},
-		hostWorkspace: "/repo",
-	}}
-	params := &WorkflowParams{
-		Ctx:         context.Background(),
-		AtmosConfig: &schema.AtmosConfiguration{},
-		WorkflowDefinition: &schema.WorkflowDefinition{
-			Container: &schema.WorkflowContainer{Image: "alpine"},
-			Output:    "none",
-		},
-	}
-	step := &schema.WorkflowStep{Name: "s"} // not container-disabled.
-	cmdParams := &runCommandParams{command: "pwd", workingDirectory: "."}
-
-	require.NoError(t, e.runShellStep(params, step, cmdParams, "."))
 }

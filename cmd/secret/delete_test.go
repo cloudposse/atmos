@@ -59,6 +59,17 @@ func TestRunSecretDelete_ForceSkipsConfirm(t *testing.T) {
 	assert.Empty(t, *titles)
 }
 
+func TestRunSecretDelete_UnsetAlias(t *testing.T) {
+	svc := newFakeSecretService()
+	installService(t, svc, nil)
+	overrideConfirmAction(t, false, errors.New("should not be called"))
+
+	err := runSecretSubcommand(t, "unset", "API_KEY", "--force", "--stack", "dev", "--component", "api")
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"API_KEY"}, svc.deletedNames)
+}
+
 func TestRunSecretDelete_DeleteError(t *testing.T) {
 	svc := newFakeSecretService()
 	svc.deleteErr = errors.New("backend delete failed")

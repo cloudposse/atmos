@@ -22,7 +22,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'landing-demos'
     runs-on: ubuntu-latest
     env:
-      ATMOS_BOOTSTRAP_VERSION: "1.222.0"
+      ATMOS_BOOTSTRAP_VERSION: "1.223.0"
       TERM: xterm-256color
       COLORTERM: truecolor
       LANG: en_US.UTF-8
@@ -34,7 +34,7 @@ jobs:
       # Container runtime for the emulator-backed tapes (ubuntu runners have Docker).
       ATMOS_CONTAINER_RUNTIME: docker
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
@@ -43,7 +43,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Set up Atmos
-        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
+        uses: cloudposse/github-action-setup-atmos@89c34b209108da66a27c8d6565d8d4b21dbdaa73 # v3.2.0
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
           install-wrapper: false
@@ -52,7 +52,7 @@ jobs:
       # in any published release yet.
       - name: Build atmos
         run: |
-          sh scripts/build-atmos.sh default test
+          go tool mage build:binary default test
           echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
 
       # Fonts only. Most CLI tooling comes from the Atmos toolchain: `atmos demo record`

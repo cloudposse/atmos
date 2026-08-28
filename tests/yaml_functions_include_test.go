@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -10,11 +11,30 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
+
+func mockRemoteIncludes(t *testing.T) {
+	t.Helper()
+
+	remoteFixture, err := os.ReadFile(filepath.Join("..", "stack-templates-2", "stacks", "deploy", "nonprod.yaml"))
+	require.NoError(t, err)
+
+	mock := httpmock.NewGitHubMockServer(t)
+	mock.RegisterFile("tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml", string(remoteFixture))
+
+	oldClient := utils.TestHTTPClient
+	utils.TestHTTPClient = mock.HTTPClient()
+	t.Cleanup(func() {
+		utils.TestHTTPClient = oldClient
+	})
+}
 
 // TestYAMLFunctionInclude tests the !include YAML function with various file types.
 func TestYAMLFunctionInclude(t *testing.T) {
 	t.Chdir(filepath.Join(".", "fixtures", "scenarios", "atmos-include-yaml-function"))
+	mockRemoteIncludes(t)
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
@@ -131,6 +151,11 @@ func TestYAMLFunctionInclude(t *testing.T) {
 		settings, ok := componentSection["settings"].(map[string]interface{})
 		require.True(t, ok, "settings should be a map")
 		require.NotEmpty(t, settings, "settings should not be empty (from remote include)")
+		assert.Equal(t, map[string]interface{}{
+			"a": "component-1-a",
+			"b": "component-1-b",
+			"c": "component-1-c",
+		}, settings["config"])
 	})
 }
 
@@ -138,6 +163,7 @@ func TestYAMLFunctionInclude(t *testing.T) {
 // !include.raw, .txt, .tf, extensionless files, and advanced YQ expressions.
 func TestYAMLFunctionIncludeExtended(t *testing.T) {
 	t.Chdir(filepath.Join(".", "fixtures", "scenarios", "atmos-include-yaml-function"))
+	mockRemoteIncludes(t)
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
@@ -282,6 +308,7 @@ func TestYAMLFunctionIncludeExtended(t *testing.T) {
 // TestYAMLFunctionIncludeEdgeCases tests edge cases for the !include function.
 func TestYAMLFunctionIncludeEdgeCases(t *testing.T) {
 	t.Chdir(filepath.Join(".", "fixtures", "scenarios", "atmos-include-yaml-function"))
+	mockRemoteIncludes(t)
 
 	_, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)

@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Staging environment: production-like settings with shorter retention, used to
+# rehearse changes before they reach prod.
+
+import:
+  - _defaults
+
+vars:
+  stage: staging
+
+components:
+  terraform:
+    audit-trail:
+      vars:
+        # Staging can still be torn down wholesale.
+        force_destroy: true
+    monitoring:
+      vars:
+        retention_in_days: 30
+        # 512 MiB per 5 minutes.
+        alarm_threshold_bytes: 536870912
+    baseline:
+      vars:
+        parameters:
+          environment: staging
+          log-level: info

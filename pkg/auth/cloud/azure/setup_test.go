@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +18,20 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// skipIfCannotDenyDirWrite skips tests that rely on removing write permission
+// from a directory to force a write failure: the trick is a no-op on Windows
+// (permissions work differently) and on Unix when running as root (root
+// bypasses permission checks).
+func skipIfCannotDenyDirWrite(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("directory write-permission bits are not enforced the same way on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+}
 
 // createTestJWT creates a test JWT token with the given payload claims.
 func createTestJWT(claims map[string]interface{}) string {
@@ -399,8 +415,6 @@ func TestSetEnvironmentVariables(t *testing.T) {
 			expectedContains: map[string]string{
 				"AZURE_SUBSCRIPTION_ID": "sub-456",
 				"ARM_SUBSCRIPTION_ID":   "sub-456",
-				"AZURE_TENANT_ID":       "tenant-123",
-				"ARM_TENANT_ID":         "tenant-123",
 				"AZURE_LOCATION":        "eastus",
 				"ARM_LOCATION":          "eastus",
 				"ARM_USE_CLI":           "true",
@@ -1325,12 +1339,13 @@ func TestSetEnvironmentVariables_OIDC(t *testing.T) {
 			expectedContains: map[string]string{
 				"AZURE_SUBSCRIPTION_ID": "sub-456",
 				"ARM_SUBSCRIPTION_ID":   "sub-456",
-				"AZURE_TENANT_ID":       "tenant-123",
-				"ARM_TENANT_ID":         "tenant-123",
 				"ARM_USE_CLI":           "true",
 			},
 			expectedMissing: []string{
 				"ARM_USE_OIDC", // Should NOT be set when using CLI auth.
+				// CLI auth must NOT export the tenant (conflicts with the azurerm backend's CLI credential).
+				"AZURE_TENANT_ID",
+				"ARM_TENANT_ID",
 			},
 		},
 	}
@@ -1432,7 +1447,7 @@ func TestUpdateMSALCacheFromCreds_SovereignCloud(t *testing.T) {
 		KeyVaultExpiration: now.Add(3 * time.Hour).Format(time.RFC3339),
 	}
 
-	updateMSALCacheFromCreds(tmpDir, azureCreds, "user-oid-gov", "gov-tenant", cloudEnv)
+	updateMSALCacheFromCreds(&msalCredsContext{Home: tmpDir, UserOID: "user-oid-gov", TenantID: "gov-tenant"}, azureCreds, cloudEnv)
 
 	// Verify MSAL cache was created with sovereign cloud scopes.
 	msalCachePath := filepath.Join(tmpDir, ".azure", "msal_token_cache.json")
@@ -1454,8 +1469,11 @@ func TestUpdateMSALCacheFromCreds_SovereignCloud(t *testing.T) {
 			continue
 		}
 		target, _ := tokenEntry["target"].(string)
-		if target == cloudEnv.ManagementScope {
+		if strings.Contains(target, cloudEnv.ManagementScope) {
 			foundGovScope = true
+			// The target now also carries the legacy ARM audience forms for
+			// az/azidentity cache-lookup coverage.
+			assert.Contains(t, target, "https://management.core.usgovcloudapi.net/.default")
 			// Verify the environment/realm uses the government login endpoint.
 			realm, _ := tokenEntry["realm"].(string)
 			assert.Equal(t, "gov-tenant", realm)
@@ -1524,7 +1542,7 @@ func TestUpdateAzureCLIFiles(t *testing.T) {
 
 	t.Run("non-Azure credentials returns nil", func(t *testing.T) {
 		// Pass a non-Azure credential type.
-		err := UpdateAzureCLIFiles(nil, "tenant", "sub", "")
+		err := UpdateAzureCLIFiles(nil, "tenant", "sub", "", "")
 		assert.NoError(t, err)
 	})
 
@@ -1532,7 +1550,7 @@ func TestUpdateAzureCLIFiles(t *testing.T) {
 		creds := &types.AzureCredentials{
 			AccessToken: "not-a-jwt",
 		}
-		err := UpdateAzureCLIFiles(creds, "tenant", "sub", "")
+		err := UpdateAzureCLIFiles(creds, "tenant", "sub", "", "")
 		assert.NoError(t, err, "Invalid token should return nil (non-fatal)")
 	})
 
@@ -1550,7 +1568,7 @@ func TestUpdateAzureCLIFiles(t *testing.T) {
 			SubscriptionID: "sub-def",
 		}
 
-		err := UpdateAzureCLIFiles(creds, "tenant-abc", "sub-def", "")
+		err := UpdateAzureCLIFiles(creds, "tenant-abc", "sub-def", "", "")
 		assert.NoError(t, err)
 
 		// Verify files were created in the isolated temp home directory.
@@ -1576,7 +1594,7 @@ func TestUpdateAzureCLIFiles(t *testing.T) {
 			SubscriptionID: "gov-sub",
 		}
 
-		err := UpdateAzureCLIFiles(creds, "gov-tenant", "gov-sub", "usgovernment")
+		err := UpdateAzureCLIFiles(creds, "gov-tenant", "gov-sub", "usgovernment", "")
 		assert.NoError(t, err)
 	})
 
@@ -1597,7 +1615,362 @@ func TestUpdateAzureCLIFiles(t *testing.T) {
 			FederatedToken:     "federated-token-value",
 		}
 
-		err := UpdateAzureCLIFiles(creds, "sp-tenant", "sp-sub", "")
+		err := UpdateAzureCLIFiles(creds, "sp-tenant", "sp-sub", "", "")
 		assert.NoError(t, err)
 	})
+
+	t.Run("CLI-sourced credentials skip write-back", func(t *testing.T) {
+		// Credentials minted BY az must not be written back into az's own cache:
+		// the derived home_account_id duplicates az's Account entry for guest
+		// users and breaks az (azure-cli#20168).
+		subHome := t.TempDir()
+		t.Setenv("HOME", subHome)
+		t.Setenv("USERPROFILE", subHome)
+
+		now := time.Now().UTC()
+		accessToken := createTestJWT(map[string]interface{}{
+			"oid": "cli-oid-123",
+			"upn": "cli-user@contoso.com",
+		})
+
+		creds := &types.AzureCredentials{
+			AccessToken:    accessToken,
+			Expiration:     now.Add(1 * time.Hour).Format(time.RFC3339),
+			TenantID:       "cli-tenant",
+			SubscriptionID: "cli-sub",
+			AuthMethod:     types.AzureAuthMethodCLI,
+		}
+
+		err := UpdateAzureCLIFiles(creds, "cli-tenant", "cli-sub", "", "")
+		assert.NoError(t, err)
+
+		_, msalErr := os.Stat(filepath.Join(subHome, ".azure", "msal_token_cache.json"))
+		_, profileErr := os.Stat(filepath.Join(subHome, ".azure", "azureProfile.json"))
+		assert.True(t, os.IsNotExist(msalErr), "MSAL cache must not be written for CLI-sourced credentials")
+		assert.True(t, os.IsNotExist(profileErr), "Azure profile must not be written for CLI-sourced credentials")
+	})
+
+	t.Run("guest user home account id from MSAL is used", func(t *testing.T) {
+		// For guest (B2B) users the MSAL home account ID ("{home-oid}.{home-tenant}")
+		// differs from "{oid}.{target-tenant}"; the cache entry must carry the former.
+		subHome := t.TempDir()
+		t.Setenv("HOME", subHome)
+		t.Setenv("USERPROFILE", subHome)
+
+		now := time.Now().UTC()
+		accessToken := createTestJWT(map[string]interface{}{
+			"oid": "guest-oid-in-target",
+			"upn": "guest@hometenant.com",
+		})
+
+		creds := &types.AzureCredentials{
+			AccessToken:    accessToken,
+			Expiration:     now.Add(1 * time.Hour).Format(time.RFC3339),
+			TenantID:       "target-tenant",
+			SubscriptionID: "target-sub",
+			AuthMethod:     types.AzureAuthMethodDeviceCode,
+			HomeAccountID:  "home-oid.home-tenant",
+		}
+
+		err := UpdateAzureCLIFiles(creds, "target-tenant", "target-sub", "", "")
+		assert.NoError(t, err)
+
+		data, readErr := os.ReadFile(filepath.Join(subHome, ".azure", "msal_token_cache.json"))
+		require.NoError(t, readErr)
+
+		var cache map[string]map[string]map[string]interface{}
+		require.NoError(t, json.Unmarshal(data, &cache))
+
+		accounts := cache["Account"]
+		require.Len(t, accounts, 1, "exactly one Account entry expected")
+		for key, entry := range accounts {
+			assert.Contains(t, key, "home-oid.home-tenant", "cache key must use the MSAL home account ID")
+			assert.Equal(t, "home-oid.home-tenant", entry[FieldHomeAccountID])
+			assert.Equal(t, "guest-oid-in-target", entry["local_account_id"], "local account id stays the target-tenant OID")
+			assert.Equal(t, "target-tenant", entry[FieldRealm], "realm stays the target tenant")
+		}
+	})
+}
+
+// TestLoadMSALCache_ParseFailure verifies that a corrupted (non-JSON) MSAL
+// cache file is surfaced as a parse error rather than silently discarded.
+func TestLoadMSALCache_ParseFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	azureDir := filepath.Join(tmpDir, ".azure")
+	require.NoError(t, os.MkdirAll(azureDir, 0o700))
+	msalCachePath := filepath.Join(azureDir, "msal_token_cache.json")
+	require.NoError(t, os.WriteFile(msalCachePath, []byte("{not valid json"), 0o600))
+
+	_, err := loadMSALCache(msalCachePath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse MSAL cache")
+}
+
+// TestUpdateMSALCache_LoadFailurePropagates verifies that updateMSALCache
+// propagates a corrupted-cache parse error from loadMSALCache instead of
+// overwriting it silently.
+func TestUpdateMSALCache_LoadFailurePropagates(t *testing.T) {
+	tmpDir := t.TempDir()
+	azureDir := filepath.Join(tmpDir, ".azure")
+	require.NoError(t, os.MkdirAll(azureDir, 0o700))
+	msalCachePath := filepath.Join(azureDir, "msal_token_cache.json")
+	require.NoError(t, os.WriteFile(msalCachePath, []byte("not json at all"), 0o600))
+
+	err := updateMSALCache(&msalCacheUpdate{
+		Home:     tmpDir,
+		UserOID:  "user-oid-123",
+		TenantID: "tenant-123",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse MSAL cache")
+}
+
+// TestWriteMSALCacheToFile_MkdirAllFailure verifies that a MkdirAll failure
+// (the ".azure" path segment already exists as a regular file, not a
+// directory) is surfaced instead of panicking or being swallowed.
+func TestWriteMSALCacheToFile_MkdirAllFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	azureDir := filepath.Join(tmpDir, ".azure")
+	require.NoError(t, os.WriteFile(azureDir, []byte("not a directory"), 0o600))
+
+	err := writeMSALCacheToFile(filepath.Join(azureDir, "msal_token_cache.json"), []byte("{}"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create .azure directory")
+}
+
+// TestWriteMSALCacheToFile_WriteFailure verifies the os.WriteFile failure
+// branch inside the lock closure (distinct from a lock-acquisition failure):
+// the sibling ".lock" file is pre-created so locking succeeds, then the
+// directory is made read-only so the actual cache write fails.
+func TestWriteMSALCacheToFile_WriteFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmpDir := t.TempDir()
+	azureDir := filepath.Join(tmpDir, ".azure")
+	require.NoError(t, os.MkdirAll(azureDir, 0o700))
+	msalCachePath := filepath.Join(azureDir, "msal_token_cache.json")
+	require.NoError(t, os.WriteFile(msalCachePath+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(azureDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(azureDir, 0o700) })
+
+	err := writeMSALCacheToFile(msalCachePath, []byte("{}"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to write MSAL cache")
+}
+
+// TestUpdateMSALCacheFromCreds_WriteFailureIsNonFatal verifies the failure
+// branch of updateMSALCacheFromCreds (the mirror of the already-covered
+// success branch in TestUpdateMSALCacheFromCreds_SovereignCloud): when the
+// underlying write fails, the function logs and returns without panicking,
+// and it must not leave a partially written cache file behind.
+func TestUpdateMSALCacheFromCreds_WriteFailureIsNonFatal(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmpDir := t.TempDir()
+	azureDir := filepath.Join(tmpDir, ".azure")
+	require.NoError(t, os.MkdirAll(azureDir, 0o700))
+	msalCachePath := filepath.Join(azureDir, "msal_token_cache.json")
+	require.NoError(t, os.WriteFile(msalCachePath+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(azureDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(azureDir, 0o700) })
+
+	now := time.Now().UTC()
+	accessToken := createTestJWT(map[string]interface{}{"oid": "user-oid-123", "upn": "admin@contoso.com"})
+	azureCreds := &types.AzureCredentials{
+		AccessToken: accessToken,
+		Expiration:  now.Add(1 * time.Hour).Format(time.RFC3339),
+	}
+	cloudEnv := GetCloudEnvironment("")
+
+	require.NotPanics(t, func() {
+		updateMSALCacheFromCreds(&msalCredsContext{Home: tmpDir, UserOID: "user-oid-123", TenantID: "tenant-123"}, azureCreds, cloudEnv)
+	})
+
+	_, err := os.ReadFile(msalCachePath)
+	assert.True(t, os.IsNotExist(err), "cache file should not exist when the write failed")
+}
+
+// TestUpdateAzureProfile_ParseFailure verifies that a corrupted (non-JSON)
+// existing azureProfile.json is surfaced as a parse error.
+func TestUpdateAzureProfile_ParseFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	azureDir := filepath.Join(tmpDir, ".azure")
+	require.NoError(t, os.MkdirAll(azureDir, 0o700))
+	profilePath := filepath.Join(azureDir, "azureProfile.json")
+	require.NoError(t, os.WriteFile(profilePath, []byte("{not valid json"), 0o600))
+
+	err := updateAzureProfile(tmpDir, ProfileUpdateParams{
+		Username:       "user@example.com",
+		TenantID:       "tenant-123",
+		SubscriptionID: "sub-123",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse Azure profile")
+}
+
+// TestUpdateAzureProfile_ReadFailure verifies the non-ENOENT os.ReadFile
+// failure branch (the profile path is a directory, not a missing file).
+func TestUpdateAzureProfile_ReadFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	azureDir := filepath.Join(tmpDir, ".azure")
+	profilePath := filepath.Join(azureDir, "azureProfile.json")
+	require.NoError(t, os.MkdirAll(profilePath, 0o700)) // Directory in place of the file.
+
+	err := updateAzureProfile(tmpDir, ProfileUpdateParams{
+		Username:       "user@example.com",
+		TenantID:       "tenant-123",
+		SubscriptionID: "sub-123",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to read Azure profile")
+}
+
+// TestUpdateAzureProfile_MkdirAllFailure verifies the MkdirAll failure branch
+// (the ".azure" path segment already exists as a regular file).
+func TestUpdateAzureProfile_MkdirAllFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	azureDir := filepath.Join(tmpDir, ".azure")
+	require.NoError(t, os.WriteFile(azureDir, []byte("not a directory"), 0o600))
+
+	err := updateAzureProfile(tmpDir, ProfileUpdateParams{Username: "user@example.com"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create .azure directory")
+}
+
+// TestUpdateAzureProfile_WriteFailure verifies the os.WriteFile failure
+// branch inside the lock closure.
+func TestUpdateAzureProfile_WriteFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmpDir := t.TempDir()
+	azureDir := filepath.Join(tmpDir, ".azure")
+	require.NoError(t, os.MkdirAll(azureDir, 0o700))
+	profilePath := filepath.Join(azureDir, "azureProfile.json")
+	require.NoError(t, os.WriteFile(profilePath+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(azureDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(azureDir, 0o700) })
+
+	err := updateAzureProfile(tmpDir, ProfileUpdateParams{Username: "user@example.com"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to write Azure profile")
+}
+
+// TestUpdateServicePrincipalEntries_MkdirAllFailure verifies the MkdirAll
+// failure branch (the ".azure" path segment already exists as a regular
+// file).
+func TestUpdateServicePrincipalEntries_MkdirAllFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	azureDir := filepath.Join(tmpDir, ".azure")
+	require.NoError(t, os.WriteFile(azureDir, []byte("not a directory"), 0o600))
+
+	err := updateServicePrincipalEntries(tmpDir, "client-id", "tenant-id", "federated-token")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create .azure directory")
+}
+
+// TestUpdateServicePrincipalEntries_ReadFailure verifies the non-ENOENT
+// os.ReadFile failure branch (the entries path is a directory, not a missing
+// file).
+func TestUpdateServicePrincipalEntries_ReadFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	azureDir := filepath.Join(tmpDir, ".azure")
+	entriesPath := filepath.Join(azureDir, "service_principal_entries.json")
+	require.NoError(t, os.MkdirAll(entriesPath, 0o700))
+
+	err := updateServicePrincipalEntries(tmpDir, "client-id", "tenant-id", "federated-token")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to read service principal entries")
+}
+
+// TestUpdateServicePrincipalEntries_WriteFailure verifies the os.WriteFile
+// failure branch inside the lock closure.
+func TestUpdateServicePrincipalEntries_WriteFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmpDir := t.TempDir()
+	azureDir := filepath.Join(tmpDir, ".azure")
+	require.NoError(t, os.MkdirAll(azureDir, 0o700))
+	entriesPath := filepath.Join(azureDir, "service_principal_entries.json")
+	require.NoError(t, os.WriteFile(entriesPath+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(azureDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(azureDir, 0o700) })
+
+	err := updateServicePrincipalEntries(tmpDir, "client-id", "tenant-id", "federated-token")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to write service principal entries")
+}
+
+// TestUpdateAzureCLIFiles_ProfileWriteFailureIsNonFatal verifies
+// UpdateAzureCLIFiles' own failure branch when updateAzureProfile fails: it
+// must log and continue (return nil) rather than propagate the error, per
+// its documented "non-fatal" contract.
+func TestUpdateAzureCLIFiles_ProfileWriteFailureIsNonFatal(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
+	azureDir := filepath.Join(tmpHome, ".azure")
+	require.NoError(t, os.MkdirAll(azureDir, 0o700))
+	profilePath := filepath.Join(azureDir, "azureProfile.json")
+	require.NoError(t, os.WriteFile(profilePath+".lock", nil, 0o600))
+	// The MSAL cache lock also needs to be pre-created so that step succeeds
+	// and only the azureProfile.json write fails.
+	msalCachePath := filepath.Join(azureDir, "msal_token_cache.json")
+	require.NoError(t, os.WriteFile(msalCachePath+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(azureDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(azureDir, 0o700) })
+
+	now := time.Now().UTC()
+	accessToken := createTestJWT(map[string]interface{}{"oid": "user-oid-123", "upn": "admin@contoso.com"})
+	creds := &types.AzureCredentials{
+		AccessToken: accessToken,
+		Expiration:  now.Add(1 * time.Hour).Format(time.RFC3339),
+	}
+
+	err := UpdateAzureCLIFiles(creds, "tenant-abc", "sub-def", "", "")
+	require.NoError(t, err, "profile write failure must be non-fatal")
+
+	_, statErr := os.Stat(profilePath)
+	assert.True(t, os.IsNotExist(statErr), "azureProfile.json should not exist when the write failed")
+}
+
+// TestUpdateAzureCLIFiles_ServicePrincipalEntriesWriteFailureIsNonFatal
+// verifies UpdateAzureCLIFiles' failure branch when
+// updateServicePrincipalEntries fails: it must log and continue (return nil)
+// rather than propagate the error.
+func TestUpdateAzureCLIFiles_ServicePrincipalEntriesWriteFailureIsNonFatal(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
+	azureDir := filepath.Join(tmpHome, ".azure")
+	require.NoError(t, os.MkdirAll(azureDir, 0o700))
+	// Pre-create every sibling lock file used along the way so only the
+	// service_principal_entries.json write itself fails.
+	for _, name := range []string{"msal_token_cache.json", "azureProfile.json", "service_principal_entries.json"} {
+		require.NoError(t, os.WriteFile(filepath.Join(azureDir, name+".lock"), nil, 0o600))
+	}
+	entriesPath := filepath.Join(azureDir, "service_principal_entries.json")
+	require.NoError(t, os.Chmod(azureDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(azureDir, 0o700) })
+
+	now := time.Now().UTC()
+	accessToken := createTestJWT(map[string]interface{}{"oid": "sp-oid-789", "appid": "sp-client-id"})
+	creds := &types.AzureCredentials{
+		AccessToken:        accessToken,
+		Expiration:         now.Add(1 * time.Hour).Format(time.RFC3339),
+		ClientID:           "sp-client-id",
+		IsServicePrincipal: true,
+		FederatedToken:     "federated-token-value",
+	}
+
+	err := UpdateAzureCLIFiles(creds, "sp-tenant", "sp-sub", "", "")
+	require.NoError(t, err, "service principal entries write failure must be non-fatal")
+
+	_, statErr := os.Stat(entriesPath)
+	assert.True(t, os.IsNotExist(statErr), "service_principal_entries.json should not exist when the write failed")
 }

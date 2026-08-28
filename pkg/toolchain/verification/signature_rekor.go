@@ -48,6 +48,15 @@ var transportFlakeMarkers = []string{
 	"stream error: stream ID",
 	"connection reset by peer",
 	"TLS handshake timeout",
+	// macOS Security.framework can report this while cosign fetches a remote
+	// certificate sidecar. It is a transport/trust-store operation that happens
+	// before any signature verdict, so retrying it cannot mask bad evidence.
+	"SecPolicyCreateSSL error",
+	// A macOS process can be terminated by its security subsystem before
+	// Cosign reaches a verification verdict. This is transient execution
+	// failure, not evidence that a signature is invalid; a fresh, serialized
+	// invocation (see installer.runTrustedVerifier) is safe to retry.
+	"signal: killed",
 	"i/o timeout",
 	"unexpected EOF",
 }
@@ -82,52 +91,114 @@ const cosignHTTPFetchMarker = "server returned HTTP "
 
 var cosignHTTPFetchRetryableStatuses = []string{"429", "500", "502", "503", "504"}
 
-// classifyCosignError joins ErrSignatureRetryable into err when the cosign
-// output contains a known transient failure marker. Three classes qualify:
+// tufCDNHostMarker is the Sigstore TUF trust-root CDN hostname. Before every
+// verification, cosign refreshes its TUF trust-root/timestamp metadata from
+// this host (distinct from both the Rekor tlog endpoint and a direct
+// --certificate/--signature asset fetch); a transient CDN blip here has
+// nothing to do with the signature actually being verified.
+const tufCDNHostMarker = "tuf-repo-cdn.sigstore.dev"
+
+// tufCDNRetryableStatusMarkers are the two distinct phrasings cosign's TUF
+// client uses to report a non-2xx response from the CDN, observed in CI
+// (cloudposse/atmos#2974) as a transient 403 fetching both 16.root.json and
+// timestamp.json:
+//
+//	failed to download https://tuf-repo-cdn.sigstore.dev/16.root.json, http status code: 403
+//	failed to download timestamp.json: GET "https://tuf-repo-cdn.sigstore.dev/timestamp.json": unexpected HTTP status 403
+//
+// Kept as literal message substrings, scoped to tufCDNHostMarker, rather than
+// matching a bare "403" anywhere in cosign output: 403 is a terminal
+// authorization failure elsewhere in this codebase (see
+// pkg/toolchain/registry/githubratelimit.go), so an unscoped match would risk
+// silently retrying away a real permissions problem on an unrelated request.
+var tufCDNRetryableStatusMarkers = []string{"http status code: 403", "unexpected HTTP status 403"}
+
+// classifySignatureVerificationError joins ErrSignatureRetryable into err when
+// signature-verifier output contains a known transient failure marker. Four classes qualify:
 // Sigstore Rekor API flakes (rekorFlakeMarkers, tlog 5xx), transport-level
-// network errors (transportFlakeMarkers), and generic upstream HTTP 5xx/429
+// network errors (transportFlakeMarkers), generic upstream HTTP 5xx/429
 // responses cosign surfaces when it directly fetches a URL
-// (cosignHTTPFetchMarker). Otherwise returns err unchanged.
+// (cosignHTTPFetchMarker), and Sigstore TUF trust-root CDN fetch failures
+// (tufCDNHostMarker). Otherwise returns err unchanged.
 //
 // Never broaden what counts as retryable beyond known upstream-service
 // flakes and transport failures — real signature failures (tampering,
 // expired cert, identity mismatch, missing signature) must surface
 // immediately on the first attempt.
-func classifyCosignError(err error) error {
-	defer perf.Track(nil, "verification.classifyCosignError")()
+func classifySignatureVerificationError(err error) error {
+	defer perf.Track(nil, "verification.classifySignatureVerificationError")()
 
 	if err == nil {
 		return nil
 	}
 	msg := err.Error()
-	for _, marker := range rekorFlakeMarkers {
-		if strings.Contains(msg, marker) {
-			return errors.Join(errUtils.ErrSignatureRetryable, err)
-		}
-	}
-	for _, marker := range transportFlakeMarkers {
-		if strings.Contains(msg, marker) {
-			return errors.Join(errUtils.ErrSignatureRetryable, err)
-		}
-	}
-	if strings.Contains(msg, rekorTlogEndpointMarker) {
-		for _, status := range rekorTlog5xxStatuses {
-			if strings.Contains(msg, rekorTlogEndpointMarker+status+"]") {
-				return errors.Join(errUtils.ErrSignatureRetryable, err)
-			}
-		}
-	}
-	if isRekorStreamInternalError(msg) {
+	if isRetryableSignatureError(msg) {
 		return errors.Join(errUtils.ErrSignatureRetryable, err)
 	}
-	if strings.Contains(msg, cosignHTTPFetchMarker) {
-		for _, status := range cosignHTTPFetchRetryableStatuses {
-			if strings.Contains(msg, cosignHTTPFetchMarker+status) {
-				return errors.Join(errUtils.ErrSignatureRetryable, err)
-			}
+	return err
+}
+
+// isRetryableSignatureError reports whether msg matches one of the known
+// transient-failure marker categories: Sigstore Rekor API flakes
+// (rekorFlakeMarkers), transport-level network errors (transportFlakeMarkers),
+// Rekor tlog 5xx responses, Rekor stream internal errors, generic upstream
+// HTTP 5xx/429 responses cosign surfaces when it directly fetches a URL, or a
+// Sigstore TUF trust-root CDN fetch failure. Kept as a single predicate so
+// classifySignatureVerificationError stays a flat check-then-wrap pipeline.
+func isRetryableSignatureError(msg string) bool {
+	return matchesAnyMarker(msg, rekorFlakeMarkers) ||
+		matchesAnyMarker(msg, transportFlakeMarkers) ||
+		hasRekorTlog5xxStatus(msg) ||
+		isRekorStreamInternalError(msg) ||
+		hasCosignHTTPFetchRetryableStatus(msg) ||
+		hasTUFCDNRetryableStatus(msg)
+}
+
+// matchesAnyMarker reports whether msg contains any of the given substrings.
+func matchesAnyMarker(msg string, markers []string) bool {
+	for _, marker := range markers {
+		if strings.Contains(msg, marker) {
+			return true
 		}
 	}
-	return err
+	return false
+}
+
+// hasRekorTlog5xxStatus reports whether msg is a Rekor tlog retrieve-endpoint
+// error carrying one of rekorTlog5xxStatuses.
+func hasRekorTlog5xxStatus(msg string) bool {
+	if !strings.Contains(msg, rekorTlogEndpointMarker) {
+		return false
+	}
+	for _, status := range rekorTlog5xxStatuses {
+		if strings.Contains(msg, rekorTlogEndpointMarker+status+"]") {
+			return true
+		}
+	}
+	return false
+}
+
+// hasCosignHTTPFetchRetryableStatus reports whether msg is a direct cosign
+// HTTP fetch failure carrying one of cosignHTTPFetchRetryableStatuses.
+func hasCosignHTTPFetchRetryableStatus(msg string) bool {
+	if !strings.Contains(msg, cosignHTTPFetchMarker) {
+		return false
+	}
+	for _, status := range cosignHTTPFetchRetryableStatuses {
+		if strings.Contains(msg, cosignHTTPFetchMarker+status) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasTUFCDNRetryableStatus reports whether msg is a Sigstore TUF trust-root
+// CDN fetch failure carrying one of tufCDNRetryableStatusMarkers.
+func hasTUFCDNRetryableStatus(msg string) bool {
+	if !strings.Contains(msg, tufCDNHostMarker) {
+		return false
+	}
+	return matchesAnyMarker(msg, tufCDNRetryableStatusMarkers)
 }
 
 func isRekorStreamInternalError(msg string) bool {

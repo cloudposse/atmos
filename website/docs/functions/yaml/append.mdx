@@ -15,7 +15,7 @@ The `!append` YAML function concatenates lists during stack inheritance instead 
 
 ## Use-cases
 
-- **Dependency Management**: Append additional `depends_on` items without losing base dependencies
+- **Dependency Management**: Append additional `dependencies.components` entries without losing base dependencies
 - **Security Groups**: Add environment-specific security rules to a base configuration
 - **IAM Policies**: Extend base policies with additional statements
 - **Tags and Labels**: Add extra tags while preserving organizational defaults
@@ -29,10 +29,10 @@ components:
     eks:
       vars:
         cluster_name: main
-      settings:
-        depends_on:
-          - vpc
-          - iam-role
+      dependencies:
+        components:
+          - name: vpc
+          - name: iam-role
 ```
 
 ```yaml title="stacks/prod.yaml"
@@ -42,12 +42,12 @@ import:
 components:
   terraform:
     eks:
-      settings:
+      dependencies:
         # Without !append: [rds, elasticache] replaces [vpc, iam-role]
         # With !append: results in [vpc, iam-role, rds, elasticache]
-        depends_on: !append
-          - rds
-          - elasticache
+        components: !append
+          - name: rds
+          - name: elasticache
 ```
 
 ## Behavior

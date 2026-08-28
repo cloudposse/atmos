@@ -46,6 +46,10 @@ func TestAllTags(t *testing.T) {
 		TagAwsOrganizationID,
 		TagEmulator,
 		TagVersion,
+		TagTags,
+		TagLabels,
+		TagLabelsKeys,
+		TagLabelsValues,
 	}
 
 	assert.Equal(t, len(expectedTags), len(tags))

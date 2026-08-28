@@ -1,0 +1,11 @@
+# Atmos cache
+.atmos/cache*
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Atmos auto-generated backend configs and varfiles
+backend.tf.json
+*.terraform.tfvars.json

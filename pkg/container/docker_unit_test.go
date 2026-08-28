@@ -9,6 +9,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestBuildBuilderCreateArgs(t *testing.T) {
+	assert.Equal(
+		t,
+		[]string{
+			"buildx", "create", "--name", "atmos-builder", "--driver", "docker-container",
+			"--driver-opt", "image=mirror.gcr.io/moby/buildkit:buildx-stable-1",
+			"--driver-opt", "network=host",
+		},
+		buildBuilderCreateArgs(&DriverConfig{
+			Name:     "atmos-builder",
+			Provider: "docker-container",
+			Opts: map[string]string{
+				"network": "host",
+				"image":   "mirror.gcr.io/moby/buildkit:buildx-stable-1",
+			},
+		}),
+	)
+}
+
 // TestDockerRuntime_parseInspectData tests parsing of Docker inspect JSON output.
 func TestDockerRuntime_parseInspectData(t *testing.T) {
 	tests := []struct {
@@ -674,13 +693,13 @@ func TestGetNetworkIPsFromInspect(t *testing.T) {
 	data := map[string]interface{}{
 		"NetworkSettings": map[string]interface{}{
 			"Networks": map[string]interface{}{
-				"atmos-emulator-local": map[string]interface{}{"IPAddress": "172.20.0.2"},
-				"bridge":               map[string]interface{}{"IPAddress": ""},
+				"atmos-local": map[string]interface{}{"IPAddress": "172.20.0.2"},
+				"bridge":      map[string]interface{}{"IPAddress": ""},
 			},
 		},
 	}
 
 	got := getNetworkIPsFromInspect(data)
 
-	assert.Equal(t, map[string]string{"atmos-emulator-local": "172.20.0.2"}, got)
+	assert.Equal(t, map[string]string{"atmos-local": "172.20.0.2"}, got)
 }

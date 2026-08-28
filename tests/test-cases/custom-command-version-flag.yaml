@@ -1,4 +1,31 @@
 tests:
+  # Root help advertises Atmos' own root-only --version flag.
+  - name: root help shows atmos version flag
+    enabled: true
+    description: "Root help advertises Atmos' root-only --version flag"
+    workdir: "fixtures/scenarios/custom-version-flag"
+    command: "atmos"
+    args:
+      - "--help"
+    expect:
+      stdout:
+        - "--version\\s+Display the Atmos CLI version"
+      exit_code: 0
+
+  # Subcommand help should not inherit Atmos' root-only --version flag.
+  - name: subcommand help does not show atmos version flag
+    enabled: true
+    description: "Subcommand help does not advertise Atmos' root-only --version flag"
+    workdir: "fixtures/scenarios/custom-version-flag"
+    command: "atmos"
+    args:
+      - "about"
+      - "--help"
+    expect:
+      stdout:
+        - !not "Display the Atmos CLI version"
+      exit_code: 0
+
   # Test that custom commands can define their own --version flag (string type).
   # This verifies the fix for the issue where --version was a persistent global flag
   # and prevented custom commands from defining their own --version flag.
@@ -44,6 +71,7 @@ tests:
       stdout:
         - "--version"
         - "Version to install"
+        - !not "Display the Atmos CLI version"
       exit_code: 0
 
   # Test that atmos --version still works at root level.

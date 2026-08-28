@@ -100,6 +100,11 @@ var (
 	//   Failure! 2 passed, 1 failed.
 	// Used as a fallback when per-run lines were not captured.
 	testSummaryRe = regexp.MustCompile(`(?m)^(?:Success|Failure)!\s*(\d+)\s+passed,\s*(\d+)\s+failed`)
+
+	// Matches the file/line locator inside a terraform "Error:" diagnostic block, e.g.:
+	//   on tests/app.tftest.hcl line 30:
+	// Used to recover assertion location for the summary-line fallback.
+	errorLocationRe = regexp.MustCompile(`(?m)^\s*on\s+(\S+)\s+line\s+(\d+):`)
 )
 
 // ParsePlanJSON parses terraform plan JSON from `terraform show -json <planfile>`.
@@ -632,12 +637,17 @@ func ParseTestOutput(output string) *plugin.OutputResult {
 
 	// Fall back to the summary line when per-run lines were not captured (e.g.
 	// output buffering differences); per-run lines are preferred since they also
-	// surface skips.
+	// surface skips. The summary line carries no per-run detail, so synthesize a
+	// single aggregate row into Runs -- otherwise the CI summary's results table
+	// (gated on len(Runs) > 0) silently disappears even though badges still render.
 	if data.Total == 0 {
 		if match := testSummaryRe.FindStringSubmatch(output); len(match) == 3 {
 			data.Pass = parseIntOrZero(match[1])
 			data.Fail = parseIntOrZero(match[2])
 			data.Total = data.Pass + data.Fail
+			if data.Total > 0 {
+				data.Runs = append(data.Runs, synthesizeFallbackRun(data.Pass, data.Fail, output))
+			}
 		}
 	}
 
@@ -651,6 +661,37 @@ func ParseTestOutput(output string) *plugin.OutputResult {
 	}
 
 	return result
+}
+
+// synthesizeFallbackRun builds a single aggregate run entry standing in for the
+// per-run detail ParseTestOutput could not capture, so the CI summary's results
+// table still renders one row instead of none. If exactly one terraform error
+// diagnostic block survived even though the per-run status lines did not, its
+// file/line are attached to the row so the summary still points at a location.
+// The block's raw message text is deliberately NOT copied into the row: it is
+// multi-line and can contain "|", which would break the markdown table cell,
+// and it is already rendered safely in the fenced code block ParseTestOutput
+// populates via result.Errors. With more than one block, attributing a single
+// location to the aggregate row would misrepresent which failure it belongs
+// to, so File/Line are left unset in that case.
+func synthesizeFallbackRun(pass, fail int, output string) plugin.TerraformTestRun {
+	status := testStatusPass
+	if fail > 0 {
+		status = testStatusFail
+	}
+	run := plugin.TerraformTestRun{
+		Name:   fmt.Sprintf("test summary (per-run detail unavailable): %d passed, %d failed", pass, fail),
+		Status: status,
+	}
+	if fail > 0 {
+		if blocks := ExtractErrorBlocks(output); len(blocks) == 1 {
+			if loc := errorLocationRe.FindStringSubmatch(blocks[0]); len(loc) == 3 {
+				run.File = loc[1]
+				run.Line = parseIntOrZero(loc[2])
+			}
+		}
+	}
+	return run
 }
 
 // isJSONStream reports whether output contains Terraform/OpenTofu `test -json`

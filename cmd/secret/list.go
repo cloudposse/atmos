@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/secrets"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // flagFormat is the name of the output-format flag.
@@ -69,24 +70,30 @@ func runSecretList(cmd *cobra.Command, args []string) error {
 
 	// Fully scoped (both facets) → fast single-scope path, honoring --identity.
 	if facet.Stack != "" && facet.Component != "" {
+		var progress *spinner.Spinner
+		if verify {
+			progress = spinner.New(fmt.Sprintf("Verifying secrets for %s/%s", facet.Stack, facet.Component))
+			progress.Start()
+		}
 		svc, err := loadServiceForListFn(facet, verify)
 		if err != nil {
+			if progress != nil {
+				progress.Error("Secret verification failed")
+			}
 			return err
 		}
 		rows := statusesToData(facet.Stack, facet.Component, svc.Status(verify))
+		if progress != nil {
+			progress.Success(fmt.Sprintf("Verified secrets for %s/%s", facet.Stack, facet.Component))
+		}
 		empty := fmt.Sprintf("No secrets declared for component %q in stack %q.", facet.Component, facet.Stack)
 		return renderSecretRows(rows, verbose, outputFormat, empty)
 	}
 
-	// --verify only applies to a single fully-scoped target; enumerating and authenticating every
-	// instance is exactly the expensive multi-auth pass listing is designed to avoid.
-	if verify {
-		ui.Warning("--verify requires both --stack and --component; remote-store status is shown as unknown. Target a specific component to verify it.")
-	}
-
-	// Otherwise enumerate across every matching (stack, component) instance. Enumeration is always
-	// credential-free (it never authenticates per component); remote-store status shows "unknown".
-	rows, err := enumeratedSecretRows(facet)
+	// Enumerate across every matching (stack, component) instance. --verify is explicit consent
+	// to authenticate and check every remote backend; users can scope stack/component to reduce
+	// that work when they do not need a repository-wide result.
+	rows, err := enumeratedSecretRows(facet, verify)
 	if err != nil {
 		return err
 	}
@@ -97,19 +104,47 @@ func runSecretList(cmd *cobra.Command, args []string) error {
 // facets. Shared secrets are de-duplicated to a single row per storage location — stack-scoped
 // to one row per (stack, secret) shown with a `*` component, global to one row per secret shown
 // with a `*` stack and component — they are inherited into every consumer but stored once.
-func enumeratedSecretRows(facet secretScope) ([]map[string]any, error) {
+//
+//nolint:gocognit,revive // Coordinates spinner lifecycle, per-scope auth, and row rendering in one pass.
+func enumeratedSecretRows(facet secretScope, verify bool) ([]map[string]any, error) {
+	var progress *spinner.Spinner
+	if verify {
+		progress = spinner.New("Discovering declared secrets to verify")
+		progress.Start()
+	}
 	entries, atmosConfig, err := enumerateScopesFn(facet)
 	if err != nil {
+		if progress != nil {
+			progress.Error("Secret verification failed")
+		}
 		return nil, err
 	}
 
 	var rows []map[string]any
 	seenShared := make(map[string]bool)
-	for _, entry := range entries {
-		svc := secrets.NewService(atmosConfig, entry.Stack, entry.Component, entry.Section)
-		// Enumeration is credential-free: it never authenticates, so remote-store status is
-		// reported as unknown (verify=false). Local backends (e.g. SOPS) are still checked.
-		statuses := svc.Status(false)
+	for index, entry := range entries {
+		var statuses []secrets.Status
+		if verify {
+			progress.Update(fmt.Sprintf("Verifying %s/%s (%d/%d)", entry.Stack, entry.Component, index+1, len(entries)))
+			// Each component can select a distinct identity or store configuration, so load it
+			// through the normal authenticated path before checking its remote backends.
+			svc, loadErr := loadServiceForListFn(secretScope{
+				Stack:         entry.Stack,
+				Component:     entry.Component,
+				ComponentType: facet.ComponentType,
+				Identity:      facet.Identity,
+			}, true)
+			if loadErr != nil {
+				progress.Error(fmt.Sprintf("Secret verification failed for %s/%s", entry.Stack, entry.Component))
+				return nil, loadErr
+			}
+			statuses = svc.Status(true)
+		} else {
+			svc := secrets.NewService(atmosConfig, entry.Stack, entry.Component, entry.Section)
+			// Credential-free enumeration reports remote stores as unknown; local backends
+			// (e.g. SOPS) can still answer their status without authentication.
+			statuses = svc.Status(false)
+		}
 		for i := range statuses {
 			st := &statuses[i]
 			switch st.Declaration.Scope {
@@ -131,6 +166,9 @@ func enumeratedSecretRows(facet secretScope) ([]map[string]any, error) {
 				rows = append(rows, statusRow(entry.Stack, entry.Component, st))
 			}
 		}
+	}
+	if progress != nil {
+		progress.Success(fmt.Sprintf("Verified secret status for %d component instance(s)", len(entries)))
 	}
 	return rows, nil
 }

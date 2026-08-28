@@ -3,9 +3,9 @@ package function
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -191,100 +191,22 @@ type storeGetParams struct {
 
 // parseStoreParams parses the arguments for the store function.
 func parseStoreParams(args string, currentStack string) (*storeParams, error) {
-	// Split on pipe to separate store parameters and options.
-	parts := strings.Split(args, "|")
-	storePart := strings.TrimSpace(parts[0])
-
-	// Extract default value and query from pipe parts.
-	var defaultValue *string
-	var query string
-	if len(parts) > 1 {
-		var err error
-		defaultValue, query, err = extractPipeOptions(parts[1:])
-		if err != nil {
-			return nil, err
-		}
+	parsed, err := parser.ParseStore(args)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidArguments, err)
 	}
-
-	// Process the main store part.
-	storeParts := strings.Fields(storePart)
-	partsLength := len(storeParts)
-	if partsLength != 3 && partsLength != 4 {
-		return nil, fmt.Errorf("%w: store function requires 3 or 4 parameters, got %d", ErrInvalidArguments, partsLength)
+	stack := parsed.Stack
+	if stack == "" {
+		stack = currentStack
 	}
-
-	params := &storeParams{
-		storeName:    strings.TrimSpace(storeParts[0]),
-		defaultValue: defaultValue,
-		query:        query,
-	}
-
-	if partsLength == 4 {
-		params.stack = strings.TrimSpace(storeParts[1])
-		params.component = strings.TrimSpace(storeParts[2])
-		params.key = strings.TrimSpace(storeParts[3])
-	} else {
-		params.stack = currentStack
-		params.component = strings.TrimSpace(storeParts[1])
-		params.key = strings.TrimSpace(storeParts[2])
-	}
-
-	return params, nil
+	return &storeParams{storeName: parsed.Store, stack: stack, component: parsed.Component, key: parsed.Key, defaultValue: parsed.Default, query: parsed.Query}, nil
 }
 
 // parseStoreGetParams parses the arguments for the store.get function.
 func parseStoreGetParams(args string) (*storeGetParams, error) {
-	// Split on pipe to separate store parameters and options.
-	parts := strings.Split(args, "|")
-	storePart := strings.TrimSpace(parts[0])
-
-	// Extract default value and query from pipe parts.
-	var defaultValue *string
-	var query string
-	if len(parts) > 1 {
-		var err error
-		defaultValue, query, err = extractPipeOptions(parts[1:])
-		if err != nil {
-			return nil, err
-		}
+	parsed, err := parser.ParseStoreGet(args)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidArguments, err)
 	}
-
-	// Process the main store part.
-	storeParts := strings.Fields(storePart)
-	if len(storeParts) != 2 {
-		return nil, fmt.Errorf("%w: store.get function requires 2 parameters, got %d", ErrInvalidArguments, len(storeParts))
-	}
-
-	return &storeGetParams{
-		storeName:    strings.TrimSpace(storeParts[0]),
-		key:          strings.TrimSpace(storeParts[1]),
-		defaultValue: defaultValue,
-		query:        query,
-	}, nil
-}
-
-// extractPipeOptions extracts default value and query from pipe-separated parts.
-func extractPipeOptions(parts []string) (*string, string, error) {
-	var defaultValue *string
-	var query string
-
-	for _, p := range parts {
-		// Use SplitN to handle values containing spaces (e.g., query ".foo .bar").
-		pipeParts := strings.SplitN(strings.TrimSpace(p), " ", 2)
-		if len(pipeParts) != 2 {
-			return nil, "", fmt.Errorf("%w: invalid pipe parameters", ErrInvalidArguments)
-		}
-		key := strings.Trim(pipeParts[0], `"'`)
-		value := strings.Trim(pipeParts[1], `"'`)
-		switch key {
-		case "default":
-			defaultValue = &value
-		case "query":
-			query = value
-		default:
-			return nil, "", fmt.Errorf("%w: invalid pipe identifier '%s'", ErrInvalidArguments, key)
-		}
-	}
-
-	return defaultValue, query, nil
+	return &storeGetParams{storeName: parsed.Store, key: parsed.Key, defaultValue: parsed.Default, query: parsed.Query}, nil
 }

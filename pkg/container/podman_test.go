@@ -749,6 +749,16 @@ func TestPodmanRuntime_Pull_Integration(t *testing.T) {
 	require.NoError(t, err, "Pull should succeed for alpine:latest")
 }
 
+// isKnownPodmanRuntimeMismatch reports whether err is the specific crun/OCI
+// runtime version mismatch some environments hit (a working podman paired
+// with an incompatible crun) rather than some other Start failure.
+// PodmanRuntime.Start wraps every failure in ErrContainerRuntimeOperation, so
+// callers can't distinguish this known, environment-specific case from a real
+// regression without inspecting the message.
+func isKnownPodmanRuntimeMismatch(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "crun: unknown version specified")
+}
+
 // TestPodmanRuntime_ContainerLifecycle_Integration validates the container lifecycle
 // (Create, Start, Stop, Remove) for Podman runtime. Tests are intentionally duplicated
 // to verify both Docker and Podman implementations independently, ensuring consistency
@@ -787,9 +797,20 @@ func TestPodmanRuntime_ContainerLifecycle_Integration(t *testing.T) {
 		_ = runtime.Remove(ctx, containerID, true)
 	}()
 
-	// Start container.
+	// Start container. A working Pull doesn't guarantee a working container
+	// runtime: environments with a broken/mismatched OCI runtime (e.g. a
+	// crun version incompatible with the installed podman) can pull images
+	// fine but fail here. Only skip for that specific, known mismatch --
+	// Start wraps every failure in ErrContainerRuntimeOperation, so skipping
+	// unconditionally would also hide a real regression in Start itself.
 	err = runtime.Start(ctx, containerID)
-	require.NoError(t, err, "Start should succeed")
+	if err != nil {
+		if isKnownPodmanRuntimeMismatch(err) {
+			t.Skipf("Failed to start container: %v", err)
+			return
+		}
+		require.NoError(t, err, "Start should succeed")
+	}
 
 	// Stop container.
 	err = runtime.Stop(ctx, containerID, 5*time.Second)
@@ -935,6 +956,16 @@ func TestPodmanRuntime_BuildBakeUnsupported(t *testing.T) {
 	runtime := NewPodmanRuntime()
 	err := runtime.Build(context.Background(), &BuildConfig{
 		Bake: &BakeConfig{File: "docker-bake.hcl"},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Docker Buildx requires Docker")
+}
+
+func TestPodmanRuntime_BuildDriverUnsupported(t *testing.T) {
+	runtime := NewPodmanRuntime()
+	err := runtime.Build(context.Background(), &BuildConfig{
+		Driver: &DriverConfig{Provider: "docker-container"},
 	})
 
 	require.Error(t, err)

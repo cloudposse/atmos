@@ -26,7 +26,10 @@ func ProcessYAMLConfigFiles(
 ) {
 	defer perf.Track(atmosConfig, "stack.ProcessYAMLConfigFiles")()
 
-	return exec.ProcessYAMLConfigFiles(
+	// Deliberately discards internal/exec.ProcessYAMLConfigFiles' deferred-contexts return value:
+	// this package re-exports a stable public API, and internal/exec.ComponentDeferredContexts is
+	// an internal-only type callers outside the module could never meaningfully use.
+	listResult, mapResult, rawStackConfigs, _, err := exec.ProcessYAMLConfigFiles(
 		atmosConfig,
 		stacksBasePath,
 		terraformComponentsBasePath,
@@ -38,8 +41,11 @@ func ProcessYAMLConfigFiles(
 		processComponentDeps,
 		ignoreMissingFiles,
 	)
+	return listResult, mapResult, rawStackConfigs, err
 }
 
+// ProcessYAMLConfigFile takes a path to a YAML stack manifest, recursively
+// processes and deep-merges all the imports, and returns the processing result.
 func ProcessYAMLConfigFile(
 	atmosConfig *schema.AtmosConfiguration,
 	basePath string,
@@ -55,16 +61,7 @@ func ProcessYAMLConfigFile(
 	parentHelmfileOverridesInline map[string]any,
 	parentHelmfileOverridesImports map[string]any,
 	atmosManifestJsonSchemaFilePath string,
-) (
-	map[string]any,
-	map[string]map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	map[string]any,
-	error,
-) {
+) (*schema.StackManifestProcessingResult, error) {
 	defer perf.Track(atmosConfig, "stack.ProcessYAMLConfigFile")()
 
 	return exec.ProcessYAMLConfigFile(

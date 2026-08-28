@@ -23,9 +23,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
   `diff` uses the same stack inputs as deployment: `provider`, `paths`,
   `manifests`, `vars`, `env`, Auth, hooks, and dependencies.
   <div>
-    <PrimaryCTA to="/stacks/components/kubernetes">
-      Stack Configuration
-    </PrimaryCTA>
+    <PrimaryCTA to="/stacks/components/kubernetes">Stack Configuration</PrimaryCTA>
   </div>
 </ActionCard>
 
@@ -47,6 +45,13 @@ The command does not require the `kubectl` binary and does not run `kubectl diff
 
 ```shell
 atmos kubernetes diff argocd -s plat-ue2-dev
+```
+
+Diff components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos kubernetes diff --all --tags production,tier-1
+atmos kubernetes diff --affected --labels cost-center=platform
 ```
 
 Example output (each created or changed object is followed by its unified diff;
@@ -93,4 +98,18 @@ are omitted from the diff so their data is never printed or written to the summa
 
   <dt>`--include-dependents` <em>(optional)</em></dt>
   <dd>With `--affected`, include dependent Kubernetes components.</dd>
+
+<dt>
+  `--tags` <em>(optional)</em>
+</dt>
+<dd>
+  Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.
+</dd>
+
+<dt>
+  `--labels` <em>(optional)</em>
+</dt>
+<dd>
+  Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
+</dd>
 </dl>

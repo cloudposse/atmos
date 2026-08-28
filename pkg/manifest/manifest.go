@@ -1,8 +1,5 @@
-// Package manifest provides shared helpers for decoding, serializing, naming,
-// and packaging Kubernetes manifest objects. It is producer-agnostic: rendered
-// manifests from the Helm component, the Kubernetes component, or the Helmfile
-// `template` path all flow through these helpers so they emit identical output
-// and identical provision-artifact shapes for delivery targets (e.g. git).
+// Package manifest provides helpers for Atmos configuration manifest envelopes
+// and rendered Kubernetes-style object streams.
 package manifest
 
 import (
@@ -22,11 +19,41 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// yamlDecodeBufferSize is the buffer size used by the YAML/JSON stream decoder.
-const yamlDecodeBufferSize = 4096
+const (
+	// DefaultAPIVersion is the apiVersion used by all current Atmos manifests.
+	DefaultAPIVersion = "atmos/v1"
+	// The yamlDecodeBufferSize constant sets the YAML/JSON stream decoder buffer size.
+	yamlDecodeBufferSize = 4096
+)
 
 // fileNameSep separates the parts of a generated manifest file name.
 const fileNameSep = "_"
+
+// Metadata identifies a manifest, mirroring the Kubernetes object metadata
+// convention. Name is required; the remaining fields are optional,
+// human-oriented annotations.
+type Metadata struct {
+	Name        string `yaml:"name" json:"name" jsonschema:"description=Unique name of this manifest,minLength=1"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty" jsonschema:"description=Human-readable description"`
+	Author      string `yaml:"author,omitempty" json:"author,omitempty" jsonschema:"description=Author or maintainer"`
+	Version     string `yaml:"version,omitempty" json:"version,omitempty" jsonschema:"description=Version of this manifest"`
+}
+
+// Manifest is the generic Kubernetes-style envelope shared by all Atmos
+// manifest kinds. S is the kind-specific spec type registered for the kind.
+type Manifest[S any] struct {
+	APIVersion string   `yaml:"apiVersion" json:"apiVersion"`
+	Kind       string   `yaml:"kind" json:"kind"`
+	Metadata   Metadata `yaml:"metadata" json:"metadata"`
+	Spec       S        `yaml:"spec,omitempty" json:"spec,omitempty"`
+}
+
+// envelopeProbe is used to sniff the apiVersion and kind of a manifest
+// without decoding the spec.
+type envelopeProbe struct {
+	APIVersion string `yaml:"apiVersion"`
+	Kind       string `yaml:"kind"`
+}
 
 // DecodeObjects decodes a multi-document YAML/JSON byte stream into a slice of
 // unstructured objects. Embedded Kubernetes List objects are expanded into their

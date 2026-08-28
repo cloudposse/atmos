@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	"github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendor"
@@ -27,6 +28,7 @@ type VendorSourceOption func(*vendorSourceOptions)
 
 type vendorSourceOptions struct {
 	replaceTarget bool
+	baseDir       string
 }
 
 // WithReplaceTarget controls whether VendorSource may replace an existing target directory.
@@ -36,14 +38,27 @@ func WithReplaceTarget(replace bool) VendorSourceOption {
 	}
 }
 
+// WithBaseDir anchors a relative local-path source against baseDir instead of
+// the process's current working directory. Callers that already resolve a
+// working directory for the target path (e.g. the workdir step, which
+// anchors `path` to `working_directory`) should pass the same directory here
+// so a relative `source` resolves consistently with `path` instead of
+// silently falling back to the process cwd.
+func WithBaseDir(baseDir string) VendorSourceOption {
+	return func(opts *vendorSourceOptions) {
+		opts.baseDir = baseDir
+	}
+}
+
 // VendorSource vendors a component source to the target directory.
 // It uses go-getter via the existing downloader infrastructure.
 // Note: Authentication is not yet supported - credentials must be configured
 // via environment variables or cloud provider credential chains.
-// Note: The context parameter is currently unused but kept for API compatibility
-// with future cancellation support when the downloader is updated.
+// The context bounds the OCI download path (downloadOCISource derives a
+// DefaultVendorTimeout deadline from it); go-getter downloads keep their own
+// explicit timeout parameter independent of it.
 func VendorSource(
-	_ context.Context, // Context kept for future cancellation support.
+	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	sourceSpec *schema.VendorComponentSource,
 	targetDir string,
@@ -77,7 +92,7 @@ func VendorSource(
 	// Normalize the URI for go-getter using the same logic as regular vendoring.
 	uri = vendor.NormalizeURI(uri)
 	if vendor.IsLocalPath(uri) && !filepath.IsAbs(uri) {
-		absURI, err := filepath.Abs(uri)
+		absURI, err := resolveLocalSourcePath(uri, vendorOpts.baseDir)
 		if err != nil {
 			return errUtils.Build(errUtils.ErrSourceInvalidSpec).
 				WithCause(err).
@@ -147,20 +162,12 @@ func VendorSource(
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Download using go-getter.
-	downloadOpts := []downloader.GoGetterOption{}
-	if sourceSpec.Retry != nil {
-		downloadOpts = append(downloadOpts, downloader.WithRetryConfig(sourceSpec.Retry))
-	}
-	dl := downloader.NewGoGetterDownloader(atmosConfig, downloadOpts...)
-	err = dl.Fetch(uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout)
-	if err != nil {
-		return errUtils.Build(errUtils.ErrSourceProvision).
-			WithCause(err).
-			WithExplanation("Failed to download source").
-			WithContext("uri", uri).
-			WithHint("Verify the source URI is accessible and credentials are configured").
-			Err()
+	// Download the source into tempDir. OCI registries aren't a go-getter scheme
+	// (there is no getter.Getter implementation for them, and go-getter's model
+	// doesn't fit pulling registry layers), so oci:// sources go through pkg/oci
+	// directly; everything else still goes through go-getter.
+	if err := downloadSource(ctx, atmosConfig, sourceSpec, uri, tempDir); err != nil {
+		return err
 	}
 
 	// Ensure target parent directory exists.
@@ -210,6 +217,53 @@ func VendorSource(
 			Err()
 	}
 
+	return nil
+}
+
+// downloadSource populates tempDir from uri, branching between the OCI-native
+// path (oci.ProcessImage) and go-getter for everything else.
+func downloadSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
+	if vendor.IsOCIURI(uri) {
+		return downloadOCISource(ctx, atmosConfig, uri, tempDir)
+	}
+	return downloadGoGetterSource(atmosConfig, sourceSpec, uri, tempDir)
+}
+
+// downloadOCISource pulls an oci:// source directly via pkg/oci. Go-containerregistry
+// doesn't understand the "oci://" scheme prefix itself, so it's trimmed first (mirroring
+// the legacy vendor pull path in internal/exec/vendor_component_utils.go). The pull is
+// bounded to DefaultVendorTimeout, matching the go-getter path's explicit timeout.
+func downloadOCISource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, tempDir string) error {
+	ctx, cancel := context.WithTimeout(ctx, DefaultVendorTimeout)
+	defer cancel()
+
+	imageRef := strings.TrimPrefix(uri, "oci://")
+	if err := oci.ProcessImage(ctx, atmosConfig, imageRef, tempDir); err != nil {
+		return errUtils.Build(errUtils.ErrSourceProvision).
+			WithCause(err).
+			WithExplanation("Failed to download OCI source").
+			WithContext("uri", uri).
+			WithHint("Verify the source URI is accessible and credentials are configured").
+			Err()
+	}
+	return nil
+}
+
+// downloadGoGetterSource fetches a non-OCI source via the go-getter downloader.
+func downloadGoGetterSource(atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
+	downloadOpts := []downloader.GoGetterOption{}
+	if sourceSpec.Retry != nil {
+		downloadOpts = append(downloadOpts, downloader.WithRetryConfig(sourceSpec.Retry))
+	}
+	dl := downloader.NewGoGetterDownloader(atmosConfig, downloadOpts...)
+	if err := dl.Fetch(uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout); err != nil {
+		return errUtils.Build(errUtils.ErrSourceProvision).
+			WithCause(err).
+			WithExplanation("Failed to download source").
+			WithContext("uri", uri).
+			WithHint("Verify the source URI is accessible and credentials are configured").
+			Err()
+	}
 	return nil
 }
 
@@ -395,6 +449,16 @@ func resolveSourceURI(sourceSpec *schema.VendorComponentSource) string {
 	}
 
 	return uri
+}
+
+// resolveLocalSourcePath anchors a relative local-path uri against baseDir when
+// set, otherwise against the process's current working directory (historical
+// behavior, matched by filepath.Abs).
+func resolveLocalSourcePath(uri, baseDir string) (string, error) {
+	if baseDir != "" {
+		return filepath.Join(baseDir, uri), nil
+	}
+	return filepath.Abs(uri)
 }
 
 // copyToTarget copies downloaded source to target directory using the shared vendor copy logic.

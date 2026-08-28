@@ -1,0 +1,69 @@
+---
+title: "!labels.values"
+sidebar_position: 94
+sidebar_label: "!labels.values"
+sidebar_class_name: command
+description: Retrieve the current component's own metadata.labels values as a list, ordered by key
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `!labels.values` YAML function returns the values of the current component's own
+`metadata.labels` as a `[]string`, ordered by key — useful when a module or script wants a flat
+list of label values instead of the full map.
+</Intro>
+
+## Usage
+
+The `!labels.values` function takes no parameters:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          Namespace: eg
+          Environment: prod
+          cost-center: platform
+      vars:
+        label_values: !labels.values
+```
+
+## Arguments
+
+This function takes no arguments. It reads `metadata.labels` from the component it's used on.
+
+## How It Works
+
+`!labels.values` reads the component's `metadata.labels` map and returns its values as a
+`[]string`, ordered by key for deterministic output (Go map iteration order is randomized, so
+sorting by key matters for reproducible plans). If `metadata.labels` is unset, `!labels.values`
+returns an empty list rather than an error.
+
+## Examples
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          Namespace: eg
+          Environment: prod
+          cost-center: platform
+      vars:
+        # label_values will be ["prod", "eg", "platform"] (ordered by sorted key:
+        # Environment, Namespace, cost-center)
+        label_values: !labels.values
+```
+</File>
+
+## Related Functions
+
+- [!labels](/functions/yaml/labels) - Get the current component's own `metadata.labels` as a map
+- [!labels.keys](/functions/yaml/labels.keys) - Get the current component's `metadata.labels` keys
+- [!tags](/functions/yaml/tags) - Get the current component's own `metadata.tags` as a list

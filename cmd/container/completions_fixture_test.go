@@ -38,12 +38,13 @@ func TestComponentArgCompletion_ListsContainerComponents(t *testing.T) {
 	t.Chdir(exampleProjectPath(t))
 	withViperBasePath(t, "")
 
-	// componentArgCompletion honors the --stack flag to scope suggestions; it
-	// resolves the project and runs the describe→filter pipeline (vs. the
-	// graceful-degrade path tested elsewhere), always returning NoFileComp.
+	// componentArgCompletion honors the --stack flag and returns only native
+	// container components from the resolved project.
 	c := &cobra.Command{Use: "ps"}
 	c.Flags().String("stack", "local", "")
 
-	_, directive := componentArgCompletion(c, nil, "")
+	components, directive := componentArgCompletion(c, nil, "")
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.Contains(t, components, "api")
+	assert.Contains(t, components, "worker")
 }

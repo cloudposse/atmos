@@ -9,7 +9,10 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -36,6 +39,16 @@ const (
 //	_ATMOS_TEST_EXIT_ONE=1           — if set, exit 1 immediately after the optional
 //	                                   counter-file write (for workspace recovery tests).
 func TestMain(m *testing.M) {
+	// Initialize the I/O writer and ui formatter so data.Write*/ui.Write* calls
+	// (used throughout internal/exec and its pkg/ci dependency, e.g. CI log
+	// groups) don't panic or silently no-op — including in the
+	// runLogGroupPipelineForTest subprocess re-exec path below, which is its
+	// own process invocation with no other test's init to inherit.
+	if ioCtx, err := iolib.NewContext(); err == nil {
+		data.InitWriter(ioCtx)
+		ui.InitFormatter(ioCtx)
+	}
+
 	if os.Getenv(testEnvFakeTerraform) == "1" {
 		os.Exit(runFakeTerraformForTest())
 	}

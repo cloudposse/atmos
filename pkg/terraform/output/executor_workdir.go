@@ -11,6 +11,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -71,7 +72,7 @@ func (d *defaultWorkdirProvisioner) Provision(
 	// during !terraform.output evaluation. TTL caching limits this to the first
 	// call per TTL window, but callers should be aware that output reads may
 	// require source credentials and network access when the workdir is cold.
-	if err := provSource.AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, componentConfig, authContext); err != nil {
+	if err := provSource.AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, componentConfig, authContext, provisioner.OutputWriters{}); err != nil {
 		return err
 	}
 
@@ -79,7 +80,7 @@ func (d *defaultWorkdirProvisioner) Provision(
 	// to the workdir. For source-provisioned components where AutoProvisionSource
 	// already set WorkdirPathKey, ProvisionWorkdir detects the key and returns
 	// immediately without duplicating the copy.
-	return provWorkdir.ProvisionWorkdir(ctx, atmosConfig, componentConfig, authContext)
+	return provWorkdir.ProvisionWorkdir(ctx, atmosConfig, componentConfig, authContext, provisioner.OutputWriters{})
 }
 
 // ensureWorkdirProvisioned provisions a JIT working directory if the component
@@ -139,6 +140,9 @@ func (e *Executor) ensureWorkdirProvisioned(
 		// Each waiter can still exit early via its own ctx.Done() branch in the select below;
 		// this only insulates the shared provisioning run from the leader's deadline.
 		provCtx := context.WithoutCancel(ctx)
+		if spinnersSuppressed() {
+			provCtx = provWorkdir.WithOutputSuppressed(provCtx)
+		}
 		if err := e.workdirProvisioner.Provision(provCtx, atmosConfig, sections, authContext); err != nil {
 			// Provision failed: remove the key so the next caller can retry.
 			workdirProvisionCache.Delete(cacheKey)
@@ -160,9 +164,11 @@ func (e *Executor) ensureWorkdirProvisioned(
 		// read freshlyProvisioned from the cache and set InitRunReconfigure correctly.
 		workdirProvisionCache.Store(cacheKey, freshlyProvisioned)
 
-		ui.ClearLine()
-		ui.Info(fmt.Sprintf("Auto-provisioned JIT workdir for component '%s' in stack '%s'", component, stack))
-		ui.Hint("Tip: use `!terraform.state` instead of `!terraform.output` to read outputs without terraform init")
+		writeVisibleOutput(func() {
+			ui.ClearLine()
+			ui.Info(fmt.Sprintf("Auto-provisioned JIT workdir for component '%s' in stack '%s'", component, stack))
+			ui.Hint("Tip: use `!terraform.state` instead of `!terraform.output` to read outputs without terraform init")
+		})
 
 		return freshlyProvisioned, nil
 	})

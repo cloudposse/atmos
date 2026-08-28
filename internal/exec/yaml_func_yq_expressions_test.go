@@ -62,13 +62,13 @@ func TestYQExpressionPatterns(t *testing.T) {
 		},
 		{
 			name:       "yq pipe expression",
-			expression: `!terraform.output component ".value | \"prefix\" + . + \"suffix\""`,
+			expression: `!terraform.output component .value | "prefix" + . + "suffix"`,
 			desc:       "YQ pipe operator for string manipulation",
 			valid:      true,
 		},
 		{
 			name:       "yq default value",
-			expression: `!terraform.output component ".missing // \"default\""`,
+			expression: `!terraform.output component .missing // "default"`,
 			desc:       "YQ default value operator",
 			valid:      true,
 		},

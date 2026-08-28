@@ -52,13 +52,14 @@ var noAllFlagVerbs = map[string]bool{
 	"run": true, "exec": true, "attach": true, "ps": true,
 }
 
-func TestContainerSingleComponentVerbsRequireComponent(t *testing.T) {
+func TestContainerSingleComponentVerbsDeferMissingComponentToPrompt(t *testing.T) {
 	for _, c := range containerCmd.Commands() {
 		if c.Args == nil || !requireComponentVerbs[c.Name()] {
 			continue
 		}
-		require.Error(t, c.Args(c, []string{}), "subcommand %q should require a component", c.Name())
+		require.NoError(t, c.Args(c, []string{}), "subcommand %q should defer a missing component to the prompt flow", c.Name())
 		require.NoError(t, c.Args(c, []string{"api"}), "subcommand %q should accept one component", c.Name())
+		require.Error(t, c.Args(c, []string{"api", "extra"}), "subcommand %q should reject extra positional arguments", c.Name())
 	}
 }
 

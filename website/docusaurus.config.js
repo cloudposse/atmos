@@ -88,6 +88,7 @@ const config = {
                     // Redirects for integrations pages moved to cli/configuration
                     {from: '/integrations/atlantis', to: '/cli/configuration/integrations/atlantis'},
                     {from: '/integrations/integrations', to: '/cli/configuration/integrations'},
+                    {from: '/cli/configuration/integrations/spacelift', to: '/deprecated/spacelift'},
                     // Legacy GitHub Actions redirected to native CI (deprecated)
                     {from: '/integrations/github-actions', to: '/ci'},
                     {from: '/integrations/github-actions/affected-stacks', to: '/ci'},
@@ -95,6 +96,8 @@ const config = {
                     {from: '/integrations/github-actions/atmos-terraform-apply', to: '/ci'},
                     {from: '/integrations/github-actions/atmos-terraform-drift-detection', to: '/ci'},
                     {from: '/integrations/github-actions/atmos-terraform-drift-remediation', to: '/ci'},
+                    // Vendored dependency management moved out of GitHub Actions integrations.
+                    {from: '/integrations/github-actions/component-updater', to: '/cli/commands/vendor/vendor-update'},
                     {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'
@@ -343,6 +346,10 @@ const config = {
                     {from: '/cli/commands/auth', to: '/cli/commands/auth/usage'},
                     {from: '/cli/commands/ai', to: '/cli/commands/ai/usage'},
                     {from: '/cli/commands/toolchain', to: '/cli/commands/toolchain/usage'},
+                    {from: '/cli/commands/scaffold', to: '/cli/commands/scaffold/usage'},
+                    // Agent Skills docs consolidated onto the CLI command reference
+                    {from: '/ai/agent-skills', to: '/cli/commands/ai/skill'},
+                    {from: '/ai/skill-marketplace', to: '/cli/commands/ai/skill'},
                     // Terraform source command reorganization
                     {from: '/cli/commands/terraform/terraform-source', to: '/cli/commands/terraform/source'},
                     {from: '/cli/commands/terraform/terraform-source-pull', to: '/cli/commands/terraform/source/pull'},
@@ -494,6 +501,40 @@ const config = {
                 // Gist chapters, in display order (gist README front matter `tags:` assigns each gist).
                 tagOrder: ['AWS', 'AI', 'CI/CD', 'Secrets', 'Hooks'],
                 disclaimer: 'Gists are examples that demonstrate a concept, but are not actively maintained and may not work in your environment or current versions of Atmos without adaptations.',
+            },
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'file-browser'),
+            {
+                id: 'skills',
+                sourceDir: '../agent-skills/skills',
+                routeBasePath: '/ai/skills',
+                title: 'Agent Skills',
+                description: 'Browse every Atmos agent skill — domain-specific knowledge that gives AI coding assistants deep, accurate understanding of Atmos conventions.',
+                githubRepo: 'cloudposse/atmos',
+                githubBranch: 'main',
+                githubPath: 'agent-skills/skills',
+                // Skill chapters, in display order (from each SKILL.md's metadata.category).
+                tagOrder: [
+                    'Core Configuration & Architecture',
+                    'Orchestration Engines',
+                    'Auth, Secrets & Compliance',
+                    'AWS Integrations',
+                    'CI/CD & Automation',
+                    'State, Versioning & Provenance',
+                    'Developer Tooling',
+                    'Templates & Data',
+                    'AI & MCP',
+                    'Scaffolding & Init',
+                ],
+                searchable: true,
+                cardIcon: 'graduation-cap',
+                cardCtaLabel: 'Learn',
+                enableCopyMarkdown: true,
+                enablePerPageMarkdown: true,
+                titleAsCode: true,
+                installCommandLabel: 'Use this skill',
+                installCommandTemplate: 'atmos ai skill install {name}',
             },
         ],
     ],

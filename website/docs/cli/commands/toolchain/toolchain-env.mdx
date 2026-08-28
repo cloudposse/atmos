@@ -13,6 +13,8 @@ import Intro from '@site/src/components/Intro'
 Export the PATH environment variable for your toolchain tools in shell-specific formats. This command makes it easy to integrate toolchain paths into different shell environments (Bash, Fish, PowerShell) and configuration files (.env, JSON).
 </Intro>
 
+When [toolchain proxies](/cli/configuration/toolchain/proxies) are configured, this command also creates their command links and exports the private context needed to resolve them after changing directories.
+
 <CastPlayer title="atmos toolchain env --help" src="/casts/screengrabs/atmos-toolchain-env--help.cast" static chrome />
 
 ## Usage
@@ -38,6 +40,8 @@ Source it directly in your shell:
 ```shell
 eval "$(atmos toolchain env)"
 ```
+
+This also activates configured proxies, so a proxy such as `ls` can be used directly in the shell.
 
 ### Fish Shell
 

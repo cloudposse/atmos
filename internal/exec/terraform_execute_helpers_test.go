@@ -1,20 +1,25 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/degradation"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -421,7 +426,7 @@ func TestPrepareInitExecution_SkipsCleanWorkspaceForWorkdir(t *testing.T) {
 		},
 	}
 
-	_, err := prepareInitExecution(&atmosConfig, &info, tmpDir)
+	_, err := prepareInitExecution(t.Context(), provisioner.OutputWriters{}, &atmosConfig, &info, tmpDir)
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(envFile)
@@ -442,11 +447,46 @@ func TestPrepareInitExecution_CleansWorkspaceForNonWorkdir(t *testing.T) {
 		ComponentSection: map[string]any{}, // no WorkdirPathKey
 	}
 
-	_, err := prepareInitExecution(&atmosConfig, &info, tmpDir)
+	_, err := prepareInitExecution(t.Context(), provisioner.OutputWriters{}, &atmosConfig, &info, tmpDir)
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(envFile)
 	assert.True(t, os.IsNotExist(statErr), ".terraform/environment must be deleted for non-workdir components")
+}
+
+func TestPrepareInitExecutionPropagatesOutputSuppression(t *testing.T) {
+	originalExecuteProvisioners := executeBeforeInitProvisioners
+	t.Cleanup(func() { executeBeforeInitProvisioners = originalExecuteProvisioners })
+	var observedSuppression atomic.Bool
+	executeBeforeInitProvisioners = func(ctx context.Context, _ provisioner.HookEvent, _ *schema.AtmosConfiguration, _ map[string]any, _ *schema.AuthContext, _ provisioner.OutputWriters, _ ...*provisioner.TerraformExecContext) error {
+		observedSuppression.Store(provWorkdir.OutputSuppressed(ctx))
+		return nil
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}
+
+	_, err := prepareInitExecution(provWorkdir.WithOutputSuppressed(t.Context()), provisioner.OutputWriters{}, &atmosConfig, &info, t.TempDir())
+	require.NoError(t, err)
+	require.True(t, observedSuppression.Load())
+}
+
+func TestResolveAndProvisionComponentPathPropagatesOutputSuppression(t *testing.T) {
+	originalProvisioner := provisionAndResolveTerraformComponentPath
+	t.Cleanup(func() { provisionAndResolveTerraformComponentPath = originalProvisioner })
+
+	var observedSuppression atomic.Bool
+	provisionAndResolveTerraformComponentPath = func(ctx context.Context, _ provisioner.OutputWriters, _ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _ string, componentPath string) (string, bool, error) {
+		observedSuppression.Store(provWorkdir.OutputSuppressed(ctx))
+		return componentPath, true, nil
+	}
+
+	atmosConfig := schema.AtmosConfiguration{BasePath: t.TempDir()}
+	info := schema.ConfigAndStacksInfo{FinalComponent: "component"}
+
+	_, err := resolveAndProvisionComponentPath(provWorkdir.WithOutputSuppressed(t.Context()), provisioner.OutputWriters{}, &atmosConfig, &info)
+	require.NoError(t, err)
+	require.True(t, observedSuppression.Load())
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -673,6 +713,72 @@ func TestTerraformSecretVars_NoSecrets(t *testing.T) {
 	env, err := secretVarEnv(info)
 	require.NoError(t, err)
 	assert.Empty(t, env, "no TF_VAR_ entries expected when no secrets present")
+}
+
+func TestTerraformSensitiveDeclaredVars_NeverHitDisk(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+	require.NoError(t, atmosio.Initialize())
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{
+			"sensitive_value": "ordinary-resolved-value",
+			"region":          "us-east-1-sensitive-declaration",
+		},
+		ComponentSection: map[string]any{
+			componentInfoKey: map[string]any{
+				terraformConfigKey: &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
+					"sensitive_value": {Name: "sensitive_value", Sensitive: true},
+					"not_supplied":    {Name: "not_supplied", Sensitive: true},
+					"region":          {Name: "region", Sensitive: false},
+				}},
+			},
+		},
+	}
+
+	computeTerraformSecretVarKeys(info)
+	require.True(t, info.TerraformSecretVarKeys["sensitive_value"])
+	assert.False(t, info.TerraformSecretVarKeys["region"])
+	assert.NotContains(t, diskSafeVars(info), "sensitive_value")
+	assert.Equal(t, "us-east-1-sensitive-declaration", diskSafeVars(info)["region"])
+	assert.NotContains(t, varfileVarsToWrite(info, true, "test.tfvars.json"), "sensitive_value")
+	assert.Equal(t, "us-east-1-sensitive-declaration", varfileVarsToWrite(info, true, "test.tfvars.json")["region"])
+
+	env, err := secretVarEnv(info)
+	require.NoError(t, err)
+	assert.Contains(t, strings.Join(env, "\n"), "TF_VAR_sensitive_value=ordinary-resolved-value")
+}
+
+func TestTerraformSensitiveDeclaredVars_MaskingDisabledPreservesJSONCompatibility(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+	require.NoError(t, atmosio.Initialize())
+	atmosio.GetContext().Masker().SetEnabled(false)
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{"sensitive_value": map[string]any{"id": "typed-value"}},
+		ComponentSection: map[string]any{
+			componentInfoKey: map[string]any{
+				terraformConfigKey: &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
+					"sensitive_value": {Name: "sensitive_value", Sensitive: true},
+				}},
+			},
+		},
+	}
+
+	computeTerraformSecretVarKeys(info)
+	assert.Nil(t, info.TerraformSecretVarKeys)
+	assert.Equal(t, info.ComponentVarsSection, diskSafeVars(info))
+}
+
+func TestRejectComputedTerraformVars(t *testing.T) {
+	assert.NoError(t, rejectComputedTerraformVars(map[string]any{"region": "us-east-1"}))
+	err := rejectComputedTerraformVars(map[string]any{"value": degradation.AtmosComputedValue{}})
+	assert.ErrorIs(t, err, errUtils.ErrUnresolvedComputedTerraformVar)
+	err = rejectComputedTerraformVars(map[string]any{
+		"nested": []any{map[string]any{"value": degradation.AtmosComputedValue{}}},
+	})
+	assert.ErrorIs(t, err, errUtils.ErrUnresolvedComputedTerraformVar)
 }
 
 func TestHandleDeploySubcommand(t *testing.T) {

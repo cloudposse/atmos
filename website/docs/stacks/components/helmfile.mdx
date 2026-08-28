@@ -64,10 +64,10 @@ components:
         service_type: LoadBalancer
       env:
         KUBECONFIG: '{{ env "HOME" }}/.kube/config'
-      settings:
-        depends_on:
-          - component: eks
-            type: terraform
+      dependencies:
+        components:
+          - name: eks
+            kind: terraform
 ```
 
 ## Helmfile Directory Structure
@@ -184,9 +184,9 @@ components:
         replica_count: 3
         service_type: LoadBalancer
         metrics_enabled: true
-      settings:
-        depends_on:
-          - component: cert-manager
+      dependencies:
+        components:
+          - name: cert-manager
 
     prometheus:
       metadata:
@@ -197,9 +197,9 @@ components:
         chart_version: "45.0.0"
         retention: "15d"
         storage_size: "100Gi"
-      settings:
-        depends_on:
-          - component: nginx-ingress
+      dependencies:
+        components:
+          - name: nginx-ingress
 
 ```
 </File>
@@ -320,10 +320,10 @@ components:
         cluster_name: "{{ .terraform_outputs.eks.cluster_name }}"
       env:
         KUBECONFIG: "{{ .terraform_outputs.eks.kubeconfig_path }}"
-      settings:
-        depends_on:
-          - component: eks
-            type: terraform
+      dependencies:
+        components:
+          - name: eks
+            kind: terraform
 ```
 
 ## Values Handling
@@ -360,7 +360,7 @@ releases:
 
 ## Best Practices
 
-1. **Use Dependencies:** Define `depends_on` to ensure Helmfile components deploy after their infrastructure dependencies.
+1. **Use Dependencies:** Define `dependencies.components` to ensure Helmfile components deploy after their infrastructure dependencies.
 
 2. **Centralize Chart Versions:** Define chart versions in catalog defaults and override only when necessary.
 
@@ -380,4 +380,4 @@ releases:
 - [Configure Environment](/stacks/env)
 - [Passing Secrets](/cli/configuration/secrets)
 - [`!secret` function](/functions/yaml/secret)
-- [depends_on](/stacks/settings/depends_on)
+- [Component Dependencies](/stacks/dependencies/components)

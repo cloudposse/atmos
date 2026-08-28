@@ -32,23 +32,6 @@ func buildToolchainOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.St
 	return []mcpclient.StartOption{mcpclient.WithToolchain(tenv)}
 }
 
-// buildToolchainPATH returns the toolchain-augmented PATH string for the
-// configured atmos toolchain, or "" when no toolchain dependencies are
-// resolved. Used by `atmos mcp export` so the exported .mcp.json carries the
-// toolchain PATH into the IDE-spawned subprocess (otherwise IDEs can't find
-// `uvx` / `npx` when those are only on the Atmos toolchain PATH).
-//
-// This mirrors buildToolchainOption's resolution chain (`.tool-versions`
-// first, then a terraform-component fallback) so the two `mcp` paths agree
-// on what "the toolchain" means for a given project.
-func buildToolchainPATH(atmosConfig *schema.AtmosConfiguration) string {
-	tenv := resolveToolchainEnvironment(atmosConfig)
-	if tenv == nil {
-		return ""
-	}
-	return tenv.PATH()
-}
-
 // resolveToolchainEnvironment loads the Atmos toolchain environment for the
 // current project, trying `.tool-versions` first and falling back to a
 // terraform-component resolution. Returns nil when no toolchain is

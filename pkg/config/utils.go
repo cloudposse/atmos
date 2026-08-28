@@ -15,10 +15,57 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
+	_ "github.com/cloudposse/atmos/pkg/store/providers" // Register the built-in store backends.
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
+
+// resolveStackGlobMatches expands p into its candidate glob patterns (template-aware, via
+// getStackFilePatterns when p has no extension), resolves matches for each, and distinguishes a
+// genuine glob error (invalid pattern syntax, permission denied) from a valid-but-empty pattern,
+// which must not abort discovery of the other includeStackPaths entries (cloudposse/atmos#2867).
+// Returns (nil, nil) when the pattern is valid but matched nothing -- callers must treat that as
+// "continue to the next included_paths entry", not an error. Shared by
+// FindAllStackConfigsInPathsForStack and FindAllStackConfigsInPaths, which were previously
+// duplicating this exact pattern-expansion/error-construction logic.
+func resolveStackGlobMatches(atmosConfig *schema.AtmosConfiguration, p string) ([]string, error) {
+	patterns := []string{p}
+
+	ext := filepath.Ext(p)
+	if ext == "" {
+		// Get all patterns since filtering is done later.
+		patterns = getStackFilePatterns(p, true)
+	}
+
+	var allMatches []string
+	for _, pattern := range patterns {
+		matches, err := u.GetGlobMatches(pattern)
+		if err != nil {
+			// GetGlobMatches always errors (wrapping ErrFailedToFindImport) when a pattern
+			// matches nothing -- e.g. a stacks.included_paths entry whose directory doesn't
+			// exist yet. That's expected and must not abort discovery for the other entries in
+			// includeStackPaths (cloudposse/atmos#2867: a second, currently-empty
+			// included_paths entry was hard-failing the whole lookup, even though an earlier
+			// entry already matched real stack manifests). Any other error (invalid pattern
+			// syntax, permission denied, etc.) is genuine and must be preserved -- checking
+			// every pattern's own error here, instead of only retrying patterns[0] after the
+			// loop, so a real error from a LATER pattern is never silently discarded.
+			if errors.Is(err, errUtils.ErrFailedToFindImport) {
+				continue
+			}
+			return nil, errUtils.Build(err).
+				WithHintf("Verify `stacks.base_path` in `atmos.yaml` points to the correct directory").
+				WithHint("Check that the stacks directory exists and contains stack configuration files").
+				WithContext("pattern", pattern).
+				WithContext("stacks_base_path", atmosConfig.StacksBaseAbsolutePath).
+				Err()
+		}
+		allMatches = append(allMatches, matches...)
+	}
+
+	return allMatches, nil
+}
 
 // FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack.
 func FindAllStackConfigsInPathsForStack(
@@ -32,39 +79,11 @@ func FindAllStackConfigsInPathsForStack(
 	stackIsDir := strings.IndexAny(stack, "/") > 0
 
 	for _, p := range includeStackPaths {
-		// Try both regular and template patterns
-		patterns := []string{p}
-
-		ext := filepath.Ext(p)
-		if ext == "" {
-			// Get all patterns since filtering is done later
-			patterns = getStackFilePatterns(p, true)
+		allMatches, err := resolveStackGlobMatches(&atmosConfig, p)
+		if err != nil {
+			return nil, nil, false, err
 		}
-
-		var allMatches []string
-		for _, pattern := range patterns {
-			// Find all matches in the glob
-			matches, err := u.GetGlobMatches(pattern)
-			if err == nil && len(matches) > 0 {
-				allMatches = append(allMatches, matches...)
-			}
-		}
-
-		// If no matches were found across all patterns, we perform an additional check:
-		// We try to get matches for the first pattern only to determine if there's a genuine error
-		// (like permission issues or invalid path) versus simply no matching files.
 		if len(allMatches) == 0 {
-			_, err := u.GetGlobMatches(patterns[0])
-			if err != nil {
-				return nil, nil, false, errUtils.Build(err).
-					WithHintf("Verify `stacks.base_path` in `atmos.yaml` points to the correct directory").
-					WithHint("Check that the stacks directory exists and contains stack configuration files").
-					WithContext("pattern", patterns[0]).
-					WithContext("stacks_base_path", atmosConfig.StacksBaseAbsolutePath).
-					Err()
-			}
-			// If there's no error but still no matches, we continue to the next path
-			// This happens when the pattern is valid but no files match it
 			continue
 		}
 
@@ -113,7 +132,10 @@ func FindAllStackConfigsInPathsForStack(
 	}
 
 	if len(absolutePaths) == 0 {
-		return nil, nil, false, fmt.Errorf("%w for the provided stack '%s' in the paths %v", errUtils.ErrNoStackManifestsFound, stack, includeStackPaths)
+		// The paths are backtick-wrapped so the markdown error renderer treats them as a literal
+		// code span instead of parsing the "**" glob wildcard (a common included_paths pattern) as
+		// emphasis, which otherwise corrupts the rendered path list.
+		return nil, nil, false, fmt.Errorf("%w for the provided stack '%s' in the paths `%v`", errUtils.ErrNoStackManifestsFound, stack, includeStackPaths)
 	}
 
 	return absolutePaths, relativePaths, false, nil
@@ -131,38 +153,11 @@ func FindAllStackConfigsInPaths(
 	var relativePaths []string
 
 	for _, p := range includeStackPaths {
-		patterns := []string{p}
-
-		ext := filepath.Ext(p)
-		if ext == "" {
-			// Get all patterns since filtering is done later
-			patterns = getStackFilePatterns(p, true)
+		allMatches, err := resolveStackGlobMatches(atmosConfig, p)
+		if err != nil {
+			return nil, nil, err
 		}
-
-		var allMatches []string
-		for _, pattern := range patterns {
-			// Find all matches in the glob
-			matches, err := u.GetGlobMatches(pattern)
-			if err == nil && len(matches) > 0 {
-				allMatches = append(allMatches, matches...)
-			}
-		}
-
-		// If no matches were found across all patterns, we perform an additional check:
-		// We try to get matches for the first pattern only to determine if there's a genuine error
-		// (like permission issues or invalid path) versus simply no matching files.
 		if len(allMatches) == 0 {
-			_, err := u.GetGlobMatches(patterns[0])
-			if err != nil {
-				return nil, nil, errUtils.Build(err).
-					WithHintf("Verify `stacks.base_path` in `atmos.yaml` points to the correct directory").
-					WithHint("Check that the stacks directory exists and contains stack configuration files").
-					WithContext("pattern", patterns[0]).
-					WithContext("stacks_base_path", atmosConfig.StacksBaseAbsolutePath).
-					Err()
-			}
-			// If there's no error but still no matches, we continue to the next path
-			// This happens when the pattern is valid but no files match it
 			continue
 		}
 
@@ -187,6 +182,12 @@ func FindAllStackConfigsInPaths(
 				relativePaths = append(relativePaths, matchedFileRelativePath)
 			}
 		}
+	}
+
+	if len(absolutePaths) == 0 {
+		// Backtick-wrapped for the same reason as the ForStack variant above: avoid the markdown
+		// renderer misinterpreting "**" glob wildcards in the path list as emphasis.
+		return nil, nil, fmt.Errorf("%w in the paths `%v`", errUtils.ErrNoStackManifestsFound, includeStackPaths)
 	}
 
 	return absolutePaths, relativePaths, nil
@@ -840,8 +841,7 @@ func GetContextFromVars(vars map[string]any) schema.Context {
 // GetContextPrefix calculates context prefix from the context.
 func GetContextPrefix(stack string, context schema.Context, stackNamePattern string, stackFile string) (string, error) {
 	if len(stackNamePattern) == 0 {
-		return "",
-			errors.New("stack name pattern must be provided in 'stacks.name_pattern' config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
+		return "", errUtils.ErrMissingStackNameTemplateAndPattern
 	}
 
 	contextPrefix := ""
@@ -921,8 +921,7 @@ func GetStackNameFromContextAndStackNamePattern(
 	stackNamePattern string,
 ) (string, error) {
 	if len(stackNamePattern) == 0 {
-		return "",
-			fmt.Errorf("stack name pattern must be provided")
+		return "", errUtils.ErrMissingStackNameTemplateAndPattern
 	}
 
 	var stack string

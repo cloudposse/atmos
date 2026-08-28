@@ -1,14 +1,18 @@
 package exec
 
 import (
+	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -17,7 +21,7 @@ import (
 func TestCreateQueryAuthManager(t *testing.T) {
 	tests := []struct {
 		name             string
-		factory          func(string, schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error)
+		setupMock        func(ctrl *gomock.Controller, m *MockAuthManagerQueryFactory)
 		expectErr        bool
 		expectSentinel   error
 		expectNilMgr     bool
@@ -26,16 +30,16 @@ func TestCreateQueryAuthManager(t *testing.T) {
 	}{
 		{
 			name: "no auth configured returns nil manager",
-			factory: func(string, schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error) {
-				return nil, nil
+			setupMock: func(_ *gomock.Controller, m *MockAuthManagerQueryFactory) {
+				m.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
 			},
 			expectNilMgr:     true,
 			expectInfoStored: false,
 		},
 		{
 			name: "nonexistent identity returns wrapped error",
-			factory: func(string, schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error) {
-				return nil, errUtils.ErrAuthNotConfigured
+			setupMock: func(_ *gomock.Controller, m *MockAuthManagerQueryFactory) {
+				m.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errUtils.ErrAuthNotConfigured)
 			},
 			expectErr:        true,
 			expectSentinel:   errUtils.ErrAuthNotConfigured,
@@ -44,17 +48,16 @@ func TestCreateQueryAuthManager(t *testing.T) {
 		},
 		{
 			name: "non-nil manager is stored in info",
-			factory: func(string, schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error) {
-				ctrl := gomock.NewController(t)
-				return types.NewMockAuthManager(ctrl), nil
+			setupMock: func(ctrl *gomock.Controller, m *MockAuthManagerQueryFactory) {
+				m.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(types.NewMockAuthManager(ctrl), nil)
 			},
 			expectNilMgr:     false,
 			expectInfoStored: true,
 		},
 		{
 			name: "ErrUserAborted calls Exit with SIGINT code",
-			factory: func(string, schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error) {
-				return nil, errUtils.ErrUserAborted
+			setupMock: func(_ *gomock.Controller, m *MockAuthManagerQueryFactory) {
+				m.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errUtils.ErrUserAborted)
 			},
 			expectExit: true,
 		},
@@ -63,8 +66,11 @@ func TestCreateQueryAuthManager(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Inject test factory.
+			ctrl := gomock.NewController(t)
+			mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+			tt.setupMock(ctrl, mockFactory)
 			original := authManagerFactory
-			authManagerFactory = tt.factory
+			authManagerFactory = mockFactory
 			defer func() { authManagerFactory = original }()
 
 			// Mock os.Exit to capture exit calls.
@@ -451,4 +457,43 @@ func TestMultipleYamlFunctionsAuthPropagation(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Equal(t, "state-bucket", result["bucket"])
 	assert.Equal(t, "output-region", result["region"])
+}
+
+// TestExecuteTerraformQueryComponent covers executeTerraformQueryComponent
+// directly — it has no test at all today (only ExecuteTerraformQuery /
+// ExecuteTerraformQueryWithContext, which call it indirectly through the
+// scheduler, are exercised elsewhere). A nonexistent component/stack makes
+// the underlying ExecuteTerraform fail fast during stack processing, without
+// needing a real terraform/tofu binary, so both CaptureOutput branches can be
+// asserted directly.
+func TestExecuteTerraformQueryComponent(t *testing.T) {
+	t.Chdir(filepath.Join("..", "..", "examples", "demo-stacks"))
+
+	tests := []struct {
+		name          string
+		captureOutput bool
+	}{
+		{name: "without output capture", captureOutput: false},
+		{name: "with output capture", captureOutput: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			execution := scheduleradapters.TerraformExecution{
+				Context: context.Background(),
+				Info: schema.ConfigAndStacksInfo{
+					ComponentFromArg: "nonexistent",
+					Stack:            "nonexistent",
+					SubCommand:       "plan",
+				},
+				CaptureOutput: tc.captureOutput,
+			}
+
+			result, err := executeTerraformQueryComponent(execution)
+
+			require.Error(t, err, "a nonexistent component/stack must fail during stack processing")
+			assert.Empty(t, result.Stdout, "no shell command ever runs, so nothing is captured")
+			assert.Empty(t, result.Stderr)
+		})
+	}
 }

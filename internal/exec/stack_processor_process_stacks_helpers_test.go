@@ -772,7 +772,7 @@ func TestSupportsComponentTypeHelpers(t *testing.T) {
 		{cfg.TerraformComponentType, true, true, true},
 		{cfg.KubernetesComponentType, true, true, true},
 		{cfg.HelmComponentType, true, true, true},
-		{cfg.HelmfileComponentType, false, false, true},
+		{cfg.HelmfileComponentType, true, false, true},
 		{cfg.PackerComponentType, false, false, true},
 		{"unknown-type", false, false, false},
 	}

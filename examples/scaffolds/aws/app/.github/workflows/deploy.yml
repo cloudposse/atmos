@@ -1,0 +1,41 @@
+# atmos:template
+name: Deploy [[ .Config.project_name ]]
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Stage to deploy
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    env:
+      ATMOS_CI: "true"
+      ATMOS_CI_PROVIDER: github-actions
+      ATMOS_INIT_INTERACTIVE: "false"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+      - name: Install Atmos
+        run: |
+          curl -sSL https://github.com/cloudposse/atmos/releases/latest/download/atmos_linux_amd64 -o /usr/local/bin/atmos
+          chmod +x /usr/local/bin/atmos
+      - name: Validate
+        run: atmos validate stacks
+      - name: Deploy
+        run: atmos terraform deploy app -s "${{ github.event.inputs.stage || 'dev' }}"

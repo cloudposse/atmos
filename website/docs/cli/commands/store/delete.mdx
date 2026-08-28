@@ -1,0 +1,85 @@
+---
+title: atmos store delete
+sidebar_label: delete
+sidebar_class_name: command
+id: delete
+description: Remove a value from a store, with a confirmation prompt.
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Remove a value from a configured store backend. Atmos asks you to confirm before it deletes the value. To skip this prompt, pass `--force`. If the backend does not support deletion, this command returns an error. Examples of backends that do not support deletion are Redis and Artifactory. You can also run this command with the `rm` or `unset` alias.
+</Intro>
+
+<CastPlayer title="atmos store delete --help" src="/casts/screengrabs/atmos-store-delete--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos store delete STORE KEY [flags]
+```
+
+## Examples
+
+```shell
+# Delete a value, prompting for confirmation
+atmos store delete app-metadata image_tag --stack=prod --component=ecs-service
+
+# Delete without a confirmation prompt
+atmos store delete app-metadata image_tag --stack=prod --component=ecs-service --force
+
+# Use the `rm` alias
+atmos store rm app-metadata image_tag --stack=prod --component=ecs-service
+
+# Use the `unset` alias
+atmos store unset app-metadata image_tag --stack=prod --component=ecs-service
+```
+
+## Arguments
+
+<dl>
+  <dt>`STORE`</dt>
+  <dd>
+    The name of the configured store backend to delete from.
+  </dd>
+
+  <dt>`KEY`</dt>
+  <dd>
+    The key to remove.
+  </dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` <em>(alias `-s`)</em></dt>
+  <dd>
+    The Atmos stack used to scope the key when set. This flag is optional. It must match the value used with `set`.
+
+    **Environment variable:** `ATMOS_STACK`
+  </dd>
+
+  <dt>`--component` <em>(alias `-c`)</em></dt>
+  <dd>
+    The Atmos component used to scope the key when set. This flag is optional. It must match the value used with `set`.
+
+    **Environment variable:** `ATMOS_COMPONENT`
+  </dd>
+
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    The identity Atmos uses to access the store backend.
+
+    **Environment variable:** `ATMOS_IDENTITY`
+  </dd>
+
+  <dt>`--force` <em>(alias `-f`)</em></dt>
+  <dd>
+    Delete the value. Do not ask for confirmation.
+  </dd>
+</dl>
+
+## See Also
+
+- [atmos store](/cli/commands/store/usage) — Overview of the store command group

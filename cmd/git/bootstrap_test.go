@@ -1,0 +1,250 @@
+package git
+
+import (
+	"os"
+	"testing"
+
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	// The GitHub CI provider is already blank-imported by clone.go, registering
+	// it for ci.Detect() package-wide.
+)
+
+// newBootstrapTestCommand builds a lightweight "git clone" command tree
+// (mirroring the real gitCmd/cloneCmd parent/name relationship) with the same
+// --ci/--all bool flags the real clone command registers, then parses rawArgs
+// through it exactly as Cobra would before invoking PersistentPreRun/RunE.
+// Returns the clone leaf and the resulting positional args.
+func newBootstrapTestCommand(t *testing.T, rawArgs []string) (*cobra.Command, []string) {
+	t.Helper()
+
+	root := &cobra.Command{Use: "atmos"}
+	git := &cobra.Command{Use: gitCmd.Name()}
+	clone := &cobra.Command{Use: cloneCmd.Name()}
+	clone.Flags().Bool(flagCI, false, "")
+	clone.Flags().Bool(flagAll, false, "")
+	root.AddCommand(git)
+	git.AddCommand(clone)
+
+	require.NoError(t, clone.ParseFlags(rawArgs))
+	return clone, clone.Flags().Args()
+}
+
+func withCleanATMOSCIEnv(t *testing.T, value string) {
+	t.Helper()
+	if value == "" {
+		original, wasSet := os.LookupEnv("ATMOS_CI")
+		os.Unsetenv("ATMOS_CI")
+		t.Cleanup(func() {
+			if wasSet {
+				_ = os.Setenv("ATMOS_CI", original)
+				return
+			}
+			os.Unsetenv("ATMOS_CI")
+		})
+		return
+	}
+	t.Setenv("ATMOS_CI", value)
+}
+
+func TestCICloneBootstrapRequested(t *testing.T) {
+	tests := []struct {
+		name        string
+		rawArgs     []string
+		ciDetected  bool
+		atmosCIEnv  string
+		wantRequest bool
+	}{
+		{
+			name:        "no CI provider detected",
+			rawArgs:     nil,
+			ciDetected:  false,
+			wantRequest: false,
+		},
+		{
+			name:        "CI detected, no args, auto mode",
+			rawArgs:     nil,
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			name:        "explicit --ci=false opts out",
+			rawArgs:     []string{"--ci=false"},
+			ciDetected:  true,
+			wantRequest: false,
+		},
+		{
+			name:        "ATMOS_CI=false opts out",
+			rawArgs:     nil,
+			ciDetected:  true,
+			atmosCIEnv:  "false",
+			wantRequest: false,
+		},
+		{
+			name:        "ATMOS_CI uppercase TRUE is accepted (no drift vs pflag ParseBool)",
+			rawArgs:     nil,
+			ciDetected:  true,
+			atmosCIEnv:  "TRUE",
+			wantRequest: true,
+		},
+		{
+			name:        "positional argument disqualifies bootstrap",
+			rawArgs:     []string{"my-repo"},
+			ciDetected:  true,
+			wantRequest: false,
+		},
+		{
+			name:        "native args after -- disqualify bootstrap",
+			rawArgs:     []string{"--", "--no-tags"},
+			ciDetected:  true,
+			wantRequest: false,
+		},
+		{
+			name:        "--all disqualifies bootstrap",
+			rawArgs:     []string{"--all"},
+			ciDetected:  true,
+			wantRequest: false,
+		},
+		{
+			name:        "invalid ATMOS_CI value defers to auto (RunE reports the real error)",
+			rawArgs:     nil,
+			ciDetected:  true,
+			atmosCIEnv:  "sometimes",
+			wantRequest: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.ciDetected {
+				t.Setenv("GITHUB_ACTIONS", "true")
+			} else {
+				t.Setenv("GITHUB_ACTIONS", "false")
+			}
+			withCleanATMOSCIEnv(t, tt.atmosCIEnv)
+
+			cmd, args := newBootstrapTestCommand(t, tt.rawArgs)
+			assert.Equal(t, tt.wantRequest, CICloneBootstrapRequested(cmd, args))
+		})
+	}
+}
+
+func TestCICloneBootstrapRequested_WrongCommand(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "true")
+	withCleanATMOSCIEnv(t, "")
+
+	root := &cobra.Command{Use: "atmos"}
+	terraform := &cobra.Command{Use: "terraform"}
+	plan := &cobra.Command{Use: "plan"}
+	root.AddCommand(terraform)
+	terraform.AddCommand(plan)
+
+	assert.False(t, CICloneBootstrapRequested(plan, nil))
+	assert.False(t, CICloneBootstrapRequested(nil, nil))
+}
+
+// TestCIGitCloneBootstrapRequestedFromRawArgs covers the pre-Cobra entry
+// point cmd/root.go uses (via isCIGitCloneBootstrapArgs), where flags haven't
+// been parsed by the real command tree yet. The critical case is a
+// value-taking flag given in space-separated form (--depth 0): a naive
+// "-"-prefix heuristic misreads the bare "0" token as a positional repo
+// name/URI and wrongly disqualifies the bootstrap. Parsing rawArgs against
+// the real clone flag set must get this right.
+func TestCIGitCloneBootstrapRequestedFromRawArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		rawArgs     []string
+		ciDetected  bool
+		wantRequest bool
+	}{
+		{
+			name:        "no args, CI detected",
+			rawArgs:     nil,
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			name:        "--ci --depth 0 (space-separated value flag)",
+			rawArgs:     []string{"--ci", "--depth", "0"},
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			name:        "--ci --depth=0 (equals-form value flag)",
+			rawArgs:     []string{"--ci", "--depth=0"},
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			name:        "--branch main (space-separated string value flag)",
+			rawArgs:     []string{"--branch", "main"},
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			name:        "explicit positional repo URI disqualifies bootstrap",
+			rawArgs:     []string{"flux-deploy", "--depth", "0"},
+			ciDetected:  true,
+			wantRequest: false,
+		},
+		{
+			name:        "--all disqualifies bootstrap",
+			rawArgs:     []string{"--all"},
+			ciDetected:  true,
+			wantRequest: false,
+		},
+		{
+			name:        "no CI provider detected",
+			rawArgs:     []string{"--ci", "--depth", "0"},
+			ciDetected:  false,
+			wantRequest: false,
+		},
+		{
+			// Regression: this must be true, not false. A false result here
+			// makes handleConfigInitErrorWithArgs (cmd/root.go) return an
+			// unrelated config/profile error immediately, never reaching
+			// RootCmd.Execute() -- so Cobra's own clean "invalid argument for
+			// --depth" error is never shown. Reporting true lets that error
+			// surface as intended, whether or not CI is actually detected:
+			// see "malformed flag value returns true regardless of CI"
+			// below for the non-CI case.
+			name:        "malformed flag value returns true, deferring to RunE",
+			rawArgs:     []string{"--depth", "not-a-number"},
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			// A malformed clone flag must defer to Cobra's own error even
+			// outside CI -- no config/profile error should ever preempt it.
+			name:        "malformed flag value returns true regardless of CI",
+			rawArgs:     []string{"--depth", "not-a-number"},
+			ciDetected:  false,
+			wantRequest: true,
+		},
+		{
+			// Regression: --config is a real global persistent flag (not a
+			// clone-specific flag), so the throwaway command tree must
+			// inherit it or clone.ParseFlags rejects it as unknown, wrongly
+			// disqualifying the bootstrap. The referenced file need not
+			// exist -- this only exercises flag parsing, not config loading.
+			name:        "--config inherited root flag is accepted",
+			rawArgs:     []string{"--config", "missing.yaml"},
+			ciDetected:  true,
+			wantRequest: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.ciDetected {
+				t.Setenv("GITHUB_ACTIONS", "true")
+			} else {
+				t.Setenv("GITHUB_ACTIONS", "false")
+			}
+			withCleanATMOSCIEnv(t, "")
+
+			assert.Equal(t, tt.wantRequest, CIGitCloneBootstrapRequestedFromRawArgs(tt.rawArgs))
+		})
+	}
+}

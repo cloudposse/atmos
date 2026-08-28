@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
@@ -123,10 +124,15 @@ func (p *Provider) cloneFresh(ctx context.Context, opts *atmosgit.CloneOptions) 
 	return nil
 }
 
-// reconcile brings an existing workdir up to date: fetch, ensure the
-// configured branch is checked out, then fast-forward only.
+// reconcile brings an existing workdir up to date: sync the remote URL with
+// the configured URI, fetch, ensure the configured branch is checked out,
+// then fast-forward only.
 func (p *Provider) reconcile(ctx context.Context, opts *atmosgit.CloneOptions) error {
 	if err := p.ensureCleanWorktree(ctx, opts.RepoContext); err != nil {
+		return err
+	}
+
+	if err := p.syncRemoteURL(ctx, opts); err != nil {
 		return err
 	}
 
@@ -142,6 +148,30 @@ func (p *Provider) reconcile(ctx context.Context, opts *atmosgit.CloneOptions) e
 	}
 
 	return p.fastForward(ctx, opts.RepoContext, "FETCH_HEAD")
+}
+
+// syncRemoteURL updates the local remote's URL to match opts.URI when they
+// differ. Without this, an already-cloned workdir keeps using whatever URL
+// was set at the original `git clone` time forever: fetch/pull address the
+// remote by name, never by opts.URI, so a corrected or migrated repository
+// URI in atmos.yaml would otherwise be silently ignored on every subsequent
+// operation until the workdir is removed (`atmos git clean`).
+func (p *Provider) syncRemoteURL(ctx context.Context, opts *atmosgit.CloneOptions) error {
+	if opts.URI == "" {
+		return nil
+	}
+	remote := remoteOrDefault(opts.Remote)
+	result, err := p.runQuiet(ctx, opts.Workdir, opts.Env, "remote", "get-url", remote)
+	if err != nil {
+		return classify(err, result, "remote get-url")
+	}
+	if strings.TrimSpace(result.Stdout) == opts.URI {
+		return nil
+	}
+	if result, err := p.run(ctx, opts.Workdir, opts.Env, "remote", "set-url", remote, opts.URI); err != nil {
+		return classify(err, result, "remote set-url")
+	}
+	return nil
 }
 
 // fetch updates remote-tracking refs, honoring shallow/partial clone options.

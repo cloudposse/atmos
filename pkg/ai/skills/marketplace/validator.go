@@ -12,10 +12,22 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// SkillValidator validates a skill package on disk against its parsed metadata.
+// It's implemented by *Validator; abstracting it as an interface lets tests inject
+// a fake validator without depending on the real embedded bundled-skill catalog,
+// whose real content is always valid (so failure paths can't be exercised through it
+// otherwise).
+type SkillValidator interface {
+	Validate(skillPath string, metadata *SkillMetadata) error
+}
+
 // Validator validates skill packages against various rules.
 type Validator struct {
 	atmosVersion *version.Version
 }
+
+// Compile-time assertion that *Validator satisfies SkillValidator.
+var _ SkillValidator = (*Validator)(nil)
 
 // NewValidator creates a new validator for the given Atmos version.
 func NewValidator(atmosVersion string) *Validator {

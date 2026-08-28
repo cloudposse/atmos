@@ -19,7 +19,7 @@ import (
 func emulatorBoundGenCtx() *generator.GeneratorContext {
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Auth.Identities = map[string]schema.Identity{
-		"local-aws": {Kind: types.IdentityKindAWSEmulator, Emulator: "aws"},
+		"local-aws": {Kind: types.IdentityKindAWSEmulator, Emulator: "local/aws"},
 	}
 	return &generator.GeneratorContext{
 		AtmosConfig: atmosConfig,
@@ -33,18 +33,25 @@ func TestContribute_EmulatorBoundReturnsProviderFragment(t *testing.T) {
 	require.True(t, ok, "aws target must have a Terraform provider name")
 
 	fragment := map[string]any{"region": "us-east-1", "s3_use_path_style": true}
-	mgr := &fakeManager{resProfile: emu.Profile{Provider: fragment}}
+	mgr := &fakeManager{
+		psStatuses: []emu.Status{{Name: "aws", Stack: "local", Status: "running"}},
+		resProfile: emu.Profile{Provider: fragment},
+	}
 	stubPrepare(t, validSection(), nil, mgr)
 
 	got, err := providerContributor{}.Contribute(context.Background(), emulatorBoundGenCtx())
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{providerName: fragment}, got)
 	assert.Equal(t, 1, mgr.resCalls)
+	assert.Equal(t, "local", mgr.gotStack)
 	assert.Equal(t, "aws", mgr.gotName)
 }
 
 func TestContribute_EmptyProviderContributesNothing(t *testing.T) {
-	mgr := &fakeManager{resProfile: emu.Profile{Provider: nil}}
+	mgr := &fakeManager{
+		psStatuses: []emu.Status{{Name: "aws", Stack: "local", Status: "running"}},
+		resProfile: emu.Profile{Provider: nil},
+	}
 	stubPrepare(t, validSection(), nil, mgr)
 
 	got, err := providerContributor{}.Contribute(context.Background(), emulatorBoundGenCtx())
@@ -64,7 +71,10 @@ func TestContribute_PrepareError(t *testing.T) {
 }
 
 func TestContribute_ResolveError(t *testing.T) {
-	stubPrepare(t, validSection(), nil, &fakeManager{resErr: errBoom})
+	stubPrepare(t, validSection(), nil, &fakeManager{
+		psStatuses: []emu.Status{{Name: "aws", Stack: "local", Status: "running"}},
+		resErr:     errBoom,
+	})
 	_, err := providerContributor{}.Contribute(context.Background(), emulatorBoundGenCtx())
 	require.ErrorIs(t, err, errBoom)
 }

@@ -23,6 +23,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -84,7 +85,7 @@ func TestPrepareComponentExecution_NoComponentPath_ReturnsError(t *testing.T) {
 	// BasePath is empty → GetComponentPath returns an error.
 	info := schema.ConfigAndStacksInfo{}
 
-	_, err := prepareComponentExecution(&atmosConfig, &info, false)
+	_, err := prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, &atmosConfig, &info, false)
 	// An empty BasePath causes checkTerraformConfig to return an error.
 	require.Error(t, err)
 }
@@ -159,6 +160,16 @@ func runLogGroupPipelineSubprocess(t *testing.T, env map[string]string) string {
 		os.Environ(),
 		testEnvRunLogGroupPipeline+"=1",
 		"GITHUB_ACTIONS=true",
+		// Override, not just inherit: this test binary can itself run as a
+		// child of a CI-grouped step (this repo's own atmos.yaml sets
+		// ci.enabled: true, and CI runs `go test` via an `atmos test
+		// acceptance` custom-command step), in which case the ci package's
+		// nesting sentinel is already set in os.Environ() above. Since
+		// os/exec.Cmd.Env uses last-value-wins for duplicate keys, appending
+		// an empty override here after os.Environ() clears it for the
+		// subprocess so the grouping assertions below are deterministic
+		// regardless of how the outer test binary was launched.
+		"ATMOS_CI_LOG_GROUP_ACTIVE=",
 	)
 	for key, value := range env {
 		cmd.Env = append(cmd.Env, key+"="+value)

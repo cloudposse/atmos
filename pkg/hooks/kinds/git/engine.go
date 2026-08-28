@@ -106,7 +106,7 @@ func (e *Engine) resolveTarget(ctx *hooks.ExecContext) (*publishTarget, error) {
 	if ctx.Hook.Repository != "" {
 		target, err = e.resolveNamedTarget(ctx)
 	} else {
-		target, err = e.resolveCurrentTarget()
+		target, err = e.resolveCurrentTarget(ctx)
 	}
 	if err != nil {
 		return nil, err
@@ -163,10 +163,11 @@ func (e *Engine) resolveNamedTarget(ctx *hooks.ExecContext) (*publishTarget, err
 	}, nil
 }
 
-// resolveCurrentTarget targets the repository the component already lives in:
-// no clone/reconcile, no identity resolution (ambient credentials and the
-// developer's own Git config apply), signing and author left to Git config.
-func (e *Engine) resolveCurrentTarget() (*publishTarget, error) {
+// resolveCurrentTarget targets the component's directory in its current
+// repository. This makes commit.paths component-relative, matching the default
+// execution directory for other executable hook kinds. No clone/reconcile or
+// identity resolution is needed; ambient credentials and Git config apply.
+func (e *Engine) resolveCurrentTarget(ctx *hooks.ExecContext) (*publishTarget, error) {
 	root, err := e.currentRepoRoot()
 	if err != nil {
 		return nil, err
@@ -184,10 +185,14 @@ func (e *Engine) resolveCurrentTarget() (*publishTarget, error) {
 		log.Debug("Could not resolve current repository HEAD for provenance", "error", err)
 		sourceSHA = ""
 	}
+	workdir := root
+	if ctx.AtmosConfig != nil && ctx.Info != nil {
+		workdir = hooks.ComponentPath(ctx)
+	}
 
 	return &publishTarget{
 		provider:    provider,
-		repoCtx:     gitsvc.RepoContext{Workdir: root, Env: e.environ()},
+		repoCtx:     gitsvc.RepoContext{Workdir: workdir, Env: e.environ()},
 		signing:     gitsvc.SigningAuto,
 		pushRetries: gitsvc.DefaultPushRetries,
 		sourceSHA:   sourceSHA,

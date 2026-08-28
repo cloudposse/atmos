@@ -129,9 +129,8 @@ func TestForceTTY_Width(t *testing.T) {
 	}
 }
 
-// TestWidth_NonTTYFallback verifies non-TTY streams ignore COLUMNS and use
-// only the explicit forced-TTY default. This keeps piped CI output stable while
-// allowing cast recording code to provide its own explicit width.
+// TestWidth_NonTTYFallback verifies non-TTY streams honor an explicit COLUMNS
+// value and otherwise use the existing forced-TTY fallback behavior.
 func TestWidth_NonTTYFallback(t *testing.T) {
 	cleanup := setupTest(t)
 	defer cleanup()
@@ -147,16 +146,16 @@ func TestWidth_NonTTYFallback(t *testing.T) {
 		expected int
 	}{
 		{
-			name:     "positive COLUMNS is ignored on non-TTY",
+			name:     "positive COLUMNS is honored on non-TTY",
 			columns:  "90",
 			forceTTY: false,
-			expected: 0,
+			expected: 90,
 		},
 		{
-			name:     "force-tty default wins over COLUMNS",
+			name:     "COLUMNS is honored before force-tty default",
 			columns:  "80",
 			forceTTY: true,
-			expected: defaultForcedWidth,
+			expected: 80,
 		},
 		{
 			name:     "malformed COLUMNS is ignored",
@@ -195,10 +194,9 @@ func TestWidth_NonTTYFallback(t *testing.T) {
 	}
 }
 
-// TestWidth_ForceTTYRecordingWidthOverride verifies that ATMOS_CAST_RECORDING_WIDTH,
-// unlike the general-purpose COLUMNS variable, can pin an explicit width under
-// --force-tty. Recording pipelines (e.g. docs screengrabs) set this variable
-// deliberately, so honoring it does not reintroduce ambient-COLUMNS instability.
+// TestWidth_ForceTTYRecordingWidthOverride verifies that ATMOS_CAST_RECORDING_WIDTH
+// takes precedence over COLUMNS under --force-tty. Recording pipelines (e.g.
+// docs screengrabs) use it to match the recorded terminal dimensions.
 func TestWidth_ForceTTYRecordingWidthOverride(t *testing.T) {
 	cleanup := setupTest(t)
 	defer cleanup()
@@ -209,12 +207,14 @@ func TestWidth_ForceTTYRecordingWidthOverride(t *testing.T) {
 
 	tests := []struct {
 		name           string
+		columns        string
 		recordingWidth string
 		forceTTY       bool
 		expected       int
 	}{
 		{
-			name:           "recording width is honored under force-tty",
+			name:           "recording width overrides COLUMNS under force-tty",
+			columns:        "80",
 			recordingWidth: "90",
 			forceTTY:       true,
 			expected:       90,
@@ -241,6 +241,7 @@ func TestWidth_ForceTTYRecordingWidthOverride(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("COLUMNS", tt.columns)
 			t.Setenv("ATMOS_CAST_RECORDING_WIDTH", tt.recordingWidth)
 			viper.Set("force-tty", tt.forceTTY)
 
@@ -1180,6 +1181,135 @@ func TestBuildConfig_CI(t *testing.T) {
 
 	cfg := buildConfig()
 	assert.True(t, cfg.EnvCI, "Config should detect CI=true env var")
+}
+
+func TestBuildConfig_ForceColorEnvVars(t *testing.T) {
+	tests := []struct {
+		name     string
+		envVar   string
+		value    string
+		expected bool
+	}{
+		{name: "FORCE_COLOR=1 forces color", envVar: "FORCE_COLOR", value: "1", expected: true},
+		{name: "FORCE_COLOR=true forces color", envVar: "FORCE_COLOR", value: "true", expected: true},
+		{name: "FORCE_COLOR=0 does not force color", envVar: "FORCE_COLOR", value: "0", expected: false},
+		{name: "FORCE_COLOR=false does not force color", envVar: "FORCE_COLOR", value: "false", expected: false},
+		{name: "FORCE_COLOR=FALSE does not force color", envVar: "FORCE_COLOR", value: "FALSE", expected: false},
+		{name: "FORCE_COLOR empty does not force color", envVar: "FORCE_COLOR", value: "", expected: false},
+		{name: "ATMOS_FORCE_COLOR=true forces color", envVar: "ATMOS_FORCE_COLOR", value: "true", expected: true},
+		{name: "ATMOS_FORCE_COLOR=0 does not force color", envVar: "ATMOS_FORCE_COLOR", value: "0", expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanup := setupTest(t)
+			defer cleanup()
+
+			t.Setenv(tt.envVar, tt.value)
+
+			cfg := buildConfig()
+			assert.Equal(t, tt.expected, cfg.ForceColor)
+		})
+	}
+}
+
+// TestBuildConfig_ForceColorPrecedence covers conflicting force-color sources
+// to guard against a boolean-OR regression: a higher-priority source that is
+// explicitly set - even to false - must never be overridden by a
+// lower-priority source, following flags > ATMOS_FORCE_COLOR > FORCE_COLOR >
+// atmos.yaml's settings.terminal.force_color.
+func TestBuildConfig_ForceColorPrecedence(t *testing.T) {
+	tests := []struct {
+		name             string
+		setFlag          bool // simulates an explicit --force-color flag via viper.Set
+		flagValue        bool
+		atmosForceColor  string // ATMOS_FORCE_COLOR env value; "" means unset
+		forceColor       string // FORCE_COLOR env value; "" means unset
+		configForceColor bool   // settings.terminal.force_color in atmos.yaml
+		setConfig        bool
+		expected         bool
+	}{
+		{
+			name:            "explicit --force-color=false wins over ATMOS_FORCE_COLOR=true",
+			setFlag:         true,
+			flagValue:       false,
+			atmosForceColor: "true",
+			expected:        false,
+		},
+		{
+			name:       "explicit --force-color=false wins over FORCE_COLOR=1",
+			setFlag:    true,
+			flagValue:  false,
+			forceColor: "1",
+			expected:   false,
+		},
+		{
+			name:       "explicit --force-color=true wins over FORCE_COLOR=0",
+			setFlag:    true,
+			flagValue:  true,
+			forceColor: "0",
+			expected:   true,
+		},
+		{
+			name:            "ATMOS_FORCE_COLOR=false wins over FORCE_COLOR=1",
+			atmosForceColor: "false",
+			forceColor:      "1",
+			expected:        false,
+		},
+		{
+			name:            "ATMOS_FORCE_COLOR=true wins over FORCE_COLOR=0",
+			atmosForceColor: "true",
+			forceColor:      "0",
+			expected:        true,
+		},
+		{
+			name:             "FORCE_COLOR=0 wins over configured settings.terminal.force_color=true",
+			forceColor:       "0",
+			setConfig:        true,
+			configForceColor: true,
+			expected:         false,
+		},
+		{
+			name:             "FORCE_COLOR=1 wins over configured settings.terminal.force_color=false",
+			forceColor:       "1",
+			setConfig:        true,
+			configForceColor: false,
+			expected:         true,
+		},
+		{
+			name:             "no flag or env falls back to configured settings.terminal.force_color=true",
+			setConfig:        true,
+			configForceColor: true,
+			expected:         true,
+		},
+		{
+			name:     "nothing set defaults to false",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanup := setupTest(t)
+			defer cleanup()
+
+			if tt.setFlag {
+				viper.Set("force-color", tt.flagValue)
+			}
+			if tt.atmosForceColor != "" {
+				t.Setenv("ATMOS_FORCE_COLOR", tt.atmosForceColor)
+			}
+			if tt.forceColor != "" {
+				t.Setenv("FORCE_COLOR", tt.forceColor)
+			}
+			if tt.setConfig {
+				viper.Set("settings.terminal.force_color", tt.configForceColor)
+			}
+
+			cfg := buildConfig()
+			assert.Equal(t, tt.expected, cfg.ForceColor, "cfg.ForceColor mismatch for %s", tt.name)
+		})
+	}
 }
 
 func TestWidth_EdgeCases(t *testing.T) {

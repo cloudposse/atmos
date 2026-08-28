@@ -20,21 +20,23 @@ var listCmd = &cobra.Command{
 func init() {
 	// Add --identity flag to all list commands to enable authentication
 	// when processing YAML template functions (!terraform.state, !terraform.output).
-	// This follows the same pattern as the describe commands.
 	//
-	// NOTE: NoOptDefVal is NOT used here to avoid Cobra parsing issues with commands
-	// that have positional arguments. When NoOptDefVal is set and a space-separated value
-	// is used (--identity value), Cobra misinterprets the value as a subcommand/positional arg.
+	// Uses the shared flags.WithIdentityFlag() builder (rather than a hand-rolled
+	// PersistentFlags().StringP()) so bare --identity triggers the interactive selector like
+	// every other Atmos command. Space-separated values on subcommands with positional args
+	// are normalized to `--identity=value` by the generic NoOptDefVal preprocessor in
+	// cmd/root.go before Cobra parses.
 	//
 	// The ATMOS_IDENTITY environment variable binding is handled centrally by the global
 	// flag registry in pkg/flags/global_builder.go, so no explicit viper.BindEnv is needed here.
-	listCmd.PersistentFlags().StringP("identity", "i", "", "Specify the identity to authenticate with")
+	flags.NewStandardParser(flags.WithIdentityFlag()).RegisterPersistentFlags(listCmd)
 
 	// Attach all subcommands
 	listCmd.AddCommand(affectedCmd)
 	listCmd.AddCommand(aliasesCmd)
 	listCmd.AddCommand(componentsCmd)
 	listCmd.AddCommand(dependenciesCmd)
+	listCmd.AddCommand(editionsCmd)
 	listCmd.AddCommand(stacksCmd)
 	listCmd.AddCommand(themesCmd)
 	listCmd.AddCommand(workflowsCmd)

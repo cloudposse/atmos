@@ -213,3 +213,13 @@ func (m *spinnerModel) View() string {
 	}
 	return m.spinner.View() + " Waiting for authentication...\n"
 }
+
+// displayBrowserPrompt tells the user a browser window is being opened for the
+// interactive (authorization-code + PKCE) sign-in.
+func displayBrowserPrompt() {
+	ui.Writeln("")
+	ui.Writeln("🔐 Azure Authentication Required")
+	ui.Writeln("")
+	ui.Writeln("Opening your browser to complete sign-in...")
+	ui.Writeln("")
+}

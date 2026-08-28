@@ -10,7 +10,7 @@ import (
 	"strconv"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/xdg"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -19,6 +19,12 @@ import (
 )
 
 const (
+	// ExpectedServerEnv is set by cluster integrations to the API endpoint they provisioned.
+	// Cluster clients use it as a post-condition against the effective kubeconfig target.
+	ExpectedServerEnv = "ATMOS_KUBERNETES_EXPECTED_SERVER"
+	// EndpointGuardEnv enables endpoint enforcement for an explicitly guarded operation.
+	EndpointGuardEnv = "ATMOS_KUBERNETES_ENDPOINT_GUARD"
+
 	// defaultFileMode is the default kubeconfig file permission.
 	defaultFileMode = 0o600
 
@@ -33,9 +39,64 @@ const (
 
 	// atmosCommand is the command used in the exec credential plugin.
 	atmosCommand = "atmos"
+
+	// Structured-log key names for the [kubeconfig-diff] debug diagnostics
+	// (see configContentEqual, clusterMapsEqual, contextMapsEqual,
+	// authInfoMapsEqual, and mergeWouldChange below).
+	logKeyA        = "a"
+	logKeyB        = "b"
+	logKeyKey      = "key"
+	logKeyExisting = "existing"
+	logKeyNew      = "new"
 )
 
-// KubeconfigManager manages kubeconfig files for EKS clusters.
+// ClusterInfo is the cloud-agnostic cluster data needed to write a kubeconfig
+// entry. Each cloud package (aws, azure) builds one of these from its own
+// describe-cluster call before handing it to KubeconfigManager.
+type ClusterInfo struct {
+	// Name is the cluster's short name.
+	Name string
+
+	// Endpoint is the cluster's API server URL.
+	Endpoint string
+
+	// CertificateAuthorityData is the base64-encoded CA certificate, as
+	// returned by the cloud API. Decoded the same way for every cloud.
+	CertificateAuthorityData string
+
+	// ID uniquely identifies the cluster and is used as the kubeconfig
+	// cluster map key and default context name: the ARN for EKS, the ARM
+	// resource ID for AKS, or the canonical GKE resource name.
+	ID string
+
+	// Region disambiguates the generated exec-plugin username when the same
+	// cluster name exists in more than one place: the AWS region for EKS,
+	// the resource group for AKS, or the project and location for GKE.
+	Region string
+
+	// UserPrefix distinguishes the exec-plugin username by cloud, e.g. "eks"
+	// or "aks", reproducing the existing "atmos-eks-<name>-<region>" scheme.
+	UserPrefix string
+
+	// AccountID further disambiguates the exec-plugin username for clouds
+	// where Name+Region is not guaranteed unique: Azure resource groups are
+	// scoped per-subscription, so the same cluster name and resource group
+	// can exist in two subscriptions. Leave empty to keep the existing
+	// "atmos-eks-<name>-<region>" AWS/EKS username format unchanged.
+	AccountID string
+
+	// ExecArgs are the fully-built kubectl exec-credential-plugin arguments,
+	// e.g. [aws, eks, token, --cluster-name, X, --region, Y] or
+	// [azure, aks, token, --cluster-name, X, --resource-group, Y]. Built by
+	// the caller so this package stays cloud-agnostic.
+	ExecArgs []string
+
+	// ExecEnv are additional environment variables for the exec plugin, e.g.
+	// ATMOS_IDENTITY.
+	ExecEnv []clientcmdapi.ExecEnvVar
+}
+
+// KubeconfigManager manages kubeconfig files for Kubernetes clusters (EKS, AKS, GKE).
 type KubeconfigManager struct {
 	path string
 	mode os.FileMode
@@ -78,12 +139,12 @@ func (m *KubeconfigManager) GetPath() string {
 	return m.path
 }
 
-// WriteClusterConfig generates and writes kubeconfig for an EKS cluster.
+// WriteClusterConfig generates and writes kubeconfig for a cluster.
 // Returns changed=true when the on-disk file was modified, and changed=false
 // when the existing kubeconfig already matches the desired state (no write
 // performed). Callers can use this to suppress noisy success messages on
 // repeated invocations that produce identical output.
-func (m *KubeconfigManager) WriteClusterConfig(info *awsCloud.EKSClusterInfo, alias, identityName, updateMode string) (bool, error) {
+func (m *KubeconfigManager) WriteClusterConfig(info *ClusterInfo, alias, updateMode string) (bool, error) {
 	defer perf.Track(nil, "kube.KubeconfigManager.WriteClusterConfig")()
 
 	if updateMode == "" {
@@ -91,7 +152,7 @@ func (m *KubeconfigManager) WriteClusterConfig(info *awsCloud.EKSClusterInfo, al
 	}
 
 	// Build the kubeconfig for this cluster.
-	newConfig := BuildClusterConfig(info, alias, identityName)
+	newConfig := BuildClusterConfig(info, alias)
 
 	// Ensure parent directory exists.
 	dir := filepath.Dir(m.path)
@@ -104,22 +165,8 @@ func (m *KubeconfigManager) WriteClusterConfig(info *awsCloud.EKSClusterInfo, al
 		return m.writeIfChanged(newConfig)
 
 	case "error":
-		if _, err := os.Stat(m.path); err == nil {
-			// File exists, check for cluster, context, and auth info collisions.
-			existing, loadErr := clientcmd.LoadFromFile(m.path)
-			if loadErr == nil {
-				if _, exists := existing.Clusters[info.ARN]; exists {
-					return false, fmt.Errorf("%w: cluster %s already exists in %s", errUtils.ErrKubeconfigMerge, info.ARN, m.path)
-				}
-				// Check context name collision.
-				contextName := info.ARN
-				if alias != "" {
-					contextName = alias
-				}
-				if _, exists := existing.Contexts[contextName]; exists {
-					return false, fmt.Errorf("%w: context %s already exists in %s", errUtils.ErrKubeconfigMerge, contextName, m.path)
-				}
-			}
+		if err := m.checkErrorModeCollisions(info, alias); err != nil {
+			return false, err
 		}
 		return m.mergeIfChanged(newConfig)
 
@@ -129,6 +176,37 @@ func (m *KubeconfigManager) WriteClusterConfig(info *awsCloud.EKSClusterInfo, al
 	default:
 		return false, fmt.Errorf("%w: invalid update mode %q", errUtils.ErrKubeconfigMerge, updateMode)
 	}
+}
+
+// checkErrorModeCollisions checks the on-disk kubeconfig (if any) for
+// cluster and context name collisions, used by WriteClusterConfig in
+// "error" update mode before merging. Returns nil when the file doesn't
+// exist, can't be loaded, or has no colliding entries.
+func (m *KubeconfigManager) checkErrorModeCollisions(info *ClusterInfo, alias string) error {
+	if _, err := os.Stat(m.path); err != nil {
+		return nil //nolint:nilerr // No file yet means no collisions; nothing to check.
+	}
+
+	// File exists, check for cluster, context, and auth info collisions.
+	existing, loadErr := clientcmd.LoadFromFile(m.path)
+	if loadErr != nil {
+		return nil //nolint:nilerr // Unreadable existing file: best-effort check, fall through to merge.
+	}
+
+	if _, exists := existing.Clusters[info.ID]; exists {
+		return fmt.Errorf("%w: cluster %s already exists in %s", errUtils.ErrKubeconfigMerge, info.ID, m.path)
+	}
+
+	// Check context name collision.
+	contextName := info.ID
+	if alias != "" {
+		contextName = alias
+	}
+	if _, exists := existing.Contexts[contextName]; exists {
+		return fmt.Errorf("%w: context %s already exists in %s", errUtils.ErrKubeconfigMerge, contextName, m.path)
+	}
+
+	return nil
 }
 
 // RemoveClusterConfig removes a cluster, context, and user from the kubeconfig.
@@ -164,10 +242,10 @@ func (m *KubeconfigManager) RemoveClusterConfig(clusterARN, contextName, userNam
 	return clientcmd.WriteToFile(*existing, m.path)
 }
 
-// ListClusterARNs returns all cluster ARN keys from the kubeconfig file.
+// ListClusterIDs returns all cluster ARN keys from the kubeconfig file.
 // Returns nil if the file does not exist.
-func (m *KubeconfigManager) ListClusterARNs() ([]string, error) {
-	defer perf.Track(nil, "kube.KubeconfigManager.ListClusterARNs")()
+func (m *KubeconfigManager) ListClusterIDs() ([]string, error) {
+	defer perf.Track(nil, "kube.KubeconfigManager.ListClusterIDs")()
 
 	if _, err := os.Stat(m.path); os.IsNotExist(err) {
 		return nil, nil
@@ -186,47 +264,26 @@ func (m *KubeconfigManager) ListClusterARNs() ([]string, error) {
 	return arns, nil
 }
 
-// BuildClusterConfig creates a kubeconfig api.Config for a single EKS cluster.
-func BuildClusterConfig(info *awsCloud.EKSClusterInfo, alias, identityName string) *clientcmdapi.Config {
+// BuildClusterConfig creates a kubeconfig api.Config for a single cluster.
+// The exec-plugin command line (ExecArgs/ExecEnv) is supplied by the caller,
+// which keeps this package cloud-agnostic.
+func BuildClusterConfig(info *ClusterInfo, alias string) *clientcmdapi.Config {
 	defer perf.Track(nil, "kube.BuildClusterConfig")()
 
-	// Context name defaults to cluster ARN, or alias if provided.
-	contextName := info.ARN
+	// Context name defaults to cluster ID, or alias if provided.
+	contextName := info.ID
 	if alias != "" {
 		contextName = alias
 	}
 
 	// User name includes cluster name and region for uniqueness when multiple
 	// clusters share the same identity.
-	userName := "atmos-eks-" + info.Name + "-" + info.Region
-
-	// Build exec plugin env vars. Only set ATMOS_IDENTITY when identity is specified.
-	var execEnv []clientcmdapi.ExecEnvVar
-	if identityName != "" {
-		execEnv = append(execEnv, clientcmdapi.ExecEnvVar{
-			Name:  "ATMOS_IDENTITY",
-			Value: identityName,
-		})
-	}
-
-	// Build exec plugin args.
-	execArgs := []string{
-		"aws",
-		"eks",
-		"token",
-		"--cluster-name",
-		info.Name,
-		"--region",
-		info.Region,
-	}
-	if identityName != "" {
-		execArgs = append(execArgs, "--identity="+identityName)
-	}
+	userName := UserName(info)
 
 	config := clientcmdapi.NewConfig()
 	config.CurrentContext = contextName
 
-	// The EKS API returns CertificateAuthority.Data as base64-encoded PEM.
+	// Cloud APIs return CertificateAuthority.Data as base64-encoded PEM.
 	// clientcmdapi.Cluster.CertificateAuthorityData expects raw PEM bytes
 	// (client-go base64-encodes them when writing the YAML).
 	caData, err := base64.StdEncoding.DecodeString(info.CertificateAuthorityData)
@@ -235,13 +292,13 @@ func BuildClusterConfig(info *awsCloud.EKSClusterInfo, alias, identityName strin
 		caData = []byte(info.CertificateAuthorityData)
 	}
 
-	config.Clusters[info.ARN] = &clientcmdapi.Cluster{
+	config.Clusters[info.ID] = &clientcmdapi.Cluster{
 		Server:                   info.Endpoint,
 		CertificateAuthorityData: caData,
 	}
 
 	config.Contexts[contextName] = &clientcmdapi.Context{
-		Cluster:  info.ARN,
+		Cluster:  info.ID,
 		AuthInfo: userName,
 	}
 
@@ -249,13 +306,24 @@ func BuildClusterConfig(info *awsCloud.EKSClusterInfo, alias, identityName strin
 		Exec: &clientcmdapi.ExecConfig{
 			APIVersion:      execAPIVersion,
 			Command:         atmosCommand,
-			Args:            execArgs,
-			Env:             execEnv,
+			Args:            info.ExecArgs,
+			Env:             info.ExecEnv,
 			InteractiveMode: clientcmdapi.NeverExecInteractiveMode,
 		},
 	}
 
 	return config
+}
+
+// UserName returns the shared exec-plugin username for a cluster entry.
+func UserName(info *ClusterInfo) string {
+	defer perf.Track(nil, "kube.UserName")()
+
+	name := "atmos-" + info.UserPrefix + "-" + info.Name + "-" + info.Region
+	if info.AccountID != "" {
+		name += "-" + info.AccountID
+	}
+	return name
 }
 
 // DefaultKubeconfigPath returns the XDG-compliant default kubeconfig path.
@@ -390,99 +458,78 @@ func (m *KubeconfigManager) reconcileMode() (bool, error) {
 // (line endings, LocationOfOrigin populated during load on Windows, …) that
 // don't reflect actual content changes.
 //
-// When ATMOS_KUBECONFIG_DEBUG_DIFF is set, emits a diagnostic line to
-// stderr describing which entry/field caused the inequality.
+// Emits a diagnostic log line describing which entry/field caused the
+// inequality; visible with ATMOS_LOGS_LEVEL=Debug.
 func configContentEqual(a, b *clientcmdapi.Config) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
-	debug := kubeconfigDebugDiff()
 	if a.CurrentContext != b.CurrentContext {
-		if debug {
-			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] CurrentContext differs: a=%q b=%q\n", a.CurrentContext, b.CurrentContext)
-		}
+		log.Debug("[kubeconfig-diff] CurrentContext differs", logKeyA, a.CurrentContext, logKeyB, b.CurrentContext)
 		return false
 	}
-	if !clusterMapsEqualDebug(a.Clusters, b.Clusters, debug) {
+	if !clusterMapsEqual(a.Clusters, b.Clusters) {
 		return false
 	}
-	if !contextMapsEqualDebug(a.Contexts, b.Contexts, debug) {
+	if !contextMapsEqual(a.Contexts, b.Contexts) {
 		return false
 	}
-	return authInfoMapsEqualDebug(a.AuthInfos, b.AuthInfos, debug)
+	return authInfoMapsEqual(a.AuthInfos, b.AuthInfos)
 }
 
-func clusterMapsEqualDebug(a, b map[string]*clientcmdapi.Cluster, debug bool) bool {
+func clusterMapsEqual(a, b map[string]*clientcmdapi.Cluster) bool {
 	if len(a) != len(b) {
-		if debug {
-			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters map length differs: a=%d b=%d\n", len(a), len(b))
-		}
+		log.Debug("[kubeconfig-diff] Clusters map length differs", logKeyA, len(a), logKeyB, len(b))
 		return false
 	}
 	for k, av := range a {
 		bv, ok := b[k]
 		if !ok {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters[%q] missing from b\n", k)
-			}
+			log.Debug("[kubeconfig-diff] Clusters key missing from b", logKeyKey, k)
 			return false
 		}
 		if !clustersEqual(av, bv) {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters[%q] differs:\n  a=%#v\n  b=%#v\n", k, av, bv)
-			}
+			log.Debug("[kubeconfig-diff] Clusters entry differs", logKeyKey, k, logKeyA, av, logKeyB, bv)
 			return false
 		}
 	}
 	return true
 }
 
-func contextMapsEqualDebug(a, b map[string]*clientcmdapi.Context, debug bool) bool {
+func contextMapsEqual(a, b map[string]*clientcmdapi.Context) bool {
 	if len(a) != len(b) {
-		if debug {
-			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts map length differs: a=%d b=%d\n", len(a), len(b))
-		}
+		log.Debug("[kubeconfig-diff] Contexts map length differs", logKeyA, len(a), logKeyB, len(b))
 		return false
 	}
 	for k, av := range a {
 		bv, ok := b[k]
 		if !ok {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts[%q] missing from b\n", k)
-			}
+			log.Debug("[kubeconfig-diff] Contexts key missing from b", logKeyKey, k)
 			return false
 		}
 		if !contextsEqual(av, bv) {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts[%q] differs:\n  a=%#v\n  b=%#v\n", k, av, bv)
-			}
+			log.Debug("[kubeconfig-diff] Contexts entry differs", logKeyKey, k, logKeyA, av, logKeyB, bv)
 			return false
 		}
 	}
 	return true
 }
 
-func authInfoMapsEqualDebug(a, b map[string]*clientcmdapi.AuthInfo, debug bool) bool {
+func authInfoMapsEqual(a, b map[string]*clientcmdapi.AuthInfo) bool {
 	if len(a) != len(b) {
-		if debug {
-			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos map length differs: a=%d b=%d\n", len(a), len(b))
-		}
+		log.Debug("[kubeconfig-diff] AuthInfos map length differs", logKeyA, len(a), logKeyB, len(b))
 		return false
 	}
 	for k, av := range a {
 		bv, ok := b[k]
 		if !ok {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos[%q] missing from b\n", k)
-			}
+			log.Debug("[kubeconfig-diff] AuthInfos key missing from b", logKeyKey, k)
 			return false
 		}
 		if !authInfosEqual(av, bv) {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos[%q] differs:\n  a=%#v\n  b=%#v\n", k, av, bv)
-				if av.Exec != nil || bv.Exec != nil {
-					fmt.Fprintf(os.Stderr, "  a.Exec=%#v\n  b.Exec=%#v\n", av.Exec, bv.Exec)
-				}
+			log.Debug("[kubeconfig-diff] AuthInfos entry differs", logKeyKey, k, logKeyA, av, logKeyB, bv)
+			if av.Exec != nil || bv.Exec != nil {
+				log.Debug("[kubeconfig-diff] AuthInfos entry Exec differs", logKeyKey, k, "a.Exec", av.Exec, "b.Exec", bv.Exec)
 			}
 			return false
 		}
@@ -497,77 +544,53 @@ func authInfoMapsEqualDebug(a, b map[string]*clientcmdapi.AuthInfo, debug bool) 
 // newConfig are preserved by merge regardless, so they don't enter the
 // comparison.
 //
-// When ATMOS_KUBECONFIG_DEBUG_DIFF is set in the environment, the function
-// emits a diagnostic line to stderr describing which entry/field caused
-// the "would change" result. Used to debug platform-specific divergences
-// where a logically-identical kubeconfig appears to differ after a load+
-// re-serialize cycle (most notably on Windows).
+// Emits a diagnostic log line describing which entry/field caused the
+// "would change" result; visible with ATMOS_LOGS_LEVEL=Debug. Used to debug
+// platform-specific divergences where a logically-identical kubeconfig
+// appears to differ after a load+re-serialize cycle (most notably on
+// Windows).
 func mergeWouldChange(existing, newConfig *clientcmdapi.Config) bool {
-	debug := kubeconfigDebugDiff()
-
 	if newConfig.CurrentContext != "" && existing.CurrentContext != newConfig.CurrentContext {
-		if debug {
-			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] CurrentContext differs: existing=%q new=%q\n",
-				existing.CurrentContext, newConfig.CurrentContext)
-		}
+		log.Debug("[kubeconfig-diff] CurrentContext differs", logKeyExisting, existing.CurrentContext, logKeyNew, newConfig.CurrentContext)
 		return true
 	}
 	for k, v := range newConfig.Clusters {
 		ev, ok := existing.Clusters[k]
 		if !ok {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters[%q] missing from existing\n", k)
-			}
+			log.Debug("[kubeconfig-diff] Clusters key missing from existing", logKeyKey, k)
 			return true
 		}
 		if !clustersEqual(ev, v) {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters[%q] differs:\n  existing=%#v\n  new=%#v\n", k, ev, v)
-			}
+			log.Debug("[kubeconfig-diff] Clusters entry differs", logKeyKey, k, logKeyExisting, ev, logKeyNew, v)
 			return true
 		}
 	}
 	for k, v := range newConfig.Contexts {
 		ev, ok := existing.Contexts[k]
 		if !ok {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts[%q] missing from existing\n", k)
-			}
+			log.Debug("[kubeconfig-diff] Contexts key missing from existing", logKeyKey, k)
 			return true
 		}
 		if !contextsEqual(ev, v) {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts[%q] differs:\n  existing=%#v\n  new=%#v\n", k, ev, v)
-			}
+			log.Debug("[kubeconfig-diff] Contexts entry differs", logKeyKey, k, logKeyExisting, ev, logKeyNew, v)
 			return true
 		}
 	}
 	for k, v := range newConfig.AuthInfos {
 		ev, ok := existing.AuthInfos[k]
 		if !ok {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos[%q] missing from existing\n", k)
-			}
+			log.Debug("[kubeconfig-diff] AuthInfos key missing from existing", logKeyKey, k)
 			return true
 		}
 		if !authInfosEqual(ev, v) {
-			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos[%q] differs:\n  existing=%#v\n  new=%#v\n", k, ev, v)
-				if ev.Exec != nil || v.Exec != nil {
-					fmt.Fprintf(os.Stderr, "  existing.Exec=%#v\n  new.Exec=%#v\n", ev.Exec, v.Exec)
-				}
+			log.Debug("[kubeconfig-diff] AuthInfos entry differs", logKeyKey, k, logKeyExisting, ev, logKeyNew, v)
+			if ev.Exec != nil || v.Exec != nil {
+				log.Debug("[kubeconfig-diff] AuthInfos entry Exec differs", logKeyKey, k, "existing.Exec", ev.Exec, "new.Exec", v.Exec)
 			}
 			return true
 		}
 	}
 	return false
-}
-
-// kubeconfigDebugDiff returns true when the user has opted in to diagnostic
-// output from the no-op detection helpers. Gate is an env var so prod paths
-// stay silent and tests can flip it per-test via t.Setenv.
-func kubeconfigDebugDiff() bool {
-	return os.Getenv("ATMOS_KUBECONFIG_DEBUG_DIFF") != ""
 }
 
 // clustersEqual compares the fields of two Cluster entries that BuildClusterConfig

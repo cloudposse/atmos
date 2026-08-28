@@ -232,6 +232,23 @@ func TestDependencyParser_ParseComponentDependencies(t *testing.T) {
 			expectDeps:  []string{"vpc-dev"},
 			expectError: false,
 		},
+		{
+			name:          "empty settings dependencies fall back to component dependencies",
+			stackName:     "dev",
+			componentName: "app",
+			component: map[string]any{
+				cfg.SettingsSectionName: map[string]any{"depends_on": map[string]any{}},
+				"depends_on": map[string]any{
+					"legacy": map[string]any{"component": "vpc"},
+				},
+			},
+			nodeMap: map[string]string{
+				"vpc-dev": "vpc-dev",
+				"app-dev": "app-dev",
+			},
+			expectDeps:  []string{"vpc-dev"},
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {

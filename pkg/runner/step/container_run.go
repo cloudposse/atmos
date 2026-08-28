@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -23,7 +24,7 @@ func (h *ContainerHandler) validateRunAction(step *schema.WorkflowStep) error {
 		return err
 	}
 	if !isValidContainerRuntime(run.Provider) {
-		return invalidContainerField(step, "run.provider", run.Provider, "Provider must be `docker`, `podman`, or empty for auto-detect")
+		return invalidContainerField(step, "run.provider", run.Provider, "Provider must be `auto`, `docker`, `podman`, or empty for auto-detect")
 	}
 	if !isValidContainerPull(run.Pull) {
 		return invalidContainerField(step, "run.pull", run.Pull, "Pull policy must be `missing`, `always`, `never`, or empty")
@@ -52,6 +53,16 @@ func (h *ContainerHandler) executeRun(ctx context.Context, step *schema.Workflow
 		return nil, err
 	}
 	applyRuntimeEnv(runtime, vars)
+
+	stack, err := resolveContainerStepStack(step, vars)
+	if err != nil {
+		return nil, fmt.Errorf("%w: step %q: %w", errUtils.ErrContainerStepResolveStack, step.Name, err)
+	}
+	// An explicit --network in run_args (e.g. host networking) is the user's
+	// choice; attaching the shared network too would conflict with it.
+	if stack != "" && !container.HasExplicitNetworkOverride(config.RunArgs) {
+		container.AttachSharedNetwork(ctx, runtime, &config.Networks, stack, containerStepIdentity(step.Name))
+	}
 
 	result, err := container.RunEphemeralContainer(ctx, runtime, config)
 	if result == nil {
@@ -161,6 +172,8 @@ func (h *ContainerHandler) buildRunConfig(ctx context.Context, step *schema.Work
 		PullPolicy:        run.Pull,
 		CleanupPolicy:     run.Cleanup,
 		Host:              runtimeHost(run.Runtime),
+		Restart:           container.RestartPolicyFromStep(&run),
+		HealthCheck:       container.HealthCheckFromStep(&run),
 		TTY:               step.Tty,
 		Interactive:       step.Interactive,
 		Labels: map[string]string{
@@ -173,6 +186,37 @@ func (h *ContainerHandler) buildRunConfig(ctx context.Context, step *schema.Work
 func (h *ContainerHandler) buildConfig(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*container.EphemeralConfig, error) {
 	config, _, err := h.buildRunConfig(ctx, step, vars)
 	return config, err
+}
+
+// resolveContainerStepStack resolves the stack a `type: container, action: run`
+// step's ephemeral container should join for shared networking: the step's own
+// `stack:` override, falling back to the workflow's --stack flag/ATMOS_STACK env
+// (the same precedence pkg/runner/step's other stack-aware step types use, e.g.
+// resolveStoreStack), and finally "" -- a step with no stack context in scope
+// gets no network attachment, the same as it always has, rather than guessing.
+func resolveContainerStepStack(step *schema.WorkflowStep, vars *Variables) (string, error) {
+	stack := step.Stack
+	if stack == "" {
+		stack = vars.Flags["stack"]
+	}
+	if stack == "" {
+		stack = vars.Env["ATMOS_STACK"]
+	}
+	if stack == "" {
+		return "", nil
+	}
+	return vars.Resolve(stack)
+}
+
+// containerStepIdentity is the network alias identity for a container step,
+// defaulting to "step" like containerStepName so an unnamed step still gets a
+// usable (if generic) alias.
+func containerStepIdentity(stepName string) string {
+	name := strings.TrimSpace(stepName)
+	if name == "" {
+		return "step"
+	}
+	return name
 }
 
 // effectiveRunStep resolves the run configuration from the step's `with:` block

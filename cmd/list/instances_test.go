@@ -424,4 +424,17 @@ func TestParseInstancesOptions(t *testing.T) {
 
 		assert.Equal(t, "prod-*", opts.Stack)
 	})
+
+	t.Run("tags_and_labels_flags", func(t *testing.T) {
+		cmd := buildCmd()
+		require.NoError(t, cmd.Flags().Set("tags", "network,tier-1"))
+		require.NoError(t, cmd.Flags().Set("labels", "team:platform"))
+		v := viper.New()
+		require.NoError(t, instancesParser.BindFlagsToViper(cmd, v))
+
+		opts := parseInstancesOptions(cmd, v)
+
+		assert.Equal(t, []string{"network", "tier-1"}, opts.Tags)
+		assert.Equal(t, "team:platform", opts.LabelsRaw, "labels stay raw until parsed at filter-build time")
+	})
 }

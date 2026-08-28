@@ -1,9 +1,13 @@
 package toolchain
 
 import (
+	"fmt"
+	"slices"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/toolchain"
@@ -13,7 +17,10 @@ const (
 	defaultVersionLimit = 10
 )
 
-var getParser *flags.StandardParser
+var (
+	getParser           *flags.StandardParser
+	supportedGetFormats = []string{"table", "plain", "json"}
+)
 
 var getCmd = &cobra.Command{
 	Use:   "get [tool]",
@@ -35,8 +42,16 @@ var getCmd = &cobra.Command{
 		// Read from viper to respect config precedence (file/env/flag).
 		all := v.GetBool("all")
 		limit := v.GetInt("limit")
+		format := v.GetString("format")
 
-		return toolchain.ListToolVersions(all, limit, toolName)
+		if !slices.Contains(supportedGetFormats, format) {
+			return fmt.Errorf("%w: %q (supported: %v)", errUtils.ErrInvalidFlagValue, format, supportedGetFormats)
+		}
+		if format == "plain" && all {
+			return errUtils.ErrToolchainPlainFormatWithAllFlag
+		}
+
+		return toolchain.ListToolVersions(all, limit, toolName, format)
 	},
 }
 
@@ -45,8 +60,10 @@ func init() {
 	getParser = flags.NewStandardParser(
 		flags.WithBoolFlag("all", "", false, "Show all available versions"),
 		flags.WithIntFlag("limit", "", defaultVersionLimit, "Limit number of versions to display"),
+		flags.WithStringFlag("format", "f", "table", fmt.Sprintf("Output format: %v", supportedGetFormats)),
 		flags.WithEnvVars("all", "ATMOS_TOOLCHAIN_ALL"),
 		flags.WithEnvVars("limit", "ATMOS_TOOLCHAIN_LIMIT"),
+		flags.WithEnvVars("format", "ATMOS_TOOLCHAIN_GET_FORMAT"),
 	)
 
 	// Register flags.
@@ -54,6 +71,13 @@ func init() {
 
 	// Bind flags to Viper.
 	if err := getParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Register shell completion for the format flag.
+	if err := getCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return supportedGetFormats, cobra.ShellCompDirectiveNoFileComp
+	}); err != nil {
 		panic(err)
 	}
 }

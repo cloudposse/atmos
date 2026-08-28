@@ -13,6 +13,7 @@ import (
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -85,7 +86,7 @@ func ExecuteAtmosCmd() error {
 
 	// Start the UI
 	app, err := tui.Execute(commands, stacksComponentsMap, componentsStacksMap)
-	fmt.Println()
+	ui.Writeln("")
 	if err != nil {
 		return err
 	}

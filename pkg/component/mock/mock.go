@@ -11,7 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // MockComponentProvider is a proof-of-concept component type for testing the component registry pattern.
@@ -113,14 +113,14 @@ func (m *MockComponentProvider) Execute(ctx *component.ExecutionContext) error {
 	defer perf.Track(ctx.AtmosConfig, "mock.Execute")()
 
 	// Mock execution - simulates command execution without external dependencies.
-	u.PrintfMessageToTUI("Mock component execution:\n")
-	u.PrintfMessageToTUI("  Type: %s\n", ctx.ComponentType)
-	u.PrintfMessageToTUI("  Component: %s\n", ctx.Component)
-	u.PrintfMessageToTUI("  Stack: %s\n", ctx.Stack)
-	u.PrintfMessageToTUI("  Command: %s\n", ctx.Command)
+	ui.Writef("Mock component execution:\n")
+	ui.Writef("  Type: %s\n", ctx.ComponentType)
+	ui.Writef("  Component: %s\n", ctx.Component)
+	ui.Writef("  Stack: %s\n", ctx.Stack)
+	ui.Writef("  Command: %s\n", ctx.Command)
 
 	if ctx.SubCommand != "" {
-		u.PrintfMessageToTUI("  SubCommand: %s\n", ctx.SubCommand)
+		ui.Writef("  SubCommand: %s\n", ctx.SubCommand)
 	}
 
 	return nil
@@ -131,7 +131,7 @@ func (m *MockComponentProvider) GenerateArtifacts(ctx *component.ExecutionContex
 	defer perf.Track(ctx.AtmosConfig, "mock.GenerateArtifacts")()
 
 	// Mock artifact generation - no actual files created.
-	u.PrintfMessageToTUI("Mock artifact generation for %s in stack %s\n", ctx.Component, ctx.Stack)
+	ui.Writef("Mock artifact generation for %s in stack %s\n", ctx.Component, ctx.Stack)
 	return nil
 }
 

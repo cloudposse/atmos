@@ -1,0 +1,76 @@
+---
+slug: vendor-stack-flag
+title: "Select Vendored Components by Stack, Label, or Tag"
+authors: [osterman]
+tags: [feature]
+---
+
+A CI job deploying the dev stack shouldn't need to vendor every component in the repository --
+just the ones dev actually uses. Production deploys have the same problem in reverse: pulling in
+components that belong to other environments wastes time and widens what that job can touch.
+Selecting the right subset meant either hand-listing every component with repeated `--component`
+flags or reaching for `--everything` and pulling in components the job has nothing to do with.
+
+<!--truncate-->
+
+## The Problem
+
+Scoping a vendor pull to "just what this stack needs" is a selection CI reaches for on every
+deploy, not an occasional convenience. Without it, the choice was between hand-listing every
+component or vendoring the entire repository. Neither scales, and neither composes: picking
+components by tag, by name, and by the stack they belong to used to be three separate, mutually
+exclusive modes rather than filters that could work together.
+
+## The Fix
+
+`atmos vendor pull` now accepts `--stack` and `--labels` selectors, and `--tags` composes with
+either of them (or with `--component`) as an independent, narrowing filter -- across `pull`,
+`diff`, `clean`, `update`, and `verify` alike:
+
+- `--stack` vendors every component declared in that stack that has its own `component.yaml`.
+- `--labels` filters that eligible stack component set by each component's stack
+  `metadata.labels`.
+- `--tags` narrows whichever set `--stack`/`--labels` (or `--component`) resolved, down to
+  components whose declared source tags match.
+
+Combining selectors that don't overlap now fails with a clear error instead of silently matching
+nothing or falling back to a different set than you asked for.
+
+## How to Use It
+
+```shell
+# Vendor each stack component that has a component.yaml
+atmos vendor pull --stack plat-ue2-dev
+
+# Select by stack metadata.labels instead of stack name
+atmos vendor pull --labels tier=1,cost-center:platform
+
+# Narrow a stack selection further by declared tag
+atmos vendor pull --stack plat-ue2-dev --tags networking
+
+# Preview instead of pulling
+atmos vendor pull --stack plat-ue2-dev --dry-run
+```
+
+The same selectors work on the other vendor subcommands:
+
+```shell
+atmos vendor diff --stack plat-ue2-dev --tags networking
+atmos vendor update --labels tier=1 --check
+atmos vendor clean --stack plat-ue2-dev
+atmos vendor verify --labels tier=1
+```
+
+For `atmos vendor pull`, `--stack`/`--labels` install each matched component from its own
+`component.yaml`, bypassing `vendor.yaml` entirely -- components without one are skipped, and if
+every matched component lacks a `component.yaml` the command succeeds having pulled nothing. It
+only fails with the shared selector's "no components matched" error when `--stack`/`--labels`
+itself resolves to no stack, or when `--tags` narrows an already non-empty selection down to zero.
+`--component` still selects a single, explicitly named component and isn't combined with
+`--stack`/`--labels`, but composes with `--tags` the same way they do. `diff`, `update`, `clean`,
+and `verify` use the same selectors to resolve component names, but retain their own
+manifest-resolution rules (`vendor.yaml` first, falling back to `component.yaml`).
+
+## Get Involved
+
+Have feedback or ideas for vendor improvements? Join our [Slack community](https://slack.cloudposse.com) or open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

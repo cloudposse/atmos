@@ -1,6 +1,7 @@
 package helmfile
 
 import (
+	"context"
 	"os"
 	"strings"
 
@@ -68,38 +69,111 @@ func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
 	}
 	info.CliArgs = []string{"helmfile", commandName}
 
-	hookCalled := false
 	forceCIMode := helmfileCIModeEnabled(cmd, argsCI)
-	info.PerComponentHook = func(hookInfo *schema.ConfigAndStacksInfo, output string, execErr error) {
-		hookCalled = true
-		runHelmfileCIHook(commandName, hookInfo, output, execErr, forceCIMode)
+	nodeHooks := &helmfileNodeHooks{
+		cmd:         cmd,
+		args:        args,
+		beforeEvent: helmfileBeforeEvent(commandName),
+		afterEvent:  helmfileAfterEvent(commandName),
+		forceCIMode: forceCIMode,
 	}
+	info.NodeHooks = nodeHooks
 
 	err = e.ExecuteHelmfile(info)
-	if err != nil && !hookCalled {
-		runHelmfileCIHook(commandName, &info, "", err, forceCIMode)
+	if err != nil && !nodeHooks.called {
+		_ = nodeHooks.After(context.Background(), &info, "", err)
 	}
 	return err
 }
 
-func runHelmfileCIHook(commandName string, info *schema.ConfigAndStacksInfo, output string, execErr error, forceCIMode bool) {
+// helmfileNodeHooks implements schema.ComponentNodeHooks for one Helmfile
+// command invocation. Fires user-defined hooks.RunAll (Helmfile previously had
+// no user-hook wiring at all — this is the fix) and CI hooks.RunCIHooks,
+// mirroring cmd/terraform's terraformNodeHooks. Helmfile has no bulk-dispatch
+// mode (no --all/--affected/--query), so Before/After each fire at most once
+// per invocation, from the single call site inside internal/exec/helmfile.go
+// that executes the resolved component.
+type helmfileNodeHooks struct {
+	cmd         *cobra.Command
+	args        []string
+	beforeEvent h.HookEvent
+	afterEvent  h.HookEvent
+	forceCIMode bool
+	called      bool
+}
+
+// Before implements schema.ComponentNodeHooks.
+func (n *helmfileNodeHooks) Before(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	return n.BeforeWithWriters(ctx, info, schema.ComponentNodeHookWriters{})
+}
+
+// BeforeWithWriters implements schema.ComponentNodeHooksWithOutput.
+func (n *helmfileNodeHooks) BeforeWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, writers schema.ComponentNodeHookWriters) error {
+	n.called = true
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		log.Warn("CI hook config init failed", "component", info.ComponentFromArg, "error", err)
-		return
+		return nil // Config errors surface on the real execution path, not here.
+	}
+	return n.runUserHooksWithWriters(&atmosConfig, info, n.beforeEvent, h.Outcome{Status: h.RunSuccess}, writers)
+}
+
+// After implements schema.ComponentNodeHooks.
+func (n *helmfileNodeHooks) After(ctx context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error) error {
+	return n.AfterWithWriters(ctx, info, output, execErr, schema.ComponentNodeHookWriters{})
+}
+
+// AfterWithWriters implements schema.ComponentNodeHooksWithOutput.
+func (n *helmfileNodeHooks) AfterWithWriters(_ context.Context, info *schema.ConfigAndStacksInfo, output string, execErr error, writers schema.ComponentNodeHookWriters) error {
+	n.called = true
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		log.Warn("CI hook config init failed", "component", info.ComponentFromArg, "error", err)
+		return nil
 	}
 
+	outcome := h.Outcome{Status: h.RunSuccess}
+	if execErr != nil {
+		outcome = h.Outcome{Status: h.RunFailure, Err: execErr, ExitCode: errUtils.GetExitCode(execErr)}
+	}
+	hookErr := n.runUserHooksWithWriters(&atmosConfig, info, n.afterEvent, outcome, writers)
+
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
-		Event:        helmfileAfterEvent(commandName),
+		Event:        n.afterEvent,
 		AtmosConfig:  &atmosConfig,
 		Info:         info,
 		Output:       output,
-		ForceCIMode:  forceCIMode,
+		ForceCIMode:  n.forceCIMode,
 		CommandError: execErr,
 		ExitCode:     errUtils.GetExitCode(execErr),
 	}); err != nil {
 		log.Warn("CI hook execution failed", "component", info.ComponentFromArg, "error", err)
 	}
+	return hookErr
+}
+
+// runUserHooks resolves and runs this component's user-defined hooks for a
+// single lifecycle event, propagating hooks.RunPerComponentHooks' error
+// verbatim: RunAll already resolves each hook's on_failure mode internally
+// (applyOnFailure) — a non-nil return specifically means on_failure: fail.
+func (n *helmfileNodeHooks) runUserHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, event h.HookEvent, outcome h.Outcome) error {
+	return n.runUserHooksWithWriters(atmosConfig, info, event, outcome, schema.ComponentNodeHookWriters{})
+}
+
+func (n *helmfileNodeHooks) runUserHooksWithWriters(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, event h.HookEvent, outcome h.Outcome, writers schema.ComponentNodeHookWriters) error {
+	if event == "" {
+		return nil
+	}
+	return h.RunPerComponentHooks(&h.RunPerComponentHooksOptions{
+		Event:       event,
+		AtmosConfig: atmosConfig,
+		Info:        info,
+		Cmd:         n.cmd,
+		Args:        n.args,
+		Outcome:     outcome,
+		Stdout:      writers.Stdout,
+		Stderr:      writers.Stderr,
+	})
 }
 
 func helmfileAfterEvent(commandName string) h.HookEvent {
@@ -118,6 +192,25 @@ func helmfileAfterEvent(commandName string) h.HookEvent {
 		return h.AfterHelmfileDestroy
 	default:
 		return h.HookEvent("after.helmfile." + commandName)
+	}
+}
+
+func helmfileBeforeEvent(commandName string) h.HookEvent {
+	switch commandName {
+	case "template":
+		return h.BeforeHelmfileTemplate
+	case "diff":
+		return h.BeforeHelmfileDiff
+	case "apply":
+		return h.BeforeHelmfileApply
+	case "sync":
+		return h.BeforeHelmfileSync
+	case "deploy":
+		return h.BeforeHelmfileDeploy
+	case "destroy":
+		return h.BeforeHelmfileDestroy
+	default:
+		return h.HookEvent("before.helmfile." + commandName)
 	}
 }
 

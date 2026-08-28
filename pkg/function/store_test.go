@@ -469,68 +469,6 @@ func TestParseStoreGetParams(t *testing.T) {
 	}
 }
 
-func TestExtractPipeOptions(t *testing.T) {
-	tests := []struct {
-		name        string
-		parts       []string
-		wantDefault *string
-		wantQuery   string
-		wantErr     bool
-	}{
-		{
-			name:  "empty parts",
-			parts: []string{},
-		},
-		{
-			name:        "default only",
-			parts:       []string{"default \"value\""},
-			wantDefault: strPtr("value"),
-		},
-		{
-			name:      "query only",
-			parts:     []string{"query \".foo\""},
-			wantQuery: ".foo",
-		},
-		{
-			name:        "both default and query",
-			parts:       []string{"default \"val\"", "query \".bar\""},
-			wantDefault: strPtr("val"),
-			wantQuery:   ".bar",
-		},
-		{
-			name:    "invalid - no value",
-			parts:   []string{"default"},
-			wantErr: true,
-		},
-		{
-			name:    "invalid - unknown key",
-			parts:   []string{"unknown \"value\""},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			defVal, query, err := extractPipeOptions(tt.parts)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantQuery, query)
-
-			if tt.wantDefault == nil {
-				assert.Nil(t, defVal)
-			} else {
-				require.NotNil(t, defVal)
-				assert.Equal(t, *tt.wantDefault, *defVal)
-			}
-		})
-	}
-}
-
 // strPtr is a helper to create a pointer to a string.
 func strPtr(s string) *string {
 	return &s

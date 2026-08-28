@@ -2,10 +2,13 @@ package merge
 
 import (
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewMergeContext(t *testing.T) {
@@ -37,6 +40,56 @@ func TestMergeContext_WithFile(t *testing.T) {
 	assert.NotNil(t, ctx3)
 	assert.Equal(t, "stacks/file.yaml", ctx3.CurrentFile)
 	assert.Equal(t, []string{"stacks/file.yaml"}, ctx3.ImportChain)
+}
+
+// TestMergeContext_WithFile_ConcurrentSiblingsAreRaceFree covers a real
+// data race in stack processing: processYAMLConfigFileWithContextInternal
+// (internal/exec/stack_processor_utils.go) spawns one goroutine per imported
+// file and passes all of them the same parent *MergeContext, so every
+// sibling calls WithFile on the same mc concurrently. Appending directly
+// with append(mc.ImportChain, filePath) reused mc.ImportChain's backing
+// array whenever it had spare capacity, so two siblings could write their
+// different filePath values into the same backing slot at the same time.
+//
+// The parent is built through several sequential (non-concurrent) WithFile
+// calls first, matching a real multi-level import chain, because Go's slice
+// growth leaves spare capacity after enough small appends (e.g. len 3 gets
+// cap 4): forking siblings directly off a freshly built, exactly-sized chain
+// would not reproduce the race.
+//
+// Run under -race (atmos test --coverage or go test -race) to see this fail
+// without the fix.
+func TestMergeContext_WithFile_ConcurrentSiblingsAreRaceFree(t *testing.T) {
+	parent := NewMergeContext().
+		WithFile("stacks/root.yaml").
+		WithFile("stacks/catalog.yaml").
+		WithFile("stacks/mixin.yaml")
+	require.Less(t, len(parent.ImportChain), cap(parent.ImportChain),
+		"test setup must leave spare capacity in ImportChain for the race to be reachable")
+
+	const siblings = 32
+	results := make([]*MergeContext, siblings)
+
+	var wg sync.WaitGroup
+	for i := range siblings {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			results[i] = parent.WithFile(fmt.Sprintf("stacks/import-%d.yaml", i))
+		}(i)
+	}
+	wg.Wait()
+
+	// Every sibling must see its own file as the last link in its own chain,
+	// unaffected by any other sibling's concurrent call.
+	wantPrefix := []string{"stacks/root.yaml", "stacks/catalog.yaml", "stacks/mixin.yaml"}
+	for i, ctx := range results {
+		wantFile := fmt.Sprintf("stacks/import-%d.yaml", i)
+		assert.Equal(t, wantFile, ctx.CurrentFile)
+		assert.Equal(t, append(append([]string{}, wantPrefix...), wantFile), ctx.ImportChain)
+	}
+	// The parent's own chain must be untouched by any sibling's append.
+	assert.Equal(t, wantPrefix, parent.ImportChain)
 }
 
 func TestMergeContext_Clone(t *testing.T) {

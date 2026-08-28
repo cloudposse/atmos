@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -70,7 +71,24 @@ func TestFileHandler_ResolveStartPath(t *testing.T) {
 
 		_, err := fileHandler.resolveStartPath(step, vars)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to resolve path")
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+	})
+
+	t.Run("relative path resolves against working directory, not cwd", func(t *testing.T) {
+		workDir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(workDir, "sub"), 0o755))
+		t.Chdir(t.TempDir())
+
+		step := &schema.WorkflowStep{
+			Name:             "test",
+			Path:             "sub",
+			WorkingDirectory: workDir,
+		}
+		vars := NewVariables()
+
+		path, err := fileHandler.resolveStartPath(step, vars)
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(workDir, "sub"), path)
 	})
 }
 

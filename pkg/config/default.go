@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
-	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -75,13 +74,20 @@ var (
 				Provider:          "kubectl",
 				AutoGenerateFiles: false,
 			},
+			Container: schema.ContainerComponentsConfig{
+				BasePath: "components/container",
+			},
 		},
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "replace",
 			Terminal: schema.Terminal{
-				MaxWidth: templates.GetTerminalWidth(),
-				Pager:    "less",
+				// Unlimited by default: 0 means "use the live detected terminal width".
+				// Baking GetTerminalWidth() here froze the width measured at package
+				// init (before TTY setup — typically 78) and clamped all rendering.
+				MaxWidth: 0,
+				Pager:    "false", // Disabled by default since PR #1642 (journaled in pkg/edition); previously "less" here contradicted setDefaultConfiguration.
 				Unicode:  true,
+				Help:     schema.HelpSettings{Filter: true}, // Focused --help by default since PR #2762 (journaled in pkg/edition).
 				SyntaxHighlighting: schema.SyntaxHighlighting{
 					Enabled:     true,
 					Formatter:   "terminal",
