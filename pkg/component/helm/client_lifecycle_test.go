@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -287,6 +288,33 @@ func TestReleaseOperationContextAppliesTimeout(t *testing.T) {
 	deadline, hasDeadline := ctx.Deadline()
 	require.True(t, hasDeadline)
 	assert.WithinDuration(t, started.Add(timeout), deadline, time.Second)
+}
+
+func TestApplyReleasePreparesChartBeforeLifecycleTimeout(t *testing.T) {
+	chartDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(chartDir, "Chart.yaml"), []byte("apiVersion: ["), 0o600))
+
+	for _, operation := range []string{releaseOperationInstall, releaseOperationUpgrade} {
+		t.Run(operation, func(t *testing.T) {
+			actx := memoryActionContext(t)
+			stubActionContext(t, actx)
+			spec := testdataChartSpec(t, "prepare-"+operation)
+			spec.Chart = chartDir
+			timeout := "1ns"
+			spec.Release.Timeout = &timeout
+			if operation == releaseOperationUpgrade {
+				require.NoError(t, actx.cfg.Releases.Create(release.Mock(&release.MockReleaseOptions{
+					Name:      spec.ReleaseName,
+					Namespace: spec.Namespace,
+				})))
+			}
+
+			result, err := applyRelease(context.Background(), spec, true)
+			require.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
+			assert.NotErrorIs(t, err, context.DeadlineExceeded)
+			assert.Equal(t, operation, result.Operation)
+		})
+	}
 }
 
 func TestReleaseOperationContextPreservesZeroTimeout(t *testing.T) {

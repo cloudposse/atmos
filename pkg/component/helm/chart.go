@@ -174,7 +174,11 @@ func runInstall(ctx context.Context, client *action.Install, settings *cli.EnvSe
 		return "", err
 	}
 
-	rel, err := client.RunWithContext(ctx, loaded, spec.Values)
+	operationCtx, cancel := releaseOperationContext(ctx, spec.Lifecycle.Policy.Timeout)
+	defer cancel()
+	client.WaitOptions = releaseWaitOptions(operationCtx)
+
+	rel, err := client.RunWithContext(operationCtx, loaded, spec.Values)
 	if err != nil {
 		return "", err
 	}

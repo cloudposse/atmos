@@ -115,9 +115,7 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseAct
 		spec.Lifecycle = lifecycle
 		reportReleaseProgress(spec, releaseOperationInstall, lifecycle)
 		reportResolvedLifecycle(lifecycle)
-		operationCtx, cancel := releaseOperationContext(ctx, lifecycle.Policy.Timeout)
-		defer cancel()
-		manifest, installErr := installRelease(operationCtx, actx, spec, dryRun)
+		manifest, installErr := installRelease(ctx, actx, spec, dryRun)
 		return releaseActionResult{Manifest: manifest, Operation: releaseOperationInstall, Lifecycle: lifecycle}, installErr
 	} else if historyErr != nil {
 		return releaseActionResult{}, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr)
@@ -129,9 +127,7 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseAct
 	spec.Lifecycle = lifecycle
 	reportReleaseProgress(spec, releaseOperationUpgrade, lifecycle)
 	reportResolvedLifecycle(lifecycle)
-	operationCtx, cancel := releaseOperationContext(ctx, lifecycle.Policy.Timeout)
-	defer cancel()
-	manifest, upgradeErr := upgradeRelease(operationCtx, actx, spec, dryRun)
+	manifest, upgradeErr := upgradeRelease(ctx, actx, spec, dryRun)
 	return releaseActionResult{Manifest: manifest, Operation: releaseOperationUpgrade, Lifecycle: lifecycle}, upgradeErr
 }
 
@@ -155,7 +151,6 @@ func releaseWaitOptions(ctx context.Context) []kube.WaitOption {
 
 func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, dryRun bool) (string, error) {
 	client := newInstallClient(actx, spec, dryRun)
-	client.WaitOptions = releaseWaitOptions(ctx)
 	manifest, err := runInstall(ctx, client, actx.settings, spec)
 	if err != nil {
 		return "", releaseOperationError("install", spec, err)
@@ -191,7 +186,6 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	client.Namespace = spec.Namespace
 	client.Version = spec.Version
 	configureUpgradeLifecycle(client, spec.Lifecycle.Policy)
-	client.WaitOptions = releaseWaitOptions(ctx)
 	if dryRun {
 		client.DryRunStrategy = action.DryRunServer
 	}
@@ -206,14 +200,18 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 		return "", err
 	}
 
-	rel, err := client.RunWithContext(ctx, spec.ReleaseName, loaded, spec.Values)
+	operationCtx, cancel := releaseOperationContext(ctx, spec.Lifecycle.Policy.Timeout)
+	defer cancel()
+	client.WaitOptions = releaseWaitOptions(operationCtx)
+
+	rel, err := client.RunWithContext(operationCtx, spec.ReleaseName, loaded, spec.Values)
 	if err != nil && !dryRun && spec.Lifecycle.Policy.OnFailure == failurePolicyRollback {
 		if historyErr := enforceReleaseHistoryLimit(actx.cfg.Releases, spec.ReleaseName, spec.Lifecycle.Policy.MaxHistory); historyErr != nil {
 			err = errors.Join(err, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr))
 		}
 	}
 	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
+		if ctxErr := operationCtx.Err(); ctxErr != nil {
 			return "", releaseOperationError("upgrade", spec, errors.Join(ctxErr, err))
 		}
 		return "", releaseOperationError("upgrade", spec, err)
