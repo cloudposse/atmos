@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/creack/pty"
@@ -1594,16 +1595,24 @@ func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPatte
 // also flood CI logs if a command misbehaves and prints unbounded data.
 const maxDiagOutputLen = 8192
 
+// diagTruncationSuffix marks diagnostic output that ran over maxDiagOutputLen. Its length is
+// reserved out of maxDiagOutputLen so the combined result never exceeds the configured cap.
+const diagTruncationSuffix = "...[truncated]"
+
 // redactAndCapDiagOutput masks known secrets (e.g. GITHUB_TOKEN, forwarded to every child
 // process under test) out of diagnostic output and truncates it to maxDiagOutputLen before it's
 // written to the test log, so a failing command that prints its environment can't leak a token
 // into CI logs.
 func redactAndCapDiagOutput(s string) string {
 	masked := iolib.MaskString(s)
-	if len(masked) > maxDiagOutputLen {
-		masked = masked[:maxDiagOutputLen] + "...[truncated]"
+	if len(masked) <= maxDiagOutputLen {
+		return masked
 	}
-	return masked
+	limit := maxDiagOutputLen - len(diagTruncationSuffix)
+	for limit > 0 && !utf8.RuneStart(masked[limit]) {
+		limit--
+	}
+	return masked[:limit] + diagTruncationSuffix
 }
 
 // dumpCapturedOutput prints the command's captured stdout/stderr into the test log. A
@@ -2000,6 +2009,74 @@ func TestUnwrapMarkdownProseLinesPreservesSemanticBoundaries(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, unwrapMarkdownProseLines(tt.input))
+		})
+	}
+}
+
+// TestRedactAndCapDiagOutput covers redactAndCapDiagOutput's secret-masking and length-capping
+// behavior in isolation from the CLI test harness that normally calls it.
+func TestRedactAndCapDiagOutput(t *testing.T) {
+	tests := []struct {
+		name   string
+		secret string // if set, registered as GITHUB_TOKEN (via a fresh masker) before the call
+		input  string
+		check  func(t *testing.T, got string)
+	}{
+		{
+			name:  "empty input",
+			input: "",
+			check: func(t *testing.T, got string) {
+				assert.Empty(t, got)
+			},
+		},
+		{
+			name:  "below limit is unchanged",
+			input: "plain output\nno secrets here\n",
+			check: func(t *testing.T, got string) {
+				assert.Equal(t, "plain output\nno secrets here\n", got)
+			},
+		},
+		{
+			name:   "registered secret is redacted",
+			secret: "ghp_test-secret-token-value",
+			input:  "before ghp_test-secret-token-value after",
+			check: func(t *testing.T, got string) {
+				assert.NotContains(t, got, "ghp_test-secret-token-value")
+				assert.Contains(t, got, iolib.MaskReplacement)
+			},
+		},
+		{
+			name:  "above limit is truncated to exactly maxDiagOutputLen",
+			input: strings.Repeat("a", maxDiagOutputLen*2),
+			check: func(t *testing.T, got string) {
+				assert.Len(t, got, maxDiagOutputLen)
+				assert.True(t, strings.HasSuffix(got, diagTruncationSuffix))
+			},
+		},
+		{
+			// A 3-byte rune repeated means the naive cut point (maxDiagOutputLen -
+			// len(diagTruncationSuffix)) does not land on a rune boundary, forcing the
+			// backup-to-a-valid-boundary logic to actually engage.
+			name:  "truncation never splits a multibyte rune",
+			input: strings.Repeat("日", maxDiagOutputLen),
+			check: func(t *testing.T, got string) {
+				assert.LessOrEqual(t, len(got), maxDiagOutputLen)
+				assert.True(t, utf8.ValidString(got), "truncated output must remain valid UTF-8")
+				assert.True(t, strings.HasSuffix(got, diagTruncationSuffix))
+				kept := strings.TrimSuffix(got, diagTruncationSuffix)
+				assert.Zero(t, len(kept)%3, "kept portion should end on a full rune boundary")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.secret != "" {
+				t.Setenv("GITHUB_TOKEN", tt.secret)
+				iolib.Reset()
+				t.Cleanup(iolib.Reset)
+			}
+			tt.check(t, redactAndCapDiagOutput(tt.input))
 		})
 	}
 }
