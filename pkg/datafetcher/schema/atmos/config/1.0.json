@@ -3502,7 +3502,7 @@
             }
           ]
         },
-        "type": {
+        "provides": {
           "anyOf": [
             {
               "type": "string"
@@ -3511,7 +3511,20 @@
               "type": "null"
             }
           ],
-          "description": "Type specifies the semantic type of this argument: \"component\" or \"stack\".\nWhen set, the argument value is used to resolve component configuration."
+          "description": "Provides specifies what this argument's value provides: \"component\" or \"stack\".\nWhen set, the argument value is used to resolve component configuration."
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "provides"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Deprecated: use Provides."
         },
         "values": {
           "anyOf": [
@@ -3700,7 +3713,7 @@
           ]
         },
         "default": true,
-        "semantic_type": {
+        "provides": {
           "anyOf": [
             {
               "type": "string"
@@ -3709,7 +3722,20 @@
               "type": "null"
             }
           ],
-          "description": "SemanticType specifies the semantic type of this flag: \"component\" or \"stack\".\nWhen set, the flag value is used to resolve component configuration."
+          "description": "Provides specifies what this flag's value provides: \"component\" or \"stack\".\nWhen set, the flag value is used to resolve component configuration."
+        },
+        "semantic_type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "provides"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Deprecated: use Provides."
         },
         "values": {
           "anyOf": [
