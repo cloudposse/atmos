@@ -31,28 +31,31 @@ import (
 func SafeJoin(destDir, entryName string) (string, error) {
 	defer perf.Track(nil, "filesystem.SafeJoin")()
 
+	// Reject absolute-looking and backslash-containing entry names outright rather
+	// than relying on filepath.Join/Rel to neutralize them: Join treats an embedded
+	// leading "/" as just another path segment (so "/etc/passwd" harmlessly becomes
+	// destDir/etc/passwd, not an escape), but both shapes are never legitimate zip/tar
+	// entry names -- the format always uses forward slashes -- so treat either as a
+	// suspicious archive outright.
 	if filepath.IsAbs(entryName) || strings.HasPrefix(entryName, "/") || strings.HasPrefix(entryName, "\\") {
 		return "", fmt.Errorf(errUtils.ErrWrapWithNameFormat, errUtils.ErrArchiveEntryEscapesDest, entryName)
 	}
 	if strings.Contains(entryName, "\\") {
 		return "", fmt.Errorf(errUtils.ErrWrapWithNameFormat, errUtils.ErrArchiveEntryEscapesDest, entryName)
 	}
-	for _, part := range strings.Split(filepath.ToSlash(entryName), "/") {
-		if part == ".." {
-			return "", fmt.Errorf(errUtils.ErrWrapWithNameFormat, errUtils.ErrArchiveEntryEscapesDest, entryName)
-		}
-	}
 
 	cleanDestDir := filepath.Clean(destDir)
 	target := filepath.Join(cleanDestDir, filepath.FromSlash(entryName))
 
-	// Defense in depth: given the guards above (no absolute path, no backslash, no ".."
-	// component), Join+Clean of destDir with a purely relative, dot-dot-free entry name
-	// can never actually let target escape destDir. This re-verifies that via
-	// filepath.Rel rather than a string-prefix comparison, since a naive
-	// `strings.HasPrefix(target, cleanDestDir+separator)` check incorrectly rejects a
-	// valid target when cleanDestDir is a root path with no room for a trailing
-	// separator to appear before the next path segment (destDir "." or "" -> cleanDestDir
+	// filepath.Rel is the actual containment check: it reflects the true
+	// relationship between target and cleanDestDir after Join has resolved any ".."
+	// components, so it correctly accepts a harmless internal ".." that never leaves
+	// destDir (e.g. "a/../b") and correctly rejects one that does, including the
+	// sibling-directory-name case ("../destEVIL/file" is not a "destEVIL" component
+	// match but does resolve outside cleanDestDir). A naive
+	// `strings.HasPrefix(target, cleanDestDir+separator)` check would also incorrectly
+	// reject a valid target when cleanDestDir is a root path with no room for a
+	// trailing separator before the next path segment (destDir "." or "" -> cleanDestDir
 	// "." with target "file", or destDir "/" with target "/file").
 	rel, err := filepath.Rel(cleanDestDir, target)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {

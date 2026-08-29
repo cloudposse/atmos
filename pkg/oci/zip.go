@@ -22,8 +22,9 @@ const maxZipArchiveSize = 512 * 1024 * 1024 // 512 MiB.
 // maxZipEntrySize bounds how many bytes a single zip entry may decompress
 // to. Module packages are source-code archives (KBs-MBs), so this is
 // generous while still bounding a maliciously crafted entry that expands
-// far past its declared size.
-const maxZipEntrySize = 512 * 1024 * 1024 // 512 MiB.
+// far past its declared size. A var, not a const, so tests can shrink it
+// temporarily instead of writing hundreds of megabytes of fixture data.
+var maxZipEntrySize uint64 = 512 * 1024 * 1024 // 512 MiB.
 
 // extractZip extracts a ZIP archive read from reader into the destination
 // directory. Since zip.Reader requires io.ReaderAt plus a known size, the
@@ -115,7 +116,7 @@ func createFileFromZip(root *os.Root, relPath string, file *zip.File) error {
 	// Copy at most maxZipEntrySize+1 bytes: a nil error means the source still
 	// had data left at that point, i.e. the actual decompressed content
 	// exceeds the declared size (or the declaration was understated/forged).
-	_, err = io.CopyN(writer, src, maxZipEntrySize+1)
+	_, err = io.CopyN(writer, src, int64(maxZipEntrySize)+1) //nolint:gosec // G115: maxZipEntrySize is an internal, code-controlled limit (default 512MiB, only ever shrunk by tests), never derived from untrusted archive input, so it never approaches int64's range.
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.Error("Failed to write file contents", "path", relPath, "error", err)
 		return fmt.Errorf("failed to write file contents to %s: %w", relPath, err)

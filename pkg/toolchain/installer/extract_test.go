@@ -662,6 +662,41 @@ func TestUnpackTarGz_ErrorPaths(t *testing.T) {
 		_, statErr := os.Stat(filepath.Join(outside, "evil.txt"))
 		assert.True(t, os.IsNotExist(statErr), "entry must not be written through the symlink to outside")
 	})
+
+	// TestUnpackTarGz_FailsWhenExtractPathBlocked exercises unpackTarGz's
+	// os.MkdirAll(dest, ...) error branch: a regular file sitting where dest
+	// itself needs to be created makes MkdirAll fail.
+	t.Run("fails when the extraction directory is blocked", func(t *testing.T) {
+		tmp := t.TempDir()
+		blocked := filepath.Join(tmp, "blocked")
+		require.NoError(t, os.WriteFile(blocked, []byte("x"), 0o644))
+		archive := filepath.Join(tmp, "test.tar.gz")
+		writeTarGzTree(t, archive, []tarEntry{{name: "file.txt", content: "x"}})
+
+		_, _, err := unpackTarGz(archive, filepath.Join(blocked, "nested"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	// TestUnpackTarGz_FailsWhenExtractPathUnreadable exercises unpackTarGz's
+	// os.OpenRoot(dest) error branch: MkdirAll succeeds (the directory
+	// already exists), but a directory with no permissions cannot be opened.
+	t.Run("fails when the extraction directory is unreadable", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("POSIX permission bits don't apply the same way on Windows")
+		}
+		tmp := t.TempDir()
+		dest := filepath.Join(tmp, "out")
+		require.NoError(t, os.MkdirAll(dest, 0o755))
+		require.NoError(t, os.Chmod(dest, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
+		archive := filepath.Join(tmp, "test.tar.gz")
+		writeTarGzTree(t, archive, []tarEntry{{name: "file.txt", content: "x"}})
+
+		_, _, err := unpackTarGz(archive, dest)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
 }
 
 // TestUnpackZip_ErrorPaths covers unpackZip's entry-error propagation (a name
@@ -734,6 +769,41 @@ func TestUnpackZip_ErrorPaths(t *testing.T) {
 
 		_, statErr := os.Stat(filepath.Join(outside, "evil.txt"))
 		assert.True(t, os.IsNotExist(statErr), "entry must not be written through the symlink to outside")
+	})
+
+	// TestUnpackZip_FailsWhenExtractPathBlocked exercises unpackZip's
+	// os.MkdirAll(dest, ...) error branch: a regular file sitting where dest
+	// itself needs to be created makes MkdirAll fail.
+	t.Run("fails when the extraction directory is blocked", func(t *testing.T) {
+		tmp := t.TempDir()
+		blocked := filepath.Join(tmp, "blocked")
+		require.NoError(t, os.WriteFile(blocked, []byte("x"), 0o644))
+		archive := filepath.Join(tmp, "test.zip")
+		writeZipTree(t, archive, []zipEntry{{name: "file.txt", content: "x"}})
+
+		_, err := unpackZip(archive, filepath.Join(blocked, "nested"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	// TestUnpackZip_FailsWhenExtractPathUnreadable exercises unpackZip's
+	// os.OpenRoot(dest) error branch: MkdirAll succeeds (the directory
+	// already exists), but a directory with no permissions cannot be opened.
+	t.Run("fails when the extraction directory is unreadable", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("POSIX permission bits don't apply the same way on Windows")
+		}
+		tmp := t.TempDir()
+		dest := filepath.Join(tmp, "out")
+		require.NoError(t, os.MkdirAll(dest, 0o755))
+		require.NoError(t, os.Chmod(dest, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
+		archive := filepath.Join(tmp, "test.zip")
+		writeZipTree(t, archive, []zipEntry{{name: "file.txt", content: "x"}})
+
+		_, err := unpackZip(archive, dest)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
 	})
 }
 

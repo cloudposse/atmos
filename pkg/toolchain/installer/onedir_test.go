@@ -1721,6 +1721,94 @@ func TestMaterializeHardLinks(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
+
+	// TestMaterializeHardLinks_FailsWhenRootUnreadable exercises
+	// materializeHardLinks' os.OpenRoot error branch: a directory with no
+	// permissions cannot be opened.
+	t.Run("fails when root is unreadable", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("POSIX permission bits don't apply the same way on Windows")
+		}
+		root := t.TempDir()
+		require.NoError(t, os.Chmod(root, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(root, 0o755) })
+
+		err := materializeHardLinks(root, []pendingHardLink{{rel: "link", target: "target"}})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
+// TestExtractHardLink_FallsBackToCopyWhenLinkFails exercises extractHardLink's
+// fallback to copyRegularFileInRoot: os.Link refuses a directory source
+// (EPERM/EISDIR), which reliably forces the fallback path without relying on
+// a cross-device setup -- copyRegularFileInRoot's Open succeeds (opening a
+// directory as a handle is legal), but the subsequent io.Copy read then fails
+// reading the directory as file content -- copyRegularFileInRoot's full
+// success path is covered directly by TestCopyRegularFileInRoot.
+func TestExtractHardLink_FallsBackToCopyWhenLinkFails(t *testing.T) {
+	dest := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dest, "target"), 0o755))
+	root, err := os.OpenRoot(dest)
+	require.NoError(t, err)
+	defer root.Close()
+
+	err = extractHardLink(root, "link", "target", dest)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to copy")
+}
+
+func TestCopyRegularFileInRoot(t *testing.T) {
+	t.Run("copies file contents and mode", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFileUnder(t, dir, "src.txt", "PAYLOAD")
+		root, err := os.OpenRoot(dir)
+		require.NoError(t, err)
+		defer root.Close()
+
+		require.NoError(t, copyRegularFileInRoot(root, "src.txt", "nested/dst.txt", 0o644))
+
+		got, err := os.ReadFile(filepath.Join(dir, "nested", "dst.txt"))
+		require.NoError(t, err)
+		assert.Equal(t, "PAYLOAD", string(got))
+	})
+
+	t.Run("fails when source is missing", func(t *testing.T) {
+		dir := t.TempDir()
+		root, err := os.OpenRoot(dir)
+		require.NoError(t, err)
+		defer root.Close()
+
+		err = copyRegularFileInRoot(root, "missing.txt", "dst.txt", 0o644)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("fails when destination parent is blocked", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFileUnder(t, dir, "src.txt", "PAYLOAD")
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "blocked"), []byte("x"), 0o644))
+		root, err := os.OpenRoot(dir)
+		require.NoError(t, err)
+		defer root.Close()
+
+		err = copyRegularFileInRoot(root, "src.txt", filepath.Join("blocked", "dst.txt"), 0o644)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("fails when destination is an existing directory", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFileUnder(t, dir, "src.txt", "PAYLOAD")
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "dst.txt"), 0o755))
+		root, err := os.OpenRoot(dir)
+		require.NoError(t, err)
+		defer root.Close()
+
+		err = copyRegularFileInRoot(root, "src.txt", "dst.txt", 0o644)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
 }
 
 func TestCopyTree(t *testing.T) {

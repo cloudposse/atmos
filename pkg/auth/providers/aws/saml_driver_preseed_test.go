@@ -480,6 +480,23 @@ func TestExtractTarGzSingleEntryFailures(t *testing.T) {
 	assert.Contains(t, err.Error(), "entry node/bin/node not found")
 }
 
+// TestExtractTarGzSingleEntryFailsWhenDriverDirUnreadable exercises
+// extractTarGzSingleEntry's openPreseedRoot error branch (and, through it,
+// openPreseedRoot's own os.OpenRoot error branch): a directory with no
+// permissions cannot be opened.
+func TestExtractTarGzSingleEntryFailsWhenDriverDirUnreadable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits don't apply the same way on Windows")
+	}
+	driverDir := t.TempDir()
+	require.NoError(t, os.Chmod(driverDir, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(driverDir, 0o755) })
+
+	err := extractTarGzSingleEntry(makeTgz(t, map[string]string{"node/bin/node": "x"}), "node/bin/node", driverDir, "node")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not open driver directory root")
+}
+
 func TestExtractZipSingleEntry(t *testing.T) {
 	driverDir := t.TempDir()
 	err := extractZipSingleEntry(makeZip(t, map[string]string{"node/node.exe": "zip node"}), "node/node.exe", driverDir, "node.exe")
@@ -496,6 +513,22 @@ func TestExtractZipSingleEntry(t *testing.T) {
 	err = extractZipSingleEntry([]byte("not a zip"), "node/node.exe", t.TempDir(), "bad.exe")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not read Node.js archive")
+}
+
+// TestExtractZipSingleEntryFailsWhenDriverDirUnreadable exercises
+// extractZipSingleEntry's openPreseedRoot error branch: a directory with no
+// permissions cannot be opened.
+func TestExtractZipSingleEntryFailsWhenDriverDirUnreadable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits don't apply the same way on Windows")
+	}
+	driverDir := t.TempDir()
+	require.NoError(t, os.Chmod(driverDir, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(driverDir, 0o755) })
+
+	err := extractZipSingleEntry(makeZip(t, map[string]string{"node/node.exe": "x"}), "node/node.exe", driverDir, "node.exe")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not open driver directory root")
 }
 
 func TestWritePreseedFileCopyError(t *testing.T) {

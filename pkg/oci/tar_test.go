@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -218,4 +219,51 @@ func TestExtractTarball_RejectsWriteThroughPreExistingSymlink(t *testing.T) {
 
 	_, statErr := os.Stat(filepath.Join(outside, "evil.txt"))
 	assert.True(t, os.IsNotExist(statErr), "entry must not be written through the symlink to outside")
+}
+
+// TestExtractTarball_FailsWhenExtractPathBlocked exercises untar's
+// os.MkdirAll(extractPath) error branch: a regular file sitting where
+// extractPath itself needs to be created makes MkdirAll fail.
+func TestExtractTarball_FailsWhenExtractPathBlocked(t *testing.T) {
+	parent := t.TempDir()
+	blocked := filepath.Join(parent, "blocked")
+	require.NoError(t, os.WriteFile(blocked, []byte("x"), 0o644))
+
+	tarBuf := writeTestTar(t, map[string]string{"file.txt": "content\n"})
+
+	err := extractTarball(tarBuf, filepath.Join(blocked, "nested"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create extraction directory")
+}
+
+// TestExtractTarball_FailsWhenExtractPathUnreadable exercises untar's
+// os.OpenRoot(extractPath) error branch: MkdirAll succeeds (the directory
+// already exists), but a directory with no permissions cannot be opened.
+func TestExtractTarball_FailsWhenExtractPathUnreadable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits don't apply the same way on Windows")
+	}
+
+	dest := t.TempDir()
+	require.NoError(t, os.Chmod(dest, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(dest, 0o755) }) // Allow t.TempDir's own cleanup to remove it.
+
+	tarBuf := writeTestTar(t, map[string]string{"file.txt": "content\n"})
+
+	err := extractTarball(tarBuf, dest)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to open extraction root")
+}
+
+// TestExtractTarball_FailsWhenTargetIsExistingDir exercises
+// createFileFromTar's root.Create error branch: a directory already sitting
+// at the entry's path makes Create fail (can't open a directory for writing).
+func TestExtractTarball_FailsWhenTargetIsExistingDir(t *testing.T) {
+	dest := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dest, "file.txt"), 0o755))
+
+	tarBuf := writeTestTar(t, map[string]string{"file.txt": "content\n"})
+
+	err := extractTarball(tarBuf, dest)
+	require.Error(t, err)
 }
