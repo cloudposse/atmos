@@ -2,9 +2,11 @@ package generator
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -18,8 +20,22 @@ func RemoveGenerated(dir, filename string) error {
 	defer perf.Track(nil, "generator.RemoveGenerated")()
 
 	path := filepath.Join(dir, filename)
+
+	// Only ever delete a regular file: `os.Remove` also removes empty directories, and a
+	// directory (or symlink) at this path was not created by generation.
+	info, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("%w %q: %w", errUtils.ErrGeneratorRemoveFailed, path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("%w: %q", errUtils.ErrGeneratedNotRegular, path)
+	}
+
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+		return fmt.Errorf("%w %q: %w", errUtils.ErrGeneratorRemoveFailed, path, err)
 	}
 
 	return nil

@@ -158,6 +158,8 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 	return nil
 }
 
+// generateProviderOverrides writes `providers_override.tf.json` from the component's `providers`
+// section, and removes a previously generated file when that section is no longer configured.
 func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	// Let registered provider-config contributors (e.g. an emulator binding) deep-merge
 	// provider fragments UNDER the explicit `providers:` section before generation.

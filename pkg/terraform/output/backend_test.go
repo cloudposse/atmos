@@ -684,6 +684,7 @@ func TestDefaultBackendGenerator_GenerateBackendIfNeeded(t *testing.T) {
 	}
 }
 
+// TestDefaultBackendGenerator_GenerateProvidersIfNeeded tests the GenerateProvidersIfNeeded method.
 func TestDefaultBackendGenerator_GenerateProvidersIfNeeded(t *testing.T) {
 	tests := []struct {
 		name              string

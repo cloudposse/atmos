@@ -955,6 +955,7 @@ func TestGenerateBackendConfig(t *testing.T) {
 	}
 }
 
+// TestGenerateProviderOverrides tests the generateProviderOverrides function.
 func TestGenerateProviderOverrides(t *testing.T) {
 	// Create a temporary directory for testing.
 	tempDir := t.TempDir()
