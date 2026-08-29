@@ -64,15 +64,15 @@ ResolveBase() (*BaseResolution, error)
 
 ## FR-12: GitHub Actions Base Resolution
 
-**Requirement**: The GitHub provider resolves the base commit from GitHub Actions environment variables and event payload. For pull request events, the primary strategy is `git merge-base` — the only approach that is correct regardless of checkout strategy and merge method.
+**Requirement**: The GitHub provider resolves the base commit from GitHub Actions environment variables and event payload. For open and closed-unmerged pull request events, the primary strategy is `git merge-base` — the only approach that is correct regardless of checkout strategy and merge method. Merged pull requests use a different strategy entirely (see "Merged pull requests: checkout classification" below), because merge-base against the target branch degenerates once the target already contains the PR.
 
 ### Why merge-base is the gold standard
 
-The purpose of base resolution is to answer: "what is the fork point — the commit where this PR's changes diverge from the target branch?" This determines which stacks are affected by the PR. `git merge-base HEAD origin/<target>` answers this question correctly in all scenarios.
+The purpose of base resolution is to answer: "what is the fork point — the commit where this PR's changes diverge from the target branch?" This determines which stacks are affected by the PR. For open and closed-unmerged PRs, `git merge-base HEAD origin/<target>` answers this question correctly in all scenarios. Merged PRs are the exception — see "Merged pull requests: checkout classification" below.
 
 ### Rejected approaches
 
-**`HEAD~1` (parent of checked-out commit)**:
+**`HEAD~1` (parent of checked-out commit)** — rejected as a *blind* strategy; retained only after positively classifying a merge-commit checkout (see "Merged pull requests: checkout classification"):
 - Only correct when the workflow checks out the **merge commit** (not the PR head) AND the merge strategy is merge or squash.
 - **Breaks for rebase merges with multiple commits**: `merge_commit_sha` points to the tip of the rebased commits, so `HEAD~1` is the previous rebased commit — not the target branch state.
 - **Breaks entirely when the workflow checks out `head.sha`**: `HEAD~1` is the parent commit on the PR branch, which for multi-commit PRs is just the second-to-last PR commit — completely wrong.
@@ -99,18 +99,35 @@ The purpose of base resolution is to answer: "what is the fork point — the com
 
 **Edge case**: if the workflow checks out the merge commit, HEAD is *on* the target branch, so `merge-base(HEAD, origin/main) == HEAD`. This is detected (merge-base == HEAD hash) and falls through to the next strategy.
 
+**Merged PRs are excluded from this strategy entirely**: after the merge, `origin/<target>` *contains* the PR, so merge-base against its moving tip degenerates — to HEAD itself for merge-commit merges (the collapse above), and more generally to an anchor that includes the PR's own landing. Merged PRs use the checkout-classified strategy below instead.
+
+### Merged pull requests: checkout classification
+
+For `closed` events with `pull_request.merged == true`, no single strategy is correct for every checkout — `HEAD~1` in particular diffs only the PR's *final* commit when the PR head is checked out, so a multi-commit PR whose last commit reverts an earlier org-wide change re-reports the reverted files as affected after merge (observed in production as a wall of post-merge dispatches). The resolver therefore classifies what the workflow actually checked out, by comparing the local HEAD against the payload, and picks the strategy that is provably correct for that checkout:
+
+| Local HEAD matches | Classification | Base | Why it is correct |
+|---|---|---|---|
+| `pull_request.head.sha` | `head.sha` | `merge-base(HEAD, merge_commit_sha^1)` | First parent of the merge commit is the pre-merge target tip; the merge-base against it is the true fork point for merge, squash, and rebase strategies alike, and cannot collapse to HEAD. Mirrors `merge_group.base_sha` semantics. Fetches `merge_commit_sha` by SHA if a narrow checkout did not bring it in. |
+| `pull_request.head.sha`, fast-forward merge (`merge_commit_sha == head.sha`) | `head.sha` | `merge-base(HEAD, base.sha)` | For externally-merged/fast-forwarded PRs the merge commit IS the PR head, so `merge_commit_sha^1` is the PR's own previous commit — anchoring there silently drops every commit but the last (under-detection). The payload's `base.sha` is a pre-merge target-branch commit; staleness only moves the anchor along the target branch, never onto the PR branch, so the merge-base is still the fork point. |
+| `pull_request.merge_commit_sha` | `merge-commit` | `HEAD^1` | First parent of the real merge/squash commit is the pre-merge target tip — the one case the old `HEAD~1` fallback was actually right for. |
+| 2-parent commit whose 2nd parent is `head.sha` | `synthetic-merge` | first parent of HEAD | GitHub's `refs/pull/<n>/merge` test-merge commit: first parent is the target tip the merge was built on — the exact net-diff base. |
+| anything else | `unknown` | `event.pull_request.base.sha` (Warn) | No strategy is provably correct for an unrecognized checkout; guessing silently is how wrong-base incidents happen. |
+
+Closed-*unmerged* PRs are treated like open PRs (the branch was never folded into the target, so merge-base against `origin/<target>` remains correct).
+
+The classification is included in the "Auto-detected CI base" log line (`checkout=...`) so wrong-base reports are diagnosable from a single line.
+
 ### Implementation: generic utility + provider-specific extraction
 
 The merge-base computation itself is provider-agnostic and lives in `pkg/git/` as a shared utility. The GitHub provider is responsible only for extracting the target branch name from GitHub-specific sources (`event.pull_request.base.ref`, `GITHUB_BASE_REF`).
 
-### Fallback chain for pull request events
+### Fallback chain for open (and closed-unmerged) pull request events
 
-Each strategy is tried in order; the first success is used:
+Each strategy is tried in order; the first success is used. (Merged PRs use the checkout-classified strategy above instead.)
 
 1. **`git merge-base(HEAD, origin/<target>)`** via `MergeBaseWithAutoFetch` — gold standard. Target branch extracted from `event.pull_request.base.ref` (payload) or `GITHUB_BASE_REF` (env var). Self-heals from shallow checkouts by fetching the target branch (and deepening once) before retrying. Skipped if merge-base equals HEAD (merge commit checkout).
-2. **`HEAD~1`** — fallback for closed/merged PRs when merge-base fails. Correct when the merge commit is checked out with merge/squash strategy.
-3. **`event.pull_request.base.sha`** — payload SHA fallback. Frozen at the last PR sync event, so it is never the current tip of `<target>`. Slightly stale on out-of-date PRs but cannot produce the "every component is affected" false positives that returning a *ref* to the current target tip does.
-4. **`GITHUB_BASE_REF` ref** — last resort, only reached when the payload has no `base.sha` (hand-crafted or legacy events). Logs `Warn` because this path compares against the current tip and may include unrelated commits from `<target>`.
+2. **`event.pull_request.base.sha`** — payload SHA fallback. Frozen at the last PR sync event, so it is never the current tip of `<target>`. Slightly stale on out-of-date PRs but cannot produce the "every component is affected" false positives that returning a *ref* to the current target tip does.
+3. **`GITHUB_BASE_REF` ref** — last resort, only reached when the payload has no `base.sha` (hand-crafted or legacy events). Logs `Warn` because this path compares against the current tip and may include unrelated commits from `<target>`.
 
 ### Atmos Pro upload correlation
 
@@ -123,7 +140,8 @@ Push events are rejected when `--upload` is set, since Atmos Pro only processes 
 | Event | Action | Primary Strategy | Fallback | Type | Source |
 |-------|--------|-----------------|----------|------|--------|
 | `pull_request` | opened / synchronize | `MergeBaseWithAutoFetch(HEAD, origin/<target>)` | `event.pull_request.base.sha` → `GITHUB_BASE_REF` ref (warn) | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
-| `pull_request` | closed (merged) | `MergeBaseWithAutoFetch(HEAD, origin/<target>)` | `HEAD~1` → `event.pull_request.base.sha` → `GITHUB_BASE_REF` ref (warn) | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
+| `pull_request` | closed (merged) | Checkout-classified: `merge-base(HEAD, merge_commit_sha^1)` (head.sha) / `HEAD^1` (merge-commit) / first parent (synthetic-merge) | `event.pull_request.base.sha` (also for unknown checkout, warn) → `GITHUB_BASE_REF` ref (warn) | SHA or ref | `event.pull_request.merge_commit_sha` → git |
+| `pull_request` | closed (unmerged) | `MergeBaseWithAutoFetch(HEAD, origin/<target>)` | `event.pull_request.base.sha` → `GITHUB_BASE_REF` ref (warn) | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
 | `pull_request_target` | any | `MergeBaseWithAutoFetch(HEAD, origin/<target>)` | `event.pull_request.base.sha` → `GITHUB_BASE_REF` ref (warn) | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
 | `push` | normal | `event.before` | — | SHA | `$GITHUB_EVENT_PATH` |
 | `push` | force-push (`event.forced`) | `HEAD~1` | `origin/HEAD` ref | SHA or ref | git resolution |
@@ -140,14 +158,17 @@ Push events are rejected when `--upload` is set, since Atmos Pro only processes 
 
 - `action` — PR action (opened, synchronize, closed).
 - `pull_request.base.ref` — target branch name for merge-base computation.
-- `pull_request.head.sha` — PR head commit SHA for Atmos Pro upload correlation.
+- `pull_request.base.sha` — payload-base fallback SHA.
+- `pull_request.head.sha` — PR head commit SHA for Atmos Pro upload correlation and checkout classification.
+- `pull_request.merged` — routes closed events to the merged-PR strategy (unmerged closes resolve like open PRs).
+- `pull_request.merge_commit_sha` — anchor for merged-PR base resolution and checkout classification.
 - `before` — previous HEAD SHA for push events.
 - `forced` — whether push was a force-push.
 
 ### Validation
 
-- PR open/sync: `MergeBaseWithAutoFetch(HEAD, origin/<target>)` resolves to the fork-point SHA (self-healing fetch on shallow clones); falls back to `event.pull_request.base.sha`, then `refs/remotes/origin/<target>` ref (warn).
-- PR closed/merged: `MergeBaseWithAutoFetch(HEAD, origin/<target>)` resolves to the fork-point SHA; falls back to `HEAD~1`, then `event.pull_request.base.sha`, then `refs/remotes/origin/<target>` ref (warn).
+- PR open/sync (and closed-unmerged): `MergeBaseWithAutoFetch(HEAD, origin/<target>)` resolves to the fork-point SHA (self-healing fetch on shallow clones); falls back to `event.pull_request.base.sha`, then `refs/remotes/origin/<target>` ref (warn).
+- PR closed/merged: checkout is classified against the payload; head.sha checkout resolves `merge-base(HEAD, merge_commit_sha^1)` (fork point), merge-commit checkout resolves `HEAD^1`, synthetic-merge checkout resolves the first parent, unknown checkout falls back to `event.pull_request.base.sha` with a warn. A multi-commit PR whose final commit reverts an earlier commit must resolve the fork point, never the PR's own previous commit.
 - Push: resolves to `before` SHA from event payload.
 - Force-push: falls back to `HEAD~1` when `forced=true`.
 - Missing `$GITHUB_EVENT_PATH`: returns error (file should always exist in GitHub Actions).
