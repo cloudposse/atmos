@@ -407,6 +407,7 @@ components:
 
 	dumpFile := filepath.Join(t.TempDir(), "aws-env.dump")
 	t.Setenv(testEnvEnvDumpFile, dumpFile)
+	t.Setenv(testEnvEnvDumpKeys, "AWS_SHARED_CREDENTIALS_FILE")
 
 	info := schema.ConfigAndStacksInfo{
 		ComponentFromArg: "myapp",

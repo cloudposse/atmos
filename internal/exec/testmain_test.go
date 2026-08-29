@@ -22,6 +22,7 @@ const (
 	testEnvPipelineBackendType     = "_ATMOS_TEST_PIPELINE_BACKEND_TYPE"
 	testEnvPipelineSkipInit        = "_ATMOS_TEST_PIPELINE_SKIP_INIT"
 	testEnvEnvDumpFile             = "_ATMOS_TEST_ENV_DUMP_FILE"
+	testEnvEnvDumpKeys             = "_ATMOS_TEST_ENV_DUMP_KEYS"
 )
 
 // TestMain is the entry point for the internal/exec test binary.
@@ -39,10 +40,15 @@ const (
 //	_ATMOS_TEST_STDERR=<text>         — if set, write text to stderr.
 //	_ATMOS_TEST_EXIT_ONE=1           — if set, exit 1 immediately after the optional
 //	                                   counter-file write (for workspace recovery tests).
-//	_ATMOS_TEST_ENV_DUMP_FILE=<path> — if set, write the subprocess's full environment
+//	_ATMOS_TEST_ENV_DUMP_FILE=<path> — if set, write the subset of the subprocess's
+//	                                   environment named by _ATMOS_TEST_ENV_DUMP_KEYS
 //	                                   (newline-joined "KEY=VALUE" pairs) to <path> and
 //	                                   exit successfully (for asserting which env vars a
 //	                                   faked external binary, e.g. "aws", actually received).
+//	_ATMOS_TEST_ENV_DUMP_KEYS=<list> — comma-separated env var names to capture for
+//	                                   _ATMOS_TEST_ENV_DUMP_FILE. Required alongside it —
+//	                                   the full environment (which may hold inherited
+//	                                   credentials) is never written verbatim.
 func TestMain(m *testing.M) {
 	// Initialize the I/O writer and ui formatter so data.Write*/ui.Write* calls
 	// (used throughout internal/exec and its pkg/ci dependency, e.g. CI log
@@ -78,7 +84,7 @@ func TestMain(m *testing.M) {
 	}
 
 	if envDumpFile := os.Getenv(testEnvEnvDumpFile); envDumpFile != "" {
-		_ = os.WriteFile(envDumpFile, []byte(strings.Join(os.Environ(), "\n")), 0o600)
+		_ = os.WriteFile(envDumpFile, []byte(strings.Join(filterEnvByKeys(os.Environ(), os.Getenv(testEnvEnvDumpKeys)), "\n")), 0o600)
 		os.Exit(0)
 	}
 
@@ -124,6 +130,27 @@ func TestMain(m *testing.M) {
 		_ = os.RemoveAll(cacheDir) // os.Exit skips defers; clean up explicitly.
 	}
 	os.Exit(code)
+}
+
+// filterEnvByKeys returns only the "KEY=VALUE" entries of env whose key is named in
+// commaSeparatedKeys. Used by the _ATMOS_TEST_ENV_DUMP_FILE gate so it never persists
+// the full (potentially credential-bearing) process environment to a test artifact.
+func filterEnvByKeys(env []string, commaSeparatedKeys string) []string {
+	wanted := make(map[string]bool)
+	for _, key := range strings.Split(commaSeparatedKeys, ",") {
+		if key != "" {
+			wanted[key] = true
+		}
+	}
+
+	filtered := make([]string, 0, len(wanted))
+	for _, entry := range env {
+		key, _, found := strings.Cut(entry, "=")
+		if found && wanted[key] {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
 }
 
 func runFakeTerraformForTest() int {
