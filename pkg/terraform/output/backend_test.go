@@ -781,3 +781,31 @@ func TestDefaultBackendGenerator_GenerateProvidersIfNeeded(t *testing.T) {
 		})
 	}
 }
+
+// TestDefaultBackendGenerator_GenerateProvidersIfNeeded_RemovesStaleFile tests that a stale file is removed when providers are gone.
+func TestDefaultBackendGenerator_GenerateProvidersIfNeeded_RemovesStaleFile(t *testing.T) {
+	tests := []struct {
+		name      string
+		providers map[string]any
+	}{
+		{name: "nil providers", providers: nil},
+		{name: "empty providers", providers: map[string]any{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			providerFile := filepath.Join(tempDir, "providers_override.tf.json")
+			require.NoError(t, os.WriteFile(providerFile, []byte(`{"provider":{"aws":{"region":"us-east-1"}}}`), 0o600))
+
+			gen := &defaultBackendGenerator{}
+			require.NoError(t, gen.GenerateProvidersIfNeeded(&ComponentConfig{
+				ComponentPath: tempDir,
+				Providers:     tt.providers,
+			}, nil))
+
+			_, err := os.Stat(providerFile)
+			assert.True(t, os.IsNotExist(err), "stale provider file should be removed")
+		})
+	}
+}

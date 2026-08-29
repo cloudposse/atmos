@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -10,6 +11,19 @@ import (
 
 // defaultFileMode is the default permission mode for generated files.
 const defaultFileMode os.FileMode = 0o600
+
+// RemoveGenerated deletes a previously generated file from dir, so generation stays idempotent
+// through cleaning up of files that are no longer generated.
+func RemoveGenerated(dir, filename string) error {
+	defer perf.Track(nil, "generator.RemoveGenerated")()
+
+	path := filepath.Join(dir, filename)
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	return nil
+}
 
 // Writer handles file output for generators.
 type Writer interface {

@@ -11,6 +11,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/generator"
+	"github.com/cloudposse/atmos/pkg/generator/providers"
 	"github.com/cloudposse/atmos/pkg/generator/required_providers"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -169,7 +170,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 
 	// Generate `providers_override.tf.json` file if the `providers` section is configured.
 	if len(info.ComponentProvidersSection) > 0 {
-		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
+		providerOverrideFileName := filepath.Join(workingDir, providers.DefaultFilenameConst)
 
 		log.Debug("Writing the provider overrides to file.", "file", providerOverrideFileName)
 
@@ -178,6 +179,9 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o600)
 			return err
 		}
+	} else if !info.DryRun {
+		// Remove a stale file, otherwise an earlier stack's providers apply to this one.
+		return generator.RemoveGenerated(workingDir, providers.DefaultFilenameConst)
 	}
 	return nil
 }
@@ -187,9 +191,13 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 func generateRequiredProviders(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	defer perf.Track(atmosConfig, "exec.generateRequiredProviders")()
 
-	// Skip if no required_version or required_providers configured.
+	// Skip if no required_version or required_providers configured, removing a stale file
+	// so an earlier stack's version pins don't apply to this one.
 	if info.RequiredVersion == "" && len(info.RequiredProviders) == 0 {
-		return nil
+		if info.DryRun {
+			return nil
+		}
+		return generator.RemoveGenerated(workingDir, required_providers.DefaultFilenameConst)
 	}
 
 	requiredProvidersFileName := filepath.Join(workingDir, required_providers.DefaultFilenameConst)

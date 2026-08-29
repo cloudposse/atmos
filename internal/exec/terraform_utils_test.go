@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/generator/required_providers"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
@@ -1035,6 +1036,100 @@ func TestGenerateProviderOverrides(t *testing.T) {
 
 			// Clean up any created files for next test.
 			os.Remove(providerFilePath)
+		})
+	}
+}
+
+// TestGenerateProviderOverrides_RemovesStaleFile tests that a stale file is removed when the `providers` section is gone.
+func TestGenerateProviderOverrides_RemovesStaleFile(t *testing.T) {
+	staleContent := []byte(`{"provider":{"aws":{"region":"us-east-1"}}}`)
+
+	tests := []struct {
+		name               string
+		info               *schema.ConfigAndStacksInfo
+		expectedFileExists bool
+	}{
+		{
+			name: "empty providers section removes stale file",
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: map[string]any{},
+			},
+			expectedFileExists: false,
+		},
+		{
+			name: "nil providers section removes stale file",
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: nil,
+			},
+			expectedFileExists: false,
+		},
+		{
+			name: "dry run leaves stale file untouched",
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: nil,
+				DryRun:                    true,
+			},
+			expectedFileExists: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			providerFilePath := filepath.Join(tempDir, "providers_override.tf.json")
+			require.NoError(t, os.WriteFile(providerFilePath, staleContent, 0o600))
+
+			err := generateProviderOverrides(&schema.AtmosConfiguration{}, tt.info, tempDir)
+			assert.NoError(t, err)
+
+			_, fileErr := os.Stat(providerFilePath)
+			if tt.expectedFileExists {
+				assert.NoError(t, fileErr, "Expected stale providers_override.tf.json to be preserved")
+			} else {
+				assert.True(t, os.IsNotExist(fileErr), "Expected stale providers_override.tf.json to be removed")
+			}
+		})
+	}
+}
+
+// TestGenerateRequiredProviders_RemovesStaleFile tests that a stale file is removed when the version pins are gone.
+func TestGenerateRequiredProviders_RemovesStaleFile(t *testing.T) {
+	staleContent := []byte(`{"terraform":{"required_version":"1.5.0"}}`)
+
+	tests := []struct {
+		name               string
+		info               *schema.ConfigAndStacksInfo
+		expectedFileExists bool
+	}{
+		{
+			name:               "no required_version or required_providers removes stale file",
+			info:               &schema.ConfigAndStacksInfo{},
+			expectedFileExists: false,
+		},
+		{
+			name: "dry run leaves stale file untouched",
+			info: &schema.ConfigAndStacksInfo{
+				DryRun: true,
+			},
+			expectedFileExists: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			requiredProvidersPath := filepath.Join(tempDir, required_providers.DefaultFilenameConst)
+			require.NoError(t, os.WriteFile(requiredProvidersPath, staleContent, 0o600))
+
+			err := generateRequiredProviders(&schema.AtmosConfiguration{}, tt.info, tempDir)
+			assert.NoError(t, err)
+
+			_, fileErr := os.Stat(requiredProvidersPath)
+			if tt.expectedFileExists {
+				assert.NoError(t, fileErr, "Expected stale terraform_override.tf.json to be preserved")
+			} else {
+				assert.True(t, os.IsNotExist(fileErr), "Expected stale terraform_override.tf.json to be removed")
+			}
 		})
 	}
 }
