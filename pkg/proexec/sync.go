@@ -32,17 +32,20 @@ func CaptureSync(atmosConfig *schema.AtmosConfiguration, in *ExecRecordInput) er
 		return nil
 	}
 
-	client, clientErr := pro.NewAtmosProAPIClientFromEnv(atmosConfig)
-	if clientErr != nil {
-		log.Debug("Skipping sync exec-metadata upload: failed to create Atmos Pro client.", "error", clientErr)
-		return nil
-	}
-
 	timeout := syncTimeout(atmosConfig)
 	cmdName := in.Command
 
+	// Client creation (which may perform GitHub OIDC token exchange over the
+	// network) runs in the same goroutine as the upload so the configured
+	// timeout bounds the whole synchronous delivery, not just the upload.
 	resultCh := make(chan error, 1)
 	go func() {
+		client, clientErr := pro.NewAtmosProAPIClientFromEnv(atmosConfig)
+		if clientErr != nil {
+			resultCh <- clientErr
+			return
+		}
+
 		metrics := processBaseline.Since()
 		req, buildErr := buildRecord(in, &metrics, git.NewDefaultGitRepo())
 		if buildErr != nil {

@@ -29,10 +29,10 @@ what you already have. The record covers the Atmos version, the command and its 
 code, and how long it took to run.
 
 Most commands report this in the background and never slow anything down. `terraform
-plan`, `terraform apply`, and `describe affected` wait briefly to confirm the record
-made it to Atmos Pro before the command finishes, so a pipeline never reports success for
-a run Atmos Pro never saw — and if delivery is slow or fails, the command still
-completes; it only logs a warning.
+plan`, `terraform apply`, and `describe affected` wait up to the configured timeout to
+confirm the record made it to Atmos Pro before the command finishes — and if delivery is
+slow or fails, the command still completes; it just logs a warning so a missed record
+doesn't disappear silently.
 
 ## How to Use It
 
