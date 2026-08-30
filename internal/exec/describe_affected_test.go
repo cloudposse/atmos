@@ -5,7 +5,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -282,15 +285,19 @@ func shouldSkipRepoCopyPath(src string) bool {
 	return false
 }
 
-// copyRepoWithRetry copies the live repository at src into dest, retrying a few times
-// if the copy fails because a source file vanished mid-copy. The source is the actual
-// checked-out repository, which can have transient files appear and disappear under
-// .git/objects/pack while git performs routine background housekeeping (e.g. an
-// automatic repack writes tmp_pack_*/tmp_idx_*/tmp_rev_* files and renames or removes
-// them within milliseconds). The otiai10/copy directory walk stats every entry it
-// lists, so it can observe one of these files mid-flight and fail the whole copy with
-// "no such file or directory". Retrying a moment later almost always succeeds, since
-// the transient file is long gone by the next attempt.
+// copyRepoWithRetry copies the live repository at src into dest, retrying a few times if the
+// copy hits a transient error. The source is the actual checked-out repository, which can have:
+//   - files appear and disappear under .git/objects/pack while git performs routine background
+//     housekeeping (e.g. an automatic repack writes tmp_pack_*/tmp_idx_*/tmp_rev_* files and
+//     renames or removes them within milliseconds) -- the otiai10/copy directory walk stats every
+//     entry it lists, so it can observe one of these files mid-flight and fail with
+//     "no such file or directory" (os.IsNotExist).
+//   - fixture files locked by another concurrently running test's terraform process (e.g. a
+//     terraform.tfstate under tests/fixtures/scenarios/plan-diff held open mid-plan/apply), which
+//     on Windows surfaces as a sharing/lock violation rather than IsNotExist.
+//
+// Retrying a moment later almost always succeeds, since the transient file is long gone, or the
+// lock released, by the next attempt.
 func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
 	t.Helper()
 
@@ -298,7 +305,7 @@ func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
 	var err error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		err = cp.Copy(src, dest, *opts)
-		if err == nil || !os.IsNotExist(err) {
+		if err == nil || !isTransientRepoCopyError(err) {
 			return err
 		}
 		if attempt == maxAttempts {
@@ -309,6 +316,28 @@ func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
 		time.Sleep(50 * time.Millisecond)
 	}
 	return err
+}
+
+// isTransientRepoCopyError reports whether err is expected to resolve on its own shortly, and so
+// is worth retrying rather than failing the test outright. Windows reports a locked file via its
+// error message text rather than a portable sentinel/errno, so this matches on that text the same
+// way pkg/git/worktree.go's isTransientWorktreeRemoveError does for transient worktree-removal
+// errors.
+func isTransientRepoCopyError(err error) bool {
+	if os.IsNotExist(err) {
+		return true
+	}
+	lower := strings.ToLower(err.Error())
+	transientPatterns := []string{
+		"another process has locked a portion of the file",
+		"being used by another process",
+	}
+	for _, p := range transientPatterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // setupDescribeAffectedTest sets up the test environment for describe affected tests.
@@ -2607,4 +2636,238 @@ func TestUploadErrorsWhenNoCredentials(t *testing.T) {
 	assert.Contains(t, allHints, "id-token: write")
 	assert.Contains(t, allHints, "ATMOS_PRO_WORKSPACE_ID")
 	assert.Contains(t, allHints, "atmos.tools/pro")
+}
+
+// removeAllWithRetry removes dir, retrying with backoff on failure. Mirrors
+// the retry budget pkg/git/worktree.go uses for the same class of transient
+// Windows lock (a just-exited git/antivirus process briefly holding a handle
+// open on a file inside a just-torn-down git worktree's administrative
+// directory). A failure after the full budget is logged, not fatal. The
+// directory is left for the operating system's temporary-directory reaper.
+func removeAllWithRetry(t *testing.T, dir string) {
+	t.Helper()
+	delay := 200 * time.Millisecond
+	const maxDelay = 2 * time.Second
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		err := os.RemoveAll(dir)
+		if err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Logf("removeAllWithRetry: giving up removing %s after retries: %v", dir, err)
+			return
+		}
+		time.Sleep(delay)
+		if delay *= 2; delay > maxDelay {
+			delay = maxDelay
+		}
+	}
+}
+
+// runIncidentGit runs a git command in dir for the CI-base E2E fixtures below.
+func runIncidentGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	base := []string{"-c", "commit.gpgsign=false", "-c", "user.name=Test", "-c", "user.email=t@t.co"}
+	cmd := osexec.Command("git", append(base, args...)...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, string(out))
+	return strings.TrimSpace(string(out))
+}
+
+// writeIncidentFile writes a file (creating parents) inside the fixture repo.
+func writeIncidentFile(t *testing.T, dir, rel, content string) {
+	t.Helper()
+	path := filepath.Join(dir, filepath.FromSlash(rel))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+}
+
+// buildMergedPRIncidentRepo builds a self-contained git repo with a small
+// atmos project reproducing the merged multi-commit PR incident shape:
+//
+//	main:    fork ──────────────── advance ── mergeCommit
+//	     \                                   /
+//	feature:  org-wide change ── revert+README
+//
+// The PR's net diff is README only, so the correct affected set is empty.
+// Returns the repo dir and the fork/head/advance/merge commit SHAs.
+func buildMergedPRIncidentRepo(t *testing.T) (string, map[string]string) {
+	t.Helper()
+	// This repo has a real git worktree created and torn down inside it
+	// (ExecuteDescribeAffectedWithTargetRefCheckout). On Windows CI, a
+	// transient antivirus/indexing scan can hold a lock on the worktree's
+	// administrative metadata (.git/worktrees/<name>/commondir) well past
+	// both the production RemoveWorktree's own 20s retry and a matching
+	// 20s retry here (40s observed combined, in practice). Deliberately
+	// NOT using t.TempDir(): its built-in cleanup is a single-attempt,
+	// fatal-on-error os.RemoveAll that runs unconditionally after ours,
+	// which would turn an already-logged, deliberately-non-fatal leftover
+	// lock back into a failed test. Managing the dir with os.MkdirTemp
+	// keeps our retry-then-log-only cleanup authoritative; a leftover
+	// lock is left for the OS temp-directory reaper, not this test.
+	dir, err := os.MkdirTemp("", "TestDescribeAffectedCIBaseE2E") //nolint:lintroller // t.TempDir()'s own cleanup is fatal-on-error and would race the exact lock removeAllWithRetry exists to tolerate; see comment above.
+	require.NoError(t, err)
+	t.Cleanup(func() { removeAllWithRetry(t, dir) })
+	runIncidentGit(t, dir, "init", "-b", "main")
+	runIncidentGit(t, dir, "remote", "add", "origin", "https://github.com/example/incident.git")
+
+	writeIncidentFile(t, dir, "atmos.yaml", `
+base_path: "."
+components:
+  terraform:
+    base_path: components/terraform
+stacks:
+  base_path: stacks
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+ci:
+  enabled: true
+`)
+	writeIncidentFile(t, dir, "stacks/catalog/defaults.yaml", "terraform:\n  vars:\n    org_tag: dynamodb\n")
+	writeIncidentFile(t, dir, "stacks/deploy/dev.yaml", `
+import:
+  - catalog/defaults
+vars:
+  stage: dev
+components:
+  terraform:
+    c1:
+      vars: {size: small}
+    c2:
+      vars: {size: small}
+`)
+	writeIncidentFile(t, dir, "stacks/deploy/prod.yaml", `
+import:
+  - catalog/defaults
+vars:
+  stage: prod
+components:
+  terraform:
+    c1:
+      vars: {size: large}
+    c2:
+      vars: {size: large}
+`)
+	tf := "variable \"org_tag\" { default = \"\" }\n"
+	writeIncidentFile(t, dir, "components/terraform/c1/main.tf", tf)
+	writeIncidentFile(t, dir, "components/terraform/c2/main.tf", tf)
+	runIncidentGit(t, dir, "add", "-A")
+	runIncidentGit(t, dir, "commit", "-qm", "baseline")
+	fork := runIncidentGit(t, dir, "rev-parse", "HEAD")
+
+	runIncidentGit(t, dir, "checkout", "-qb", "feature")
+	writeIncidentFile(t, dir, "stacks/catalog/defaults.yaml", "terraform:\n  vars:\n    org_tag: s3-lockfile\n")
+	runIncidentGit(t, dir, "add", "-A")
+	runIncidentGit(t, dir, "commit", "-qm", "org-wide change")
+	writeIncidentFile(t, dir, "stacks/catalog/defaults.yaml", "terraform:\n  vars:\n    org_tag: dynamodb\n")
+	writeIncidentFile(t, dir, "README.md", "docs only\n")
+	runIncidentGit(t, dir, "add", "-A")
+	runIncidentGit(t, dir, "commit", "-qm", "revert org-wide change; add README")
+	head := runIncidentGit(t, dir, "rev-parse", "HEAD")
+
+	runIncidentGit(t, dir, "checkout", "-q", "main")
+	writeIncidentFile(t, dir, "stacks/deploy/prod.yaml", `
+import:
+  - catalog/defaults
+vars:
+  stage: prod
+components:
+  terraform:
+    c1:
+      vars: {size: xlarge}
+    c2:
+      vars: {size: xlarge}
+`)
+	runIncidentGit(t, dir, "add", "-A")
+	runIncidentGit(t, dir, "commit", "-qm", "main advance")
+	advance := runIncidentGit(t, dir, "rev-parse", "HEAD")
+	runIncidentGit(t, dir, "merge", "-q", "--no-ff", head, "-m", "merge PR")
+	mergeCommit := runIncidentGit(t, dir, "rev-parse", "HEAD")
+
+	return dir, map[string]string{
+		"fork": fork, "head": head, "advance": advance, "merge": mergeCommit,
+	}
+}
+
+// describeAffectedInRepo initializes the CLI config for the repo at cwdPath
+// and runs the real checkout-based describe-affected flow against baseSHA.
+func describeAffectedInRepo(t *testing.T, cwdPath, baseSHA string) []schema.Affected {
+	t.Helper()
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", cwdPath)
+	t.Setenv("ATMOS_BASE_PATH", cwdPath)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCheckout(
+		&atmosConfig, "", baseSHA, "main",
+		false, false, "", false, false, nil, false, nil, true,
+	)
+	require.NoError(t, err)
+	return affected
+}
+
+// TestDescribeAffectedCIBaseE2E exercises the full merged-PR flow end to end:
+// a real git repo, a real GitHub event payload, real base auto-detection, and
+// the real checkout-based affected computation — the wiring no unit test
+// covers on its own.
+func TestDescribeAffectedCIBaseE2E(t *testing.T) {
+	repoDir, shas := buildMergedPRIncidentRepo(t)
+	runIncidentGit(t, repoDir, "checkout", "-q", shas["head"]) // head.sha checkout, like the documented workflow
+
+	t.Run("merged PR resolves fork point and reports zero affected", func(t *testing.T) {
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
+		eventPath := filepath.Join(t.TempDir(), "event.json")
+		payload := `{"action":"closed","pull_request":{"merged":true,"merge_commit_sha":"` + shas["merge"] +
+			`","head":{"sha":"` + shas["head"] + `"},"base":{"ref":"main","sha":"` + shas["advance"] + `"}}}`
+		require.NoError(t, os.WriteFile(eventPath, []byte(payload), 0o644))
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+		t.Setenv("GITHUB_EVENT_PATH", eventPath)
+		t.Setenv("GITHUB_BASE_REF", "main")
+		t.Chdir(repoDir)
+
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		}
+		resolveBaseFromCI(describe)
+		assert.Equal(t, shas["fork"], describe.SHA,
+			"merged-PR base must be the fork point, not the PR's previous commit")
+		assert.Equal(t, shas["head"], describe.HeadSHAOverride)
+
+		affected := describeAffectedInRepo(t, repoDir, describe.SHA)
+		assert.Empty(t, affected, "net PR diff is README only — nothing is affected")
+	})
+
+	t.Run("repo under symlinked path re-bases BASE paths correctly", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation requires elevation on Windows")
+		}
+		link := filepath.Join(t.TempDir(), "link-repo")
+		require.NoError(t, os.Symlink(repoDir, link))
+		t.Chdir(link)
+
+		// go-git reports the symlink-RESOLVED repo root while the config
+		// paths keep the logical (symlinked) form from the CWD. Mixing the
+		// two makes filepath.Rel produce a `..`-climbing path; depending on
+		// depth, joining it onto the BASE worktree lands on a nonexistent
+		// dir (BASE treated as empty → EVERYTHING affected) or clamps at
+		// the filesystem root and lands back on the HEAD repo (BASE ==
+		// HEAD → NOTHING affected). Diffing against "advance" (which
+		// genuinely differs from HEAD in the prod stack only) discriminates
+		// the correct result from both failure modes.
+		affected := describeAffectedInRepo(t, link, shas["advance"])
+		slugs := make([]string, 0, len(affected))
+		for _, a := range affected {
+			slugs = append(slugs, a.StackSlug)
+		}
+		sort.Strings(slugs)
+		assert.Equal(t, []string{"prod-c1", "prod-c2"}, slugs,
+			"symlinked CWD must yield the same affected set as a plain path: prod only")
+	})
 }

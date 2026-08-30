@@ -311,9 +311,10 @@ func includeDependentsFlagValue(flags *pflag.FlagSet) (bool, error) {
 // has opted into CI auto-detect, it is appropriate to mutate the runner's git
 // config (via `EnsureGitSafeDirectory`) so that downstream git commands —
 // `merge-base`, the targeted `git fetch` for shallow clones, and the
-// `HEAD~1` lookup for closed PRs — do not fail with "dubious ownership in
-// repository" inside GitHub Actions container jobs. The helper is a no-op
-// outside GitHub Actions, so it does nothing when running locally.
+// checkout-classified merged-PR lookups (merge-commit parents, payload-anchor
+// fetches) — do not fail with "dubious ownership in repository" inside GitHub
+// Actions container jobs. The helper is a no-op outside GitHub Actions, so it
+// does nothing when running locally.
 func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 	defer perf.Track(nil, "exec.resolveBaseFromCI")()
 
@@ -349,11 +350,19 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 	if base == "" {
 		base = resolution.Ref
 	}
-	log.Info("Auto-detected CI base",
+	logArgs := []any{
 		"provider", p.Name(),
 		"event", resolution.EventType,
 		"base", base,
-		"source", resolution.Source)
+		"source", resolution.Source,
+	}
+	// The checkout classification tells support which strategy family was
+	// valid for this run — wrong-base incidents are diagnosable from this
+	// one line instead of run-log archaeology.
+	if resolution.Checkout != "" {
+		logArgs = append(logArgs, "checkout", resolution.Checkout)
+	}
+	log.Info("Auto-detected CI base", logArgs...)
 }
 
 // Execute executes `describe affected` command. It reports an execution

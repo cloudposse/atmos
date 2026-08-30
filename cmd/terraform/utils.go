@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
@@ -59,6 +60,37 @@ const logKeyStack = "stack"
 // verifyPlanFlagName is the tri-state planfile-verify flag (--verify-plan,
 // --verify-plan=false).
 const verifyPlanFlagName = "verify-plan"
+
+// ciFlagKey is the --ci flag / ATMOS_CI /CI env var key, read both from the
+// Cobra flag and (as a fallback) the global Viper singleton.
+const ciFlagKey = "ci"
+
+// ciFlagExplicit returns the --ci flag's value and whether the user
+// explicitly set it (true or false), distinguishing that from "never set,
+// defaults to false" so callers can treat an explicit override as
+// authoritative instead of falling through to env/config/native detection.
+func ciFlagExplicit(flags *pflag.FlagSet) (value bool, changed bool) {
+	if flags == nil {
+		return false, false
+	}
+	f := flags.Lookup(ciFlagKey)
+	if f == nil || !f.Changed {
+		return false, false
+	}
+	value, _ = flags.GetBool(ciFlagKey)
+	return value, true
+}
+
+// resolveCIMode reports whether CI mode is enabled for this command
+// invocation. An explicitly set --ci flag (true or false) is authoritative;
+// only when the flag was never explicitly set do ATMOS_CI/CI env vars (via
+// the global Viper singleton, which the --ci flag's env bindings feed) decide.
+func resolveCIMode(flags *pflag.FlagSet) bool {
+	if value, changed := ciFlagExplicit(flags); changed {
+		return value
+	}
+	return cfg.GlobalViper().GetBool(ciFlagKey)
+}
 
 // multiComponentPlaceholder satisfies the legacy compound-subcommand parser while
 // fleet options are applied immediately afterward. It never reaches Terraform.
@@ -202,10 +234,7 @@ var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, arg
 		log.Warn("hook failed on error path", "error", err)
 	}
 
-	forceCIMode, _ := cmd_.Flags().GetBool("ci")
-	if !forceCIMode {
-		forceCIMode = viper.GetBool("ci")
-	}
+	forceCIMode := resolveCIMode(cmd_.Flags())
 
 	// Extract the exit code from the command error. errUtils.GetExitCode unwraps
 	// the error chain (exec.ExitError, ExecError, exitCoder, etc.) and returns 1
@@ -388,15 +417,13 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		return err
 	}
 
-	// Check for --ci flag or CI environment variable.
-	// Read directly from Cobra flag (not Viper) because pflags are only bound
-	// to Viper in RunE via BindFlagsToViper. During PreRunE, Viper doesn't
-	// yet see the Cobra flag value — only env vars and defaults.
-	forceCIMode, _ := cmd_.Flags().GetBool("ci")
-	if !forceCIMode {
-		// Fall back to Viper for env var support (ATMOS_CI, CI).
-		forceCIMode = viper.GetBool("ci")
-	}
+	// Check for --ci flag or CI environment variable. resolveCIMode reads
+	// directly from the Cobra flag first (not Viper) because pflags are only
+	// bound to Viper in RunE via BindFlagsToViper -- during PreRunE, Viper
+	// doesn't yet see the Cobra flag value, only env vars and defaults -- and
+	// falls back to Viper for env var support (ATMOS_CI, CI) only when the
+	// flag was never explicitly set, so an explicit --ci=false is authoritative.
+	forceCIMode := resolveCIMode(cmd_.Flags())
 
 	// Read the verify-plan flag early (same pattern as --ci above). PreRunE runs
 	// before RunE, so info is not yet populated by applyOptionsToInfo(). The
@@ -486,10 +513,7 @@ func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, inf
 		return
 	}
 
-	forceCIMode, _ := cmd_.Flags().GetBool("ci")
-	if !forceCIMode {
-		forceCIMode = viper.GetBool("ci")
-	}
+	forceCIMode := resolveCIMode(cmd_.Flags())
 
 	// Before-event hook (e.g., before.terraform.deploy): no command has run yet,
 	// so there is no exit code or error to report.
@@ -1063,10 +1087,7 @@ func (n *terraformNodeHooks) runUserHooksForNodeWithWriters(atmosConfig *schema.
 // errors are advisory only (unrelated to a hook's on_failure setting) and are
 // only logged, matching existing CI-hook behavior.
 func (n *terraformNodeHooks) runCIHooksForNode(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
-	forceCIMode, _ := n.cmd.Flags().GetBool("ci")
-	if !forceCIMode {
-		forceCIMode = viper.GetBool("ci")
-	}
+	forceCIMode := resolveCIMode(n.cmd.Flags())
 
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
 		Event:        n.afterEvent,
@@ -1156,14 +1177,18 @@ func terraformAggregateEvent(command string) h.HookEvent {
 
 // terraformCIModeEnabled returns true when CLI, config, or native provider detection enables CI mode.
 func terraformCIModeEnabled(cmd *cobra.Command) bool {
-	forceCIMode := false
+	var flags *pflag.FlagSet
 	if cmd != nil {
-		forceCIMode, _ = cmd.Flags().GetBool("ci")
+		flags = cmd.Flags()
 	}
-	if forceCIMode {
-		return true
+	// An explicit --ci=false must win over env vars and native CI-provider
+	// detection, not just an explicit --ci=true, or a user disabling CI mode
+	// on a CI runner (e.g. to force human-readable output) would be silently
+	// overridden by env vars / native detection.
+	if value, changed := ciFlagExplicit(flags); changed {
+		return value
 	}
-	if viper.GetBool("ci") {
+	if cfg.GlobalViper().GetBool(ciFlagKey) {
 		return true
 	}
 	return ci.IsCI()
