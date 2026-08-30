@@ -641,6 +641,11 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 	}
 
 	// Fields to keep (the sections a stack manifest can define).
+	//
+	// NOTE: this allowlist is already missing several other real sections a stack
+	// manifest can define (e.g. retry, generate, auth, secrets, command, backend_type,
+	// workspace) — a broader, pre-existing gap out of scope for the "flags" addition
+	// below. See docs/fixes/ for the field-test finding that added "flags" here.
 	fieldsToKeep := map[string]bool{
 		"vars":         true,
 		"settings":     true,
@@ -653,6 +658,7 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 		"dependencies": true,
 		"component":    true,
 		"hooks":        true,
+		"flags":        true,
 	}
 
 	filtered := make(map[string]any)

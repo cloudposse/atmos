@@ -27,7 +27,10 @@
         "plugin_cache": true,
         "auto_provision_workdir_for_outputs": true,
         "ci": {},
-        "workspace": {}
+        "workspace": {},
+        "flags": {
+          "lock_timeout": "5m"
+        }
       },
       "helmfile": {
         "base_path": "",
@@ -212,6 +215,9 @@
     "prod"
   ],
   "env": {},
+  "flags": {
+    "lock_timeout": "5m"
+  },
   "generate": {},
   "hooks": {},
   "imports": [
