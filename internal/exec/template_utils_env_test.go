@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -594,6 +595,110 @@ config:
 	require.NoError(t, err)
 	assert.Contains(t, result, "test-name", "pass 1 should resolve .name with the default {{ }}")
 	assert.Contains(t, result, "test-other", "pass 2 should resolve << .other >> using the delimiters pass 1 declared")
+}
+
+// TestConvertRawDelimitersToStringSlice covers convertRawDelimitersToStringSlice's rejection of
+// malformed input, rather than silently dropping bad elements into a valid-looking result.
+// Regression test: a mixed-type list used to have its non-string elements silently filtered out,
+// so `["<<", 1, ">>"]` became the valid-looking 2-item pair ["<<", ">>"] and `[1, 2]` became an
+// empty slice that resolveTemplateDelimiters' empty-means-default fallback would then silently
+// accept -- both cases should error instead.
+func TestConvertRawDelimitersToStringSlice(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     any
+		want    []string
+		wantErr bool
+	}{
+		{
+			name: "valid []any pair",
+			raw:  []any{"<<", ">>"},
+			want: []string{"<<", ">>"},
+		},
+		{
+			name: "valid []string pair",
+			raw:  []string{"[[", "]]"},
+			want: []string{"[[", "]]"},
+		},
+		{
+			name: "explicit empty list resets to defaults, not an error",
+			raw:  []any{},
+			want: []string{},
+		},
+		{
+			name:    "mixed-type list must not silently collapse to a valid-looking pair",
+			raw:     []any{"<<", 1, ">>"},
+			wantErr: true,
+		},
+		{
+			name:    "all-non-string list must not silently collapse to empty",
+			raw:     []any{1, 2},
+			wantErr: true,
+		},
+		{
+			name:    "empty string element is rejected",
+			raw:     []any{"", ">>"},
+			wantErr: true,
+		},
+		{
+			name:    "non-list value is rejected",
+			raw:     "not-a-list",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := convertRawDelimitersToStringSlice(tt.raw)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrInvalidTemplateSettings)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestProcessTmplWithDatasources_DelimitersInvalidMidEvaluationLoop tests that a pass declaring
+// malformed delimiters in its own rendered output fails loudly instead of silently rendering
+// with unintended delimiters.
+func TestProcessTmplWithDatasources_DelimitersInvalidMidEvaluationLoop(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled:     true,
+				Evaluations: 2,
+			},
+		},
+	}
+
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
+	settingsSection := schema.Settings{}
+
+	tmplValue := `
+settings:
+  templates:
+    settings:
+      delimiters: ["<<", 1, ">>"]
+config:
+  value: '{{ .name }}'
+`
+	tmplData := map[string]any{"name": "test"}
+
+	_, err := ProcessTmplWithDatasources(
+		atmosConfig,
+		configAndStacksInfo,
+		settingsSection,
+		"test-delimiters-invalid-mid-loop",
+		tmplValue,
+		tmplData,
+		true,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidTemplateSettings)
 }
 
 // TestProcessTmplWithDatasources_EnvVarsInEvaluationLoop tests that env vars are

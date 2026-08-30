@@ -128,25 +128,37 @@ func convertRawEnvToStringMap(envRaw any) map[string]string {
 }
 
 // convertRawDelimitersToStringSlice converts a raw delimiters value (any) decoded from rendered
-// YAML to []string. Handles []any (the common case from YAML unmarshaling into AtmosSectionMapType)
-// and []string; non-string elements are skipped. A present-but-empty or all-non-string sequence
-// returns a non-nil empty slice (distinct from an absent key, which callers check separately via
-// map key presence) so resolveTemplateDelimiters' existing empty-means-default fallback applies.
-func convertRawDelimitersToStringSlice(delimitersRaw any) []string {
-	result := []string{}
+// YAML to []string, rejecting the whole value instead of silently dropping a bad element: e.g.
+// `delimiters: ["<<", 1, ">>"]` must not become the valid-looking 2-item pair ["<<", ">>"], and
+// `delimiters: [1, 2]` must not become an empty slice that resolveTemplateDelimiters' own
+// empty-means-default fallback would then silently accept. A present-but-genuinely-empty
+// sequence (`delimiters: []`) still returns a non-nil empty slice with no error (distinct from
+// an absent key, which callers check separately via map key presence) so that fallback continues
+// to apply to it specifically.
+func convertRawDelimitersToStringSlice(delimitersRaw any) ([]string, error) {
+	var raw []any
 
 	switch delimiters := delimitersRaw.(type) {
 	case []any:
-		for _, v := range delimiters {
-			if s, ok := v.(string); ok {
-				result = append(result, s)
-			}
-		}
+		raw = delimiters
 	case []string:
-		result = append(result, delimiters...)
+		for _, s := range delimiters {
+			raw = append(raw, s)
+		}
+	default:
+		return nil, fmt.Errorf("%w: 'delimiters' must be a list of strings, got %T", errUtils.ErrInvalidTemplateSettings, delimitersRaw)
 	}
 
-	return result
+	result := make([]string, 0, len(raw))
+	for _, v := range raw {
+		s, ok := v.(string)
+		if !ok || s == "" {
+			return nil, fmt.Errorf("%w: 'delimiters' elements must be non-empty strings, got %#v", errUtils.ErrInvalidTemplateSettings, v)
+		}
+		result = append(result, s)
+	}
+
+	return result, nil
 }
 
 // extractEnvFromRawMap extracts the env map from a raw settings map[string]any.
@@ -400,6 +412,21 @@ func ProcessTmplWithDatasources(
 					// Extract env before mapstructure drops it.
 					resultEnv := convertRawEnvToStringMap(resultMapSettingsTemplatesSettings["env"])
 
+					// Validate delimiters before mapstructure.Decode below: a malformed
+					// `settings.templates.settings.delimiters` value (e.g. a non-string
+					// element) would otherwise surface as mapstructure's raw internal decode
+					// error instead of the same ErrInvalidTemplateSettings message
+					// resolveTemplateDelimiters gives for the same class of problem.
+					var newDelimiters []string
+					rawDelimiters, hasDelimiters := resultMapSettingsTemplatesSettings["delimiters"]
+					if hasDelimiters {
+						var convErr error
+						newDelimiters, convErr = convertRawDelimitersToStringSlice(rawDelimiters)
+						if convErr != nil {
+							return "", convErr
+						}
+					}
+
 					err = mapstructure.Decode(resultMapSettingsTemplatesSettings, &templateSettings)
 					if err != nil {
 						return "", err
@@ -423,8 +450,8 @@ func ProcessTmplWithDatasources(
 					// "settings.templates.settings.delimiters" section at all must leave the
 					// prior pass's resolved delimiters in place for the next pass, not silently
 					// reset them to nil/empty.
-					if rawDelimiters, hasDelimiters := resultMapSettingsTemplatesSettings["delimiters"]; hasDelimiters {
-						effectiveDelimiters = convertRawDelimitersToStringSlice(rawDelimiters)
+					if hasDelimiters {
+						effectiveDelimiters = newDelimiters
 					}
 				}
 			}
