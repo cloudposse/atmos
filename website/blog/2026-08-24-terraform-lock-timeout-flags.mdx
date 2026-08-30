@@ -28,8 +28,10 @@ to type the flag by hand.
 Terraform CLI execution flags — `lock_timeout`, `lock`, `parallelism`, `refresh`, and
 `compact_warnings` — can now be declared once under a `flags:` block: globally in `atmos.yaml`,
 for an entire stack, or for a single component, with each layer overriding the one before it. An
-explicit flag typed directly on the command line still wins over every declared default, so
-nothing about existing one-off usage changes.
+`ATMOS_COMPONENTS_TERRAFORM_FLAGS_*` environment variable can override the `atmos.yaml` default
+too — the same environment-variable handling every other Atmos setting already gets, not a
+special case invented for these five flags. An explicit flag typed directly on the command line
+still wins over every declared default, so nothing about existing one-off usage changes.
 
 Atmos only injects a flag into commands that actually support it — for example `-refresh` isn't
 valid when applying a saved plan, and `terraform import` doesn't accept `-parallelism` — so you
