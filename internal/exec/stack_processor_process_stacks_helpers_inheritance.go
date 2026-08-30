@@ -31,6 +31,7 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 		result.BaseComponentMocks = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentBackendSection = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentRemoteStateBackendSection = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentFlags = make(map[string]any, componentSmallMapCapacity)
 	}
 	if supportsComponentHooks(opts.ComponentType) {
 		result.BaseComponentHooks = make(map[string]any, componentSmallMapCapacity)
@@ -254,6 +255,7 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 		result.BaseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
 		result.BaseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
 		result.BaseComponentRemoteStateBackendSection = baseComponentConfig.BaseComponentRemoteStateBackendSection
+		result.BaseComponentFlags = baseComponentConfig.BaseComponentFlags
 	}
 	if supportsComponentHooks(opts.ComponentType) {
 		result.BaseComponentHooks = baseComponentConfig.BaseComponentHooks
