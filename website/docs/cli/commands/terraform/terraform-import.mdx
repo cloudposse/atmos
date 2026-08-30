@@ -113,6 +113,14 @@ atmos terraform import app -s dev 'aws_instance.web[0]' i-1234567890abcdef0
 
 This command supports native `terraform import` flags such as `-input=false` to disable interactive input, `-var` to set variables, `-var-file` to specify variable files.
 
+### Default Locking Flags
+
+Instead of retyping `-lock-timeout` on every invocation, declare a default in
+[`components.terraform.flags`](/cli/configuration/components/terraform#flags) — globally
+in `atmos.yaml`, per stack, or per component. `import` supports only `lock_timeout` and
+`lock` (it does not support `-parallelism`, `-refresh`, or `-compact-warnings`). A native
+flag typed directly on the command line always wins over a declared default.
+
 ## Related Commands
 
 - [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
