@@ -76,6 +76,7 @@ var manifestSections = map[string]sectionScope{
 	"required_version":          {component: true},
 	"required_providers":        {component: true},
 	"retry":                     {component: true},
+	"flags":                     {component: true},
 }
 
 // nonManifestSections are `*SectionName` constants that are NOT authored stack-manifest sections
