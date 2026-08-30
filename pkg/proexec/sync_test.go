@@ -1,6 +1,8 @@
 package proexec
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -42,13 +44,26 @@ func TestCaptureSync_NoOpOnGateClosed(t *testing.T) {
 }
 
 // TestCaptureSync_WarnAndContinueOnFailure verifies a delivery failure (here,
-// an unreachable Pro endpoint) returns nil (warn-and-continue) rather than
-// propagating the upload error to the caller.
+// a Pro endpoint that never responds within the configured sync timeout)
+// returns nil (warn-and-continue) rather than propagating the upload error to
+// the caller, and that CaptureSync actually exercises its timeout branch
+// rather than returning early on a connection failure.
 func TestCaptureSync_WarnAndContinueOnFailure(t *testing.T) {
 	withCIEnv(t, true)
+
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer func() {
+		close(release)
+		server.Close()
+	}()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Settings.Pro.Token = "test-token"
-	atmosConfig.Settings.Pro.BaseURL = "http://127.0.0.1:0"
+	atmosConfig.Settings.Pro.BaseURL = server.URL
 	atmosConfig.Settings.Pro.Exec.SyncTimeoutSeconds = defaultSyncTimeoutSeconds
 
 	start := time.Now()
@@ -56,6 +71,9 @@ func TestCaptureSync_WarnAndContinueOnFailure(t *testing.T) {
 	elapsed := time.Since(start)
 
 	assert.NoError(t, err, "CaptureSync must warn-and-continue, never return the upload error")
-	// Must not hang indefinitely — bounded by the (clamped) sync timeout.
+	// The endpoint never responds, so CaptureSync must have hit its timeout
+	// branch — not returned early on an immediate connection failure.
+	assert.GreaterOrEqual(t, elapsed, defaultSyncTimeoutSeconds*time.Second)
+	// Must not hang indefinitely — bounded well beyond the configured timeout.
 	assert.Less(t, elapsed, 60*time.Second)
 }
