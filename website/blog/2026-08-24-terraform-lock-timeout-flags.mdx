@@ -17,11 +17,11 @@ though the lock would have cleared in a few seconds.
 ## The Problem
 
 Terraform and OpenTofu support `-lock-timeout=<duration>` to poll for a held lock instead of
-failing immediately, but it has to be typed on every single invocation — there was no way to
-declare "always retry lock contention for up to 5 minutes" once and have it apply everywhere.
-Teams running concurrent CI matrices, or Atmos Pro-driven deployments, would hit avoidable
-failures from Terraform's `0s` default and have no way to make it automatic, only a habit of
-remembering to type the flag by hand.
+failing immediately, but it has to be typed on every single invocation. `TF_CLI_ARGS_<command>`
+can automate it, but it is a single flat string rather than a structured, independently merged
+`flags:` block — so a component that wants to override one flag has to restate the rest or lose
+them. Teams running concurrent CI matrices, or Atmos Pro-driven deployments, would hit avoidable
+failures from Terraform's `0s` default when no lock timeout is configured.
 
 ## The Fix
 
