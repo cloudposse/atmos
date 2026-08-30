@@ -13,59 +13,34 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	git "github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
-// fakeUploadClient is a minimal pro.AtmosProAPIClientInterface stand-in used
-// to observe/control UploadExecMetadata behavior without a real HTTP client.
-type fakeUploadClient struct {
-	uploadCalls atomic.Int32
-	delay       time.Duration
-	returnErr   error
-	lastRequest *dtos.ExecUploadRequest
-}
-
-func (f *fakeUploadClient) UploadInstances(*dtos.InstancesUploadRequest) error { return nil }
-func (f *fakeUploadClient) UploadInstanceStatus(*dtos.InstanceStatusUploadRequest) error {
-	return nil
-}
-
-func (f *fakeUploadClient) UploadAffectedStacks(*dtos.UploadAffectedStacksRequest) error { return nil }
-func (f *fakeUploadClient) LockStack(*dtos.LockStackRequest) (dtos.LockStackResponse, error) {
-	return dtos.LockStackResponse{}, nil
-}
-
-func (f *fakeUploadClient) UnlockStack(*dtos.UnlockStackRequest) (dtos.UnlockStackResponse, error) {
-	return dtos.UnlockStackResponse{}, nil
-}
-
-func (f *fakeUploadClient) UploadExecMetadata(dto *dtos.ExecUploadRequest) error {
-	f.uploadCalls.Add(1)
-	f.lastRequest = dto
-	if f.delay > 0 {
-		time.Sleep(f.delay)
-	}
-	return f.returnErr
-}
-
-func (f *fakeUploadClient) UploadExecData(*dtos.ExecDataUploadRequest) (*dtos.ExecDataUploadResponse, error) {
-	return &dtos.ExecDataUploadResponse{}, nil
-}
-
 func TestUploadExecMetadata_DispatchesOnGateOpen(t *testing.T) {
-	client := &fakeUploadClient{}
+	ctrl := gomock.NewController(t)
+	client := pro.NewMockAtmosProAPIClientInterface(ctrl)
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
+
+	var uploadCalls atomic.Int32
+	var lastRequest *dtos.ExecUploadRequest
+	client.EXPECT().UploadExecMetadata(gomock.Any()).DoAndReturn(func(dto *dtos.ExecUploadRequest) error {
+		uploadCalls.Add(1)
+		lastRequest = dto
+		return nil
+	})
 
 	err := uploadExecMetadata(&ExecRecordInput{Command: "version"}, client, repo)
 
 	assert.NoError(t, err)
-	assert.Equal(t, int32(1), client.uploadCalls.Load())
-	assert.Equal(t, "version", client.lastRequest.Command)
-	assert.NotEmpty(t, client.lastRequest.ExecutionID, "async path must populate ExecutionID (FR-003c)")
+	assert.Equal(t, int32(1), uploadCalls.Load())
+	assert.Equal(t, "version", lastRequest.Command)
+	assert.NotEmpty(t, lastRequest.ExecutionID, "async path must populate ExecutionID (FR-003c)")
 }
 
 // TestCommandArgsAndFlags_StripsRootAndSeparatesFlags verifies FR-003b's
