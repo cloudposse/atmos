@@ -35,8 +35,13 @@ func captureRusage() rusageSnapshot {
 
 // diffRusage computes the ProcessMetrics delta since the baseline sample.
 func diffRusage(baseline *rusageSnapshot) ProcessMetrics {
-	now := captureRusage()
+	return diffRusageValues(captureRusage(), baseline)
+}
 
+// diffRusageValues computes the ProcessMetrics delta between two already
+// captured samples. Split out from diffRusage so the delta arithmetic can be
+// exercised with fixed inputs in tests.
+func diffRusageValues(now rusageSnapshot, baseline *rusageSnapshot) ProcessMetrics {
 	return ProcessMetrics{
 		UserCPUTime:   now.userTime - baseline.userTime,
 		SystemCPUTime: now.kernelTime - baseline.kernelTime,
