@@ -180,7 +180,7 @@ func TestCaptureAsync_DoesNotAlterCallerError(t *testing.T) {
 	withCIEnv(t, true)
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Settings.Pro.Token = "test-token"
-	atmosConfig.Settings.Pro.BaseURL = "http://127.0.0.1:0" // unreachable
+	atmosConfig.Settings.Pro.BaseURL = "http://127.0.0.1:0" // Unreachable.
 	SetAtmosConfig(atmosConfig)
 	t.Cleanup(func() { SetAtmosConfig(nil) })
 
