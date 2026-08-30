@@ -46,6 +46,11 @@ const (
 	forceFlag                 = "--force"
 	everythingFlag            = "--everything"
 	detailedExitCodeFlag      = "-detailed-exitcode"
+	lockTimeoutFlag           = "-lock-timeout"
+	lockFlag                  = "-lock"
+	parallelismFlag           = "-parallelism"
+	refreshFlag               = "-refresh"
+	compactWarningsFlag       = "-compact-warnings"
 	logFieldComponent         = "component"
 	dirPermissions            = 0o755
 )
