@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/metrics/process"
@@ -108,10 +109,7 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 		return
 	}
 
-	exitCode := 0
-	if err != nil {
-		exitCode = 1
-	}
+	exitCode := errUtils.GetExitCode(err)
 
 	reportedCommand, args, flags := commandArgsAndFlags(cmd)
 
