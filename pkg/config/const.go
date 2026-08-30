@@ -118,6 +118,7 @@ const (
 	EmulatorSectionName               = "emulator"
 	AnsibleInventorySectionName       = "inventory"
 	WorkspaceSectionName              = "workspace"
+	FlagsSectionName                  = "flags"
 	AuthSectionName                   = "auth"
 	RequiredVersionSectionName        = "required_version"
 	RequiredProvidersSectionName      = "required_providers"
