@@ -2,6 +2,7 @@ package proexec
 
 import (
 	"encoding/json"
+	"net/url"
 	"os"
 	"runtime"
 
@@ -81,7 +82,7 @@ func buildRecord(in *ExecRecordInput, metrics *process.ProcessMetrics, gitRepo g
 		Flags:         maskedFlags,
 		ExitCode:      in.ExitCode,
 		GitSHA:        gitSHA,
-		RepoURL:       repoInfo.RepoUrl,
+		RepoURL:       sanitizeRepoURL(repoInfo.RepoUrl),
 		RepoName:      repoInfo.RepoName,
 		RepoOwner:     repoInfo.RepoOwner,
 		RepoHost:      repoInfo.RepoHost,
@@ -108,6 +109,26 @@ func VersionedData(version int, key string, payload any) map[string]any {
 		"version": version,
 		key:       payload,
 	}
+}
+
+// sanitizeRepoURL strips userinfo (e.g. "user:token@") from a git remote URL
+// before it is copied into the upload record, so credentials embedded in the
+// remote URL never leave the machine. repoInfo.RepoUrl itself is left
+// untouched by callers — only the value copied into the upload request is
+// sanitized. URLs that fail to parse (e.g. SCP-style git@host:owner/repo.git,
+// which carries no credentials) are returned unchanged.
+func sanitizeRepoURL(repoURL string) string {
+	if repoURL == "" {
+		return repoURL
+	}
+
+	parsed, err := url.Parse(repoURL)
+	if err != nil || parsed.User == nil {
+		return repoURL
+	}
+
+	parsed.User = nil
+	return parsed.String()
 }
 
 // maskArgs runs the existing secret-masking path over each argument.
