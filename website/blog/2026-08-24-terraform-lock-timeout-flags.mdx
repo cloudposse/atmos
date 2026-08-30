@@ -20,8 +20,8 @@ Terraform and OpenTofu support `-lock-timeout=<duration>` to poll for a held loc
 failing immediately, but it has to be typed on every single invocation — there was no way to
 declare "always retry lock contention for up to 5 minutes" once and have it apply everywhere.
 Teams running concurrent CI matrices, or Atmos Pro-driven deployments, would hit avoidable
-failures from Terraform's `0s` default and have no config-level fix, only a habit of remembering
-to type the flag by hand.
+failures from Terraform's `0s` default and have no way to make it automatic, only a habit of
+remembering to type the flag by hand.
 
 ## The Fix
 
@@ -68,6 +68,17 @@ atmos terraform plan vpc -s plat-ue2-dev -- -lock-timeout=30s
 # tweak without touching the fleet-wide config
 ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT=2m atmos terraform plan vpc -s plat-ue2-dev
 ```
+
+## Why not just use TF_CLI_ARGS?
+
+Yes, you could. Atmos's `env:` section also merges by stack and component. Set
+`env: { TF_CLI_ARGS_plan: "-lock-timeout=5m" }`, and it scopes the same way `flags:` does.
+
+But `TF_CLI_ARGS_plan` is one flat string with no separate fields. If a component overrides
+`-parallelism`, it must also restate `-lock-timeout`, or the component loses that value.
+
+Fields in `flags:` merge one at a time. A component can override `parallelism` alone and still
+inherit `lock_timeout` from the stack. Every other Atmos section merges the same way.
 
 ## Get Involved
 
