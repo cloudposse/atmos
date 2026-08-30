@@ -443,6 +443,9 @@ func unpackTarGz(src, dest string) ([]pendingSymlink, []pendingHardLink, error) 
 func extractEntry(tr *tar.Reader, header *tar.Header, dest string, symlinks *[]pendingSymlink, hardLinks *[]pendingHardLink) error {
 	//nolint:gosec // G305: Path is validated by isSafePath check on next line.
 	targetPath := filepath.Join(dest, header.Name)
+	if !strings.HasPrefix(targetPath, filepath.Clean(dest)+string(filepath.Separator)) {
+		return fmt.Errorf("%w: invalid path: path traversal detected in %s", ErrFileOperation, header.Name)
+	}
 	if !isSafePath(targetPath, dest) {
 		return fmt.Errorf("%w: illegal file path: %s", ErrFileOperation, header.Name)
 	}

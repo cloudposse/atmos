@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -48,6 +49,10 @@ func deleteFolders(folders []Directory, relativePath string, atmosConfig *schema
 			if err != nil {
 				log.Debug("Failed to get relative path", "path", file.FullPath, "error", err)
 				fileRel = filepath.Join(relativePath, file.Name)
+				if !strings.HasPrefix(fileRel, filepath.Clean(relativePath)+string(filepath.Separator)) {
+					errors = append(errors, fmt.Errorf("invalid path: path traversal detected in %s", file.Name))
+					continue
+				}
 			}
 			if file.IsDir {
 				if err := DeletePath(file.FullPath, fileRel+"/"); err != nil {
