@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
@@ -26,6 +27,8 @@ const uploadExecDataOperation = "UploadExecData"
 // sends the returned URL in Data's place instead (FR-011, research.md
 // Decision 16).
 func (c *AtmosProAPIClient) UploadExecMetadata(dto *dtos.ExecUploadRequest) error {
+	defer perf.Track(nil, "pro.UploadExecMetadata")()
+
 	url := fmt.Sprintf("%s/%s/atmos/exec", c.BaseURL, c.BaseAPIEndpoint)
 
 	maxBytes := c.MaxPayloadBytes
