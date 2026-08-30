@@ -129,3 +129,38 @@ func TestProcessComponentConfig_AuthManagerGuardBranches(t *testing.T) {
 		assert.Nil(t, info.AuthContext)
 	})
 }
+
+// TestProcessComponentConfig_InvalidFlagsSection covers the flags-decode error branch
+// added to processComponentConfig: an invalid `flags:` section (wrong type) must be
+// surfaced as a descriptive error rather than silently ignored, mirroring how the
+// analogous retry-decode error is surfaced.
+func TestProcessComponentConfig_InvalidFlagsSection(t *testing.T) {
+	stacksMap := map[string]any{
+		"tenant-dev-test": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{
+							"name": "vpc",
+						},
+						"flags": "not-a-map",
+					},
+				},
+			},
+		},
+	}
+
+	info := &schema.ConfigAndStacksInfo{}
+	err := ProcessComponentConfig(
+		&schema.AtmosConfiguration{},
+		info,
+		"tenant-dev-test",
+		stacksMap,
+		"terraform",
+		"vpc",
+		nil,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, schema.ErrInvalidTerraformFlagsConfig)
+	assert.Contains(t, err.Error(), "components.terraform.vpc.flags")
+}
