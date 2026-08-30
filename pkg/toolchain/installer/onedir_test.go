@@ -1729,6 +1729,9 @@ func TestMaterializeHardLinks(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("POSIX permission bits don't apply the same way on Windows")
 		}
+		if os.Geteuid() == 0 {
+			t.Skip("running as root ignores directory permission bits")
+		}
 		root := t.TempDir()
 		require.NoError(t, os.Chmod(root, 0o000))
 		t.Cleanup(func() { _ = os.Chmod(root, 0o755) })

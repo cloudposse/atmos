@@ -685,6 +685,9 @@ func TestUnpackTarGz_ErrorPaths(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("POSIX permission bits don't apply the same way on Windows")
 		}
+		if os.Geteuid() == 0 {
+			t.Skip("running as root ignores directory permission bits")
+		}
 		tmp := t.TempDir()
 		dest := filepath.Join(tmp, "out")
 		require.NoError(t, os.MkdirAll(dest, 0o755))
@@ -792,6 +795,9 @@ func TestUnpackZip_ErrorPaths(t *testing.T) {
 	t.Run("fails when the extraction directory is unreadable", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("POSIX permission bits don't apply the same way on Windows")
+		}
+		if os.Geteuid() == 0 {
+			t.Skip("running as root ignores directory permission bits")
 		}
 		tmp := t.TempDir()
 		dest := filepath.Join(tmp, "out")

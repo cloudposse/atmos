@@ -243,6 +243,9 @@ func TestExtractTarball_FailsWhenExtractPathUnreadable(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX permission bits don't apply the same way on Windows")
 	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root ignores directory permission bits")
+	}
 
 	dest := t.TempDir()
 	require.NoError(t, os.Chmod(dest, 0o000))
