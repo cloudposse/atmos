@@ -30,6 +30,11 @@ jobs:
       url: https://${{ env.DEPLOYMENT_HOST }}
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
