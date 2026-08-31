@@ -38,6 +38,7 @@ export PATH="${GO_BIN}:${PATH}"
 # A plain newline-delimited list (not a bash 4 associative array) keeps this working
 # on macOS's stock bash 3.2.
 REPO_OVERRIDES="
+al.essio.dev/pkg/shellescape|github.com/alessio/shellescape||LICENSE
 dario.cat/mergo|github.com/imdario/mergo||LICENSE
 inet.af/netaddr|github.com/inetaf/netaddr||LICENSE
 go4.org/intern|github.com/go4org/intern||LICENSE
