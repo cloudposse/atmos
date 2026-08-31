@@ -175,10 +175,13 @@ func VendorSource(
 	// URI like https://.../dns.yaml) is staged by ClientModeAny as the sole entry
 	// in tempDir, named by the URL's basename. Detect that shape here and write
 	// the file directly to targetDir, bypassing the directory-copy assumption the
-	// rest of this function makes. OCI sources are excluded: they distribute
-	// module/component packages, which stay directories even when a given
-	// package happens to contain only one file.
-	if !vendor.IsOCIURI(uri) {
+	// rest of this function makes. OCI, Git, S3, and archive sources are
+	// excluded: they always unpack to a directory, so a module/component
+	// package that happens to contain only one file (e.g. a subdir like
+	// terraform-null-label//exports, which is just context.tf, or a tarball
+	// whose sole member is main.tf) must still be copied as a directory, not
+	// misdetected as a single-file template source.
+	if !vendor.IsOCIURI(uri) && !vendor.IsGitURI(uri) && !vendor.IsS3URI(uri) && !vendor.IsArchiveURI(uri) {
 		if singleFile, ok, err := singleFileInDir(tempDir); err != nil {
 			return err
 		} else if ok {

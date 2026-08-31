@@ -1,6 +1,8 @@
 package source
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"errors"
 	"io/fs"
@@ -460,6 +462,58 @@ func TestVendorSourceSingleFileURIReplaceTargetFalseFailsWhenTargetExists(t *tes
 	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceURL.String()}, targetDir, WithReplaceTarget(false))
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+}
+
+// buildSingleFileTarball packages exactly one file (content in a directory
+// tree, e.g. a Terraform module subdir like terraform-null-label//exports
+// that only has context.tf) into a .tar.gz and returns its path.
+func buildSingleFileTarball(t *testing.T, fileName, content string) string {
+	t.Helper()
+
+	archivePath := filepath.Join(t.TempDir(), "source.tar.gz")
+	f, err := os.Create(archivePath)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, f.Close()) }()
+
+	gz := gzip.NewWriter(f)
+	defer func() { require.NoError(t, gz.Close()) }()
+
+	tw := tar.NewWriter(gz)
+	defer func() { require.NoError(t, tw.Close()) }()
+
+	require.NoError(t, tw.WriteHeader(&tar.Header{
+		Name: fileName,
+		Mode: 0o644,
+		Size: int64(len(content)),
+	}))
+	_, err = tw.Write([]byte(content))
+	require.NoError(t, err)
+
+	return archivePath
+}
+
+// TestVendorSourceArchiveWithOneFileIsNotMisdetectedAsSingleFileURI is a
+// regression test: an archive source (e.g. a module tarball, or a git//subdir
+// source) that happens to extract to exactly one file must still be copied
+// as a directory, not misdetected as a single-file `source:` shape (which
+// would write the file directly to targetDir, leaving targetDir a file
+// instead of a directory and breaking every subsequent workdir/metadata
+// write that assumes targetDir is a directory).
+func TestVendorSourceArchiveWithOneFileIsNotMisdetectedAsSingleFileURI(t *testing.T) {
+	archivePath := buildSingleFileTarball(t, "context.tf", "resource \"null_resource\" \"x\" {}\n")
+	sourceURL := url.URL{Scheme: "file", Path: filepath.ToSlash(archivePath)}
+
+	targetDir := filepath.Join(t.TempDir(), "module")
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceURL.String()}, targetDir)
+	require.NoError(t, err)
+
+	info, statErr := os.Stat(targetDir)
+	require.NoError(t, statErr)
+	assert.True(t, info.IsDir(), "targetDir must be a directory, not the single extracted file")
+
+	content, err := os.ReadFile(filepath.Join(targetDir, "context.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "resource \"null_resource\" \"x\" {}\n", string(content))
 }
 
 func TestCopyToTargetCreatesParentDirectoryAndWrapsCopyErrors(t *testing.T) {

@@ -98,6 +98,35 @@ func IsS3URI(uri string) bool {
 	return strings.HasPrefix(uri, "s3::") || strings.Contains(uri, ".amazonaws.com/")
 }
 
+// directoryArchiveExtensions lists the go-getter decompressor extensions that
+// unpack to a directory of files (possibly just one), as opposed to the
+// single-compressed-file formats (.gz, .bz2, .xz, .zst alone) that unpack to
+// exactly one file. Longer extensions are listed before their suffixes (e.g.
+// "tar.gz" before "gz" would matter if this were used for prefix matching;
+// HasSuffix below doesn't require that ordering, but it documents intent).
+var directoryArchiveExtensions = []string{
+	".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz",
+	".tar.zst", ".tzst", ".tar", ".zip",
+}
+
+// IsArchiveURI checks if the URI's path ends in a directory-producing archive
+// extension (a tarball or zip go-getter will decompress into a directory tree).
+// This matches on the path suffix, ignoring any query string, so it works for
+// any scheme (http(s)://, file://, s3::, etc.) rather than only http(s).
+func IsArchiveURI(uri string) bool {
+	path := uri
+	if idx := strings.IndexByte(path, '?'); idx != -1 {
+		path = path[:idx]
+	}
+	lowerPath := strings.ToLower(path)
+	for _, ext := range directoryArchiveExtensions {
+		if strings.HasSuffix(lowerPath, ext) {
+			return true
+		}
+	}
+	return false
+}
+
 // HasLocalPathPrefix checks if the URI starts with local path prefixes.
 func HasLocalPathPrefix(uri string) bool {
 	return strings.HasPrefix(uri, "/") || strings.HasPrefix(uri, "./") || strings.HasPrefix(uri, "../")
