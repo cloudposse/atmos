@@ -16,6 +16,9 @@ badges:
   - name: Tests
     image: https://img.shields.io/github/actions/workflow/status/cloudposse/atmos/test.yml?style=for-the-badge
     url: https://github.com/cloudposse/atmos/actions/workflows/test.yml
+  - name: OpenSSF Scorecard
+    image: https://api.scorecard.dev/projects/github.com/cloudposse/atmos/badge?style=for-the-badge
+    url: https://scorecard.dev/viewer/?uri=github.com/cloudposse/atmos
   - name: Slack Community
     image: https://slack.cloudposse.com/for-the-badge.svg
     url: https://slack.cloudposse.com
