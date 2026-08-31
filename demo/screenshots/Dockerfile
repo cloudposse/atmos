@@ -1,4 +1,4 @@
-FROM ghcr.io/charmbracelet/vhs:latest
+FROM ghcr.io/charmbracelet/vhs:latest@sha256:9d5fc3dc0c160b0fb1d2212baff07e6bdf3fa9438c504a3237484567302fcf93
 ARG ARCH=arm64
 RUN apt-get update && apt-get install -y apt-utils curl aha
 

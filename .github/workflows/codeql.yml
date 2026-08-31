@@ -19,6 +19,11 @@ env:
   # `go mod download` fall back to direct module fetches.
   GOPROXY: "https://proxy.golang.org|direct"
 
+# Least-privilege default; every job below declares its own narrower
+# job-level permissions that override this baseline.
+permissions:
+  contents: read
+
 jobs:
   analyze:
     name: Analyze
@@ -35,6 +40,11 @@ jobs:
         language: ["go", "javascript-typescript"]
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -84,6 +94,106 @@ jobs:
           # report, exactly like the PR Semver Labels gap. Instead, point the
           # upload at the queue's real target branch ref (which persists)
           # while still analyzing the actual queued merge commit.
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          sha: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
+
+  # Unlike Dependabot/dependency-review (version-based), govulncheck does
+  # call-graph reachability analysis: it only flags CVEs in code this binary
+  # can actually reach, so findings here are high-confidence. Lives alongside
+  # lint-golangci below rather than its own file, matching that job's
+  # precedent for SARIF-producing Go tools that aren't CodeQL itself.
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Run govulncheck
+        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+        env:
+          # Atmos ships with CGO disabled (see Makefile/test.yml) — without this,
+          # the runner's default CGO_ENABLED=1 makes govulncheck try to compile
+          # the cgo-only half of github.com/bearsh/hid (pulled in transitively via
+          # saml2aws's U2F support), which needs libudev-dev and fails to load.
+          CGO_ENABLED: "0"
+          # govulncheck's whole-program (`./...`) SSA call-graph analysis over
+          # this repo's large, dependency-heavy module (cloud SDKs, client-go,
+          # Terraform/OpenTofu, ...) peaks high enough in memory to get
+          # OOM-killed by the standard 16GB runner (observed as an unexplained
+          # SIGTERM/exit 143 partway through, with no findings ever produced).
+          # A soft memory ceiling forces the Go runtime to GC earlier/more
+          # often instead of letting the heap grow unchecked, trading some run
+          # time for staying under the runner's memory limit. GOFLAGS=-p=1
+          # (serializing package builds) was tried first and rejected: it only
+          # marginally reduced peak memory (govulncheck's SSA construction
+          # parallelizes via goroutines internally, which -p doesn't govern)
+          # while nearly tripling run time.
+          GOMEMLIMIT: "12GiB"
+        with:
+          go-version-file: go.mod
+          output-format: sarif
+          output-file: govulncheck.sarif
+
+      - name: Upload SARIF file
+        if: always()
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          sarif_file: govulncheck.sarif
+          category: govulncheck
+          # See the ref/sha override comment on the analyze job's upload step
+          # above: without it, merge_group uploads race the ephemeral
+          # gh-readonly-queue/... ref being deleted and fail with "ref not found".
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          sha: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
+
+  semgrep:
+    name: Semgrep scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      # Run via `docker run` rather than a job-level `container:` so Harden
+      # Runner (which needs to instrument the runner VM directly) still works —
+      # job-level containers run every step inside the container instead.
+      - name: Run Semgrep
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/src" \
+            -w /src \
+            semgrep/semgrep@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b \
+            semgrep scan --config=p/ci --sarif --output=semgrep.sarif --metrics=off
+
+      - name: Upload SARIF to code-scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+          # See the ref/sha override comment on the analyze job's upload step
+          # above: without it, merge_group uploads race the ephemeral
+          # gh-readonly-queue/... ref being deleted and fail with "ref not found".
           ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
           sha: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
 
@@ -226,6 +336,11 @@ jobs:
       pull-requests: write
       issues: write
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       # Checkout is required for local composite actions
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
