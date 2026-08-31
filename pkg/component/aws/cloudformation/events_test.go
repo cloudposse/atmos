@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -33,6 +35,13 @@ func captureStderr(t *testing.T, fn func()) string {
 	buf := make([]byte, 4096)
 	n, _ := r.Read(buf)
 	return string(buf[:n])
+}
+
+// normalizeUIOutput strips ANSI styling and collapses whitespace (including the
+// soft line-wraps toastMarkdown inserts at narrower terminal widths) so content
+// assertions don't depend on the rendering width of the environment running them.
+func normalizeUIOutput(out string) string {
+	return strings.Join(strings.Fields(ansi.Strip(out)), " ")
 }
 
 func TestIsTerminalStackStatus(t *testing.T) {
@@ -104,7 +113,7 @@ func TestPrintStackEvent_FailedStatusWithReason(t *testing.T) {
 		ResourceStatusReason: &reason,
 	}
 
-	out := captureStderr(t, func() { printStackEvent(event) })
+	out := normalizeUIOutput(captureStderr(t, func() { printStackEvent(event) }))
 	assert.Contains(t, out, "MyBucket")
 	assert.Contains(t, out, string(cfntypes.ResourceStatusCreateFailed))
 	assert.Contains(t, out, "Bucket already exists")
