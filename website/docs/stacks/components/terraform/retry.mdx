@@ -75,7 +75,7 @@ This type of error can fail many components at the same time. A drift-detection 
 
 You have four ways to share one retry policy across those components:
 
-1. Configure `retry` once at the stack-manifest root — see [Stack-Level Defaults](#stack-level-defaults). This applies to every component in the stack. No mixin, no shared base component, no per-component copies.
+1. Configure `retry` once at the stack-manifest root — see [Stack-Level Defaults](#stack-level-defaults). This applies to every supported component in the stack. No mixin, no shared base component, no per-component copies.
 2. Configure `retry` on each affected component.
 3. Configure `retry` on one shared abstract base component — see [Inheritance](#inheritance). This only works when the components already share a base.
 4. Configure `retry` once in a [mixin](/howto/mixins), using `overrides.retry`. This works even when the components do not share a base component, and lets you scope the policy to part of a stack instead of all of it.
@@ -159,7 +159,7 @@ components:
 
 ## Stack-Level Defaults
 
-Configure `retry` once at the root of a stack manifest to apply the same policy to every component in that stack. No mixin, no shared base component, no per-component copies:
+Configure `retry` once at the root of a stack manifest to apply the same policy to every supported component in that stack. No mixin, no shared base component, no per-component copies:
 
 ```yaml title="stacks/deploy/prod.yaml"
 retry:

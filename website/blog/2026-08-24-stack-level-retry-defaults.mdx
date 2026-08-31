@@ -16,7 +16,7 @@ Component retry matches transient failures against `conditions` regex patterns a
 
 ## The Fix
 
-Stacks now accept a top-level `retry:` block, the same way they already accept top-level `vars`, `metadata`, and `hooks`. Set it once at the root of a stack manifest and every component in that stack picks it up:
+Stacks now accept a top-level `retry:` block, the same way they already accept top-level `vars`, `metadata`, and `hooks`. Set it once at the root of a stack manifest and every supported component in that stack picks it up:
 
 ```yaml title="stacks/deploy/prod.yaml"
 retry:
