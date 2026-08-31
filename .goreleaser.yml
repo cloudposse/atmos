@@ -39,7 +39,9 @@ before:
       sh -c 'if [ "$GITHUB_ACTIONS" = "true" ]; then
         echo "Installing cosign for keyless artifact signing..."
         go install github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3
-        sudo cp "$(go env GOPATH)/bin/cosign" /usr/local/bin/cosign
+        cosign_bin_dir="$(go env GOBIN)"
+        if [ -z "$cosign_bin_dir" ]; then cosign_bin_dir="$(go env GOPATH)/bin"; fi
+        sudo cp "$cosign_bin_dir/cosign" /usr/local/bin/cosign
         cosign version
       fi'
 
@@ -137,15 +139,17 @@ sboms:
 # Keyless OIDC signing of the checksums file (which covers every archive by
 # digest) — no --key, no static key material. cosign is installed by the
 # before.hooks entry above; the invoking workflow (test.yml's `release` job)
-# grants id-token: write for the OIDC token exchange. Verifiable with:
-#   cosign verify-blob <checksums file> --signature <file>.sig --certificate <file>.pem \
+# grants id-token: write for the OIDC token exchange. cosign v3 enables
+# --new-bundle-format by default, which requires --bundle (the old
+# --output-signature/--output-certificate pair errors out). Verifiable with:
+#   cosign verify-blob --bundle <checksums file>.sigstore.json <checksums file> \
 #     --certificate-identity-regexp='^https://github.com/cloudposse/atmos/' \
 #     --certificate-oidc-issuer=https://token.actions.githubusercontent.com
 signs:
   - cmd: cosign
-    args: ["sign-blob", "--yes", "--output-signature=${signature}", "--output-certificate=${certificate}", "${artifact}"]
+    args: ["sign-blob", "--yes", "--bundle=${signature}", "${artifact}"]
     artifacts: checksum
-    certificate: "${artifact}.pem"
+    signature: "${artifact}.sigstore.json"
 
 ## Copied from https://github.com/cloudposse/.github/blob/main/.github/goreleaser.yml
 ## Required to correct working go auto release workflow
