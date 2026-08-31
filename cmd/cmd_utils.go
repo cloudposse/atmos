@@ -50,6 +50,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
+	workflowPkg "github.com/cloudposse/atmos/pkg/workflow"
 )
 
 //go:embed markdown/getting_started.md
@@ -509,8 +510,11 @@ func createCustomCommand(
 	}
 	customCommand.PersistentFlags().Bool("", false, doubleDashHint)
 
-	// Add --identity flag to all custom commands to allow runtime override.
-	customCommand.PersistentFlags().String(customCommandKeyIdentity, "", "Identity to use for authentication (overrides identity in command config)")
+	// Add --identity flag to all custom commands to allow runtime override. Uses the shared
+	// flags.WithIdentityFlag() builder (rather than a hand-rolled PersistentFlags().String())
+	// so custom commands get the same NoOptDefVal-driven interactive-selector behavior
+	// (bare --identity) as every other Atmos command.
+	pkgFlags.NewStandardParser(pkgFlags.WithIdentityFlag()).RegisterPersistentFlags(customCommand)
 	AddIdentityCompletion(customCommand)
 
 	if err := validateCustomCommandFlags(commandConfig, parentCommand); err != nil {
@@ -885,7 +889,7 @@ func executeCustomCommand(
 		commandIdentity = strings.TrimSpace(commandConfig.Identity)
 	}
 
-	authManager := prepareCustomCommandAuth(&atmosConfig, commandIdentity, commandConfig.Name, hasRunnableStep)
+	authManager, commandIdentity := prepareCustomCommandAuth(&atmosConfig, commandIdentity, commandConfig.Name, hasRunnableStep)
 
 	// Determine working directory for command execution.
 	workDir, err := resolveWorkingDirectory(commandConfig.WorkingDirectory, atmosConfig.BasePath, currentDirPath)
@@ -1280,6 +1284,64 @@ func executeCustomCommand(
 			commandResult, runErr = stepPkg.ExecuteCommandResult(step.Name, run)
 			return runErr
 		}
+		// Use cmd.Context() so cancellation (e.g. Ctrl-C on the top-level Cobra invocation)
+		// propagates into step execution and container runtime operations;
+		// context.Background() would let them run to completion after the user has already
+		// cancelled. cmd.Context() is nil only when this command is invoked directly in tests
+		// without going through Cobra's Execute().
+		executionCtx := cmd.Context()
+		if executionCtx == nil {
+			executionCtx = context.Background()
+		}
+		// runExtendedStep converts step to a schema.WorkflowStep and routes it through the
+		// registered pkg/runner/step handlers (used for genuinely-extended step types like
+		// input/confirm/choose, and for "script" steps with no active container override).
+		runExtendedStep := func(workflowStep schema.WorkflowStep) error {
+			// Carry env onto the step so handlers that read step.Env (e.g. the
+			// container handler's in-container env) see it. The step's own
+			// declared `env:` had its map keys lowercased by Viper, so restore
+			// the original case from the shared env case map, then merge it over
+			// the resolved command/process env (step vars win on collisions).
+			stepOwnEnv := workflowStep.Env
+			if atmosConfig.CaseMaps != nil {
+				stepOwnEnv = atmosConfig.CaseMaps.ApplyCase("env", stepOwnEnv)
+			}
+			mergedStepEnv := envpkg.SliceToMap(env)
+			for key, value := range stepOwnEnv {
+				mergedStepEnv[key] = value
+			}
+			workflowStep.Env = mergedStepEnv
+			workflowStep.WorkingDirectory = stepWorkDir
+
+			if stack, ok := flagsData["stack"].(string); ok && stack != "" {
+				executor.SetFlag("stack", stack)
+			}
+
+			// Execute the extended step.
+			_, execErr := executor.Execute(executionCtx, &workflowStep)
+			return execErr
+		}
+		// runContainerOverrideStep routes a step-level `container:` override through the same
+		// pkg/workflow session/merge logic internal/exec/workflow_utils.go uses for
+		// workflow-file container steps, shared by both the "shell" and "script" cases below
+		// (which differ only in the workflowStep and the command shown in output/logs).
+		runContainerOverrideStep := func(workflowStep *schema.WorkflowStep, displayCommand string) error {
+			return runCommandStep(func(stdout, stderr io.Writer) error {
+				return workflowPkg.RunStepContainerOverride(executionCtx, &workflowPkg.ContainerStepParams{
+					Workflow:      commandConfig.Name,
+					WorkflowPath:  atmosConfig.CliConfigPath,
+					BasePath:      atmosConfig.BasePath,
+					WorkflowDef:   &schema.WorkflowDefinition{},
+					Step:          workflowStep,
+					HostWorkDir:   stepWorkDir,
+					Command:       displayCommand,
+					StepEnv:       env,
+					RuntimeEnv:    env,
+					StdoutCapture: stdout,
+					StderrCapture: stderr,
+				})
+			})
+		}
 		runStep := func() error {
 			switch stepType {
 			case "shell":
@@ -1287,8 +1349,20 @@ func executeCustomCommand(
 				// Steps with tty/interactive attach the user's terminal so commands
 				// like `aws ssm start-session` get a real TTY and own Ctrl-C.
 				commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+				// A step-level `container:` override (mapping config, or the
+				// bare `false` opt-out) routes the step through the same
+				// pkg/workflow session/merge logic internal/exec/workflow_utils.go
+				// uses for workflow-file steps, instead of always running on
+				// the host. Custom commands have no ambient command-level
+				// container block (unlike schema.WorkflowDefinition.Container
+				// for workflow files), so the merge base is always nil and
+				// the step's own `container:` block is the whole config.
+				workflowStep := step.ToWorkflowStep()
+				if workflowPkg.StepContainerOverride(&workflowStep) {
+					return runContainerOverrideStep(&workflowStep, commandToRun)
+				}
 				return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
-					return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+					return process.RunShellStep(executionCtx, &process.ShellSessionSpec{
 						Command:     commandToRun,
 						Name:        commandName,
 						Dir:         stepWorkDir,
@@ -1303,6 +1377,7 @@ func executeCustomCommand(
 							stderr = io.Discard
 						}
 						return e.ExecuteShellWithWriters(&e.ExecuteShellSpec{
+							Context: executionCtx,
 							Command: commandToRun,
 							Name:    commandName,
 							Dir:     stepWorkDir,
@@ -1312,6 +1387,18 @@ func executeCustomCommand(
 						})
 					})
 				})
+			case schema.TaskTypeScript:
+				// A step-level `container:` override routes the step through the same
+				// pkg/workflow session/merge logic internal/exec/workflow_utils.go uses for
+				// workflow-file script steps, mirroring the "shell" case above.
+				// workflowPkg.RunStepContainerOverride's containerStepCommand already
+				// special-cases Type == script to invoke Interpreter/Script directly instead
+				// of wrapping the display command in `sh -lc`.
+				workflowStep := step.ToWorkflowStep()
+				if workflowPkg.StepContainerOverride(&workflowStep) {
+					return runContainerOverrideStep(&workflowStep, process.FormatScriptDisplay(step.Interpreter, step.Script))
+				}
+				return runExtendedStep(workflowStep)
 			case schema.TaskTypeExec:
 				// Replace the Atmos process with the command (shell exec semantics).
 				return process.ReplaceShellSession(&process.ExecSpec{
@@ -1329,6 +1416,7 @@ func executeCustomCommand(
 				}
 				return runCommandStep(func(stdout, stderr io.Writer) error {
 					execOpts := []e.ShellCommandOption{
+						e.WithProcessContext(executionCtx),
 						e.WithStdoutCapture(stdout),
 						e.WithStderrCapture(stderr),
 					}
@@ -1359,7 +1447,7 @@ func executeCustomCommand(
 				if s, ok := flagsData["stack"].(string); ok {
 					stack = s
 				}
-				return e.ExecuteCustomCommandControlStep(context.Background(), &e.CustomCommandControlContext{
+				return e.ExecuteCustomCommandControlStep(executionCtx, &e.CustomCommandControlContext{
 					AtmosConfig:      atmosConfig,
 					CommandName:      commandConfig.Name,
 					CommandEnv:       envpkg.CommandEnvToMap(commandConfig.Env),
@@ -1372,38 +1460,14 @@ func executeCustomCommand(
 			default:
 				// Check if this is an extended step type (input, confirm, choose, etc.).
 				if stepPkg.IsExtendedStepType(stepType) {
-					// Convert Task to WorkflowStep for handler compatibility.
-					workflowStep := step.ToWorkflowStep()
-					// Carry env onto the step so handlers that read step.Env (e.g. the
-					// container handler's in-container env) see it. The step's own
-					// declared `env:` had its map keys lowercased by Viper, so restore
-					// the original case from the shared env case map, then merge it over
-					// the resolved command/process env (step vars win on collisions).
-					stepOwnEnv := workflowStep.Env
-					if atmosConfig.CaseMaps != nil {
-						stepOwnEnv = atmosConfig.CaseMaps.ApplyCase("env", stepOwnEnv)
-					}
-					mergedStepEnv := envpkg.SliceToMap(env)
-					for key, value := range stepOwnEnv {
-						mergedStepEnv[key] = value
-					}
-					workflowStep.Env = mergedStepEnv
-					workflowStep.WorkingDirectory = stepWorkDir
-
-					if stack, ok := flagsData["stack"].(string); ok && stack != "" {
-						executor.SetFlag("stack", stack)
-					}
-
-					// Execute the extended step.
-					_, execErr := executor.Execute(context.Background(), &workflowStep)
-					return execErr
+					return runExtendedStep(step.ToWorkflowStep())
 				}
 				return fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
 			}
 		}
 		err = stepPkg.RunGroupedForType(&atmosConfig, step.Name, commandToRun, stepType, func() error {
 			if step.Retry != nil {
-				if retryErr := retry.Do(context.Background(), step.Retry, runStep); retryErr != nil {
+				if retryErr := retry.Do(executionCtx, step.Retry, runStep); retryErr != nil {
 					return retryErr
 				}
 			} else if runErr := runStep(); runErr != nil {
@@ -1526,9 +1590,18 @@ func customCommandConditionContext(commandName string, step *schema.Task, index 
 	}
 }
 
-func prepareCustomCommandAuth(atmosConfig *schema.AtmosConfiguration, commandIdentity, commandName string, hasRunnableStep bool) auth.AuthManager {
+// newCustomCommandAuthManagerFn constructs the AuthManager used to authenticate a custom
+// command's --identity. Overridable in tests.
+var newCustomCommandAuthManagerFn = auth.NewAuthManager
+
+// prepareCustomCommandAuth authenticates commandIdentity for a custom command, resolving the
+// interactive-selection sentinel to a concrete identity name first. It returns that resolved
+// identity alongside the AuthManager so callers use it (not the original sentinel) for any
+// identity-dependent operation that runs after authentication, e.g. PrepareShellEnvironment or
+// ExecuteCustomCommandControlStep.
+func prepareCustomCommandAuth(atmosConfig *schema.AtmosConfiguration, commandIdentity, commandName string, hasRunnableStep bool) (auth.AuthManager, string) {
 	if commandIdentity == "" || !hasRunnableStep {
-		return nil
+		return nil, commandIdentity
 	}
 
 	authStackInfo := &schema.ConfigAndStacksInfo{
@@ -1536,28 +1609,39 @@ func prepareCustomCommandAuth(atmosConfig *schema.AtmosConfiguration, commandIde
 	}
 	credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 	validator := validation.NewValidator()
-	authManager, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
+	authManager, err := newCustomCommandAuthManagerFn(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
+	}
+
+	// Resolve the interactive-selection sentinel (produced when --identity is passed without a
+	// value) to a concrete identity before checking the credential cache or authenticating.
+	commandIdentity, err = auth.ResolveSelectedIdentity(authManager, commandIdentity, cfg.IdentityFlagSelectValue)
+	if err != nil {
+		if errors.Is(err, errUtils.ErrUserAborted) {
+			errUtils.CheckErrorPrintAndExit(errUtils.ErrUserAborted, "", "")
+		}
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w for custom command %q: %w",
+			errUtils.ErrDefaultIdentity, commandName, err), "", "")
 	}
 
 	ctx := context.Background()
 	if _, err = authManager.GetCachedCredentials(ctx, commandIdentity); err == nil {
 		log.Debug("Authenticated with cached identity for custom command", customCommandKeyIdentity, commandIdentity, customCommandKeyCommand, commandName)
-		return authManager
+		return authManager, commandIdentity
 	}
 
 	log.Debug("No valid cached credentials found, authenticating", customCommandKeyIdentity, commandIdentity, "error", err)
 	if _, err = authManager.Authenticate(ctx, commandIdentity); err == nil {
 		log.Debug("Authenticated with identity for custom command", customCommandKeyIdentity, commandIdentity, customCommandKeyCommand, commandName)
-		return authManager
+		return authManager, commandIdentity
 	}
 	if errors.Is(err, errUtils.ErrUserAborted) {
 		errUtils.CheckErrorPrintAndExit(errUtils.ErrUserAborted, "", "")
 	}
 	errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w for identity %q in custom command %q: %w",
 		errUtils.ErrAuthenticationFailed, commandIdentity, commandName, err), "", "")
-	return authManager
+	return authManager, commandIdentity
 }
 
 // cloneCommand clones a custom command config into a new struct.
@@ -1575,14 +1659,13 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	return &clone, nil
 }
 
-// findTypedValue finds the value of an argument or flag with the specified semantic type.
-// For arguments, it checks the Type field.
-// For flags, it checks the SemanticType field.
-// Returns empty string if no matching typed argument/flag is found.
+// findTypedValue finds the value of an argument or flag whose EffectiveProvides matches
+// the given role ("component" or "stack").
+// Returns empty string if no matching argument/flag is found.
 func findTypedValue(cmd *schema.Command, argumentsData map[string]string, flagsData map[string]any, semanticType string) string {
 	// Check arguments first.
 	for _, arg := range cmd.Arguments {
-		if arg.Type == semanticType {
+		if arg.EffectiveProvides() == semanticType {
 			if val, ok := argumentsData[arg.Name]; ok {
 				return val
 			}
@@ -1591,7 +1674,7 @@ func findTypedValue(cmd *schema.Command, argumentsData map[string]string, flagsD
 
 	// Check flags.
 	for _, flag := range cmd.Flags {
-		if flag.SemanticType == semanticType {
+		if flag.EffectiveProvides() == semanticType {
 			if val, ok := flagsData[flag.Name]; ok {
 				if strVal, ok := val.(string); ok {
 					return strVal
@@ -2492,13 +2575,13 @@ func resolveCustomComponentConfig(
 ) (map[string]any, error) {
 	defer perf.Track(nil, "cmd.resolveCustomComponentConfig")()
 
-	// Find component name from argument/flag with type: component.
+	// Find component name from argument/flag with provides: component.
 	componentName := findTypedValue(commandConfig, argumentsData, flagsData, semanticTypeComponent)
 	if componentName == "" {
 		return nil, errUtils.ErrComponentArgumentNotFound
 	}
 
-	// Find stack name from argument/flag with type: stack (or semantic_type: stack for flags).
+	// Find stack name from argument/flag with provides: stack.
 	stackName := findTypedValue(commandConfig, argumentsData, flagsData, semanticTypeStack)
 	if stackName == "" {
 		return nil, errUtils.ErrStackArgumentNotFound

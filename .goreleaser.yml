@@ -1,3 +1,5 @@
+version: 2
+
 # Visit https://goreleaser.com for documentation on how to customize this behavior.
 
 before:
@@ -24,12 +26,37 @@ before:
         df -h /
       fi'
 
+    # Install cosign for the `signs:` block below. The reusable release workflow
+    # (cloudposse/.github/.github/workflows/shared-go-auto-release.yml, invoked from
+    # .github/workflows/test.yml) sets up Go before running GoReleaser but does not
+    # install cosign itself, so without this hook `signs:` fails with
+    # "exec: cosign: executable file not found in $PATH". `go install` resolves
+    # through the Go module proxy and verifies against sum.golang.org, so this needs
+    # no separate checksum pinning. The binary is copied to /usr/local/bin because
+    # each `before.hooks` entry and the later `signs:` step run as separate
+    # subprocesses that don't share a modified PATH or GOPATH/bin.
+    - |
+      sh -c 'if [ "$GITHUB_ACTIONS" = "true" ]; then
+        echo "Installing cosign for keyless artifact signing..."
+        go install github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3
+        cosign_bin_dir="$(go env GOBIN)"
+        if [ -z "$cosign_bin_dir" ]; then cosign_bin_dir="$(go env GOPATH)/bin"; fi
+        sudo cp "$cosign_bin_dir/cosign" /usr/local/bin/cosign
+        cosign version
+      fi'
+
 builds:
   - env:
       # goreleaser does not work with CGO, it could also complicate
       # usage by users in CI/CD systems like Terraform Cloud where
       # they are unable to install libraries.
       - CGO_ENABLED=0
+      # Link Go's native FIPS 140-3 crypto module and default release binaries
+      # to FIPS-enforcing mode (GODEBUG=fips140=on) at runtime. This puts the
+      # binary in FIPS 140-3 mode; it is not by itself a CMVP compliance
+      # certification for atmos, and it does not cover the age/NaCl-based
+      # secrets encryption atmos also uses. See docs/prd/fips-140-mode.md.
+      - GOFIPS140=latest
     mod_timestamp: '{{ .CommitTimestamp }}'
     goos:
       - 'linux'
@@ -46,6 +73,13 @@ builds:
       # https://go.dev/doc/go1.24#ports
       - goos: windows
         goarch: arm
+      # windows/386 lacks a CPU jitter entropy source good enough for Go's
+      # FIPS 140-3 module: crypto/internal/fips140.Supported() rejects it,
+      # and check.init() panics on process startup once GODEBUG=fips140=on
+      # (the default this build sets via GOFIPS140=latest above). Building
+      # this target would ship a binary that crashes immediately at launch.
+      - goos: windows
+        goarch: '386'
       # modernc.org/libc (dependency of modernc.org/sqlite used by pkg/ai/session)
       # has type mismatch bugs on 32-bit FreeBSD that are unresolved upstream.
       # https://gitlab.com/cznic/libc/-/issues
@@ -68,12 +102,54 @@ builds:
       - -trimpath
 
 archives:
-  - format: binary
+  - formats: [binary]
     name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
 
 checksum:
   name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
   algorithm: sha256
+
+# Builds real .deb/.rpm/.apk packages from the linux archives above (nfpm is
+# bundled in GoReleaser — no separate install step needed) and attaches them
+# to the GitHub Release as assets, same as every other artifact here. This is
+# independent of and does not require Cloudsmith: publishing those same
+# packages to Cloudsmith is a separate, deliberately-not-yet-wired-up step —
+# see the commented-out Cloudsmith push step in build.yml's
+# sign-and-attest-release job and docs/prd/native-goreleaser-release-pipeline.md.
+nfpms:
+  - id: atmos
+    formats: [apk, deb, rpm]
+    vendor: Cloud Posse
+    maintainer: Cloud Posse <hello@cloudposse.com>
+    homepage: https://atmos.tools
+    description: Terraform Orchestration Tool for DevOps
+    license: APACHE2
+    # ConventionalFileName renders a prerelease version's hyphen as a tilde
+    # (Debian version-ordering convention, e.g. 1.2.3~test.9) for nightly and
+    # feature-release builds. GitHub rewrites tildes to dots in uploaded asset
+    # filenames, which would otherwise no longer match the SHA256SUMS entry
+    # generated from the pre-upload filename. GoReleaser's "replace" template
+    # func is strings.ReplaceAll(s, old, new) -- call it directly (not piped)
+    # so .ConventionalFileName lands in the s position, not old/new.
+    file_name_template: '{{ replace .ConventionalFileName "~" "-" }}'
+
+sboms:
+  - artifacts: archive
+
+# Keyless OIDC signing of the checksums file (which covers every archive by
+# digest) — no --key, no static key material. cosign is installed by the
+# before.hooks entry above; the invoking workflow (test.yml's `release` job)
+# grants id-token: write for the OIDC token exchange. cosign v3 enables
+# --new-bundle-format by default, which requires --bundle (the old
+# --output-signature/--output-certificate pair errors out). Verifiable with:
+#   cosign verify-blob --bundle <checksums file>.sigstore.json <checksums file> \
+#     --certificate-identity-regexp='^https://github.com/cloudposse/atmos/' \
+#     --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+signs:
+  - cmd: cosign
+    args: ["sign-blob", "--yes", "--bundle=${signature}", "${artifact}"]
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
 
 ## Copied from https://github.com/cloudposse/.github/blob/main/.github/goreleaser.yml
 ## Required to correct working go auto release workflow

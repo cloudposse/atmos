@@ -307,6 +307,14 @@ func (p *StandardFlagParser) registerStringSliceFlag(flagSet *pflag.FlagSet, f *
 
 	flagSet.StringSliceP(f.Name, f.Shorthand, f.Default, f.Description)
 
+	// Set NoOptDefVal if specified (sentinel pattern, e.g. --profile picker).
+	if f.NoOptDefVal != "" {
+		cobraFlag := flagSet.Lookup(f.Name)
+		if cobraFlag != nil {
+			cobraFlag.NoOptDefVal = f.NoOptDefVal
+		}
+	}
+
 	// Populate validValues map for runtime validation.
 	if len(f.ValidValues) > 0 {
 		p.validValues[f.Name] = f.ValidValues

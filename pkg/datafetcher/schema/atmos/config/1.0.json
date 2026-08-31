@@ -3076,6 +3076,103 @@
       },
       "type": "object"
     },
+    "Cluster": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name is the cluster name (required by aws/eks, azure/aks, and gcp/gke)."
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Region is the AWS region where the cluster is located (required for aws/eks)."
+        },
+        "resource_group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ResourceGroup is the Azure resource group containing the cluster (required for azure/aks)."
+        },
+        "subscription_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "SubscriptionID optionally overrides the Azure subscription used to address\nthe cluster (azure/aks); defaults to the identity's subscription."
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ProjectID is the GCP project containing the cluster (required for gcp/gke)."
+        },
+        "location": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Location is the GCP region or zone containing the cluster (required for gcp/gke)."
+        },
+        "alias": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Alias is the context name in kubeconfig (optional, defaults to the cluster ARN/resource ID)."
+        },
+        "kubeconfig": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KubeconfigSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Kubeconfig contains kubeconfig file settings (optional)."
+        }
+      },
+      "type": "object",
+      "description": "Cluster represents a Kubernetes cluster configuration shared by aws/eks,\nazure/aks, and gcp/gke integrations. Each integration kind reads only the\nfields it needs: aws/eks requires Name+Region; azure/aks requires\nName+ResourceGroup; gcp/gke requires Name+ProjectID+Location."
+    },
     "Command": {
       "properties": {
         "name": {
@@ -3405,7 +3502,7 @@
             }
           ]
         },
-        "type": {
+        "provides": {
           "anyOf": [
             {
               "type": "string"
@@ -3414,7 +3511,20 @@
               "type": "null"
             }
           ],
-          "description": "Type specifies the semantic type of this argument: \"component\" or \"stack\".\nWhen set, the argument value is used to resolve component configuration."
+          "description": "Provides specifies what this argument's value provides: \"component\" or \"stack\".\nWhen set, the argument value is used to resolve component configuration."
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "provides"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Deprecated: use Provides."
         },
         "values": {
           "anyOf": [
@@ -3603,7 +3713,7 @@
           ]
         },
         "default": true,
-        "semantic_type": {
+        "provides": {
           "anyOf": [
             {
               "type": "string"
@@ -3612,7 +3722,20 @@
               "type": "null"
             }
           ],
-          "description": "SemanticType specifies the semantic type of this flag: \"component\" or \"stack\".\nWhen set, the flag value is used to resolve component configuration."
+          "description": "Provides specifies what this flag's value provides: \"component\" or \"stack\".\nWhen set, the flag value is used to resolve component configuration."
+        },
+        "semantic_type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "provides"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Deprecated: use Provides."
         },
         "values": {
           "anyOf": [
@@ -3778,6 +3901,19 @@
           "anyOf": [
             {
               "$ref": "#/$defs/Helm"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "container": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContainerComponentsConfig"
             },
             {
               "type": "null"
@@ -4006,6 +4142,23 @@
       },
       "type": "object",
       "description": "ConsoleConfig defines web console access configuration for providers."
+    },
+    "ContainerComponentsConfig": {
+      "properties": {
+        "base_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "BasePath is the base directory for container component assets, relative\nto the Atmos project root. Defaults to \"components/container\"."
+        }
+      },
+      "type": "object",
+      "description": "ContainerComponentsConfig configures `components.container` — the base\ndirectory for container component build/run assets, mirroring\nTerraform/Helmfile/Packer/Ansible/Kubernetes/Helm's own `base_path`."
     },
     "ContainerConfig": {
       "properties": {
@@ -4622,85 +4775,6 @@
         }
       },
       "type": "object"
-    },
-    "ECRRegistry": {
-      "properties": {
-        "account_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "region": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "type": "object",
-      "description": "ECRRegistry represents an ECR registry configuration for aws/ecr integrations."
-    },
-    "EKSCluster": {
-      "properties": {
-        "name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Name is the EKS cluster name (required)."
-        },
-        "region": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Region is the AWS region where the cluster is located (required)."
-        },
-        "alias": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Alias is the context name in kubeconfig (optional, defaults to cluster ARN)."
-        },
-        "kubeconfig": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/KubeconfigSettings"
-            },
-            {
-              "type": "null"
-            },
-            {
-              "$ref": "#/$defs/yamlFunction"
-            }
-          ],
-          "description": "Kubeconfig contains kubeconfig file settings (optional)."
-        }
-      },
-      "type": "object",
-      "description": "EKSCluster represents an EKS cluster configuration for aws/eks integrations."
     },
     "EditorConfig": {
       "properties": {
@@ -6210,7 +6284,7 @@
         }
       },
       "type": "object",
-      "description": "Integration defines a client-only credential materialization (e.g., ECR, EKS).\nIntegrations derive credentials from identities for service-specific access."
+      "description": "Integration defines a client-only credential materialization (e.g., ECR, EKS, GKE).\nIntegrations derive credentials from identities for service-specific access."
     },
     "IntegrationSpec": {
       "properties": {
@@ -6231,7 +6305,7 @@
         "registry": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ECRRegistry"
+              "$ref": "#/$defs/Registry"
             },
             {
               "type": "null"
@@ -6240,12 +6314,12 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Single ECR registry for aws/ecr integrations."
+          "description": "Registry for aws/ecr and azure/acr integrations."
         },
         "cluster": {
           "anyOf": [
             {
-              "$ref": "#/$defs/EKSCluster"
+              "$ref": "#/$defs/Cluster"
             },
             {
               "type": "null"
@@ -6254,7 +6328,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "EKS cluster for aws/eks integrations."
+          "description": "Cluster for aws/eks and azure/aks integrations."
         },
         "repos": {
           "anyOf": [
@@ -8504,6 +8578,56 @@
       },
       "type": "object",
       "description": "ProvisionWorkdirSettings contains default settings for workdir provisioning."
+    },
+    "Registry": {
+      "properties": {
+        "account_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "AccountID is the AWS account ID (required for aws/ecr)."
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Region is the AWS region (required for aws/ecr)."
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name is the Azure Container Registry name (required for azure/acr).\nThe login server is Name + \".azurecr.io\"."
+        },
+        "tenant_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "TenantID optionally overrides the Azure AD tenant used for the ACR\nOAuth2 token exchange (azure/acr); defaults to the identity's tenant."
+        }
+      },
+      "type": "object",
+      "description": "Registry represents a container registry configuration shared by aws/ecr\nand azure/acr integrations. Each integration kind reads only the fields it\nneeds: aws/ecr requires AccountID+Region; azure/acr requires Name and\noptionally TenantID."
     },
     "ResourcePath": {
       "properties": {
@@ -11750,6 +11874,20 @@
             }
           ],
           "description": "Platforms lists the target platforms a project builds for, as \u003cos\u003e_\u003carch\u003e\n(e.g. linux_amd64, darwin_arm64). It is consumed by `atmos terraform cache\nmirror` (eager multi-platform pre-seeding) and by the automatic post-init\n`providers lock` that keeps .terraform.lock.hcl complete across platforms.\nEmpty defaults to the current host platform."
+        },
+        "flags": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformFlags"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Flags holds fleet-wide default values for terraform CLI execution flags\n(e.g. -lock-timeout, -parallelism). Overridable per stack via the\nroot-level `terraform: flags:` block, and per component via a\ncomponent's own `flags:` block. An explicit CLI-typed compat flag\n(e.g. `-lock-timeout=5m` typed on the command line) always wins."
         }
       },
       "type": "object"
@@ -12034,6 +12172,79 @@
         }
       },
       "type": "object"
+    },
+    "TerraformFlags": {
+      "properties": {
+        "lock_timeout": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "LockTimeout is the default value for terraform's -lock-timeout flag\n(e.g. \"30s\", \"5m\"). Empty means unset — terraform's own 0s default\napplies. Validated with time.ParseDuration at injection time."
+        },
+        "lock": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Lock is the default value for terraform's -lock flag. nil means unset."
+        },
+        "parallelism": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Parallelism is the default value for terraform's -parallelism flag. nil means unset."
+        },
+        "refresh": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Refresh is the default value for terraform's -refresh flag. nil means unset.\nNot applied to `apply \u003cplanfile\u003e` — terraform rejects -refresh when\napplying a saved plan."
+        },
+        "compact_warnings": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "CompactWarnings is the default value for terraform's -compact-warnings flag."
+        }
+      },
+      "type": "object",
+      "description": "TerraformFlags holds default values for terraform CLI execution flags\n(lock/concurrency/output tuning). Settable globally under\ncomponents.terraform.flags in atmos.yaml, per stack under a root-level\nterraform.flags block, and per component under a component's flags block\n(field-level override, highest-precedence layer below an explicit\nCLI-typed compat flag).\n\nLock and Refresh are *bool (not bool) because terraform's own default for\nboth is true — a plain bool can't distinguish \"not configured\" from\n\"explicitly set to false\" and would silently inject -lock=false /\n-refresh=false for everyone who never touched the setting. Parallelism is\n*int for the same reason (terraform's default is 10, not 0).\nCompactWarnings' terraform default is already false, so a plain bool is\nunambiguous."
     },
     "TerraformInit": {
       "properties": {
@@ -13327,7 +13538,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Files declares which project files the file managers maintain. When\nempty, managers with default paths (github-actions, template) run over\nthose defaults."
+          "description": "Files declares which project files the file managers maintain. When\nomitted, managers with default paths (github-actions, template) run over\nthose defaults. An explicit empty list (files: []) manages zero files."
         }
       },
       "type": "object",
@@ -13595,7 +13806,7 @@
               "type": "null"
             }
           ],
-          "description": "Manager is the file manager name (github-actions, marker, template)."
+          "description": "Manager is the file manager name (github-actions, json, marker, template)."
         },
         "paths": {
           "anyOf": [
@@ -16362,6 +16573,16 @@
         },
         {
           "$ref": "#/$defs/yamlFunction"
+        }
+      ]
+    },
+    "containerDirAbsolutePath": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
         }
       ]
     },

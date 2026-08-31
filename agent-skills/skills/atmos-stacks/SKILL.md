@@ -214,6 +214,26 @@ terraform:
   command: tofu
 ```
 
+### flags
+
+Default values for terraform CLI execution flags (`lock_timeout`, `lock`, `parallelism`,
+`refresh`, `compact_warnings`). Settable in `atmos.yaml` (`components.terraform.flags`),
+at the stack level (root-level `terraform:` block), and per component — merged
+field-by-field, lowest to highest precedence. An explicit CLI-typed flag (`-- -lock-timeout=30s`)
+always wins over all three. Terraform-only; not every flag applies to every subcommand.
+
+```yaml
+terraform:
+  flags:
+    lock_timeout: "5m"
+
+components:
+  terraform:
+    vpc:
+      flags:
+        parallelism: 4
+```
+
 ### backend
 
 Terraform backend configuration. Atmos generates `backend.tf.json` automatically.

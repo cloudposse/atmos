@@ -346,6 +346,14 @@ Some commonly used native flags include:
     </dd>
 </dl>
 
+### Default Locking and Concurrency Flags
+
+Instead of retyping flags like `-lock-timeout` on every invocation, declare a default
+in [`components.terraform.flags`](/cli/configuration/components/terraform#flags) — globally
+in `atmos.yaml`, per stack, or per component. `plan` supports all five flags
+(`lock_timeout`, `lock`, `parallelism`, `refresh`, `compact_warnings`); a native flag typed
+directly on the command line (as shown above) always wins over a declared default.
+
 ## Multi-Component Operations
 
 Execute `terraform plan` across multiple components using filtering flags. All flags can be combined with `--dry-run` to preview what would be executed.
@@ -482,6 +490,9 @@ When running in CI mode (`--ci` flag or auto-detected), Atmos produces rich CI a
 - **Job summaries** with resource badges, collapsible diffs, and warnings written to `$GITHUB_STEP_SUMMARY`
 - **Output variables** (`has_changes`, `has_errors`, `exit_code`, etc.) written to `$GITHUB_OUTPUT`
 - **Status checks** showing plan progress and results (requires `ci.checks.enabled: true`)
+- **PR plan-summary comments** when `ci.comments.enabled: true`, the run is for a pull request, and
+  the workflow grants `pull-requests: write`; comments reuse the job-summary template and are
+  updated by default on later runs for the same command, component, and stack
 
 ```shell
 # In GitHub Actions (auto-detected)
@@ -492,7 +503,7 @@ atmos terraform plan vpc -s dev --ci
 ```
 
 :::info
-See [CI Configuration](/cli/configuration/ci) for full configuration options including custom templates, status checks, and output variables.
+See [CI Configuration](/cli/configuration/ci) for full configuration options including custom templates, status checks, and output variables. See [CI Pull Request Comments](/cli/configuration/ci/comments) to opt into plan-summary comments.
 :::
 
 ## Related Commands

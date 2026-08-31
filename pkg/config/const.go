@@ -118,6 +118,7 @@ const (
 	EmulatorSectionName               = "emulator"
 	AnsibleInventorySectionName       = "inventory"
 	WorkspaceSectionName              = "workspace"
+	FlagsSectionName                  = "flags"
 	AuthSectionName                   = "auth"
 	RequiredVersionSectionName        = "required_version"
 	RequiredProvidersSectionName      = "required_providers"
@@ -190,6 +191,9 @@ const (
 	IdentityFlagShort         = "-i"
 	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
 	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).
+
+	// Profile flags.
+	ProfileFlagSelectValue = "__SELECT__" // Special value when --profile is used without argument (interactive picker).
 
 	// Cast recording flag.
 	CastFlagName      = "cast"

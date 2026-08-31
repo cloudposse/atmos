@@ -33,7 +33,7 @@ var eksDescribeCluster = awsCloud.DescribeCluster
 type EKSIntegration struct {
 	name     string
 	identity string
-	cluster  *schema.EKSCluster
+	cluster  *schema.Cluster
 }
 
 // NewEKSIntegration creates an EKS integration from config.
@@ -51,7 +51,7 @@ func NewEKSIntegration(config *integrations.IntegrationConfig) (integrations.Int
 	}
 
 	// Extract cluster from spec.cluster - required for aws/eks integrations.
-	var cluster *schema.EKSCluster
+	var cluster *schema.Cluster
 	if config.Config.Spec != nil && config.Config.Spec.Cluster != nil {
 		cluster = config.Config.Spec.Cluster
 	}
@@ -126,7 +126,7 @@ func (e *EKSIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	}
 
 	// Write cluster config.
-	changed, err := mgr.WriteClusterConfig(info, e.cluster.Alias, e.identity, updateMode)
+	changed, err := mgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, e.identity), e.cluster.Alias, updateMode)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
@@ -214,7 +214,7 @@ func (e *EKSIntegration) GetIdentity() string {
 }
 
 // GetCluster returns the configured cluster.
-func (e *EKSIntegration) GetCluster() *schema.EKSCluster {
+func (e *EKSIntegration) GetCluster() *schema.Cluster {
 	return e.cluster
 }
 
@@ -230,7 +230,7 @@ func (e *EKSIntegration) resolveKubeconfigSettings() (path, mode, update string)
 func (e *EKSIntegration) findClusterARN(mgr *kube.KubeconfigManager) (string, error) {
 	defer perf.Track(nil, "aws.EKSIntegration.findClusterARN")()
 
-	clusters, err := mgr.ListClusterARNs()
+	clusters, err := mgr.ListClusterIDs()
 	if err != nil {
 		return "", err
 	}

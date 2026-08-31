@@ -309,7 +309,7 @@ Enum of supported backend types:
 "backend_type": {
   "oneOf": [
     { "type": "string", "pattern": "^!include" },
-    { "type": "string", "enum": ["local", "s3", "remote", "vault", "static", "azurerm", "gcs", "cloud"] }
+    { "type": "string", "enum": ["local", "s3", "remote", "vault", "static", "azurerm", "gcs", "cloud", "consul", "cos", "http", "kubernetes", "oss", "pg"] }
   ]
 }
 ```
@@ -333,7 +333,13 @@ Backend configuration with per-type objects:
         "static": { ... },
         "azurerm": { ... },
         "gcs": { ... },
-        "cloud": { ... }
+        "cloud": { ... },
+        "consul": { ... },
+        "cos": { ... },
+        "http": { ... },
+        "kubernetes": { ... },
+        "oss": { ... },
+        "pg": { ... }
       }
     }
   ]

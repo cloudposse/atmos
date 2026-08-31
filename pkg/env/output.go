@@ -113,7 +113,7 @@ func Output(data map[string]string, formatStr string, outputFile string, opts ..
 		return writeToFileWithMode(outputFile, formatted, cfg.fileMode)
 	}
 
-	// lgtm[go/clear-text-logging] - Intentional stdout output for shell evaluation.
+	// codeql[go/clear-text-logging]: intentional stdout output for shell evaluation.
 	if cfg.maskStdout {
 		return pkgdata.Write(formatted)
 	}

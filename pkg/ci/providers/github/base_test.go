@@ -680,6 +680,37 @@ func TestResolveBase_PullRequest_OpenSync_NoHeadInPayload(t *testing.T) {
 	assert.Empty(t, res.HeadSHA, "should be empty when pull_request.head.sha is missing from payload")
 }
 
+// TestExtractPRMerged tests the extractPRMerged helper function.
+func TestExtractPRMerged(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload map[string]any
+		want    bool
+	}{
+		{
+			name:    "merged true",
+			payload: map[string]any{"pull_request": map[string]any{"merged": true}},
+			want:    true,
+		},
+		{
+			name:    "merged false",
+			payload: map[string]any{"pull_request": map[string]any{"merged": false}},
+			want:    false,
+		},
+		{
+			name:    "missing pull_request key",
+			payload: map[string]any{"action": "closed"},
+			want:    false, // no pull_request key must not be treated as merged.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, extractPRMerged(tt.payload))
+		})
+	}
+}
+
 // writeEventPayload writes a JSON event payload to a temp file and returns the path.
 func writeEventPayload(t *testing.T, payload map[string]any) string {
 	t.Helper()

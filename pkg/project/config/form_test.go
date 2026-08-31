@@ -1,6 +1,9 @@
 package config
 
 import (
+	"bytes"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/huh"
@@ -10,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/condition"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/manifest"
 )
 
@@ -626,12 +630,12 @@ func TestBuildConfigForm_FieldWhenGating(t *testing.T) {
 		},
 	}
 
-	huhForm, valueGetters, err := buildConfigForm(scaffoldConfig, map[string]interface{}{})
+	huhForm, ctx, err := buildConfigForm(scaffoldConfig, map[string]interface{}{})
 	require.NoError(t, err)
 	require.NotNil(t, huhForm)
-	assert.Len(t, valueGetters, 2)
-	assert.Contains(t, valueGetters, "deploy_multi_env")
-	assert.Contains(t, valueGetters, "environments")
+	assert.Len(t, ctx.valueGetters, 2)
+	assert.Contains(t, ctx.valueGetters, "deploy_multi_env")
+	assert.Contains(t, ctx.valueGetters, "environments")
 }
 
 func TestMissingRequiredValues_RespectsWhen(t *testing.T) {
@@ -731,10 +735,129 @@ func TestCoerceFieldValueTypes_FixesSetFlagWhenCondition(t *testing.T) {
 	assert.Equal(t, []string{"vendor_source"}, missing)
 }
 
+// TestCoerceFieldValueTypes_MultiSelect verifies --set's raw comma-separated
+// string for a multiselect field is split into a []string of trimmed
+// options, so a matrix axis (or a when: membership check) sourced from it
+// sees a list, not an unsplit string -- the same class of fix as the
+// boolean case above, for a different field type.
+func TestCoerceFieldValueTypes_MultiSelect(t *testing.T) {
+	scaffoldConfig := &ScaffoldConfig{
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "environments", Type: "multiselect", Options: []string{"dev", "staging", "production"}},
+			},
+		},
+	}
+
+	values := map[string]interface{}{"environments": "dev, staging"}
+	require.NoError(t, CoerceFieldValueTypes(scaffoldConfig, values))
+	assert.Equal(t, []string{"dev", "staging"}, values["environments"])
+}
+
+// TestCoerceFieldValueTypes_MultiSelectEmpty verifies an empty --set value
+// becomes an empty, non-nil []string, distinct from the field never having
+// been set at all.
+func TestCoerceFieldValueTypes_MultiSelectEmpty(t *testing.T) {
+	scaffoldConfig := &ScaffoldConfig{
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{{Name: "environments", Type: "multiselect"}},
+		},
+	}
+
+	values := map[string]interface{}{"environments": ""}
+	require.NoError(t, CoerceFieldValueTypes(scaffoldConfig, values))
+	assert.Equal(t, []string{}, values["environments"])
+}
+
+// TestCoerceFieldValueTypes_MultiSelectAlreadyTyped verifies an
+// already-[]string value (e.g. from an interactive prompt) is left
+// untouched.
+func TestCoerceFieldValueTypes_MultiSelectAlreadyTyped(t *testing.T) {
+	scaffoldConfig := &ScaffoldConfig{
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{{Name: "environments", Type: "multiselect"}},
+		},
+	}
+
+	values := map[string]interface{}{"environments": []string{"dev"}}
+	require.NoError(t, CoerceFieldValueTypes(scaffoldConfig, values))
+	assert.Equal(t, []string{"dev"}, values["environments"])
+}
+
 // mustCondition parses a bare CEL when: expression for test fixtures.
 func mustCondition(t *testing.T, expr string) condition.Condition {
 	t.Helper()
 	var field FieldDefinition
 	require.NoError(t, yaml.Unmarshal([]byte("when: "+expr+"\n"), &field))
 	return field.When
+}
+
+// TestDynamicOptionsFunc_RecordsErrorInsteadOfLogging verifies the fix for
+// the mid-render log corruption: a resolution failure must be stored on
+// ctx.optionsErrors, not logged directly from the OptionsFunc closure, since
+// that closure runs while huh's interactive form is still on screen.
+func TestDynamicOptionsFunc_RecordsErrorInsteadOfLogging(t *testing.T) {
+	var buf bytes.Buffer
+	originalLogger := log.Default()
+	defer log.SetDefault(originalLogger)
+	testLogger := log.New()
+	testLogger.SetOutput(&buf)
+	log.SetDefault(testLogger)
+
+	ctx := &fieldFormContext{
+		valueGetters: map[string]func() interface{}{
+			"envs": func() interface{} { return "not-a-list" },
+		},
+		fieldPointers: map[string]any{},
+		delimiters:    defaultDelimiters(nil),
+		optionsErrors: make(map[string]error),
+	}
+	field := &FieldDefinition{Name: "default_env", Options: "answers.envs"}
+
+	fn := dynamicOptionsFunc(field, ctx)
+	assert.Nil(t, fn())
+
+	assert.Empty(t, buf.String(), "resolving dynamic options must not log while the form is on screen")
+	require.Contains(t, ctx.optionsErrors, "default_env")
+	assert.Error(t, ctx.optionsErrors["default_env"])
+}
+
+// TestReportOptionsErrors_LogsCollectedFailuresInSortedOrder verifies the
+// deferred-reporting side of the fix: once the interactive session has
+// ended, reportOptionsErrors logs every collected failure, in a
+// deterministic (sorted by field name) order.
+func TestReportOptionsErrors_LogsCollectedFailuresInSortedOrder(t *testing.T) {
+	var buf bytes.Buffer
+	originalLogger := log.Default()
+	defer log.SetDefault(originalLogger)
+	testLogger := log.New()
+	testLogger.SetOutput(&buf)
+	testLogger.SetLevel(log.WarnLevel)
+	log.SetDefault(testLogger)
+
+	reportOptionsErrors(map[string]error{
+		"zebra": errors.New("zebra failure"),
+		"apple": errors.New("apple failure"),
+	})
+
+	output := buf.String()
+	require.Contains(t, output, "apple failure")
+	require.Contains(t, output, "zebra failure")
+	assert.Less(t, strings.Index(output, "apple failure"), strings.Index(output, "zebra failure"))
+}
+
+// TestReportOptionsErrors_EmptyMapIsNoop verifies reportOptionsErrors doesn't
+// panic or log anything when no dynamic Options resolution ever failed.
+func TestReportOptionsErrors_EmptyMapIsNoop(t *testing.T) {
+	var buf bytes.Buffer
+	originalLogger := log.Default()
+	defer log.SetDefault(originalLogger)
+	testLogger := log.New()
+	testLogger.SetOutput(&buf)
+	log.SetDefault(testLogger)
+
+	reportOptionsErrors(nil)
+	reportOptionsErrors(map[string]error{})
+
+	assert.Empty(t, buf.String())
 }

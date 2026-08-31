@@ -80,6 +80,43 @@ Common field keys: `name` (required, used as the template variable — access vi
 `options` (select/multiselect), `placeholder` (input), `validation.pattern`/`message`
 (regex, input fields only).
 
+### Dynamic and label/value `options:` (select/multiselect)
+
+`options:` accepts a plain string list, a list of `{label, value}` objects, a dot-path into an
+earlier answer, or a Go-template expression:
+
+```yaml
+spec:
+  fields:
+    - name: envs
+      type: multiselect
+      options:                       # {label, value} objects — value is required, label optional
+        - label: Development
+          value: dev
+        - label: Production
+          value: prod
+    - name: default_env
+      type: select
+      options: answers.envs          # dot-path: only the environments actually picked above
+    - name: csv_owners
+      type: input
+      default: "platform-team,security-team"
+    - name: primary_owner
+      type: select
+      options: '{{ splitList "," answers.csv_owners }}'   # Go-template expression
+```
+
+The dot-path and template-expression forms resolve correctly once the referenced earlier field
+has been answered — interactively (fields prompt one at a time, so a later field is only ever
+shown after the ones before it) or headlessly against `--set`/`--defaults` — the same
+`answers.`-prefix convention `spec.files[].matrix` axes use. A dot-path may also point at a `spec.values` preset or
+a `--set`-supplied value never declared as a field at all; there's no field-declaration-order
+check at load time, so a forward/self/typo'd reference degrades gracefully at runtime instead of
+failing to load. When a dot-path (not a template expression) sources from a field using
+`{label, value}` pairs, those labels are recovered for the filtered subset of values present in
+the answer — only values ever flow into `answers`/templates, never labels. Full details:
+[references/scaffold-yaml-schema.md](references/scaffold-yaml-schema.md).
+
 ### Conditional prompts (`when:`)
 
 A field can declare `when:` to be shown only if a condition on **earlier-declared
@@ -122,13 +159,42 @@ spec:
 ```
 
 This is *static* gating over a fixed, enumerable set of files the template author
-already created — not a loop generating an unbounded number of files per answer
-(no `for_each:`; that's a future enhancement, see the PRD).
+already created — one file stays one file. For generating a variable number of files
+(one per selected value, or one per resolved combination of several axes), see
+`spec.files[].matrix` below.
 
 This is distinct from the older path-templating trick: if a file's *path itself* is a
 Go template that renders to `""`, `"false"`, `"null"`, or `"<no value>"`, the engine
 skips it too (`ShouldSkipFile`). Prefer declarative `when:` for new templates — it's
 evaluated before any rendering and doesn't require crafting a path template.
+
+## Dynamic File Generation (matrix)
+
+`spec.files[].matrix` expands one discovered file into one generated file per resolved
+combination of one or more axes — the same `map[axis][]values` shape workflow `matrix:`
+steps use. Requires `target:` (a Go-template string overriding the discovered `path:`),
+since a single `path:` can't serve as the output for more than one file.
+
+```yaml
+spec:
+  files:
+    - path: templates/deploy.yaml
+      target: "deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml"
+      matrix:
+        environment: answers.environments        # a list-shaped answer
+        region: [us-east-1, us-west-2]            # a literal list
+      when: "matrix.region in answers.environments[matrix.environment].regions"
+```
+
+Each axis's value is a literal list, a dot-path into `answers.*` referencing an
+already list-shaped answer, or a Go-template expression computing the list from
+nested/structured or free-text answer data (e.g. `'{{ collectKeys answers.environments
+"regions" }}'` for a computed axis, or `'{{ splitList "," answers.environments_csv
+}}'` for a free-text one — see `atmos-templates` for `collectKeys`). The resolved
+combination is available as `.matrix.<axis>` in `target:`, in `when:` (pruning
+combinations that don't apply), and in the file's own rendered content.
+
+Full schema: [references/scaffold-yaml-schema.md](references/scaffold-yaml-schema.md#specfilesmatrix--dynamic-file-generation).
 
 ## Hooks
 

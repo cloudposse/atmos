@@ -1,0 +1,71 @@
+---
+slug: container-component-base-path
+title: "Container Build Paths Depended on Where You Ran Atmos From"
+authors: [osterman]
+tags: [bugfix, breaking-change]
+date: 2026-08-21T12:00:00.000Z
+---
+
+A container component's `build.context` and `dockerfile` looked like ordinary relative paths, but
+they weren't resolved against anything in particular — they resolved against whatever directory
+your shell happened to be in the moment you ran `atmos container build`. Run it from the repo root
+and it worked. Run it from a subdirectory, a CI job with a different working directory, or a
+script that changes directories first, and the build silently picked up the wrong Dockerfile or
+found nothing at all. Setting `components.container.base_path` didn't help — that option was
+accepted but quietly ignored.
+
+<!--truncate-->
+
+## The Problem
+
+Terraform, Helmfile, Kubernetes, and Helm components have always resolved their working directory
+the same way: a configurable `base_path` per component type, joined with the component's own name,
+computed once and used consistently no matter where `atmos` is invoked from. Container components
+never got wired into that mechanism. `build.context` and `build.dockerfile` were passed straight
+through to `docker build`/`podman build` with no anchoring at all, and `run.mounts[].source`
+anchored only to the bare project root — never to the component itself.
+`components.container.base_path` existed in the config schema, but nothing ever read it.
+
+## The Fix
+
+Container components now resolve `build.context`, `build.dockerfile`, and `run.mounts[].source`
+the same way every other component type does: relative to `components.container.base_path`
+(default `components/container`) joined with the component's own name, independent of the
+directory `atmos` happens to be invoked from. `components.container.base_path` is now a real,
+working setting. Container components also gained the same just-in-time source provisioning as
+Terraform and Helmfile components — a component that declares `source:` is now auto-vendored into
+a workdir, and that workdir becomes the anchor for build and mount paths instead of the static base
+path.
+
+## Breaking Change
+
+If your container component's `build.context`, `build.dockerfile`, or `run.mounts[].source` are
+relative paths, they now resolve against `<base_path>/<component-name>/` instead of the previous
+CWD-dependent (build) or bare-project-root (mounts) behavior. Update your setup one of two ways:
+move build assets under `components/container/<component-name>/` to match the same convention
+Terraform components already use, or point `components.container.base_path` at wherever your
+container build assets currently live.
+
+## How to Use It
+
+```yaml
+# atmos.yaml
+components:
+  container:
+    base_path: components/container   # default
+```
+
+```yaml
+components:
+  container:
+    api:
+      build:
+        context: app           # resolves to components/container/api/app
+        dockerfile: Dockerfile  # resolves to components/container/api/app/Dockerfile
+```
+
+## Get Involved
+
+Try it out with an existing container component or a fresh one. Questions or ideas? Start a thread
+in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions), or open an issue in the
+[issue tracker](https://github.com/cloudposse/atmos/issues).

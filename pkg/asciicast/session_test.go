@@ -805,7 +805,13 @@ func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 	}
 	t.Setenv(asciicastSessionHelperEnv, "1")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// 15s outer / 10s per wait step (not 3s/2s): Windows CI runners occasionally
+	// need several seconds just to spawn the subprocess under load, well before
+	// any scripted actions run — a tight budget here flakes on process start,
+	// not on session behavior. The outer context must exceed the wait step's
+	// own timeout with margin, or it silently caps the wait short regardless of
+	// what the step's Timeout says (see waitForOutput's race between the two).
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	err = RunSession(ctx, &SessionOptions{
 		Shell:  shell,
@@ -814,7 +820,7 @@ func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 		Actions: []SessionAction{
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: "2s"},
+			{Type: "wait", Text: "ready", Timeout: "10s"},
 		},
 	})
 	if err != nil {
@@ -838,7 +844,14 @@ func TestRunSessionAppliesDirectoryAndEnvironment(t *testing.T) {
 	cwdPattern := "cwd=(" + regexp.QuoteMeta(dir) + "|" + regexp.QuoteMeta(expectedDir) + ")"
 	t.Setenv(asciicastSessionHelperEnv, "1")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// 25s outer / 10s per wait step (not 3s/2s): Windows CI runners occasionally
+	// need several seconds just to spawn the subprocess under load, well before
+	// any scripted actions run — a tight budget here flakes on process start,
+	// not on session behavior. The outer context must exceed the sum of both
+	// sequential wait steps' own timeouts with margin, or it silently caps them
+	// short regardless of what each step's Timeout says (see waitForOutput's
+	// race between the two).
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	err = RunSession(ctx, &SessionOptions{
 		Shell: shell,
@@ -855,8 +868,8 @@ func TestRunSessionAppliesDirectoryAndEnvironment(t *testing.T) {
 			{Type: "pause", Duration: "300ms"},
 			{Type: "write", Text: "print context", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Regex: cwdPattern, Timeout: "2s"},
-			{Type: "wait", Text: "marker=from-session", Timeout: "2s"},
+			{Type: "wait", Regex: cwdPattern, Timeout: "10s"},
+			{Type: "wait", Text: "marker=from-session", Timeout: "10s"},
 		},
 	})
 	if err != nil {
@@ -878,7 +891,10 @@ func TestRunSessionDefaultsNilOptions(t *testing.T) {
 	t.Setenv("SHELL", shell)
 	t.Setenv(asciicastSessionHelperEnv, "1")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// 10s (not 3s): Windows CI runners occasionally need several seconds just to
+	// spawn the subprocess under load, well before any scripted actions run —
+	// a tight budget here flakes on process start, not on session behavior.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := RunSession(ctx, nil); err != nil {
 		t.Fatalf("RunSession with nil opts: %v", err)
@@ -906,7 +922,10 @@ func TestRunSessionReturnsActionErrors(t *testing.T) {
 	}
 	t.Setenv(asciicastSessionHelperEnv, "1")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// 10s (not 3s): Windows CI runners occasionally need several seconds just to
+	// spawn the subprocess under load, well before any scripted actions run —
+	// a tight budget here flakes on process start, not on session behavior.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	err = RunSession(ctx, &SessionOptions{
 		Shell:   shell,

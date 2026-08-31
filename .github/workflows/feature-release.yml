@@ -5,19 +5,25 @@ on:
     paths-ignore:
       - "README.md"
 
+# Least-privilege default; the release job below declares its own
+# job-level permissions that override this baseline.
 permissions:
-  attestations: write
-  contents: write
-  id-token: write
-  pull-requests: write
-  packages: write
-  issues: write
+  contents: read
 
 jobs:
   release:
     if: |
       github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release/feature')
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
+    # shared-go-auto-release.yml declares permissions: {} itself — all
+    # release-writing operations go through a separately-scoped GitHub App
+    # installation token (BOT_GITHUB_APP_ID), not GITHUB_TOKEN. id-token:
+    # write is still needed here, though: cosign's keyless OIDC signing (in
+    # the goreleaser job's `signs` step) reads the runner's OIDC token-minting
+    # endpoint, which is gated purely by this job's own id-token permission —
+    # independent of which token is used for git/API calls elsewhere.
+    permissions:
+      id-token: write
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@49ac8cd5c4cf74abdbf24a80027cd3bde811133a # main
     with:
       publish: true
       prerelease: true
