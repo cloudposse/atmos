@@ -131,6 +131,7 @@ func ProcessStackConfig(
 	terraformGenerate := map[string]any{}
 	terraformAuth := map[string]any{}
 	terraformDependencies := map[string]any{}
+	terraformFlags := map[string]any{}
 
 	helmfileVars := map[string]any{}
 	helmfileSettings := map[string]any{}
@@ -366,6 +367,32 @@ func ProcessStackConfig(
 	}
 
 	globalAndTerraformGenerate, err := m.Merge(atmosConfig, []map[string]any{globalGenerateSection, terraformGenerate})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if i, ok := globalTerraformSection[cfg.FlagsSectionName]; ok {
+		terraformFlags, ok = i.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformFlagsSection, stackName)
+		}
+	}
+
+	// Flags has no cross-component-type root layer (unlike vars/generate) —
+	// these are terraform/tofu-specific CLI flags with no helmfile/packer
+	// equivalent — so the atmos.yaml fleet-wide default (converted to a map)
+	// takes the place of a "global" layer here, merged with the stack-level
+	// `terraform: flags:` block.
+	atmosYamlFlagsBytes, err := json.Marshal(atmosConfig.Components.Terraform.Flags)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: failed to marshal global terraform flags: %w", errUtils.ErrInvalidTerraformFlagsSection, err)
+	}
+	var atmosYamlFlags map[string]any
+	if err := json.Unmarshal(atmosYamlFlagsBytes, &atmosYamlFlags); err != nil {
+		return nil, nil, fmt.Errorf("%w: failed to unmarshal global terraform flags: %w", errUtils.ErrInvalidTerraformFlagsSection, err)
+	}
+
+	globalAndTerraformFlags, err := m.Merge(atmosConfig, []map[string]any{atmosYamlFlags, terraformFlags})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -992,6 +1019,7 @@ func ProcessStackConfig(
 					TerraformProviders:              terraformProviders,
 					GlobalAndTerraformHooks:         globalAndTerraformHooks,
 					GlobalAndTerraformGenerate:      globalAndTerraformGenerate,
+					GlobalAndTerraformFlags:         globalAndTerraformFlags,
 					GlobalBackendType:               globalBackendType,
 					GlobalBackendSection:            globalBackendSection,
 					GlobalRemoteStateBackendType:    globalRemoteStateBackendType,

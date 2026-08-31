@@ -356,6 +356,29 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		deferredContexts[cfg.GenerateSectionName] = generateCtx
 	}
 
+	// Merge flags section (terraform CLI execution flag defaults). Terraform-only,
+	// no deferred/YAML-function support needed — these are simple scalar values.
+	// Merge order (lowest to highest priority):
+	// 1. atmos.yaml global default + stack-level `terraform: flags:` (opts.GlobalAndTerraformFlags)
+	// 2. Base component flags (from metadata.inherits)
+	// 3. Component flags (component-specific flags section)
+	// 4. Component overrides flags (from overrides section)
+	var finalComponentFlags map[string]any
+	if opts.ComponentType == cfg.TerraformComponentType {
+		finalComponentFlags, err = m.Merge(
+			mergeConfig,
+			[]map[string]any{
+				opts.GlobalAndTerraformFlags,
+				result.BaseComponentFlags,
+				result.ComponentFlags,
+				result.ComponentOverridesFlags,
+			},
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
 	// Resolve the final executable command.
 	// Check for the binary in the following order:
 	// - `components.<type>.command` section in `atmos.yaml` CLI config file.
@@ -650,6 +673,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.RemoteStateBackendTypeSectionName] = finalComponentRemoteStateBackendType
 		comp[cfg.RemoteStateBackendSectionName] = finalComponentRemoteStateBackend
 		comp[cfg.AuthSectionName] = mergedAuth
+		if len(finalComponentFlags) > 0 {
+			comp[cfg.FlagsSectionName] = finalComponentFlags
+		}
 	}
 
 	if opts.ComponentType == cfg.KubernetesComponentType {

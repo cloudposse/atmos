@@ -41,6 +41,13 @@ env:
   HELM_DIFF_VERSION: "v3.15.10"
   HELMFILE_VERSION: "v1.1.0"
   PACKER_VERSION: "1.14.2"
+  # helmfile's own `version` subcommand makes an outbound network call to GitHub to check
+  # for a newer release. On CI runners that call is a source of flakiness (e.g. "context
+  # deadline exceeded" on Windows runners) unrelated to anything this repo controls, and
+  # `TestExecuteHelmfile_Version` exercises the real binary. Disabling the notice skips the
+  # network call entirely (verified: no request is made when this is set), not just the
+  # printed message.
+  HELMFILE_UPGRADE_NOTICE_DISABLED: "true"
   # Number of parallel shards the `test` job's acceptance suite is split into per
   # OS (see tests/cli_test.go's testShard/testCaseShard and the `test` job's
   # matrix.shard list below, which must stay in sync with this count).
@@ -312,28 +319,72 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # jobTimeout/stepTimeout are this job's own and its "Acceptance
+        # tests" step's per-platform timeout-minutes budgets, kept here (one
+        # pair of numbers per platform) instead of a
+        # `matrix.flavor.target == 'windows' && X || Y` ternary repeated at
+        # every timeout-minutes site: that's exactly how the job-level and
+        # step-level Windows budgets drifted out of sync before (the job
+        # budget once exactly equaled the step budget, leaving zero slack for
+        # setup/cache-save around the step -- see docs/fixes for that
+        # incident). Sharding splits the acceptance suite's runtime across
+        # parallel jobs, but each shard still pays the same fixed per-job
+        # overhead (checkout, toolchain installs, `atmos build deps`) that
+        # used to be amortized over one long-running job. Give shards real
+        # headroom above their expected fraction of the pre-sharding budgets
+        # (Linux ~90m, windows ~105m, macos ~85m for the unsharded suite -
+        # see git history on this comment) rather than dividing those numbers
+        # by the shard count exactly. Windows also distributes the tests
+        # package's non-CLI top-level tests and internal/exec's top-level
+        # tests across all shards; both binaries are compiled once in the
+        # build job, so each shard executes only its assigned tests without
+        # paying a cold compile/link penalty. Windows is also the slowest
+        # platform for this suite's post-job Go module/build cache save
+        # (much slower on Windows than Linux/macOS -- see
+        # terraform-registry-cache's own timeout comment). windows'
+        # stepTimeout=55 was set by measuring real job timings across 5
+        # consecutive runs on this CI provider's (spot instance) Windows
+        # runners: typical shards land 10-18min, but 20-30min is a routine
+        # occurrence (not a fixed "slow shard" -- shards 1, 2, 4, 5, 8, and 9
+        # each independently hit 26-28min across different runs), and two
+        # separate shards were cancelled at 39m57s/40m8s after their own
+        # tests had already printed PASS -- genuine runner-pool variance
+        # hitting the wall, not a hang. jobTimeout then adds real headroom
+        # above stepTimeout for the setup/cache-save overhead around it,
+        # rather than matching it 1:1.
+        # linux's jobTimeout is 50, not 40: its "Acceptance tests with
+        # coverage" step below (linux-only) has its own coverageStepTimeout
+        # budget of 40, and a job timeout merely equal to a step's own budget
+        # leaves zero slack for checkout/toolchain setup before the step or
+        # cache-save after it -- exactly the bug already fixed once for
+        # Windows here (see this matrix's own history).
         flavor:
-          - { os: "ubuntu-latest", target: linux }
-          - { os: "windows-latest", target: windows }
-          - { os: "macos-15", target: macos }
+          - { os: "ubuntu-latest", target: linux, jobTimeout: 50, stepTimeout: 30, coverageStepTimeout: 40 }
+          - { os: "windows-latest", target: windows, jobTimeout: 65, stepTimeout: 55 }
+          - { os: "macos-15", target: macos, jobTimeout: 40, stepTimeout: 30 }
         # tests/cli_test.go's TestCLICommands splits its ~388 CLI-driven subtests
         # across these shards by bin-packing each test case's workdir
         # (assignWorkdirsToShards, see ATMOS_TEST_SHARD/ATMOS_TEST_SHARD_COUNT
         # below); keep this list and env.TEST_SHARD_COUNT in sync if the shard
         # count ever changes.
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    # Sharding splits the acceptance suite's runtime across parallel jobs, but each
-    # shard still pays the same fixed per-job overhead (checkout, toolchain installs,
-    # `atmos build deps`) that used to be amortized over one long-running job. Give
-    # shards real headroom above their expected fraction of the pre-sharding budgets
-    # (Linux ~90m, windows ~105m, macos ~85m for the unsharded suite - see git history
-    # on this comment) rather than dividing those numbers by the shard count exactly.
-    #
-    # Windows also distributes the tests package's non-CLI top-level tests and
-    # internal/exec's top-level tests across all shards. Both binaries are
-    # compiled once in the build job, so each shard executes only its assigned
-    # tests without paying a cold compile/link penalty.
-    timeout-minutes: ${{ matrix.shard == 1 && 65 || 40 }}
+        # Shard 1 does somewhat more work than every other shard, regardless
+        # of platform (see the "Acceptance tests with coverage" step below),
+        # so it needs a higher timeout than any flavor's own jobTimeout/
+        # stepTimeout. An include entry naming only `shard` (not `flavor`)
+        # applies its extra keys to every matrix combination whose shard
+        # matches -- all three platforms' shard-1 jobs here -- without
+        # widening the matrix with new combinations; see GitHub's own
+        # "Expanding configurations" docs for this exact partial-match
+        # pattern. jobTimeoutOverride/stepTimeoutOverride are read in
+        # preference to matrix.flavor.jobTimeout/stepTimeout below, so the
+        # override lives here as data instead of a `shard == 1 &&` branch
+        # duplicated at each timeout-minutes site.
+        include:
+          - shard: 1
+            jobTimeoutOverride: 65
+            stepTimeoutOverride: 60
+    timeout-minutes: ${{ matrix.jobTimeoutOverride || matrix.flavor.jobTimeout }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
@@ -436,7 +487,9 @@ jobs:
       # The Mage target owns package/test allocation, precompiled suites, and
       # native coverage collection so both workflow paths stay identical.
       - name: Acceptance tests with coverage
-        timeout-minutes: ${{ matrix.shard == 1 && 60 || 40 }}
+        # coverageStepTimeout lives on the linux flavor entry above,
+        # alongside why the job-level budget needs to exceed it.
+        timeout-minutes: ${{ matrix.stepTimeoutOverride || matrix.flavor.coverageStepTimeout }}
         if: matrix.flavor.target == 'linux'
         shell: bash
         env:
@@ -452,12 +505,11 @@ jobs:
       - name: Acceptance tests
         # windows-latest is the slowest target for this suite too (see the
         # Build job's timeout comment above): before sharding, runs of the
-        # unsharded step were observed between 37m43s and 60m17s. Give Windows
-        # real slack per shard too; macOS shards finish faster so their budget
-        # stays lower. Shard 1 still does somewhat more work than other shards
-        # (see the "Acceptance tests with coverage" step above), so it keeps
-        # extra headroom regardless of OS.
-        timeout-minutes: ${{ matrix.shard == 1 && 60 || (matrix.flavor.target == 'windows' && 40 || 30) }}
+        # unsharded step were observed between 37m43s and 60m17s. Per-platform
+        # budgets (stepTimeout) and shard 1's override (stepTimeoutOverride)
+        # both live on the matrix above, alongside the measured timing data
+        # and incident history behind them.
+        timeout-minutes: ${{ matrix.stepTimeoutOverride || matrix.flavor.stepTimeout }}
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         shell: bash
         env:

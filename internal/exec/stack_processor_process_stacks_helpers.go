@@ -44,6 +44,7 @@ type ComponentProcessorOptions struct {
 	TerraformRequiredVersion        string
 	GlobalAndTerraformHooks         map[string]any
 	GlobalAndTerraformGenerate      map[string]any
+	GlobalAndTerraformFlags         map[string]any
 	GlobalBackendType               string
 	GlobalBackendSection            map[string]any
 	GlobalRemoteStateBackendType    string
@@ -132,6 +133,9 @@ type ComponentProcessorResult struct {
 	ComponentOverridesRequiredVersion      string
 	ComponentOverridesHooks                map[string]any
 	ComponentOverridesGenerate             map[string]any
+	ComponentFlags                         map[string]any
+	ComponentOverridesFlags                map[string]any
+	BaseComponentFlags                     map[string]any
 	BaseComponentProviders                 map[string]any
 	BaseComponentRequiredProviders         map[string]any
 	BaseComponentRequiredVersion           string

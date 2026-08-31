@@ -808,6 +808,18 @@ func TestFilterComputedFields(t *testing.T) {
 			},
 		},
 		{
+			// Discovered via field-testing PR #2992: "flags" was absent from this
+			// allowlist, so a component's resolved terraform CLI flag defaults were
+			// silently hidden from `atmos describe component`'s default output.
+			name: "Keeps flags section",
+			input: map[string]any{
+				"flags": map[string]any{"lock_timeout": "5m"},
+			},
+			expected: map[string]any{
+				"flags": map[string]any{"lock_timeout": "5m"},
+			},
+		},
+		{
 			name:     "Handles empty input",
 			input:    map[string]any{},
 			expected: map[string]any{},

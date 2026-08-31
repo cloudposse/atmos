@@ -33,6 +33,9 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 	if supportsSourceProvision(opts.ComponentType) {
 		result.ComponentOverridesProvision = make(map[string]any, componentOverridesCapacity)
 	}
+	if opts.ComponentType == cfg.TerraformComponentType {
+		result.ComponentOverridesFlags = make(map[string]any, componentOverridesCapacity)
+	}
 
 	i, ok := opts.ComponentMap[cfg.OverridesSectionName]
 	if !ok {
@@ -163,6 +166,17 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 				return fmt.Errorf("%w: 'components.%s.%s.overrides.provision' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesProvision, opts.ComponentType, opts.Component, opts.StackName)
 			}
 			result.ComponentOverridesProvision = componentOverridesProvision
+		}
+	}
+
+	// Extract flags overrides (terraform-only).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := componentOverrides[cfg.FlagsSectionName]; ok {
+			componentOverridesFlags, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.overrides.flags' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesFlags, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentOverridesFlags = componentOverridesFlags
 		}
 	}
 

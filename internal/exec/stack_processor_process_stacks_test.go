@@ -427,6 +427,15 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 			expectedError: errUtils.ErrInvalidTerraformGenerateSection,
 		},
 		{
+			name: "invalid terraform flags section type",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.FlagsSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidTerraformFlagsSection,
+		},
+		{
 			name: "invalid terraform source type",
 			config: map[string]any{
 				cfg.TerraformSectionName: map[string]any{
@@ -1701,6 +1710,99 @@ func TestProcessStackConfig_CustomComponentTypeSettingsEnvMerge(t *testing.T) {
 	assert.Equal(t, "global", env["GLOBAL_ONLY"], "global-only env var must be inherited")
 	assert.Equal(t, "local", env["LOCAL_ONLY"], "component-local env var must be retained")
 	assert.Equal(t, "local-value", env["CONFLICT_ENV"], "component-local env var must win over global on conflict")
+}
+
+// TestProcessStackConfig_TerraformFlagsGlobalSectionMergeError verifies a structurally
+// ambiguous (colliding, YAML-normalized) stack-level `terraform: flags:` map surfaces as a
+// real merge error from the atmos.yaml-global + stack-level flags merge, mirroring
+// TestMergeComponentConfigurations_SectionMergeErrors' collidingSection() technique one
+// layer up, at ProcessStackConfig itself.
+func TestProcessStackConfig_TerraformFlagsGlobalSectionMergeError(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.TerraformSectionName: map[string]any{
+			cfg.FlagsSectionName: collidingSection(),
+		},
+	}
+
+	_, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeKeyCollision)
+}
+
+// TestProcessStackConfig_TerraformFlagsGlobalSection verifies the stack-level
+// `terraform: flags:` block (globalTerraformSection[cfg.FlagsSectionName]) is picked up and
+// merged into a terraform component's final `flags:` section, with the component's own
+// `flags:` winning on a field present at both layers (mirrors the analogous
+// terraform-section-level vars/settings/env precedence tests).
+func TestProcessStackConfig_TerraformFlagsGlobalSection(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.TerraformSectionName: map[string]any{
+			cfg.FlagsSectionName: map[string]any{
+				"lock_timeout": "5m",
+				"parallelism":  float64(5),
+			},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.VarsSectionName: map[string]any{"enabled": true},
+					cfg.FlagsSectionName: map[string]any{
+						"lock_timeout": "10m",
+					},
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should exist")
+	terraformComponents, ok := components[cfg.TerraformComponentType].(map[string]any)
+	require.True(t, ok, "terraform components section should exist")
+	vpc, ok := terraformComponents["vpc"].(map[string]any)
+	require.True(t, ok, "vpc component should exist")
+
+	flags, ok := vpc[cfg.FlagsSectionName].(map[string]any)
+	require.True(t, ok, "vpc must have a merged flags section, got: %v", vpc[cfg.FlagsSectionName])
+	assert.Equal(t, "10m", flags["lock_timeout"], "component-level flags.lock_timeout must win over the stack-level terraform:flags: default")
+	assert.InEpsilon(t, float64(5), flags["parallelism"], 0, "stack-level terraform:flags:.parallelism must survive when the component doesn't override it")
 }
 
 // TestProcessStackConfig_HelmIsBuiltInNotCustomPassthrough verifies that `components.helm` is
