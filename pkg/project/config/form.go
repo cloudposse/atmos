@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/viper"
@@ -40,8 +41,12 @@ func PromptForScaffoldConfig(scaffoldConfig *ScaffoldConfig, userValues map[stri
 
 	// Now that the interactive form has finished and the terminal is back to
 	// normal, it's safe to report any dynamic Options resolution failures
-	// collected during the session (see reportOptionsErrors).
-	reportOptionsErrors(ctx.optionsErrors)
+	// collected during the session (see reportOptionsErrors). Snapshotted
+	// under ctx.optionsErrorsMu rather than read directly, since a dynamic
+	// Options goroutine bubbletea spawned for a field's OptionsFunc (see
+	// dynamicOptionsFunc's doc comment) could still be writing to
+	// ctx.optionsErrors even after runFormInteraction has returned.
+	reportOptionsErrors(ctx.snapshotOptionsErrors())
 
 	// Extract form values back to userValues
 	extractFormValues(userValues, ctx.valueGetters)
@@ -191,6 +196,23 @@ func extractFormValues(userValues map[string]interface{}, valueGetters map[strin
 // collecting dynamic Options resolution failures encountered during the form
 // session (see dynamicOptionsFunc and reportOptionsErrors) so they can be
 // reported once the interactive session ends instead of mid-render.
+//
+// The valueMu and optionsErrorsMu fields exist because dynamicOptionsFunc's
+// closure doesn't run on the main form's goroutine: huh's Select/MultiSelect Update
+// method (vendored charmbracelet/huh@v1.0.0 field_select.go) invokes a
+// dynamic OptionsFunc inside a tea.Cmd, and bubbletea's Program.execBatchMsg
+// (charmbracelet/bubbletea@v1.3.10 tea.go) runs every tea.Cmd in its own
+// goroutine via tea.Batch -- concurrently with the main form's single-
+// threaded Update loop, which is what actually mutates a field's bound value
+// in response to keystrokes/selections (via huh's own Accessor). Without
+// synchronization this is a genuine data race, not just a theoretical one:
+// dynamicOptionsFunc's snapshotAnswers call reads every field's bound value
+// from that concurrent goroutine while the main loop can be writing to the
+// very same value at the same time. Every field's Accessor in
+// createFieldInContext (see syncedAccessor) takes valueMu on Get/Set so
+// those two sides can never race, and optionsErrorsMu guards optionsErrors
+// itself, since more than one field's OptionsFunc goroutine can be
+// in-flight concurrently and a plain map isn't safe for that.
 type fieldFormContext struct {
 	valueGetters  map[string]func() interface{}
 	fieldPointers map[string]any
@@ -198,6 +220,72 @@ type fieldFormContext struct {
 	render        FieldOptionsRenderer
 	delimiters    []string
 	optionsErrors map[string]error
+
+	valueMu         sync.RWMutex
+	optionsErrorsMu sync.Mutex
+}
+
+// recordOptionsError safely records a dynamic Options resolution failure for
+// field, guarding against concurrent writes from other fields' OptionsFunc
+// goroutines (see fieldFormContext's doc comment).
+func (ctx *fieldFormContext) recordOptionsError(field string, err error) {
+	ctx.optionsErrorsMu.Lock()
+	defer ctx.optionsErrorsMu.Unlock()
+	if ctx.optionsErrors == nil {
+		ctx.optionsErrors = make(map[string]error)
+	}
+	ctx.optionsErrors[field] = err
+}
+
+// snapshotOptionsErrors returns a copy of optionsErrors safe to hand to
+// reportOptionsErrors after runFormInteraction returns, guarding against a
+// still-in-flight OptionsFunc goroutine racing that final read (see
+// fieldFormContext's doc comment).
+func (ctx *fieldFormContext) snapshotOptionsErrors() map[string]error {
+	ctx.optionsErrorsMu.Lock()
+	defer ctx.optionsErrorsMu.Unlock()
+	out := make(map[string]error, len(ctx.optionsErrors))
+	for name, err := range ctx.optionsErrors {
+		out[name] = err
+	}
+	return out
+}
+
+// syncedAccessor implements huh.Accessor[T] over a raw pointer, guarding
+// every Get/Set with fieldFormContext.valueMu -- see that struct's doc
+// comment for why this is required: huh calls Get/Set synchronously from the
+// main form's Update loop, while dynamicOptionsFunc's OptionsFunc closure
+// reads every field's current value (via snapshotAnswers) from a goroutine
+// bubbletea spawns for it, concurrently with that main loop. The wrapped
+// value keeps pointing at the exact same address stored in
+// ctx.fieldPointers, so a dynamic Options field elsewhere in the form still
+// hashes the correct underlying value for its own OptionsFunc bindings.
+type syncedAccessor[T any] struct {
+	mu    *sync.RWMutex
+	value *T
+}
+
+// newSyncedAccessor returns a syncedAccessor wrapping value, guarded by mu.
+func newSyncedAccessor[T any](mu *sync.RWMutex, value *T) *syncedAccessor[T] {
+	return &syncedAccessor[T]{mu: mu, value: value}
+}
+
+// Get returns the current value, guarded by a read lock.
+func (a *syncedAccessor[T]) Get() T {
+	defer perf.Track(nil, "config.syncedAccessor.Get")()
+
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return *a.value
+}
+
+// Set stores value, guarded by a write lock.
+func (a *syncedAccessor[T]) Set(value T) {
+	defer perf.Track(nil, "config.syncedAccessor.Set")()
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	*a.value = value
 }
 
 // toHuhOptions converts resolved options into huh.Option values. Labels
@@ -232,10 +320,7 @@ func dynamicOptionsFunc(field *FieldDefinition, ctx *fieldFormContext) func() []
 	return func() []huh.Option[string] {
 		options, err := resolveFieldOptions(field, snapshotAnswers(ctx.valueGetters), ctx.fieldsByName, ctx.render, ctx.delimiters)
 		if err != nil {
-			if ctx.optionsErrors == nil {
-				ctx.optionsErrors = make(map[string]error)
-			}
-			ctx.optionsErrors[field.Name] = err
+			ctx.recordOptionsError(field.Name, err)
 			return nil
 		}
 		return toHuhOptions(options)
@@ -380,12 +465,13 @@ func createFieldInContext(key string, field *FieldDefinition, values map[string]
 			value = str
 		}
 		ctx.fieldPointers[key] = &value
+		accessor := newSyncedAccessor(&ctx.valueMu, &value)
 
 		input := huh.NewInput().
 			Title(fieldTitle(field)).
 			Description(field.Description).
 			Placeholder(field.Placeholder).
-			Value(&value)
+			Accessor(accessor)
 
 		if field.Required {
 			input = input.Validate(func(s string) error {
@@ -397,7 +483,7 @@ func createFieldInContext(key string, field *FieldDefinition, values map[string]
 			})
 		}
 
-		return input, func() interface{} { return value }
+		return input, func() interface{} { return accessor.Get() }
 
 	case "select":
 		var value string
@@ -405,11 +491,12 @@ func createFieldInContext(key string, field *FieldDefinition, values map[string]
 			value = str
 		}
 		ctx.fieldPointers[key] = &value
+		accessor := newSyncedAccessor(&ctx.valueMu, &value)
 
 		selectField := huh.NewSelect[string]().
 			Title(fieldTitle(field)).
 			Description(field.Description).
-			Value(&value)
+			Accessor(accessor)
 
 		if source, dynamic := field.Options.(string); dynamic {
 			selectField = selectField.OptionsFunc(dynamicOptionsFunc(field, ctx), optionsBindings(source, key, ctx))
@@ -431,7 +518,7 @@ func createFieldInContext(key string, field *FieldDefinition, values map[string]
 			})
 		}
 
-		return selectField, func() interface{} { return value }
+		return selectField, func() interface{} { return accessor.Get() }
 
 	case "multiselect":
 		var value []string
@@ -449,11 +536,12 @@ func createFieldInContext(key string, field *FieldDefinition, values map[string]
 		// Registered even for a multiselect with static Options: a later
 		// field's dynamic Options may reference this one's answer.
 		ctx.fieldPointers[key] = &value
+		accessor := newSyncedAccessor(&ctx.valueMu, &value)
 
 		multiSelect := huh.NewMultiSelect[string]().
 			Title(fieldTitle(field)).
 			Description(field.Description).
-			Value(&value).
+			Accessor(accessor).
 			Filterable(true)
 
 		if source, dynamic := field.Options.(string); dynamic {
@@ -476,7 +564,7 @@ func createFieldInContext(key string, field *FieldDefinition, values map[string]
 			})
 		}
 
-		return multiSelect, func() interface{} { return value }
+		return multiSelect, func() interface{} { return accessor.Get() }
 
 	case "confirm", "bool", "boolean":
 		var value bool
@@ -484,15 +572,16 @@ func createFieldInContext(key string, field *FieldDefinition, values map[string]
 			value = b
 		}
 		ctx.fieldPointers[key] = &value
+		accessor := newSyncedAccessor(&ctx.valueMu, &value)
 
 		confirm := huh.NewConfirm().
 			Title(fieldTitle(field)).
 			Description(field.Description).
-			Value(&value).
+			Accessor(accessor).
 			Affirmative("Yes").
 			Negative("No")
 
-		return confirm, func() interface{} { return value }
+		return confirm, func() interface{} { return accessor.Get() }
 
 	default:
 		// Unknown types are rejected by schema validation before the form is
@@ -504,12 +593,13 @@ func createFieldInContext(key string, field *FieldDefinition, values map[string]
 			value = str
 		}
 		ctx.fieldPointers[key] = &value
+		accessor := newSyncedAccessor(&ctx.valueMu, &value)
 
 		input := huh.NewInput().
 			Title(fieldTitle(field)).
 			Description(field.Description).
-			Value(&value)
-		return input, func() interface{} { return value }
+			Accessor(accessor)
+		return input, func() interface{} { return accessor.Get() }
 	}
 }
 

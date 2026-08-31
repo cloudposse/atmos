@@ -98,6 +98,9 @@ spec:
     - name: default_env
       type: select
       options: answers.envs          # dot-path: only the environments actually picked above
+    - name: csv_owners
+      type: input
+      default: "platform-team,security-team"
     - name: primary_owner
       type: select
       options: '{{ splitList "," answers.csv_owners }}'   # Go-template expression
