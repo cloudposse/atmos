@@ -69,7 +69,14 @@ jobs:
     # changes plus that save pushes the job past a tight limit and the run gets
     # cancelled mid-save (see #2713's windows build being killed at 30m10s).
     # Give the slowest target real headroom for build + cache save.
-    timeout-minutes: 45
+    #
+    # 45 minutes still wasn't enough after a large merge from main cold-started
+    # the cache: every real step (build, tests, upload) finished by 12:01, but
+    # the "Post Set up Go" cache-save step alone ran another 23+ minutes before
+    # the job timeout cancelled it mid-save (run 33387953802, job 99474734663,
+    # 2026-08-31). Raised further to keep genuine cold-cache saves from
+    # tripping the timeout.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
