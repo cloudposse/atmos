@@ -48,6 +48,8 @@ components:
     auto_generate_files: false
   container:
     base_path: components/container
+  aws/cloudformation:
+    base_path: ""
 stacks:
   base_path: stacks
   included_paths:
@@ -113,6 +115,7 @@ ansibleDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 kubernetesDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 helmDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 containerDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/components/container
+cloudFormationDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 vendorDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 workflowsDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 default: false

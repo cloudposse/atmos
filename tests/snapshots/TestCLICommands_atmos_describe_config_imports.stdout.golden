@@ -48,6 +48,8 @@ components:
     auto_generate_files: false
   container:
     base_path: components/container
+  aws/cloudformation:
+    base_path: ""
 stacks:
   base_path: stacks
   included_paths:
@@ -129,6 +131,7 @@ ansibleDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cl
 kubernetesDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 helmDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 containerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/components/container
+cloudFormationDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 vendorDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/vendor.yaml
 workflowsDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 default: false
