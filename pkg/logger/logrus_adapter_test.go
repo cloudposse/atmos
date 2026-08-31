@@ -1,22 +1,44 @@
 package logger
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// recordingLogger captures the level and message of each log call for assertion.
+// recordingLogger captures the level, message, and keyvals of each log call for assertion.
 type recordingLogger struct {
-	level string
-	msg   string
+	level   string
+	msg     string
+	keyvals []interface{}
 }
 
-func (r *recordingLogger) Error(msg string, _ ...interface{}) { r.level = "error"; r.msg = msg }
-func (r *recordingLogger) Warn(msg string, _ ...interface{})  { r.level = "warn"; r.msg = msg }
-func (r *recordingLogger) Info(msg string, _ ...interface{})  { r.level = "info"; r.msg = msg }
-func (r *recordingLogger) Debug(msg string, _ ...interface{}) { r.level = "debug"; r.msg = msg }
+func (r *recordingLogger) Error(msg string, keyvals ...interface{}) {
+	r.level = "error"
+	r.msg = msg
+	r.keyvals = keyvals
+}
+
+func (r *recordingLogger) Warn(msg string, keyvals ...interface{}) {
+	r.level = "warn"
+	r.msg = msg
+	r.keyvals = keyvals
+}
+
+func (r *recordingLogger) Info(msg string, keyvals ...interface{}) {
+	r.level = "info"
+	r.msg = msg
+	r.keyvals = keyvals
+}
+
+func (r *recordingLogger) Debug(msg string, keyvals ...interface{}) {
+	r.level = "debug"
+	r.msg = msg
+	r.keyvals = keyvals
+}
 
 func TestLogrusAdapter_Write(t *testing.T) {
 	adapter := newLogrusAdapter()
@@ -317,6 +339,27 @@ func TestSanitizeFieldValue(t *testing.T) {
 	result := sanitizeFieldValue("details", "login failed password=s3cret123")
 	assert.NotContains(t, result, "s3cret123", "embedded password in non-sensitive key's value must be redacted")
 	assert.Contains(t, result, "[REDACTED]")
+
+	// A sensitive key nested under a non-sensitive parent map must still be redacted.
+	nested := sanitizeFieldValue("details", map[string]interface{}{
+		"password": "secret",
+		"provider": "browser",
+	})
+	nestedMap, ok := nested.(map[string]interface{})
+	require.True(t, ok, "nested map value must remain a map")
+	assert.Equal(t, "[REDACTED]", nestedMap["password"])
+	assert.Equal(t, "browser", nestedMap["provider"])
+
+	// A sensitive key nested inside a slice element must also be redacted.
+	nestedSlice := sanitizeFieldValue("attempts", []interface{}{
+		map[string]interface{}{"token": "abc123"},
+	})
+	sliceVal, ok := nestedSlice.([]interface{})
+	require.True(t, ok, "nested slice value must remain a slice")
+	require.Len(t, sliceVal, 1)
+	elemMap, ok := sliceVal[0].(map[string]interface{})
+	require.True(t, ok, "slice element must remain a map")
+	assert.Equal(t, "[REDACTED]", elemMap["token"])
 }
 
 func TestLogrusAdapter_Write_RedactsSensitiveData(t *testing.T) {
@@ -340,4 +383,29 @@ func TestLogrusAdapter_Write_RedactsSensitiveData(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotContains(t, rec2.msg, "abc123def456", "raw content must not appear in fallback path")
 	assert.Contains(t, rec2.msg, "content omitted")
+}
+
+// TestLogrusAdapter_Write_RedactsNestedSensitiveData is a regression test for
+// a sensitive key nested under a non-sensitive parent field, e.g.
+// {"details":{"password":"secret"}}: sanitizeFieldValue must recurse into
+// the parsed JSON's nested map/slice values rather than passing them through
+// unexamined.
+func TestLogrusAdapter_Write_RedactsNestedSensitiveData(t *testing.T) {
+	rec := &recordingLogger{}
+	adapter := &logrusAdapter{logger: rec}
+
+	msg := `{"level":"error","msg":"login failed","details":{"password":"s3cret123","provider":"browser"}}` + "\n"
+	_, err := adapter.Write([]byte(msg))
+	require.NoError(t, err)
+	require.Equal(t, "error", rec.level)
+
+	require.Len(t, rec.keyvals, 2, "expected one key/value pair for the details field")
+	require.Equal(t, "details", rec.keyvals[0])
+	details, ok := rec.keyvals[1].(map[string]interface{})
+	require.True(t, ok, "details field must remain a map")
+	assert.Equal(t, "[REDACTED]", details["password"])
+	assert.Equal(t, "browser", details["provider"])
+
+	full := fmt.Sprintf("%v", rec.keyvals)
+	assert.NotContains(t, full, "s3cret123", "nested password must not appear anywhere in logged fields")
 }
