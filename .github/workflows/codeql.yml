@@ -119,20 +119,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # golang/govulncheck-action fetches the vuln.go.dev database itself with no
-      # retry: a transient CDN blip (observed: "HTTP GET
-      # https://vuln.go.dev/index/modules.json.gz returned unexpected status: 403
-      # Forbidden", run 33394301632, job 99495014165, 2026-08-31) fails the whole
-      # step on the first attempt, and since no SARIF file is ever written, the
-      # always-run upload step below then also fails ("Invalid SARIF ... Unexpected
-      # end of JSON input"). Retry up to three times, matching the
-      # download-artifact-retry composite action's pattern for the same class of
-      # transient-network-error-with-no-built-in-retry problem. A genuine
-      # vulnerability finding still fails the job after exhausting retries — this
-      # only re-runs on failure, it doesn't change what counts as one.
-      - name: Run govulncheck (attempt 1/3)
-        id: govulncheck_attempt_1
-        continue-on-error: true
+      - name: Run govulncheck
         uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
         env:
           # Atmos ships with CGO disabled (see Makefile/test.yml) — without this,
@@ -152,38 +139,6 @@ jobs:
           # marginally reduced peak memory (govulncheck's SSA construction
           # parallelizes via goroutines internally, which -p doesn't govern)
           # while nearly tripling run time.
-          GOMEMLIMIT: "12GiB"
-        with:
-          go-version-file: go.mod
-          output-format: sarif
-          output-file: govulncheck.sarif
-
-      - name: Wait before retry
-        if: steps.govulncheck_attempt_1.outcome == 'failure'
-        run: sleep 15
-
-      - name: Run govulncheck (attempt 2/3)
-        id: govulncheck_attempt_2
-        if: steps.govulncheck_attempt_1.outcome == 'failure'
-        continue-on-error: true
-        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
-        env:
-          CGO_ENABLED: "0"
-          GOMEMLIMIT: "12GiB"
-        with:
-          go-version-file: go.mod
-          output-format: sarif
-          output-file: govulncheck.sarif
-
-      - name: Wait before final retry
-        if: steps.govulncheck_attempt_1.outcome == 'failure' && steps.govulncheck_attempt_2.outcome == 'failure'
-        run: sleep 15
-
-      - name: Run govulncheck (attempt 3/3)
-        if: steps.govulncheck_attempt_1.outcome == 'failure' && steps.govulncheck_attempt_2.outcome == 'failure'
-        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
-        env:
-          CGO_ENABLED: "0"
           GOMEMLIMIT: "12GiB"
         with:
           go-version-file: go.mod
