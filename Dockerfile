@@ -2,7 +2,7 @@
 # trixie (glibc 2.41) is required so PyInstaller-bundled tools installed via the
 # Atmos toolchain — notably Checkov, which needs GLIBC_2.38+ — can load their
 # frozen Python runtime. bookworm (glibc 2.36) fails with a missing-version error.
-FROM debian:trixie-slim
+FROM debian:trixie-slim@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258
 
 # Define the arguments for the Atmos version and target platform.
 ARG TARGETPLATFORM
@@ -46,6 +46,15 @@ RUN set -ex; \
     helm plugin install --verify=false https://github.com/databus23/helm-diff; \
     # Clean up the package lists to keep the image clean
     rm -rf /var/lib/apt/lists/*
+
+# Strip setuid/setgid bits from binaries Atmos never uses (user/password
+# management: su, passwd, chsh, chage, chfn, expiry, gpasswd, newgrp,
+# unix_chkpwd; filesystem: mount, umount) — all shipped by the base Debian
+# image, none installed or needed by Atmos itself. Doesn't change current
+# behavior (everything in this image already runs as root by default), but
+# removes a local privilege-escalation vector for anyone who runs this image,
+# or a derived image, as a non-root user.
+RUN find / -xdev -perm /6000 -type f -exec chmod a-s {} \;
 
 # Install Atmos from the GitHub Release
 RUN case ${TARGETPLATFORM} in \
