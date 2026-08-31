@@ -78,7 +78,7 @@ func TestCatalogEntry_ResolvedSource(t *testing.T) {
 }
 
 // TestCatalogEntry_ResolvedSource_PinnedToBuildCommit verifies that once a
-// binary is built with a commit SHA (via ldflags, see scripts/build-atmos.sh
+// binary is built with a commit SHA (via ldflags, see magefiles/build.go
 // and .goreleaser*.yml), catalog sources pin to that exact commit. Fetching
 // it shallowly is pkg/downloader.CustomGitGetter.cloneShallowCommit's job,
 // not this package's -- ResolvedSource does not need to special-case it.

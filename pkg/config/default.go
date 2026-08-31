@@ -74,6 +74,9 @@ var (
 				Provider:          "kubectl",
 				AutoGenerateFiles: false,
 			},
+			Container: schema.ContainerComponentsConfig{
+				BasePath: "components/container",
+			},
 		},
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "replace",
@@ -84,6 +87,7 @@ var (
 				MaxWidth: 0,
 				Pager:    "false", // Disabled by default since PR #1642 (journaled in pkg/edition); previously "less" here contradicted setDefaultConfiguration.
 				Unicode:  true,
+				Help:     schema.HelpSettings{Filter: true}, // Focused --help by default since PR #2762 (journaled in pkg/edition).
 				SyntaxHighlighting: schema.SyntaxHighlighting{
 					Enabled:     true,
 					Formatter:   "terminal",

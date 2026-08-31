@@ -1025,6 +1025,17 @@ func TestBuildBuildArgs(t *testing.T) {
 			expected: []string{"buildx", "build", "-t", "myapp:latest", "-f", "Dockerfile", "."},
 		},
 		{
+			name: "buildx build with load",
+			config: &BuildConfig{
+				Engine:     "buildx",
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Tags:       []string{"myapp:latest"},
+				Load:       true,
+			},
+			expected: []string{"buildx", "build", "--load", "-t", "myapp:latest", "-f", "Dockerfile", "."},
+		},
+		{
 			name: "buildx bake",
 			config: &BuildConfig{
 				NoCache: true,
@@ -1050,11 +1061,21 @@ func TestBuildBuildArgs(t *testing.T) {
 				"--load",
 				"--push",
 				"--print",
-				"--var", "VERSION=1.0.0",
 				"--set", "*.platform=linux/amd64",
 				"app",
 				"worker",
 			},
+		},
+		{
+			// Bake.Vars is injected into the subprocess environment (see bakeVarEnv/
+			// bakeCommandEnv), not passed as a --var CLI flag, since --var isn't
+			// implemented by every buildx release (e.g. Debian Trixie's docker-buildx
+			// 0.13.1). Confirms Vars leaves no trace in the CLI args.
+			name: "buildx bake with vars does not affect CLI args",
+			config: &BuildConfig{
+				Bake: &BakeConfig{File: "docker-bake.hcl", Vars: map[string]string{"VERSION": "1.0.0"}},
+			},
+			expected: []string{"buildx", "bake", "--file", "docker-bake.hcl"},
 		},
 		{
 			name: "buildx bake with driver",
@@ -1233,6 +1254,93 @@ func TestJoinAttrs(t *testing.T) {
 	}
 }
 
+func TestBakeVarEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		vars     map[string]string
+		expected []string
+	}{
+		{
+			name:     "nil vars",
+			vars:     nil,
+			expected: nil,
+		},
+		{
+			name:     "empty vars",
+			vars:     map[string]string{},
+			expected: nil,
+		},
+		{
+			name:     "single var",
+			vars:     map[string]string{"VERSION": "1.0.0"},
+			expected: []string{"VERSION=1.0.0"},
+		},
+		{
+			name:     "multiple vars sorted by key",
+			vars:     map[string]string{"VERSION": "1.0.0", "BUILD_ID": "42"},
+			expected: []string{"BUILD_ID=42", "VERSION=1.0.0"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, bakeVarEnv(tt.vars))
+		})
+	}
+}
+
+func TestBakeCommandEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		base     []string
+		config   *BuildConfig
+		expected []string
+	}{
+		{
+			name:     "no bake",
+			base:     []string{"PATH=/usr/bin"},
+			config:   &BuildConfig{},
+			expected: nil,
+		},
+		{
+			name:     "bake without vars",
+			base:     []string{"PATH=/usr/bin"},
+			config:   &BuildConfig{Bake: &BakeConfig{File: "docker-bake.hcl"}},
+			expected: nil,
+		},
+		{
+			name: "bake with vars appends to configured base env",
+			base: []string{"PATH=/usr/bin", "DOCKER_CONFIG=/tmp/dc"},
+			config: &BuildConfig{
+				Bake: &BakeConfig{File: "docker-bake.hcl", Vars: map[string]string{"VERSION": "1.0.0"}},
+			},
+			expected: []string{"PATH=/usr/bin", "DOCKER_CONFIG=/tmp/dc", "VERSION=1.0.0"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, bakeCommandEnv(tt.base, tt.config))
+		})
+	}
+
+	t.Run("nil base falls back to os.Environ", func(t *testing.T) {
+		config := &BuildConfig{
+			Bake: &BakeConfig{File: "docker-bake.hcl", Vars: map[string]string{"VERSION": "1.0.0"}},
+		}
+		result := bakeCommandEnv(nil, config)
+		assert.Contains(t, result, "VERSION=1.0.0")
+		assert.Greater(t, len(result), 1, "should include os.Environ() entries, not just the bake var")
+	})
+
+	t.Run("does not mutate base slice", func(t *testing.T) {
+		base := []string{"PATH=/usr/bin"}
+		config := &BuildConfig{Bake: &BakeConfig{Vars: map[string]string{"VERSION": "1.0.0"}}}
+		_ = bakeCommandEnv(base, config)
+		assert.Equal(t, []string{"PATH=/usr/bin"}, base, "base must not be mutated so later commands on the same runtime don't inherit bake vars")
+	})
+}
+
 func TestEffectiveDriverName(t *testing.T) {
 	assert.Equal(t, "atmos", effectiveDriverName(&DriverConfig{}))
 	assert.Equal(t, "my-builder", effectiveDriverName(&DriverConfig{Name: "my-builder"}))
@@ -1315,6 +1423,49 @@ func TestBuildStopArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := buildStopArgs(tt.containerID, tt.timeoutSecs)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildNetworkConnectArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		network     string
+		containerID string
+		aliases     []string
+		expected    []string
+	}{
+		{
+			name:        "no aliases",
+			network:     "atmos-fixtures",
+			containerID: "abc123",
+			expected:    []string{"network", "connect", "atmos-fixtures", "abc123"},
+		},
+		{
+			name:        "single alias",
+			network:     "atmos-fixtures",
+			containerID: "abc123",
+			aliases:     []string{"fixtures-aws"},
+			expected:    []string{"network", "connect", "--alias", "fixtures-aws", "atmos-fixtures", "abc123"},
+		},
+		{
+			name:        "multiple aliases preserve order",
+			network:     "atmos-fixtures",
+			containerID: "abc123",
+			aliases:     []string{"fixtures-aws", "fixtures-aws-alt"},
+			expected: []string{
+				"network", "connect",
+				"--alias", "fixtures-aws",
+				"--alias", "fixtures-aws-alt",
+				"atmos-fixtures", "abc123",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildNetworkConnectArgs(tt.network, tt.containerID, tt.aliases)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

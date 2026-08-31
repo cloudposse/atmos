@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/safenum"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
@@ -188,10 +189,7 @@ func getShellCommand() (shell string, arg string) {
 // safeEnvCapacity computes a safe capacity for environment variable slices.
 // It clamps both lengths to maxEnvVars before adding to prevent overflow.
 func safeEnvCapacity(len1, len2, maxEnvVars int) int {
-	// Clamp inputs using min() so the addition can't overflow.
-	len1 = min(len1, maxEnvVars)
-	len2 = min(len2, maxEnvVars)
-	return min(len1+len2, maxEnvVars)
+	return safenum.Cap(len1, len2, maxEnvVars)
 }
 
 // buildResult creates a step result from command output.

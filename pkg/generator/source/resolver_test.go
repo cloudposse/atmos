@@ -9,9 +9,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -169,26 +173,34 @@ func TestHydrate_LocalStubError(t *testing.T) {
 	cleanup()
 }
 
-// requireGit skips the test when the git binary is unavailable, matching the
-// inline-skip convention used elsewhere in the codebase for git-backed tests.
-func requireGit(t *testing.T) {
+// requireGitBinary skips the test when the git binary is unavailable. This guards
+// only the actual remote-fetch call: Resolve's `git::` remote path (resolver.go's
+// resolveRemote/fetchRemoteSource) goes through go-getter's git client
+// (pkg/downloader/get_git.go's CustomGitGetter.GetCustom), which explicitly requires
+// and shells out to a real git binary to clone via exec.LookPath and
+// exec.CommandContext. That is go-getter's own mechanism and orthogonal to how the
+// test fixture below is built, so it cannot be replaced with go-git here. Fixture
+// construction itself no longer needs the CLI at all -- see initSourceTestGitRepo.
+func requireGitBinary(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git binary not found on PATH")
+		t.Skip("git binary not found on PATH; required by go-getter's git clone, not by fixture setup")
 	}
 }
 
 // initSourceTestGitRepo creates a local git repository on branch "main" with the given
-// files committed, mirroring the local-git-fixture pattern used by
-// tests/cli_remote_imports_test.go and pkg/stack/imports/remote_test.go.
+// files committed, using go-git (no external git binary) instead of shelling out --
+// mirroring the idiom in pkg/generator/gitinit.go's InitGitRepository. Setup failures
+// fail the test loudly via require.NoError rather than skipping, since go-git has no
+// external binary dependency that can be "unavailable".
 func initSourceTestGitRepo(t *testing.T, files map[string]string) string {
 	t.Helper()
 
 	repoDir := t.TempDir()
-	runSourceTestGit(t, repoDir, "init")
-	runSourceTestGit(t, repoDir, "checkout", "-b", "main")
-	runSourceTestGit(t, repoDir, "config", "user.email", "test@example.com")
-	runSourceTestGit(t, repoDir, "config", "user.name", "Test User")
+	repo, err := git.PlainInitWithOptions(repoDir, &git.PlainInitOptions{
+		InitOptions: git.InitOptions{DefaultBranch: plumbing.NewBranchReferenceName("main")},
+	})
+	require.NoError(t, err)
 
 	for name, content := range files {
 		path := filepath.Join(repoDir, filepath.FromSlash(name))
@@ -196,17 +208,18 @@ func initSourceTestGitRepo(t *testing.T, files map[string]string) string {
 		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	}
 
-	runSourceTestGit(t, repoDir, "add", ".")
-	runSourceTestGit(t, repoDir, "commit", "-m", "initial")
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+	require.NoError(t, wt.AddGlob("."))
+	_, err = wt.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test User",
+			Email: "test@example.com",
+			When:  time.Now(),
+		},
+	})
+	require.NoError(t, err)
 	return repoDir
-}
-
-func runSourceTestGit(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "git %v failed: %s", args, string(out))
 }
 
 func sourceTestGitFileURI(path string) string {
@@ -223,20 +236,45 @@ func sourceTestGitFileURI(path string) string {
 // test drove a successful fetch through this path; every other scaffold test sets
 // ATMOS_SCAFFOLD_SOURCE_OVERRIDE and bypasses it entirely.
 func TestResolve_RemoteGitSubdirSuccess(t *testing.T) {
-	requireGit(t)
-
 	repoDir := initSourceTestGitRepo(t, map[string]string{
 		"aws/app/scaffold.yaml": sampleScaffold,
 		"aws/app/file.txt":      "hello",
 	})
 	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/app?ref=main"
 
+	requireGitBinary(t)
 	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, time.Minute)
 	require.NoError(t, err)
 	require.NotNil(t, cleanup)
 	defer cleanup()
 	require.NotNil(t, cfg)
 	assert.True(t, hasSampleFile(cfg.Files), "remote git subdir template files must be loaded")
+}
+
+// TestResolve_RemoteGitExcludesGitDirectory reproduces a client-reported bug: fetching a
+// `git::` scaffold source (no subdir, mirroring the client's exact repro) must not copy
+// the fetched clone's own `.git` directory (objects, refs, hooks, and a `config` pointing
+// at the template's source repo) into the loaded template's file list -- it isn't part of
+// the template's content.
+func TestResolve_RemoteGitExcludesGitDirectory(t *testing.T) {
+	repoDir := initSourceTestGitRepo(t, map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+	src := "git::" + sourceTestGitFileURI(repoDir) + "?ref=main"
+
+	requireGitBinary(t)
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", src, time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.True(t, hasSampleFile(cfg.Files), "remote git template files must still be loaded")
+
+	for _, f := range cfg.Files {
+		assert.NotEqual(t, ".git", f.Path, "loaded configuration must not include the .git directory itself")
+		assert.False(t, strings.HasPrefix(f.Path, ".git/"), "loaded configuration must not include files under .git/, got %q", f.Path)
+	}
 }
 
 // zipArchive builds an in-memory ZIP archive containing the given files.
@@ -297,14 +335,13 @@ func TestResolve_RemoteRecordsOriginalSource(t *testing.T) {
 // TestResolve_RemoteGitSubdirMissing pins the exact failure mode reported for
 // `atmos init aws/app`: a valid git remote whose requested //subdir does not exist.
 func TestResolve_RemoteGitSubdirMissing(t *testing.T) {
-	requireGit(t)
-
 	repoDir := initSourceTestGitRepo(t, map[string]string{
 		"aws/app/scaffold.yaml": sampleScaffold,
 		"aws/app/file.txt":      "hello",
 	})
 	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/missing?ref=main"
 
+	requireGitBinary(t)
 	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/missing", src, time.Minute)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldFetchSource)

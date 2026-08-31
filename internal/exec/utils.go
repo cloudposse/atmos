@@ -280,6 +280,13 @@ func processComponentConfig(
 		return fmt.Errorf("'components.%s.%s.retry' in the stack manifest '%s': %w", componentType, component, stack, err)
 	}
 
+	// Decode the (already merged: atmos.yaml global < stack-level < component-inheritance)
+	// `flags:` block into typed terraform CLI execution flag defaults.
+	componentFlags, err := schema.DecodeTerraformFlags(componentSection[cfg.FlagsSectionName])
+	if err != nil {
+		return fmt.Errorf("'components.%s.%s.flags' in the stack manifest '%s': %w", componentType, component, stack, err)
+	}
+
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
@@ -314,6 +321,7 @@ func processComponentConfig(
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
 	configAndStacksInfo.ComponentRetrySection = componentRetrySection
+	configAndStacksInfo.Flags = componentFlags
 	configAndStacksInfo.BaseComponentPath = baseComponentName
 	configAndStacksInfo.ComponentInheritanceChain = componentInheritanceChain
 	configAndStacksInfo.ComponentIsAbstract = componentIsAbstract
@@ -1159,16 +1167,16 @@ func processStacks(
 				isNotExistString := strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "Failed to read directory")
 
 				if !isNotExist && !isNotExistString {
-					// Check if this is an OpenTofu-specific feature that terraform-config-inspect doesn't support.
-					// Respect component-level command overrides for OpenTofu detection.
-					// Clone the config and apply the component override if present.
-					effectiveConfig := *atmosConfig
-					if configAndStacksInfo.Command != "" {
-						effectiveConfig.Components.Terraform.Command = configAndStacksInfo.Command
-					}
-
-					// For known OpenTofu features, skip validation. Otherwise, return the error.
-					if !IsOpenTofu(&effectiveConfig, nil) || !isKnownOpenTofuFeature(diagErr) {
+					// For known module-source-interpolation diagnostics (a terraform-config-inspect
+					// static-parser limitation, not a tool-specific feature gate -- see
+					// isKnownModuleSourceInterpolationDiagnostic), skip validation. Otherwise, return the error.
+					//
+					// Check every diagnostic individually (allDiagnosticsAreModuleSourceInterpolation),
+					// not just the collapsed diagErr string: tfconfig's Diagnostics.Error() only renders
+					// diags[0]'s text, so a genuine unrelated error sorting after the known-safe one would
+					// never appear in diagErr yet would still be silently discarded if only diagErr were
+					// checked.
+					if !allDiagnosticsAreModuleSourceInterpolation(diags) {
 						// For other errors (syntax errors, permission issues, etc.), return error.
 						// Use ErrorBuilder to provide helpful context about the HCL parsing failure.
 						// This fixes https://github.com/cloudposse/atmos/issues/1864 by showing a clear error
@@ -1203,10 +1211,10 @@ func processStacks(
 						return configAndStacksInfo, err
 					}
 
-					// Skip validation for known OpenTofu-specific features.
-					log.Debug("Skipping terraform-config-inspect validation for OpenTofu-specific feature: " + errMsg)
+					// Skip validation for known module-source-interpolation diagnostics.
+					log.Debug("Skipping terraform-config-inspect validation for known module-source-interpolation diagnostic", "diagnostic", errMsg)
 					componentInfo[terraformConfigKey] = nil
-					componentInfo["validation_skipped_opentofu"] = true
+					componentInfo["validation_skipped_module_source_interpolation"] = true
 				} else {
 					componentInfo[terraformConfigKey] = nil
 				}
@@ -1456,6 +1464,12 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 		// Always assign — including nil — so a retry section removed via templates
 		// or YAML functions clears any previously decoded config.
 		configAndStacksInfo.ComponentRetrySection = retryCfg
+	}
+
+	if flags, err := schema.DecodeTerraformFlags(configAndStacksInfo.ComponentSection[cfg.FlagsSectionName]); err != nil {
+		log.Warn("Failed to restore terraform flags configuration after template processing", "error", err)
+	} else {
+		configAndStacksInfo.Flags = flags
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {

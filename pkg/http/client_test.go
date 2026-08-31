@@ -1405,7 +1405,14 @@ func TestGitHubAuthenticatedTransport_AllRedirectStatusCodes(t *testing.T) {
 			}))
 			defer origin.Close()
 
+			// Use a dedicated transport instead of falling back to http.DefaultTransport:
+			// httptest.Server.Close() unconditionally calls CloseIdleConnections() on
+			// http.DefaultTransport (net/http/httptest), which races with in-flight
+			// requests from the other parallel subtests here and intermittently fails
+			// with "http: CloseIdleConnections called". An isolated transport per
+			// subtest removes the shared state that makes this racy.
 			client := NewDefaultClient(
+				WithTransport(&http.Transport{}),
 				WithGitHubToken("redir-test-token"),
 			)
 

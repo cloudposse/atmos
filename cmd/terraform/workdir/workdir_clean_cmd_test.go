@@ -54,7 +54,7 @@ func TestCleanAllWorkdirs_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mock := NewMockWorkdirManager(ctrl)
-	mock.EXPECT().CleanAllWorkdirs(gomock.Any()).Return(nil)
+	mock.EXPECT().CleanAllWorkdirs(gomock.Any(), false).Return(nil)
 
 	// Save and restore.
 	original := workdirManager
@@ -62,7 +62,24 @@ func TestCleanAllWorkdirs_Success(t *testing.T) {
 	SetWorkdirManager(mock)
 
 	atmosConfig := &schema.AtmosConfiguration{}
-	err := cleanAllWorkdirs(atmosConfig)
+	err := cleanAllWorkdirs(atmosConfig, false)
+	assert.NoError(t, err)
+}
+
+func TestCleanAllWorkdirs_DryRun(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().CleanAllWorkdirs(gomock.Any(), true).Return(nil)
+
+	// Save and restore.
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	err := cleanAllWorkdirs(atmosConfig, true)
 	assert.NoError(t, err)
 }
 
@@ -72,7 +89,7 @@ func TestCleanAllWorkdirs_Error(t *testing.T) {
 
 	mock := NewMockWorkdirManager(ctrl)
 	expectedErr := errors.New("clean failed")
-	mock.EXPECT().CleanAllWorkdirs(gomock.Any()).Return(expectedErr)
+	mock.EXPECT().CleanAllWorkdirs(gomock.Any(), false).Return(expectedErr)
 
 	// Save and restore.
 	original := workdirManager
@@ -80,7 +97,7 @@ func TestCleanAllWorkdirs_Error(t *testing.T) {
 	SetWorkdirManager(mock)
 
 	atmosConfig := &schema.AtmosConfiguration{}
-	err := cleanAllWorkdirs(atmosConfig)
+	err := cleanAllWorkdirs(atmosConfig, false)
 	assert.Error(t, err)
 	assert.Equal(t, expectedErr, err)
 }
@@ -175,9 +192,9 @@ func TestMockWorkdirManager_CleanAllWorkdirs(t *testing.T) {
 	defer ctrl.Finish()
 
 	mock := NewMockWorkdirManager(ctrl)
-	mock.EXPECT().CleanAllWorkdirs(gomock.Any()).Return(nil)
+	mock.EXPECT().CleanAllWorkdirs(gomock.Any(), false).Return(nil)
 
-	err := mock.CleanAllWorkdirs(&schema.AtmosConfiguration{})
+	err := mock.CleanAllWorkdirs(&schema.AtmosConfiguration{}, false)
 	assert.NoError(t, err)
 }
 
@@ -192,14 +209,14 @@ func TestMockWorkdirManager_MultipleMethodCalls(t *testing.T) {
 	mock.EXPECT().GetWorkdirInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
 	mock.EXPECT().DescribeWorkdir(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return("", nil)
 	mock.EXPECT().CleanWorkdir(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	mock.EXPECT().CleanAllWorkdirs(gomock.Any()).Return(nil)
+	mock.EXPECT().CleanAllWorkdirs(gomock.Any(), gomock.Any()).Return(nil)
 
 	// Call various methods.
 	_, _ = mock.ListWorkdirs(&schema.AtmosConfiguration{})
 	_, _ = mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "", "", nil)
 	_, _ = mock.DescribeWorkdir(&schema.AtmosConfiguration{}, "", "", nil)
 	_ = mock.CleanWorkdir(&schema.AtmosConfiguration{}, "", "", nil)
-	_ = mock.CleanAllWorkdirs(&schema.AtmosConfiguration{})
+	_ = mock.CleanAllWorkdirs(&schema.AtmosConfiguration{}, false)
 }
 
 // Test error types.
@@ -251,13 +268,13 @@ func TestCleanAllWorkdirs_WithNilConfig(t *testing.T) {
 	defer ctrl.Finish()
 
 	mock := NewMockWorkdirManager(ctrl)
-	mock.EXPECT().CleanAllWorkdirs(gomock.Any()).Return(nil)
+	mock.EXPECT().CleanAllWorkdirs(gomock.Any(), false).Return(nil)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	err := cleanAllWorkdirs(nil)
+	err := cleanAllWorkdirs(nil, false)
 	assert.NoError(t, err)
 }
 
@@ -377,7 +394,7 @@ func TestCleanAllWorkdirs_SuccessMessage(t *testing.T) {
 	defer ctrl.Finish()
 
 	mock := NewMockWorkdirManager(ctrl)
-	mock.EXPECT().CleanAllWorkdirs(gomock.Any()).Return(nil)
+	mock.EXPECT().CleanAllWorkdirs(gomock.Any(), false).Return(nil)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
@@ -386,8 +403,33 @@ func TestCleanAllWorkdirs_SuccessMessage(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Should print success message to stderr and return nil.
-	err := cleanAllWorkdirs(atmosConfig)
+	err := cleanAllWorkdirs(atmosConfig, false)
 	assert.NoError(t, err)
+}
+
+// TestCleanAllWorkdirs_DryRunSuppressesSuccessMessage is a regression test for the
+// dry-run/--all bug where "atmos terraform workdir clean --all --dry-run" printed the same
+// "All workdirs cleaned" success message as a real clean, misleadingly implying something was
+// deleted. On a dry run, cleanAllWorkdirs must not print that message -- the dry-run report
+// itself (emitted by provWorkdir.CleanAllWorkdirs) is the only output.
+func TestCleanAllWorkdirs_DryRunSuppressesSuccessMessage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().CleanAllWorkdirs(gomock.Any(), true).Return(nil)
+
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	ioCtx := initTestIOWithCapture(t)
+	err := cleanAllWorkdirs(atmosConfig, true)
+	assert.NoError(t, err)
+	assert.NotContains(t, ioCtx.stderr.String(), "All workdirs cleaned",
+		"dry run must not print the success message")
 }
 
 // Test cleanSpecificWorkdir success path.

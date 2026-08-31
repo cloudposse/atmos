@@ -510,8 +510,11 @@ func createCustomCommand(
 	}
 	customCommand.PersistentFlags().Bool("", false, doubleDashHint)
 
-	// Add --identity flag to all custom commands to allow runtime override.
-	customCommand.PersistentFlags().String(customCommandKeyIdentity, "", "Identity to use for authentication (overrides identity in command config)")
+	// Add --identity flag to all custom commands to allow runtime override. Uses the shared
+	// flags.WithIdentityFlag() builder (rather than a hand-rolled PersistentFlags().String())
+	// so custom commands get the same NoOptDefVal-driven interactive-selector behavior
+	// (bare --identity) as every other Atmos command.
+	pkgFlags.NewStandardParser(pkgFlags.WithIdentityFlag()).RegisterPersistentFlags(customCommand)
 	AddIdentityCompletion(customCommand)
 
 	if err := validateCustomCommandFlags(commandConfig, parentCommand); err != nil {
@@ -886,7 +889,7 @@ func executeCustomCommand(
 		commandIdentity = strings.TrimSpace(commandConfig.Identity)
 	}
 
-	authManager := prepareCustomCommandAuth(&atmosConfig, commandIdentity, commandConfig.Name, hasRunnableStep)
+	authManager, commandIdentity := prepareCustomCommandAuth(&atmosConfig, commandIdentity, commandConfig.Name, hasRunnableStep)
 
 	// Determine working directory for command execution.
 	workDir, err := resolveWorkingDirectory(commandConfig.WorkingDirectory, atmosConfig.BasePath, currentDirPath)
@@ -1587,9 +1590,18 @@ func customCommandConditionContext(commandName string, step *schema.Task, index 
 	}
 }
 
-func prepareCustomCommandAuth(atmosConfig *schema.AtmosConfiguration, commandIdentity, commandName string, hasRunnableStep bool) auth.AuthManager {
+// newCustomCommandAuthManagerFn constructs the AuthManager used to authenticate a custom
+// command's --identity. Overridable in tests.
+var newCustomCommandAuthManagerFn = auth.NewAuthManager
+
+// prepareCustomCommandAuth authenticates commandIdentity for a custom command, resolving the
+// interactive-selection sentinel to a concrete identity name first. It returns that resolved
+// identity alongside the AuthManager so callers use it (not the original sentinel) for any
+// identity-dependent operation that runs after authentication, e.g. PrepareShellEnvironment or
+// ExecuteCustomCommandControlStep.
+func prepareCustomCommandAuth(atmosConfig *schema.AtmosConfiguration, commandIdentity, commandName string, hasRunnableStep bool) (auth.AuthManager, string) {
 	if commandIdentity == "" || !hasRunnableStep {
-		return nil
+		return nil, commandIdentity
 	}
 
 	authStackInfo := &schema.ConfigAndStacksInfo{
@@ -1597,28 +1609,39 @@ func prepareCustomCommandAuth(atmosConfig *schema.AtmosConfiguration, commandIde
 	}
 	credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 	validator := validation.NewValidator()
-	authManager, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
+	authManager, err := newCustomCommandAuthManagerFn(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
+	}
+
+	// Resolve the interactive-selection sentinel (produced when --identity is passed without a
+	// value) to a concrete identity before checking the credential cache or authenticating.
+	commandIdentity, err = auth.ResolveSelectedIdentity(authManager, commandIdentity, cfg.IdentityFlagSelectValue)
+	if err != nil {
+		if errors.Is(err, errUtils.ErrUserAborted) {
+			errUtils.CheckErrorPrintAndExit(errUtils.ErrUserAborted, "", "")
+		}
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w for custom command %q: %w",
+			errUtils.ErrDefaultIdentity, commandName, err), "", "")
 	}
 
 	ctx := context.Background()
 	if _, err = authManager.GetCachedCredentials(ctx, commandIdentity); err == nil {
 		log.Debug("Authenticated with cached identity for custom command", customCommandKeyIdentity, commandIdentity, customCommandKeyCommand, commandName)
-		return authManager
+		return authManager, commandIdentity
 	}
 
 	log.Debug("No valid cached credentials found, authenticating", customCommandKeyIdentity, commandIdentity, "error", err)
 	if _, err = authManager.Authenticate(ctx, commandIdentity); err == nil {
 		log.Debug("Authenticated with identity for custom command", customCommandKeyIdentity, commandIdentity, customCommandKeyCommand, commandName)
-		return authManager
+		return authManager, commandIdentity
 	}
 	if errors.Is(err, errUtils.ErrUserAborted) {
 		errUtils.CheckErrorPrintAndExit(errUtils.ErrUserAborted, "", "")
 	}
 	errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w for identity %q in custom command %q: %w",
 		errUtils.ErrAuthenticationFailed, commandIdentity, commandName, err), "", "")
-	return authManager
+	return authManager, commandIdentity
 }
 
 // cloneCommand clones a custom command config into a new struct.
@@ -1636,14 +1659,13 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	return &clone, nil
 }
 
-// findTypedValue finds the value of an argument or flag with the specified semantic type.
-// For arguments, it checks the Type field.
-// For flags, it checks the SemanticType field.
-// Returns empty string if no matching typed argument/flag is found.
+// findTypedValue finds the value of an argument or flag whose EffectiveProvides matches
+// the given role ("component" or "stack").
+// Returns empty string if no matching argument/flag is found.
 func findTypedValue(cmd *schema.Command, argumentsData map[string]string, flagsData map[string]any, semanticType string) string {
 	// Check arguments first.
 	for _, arg := range cmd.Arguments {
-		if arg.Type == semanticType {
+		if arg.EffectiveProvides() == semanticType {
 			if val, ok := argumentsData[arg.Name]; ok {
 				return val
 			}
@@ -1652,7 +1674,7 @@ func findTypedValue(cmd *schema.Command, argumentsData map[string]string, flagsD
 
 	// Check flags.
 	for _, flag := range cmd.Flags {
-		if flag.SemanticType == semanticType {
+		if flag.EffectiveProvides() == semanticType {
 			if val, ok := flagsData[flag.Name]; ok {
 				if strVal, ok := val.(string); ok {
 					return strVal
@@ -2553,13 +2575,13 @@ func resolveCustomComponentConfig(
 ) (map[string]any, error) {
 	defer perf.Track(nil, "cmd.resolveCustomComponentConfig")()
 
-	// Find component name from argument/flag with type: component.
+	// Find component name from argument/flag with provides: component.
 	componentName := findTypedValue(commandConfig, argumentsData, flagsData, semanticTypeComponent)
 	if componentName == "" {
 		return nil, errUtils.ErrComponentArgumentNotFound
 	}
 
-	// Find stack name from argument/flag with type: stack (or semantic_type: stack for flags).
+	// Find stack name from argument/flag with provides: stack.
 	stackName := findTypedValue(commandConfig, argumentsData, flagsData, semanticTypeStack)
 	if stackName == "" {
 		return nil, errUtils.ErrStackArgumentNotFound

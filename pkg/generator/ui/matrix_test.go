@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/project/config"
@@ -210,7 +211,7 @@ func whitespaceAxisEmbedsConfig() *templates.Configuration {
 // proves a computed axis value containing whitespace (e.g. an
 // answers.environments key like "us east") survives end-to-end as one axis
 // value, not two -- the real regression test for the toJson-based
-// RenderMatrixAxisExpression fix, exercised through the actual generation
+// RenderAnswersListExpression fix, exercised through the actual generation
 // pipeline rather than a mocked AxisRenderer.
 func TestExecuteWithSetup_FilesMatrixComputedAxisValueWithWhitespacePreserved(t *testing.T) {
 	ui := createTestUI(t)
@@ -281,6 +282,116 @@ spec:
 	content, readErr := os.ReadFile(filepath.Join(targetDir, "deploy.yaml"))
 	require.NoError(t, readErr, "the first combination's write must still have succeeded")
 	assert.Equal(t, "environment: dev\n", string(content))
+}
+
+// TestProcessFileEntry_DryRunMatrixExpansion proves that --dry-run (routed
+// through this same processFileEntry real-generation dispatch, see
+// cmd/scaffold's executeScaffoldGenerate, which now sets DryRun for every
+// --dry-run invocation, not just --dry-run --update) expands
+// spec.files[].matrix exactly like a real run: one status line per
+// surviving row (honoring target's per-axis path and the matrix-gated
+// when: prune), not one raw, unexpanded path. The successCount return value
+// is the authoritative "how many files would this produce" signal -- it
+// must match the four files TestExecuteWithSetup_FilesMatrixExpansion above
+// proves a real (non-dry-run) run of the identical template actually
+// writes -- while nothing is written to disk and every rendered path is
+// reported as "(would create)".
+func TestProcessFileEntry_DryRunMatrixExpansion(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetDryRun(true)
+	targetDir := t.TempDir()
+
+	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(matrixScaffoldYAML)
+	require.NoError(t, err)
+
+	file := templates.File{
+		Path:        "deploy.yaml",
+		Content:     "environment: {{ .matrix.environment }}\nregion: {{ .matrix.region }}\n",
+		IsTemplate:  true,
+		Permissions: 0o644,
+	}
+	spec := FileSpecByPath(scaffoldConfig)["deploy.yaml"]
+
+	mergedValues := map[string]interface{}{
+		"regions_by_env": map[string]interface{}{
+			"dev":        []interface{}{"us-east-1"},
+			"staging":    []interface{}{"us-east-1"},
+			"production": []interface{}{"us-east-1", "us-west-2"},
+		},
+	}
+
+	successCount, errorCount, failedPaths, err := ui.processFileEntry(
+		file, spec, targetDir, false, false, scaffoldConfig, mergedValues, []string{"{{", "}}"}, make(map[string]string),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 4, successCount, "all four surviving matrix rows must be counted, matching the real run")
+	assert.Equal(t, 0, errorCount)
+	assert.Empty(t, failedPaths)
+
+	// Nothing was written to disk: neither the matrix source's own path nor
+	// any of its expanded outputs.
+	for _, relPath := range []string{
+		"deploy.yaml",
+		filepath.Join("deploy", "dev", "us-east-1.yaml"),
+		filepath.Join("deploy", "staging", "us-east-1.yaml"),
+		filepath.Join("deploy", "production", "us-east-1.yaml"),
+		filepath.Join("deploy", "production", "us-west-2.yaml"),
+	} {
+		_, statErr := os.Stat(filepath.Join(targetDir, relPath))
+		assert.True(t, os.IsNotExist(statErr), "dry-run must not write %s", relPath)
+	}
+
+	// Strip ANSI styling before asserting: reportWriteResult renders the
+	// bullet/checkmark and status text through lipgloss styles, whose color
+	// profile (and therefore whether escape codes appear at all) depends on
+	// the environment's detected terminal capabilities -- CI and local runs
+	// can disagree. A literal `path + " " + status` concatenation would only
+	// match when nothing is inserted between them, so strip color first and
+	// assert on the plain text every environment agrees on.
+	output := ansi.Strip(ui.output.String())
+	for _, want := range []string{
+		filepath.ToSlash(filepath.Join("deploy", "dev", "us-east-1.yaml")),
+		filepath.ToSlash(filepath.Join("deploy", "staging", "us-east-1.yaml")),
+		filepath.ToSlash(filepath.Join("deploy", "production", "us-east-1.yaml")),
+		filepath.ToSlash(filepath.Join("deploy", "production", "us-west-2.yaml")),
+	} {
+		assert.Contains(t, output, want, "expected the matrix-expanded path %s to be previewed", want)
+	}
+	// Every surviving row is reported as a new file (none pre-exist), and
+	// exactly four rows survive the when: prune -- one status line each.
+	assert.Equal(t, 4, strings.Count(output, dryRunCreateStatus))
+
+	// dev/us-west-2 and staging/us-west-2 are pruned by when: in real
+	// generation (see TestExecuteWithSetup_FilesMatrixExpansion): they're
+	// reported as skipped rows, not previewed as if they'd be created.
+	for _, relPath := range []string{
+		filepath.ToSlash(filepath.Join("deploy", "dev", "us-west-2.yaml")),
+		filepath.ToSlash(filepath.Join("deploy", "staging", "us-west-2.yaml")),
+	} {
+		assert.Contains(t, output, relPath+" "+skippedText)
+		assert.NotContains(t, output, relPath+" "+dryRunCreateStatus)
+	}
+}
+
+// TestGenerationSummaryLine pins the four dry-run/error wording combinations
+// executeWithSetup's post-run summary line can print. Split out as
+// generationSummaryLine specifically so this can be asserted directly
+// instead of needing to capture UI output (executeWithSetup always flushes
+// and resets ui.output before returning).
+func TestGenerationSummaryLine(t *testing.T) {
+	assert.Equal(t, "Generated 3 files.\n", generationSummaryLine(false, 3, 0))
+	assert.Equal(t, "Generated 3 files. Failed to generate 1 files.\n", generationSummaryLine(false, 3, 1))
+	assert.Equal(t, "Would generate 3 files.\n", generationSummaryLine(true, 3, 0))
+	assert.Equal(t, "Would generate 3 files. 1 would fail.\n", generationSummaryLine(true, 3, 1))
+}
+
+// TestInitializationSummaryLine pins the four dry-run/error wording
+// combinations executeWithCommandValues's post-run summary line can print.
+func TestInitializationSummaryLine(t *testing.T) {
+	assert.Equal(t, "Initialized 3 files.\n", initializationSummaryLine(false, 3, 0))
+	assert.Equal(t, "Initialized 3 files. Failed to initialize 1 files.\n", initializationSummaryLine(false, 3, 1))
+	assert.Equal(t, "Would initialize 3 files.\n", initializationSummaryLine(true, 3, 0))
+	assert.Equal(t, "Would initialize 3 files. 1 would fail.\n", initializationSummaryLine(true, 3, 1))
 }
 
 // TestProcessMatrixedFileEntry_ZeroRowsWritesSkipLine proves a matrix entry
