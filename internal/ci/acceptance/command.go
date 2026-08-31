@@ -28,6 +28,12 @@ const (
 	// Retry bounds for the known-benign Windows race handled by isTransientWindowsUnlinkError.
 	transientUnlinkRetries = 2
 	transientUnlinkDelay   = 2 * time.Second
+
+	// Bounds how much trailing stderr transientErrorDetector retains while looking
+	// for isTransientWindowsUnlinkError's diagnostic, so a verbose `go test` run
+	// can't grow that buffer without limit. The real diagnostic is one short line
+	// (well under this), so bounding it doesn't affect detection.
+	maxTransientMatchWindow = 4096
 )
 
 var (
@@ -93,19 +99,28 @@ type runOptions struct {
 func (r commandRunner) run(ctx context.Context, opts runOptions, name string, args ...string) error {
 	var lastErr error
 	for attempt := 0; attempt <= transientUnlinkRetries; attempt++ {
-		var stderrCapture bytes.Buffer
 		cmd := exec.CommandContext(ctx, name, args...) // #nosec G702 -- CI executes only repository-selected tools and test binaries.
 		cmd.Dir = opts.dir
 		cmd.Env = append(os.Environ(), opts.env...)
 		cmd.Stdin = r.stdin
 		cmd.Stdout = r.stdout
-		cmd.Stderr = io.MultiWriter(r.stderr, &stderrCapture)
+
+		// Only retry-enabled invocations need to watch stderr for the transient
+		// diagnostic; everything else forwards stderr directly instead of paying for
+		// a capture that's never inspected.
+		var detector *transientErrorDetector
+		cmd.Stderr = r.stderr
+		if opts.retryTransient {
+			detector = &transientErrorDetector{}
+			cmd.Stderr = io.MultiWriter(r.stderr, detector)
+		}
+
 		err := cmd.Run()
 		if err == nil {
 			return nil
 		}
 		lastErr = fmt.Errorf("%w: run %s: %w", errCommandFailed, commandString(name, args), err)
-		if attempt == transientUnlinkRetries || !opts.retryTransient || !isTransientWindowsUnlinkError(stderrCapture.String()) {
+		if attempt == transientUnlinkRetries || !opts.retryTransient || !detector.matched() {
 			return lastErr
 		}
 		_, _ = fmt.Fprintf(r.stderr, "::warning::retrying %s after a transient Windows go-test cleanup race (attempt %d/%d): %v\n",
@@ -128,6 +143,38 @@ func (r commandRunner) run(ctx context.Context, opts runOptions, name string, ar
 func isTransientWindowsUnlinkError(output string) bool {
 	return strings.Contains(output, "unlinkat") &&
 		strings.Contains(output, "cannot access the file because it is being used by another process")
+}
+
+// transientErrorDetector is an io.Writer that reports whether
+// isTransientWindowsUnlinkError has matched anywhere in everything written to it so
+// far, without retaining unbounded output: it keeps only the trailing
+// maxTransientMatchWindow bytes while unmatched, and drops that window entirely once
+// matched, since the sticky matched flag is all run needs from then on. The real
+// diagnostic is one short line, so bounding the window doesn't affect detection.
+type transientErrorDetector struct {
+	window []byte
+	found  bool
+}
+
+// Write implements io.Writer.
+func (d *transientErrorDetector) Write(p []byte) (int, error) {
+	if !d.found {
+		d.window = append(d.window, p...)
+		if len(d.window) > maxTransientMatchWindow {
+			d.window = d.window[len(d.window)-maxTransientMatchWindow:]
+		}
+		if isTransientWindowsUnlinkError(string(d.window)) {
+			d.found = true
+			d.window = nil
+		}
+	}
+	return len(p), nil
+}
+
+// matched reports whether the diagnostic has been observed. A nil detector (the
+// retryTransient=false path, where nothing is watching stderr) never matches.
+func (d *transientErrorDetector) matched() bool {
+	return d != nil && d.found
 }
 
 func (r commandRunner) output(ctx context.Context, dir string, env []string, name string, args ...string) (string, error) {

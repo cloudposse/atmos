@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -145,6 +146,113 @@ func TestIsTransientWindowsUnlinkError(t *testing.T) {
 				t.Fatalf("isTransientWindowsUnlinkError(%q) = %v, want %v", tt.output, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestTransientErrorDetectorNilNeverMatches(t *testing.T) {
+	t.Parallel()
+
+	var d *transientErrorDetector
+	if d.matched() {
+		t.Fatal("nil detector must never report a match")
+	}
+}
+
+func TestTransientErrorDetectorMatchesWithinOneWrite(t *testing.T) {
+	t.Parallel()
+
+	d := &transientErrorDetector{}
+	line := []byte("go: unlinkat C:\\pkg.test.exe: The process cannot access the file because it is being used by another process.\n")
+	n, err := d.Write(line)
+	if err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if n != len(line) {
+		t.Fatalf("Write() n = %d, want %d (io.Writer contract: n == len(p))", n, len(line))
+	}
+	if !d.matched() {
+		t.Fatal("expected a match after writing the diagnostic in one call")
+	}
+}
+
+func TestTransientErrorDetectorMatchesAcrossWrites(t *testing.T) {
+	t.Parallel()
+
+	d := &transientErrorDetector{}
+	if _, err := d.Write([]byte("go: unlinkat C:\\pkg.test.exe: ")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if d.matched() {
+		t.Fatal("must not match on a partial write")
+	}
+	if _, err := d.Write([]byte("The process cannot access the file because it is being used by another process.\n")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if !d.matched() {
+		t.Fatal("expected a match once both halves have been written")
+	}
+}
+
+func TestTransientErrorDetectorDoesNotMatchUnrelatedOutput(t *testing.T) {
+	t.Parallel()
+
+	d := &transientErrorDetector{}
+	for range 5 {
+		if _, err := d.Write([]byte("--- PASS: TestSomething (0.01s)\n")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+	}
+	if d.matched() {
+		t.Fatal("expected no match for ordinary passing-test output")
+	}
+}
+
+// TestTransientErrorDetectorBoundsMemory reproduces the risk CodeRabbit flagged:
+// stderrCapture previously retained everything a verbose command wrote, unbounded,
+// even when the diagnostic never appeared. The detector must cap its retained window
+// at maxTransientMatchWindow regardless of how much unrelated output it sees.
+func TestTransientErrorDetectorBoundsMemory(t *testing.T) {
+	t.Parallel()
+
+	d := &transientErrorDetector{}
+	line := strings.Repeat("v", 512) + "\n"
+	for range 50 { // 50 * 513 bytes >> maxTransientMatchWindow (4096).
+		if _, err := d.Write([]byte(line)); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+	}
+	if d.matched() {
+		t.Fatal("expected no match for repeated unrelated output")
+	}
+	if len(d.window) > maxTransientMatchWindow {
+		t.Fatalf("retained window = %d bytes, want at most %d", len(d.window), maxTransientMatchWindow)
+	}
+}
+
+// TestTransientErrorDetectorDropsWindowOnceMatched confirms the window is freed after
+// a match, since run only needs the sticky bool from then on -- a long-running command
+// that keeps writing after the diagnostic appears must not keep growing memory either.
+func TestTransientErrorDetectorDropsWindowOnceMatched(t *testing.T) {
+	t.Parallel()
+
+	d := &transientErrorDetector{}
+	if _, err := d.Write([]byte("go: unlinkat x: The process cannot access the file because it is being used by another process.\n")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if !d.matched() {
+		t.Fatal("expected a match")
+	}
+	if d.window != nil {
+		t.Fatalf("window = %q, want nil once matched", d.window)
+	}
+	if _, err := d.Write([]byte(strings.Repeat("more output\n", 1000))); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if d.window != nil {
+		t.Fatalf("window = %d bytes after further writes, want it to stay nil once matched", len(d.window))
+	}
+	if !d.matched() {
+		t.Fatal("match must remain sticky after further writes")
 	}
 }
 
