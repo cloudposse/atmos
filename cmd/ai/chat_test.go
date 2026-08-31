@@ -2,6 +2,7 @@
 package ai
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1760,6 +1761,140 @@ func TestChatCmd_RunE_OllamaWithSessions(t *testing.T) {
 	require.Error(t, err)
 	// The error should be from chat session failing, not from session creation.
 	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// TestChatCmd_RunE_CLIProviderSessionModel verifies the fix for a session created
+// against a CLI provider (claude-code) with no explicit `model` configured: the
+// session's Model field must be populated from the actually-constructed client
+// (client.GetModel(), which claude-code defaults to "claude-code") rather than
+// the independent getModelFromConfig lookup, which would have returned "" here
+// and made the session unexportable/unimportable (see validateCheckpointSession).
+func TestChatCmd_RunE_CLIProviderSessionModel(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
+
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	sessionsDir := filepath.Join(tmpDir, ".atmos", "sessions")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte("vars:\n  stage: test\n"), 0o644))
+
+	basePath := filepath.ToSlash(tmpDir)
+	// binary points at a path that need not exist: claude-code's NewClient only
+	// resolves via exec.LookPath when providerConfig.Binary is empty, and no
+	// `model:` is set so the provider's own default ("claude-code") is what
+	// must end up on the session, not an empty string.
+	atmosYaml := `
+base_path: "` + basePath + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "*.yaml"
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: components/terraform
+ai:
+  enabled: true
+  default_provider: claude-code
+  providers:
+    claude-code:
+      binary: "/usr/bin/true"
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+    max_sessions: 100
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	require.NoError(t, chatCmd.Flags().Set("session", "cli-provider-session"))
+
+	err := chatCmd.RunE(chatCmd, []string{})
+	// Fails at tui.RunChat (no terminal), but session creation happens first.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+
+	manager, cleanup, mgrErr := initSessionManager()
+	require.NoError(t, mgrErr)
+	defer cleanup()
+
+	sess, getErr := manager.GetSessionByName(context.Background(), "cli-provider-session")
+	require.NoError(t, getErr)
+	assert.Equal(t, "claude-code", sess.Model, "session Model must come from client.GetModel(), not the blank provider-config lookup")
+}
+
+// TestChatCmd_RunE_CLIProviderAnonymousSessionModel is a regression test: the
+// anonymous-session branch (no --session given) must resolve Model the same
+// way the named-session branch does. Before this fix, the anonymous branch
+// still called getModelFromConfig (a raw config lookup with no default
+// fallback) instead of client.GetModel(), so a zero-config claude-code chat
+// with no --session got a blank Model on its session record -- breaking
+// re-import, which requires a non-empty Model (see
+// warnIfCheckpointMayNotReimport in pkg/ai/session/export.go).
+func TestChatCmd_RunE_CLIProviderAnonymousSessionModel(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
+
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	sessionsDir := filepath.Join(tmpDir, ".atmos", "sessions")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte("vars:\n  stage: test\n"), 0o644))
+
+	basePath := filepath.ToSlash(tmpDir)
+	atmosYaml := `
+base_path: "` + basePath + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "*.yaml"
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: components/terraform
+ai:
+  enabled: true
+  default_provider: claude-code
+  providers:
+    claude-code:
+      binary: "/usr/bin/true"
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+    max_sessions: 100
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	require.NoError(t, chatCmd.Flags().Set("session", ""))
+
+	err := chatCmd.RunE(chatCmd, []string{})
+	// Fails at tui.RunChat (no terminal), but session creation happens first.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+
+	manager, cleanup, mgrErr := initSessionManager()
+	require.NoError(t, mgrErr)
+	defer cleanup()
+
+	sessions, listErr := manager.ListSessions(context.Background())
+	require.NoError(t, listErr)
+	require.Len(t, sessions, 1, "exactly one anonymous session must have been created")
+	assert.Equal(t, "claude-code", sessions[0].Model,
+		"anonymous session Model must come from client.GetModel(), not the blank provider-config lookup")
 }
 
 // TestChatCmd_RunE_OllamaWithTools tests tools initialization with ollama provider.

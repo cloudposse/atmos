@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/helmfile"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
@@ -117,7 +118,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
-		ctx, &atmosConfig, &info, cfg.HelmfileComponentType, componentPath,
+		ctx, provisioner.OutputWriters{}, &atmosConfig, &info, cfg.HelmfileComponentType, componentPath,
 	)
 	if err != nil {
 		return err
@@ -397,7 +398,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
 
-	envVars, err = prepareHelmfileAuthEnvironment(authManager, info.Identity, envVars)
+	envVars, err = prepareComponentAuthEnvironment(authManager, info.Identity, envVars)
 	if err != nil {
 		return err
 	}
@@ -526,38 +527,5 @@ func deliverHelmfileToTarget(
 	})
 }
 
-// resolveDefaultIdentity resolves the default identity. A lookup failure is fatal
-// only when the caller explicitly requested the select-default path; for an
-// implicit empty identity the requested value is returned so execution can
-// continue without identity.
-func resolveDefaultIdentity(authManager auth.AuthManager, requested string) (string, error) {
-	defaultIdentity, err := authManager.GetDefaultIdentity(false)
-	if err == nil {
-		return defaultIdentity, nil
-	}
-	if requested == cfg.IdentityFlagSelectValue {
-		return "", fmt.Errorf("%w: resolve default identity: %w", errUtils.ErrAuthenticationFailed, err)
-	}
-	return requested, nil
-}
-
-func prepareHelmfileAuthEnvironment(authManager auth.AuthManager, identity string, envVars []string) ([]string, error) {
-	if authManager == nil {
-		return envVars, nil
-	}
-	if identity == "" || identity == cfg.IdentityFlagSelectValue {
-		resolved, err := resolveDefaultIdentity(authManager, identity)
-		if err != nil {
-			return nil, err
-		}
-		identity = resolved
-	}
-	if identity == "" || identity == cfg.IdentityFlagDisabledValue {
-		return envVars, nil
-	}
-	preparedEnv, err := authManager.PrepareShellEnvironment(context.Background(), identity, envVars)
-	if err != nil {
-		return nil, fmt.Errorf("%w: prepare helmfile environment for identity %q: %w", errUtils.ErrAuthenticationFailed, identity, err)
-	}
-	return preparedEnv, nil
-}
+// resolveDefaultIdentity and prepareComponentAuthEnvironment now live in utils_auth.go
+// so the helmfile and packer subprocess executors share one credential-injection path.

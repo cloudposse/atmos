@@ -4,6 +4,7 @@ description: "Atmos Terraform linting with TFLint: standalone `atmos terraform l
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: ci-automation
 ---
 
 # Atmos Linting

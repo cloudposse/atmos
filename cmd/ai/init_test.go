@@ -576,6 +576,62 @@ func TestSelectManualServers(t *testing.T) {
 	})
 }
 
+// TestClientConfigForMCP verifies the --mcp filtering fix for CLI providers:
+// clientConfigForMCP filters MCP.Servers on a config COPY when the provider is
+// a CLI provider and --mcp was given, leaves non-CLI providers alone (their
+// filtering already happens via registerMCPServerTools), leaves the config
+// alone when --mcp wasn't given, and never mutates the caller's original
+// atmosConfig.MCP.Servers map either way.
+func TestClientConfigForMCP(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"aws": {Command: "aws-mcp"},
+		"gcp": {Command: "gcp-mcp"},
+	}
+
+	t.Run("CLI provider with --mcp filters to the requested subset", func(t *testing.T) {
+		original := schema.AtmosConfiguration{
+			AI: schema.AISettings{DefaultProvider: "claude-code"},
+			MCP: schema.MCPSettings{
+				Servers: servers,
+			},
+		}
+
+		result := clientConfigForMCP(&original, []string{"aws"})
+
+		assert.Len(t, result.MCP.Servers, 1)
+		assert.Contains(t, result.MCP.Servers, "aws")
+		assert.NotContains(t, result.MCP.Servers, "gcp")
+		// The original, unfiltered map must be untouched.
+		assert.Len(t, original.MCP.Servers, 2)
+		assert.Contains(t, original.MCP.Servers, "gcp")
+	})
+
+	t.Run("CLI provider without --mcp is unchanged", func(t *testing.T) {
+		original := schema.AtmosConfiguration{
+			AI:  schema.AISettings{DefaultProvider: "claude-code"},
+			MCP: schema.MCPSettings{Servers: servers},
+		}
+
+		result := clientConfigForMCP(&original, nil)
+
+		assert.Len(t, result.MCP.Servers, 2)
+	})
+
+	t.Run("non-CLI provider with --mcp is left to registerMCPServerTools", func(t *testing.T) {
+		original := schema.AtmosConfiguration{
+			AI:  schema.AISettings{DefaultProvider: "anthropic"},
+			MCP: schema.MCPSettings{Servers: servers},
+		}
+
+		result := clientConfigForMCP(&original, []string{"aws"})
+
+		// Unfiltered here: API-provider clients don't read MCP.Servers directly,
+		// and registerMCPServerTools (called separately) already applies this
+		// same filtering for the tool-registration path.
+		assert.Len(t, result.MCP.Servers, 2)
+	})
+}
+
 // TestServersNeedAuth tests the serversNeedAuth function.
 func TestServersNeedAuth(t *testing.T) {
 	t.Run("no servers need auth", func(t *testing.T) {

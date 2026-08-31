@@ -46,6 +46,11 @@ const (
 	forceFlag                 = "--force"
 	everythingFlag            = "--everything"
 	detailedExitCodeFlag      = "-detailed-exitcode"
+	lockTimeoutFlag           = "-lock-timeout"
+	lockFlag                  = "-lock"
+	parallelismFlag           = "-parallelism"
+	refreshFlag               = "-refresh"
+	compactWarningsFlag       = "-compact-warnings"
 	logFieldComponent         = "component"
 	dirPermissions            = 0o755
 )
@@ -157,7 +162,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	}
 
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
-	execCtx, err := prepareComponentExecution(&atmosConfig, &info, shouldProcess)
+	execCtx, err := prepareComponentExecution(shellCommandContext(opts...), shellCommandOutputWriters(opts...), &atmosConfig, &info, shouldProcess)
 	if err != nil {
 		return err
 	}

@@ -58,6 +58,11 @@ Atmos resolves the active profile using this precedence (highest first):
 3. `profiles.default` in the base `atmos.yaml`
 4. No profile
 
+Profiles apply on top of whatever base configuration was selected — including a base loaded
+via [`--config` or `--config-path`](/cli/configuration) — so
+`atmos --config ./main.yaml --profile ci ...` merges the `ci` profile over `main.yaml`, the
+same way it would over an auto-discovered `atmos.yaml`.
+
 ### Pinning a Profile Per Project
 
 You can pin a profile for a whole project by setting `ATMOS_PROFILE` in a committed dotenv file and including it in the base `atmos.yaml` [`env`](/cli/configuration/env) section:
@@ -106,6 +111,10 @@ profiles/
     ├── atmos.yaml
     └── auth.yaml
 ```
+
+`__SELECT__` is a reserved profile directory name — it's the sentinel bare `--profile` uses to
+trigger [interactive selection](#interactive-selection), so a profile with that name can never be
+activated explicitly. Atmos excludes any `__SELECT__` directory from discovery.
 
 Each profile directory can contain:
 - `atmos.yaml` - Main configuration overrides
@@ -200,6 +209,25 @@ atmos terraform plan vpc -s prod
 export ATMOS_PROFILE="ci,security"
 atmos terraform apply --auto-approve
 ```
+
+### Interactive Selection
+
+Use `--profile` without a value to open a multi-select picker listing every profile Atmos
+discovers (see [Profile Discovery](#profile-discovery)). Nothing is pre-checked by default — toggle
+the profiles you want with space, then confirm — they're activated left-to-right in the order
+shown, same as if you'd typed them explicitly.
+
+```bash
+atmos auth login -i core-auto/terraform --profile
+```
+
+Any profile name already typed explicitly alongside the bare flag (e.g. `--profile ci --profile`)
+starts pre-checked in the picker, since you asked for it — but the form is still yours to edit,
+including unchecking it.
+
+This requires an interactive terminal. In CI, scripts, or any non-interactive context, use
+`--profile=<name>` or `ATMOS_PROFILE` explicitly instead — `--profile` used bare there returns an
+error rather than hanging.
 
 ## Profile Merging
 

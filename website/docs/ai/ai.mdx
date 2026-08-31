@@ -11,6 +11,7 @@ import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import Experimental from '@site/src/components/Experimental'
+import SkillCount from '@site/src/components/SkillCount'
 
 <Intro>
 Atmos is designed for AI agents to operate your infrastructure directly. It can call MCP servers and be called as one, reason about your infrastructure on its own, and share the same skills and context with whatever AI tool your team already uses.
@@ -211,22 +212,14 @@ ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc 
 
 ## Agent Skills
 
-Atmos ships 25 agent skills that give AI coding assistants deep knowledge of Atmos conventions.
-Skills follow the [Agent Skills](https://agentskills.io) open standard and work across Claude Code,
-Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more.
+Atmos ships <SkillCount /> agent skills -- browsable in the [Agent Skills Directory](/ai/skills) -- that give AI coding
+assistants deep knowledge of Atmos conventions. Skills follow the [Agent Skills](https://agentskills.io) open
+standard and work across Claude Code, Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more.
 
 <dl>
   <dt>[`atmos ai skill`](/cli/commands/ai/skill)</dt>
   <dd>Install, list, and uninstall community AI skills from GitHub.</dd>
 </dl>
-
-### [Agent Skills Overview](/ai/agent-skills)
-
-How skills work, available skills, and the SKILL.md format.
-
-### [Skill Marketplace](/ai/skill-marketplace)
-
-Install and share community skills from GitHub.
 
 ### [Skills Configuration](/cli/configuration/ai/skills)
 

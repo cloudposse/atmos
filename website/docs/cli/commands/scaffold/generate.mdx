@@ -40,6 +40,10 @@ atmos scaffold generate terraform-component ./preview --dry-run --skip-hooks
 # Bring a recorded project forward after its template changes.
 atmos scaffold generate terraform-component ./components/terraform/vpc \
   --update --merge-strategy=manual
+
+# Force line-oriented text merging so YAML formatting (e.g. blank lines) survives an update.
+atmos scaffold generate terraform-component ./components/terraform/vpc \
+  --update --merge-driver=text
 ```
 
 ## Template Sources
@@ -90,6 +94,208 @@ their declared `options`; `false` remains a valid answer for a required boolean.
 earlier field answers through `answers`; use CEL (`&&`, `||`, `!`) for compound logic because the
 map-style `{all, any, not}` form is not accepted by scaffold manifests.
 
+## Dynamic and Label/Value Options
+
+`select` and `multiselect` fields declare their choices through `options:`, which accepts four
+shapes. A plain list of strings is the common case, where each choice's label and underlying
+value are the same:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: environment
+      type: select
+      options: [dev, staging, production]
+```
+
+An option can instead be a `{label, value}` object, for when the displayed choice should read
+differently from the value stored in `answers` and passed to templates. `value` is required;
+`label` defaults to `value` when omitted:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: environment
+      type: select
+      options:
+        - label: Development
+          value: dev
+        - label: Staging
+          value: staging
+        - value: production # No label -- displays as "production".
+```
+
+`options:` can also be sourced dynamically, using exactly the two forms `spec.files[].matrix`
+axes support below: a dot-path into `answers.*`, or a Go-template expression:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: environments
+      type: multiselect
+      options: [dev, staging, production]
+
+    # Sourced from the prior multiselect answer -- only offers environments
+    # the user actually selected above.
+    - name: default_environment
+      type: select
+      options: "answers.environments"
+```
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: csv_owners
+      type: input
+      label: Comma-separated list of component owners (e.g. GitHub teams)
+
+    - name: primary_owner
+      type: select
+      options: '{{ splitList "," answers.csv_owners }}'
+```
+
+A dot-path source must resolve to an already list-shaped answer -- a `multiselect` answer, a
+`spec.values` preset, or a `--set`-supplied value never declared as a field at all -- while a
+template expression computes the list the same way a matrix axis expression does. Both dynamic
+forms resolve correctly against whatever the earlier field was ultimately answered, whether that
+answer came from the interactive prompt (fields are prompted one at a time, so a later field is
+only ever shown after the ones before it) or from `--set`/`--defaults`.
+
+When a later field's dot-path sources directly from a field using `{label, value}` options,
+labels are recovered for the filtered subset of values present in the referenced answer:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: environments
+      type: multiselect
+      options:
+        - label: Development
+          value: dev
+        - label: Staging
+          value: staging
+        - label: Production
+          value: prod
+
+    # environments answer is [dev, staging] -> default_environment offers
+    # "Development" and "Staging" -- not "Production", and not the raw
+    # "dev"/"staging" values.
+    - name: default_environment
+      type: select
+      options: "answers.environments"
+```
+
+Only values ever reach `answers` and templates; labels are presentation-only.
+
+Two limitations to keep in mind: there's no field-declaration-order validation at load time, so a
+forward reference, self-reference, or typo'd dot-path loads successfully and degrades to an empty
+option list (no constraint, any value accepted) at runtime instead of erroring; and label recovery
+looks back only one hop -- it does not chase labels through a chain of dynamic references, nor
+through the template-expression form, both of which fall back to `label == value`.
+
+## Dynamic File Generation
+
+`matrix:` expands a single discovered file into one generated file per resolved combination — the
+Cartesian product of one or more axes, using the same axis shape the workflow `matrix:` step uses.
+Axis values share the same `answers.`-prefix dot-path and template-expression convention as a
+dynamic `options:` source (see "Dynamic and Label/Value Options" above).
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: environments
+      type: multiselect
+      options: [dev, staging, production]
+  files:
+    - path: environment.yaml
+      target: "stacks/{{ .matrix.environment }}.yaml"
+      matrix:
+        environment: answers.environments
+```
+
+An axis's value is a literal list declared directly in `scaffold.yaml` (e.g.
+`region: [us-east-1, us-west-2]`), a dot-path into `answers.*` referencing an already
+list-shaped answer, such as a `multiselect` field, or a Go-template expression (any string
+containing `{{`) that computes the list. `--set` values for a `multiselect` field are split on
+commas automatically, so `--set environments=dev,staging` works non-interactively.
+
+Declaring more than one axis expands their full Cartesian product; add `when:` to prune
+combinations that don't apply, using the `matrix` CEL variable alongside `answers`:
+
+```yaml title="scaffold.yaml"
+spec:
+  files:
+    - path: deploy.yaml
+      target: "deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml"
+      matrix:
+        environment: [dev, staging, production]
+        region: [us-east-1, us-west-2]
+      when: "matrix.region in answers.environments[matrix.environment].regions"
+```
+
+`target:` is required whenever `matrix:` is set. The resolved combination is available in
+`target:` and the file's own content — not just the output path — as `.matrix.<axis>`, matching
+Go template's leading-dot field access. `when:` is CEL, not Go template, so it reads the same
+value as `matrix.<axis>` instead, without the leading dot (see the `when:` example above). Two
+files (matrixed or not) rendering to the same output path is a hard error, never a silent
+overwrite.
+
+An axis doesn't need to come from a `multiselect` at all — a plain free-text answer is just a
+string, and any Sprig/Gomplate function can split it into a list:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: environments_csv
+      type: input
+      label: Comma-separated list of environments
+  files:
+    - path: deploy.yaml
+      target: "deploy/{{ .matrix.environment }}.yaml"
+      matrix:
+        environment: '{{ splitList "," answers.environments_csv }}'
+```
+
+Typing `dev,staging,production` at the prompt generates the same three files a `multiselect`
+with those three options would — except the values aren't limited to a fixed,
+template-author-declared list.
+
+When an axis's values aren't already list-shaped anywhere in `answers` — e.g. an answer is itself
+a map of structured values rather than a flat `multiselect` — compute the list with
+`collectKeys`, a template function unconditionally available to axis expressions, alongside every
+Sprig/Gomplate function. Scaffold templating always has both available and is independent of the
+`templates.settings.sprig.enabled`/`templates.settings.gomplate.enabled` settings, which only gate
+stack manifest templating. `collectKeys(m)` returns `m`'s top-level keys, sorted; `collectKeys(m,
+"nestedKey")` collects `nestedKey`'s own keys from every value in `m`, flattened and deduplicated:
+
+```yaml title="scaffold.yaml"
+spec:
+  files:
+    - path: deploy.yaml
+      target: "deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml"
+      matrix:
+        environment: '{{ collectKeys answers.environments }}'
+        region: '{{ collectKeys answers.environments "regions" }}'
+      when: "matrix.region in answers.environments[matrix.environment].regions"
+```
+
+Given an `environments` answer shaped like this:
+
+```yaml
+environments:
+  dev:
+    regions:
+      us-east-1: {}
+  production:
+    regions:
+      us-east-1: {}
+      us-west-2: {}
+```
+
+`environment` resolves to `dev` and `production`, and `region` to every region used by any
+environment (`us-east-1` and `us-west-2`) — `when:` then prunes the Cartesian product down to each
+environment's actual regions.
+
 ## Generation Hooks
 
 Generation hooks run after answers are validated and before or after files are written:
@@ -136,6 +342,13 @@ stores, Git, and CI integrations.
 
   <dt>`--update`</dt>
   <dd>Apply an optimistic three-way merge using the recorded source/base revision.</dd>
+
+  <dt>`--merge-driver` (default `auto`)</dt>
+  <dd>
+    Choose `auto` (YAML-aware for `.yaml`/`.yml`, text otherwise) or `text` to force every file
+    through the line-oriented text merge driver, preserving formatting (e.g. blank lines) that a
+    YAML-aware re-encode would otherwise collapse.
+  </dd>
 
   <dt>`--merge-strategy` (default `manual`)</dt>
   <dd>Choose `manual`, `ours`, or `theirs` for merge conflicts.</dd>

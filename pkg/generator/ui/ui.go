@@ -91,15 +91,33 @@ func toEngineFile(file tmpl.File) engine.File {
 	}
 }
 
-// fileConditionsByPath indexes a scaffold config's spec.files overlay by
-// declared path, for O(1) lookup during the file-generation loop. Files not
-// listed in the overlay generate unconditionally.
-func fileConditionsByPath(scaffoldConfig *config.ScaffoldConfig) map[string]condition.Condition {
-	whenByPath := make(map[string]condition.Condition, len(scaffoldConfig.Spec.Files))
+// FileSpecByPath indexes a scaffold config's spec.files overlay by declared
+// path, for O(1) lookup during the file-generation loop. Files not listed in
+// the overlay generate unconditionally with no Target/Matrix override --
+// FileSpec's zero-value When already evaluates to true (see
+// condition.Condition.Evaluate). Exported so the `--dry-run` preview
+// (cmd/scaffold) can gate its file list with the exact same spec.When
+// evaluation real generation uses, instead of a second, divergent copy.
+func FileSpecByPath(scaffoldConfig *config.ScaffoldConfig) map[string]config.FileSpec {
+	specByPath := make(map[string]config.FileSpec, len(scaffoldConfig.Spec.Files))
 	for _, f := range scaffoldConfig.Spec.Files {
-		whenByPath[f.Path] = f.When
+		specByPath[f.Path] = f
 	}
-	return whenByPath
+	return specByPath
+}
+
+// FileOutputPath resolves the output path template for one discovered file:
+// spec.Target when set, otherwise the file's own discovered Path. See
+// docs/prd/atmos-scaffold.md, "Dynamic File Generation (matrix)". Exported
+// (alongside FileSpecByPath/ResolveDelimiters) so callers that need to plan
+// output paths without running generation -- e.g. cmd/scaffold's dry-run
+// preview -- resolve Target the same way real generation does instead of
+// duplicating this one-line rule.
+func FileOutputPath(file tmpl.File, spec config.FileSpec) string {
+	if spec.Target != "" {
+		return spec.Target
+	}
+	return file.Path
 }
 
 // truncateString truncates a string to the specified length and adds "..." if truncated.
@@ -110,15 +128,15 @@ func truncateString(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
-// resolveDelimiters determines the delimiters to use. A scaffold config's own
+// ResolveDelimiters determines the delimiters to use. A scaffold config's own
 // declared delimiters always win: callers (Execute/ExecuteWithBaseRef) pass a
 // generic "{{"/"}}"  default through regardless of what the scaffold actually
 // declares, so treating that default as an explicit override would silently
 // ignore scaffold.yaml's spec.delimiters (e.g. "[[" / "]]") -- this is exactly
 // what engine.extractDelimiters already does for per-file rendering via
-// ProcessFile, which resolveDelimiters must match so the README summary
+// ProcessFile, which ResolveDelimiters must match so the README summary
 // renders with the same delimiters as every other generated file.
-func resolveDelimiters(delimiters []string, scaffoldConfig *config.ScaffoldConfig) []string {
+func ResolveDelimiters(delimiters []string, scaffoldConfig *config.ScaffoldConfig) []string {
 	if scaffoldConfig != nil && len(scaffoldConfig.Spec.Delimiters) == 2 {
 		return scaffoldConfig.Spec.Delimiters
 	}
@@ -320,6 +338,11 @@ func (ui *InitUI) SetConflictStrategy(strategy merge.ConflictStrategy) {
 	ui.processor.SetConflictStrategy(strategy)
 }
 
+// SetMergeDriver sets which merger handles every file during a 3-way merge.
+func (ui *InitUI) SetMergeDriver(driver merge.Driver) {
+	ui.processor.SetMergeDriver(driver)
+}
+
 // SetSkipHooks configures the --skip-hooks predicate (see
 // hooks.NewSkipPredicate) consulted before running any scaffold hook. A nil
 // predicate (the zero value) runs every hook, matching today's behavior for
@@ -486,6 +509,25 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRefResult(
 		return targetPath, err
 	}
 	return targetPath, nil
+}
+
+// ResolveTargetPath determines the target path to generate into, prompting
+// interactively (and reconciling any values pre-collected during that
+// prompt) when the caller did not already provide one. It is exported so
+// callers that need the final target directory *before* calling one of the
+// ExecuteWithInteractiveFlow* variants (for example to resolve a --update
+// base ref against the real target rather than the empty path available
+// before the interactive prompt runs) can resolve it themselves first --
+// passing the result back in as targetPath short-circuits the prompt on the
+// subsequent Execute* call, since resolveTargetPath is a no-op once
+// targetPath is non-empty.
+func (ui *InitUI) ResolveTargetPath(
+	embedsConfig *tmpl.Configuration,
+	targetPath string,
+	update, useDefaults bool,
+	cmdTemplateValues map[string]interface{},
+) (string, map[string]interface{}, bool, error) {
+	return ui.resolveTargetPath(embedsConfig, targetPath, update, useDefaults, cmdTemplateValues)
 }
 
 // resolveTargetPath determines the target path to generate into, prompting
@@ -662,12 +704,31 @@ func (ui *InitUI) generateSuggestedDirectoryWithValues(config *tmpl.Configuratio
 	return currentDirPrefix + filepath.Base(config.Name)
 }
 
+// initializationSummaryLine formats executeWithCommandValues's post-run
+// summary line. When dryRun is true nothing was actually written to disk, so
+// the line is worded as a preview ("Would initialize") instead of a
+// completed action -- otherwise it reads identically to the pre-dry-run-aware
+// wording. Split out of executeWithCommandValues so the four wording
+// combinations are unit-testable without needing to capture UI output.
+func initializationSummaryLine(dryRun bool, successCount, errorCount int) string {
+	switch {
+	case errorCount > 0 && dryRun:
+		return fmt.Sprintf("Would initialize %d files. %d would fail.\n", successCount, errorCount)
+	case errorCount > 0:
+		return fmt.Sprintf("Initialized %d files. Failed to initialize %d files.\n", successCount, errorCount)
+	case dryRun:
+		return fmt.Sprintf("Would initialize %d files.\n", successCount)
+	default:
+		return fmt.Sprintf("Initialized %d files.\n", successCount)
+	}
+}
+
 // executeWithCommandValues processes files using command-line template values.
 //
 //nolint:revive // function-length: file processing loop with error handling
 func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, targetPath string, force, update bool, cmdTemplateValues map[string]interface{}, delimiters []string) error {
 	// Resolve delimiters, falling back to defaults when none are provided.
-	activeDelimiters := resolveDelimiters(delimiters, nil)
+	activeDelimiters := ResolveDelimiters(delimiters, nil)
 	delimitersConfig := delimitersAsScaffoldConfig(activeDelimiters)
 
 	// For now, use the existing processFile method but this should be refactored
@@ -710,16 +771,15 @@ func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, tar
 		}
 	}
 
-	// Print summary
+	// Print summary. In dry-run mode nothing was actually written to disk, so
+	// the wording says "would" instead of implying files were initialized.
 	ui.writeOutput(newlineStr)
+	ui.writeOutput("%s", initializationSummaryLine(ui.processor.DryRun, successCount, errorCount))
 	if errorCount > 0 {
-		ui.writeOutput("Initialized %d files. Failed to initialize %d files.\n", successCount, errorCount)
 		ui.flushOutput()
 		return errUtils.Build(errUtils.ErrInitializationPartialFailure).
 			WithExplanationf("Failed to initialize %d files", errorCount).
 			Err()
-	} else {
-		ui.writeOutput("Initialized %d files.\n", successCount)
 	}
 
 	// Flush all output before rendering README
@@ -750,12 +810,12 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 	// Prompt the user to edit the configuration values unless --use-defaults is specified
 	// This allows them to review and modify values from command line, config, or defaults
 	if !useDefaults {
-		if err := config.PromptForScaffoldConfig(scaffoldConfig, mergedValues); err != nil {
+		if err := config.PromptForScaffoldConfig(scaffoldConfig, mergedValues, config.WithFieldOptionsRenderer(ui.processor.RenderAnswersListExpression)); err != nil {
 			return nil, nil, fmt.Errorf("failed to prompt for configuration: %w", err)
 		}
 	}
 
-	if err := validateSetupValues(scaffoldConfig, mergedValues); err != nil {
+	if err := validateSetupValues(scaffoldConfig, mergedValues, ui.processor.RenderAnswersListExpression); err != nil {
 		return nil, nil, err
 	}
 
@@ -839,8 +899,8 @@ func coerceSetupFieldTypes(scaffoldConfig *config.ScaffoldConfig, mergedValues m
 // interactive and non-interactive generation. Prompt-level validation
 // provides immediate feedback, while this canonical check also covers
 // defaults, persisted values, and --set values.
-func validateSetupValues(scaffoldConfig *config.ScaffoldConfig, mergedValues map[string]interface{}) error {
-	err := config.ValidateFieldValues(scaffoldConfig, mergedValues)
+func validateSetupValues(scaffoldConfig *config.ScaffoldConfig, mergedValues map[string]interface{}, render config.FieldOptionsRenderer) error {
+	err := config.ValidateFieldValues(scaffoldConfig, mergedValues, config.WithFieldOptionsRenderer(render))
 	if err == nil {
 		return nil
 	}
@@ -859,6 +919,319 @@ func validateSetupValues(scaffoldConfig *config.ScaffoldConfig, mergedValues map
 		WithHint("Correct the invalid field value or update the scaffold configuration").
 		WithExitCode(2).
 		Err()
+}
+
+// processFileEntry renders and writes one discovered file entry: once, using
+// spec.Target (or file.Path when Target is unset) as the output path
+// template (processSingleFileEntry), or once per matrix combination that
+// survives spec.When when spec.Matrix is set (processMatrixedFileEntry).
+//
+//nolint:revive // argument-limit: dispatches to processSingleFileEntry/processMatrixedFileEntry, which need the same full context
+func (ui *InitUI) processFileEntry(
+	file tmpl.File,
+	spec config.FileSpec,
+	targetPath string,
+	force, update bool,
+	scaffoldConfig *config.ScaffoldConfig,
+	mergedValues map[string]interface{},
+	activeDelimiters []string,
+	seenRenderedPaths map[string]string,
+) (successCount, errorCount int, failedPaths []string, err error) {
+	outputTemplate := FileOutputPath(file, spec)
+
+	if len(spec.Matrix) == 0 {
+		return ui.processSingleFileEntry(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
+	}
+	return ui.processMatrixedFileEntry(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
+}
+
+// processSingleFileEntry renders and writes file's one non-matrix output,
+// gated by spec.When. Err is the specific underlying failure when
+// errorCount is 1 (nil otherwise), so callers can preserve it (e.g. via
+// errors.Join) alongside the generic "Failed to generate N files" summary.
+//
+//nolint:revive // argument-limit: needs the same full context processFileEntry received
+func (ui *InitUI) processSingleFileEntry(
+	file tmpl.File,
+	spec config.FileSpec,
+	outputTemplate string,
+	targetPath string,
+	force, update bool,
+	scaffoldConfig *config.ScaffoldConfig,
+	mergedValues map[string]interface{},
+	activeDelimiters []string,
+	seenRenderedPaths map[string]string,
+) (successCount, errorCount int, failedPaths []string, err error) {
+	if !spec.When.Evaluate(condition.Context{Answers: mergedValues}) {
+		ui.writeOutput(fileStatusFormat,
+			ui.grayStyle.Render(bulletSymbol),
+			file.Path,
+			ui.grayStyle.Render(skippedText))
+		return 0, 0, nil, nil
+	}
+	success, failed, causeErr := ui.writeOneOutput(file, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths)
+	switch {
+	case success:
+		return 1, 0, nil, nil
+	case failed:
+		return 0, 1, []string{file.Path}, causeErr
+	default:
+		return 0, 0, nil, nil
+	}
+}
+
+// processMatrixedFileEntry renders and writes one output per matrix
+// combination that survives spec.When. Each combination is bound into a
+// shallow-cloned copy of mergedValues under engine.MatrixKey, which
+// ProcessTemplateWithDelimiters hoists onto the template root as "matrix"
+// so path and content templates see .matrix.<axis> directly. An expansion
+// error counts as one failure for the whole entry; err joins every failed
+// combination's own error so callers can preserve the real cause(s)
+// alongside the generic "Failed to generate N files" summary.
+//
+//nolint:revive // argument-limit: needs the same full context processFileEntry received
+func (ui *InitUI) processMatrixedFileEntry(
+	file tmpl.File,
+	spec config.FileSpec,
+	outputTemplate string,
+	targetPath string,
+	force, update bool,
+	scaffoldConfig *config.ScaffoldConfig,
+	mergedValues map[string]interface{},
+	activeDelimiters []string,
+	seenRenderedPaths map[string]string,
+) (successCount, errorCount int, failedPaths []string, err error) {
+	rows, expandErr := engine.ExpandMatrix(spec.Matrix, mergedValues, ui.processor.RenderAnswersListExpression, activeDelimiters)
+	if expandErr != nil {
+		ui.writeOutput(fileStatusFormat,
+			ui.errorStyle.Render(ui.xMark),
+			file.Path,
+			ui.grayStyle.Render(fmt.Sprintf("(error: %v)", expandErr)))
+		return 0, 1, []string{file.Path}, expandErr
+	}
+
+	// An axis resolved to zero values (e.g. an empty multiselect answer)
+	// means the loop below never runs at all, unlike a pruned row (which
+	// still writes its own skip line inside the loop) -- write the same
+	// single skip line processSingleFileEntry always writes for a skipped
+	// file, rather than silently producing no output at all for this entry.
+	if len(rows) == 0 {
+		ui.writeOutput(fileStatusFormat,
+			ui.grayStyle.Render(bulletSymbol),
+			file.Path,
+			ui.grayStyle.Render(skippedText))
+		return 0, 0, nil, nil
+	}
+
+	// entryFailed tracks whether any combination of this entry failed to
+	// write, so file.Path is named at most once in the returned
+	// failedPaths -- errorCount below still counts every failed
+	// combination as its own failed file, matching "Failed to generate N
+	// files"'s per-file wording.
+	entryFailed := false
+	var entryErrs []error
+	for _, row := range rows {
+		success, failed, causeErr := ui.processMatrixRow(file, spec, outputTemplate, targetPath, force, update, scaffoldConfig, mergedValues, row, activeDelimiters, seenRenderedPaths)
+		switch {
+		case success:
+			successCount++
+		case failed:
+			errorCount++
+			entryFailed = true
+			if causeErr != nil {
+				entryErrs = append(entryErrs, causeErr)
+			}
+		}
+	}
+	if entryFailed {
+		failedPaths = []string{file.Path}
+		err = errors.Join(entryErrs...)
+	}
+	return successCount, errorCount, failedPaths, err
+}
+
+// processMatrixRow renders and writes a single matrix combination (row),
+// gated by spec.When -- split out of processMatrixedFileEntry's loop to
+// keep that function within this repo's function-length limit. Row is
+// bound into mergedValues under engine.MatrixKey, same as
+// processMatrixedFileEntry's own doc comment describes.
+//
+//nolint:revive // argument-limit: needs the same full context processMatrixedFileEntry received
+func (ui *InitUI) processMatrixRow(
+	file tmpl.File,
+	spec config.FileSpec,
+	outputTemplate string,
+	targetPath string,
+	force, update bool,
+	scaffoldConfig *config.ScaffoldConfig,
+	mergedValues map[string]interface{},
+	row map[string]string,
+	activeDelimiters []string,
+	seenRenderedPaths map[string]string,
+) (success, failed bool, causeErr error) {
+	iterValues := make(map[string]interface{}, len(mergedValues)+1)
+	for k, v := range mergedValues {
+		iterValues[k] = v
+	}
+	iterValues[engine.MatrixKey] = row
+
+	if !spec.When.Evaluate(condition.Context{Answers: mergedValues, Matrix: row}) {
+		renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(outputTemplate, targetPath, scaffoldConfig, iterValues, activeDelimiters)
+		if pathErr != nil {
+			renderedPath = outputTemplate
+		}
+		ui.writeOutput(fileStatusFormat,
+			ui.grayStyle.Render(bulletSymbol),
+			renderedPath,
+			ui.grayStyle.Render(skippedText))
+		return false, false, nil
+	}
+
+	return ui.writeOneOutput(file, outputTemplate, targetPath, force, update, scaffoldConfig, iterValues, activeDelimiters, seenRenderedPaths)
+}
+
+// checkDuplicateRenderedPath reports whether renderedPath was already
+// claimed by an earlier file or matrix combination this run, recording it
+// under file.Path if not. A duplicate is a hard failure -- first write
+// wins. RenderedPath is normalized with filepath.Clean first, matching
+// ProcessFile's own convention, so equivalent-but-differently-formatted
+// paths aren't treated as distinct targets.
+func (ui *InitUI) checkDuplicateRenderedPath(file tmpl.File, renderedPath string, seenRenderedPaths map[string]string) (bool, error) {
+	renderedPath = filepath.Clean(renderedPath)
+
+	originalPath, dup := seenRenderedPaths[renderedPath]
+	if !dup {
+		seenRenderedPaths[renderedPath] = file.Path
+		return false, nil
+	}
+
+	dupErr := errUtils.Build(errUtils.ErrScaffoldDuplicateOutputPath).
+		WithExplanationf("both %q and %q rendered to %q", originalPath, file.Path, renderedPath).
+		WithHint("Check that matrix's target: references every axis so each combination renders a distinct path").
+		Err()
+	ui.writeOutput(fileStatusFormat,
+		ui.errorStyle.Render(ui.xMark),
+		renderedPath,
+		ui.grayStyle.Render(fmt.Sprintf("(error: %v)", dupErr)))
+	return true, dupErr
+}
+
+// reportWriteResult renders the UI status line for one ProcessFile outcome
+// and reports whether it counts as a success or a failure. Neither being
+// true means the file was intentionally skipped, already reported via UI
+// output above, so it's counted neither way. The existedBefore parameter is
+// the single authoritative signal for the dry-run "would create" vs "would
+// update" label, captured by the caller before ProcessFile ran.
+func (ui *InitUI) reportWriteResult(err error, renderedPath string, existedBefore bool) (success, failed bool) {
+	var skipErr *engine.FileSkippedError
+	switch {
+	case err == nil:
+		if ui.processor.DryRun {
+			status := dryRunCreateStatus
+			if existedBefore {
+				status = dryRunUpdateStatus
+			}
+			ui.writeOutput(fileStatusFormat,
+				ui.successStyle.Render(ui.checkmark),
+				renderedPath,
+				ui.grayStyle.Render(status))
+		} else {
+			ui.writeOutput("  %s %s\n",
+				ui.successStyle.Render(ui.checkmark),
+				renderedPath)
+		}
+		return true, false
+	case errors.As(err, &skipErr):
+		// File was intentionally skipped.
+		ui.writeOutput(fileStatusFormat,
+			ui.grayStyle.Render(bulletSymbol),
+			skipErr.Path,
+			ui.grayStyle.Render(skippedText))
+		return false, false
+	default:
+		ui.writeOutput(fileStatusFormat,
+			ui.errorStyle.Render(ui.xMark),
+			renderedPath,
+			ui.grayStyle.Render(fmt.Sprintf("(error: %v)", err)))
+		return false, true
+	}
+}
+
+// writeOneOutput renders outputTemplate against values, applies the skip
+// and duplicate-output-path guards, and writes via ProcessFile -- shared by
+// both the single-file and per-combination matrix paths. See
+// reportWriteResult for what success/failed mean; causeErr is the
+// underlying error when failed is true, for callers that want to preserve
+// it instead of a generic message.
+func (ui *InitUI) writeOneOutput(
+	file tmpl.File,
+	outputTemplate string,
+	targetPath string,
+	force, update bool,
+	scaffoldConfig *config.ScaffoldConfig,
+	values map[string]interface{},
+	activeDelimiters []string,
+	seenRenderedPaths map[string]string,
+) (success, failed bool, causeErr error) {
+	// Process the file path as a template first to check if it should be skipped.
+	renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(outputTemplate, targetPath, scaffoldConfig, values, activeDelimiters)
+	if pathErr != nil {
+		// If path processing fails, use original path.
+		renderedPath = outputTemplate
+	}
+
+	// Check if the rendered path should be skipped.
+	if ui.processor.ShouldSkipFile(renderedPath) {
+		ui.writeOutput(fileStatusFormat,
+			ui.grayStyle.Render(bulletSymbol),
+			file.Path,
+			ui.grayStyle.Render(skippedText))
+		return false, false, nil
+	}
+
+	if dup, dupErr := ui.checkDuplicateRenderedPath(file, renderedPath, seenRenderedPaths); dup {
+		return false, true, dupErr
+	}
+
+	// In dry-run mode, whether the file already exists is the single
+	// authoritative signal for "would create" vs "would update": capture
+	// it before ProcessFile runs (ProcessFile itself performs no write in
+	// dry-run mode, so the file's existence is unaffected either way).
+	existedBefore := ui.processor.DryRun && fileExistsAt(targetPath, renderedPath)
+
+	// Use the templating processor to handle file processing. The engine
+	// File's Path is outputTemplate (spec.Target when set, else file.Path
+	// unchanged), so ProcessFile re-renders and writes the same path this
+	// function just resolved above.
+	engineFile := toEngineFile(file)
+	engineFile.Path = outputTemplate
+	err := ui.processor.ProcessFile(engineFile, targetPath, force, update, scaffoldConfig, values)
+
+	success, failed = ui.reportWriteResult(err, renderedPath, existedBefore)
+	if failed {
+		return success, failed, err
+	}
+	return success, failed, nil
+}
+
+// generationSummaryLine formats executeWithSetup's post-run summary line.
+// When dryRun is true nothing was actually written to disk, so the line is
+// worded as a preview ("Would generate") instead of a completed action --
+// otherwise it reads identically to the pre-dry-run-aware wording. Split out
+// of executeWithSetup so the four wording combinations are unit-testable
+// without needing to capture UI output (executeWithSetup flushes and resets
+// ui.output before returning in every branch).
+func generationSummaryLine(dryRun bool, successCount, errorCount int) string {
+	switch {
+	case errorCount > 0 && dryRun:
+		return fmt.Sprintf("Would generate %d files. %d would fail.\n", successCount, errorCount)
+	case errorCount > 0:
+		return fmt.Sprintf("Generated %d files. Failed to generate %d files.\n", successCount, errorCount)
+	case dryRun:
+		return fmt.Sprintf("Would generate %d files.\n", successCount)
+	default:
+		return fmt.Sprintf("Generated %d files.\n", successCount)
+	}
 }
 
 // executeWithSetup handles any scaffold configuration with interactive prompts.
@@ -880,9 +1253,13 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 			Err()
 	}
 
-	// Create directory if needed
-	if err := os.MkdirAll(targetPath, dirPermissions); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+	// Create directory if needed. Skipped in dry-run: a preview must leave no
+	// trace on disk, including an otherwise-empty target directory that
+	// didn't exist before the preview ran.
+	if !ui.processor.DryRun {
+		if err := os.MkdirAll(targetPath, dirPermissions); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
 	}
 
 	// Load the scaffold configuration from embedded content (don't write to target folder)
@@ -911,19 +1288,33 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 
 	// Run pre-generate hooks before any file is written: nothing has run yet
 	// (status: success), and a hook failure aborts before any write happens,
-	// so no rollback is needed.
-	if err := scaffoldhooks.Run(scaffoldHooks, hooks.BeforeScaffoldGenerate, mergedValues, "success", ui.skipHooks); err != nil {
-		return fmt.Errorf("pre-generate hook failed: %w", err)
+	// so no rollback is needed. Skipped in dry-run: hooks can run arbitrary
+	// commands (git operations, notifications, ...) that are real side
+	// effects a preview must never trigger.
+	if !ui.processor.DryRun {
+		if err := scaffoldhooks.Run(scaffoldHooks, hooks.BeforeScaffoldGenerate, mergedValues, "success", ui.skipHooks); err != nil {
+			return fmt.Errorf("pre-generate hook failed: %w", err)
+		}
 	}
 
 	// Process each file with rich configuration
 	var successCount, errorCount int
 	var failedFiles []string
+	// failureErrs collects each failed entry's own underlying error (e.g.
+	// ErrScaffoldDuplicateOutputPath, a ProcessFile write error, or a matrix
+	// expansion error), so the final returned error below can preserve the
+	// real cause(s) via errors.Join instead of only carrying the generic
+	// ErrScaffoldGeneration sentinel.
+	var failureErrs []error
 	// Resolve once, with the same precedence ProcessFile's own extractDelimiters
 	// uses (scaffoldConfig.Spec.Delimiters wins), so this preflight path-skip
 	// check and the actual file-body rendering below never disagree.
-	activeDelimiters := resolveDelimiters(delimiters, scaffoldConfig)
-	whenByPath := fileConditionsByPath(scaffoldConfig)
+	activeDelimiters := ResolveDelimiters(delimiters, scaffoldConfig)
+	fileSpecs := FileSpecByPath(scaffoldConfig)
+	// Tracks every rendered output path across the whole loop (not just
+	// matrix entries) so two files -- matrixed or not -- can never silently
+	// clobber one another's write.
+	seenRenderedPaths := make(map[string]string)
 	for _, file := range embedsConfig.Files {
 		// Skip the scaffold.yaml as it's only used for schema definition
 		if file.Path == config.ScaffoldConfigFileName {
@@ -937,112 +1328,58 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 			continue
 		}
 
-		// Declarative spec.files[].when: gates generation before any template
-		// rendering happens, keyed by the file's original (undiscovered) path
-		// -- distinct from the path-templating sentinel-skip check below,
-		// which reacts to a *rendered* path evaluating to empty/false/null.
-		if when, ok := whenByPath[file.Path]; ok && !when.Evaluate(condition.Context{Answers: mergedValues}) {
-			ui.writeOutput(fileStatusFormat,
-				ui.grayStyle.Render(bulletSymbol),
-				file.Path,
-				ui.grayStyle.Render(skippedText))
-			continue
-		}
-
-		// Process the file path as a template first to check if it should be skipped
-		renderedPath, pathErr := ui.processor.ProcessTemplateWithDelimiters(file.Path, targetPath, scaffoldConfig, mergedValues, activeDelimiters)
-		if pathErr != nil {
-			// If path processing fails, use original path
-			renderedPath = file.Path
-		}
-
-		// Check if the rendered path should be skipped
-		if ui.processor.ShouldSkipFile(renderedPath) {
-			// File was intentionally skipped
-			ui.writeOutput(fileStatusFormat,
-				ui.grayStyle.Render(bulletSymbol),
-				file.Path,
-				ui.grayStyle.Render(skippedText))
-			continue
-		}
-
-		// In dry-run mode, whether the file already exists is the single
-		// authoritative signal for "would create" vs "would update": capture
-		// it before ProcessFile runs (ProcessFile itself performs no write in
-		// dry-run mode, so the file's existence is unaffected either way).
-		existedBefore := ui.processor.DryRun && fileExistsAt(targetPath, renderedPath)
-
-		// Use the templating processor to handle file processing.
-		err := ui.processor.ProcessFile(toEngineFile(file), targetPath, force, update, scaffoldConfig, mergedValues)
-
-		// Display result using proper UI output
-		var skipErr *engine.FileSkippedError
-		switch {
-		case err == nil:
-			successCount++
-			if ui.processor.DryRun {
-				// The single authoritative signal for this status label is
-				// existedBefore, captured above -- not a separate boolean.
-				status := dryRunCreateStatus
-				if existedBefore {
-					status = dryRunUpdateStatus
-				}
-				ui.writeOutput(fileStatusFormat,
-					ui.successStyle.Render(ui.checkmark),
-					renderedPath,
-					ui.grayStyle.Render(status))
-			} else {
-				ui.writeOutput("  %s %s\n",
-					ui.successStyle.Render(ui.checkmark),
-					renderedPath)
-			}
-		case errors.As(err, &skipErr):
-			// File was intentionally skipped
-			ui.writeOutput(fileStatusFormat,
-				ui.grayStyle.Render(bulletSymbol),
-				skipErr.Path,
-				ui.grayStyle.Render(skippedText))
-		default:
-			errorCount++
-			failedFiles = append(failedFiles, file.Path)
-			ui.writeOutput(fileStatusFormat,
-				ui.errorStyle.Render(ui.xMark),
-				renderedPath,
-				ui.grayStyle.Render(fmt.Sprintf("(error: %v)", err)))
+		spec := fileSpecs[file.Path]
+		entrySuccess, entryErrors, entryFailedPaths, entryErr := ui.processFileEntry(
+			file, spec, targetPath, force, update, scaffoldConfig, mergedValues, activeDelimiters, seenRenderedPaths,
+		)
+		successCount += entrySuccess
+		errorCount += entryErrors
+		failedFiles = append(failedFiles, entryFailedPaths...)
+		if entryErr != nil {
+			failureErrs = append(failureErrs, entryErr)
 		}
 	}
 
-	// Print summary.
+	// Print summary. In dry-run mode nothing was actually written to disk, so
+	// the wording says "would" instead of implying files were generated.
 	ui.writeOutput(newlineStr)
+	ui.writeOutput("%s", generationSummaryLine(ui.processor.DryRun, successCount, errorCount))
 	if errorCount > 0 {
-		ui.writeOutput("Generated %d files. Failed to generate %d files.\n", successCount, errorCount)
 		// Don't render README if there were errors - flush output and return error immediately.
 		ui.flushOutput()
 		// Post-generate hooks still get a chance to run on failure (e.g. a
 		// cleanup step declaring when: always/failure); the implicit-success
 		// default on an unconditioned hook skips it here, matching hooks
-		// elsewhere in Atmos.
-		if hookErr := scaffoldhooks.Run(scaffoldHooks, hooks.AfterScaffoldGenerate, mergedValues, "failure", ui.skipHooks); hookErr != nil {
-			log.Warn("Post-generate hook failed", "error", hookErr)
+		// elsewhere in Atmos. Skipped in dry-run, same as the pre-generate
+		// hooks above.
+		if !ui.processor.DryRun {
+			if hookErr := scaffoldhooks.Run(scaffoldHooks, hooks.AfterScaffoldGenerate, mergedValues, "failure", ui.skipHooks); hookErr != nil {
+				log.Warn("Post-generate hook failed", "error", hookErr)
+			}
 		}
 		return errUtils.Build(errUtils.ErrScaffoldGeneration).
+			WithCause(errors.Join(failureErrs...)).
 			WithExplanationf("Failed to generate files: %s", strings.Join(failedFiles, ", ")).
 			Err()
-	} else {
-		ui.writeOutput("Generated %d files.\n", successCount)
 	}
 
 	// Write the project record only after all files have been generated
 	// successfully so a partial run does not leave the directory looking
-	// fully initialised.
-	if err := config.SaveProjectRecord(targetPath, scaffoldConfig, embedsConfig.Source, baseRef, mergedValues); err != nil {
-		return fmt.Errorf("failed to save project record: %w", err)
-	}
+	// fully initialised. Skipped in dry-run: writing .atmos/scaffold.yaml
+	// would mark the preview target as already generated, so a later real
+	// --update against that same directory would wrongly treat it as an
+	// existing project instead of a fresh generate.
+	if !ui.processor.DryRun {
+		if err := config.SaveProjectRecord(targetPath, scaffoldConfig, embedsConfig.Source, baseRef, mergedValues); err != nil {
+			return fmt.Errorf("failed to save project record: %w", err)
+		}
 
-	// Run post-generate hooks after the project record is saved, so a hook
-	// (e.g. `git add .`) sees the generated .atmos/scaffold.yaml record too.
-	if err := scaffoldhooks.Run(scaffoldHooks, hooks.AfterScaffoldGenerate, mergedValues, "success", ui.skipHooks); err != nil {
-		return fmt.Errorf("post-generate hook failed: %w", err)
+		// Run post-generate hooks after the project record is saved, so a hook
+		// (e.g. `git add .`) sees the generated .atmos/scaffold.yaml record too.
+		// Skipped in dry-run, same as the pre-generate hooks above.
+		if err := scaffoldhooks.Run(scaffoldHooks, hooks.AfterScaffoldGenerate, mergedValues, "success", ui.skipHooks); err != nil {
+			return fmt.Errorf("post-generate hook failed: %w", err)
+		}
 	}
 
 	// Flush all output before rendering README.
@@ -1051,7 +1388,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// Only render README if all files were successful.
 	if embedsConfig.README != "" {
 		// Resolve delimiters: use passed-in, or scaffold config, or defaults.
-		delimiters = resolveDelimiters(delimiters, scaffoldConfig)
+		delimiters = ResolveDelimiters(delimiters, scaffoldConfig)
 
 		// Process README template with rich configuration.
 		processedContent, err := ui.processor.ProcessTemplateWithDelimiters(embedsConfig.README, targetPath, scaffoldConfig, mergedValues, delimiters)
@@ -1090,7 +1427,7 @@ func (ui *InitUI) renderMarkdown(markdownContent string) error {
 // to nothing.
 func (ui *InitUI) renderREADME(readmeContent string, targetPath string, delimiters []string, values map[string]interface{}) error {
 	// Resolve delimiters, falling back to defaults.
-	activeDelimiters := resolveDelimiters(delimiters, nil)
+	activeDelimiters := ResolveDelimiters(delimiters, nil)
 
 	// Process README template with the active delimiters and values.
 	processedContent, err := ui.processor.ProcessTemplateWithDelimiters(readmeContent, targetPath, nil, values, activeDelimiters)

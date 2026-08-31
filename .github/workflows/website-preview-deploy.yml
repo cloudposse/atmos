@@ -14,11 +14,10 @@ env:
   PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
   DEPLOYMENT_HOST: pr-${{ github.event.workflow_run.pull_requests[0].number }}.atmos-docs.ue2.dev.plat.cloudposse.org
 
-# These permissions are needed to interact with the GitHub's OIDC Token endpoint
+# Least-privilege default; the job below declares its own narrower
+# job-level permissions that override this baseline.
 permissions:
-  id-token: write
   contents: read
-  deployments: write
 
 jobs:
   website-deploy-preview:
@@ -27,8 +26,20 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: release
+    # id-token: write is needed to interact with GitHub's OIDC token endpoint
+    # (Configure AWS Credentials); deployments: write for the deployment
+    # status updates below.
+    permissions:
+      contents: read
+      id-token: write
+      deployments: write
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Start deployment
         uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1
         id: deployment
@@ -39,14 +50,14 @@ jobs:
           ref: ${{ github.event.workflow_run.pull_requests[0].head.ref }}
 
       - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
           fetch-depth: 0
 
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.IAM_ROLE_ARN }}

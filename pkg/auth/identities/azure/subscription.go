@@ -190,7 +190,7 @@ func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *aut
 	// This ensures azuread and azapi providers can authenticate using Azure CLI credentials.
 	azureCreds, ok := params.Credentials.(*authTypes.AzureCredentials)
 	if ok {
-		if err := azureCloud.UpdateAzureCLIFiles(params.Credentials, azureCreds.TenantID, i.subscriptionID, azureCreds.CloudEnvironment); err != nil {
+		if err := azureCloud.UpdateAzureCLIFiles(params.Credentials, azureCreds.TenantID, i.subscriptionID, azureCreds.CloudEnvironment, i.realm); err != nil {
 			log.Debug("Failed to update Azure CLI files", "error", err)
 			// Non-fatal - continue with normal flow.
 		}

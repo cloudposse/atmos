@@ -2,9 +2,11 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/formatter"
 	"github.com/cloudposse/atmos/pkg/ai/instructions"
@@ -55,6 +57,12 @@ type Options struct {
 
 	// IncludeContext includes stack context in the prompt.
 	IncludeContext bool
+
+	// History contains prior conversation messages to prepend before Prompt.
+	// Callers resuming a persisted session (see cmd/ai/session_helpers.go)
+	// populate this from the session's stored messages; it is empty for a
+	// fresh, session-less execution.
+	History []types.Message
 }
 
 // Execute runs a single prompt and returns the formatted result.
@@ -83,9 +91,9 @@ func (e *Executor) Execute(ctx context.Context, opts Options) *formatter.Executi
 
 	// Execute with or without tools.
 	if opts.ToolsEnabled {
-		e.executeWithTools(ctx, prompt, result)
+		e.executeWithTools(ctx, prompt, opts.History, result)
 	} else {
-		e.executeSimple(ctx, prompt, result)
+		e.executeSimple(ctx, prompt, opts.History, result)
 	}
 
 	// Calculate total duration.
@@ -94,9 +102,20 @@ func (e *Executor) Execute(ctx context.Context, opts Options) *formatter.Executi
 	return result
 }
 
-// executeSimple executes a prompt without tool support.
-func (e *Executor) executeSimple(ctx context.Context, prompt string, result *formatter.ExecutionResult) {
-	response, err := e.client.SendMessage(ctx, prompt)
+// executeSimple executes a prompt without tool support. When history is
+// non-empty (a resumed session), it is sent along with the prompt so the
+// model has the prior conversation as context.
+func (e *Executor) executeSimple(ctx context.Context, prompt string, history []types.Message, result *formatter.ExecutionResult) {
+	var response string
+	var err error
+	if len(history) > 0 {
+		messages := make([]types.Message, 0, len(history)+1)
+		messages = append(messages, history...)
+		messages = append(messages, types.Message{Role: types.RoleUser, Content: prompt})
+		response, err = e.client.SendMessageWithHistory(ctx, messages)
+	} else {
+		response, err = e.client.SendMessage(ctx, prompt)
+	}
 	if err != nil {
 		result.Success = false
 		result.Error = &formatter.ErrorInfo{
@@ -129,14 +148,17 @@ func (e *Executor) loadAtmosInstructions(ctx context.Context) string {
 }
 
 // handleToolCalls executes tool calls and appends results to the message list.
+// The returned error is non-nil only for an infrastructure-level tool failure
+// (see isInfrastructureToolError) that the caller should treat as fatal rather
+// than feeding back to the model for another round.
 func (e *Executor) handleToolCalls(
 	ctx context.Context,
 	response *types.Response,
 	messages []types.Message,
 	accumulatedResponse string,
 	result *formatter.ExecutionResult,
-) ([]types.Message, string) {
-	toolResults := e.executeTools(ctx, response.ToolCalls, result)
+) ([]types.Message, string, error) {
+	toolResults, infraErr := e.executeTools(ctx, response.ToolCalls, result)
 	toolResultsText := formatToolResults(toolResults)
 
 	if response.Content != "" {
@@ -152,7 +174,7 @@ func (e *Executor) handleToolCalls(
 		Content: fmt.Sprintf("Tool execution results:\n\n%s\n\nPlease provide your response based on these results.", toolResultsText),
 	})
 
-	return messages, accumulatedResponse
+	return messages, accumulatedResponse, infraErr
 }
 
 // setFinalResult sets the final response and token usage on the result.
@@ -190,16 +212,17 @@ stacks written yet. Treat this as an opportunity, not an error: proactively offe
 user create their first stack and component rather than just reporting that none exist.`
 
 // executeWithTools executes a prompt with tool support, handling multiple tool execution rounds.
-func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *formatter.ExecutionResult) {
+// When history is non-empty (a resumed session), it is prepended to the conversation.
+func (e *Executor) executeWithTools(ctx context.Context, prompt string, history []types.Message, result *formatter.ExecutionResult) {
 	availableTools := e.toolExecutor.ListTools()
 	if len(availableTools) == 0 {
-		e.executeSimple(ctx, prompt, result)
+		e.executeSimple(ctx, prompt, history, result)
 		return
 	}
 
-	messages := []types.Message{
-		{Role: types.RoleUser, Content: prompt},
-	}
+	messages := make([]types.Message, 0, len(history)+1)
+	messages = append(messages, history...)
+	messages = append(messages, types.Message{Role: types.RoleUser, Content: prompt})
 
 	atmosMemory := e.loadAtmosInstructions(ctx)
 
@@ -222,7 +245,19 @@ func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *
 		totalUsage = combineUsage(totalUsage, response.Usage)
 
 		if response.StopReason == types.StopReasonToolUse && len(response.ToolCalls) > 0 {
-			messages, accumulatedResponse = e.handleToolCalls(ctx, response, messages, accumulatedResponse, result)
+			var infraErr error
+			messages, accumulatedResponse, infraErr = e.handleToolCalls(ctx, response, messages, accumulatedResponse, result)
+			if infraErr != nil {
+				// Infrastructure-level failure (e.g. an unregistered tool name): the
+				// model can't meaningfully retry around this, so stop immediately
+				// instead of waiting for MaxToolIterations to exhaust.
+				result.Success = false
+				result.Error = &formatter.ErrorInfo{
+					Message: infraErr.Error(),
+					Type:    "tool_error",
+				}
+				return
+			}
 			continue
 		}
 
@@ -237,9 +272,13 @@ func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *
 	}
 }
 
-// executeTools executes a batch of tool calls and records results.
-func (e *Executor) executeTools(ctx context.Context, toolCalls []types.ToolCall, result *formatter.ExecutionResult) []formatter.ToolCallResult {
+// executeTools executes a batch of tool calls and records results. It returns
+// the per-call results and, if any call failed at the infrastructure level
+// (e.g. an unregistered tool name), the first such error — distinct from an
+// application-level error the model can see and potentially recover from.
+func (e *Executor) executeTools(ctx context.Context, toolCalls []types.ToolCall, result *formatter.ExecutionResult) ([]formatter.ToolCallResult, error) {
 	results := make([]formatter.ToolCallResult, len(toolCalls))
+	var infraErr error
 
 	for i, call := range toolCalls {
 		startTime := time.Now()
@@ -256,6 +295,9 @@ func (e *Executor) executeTools(ctx context.Context, toolCalls []types.ToolCall,
 		if err != nil {
 			results[i].Success = false
 			results[i].Error = err.Error()
+			if infraErr == nil && isInfrastructureToolError(err) {
+				infraErr = fmt.Errorf("tool %q: %w", call.Name, err)
+			}
 		} else if toolResult != nil {
 			results[i].Success = toolResult.Success
 			results[i].Result = toolResult.Data
@@ -269,7 +311,18 @@ func (e *Executor) executeTools(ctx context.Context, toolCalls []types.ToolCall,
 	// Append to result's tool calls.
 	result.ToolCalls = append(result.ToolCalls, results...)
 
-	return results
+	return results, infraErr
+}
+
+// isInfrastructureToolError reports whether err represents a failure to even
+// invoke the requested tool — e.g. the model asked for a tool name that isn't
+// registered — rather than an application-level error the tool itself
+// returned. The model can meaningfully retry around an application-level
+// error (it sees the failure and can adjust its next call); it cannot retry
+// around an infrastructure-level one, so callers should stop immediately
+// instead of exhausting MaxToolIterations.
+func isInfrastructureToolError(err error) bool {
+	return errors.Is(err, errUtils.ErrAIToolNotFound)
 }
 
 // formatToolResults formats tool execution results for the AI.

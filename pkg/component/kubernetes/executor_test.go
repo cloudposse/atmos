@@ -634,6 +634,129 @@ func TestRunOperationApplyGateRejectsInvalidManifest(t *testing.T) {
 	assert.Equal(t, 1, result.ObjectsTotal)
 }
 
+func TestRunOperationApplyGateSkippedWhenValidateDisabled(t *testing.T) {
+	original := newKubernetesSDKClient
+	t.Cleanup(func() { newKubernetesSDKClient = original })
+
+	// A structurally invalid manifest (DNS-1123-invalid name — Atmos's own
+	// offline opinion, not a mechanical requirement of the K8s client itself, so
+	// it's deliverable once the auto-gate is out of the way) that would normally
+	// trip the auto-gate. With `validate: false` set on the component, the gate
+	// must be skipped entirely and delivery must proceed to the fake cluster client.
+	object := kubernetesObject("v1", "ConfigMap", "Bad_Name", "")
+	newKubernetesSDKClient = func() (*sdkClient, error) {
+		client, fakeClient := newFakeSDKClientWithFake(object.DeepCopy())
+		prependApplyDryRunReactor(fakeClient, object.DeepCopy())
+		return client, nil
+	}
+
+	result, err := runOperation(
+		&component.ExecutionContext{},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"validate": false}},
+		OperationApply,
+		[]*unstructured.Unstructured{object},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ObjectsTotal)
+}
+
+// TestRunOperationPropagatesValidateSectionError verifies apply and validate
+// both fail closed and never contact the cluster when the component's
+// "validate" section is present but not a bool (e.g. a quoted "false"). The
+// object uses an invalid name ("Bad_Name") so the assertion actually proves
+// precedence: with a structurally valid object, both "validate-section
+// resolved first" and "structural check first, but this object happens to
+// pass" would return the same error, so that wouldn't catch a regression
+// that reorders the two checks. An invalid name means only "validate-section
+// resolved first" can still produce ErrKubernetesValidateSectionInvalid.
+func TestRunOperationPropagatesValidateSectionError(t *testing.T) {
+	tests := []struct {
+		name      string
+		operation Operation
+		fatalMsg  string
+	}{
+		{
+			name:      "apply",
+			operation: OperationApply,
+			fatalMsg:  "apply must fail closed on an invalid 'validate' section before contacting the cluster",
+		},
+		{
+			name:      "validate",
+			operation: OperationValidate,
+			fatalMsg:  "validate must fail closed on an invalid 'validate' section before any structural or cluster check",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := newKubernetesSDKClient
+			t.Cleanup(func() { newKubernetesSDKClient = original })
+			newKubernetesSDKClient = func() (*sdkClient, error) {
+				t.Fatal(tt.fatalMsg)
+				return nil, nil
+			}
+
+			objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "Bad_Name", "")}
+			_, err := runOperation(
+				&component.ExecutionContext{},
+				&schema.AtmosConfiguration{},
+				&schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"validate": "false"}},
+				tt.operation,
+				objects,
+			)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrKubernetesValidateSectionInvalid)
+		})
+	}
+}
+
+func TestRunOperationValidateSkippedWhenValidateDisabled(t *testing.T) {
+	original := newKubernetesSDKClient
+	t.Cleanup(func() { newKubernetesSDKClient = original })
+	newKubernetesSDKClient = func() (*sdkClient, error) {
+		t.Fatal("validate: false must short-circuit before any structural or cluster check")
+		return nil, nil
+	}
+
+	objects := []*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "", "")}
+	result, err := runOperation(
+		&component.ExecutionContext{},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"validate": false}},
+		OperationValidate,
+		objects,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]int{"skipped": 1}, result.ActionCounts)
+}
+
+func TestRunOperationValidateServerRunsDespiteValidateDisabled(t *testing.T) {
+	original := newKubernetesSDKClient
+	t.Cleanup(func() { newKubernetesSDKClient = original })
+
+	// A DNS-1123-invalid name is exactly what `validate: false` opts out of
+	// (Atmos's own offline opinion) — but --server must still validate against
+	// the live cluster regardless of the component-level flag.
+	object := kubernetesObject("v1", "ConfigMap", "Bad_Name", "")
+	newKubernetesSDKClient = func() (*sdkClient, error) {
+		client, fakeClient := newFakeSDKClientWithFake(object.DeepCopy())
+		prependApplyDryRunReactor(fakeClient, object.DeepCopy())
+		return client, nil
+	}
+
+	result, err := runOperation(
+		&component.ExecutionContext{Flags: map[string]any{"server": true}},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"validate": false}},
+		OperationValidate,
+		[]*unstructured.Unstructured{object},
+	)
+	require.NoError(t, err)
+	// "valid" (not "skipped") proves the server dry-run actually ran.
+	assert.Equal(t, map[string]int{"valid": 1}, result.ActionCounts)
+}
+
 func TestRunOperationValidateDispatches(t *testing.T) {
 	original := newKubernetesSDKClient
 	t.Cleanup(func() { newKubernetesSDKClient = original })

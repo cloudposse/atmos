@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -138,52 +139,15 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var workflowPath string
-	if u.IsPathAbsolute(workflowFile) {
-		workflowPath = workflowFile
-	} else {
-		workflowPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath, workflowFile)
-	}
+	workflowPath := ResolveWorkflowFilePath(&atmosConfig, workflowFile)
 
-	// If the workflow file is specified without an extension, use the default extension
-	ext := filepath.Ext(workflowPath)
-	if ext == "" {
-		ext = u.DefaultStackConfigFileExtension
-		workflowPath = workflowPath + ext
-	}
-
-	if !u.FileExists(workflowPath) {
-		return errUtils.Build(errUtils.ErrWorkflowFileNotFound).
-			WithExplanationf("The workflow manifest file `%s` does not exist", filepath.ToSlash(workflowPath)).
-			WithExitCode(1).
-			Err()
-	}
-
-	fileContent, err := os.ReadFile(workflowPath)
+	workflowConfig, err := LoadWorkflowConfig(workflowPath)
 	if err != nil {
 		return err
 	}
 
-	var workflowManifest schema.WorkflowManifest
-	var workflowConfig schema.WorkflowConfig
-	var workflowDefinition schema.WorkflowDefinition
-
-	workflowManifest, err = u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
-	if err != nil {
-		return err
-	}
-
-	if workflowManifest.Workflows == nil {
-		return errUtils.Build(errUtils.ErrInvalidWorkflowManifest).
-			WithExplanationf("The workflow manifest `%s` must be a map with the top-level `workflows:` key", filepath.ToSlash(workflowPath)).
-			WithHint("Add a top-level 'workflows:' key to the manifest file").
-			WithExitCode(1).
-			Err()
-	}
-
-	workflowConfig = workflowManifest.Workflows
-
-	if i, ok := workflowConfig[workflowName]; !ok {
+	workflowDefinition, ok := workflowConfig[workflowName]
+	if !ok {
 		validWorkflows := make([]string, 0, len(workflowConfig))
 		for w := range workflowConfig {
 			validWorkflows = append(validWorkflows, w)
@@ -196,8 +160,6 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			WithHintf("Available workflows in %s:\n\n%s", filepath.Base(workflowPath), u.FormatList(validWorkflows)).
 			WithExitCode(1).
 			Err()
-	} else {
-		workflowDefinition = i
 	}
 
 	err = ExecuteWorkflow(atmosConfig, workflowName, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep, commandLineIdentity,
@@ -207,4 +169,58 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// ResolveWorkflowFilePath resolves a workflow file reference (as given to the CLI's `-f`/
+// `--file` flag, or a `dependencies.workflows[].file` entry) to an absolute path, applying the
+// same base-path-join and default-extension rules the `atmos workflow` command itself uses.
+func ResolveWorkflowFilePath(atmosConfig *schema.AtmosConfiguration, file string) string {
+	defer perf.Track(atmosConfig, "exec.ResolveWorkflowFilePath")()
+
+	var workflowPath string
+	if u.IsPathAbsolute(file) {
+		workflowPath = file
+	} else {
+		workflowPath = filepath.Join(getWorkflowsDirToUse(atmosConfig), file)
+	}
+
+	// If the workflow file is specified without an extension, use the default extension.
+	if filepath.Ext(workflowPath) == "" {
+		workflowPath += u.DefaultStackConfigFileExtension
+	}
+	return workflowPath
+}
+
+// LoadWorkflowConfig reads and parses a workflow manifest file at the given (already-resolved,
+// see ResolveWorkflowFilePath) path into its WorkflowConfig map (workflow name -> definition,
+// for every workflow defined in that file).
+func LoadWorkflowConfig(workflowPath string) (schema.WorkflowConfig, error) {
+	defer perf.Track(nil, "exec.LoadWorkflowConfig")()
+
+	if !u.FileExists(workflowPath) {
+		return nil, errUtils.Build(errUtils.ErrWorkflowFileNotFound).
+			WithExplanationf("The workflow manifest file `%s` does not exist", filepath.ToSlash(displayPath(workflowPath))).
+			WithExitCode(1).
+			Err()
+	}
+
+	fileContent, err := os.ReadFile(workflowPath)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrReadFile, filepath.ToSlash(displayPath(workflowPath)), err)
+	}
+
+	workflowManifest, err := u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrInvalidWorkflowManifest, filepath.ToSlash(displayPath(workflowPath)), err)
+	}
+
+	if workflowManifest.Workflows == nil {
+		return nil, errUtils.Build(errUtils.ErrInvalidWorkflowManifest).
+			WithExplanationf("The workflow manifest `%s` must be a map with the top-level `workflows:` key", filepath.ToSlash(displayPath(workflowPath))).
+			WithHint("Add a top-level 'workflows:' key to the manifest file").
+			WithExitCode(1).
+			Err()
+	}
+
+	return workflowManifest.Workflows, nil
 }

@@ -8,14 +8,39 @@ on:
   release:
     types: [published]
 
+# The default GITHUB_TOKEN never writes here — the only mutating step below
+# mints and uses a separately-scoped GitHub App token instead (see comment on
+# the `major-tag` job), so this stays read-only.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   major-tag:
     name: Update major version tag
     if: ${{ ! github.event.release.prerelease }}
     runs-on: ubuntu-latest
+    # The default GITHUB_TOKEN can never update .github/workflows/** (there is
+    # no "workflows" scope in the workflow-level `permissions:` block for it),
+    # so force-pushing the v1 tag fails whenever its tree differs from the
+    # target release in a workflow file. Mint a token from the cloudposse-releaser
+    # GitHub App instead, which has been granted the Workflows permission.
+    environment: release
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Generate a token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: github-app
+        with:
+          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-workflows: write
+
       - name: Update major version tag
         uses: cloudposse/github-action-major-release-tagger@853c309982b8cd78c46a4cdc17cca6720d52541a # v2
+        with:
+          token: ${{ steps.github-app.outputs.token }}

@@ -309,7 +309,27 @@ func TestShowArgCountErrorAndExit_MessageContent(t *testing.T) {
 	os.Stderr = w
 	t.Cleanup(func() {
 		os.Stderr = oldStderr
+		_ = w.Close()
+		_ = r.Close()
 	})
+
+	// Drain the pipe concurrently. The rendered error message (markdown box,
+	// ANSI styling) can exceed the OS pipe's kernel buffer; writing to it then
+	// blocks until something reads. Reading only after the write returns (as
+	// this test used to) deadlocks whenever the message is large enough - seen
+	// in practice as an indefinite hang running this test's compiled binary
+	// directly on windows, where the rendered message happened to cross that
+	// threshold.
+	type pipeResult struct {
+		output string
+		err    error
+	}
+	resultCh := make(chan pipeResult, 1)
+	go func() {
+		var output bytes.Buffer
+		_, copyErr := io.Copy(&output, r)
+		resultCh <- pipeResult{output: output.String(), err: copyErr}
+	}()
 
 	assert.Panics(t, func() {
 		showArgCountErrorAndExit(deleteCmd, argErr)
@@ -317,13 +337,13 @@ func TestShowArgCountErrorAndExit_MessageContent(t *testing.T) {
 	require.NoError(t, w.Close())
 	os.Stderr = oldStderr
 
-	var output bytes.Buffer
-	_, err := io.Copy(&output, r)
-	require.NoError(t, err)
+	result := <-resultCh
+	require.NoError(t, result.err)
+	require.NoError(t, r.Close())
 
 	// Strip ANSI since CI-enabled color rendering can wrap this message across
 	// separate escape-coded spans, splitting the plain substring below.
-	got := atmosansi.Strip(output.String())
+	got := atmosansi.Strip(result.output)
 	assert.Contains(t, got, argErr.Error(), "must surface Cobra's own argument-count message")
 	assert.NotContains(t, got, "Unknown command", "must not misreport a wrong-argument-count error as an unknown command")
 }
@@ -2408,11 +2428,11 @@ func TestFindTypedValue(t *testing.T) {
 		want          string
 	}{
 		{
-			name: "finds value in arguments by type",
+			name: "finds value in arguments by provides",
 			cmd: &schema.Command{
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: "component"},
-					{Name: "stack", Type: "stack"},
+					{Name: "component", Provides: "component"},
+					{Name: "stack", Provides: "stack"},
 				},
 			},
 			argumentsData: map[string]string{
@@ -2424,11 +2444,11 @@ func TestFindTypedValue(t *testing.T) {
 			want:         "vpc",
 		},
 		{
-			name: "finds value in flags by semantic type",
+			name: "finds value in flags by provides",
 			cmd: &schema.Command{
 				Flags: []schema.CommandFlag{
-					{Name: "stack", SemanticType: "stack"},
-					{Name: "component", SemanticType: "component"},
+					{Name: "stack", Provides: "stack"},
+					{Name: "component", Provides: "component"},
 				},
 			},
 			argumentsData: map[string]string{},
@@ -2438,6 +2458,42 @@ func TestFindTypedValue(t *testing.T) {
 			},
 			semanticType: "stack",
 			want:         "prod",
+		},
+		{
+			name: "falls back to deprecated Type when Provides unset on argument",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: "component"},
+				},
+			},
+			argumentsData: map[string]string{"component": "vpc"},
+			flagsData:     map[string]any{},
+			semanticType:  "component",
+			want:          "vpc",
+		},
+		{
+			name: "falls back to deprecated SemanticType when Provides unset on flag",
+			cmd: &schema.Command{
+				Flags: []schema.CommandFlag{
+					{Name: "stack", SemanticType: "stack"},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{"stack": "prod"},
+			semanticType:  "stack",
+			want:          "prod",
+		},
+		{
+			name: "Provides takes precedence over deprecated Type on argument",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Provides: "component", Type: "stack"},
+				},
+			},
+			argumentsData: map[string]string{"component": "vpc"},
+			flagsData:     map[string]any{},
+			semanticType:  "component",
+			want:          "vpc",
 		},
 		{
 			name: "returns empty when not found in arguments",
@@ -2479,10 +2535,10 @@ func TestFindTypedValue(t *testing.T) {
 			name: "arguments take precedence over flags",
 			cmd: &schema.Command{
 				Arguments: []schema.CommandArgument{
-					{Name: "comp", Type: "component"},
+					{Name: "comp", Provides: "component"},
 				},
 				Flags: []schema.CommandFlag{
-					{Name: "component", SemanticType: "component"},
+					{Name: "component", Provides: "component"},
 				},
 			},
 			argumentsData: map[string]string{"comp": "from-arg"},
@@ -2538,7 +2594,7 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			name: "missing component argument returns ErrComponentArgumentNotFound",
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
-				Arguments: []schema.CommandArgument{{Name: "component", Type: semanticTypeComponent}},
+				Arguments: []schema.CommandArgument{{Name: "component", Provides: semanticTypeComponent}},
 			},
 			argumentsData: map[string]string{},
 			flagsData:     map[string]any{},
@@ -2549,8 +2605,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: semanticTypeComponent},
-					{Name: "stack", Type: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{"component": "deploy-app"},
@@ -2562,8 +2618,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: semanticTypeComponent},
-					{Name: "stack", Type: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
@@ -2577,8 +2633,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: semanticTypeComponent},
-					{Name: "stack", Type: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
@@ -2592,8 +2648,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: semanticTypeComponent},
-					{Name: "stack", Type: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
@@ -2607,8 +2663,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script", BasePath: "custom/path"},
 				Flags: []schema.CommandFlag{
-					{Name: "component", SemanticType: semanticTypeComponent},
-					{Name: "stack", SemanticType: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{},
@@ -2616,6 +2672,23 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			describeRet:   map[string]any{"component": "deploy-app"},
 			wantConfig:    map[string]any{"component": "deploy-app"},
 			wantBasePath:  "custom/path", // explicit basePath is preserved.
+		},
+		{
+			name: "success using deprecated type/semantic_type fields (backward compatibility)",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+				},
+				Flags: []schema.CommandFlag{
+					{Name: "stack", SemanticType: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app"},
+			flagsData:     map[string]any{"stack": "dev"},
+			describeRet:   map[string]any{"vars": map[string]any{"foo": "bar"}},
+			wantConfig:    map[string]any{"vars": map[string]any{"foo": "bar"}},
+			wantBasePath:  "components/script",
 		},
 	}
 
@@ -2783,4 +2856,37 @@ func TestConfigureCustomCommandScannerContext_NilVarsNoPanic(t *testing.T) {
 	assert.NotPanics(t, func() {
 		configureCustomCommandScannerContext(nil, &schema.AtmosConfiguration{}, filepath.Join("opt", "toolchain", "bin"), nil)
 	})
+}
+
+// TestStepFreshnessName covers both branches of stepFreshnessName: a named step must return its
+// own name unchanged (so freshness state keys stay human-readable), while an unnamed step must
+// fall back to the same positional "step-%d" scheme customCommandConditionContext already uses,
+// so a step with no name: still gets a stable, unique freshness state key across runs.
+func TestStepFreshnessName(t *testing.T) {
+	tests := []struct {
+		name     string
+		stepName string
+		index    int
+		expected string
+	}{
+		{
+			name:     "named step returns its own name",
+			stepName: "build",
+			index:    3,
+			expected: "build",
+		},
+		{
+			name:     "unnamed step falls back to positional name",
+			stepName: "",
+			index:    2,
+			expected: "step-2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stepFreshnessName(tt.stepName, tt.index)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
 }

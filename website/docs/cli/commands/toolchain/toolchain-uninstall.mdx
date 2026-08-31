@@ -63,6 +63,16 @@ atmos toolchain uninstall
 
 Uninstalls all tools listed in `.tool-versions`. Prompts for confirmation.
 
+### Uninstall Every Installed Tool
+
+```shell
+atmos toolchain uninstall --all
+```
+
+Uninstalls every tool found in the toolchain install directory, including tools that were
+installed automatically via component, workflow, or command `dependencies.tools` and are not
+listed in `.tool-versions`.
+
 ### Force Uninstall
 
 ```shell
@@ -87,6 +97,14 @@ Skips confirmation prompt.
 ## Flags
 
 <dl>
+    <dt>`--all` <em>(optional)</em></dt>
+    <dd>
+        Uninstall all installed tools, not just the ones listed in `.tool-versions`. This also
+        removes tools that were installed via component, workflow, or command `dependencies.tools`.
+
+        Environment variable: `ATMOS_TOOLCHAIN_UNINSTALL_ALL`
+    </dd>
+
     <dt>`--force` <em>(optional)</em></dt>
     <dd>
         Skip confirmation prompt and immediately uninstall.

@@ -37,6 +37,7 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 		expectedEnv         map[string]any
 		expectedBackendType string
 		expectBaseComponent string
+		expectedFlags       map[string]any
 	}{
 		{
 			name: "basic-base-component",
@@ -120,6 +121,74 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 			baseComponent: "base",
 			expectedError: "invalid base component config",
 		},
+		{
+			// Covers the terraform `flags:` extraction added to processBaseComponentConfigInternal:
+			// a base (abstract) component's flags section must be picked up into
+			// BaseComponentFlags so concrete components inheriting from it see the defaults.
+			name: "base-component-flags",
+			baseComponentConfig: &schema.BaseComponentConfig{
+				BaseComponentVars:     map[string]any{},
+				BaseComponentSettings: map[string]any{},
+				BaseComponentEnv:      map[string]any{},
+				BaseComponentFlags:    map[string]any{},
+			},
+			allComponentsMap: map[string]any{
+				"base": map[string]any{
+					"vars": map[string]any{"environment": "dev"},
+					"flags": map[string]any{
+						"lock_timeout": "5m",
+					},
+				},
+			},
+			component:           "test",
+			stack:               "test-stack",
+			baseComponent:       "base",
+			expectBaseComponent: "base",
+			expectedFlags: map[string]any{
+				"lock_timeout": "5m",
+			},
+		},
+		{
+			// A non-map `flags:` on a base component must be a precise error, not a silent
+			// no-op that would otherwise surface as a confusing downstream merge failure.
+			name: "invalid-base-component-flags",
+			baseComponentConfig: &schema.BaseComponentConfig{
+				BaseComponentVars:     map[string]any{},
+				BaseComponentSettings: map[string]any{},
+				BaseComponentEnv:      map[string]any{},
+				BaseComponentFlags:    map[string]any{},
+			},
+			allComponentsMap: map[string]any{
+				"base": map[string]any{
+					"flags": "not-a-map",
+				},
+			},
+			component:     "test",
+			stack:         "test-stack",
+			baseComponent: "base",
+			expectedError: "invalid component flags",
+		},
+		{
+			// A structurally ambiguous (colliding, YAML-normalized) base-component flags map
+			// must surface as a real merge error, not be silently dropped — mirrors
+			// TestMergeComponentConfigurations_SectionMergeErrors' collidingSection() technique.
+			name: "base-component-flags-merge-collision",
+			baseComponentConfig: &schema.BaseComponentConfig{
+				BaseComponentVars:     map[string]any{},
+				BaseComponentSettings: map[string]any{},
+				BaseComponentEnv:      map[string]any{},
+				BaseComponentFlags:    map[string]any{},
+			},
+			allComponentsMap: map[string]any{
+				"base": map[string]any{
+					"flags": collidingSection(),
+				},
+			},
+			component:     "test",
+			stack:         "test-stack",
+			baseComponent: "base",
+			expectedError: errUtils.ErrMergeKeyCollision.Error(),
+		},
 	}
 
 	for _, tt := range tests {
@@ -169,6 +238,10 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 
 			if tt.expectBaseComponent != "" {
 				assert.Equal(t, tt.expectBaseComponent, tt.baseComponentConfig.FinalBaseComponentName)
+			}
+
+			if tt.expectedFlags != nil {
+				assert.Equal(t, tt.expectedFlags, tt.baseComponentConfig.BaseComponentFlags)
 			}
 
 			// Verify baseComponents slice contains the expected components
@@ -1706,7 +1779,7 @@ func TestProcessStackConfigProviderSection(t *testing.T) {
 	importsConfig := processingResult.ImportsConfig
 	assert.Nil(t, err)
 
-	config, err := ProcessStackConfig(
+	config, _, err := ProcessStackConfig(
 		&atmosConfig,
 		stacksBasePath,
 		filepath.Join(basePath, "components", "terraform"),
@@ -1917,7 +1990,7 @@ func TestProcessYAMLConfigFiles(t *testing.T) {
 		},
 	}
 
-	listResult, mapResult, rawStackConfigs, err := ProcessYAMLConfigFiles(
+	listResult, mapResult, rawStackConfigs, _, err := ProcessYAMLConfigFiles(
 		&atmosConfig,
 		stacksBasePath,
 		"", // terraformComponentsBasePath
@@ -2352,7 +2425,7 @@ func TestHierarchicalImports_MultipleStacksConsistency(t *testing.T) {
 
 	// Process both stacks in parallel using ProcessYAMLConfigFiles
 	// This tests the outer parallel loop (processing multiple stack files)
-	_, _, rawStackConfigs, err := ProcessYAMLConfigFiles(
+	_, _, rawStackConfigs, _, err := ProcessYAMLConfigFiles(
 		&atmosConfig,
 		stacksBasePath,
 		"../../tests/fixtures/scenarios/hierarchical-imports/components/terraform",

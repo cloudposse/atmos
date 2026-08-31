@@ -109,22 +109,23 @@ func AddVersionToTool(toolVersions *ToolVersions, tool, version string, asDefaul
 		toolVersions.Tools = make(map[string][]string)
 	}
 
+	// asDefault mirrors asdf's own "set" convention: the whole line becomes exactly the
+	// version given, full stop -- not a merge that preserves other previously-pinned
+	// versions. asdf's docs describe `asdf set <tool> <version>` as equivalent to
+	// `echo "<tool> <version>" > .tool-versions`. This is what lets set/add --default/update
+	// keep the documented guarantee that a tool is never left pinned to two versions at once.
+	if asDefault {
+		toolVersions.Tools[tool] = []string{version}
+		return
+	}
+
 	versions := toolVersions.Tools[tool]
-	for i, v := range versions {
+	for _, v := range versions {
 		if v == version {
-			if asDefault && i != 0 {
-				// Move to front
-				versions = append([]string{version}, append(versions[:i], versions[i+1:]...)...)
-				toolVersions.Tools[tool] = versions
-			}
 			return
 		}
 	}
-	if asDefault {
-		toolVersions.Tools[tool] = append([]string{version}, versions...)
-	} else {
-		toolVersions.Tools[tool] = append(versions, version)
-	}
+	toolVersions.Tools[tool] = append(versions, version)
 }
 
 // GetDefaultVersion returns the default (first) version for a tool.

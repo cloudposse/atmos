@@ -4,6 +4,7 @@ description: "Atmos hooks: lifecycle events, hook kinds, command/store/git/secur
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: ci-automation
 ---
 
 # Atmos Hooks
@@ -156,6 +157,26 @@ Use `kind: step`/`kind: steps` when you need a registered step type (`container`
 `require`, `atmos`, `shell`, and other types workflows support) inside a hook; use the older named
 kinds (`trivy`, `checkov`, `kics`, `infracost`) when Atmos already ships a purpose-built scanner
 integration for the job.
+
+### Working directory in `kind: step`/`kind: steps`
+
+A step's relative paths (`source`, `destination`, `path`, `files`, `context`, and other
+step-specific fields) resolve against `with: { working_directory: ... }` when set, or the
+component's own working directory when unset. This is the only surface where `working_directory`
+is ever component-relative -- workflows and custom commands always resolve relative values against
+the current working directory, since neither is scoped to a single component.
+
+An explicit `working_directory:` value resolves differently depending on its shape:
+
+| Value | Resolves against |
+|---|---|
+| Not set | The component's working directory (a provisioned/vendored working copy when one exists, otherwise the in-repo source directory) |
+| `.`, `..`, `./foo`, `../foo` | The directory Atmos was run from |
+| `foo`, `foo/bar` | The component's working directory + `foo` (or `foo/bar`) |
+| `/absolute/path` | Used as-is |
+
+A plain relative value (`foo`) behaves like the unset default -- component-relative. A `./`- or
+`../`-prefixed value is an explicit signal to anchor to the directory Atmos was run from instead.
 
 ## Operational Guidance
 

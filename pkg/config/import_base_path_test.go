@@ -155,7 +155,8 @@ func TestMergeFiles_InheritedBasePathUsesDeclaringConfigDir(t *testing.T) {
 
 	v := viper.New()
 	v.SetConfigType(yamlType)
-	require.NoError(t, mergeFiles(v, []string{baseConfig, overlayConfig}))
+	_, err := mergeFiles(v, []string{baseConfig, overlayConfig})
+	require.NoError(t, err)
 	assert.Equal(t, 157, v.GetInt("settings.terminal.max_width"))
 }
 
@@ -184,7 +185,8 @@ func mergeFilesImportedBasePathCase(t *testing.T, baseYAML, defaultsYAML, extraS
 
 	v := viper.New()
 	v.SetConfigType(yamlType)
-	require.NoError(t, mergeFiles(v, []string{baseConfig, overlayConfig}))
+	_, err := mergeFiles(v, []string{baseConfig, overlayConfig})
+	require.NoError(t, err)
 	assert.Equal(t, wantWidth, v.GetInt("settings.terminal.max_width"))
 }
 
@@ -218,7 +220,8 @@ func TestMergeFiles_EmptyBasePathUsesImportingConfigDir(t *testing.T) {
 
 	v := viper.New()
 	v.SetConfigType(yamlType)
-	require.NoError(t, mergeFiles(v, []string{filepath.Join(baseConfigDir, "base.yaml"), overlayConfig}))
+	_, err := mergeFiles(v, []string{filepath.Join(baseConfigDir, "base.yaml"), overlayConfig})
+	require.NoError(t, err)
 	assert.Equal(t, 173, v.GetInt("settings.terminal.max_width"))
 }
 
@@ -238,7 +241,8 @@ func TestMergeFiles_ImportMergeErrorIsNonFatal(t *testing.T) {
 
 	v := viper.New()
 	v.SetConfigType(yamlType)
-	require.NoError(t, mergeFiles(v, []string{cfg}))
+	_, err := mergeFiles(v, []string{cfg})
+	require.NoError(t, err)
 	assert.Equal(t, 181, v.GetInt("settings.terminal.max_width"))
 }
 

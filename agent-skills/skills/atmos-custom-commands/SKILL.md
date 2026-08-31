@@ -4,6 +4,7 @@ description: "Custom CLI commands: command definition in atmos.yaml, arguments, 
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: ci-automation
 references:
   - references/command-syntax.md
 ---

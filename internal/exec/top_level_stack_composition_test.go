@@ -71,7 +71,7 @@ func TestTopLevelStackComposition(t *testing.T) {
 			assert.Contains(t, terraform, "dns-primary")
 			assert.Contains(t, terraform, "chatops")
 
-			stacksMap, _, err := FindStacksMap(&atmosConfig, false)
+			stacksMap, _, _, err := FindStacksMap(&atmosConfig, false)
 			require.NoError(t, err)
 			platformParent := stacksMap["parents/02-platform"].(map[string]any)
 			platformComponents := platformParent["components"].(map[string]any)["terraform"].(map[string]any)
@@ -149,7 +149,7 @@ func TestTopLevelStackCompositionPreservesParentScopes(t *testing.T) {
 func TestTopLevelStackCompositionRejectsPeerOnlyInheritance(t *testing.T) {
 	atmosConfig := initTopLevelStackCompositionConfig(t, "top-level-stack-composition-isolated-inheritance")
 
-	_, _, err := FindStacksMap(&atmosConfig, false)
+	_, _, _, err := FindStacksMap(&atmosConfig, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "component 'chatops'")
 	assert.Contains(t, err.Error(), "inherits from 'dns-primary'")

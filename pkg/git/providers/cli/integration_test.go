@@ -153,6 +153,60 @@ func TestIntegrationPublishFlow(t *testing.T) {
 	assert.False(t, noop.Committed)
 }
 
+// TestIntegrationReconcileSyncsRemoteURLOnUriChange verifies that reconciling
+// an already-cloned workdir against a changed configured URI (e.g. a
+// corrected typo or a migrated repository) repoints the local "origin"
+// remote and fetches from the new location, instead of silently continuing
+// to talk to whatever URL was set at the original `git clone` time.
+func TestIntegrationReconcileSyncsRemoteURLOnUriChange(t *testing.T) {
+	requireGitBinary(t)
+
+	ctx := context.Background()
+	env := gitTestEnv(t)
+	provider := New()
+	root := t.TempDir()
+
+	bareA := filepath.Join(root, "origin-a.git")
+	gitRun(t, env, "", "init", "--bare", bareA)
+	gitRun(t, env, bareA, "symbolic-ref", "HEAD", "refs/heads/main")
+
+	bareB := filepath.Join(root, "origin-b.git")
+	gitRun(t, env, "", "init", "--bare", bareB)
+	gitRun(t, env, bareB, "symbolic-ref", "HEAD", "refs/heads/main")
+
+	// bareB starts as a fork of bareA's history (a repository migration, not
+	// an unrelated repository), then gains one commit bareA never gets --
+	// so fast-forwarding onto it after the URI change is possible, and its
+	// presence in the workdir proves the fetch actually came from bareB.
+	seed := filepath.Join(root, "seed")
+	gitRun(t, env, "", "clone", bareA, seed)
+	writeFile(t, filepath.Join(seed, "README.md"), "from a\n")
+	gitRun(t, env, seed, "add", "README.md")
+	gitRun(t, env, seed, "commit", "-m", "seed")
+	gitRun(t, env, seed, "push", "origin", "main")
+	gitRun(t, env, seed, "push", bareB, "main")
+	writeFile(t, filepath.Join(seed, "from-b-only.txt"), "b\n")
+	gitRun(t, env, seed, "add", "from-b-only.txt")
+	gitRun(t, env, seed, "commit", "-m", "b-only commit")
+	gitRun(t, env, seed, "push", bareB, "main")
+
+	work := filepath.Join(root, "work")
+	rc := atmosgit.RepoContext{Workdir: work, Branch: "main", Env: env}
+
+	// Initial clone against origin-a.
+	require.NoError(t, provider.Clone(ctx, &atmosgit.CloneOptions{RepoContext: rc, URI: bareA}))
+	assert.Equal(t, bareA, strings.TrimSpace(gitRun(t, env, work, "remote", "get-url", "origin")))
+	assert.NoFileExists(t, filepath.Join(work, "from-b-only.txt"))
+
+	// Config now points the SAME workdir at origin-b. Reconcile must repoint
+	// the local "origin" remote, not silently keep talking to origin-a.
+	require.NoError(t, provider.Clone(ctx, &atmosgit.CloneOptions{RepoContext: rc, URI: bareB}))
+	assert.Equal(t, bareB, strings.TrimSpace(gitRun(t, env, work, "remote", "get-url", "origin")),
+		"reconcile must update the local remote to the newly configured URI")
+	assert.FileExists(t, filepath.Join(work, "from-b-only.txt"),
+		"workdir must fetch and fast-forward from origin-b's history after the URI change, not stay stale on origin-a")
+}
+
 // TestIntegrationPullFFOnly verifies pull fast-forwards and refuses divergence.
 func TestIntegrationPullFFOnly(t *testing.T) {
 	requireGitBinary(t)

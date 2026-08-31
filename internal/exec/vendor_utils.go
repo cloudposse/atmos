@@ -14,12 +14,14 @@ import (
 	"github.com/samber/lo"
 	"go.yaml.in/yaml/v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/vendor"
+	"github.com/cloudposse/atmos/pkg/vendoring"
 	"github.com/cloudposse/atmos/pkg/vendoring/install"
 	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
@@ -130,11 +132,27 @@ func ReadAndProcessVendorConfigFile(
 	return vendorConfig, true, foundVendorConfigFile, nil
 }
 
+// getVendorDirToUse returns the appropriate vendor directory for file resolution. It prefers
+// the precomputed VendorDirAbsolutePath (set by AtmosConfigAbsolutePaths, the same mechanism
+// cloudposse/atmos#2864 uses for the top-level base_path), falling back to joining the raw
+// BasePath/Vendor.BasePath for callers that construct an AtmosConfiguration by hand without
+// running it through AtmosConfigAbsolutePaths first (e.g. tests). Mirrors getWorkflowsDirToUse
+// and getBasePathToUse (validate_component.go).
+func getVendorDirToUse(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig.VendorDirAbsolutePath != "" {
+		return atmosConfig.VendorDirAbsolutePath
+	}
+	// u.JoinPath (unlike filepath.Join) returns an already-absolute Vendor.BasePath as-is
+	// instead of nesting it under BasePath. getBasePathToUse (not raw atmosConfig.BasePath)
+	// keeps this consistent with getWorkflowsDirToUse's identical fallback.
+	return u.JoinPath(getBasePathToUse(atmosConfig), atmosConfig.Vendor.BasePath)
+}
+
 // Helper function to resolve the vendor config file path.
 func resolveVendorConfigFilePath(atmosConfig *schema.AtmosConfiguration, vendorConfigFile string, checkGlobalConfig bool) string {
 	if checkGlobalConfig && atmosConfig.Vendor.BasePath != "" {
 		if !filepath.IsAbs(atmosConfig.Vendor.BasePath) {
-			return filepath.Join(atmosConfig.BasePath, atmosConfig.Vendor.BasePath)
+			return getVendorDirToUse(atmosConfig)
 		}
 		return atmosConfig.Vendor.BasePath
 	}
@@ -142,7 +160,7 @@ func resolveVendorConfigFilePath(atmosConfig *schema.AtmosConfiguration, vendorC
 	// Search for the vendor config file
 	foundVendorConfigFile, fileExists := u.SearchConfigFile(vendorConfigFile)
 	if !fileExists {
-		pathToVendorConfig := filepath.Join(atmosConfig.BasePath, vendorConfigFile)
+		pathToVendorConfig := filepath.Join(getBasePathToUse(atmosConfig), vendorConfigFile)
 		foundVendorConfigFile, fileExists = u.SearchConfigFile(pathToVendorConfig)
 		if !fileExists {
 			return "" // File does not exist, but this is not an error
@@ -159,7 +177,7 @@ func getConfigFiles(path string) ([]string, error) {
 			return nil, ErrVendoringNotConfigured
 		}
 		if os.IsPermission(err) {
-			return nil, fmt.Errorf("%w '%s'. Please check the file permissions", ErrPermissionDenied, path)
+			return nil, fmt.Errorf("%w '%s'. Please check the file permissions", ErrPermissionDenied, displayPath(path))
 		}
 		return nil, fmt.Errorf("An error occurred while accessing the vendoring configuration: %w", err)
 	}
@@ -171,7 +189,7 @@ func getConfigFiles(path string) ([]string, error) {
 		}
 
 		if len(matches) == 0 {
-			return nil, fmt.Errorf("%w '%s'", ErrNoYAMLConfigFiles, path)
+			return nil, fmt.Errorf("%w '%s'", ErrNoYAMLConfigFiles, displayPath(path))
 		}
 		for i, match := range matches {
 			matches[i] = filepath.Join(path, match)
@@ -203,7 +221,7 @@ func mergeVendorConfigFiles(configFiles []string) (schema.AtmosVendorConfig, err
 			source := currentConfig.Spec.Sources[i]
 			if source.Component != "" {
 				if sourceMap[source.Component] {
-					return vendorConfig, fmt.Errorf("%w '%s' found in config file '%s'", ErrDuplicateComponentsFound, source.Component, configFile)
+					return vendorConfig, fmt.Errorf("%w '%s' found in config file '%s'", ErrDuplicateComponentsFound, source.Component, displayPath(configFile))
 				}
 				sourceMap[source.Component] = true
 			}
@@ -228,9 +246,11 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 	var err error
 	vendorConfigFilePath := filepath.Dir(params.vendorConfigFileName)
 
-	logInitialMessage(params.vendorConfigFileName, params.tags)
+	// displayPath keeps the log message short and machine-independent; params.vendorConfigFileName
+	// itself stays untouched (and possibly absolute) for the actual file/source resolution below.
+	logInitialMessage(displayPath(params.vendorConfigFileName), params.tags)
 	if len(params.atmosVendorSpec.Sources) == 0 && len(params.atmosVendorSpec.Imports) == 0 {
-		return fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, params.vendorConfigFileName)
+		return fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, displayPath(params.vendorConfigFileName))
 	}
 	// Process imports and return all sources from all the imports and from `vendor.yaml`.
 	sources, _, err := processVendorImports(
@@ -245,7 +265,7 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 	}
 
 	if len(sources) == 0 {
-		return fmt.Errorf("%w %s", ErrEmptySources, params.vendorConfigFileName)
+		return fmt.Errorf("%w %s", ErrEmptySources, displayPath(params.vendorConfigFileName))
 	}
 
 	if err := validateTagsAndComponents(sources, params.vendorConfigFileName, params.component, params.tags); err != nil {
@@ -282,29 +302,55 @@ func validateTagsAndComponents(
 	component string,
 	tags []string,
 ) error {
-	if len(tags) > 0 {
-		componentTags := lo.FlatMap(sources, func(s schema.AtmosVendorSource, _ int) []string {
-			return s.Tags
-		})
-
-		if len(lo.Intersect(tags, componentTags)) == 0 {
-			return fmt.Errorf("%w '%s' tagged with the tags %v",
-				ErrNoComponentsWithTags, vendorConfigFileName, tags)
-		}
-	}
-
 	components := lo.FilterMap(sources, func(s schema.AtmosVendorSource, _ int) (string, bool) {
 		return s.Component, s.Component != ""
 	})
 
 	if duplicates := lo.FindDuplicates(components); len(duplicates) > 0 {
 		return fmt.Errorf("%w %v in the vendor config file '%s' and the imports",
-			ErrDuplicateComponents, duplicates, vendorConfigFileName)
+			ErrDuplicateComponents, duplicates, displayPath(vendorConfigFileName))
 	}
 
+	// Component existence is checked before any tags reasoning below, so an undeclared --component
+	// is always reported as such -- never masked behind a tags-mismatch message just because --tags
+	// also happens to match nothing.
 	if component != "" && !slices.Contains(components, component) {
 		return fmt.Errorf("%w component '%s', file '%s'",
-			ErrComponentNotDefined, component, vendorConfigFileName)
+			ErrComponentNotDefined, component, displayPath(vendorConfigFileName))
+	}
+
+	if len(tags) == 0 {
+		return nil
+	}
+
+	// Tag matching is scoped to the components actually in play: just the named --component if one
+	// was given, never a different, out-of-scope component. Checking tags globally across every
+	// declared source let a mismatched --component/--tags pair (e.g. "-c vpc --tags compute" where
+	// only "eks" has the "compute" tag) pass this check on the strength of a component the user
+	// never asked for, then silently filter down to zero packages later with no error.
+	if component != "" {
+		var declaredTags []string
+		for i := range sources {
+			if sources[i].Component == component {
+				declaredTags = sources[i].Tags
+				break
+			}
+		}
+		if len(lo.Intersect(tags, declaredTags)) == 0 {
+			return errUtils.Build(errUtils.ErrInvalidArgumentError).
+				WithExplanation("No components matched the given selector.").
+				WithHint(fmt.Sprintf("component '%s' does not declare any of the requested tags %v.", component, tags)).
+				Err()
+		}
+		return nil
+	}
+
+	componentTags := lo.FlatMap(sources, func(s schema.AtmosVendorSource, _ int) []string {
+		return s.Tags
+	})
+	if len(lo.Intersect(tags, componentTags)) == 0 {
+		return fmt.Errorf("%w '%s' tagged with the tags %v",
+			ErrNoComponentsWithTags, displayPath(vendorConfigFileName), tags)
 	}
 
 	return nil
@@ -575,8 +621,8 @@ func processVendorImports(
 			return nil, nil, fmt.Errorf(
 				"%w '%s' in the vendor config file '%s'. It was already imported in the import chain",
 				ErrDuplicateImport,
-				imp,
-				vendorConfigFile,
+				displayPath(imp),
+				displayPath(vendorConfigFile),
 			)
 		}
 
@@ -588,11 +634,11 @@ func processVendorImports(
 		}
 
 		if slices.Contains(vendorConfig.Spec.Imports, imp) {
-			return nil, nil, fmt.Errorf("%w file '%s'", ErrVendorConfigSelfImport, imp)
+			return nil, nil, fmt.Errorf("%w file '%s'", ErrVendorConfigSelfImport, displayPath(imp))
 		}
 
 		if len(vendorConfig.Spec.Sources) == 0 && len(vendorConfig.Spec.Imports) == 0 {
-			return nil, nil, fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, imp)
+			return nil, nil, fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, displayPath(imp))
 		}
 
 		mergedSources, allImports, err = processVendorImports(atmosConfig, imp, vendorConfig.Spec.Imports, mergedSources, allImports)
@@ -624,10 +670,10 @@ func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName stri
 		s.File = vendorConfigFileName
 	}
 	if s.Source == "" {
-		return fmt.Errorf("%w `%s`", ErrSourceMissing, s.File)
+		return fmt.Errorf("%w `%s`", ErrSourceMissing, displayPath(s.File))
 	}
 	if len(s.Targets) == 0 {
-		return fmt.Errorf("%w for source '%s' in file '%s'", ErrTargetsMissing, s.Source, s.File)
+		return fmt.Errorf("%w for source '%s' in file '%s'", ErrTargetsMissing, s.Source, displayPath(s.File))
 	}
 	if err := version.ValidateVersionRangeConstraints(s.Version, s.Constraints); err != nil {
 		return err
@@ -635,11 +681,12 @@ func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName stri
 	return nil
 }
 
+// shouldSkipSource reports whether s should be skipped for the given --component/--tags filter --
+// the inverse of vendoring.MatchesComponentTags, the shared component-exact/tags-any matcher also
+// used by `vendor update` (pkg/vendoring/update.go's sourceMatchesFilter), so the two commands don't
+// hand-maintain independent copies of the same filter logic.
 func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []string) bool {
-	// Skip if component or tags do not match
-	// If `--component` is specified, and it's not equal to this component, skip this component
-	// If `--tags` list is specified, and it does not contain any tags defined in this component, skip this component.
-	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
+	return !vendoring.MatchesComponentTags(s, component, tags)
 }
 
 // normalizeVendorURI normalizes vendor source URIs to handle all patterns consistently.

@@ -204,13 +204,15 @@ func printSubcommandAliases(ctx *helpRenderContext, cmd *cobra.Command) {
 		if !c.IsAvailableCommand() || len(c.Aliases) == 0 {
 			continue
 		}
-		name := ctx.styles.commandName.Render(fmt.Sprintf("%-15s", c.Aliases[0]))
 
 		// Render description as Markdown (like command descriptions) with backticks instead of quotes.
 		desc := fmt.Sprintf("Alias of `%s %s` command", cmd.Name(), c.Name())
 		desc = renderMarkdownDescription(desc)
 
-		fmt.Fprintf(ctx.writer, "      %s  %s\n", name, desc)
+		for _, alias := range c.Aliases {
+			name := ctx.styles.commandName.Render(fmt.Sprintf("%-15s", alias))
+			fmt.Fprintf(ctx.writer, "      %s  %s\n", name, desc)
+		}
 	}
 	fmt.Fprintln(ctx.writer)
 }

@@ -204,7 +204,7 @@ func TestWithMetadataFileLockUnix_LockUnavailable(t *testing.T) {
 // which succeeds against a directory). Instead, point the metadata file at a
 // path whose parent directory does not exist, so the open() call inside
 // TryWithRLock fails immediately with ENOENT (a hard error) rather than the
-// 1ms internal timeout merely expiring without an error - deterministically
+// internal try-lock timeout merely expiring without an error - deterministically
 // forcing the hard-error variant.
 func TestLoadMetadataWithReadLockUnix_LockUnavailable(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -221,8 +221,8 @@ func TestLoadMetadataWithReadLockUnix_LockUnavailable(t *testing.T) {
 // "!acquired && err == nil" branch (the "return nil, nil" contended-read
 // path). This is genuinely distinct from both LockUnavailable tests above:
 // here the lock file opens fine but is already held exclusively by another
-// holder, so TryWithRLock's 1ms internal timeout expires without an OS-level
-// error. The existing goroutine-based TestLoadMetadataWithReadLockUnix_ConcurrentReads
+// holder, so TryWithRLock's internal try-lock timeout expires without an
+// OS-level error. The existing goroutine-based TestLoadMetadataWithReadLockUnix_ConcurrentReads
 // doesn't reliably hit this branch because shared (read) locks don't
 // contend with each other, so this test forces it deterministically by
 // holding a separate exclusive lock, matching the style of

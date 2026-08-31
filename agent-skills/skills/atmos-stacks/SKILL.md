@@ -4,6 +4,7 @@ description: "Stack configuration: local and remote imports, inheritance, deep m
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: core-config
 ---
 
 # Atmos Stack Configuration
@@ -213,6 +214,26 @@ terraform:
   command: tofu
 ```
 
+### flags
+
+Default values for terraform CLI execution flags (`lock_timeout`, `lock`, `parallelism`,
+`refresh`, `compact_warnings`). Settable in `atmos.yaml` (`components.terraform.flags`),
+at the stack level (root-level `terraform:` block), and per component — merged
+field-by-field, lowest to highest precedence. An explicit CLI-typed flag (`-- -lock-timeout=30s`)
+always wins over all three. Terraform-only; not every flag applies to every subcommand.
+
+```yaml
+terraform:
+  flags:
+    lock_timeout: "5m"
+
+components:
+  terraform:
+    vpc:
+      flags:
+        parallelism: 4
+```
+
 ### backend
 
 Terraform backend configuration. Atmos generates `backend.tf.json` automatically.
@@ -366,7 +387,7 @@ For the full current function inventory, load `atmos-yaml-functions`.
 6. **Use `name` or `name_template` for stack naming**: If legacy `name_pattern` is present, migrate it.
 7. **Use `atmos describe stacks` liberally**: Always verify the resolved configuration before applying changes.
 8. **Treat remote imports as config only**: use component `source:` or `atmos vendor pull` when imported
-   config references component code that is not already local.
+    config references component code that is not already local.
 
 ## References
 

@@ -78,7 +78,8 @@ type PrepareEnvironmentConfig struct {
 func PrepareEnvironment(cfg PrepareEnvironmentConfig) map[string]string {
 	defer perf.Track(nil, "pkg/auth/cloud/azure.PrepareEnvironment")()
 
-	log.Debug("Preparing Azure environment for Atmos-managed credentials",
+	log.Debug(
+		"Preparing Azure environment for Atmos-managed credentials",
 		"subscription", cfg.SubscriptionID,
 		"tenant", cfg.TenantID,
 		"location", cfg.Location,
@@ -101,14 +102,25 @@ func PrepareEnvironment(cfg PrepareEnvironmentConfig) map[string]string {
 		}
 	}
 
-	// Set Azure subscription and tenant for Terraform providers.
-	// These are required for azurerm, azuread, and azapi providers to work correctly.
+	// Set the Azure subscription for the Terraform providers AND the OpenTofu `azurerm` backend.
+	// This scopes every Azure operation to the identity's subscription.
 	if cfg.SubscriptionID != "" {
 		result["AZURE_SUBSCRIPTION_ID"] = cfg.SubscriptionID
 		result["ARM_SUBSCRIPTION_ID"] = cfg.SubscriptionID
 	}
 
-	if cfg.TenantID != "" {
+	// Export the tenant ONLY for OIDC (service-principal / federated) auth, which needs it and
+	// does not shell out to the Azure CLI.
+	//
+	// For CLI / device-code / interactive auth we deliberately do NOT export
+	// AZURE_TENANT_ID / ARM_TENANT_ID. The tenant is already fixed by the MSAL session (and active
+	// subscription) that Atmos seeds, and exporting it in addition makes the `azurerm` BACKEND's
+	// Azure CLI credential invoke `az account get-access-token --subscription <id> --tenant <id>`,
+	// which the Azure CLI rejects with "Please specify only one of subscription and tenant, not
+	// both" (it fails at argument validation, so `terraform init` can't even list state). The
+	// azurerm / azapi / azuread providers auto-detect the tenant from the CLI session, so nothing
+	// on the CLI path needs it.
+	if cfg.TenantID != "" && cfg.UseOIDC {
 		result["AZURE_TENANT_ID"] = cfg.TenantID
 		result["ARM_TENANT_ID"] = cfg.TenantID
 	}
@@ -145,7 +157,8 @@ func PrepareEnvironment(cfg PrepareEnvironmentConfig) map[string]string {
 			result["ARM_OIDC_TOKEN_FILE_PATH"] = cfg.TokenFilePath
 		}
 
-		log.Debug("Azure OIDC auth active - Terraform will use federated credentials",
+		log.Debug(
+			"Azure OIDC auth active - Terraform will use federated credentials",
 			"subscription", cfg.SubscriptionID,
 			"tenant", cfg.TenantID,
 			"client_id", cfg.ClientID,
@@ -158,7 +171,8 @@ func PrepareEnvironment(cfg PrepareEnvironmentConfig) map[string]string {
 		log.Debug("Set ARM_USE_CLI=true for Azure CLI authentication",
 			"note", "Providers will use MSAL cache populated by Atmos")
 
-		log.Debug("Azure CLI auth active - Terraform will use MSAL cache credentials",
+		log.Debug(
+			"Azure CLI auth active - Terraform will use MSAL cache credentials",
 			"subscription", cfg.SubscriptionID,
 			"tenant", cfg.TenantID,
 		)

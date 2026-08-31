@@ -4,6 +4,7 @@ description: "AWS security finding analysis: analyze findings, map to Atmos comp
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: security
 ---
 
 # Atmos AWS Security Finding Analysis

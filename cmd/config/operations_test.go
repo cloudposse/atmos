@@ -3,9 +3,12 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	ckerrors "github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -130,6 +133,29 @@ func TestResolveConfigFile_Error(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
 }
 
+// TestResolveConfigFile_MultipleConfigFilesAmbiguous guards against a bug found during a
+// field-test pass on cloudposse/atmos#2867/#2868: resolveConfigFile silently used only the
+// FIRST --config file (cfgFiles[0]) when multiple were given, so `config set --config a,b
+// logs.level X` reported success editing a.yaml while the actual effective value (what `config
+// get` reports, and what every other atmos command uses) stayed unchanged whenever b.yaml also
+// set that key -- a false success, not just a stale-value bug.
+func TestResolveConfigFile_MultipleConfigFilesAmbiguous(t *testing.T) {
+	dir := t.TempDir()
+	fileA := filepath.Join(dir, "a.yaml")
+	fileB := filepath.Join(dir, "b.yaml")
+	require.NoError(t, os.WriteFile(fileA, []byte("settings:\n  enabled: true\n"), 0o644))
+	require.NoError(t, os.WriteFile(fileB, []byte("settings:\n  enabled: false\n"), 0o644))
+
+	cmd := &cobra.Command{}
+	cmd.Flags().StringSlice("config", []string{fileA, fileB}, "")
+
+	_, err := resolveConfigFile(cmd)
+	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+	details := strings.Join(ckerrors.GetAllDetails(err), "\n")
+	assert.Contains(t, details, "a.yaml")
+	assert.Contains(t, details, "b.yaml")
+}
+
 func TestConfigGetCommand_MissingValue(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "atmos.yaml")
@@ -146,6 +172,68 @@ func TestConfigGetCommand_MissingValue(t *testing.T) {
 	require.ErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound)
 }
 
+// TestConfigGetCommand_ReportsEffectiveMergedValue reproduces the "stale value" half of
+// cloudposse/atmos#2867: `atmos config get` used to read only the FIRST --config file
+// directly off disk (resolveConfigFile picked cfgFiles[0]), so a second --config file's
+// override was invisible to `get` even though the rest of atmos (stack discovery, etc.)
+// correctly used the merged value. `get` must report the same effective value everything
+// else uses.
+func TestConfigGetCommand_ReportsEffectiveMergedValue(t *testing.T) {
+	dir := t.TempDir()
+	mainFile := filepath.Join(dir, "main.yaml")
+	fragmentFile := filepath.Join(dir, "fragment.yaml")
+
+	require.NoError(t, os.WriteFile(mainFile, []byte(`
+base_path: "."
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+`), 0o644))
+	require.NoError(t, os.WriteFile(fragmentFile, []byte(`
+stacks:
+  included_paths:
+    - "deploy/**/*"
+    - "other/**/*"
+`), 0o644))
+
+	stdout := initConfigTestWriter(t)
+
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	origArgs := os.Args
+	t.Cleanup(func() { os.Args = origArgs })
+	os.Args = []string{"atmos", "--config", mainFile + "," + fragmentFile, "config", "get", "stacks.included_paths"}
+
+	require.NoError(t, configGetCmd.RunE(configGetCmd, []string{"stacks.included_paths"}))
+
+	output := stdout.String()
+	assert.True(t, strings.Contains(output, "deploy/**/*"), "output should contain the first file's value: %s", output)
+	assert.True(t, strings.Contains(output, "other/**/*"),
+		"output must reflect the SECOND --config file's override, not just the first file's stale value: %s", output)
+}
+
+// TestConfigGetCommand_InitCliConfigError proves configGetCmd.RunE surfaces a genuine
+// InitCliConfig failure (a malformed --config file here) instead of panicking or masking it,
+// since `get` now reloads the full effective config on every invocation rather than reading a
+// single already-validated file (cloudposse/atmos#2867/#2868).
+func TestConfigGetCommand_InitCliConfigError(t *testing.T) {
+	dir := t.TempDir()
+	badFile := filepath.Join(dir, "bad.yaml")
+	require.NoError(t, os.WriteFile(badFile, []byte("settings:\n  enabled: [true\n"), 0o644)) // unterminated flow sequence
+
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	origArgs := os.Args
+	t.Cleanup(func() { os.Args = origArgs })
+	os.Args = []string{"atmos", "--config", badFile, "config", "get", "settings.enabled"}
+
+	err := configGetCmd.RunE(configGetCmd, []string{"settings.enabled"})
+	require.Error(t, err)
+}
+
 func TestConfigSetCommand_TypeVariants(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "atmos.yaml")
@@ -157,7 +245,7 @@ func TestConfigSetCommand_TypeVariants(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, os.Chdir(wd))
-		valueType = atmosyaml.TypeString
+		valueType = atmosyaml.TypeAuto
 	})
 	require.NoError(t, os.Chdir(dir))
 
@@ -242,6 +330,199 @@ func TestConfigSetCommand_TypeVariants(t *testing.T) {
 	}
 }
 
+// TestConfigSetCommand_AutoInfersFromExistingValue covers --type=auto (the
+// default) on a path the Atmos config schema doesn't model (settings.* here
+// is a free-form test fixture, not a real modeled field): when the path
+// already has a typed value, auto must infer that type instead of falling
+// back to string.
+func TestConfigSetCommand_AutoInfersFromExistingValue(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(
+		"settings:\n  replicas: 1\n  enabled: false\n",
+	), 0o644))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+		valueType = atmosyaml.TypeAuto
+	})
+	require.NoError(t, os.Chdir(dir))
+
+	valueType = atmosyaml.TypeAuto
+	require.NoError(t, configSetCmd.RunE(configSetCmd, []string{"settings.replicas", "5"}))
+	require.NoError(t, configSetCmd.RunE(configSetCmd, []string{"settings.enabled", "true"}))
+
+	content, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "replicas: 5")
+	assert.NotContains(t, string(content), `replicas: "5"`)
+	assert.Contains(t, string(content), "enabled: true")
+	assert.NotContains(t, string(content), `enabled: "true"`)
+}
+
+// TestConfigSetCommand_AutoFallsBackToStringForNewKey covers --type=auto when
+// the path is neither schema-modeled nor already present in the file -- there
+// is nothing to infer from, so it must fall back to string.
+// TestConfigSetCommand_AutoGuessesTypeForNewNumericLookingKey is a
+// regression test for the "auto nag" fix: --type=auto used to fall all the
+// way back to a plain string for a path the schema doesn't model with no
+// existing value, only warning that the value looked like it could've been
+// a bool/int/float without ever acting on that judgment. "settings.replicas"
+// isn't a real AtmosSettings field, so this exercises the shape-guess
+// fallback tier specifically: "5" must now be inferred as TypeInt.
+func TestConfigSetCommand_AutoGuessesTypeForNewNumericLookingKey(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("base_path: \"./\"\n"), 0o644))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+		valueType = atmosyaml.TypeAuto
+	})
+	require.NoError(t, os.Chdir(dir))
+
+	valueType = atmosyaml.TypeAuto
+	require.NoError(t, configSetCmd.RunE(configSetCmd, []string{"settings.replicas", "5"}))
+
+	got, err := atmosyaml.GetFile(file, "settings.replicas")
+	require.NoError(t, err)
+	assert.Equal(t, "5", got)
+
+	content, err := os.ReadFile(file)
+	require.NoError(t, err)
+	contentStr := string(content)
+	assert.Contains(t, contentStr, "replicas: 5")
+	assert.NotContains(t, contentStr, `replicas: "5"`)
+}
+
+// TestConfigSetCommand_AutoFallsBackToStringForGenuineNewStringKey keeps
+// real string-fallback coverage alive: a brand-new, schema-unmodeled path
+// whose value doesn't look like a bool/int/float at all must still land on
+// TypeString, with no change in behavior from before the "auto nag" fix.
+func TestConfigSetCommand_AutoFallsBackToStringForGenuineNewStringKey(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("base_path: \"./\"\n"), 0o644))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+		valueType = atmosyaml.TypeAuto
+	})
+	require.NoError(t, os.Chdir(dir))
+
+	valueType = atmosyaml.TypeAuto
+	require.NoError(t, configSetCmd.RunE(configSetCmd, []string{"settings.color", "blue"}))
+
+	got, err := atmosyaml.GetFile(file, "settings.color")
+	require.NoError(t, err)
+	assert.Equal(t, "blue", got)
+
+	typ, ok := atmosyaml.GetFileType(file, "settings.color")
+	require.True(t, ok)
+	assert.Equal(t, atmosyaml.TypeString, typ)
+}
+
+// TestConfigSetCommand_ShapeGuess_NaNFailsClosed is a regression test for
+// the one narrow case where GuessScalarType still fails closed: a
+// brand-new, schema-unmodeled path whose value is the bare "nan" literal
+// must land on TypeString, not error out and not silently coerce to a
+// numeric type it can't safely write (see
+// pkg/yaml.TestBuildValidatedRHS_FloatRejectsNaNAndInf). Asserted via
+// GetFile's resolved value, not a specific quote style: pkg/yaml.GetType and
+// yaml.v3 (Atmos's actual config loader) both already resolve an unquoted
+// "nan" as a plain string -- unlike ".nan", the bare form was never
+// ambiguous on read, so either quoting is a correct, safe result here.
+func TestConfigSetCommand_ShapeGuess_NaNFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("base_path: \"./\"\n"), 0o644))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+		valueType = atmosyaml.TypeAuto
+	})
+	require.NoError(t, os.Chdir(dir))
+
+	valueType = atmosyaml.TypeAuto
+	require.NoError(t, configSetCmd.RunE(configSetCmd, []string{"settings.threshold", "nan"}))
+
+	got, err := atmosyaml.GetFile(file, "settings.threshold")
+	require.NoError(t, err)
+	assert.Equal(t, "nan", got)
+
+	typ, ok := atmosyaml.GetFileType(file, "settings.threshold")
+	require.True(t, ok)
+	assert.Equal(t, atmosyaml.TypeString, typ, "must resolve back as a string, not a numeric type")
+}
+
+// TestConfigSetCommand_AutoWithExistingNull_DoesNotForceNull is a regression
+// test: GetType now correctly reports (TypeNull, true) for an explicit YAML
+// null (see pkg/yaml.TestGetType_ExplicitNull), but --type=auto must not
+// treat that as "the inferred type", since buildRHS's TypeNull case always
+// writes the literal `null` and would silently discard the value being set.
+// A path whose existing value is null must fall back to the same
+// unresolved/string-fallback behavior as a brand-new key.
+func TestConfigSetCommand_AutoWithExistingNull_DoesNotForceNull(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("settings:\n  replicas: null\n"), 0o644))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+		valueType = atmosyaml.TypeAuto
+	})
+	require.NoError(t, os.Chdir(dir))
+
+	valueType = atmosyaml.TypeAuto
+	require.NoError(t, configSetCmd.RunE(configSetCmd, []string{"settings.replicas", "5"}))
+
+	got, err := atmosyaml.GetFile(file, "settings.replicas")
+	require.NoError(t, err)
+	assert.Equal(t, "5", got, "the new value must be written, not silently coerced to null")
+}
+
+// TestConfigSetCommand_AutoRejectsExistingList is a regression test for a
+// field-test finding: --type=auto used to fall through GetFileType's default
+// case to TypeString for a !!seq/!!map existing value, silently collapsing a
+// list into a plain string with no warning. GetType now reports TypeYAML for
+// a non-scalar existing value, and effectiveValueType must refuse rather
+// than silently coerce.
+func TestConfigSetCommand_AutoRejectsExistingList(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(
+		"settings:\n  taglist:\n    - a\n    - b\n",
+	), 0o644))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+		valueType = atmosyaml.TypeAuto
+	})
+	require.NoError(t, os.Chdir(dir))
+
+	valueType = atmosyaml.TypeAuto
+	err = configSetCmd.RunE(configSetCmd, []string{"settings.taglist", "x"})
+	require.ErrorIs(t, err, atmosyaml.ErrTypeInferenceNonScalar)
+
+	content, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "- a")
+	assert.Contains(t, string(content), "- b")
+	assert.NotContains(t, string(content), "taglist: x")
+}
+
 func TestConfigSetCommand_InvalidType(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "atmos.yaml")
@@ -257,7 +538,9 @@ func TestConfigSetCommand_InvalidType(t *testing.T) {
 
 	valueType = atmosyaml.TypeInt
 	err = configSetCmd.RunE(configSetCmd, []string{"settings.count", "not-an-int"})
-	require.ErrorIs(t, err, atmosyaml.ErrInvalidYAMLExpression)
+	require.ErrorIs(t, err, atmosyaml.ErrInvalidTypedValue)
+	require.NotErrorIs(t, err, atmosyaml.ErrInvalidYAMLExpression,
+		"a bad --type value is a type problem, not a path/expression problem -- must not share a headline with those")
 }
 
 func TestConfigDeleteCommand_InvalidPath(t *testing.T) {

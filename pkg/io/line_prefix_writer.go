@@ -65,6 +65,14 @@ func (w *LinePrefixWriter) Write(p []byte) (int, error) {
 	}
 
 	w.buffer = append(w.buffer, p...)
+
+	// Hold writeMu across every line this call flushes, not per individual writeLine -- one
+	// upstream Write can resolve into several complete lines (e.g. a "\r"-separated progress
+	// update followed later by its completion), and releasing the shared lock between them let a
+	// concurrently-writing sibling node's entire output interleave in the gap, splitting what
+	// should read as one contiguous burst from this node.
+	w.writeMu.Lock()
+	defer w.writeMu.Unlock()
 	if err := w.flushCompleteLinesLocked(); err != nil {
 		return 0, err
 	}
@@ -81,6 +89,11 @@ func (w *LinePrefixWriter) Flush() error {
 	if len(w.buffer) == 0 {
 		return nil
 	}
+
+	// See Write: writeMu is held across the whole flush (complete lines plus the trailing
+	// partial one) so this node's output can't be split by a concurrently-writing sibling.
+	w.writeMu.Lock()
+	defer w.writeMu.Unlock()
 	if err := w.flushCompleteLinesLocked(); err != nil {
 		return err
 	}
@@ -95,7 +108,7 @@ func (w *LinePrefixWriter) Flush() error {
 	return nil
 }
 
-// flushCompleteLinesLocked writes buffered complete lines while w.mu is held.
+// flushCompleteLinesLocked writes buffered complete lines while w.mu and w.writeMu are held.
 func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
 	for {
 		idx := lineEndIndex(w.buffer)
@@ -114,13 +127,13 @@ func (w *LinePrefixWriter) flushCompleteLinesLocked() error {
 	}
 }
 
-// writeLine writes one already-delimited line with the configured prefix.
+// writeLine writes one already-delimited line with the configured prefix. Callers (Write, Flush)
+// must already hold writeMu -- this method does not lock it itself, so multiple lines from one
+// flush can be written as a single atomic burst relative to other writers sharing that lock.
 func (w *LinePrefixWriter) writeLine(line []byte) error {
 	if w.w == nil {
 		return nil
 	}
-	w.writeMu.Lock()
-	defer w.writeMu.Unlock()
 
 	line = bytes.ReplaceAll(line, crlfBytes, lfBytes)
 	line = bytes.ReplaceAll(line, crBytes, lfBytes)

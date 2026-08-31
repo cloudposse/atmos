@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWithStringFlag(t *testing.T) {
@@ -139,6 +140,73 @@ func TestWithNoOptDefVal(t *testing.T) {
 	assert.Equal(t, "__SELECT__", strFlag.NoOptDefVal)
 }
 
+func TestWithNoOptDefVal_StringSliceFlag(t *testing.T) {
+	cfg := &parserConfig{registry: NewFlagRegistry()}
+
+	// First add a string-slice flag (e.g. --profile, repeatable).
+	WithStringSliceFlag("profile", "", nil, "Profile name")(cfg)
+
+	// Then set NoOptDefVal - this exercises the *StringSliceFlag branch added
+	// alongside the pre-existing *StringFlag branch.
+	opt := WithNoOptDefVal("profile", "__SELECT__")
+	opt(cfg)
+
+	flag := cfg.registry.Get("profile")
+	require.NotNil(t, flag)
+
+	sliceFlag, ok := flag.(*StringSliceFlag)
+	require.True(t, ok)
+	assert.Equal(t, "__SELECT__", sliceFlag.NoOptDefVal)
+}
+
+func TestWithNoOptDefValNoSpaceValue(t *testing.T) {
+	tests := []struct {
+		name        string
+		registerOpt Option
+		flagName    string
+		assertFlag  func(t *testing.T, flag Flag)
+	}{
+		{
+			name:        "StringFlag",
+			registerOpt: WithStringFlag("identity", "i", "", "Identity name"),
+			flagName:    "identity",
+			assertFlag: func(t *testing.T, flag Flag) {
+				t.Helper()
+				strFlag, ok := flag.(*StringFlag)
+				require.True(t, ok)
+				assert.Equal(t, "__SELECT__", strFlag.NoOptDefVal)
+				assert.True(t, strFlag.NoOptDefValNoSpaceValue)
+			},
+		},
+		{
+			name:        "StringSliceFlag",
+			registerOpt: WithStringSliceFlag("profile", "", nil, "Profile name"),
+			flagName:    "profile",
+			assertFlag: func(t *testing.T, flag Flag) {
+				t.Helper()
+				sliceFlag, ok := flag.(*StringSliceFlag)
+				require.True(t, ok)
+				assert.Equal(t, "__SELECT__", sliceFlag.NoOptDefVal)
+				assert.True(t, sliceFlag.NoOptDefValNoSpaceValue)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &parserConfig{registry: NewFlagRegistry()}
+			tt.registerOpt(cfg)
+
+			opt := WithNoOptDefValNoSpaceValue(tt.flagName, "__SELECT__")
+			opt(cfg)
+
+			flag := cfg.registry.Get(tt.flagName)
+			require.NotNil(t, flag)
+			tt.assertFlag(t, flag)
+		})
+	}
+}
+
 func TestWithRegistry(t *testing.T) {
 	// Create a custom registry
 	customRegistry := NewFlagRegistry()
@@ -241,6 +309,24 @@ func TestWithValidValues(t *testing.T) {
 	strFlag, ok := flag.(*StringFlag)
 	assert.True(t, ok)
 	assert.Equal(t, []string{"json", "yaml", "table"}, strFlag.ValidValues)
+}
+
+func TestWithValidValues_StringSliceFlag(t *testing.T) {
+	cfg := &parserConfig{registry: NewFlagRegistry()}
+
+	// First add a string-slice flag (e.g. --client, repeatable).
+	WithStringSliceFlag("client", "c", nil, "AI client(s) to target")(cfg)
+
+	// Then set valid values, same option as the scalar StringFlag case.
+	opt := WithValidValues("client", "claude-code", "vscode", "gemini")
+	opt(cfg)
+
+	flag := cfg.registry.Get("client")
+	assert.NotNil(t, flag)
+
+	sliceFlag, ok := flag.(*StringSliceFlag)
+	assert.True(t, ok)
+	assert.Equal(t, []string{"claude-code", "vscode", "gemini"}, sliceFlag.ValidValues)
 }
 
 func TestWithValidValues_NonExistentFlag(t *testing.T) {

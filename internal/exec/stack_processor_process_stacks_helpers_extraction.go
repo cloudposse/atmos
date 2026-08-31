@@ -272,6 +272,20 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Extract flags section (terraform CLI execution flag defaults). Terraform-only —
+	// no helmfile/packer equivalent.
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.FlagsSectionName]; ok {
+			componentFlags, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.flags' in the file '%s'", errUtils.ErrInvalidComponentFlags, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentFlags = componentFlags
+		} else {
+			result.ComponentFlags = make(map[string]any, componentSmallMapCapacity)
+		}
+	}
+
 	// Kubernetes-specific manifest/render sections.
 	if opts.ComponentType == cfg.KubernetesComponentType {
 		if i, ok := opts.ComponentMap[cfg.ProviderSectionName]; ok {
@@ -288,6 +302,10 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 
 		if i, ok := opts.ComponentMap[cfg.ManifestsSectionName]; ok {
 			result.ComponentManifests = i
+		}
+
+		if i, ok := opts.ComponentMap[cfg.ValidateSectionName]; ok {
+			result.ComponentValidate = i
 		}
 
 		if i, ok := opts.ComponentMap[cfg.RenderSectionName]; ok {

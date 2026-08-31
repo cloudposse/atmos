@@ -1,13 +1,15 @@
 ---
 name: atmos-migration
-description: "Migrating to Atmos from existing IaC and authentication tooling: techniques, tactics, and design patterns for native Terraform and Terraform Workspaces — minimum-disruption paths, file-layout options, workspace mapping, and the remote-state bridge for progressive migration — plus migrating AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, and okta-aws-cli into atmos auth"
+description: "Migrating to Atmos from existing IaC and authentication tooling: techniques, tactics, and design patterns for native Terraform, Terraform Workspaces, and Terramate — minimum-disruption paths, file-layout options, workspace mapping, tag/generate_hcl/script decomposition, and the remote-state bridge for progressive migration — plus migrating AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, and okta-aws-cli into atmos auth"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: state-versioning
 references:
   - references/from-native-terraform.md
   - references/from-terraform-workspaces.md
   - references/remote-state-bridge.md
+  - references/from-terramate.md
   - references/from-component-updater.md
   - references/from-aws-config.md
   - references/from-gcp-config.md
@@ -32,6 +34,8 @@ For full prose tutorials aimed at end users, link to:
 - [Migrating from Native Terraform](https://atmos.tools/migration/native-terraform)
 - [Migrating from Terraform Workspaces](https://atmos.tools/migration/terraform-workspaces)
 - [Migrating from Terragrunt](https://atmos.tools/migration/terragrunt) (not covered by this skill)
+- Migrating from Terramate -- covered by this skill via
+  [references/from-terramate.md](references/from-terramate.md) (no atmos.tools tutorial yet)
 
 ## Terraform or OpenTofu
 
@@ -80,6 +84,7 @@ different reference:
 | One TF root module, env config via `.tfvars` or env vars             | [from-native-terraform.md](references/from-native-terraform.md) |
 | Multiple TF root modules in scattered dirs                           | [from-native-terraform.md](references/from-native-terraform.md) |
 | `terraform.workspace`-driven environments with shared state backend  | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
+| `.tm.hcl` files, `stack.tm.hcl`, `generate_hcl` blocks (Terramate project) | [from-terramate.md](references/from-terramate.md) |
 | Need to read outputs from un-migrated TF (legacy or another repo)    | [remote-state-bridge.md](references/remote-state-bridge.md) |
 | `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
 
@@ -220,6 +225,9 @@ Things to push back on if a user (or another agent) proposes them during migrati
   workspaces to stacks without losing state
 - [References/remote-state-bridge.md](references/remote-state-bridge.md) -- the dummy-component
   and abstract-component patterns for reading state from un-migrated or external Terraform
+- [References/from-terramate.md](references/from-terramate.md) -- construct-by-construct mapping
+  from Terramate (`stack.tm.hcl`, globals, `generate_hcl`, `script{}`, tags/labels) to Atmos,
+  including the one remaining known gap (`.tmtriggers`)
 - [References/from-aws-config.md](references/from-aws-config.md) -- mapping `~/.aws/config`
   profiles (SSO, static keys, role chaining, MFA) to `atmos auth`
 - [References/from-gcp-config.md](references/from-gcp-config.md) -- mapping `gcloud` CLI auth

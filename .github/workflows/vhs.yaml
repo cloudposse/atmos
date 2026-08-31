@@ -9,15 +9,27 @@ env:
   LANG: "en_US.UTF-8"
   ATMOS_LOGS_LEVEL: "Info"
 
+# Least-privilege default; every job below declares its own narrower
+# job-level permissions that override this baseline.
+permissions:
+  contents: read
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: false
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -66,14 +78,26 @@ jobs:
     needs: [prepare]
     if: needs.prepare.outputs.matrix != '[]'
     runs-on: ubuntu-latest
+    permissions:
+      # Render-only. .tape files come from the PR diff and vhs-action executes
+      # their directives, so this job must never hold a write token — the
+      # actual push happens in the trusted `commit` job below, which never
+      # runs vhs-action and only ever consumes this job's artifact output.
+      contents: read
     strategy:
+      fail-fast: false
       matrix:
         file: ${{fromJson(needs.prepare.outputs.matrix)}}
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ matrix.file }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
@@ -90,6 +114,80 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: ${{ matrix.file }}
           install-fonts: true
+
+      # VHS determines the output path from the tape's own `Output <path>.gif`
+      # directive, so the workflow can't know it ahead of time — discover it
+      # from the working-tree diff instead, same trust boundary as the old
+      # file_pattern: '*.gif' passed to git-auto-commit-action.
+      - name: Detect rendered GIF
+        id: detect
+        run: |
+          changed=$(git status --porcelain --untracked-files=all -- '*.gif' | cut -c4-)
+          if [ -z "$changed" ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "files<<GIF_EOF"
+            echo "$changed"
+            echo "GIF_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # A tape whose render didn't change its GIF is a normal no-op, not a
+      # failure — only upload when there's something for `commit` to push.
+      - name: Upload rendered GIF
+        if: steps.detect.outputs.found == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vhs-gif-${{ strategy.job-index }}
+          path: ${{ steps.detect.outputs.files }}
+          if-no-files-found: error
+          retention-days: 1
+
+  commit:
+    name: Commit rendered GIFs
+    needs: [vhs]
+    # Runs whenever `vhs` actually executed (not skipped for zero tape files),
+    # on both full success and partial per-leg failure (fail-fast: false lets
+    # good legs upload before a broken tape fails its own leg) — but not if
+    # the run was cancelled outright.
+    if: (success() || failure()) && needs.vhs.result != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      # The only job in this workflow with push rights. Starts from a fresh
+      # checkout and only ever pulls in files via the artifact API (an opaque
+      # blob store), so it never inherits any working-tree/git state a
+      # PR-controlled tape may have tampered with in the `vhs` job.
+      contents: write
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-commit
+      cancel-in-progress: false
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+          # This job's own push (via git-auto-commit-action below) needs the
+          # credentials checkout persists — GITHUB_TOKEN in the environment
+          # does not by itself configure git's push auth. Renderer jobs keep
+          # persist-credentials: false since they never push.
+          persist-credentials: true
+
+      # Zero-artifact case (every leg was a no-op, or vhs failed before any
+      # leg uploaded) must not fail the step — warn and let auto-commit below
+      # find nothing to do.
+      - name: Download rendered GIFs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: vhs-gif-*
+          path: .
+          merge-multiple: true
+          if-no-artifact-found: warn
 
       - uses: stefanzweifel/git-auto-commit-action@3ea6ae190baf489ba007f7c92608f33ce20ef04a # v4
         id: auto-commit

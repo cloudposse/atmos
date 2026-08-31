@@ -202,6 +202,26 @@ func TestUninstallCmd_FlagDefaults(t *testing.T) {
 	})
 }
 
+// TestUninstallCmd_RunE_InvalidClientRejected covers the end-to-end wiring of
+// flags.WithValidValues("client", ...) + ValidateFlagValues on the uninstall
+// command: an unsupported --client value must be rejected before the command
+// touches the registry or disk, not silently ignored.
+func TestUninstallCmd_RunE_InvalidClientRejected(t *testing.T) {
+	resetFlags := func() {
+		resetFlagChangedForTest(t, uninstallCmd, "force")
+		resetStringSliceFlagForTest(t, uninstallCmd)
+	}
+	resetFlags()
+	t.Cleanup(resetFlags)
+
+	require.NoError(t, uninstallCmd.Flags().Set("client", "bogus-name"))
+
+	err := uninstallCmd.RunE(uninstallCmd, []string{"some-skill"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bogus-name")
+	assert.Contains(t, err.Error(), "client")
+}
+
 func TestUninstallCmd_RunE_NonexistentSkill(t *testing.T) {
 	// Reset flags before test.
 	resetFlags := func() {

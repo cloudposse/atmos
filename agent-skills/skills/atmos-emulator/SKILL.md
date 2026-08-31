@@ -4,6 +4,7 @@ description: "Atmos emulator components: local AWS/GCP/Azure/Kubernetes/Vault/Op
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: orchestrators
 ---
 
 # Atmos Emulators

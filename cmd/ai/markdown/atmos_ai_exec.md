@@ -15,7 +15,13 @@ Output can be formatted as:
 Exit codes:
 - 0: Success
 - 1: AI error (API failure, invalid response)
-- 2: Tool execution error
+- 2: Tool execution error — either the model asked for a tool that doesn't exist
+  (an unregistered name or unreachable MCP server, reported immediately) or the
+  model kept retrying a tool without ever resolving it until the configured
+  iteration limit (ai.max_tool_iterations, default 25) was reached. A tool call
+  that fails but returns a normal error result (e.g. a file not found) is fed
+  back to the model to retry or work around, and does not by itself cause exit
+  code 2.
 
 Examples:
   # Simple question

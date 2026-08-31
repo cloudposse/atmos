@@ -19,6 +19,11 @@ env:
   # `go mod download` fall back to direct module fetches.
   GOPROXY: "https://proxy.golang.org|direct"
 
+# Least-privilege default; every job below declares its own narrower
+# job-level permissions that override this baseline.
+permissions:
+  contents: read
+
 jobs:
   analyze:
     name: Analyze
@@ -35,14 +40,19 @@ jobs:
         language: ["go", "javascript-typescript"]
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           languages: ${{ matrix.language }}
           # If you wish to specify custom queries, you can do so here or in a config file.
@@ -55,7 +65,7 @@ jobs:
       # Autobuild attempts to build any compiled languages (C/C++, C#, Go, Java, or Swift).
       # If this step fails, then you should remove it and run the build manually (see below)
       - name: Autobuild
-        uses: github/codeql-action/autobuild@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/autobuild@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
 
       # ℹ️ Command-line programs to run using the OS shell.
       # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
@@ -68,9 +78,124 @@ jobs:
       #     ./location_of_script_within_repo/buildscript.sh
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           category: "/language:${{matrix.language}}"
+          # The merge queue's ephemeral gh-readonly-queue/... ref is deleted as
+          # soon as the queue cycles, which routinely races the upload for this
+          # multi-minute analysis and fails it with "ref not found" if the
+          # action is left to auto-detect ref/sha from GITHUB_REF/GITHUB_SHA
+          # (the doomed ephemeral ref). Skipping the upload entirely (an
+          # earlier attempt at this fix) isn't right either: the native
+          # "CodeQL" required status check is only created when a SARIF
+          # upload actually happens, so skipping it left that required check
+          # permanently missing for merge_group commits -- the merge queue
+          # then waits out its full timeout for a check that will never
+          # report, exactly like the PR Semver Labels gap. Instead, point the
+          # upload at the queue's real target branch ref (which persists)
+          # while still analyzing the actual queued merge commit.
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          sha: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
+
+  # Unlike Dependabot/dependency-review (version-based), govulncheck does
+  # call-graph reachability analysis: it only flags CVEs in code this binary
+  # can actually reach, so findings here are high-confidence. Lives alongside
+  # lint-golangci below rather than its own file, matching that job's
+  # precedent for SARIF-producing Go tools that aren't CodeQL itself.
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Run govulncheck
+        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+        env:
+          # Atmos ships with CGO disabled (see Makefile/test.yml) — without this,
+          # the runner's default CGO_ENABLED=1 makes govulncheck try to compile
+          # the cgo-only half of github.com/bearsh/hid (pulled in transitively via
+          # saml2aws's U2F support), which needs libudev-dev and fails to load.
+          CGO_ENABLED: "0"
+          # govulncheck's whole-program (`./...`) SSA call-graph analysis over
+          # this repo's large, dependency-heavy module (cloud SDKs, client-go,
+          # Terraform/OpenTofu, ...) peaks high enough in memory to get
+          # OOM-killed by the standard 16GB runner (observed as an unexplained
+          # SIGTERM/exit 143 partway through, with no findings ever produced).
+          # A soft memory ceiling forces the Go runtime to GC earlier/more
+          # often instead of letting the heap grow unchecked, trading some run
+          # time for staying under the runner's memory limit. GOFLAGS=-p=1
+          # (serializing package builds) was tried first and rejected: it only
+          # marginally reduced peak memory (govulncheck's SSA construction
+          # parallelizes via goroutines internally, which -p doesn't govern)
+          # while nearly tripling run time.
+          GOMEMLIMIT: "12GiB"
+        with:
+          go-version-file: go.mod
+          output-format: sarif
+          output-file: govulncheck.sarif
+
+      - name: Upload SARIF file
+        if: always()
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          sarif_file: govulncheck.sarif
+          category: govulncheck
+          # See the ref/sha override comment on the analyze job's upload step
+          # above: without it, merge_group uploads race the ephemeral
+          # gh-readonly-queue/... ref being deleted and fail with "ref not found".
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          sha: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
+
+  semgrep:
+    name: Semgrep scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      # Run via `docker run` rather than a job-level `container:` so Harden
+      # Runner (which needs to instrument the runner VM directly) still works —
+      # job-level containers run every step inside the container instead.
+      - name: Run Semgrep
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/src" \
+            -w /src \
+            semgrep/semgrep@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b \
+            semgrep scan --config=p/ci --sarif --output=semgrep.sarif --metrics=off
+
+      - name: Upload SARIF to code-scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+          # See the ref/sha override comment on the analyze job's upload step
+          # above: without it, merge_group uploads race the ephemeral
+          # gh-readonly-queue/... ref being deleted and fail with "ref not found".
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          sha: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
 
   lint-golangci:
     name: "Lint (golangci)"
@@ -95,7 +220,7 @@ jobs:
       security-events: write
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -104,7 +229,7 @@ jobs:
       # Without this step, the action may fail intermittently with
       # "could not load export data" errors due to cache corruption
       - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
@@ -132,8 +257,8 @@ jobs:
           # Ensure lintroller module is ready
           cd tools/lintroller && go mod tidy && cd ../..
 
-          # Build custom golangci-lint with plugins
-          golangci-lint custom
+          # Build custom golangci-lint with plugins (staleness-guarded; see magefiles/)
+          go tool mage lint:customGCL
 
           # Verify the custom binary was created
           test -x ./custom-gcl || { echo "Error: custom-gcl not found or not executable"; exit 1; }
@@ -165,7 +290,7 @@ jobs:
       # - t.Setenv in defer blocks (should use os.Setenv)
       # will appear in the SARIF output and GitHub Security tab.
       - name: Run golangci-lint with lintroller plugin
-        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8.0.0
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: 101ccaca0df22b2e36dd917ed5d0be423baa6298
           install-mode: none
@@ -179,21 +304,45 @@ jobs:
             --issues-exit-code=0
 
       - name: Upload filtered SARIF results
+        # merge_group's ephemeral gh-readonly-queue/... ref is deleted as soon
+        # as the queue cycles, which routinely races this upload and fails it
+        # with "ref not found" if left to auto-detect ref/sha from
+        # GITHUB_REF/GITHUB_SHA (the doomed ephemeral ref). Point it at the
+        # queue's real target branch ref (which persists) while still
+        # uploading results for the actual queued merge commit, same as the
+        # CodeQL analyze step above -- skipping the upload outright isn't an
+        # option here either: it would leave the native "CodeQL" code-scanning
+        # required check without this SARIF's contribution.
         if: always()
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: golangci-lint.sarif
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          sha: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
 
   pr-semver-labels:
     name: PR Semver Labels
-    if: github.event_name == 'pull_request'
+    # Required checks must also report on the merge queue's synthetic commit
+    # (github.event_name == 'merge_group'), otherwise the merge queue waits
+    # out its full check-response timeout for a check that will never exist,
+    # then dequeues the PR -- even when every other check already passed.
+    # The label check itself only makes sense against a real pull_request
+    # event (github.event.pull_request doesn't exist for merge_group), and
+    # by the time a PR reaches the queue its label was already verified on
+    # pull_request, so merge_group just needs this job to report a pass.
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
       issues: write
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       # Checkout is required for local composite actions
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
         with:
           persist-credentials: false
@@ -207,7 +356,10 @@ jobs:
 
       # Check for required semver labels
       # Every PR must have exactly one: major, minor, patch, or no-release
-      - uses: mheap/github-action-required-labels@0ac283b4e65c1fb28ce6079dea5546ceca98ccbe # v5.5.2
+      # pull_request only: merge_group has no github.event.pull_request for
+      # this action to check labels against.
+      - uses: mheap/github-action-required-labels@23e10fde7e062233401931a0eece796cd9bf3177 # v5.6.0
+        if: github.event_name == 'pull_request'
         with:
           mode: exactly
           count: 1

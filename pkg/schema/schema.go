@@ -132,6 +132,9 @@ type AtmosConfiguration struct {
 	AnsibleDirAbsolutePath        string             `yaml:"ansibleDirAbsolutePath,omitempty" json:"ansibleDirAbsolutePath,omitempty" mapstructure:"ansibleDirAbsolutePath"`
 	KubernetesDirAbsolutePath     string             `yaml:"kubernetesDirAbsolutePath,omitempty" json:"kubernetesDirAbsolutePath,omitempty" mapstructure:"kubernetesDirAbsolutePath"`
 	HelmDirAbsolutePath           string             `yaml:"helmDirAbsolutePath,omitempty" json:"helmDirAbsolutePath,omitempty" mapstructure:"helmDirAbsolutePath"`
+	ContainerDirAbsolutePath      string             `yaml:"containerDirAbsolutePath,omitempty" json:"containerDirAbsolutePath,omitempty" mapstructure:"containerDirAbsolutePath"`
+	VendorDirAbsolutePath         string             `yaml:"vendorDirAbsolutePath,omitempty" json:"vendorDirAbsolutePath,omitempty" mapstructure:"vendorDirAbsolutePath"`
+	WorkflowsDirAbsolutePath      string             `yaml:"workflowsDirAbsolutePath,omitempty" json:"workflowsDirAbsolutePath,omitempty" mapstructure:"workflowsDirAbsolutePath"`
 	StackConfigFilesRelativePaths []string           `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
 	StackConfigFilesAbsolutePaths []string           `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string             `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
@@ -145,22 +148,35 @@ type AtmosConfiguration struct {
 	// SecretsAuth carries the auth-context resolver and effective default identity for cloud-KMS
 	// SOPS providers (sops/aws-kms, sops/gcp-kms, sops/azure-kv). It is transient (never serialized)
 	// and populated alongside the store auth resolver in the `atmos secret` and terraform code paths.
-	SecretsAuth     *store.SecretsAuthContext `yaml:"-" json:"-" mapstructure:"-"`
-	CliConfigPath   string                    `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
-	Import          []string                  `yaml:"import" json:"import" mapstructure:"import"`
-	Docs            Docs                      `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
-	Auth            AuthConfig                `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
-	Container       ContainerConfig           `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
-	Compositions    map[string]Composition    `yaml:"compositions,omitempty" json:"compositions,omitempty" mapstructure:"compositions"`
-	Env             map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
-	CaseMaps        *casemap.CaseMaps         `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
-	Profiler        profiler.Config           `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
-	TrackProvenance bool                      `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
-	Toolchain       Toolchain                 `yaml:"toolchain,omitempty" json:"toolchain,omitempty" mapstructure:"toolchain"`
-	Git             GitConfig                 `yaml:"git,omitempty" json:"git,omitempty" mapstructure:"git"`
-	Devcontainer    map[string]any            `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
-	Profiles        ProfilesConfig            `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
-	Metadata        ConfigMetadata            `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+	SecretsAuth   *store.SecretsAuthContext `yaml:"-" json:"-" mapstructure:"-"`
+	CliConfigPath string                    `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
+	// BasePathConfigDir is the directory of the --config/--config-path source that declared
+	// (or, absent any declaration, the first source that contributed) base_path, used to resolve
+	// a relative (dot-prefixed or empty) base_path correctly when multiple --config files or
+	// --config-path directories are given. CliConfigPath itself becomes a ";"-joined multi-directory
+	// string in that case, which is not a valid single directory to join a relative path against.
+	// Transient, populated during LoadConfig, never serialized.
+	BasePathConfigDir string `yaml:"-" json:"-" mapstructure:"-"`
+	// ProfilesBasePathConfigDir is the directory of the --config file that declared
+	// profiles.base_path, used to resolve a relative profiles.base_path correctly when multiple
+	// --config files are given (cloudposse/atmos#2867: previously always resolved against the
+	// FIRST --config file's directory regardless of which file actually declared it). Transient,
+	// populated during LoadConfig, never serialized.
+	ProfilesBasePathConfigDir string                 `yaml:"-" json:"-" mapstructure:"-"`
+	Import                    []string               `yaml:"import" json:"import" mapstructure:"import"`
+	Docs                      Docs                   `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Auth                      AuthConfig             `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	Container                 ContainerConfig        `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
+	Compositions              map[string]Composition `yaml:"compositions,omitempty" json:"compositions,omitempty" mapstructure:"compositions"`
+	Env                       map[string]string      `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
+	CaseMaps                  *casemap.CaseMaps      `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
+	Profiler                  profiler.Config        `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
+	TrackProvenance           bool                   `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
+	Toolchain                 Toolchain              `yaml:"toolchain,omitempty" json:"toolchain,omitempty" mapstructure:"toolchain"`
+	Git                       GitConfig              `yaml:"git,omitempty" json:"git,omitempty" mapstructure:"git"`
+	Devcontainer              map[string]any         `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
+	Profiles                  ProfilesConfig         `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
+	Metadata                  ConfigMetadata         `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
 	// List holds command-specific list configurations (list.components, list.instances, list.stacks).
 	List TopLevelListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 	CI   CIConfig           `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
@@ -689,6 +705,43 @@ type Terraform struct {
 	// `providers lock` that keeps .terraform.lock.hcl complete across platforms.
 	// Empty defaults to the current host platform.
 	Platforms []string `yaml:"platforms,omitempty" json:"platforms,omitempty" mapstructure:"platforms"`
+	// Flags holds fleet-wide default values for terraform CLI execution flags
+	// (e.g. -lock-timeout, -parallelism). Overridable per stack via the
+	// root-level `terraform: flags:` block, and per component via a
+	// component's own `flags:` block. An explicit CLI-typed compat flag
+	// (e.g. `-lock-timeout=5m` typed on the command line) always wins.
+	Flags TerraformFlags `yaml:"flags,omitempty" json:"flags,omitempty" mapstructure:"flags"`
+}
+
+// TerraformFlags holds default values for terraform CLI execution flags
+// (lock/concurrency/output tuning). Settable globally under
+// components.terraform.flags in atmos.yaml, per stack under a root-level
+// terraform.flags block, and per component under a component's flags block
+// (field-level override, highest-precedence layer below an explicit
+// CLI-typed compat flag).
+//
+// Lock and Refresh are *bool (not bool) because terraform's own default for
+// both is true — a plain bool can't distinguish "not configured" from
+// "explicitly set to false" and would silently inject -lock=false /
+// -refresh=false for everyone who never touched the setting. Parallelism is
+// *int for the same reason (terraform's default is 10, not 0).
+// CompactWarnings' terraform default is already false, so a plain bool is
+// unambiguous.
+type TerraformFlags struct {
+	// LockTimeout is the default value for terraform's -lock-timeout flag
+	// (e.g. "30s", "5m"). Empty means unset — terraform's own 0s default
+	// applies. Validated with time.ParseDuration at injection time.
+	LockTimeout string `yaml:"lock_timeout,omitempty" json:"lock_timeout,omitempty" mapstructure:"lock_timeout"`
+	// Lock is the default value for terraform's -lock flag. nil means unset.
+	Lock *bool `yaml:"lock,omitempty" json:"lock,omitempty" mapstructure:"lock"`
+	// Parallelism is the default value for terraform's -parallelism flag. nil means unset.
+	Parallelism *int `yaml:"parallelism,omitempty" json:"parallelism,omitempty" mapstructure:"parallelism"`
+	// Refresh is the default value for terraform's -refresh flag. nil means unset.
+	// Not applied to `apply <planfile>` — terraform rejects -refresh when
+	// applying a saved plan.
+	Refresh *bool `yaml:"refresh,omitempty" json:"refresh,omitempty" mapstructure:"refresh"`
+	// CompactWarnings is the default value for terraform's -compact-warnings flag.
+	CompactWarnings bool `yaml:"compact_warnings,omitempty" json:"compact_warnings,omitempty" mapstructure:"compact_warnings"`
 }
 
 // TerraformLint configures TFLint for Terraform components. Config may be an
@@ -1223,12 +1276,13 @@ type Helm struct {
 
 type Components struct {
 	// Built-in component types (legacy - will migrate to plugin model in future phases).
-	Terraform  Terraform  `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
-	Helmfile   Helmfile   `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
-	Packer     Packer     `yaml:"packer" json:"packer" mapstructure:"packer"`
-	Ansible    Ansible    `yaml:"ansible" json:"ansible" mapstructure:"ansible"`
-	Kubernetes Kubernetes `yaml:"kubernetes" json:"kubernetes" mapstructure:"kubernetes"`
-	Helm       Helm       `yaml:"helm" json:"helm" mapstructure:"helm"`
+	Terraform  Terraform                 `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
+	Helmfile   Helmfile                  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
+	Packer     Packer                    `yaml:"packer" json:"packer" mapstructure:"packer"`
+	Ansible    Ansible                   `yaml:"ansible" json:"ansible" mapstructure:"ansible"`
+	Kubernetes Kubernetes                `yaml:"kubernetes" json:"kubernetes" mapstructure:"kubernetes"`
+	Helm       Helm                      `yaml:"helm" json:"helm" mapstructure:"helm"`
+	Container  ContainerComponentsConfig `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
 
 	// List configuration for component listing.
 	List ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
@@ -1258,6 +1312,8 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 		return c.Kubernetes, true
 	case "helm":
 		return c.Helm, true
+	case "container":
+		return c.Container, true
 	default:
 		// Check plugin types.
 		if config, ok := c.Plugins[componentType]; ok {
@@ -1612,12 +1668,29 @@ type ConfigAndStacksInfo struct {
 	//   - Type assertions are used at usage sites to recover type safety
 	AuthManager  any
 	AuthDisabled bool
+	// DeferredMergeContexts holds the per-section deferred-merge contexts recovered from the
+	// FindStacksMap cache for this component, keyed by section name (vars, settings, env, auth,
+	// providers, required_providers, hooks, test, generate). A later, per-invocation stage
+	// resolves the deferred YAML functions they hold (!template, !terraform.output, !labels,
+	// etc.) with a real processor and deep-merges the result against any concrete override at
+	// the same path.
+	//
+	// Type is 'any' (concretely internal/exec.ComponentDeferredContexts) for the same reason as
+	// AuthManager above: pkg/merge imports pkg/schema, so a concretely-typed field naming an
+	// internal/exec or pkg/merge type here would risk an import cycle. Type-assert at usage sites.
+	DeferredMergeContexts any
 	// SecretsMaskOnly indicates an inspection command (describe/list) is resolving YAML
 	// functions with masking enabled. When true, the `!secret` resolver returns the mask
 	// replacement WITHOUT retrieving from the backend (no credentials required). Value-
 	// producing commands (secret get/pull/push, terraform plan/apply/output) leave this false.
 	SecretsMaskOnly      bool
 	ComponentBackendType string
+	// Flags holds the fully resolved terraform CLI execution flags for this
+	// component (merged: atmos.yaml global default < stack-level
+	// `terraform: flags:` < component's own `flags:` block). An explicit
+	// CLI-typed compat flag in AdditionalArgsAndFlags still wins over this
+	// at injection time.
+	Flags TerraformFlags
 	// RequiredVersion is the Terraform version constraint (e.g., ">= 1.10.1").
 	// This is extracted from terraform.required_version or components.terraform.<name>.required_version.
 	RequiredVersion string
@@ -1881,6 +1954,7 @@ type BaseComponentConfig struct {
 	BaseComponentProvider                  string
 	BaseComponentPaths                     any
 	BaseComponentManifests                 any
+	BaseComponentValidate                  any
 	BaseComponentPlugins                   any
 	BaseComponentRender                    AtmosSectionMapType
 	BaseComponentHelm                      AtmosSectionMapType
@@ -1892,6 +1966,9 @@ type BaseComponentConfig struct {
 	BaseComponentRemoteStateBackendSection AtmosSectionMapType
 	BaseComponentSourceSection             AtmosSectionMapType
 	BaseComponentProvisionSection          AtmosSectionMapType
+	// BaseComponentFlags holds the terraform CLI execution flag defaults inherited
+	// from base components (metadata.inherits / top-level `component`).
+	BaseComponentFlags AtmosSectionMapType
 	// BaseComponentRetry holds the raw retry configuration inherited from base components.
 	// It is deep-merged with the child component's retry block by mergeComponentConfigurations.
 	BaseComponentRetry        AtmosSectionMapType

@@ -73,6 +73,10 @@ var manifestSections = map[string]sectionScope{
 	"provision":                 {component: true},
 	"source":                    {component: true},
 	"version":                   {topLevel: true},
+	"required_version":          {component: true},
+	"required_providers":        {component: true},
+	"retry":                     {component: true},
+	"flags":                     {component: true},
 }
 
 // nonManifestSections are `*SectionName` constants that are NOT authored stack-manifest sections
@@ -80,38 +84,36 @@ var manifestSections = map[string]sectionScope{
 // from the schema-coverage requirement, but listing them here is mandatory: a new `*SectionName`
 // constant absent from BOTH this set and manifestSections fails TestSchemaCoversAllSections.
 var nonManifestSections = map[string]struct{}{
-	"template":           {}, // Packer template sub-field.
-	"playbook":           {}, // Ansible sub-field.
-	"inventory":          {}, // Ansible sub-field.
-	"provider":           {}, // Kubernetes component sub-field (manifest provider engine).
-	"paths":              {}, // Kubernetes component sub-field (manifest paths).
-	"manifests":          {}, // Kubernetes component sub-field (inline manifests).
-	"render":             {}, // Kubernetes component sub-field (render output config).
-	"chart":              {}, // Native Helm component sub-field (chart reference).
-	"values":             {}, // Native Helm component sub-field (inline chart values).
-	"values_files":       {}, // Native Helm component sub-field (chart values file paths).
-	"repositories":       {}, // Native Helm component sub-field (chart repositories).
-	"plugins":            {}, // Helm/Helmfile component sub-field (Helm CLI plugins list).
-	"workspace":          {}, // Terraform workspace (derived/metadata).
-	"required_version":   {}, // Introspected from Terraform, not authored.
-	"required_providers": {}, // Introspected from Terraform, not authored.
-	"inheritance":        {}, // Describe output.
-	"integrations":       {}, // atmos.yaml / describe output.
-	"github":             {}, // Sub-field of integrations.
-	"process_env":        {}, // Describe output (resolved process env).
-	"cli_args":           {}, // Describe output.
-	"retry":              {}, // Workflow/source retry sub-field, not a manifest section.
-	"tf_cli_vars":        {}, // Derived Terraform CLI vars.
-	"env_tf_cli_args":    {}, // Derived Terraform CLI env.
-	"env_tf_cli_vars":    {}, // Derived Terraform CLI env.
-	"component_type":     {}, // Describe output.
-	"outputs":            {}, // Describe output.
-	"static":             {}, // Describe output (static remote state).
-	"component_path":     {}, // Describe output.
-	"inherits":           {}, // metadata sub-field, not a top-level section.
-	"abstract":           {}, // metadata sub-field, not a top-level section.
-	"container":          {}, // Component-type key; container components are authored under `components.container.<name>` and modeled via the components schema, not as a standalone top-level section.
-	"emulator":           {}, // Component-type key; emulator components are authored under `components.emulator.<name>` and modeled via the components schema, not as a standalone top-level section.
+	"template":        {}, // Packer template sub-field.
+	"playbook":        {}, // Ansible sub-field.
+	"inventory":       {}, // Ansible sub-field.
+	"provider":        {}, // Kubernetes component sub-field (manifest provider engine).
+	"paths":           {}, // Kubernetes component sub-field (manifest paths).
+	"manifests":       {}, // Kubernetes component sub-field (inline manifests).
+	"render":          {}, // Kubernetes component sub-field (render output config).
+	"validate":        {}, // Kubernetes component sub-field (structural validation opt-out).
+	"chart":           {}, // Native Helm component sub-field (chart reference).
+	"values":          {}, // Native Helm component sub-field (inline chart values).
+	"values_files":    {}, // Native Helm component sub-field (chart values file paths).
+	"repositories":    {}, // Native Helm component sub-field (chart repositories).
+	"plugins":         {}, // Helm/Helmfile component sub-field (Helm CLI plugins list).
+	"workspace":       {}, // Terraform workspace (derived/metadata).
+	"inheritance":     {}, // Describe output.
+	"integrations":    {}, // atmos.yaml / describe output.
+	"github":          {}, // Sub-field of integrations.
+	"process_env":     {}, // Describe output (resolved process env).
+	"cli_args":        {}, // Describe output.
+	"tf_cli_vars":     {}, // Derived Terraform CLI vars.
+	"env_tf_cli_args": {}, // Derived Terraform CLI env.
+	"env_tf_cli_vars": {}, // Derived Terraform CLI env.
+	"component_type":  {}, // Describe output.
+	"outputs":         {}, // Describe output.
+	"static":          {}, // Describe output (static remote state).
+	"component_path":  {}, // Describe output.
+	"inherits":        {}, // metadata sub-field, not a top-level section.
+	"abstract":        {}, // metadata sub-field, not a top-level section.
+	"container":       {}, // Component-type key; container components are authored under `components.container.<name>` and modeled via the components schema, not as a standalone top-level section.
+	"emulator":        {}, // Component-type key; emulator components are authored under `components.emulator.<name>` and modeled via the components schema, not as a standalone top-level section.
 }
 
 // knownSchemaGaps tracks sections that SHOULD be in the manifest schema but currently are not.
@@ -121,13 +123,9 @@ var nonManifestSections = map[string]struct{}{
 //
 // TODO(schema-reconciliation): close these gaps and delete the entries.
 //   - top-level `ansible` and global `auth` are not yet modeled (only component-level auth is).
-//   - native Helm is not yet modeled: top-level `helm` (default config for helm components, peer
-//     of `helmfile`/`kubernetes`) and the `helm_component_manifest` definition are missing.
-//     Tracked until the native-Helm manifest schema lands.
 var knownSchemaGaps = map[string]struct{}{
 	"topLevel:ansible": {},
 	"topLevel:auth":    {},
-	"topLevel:helm":    {},
 }
 
 // componentManifestDefs are the per-component-type manifest definitions whose `properties` model
@@ -135,6 +133,7 @@ var knownSchemaGaps = map[string]struct{}{
 var componentManifestDefs = []string{
 	"terraform_component_manifest",
 	"helmfile_component_manifest",
+	"helm_component_manifest",
 	"packer_component_manifest",
 }
 

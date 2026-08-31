@@ -74,11 +74,15 @@
                 "type": "string"
               },
               "options": {
-                "description": "Choices for select and multiselect fields",
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
+                "description": "Static list of choices (plain strings or {label: value} objects); a dot-path string into answers.* (e.g. answers.environments); or a Go-template expression computing the list",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array"
+                  }
+                ]
               },
               "placeholder": {
                 "description": "Placeholder text for input fields",
@@ -142,14 +146,42 @@
           "description": "Conditional generation overlay keyed by each file's discovered path",
           "items": {
             "additionalProperties": false,
+            "if": {
+              "required": [
+                "matrix"
+              ]
+            },
             "properties": {
+              "matrix": {
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    }
+                  ]
+                },
+                "description": "Axes to expand this file into one output per resolved combination; each axis's value is a literal list of strings; a dot-path string into answers.*; or a Go-template expression computing the list",
+                "minProperties": 1,
+                "type": "object"
+              },
               "path": {
                 "description": "File path as discovered in the template's file tree",
                 "type": "string"
               },
+              "target": {
+                "description": "Output path template overriding Path; required when matrix is set; optional otherwise",
+                "type": "string"
+              },
               "when": {
                 "additionalProperties": false,
-                "description": "Condition (predicate/CEL string or a list treated as 'all'; use CEL \u0026\u0026/||/! instead of the all/any/not map form) gating whether this file is generated",
+                "description": "Condition (predicate/CEL string or a list treated as 'all'; use CEL \u0026\u0026/||/! instead of the all/any/not map form) gating whether this file (or with matrix a specific combination) is generated",
                 "oneOf": [
                   {
                     "type": "string"
@@ -164,6 +196,17 @@
             "required": [
               "path"
             ],
+            "then": {
+              "properties": {
+                "target": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "target"
+              ]
+            },
             "type": "object"
           },
           "type": "array"

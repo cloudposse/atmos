@@ -41,6 +41,7 @@ type ComponentProcessorOptions struct {
 	TerraformRequiredVersion        string
 	GlobalAndTerraformHooks         map[string]any
 	GlobalAndTerraformGenerate      map[string]any
+	GlobalAndTerraformFlags         map[string]any
 	GlobalBackendType               string
 	GlobalBackendSection            map[string]any
 	GlobalRemoteStateBackendType    string
@@ -53,6 +54,7 @@ type ComponentProcessorOptions struct {
 	GlobalKubernetesPaths     any
 	GlobalKubernetesManifests any
 	GlobalKubernetesRender    map[string]any
+	GlobalKubernetesValidate  any
 
 	// Atmos configuration.
 	AtmosConfig *schema.AtmosConfiguration
@@ -70,6 +72,7 @@ type ComponentProcessorResult struct {
 	ComponentProvider     string
 	ComponentPaths        any
 	ComponentManifests    any
+	ComponentValidate     any
 	// ComponentPlugins holds the Helm CLI plugins list (helm/helmfile components).
 	ComponentPlugins any
 	ComponentRender  map[string]any
@@ -94,6 +97,7 @@ type ComponentProcessorResult struct {
 	BaseComponentProvider      string
 	BaseComponentPaths         any
 	BaseComponentManifests     any
+	BaseComponentValidate      any
 	// BaseComponentPlugins holds the inherited Helm CLI plugins list from base components.
 	BaseComponentPlugins any
 	BaseComponentRender  map[string]any
@@ -126,6 +130,9 @@ type ComponentProcessorResult struct {
 	ComponentOverridesRequiredVersion      string
 	ComponentOverridesHooks                map[string]any
 	ComponentOverridesGenerate             map[string]any
+	ComponentFlags                         map[string]any
+	ComponentOverridesFlags                map[string]any
+	BaseComponentFlags                     map[string]any
 	BaseComponentProviders                 map[string]any
 	BaseComponentRequiredProviders         map[string]any
 	BaseComponentRequiredVersion           string

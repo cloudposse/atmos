@@ -60,6 +60,10 @@ commands:
         env: &go_auto_env
           GOTOOLCHAIN: &go_auto_toolchain auto
           CGO_ENABLED: &go_cgo_disabled "0"
+          # Link Go's native FIPS 140-3 validated crypto module so test
+          # binaries default to FIPS-enforcing (GODEBUG=fips140=on) at
+          # runtime, matching release builds. See docs/prd/fips-140-mode.md.
+          GOFIPS140: &go_fips140 latest
         flags:
           - name: cover
             type: bool
@@ -71,9 +75,9 @@ commands:
           - type: shell
             command: |
               if [ "{{ .Flags.cover }}" = "true" ]; then
-                scripts/collect-coverage.sh "${TEST:-$(go list ./...)}" "${TESTARGS:-}"
+                go tool mage coverage:collect
               else
-                go test ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 40m
+                go test ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout "${GO_TEST_TIMEOUT:-40m}"
               fi
 
       - name: acc
@@ -126,6 +130,7 @@ commands:
         env:
           GOTOOLCHAIN: *go_auto_toolchain
           CGO_ENABLED: *go_cgo_disabled
+          GOFIPS140: *go_fips140
           GOCOVERDIR: coverage
         steps:
           - type: atmos
@@ -143,17 +148,49 @@ commands:
             command: go test -coverprofile=coverage.out ${TEST:-$(go list ./...)} ${TESTARGS:-}
           - type: shell
             command: go tool cover -html=coverage.out -o coverage.html
+        commands:
+          - name: download-shards
+            description: >-
+              Download every Linux shard's coverage artifact from this workflow
+              run in parallel (CI-only; collates before the Codecov upload
+              since Codecov aggregation happens from a single job).
+            steps:
+              - name: shards
+                type: matrix
+                # Keep this list in sync with .github/workflows/test.yml's
+                # env.TEST_SHARD_COUNT and the `test` job's matrix.shard.
+                matrix:
+                  shard: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+                steps:
+                  - name: download
+                    type: shell
+                    retry:
+                      max_attempts: 3
+                      initial_delay: 15s
+                      backoff_strategy: constant
+                    command: >-
+                      gh run download "$GITHUB_RUN_ID"
+                      -n "acceptance-coverage-linux-shard-{{ .matrix.shard }}"
+                      -D "$GITHUB_WORKSPACE/coverage/shards/shard-{{ .matrix.shard }}"
 
       - name: race
         description: Run quick tests with race detector and shuffled order
         env:
           GOTOOLCHAIN: *go_auto_toolchain
           CGO_ENABLED: "1"
+          GOFIPS140: *go_fips140
         steps:
           - type: atmos
             command: build deps
           - type: shell
             command: go test -race -shuffle=on ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 10m
+
+      - name: magefiles
+        description: Run magefiles/ unit tests with coverage (excluded from `go test ./...` by the mage build tag, so CI runs it as a separate step)
+        env: *go_auto_env
+        steps:
+          - type: shell
+            command: go test -tags=mage -coverprofile=magefiles-coverage.out ./magefiles/...
 
       - name: generate-auth-http-store-mocks
         description: Regenerate auth/http/store mocks using go:generate directives

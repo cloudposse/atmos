@@ -146,9 +146,10 @@ type remoteComponentLocator struct {
 	componentName string
 }
 
-// section returns the raw value of the named section for the located remote component,
-// and whether it was found.
-func (l remoteComponentLocator) section(sectionName string) (any, bool) {
+// remoteComponentMap resolves the raw section map for the located remote component, and
+// whether the remote component path itself was found (not whether any specific section
+// key exists within it).
+func (l remoteComponentLocator) remoteComponentMap() (map[string]any, bool) {
 	remoteStackSection, ok := (*l.remoteStacks)[l.stackName].(map[string]any)
 	if !ok {
 		return nil, false
@@ -162,10 +163,31 @@ func (l remoteComponentLocator) section(sectionName string) (any, bool) {
 		return nil, false
 	}
 	remoteComponentSection, ok := remoteComponentTypeSection[l.componentName].(map[string]any)
+	return remoteComponentSection, ok
+}
+
+// section returns the raw value of the named section for the located remote component,
+// and whether it was found.
+func (l remoteComponentLocator) section(sectionName string) (any, bool) {
+	m, ok := l.remoteComponentMap()
 	if !ok {
 		return nil, false
 	}
-	return remoteComponentSection[sectionName], true
+	return m[sectionName], true
+}
+
+// sectionPresent reports whether sectionName exists as an explicit key on the located
+// remote component. Unlike section, which defaults an absent key to nil for value
+// comparison, this distinguishes "explicitly set" from "never set" — needed to detect
+// when the LOCAL side removes a section the remote still has (section's ok only reflects
+// whether the remote component path was found, not per-key presence).
+func (l remoteComponentLocator) sectionPresent(sectionName string) bool {
+	m, ok := l.remoteComponentMap()
+	if !ok {
+		return false
+	}
+	_, present := m[sectionName]
+	return present
 }
 
 // isSectionValueEqual compares a local component section value with the corresponding value

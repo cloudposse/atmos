@@ -21,6 +21,10 @@ import (
 // uninstall.go, and the scope-resolution helpers below.
 const scopeFlag = "scope"
 
+// clientFlag is the shared --client flag name, referenced from install.go,
+// uninstall.go, and the client-resolution helpers below.
+const clientFlag = "client"
+
 // resolveSkillClients resolves which AI clients `atmos ai skill install`
 // should target (uninstall uses resolveUninstallClients instead, since it
 // must consider every scope in play rather than one). An explicit
@@ -33,7 +37,7 @@ const scopeFlag = "scope"
 // was detected -- that's what --all-clients is for. Mirrors
 // cmd/mcp/client.resolveInstallClients.
 func resolveSkillClients(basePath string, v *viper.Viper, skipPrompt bool, scope string) ([]string, error) {
-	clients := v.GetStringSlice("client")
+	clients := v.GetStringSlice(clientFlag)
 	if len(clients) > 0 {
 		return clients, nil
 	}
@@ -112,7 +116,7 @@ func resolveUninstallScopes(cmd *cobra.Command, v *viper.Viper, skipPrompt bool)
 // scope in scopes (see resolveUninstallScopes) -- an explicit
 // --client/--all-clients flag still always wins, same as resolveSkillClients.
 func resolveUninstallClients(basePath string, v *viper.Viper, skipPrompt bool, scopes []string) ([]string, error) {
-	clients := v.GetStringSlice("client")
+	clients := v.GetStringSlice(clientFlag)
 	if len(clients) > 0 {
 		return clients, nil
 	}

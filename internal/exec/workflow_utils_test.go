@@ -1,11 +1,13 @@
 package exec
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,7 +22,6 @@ import (
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
@@ -29,6 +30,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/diagnostics"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/taskgraph"
 )
 
 // envSnapshotHandler is an in-process extended step type that records the
@@ -543,117 +545,6 @@ func TestShellFieldsCorrectParsing(t *testing.T) {
 			assert.NoError(t, err, "shell.Fields should not return an error")
 			assert.Equal(t, tt.expectedArgs, actualArgs,
 				"shell.Fields should correctly parse quoted arguments")
-		})
-	}
-}
-
-// TestBuildWorkflowStepError tests the buildWorkflowStepError function.
-func TestBuildWorkflowStepError(t *testing.T) {
-	tests := []struct {
-		name           string
-		err            error
-		ctx            *workflowStepErrorContext
-		expectContains []string
-		expectSentinel error
-		expectExitCode int
-	}{
-		{
-			name: "shell command failure with stack",
-			err:  errors.New("command failed"),
-			ctx: &workflowStepErrorContext{
-				WorkflowPath:     "/path/to/stacks/workflows/deploy.yaml",
-				WorkflowBasePath: "/path/to/stacks/workflows",
-				Workflow:         "deploy-all",
-				StepName:         "step1",
-				Command:          "echo hello",
-				CommandType:      "shell",
-				FinalStack:       "dev-us-east-1",
-			},
-			expectContains: []string{"deploy-all", "step1", "echo hello", "dev-us-east-1"},
-			expectSentinel: errUtils.ErrWorkflowStepFailed,
-		},
-		{
-			name: "atmos command failure without stack",
-			err:  errors.New("terraform failed"),
-			ctx: &workflowStepErrorContext{
-				WorkflowPath:     "/base/stacks/workflows/infra.yaml",
-				WorkflowBasePath: "/base/stacks/workflows",
-				Workflow:         "provision",
-				StepName:         "terraform-step",
-				Command:          "terraform plan vpc",
-				CommandType:      "atmos",
-				FinalStack:       "",
-			},
-			expectContains: []string{"provision", "terraform-step", "atmos terraform plan vpc"},
-			expectSentinel: errUtils.ErrWorkflowStepFailed,
-		},
-		{
-			name: "atmos command failure with stack",
-			err:  errors.New("plan failed"),
-			ctx: &workflowStepErrorContext{
-				WorkflowPath:     "/workflows/deploy.yaml",
-				WorkflowBasePath: "/workflows",
-				Workflow:         "deploy",
-				StepName:         "plan-step",
-				Command:          "terraform plan mycomponent",
-				CommandType:      "atmos",
-				FinalStack:       "prod",
-			},
-			expectContains: []string{"deploy", "plan-step", "atmos", "prod"},
-			expectSentinel: errUtils.ErrWorkflowStepFailed,
-		},
-		{
-			name: "error with exit code",
-			err:  errUtils.WithExitCode(errors.New("exit error"), 2),
-			ctx: &workflowStepErrorContext{
-				WorkflowPath:     "/workflows/test.yaml",
-				WorkflowBasePath: "/workflows",
-				Workflow:         "test-wf",
-				StepName:         "failing-step",
-				Command:          "exit 2",
-				CommandType:      "shell",
-				FinalStack:       "",
-			},
-			expectContains: []string{"test-wf", "failing-step"},
-			expectSentinel: errUtils.ErrWorkflowStepFailed,
-			expectExitCode: 2,
-		},
-		{
-			name: "workflow file in nested directory",
-			err:  errors.New("nested failure"),
-			ctx: &workflowStepErrorContext{
-				WorkflowPath:     "/base/stacks/workflows/team/project/deploy.yaml",
-				WorkflowBasePath: "/base/stacks/workflows",
-				Workflow:         "deploy",
-				StepName:         "step1",
-				Command:          "echo test",
-				CommandType:      "shell",
-				FinalStack:       "",
-			},
-			expectContains: []string{"deploy", "step1", "team/project/deploy"},
-			expectSentinel: errUtils.ErrWorkflowStepFailed,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := buildWorkflowStepError(tt.err, tt.ctx)
-
-			assert.Error(t, result)
-			assert.ErrorIs(t, result, tt.expectSentinel)
-
-			// Use Format to get the full formatted error including hints. Strip ANSI
-			// since CI-enabled color rendering can split an expected substring (e.g. a
-			// syntax-highlighted code fence) across separate escape-coded spans.
-			formattedErr := atmosansi.Strip(errUtils.Format(result, errUtils.DefaultFormatterConfig()))
-			for _, expected := range tt.expectContains {
-				assert.Contains(t, formattedErr, expected)
-			}
-
-			if tt.expectExitCode > 0 {
-				exitCode := errUtils.GetExitCode(result)
-				assert.Equal(t, tt.expectExitCode, exitCode)
-			}
 		})
 	}
 }
@@ -1426,6 +1317,335 @@ func TestExecuteWorkflowContinuesWithFailureConditionAfterStepError(t *testing.T
 	assert.True(t, os.IsNotExist(statErr), "implicit success step should be skipped after failure")
 }
 
+// TestExecuteWorkflowContinueAlwaysForgivesFailure verifies GitHub-Actions-continue-on-error
+// semantics: a step with `continue: always` that fails still lets subsequent steps run, and the
+// overall workflow error is nil (unlike a plain failing step, which stops the workflow and
+// propagates errUtils.ErrWorkflowStepFailed, per
+// TestExecuteWorkflowContinuesWithFailureConditionAfterStepError above).
+func TestExecuteWorkflowContinueAlwaysForgivesFailure(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test continue: always forgives a step failure",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:             "forgiven-fail-step",
+				Command:          "echo fail > fail.txt && exit 7",
+				Type:             "shell",
+				Continue:         schema.MustCondition(schema.ConditionPredicateAlways),
+				WorkingDirectory: tmpDir,
+			},
+			{
+				Name:             "after-forgiven-failure",
+				Command:          "echo ran > ran.txt",
+				Type:             "shell",
+				WorkingDirectory: tmpDir,
+			},
+			{
+				Name:             "failure-handler-must-not-fire",
+				Command:          "echo failure > failure.txt",
+				Type:             "shell",
+				When:             schema.MustCondition(schema.ConditionPredicateFailure),
+				WorkingDirectory: tmpDir,
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-continue-always", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	require.NoError(t, err, "a continue: always failure must not fail the overall workflow")
+
+	for _, name := range []string{"fail.txt", "ran.txt"} {
+		_, statErr := os.Stat(filepath.Join(tmpDir, name))
+		assert.NoError(t, statErr, "expected %s to be written", name)
+	}
+	_, statErr := os.Stat(filepath.Join(tmpDir, "failure.txt"))
+	assert.True(t, os.IsNotExist(statErr), "a forgiven failure must not satisfy a later when: failure")
+}
+
+// TestExecuteWorkflow_InputsSkipsWhenSourcesUnchanged exercises the `inputs:`/`artifacts:`
+// feature end-to-end at the workflow level: a step declares inputs.sources/artifacts.paths with
+// no explicit `when:`, implicitly meaning `when: checksum.changed`. The first run executes (no
+// prior state); the second run (sources unchanged) skips; a source content change causes a
+// third run to execute again.
+func TestExecuteWorkflow_InputsSkipsWhenSourcesUnchanged(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	atmosConfig.BasePath = tmpDir
+
+	srcFile := filepath.Join(tmpDir, "main.go")
+	artifactFile := filepath.Join(tmpDir, "bin", "app")
+	runLog := filepath.Join(tmpDir, "run.txt")
+	require.NoError(t, os.WriteFile(srcFile, []byte("package main"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(artifactFile), 0o755))
+	require.NoError(t, os.WriteFile(artifactFile, []byte("binary"), 0o644))
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test inputs: skip-when-unchanged",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:             "compile",
+				Command:          "echo ran >> " + filepath.ToSlash(runLog),
+				Type:             "shell",
+				WorkingDirectory: tmpDir,
+				Inputs:           &schema.Inputs{Sources: []string{"main.go"}},
+				Artifacts:        &schema.Artifacts{Paths: []string{"bin/app"}},
+			},
+		},
+	}
+
+	countRuns := func() int {
+		content, readErr := os.ReadFile(runLog)
+		if os.IsNotExist(readErr) {
+			return 0
+		}
+		require.NoError(t, readErr)
+		return len(strings.Split(strings.TrimSpace(string(content)), "\n"))
+	}
+
+	require.NoError(t, ExecuteWorkflow(atmosConfig, "test-inputs-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", ""))
+	assert.Equal(t, 1, countRuns(), "first run must execute (no prior recorded state)")
+
+	require.NoError(t, ExecuteWorkflow(atmosConfig, "test-inputs-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", ""))
+	assert.Equal(t, 1, countRuns(), "second run must skip since sources are unchanged")
+
+	require.NoError(t, os.WriteFile(srcFile, []byte("package main // changed"), 0o644))
+	require.NoError(t, ExecuteWorkflow(atmosConfig, "test-inputs-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", ""))
+	assert.Equal(t, 2, countRuns(), "third run must execute since sources changed")
+}
+
+// TestExecuteWorkflow_PreconditionsSkipsWhenToolAlreadyOnPath exercises the `preconditions:`
+// mechanism at the workflow level: a step with `preconditions.tools` and no explicit inputs/
+// artifacts is skipped when every declared tool already resolves via exec.LookPath. Uses "go"
+// (guaranteed present under `go test`) rather than a shell command, staying cross-platform.
+func TestExecuteWorkflow_PreconditionsSkipsWhenToolAlreadyOnPath(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	atmosConfig.BasePath = tmpDir
+	runLog := filepath.Join(tmpDir, "run.txt")
+
+	// Use the running test binary's own absolute path as the precondition tool: exec.LookPath
+	// special-cases a name containing a path separator to check that exact file directly (no PATH
+	// search), so this is guaranteed present and resolvable without depending on any particular
+	// binary (e.g. "go") happening to be on PATH in whatever environment runs this test.
+	testExe, err := os.Executable()
+	require.NoError(t, err)
+	_, lookErr := exec.LookPath(testExe)
+	require.NoError(t, lookErr, "the running test binary's own path must resolve via exec.LookPath")
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test preconditions: skip-when-satisfied",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:             "install",
+				Command:          "echo ran >> " + filepath.ToSlash(runLog),
+				Type:             "shell",
+				WorkingDirectory: tmpDir,
+				Preconditions:    &schema.Preconditions{Tools: []string{testExe}},
+			},
+		},
+	}
+
+	require.NoError(t, ExecuteWorkflow(atmosConfig, "test-preconditions-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", ""))
+	_, statErr := os.Stat(runLog)
+	assert.True(t, os.IsNotExist(statErr), "step must be skipped when the preconditions tool is already on PATH")
+}
+
+// TestExecuteWorkflow_MalformedWhenCELErrorsDuringAuthPrescan verifies a step whose `when:` is
+// a syntactically-valid CEL expression that fails at RUNTIME (not compile time, which
+// schema.MustCondition would already reject) surfaces that evaluation error from the upfront
+// needs-auth prescan loop, before any step runs. `1 / 0 == 0` type-checks to bool (so
+// construction succeeds) but integer division by zero is a CEL runtime error.
+func TestExecuteWorkflow_MalformedWhenCELErrorsDuringAuthPrescan(t *testing.T) {
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test malformed when: CEL surfaces during auth prescan",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "step1",
+				Command: "echo should-not-run",
+				Type:    "shell",
+				When:    schema.MustCondition("!cel 1 / 0 == 0"),
+			},
+		},
+	}
+
+	err := ExecuteWorkflow(schema.AtmosConfiguration{}, "test-malformed-when", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, schema.ErrInvalidWhenCondition)
+}
+
+// TestExecuteWorkflow_MalformedWhenCELErrorsDuringMainStepLoop verifies the SECOND,
+// independent `when:` evaluation in ExecuteWorkflow's main per-step loop (distinct from the
+// upfront needs-auth prescan loop covered by TestExecuteWorkflow_MalformedWhenCELErrorsDuringAuthPrescan)
+// also surfaces a runtime CEL evaluation error rather than silently skipping or panicking. The
+// `when:` here references `checksum.changed` so freshness.MentionsAnyFreshnessFact makes the
+// prescan loop treat the step as always-possibly-runnable WITHOUT evaluating the CEL at all
+// (facts aren't computed yet during prescan) -- so the only place this expression is ever
+// actually evaluated is the main loop, isolating that branch. `==` evaluates both operands (no
+// short-circuiting), so the `1 / 0` runtime error fires regardless of checksum.changed's value.
+func TestExecuteWorkflow_MalformedWhenCELErrorsDuringMainStepLoop(t *testing.T) {
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test malformed when: CEL surfaces during the main step loop",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "step1",
+				Command: "echo should-not-run",
+				Type:    "shell",
+				When:    schema.MustCondition("!cel checksum.changed == (1 / 0 == 0)"),
+			},
+		},
+	}
+
+	err := ExecuteWorkflow(schema.AtmosConfiguration{}, "test-malformed-when-main-loop", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, schema.ErrInvalidWhenCondition)
+}
+
+// TestExecuteWorkflow_DependenciesWorkflowsUnknownNameErrors verifies a dependencies.workflows
+// entry naming a workflow that doesn't exist in the resolved file fails the whole workflow run
+// with taskgraph's own ErrUnknownDependency, surfaced through ExecuteWorkflow's call into
+// taskgraph.Run -- rather than silently skipping the missing dependency.
+func TestExecuteWorkflow_DependenciesWorkflowsUnknownNameErrors(t *testing.T) {
+	tmpDir := t.TempDir()
+	workflowPath := filepath.Join(tmpDir, "deploy.yaml")
+	// WorkflowLookup's same-file resolution (see WorkflowLookup's doc comment) defaults an
+	// unset ref.File to this workflow's own workflowPath, so the file must actually exist and
+	// parse -- otherwise ExecuteWorkflow would fail with ErrWorkflowFileNotFound instead of the
+	// unresolved-dependency error this test targets.
+	require.NoError(t, os.WriteFile(workflowPath, []byte("workflows:\n  deploy:\n    steps: []\n"), 0o644))
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test unknown dependencies.workflows entry",
+		Dependencies: &schema.Dependencies{
+			Workflows: schema.UnitDependencies{{Name: "missing-workflow"}},
+		},
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "step1",
+				Command: "echo should-not-run",
+				Type:    "shell",
+			},
+		},
+	}
+	atmosConfig := schema.AtmosConfiguration{BasePath: tmpDir}
+
+	err := ExecuteWorkflow(atmosConfig, "deploy", workflowPath, workflowDef, false, "", "", "")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, taskgraph.ErrUnknownDependency)
+}
+
+// TestExecuteWorkflow_InputsBadGlobPatternErrors verifies a step's inputs.sources containing a
+// syntactically-invalid glob pattern surfaces the freshness checker's Compute error from
+// ExecuteWorkflow's main step loop, instead of being silently swallowed or crashing.
+func TestExecuteWorkflow_InputsBadGlobPatternErrors(t *testing.T) {
+	tmpDir := t.TempDir()
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test malformed inputs.sources glob pattern",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:             "step1",
+				Command:          "echo should-not-run",
+				Type:             "shell",
+				WorkingDirectory: tmpDir,
+				Inputs:           &schema.Inputs{Sources: []string{"["}}, // Unterminated bracket: invalid glob pattern.
+			},
+		},
+	}
+	atmosConfig := schema.AtmosConfiguration{BasePath: tmpDir}
+
+	err := ExecuteWorkflow(atmosConfig, "test-bad-glob", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+
+	require.Error(t, err)
+}
+
+// TestExecuteWorkflow_ContinueMalformedCELErrors verifies a failed step's `continue:` condition
+// being a syntactically-valid-but-runtime-failing CEL expression is a hard failure (wrapped in
+// errUtils.ErrInvalidContinueCondition), never silently forgiven -- matching the doc comment on
+// this exact branch ("Malformed `continue:` CEL is a hard failure, never silently forgiven").
+func TestExecuteWorkflow_ContinueMalformedCELErrors(t *testing.T) {
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test malformed continue: CEL is a hard failure",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:     "step1",
+				Command:  "exit 1",
+				Type:     "shell",
+				Continue: schema.MustCondition("!cel 1 / 0 == 0"),
+			},
+		},
+	}
+
+	err := ExecuteWorkflow(schema.AtmosConfiguration{}, "test-malformed-continue", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidContinueCondition)
+}
+
+// TestExecuteWorkflow_RecordSuccessFailureIsLoggedNotFatal verifies that when
+// freshnessChecker.RecordSuccess fails after an otherwise-successful step, ExecuteWorkflow
+// still reports overall success: RecordSuccess failures are log-and-continue, never fatal, per
+// the RecordSuccess call site's own doc comment. The failure is forced by making
+// atmosConfig.BasePath (freshness state lives under <BasePath>/.atmos/cache/freshness)
+// read-only: the state dir doesn't exist yet, so the first-run Load() still succeeds (a plain
+// stat that only needs traversal/execute permission on BasePath), but Save()'s os.MkdirAll to
+// persist the new record needs WRITE permission on BasePath and fails. Permission bits don't
+// carry the same meaning on Windows (and the test process may run elevated), so this is skipped
+// there, matching this package's other chmod-based permission tests.
+func TestExecuteWorkflow_RecordSuccessFailureIsLoggedNotFatal(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod-based permission denial is not meaningful on Windows")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+
+	baseDir := t.TempDir()
+	workDir := t.TempDir()
+	runLog := filepath.Join(workDir, "run.txt")
+
+	require.NoError(t, os.Chmod(baseDir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(baseDir, 0o755) }) // Restore so t.TempDir() cleanup can remove it.
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test RecordSuccess failure does not fail the workflow",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:             "step1",
+				Command:          "echo ran >> " + filepath.ToSlash(runLog),
+				Type:             "shell",
+				WorkingDirectory: workDir,
+				Inputs:           &schema.Inputs{Sources: []string{"*.go"}},
+			},
+		},
+	}
+	atmosConfig := schema.AtmosConfiguration{BasePath: baseDir}
+
+	err := ExecuteWorkflow(atmosConfig, "test-record-success-failure", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+
+	require.NoError(t, err, "a RecordSuccess failure must not fail an otherwise-successful step")
+	assert.FileExists(t, runLog, "the step itself must still have run")
+}
+
 // TestExecuteWorkflow_ShellFieldsFallbackWithMalformedCommand tests the fallback path
 // with a command that shell.Fields cannot parse but strings.Fields can handle.
 func TestExecuteWorkflow_ShellFieldsFallbackWithMalformedCommand(t *testing.T) {
@@ -2008,6 +2228,63 @@ func TestExecuteWorkflow_MultipleStepsWithMixedTypes(t *testing.T) {
 
 	err = ExecuteWorkflow(atmosConfig, "test-mixed-types", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
 	assert.NoError(t, err)
+}
+
+// TestExecuteWorkflow_WorkflowLevelWorkingDirectoryAppliesToExtendedStepTypes
+// proves that a workflow-level `working_directory:` default (documented as
+// "default working directory for all steps") actually reaches extended step
+// types (archive, file, junit, workdir, container, ...), not just the
+// shell/exec/atmos legacy dispatch path. Before the fix, extended steps only
+// ever looked at their own step-level WorkingDirectory (via
+// pkg/runner/step's resolver) and silently ignored the workflow-level
+// default, falling back to the process cwd instead.
+func TestExecuteWorkflow_WorkflowLevelWorkingDirectoryAppliesToExtendedStepTypes(t *testing.T) {
+	ResetStepExecutorState()
+	t.Cleanup(ResetStepExecutorState)
+
+	basePath := t.TempDir()
+	subDir := filepath.Join(basePath, "sub")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(subDir, "marker.txt"), []byte("from-workflow-default"), 0o644))
+
+	// Process cwd differs from basePath and also has a same-named "sub" dir,
+	// so a wrong (cwd-fallback) resolution would silently succeed against
+	// the wrong directory instead of failing loudly.
+	cwd := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(cwd, "sub"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "sub", "marker.txt"), []byte("from-cwd"), 0o644))
+	t.Chdir(cwd)
+
+	atmosConfig := schema.AtmosConfiguration{BasePath: basePath}
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description:      "Test workflow-level working_directory default reaches extended step types",
+		WorkingDirectory: "sub",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:        "archive",
+				Type:        "archive",
+				Action:      "replace",
+				Source:      ".",
+				Destination: "../result.zip",
+				Format:      "zip",
+			},
+		},
+	}
+
+	err := ExecuteWorkflow(atmosConfig, "test-workflow-default-workdir", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	require.NoError(t, err)
+
+	r, err := zip.OpenReader(filepath.Join(basePath, "result.zip"))
+	require.NoError(t, err, "archive should land under basePath (the workflow-level default), not the process cwd")
+	defer r.Close()
+	require.Len(t, r.File, 1)
+	rc, err := r.File[0].Open()
+	require.NoError(t, err)
+	defer rc.Close()
+	content, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, "from-workflow-default", string(content))
 }
 
 // TestExecuteWorkflow_EnvStepPersistsToLaterSteps verifies that ExecuteWorkflow's

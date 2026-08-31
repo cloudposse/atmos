@@ -1,6 +1,8 @@
 package flags
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -39,8 +41,8 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		// Working directory and path configuration.
 		Chdir:      v.GetString("chdir"),
 		BasePath:   v.GetString("base-path"),
-		Config:     v.GetStringSlice("config"),
-		ConfigPath: v.GetStringSlice("config-path"),
+		Config:     stringSliceFromViperOrEnv(v, "config", "ATMOS_CONFIG"),
+		ConfigPath: stringSliceFromViperOrEnv(v, "config-path", "ATMOS_CONFIG_PATH"),
 
 		// Logging configuration.
 		LogsLevel: v.GetString("logs-level"),
@@ -87,6 +89,24 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		// Edition pin.
 		Edition: v.GetString("edition"),
 	}
+}
+
+// stringSliceFromViperOrEnv reads a StringSlice flag from Viper, correcting for Viper's
+// comma-splitting quirk (see cfg.FixViperEnvStringSliceQuirk) when the value came from one of
+// the given environment variables rather than the CLI flag itself. CLI-flag-sourced values are
+// already parsed correctly by pflag/Cobra and must not be re-split.
+//
+// This is currently scoped to "config"/"config-path" (cloudposse/atmos#2867/#2868); other
+// StringSlice+EnvVar flags (e.g. "skill"/ATMOS_SKILL) share the same latent Viper quirk but are
+// deliberately left as a known follow-up rather than fixed here.
+func stringSliceFromViperOrEnv(v *viper.Viper, key string, envVars ...string) []string {
+	values := v.GetStringSlice(key)
+	for _, envVar := range envVars {
+		if _, ok := os.LookupEnv(envVar); ok {
+			return cfg.FixViperEnvStringSliceQuirk(values)
+		}
+	}
+	return values
 }
 
 func lookupCommandFlag(cmd *cobra.Command, name string) (*pflag.Flag, bool) {
@@ -350,6 +370,23 @@ func registerAuthenticationFlags(registry *FlagRegistry) {
 		NoOptDefVal:             cfg.CastFlagAutoValue,
 		NoOptDefValNoSpaceValue: true,
 		EnvVars:                 []string{cfg.CastEnvVarName},
+	})
+
+	// Profile flag with NoOptDefVal for interactive selection, mirroring identity above.
+	// This registration is what preprocessNoOptDefValFlags (cmd/root.go) uses to rewrite
+	// ambiguous space-separated syntax ("--profile name" -> "--profile=name") before Cobra
+	// parses args. Without it, once the real --profile flag (registered separately by
+	// GlobalOptionsBuilder in global_builder.go) has NoOptDefVal set, "--profile name" would
+	// become ambiguous to pflag: the bare flag would consume the sentinel and "name" would be
+	// left as a stray positional argument. See preprocessNoOptDefValFlags in flag_parser.go for
+	// the pflag #134/#321, cobra #1962 background on why this preprocessing step exists at all.
+	registry.Register(&StringSliceFlag{
+		Name:        "profile",
+		Shorthand:   "",
+		Default:     []string{},
+		Description: "Activate configuration profiles (comma-separated or repeated flag)",
+		EnvVars:     []string{"ATMOS_PROFILE"},
+		NoOptDefVal: cfg.ProfileFlagSelectValue,
 	})
 }
 

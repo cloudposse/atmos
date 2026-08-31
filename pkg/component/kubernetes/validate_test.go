@@ -45,6 +45,107 @@ func TestValidateObjectsStructuralReportsAllFailures(t *testing.T) {
 	assert.ErrorContains(t, err, "missing group/version/kind")
 }
 
+func TestValidateObjectsStructuralInvalidNameMessageIsBacktickFenced(t *testing.T) {
+	// The upstream k8s DNS-1123 message embeds an unbroken regex with '[', ']',
+	// '(', ')' and no spaces to wrap on. Rendered as plain markdown by the CLI's
+	// glamour renderer, those characters collide with link syntax and get
+	// mangled, and the token hard-wraps mid-character at terminal width. Fence
+	// it as a code span so it renders verbatim, monospaced, and unwrapped.
+	objects := []*unstructured.Unstructured{
+		kubernetesObject("v1", "Service", "Bad_Name", ""),
+	}
+
+	err := validateObjectsStructural(objects)
+	require.Error(t, err)
+	msg := err.Error()
+	assert.Contains(t, msg, "`", "the DNS-1123 detail must be backtick-fenced as a code span")
+	assert.Regexp(t, "`[^`]*regex used for validation is[^`]*`", msg,
+		"the regex-bearing detail text must be inside the code span, not plain markdown text")
+}
+
+func TestValidateObjectsStructuralKustomizeConfigObjectsExemptFromName(t *testing.T) {
+	objects := []*unstructured.Unstructured{
+		kubernetesObject("kustomize.config.k8s.io/v1beta1", "Kustomization", "", ""),
+		kubernetesObject("kustomize.config.k8s.io/v1alpha1", "Component", "", ""),
+	}
+
+	require.NoError(t, validateObjectsStructural(objects), "Kustomize's own config objects have no metadata.name in the real Kustomize schema")
+}
+
+func TestValidateObjectsStructuralKustomizeConfigObjectInvalidNameStillFails(t *testing.T) {
+	// The exemption is presence-only: a name that IS given is still validated.
+	objects := []*unstructured.Unstructured{
+		kubernetesObject("kustomize.config.k8s.io/v1alpha1", "Component", "Bad_Name", ""),
+	}
+
+	err := validateObjectsStructural(objects)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "not a valid DNS-1123 subdomain")
+}
+
+func TestValidateObjectsStructuralNonKustomizeObjectStillRequiresName(t *testing.T) {
+	// Guards against over-broad matching: a normal Kubernetes API object with no
+	// name must still fail, regardless of delivery target.
+	objects := []*unstructured.Unstructured{
+		kubernetesObject("apps/v1", "Deployment", "", ""),
+	}
+
+	err := validateObjectsStructural(objects)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "is missing metadata.name")
+}
+
+func TestIsKustomizeConfigObject(t *testing.T) {
+	tests := []struct {
+		name string
+		obj  *unstructured.Unstructured
+		want bool
+	}{
+		{"Kustomization at its canonical version", kubernetesObject("kustomize.config.k8s.io/v1beta1", "Kustomization", "", ""), true},
+		{"Component at its canonical version", kubernetesObject("kustomize.config.k8s.io/v1alpha1", "Component", "", ""), true},
+		{"plain Deployment", kubernetesObject("apps/v1", "Deployment", "app", ""), false},
+		{
+			"Kustomize API group but an unrecognized kind does not match",
+			kubernetesObject("kustomize.config.k8s.io/v1alpha1", "SomeFutureKind", "", ""),
+			false,
+		},
+		{
+			"Kustomization kind at the wrong (non-canonical) version does not match",
+			kubernetesObject("kustomize.config.k8s.io/v2", "Kustomization", "", ""),
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isKustomizeConfigObject(tt.obj))
+		})
+	}
+}
+
+func TestResolveComponentValidateEnabled(t *testing.T) {
+	enabled, err := resolveComponentValidateEnabled(nil)
+	require.NoError(t, err)
+	assert.True(t, enabled, "unset defaults to enabled")
+
+	enabled, err = resolveComponentValidateEnabled(map[string]any{})
+	require.NoError(t, err)
+	assert.True(t, enabled, "unset defaults to enabled")
+
+	enabled, err = resolveComponentValidateEnabled(map[string]any{"validate": true})
+	require.NoError(t, err)
+	assert.True(t, enabled)
+
+	enabled, err = resolveComponentValidateEnabled(map[string]any{"validate": false})
+	require.NoError(t, err)
+	assert.False(t, enabled)
+}
+
+func TestResolveComponentValidateEnabledRejectsNonBool(t *testing.T) {
+	_, err := resolveComponentValidateEnabled(map[string]any{"validate": "false"})
+	require.Error(t, err, "a present but non-bool value fails closed instead of silently defaulting to enabled")
+	assert.ErrorIs(t, err, errUtils.ErrKubernetesValidateSectionInvalid)
+}
+
 func TestRunValidate(t *testing.T) {
 	original := newKubernetesSDKClient
 	t.Cleanup(func() { newKubernetesSDKClient = original })

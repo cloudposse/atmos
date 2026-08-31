@@ -129,6 +129,11 @@ func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error
 			return err
 		}
 	}
+	if src.BaseComponentFlags != nil {
+		if dst.BaseComponentFlags, err = m.DeepCopyMap(src.BaseComponentFlags); err != nil {
+			return err
+		}
+	}
 	if src.BaseComponentPaths != nil {
 		if dst.BaseComponentPaths, err = deepCopyComponentAnySection(src.BaseComponentPaths); err != nil {
 			return err
@@ -136,6 +141,11 @@ func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error
 	}
 	if src.BaseComponentManifests != nil {
 		if dst.BaseComponentManifests, err = deepCopyComponentAnySection(src.BaseComponentManifests); err != nil {
+			return err
+		}
+	}
+	if src.BaseComponentValidate != nil {
+		if dst.BaseComponentValidate, err = deepCopyComponentAnySection(src.BaseComponentValidate); err != nil {
 			return err
 		}
 	}

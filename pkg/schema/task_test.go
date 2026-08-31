@@ -265,6 +265,7 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 		Rate:             "fast",
 		Print:            "always",
 		When:             MustCondition("ci"),
+		Continue:         MustCondition(ConditionPredicateAlways),
 		Retry: &RetryConfig{
 			MaxAttempts: &maxAttempts,
 		},
@@ -287,6 +288,9 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 	assert.Equal(t, task.Print, step.Print)
 	assert.True(t, step.When.Evaluate(ConditionContext{CI: true}))
 	assert.False(t, step.When.Evaluate(ConditionContext{CI: false}))
+	forgiven, err := step.Continue.EvaluateContinueE(ConditionContext{Status: ConditionPredicateFailure})
+	require.NoError(t, err)
+	assert.True(t, forgiven, "Continue must survive Task -> WorkflowStep conversion")
 	assert.Equal(t, task.Retry, step.Retry)
 	assert.Same(t, task.Export, step.Export)
 	// Note: Timeout is not in WorkflowStep.
@@ -308,6 +312,7 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 		Rate:             "slow",
 		Print:            "fallback",
 		When:             MustCondition("local"),
+		Continue:         MustCondition(ConditionPredicateAlways),
 		Retry: &RetryConfig{
 			MaxAttempts: &maxAttempts,
 		},
@@ -329,6 +334,9 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 	assert.Equal(t, step.Print, task.Print)
 	assert.True(t, task.When.Evaluate(ConditionContext{CI: false}))
 	assert.False(t, task.When.Evaluate(ConditionContext{CI: true}))
+	forgiven, err := task.Continue.EvaluateContinueE(ConditionContext{Status: ConditionPredicateFailure})
+	require.NoError(t, err)
+	assert.True(t, forgiven, "Continue must survive WorkflowStep -> Task conversion")
 	assert.Equal(t, step.Retry, task.Retry)
 	assert.Same(t, step.Export, task.Export)
 	assert.Zero(t, task.Timeout) // WorkflowStep doesn't have Timeout.
@@ -398,6 +406,53 @@ func TestTaskWorkflowStepControlFieldsRoundTrip(t *testing.T) {
 	assert.Equal(t, task.Columns, roundTripped.Columns)
 	assert.Equal(t, task.Options, roundTripped.Options)
 	assert.Equal(t, task.WorkingDirectory, roundTripped.WorkingDirectory)
+}
+
+// TestTask_InputsArtifactsPreconditionsRoundTrip exercises every combination of the three
+// freshness sibling fields (Inputs/Artifacts/Preconditions) through both conversion directions,
+// since Inputs is a general container (not narrowed to sources only) and Artifacts/Preconditions
+// are deliberately separate sibling fields, not nested inside Inputs.
+func TestTask_InputsArtifactsPreconditionsRoundTrip(t *testing.T) {
+	cases := []struct {
+		name          string
+		inputs        *Inputs
+		artifacts     *Artifacts
+		preconditions *Preconditions
+	}{
+		{name: "none"},
+		{name: "inputs only", inputs: &Inputs{Sources: []string{"*.go"}}},
+		{name: "artifacts only", artifacts: &Artifacts{Paths: []string{"bin/app"}}},
+		{name: "preconditions only", preconditions: &Preconditions{Tools: []string{"stringer"}}},
+		{
+			name:      "inputs and artifacts",
+			inputs:    &Inputs{Sources: []string{"*.go", "go.sum"}},
+			artifacts: &Artifacts{Paths: []string{"bin/app"}},
+		},
+		{
+			name:          "all three",
+			inputs:        &Inputs{Sources: []string{"*.go"}},
+			artifacts:     &Artifacts{Paths: []string{"bin/app"}},
+			preconditions: &Preconditions{Tools: []string{"stringer", "protoc"}},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name+" Task->WorkflowStep", func(t *testing.T) {
+			task := Task{Name: "t", Inputs: tc.inputs, Artifacts: tc.artifacts, Preconditions: tc.preconditions}
+			step := task.ToWorkflowStep()
+			assert.Equal(t, tc.inputs, step.Inputs)
+			assert.Equal(t, tc.artifacts, step.Artifacts)
+			assert.Equal(t, tc.preconditions, step.Preconditions)
+		})
+
+		t.Run(tc.name+" WorkflowStep->Task", func(t *testing.T) {
+			step := WorkflowStep{Name: "s", Inputs: tc.inputs, Artifacts: tc.artifacts, Preconditions: tc.preconditions}
+			task := TaskFromWorkflowStep(&step)
+			assert.Equal(t, tc.inputs, task.Inputs)
+			assert.Equal(t, tc.artifacts, task.Artifacts)
+			assert.Equal(t, tc.preconditions, task.Preconditions)
+		})
+	}
 }
 
 func TestTaskFromWorkflowStepIgnoresInvalidTimeout(t *testing.T) {
@@ -1100,6 +1155,26 @@ func TestDecodeTaskFromMap_InvalidStepsMap(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrWorkflowControlStepInvalid))
 }
 
+// TestDecodeTaskFromMap_InvalidWithBlock verifies decodeTaskFromMap wraps a
+// decodeStepWithFromMapValue error (an unsupported container `action` rejecting
+// a non-empty `with:` block, mirroring decodeContainerWith's default case in
+// workflow.go) with the "failed to decode task with-block at index N" context
+// and the ErrWorkflowControlStepInvalid sentinel.
+func TestDecodeTaskFromMap_InvalidWithBlock(t *testing.T) {
+	m := map[string]any{
+		"type":   containerStepType,
+		"action": "not-a-real-action",
+		"with": map[string]any{
+			"context": "app",
+		},
+	}
+
+	_, err := decodeTaskFromMap(m, 6)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to decode task with-block at index 6")
+	assert.True(t, errors.Is(err, ErrWorkflowControlStepInvalid))
+}
+
 func TestDecodeTaskFromMap_EmptyMap(t *testing.T) {
 	m := map[string]any{}
 
@@ -1108,6 +1183,30 @@ func TestDecodeTaskFromMap_EmptyMap(t *testing.T) {
 	// Empty command is allowed, defaults to shell type.
 	assert.Equal(t, "", task.Command)
 	assert.Equal(t, TaskTypeShell, task.Type)
+}
+
+// TestDecodeTaskFromMap_DoesNotMutateCallerMap verifies that decoding a task with no
+// structured output/prompt/steps (the case where normalizeTaskOutputMap/
+// normalizeTaskPromptMap/normalizeTaskStepsMap all return the input map unchanged, not a
+// copy) does not delete "with"/"container" from the caller's own map. The caller's map can
+// be Viper's live merged config tree, so an in-place delete here would silently drop the
+// with/container override for any later decode of the same configuration.
+func TestDecodeTaskFromMap_DoesNotMutateCallerMap(t *testing.T) {
+	m := map[string]any{
+		"type": TaskTypeShell,
+		"with": map[string]any{
+			"context": "app",
+		},
+		"container": map[string]any{
+			"image": "golang:1.24",
+		},
+	}
+
+	_, err := decodeTaskFromMap(m, 0)
+	require.NoError(t, err)
+
+	assert.Contains(t, m, "with", "decodeTaskFromMap must not delete \"with\" from the caller's map")
+	assert.Contains(t, m, "container", "decodeTaskFromMap must not delete \"container\" from the caller's map")
 }
 
 // TestTasksDecodeHook_IgnoresNonTasksTarget verifies the hook's early-out guards:
@@ -1191,6 +1290,370 @@ func TestSliceToAny_ConvertsTypedSlice(t *testing.T) {
 	require.Len(t, slice, 2)
 	assert.Equal(t, typed[0], slice[0])
 	assert.Equal(t, typed[1], slice[1])
+}
+
+// containerStepWithBlockYAML is a single `type: container, action: build`
+// step with a full `with:` block, in the exact shape a user writes it in
+// either a workflow file or a commands.yaml custom command.
+const containerStepWithBlockYAML = `
+- name: build
+  type: container
+  action: build
+  provider: docker
+  with:
+    engine: buildx
+    context: app
+    dockerfile: Dockerfile
+    tags:
+      - "example.invalid/demo:sha-test"
+    driver:
+      name: atmos-native-ci
+      provider: docker-container
+    cache:
+      from:
+        - type: registry
+          ref: "example.invalid/demo:buildcache"
+      to:
+        - type: registry
+          ref: "example.invalid/demo:buildcache"
+          mode: max
+`
+
+// TestContainerStepWithBlock_WorkflowAndCustomCommandDecodeIdentically confirms
+// the public contract cited by https://github.com/cloudposse/atmos/issues/2876:
+// a `type: container` step's `with:` block must decode into the same Build
+// struct whether it's parsed as a standalone workflow file (direct
+// yaml.Node.Decode -> Task.UnmarshalYAML) or as a commands.yaml custom
+// command merged into Viper's config tree (mapstructure -> TasksDecodeHook ->
+// decodeTaskFromMap). Both call paths are exercised here exactly as their
+// real callers do: yaml.Unmarshal for the workflow-file path (see
+// pkg/utils.UnmarshalYAMLFromFile, used to load workflows/*.yaml), and
+// mapstructure.NewDecoder with TasksDecodeHook for the Viper path (see
+// pkg/config's atmosDecodeHook, used to decode atmos.yaml's `commands:`).
+func TestContainerStepWithBlock_WorkflowAndCustomCommandDecodeIdentically(t *testing.T) {
+	// Workflow-file path: direct YAML decode, invoking Task.UnmarshalYAML.
+	var fromYAML Tasks
+	require.NoError(t, yaml.Unmarshal([]byte(containerStepWithBlockYAML), &fromYAML))
+	require.Len(t, fromYAML, 1)
+
+	// Custom-command / Viper path: decode into a generic tree first (as Viper
+	// does when it reads the YAML file), then mapstructure-decode that tree
+	// into Tasks via the real TasksDecodeHook, mirroring atmosDecodeHook.
+	var generic []any
+	require.NoError(t, yaml.Unmarshal([]byte(containerStepWithBlockYAML), &generic))
+
+	var fromMapstructure Tasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &fromMapstructure,
+		TagName:          "mapstructure",
+		WeaklyTypedInput: true,
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			ConditionDecodeHook(),
+			WorkflowStepDecodeHook(),
+			TasksDecodeHook(),
+		),
+	})
+	require.NoError(t, err)
+	require.NoError(t, decoder.Decode(generic))
+	require.Len(t, fromMapstructure, 1)
+
+	workflowStep := fromYAML[0]
+	commandStep := fromMapstructure[0]
+
+	require.NotNil(t, workflowStep.Build, "workflow-file path must decode with: into Build")
+	require.NotNil(t, commandStep.Build, "custom-command path must decode with: into Build")
+	assert.Equal(t, workflowStep.Build, commandStep.Build,
+		"a type: container step's with: block must decode identically for workflow files and custom commands")
+	assert.Nil(t, workflowStep.With, "with: must not also leak into the generic With map for a container step")
+	assert.Nil(t, commandStep.With, "with: must not also leak into the generic With map for a container step")
+}
+
+// storeStepWithBlockYAML is a single `type: store, action: write` step with
+// a full `with:` block, in the exact shape documented for custom commands
+// (see https://github.com/cloudposse/atmos/issues -- store step misdecoded
+// as a container step).
+const storeStepWithBlockYAML = `
+- name: write-image-metadata
+  type: store
+  action: write
+  with:
+    store: image-metadata
+    key: image-dev
+    value: "some-value"
+    stack: dev
+    component: app
+`
+
+// TestStoreStepWithBlock_WorkflowAndCustomCommandDecodeIdentically confirms a
+// `type: store` step's `with:` block decodes into the generic With map --
+// not the container action decoder -- for both the workflow-file path
+// (yaml.Unmarshal -> Task.UnmarshalYAML) and the custom-command/Viper path
+// (mapstructure -> TasksDecodeHook -> decodeTaskFromMap). Before the fix,
+// decodeStepWith routed any step with a non-empty `action:` (regardless of
+// `type:`) into decodeContainerWith, which rejected `action: write` with
+// "container `action: write` does not accept a `with:` block".
+func TestStoreStepWithBlock_WorkflowAndCustomCommandDecodeIdentically(t *testing.T) {
+	// Workflow-file path: direct YAML decode, invoking Task.UnmarshalYAML.
+	var fromYAML Tasks
+	require.NoError(t, yaml.Unmarshal([]byte(storeStepWithBlockYAML), &fromYAML))
+	require.Len(t, fromYAML, 1)
+
+	// Custom-command / Viper path: decode into a generic tree first (as Viper
+	// does when it reads the YAML file), then mapstructure-decode that tree
+	// into Tasks via the real TasksDecodeHook, mirroring atmosDecodeHook.
+	var generic []any
+	require.NoError(t, yaml.Unmarshal([]byte(storeStepWithBlockYAML), &generic))
+
+	var fromMapstructure Tasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &fromMapstructure,
+		TagName:          "mapstructure",
+		WeaklyTypedInput: true,
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			ConditionDecodeHook(),
+			WorkflowStepDecodeHook(),
+			TasksDecodeHook(),
+		),
+	})
+	require.NoError(t, err)
+	require.NoError(t, decoder.Decode(generic))
+	require.Len(t, fromMapstructure, 1)
+
+	workflowStep := fromYAML[0]
+	commandStep := fromMapstructure[0]
+
+	require.NotNil(t, workflowStep.With, "workflow-file path must decode with: into the generic With map")
+	require.NotNil(t, commandStep.With, "custom-command path must decode with: into the generic With map")
+
+	expected := map[string]any{
+		"store":     "image-metadata",
+		"key":       "image-dev",
+		"value":     "some-value",
+		"stack":     "dev",
+		"component": "app",
+	}
+	assert.Equal(t, expected, workflowStep.With)
+	assert.Equal(t, expected, commandStep.With)
+	assert.Nil(t, workflowStep.Build)
+	assert.Nil(t, commandStep.Build)
+}
+
+// containerStepWithUnknownFieldYAML is the same shape as
+// containerStepWithBlockYAML but with a plausible-sounding, nonexistent
+// field (`platforms:` -- not a field on ContainerBuildStep) mixed into the
+// `with:` block, the way a user coming from Docker Compose might type it.
+const containerStepWithUnknownFieldYAML = `
+- name: build
+  type: container
+  action: build
+  provider: docker
+  with:
+    context: app
+    dockerfile: Dockerfile
+    platforms:
+      - linux/amd64
+      - linux/arm64
+`
+
+// TestContainerStepWithBlock_RejectsUnknownField confirms a typo'd/nonexistent
+// `with:` field (e.g. `platforms:`, which sounds plausible but isn't a
+// ContainerBuildStep field) is rejected rather than silently dropped, for
+// both the workflow-file path (yaml.Unmarshal) and the custom-command path
+// (mapstructure + TasksDecodeHook) -- the same two paths
+// TestContainerStepWithBlock_WorkflowAndCustomCommandDecodeIdentically
+// exercises for the happy path. Before this fix, decodeYAMLInto used plain
+// yaml.Node.Decode, which has no KnownFields/strict mode, so `platforms:`
+// was silently discarded with no error and no trace in the decoded struct.
+func TestContainerStepWithBlock_RejectsUnknownField(t *testing.T) {
+	t.Run("workflow file path", func(t *testing.T) {
+		var fromYAML Tasks
+		err := yaml.Unmarshal([]byte(containerStepWithUnknownFieldYAML), &fromYAML)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "platforms")
+	})
+
+	t.Run("custom command path", func(t *testing.T) {
+		var generic []any
+		require.NoError(t, yaml.Unmarshal([]byte(containerStepWithUnknownFieldYAML), &generic))
+
+		var fromMapstructure Tasks
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result:           &fromMapstructure,
+			TagName:          "mapstructure",
+			WeaklyTypedInput: true,
+			DecodeHook: mapstructure.ComposeDecodeHookFunc(
+				mapstructure.StringToTimeDurationHookFunc(),
+				ConditionDecodeHook(),
+				WorkflowStepDecodeHook(),
+				TasksDecodeHook(),
+			),
+		})
+		require.NoError(t, err)
+		err = decoder.Decode(generic)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "platforms")
+	})
+}
+
+// containerStepDriverUnknownFieldYAML nests the typo inside the `driver:`
+// mapping (a field with its own custom UnmarshalYAML, ContainerDriverConfig),
+// not the top-level `with:` mapping -- a distinct code path from the
+// top-level case above since ContainerDriverConfig.UnmarshalYAML runs its
+// own nested decode.
+const containerStepDriverUnknownFieldYAML = `
+- name: build
+  type: container
+  action: build
+  with:
+    context: app
+    driver:
+      name: atmos-native-ci
+      bogus_field: x
+`
+
+// TestContainerStepWithBlock_RejectsUnknownNestedDriverField confirms the
+// same unknown-field rejection reaches a typo inside a nested `driver:`
+// mapping, not just the top-level `with:` mapping.
+func TestContainerStepWithBlock_RejectsUnknownNestedDriverField(t *testing.T) {
+	var fromYAML Tasks
+	err := yaml.Unmarshal([]byte(containerStepDriverUnknownFieldYAML), &fromYAML)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bogus_field")
+}
+
+// containerStepOverrideYAML has two ordinary `type: shell` (default) steps:
+// one with a mapping-form step-level `container:` override, and one that
+// opts out of an ambient container sandbox with the bare boolean form
+// `container: false`. Both forms are handled by WorkflowContainer.UnmarshalYAML
+// (workflow.go) for the workflow-file path; decodeTaskFromMap must reproduce
+// the exact same result for the custom-command/mapstructure path.
+const containerStepOverrideYAML = `
+- name: run-in-sandbox
+  command: echo hello
+  container:
+    image: alpine
+    provider: docker
+    workspace: /workspace
+- name: run-on-host
+  command: echo skip
+  container: false
+`
+
+// TestContainerStepOverride_WorkflowAndCustomCommandDecodeIdentically confirms
+// a step's `container:` override (mapping config or bare boolean opt-out)
+// decodes identically whether parsed as a standalone workflow file (direct
+// yaml.Node.Decode -> Task.UnmarshalYAML -> WorkflowContainer.UnmarshalYAML)
+// or as a commands.yaml custom command merged into Viper's config tree
+// (mapstructure -> TasksDecodeHook -> decodeTaskFromMap). Before the fix,
+// the mapstructure path either failed the boolean form outright ("'container'
+// expected a map or struct, got bool") -- breaking the ENTIRE atmos.yaml load,
+// not just this one step/command -- or, for the mapping form, decoded without
+// error but left Container fields un-typed relative to the workflow path.
+func TestContainerStepOverride_WorkflowAndCustomCommandDecodeIdentically(t *testing.T) {
+	// Workflow-file path: direct YAML decode, invoking Task.UnmarshalYAML.
+	var fromYAML Tasks
+	require.NoError(t, yaml.Unmarshal([]byte(containerStepOverrideYAML), &fromYAML))
+	require.Len(t, fromYAML, 2)
+
+	// Custom-command / Viper path: decode into a generic tree first (as Viper
+	// does when it reads the YAML file), then mapstructure-decode that tree
+	// into Tasks via the real TasksDecodeHook, mirroring atmosDecodeHook.
+	var generic []any
+	require.NoError(t, yaml.Unmarshal([]byte(containerStepOverrideYAML), &generic))
+
+	var fromMapstructure Tasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &fromMapstructure,
+		TagName:          "mapstructure",
+		WeaklyTypedInput: true,
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			ConditionDecodeHook(),
+			WorkflowStepDecodeHook(),
+			TasksDecodeHook(),
+		),
+	})
+	require.NoError(t, err)
+	// Before the fix, this failed outright for the boolean-opt-out step:
+	// mapstructure has no notion of WorkflowContainer.UnmarshalYAML and
+	// rejects a bare `false` for a struct-typed field.
+	require.NoError(t, decoder.Decode(generic))
+	require.Len(t, fromMapstructure, 2)
+
+	// Mapping-form container override.
+	workflowOverride := fromYAML[0]
+	commandOverride := fromMapstructure[0]
+	require.NotNil(t, workflowOverride.Container, "workflow-file path must decode container: into a WorkflowContainer")
+	require.NotNil(t, commandOverride.Container, "custom-command path must decode container: into a WorkflowContainer")
+	assert.Equal(t, workflowOverride.Container, commandOverride.Container,
+		"a step's mapping-form container: block must decode identically for workflow files and custom commands")
+	assert.Equal(t, "alpine", commandOverride.Container.Image)
+	assert.True(t, commandOverride.Container.IsEnabled())
+
+	// Boolean-false opt-out form.
+	workflowDisabled := fromYAML[1]
+	commandDisabled := fromMapstructure[1]
+	require.NotNil(t, workflowDisabled.Container)
+	require.NotNil(t, commandDisabled.Container)
+	assert.False(t, workflowDisabled.Container.IsEnabled())
+	assert.False(t, commandDisabled.Container.IsEnabled())
+	assert.Equal(t, workflowDisabled.Container, commandDisabled.Container,
+		"a step's boolean container: false opt-out must decode identically for workflow files and custom commands")
+}
+
+// containerStepOverrideUnknownFieldYAML mirrors containerStepOverrideYAML's
+// mapping-form override but with a typo'd field (`imgae` instead of `image`)
+// that WorkflowContainer has no field for.
+const containerStepOverrideUnknownFieldYAML = `
+- name: run-in-sandbox
+  command: echo hello
+  container:
+    imgae: alpine
+    provider: docker
+`
+
+// TestContainerStepOverride_RejectsUnknownField confirms a typo'd/nonexistent
+// field in a step-level `container:` mapping (e.g. `imgae` instead of
+// `image`) is rejected rather than silently dropped, for both the
+// workflow-file path (yaml.Unmarshal -> WorkflowContainer.UnmarshalYAML) and
+// the custom-command path (mapstructure + TasksDecodeHook ->
+// decodeTaskContainerFromMapValue -> the same UnmarshalYAML). Before this
+// fix, WorkflowContainer.UnmarshalYAML's mapping branch used plain
+// value.Decode, which has no KnownFields/strict mode, so `imgae:` was
+// silently discarded with no error and no trace in the decoded struct.
+func TestContainerStepOverride_RejectsUnknownField(t *testing.T) {
+	t.Run("workflow file path", func(t *testing.T) {
+		var fromYAML Tasks
+		err := yaml.Unmarshal([]byte(containerStepOverrideUnknownFieldYAML), &fromYAML)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
+		assert.Contains(t, err.Error(), "imgae")
+	})
+
+	t.Run("custom command path", func(t *testing.T) {
+		var generic []any
+		require.NoError(t, yaml.Unmarshal([]byte(containerStepOverrideUnknownFieldYAML), &generic))
+
+		var fromMapstructure Tasks
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result:           &fromMapstructure,
+			TagName:          "mapstructure",
+			WeaklyTypedInput: true,
+			DecodeHook: mapstructure.ComposeDecodeHookFunc(
+				mapstructure.StringToTimeDurationHookFunc(),
+				ConditionDecodeHook(),
+				WorkflowStepDecodeHook(),
+				TasksDecodeHook(),
+			),
+		})
+		require.NoError(t, err)
+		err = decoder.Decode(generic)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
+		assert.Contains(t, err.Error(), "imgae")
+	})
 }
 
 // TestDecodeTaskItem_MapAnyAny verifies the default branch of decodeTaskItem that
@@ -1361,4 +1824,84 @@ func TestNormalizeTaskOutputMap_ParallelOutputDecodeErrorPropagates(t *testing.T
 	}
 	_, err := normalizeTaskOutputMap(m, &task)
 	require.Error(t, err)
+}
+
+// withValueMarshalError implements yaml.Marshaler and always fails, so
+// decodeStepWithFromMapValue's yaml.Marshal(withValue) call surfaces a real
+// error instead of silently dropping it or panicking.
+type withValueMarshalError struct{}
+
+var errWithValueMarshal = errors.New("with-value marshal failed")
+
+func (withValueMarshalError) MarshalYAML() (any, error) {
+	return nil, errWithValueMarshal
+}
+
+// TestDecodeStepWithFromMapValue_MarshalErrorPropagates verifies that when the
+// `with:` value round-tripped through YAML (see decodeStepWithFromMapValue's
+// doc comment) cannot itself be marshaled, the error is returned rather than
+// swallowed. A mapstructure/Viper-sourced `with:` value can implement
+// yaml.Marshaler indirectly (e.g. via an embedded custom type), so this is a
+// real, reachable failure mode of the round-trip, not a contrived one.
+func TestDecodeStepWithFromMapValue_MarshalErrorPropagates(t *testing.T) {
+	err := decodeStepWithFromMapValue(withValueMarshalError{}, TaskTypeShell, "", &stepPolyTargets{generic: &map[string]any{}})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errWithValueMarshal)
+}
+
+// withValueDanglingAlias implements yaml.Marshaler by returning a *yaml.Node
+// alias with no corresponding anchor. Marshaling happily serializes this
+// (it does not validate that aliases resolve) as the literal text `*x`, but
+// unmarshaling that text back into a *yaml.Node fails with "unknown anchor
+// 'x' referenced" -- a genuine, non-contrived way the second round-trip step
+// (yaml.Unmarshal(withBytes, &doc)) in decodeStepWithFromMapValue can fail
+// even though the preceding yaml.Marshal succeeded.
+type withValueDanglingAlias struct{}
+
+func (withValueDanglingAlias) MarshalYAML() (any, error) {
+	return &yaml.Node{Kind: yaml.AliasNode, Value: "x"}, nil
+}
+
+// TestDecodeStepWithFromMapValue_UnmarshalErrorPropagates verifies that when
+// the intermediate YAML bytes produced by yaml.Marshal cannot themselves be
+// parsed back by yaml.Unmarshal, decodeStepWithFromMapValue returns that error
+// rather than swallowing it.
+func TestDecodeStepWithFromMapValue_UnmarshalErrorPropagates(t *testing.T) {
+	err := decodeStepWithFromMapValue(withValueDanglingAlias{}, TaskTypeShell, "", &stepPolyTargets{generic: &map[string]any{}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown anchor")
+}
+
+// containerValueMarshalError implements yaml.Marshaler and always fails, so
+// decodeTaskContainerFromMapValue's yaml.Marshal(containerValue) call
+// surfaces a real error instead of silently dropping it or panicking.
+type containerValueMarshalError struct{}
+
+var errContainerValueMarshal = errors.New("container-value marshal failed")
+
+func (containerValueMarshalError) MarshalYAML() (any, error) {
+	return nil, errContainerValueMarshal
+}
+
+// TestDecodeTaskFromMap_WithBlockMarshalErrorHasSentinel verifies that when
+// yamlNodeFromMapValue fails while decoding a task's `with:` block,
+// decodeTaskFromMap's outer error still classifies as
+// ErrWorkflowControlStepInvalid via errors.Is, not just a dynamically
+// wrapped string, so callers can distinguish this failure mode.
+func TestDecodeTaskFromMap_WithBlockMarshalErrorHasSentinel(t *testing.T) {
+	_, err := decodeTaskFromMap(map[string]any{"with": withValueMarshalError{}}, 0)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWorkflowControlStepInvalid)
+	assert.ErrorIs(t, err, errWithValueMarshal)
+}
+
+// TestDecodeTaskFromMap_ContainerBlockMarshalErrorHasSentinel verifies that
+// when yamlNodeFromMapValue fails while decoding a task's `container:`
+// block, decodeTaskFromMap's outer error still classifies as
+// ErrInvalidWorkflowContainer via errors.Is.
+func TestDecodeTaskFromMap_ContainerBlockMarshalErrorHasSentinel(t *testing.T) {
+	_, err := decodeTaskFromMap(map[string]any{"container": containerValueMarshalError{}}, 0)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidWorkflowContainer)
+	assert.ErrorIs(t, err, errContainerValueMarshal)
 }
