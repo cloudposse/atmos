@@ -180,6 +180,28 @@ func TestResolve_OCIMissingScaffoldConfig(t *testing.T) {
 	cleanup()
 }
 
+// TestResolve_OCIMkdirTempFails proves the OCI branch's os.MkdirTemp failure surfaces as
+// errUtils.ErrCreateTempDirectory. Poisoning TMPDIR/TEMP/TMP makes MkdirTemp fail
+// deterministically before any registry call is attempted, so no fake registry is needed.
+func TestResolve_OCIMkdirTempFails(t *testing.T) {
+	// Pre-compute a real temp dir path so t.TempDir()/require.NoError machinery still
+	// works, then poison the env for the call under test.
+	bogusTmp := filepath.Join(t.TempDir(), "this-subdir-does-not-exist")
+	// Sanity: this directory must NOT exist for MkdirTemp to fail.
+	_, statErr := os.Stat(bogusTmp)
+	require.True(t, os.IsNotExist(statErr), "test setup: bogusTmp must not exist")
+
+	t.Setenv("TMPDIR", bogusTmp)
+	t.Setenv("TEMP", bogusTmp)
+	t.Setenv("TMP", bogusTmp)
+
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", "oci://ghcr.io/cloudposse/does-not-matter:v1", time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCreateTempDirectory)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
 func TestResolve_RemoteFetchFailureCleansUp(t *testing.T) {
 	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "x", "git::file:///definitely/not/a/repo", time.Millisecond)
 	require.Error(t, err)
