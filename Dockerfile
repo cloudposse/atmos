@@ -26,10 +26,15 @@ RUN set -ex; \
     apt-get update; \
     # Install runtime dependencies required by Atmos-managed tools.
     apt-get -y install  --no-install-recommends curl git ca-certificates docker.io python3; \
-    # Install the Cloud Posse Debian repository
-    curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash -x; \
+    # Install the Cloud Posse Debian repository (inlined from cfg/setup/bash.deb.sh
+    # instead of piping a downloaded script into bash, per Scorecard Pinned-Dependencies).
+    curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/gpg.7333C6FDEFA717CC.key' | gpg --dearmor -o /usr/share/keyrings/cloudposse-packages-archive-keyring.gpg; \
+    chmod 644 /usr/share/keyrings/cloudposse-packages-archive-keyring.gpg; \
+    . /etc/os-release; \
+    curl -1sLf "https://dl.cloudsmith.io/public/cloudposse/packages/config.deb.txt?distro=debian&codename=${VERSION_CODENAME}" -o /etc/apt/sources.list.d/cloudposse-packages.list; \
+    chmod 644 /etc/apt/sources.list.d/cloudposse-packages.list; \
     # Install OpenTofu
-    curl -1sSLf 'https://get.opentofu.org/install-opentofu.sh' | bash -s -- --root-method none --install-method deb; \
+    curl -1sSLf 'https://raw.githubusercontent.com/opentofu/get.opentofu.org/3d354dfa62d9a36f33df16cdd6bb506ace1e6e2e/static/install-opentofu.sh' | bash -s -- --root-method none --install-method deb; \
     # Install Kustomize binary (required by Helmfile).
     # Direct download instead of install_kustomize.sh which has known bugs (kubernetes-sigs/kustomize#5562).
     KUSTOMIZE_VERSION=5.8.1; \
