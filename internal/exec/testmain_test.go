@@ -65,9 +65,17 @@ func TestMain(m *testing.M) {
 	// the file length: len(file) == number of invocations.
 	if counterFile := os.Getenv("_ATMOS_TEST_COUNTER_FILE"); counterFile != "" {
 		fd, err := os.OpenFile(counterFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-		if err == nil {
-			_, _ = fd.WriteString("x")
-			_ = fd.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "open counter file: %v\n", err)
+			os.Exit(1)
+		}
+		if _, err := fd.WriteString("x"); err != nil {
+			fmt.Fprintf(os.Stderr, "write counter file: %v\n", err)
+			os.Exit(1)
+		}
+		if err := fd.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close counter file: %v\n", err)
+			os.Exit(1)
 		}
 	}
 

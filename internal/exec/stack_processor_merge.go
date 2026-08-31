@@ -513,7 +513,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	var finalComponentRetry map[string]any
 	if len(opts.GlobalComponentRetry) > 0 || len(result.BaseComponentRetry) > 0 || len(result.ComponentRetry) > 0 || len(result.ComponentOverridesRetry) > 0 {
 		finalComponentRetry, err = m.Merge(
-			atmosConfig,
+			mergeConfig,
 			[]map[string]any{
 				opts.GlobalComponentRetry,
 				result.BaseComponentRetry,

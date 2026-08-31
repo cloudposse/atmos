@@ -37,7 +37,7 @@ components:
       # ...
 ```
 
-A component's own `retry:` still wins on any key it sets, and inherits everything else from the stack default — a component that only overrides `max_attempts` still gets the stack's `conditions` list. The full precedence order, lowest to highest, is: stack-level default → abstract base component → concrete component → `overrides.retry`.
+A concrete component's `retry:` overrides stack and abstract-base values for keys it sets. Missing keys inherit from lower-precedence layers. The full precedence order, lowest to highest, is: stack-level default → abstract base component → concrete component → `overrides.retry`.
 
 ## How to Use It
 
@@ -60,7 +60,7 @@ components:
         name: rds
 ```
 
-Both `vpc` and `rds` retry on the same conditions without either one declaring `retry:` itself. If one component needs a different policy, set `retry:` directly on that component — its values win, and any keys it doesn't set still fall back to the stack default.
+Both `vpc` and `rds` retry on the same conditions without either one declaring `retry:` itself. If one component needs a different policy, set `retry:` directly on that component. Its values override lower-precedence layers unless `overrides.retry` sets the same keys. Missing keys continue through the precedence chain.
 
 The mixin pattern from the [component retry docs](/stacks/components/terraform/retry#stack-level-defaults) is still the right tool when a policy should apply to only part of a stack, not the whole thing.
 

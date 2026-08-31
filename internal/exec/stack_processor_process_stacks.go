@@ -1354,9 +1354,13 @@ func ProcessStackConfig(
 			// Deep-merge global retry into component retry (component-local wins, and
 			// any base-component retry was already folded into componentMap by
 			// resolveCustomComponentInheritance above), consistent with how built-in
-			// component types merge retry in mergeComponentConfigurations.
+			// component types merge retry in mergeComponentConfigurations. Derive the
+			// effective merge config from the component's resolved settings so
+			// `settings.list_merge_strategy: append` is honored for retry.conditions
+			// too, not just replaced wholesale.
 			componentLocalRetry, _ := componentMap[cfg.RetrySectionName].(map[string]any)
-			componentRetry, retryMergeErr := m.Merge(atmosConfig, []map[string]any{globalRetrySection, componentLocalRetry})
+			effectiveCfg := effectiveAtmosConfig(atmosConfig, componentSettings)
+			componentRetry, retryMergeErr := m.Merge(effectiveCfg, []map[string]any{globalRetrySection, componentLocalRetry})
 			if retryMergeErr != nil {
 				return nil, nil, retryMergeErr
 			}

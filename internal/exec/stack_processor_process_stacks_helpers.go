@@ -36,7 +36,7 @@ type ComponentProcessorOptions struct {
 	// precedence layer in the retry merge (global -> base -> component -> overrides).
 	GlobalComponentRetry map[string]any
 	GlobalCommand        string
-	AtmosGlobalAuthMap   map[string]any // Pre-converted atmosConfig.Auth to prevent race conditions
+	AtmosGlobalAuthMap   map[string]any // Pre-converted atmosConfig.Auth to prevent race conditions.
 
 	// Terraform-specific options.
 	TerraformProviders              map[string]any

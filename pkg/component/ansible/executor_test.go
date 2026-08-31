@@ -1245,6 +1245,8 @@ func TestExecutePlaybookCommandWithRetry_MatchingError_Retries(t *testing.T) {
 	exePath, err := os.Executable()
 	require.NoError(t, err)
 
+	counterFile := filepath.Join(t.TempDir(), "counter")
+
 	maxAttempts := 3
 	info := &schema.ConfigAndStacksInfo{
 		Command:    exePath,
@@ -1256,6 +1258,7 @@ func TestExecutePlaybookCommandWithRetry_MatchingError_Retries(t *testing.T) {
 	}
 	cmdArgs := &CommandArgs{Command: exePath, Args: []string{"playbook"}}
 	envVars := []string{
+		"_ATMOS_TEST_COUNTER_FILE=" + counterFile,
 		"_ATMOS_TEST_EXIT_ONE=1",
 		"_ATMOS_TEST_STDERR=Error: 502 Bad Gateway returned",
 	}
@@ -1263,6 +1266,10 @@ func TestExecutePlaybookCommandWithRetry_MatchingError_Retries(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	err = executePlaybookCommandWithRetry(&atmosConfig, info, cmdArgs, t.TempDir(), envVars)
 	require.Error(t, err, "all 3 attempts fail in this fixture, so the final error must propagate")
+
+	counterBytes, readErr := os.ReadFile(counterFile)
+	require.NoError(t, readErr)
+	assert.Len(t, counterBytes, 3, "all 3 configured attempts must execute before the final error propagates")
 }
 
 // TestExecutePlaybookCommandWithRetry_NonMatchingError_FailsFast proves a real ansible

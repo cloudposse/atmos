@@ -43,7 +43,7 @@ Nothing changes for existing Terraform retry configuration — this is additive.
 
 ## How to Use It
 
-Add `retry:` to any Helmfile, Packer, or Ansible component exactly as you would for Terraform — see the [component retry docs](/stacks/components/terraform/retry) for the full field reference. A stack-root `retry:` block now protects every component in the stack regardless of type.
+Add `retry:` to any Helmfile, Packer, or Ansible component exactly as you would for Terraform — see the [component retry docs](/stacks/components/terraform/retry) for the full field reference. A stack-root `retry:` block now protects every supported component in the stack.
 
 Native Kubernetes and native Helm components don't shell out to a binary — they call Go SDKs directly — so they aren't covered by this change. That's tracked as a follow-up.
 
