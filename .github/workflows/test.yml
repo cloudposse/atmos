@@ -95,7 +95,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc # v2.2.0
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
         if: matrix.target == 'linux'
 
       - name: Announce build target
@@ -416,7 +416,7 @@ jobs:
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
@@ -818,7 +818,7 @@ jobs:
 
       - name: Upload Trivy config scan results
         if: always()
-        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config
@@ -1538,7 +1538,7 @@ jobs:
     # endpoint, which is gated purely by this job's own id-token permission.
     permissions:
       id-token: write
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@49ac8cd5c4cf74abdbf24a80027cd3bde811133a # main
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
     with:
       publish: false
       format: binary
