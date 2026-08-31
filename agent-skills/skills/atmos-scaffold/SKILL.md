@@ -80,6 +80,43 @@ Common field keys: `name` (required, used as the template variable — access vi
 `options` (select/multiselect), `placeholder` (input), `validation.pattern`/`message`
 (regex, input fields only).
 
+### Dynamic and label/value `options:` (select/multiselect)
+
+`options:` accepts a plain string list, a list of `{label, value}` objects, a dot-path into an
+earlier answer, or a Go-template expression:
+
+```yaml
+spec:
+  fields:
+    - name: envs
+      type: multiselect
+      options:                       # {label, value} objects — value is required, label optional
+        - label: Development
+          value: dev
+        - label: Production
+          value: prod
+    - name: default_env
+      type: select
+      options: answers.envs          # dot-path: only the environments actually picked above
+    - name: csv_owners
+      type: input
+      default: "platform-team,security-team"
+    - name: primary_owner
+      type: select
+      options: '{{ splitList "," answers.csv_owners }}'   # Go-template expression
+```
+
+The dot-path and template-expression forms resolve correctly once the referenced earlier field
+has been answered — interactively (fields prompt one at a time, so a later field is only ever
+shown after the ones before it) or headlessly against `--set`/`--defaults` — the same
+`answers.`-prefix convention `spec.files[].matrix` axes use. A dot-path may also point at a `spec.values` preset or
+a `--set`-supplied value never declared as a field at all; there's no field-declaration-order
+check at load time, so a forward/self/typo'd reference degrades gracefully at runtime instead of
+failing to load. When a dot-path (not a template expression) sources from a field using
+`{label, value}` pairs, those labels are recovered for the filtered subset of values present in
+the answer — only values ever flow into `answers`/templates, never labels. Full details:
+[references/scaffold-yaml-schema.md](references/scaffold-yaml-schema.md).
+
 ### Conditional prompts (`when:`)
 
 A field can declare `when:` to be shown only if a condition on **earlier-declared
