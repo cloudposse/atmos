@@ -17,9 +17,12 @@ on:
       - "demo/casts/atmos.d/screengrabs/demo-stacks/**"
       - "demo/casts/cast_checks.py"
 
+# The default GITHUB_TOKEN never writes here — `prepare` only reads (gh
+# release view), and `build`'s only push/PR step (create-pull-request) mints
+# and uses a separately-scoped GitHub App token instead, so this stays
+# read-only.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 env:
   TERM: "xterm-256color"

@@ -74,7 +74,8 @@ module.exports = {
                     items: [
                         'migration/native-terraform',
                         'migration/terragrunt',
-                        'migration/terraform-workspaces'
+                        'migration/terraform-workspaces',
+                        'migration/terramate'
                     ]
                 },
             ]
