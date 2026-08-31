@@ -7,11 +7,10 @@ on:
     types:
       - closed
 
-# These permissions are needed to interact with the GitHub's OIDC Token endpoint
+# Least-privilege default; the job below declares its own narrower
+# job-level permissions that override this baseline.
 permissions:
-  id-token: write
   contents: read
-  deployments: write
 
 env:
   AWS_REGION: us-east-2
@@ -26,6 +25,13 @@ jobs:
     if: ${{ !contains(github.event.*.labels.*.name, 'website-no-deploy') }}
 
     runs-on: ubuntu-latest
+    # id-token: write is needed to interact with GitHub's OIDC token endpoint
+    # (Configure AWS Credentials); deployments: write to inactivate the
+    # deployment below.
+    permissions:
+      contents: read
+      id-token: write
+      deployments: write
 
     steps:
       - name: Harden Runner
