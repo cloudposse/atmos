@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -157,11 +158,13 @@ func TestGetHooks_WithRealComponent(t *testing.T) {
 	// Change to test directory so atmos finds the config
 	t.Chdir(absTestDir)
 
-	atmosConfig := &schema.AtmosConfiguration{}
 	info := &schema.ConfigAndStacksInfo{
 		ComponentFromArg: "vpc",
 		Stack:            "acme-dev-test",
 	}
+	loadedConfig, err := cfg.InitCliConfig(*info, true)
+	require.NoError(t, err)
+	atmosConfig := &loadedConfig
 
 	hooks, err := GetHooks(atmosConfig, info)
 
@@ -239,11 +242,13 @@ vars:
 
 	t.Chdir(tempDir)
 
-	atmosConfig := &schema.AtmosConfiguration{}
 	info := &schema.ConfigAndStacksInfo{
 		ComponentFromArg: "vpc",
 		Stack:            "acme-dev-test",
 	}
+	loadedConfig, err := cfg.InitCliConfig(*info, true)
+	require.NoError(t, err)
+	atmosConfig := &loadedConfig
 
 	hooks, err := GetHooks(atmosConfig, info)
 	require.NoError(t, err)
@@ -275,14 +280,15 @@ func TestRunAll_RendersStoreHookExecutionFields(t *testing.T) {
 			t.Chdir(tempDir)
 
 			mockStore := NewMockStore()
-			atmosConfig := &schema.AtmosConfiguration{
-				Stores: store.StoreRegistry{
-					"staging": mockStore,
-				},
-			}
 			info := &schema.ConfigAndStacksInfo{
 				ComponentFromArg: "component",
 				Stack:            "acme-dev-test",
+			}
+			loadedConfig, err := cfg.InitCliConfig(*info, true)
+			require.NoError(t, err)
+			atmosConfig := &loadedConfig
+			atmosConfig.Stores = store.StoreRegistry{
+				"staging": mockStore,
 			}
 
 			hooks, err := GetHooks(atmosConfig, info)
@@ -304,11 +310,14 @@ func TestRunAll_DoesNotRenderNonMatchingStoreHookExecutionFields(t *testing.T) {
 	tempDir := setupStoreHookTemplateFixture(t, `!template "{{"`)
 	t.Chdir(tempDir)
 
-	atmosConfig := &schema.AtmosConfiguration{Stores: make(store.StoreRegistry)}
 	info := &schema.ConfigAndStacksInfo{
 		ComponentFromArg: "component",
 		Stack:            "acme-dev-test",
 	}
+	loadedConfig, err := cfg.InitCliConfig(*info, true)
+	require.NoError(t, err)
+	atmosConfig := &loadedConfig
+	atmosConfig.Stores = make(store.StoreRegistry)
 
 	hooks, err := GetHooks(atmosConfig, info)
 	require.NoError(t, err)
@@ -607,9 +616,11 @@ components:
 
 	t.Run("on_failure fail propagates the error", func(t *testing.T) {
 		info := newFixture(t, "fail")
-		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+		loadedConfig, err := cfg.InitCliConfig(*info, true)
+		require.NoError(t, err)
+		err = RunPerComponentHooks(&RunPerComponentHooksOptions{
 			Event:       AfterTerraformApply,
-			AtmosConfig: &schema.AtmosConfiguration{},
+			AtmosConfig: &loadedConfig,
 			Info:        info,
 			Outcome:     Outcome{Status: RunSuccess},
 		})
@@ -618,9 +629,11 @@ components:
 
 	t.Run("on_failure warn resolves to nil", func(t *testing.T) {
 		info := newFixture(t, "warn")
-		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+		loadedConfig, err := cfg.InitCliConfig(*info, true)
+		require.NoError(t, err)
+		err = RunPerComponentHooks(&RunPerComponentHooksOptions{
 			Event:       AfterTerraformApply,
-			AtmosConfig: &schema.AtmosConfiguration{},
+			AtmosConfig: &loadedConfig,
 			Info:        info,
 			Outcome:     Outcome{Status: RunSuccess},
 		})
@@ -629,9 +642,11 @@ components:
 
 	t.Run("on_failure ignore resolves to nil", func(t *testing.T) {
 		info := newFixture(t, "ignore")
-		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+		loadedConfig, err := cfg.InitCliConfig(*info, true)
+		require.NoError(t, err)
+		err = RunPerComponentHooks(&RunPerComponentHooksOptions{
 			Event:       AfterTerraformApply,
-			AtmosConfig: &schema.AtmosConfiguration{},
+			AtmosConfig: &loadedConfig,
 			Info:        info,
 			Outcome:     Outcome{Status: RunSuccess},
 		})

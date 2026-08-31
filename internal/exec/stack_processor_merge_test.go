@@ -567,6 +567,67 @@ func TestMergeComponentConfigurations_TerraformMocks(t *testing.T) {
 	assert.Equal(t, "10.1.0.0/16", res.ComponentMocks["network"].(map[string]any)["cidr"])
 }
 
+// TestMergeComponentConfigurations_TerraformFlags verifies the full precedence chain for
+// the terraform-only `flags:` section: atmos.yaml global + stack-level `terraform: flags:`
+// (opts.GlobalAndTerraformFlags) < base component < component < overrides, merged
+// field-by-field (setting only one field at a higher layer must not drop sibling fields
+// set at a lower layer).
+func TestMergeComponentConfigurations_TerraformFlags(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "vpc",
+		AtmosConfig:   atmosCfg,
+		GlobalAndTerraformFlags: map[string]any{
+			"lock_timeout": "5m",
+			"parallelism":  float64(10),
+		},
+	}
+	res := minimalComponentResult()
+	res.BaseComponentFlags = map[string]any{"refresh": false}
+	res.ComponentFlags = map[string]any{"lock_timeout": "10m"}
+	res.ComponentOverridesFlags = map[string]any{"compact_warnings": true}
+
+	comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+
+	flags, ok := comp[cfg.FlagsSectionName].(map[string]any)
+	require.True(t, ok, "flags section must be a merged map")
+	assert.Equal(t, "10m", flags["lock_timeout"], "component flags.lock_timeout must win over the global default")
+	assert.Equal(t, float64(10), flags["parallelism"], "global parallelism must survive when nothing overrides it")
+	assert.Equal(t, false, flags["refresh"], "base component flags.refresh must survive when nothing overrides it")
+	assert.Equal(t, true, flags["compact_warnings"], "overrides.flags must win")
+}
+
+func TestMergeComponentConfigurations_TerraformFlagsOmittedWhenEmpty(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "app",
+		AtmosConfig:   atmosCfg,
+	}
+	res := minimalComponentResult()
+
+	comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+	assert.NotContains(t, comp, cfg.FlagsSectionName)
+}
+
+func TestMergeComponentConfigurations_TerraformFlagsIgnoredForNonTerraform(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType:           cfg.KubernetesComponentType,
+		Component:               "app",
+		AtmosConfig:             atmosCfg,
+		GlobalAndTerraformFlags: map[string]any{"lock_timeout": "5m"},
+	}
+	res := minimalComponentResult()
+
+	comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+	assert.NotContains(t, comp, cfg.FlagsSectionName, "flags is terraform-only")
+}
+
 // TestMergeComponentConfigurations_GlobalKubernetesDefaults verifies stack-global
 // Kubernetes provider/paths/manifests/render defaults are the lowest-precedence layer:
 // they flow through when the component sets nothing, and the component overrides them.

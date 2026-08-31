@@ -25,12 +25,12 @@ commands:
     description: "Run script components"
     arguments:
       - name: component
-        type: component          # Provides the component name
+        provides: component      # Provides the component name
         required: true
     flags:
       - name: stack
         shorthand: s
-        semantic_type: stack     # Provides the stack name
+        provides: stack           # Provides the stack name
         required: true
     component:
       type: script               # Your custom component type

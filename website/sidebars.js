@@ -75,6 +75,7 @@ module.exports = {
                         'migration/native-terraform',
                         'migration/terragrunt',
                         'migration/terraform-workspaces',
+                        'migration/terramate',
                         'migration/makefile',
                         'migration/justfile',
                         'migration/taskfile'

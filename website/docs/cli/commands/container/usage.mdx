@@ -101,6 +101,36 @@ components:
 Inheritance (`metadata.inherits`), catalogs, and deep-merge apply exactly like other component kinds —
 abstract base components can carry shared `build`/`run` defaults.
 
+### Path resolution
+
+Relative `build.context` and `run.mounts[].source` values resolve against the container component's
+own directory — the same `components.container.base_path` + `component:`/`metadata.component`
+mechanism used by Terraform, Helmfile, Kubernetes, and Helm components, **not** the directory `atmos`
+happens to be invoked from. A relative `build.dockerfile` then resolves against the resulting
+`build.context` (the Docker/Compose convention), not against the component directory directly:
+
+```yaml
+# atmos.yaml
+components:
+  container:
+    base_path: components/container   # default
+```
+
+```yaml
+components:
+  container:
+    api:
+      component: api   # resolves to <base_path>/api, independent of the `atmos` invocation's CWD
+      build:
+        context: app        # <base_path>/api/app
+        dockerfile: docker/Dockerfile.prod  # <base_path>/api/app/docker/Dockerfile.prod (relative to build.context, not <base_path>/api)
+```
+
+Container components also support the same JIT `source:` provisioning as other component types — a
+component that declares `source:` is auto-vendored into a workdir on demand, and that workdir becomes
+the anchor for `build.context`/`build.dockerfile`/`run.mounts[].source` instead of the static
+`base_path` directory.
+
 `build.tags` is a list — the build applies all of them to the image, and `push` sends **every** tag, so
 listing registry-qualified tags there pushes to multiple registries in one operation (see
 [Push to multiple registries](#push-to-multiple-registries)).

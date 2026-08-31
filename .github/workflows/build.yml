@@ -6,12 +6,11 @@ on:
 
   workflow_dispatch:
 
+# Least-privilege default; every job below declares its own job-level
+# permissions that override this baseline (job-level permissions REPLACE,
+# not extend, this block).
 permissions:
-  attestations: write
-  contents: write
-  id-token: write
-  pull-requests: write
-  packages: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}
@@ -19,6 +18,14 @@ concurrency:
 
 jobs:
   release:
+    # Matches exactly what shared-release-branches.yml itself requests
+    # (id-token/contents/pull-requests) — a reusable workflow's effective
+    # permissions are the caller job's grant intersected with what the
+    # callee declares, so granting more here wouldn't reach it anyway.
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
     uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@49ac8cd5c4cf74abdbf24a80027cd3bde811133a # main
     secrets: inherit
 
@@ -28,7 +35,16 @@ jobs:
     runs-on: ubuntu-latest
     needs: release
     environment: release
+    # Authenticates via secrets.GH_BOT_TOKEN, not GITHUB_TOKEN — no elevated
+    # GITHUB_TOKEN scope needed.
+    permissions:
+      contents: read
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       # mislav/bump-homebrew-formula-action is broken: GitHub now returns HTTP 303
       # instead of 302 for tarball redirects and the action only accepts 302.
       # See https://github.com/mislav/bump-homebrew-formula-action/issues/340
@@ -42,7 +58,21 @@ jobs:
     runs-on: ubuntu-latest
     needs: release
     if: ${{ github.event_name == 'release' }}
+    # Job-level permissions REPLACE (not extend) the workflow-level block above,
+    # so everything this job needs must be re-listed here: contents/packages for
+    # the checkout+push, id-token for cosign keyless signing, security-events for
+    # the Trivy SARIF upload.
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      security-events: write
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: "Checkout source code at current commit"
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -50,7 +80,7 @@ jobs:
 
       - name: "Docker Build"
         id: build
-        uses: cloudposse/github-action-docker-build-push@02993d675b44dcc7082e6de7485c1ff8740bce9d # v3.1.0
+        uses: cloudposse/github-action-docker-build-push@ff59bd5b5c0c953aef60f5eb9b80178fff407597 # v3.2.1
         with:
           registry: ghcr.io
           organization: "${{ github.event.repository.owner.login }}"
@@ -62,6 +92,8 @@ jobs:
           file: Dockerfile
           build-args: |
             ATMOS_VERSION=${{ github.event.release.tag_name }}
+          provenance: true
+          sbom: true
 
       - name: "Verify Image"
         env:
@@ -69,6 +101,36 @@ jobs:
           DOCKER_TAG: ${{ steps.build.outputs.tag }}
         run: |
           docker pull "$DOCKER_IMAGE:$DOCKER_TAG"
+
+      - name: "Install cosign"
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Keyless OIDC signing — no key material, no secrets. Verifiable with:
+      #   cosign verify <image>@<digest> \
+      #     --certificate-identity-regexp='^https://github.com/cloudposse/atmos/' \
+      #     --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+      - name: "Sign image with cosign"
+        env:
+          DOCKER_IMAGE: ${{ steps.build.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${DOCKER_IMAGE}@${DIGEST}"
+
+      # Non-blocking (exit-code: 0) for now — surface findings via the code-scanning
+      # tab first and triage before flipping this to a release-blocking gate.
+      - name: "Scan image with Trivy"
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.build.outputs.image }}:${{ steps.build.outputs.tag }}
+          format: sarif
+          output: trivy-results.sarif
+          scanners: vuln,secret
+          exit-code: '0'
+
+      - name: "Upload Trivy scan results to code-scanning"
+        if: always()
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          sarif_file: trivy-results.sarif
 
       - name: "Job Summary"
         env:
@@ -79,3 +141,125 @@ jobs:
           echo '```json' >> $GITHUB_STEP_SUMMARY
           docker inspect "$DOCKER_IMAGE:$DOCKER_TAG" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # Rebuilds the release binaries from source at the published tag and
+  # replaces GoReleaser's already-published assets with natively signed/SBOM'd
+  # ones — see .goreleaser.yml's `signs:`/`sboms:` blocks. Deliberately runs a
+  # *real* `goreleaser release` again here (idempotent: .goreleaser.yml's
+  # release: block already has replace_existing_artifacts: true, mode:
+  # keep-existing, specifically to make repeated runs against the same tag
+  # safe) rather than downloading and re-signing already-published assets —
+  # signing what this job actually built, not what it fetched, closes a real
+  # TOCTOU gap: anything able to tamper with a just-published release asset in
+  # a download-then-sign window would get a valid-looking signature over
+  # tampered bytes. See docs/prd/native-goreleaser-release-pipeline.md.
+  #
+  # Gated the same as `docker` (any release event, not homebrew's
+  # prerelease==false) so this is exercisable pre-merge: label a non-draft PR
+  # `release/feature` to publish a real prerelease and fire this job.
+  sign-and-attest-release:
+    name: "Rebuild, sign, SBOM, and attest release artifacts"
+    runs-on: ubuntu-latest
+    needs: release
+    if: ${{ github.event_name == 'release' }}
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: "Checkout source at release tag"
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Set up Go"
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+
+      - name: "Install cosign"
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # syft binary that .goreleaser.yml's sboms: block shells out to.
+      - name: "Install syft"
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+
+      - name: "Run goreleaser release"
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # .goreleaser.yml's nfpms: block already built dist/*.deb, dist/*.rpm,
+      # dist/*.apk above and attached them to the GitHub Release directly.
+      # Pushing those same packages to Cloudsmith (currently done by an
+      # external pipeline this repo doesn't own — see
+      # docs/prd/native-goreleaser-release-pipeline.md) is intentionally left
+      # commented out: the real Cloudsmith org/repo/distro names and an API
+      # key secret are unknown from this repo today. Wire this up in a
+      # follow-up PR once those are confirmed — do not uncomment with the
+      # placeholder values below as-is.
+      #
+      # - name: "Push packages to Cloudsmith"
+      #   env:
+      #     CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
+      #   run: |
+      #     pip install --user cloudsmith-cli
+      #     for f in dist/*.deb; do cloudsmith push deb <CLOUDSMITH_ORG>/<CLOUDSMITH_REPO>/any-distro/any-version "$f"; done
+      #     for f in dist/*.rpm; do cloudsmith push rpm <CLOUDSMITH_ORG>/<CLOUDSMITH_REPO>/any-distro/any-version "$f"; done
+      #     for f in dist/*.apk; do cloudsmith push alpine <CLOUDSMITH_ORG>/<CLOUDSMITH_REPO>/alpine/edge "$f"; done
+
+      # Real Sigstore-backed provenance for every binary this job just built
+      # locally — no longer a re-fetch, so this is genuine build-time
+      # GitHub-native attestation stacked on top of cosign (a different
+      # verification mechanism/consumer than cosign, e.g. `gh attestation
+      # verify`), not a second re-fetch-and-sign layer.
+      - name: "Attest build provenance"
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: 'dist/*'
+
+      - name: "Resolve checksums file"
+        id: checksums
+        run: |
+          file="$(find dist -maxdepth 1 -name '*_SHA256SUMS' -print -quit)"
+          if [ -z "$file" ]; then
+            echo "No *_SHA256SUMS file found in dist/" >&2
+            exit 1
+          fi
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      # Bind a source-tree SBOM to the checksums file — it already commits to
+      # every binary's exact digest, so it's a well-defined single-artifact
+      # anchor for a release that ships multiple platform binaries. Separate
+      # from .goreleaser.yml's per-archive sboms: block (bound to individual
+      # archives, uploaded to the release directly by GoReleaser itself).
+      - name: "Generate and attest source-tree SBOM"
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/atmos-sbom.spdx.json
+
+      - name: "Attest SBOM"
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ steps.checksums.outputs.file }}
+          sbom-path: dist/atmos-sbom.spdx.json
+
+      - name: "Upload source-tree SBOM to the release"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$TAG" dist/atmos-sbom.spdx.json \
+            --repo "${{ github.repository }}" --clobber

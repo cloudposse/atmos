@@ -2575,11 +2575,11 @@ func TestFindTypedValue(t *testing.T) {
 		want          string
 	}{
 		{
-			name: "finds value in arguments by type",
+			name: "finds value in arguments by provides",
 			cmd: &schema.Command{
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: "component"},
-					{Name: "stack", Type: "stack"},
+					{Name: "component", Provides: "component"},
+					{Name: "stack", Provides: "stack"},
 				},
 			},
 			argumentsData: map[string]string{
@@ -2591,11 +2591,11 @@ func TestFindTypedValue(t *testing.T) {
 			want:         "vpc",
 		},
 		{
-			name: "finds value in flags by semantic type",
+			name: "finds value in flags by provides",
 			cmd: &schema.Command{
 				Flags: []schema.CommandFlag{
-					{Name: "stack", SemanticType: "stack"},
-					{Name: "component", SemanticType: "component"},
+					{Name: "stack", Provides: "stack"},
+					{Name: "component", Provides: "component"},
 				},
 			},
 			argumentsData: map[string]string{},
@@ -2605,6 +2605,42 @@ func TestFindTypedValue(t *testing.T) {
 			},
 			semanticType: "stack",
 			want:         "prod",
+		},
+		{
+			name: "falls back to deprecated Type when Provides unset on argument",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: "component"},
+				},
+			},
+			argumentsData: map[string]string{"component": "vpc"},
+			flagsData:     map[string]any{},
+			semanticType:  "component",
+			want:          "vpc",
+		},
+		{
+			name: "falls back to deprecated SemanticType when Provides unset on flag",
+			cmd: &schema.Command{
+				Flags: []schema.CommandFlag{
+					{Name: "stack", SemanticType: "stack"},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{"stack": "prod"},
+			semanticType:  "stack",
+			want:          "prod",
+		},
+		{
+			name: "Provides takes precedence over deprecated Type on argument",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Provides: "component", Type: "stack"},
+				},
+			},
+			argumentsData: map[string]string{"component": "vpc"},
+			flagsData:     map[string]any{},
+			semanticType:  "component",
+			want:          "vpc",
 		},
 		{
 			name: "returns empty when not found in arguments",
@@ -2646,10 +2682,10 @@ func TestFindTypedValue(t *testing.T) {
 			name: "arguments take precedence over flags",
 			cmd: &schema.Command{
 				Arguments: []schema.CommandArgument{
-					{Name: "comp", Type: "component"},
+					{Name: "comp", Provides: "component"},
 				},
 				Flags: []schema.CommandFlag{
-					{Name: "component", SemanticType: "component"},
+					{Name: "component", Provides: "component"},
 				},
 			},
 			argumentsData: map[string]string{"comp": "from-arg"},
@@ -2705,7 +2741,7 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			name: "missing component argument returns ErrComponentArgumentNotFound",
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
-				Arguments: []schema.CommandArgument{{Name: "component", Type: semanticTypeComponent}},
+				Arguments: []schema.CommandArgument{{Name: "component", Provides: semanticTypeComponent}},
 			},
 			argumentsData: map[string]string{},
 			flagsData:     map[string]any{},
@@ -2716,8 +2752,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: semanticTypeComponent},
-					{Name: "stack", Type: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{"component": "deploy-app"},
@@ -2729,8 +2765,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: semanticTypeComponent},
-					{Name: "stack", Type: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
@@ -2744,8 +2780,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: semanticTypeComponent},
-					{Name: "stack", Type: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
@@ -2759,8 +2795,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: semanticTypeComponent},
-					{Name: "stack", Type: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
@@ -2774,8 +2810,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script", BasePath: "custom/path"},
 				Flags: []schema.CommandFlag{
-					{Name: "component", SemanticType: semanticTypeComponent},
-					{Name: "stack", SemanticType: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{},
@@ -2783,6 +2819,23 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			describeRet:   map[string]any{"component": "deploy-app"},
 			wantConfig:    map[string]any{"component": "deploy-app"},
 			wantBasePath:  "custom/path", // explicit basePath is preserved.
+		},
+		{
+			name: "success using deprecated type/semantic_type fields (backward compatibility)",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+				},
+				Flags: []schema.CommandFlag{
+					{Name: "stack", SemanticType: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app"},
+			flagsData:     map[string]any{"stack": "dev"},
+			describeRet:   map[string]any{"vars": map[string]any{"foo": "bar"}},
+			wantConfig:    map[string]any{"vars": map[string]any{"foo": "bar"}},
+			wantBasePath:  "components/script",
 		},
 	}
 

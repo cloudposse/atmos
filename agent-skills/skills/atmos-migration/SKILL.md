@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, and the remote-state bridge for a step-by-step migration."
+description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -9,6 +9,7 @@ references:
   - references/from-native-terraform.md
   - references/from-terraform-workspaces.md
   - references/remote-state-bridge.md
+  - references/from-terramate.md
   - references/from-makefile.md
   - references/from-justfile.md
   - references/from-taskfile.md
@@ -29,6 +30,8 @@ For full tutorials for end users, see:
 - [Migrating from Native Terraform](https://atmos.tools/migration/native-terraform)
 - [Migrating from Terraform Workspaces](https://atmos.tools/migration/terraform-workspaces)
 - [Migrating from Terragrunt](https://atmos.tools/migration/terragrunt) (this skill does not cover Terragrunt)
+- Migrating from Terramate -- covered by this skill via
+  [references/from-terramate.md](references/from-terramate.md) (no atmos.tools tutorial yet)
 - [Migrating from Makefiles](https://atmos.tools/migration/makefile)
 - [Migrating from Justfiles](https://atmos.tools/migration/justfile)
 - [Migrating from Taskfile.yml](https://atmos.tools/migration/taskfile)
@@ -87,6 +90,7 @@ reference file:
 | One TF root module, env config via `.tfvars` or env vars             | [from-native-terraform.md](references/from-native-terraform.md) |
 | Multiple TF root modules in scattered dirs                           | [from-native-terraform.md](references/from-native-terraform.md) |
 | `terraform.workspace`-driven environments with shared state backend  | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
+| `.tm.hcl` files, `stack.tm.hcl`, `generate_hcl` blocks (Terramate project) | [from-terramate.md](references/from-terramate.md) |
 | Need to read outputs from un-migrated TF (legacy or another repo)    | [remote-state-bridge.md](references/remote-state-bridge.md) |
 | User has a Makefile driving builds/tests/deploys                     | [from-makefile.md](references/from-makefile.md) |
 | User has a Justfile (`just` command runner)                          | [from-justfile.md](references/from-justfile.md) |
@@ -255,6 +259,9 @@ Push back if a user or another agent proposes one of these methods during migrat
 - [References/remote-state-bridge.md](references/remote-state-bridge.md): the dummy-component and
   abstract-component patterns. Use them to read state from Terraform that is not yet migrated, or
   from an external repository.
+- [References/from-terramate.md](references/from-terramate.md): construct-by-construct mapping
+  from Terramate (`stack.tm.hcl`, globals, `generate_hcl`, `script{}`, tags/labels) to Atmos,
+  including the one remaining known gap (`.tmtriggers`).
 - [References/from-makefile.md](references/from-makefile.md): steps for a Makefile, matched to
   each shape.
 - [References/from-justfile.md](references/from-justfile.md): steps for a Justfile, matched to

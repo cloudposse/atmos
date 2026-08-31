@@ -30,6 +30,11 @@ jobs:
       url: https://${{ env.DEPLOYMENT_HOST }}
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
@@ -68,9 +73,13 @@ jobs:
         # CGO_ENABLED=0: `go run .` builds the whole atmos binary graph, which pulls in
         # cgo-linked hardware-security-key deps (e.g. github.com/bearsh/hid) that need
         # system libudev headers this runner doesn't have. atmos itself always builds with
-        # CGO disabled (see .goreleaser.yml, scripts/build-atmos.sh); match that here too.
+        # CGO disabled (see .goreleaser.yml, magefiles/build.go); match that here too.
+        # GOFIPS140=latest: match every other Go-toolchain build invocation in the repo
+        # (see docs/prd/fips-140-mode.md) so this throwaway schema-generation process
+        # behaves identically to a real atmos build/test binary.
         env:
           CGO_ENABLED: "0"
+          GOFIPS140: latest
         run: go run . stack schema website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
       - name: Publish pinned atmos-manifest schema snapshot
@@ -82,6 +91,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           CGO_ENABLED: "0"
+          GOFIPS140: latest
         run: |
           version="${RELEASE_TAG#v}"
           go run . stack schema "website/static/schemas/atmos/atmos-manifest/${version}/atmos-manifest.json"
@@ -94,6 +104,7 @@ jobs:
         # floats to the schema shipped by the atmos version at HEAD.
         env:
           CGO_ENABLED: "0"
+          GOFIPS140: latest
         run: go run . config schema website/static/schemas/atmos/atmos-config/1.0/atmos-config.json
 
       - name: Publish pinned atmos-config schema snapshot
@@ -104,6 +115,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           CGO_ENABLED: "0"
+          GOFIPS140: latest
         run: |
           version="${RELEASE_TAG#v}"
           go run . config schema "website/static/schemas/atmos/atmos-config/${version}/atmos-config.json"
