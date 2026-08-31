@@ -1,0 +1,64 @@
+---
+slug: cel-when-flags-arguments
+title: "Gate custom command steps on their own flags and arguments"
+date: 2026-08-21T12:00:00.000Z
+authors: [osterman]
+tags: [feature]
+---
+
+A custom command often needs to behave differently depending on how it was called — skip the
+destructive step on `--dry-run`, only run a cleanup step for a particular `environment` argument,
+or branch on whichever component the caller targeted. Doing that meant wrapping the command in a
+shell script that inspected `$@` itself, because a step's `when:` condition had no visibility into
+the command's own `--flag` or positional argument values.
+
+<!--truncate-->
+
+## The Problem
+
+Custom command steps already supported `when:` conditions built on CEL — `ci`, `stack`,
+`component`, and more — but a step could never see the values the user actually passed to the
+command that's running it:
+
+```yaml
+commands:
+  - name: deploy
+    flags:
+      - name: dry-run
+        type: bool
+    steps:
+      - type: shell
+        command: terraform apply
+        # No way to reference --dry-run here.
+```
+
+The flag values were already being extracted for Go/gomplate templates as `{{ .Flags.dry_run }}`,
+but that data never reached the CEL evaluator, so `when:` conditions couldn't use it.
+
+## The Fix
+
+`when:` expressions can now read `flags` and `arguments`, mirroring the same data already
+available to steps in templates. `component` is also resolved for custom commands now, the same
+way it already was for component hooks — via a semantic-typed flag or argument.
+
+## How to Use It
+
+```yaml
+commands:
+  - name: deploy
+    flags:
+      - name: dry-run
+        type: bool
+    steps:
+      - type: shell
+        command: terraform apply
+        when: !cel '!flags["dry-run"]'
+```
+
+See the [custom command steps](/cli/configuration/commands/steps#conditional-steps) docs for the
+full list of available `when:` facts.
+
+## Get Involved
+
+Have feedback on this feature? [Open an issue](https://github.com/cloudposse/atmos/issues) or join
+the conversation in the [Cloud Posse community Slack](https://cloudposse.com/slack).

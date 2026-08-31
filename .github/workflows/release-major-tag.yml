@@ -8,8 +8,11 @@ on:
   release:
     types: [published]
 
+# The default GITHUB_TOKEN never writes here — the only mutating step below
+# mints and uses a separately-scoped GitHub App token instead (see comment on
+# the `major-tag` job), so this stays read-only.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   major-tag:

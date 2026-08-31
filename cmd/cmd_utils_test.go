@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -2418,6 +2419,205 @@ func TestExecuteCustomCommandShellStepPropagatesCILogGroupSentinel(t *testing.T)
 	assert.Equal(t, "1", string(got))
 }
 
+// TestExecuteCustomCommandStepWhenFlagsFact covers the end-to-end wiring of a custom command's
+// --flag value into a step's `when:` CEL expression via the `flags` fact -- including the
+// `hasRunnableStep` pre-check loop, which runs before the main step loop and must see the same
+// flags/arguments data (previously it evaluated `flags` as always absent/empty).
+func TestExecuteCustomCommandStepWhenFlagsFact(t *testing.T) {
+	ensureIOInitialized(t)
+
+	tests := []struct {
+		name        string
+		dryRun      string
+		wantWritten bool
+	}{
+		{name: "flag true runs the step", dryRun: "true", wantWritten: true},
+		{name: "flag false skips the step", dryRun: "false", wantWritten: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			workDir := t.TempDir()
+			sentinelFile := filepath.Join(workDir, "sentinel.txt")
+			atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+			parentCmd := &cobra.Command{Use: "atmos"}
+			commands := []schema.Command{{
+				Name:             "cover-flags-when",
+				Description:      "exercise the flags fact in when:",
+				WorkingDirectory: workDir,
+				Flags: []schema.CommandFlag{
+					{Name: "dry-run", Type: "bool"},
+				},
+				Steps: []schema.Task{{
+					Name:    "capture-sentinel",
+					Type:    schema.TaskTypeShell,
+					Command: `printf %s "1" > sentinel.txt`,
+					When:    schema.MustCondition(`!cel flags["dry-run"] == true`),
+				}},
+			}}
+
+			require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+			customCmd := findSubcommand(parentCmd, "cover-flags-when")
+			require.NotNil(t, customCmd)
+			require.NoError(t, customCmd.PersistentFlags().Set("dry-run", tt.dryRun))
+
+			customCmd.PreRun(customCmd, nil)
+			customCmd.Run(customCmd, nil)
+
+			_, err := os.Stat(sentinelFile)
+			if tt.wantWritten {
+				require.NoError(t, err)
+			} else {
+				require.True(t, os.IsNotExist(err))
+			}
+		})
+	}
+}
+
+// TestExecuteCustomCommandStepWhenArgumentsAndComponentFacts covers the end-to-end wiring of a
+// custom command's positional arguments into a step's `when:` CEL expression via the `arguments`
+// fact, and the `component` fact resolved from a semantic-typed argument -- exercised through the
+// full command lifecycle (not just the customCommandConditionContext unit test), including the
+// `hasRunnableStep` pre-check loop.
+func TestExecuteCustomCommandStepWhenArgumentsAndComponentFacts(t *testing.T) {
+	ensureIOInitialized(t)
+
+	tests := []struct {
+		name        string
+		argProvides string
+		argDefault  string
+		when        string
+		wantWritten bool
+	}{
+		{name: "arguments fact matches", argDefault: "prod", when: `arguments["env"] == "prod"`, wantWritten: true},
+		{name: "arguments fact does not match", argDefault: "dev", when: `arguments["env"] == "prod"`, wantWritten: false},
+		{name: "component fact matches", argProvides: semanticTypeComponent, argDefault: "vpc", when: `component == "vpc"`, wantWritten: true},
+		{name: "component fact does not match", argProvides: semanticTypeComponent, argDefault: "eks", when: `component == "vpc"`, wantWritten: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			workDir := t.TempDir()
+			sentinelFile := filepath.Join(workDir, "sentinel.txt")
+			atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+			parentCmd := &cobra.Command{Use: "atmos"}
+			commands := []schema.Command{{
+				Name:             "cover-arguments-component-when",
+				Description:      "exercise the arguments/component facts in when:",
+				WorkingDirectory: workDir,
+				Arguments: []schema.CommandArgument{
+					{Name: "env", Provides: tt.argProvides, Default: tt.argDefault},
+				},
+				Steps: []schema.Task{{
+					Name:    "capture-sentinel",
+					Type:    schema.TaskTypeShell,
+					Command: `printf %s "1" > sentinel.txt`,
+					When:    schema.MustCondition("!cel " + tt.when),
+				}},
+			}}
+
+			require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+			customCmd := findSubcommand(parentCmd, "cover-arguments-component-when")
+			require.NotNil(t, customCmd)
+
+			customCmd.PreRun(customCmd, nil)
+			customCmd.Run(customCmd, nil)
+
+			_, err := os.Stat(sentinelFile)
+			if tt.wantWritten {
+				require.NoError(t, err)
+			} else {
+				require.True(t, os.IsNotExist(err))
+			}
+		})
+	}
+}
+
+// TestExecuteCustomCommandStepContinueOnFailure covers the end-to-end wiring of a failed step's
+// `continue:` CEL condition: customCommandConditionContext built for that evaluation carries
+// status: "failure" (unlike when:/pre-check evaluations, which see the command's running status,
+// "success" until a step actually fails), so `continue: !cel status == "failure"` can forgive the
+// failure and let the next default (success-only) step still run. Without a matching continue:,
+// the command's overall status flips to "failure" and the default step is skipped instead.
+// Exercised through the full command lifecycle, not just the context-helper unit test.
+func TestExecuteCustomCommandStepContinueOnFailure(t *testing.T) {
+	ensureIOInitialized(t)
+
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		continueVal schema.Condition
+		wantExit    bool
+		wantWritten bool
+	}{
+		{name: "continue forgives the failure", continueVal: schema.MustCondition(`!cel status == "failure"`), wantExit: false, wantWritten: true},
+		{name: "no continue leaves the command failed", continueVal: schema.Condition{}, wantExit: true, wantWritten: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			originalOsExit := errUtils.OsExit
+			t.Cleanup(func() { errUtils.OsExit = originalOsExit })
+			var exited bool
+			errUtils.OsExit = func(int) {
+				exited = true
+				panic("os exit stub")
+			}
+
+			workDir := t.TempDir()
+			sentinelFile := filepath.Join(workDir, "sentinel.txt")
+			atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+			parentCmd := &cobra.Command{Use: "atmos"}
+			commands := []schema.Command{{
+				Name:             "cover-continue-when",
+				Description:      "exercise the continue: CEL status fact after a failed step",
+				WorkingDirectory: workDir,
+				Steps: []schema.Task{
+					{
+						Name:     "fail",
+						Type:     schema.TaskTypeShell,
+						Command:  fmt.Sprintf("%q", exePath),
+						Env:      map[string]string{"_ATMOS_TEST_EXIT_ONE": "1"},
+						Continue: tt.continueVal,
+					},
+					{
+						Name:    "capture-sentinel",
+						Type:    schema.TaskTypeShell,
+						Command: `printf %s "1" > sentinel.txt`,
+					},
+				},
+			}}
+
+			require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+			customCmd := findSubcommand(parentCmd, "cover-continue-when")
+			require.NotNil(t, customCmd)
+
+			customCmd.PreRun(customCmd, nil)
+			if tt.wantExit {
+				assert.Panics(t, func() { customCmd.Run(customCmd, nil) })
+			} else {
+				assert.NotPanics(t, func() { customCmd.Run(customCmd, nil) })
+			}
+			assert.Equal(t, tt.wantExit, exited)
+
+			_, statErr := os.Stat(sentinelFile)
+			if tt.wantWritten {
+				require.NoError(t, statErr)
+			} else {
+				require.True(t, os.IsNotExist(statErr))
+			}
+		})
+	}
+}
+
 func TestFindTypedValue(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -2563,6 +2763,43 @@ func TestFindTypedValue(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestCustomCommandConditionContext covers that flags/arguments/component reach the CEL `when:`
+// context: flagsData/argumentsData are passed straight through as Flags/Arguments, and Component
+// is resolved via findTypedValue the same way processCustomComponentType already resolves it.
+func TestCustomCommandConditionContext(t *testing.T) {
+	_ = NewTestKit(t)
+
+	commandConfig := &schema.Command{
+		Name: "deploy",
+		Arguments: []schema.CommandArgument{
+			{Name: "comp", Provides: "component"},
+		},
+		Flags: []schema.CommandFlag{
+			{Name: "dry-run"},
+		},
+	}
+	argumentsData := map[string]string{"comp": "vpc"}
+	flagsData := map[string]any{"dry-run": true}
+	step := &schema.Task{Name: "apply", Stack: "prod"}
+
+	ctx := customCommandConditionContext(customCommandConditionParams{
+		commandConfig: commandConfig,
+		step:          step,
+		index:         0,
+		env:           map[string]string{},
+		status:        schema.ConditionPredicateSuccess,
+		argumentsData: argumentsData,
+		flagsData:     flagsData,
+	})
+
+	assert.Equal(t, "deploy", ctx.Workflow)
+	assert.Equal(t, "apply", ctx.Step)
+	assert.Equal(t, "prod", ctx.Stack)
+	assert.Equal(t, "vpc", ctx.Component)
+	assert.Equal(t, flagsData, ctx.Flags)
+	assert.Equal(t, argumentsData, ctx.Arguments)
 }
 
 // errEnsureRegistered is a sentinel error used to verify ensureRegisteredFn error propagation.
