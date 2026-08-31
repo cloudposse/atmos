@@ -103,10 +103,10 @@ func TestValidateTemplate(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().ValidateTemplate(gomock.Any(), gomock.Any()).Return(&cloudformation.ValidateTemplateOutput{}, nil)
 
-	out := captureStderr(t, func() {
+	out := normalizeUIOutput(captureStderr(t, func() {
 		err := validateTemplate(context.Background(), client, "vpc", "AWSTemplateFormatVersion: '2010-09-09'")
 		require.NoError(t, err)
-	})
+	}))
 	assert.Contains(t, out, "vpc")
 	assert.Contains(t, out, "template is valid")
 }
