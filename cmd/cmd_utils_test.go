@@ -2486,15 +2486,15 @@ func TestExecuteCustomCommandStepWhenArgumentsAndComponentFacts(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		argType     string
+		argProvides string
 		argDefault  string
 		when        string
 		wantWritten bool
 	}{
-		{name: "arguments fact matches", argType: "string", argDefault: "prod", when: `arguments["env"] == "prod"`, wantWritten: true},
-		{name: "arguments fact does not match", argType: "string", argDefault: "dev", when: `arguments["env"] == "prod"`, wantWritten: false},
-		{name: "component fact matches", argType: semanticTypeComponent, argDefault: "vpc", when: `component == "vpc"`, wantWritten: true},
-		{name: "component fact does not match", argType: semanticTypeComponent, argDefault: "eks", when: `component == "vpc"`, wantWritten: false},
+		{name: "arguments fact matches", argDefault: "prod", when: `arguments["env"] == "prod"`, wantWritten: true},
+		{name: "arguments fact does not match", argDefault: "dev", when: `arguments["env"] == "prod"`, wantWritten: false},
+		{name: "component fact matches", argProvides: semanticTypeComponent, argDefault: "vpc", when: `component == "vpc"`, wantWritten: true},
+		{name: "component fact does not match", argProvides: semanticTypeComponent, argDefault: "eks", when: `component == "vpc"`, wantWritten: false},
 	}
 
 	for _, tt := range tests {
@@ -2510,7 +2510,7 @@ func TestExecuteCustomCommandStepWhenArgumentsAndComponentFacts(t *testing.T) {
 				Description:      "exercise the arguments/component facts in when:",
 				WorkingDirectory: workDir,
 				Arguments: []schema.CommandArgument{
-					{Name: "env", Type: tt.argType, Default: tt.argDefault},
+					{Name: "env", Provides: tt.argProvides, Default: tt.argDefault},
 				},
 				Steps: []schema.Task{{
 					Name:    "capture-sentinel",
@@ -2774,7 +2774,7 @@ func TestCustomCommandConditionContext(t *testing.T) {
 	commandConfig := &schema.Command{
 		Name: "deploy",
 		Arguments: []schema.CommandArgument{
-			{Name: "comp", Type: "component"},
+			{Name: "comp", Provides: "component"},
 		},
 		Flags: []schema.CommandFlag{
 			{Name: "dry-run"},
