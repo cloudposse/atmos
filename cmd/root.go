@@ -48,6 +48,7 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/auth/providers/atmospro/broker"
 
 	"github.com/cloudposse/atmos/pkg/ci"
+	cistartup "github.com/cloudposse/atmos/pkg/ci/startup"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/diagnostics"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
@@ -655,6 +656,7 @@ var RootCmd = &cobra.Command{
 		// enabled. No-op outside a supported CI provider or for help commands.
 		if !isHelpRequested && !isCompletionCommand(cmd) {
 			cicache.AutoRestore(cmd, &tmpConfig)
+			cistartup.PrintStartupStatus(&tmpConfig)
 		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {

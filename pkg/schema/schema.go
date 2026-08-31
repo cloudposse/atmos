@@ -705,6 +705,43 @@ type Terraform struct {
 	// `providers lock` that keeps .terraform.lock.hcl complete across platforms.
 	// Empty defaults to the current host platform.
 	Platforms []string `yaml:"platforms,omitempty" json:"platforms,omitempty" mapstructure:"platforms"`
+	// Flags holds fleet-wide default values for terraform CLI execution flags
+	// (e.g. -lock-timeout, -parallelism). Overridable per stack via the
+	// root-level `terraform: flags:` block, and per component via a
+	// component's own `flags:` block. An explicit CLI-typed compat flag
+	// (e.g. `-lock-timeout=5m` typed on the command line) always wins.
+	Flags TerraformFlags `yaml:"flags,omitempty" json:"flags,omitempty" mapstructure:"flags"`
+}
+
+// TerraformFlags holds default values for terraform CLI execution flags
+// (lock/concurrency/output tuning). Settable globally under
+// components.terraform.flags in atmos.yaml, per stack under a root-level
+// terraform.flags block, and per component under a component's flags block
+// (field-level override, highest-precedence layer below an explicit
+// CLI-typed compat flag).
+//
+// Lock and Refresh are *bool (not bool) because terraform's own default for
+// both is true — a plain bool can't distinguish "not configured" from
+// "explicitly set to false" and would silently inject -lock=false /
+// -refresh=false for everyone who never touched the setting. Parallelism is
+// *int for the same reason (terraform's default is 10, not 0).
+// CompactWarnings' terraform default is already false, so a plain bool is
+// unambiguous.
+type TerraformFlags struct {
+	// LockTimeout is the default value for terraform's -lock-timeout flag
+	// (e.g. "30s", "5m"). Empty means unset — terraform's own 0s default
+	// applies. Validated with time.ParseDuration at injection time.
+	LockTimeout string `yaml:"lock_timeout,omitempty" json:"lock_timeout,omitempty" mapstructure:"lock_timeout"`
+	// Lock is the default value for terraform's -lock flag. nil means unset.
+	Lock *bool `yaml:"lock,omitempty" json:"lock,omitempty" mapstructure:"lock"`
+	// Parallelism is the default value for terraform's -parallelism flag. nil means unset.
+	Parallelism *int `yaml:"parallelism,omitempty" json:"parallelism,omitempty" mapstructure:"parallelism"`
+	// Refresh is the default value for terraform's -refresh flag. nil means unset.
+	// Not applied to `apply <planfile>` — terraform rejects -refresh when
+	// applying a saved plan.
+	Refresh *bool `yaml:"refresh,omitempty" json:"refresh,omitempty" mapstructure:"refresh"`
+	// CompactWarnings is the default value for terraform's -compact-warnings flag.
+	CompactWarnings bool `yaml:"compact_warnings,omitempty" json:"compact_warnings,omitempty" mapstructure:"compact_warnings"`
 }
 
 // TerraformLint configures TFLint for Terraform components. Config may be an
@@ -1648,6 +1685,12 @@ type ConfigAndStacksInfo struct {
 	// producing commands (secret get/pull/push, terraform plan/apply/output) leave this false.
 	SecretsMaskOnly      bool
 	ComponentBackendType string
+	// Flags holds the fully resolved terraform CLI execution flags for this
+	// component (merged: atmos.yaml global default < stack-level
+	// `terraform: flags:` < component's own `flags:` block). An explicit
+	// CLI-typed compat flag in AdditionalArgsAndFlags still wins over this
+	// at injection time.
+	Flags TerraformFlags
 	// RequiredVersion is the Terraform version constraint (e.g., ">= 1.10.1").
 	// This is extracted from terraform.required_version or components.terraform.<name>.required_version.
 	RequiredVersion string
@@ -1952,6 +1995,9 @@ type BaseComponentConfig struct {
 	BaseComponentRemoteStateBackendSection AtmosSectionMapType
 	BaseComponentSourceSection             AtmosSectionMapType
 	BaseComponentProvisionSection          AtmosSectionMapType
+	// BaseComponentFlags holds the terraform CLI execution flag defaults inherited
+	// from base components (metadata.inherits / top-level `component`).
+	BaseComponentFlags AtmosSectionMapType
 	// BaseComponentRetry holds the raw retry configuration inherited from base components.
 	// It is deep-merged with the child component's retry block by mergeComponentConfigurations.
 	BaseComponentRetry        AtmosSectionMapType

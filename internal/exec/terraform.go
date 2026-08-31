@@ -48,6 +48,11 @@ const (
 	forceFlag                 = "--force"
 	everythingFlag            = "--everything"
 	detailedExitCodeFlag      = "-detailed-exitcode"
+	lockTimeoutFlag           = "-lock-timeout"
+	lockFlag                  = "-lock"
+	parallelismFlag           = "-parallelism"
+	refreshFlag               = "-refresh"
+	compactWarningsFlag       = "-compact-warnings"
 	// Terraform's -detailed-exitcode documents this as "succeeded, there is a
 	// diff", distinct from 0 (no changes) and 1 (error).
 	detailedExitCodeChangesDetected = 2
