@@ -234,6 +234,14 @@ Using `--include-dependencies` with destroy also destroys the shared prerequisit
     </dd>
 </dl>
 
+### Default Locking and Concurrency Flags
+
+Instead of retyping flags like `-lock-timeout` on every invocation, declare a default
+in [`components.terraform.flags`](/cli/configuration/components/terraform#flags) — globally
+in `atmos.yaml`, per stack, or per component. `destroy` supports all five flags
+(`lock_timeout`, `lock`, `parallelism`, `refresh`, `compact_warnings`); a native flag typed
+directly on the command line (as shown above) always wins over a declared default.
+
 ## Related Commands
 
 - [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan

@@ -361,6 +361,14 @@ Some commonly used native flags include:
     </dd>
 </dl>
 
+### Default Locking and Concurrency Flags
+
+Instead of retyping flags like `-lock-timeout` on every invocation, declare a default
+in [`components.terraform.flags`](/cli/configuration/components/terraform#flags) — globally
+in `atmos.yaml`, per stack, or per component. `plan` supports all five flags
+(`lock_timeout`, `lock`, `parallelism`, `refresh`, `compact_warnings`); a native flag typed
+directly on the command line (as shown above) always wins over a declared default.
+
 ## Multi-Component Operations
 
 Execute `terraform plan` across multiple components using filtering flags. All flags can be combined with `--dry-run` to preview what would be executed.

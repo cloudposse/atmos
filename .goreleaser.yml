@@ -32,6 +32,12 @@ builds:
       # usage by users in CI/CD systems like Terraform Cloud where
       # they are unable to install libraries.
       - CGO_ENABLED=0
+      # Link Go's native FIPS 140-3 crypto module and default release binaries
+      # to FIPS-enforcing mode (GODEBUG=fips140=on) at runtime. This puts the
+      # binary in FIPS 140-3 mode; it is not by itself a CMVP compliance
+      # certification for atmos, and it does not cover the age/NaCl-based
+      # secrets encryption atmos also uses. See docs/prd/fips-140-mode.md.
+      - GOFIPS140=latest
     mod_timestamp: '{{ .CommitTimestamp }}'
     goos:
       - 'linux'
@@ -48,6 +54,13 @@ builds:
       # https://go.dev/doc/go1.24#ports
       - goos: windows
         goarch: arm
+      # windows/386 lacks a CPU jitter entropy source good enough for Go's
+      # FIPS 140-3 module: crypto/internal/fips140.Supported() rejects it,
+      # and check.init() panics on process startup once GODEBUG=fips140=on
+      # (the default this build sets via GOFIPS140=latest above). Building
+      # this target would ship a binary that crashes immediately at launch.
+      - goos: windows
+        goarch: '386'
       # modernc.org/libc (dependency of modernc.org/sqlite used by pkg/ai/session)
       # has type mismatch bugs on 32-bit FreeBSD that are unresolved upstream.
       # https://gitlab.com/cznic/libc/-/issues
@@ -76,6 +89,45 @@ archives:
 checksum:
   name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
   algorithm: sha256
+
+# Builds real .deb/.rpm/.apk packages from the linux archives above (nfpm is
+# bundled in GoReleaser — no separate install step needed) and attaches them
+# to the GitHub Release as assets, same as every other artifact here. This is
+# independent of and does not require Cloudsmith: publishing those same
+# packages to Cloudsmith is a separate, deliberately-not-yet-wired-up step —
+# see the commented-out Cloudsmith push step in build.yml's
+# sign-and-attest-release job and docs/prd/native-goreleaser-release-pipeline.md.
+nfpms:
+  - id: atmos
+    formats: [apk, deb, rpm]
+    vendor: Cloud Posse
+    maintainer: Cloud Posse <hello@cloudposse.com>
+    homepage: https://atmos.tools
+    description: Terraform Orchestration Tool for DevOps
+    license: APACHE2
+    # ConventionalFileName renders a prerelease version's hyphen as a tilde
+    # (Debian version-ordering convention, e.g. 1.2.3~test.9) for nightly and
+    # feature-release builds. GitHub rewrites tildes to dots in uploaded asset
+    # filenames, which would otherwise no longer match the SHA256SUMS entry
+    # generated from the pre-upload filename. GoReleaser's "replace" template
+    # func is strings.ReplaceAll(s, old, new) -- call it directly (not piped)
+    # so .ConventionalFileName lands in the s position, not old/new.
+    file_name_template: '{{ replace .ConventionalFileName "~" "-" }}'
+
+sboms:
+  - artifacts: archive
+
+# Keyless OIDC signing of the checksums file (which covers every archive by
+# digest) — no --key, no static key material. Requires the invoking workflow
+# to install cosign and grant id-token: write. Verifiable with:
+#   cosign verify-blob <checksums file> --signature <file>.sig --certificate <file>.pem \
+#     --certificate-identity-regexp='^https://github.com/cloudposse/atmos/' \
+#     --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+signs:
+  - cmd: cosign
+    args: ["sign-blob", "--yes", "--output-signature=${signature}", "--output-certificate=${certificate}", "${artifact}"]
+    artifacts: checksum
+    certificate: "${artifact}.pem"
 
 ## Copied from https://github.com/cloudposse/.github/blob/main/.github/goreleaser.yml
 ## Required to correct working go auto release workflow

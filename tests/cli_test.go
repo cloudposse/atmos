@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/creack/pty"
@@ -38,6 +39,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -981,7 +983,13 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if _, exists := tc.Env["GIT_CONFIG_COUNT"]; !exists {
 		if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
 			// Disable credential helper (prevents osxkeychain hangs/popups) and inject token.
-			basicAuth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + githubToken))
+			gitBasicAuthCredential := "x-access-token:" + githubToken
+			basicAuth := base64.StdEncoding.EncodeToString([]byte(gitBasicAuthCredential))
+			// pkg/io's masker auto-registers plain GITHUB_TOKEN and base64(GITHUB_TOKEN), but
+			// GIT_CONFIG_VALUE_1 below embeds base64("x-access-token:"+GITHUB_TOKEN) -- a
+			// different byte sequence the prefix changes the encoding of, so it needs its own
+			// registration or redactAndCapDiagOutput can't catch it in captured child output.
+			iolib.RegisterSecret(gitBasicAuthCredential)
 			tc.Env["GIT_CONFIG_COUNT"] = "2"
 			tc.Env["GIT_CONFIG_KEY_0"] = "credential.helper"
 			tc.Env["GIT_CONFIG_VALUE_0"] = ""
@@ -1354,12 +1362,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Validate outputs
 	if !verifyExitCode(t, tc.Expect.ExitCode, exitCode) {
 		t.Errorf("Description: %s", tc.Description)
-		if stdout.Len() > 0 {
-			t.Errorf("Captured stdout:\n%s", stdout.String())
-		}
-		if stderr.Len() > 0 {
-			t.Errorf("Captured stderr:\n%s", stderr.String())
-		}
+		dumpCapturedOutput(t, &stdout, &stderr)
 	}
 
 	// Validate output based on TTY mode
@@ -1376,6 +1379,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Validate file existence
 	if !verifyFileExists(t, tc.Expect.FileExists) {
 		t.Errorf("Description: %s", tc.Description)
+		dumpCapturedOutput(t, &stdout, &stderr)
 	}
 
 	// Validate file not existence
@@ -1591,6 +1595,45 @@ func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPatte
 		}
 	}
 	return success
+}
+
+// maxDiagOutputLen caps diagnostic output written to the test log. Child processes run under
+// test inherit secrets such as GITHUB_TOKEN (see the Env setup above), so uncapped output could
+// also flood CI logs if a command misbehaves and prints unbounded data.
+const maxDiagOutputLen = 8192
+
+// diagTruncationSuffix marks diagnostic output that ran over maxDiagOutputLen. Its length is
+// reserved out of maxDiagOutputLen so the combined result never exceeds the configured cap.
+const diagTruncationSuffix = "...[truncated]"
+
+// redactAndCapDiagOutput masks known secrets (e.g. GITHUB_TOKEN, forwarded to every child
+// process under test) out of diagnostic output and truncates it to maxDiagOutputLen before it's
+// written to the test log, so a failing command that prints its environment can't leak a token
+// into CI logs.
+func redactAndCapDiagOutput(s string) string {
+	masked := iolib.MaskString(s)
+	if len(masked) <= maxDiagOutputLen {
+		return masked
+	}
+	limit := maxDiagOutputLen - len(diagTruncationSuffix)
+	for limit > 0 && !utf8.RuneStart(masked[limit]) {
+		limit--
+	}
+	return masked[:limit] + diagTruncationSuffix
+}
+
+// dumpCapturedOutput prints the command's captured stdout/stderr into the test log. A
+// file_exists failure with an exit code that matched expectations (e.g. a vendor pull that
+// silently drops files for one source while reporting overall success) would otherwise leave
+// no trace of what the command itself printed, forcing a manual re-fetch of the raw CI log to
+// diagnose -- this makes that output part of the test failure itself.
+func dumpCapturedOutput(t *testing.T, stdout, stderr *bytes.Buffer) {
+	if stdout.Len() > 0 {
+		t.Errorf("Captured stdout:\n%s", redactAndCapDiagOutput(stdout.String()))
+	}
+	if stderr.Len() > 0 {
+		t.Errorf("Captured stderr:\n%s", redactAndCapDiagOutput(stderr.String()))
+	}
 }
 
 func verifyFileExists(t *testing.T, files []string) bool {
@@ -1973,6 +2016,94 @@ func TestUnwrapMarkdownProseLinesPreservesSemanticBoundaries(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, unwrapMarkdownProseLines(tt.input))
+		})
+	}
+}
+
+// TestRedactAndCapDiagOutput covers redactAndCapDiagOutput's secret-masking and length-capping
+// behavior in isolation from the CLI test harness that normally calls it.
+func TestRedactAndCapDiagOutput(t *testing.T) {
+	tests := []struct {
+		name           string
+		secret         string // if set, registered as GITHUB_TOKEN (via a fresh masker) before the call.
+		registerSecret string // if set, registered directly via iolib.RegisterSecret before the call.
+		input          string
+		check          func(t *testing.T, got string)
+	}{
+		{
+			name:  "empty input",
+			input: "",
+			check: func(t *testing.T, got string) {
+				assert.Empty(t, got)
+			},
+		},
+		{
+			name:  "below limit is unchanged",
+			input: "plain output\nno secrets here\n",
+			check: func(t *testing.T, got string) {
+				assert.Equal(t, "plain output\nno secrets here\n", got)
+			},
+		},
+		{
+			name:   "registered secret is redacted",
+			secret: "ghp_test-secret-token-value",
+			input:  "before ghp_test-secret-token-value after",
+			check: func(t *testing.T, got string) {
+				assert.NotContains(t, got, "ghp_test-secret-token-value")
+				assert.Contains(t, got, iolib.MaskReplacement)
+			},
+		},
+		{
+			// Regression: GIT_CONFIG_VALUE_1 embeds base64("x-access-token:"+GITHUB_TOKEN), a
+			// different byte sequence than base64(GITHUB_TOKEN) alone -- the plain GITHUB_TOKEN
+			// registration (previous case) does not catch it without registering the full
+			// composite credential too.
+			name:           "registered git basic-auth credential is redacted",
+			registerSecret: "x-access-token:ghp_test-secret-token-value",
+			input: "before " + base64.StdEncoding.EncodeToString(
+				[]byte("x-access-token:ghp_test-secret-token-value"),
+			) + " after",
+			check: func(t *testing.T, got string) {
+				assert.NotContains(t, got, "ghp_test-secret-token-value")
+				assert.Contains(t, got, iolib.MaskReplacement)
+			},
+		},
+		{
+			name:  "above limit is truncated to exactly maxDiagOutputLen",
+			input: strings.Repeat("a", maxDiagOutputLen*2),
+			check: func(t *testing.T, got string) {
+				assert.Len(t, got, maxDiagOutputLen)
+				assert.True(t, strings.HasSuffix(got, diagTruncationSuffix))
+			},
+		},
+		{
+			// A 3-byte rune repeated means the naive cut point (maxDiagOutputLen -
+			// len(diagTruncationSuffix)) does not land on a rune boundary, forcing the
+			// backup-to-a-valid-boundary logic to actually engage.
+			name:  "truncation never splits a multibyte rune",
+			input: strings.Repeat("日", maxDiagOutputLen),
+			check: func(t *testing.T, got string) {
+				assert.LessOrEqual(t, len(got), maxDiagOutputLen)
+				assert.True(t, utf8.ValidString(got), "truncated output must remain valid UTF-8")
+				assert.True(t, strings.HasSuffix(got, diagTruncationSuffix))
+				kept := strings.TrimSuffix(got, diagTruncationSuffix)
+				assert.Zero(t, len(kept)%3, "kept portion should end on a full rune boundary")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.secret != "" {
+				t.Setenv("GITHUB_TOKEN", tt.secret)
+				iolib.Reset()
+				t.Cleanup(iolib.Reset)
+			}
+			if tt.registerSecret != "" {
+				iolib.RegisterSecret(tt.registerSecret)
+				t.Cleanup(iolib.Reset)
+			}
+			tt.check(t, redactAndCapDiagOutput(tt.input))
 		})
 	}
 }

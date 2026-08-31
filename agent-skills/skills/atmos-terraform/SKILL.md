@@ -410,6 +410,9 @@ atmos terraform clean vpc -s dev
 | `--identity` | | Override authentication identity |
 
 Use `--` to pass flags directly to Terraform: `atmos terraform plan vpc -s dev -- -refresh=false`.
+For a default that should apply on every run instead of being retyped, declare it under
+`components.terraform.flags` (or a stack/component-level `flags:` block) — see
+[Configuration in atmos.yaml](#configuration-in-atmosyaml) below.
 For the complete flag reference, see [references/commands-reference.md](references/commands-reference.md).
 
 ## Path-Based Component Resolution
@@ -438,6 +441,13 @@ Key settings under `components.terraform` include `auto_generate_backend_file`, 
 `workspaces_enabled`, `deploy_run_init`, `apply_auto_approve`, and `plan.skip_planfile`. Each has a
 corresponding `ATMOS_COMPONENTS_TERRAFORM_*` environment variable override. See
 [references/backend-configuration.md](references/backend-configuration.md) for complete configuration details.
+
+`components.terraform.flags` sets fleet-wide defaults for terraform CLI execution flags
+(`lock_timeout`, `lock`, `parallelism`, `refresh`, `compact_warnings`) — e.g. `lock_timeout: "5m"`
+so concurrent runs retry a held state lock instead of failing on Terraform's `0s` default. The
+same `flags:` block can be set at the stack level (root-level `terraform:` block) and per
+component, each overriding the layer below field-by-field. See
+[Flags](https://atmos.tools/cli/configuration/components/terraform#flags).
 
 ## Best Practices
 

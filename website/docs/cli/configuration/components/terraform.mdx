@@ -73,6 +73,14 @@ components:
     shell:
       prompt: "Terraform Shell"
 
+    # Default values for terraform CLI execution flags
+    flags:
+      lock_timeout: ""   # e.g. "5m" — retry a held state lock instead of failing fast
+      lock: null         # unset — terraform's own default (true) applies
+      parallelism: null  # unset — terraform's own default (10) applies
+      refresh: null      # unset — terraform's own default (true) applies
+      compact_warnings: false
+
 ```
 </File>
 
@@ -411,6 +419,107 @@ components:
 ```
 
 For **ephemeral or vendored** components ([`provision.workdir`](/cli/commands/terraform/workdir) or a [`source:`](/vendor/)) the canonical `.terraform.lock.hcl` has no committable home, so Atmos keeps the committed lock per instance as `.<stack>-<component>.terraform.lock.hcl` — restored into the working directory before `init` and persisted after. Keep canonical `**/.terraform.lock.hcl` ignored and un-ignore `!**/.*-*.terraform.lock.hcl` in `.gitignore`. Plain in-repo components keep committing the canonical lock as usual.
+
+## Flags (`flags`) {#flags}
+
+`components.terraform.flags` sets fleet-wide default values for Terraform CLI execution
+flags — most importantly `-lock-timeout`, which controls how long Terraform retries a
+held state lock before failing. Terraform's own default is `0s` (fail immediately), which
+causes avoidable failures when concurrent pipelines (e.g. a CI matrix, or multiple
+engineers) touch the same component's state around the same time. Declaring a
+`lock_timeout` here means every `plan`/`apply`/`destroy`/`refresh`/`import` picks it up
+automatically, without retyping `-lock-timeout=<duration>` on every invocation.
+
+```yaml
+components:
+  terraform:
+    flags:
+      lock_timeout: "5m"
+      parallelism: 10
+      refresh: true
+      compact_warnings: true
+```
+
+The same `flags:` block can also be set at the stack level (a root-level `terraform:`
+block, sibling to `components:`, applying to every terraform component in that stack or
+import) and per component (inside a specific component's definition), overriding the
+fleet-wide default field-by-field:
+
+```yaml
+# stack manifest
+terraform:
+  flags:
+    lock_timeout: "5m"    # applies to every terraform component in this stack
+
+components:
+  terraform:
+    vpc:
+      flags:
+        lock_timeout: "10m"  # overrides the stack-wide default just for this component
+```
+
+Precedence (lowest to highest): Terraform's own built-in default < `atmos.yaml`
+`components.terraform.flags` < an `ATMOS_COMPONENTS_TERRAFORM_FLAGS_*` environment
+variable (overrides the `atmos.yaml` value) < stack-level `terraform.flags` < a
+component's own `flags:` block < an explicit CLI-typed flag (e.g.,
+`atmos terraform plan vpc -s plat-ue2-dev -- -lock-timeout=30s`), which always wins.
+
+Not every flag applies to every subcommand — Atmos only injects a flag where Terraform
+actually supports it:
+
+<dl>
+  <dt>`flags.lock_timeout`</dt>
+  <dd>
+    Default value for `-lock-timeout` (e.g. `"30s"`, `"5m"`). Applies to `plan`, `apply`,
+    `destroy`, `refresh`, and `import`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT`
+    **Default:** unset (Terraform's own `0s` applies)
+  </dd>
+
+  <dt>`flags.lock`</dt>
+  <dd>
+    Default value for `-lock`. Applies to `plan`, `apply`, `destroy`, `refresh`, and `import`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK`
+    **Default:** unset (Terraform's own `true` applies)
+  </dd>
+
+  <dt>`flags.parallelism`</dt>
+  <dd>
+    Default value for `-parallelism`. Applies to `plan`, `apply`, `destroy`, and
+    `refresh`. Not supported by `terraform import`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM`
+    **Default:** unset (Terraform's own `10` applies)
+  </dd>
+
+  <dt>`flags.refresh`</dt>
+  <dd>
+    Default value for `-refresh`. Applies to `plan`, `apply` (only when **not** consuming
+    a pre-built plan — Terraform rejects `-refresh` on `apply <planfile>`), and `destroy`.
+    Not supported by `terraform refresh` itself or `terraform import`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH`
+    **Default:** unset (Terraform's own `true` applies)
+  </dd>
+
+  <dt>`flags.compact_warnings`</dt>
+  <dd>
+    Default value for `-compact-warnings`. Applies to `plan`, `apply`, `destroy`, and
+    `refresh`. Not supported by `terraform import`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS`
+    **Default:** `false`
+  </dd>
+</dl>
+
+For a one-off override without changing configuration, pass the raw Terraform flag
+directly on the command line — it always wins over every layer above:
+
+```shell
+atmos terraform plan vpc -s plat-ue2-dev -- -lock-timeout=30s
+```
 
 ## Generated Files
 
