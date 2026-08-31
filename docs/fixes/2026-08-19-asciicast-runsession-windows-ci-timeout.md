@@ -6,7 +6,7 @@
 
 `Acceptance Tests (windows, shard 4/10)` failed with:
 
-```
+```text
 --- FAIL: TestRunSessionExecutesScriptedShellActions (2.07s)
     session_test.go:821: RunSession error: timed out waiting for cast output
 --- FAIL: TestRunSessionAppliesDirectoryAndEnvironment (3.18s)
@@ -53,12 +53,18 @@ window occasionally not being enough, but not confirmed as the sole cause.
 
 `pkg/asciicast/session_test.go`:
 
-- `TestRunSessionExecutesScriptedShellActions` and
-  `TestRunSessionAppliesDirectoryAndEnvironment`: outer `context.WithTimeout`
-  raised from 3s to 15s, and every `wait` action's own `Timeout` raised from
-  `"2s"` to `"8s"`, giving the round trip real headroom under Windows CI load
-  without slowing down the happy path (these are ceilings, not fixed
-  sleeps — both tests still complete in under a second locally).
+- `TestRunSessionExecutesScriptedShellActions`: outer `context.WithTimeout`
+  raised from 3s to 15s, and its single `wait` action's own `Timeout` raised
+  from `"2s"` to `"10s"`, giving the round trip real headroom under Windows CI
+  load without slowing down the happy path (these are ceilings, not fixed
+  sleeps — it still completes in under a second locally).
+- `TestRunSessionAppliesDirectoryAndEnvironment`: outer context raised from 3s
+  to 25s, and both of its sequential `wait` actions raised from `"2s"` to
+  `"10s"` each. The outer context has to exceed the *sum* of sequential wait
+  timeouts (not just one of them) with margin, or it silently caps the second
+  wait short regardless of what its own `Timeout` says — `waitForOutput` races
+  `ctx.Done()` against the action's own deadline timer, and whichever fires
+  first wins.
 - `TestRunSessionDefaultsNilOptions` and `TestRunSessionReturnsActionErrors`:
   outer context also raised 3s -> 15s for consistency, even though they
   didn't fail this run, since they exercise the same spawn path under the
@@ -83,6 +89,6 @@ to fix there, only a plausibly-too-tight test timeout.
 
 ## Follow-ups
 
-If this recurs even at 8s/15s, treat it as a genuine correctness bug in
+If this recurs even at these widened budgets, treat it as a genuine correctness bug in
 `session_windows.go`'s pipe wiring, not a timing issue, and investigate with
 Windows-side diagnostics (this session had no way to attach one).
