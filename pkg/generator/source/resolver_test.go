@@ -21,6 +21,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/oci/ocitest"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -120,10 +121,61 @@ func TestResolve_LocalPathMissingScaffoldConfig(t *testing.T) {
 	cleanup()
 }
 
-func TestResolve_OCIUnsupported(t *testing.T) {
-	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "x", "oci://ghcr.io/cloudposse/x:latest", time.Minute)
+// TestResolve_OCISuccess exercises the OCI branch of Resolve against an
+// in-process fake registry (pkg/oci/ocitest), proving a scaffold template
+// can be pulled from oci:// the same way atmos vendor pull already does.
+func TestResolve_OCISuccess(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "sample:v1", map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+	src := "oci://" + imageRef
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", src, time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.True(t, hasSampleFile(cfg.Files), "OCI template files must be loaded")
+	assert.Equal(t, src, cfg.Source, "OCI sources must record the original oci:// source string, not the ephemeral fetch tempdir")
+}
+
+// TestResolve_OCIEmptyRegistryFails proves a manifest with zero layers (a
+// real, legitimate registry response, distinct from a network/auth failure)
+// surfaces as a fetch failure rather than succeeding with an empty template.
+func TestResolve_OCIEmptyRegistryFails(t *testing.T) {
+	imageRef := ocitest.NewEmptyRegistry(t, "empty:v1")
+
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "empty", "oci://"+imageRef, time.Minute)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrScaffoldSourceUnsupported)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldFetchSource)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
+// TestResolve_OCIBrokenLayerFails proves a corrupt layer (malformed gzip)
+// surfaces as a fetch failure, not a panic or a silently empty template.
+func TestResolve_OCIBrokenLayerFails(t *testing.T) {
+	imageRef := ocitest.NewBrokenLayerRegistry(t, "broken:v1")
+
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "broken", "oci://"+imageRef, time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldFetchSource)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
+// TestResolve_OCIMissingScaffoldConfig proves an OCI artifact that pulls
+// successfully but has no scaffold.yaml at its root fails the same way a
+// local/remote source without one already does (requireScaffoldConfig).
+func TestResolve_OCIMissingScaffoldConfig(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "not-a-scaffold:v1", map[string]string{
+		"README.md": "not a scaffold",
+	})
+
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "not-a-scaffold", "oci://"+imageRef, time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldConfigMissing)
 	require.NotNil(t, cleanup)
 	cleanup()
 }
@@ -162,6 +214,25 @@ func TestHydrate_LocalStub(t *testing.T) {
 	defer cleanup()
 	assert.True(t, hasSampleFile(stub.Files), "local stub must be hydrated from its source")
 	assert.Equal(t, dir, stub.Source, "hydrate's *stub = *resolved copy must preserve the original source")
+}
+
+// TestHydrate_OCIStub proves the CLI's actual entry point (Hydrate, not just
+// Resolve directly) also works end-to-end for an OCI stub -- this is the
+// path cmd/scaffold and cmd/init actually call (see selectGenerateTemplate's
+// stub-then-Hydrate flow in cmd/scaffold/scaffold.go).
+func TestHydrate_OCIStub(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "sample:v1", map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+	src := "oci://" + imageRef
+
+	stub := &templates.Configuration{Name: "sample", Source: src}
+	cleanup, err := Hydrate(stub, "")
+	require.NoError(t, err)
+	defer cleanup()
+	assert.True(t, hasSampleFile(stub.Files), "OCI stub must be hydrated from its source")
+	assert.Equal(t, src, stub.Source, "hydrate's *stub = *resolved copy must preserve the original oci:// source")
 }
 
 func TestHydrate_LocalStubError(t *testing.T) {
