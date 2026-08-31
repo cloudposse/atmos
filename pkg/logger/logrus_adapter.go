@@ -27,16 +27,32 @@ func sanitizeLogMessage(msg string) string {
 // sanitizeFieldValue redacts the value if the field key looks like a secret.
 // For non-sensitive keys with string values, it also applies sanitizeLogMessage
 // to catch embedded sensitive patterns (e.g. a "details" field containing
-// "password=s3cret").
+// "password=s3cret"). Nested maps and slices (as produced by json.Unmarshal
+// into map[string]interface{}) are walked recursively so a sensitive key
+// buried under a non-sensitive parent, e.g. {"details":{"password":"secret"}},
+// is still redacted rather than passed through as an unexamined nested value.
 func sanitizeFieldValue(key string, value interface{}) interface{} {
 	if isSensitiveLogKey(key) {
 		return "[REDACTED]"
 	}
-	// Also sanitize string values that may contain embedded sensitive data.
-	if strVal, ok := value.(string); ok {
-		return sanitizeLogMessage(strVal)
+	switch v := value.(type) {
+	case string:
+		return sanitizeLogMessage(v)
+	case map[string]interface{}:
+		sanitized := make(map[string]interface{}, len(v))
+		for k, nested := range v {
+			sanitized[k] = sanitizeFieldValue(k, nested)
+		}
+		return sanitized
+	case []interface{}:
+		sanitized := make([]interface{}, len(v))
+		for i, nested := range v {
+			sanitized[i] = sanitizeFieldValue("", nested)
+		}
+		return sanitized
+	default:
+		return value
 	}
-	return value
 }
 
 // sensitiveKeySubstrings lists substrings that identify sensitive log field keys.
@@ -115,15 +131,23 @@ func (a *logrusAdapter) Write(p []byte) (n int, err error) {
 			}
 		}
 
-		// Route to appropriate log level based on parsed level field.
+		// Route to appropriate log level based on parsed level field. Each call below
+		// writes to os.Stderr (see NewAtmosLogger in pkg/logger/global.go), Atmos's own
+		// CLI diagnostic stream to the user's own terminal -- not a log-aggregation sink
+		// another party can read. msg and fields are also already redacted above by
+		// sanitizeLogMessage/sanitizeFieldValue.
 		switch strings.ToLower(level) {
 		case "fatal", "panic", "error":
+			// codeql[go/clear-text-logging]
 			a.logger.Error(msg, fields...)
 		case "warning", "warn":
+			// codeql[go/clear-text-logging]
 			a.logger.Warn(msg, fields...)
 		case "debug", "trace":
+			// codeql[go/clear-text-logging]
 			a.logger.Debug(msg, fields...)
 		default:
+			// codeql[go/clear-text-logging]
 			a.logger.Info(msg, fields...)
 		}
 	} else {
