@@ -99,6 +99,44 @@ updates:
   cooldown:
     default-days: 14  # 2 weeks minimum age for all dependencies
 
+# Tracks the digest-pinned base images in the example component/step/devcontainer
+# Dockerfiles used in docs and CI fixtures.
+- package-ecosystem: docker
+  directory: /examples/container-component
+  labels:
+    - dependencies
+    - docker
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+
+- package-ecosystem: docker
+  directory: /examples/container-step
+  labels:
+    - dependencies
+    - docker
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+
+- package-ecosystem: docker
+  directory: /examples/devcontainer-build
+  labels:
+    - dependencies
+    - docker
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+
 # Standalone Go modules under tools/ aren't reached by the root gomod entry.
 - package-ecosystem: gomod
   directory: /tools/gomodcheck

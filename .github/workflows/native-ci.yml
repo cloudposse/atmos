@@ -23,11 +23,12 @@ on:
       - "pkg/workflow/**"
   workflow_dispatch:
 
+# Least-privilege default; the terraform-plan/terraform-apply jobs below
+# declare their own narrower job-level permissions (they're the only jobs
+# that actually call the GitHub statuses/comments/code-scanning APIs via
+# Atmos's native-CI reporting) that override this baseline.
 permissions:
   contents: read
-  pull-requests: write
-  security-events: write
-  statuses: write
 
 env:
   ATMOS_BOOTSTRAP_VERSION: "1.223.0"
@@ -44,6 +45,10 @@ jobs:
     name: "[native ci] workflow groups (${{ matrix.group_mode }})"
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # This job never sets GITHUB_TOKEN/ATMOS_CI_GITHUB_TOKEN and only formats
+    # log-group markers to stdout, so it needs nothing beyond checkout.
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -94,6 +99,14 @@ jobs:
     name: "[native ci] terraform plan"
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Atmos's native-CI GitHub reporting (pkg/ci/providers/github) posts commit
+    # statuses, upserts PR comments, and uploads SARIF during `atmos terraform
+    # plan` — see pkg/ci/providers/github/{checks,comments,codescanning}.go.
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+      statuses: write
     env:
       ATMOS_CI_GROUPS_MODE: auto
 
@@ -149,6 +162,13 @@ jobs:
     needs: terraform-plan
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Same native-CI reporting as terraform-plan above, exercised during
+    # `atmos terraform apply`.
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+      statuses: write
     env:
       ATMOS_CI_GROUPS_MODE: auto
 
