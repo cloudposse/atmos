@@ -98,9 +98,9 @@ spec:
     - name: default_env
       type: select
       options: answers.envs          # dot-path: only the environments actually picked above
-    - name: default_region
+    - name: primary_owner
       type: select
-      options: '{{ splitList "," answers.csv_regions }}'   # Go-template expression
+      options: '{{ splitList "," answers.csv_owners }}'   # Go-template expression
 ```
 
 The dot-path and template-expression forms resolve correctly once the referenced earlier field

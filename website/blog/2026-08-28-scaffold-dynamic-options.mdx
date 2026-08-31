@@ -55,12 +55,12 @@ combined with a template expression that converts it to a list:
 ```yaml
 spec:
   fields:
-    - name: csv_regions
+    - name: csv_owners
       type: input
-      default: "eu-west-1,us-east-1"
-    - name: default_region
+      default: "platform-team,security-team"
+    - name: primary_owner
       type: select
-      options: '{{ splitList "," answers.csv_regions }}'
+      options: '{{ splitList "," answers.csv_owners }}'
 ```
 
 Both forms resolve `options:` based on whatever was supplied for the earlier field, whether

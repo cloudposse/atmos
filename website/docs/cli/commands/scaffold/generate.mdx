@@ -145,13 +145,13 @@ spec:
 ```yaml title="scaffold.yaml"
 spec:
   fields:
-    - name: csv_regions
+    - name: csv_owners
       type: input
-      label: Comma-separated list of regions
+      label: Comma-separated list of component owners (e.g. GitHub teams)
 
-    - name: default_region
+    - name: primary_owner
       type: select
-      options: '{{ splitList "," answers.csv_regions }}'
+      options: '{{ splitList "," answers.csv_owners }}'
 ```
 
 A dot-path source must resolve to an already list-shaped answer -- a `multiselect` answer, a

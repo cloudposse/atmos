@@ -444,7 +444,17 @@ pkg/condition also parses is not accepted by the scaffold JSON Schema).
 be more than a static list of plain strings: it can be sourced dynamically
 from an earlier answer, and its entries can carry a separate display label.
 
-**Dynamic sourcing**: exactly the two dynamic forms `spec.files[].matrix:`
+A plain YAML list of strings is a valid `options:` value:
+
+```yaml
+spec:
+  fields:
+    - name: environment
+      type: select
+      options: [dev, staging, production]
+```
+
+`options:` also accepts two dynamic forms, exactly the two `spec.files[].matrix:`
 axes already support (see "Dynamic File Generation (`matrix`)" below) —
 `options:` deliberately mirrors that convention rather than inventing a new
 one:
@@ -453,8 +463,8 @@ one:
   dot-path is: the referenced value must already be list-shaped (a
   `multiselect` answer, or a structured value supplied through `--set` or a
   `spec.values` preset that was never declared as a field at all).
-- A Go-template expression (any string containing `{{`), rendered through the
-  identical `Processor.RenderAnswersListExpression` mechanism a `matrix:` axis
+- A Go-template expression, rendered through the identical
+  `Processor.RenderAnswersListExpression` mechanism a `matrix:` axis
   expression uses, with `answers` exposed the same way.
 
 ```yaml
@@ -474,17 +484,19 @@ spec:
 ```yaml
 spec:
   fields:
-    - name: csv_regions
+    - name: csv_owners
       type: input
-      label: Comma-separated list of regions
-      default: "eu-west-1,us-east-1"
+      label: Comma-separated list of component owners (e.g. GitHub teams)
+      default: "platform-team,security-team"
 
     # Free-text source: any Sprig/Gomplate function is available, so a plain
     # string answer becomes a list-shaped options source the same way a
-    # matrix axis expression does.
-    - name: default_region
+    # matrix axis expression does. Owners aren't a small fixed set the way
+    # environment or region typically are -- that's the case this form
+    # exists for.
+    - name: primary_owner
       type: select
-      options: '{{ splitList "," answers.csv_regions }}'
+      options: '{{ splitList "," answers.csv_owners }}'
 ```
 
 Unlike `matrix:` axes, both the interactive huh-based form and the headless

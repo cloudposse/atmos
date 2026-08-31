@@ -149,12 +149,12 @@ func TestDynamicOptions_SelectSourcedFieldResolvesInRealHuhForm(t *testing.T) {
 
 // TestDynamicOptions_InputSourcedFieldResolvesInRealHuhForm proves the fix
 // for an input-sourced dynamic Options field, mirroring the real-world
-// csv_regions -> default_region fixture shipped in
+// csv_owners -> primary_owner fixture shipped in
 // dynamic-options/scaffold.yaml (an `input` field feeding a `select` via a
 // splitList Go-template expression).
 func TestDynamicOptions_InputSourcedFieldResolvesInRealHuhForm(t *testing.T) {
 	render := func(_ string, answers map[string]interface{}, _ []string) ([]string, error) {
-		csv, _ := answers["csv_regions"].(string)
+		csv, _ := answers["csv_owners"].(string)
 		if csv == "" {
 			return nil, nil
 		}
@@ -162,21 +162,21 @@ func TestDynamicOptions_InputSourcedFieldResolvesInRealHuhForm(t *testing.T) {
 	}
 	ctx := newSharedFieldFormContext(render)
 
-	csvField := &FieldDefinition{Name: "csv_regions", Type: "input", Default: "eu-west-1,us-east-1"}
-	csvHuhField, csvGetter := createFieldInContext("csv_regions", csvField, map[string]interface{}{}, ctx)
-	ctx.valueGetters["csv_regions"] = csvGetter
+	csvField := &FieldDefinition{Name: "csv_owners", Type: "input", Default: "platform-team,security-team"}
+	csvHuhField, csvGetter := createFieldInContext("csv_owners", csvField, map[string]interface{}{}, ctx)
+	ctx.valueGetters["csv_owners"] = csvGetter
 
-	regionField := &FieldDefinition{Name: "default_region", Type: "select", Options: `{{ splitList "," answers.csv_regions }}`}
-	regionHuhField, regionGetter := createFieldInContext("default_region", regionField, map[string]interface{}{}, ctx)
-	ctx.valueGetters["default_region"] = regionGetter
+	ownerField := &FieldDefinition{Name: "primary_owner", Type: "select", Options: `{{ splitList "," answers.csv_owners }}`}
+	ownerHuhField, ownerGetter := createFieldInContext("primary_owner", ownerField, map[string]interface{}{}, ctx)
+	ctx.valueGetters["primary_owner"] = ownerGetter
 
-	group := huh.NewGroup(csvHuhField, regionHuhField)
+	group := huh.NewGroup(csvHuhField, ownerHuhField)
 
 	// First real update cycle: resolves against the initial default CSV value.
 	pumpGroup(t, group)
-	before := ansi.Strip(regionHuhField.View())
-	require.Contains(t, before, "eu-west-1")
-	require.Contains(t, before, "us-east-1")
+	before := ansi.Strip(ownerHuhField.View())
+	require.Contains(t, before, "platform-team")
+	require.Contains(t, before, "security-team")
 
 	// Mutate the earlier input's bound value. A plain pointer write isn't
 	// enough for an Input field: huh's own Input.Update always syncs
@@ -187,20 +187,20 @@ func TestDynamicOptions_InputSourcedFieldResolvesInRealHuhForm(t *testing.T) {
 	// createFieldInContext made to bind it originally -- re-syncs
 	// textinput's internal buffer from the now-mutated pointer, exactly like
 	// a real keystroke would, without needing to simulate one.
-	csvPtr, ok := ctx.fieldPointers["csv_regions"].(*string)
-	require.True(t, ok, "expected csv_regions's field pointer to be registered as *string")
-	*csvPtr = "ap-southeast-2"
+	csvPtr, ok := ctx.fieldPointers["csv_owners"].(*string)
+	require.True(t, ok, "expected csv_owners's field pointer to be registered as *string")
+	*csvPtr = "sre-team"
 	csvInput, ok := csvHuhField.(*huh.Input)
-	require.True(t, ok, "expected csv_regions to be a *huh.Input")
+	require.True(t, ok, "expected csv_owners to be a *huh.Input")
 	csvInput.Value(csvPtr)
 
 	// Second real update cycle: must re-resolve now that the bound input
 	// value changed.
 	pumpGroup(t, group)
-	after := ansi.Strip(regionHuhField.View())
-	require.Contains(t, after, "ap-southeast-2", "expected the dynamic option to reflect the mutated input-sourced answer")
-	require.False(t, strings.Contains(after, "eu-west-1"), "expected the stale options to be gone once the input-sourced answer changed")
-	require.False(t, strings.Contains(after, "us-east-1"), "expected the stale options to be gone once the input-sourced answer changed")
+	after := ansi.Strip(ownerHuhField.View())
+	require.Contains(t, after, "sre-team", "expected the dynamic option to reflect the mutated input-sourced answer")
+	require.False(t, strings.Contains(after, "platform-team"), "expected the stale options to be gone once the input-sourced answer changed")
+	require.False(t, strings.Contains(after, "security-team"), "expected the stale options to be gone once the input-sourced answer changed")
 }
 
 // TestDynamicOptions_MultiselectSourcedFieldStillResolvesInRealHuhForm is
