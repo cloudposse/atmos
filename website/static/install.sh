@@ -10,6 +10,21 @@ command_exists() {
 	command -v "$@" >/dev/null 2>&1
 }
 
+# Retry flags shared by every curl call in this script: transient network
+# blips (connection resets, timeouts) shouldn't fail the whole install.
+# --retry-all-errors (curl 7.71+, June 2020) is needed because plain --retry
+# only retries a narrower default set of conditions that doesn't cover every
+# transient failure (e.g. curl error 35, "Recv failure: Connection was
+# reset") — but older curl builds reject it as an unknown option, which would
+# hard-fail every curl call in this script. Probe for support directly
+# (rather than parsing curl's version string, which varies by build) so this
+# degrades to curl's narrower default retry set on older clients instead of
+# failing outright.
+curl_retry_flags=(--retry 3 --retry-delay 2)
+if command_exists curl && curl --retry-all-errors --version >/dev/null 2>&1; then
+	curl_retry_flags+=(--retry-all-errors)
+fi
+
 # Function to run a command with root privileges if needed, using sudo when available.
 maybe_sudo() {
 	if [ "$(id -u)" -eq 0 ]; then
@@ -26,6 +41,15 @@ maybe_sudo() {
 	echo "Either re-run this script as root, or install the Atmos binary directly (no root required):" >&2
 	echo "  curl -fsSL https://atmos.tools/install.sh | bash -s -- binary" >&2
 	exit 1
+}
+
+# Require curl before doing anything with it, and error out with a clear
+# message rather than letting an arbitrary curl call fail obscurely.
+require_curl() {
+	if ! command_exists curl; then
+		echo "curl is required but not installed. Please install curl and try again." >&2
+		exit 1
+	fi
 }
 
 # Function to detect package manager
@@ -47,8 +71,25 @@ detect_package_manager() {
 
 # Function for CloudSmith package registry installation
 install_via_cloudsmith() {
-	local package_manager=$(detect_package_manager)
-	curl -1sLf "https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.${package_manager}.sh" | maybe_sudo bash
+	require_curl
+	local package_manager
+	package_manager=$(detect_package_manager)
+
+	# Download the setup script to a file before running it, rather than
+	# piping curl directly into bash: curl can't rewind a shell pipe the way
+	# it can rewind a file via -o, so a mid-transfer retry could otherwise
+	# hand bash a truncated-then-repeated (corrupted) script instead of the
+	# complete one.
+	local setup_script
+	setup_script=$(mktemp 2>/dev/null || mktemp -t atmos-cloudsmith-setup)
+	# Clean up on any exit path (download failure, setup-script failure,
+	# interruption), not just the success path below.
+	trap 'rm -f "$setup_script"' EXIT
+	curl "${curl_retry_flags[@]}" -1sLf "https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.${package_manager}.sh" -o "$setup_script"
+	maybe_sudo bash "$setup_script"
+	rm -f "$setup_script"
+	trap - EXIT
+
 	case $package_manager in
 		alpine)
 			echo "Using apk installation method..."
@@ -71,15 +112,11 @@ install_via_cloudsmith() {
 
 # Function for binary download installation
 install_via_binary_download() {
-	# Check for curl
-	if ! command_exists curl; then
-		echo "curl is required but not installed. Please install curl and try again."
-		exit 1
-	fi
+	require_curl
 	if [ -n "${ATMOS_VERSION:-}" ]; then
 		release="${ATMOS_VERSION#v}"
 	else
-		latest_url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/cloudposse/atmos/releases/latest)
+		latest_url=$(curl "${curl_retry_flags[@]}" -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/cloudposse/atmos/releases/latest)
 		release="${latest_url##*/}"
 		release="${release#v}"
 	fi
@@ -108,9 +145,21 @@ install_via_binary_download() {
 	fi
 
 	binary_url="https://github.com/cloudposse/atmos/releases/download/v${release}/atmos_${release}_${os}_${arch}${extension}"
-	curl -fsSL "${binary_url}" -o "$output"
+	curl "${curl_retry_flags[@]}" -fsSL "${binary_url}" -o "$output"
 	checksums_url="https://github.com/cloudposse/atmos/releases/download/v${release}/atmos_${release}_SHA256SUMS"
-	expected_sha="$(curl -fsSL "$checksums_url" | awk -v file="atmos_${release}_${os}_${arch}${extension}" '$2 == file {print $1; exit}')"
+
+	# Download the checksums file before parsing it, rather than piping curl
+	# directly into awk: a mid-transfer retry can otherwise hand awk
+	# truncated-then-repeated (corrupted) checksum data instead of the
+	# complete file.
+	checksums_file=$(mktemp 2>/dev/null || mktemp -t atmos-checksums)
+	# Clean up on any exit path (download failure, parsing error,
+	# interruption), not just the success path below.
+	trap 'rm -f "$checksums_file"' EXIT
+	curl "${curl_retry_flags[@]}" -fsSL "$checksums_url" -o "$checksums_file"
+	expected_sha="$(awk -v file="atmos_${release}_${os}_${arch}${extension}" '$2 == file {print $1; exit}' "$checksums_file")"
+	rm -f "$checksums_file"
+	trap - EXIT
 	if [ -z "$expected_sha" ]; then
 		echo "Unable to find checksum for atmos_${release}_${os}_${arch}${extension}" >&2
 		exit 1
