@@ -670,7 +670,7 @@ func TestOptionsBindings_OnlyIncludesReferencedField(t *testing.T) {
 		delimiters:    defaultDelimiters(nil),
 	}
 
-	bindings := optionsBindings("answers.envs", ctx)
+	bindings := optionsBindings("answers.envs", "default_env", ctx)
 	assert.Equal(t, map[string]any{"envs": &envs}, bindings)
 }
 
@@ -685,7 +685,7 @@ func TestOptionsBindings_ForwardReferenceIsSilentlyExcluded(t *testing.T) {
 		delimiters:    defaultDelimiters(nil),
 	}
 
-	bindings := optionsBindings("answers.not_yet_declared", ctx)
+	bindings := optionsBindings("answers.not_yet_declared", "default_env", ctx)
 	assert.Empty(t, bindings)
 }
 
@@ -703,7 +703,27 @@ func TestOptionsBindings_ExcludesFieldsOwnPointer(t *testing.T) {
 		delimiters:    defaultDelimiters(nil),
 	}
 
-	bindings := optionsBindings("answers.other", ctx)
+	bindings := optionsBindings("answers.other", "self", ctx)
 	assert.NotContains(t, bindings, "self")
 	assert.Contains(t, bindings, "other")
+}
+
+// TestOptionsBindings_ExcludesSelfReference verifies the actual self-sourced
+// case TestSelfReferenceIsTautologicallyValid documents as valid (e.g. an
+// "envs" field whose Options is "answers.envs"): createFieldInContext
+// registers a field's own bound pointer into ctx.fieldPointers before
+// resolving its own Options, so without the ownField exclusion,
+// referencedAnswerNames finding the field's own name would make
+// optionsBindings include the field's own just-registered pointer --
+// which would make huh treat the field's own selection as a bindings
+// change and clear its own filter text on every selection.
+func TestOptionsBindings_ExcludesSelfReference(t *testing.T) {
+	var envs []string
+	ctx := &fieldFormContext{
+		fieldPointers: map[string]any{"envs": &envs},
+		delimiters:    defaultDelimiters(nil),
+	}
+
+	bindings := optionsBindings("answers.envs", "envs", ctx)
+	assert.Empty(t, bindings)
 }

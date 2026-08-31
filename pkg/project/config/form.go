@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -24,7 +25,7 @@ func PromptForScaffoldConfig(scaffoldConfig *ScaffoldConfig, userValues map[stri
 	formValues := initializeFormValues(scaffoldConfig, userValues)
 
 	// Build the form with grouped fields
-	huhForm, valueGetters, err := buildConfigForm(scaffoldConfig, formValues, opts...)
+	huhForm, ctx, err := buildConfigForm(scaffoldConfig, formValues, opts...)
 	if err != nil {
 		return err
 	}
@@ -37,8 +38,13 @@ func PromptForScaffoldConfig(scaffoldConfig *ScaffoldConfig, userValues map[stri
 		return err
 	}
 
+	// Now that the interactive form has finished and the terminal is back to
+	// normal, it's safe to report any dynamic Options resolution failures
+	// collected during the session (see reportOptionsErrors).
+	reportOptionsErrors(ctx.optionsErrors)
+
 	// Extract form values back to userValues
-	extractFormValues(userValues, valueGetters)
+	extractFormValues(userValues, ctx.valueGetters)
 
 	return ValidateFieldValues(scaffoldConfig, userValues, opts...)
 }
@@ -75,9 +81,12 @@ func initializeFormValues(scaffoldConfig *ScaffoldConfig, userValues map[string]
 // declared in the template. Each field gets its own huh.Group so a field
 // declaring When can hide its group based on answers collected from fields
 // declared earlier (huh runs groups sequentially, one page at a time).
-// Returns the form and value getters for extracting values after submission.
-// Returns a nil form when the template declares no fields.
-func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]interface{}, opts ...FieldFormOption) (*huh.Form, map[string]func() interface{}, error) {
+// Returns the form and the fieldFormContext built for it -- callers use
+// ctx.valueGetters to extract values after submission and ctx.optionsErrors
+// to report dynamic Options resolution failures collected during the form
+// session (see reportOptionsErrors). Returns a nil form when the template
+// declares no fields.
+func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]interface{}, opts ...FieldFormOption) (*huh.Form, *fieldFormContext, error) {
 	if len(scaffoldConfig.Spec.Fields) == 0 {
 		return nil, nil, nil
 	}
@@ -100,6 +109,7 @@ func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]inter
 		fieldsByName:  fieldDefinitionsByName(scaffoldConfig.Spec.Fields),
 		render:        resolveFieldFormOptions(opts).render,
 		delimiters:    defaultDelimiters(scaffoldConfig.Spec.Delimiters),
+		optionsErrors: make(map[string]error),
 	}
 
 	var groups []*huh.Group
@@ -128,7 +138,7 @@ func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]inter
 
 	huhForm := huh.NewForm(groups...).WithAccessible(accessible)
 
-	return huhForm, valueGetters, nil
+	return huhForm, ctx, nil
 }
 
 // snapshotAnswers reads the current value of every field's getter into a
@@ -176,14 +186,18 @@ func extractFormValues(userValues map[string]interface{}, valueGetters map[strin
 // fieldHideFunc uses for When), fieldPointers so a later field's
 // OptionsFunc can bind its change-detection to a specific earlier field's
 // own bound value regardless of type (a select's *string, a multiselect's
-// *[]string, a confirm's *bool), and the renderer/delimiters
-// resolveFieldOptions needs for the Go-template-expression Options form.
+// *[]string, a confirm's *bool), the renderer/delimiters resolveFieldOptions
+// needs for the Go-template-expression Options form, and optionsErrors for
+// collecting dynamic Options resolution failures encountered during the form
+// session (see dynamicOptionsFunc and reportOptionsErrors) so they can be
+// reported once the interactive session ends instead of mid-render.
 type fieldFormContext struct {
 	valueGetters  map[string]func() interface{}
 	fieldPointers map[string]any
 	fieldsByName  map[string]*FieldDefinition
 	render        FieldOptionsRenderer
 	delimiters    []string
+	optionsErrors map[string]error
 }
 
 // toHuhOptions converts resolved options into huh.Option values. Labels
@@ -207,14 +221,42 @@ func toHuhOptions(options []ResolvedOption) []huh.Option[string] {
 // ultimately answered for an earlier field, since each field is its own
 // sequential prompt (huh.Group) and this one is only ever displayed or
 // validated after the fields before it are already answered.
+//
+// A resolution failure is recorded in ctx.optionsErrors rather than logged
+// here: this closure runs inside huh's Update loop while the interactive
+// form is still on screen, and a log line printed at this point would
+// corrupt the current frame. See reportOptionsErrors, which logs the
+// collected errors once runFormInteraction returns and the terminal is back
+// to normal.
 func dynamicOptionsFunc(field *FieldDefinition, ctx *fieldFormContext) func() []huh.Option[string] {
 	return func() []huh.Option[string] {
 		options, err := resolveFieldOptions(field, snapshotAnswers(ctx.valueGetters), ctx.fieldsByName, ctx.render, ctx.delimiters)
 		if err != nil {
-			log.Warn("Failed to resolve dynamic field options", "field", field.Name, "error", err)
+			if ctx.optionsErrors == nil {
+				ctx.optionsErrors = make(map[string]error)
+			}
+			ctx.optionsErrors[field.Name] = err
 			return nil
 		}
 		return toHuhOptions(options)
+	}
+}
+
+// reportOptionsErrors logs any dynamic Options resolution failures collected
+// in optionsErrors during the form session (see dynamicOptionsFunc). Callers
+// must invoke this only after runFormInteraction returns, once the
+// interactive form is no longer on screen, so the log line can't garble the
+// terminal frame. Iterates field names in sorted order for deterministic
+// output when more than one field failed to resolve.
+func reportOptionsErrors(optionsErrors map[string]error) {
+	names := make([]string, 0, len(optionsErrors))
+	for name := range optionsErrors {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		log.Warn("Failed to resolve dynamic field options", "field", name, "error", optionsErrors[name])
 	}
 }
 
@@ -273,9 +315,24 @@ func referencedAnswerNames(source string, delimiters []string) []string {
 // field declared later) simply finds nothing yet and is silently excluded,
 // the same no-constraint degradation validateFieldOptionsSource's own doc
 // comment already accepts for a forward/preset-sourced dot-path.
-func optionsBindings(source string, ctx *fieldFormContext) map[string]any {
+//
+// The ownField parameter names the field these bindings are being built for,
+// and is always excluded even if referencedAnswerNames finds it (a
+// self-sourced dot-path, e.g. Options: "answers.envs" on the "envs" field
+// itself -- TestSelfReferenceIsTautologicallyValid documents that this is a
+// deliberate, valid shape, not a load-time error). Field registration in
+// createFieldInContext stores a field's own bound pointer into
+// ctx.fieldPointers before resolving its own Options, so without this
+// exclusion a self-reference would find its own just-registered pointer and
+// huh would treat the field's own selection/keystroke as a bindings change,
+// clearing its own filter text -- exactly what the "not every field in the
+// form" reasoning above already avoids for other fields.
+func optionsBindings(source, ownField string, ctx *fieldFormContext) map[string]any {
 	bindings := make(map[string]any)
 	for _, name := range referencedAnswerNames(source, ctx.delimiters) {
+		if name == ownField {
+			continue
+		}
 		if ptr, ok := ctx.fieldPointers[name]; ok {
 			bindings[name] = ptr
 		}
@@ -355,7 +412,7 @@ func createFieldInContext(key string, field *FieldDefinition, values map[string]
 			Value(&value)
 
 		if source, dynamic := field.Options.(string); dynamic {
-			selectField = selectField.OptionsFunc(dynamicOptionsFunc(field, ctx), optionsBindings(source, ctx))
+			selectField = selectField.OptionsFunc(dynamicOptionsFunc(field, ctx), optionsBindings(source, key, ctx))
 		} else {
 			selectField = selectField.Options(staticOptions(field, ctx.delimiters)...)
 		}
@@ -400,7 +457,7 @@ func createFieldInContext(key string, field *FieldDefinition, values map[string]
 			Filterable(true)
 
 		if source, dynamic := field.Options.(string); dynamic {
-			multiSelect = multiSelect.OptionsFunc(dynamicOptionsFunc(field, ctx), optionsBindings(source, ctx))
+			multiSelect = multiSelect.OptionsFunc(dynamicOptionsFunc(field, ctx), optionsBindings(source, key, ctx))
 		} else {
 			multiSelect = multiSelect.Options(staticOptions(field, ctx.delimiters)...)
 		}
