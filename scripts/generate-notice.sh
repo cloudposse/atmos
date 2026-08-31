@@ -124,7 +124,24 @@ EOF
 GO_LICENSES_BIN="$(command -v go-licenses || true)"
 if [ -z "${GO_LICENSES_BIN}" ]; then
 	echo "Installing go-licenses ${GO_LICENSES_VERSION}..."
-	go install "github.com/google/go-licenses@${GO_LICENSES_VERSION}"
+	# `go install` resolves this module's full dependency graph, including a
+	# go.sum verification round-trip against sum.golang.org - a transient
+	# mid-stream HTTP/2 reset there fails the whole install outright. Retry a
+	# few times with a short cooldown, matching the 3-attempt/15s-backoff
+	# convention already used for artifact downloads (see
+	# .github/actions/download-artifact-retry) and go mod download
+	# (magefiles/build.go's runGoModDownload).
+	attempt=1
+	max_attempts=3
+	until go install "github.com/google/go-licenses@${GO_LICENSES_VERSION}"; do
+		if [ "$attempt" -ge "$max_attempts" ]; then
+			echo "go install github.com/google/go-licenses failed after $max_attempts attempts" >&2
+			exit 1
+		fi
+		echo "go install github.com/google/go-licenses failed (attempt $attempt/$max_attempts), retrying in 15s..." >&2
+		sleep 15
+		attempt=$((attempt + 1))
+	done
 	GOBIN="$(go env GOBIN)"
 	if [ -z "${GOBIN}" ]; then
 		GOBIN="$(go env GOPATH)/bin"
