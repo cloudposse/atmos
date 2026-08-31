@@ -144,6 +144,7 @@ TEST_QUALITY_*.md
 /lintroller
 /.lintroller
 tools/lintroller/.lintroller
+tools/gomodcheck/.gomodcheck
 .golangci/lintroller/lintroller
 /custom-gcl
 
