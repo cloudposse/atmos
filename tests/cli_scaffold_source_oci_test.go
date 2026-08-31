@@ -131,6 +131,50 @@ func TestScaffoldGenerate_OCISourceUpdate(t *testing.T) {
 	require.Contains(t, string(after), "updated content", "--update must pick up the republished OCI template content")
 }
 
+// TestInit_OCISource proves `atmos init` can pull a template directly from an
+// oci:// registry reference, exercising the same executeInit -> selectTemplate
+// -> source.Hydrate flow (cmd/init/init.go) that `atmos scaffold generate`
+// exercises for its own OCI sources in TestScaffoldGenerate_OCISource above --
+// that test alone was scaffold-generate-only CLI coverage; this is the `atmos
+// init` counterpart.
+//
+// atmos init has no --defaults flag (unlike scaffold generate): the
+// non-interactive equivalent here is --interactive=false, which also makes
+// executeInit fall back to the scaffold.yaml fields' declared defaults (see
+// ExecuteWithBaseRef's useDefaults parameter in pkg/generator/ui/ui.go, wired
+// from !opts.interactive in cmd/init/init.go's RunE). --no-git is passed
+// explicitly because atmos init defaults --git to true (scaffold generate
+// defaults it to false); nothing OCI-specific is exercised by letting init
+// create a git repo, so it's skipped to keep the test fast and hermetic.
+//
+// See TestScaffoldGenerate_OCISource's doc comment for why this drives a real
+// atmos subprocess rather than cmd.Execute() in-process.
+func TestInit_OCISource(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows: subprocess CLI invocation can stall while reading from the loopback OCI test registry")
+	}
+	ensureAtmosRunner(t)
+
+	root := t.TempDir()
+	imageRef := ocitest.NewRegistry(t, "test/init:v1", map[string]string{
+		"scaffold.yaml": scaffoldOCITestTemplate,
+		"README.md":     "# OCI_SOURCE_MARKER\n",
+	})
+
+	target := filepath.Join(root, "output")
+	runAtmosForScaffoldTest(t, root, map[string]string{
+		"XDG_CACHE_HOME": filepath.Join(t.TempDir(), ".cache"),
+	}, 2*time.Minute,
+		"init", "oci://"+imageRef, target,
+		"--interactive=false",
+		"--no-git",
+	)
+
+	content, err := os.ReadFile(filepath.Join(target, "README.md"))
+	require.NoError(t, err, "README.md should exist in the generated target (pulled from the OCI source via atmos init)")
+	require.Contains(t, string(content), "OCI_SOURCE_MARKER")
+}
+
 // pushOCIUpdate re-pushes imageRef (a "host:port/repo:tag" string, as
 // returned by ocitest.NewRegistry) against the SAME already-running
 // in-process registry server, overwriting its manifest with a new
