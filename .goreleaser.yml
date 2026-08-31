@@ -26,6 +26,25 @@ before:
         df -h /
       fi'
 
+    # Install cosign for the `signs:` block below. The reusable release workflow
+    # (cloudposse/.github/.github/workflows/shared-go-auto-release.yml, invoked from
+    # .github/workflows/test.yml) sets up Go before running GoReleaser but does not
+    # install cosign itself, so without this hook `signs:` fails with
+    # "exec: cosign: executable file not found in $PATH". `go install` resolves
+    # through the Go module proxy and verifies against sum.golang.org, so this needs
+    # no separate checksum pinning. The binary is copied to /usr/local/bin because
+    # each `before.hooks` entry and the later `signs:` step run as separate
+    # subprocesses that don't share a modified PATH or GOPATH/bin.
+    - |
+      sh -c 'if [ "$GITHUB_ACTIONS" = "true" ]; then
+        echo "Installing cosign for keyless artifact signing..."
+        go install github.com/sigstore/cosign/v3/cmd/cosign@v3.1.3
+        cosign_bin_dir="$(go env GOBIN)"
+        if [ -z "$cosign_bin_dir" ]; then cosign_bin_dir="$(go env GOPATH)/bin"; fi
+        sudo cp "$cosign_bin_dir/cosign" /usr/local/bin/cosign
+        cosign version
+      fi'
+
 builds:
   - env:
       # goreleaser does not work with CGO, it could also complicate
@@ -118,16 +137,19 @@ sboms:
   - artifacts: archive
 
 # Keyless OIDC signing of the checksums file (which covers every archive by
-# digest) — no --key, no static key material. Requires the invoking workflow
-# to install cosign and grant id-token: write. Verifiable with:
-#   cosign verify-blob <checksums file> --signature <file>.sig --certificate <file>.pem \
+# digest) — no --key, no static key material. cosign is installed by the
+# before.hooks entry above; the invoking workflow (test.yml's `release` job)
+# grants id-token: write for the OIDC token exchange. cosign v3 enables
+# --new-bundle-format by default, which requires --bundle (the old
+# --output-signature/--output-certificate pair errors out). Verifiable with:
+#   cosign verify-blob --bundle <checksums file>.sigstore.json <checksums file> \
 #     --certificate-identity-regexp='^https://github.com/cloudposse/atmos/' \
 #     --certificate-oidc-issuer=https://token.actions.githubusercontent.com
 signs:
   - cmd: cosign
-    args: ["sign-blob", "--yes", "--output-signature=${signature}", "--output-certificate=${certificate}", "${artifact}"]
+    args: ["sign-blob", "--yes", "--bundle=${signature}", "${artifact}"]
     artifacts: checksum
-    certificate: "${artifact}.pem"
+    signature: "${artifact}.sigstore.json"
 
 ## Copied from https://github.com/cloudposse/.github/blob/main/.github/goreleaser.yml
 ## Required to correct working go auto release workflow
