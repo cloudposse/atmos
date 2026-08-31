@@ -46,6 +46,13 @@ jobs:
         with:
           go-version-file: "go.mod"
 
+      # `go run .` below has no prior module cache warm-up, so a single
+      # mid-stream proxy.golang.org reset (e.g. "stream error: ...
+      # INTERNAL_ERROR; received from peer") aborts it outright -- see
+      # docs/fixes/2026-08-25-build-atmos-go-mod-download-retry.md.
+      - name: Download Go modules (with retry)
+        uses: ./.github/actions/go-mod-download-retry
+
       - name: Generate atmos-manifest schema
         # website/static/schemas/atmos/atmos-manifest/ is gitignored (see .gitignore) — it is
         # never hand-maintained or committed, only generated here from the embedded schema
