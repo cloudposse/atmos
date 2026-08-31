@@ -8,7 +8,7 @@
 
 ```text
 go: github.com/google/go-licenses@v1.6.0: version constraints conflict:
-	github.com/google/go-licenses@v1.6.0 indirectly requires github.com/googleapis/enterprise-certificate-proxy@v0.0.0-20220520183353-fd19c99a87aa: verifying go.mod: github.com/googleapis/enterprise-certificate-proxy@v0.0.0-20220520183353-fd19c99a87aa/go.mod: reading https://sum.golang.org/tile/8/0/x042/147: stream error: stream ID 1155; INTERNAL_ERROR; received from peer
+  github.com/google/go-licenses@v1.6.0 indirectly requires github.com/googleapis/enterprise-certificate-proxy@v0.0.0-20220520183353-fd19c99a87aa: verifying go.mod: github.com/googleapis/enterprise-certificate-proxy@v0.0.0-20220520183353-fd19c99a87aa/go.mod: reading https://sum.golang.org/tile/8/0/x042/147: stream error: stream ID 1155; INTERNAL_ERROR; received from peer
 ##[error]Process completed with exit code 1.
 ```
 
