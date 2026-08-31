@@ -9,6 +9,9 @@ on:
   # • Eastern Time (ET): 7:35 PM (previous day)
     - cron: "35 0 * * *"
 
+permissions:
+  contents: read
+
 env:
   ATMOS_BOOTSTRAP_VERSION: "1.223.0"
   # Use pipe fallback so transient proxy.golang.org 5xx errors during
@@ -35,6 +38,11 @@ jobs:
             target: macos-intel
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.target == 'windows'
         shell: pwsh
