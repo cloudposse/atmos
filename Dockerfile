@@ -25,7 +25,7 @@ RUN set -ex; \
     # Update the package list
     apt-get update; \
     # Install runtime dependencies required by Atmos-managed tools.
-    apt-get -y install  --no-install-recommends curl git ca-certificates docker.io python3; \
+    apt-get -y install  --no-install-recommends curl git gnupg ca-certificates docker.io python3; \
     # Install the Cloud Posse Debian repository (inlined from cfg/setup/bash.deb.sh
     # instead of piping a downloaded script into bash, per Scorecard Pinned-Dependencies).
     curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/gpg.7333C6FDEFA717CC.key' | gpg --dearmor -o /usr/share/keyrings/cloudposse-packages-archive-keyring.gpg; \
@@ -33,8 +33,12 @@ RUN set -ex; \
     . /etc/os-release; \
     curl -1sLf "https://dl.cloudsmith.io/public/cloudposse/packages/config.deb.txt?distro=debian&codename=${VERSION_CODENAME}" -o /etc/apt/sources.list.d/cloudposse-packages.list; \
     chmod 644 /etc/apt/sources.list.d/cloudposse-packages.list; \
-    # Install OpenTofu
+    # Install OpenTofu. install-opentofu.sh's --install-method deb always runs
+    # an unversioned `apt-get install tofu` (--opentofu-version only takes
+    # effect for the standalone install method), so pin the package version
+    # explicitly after.
     curl -1sSLf 'https://raw.githubusercontent.com/opentofu/get.opentofu.org/3d354dfa62d9a36f33df16cdd6bb506ace1e6e2e/static/install-opentofu.sh' | bash -s -- --root-method none --install-method deb; \
+    apt-get install -y --allow-downgrades tofu=1.12.6; \
     # Install Kustomize binary (required by Helmfile).
     # Direct download instead of install_kustomize.sh which has known bugs (kubernetes-sigs/kustomize#5562).
     KUSTOMIZE_VERSION=5.8.1; \

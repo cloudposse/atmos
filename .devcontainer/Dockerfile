@@ -27,14 +27,26 @@ RUN apt-get update && \
 RUN usermod -aG docker vscode && \
     chsh -s /bin/zsh vscode
 
-# Install the starship prompt
-RUN curl -sS https://raw.githubusercontent.com/starship/starship/e939a19ab777d64be2003c6f9c4c683ab1292945/install/install.sh | sh -s -- -y
+# Install the starship prompt. install.sh has no version-pin flag (it always
+# fetches the latest GitHub release), so download a pinned release binary
+# directly instead, for reproducible builds.
+RUN STARSHIP_VERSION=1.26.0 && \
+    case "$(uname -m)" in \
+        x86_64) STARSHIP_TARGET=x86_64-unknown-linux-gnu ;; \
+        aarch64|arm64) STARSHIP_TARGET=aarch64-unknown-linux-musl ;; \
+        *) echo "Unsupported architecture: $(uname -m)" && exit 1 ;; \
+    esac && \
+    curl -fsSL "https://github.com/starship/starship/releases/download/v${STARSHIP_VERSION}/starship-${STARSHIP_TARGET}.tar.gz" | tar xz -C /usr/local/bin && \
+    chmod +x /usr/local/bin/starship
 
-# Install OpenTofu
-RUN curl -1sSLf 'https://raw.githubusercontent.com/opentofu/get.opentofu.org/3d354dfa62d9a36f33df16cdd6bb506ace1e6e2e/static/install-opentofu.sh' | bash -s -- --root-method none --install-method deb
+# Install OpenTofu. install-opentofu.sh's --install-method deb always runs an
+# unversioned `apt-get install tofu` (--opentofu-version only takes effect for
+# the standalone install method), so pin the package version explicitly after.
+RUN curl -1sSLf 'https://raw.githubusercontent.com/opentofu/get.opentofu.org/3d354dfa62d9a36f33df16cdd6bb506ace1e6e2e/static/install-opentofu.sh' | bash -s -- --root-method none --install-method deb && \
+    apt-get install -y --allow-downgrades tofu=1.12.6
 
-# Install Kustomize binary (required by Helmfile)
-RUN curl -1sSLf "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/c44f66d54fed65f1fa47e3adc4b8001aebff825f/hack/install_kustomize.sh"  | bash -s -- /usr/local/bin
+# Install Kustomize binary (required by Helmfile), pinned to a specific version.
+RUN curl -1sSLf "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/c44f66d54fed65f1fa47e3adc4b8001aebff825f/hack/install_kustomize.sh"  | bash -s -- 5.8.1 /usr/local/bin
 
 # Install the cloudposse Debian repository (inlined from cfg/setup/bash.deb.sh
 # instead of piping a downloaded script into bash, per Scorecard Pinned-Dependencies).
@@ -44,7 +56,11 @@ RUN curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/gpg.7333C6FD
     curl -1sLf "https://dl.cloudsmith.io/public/cloudposse/packages/config.deb.txt?distro=debian&codename=${VERSION_CODENAME}" -o /etc/apt/sources.list.d/cloudposse-packages.list && \
     chmod 644 /etc/apt/sources.list.d/cloudposse-packages.list
 
-RUN apt-get -y install atmos terraform kubectl helmfile helm k9s stern && \
+# apt-get update is required here: the earlier apt-get update (Docker CLI
+# install step above) ran before this source list existed, and its package
+# lists were cleared by rm -rf /var/lib/apt/lists/* right after.
+RUN apt-get update && \
+    apt-get -y install atmos terraform kubectl helmfile helm k9s stern && \
     su - vscode -c "helm plugin install --verify=false https://github.com/databus23/helm-diff"
 
 # Install the rootfs/ configurations
