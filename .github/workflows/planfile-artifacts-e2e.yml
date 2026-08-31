@@ -55,6 +55,11 @@ jobs:
     name: plan (upload planfile)
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -73,7 +78,7 @@ jobs:
 
       - name: Build atmos
         run: |
-          sh scripts/build-atmos.sh default test
+          go tool mage build:binary default test
           echo "$PWD/build" >> "$GITHUB_PATH"
 
       # Surface the runner's ACTIONS_* credentials to every later run step.
@@ -92,6 +97,11 @@ jobs:
     needs: plan
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -110,7 +120,7 @@ jobs:
 
       - name: Build atmos
         run: |
-          sh scripts/build-atmos.sh default test
+          go tool mage build:binary default test
           echo "$PWD/build" >> "$GITHUB_PATH"
 
       - name: Expose GitHub Actions runtime credentials
