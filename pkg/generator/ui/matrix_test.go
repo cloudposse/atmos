@@ -211,7 +211,7 @@ func whitespaceAxisEmbedsConfig() *templates.Configuration {
 // proves a computed axis value containing whitespace (e.g. an
 // answers.environments key like "us east") survives end-to-end as one axis
 // value, not two -- the real regression test for the toJson-based
-// RenderMatrixAxisExpression fix, exercised through the actual generation
+// RenderAnswersListExpression fix, exercised through the actual generation
 // pipeline rather than a mocked AxisRenderer.
 func TestExecuteWithSetup_FilesMatrixComputedAxisValueWithWhitespacePreserved(t *testing.T) {
 	ui := createTestUI(t)
