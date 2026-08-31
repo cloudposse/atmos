@@ -107,6 +107,9 @@ func NewRemoteImporter(atmosConfig *schema.AtmosConfiguration, opts ...RemoteImp
 
 // uriToTempName generates a unique temp filename for a URI using SHA256 hashing.
 func uriToTempName(uri string) string {
+	// codeql[go/weak-sensitive-data-hashing] -- hashes an import URI to derive a
+	// deterministic temp-download filename; never used for credential
+	// verification or storage.
 	hash := sha256.Sum256([]byte(uri))
 	return fmt.Sprintf(".download.%x", hash[:8])
 }
