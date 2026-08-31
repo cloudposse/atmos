@@ -1598,6 +1598,8 @@ type customCommandConditionParams struct {
 	flagsData     map[string]any
 }
 
+// customCommandConditionContext builds the CEL when:/continue: fact set for one custom command
+// step, resolving Component from p's flags/arguments the same way hooks already resolve it.
 func customCommandConditionContext(p customCommandConditionParams) schema.ConditionContext {
 	stepName := ""
 	stack := ""
