@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [enhancement]
 ---
 
-Component retry already recovers a single component from a transient registry blip. All components in a stack query the same registry. So they all benefit from the same retry policy. Until now, giving them one policy took extra work: copy the same `retry:` block onto every component, wire up a shared abstract base component just to hold it, or set up a mixin. Each option added effort for a simple goal — every component in this stack gets the same policy.
+CI environments are notoriously flaky, especially in distributed systems that depend on a lot of integrations and services. Most of those blips are easily solved with a retry. Atmos has supported this for Terraform for a while now, and it's worked well. The catch was that you had to set the retry policy on every component that needed it. Now you can define it once at the stack level, and every component in that stack inherits it automatically. Configure it once, and get the benefit everywhere.
 
 <!--truncate-->
 
