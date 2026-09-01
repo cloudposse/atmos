@@ -148,6 +148,18 @@ func withExecMetadataOutputCapture(stdoutW, stderrW io.Writer) ShellCommandOptio
 	}
 }
 
+// execMetadataOutputCaptureFromOpts extracts the exec-metadata stdout/stderr
+// tee writers (if any) set via withExecMetadataOutputCapture among opts, so
+// callers that retry the underlying invocation (executeShellCommandWithRetry)
+// can reset them between attempts.
+func execMetadataOutputCaptureFromOpts(opts ...ShellCommandOption) (io.Writer, io.Writer) {
+	var cfg shellCommandConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return cfg.execMetadataStdoutCapture, cfg.execMetadataStderrCapture
+}
+
 // WithStdoutCapture returns a ShellCommandOption that tees stdout to the provided writer.
 // The captured output includes secret masking (post-MaskWriter).
 func WithStdoutCapture(w io.Writer) ShellCommandOption {

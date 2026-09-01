@@ -544,3 +544,34 @@ func TestCaptureMultiComponentExecMetadata_ExactlyOneRequestForWholeRun(t *testi
 	assert.Contains(t, components, "myapp")
 	assert.Contains(t, components, "other")
 }
+
+// TestRecordExecResult_StripsANSI is the regression test for the
+// multi-component parsing path: recordExecResult must strip ANSI escape
+// codes from the captured output before handing it to
+// buildTerraformExecData, matching the sanitization already applied by the
+// single-component parser (captureExecMetadataSync) and runCIHooksForNode.
+// Both the parsed TerraformExecData fields and the base64 logs payload must
+// reflect the cleaned (ANSI-free) output.
+func TestRecordExecResult_StripsANSI(t *testing.T) {
+	const ansiOutput = "\x1b[1m\x1b[32mApply complete! Resources: 2 added, 1 changed, 0 destroyed.\x1b[0m\x1b[0m"
+
+	nodeHooks := &terraformNodeHooks{cmd: newHookTestCmd(), subCommand: "apply"}
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", Component: "myapp", ComponentFromArg: "myapp", ComponentType: "terraform"}
+	nodeHooks.recordExecResult(info, ansiOutput, nil)
+
+	require.Len(t, nodeHooks.results, 1)
+	data, ok := nodeHooks.results[0].(map[string]any)
+	require.True(t, ok)
+
+	rawLogs, ok := data["logs"].(string)
+	require.True(t, ok)
+	decodedLogs, err := base64.StdEncoding.DecodeString(rawLogs)
+	require.NoError(t, err)
+	assert.NotContains(t, string(decodedLogs), "\x1b", "logs payload must not retain ANSI escape codes")
+	assert.Contains(t, string(decodedLogs), "Apply complete! Resources: 2 added, 1 changed, 0 destroyed.")
+
+	resourceCounts, ok := data["resource_counts"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 2, resourceCounts["create"], "parsing must succeed once ANSI codes are stripped")
+	assert.Equal(t, 1, resourceCounts["change"], "parsing must succeed once ANSI codes are stripped")
+}

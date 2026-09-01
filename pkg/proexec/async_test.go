@@ -196,10 +196,10 @@ func TestCaptureAsync_DoesNotAlterCallerError(t *testing.T) {
 // Ensures the process telemetry CI helpers are exercised for completeness;
 // mirrors the isolation approach used by gate_test.go's withCIEnv.
 //
-// TEMPORARY: CaptureAsync currently blocks synchronously on the upload (see
-// the TEMPORARILY UNUSED note on asyncFlushCeiling in async.go), so this no
-// longer asserts a ceiling — it only asserts CaptureAsync returns promptly
-// when the upload fails fast (e.g. connection refused).
+// CaptureAsync races the upload against asyncFlushCeiling, so a slow/failing
+// upload (doWithRetry retries with backoff, mirroring
+// TestCaptureSync_WarnAndContinueOnFailure's ~7s runtime) must never block
+// the caller beyond the ceiling.
 func TestCaptureAsync_ReturnsAfterUploadCompletes(t *testing.T) {
 	withCIEnv(t, true)
 	_ = telemetry.IsCI // sanity: package imported and usable directly if needed.
@@ -215,10 +215,9 @@ func TestCaptureAsync_ReturnsAfterUploadCompletes(t *testing.T) {
 	start := time.Now()
 	CaptureAsync(cmd, nil)
 	elapsed := time.Since(start)
-	// The connection fails fast, but doWithRetry still retries with backoff
-	// (mirrors TestCaptureSync_WarnAndContinueOnFailure's ~7s runtime); just
-	// assert CaptureAsync doesn't hang indefinitely.
-	assert.Less(t, elapsed, 15*time.Second)
+	// CaptureAsync must never block the caller longer than asyncFlushCeiling,
+	// plus a small margin for scheduling jitter.
+	assert.Less(t, elapsed, asyncFlushCeiling+time.Second)
 }
 
 // TestCaptureAsync_UsesAndClearsPendingAsyncData is the regression test for

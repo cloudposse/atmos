@@ -353,7 +353,7 @@
           "atmos_os": "linux",
           "atmos_pro_run_id": "run-12345",
           "atmos_version": "1.2.3",
-          "command": "atmos terraform apply",
+          "command": "terraform apply",
           "data": {
             "components": [
               {
@@ -537,7 +537,7 @@
           "atmos_os": "linux",
           "atmos_pro_run_id": "run-12345",
           "atmos_version": "1.2.3",
-          "command": "atmos terraform plan",
+          "command": "terraform plan",
           "data": {
             "components": [
               {
@@ -586,7 +586,7 @@
           "metrics": {
             "in_block_ops": 4,
             "invol_ctx_switches": 5,
-            "major_page_faults": 0,
+            "major_page_faults": 1,
             "max_rss_bytes": 52428800,
             "minor_page_faults": 120,
             "out_block_ops": 2,
@@ -766,7 +766,7 @@
           "atmos_os": "linux",
           "atmos_pro_run_id": "run-12345",
           "atmos_version": "1.2.3",
-          "command": "atmos list components",
+          "command": "list components",
           "execution_id": "c4c2f3c1-2345-4b2c-9d2e-234567890abc",
           "exit_code": 0,
           "flags": [],
@@ -1255,7 +1255,7 @@
           "atmos_os": "linux",
           "atmos_pro_run_id": "run-12345",
           "atmos_version": "1.2.3",
-          "command": "atmos terraform apply",
+          "command": "terraform apply",
           "data": {
             "components": [
               {
@@ -2046,7 +2046,7 @@
           "atmos_os": "",
           "atmos_pro_run_id": "",
           "atmos_version": "",
-          "command": "atmos terraform plan",
+          "command": "terraform plan",
           "data": "https://blob.vercel-storage.com/atmos-exec/d5d3a4d2/data.json",
           "execution_id": "d5d3a4d2-3456-4c3d-ae3f-34567890abcd",
           "exit_code": 0,

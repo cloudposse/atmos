@@ -322,3 +322,48 @@ func TestUploadExecData_Error(t *testing.T) {
 	assert.Nil(t, resp)
 	assert.True(t, errors.Is(err, errUtils.ErrFailedToUploadExecData))
 }
+
+// TestUploadExecData_MalformedJSONOn2xx verifies a 2xx response with a body
+// that fails to decode as JSON is treated as an error, never as success.
+func TestUploadExecData_MalformedJSONOn2xx(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`not json`))
+	}))
+	defer server.Close()
+
+	client := &AtmosProAPIClient{
+		BaseURL:         server.URL,
+		BaseAPIEndpoint: "api",
+		APIToken:        "test-token",
+		HTTPClient:      &http.Client{Timeout: 10 * time.Second},
+	}
+
+	resp, err := client.UploadExecData(&dtos.ExecDataUploadRequest{ExecutionID: "x", Data: json.RawMessage(`{}`)})
+	require.Error(t, err)
+	assert.Nil(t, resp)
+	assert.True(t, errors.Is(err, errUtils.ErrFailedToUploadExecData))
+}
+
+// TestUploadExecData_MissingURLOn2xx verifies a 2xx response that omits the
+// blob URL is treated as an error rather than a usable success.
+func TestUploadExecData_MissingURLOn2xx(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	defer server.Close()
+
+	client := &AtmosProAPIClient{
+		BaseURL:         server.URL,
+		BaseAPIEndpoint: "api",
+		APIToken:        "test-token",
+		HTTPClient:      &http.Client{Timeout: 10 * time.Second},
+	}
+
+	resp, err := client.UploadExecData(&dtos.ExecDataUploadRequest{ExecutionID: "x", Data: json.RawMessage(`{}`)})
+	require.Error(t, err)
+	assert.Nil(t, resp)
+	assert.True(t, errors.Is(err, errUtils.ErrFailedToUploadExecData))
+	assert.True(t, errors.Is(err, errUtils.ErrEmptyURL))
+}

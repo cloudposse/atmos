@@ -151,13 +151,13 @@ func (c *AtmosProAPIClient) doUploadExecDataRequest(url string, data []byte) (*d
 
 	var parsed dtos.ExecDataUploadResponse
 	if unmarshalErr := json.Unmarshal(body, &parsed); unmarshalErr != nil {
-		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-			return nil, &APIError{StatusCode: resp.StatusCode, Operation: uploadExecDataOperation, Err: unmarshalErr}
-		}
-		return &parsed, nil
+		return nil, &APIError{StatusCode: resp.StatusCode, Operation: uploadExecDataOperation, Err: unmarshalErr}
 	}
 
 	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusBadRequest {
+		if parsed.URL == "" {
+			return nil, &APIError{StatusCode: resp.StatusCode, Operation: uploadExecDataOperation, Err: errUtils.ErrEmptyURL}
+		}
 		return &parsed, nil
 	}
 

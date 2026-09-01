@@ -578,7 +578,7 @@ func (n *terraformNodeHooks) recordExecResult(info *schema.ConfigAndStacksInfo, 
 		}
 	}
 
-	data := buildTerraformExecData(n.subCommand, output, info.Component, info.Stack, exitCode)
+	data := buildTerraformExecData(n.subCommand, ansi.Strip(output), info.Component, info.Stack, exitCode)
 	if data == nil {
 		return
 	}

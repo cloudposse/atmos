@@ -19,13 +19,13 @@ import (
 // asyncFlushCeiling is the fixed, non-configurable best-effort flush window
 // for the async default path (research.md Decision 8, SC-004). Not derived
 // from user configuration — a delivery outage must never slow down every
-// other command beyond this small, predictable ceiling.
-//
-// TEMPORARILY UNUSED: CaptureAsync currently blocks synchronously on every
-// upload (see CaptureAsync below) so its response can be logged reliably
-// while the exec-metadata upload path is being validated. Restore the
-// select/timeout race once that verification is done.
+// other command beyond this small, predictable ceiling. CaptureAsync races
+// the upload against this ceiling and returns as soon as either finishes.
 const asyncFlushCeiling = 2 * time.Second
+
+// logKeyCommand is the structured-log key used for the reported command name
+// across CaptureAsync's log lines.
+const logKeyCommand = "command"
 
 // processBaseline is captured once, as early as possible in the process's
 // lifetime (at package load, before any command runs), so both the async
@@ -92,7 +92,7 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 	}
 
 	if IsSyncCommand(commandPath) {
-		log.Debug("Skipping async exec-metadata upload: command is on the synchronous allowlist.", "command", commandPath)
+		log.Debug("Skipping async exec-metadata upload: command is on the synchronous allowlist.", logKeyCommand, commandPath)
 		return
 	}
 
@@ -119,15 +119,35 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 	data := pendingAsyncData
 	pendingAsyncData = nil
 
-	// TEMPORARY: block on the upload (instead of racing asyncFlushCeiling)
-	// so the command's process doesn't exit before the request completes,
-	// and so its outcome is always logged.
 	in := &ExecRecordInput{Command: reportedCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data}
-	uploadErr := uploadExecMetadata(in, client, git.NewDefaultGitRepo())
+	done := make(chan error, 1)
+	go func() {
+		done <- uploadExecMetadata(in, client, git.NewDefaultGitRepo())
+	}()
+
+	// Race the upload against asyncFlushCeiling: block just long enough to
+	// maximize the chance the upload is dispatched before the process exits
+	// (FR-009), but never longer than the ceiling. The upload goroutine keeps
+	// running and still logs its own outcome if it finishes after the
+	// ceiling fires and CaptureAsync has already returned.
+	select {
+	case uploadErr := <-done:
+		logUploadOutcome(reportedCommand, uploadErr)
+	case <-time.After(asyncFlushCeiling):
+		log.Debug("Exec-metadata upload still in flight after flush ceiling; not blocking further.", logKeyCommand, reportedCommand)
+		go func() {
+			logUploadOutcome(reportedCommand, <-done)
+		}()
+	}
+}
+
+// logUploadOutcome logs a single exec-metadata upload's terminal outcome,
+// shared by both CaptureAsync's in-ceiling and background-after-ceiling paths.
+func logUploadOutcome(reportedCommand string, uploadErr error) {
 	if uploadErr != nil {
-		log.Info("Exec-metadata upload finished.", "command", reportedCommand, "success", false, "error", uploadErr)
+		log.Info("Exec-metadata upload finished.", logKeyCommand, reportedCommand, "success", false, "error", uploadErr)
 	} else {
-		log.Info("Exec-metadata upload finished.", "command", reportedCommand, "success", true)
+		log.Info("Exec-metadata upload finished.", logKeyCommand, reportedCommand, "success", true)
 	}
 }
 

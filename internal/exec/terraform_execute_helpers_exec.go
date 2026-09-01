@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -562,6 +563,19 @@ func cleanupTerraformFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 // (used by the retry wrapper to inject stdout/stderr capture writers).
 type invokeShellCommandFunc func(opts ...ShellCommandOption) error
 
+// resetExecMetadataBufs resets the exec-metadata stdout/stderr tee buffers (if
+// present) between retry attempts, so the exec-metadata parser only ever sees
+// the latest attempt's output rather than every attempt's output concatenated
+// together.
+func resetExecMetadataBufs(stdoutW, stderrW io.Writer) {
+	if resettable, ok := stdoutW.(interface{ Reset() }); ok {
+		resettable.Reset()
+	}
+	if resettable, ok := stderrW.(interface{ Reset() }); ok {
+		resettable.Reset()
+	}
+}
+
 // executeShellCommandWithRetry runs invoke exactly once when info.ComponentRetrySection is
 // nil or has no Conditions configured (zero behavioural change for non-retry components).
 //
@@ -597,6 +611,8 @@ func executeShellCommandWithRetry(
 	captureOpts := append([]ShellCommandOption{}, baseOpts...)
 	captureOpts = append(captureOpts, WithStdoutCapture(&buf), WithStderrCapture(&buf))
 
+	execMetadataStdout, execMetadataStderr := execMetadataOutputCaptureFromOpts(baseOpts...)
+
 	attempt := 0
 	return retry.WithPredicate(
 		context.Background(),
@@ -604,6 +620,7 @@ func executeShellCommandWithRetry(
 		func() error {
 			attempt++
 			buf.Reset()
+			resetExecMetadataBufs(execMetadataStdout, execMetadataStderr)
 			if attempt > 1 {
 				log.Warn(
 					"Retrying terraform subprocess after recoverable error",
