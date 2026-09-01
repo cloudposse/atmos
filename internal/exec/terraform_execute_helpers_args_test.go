@@ -399,8 +399,9 @@ func TestBuildPlanSubcommandArgs_ExecMetadataActive_AddsDetailedExitCode(t *test
 	atmosConfig.Settings.Pro.Token = "test-token"
 	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
 
-	args := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
+	args, err := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
 
+	require.NoError(t, err)
 	assert.Contains(t, args, detailedExitCodeFlag)
 	assert.True(t, info.ExecMetadataDetailedExitCodeAdded,
 		"executeMainTerraformCommand needs this signal to know the flag was added for exec-metadata, not --upload-status")
@@ -416,8 +417,9 @@ func TestBuildPlanSubcommandArgs_ExecMetadataInactive_NoDetailedExitCode(t *test
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
 
-	args := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
+	args, err := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
 
+	require.NoError(t, err)
 	assert.NotContains(t, args, detailedExitCodeFlag)
 	assert.False(t, info.ExecMetadataDetailedExitCodeAdded)
 }
@@ -432,8 +434,9 @@ func TestBuildPlanSubcommandArgs_ApplyNeverGetsDetailedExitCode(t *testing.T) {
 	withExecMetadataGateEnv(t, true)
 
 	info := schema.ConfigAndStacksInfo{SubCommand: "apply"}
-	args := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json")
+	args, err := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json")
 
+	require.NoError(t, err)
 	assert.NotContains(t, args, detailedExitCodeFlag)
 }
 
