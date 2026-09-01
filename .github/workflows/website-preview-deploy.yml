@@ -14,11 +14,10 @@ env:
   PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
   DEPLOYMENT_HOST: pr-${{ github.event.workflow_run.pull_requests[0].number }}.atmos-docs.ue2.dev.plat.cloudposse.org
 
-# These permissions are needed to interact with the GitHub's OIDC Token endpoint
+# Least-privilege default; the job below declares its own narrower
+# job-level permissions that override this baseline.
 permissions:
-  id-token: write
   contents: read
-  deployments: write
 
 jobs:
   website-deploy-preview:
@@ -27,6 +26,13 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: release
+    # id-token: write is needed to interact with GitHub's OIDC token endpoint
+    # (Configure AWS Credentials); deployments: write for the deployment
+    # status updates below.
+    permissions:
+      contents: read
+      id-token: write
+      deployments: write
 
     steps:
       - name: Harden Runner
