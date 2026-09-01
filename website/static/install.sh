@@ -31,13 +31,16 @@ fi
 # (corporate proxies, outages), which fails the handshake with
 # CRYPT_E_REVOCATION_OFFLINE even though the certificate itself is valid and
 # the destination is reachable — a well-known schannel-specific class of
-# flakiness, not a sign anything is actually wrong. Skip the revocation check
-# on Windows only; probe for the flag first since non-Windows curl builds
-# aren't schannel-backed and may not support it.
+# flakiness, not a sign anything is actually wrong. --ssl-revoke-best-effort
+# (schannel-only, curl 7.70+) still performs the check when a responder is
+# reachable and only skips it when the responder itself is offline/missing —
+# exactly this failure mode — unlike --ssl-no-revoke, which would disable
+# revocation checking unconditionally. Probe for the flag first since
+# non-Windows curl builds aren't schannel-backed and may not support it.
 case "$(uname -s)" in
 	MINGW* | MSYS* | CYGWIN*)
-		if command_exists curl && curl --ssl-no-revoke --version >/dev/null 2>&1; then
-			curl_retry_flags+=(--ssl-no-revoke)
+		if command_exists curl && curl --ssl-revoke-best-effort --version >/dev/null 2>&1; then
+			curl_retry_flags+=(--ssl-revoke-best-effort)
 		fi
 		;;
 esac
