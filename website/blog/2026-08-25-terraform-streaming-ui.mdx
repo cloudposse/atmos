@@ -120,6 +120,14 @@ components:
       enabled: true
 ```
 
+Or set it directly from the CLI without hand-editing YAML:
+
+```shell
+atmos config set components.terraform.ui.enabled true
+```
+
+With this on, the UI turns on automatically whenever a real terminal is detected — no `--ui` flag needed — and still auto-disables in the same piped/CI cases described below. Use `--ui=false` per-command to override it off.
+
 ### Enable via Environment Variable
 
 ```shell

@@ -129,7 +129,17 @@ type cancellableModel interface {
 // return value reports whether the run was cancelled.
 func runTUIProgram(model tea.Model, cmd *exec.Cmd) (tea.Model, bool, error) {
 	opts := []tea.ProgramOption{
-		tea.WithOutput(iolib.UI),
+		// iolib.MaskWriter(os.Stderr), not the bare global iolib.UI: with secret masking
+		// enabled (the default), io.UI's concrete type is *dynamicMaskedWriter, which has
+		// no Fd() method. Bubbletea's TTY detection type-asserts its output writer for
+		// Fd() to tell a real terminal from a pipe/buffer; without it, Bubbletea silently
+		// treats a real terminal as "not a TTY" and disables its own line-clearing, so
+		// every frame gets appended below the last instead of overwriting it (observed:
+		// dozens of duplicate "plan <stack>/<component>" progress lines instead of one
+		// live-updating line). iolib.MaskWriter returns *maskedWriter, which forwards
+		// Fd()/Read()/Close() to the wrapped *os.File, matching the same fix already
+		// applied to the vendor-pull Bubbletea program in internal/exec/vendor_model.go.
+		tea.WithOutput(iolib.MaskWriter(os.Stderr)),
 		tea.WithoutSignalHandler(),
 	}
 	if !terminal.HasRealTTYInput() {
