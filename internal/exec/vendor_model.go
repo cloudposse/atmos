@@ -329,8 +329,18 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 		}
 	}
 	m.index++
-	// Update progress bar
-	progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
+	// Update progress bar. Only when rendering to a TTY: charmbracelet/bubbles's
+	// progress.Model.SetPercent returns a tea.Cmd (nextFrame) whose closure reads
+	// back m.tag/m.id from the *Model pointer when the tick fires, on bubbletea's
+	// own command-execution goroutine -- a data race against a second SetPercent
+	// call landing before that tick fires (which packages completing faster than
+	// one animation frame, as in tests, reliably triggers; upstream bug, not an
+	// Atmos usage issue). Nothing renders m.progress.View() when there's no TTY
+	// to show it to, so there's no reason to animate it there either.
+	var progressCmd tea.Cmd
+	if m.isTTY {
+		progressCmd = m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
+	}
 
 	version = grayColor.Render(version)
 	return m, tea.Batch(

@@ -5,7 +5,7 @@
 ## Summary
 
 The new `[race] full test suite` CI job (added to run `atmos test race` on pull requests)
-failed on its first six real runs. Rounds 1–2: the package list included the CLI acceptance
+failed on its first seven real runs. Rounds 1–2: the package list included the CLI acceptance
 suite (deliberately sharded elsewhere because it takes ~90 minutes unsharded),
 `pkg/toolchain`'s real-network registry tests didn't fit the per-package timeout once running
 unsharded and unauthenticated, and `-shuffle=on` exposed a pre-existing test-isolation bug in
@@ -25,7 +25,13 @@ and the job ran to completion for the first time: a single root cause in `pkg/pe
 performance-tracking code (used by nearly every function in the codebase) explained 21 of 24
 data races and, once combined with three tests that left tracking permanently enabled, most of
 ~20 fanned-out `cmd`-package test failures. One further failure in that batch was unrelated: a
-pflag `Value.Set` vs `Flags().Set` distinction that silently didn't mark a flag as changed.
+pflag `Value.Set` vs `Flags().Set` distinction that silently didn't mark a flag as changed. Round
+7: a genuine upstream data race in `charmbracelet/bubbles`'s progress-bar animation, a widespread
+`--help`-flag-leak pattern (cobra checks a flag's *current* value on every `Execute()`, not just
+whether it was in that call's own args) found in three packages, plus two more
+reset-without-restore leaks. One more failure could not be pinned down -- it didn't reproduce
+twice with the same `-shuffle` seed, pointing to genuine goroutine-timing nondeterminism rather
+than simple test-order dependence -- and is left as an open item.
 
 ## Context
 
@@ -191,6 +197,22 @@ run surfaced seven more independent failures:
   after seeding the package-level style cache with a partial `ColorScheme` (no `Border` set),
   matching the sibling `TestComponentLabelStyleCyclesPalette` (log_styles_test.go), which already
   does this for the same reason — `TestGetBorderColor` was asserting an empty string.
+- `internal/exec/vendor_model.go`: `handleInstalledPkgMsg` now only calls
+  `m.progress.SetPercent(...)` (and returns its `tea.Cmd`) when `m.isTTY` — working around the
+  upstream `bubbles` `progress.Model` race documented above, and skipping animation work that
+  never renders to anyone when there's no TTY regardless.
+- `cmd/init/init_test.go`: `TestInitCmd_Integration_Help` now resets `initCmd`'s `help` flag via
+  `t.Cleanup` after setting it, instead of leaving it `true` for every later test that calls
+  `initCmd.Execute()`.
+- `cmd/scaffold/scaffold_test.go`: added a shared `resetHelpFlag(t, cmd)` helper and applied it to
+  all four `TestScaffold*Cmd_Integration_Help` tests, same fix as `cmd/init`'s.
+- `cmd/version/list_test.go`: `TestListCommand_FormatValidation` now resets the package-level
+  `listFormat` var to `"table"` (its real flag default) via `t.Cleanup`, instead of leaving it at
+  `"invalid"` (its last test case's value) for whatever test runs next.
+- `cmd/validate_editorconfig_test.go`: `TestEditorConfigCmdCIFlagRegisteredThroughStandardParser`
+  now re-runs `ciFlagsParser.BindFlagsToViper(editorConfigCmd, viper.GetViper())` (the same call
+  `init()` makes) before asserting, rather than assuming that one-time binding survived every
+  sibling test's `viper.Reset()`.
 
 ## Validation
 
@@ -258,6 +280,54 @@ comparison: its "large" family is an `r7a.xlarge`, 4 cores, 31GB RAM.
   `runner=large`; guarded the `ubuntu.sources` `sed` behind a `[ -f ... ]` check so the step
   works on either runner image instead of erroring outright when the file doesn't exist.
 
+Round 7, once the round-6 fixes landed and the job ran to completion again with a real 4-core
+runner: a fresh run surfaced a smaller but still varied set of failures:
+
+- `internal/exec`'s `TestExecuteComponentVendorPullBatch_PullsAllComponentsInOneCall` hit a real
+  `WARNING: DATA RACE` inside `github.com/charmbracelet/bubbles@v1.0.0`'s `progress.Model`:
+  `SetPercent` mutates `m.tag`/`m.targetPercent` directly and returns a `tea.Cmd`
+  (`nextFrame`) whose closure reads `m.tag`/`m.id` back off the same `*Model` pointer when the
+  tick fires -- on bubbletea's own command-execution goroutine, not the model's owning goroutine.
+  Calling `SetPercent` again (a second package finishing) before that tick fires -- which
+  completing package installs faster than one animation frame, as this test's mocked installs
+  do, reliably triggers -- races. This is an upstream library bug, not an Atmos usage defect;
+  vendoring/patching `bubbles` was out of scope, so the fix avoids triggering it instead: nothing
+  renders `m.progress.View()`'s animation without a TTY, so `SetPercent` (and the `tea.Cmd` it
+  returns) is now only called when `m.isTTY`. This closes the CI failure but not every
+  theoretical production case (a real TTY session installing several same-machine components
+  faster than one frame could still hit it) -- an upstream fix or report would close it fully.
+- Three packages had the *same* latent bug shape, previously undetected because nothing had ever
+  run their `--help` integration test before another test that also calls the same command's
+  `Execute()`: cobra's `execute()` checks the `help` pflag's *current* value on every call
+  (`c.Flags().GetBool("help")`), not whether `-h`/`--help` was in that specific invocation's own
+  args. `initCmd.SetArgs([]string{"--help"})` (`cmd/init`) and the four
+  `scaffold*Cmd.SetArgs([]string{"--help"})` calls (`cmd/scaffold`) never reset the flag
+  afterward, so once any of them ran, every later test in the same package's binary that called
+  that command's `Execute()` got `nil` back having silently printed help -- `RunE` never ran, no
+  matter what args that later test passed. This is exactly why `TestExecuteInit_ArgumentParsing`
+  (fixed already once for a different reason, in round 6) kept reappearing: reproducing it needed
+  the *same* fixed `-shuffle` seed to confirm, since `--help`-leak and ordering both had to align.
+  `cmd/root_test.go`'s two `RootCmd.SetArgs([]string{"--help"})` sites don't have this problem --
+  they already call `NewTestKit(t)`, which snapshots and restores all of `RootCmd.Flags()`,
+  including `help`.
+- `cmd/version/list_test.go`'s `TestListCommand_ValidationErrors` failed with the wrong error
+  (`"invalid format: invalid ..."` instead of the expected date-format error) because
+  `TestListCommand_FormatValidation`'s last case sets the package-level `listFormat` var (which
+  `listCmd`'s `RunE` reads directly, not through a bound flag) to `"invalid"` and never restores
+  it, so a later test's own unrelated validation check hit that stale value first.
+- `cmd/validate_editorconfig_test.go`'s `TestEditorConfigCmdCIFlagRegisteredThroughStandardParser`
+  failed for the now-familiar reason: `editorConfigCmd`'s `ciFlagsParser.BindFlagsToViper(...)`
+  runs once in `init()`; some other test's `viper.Reset()` discards it, and nothing rebinds.
+- One more failure, `cmd/list`'s `TestListStacksWithOptions_CoverageIntegration` ("authentication
+  requires at least one identity configured"), reproduced twice via full-package `-shuffle=on`
+  scans but did **not** reproduce on either retry using the exact seed that had just produced it
+  -- ruling out a simple ordering/leftover-value explanation (which would be seed-deterministic)
+  in favor of genuine goroutine-timing nondeterminism between an earlier test and this one. Ruled
+  out during investigation: `cmd/list`'s only two `t.Parallel()` tests
+  (`cmd/list/closure_test.go`) touch no auth/config/viper state at all, and `t.Chdir` (used by
+  `chdirToCompleteFixture`) has Go's own built-in serialization against concurrent use. Left
+  unresolved -- see Follow-ups.
+
 Round 6: with the runner fixed, the job ran to completion (~40 minutes) and failed with ~20
 distinct `cmd` package test failures and 24 `WARNING: DATA RACE` blocks. 21 of the 24 race blocks
 traced back to a single root cause: `pkg/perf.finishSimpleStackTracking`, the "simple stack"
@@ -323,6 +393,38 @@ Round 6 validation:
   output. This is the strongest signal yet that the fan-out is resolved, though (as with every
   other round) the actual CI run against the real RunsOn `large` runner is the final check.
 
+Round 7 validation:
+
+- `go build ./...`, `go vet ./cmd/...` — clean.
+- `./custom-gcl run --new-from-rev=origin/main` — 0 issues (one `godot` finding, fixed).
+- `gofumpt -l` on every changed file — no output.
+- `go test -race -shuffle=1788300210151906000 ./cmd/init/... -v` (the exact seed that reproduced
+  the failure) — passes; 25 further `-shuffle=on` scans of the full package — all clean.
+- `go test -race -shuffle=on ./cmd/scaffold/...` — clean.
+- `go test -race -shuffle=on ./internal/exec/... -run TestExecuteComponentVendorPullBatch -count=5`
+  — all pass; sanity-checked the fix actually addresses the race by confirming the mechanism
+  (`SetPercent`'s returned `tea.Cmd` is genuinely what races, per the upstream source read).
+- `go test -race -shuffle=on ./cmd/version/... -count=3` and
+  `go test -race -shuffle=on ./cmd/... -run TestEditorConfigCmdCIFlagRegisteredThroughStandardParser -count=3`
+  — both clean.
+- Full `go test -race -shuffle=on ./cmd/...` (one complete pass, ~45 minutes locally) — one
+  failure: `cmd/list`'s `TestListStacksWithOptions_CoverageIntegration`, investigated and left
+  open (see Follow-ups) after it didn't reproduce on retries with the seed that had just produced
+  it.
+
 ## Follow-ups
 
-None.
+- `cmd/list`'s `TestListStacksWithOptions_CoverageIntegration` failed once locally with
+  `authentication requires at least one identity configured in atmos.yaml` even though the
+  `complete` fixture it uses has identities configured and the test normally passes. It did not
+  reproduce on two follow-up attempts using the exact `-shuffle` seed that produced the original
+  failure, which rules out a simple test-ordering/leftover-value explanation (those are
+  seed-deterministic) in favor of genuine goroutine-timing nondeterminism between some earlier
+  test and this one. Investigated and ruled out: `cmd/list`'s only two `t.Parallel()` tests
+  (`cmd/list/closure_test.go`) touch no auth/config/viper state; `t.Chdir` (used by
+  `chdirToCompleteFixture`) has Go's own built-in serialization against concurrent misuse; no
+  obvious `sync.Once`/singleton pattern in `pkg/auth`'s manager code. Left unfixed. If it recurs
+  in a future CI run, the next investigation should reach for the actual race-detector output
+  (this failure carries no `WARNING: DATA RACE` block itself, but the CI log may show one nearby
+  that this local investigation didn't capture) rather than repeating the same seed-replay
+  approach that already came up empty twice.
