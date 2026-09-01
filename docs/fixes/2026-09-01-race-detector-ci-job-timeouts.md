@@ -5,7 +5,7 @@
 ## Summary
 
 The new `[race] full test suite` CI job (added to run `atmos test race` on pull requests)
-failed on its first four real runs. Rounds 1–2: the package list included the CLI acceptance
+failed on its first five real runs. Rounds 1–2: the package list included the CLI acceptance
 suite (deliberately sharded elsewhere because it takes ~90 minutes unsharded),
 `pkg/toolchain`'s real-network registry tests didn't fit the per-package timeout once running
 unsharded and unauthenticated, and `-shuffle=on` exposed a pre-existing test-isolation bug in
@@ -17,8 +17,10 @@ once, spread across unrelated packages — two real data races (an LSP document-
 package-var-capture race in a trust-store installer), four more shuffle-order test-isolation bugs
 (a reset-without-reinitialize in a test I/O helper, a backend-registry wipe-without-restore, a
 viper.Set-vs-env-var-tracking conflict, and a style cache left seeded with a partial scheme), and
-one dead/unused test-only field that was itself racing for no reason. Also bumped the job's
-runner: once every timeout was fixed, this became the slowest check in the PR.
+one dead/unused test-only field that was itself racing for no reason. Round 5: bumping the job's
+runner (once every timeout was fixed, this became the slowest check in the PR) picked the wrong
+RunsOn family on the first attempt -- fewer cores than before, and its AMI's older Ubuntu broke an
+apt-mirror workaround copied from a GitHub-hosted-runner job.
 
 ## Context
 
@@ -235,6 +237,21 @@ run surfaced seven more independent failures:
 - `go test -race -shuffle=on ./pkg/runner/step/... -count=3` — full package passes.
 - Did not reproduce the runner-swap's actual speedup locally (no access to RunsOn from this
   sandbox); the next real CI run is the validation for that change specifically.
+
+Round 5: the runner swap itself failed immediately, before any tests ran. The "Install Linux
+build dependencies" step's `sed -i .../ubuntu.sources` errored with `sed: can't read
+/etc/apt/sources.list.d/ubuntu.sources: No such file or directory` (job exit code 2) — the RunsOn
+"terraform" runner's AMI is Ubuntu 22.04 (`runs-on-v2.2-ubuntu22-full-x64-...`), which doesn't
+have the DEB822 `.sources` file at all (that's a GitHub-hosted-runner-image thing, Ubuntu 24.04+);
+this `sed` line was copied from the `floci-go` job, which runs on `ubuntu-latest`. Separately,
+the same log's runner-details table showed the "terraform" family is an `i4i.large`: 2 cores,
+15.7GB RAM -- *fewer* cores than `ubuntu-latest`, a downgrade for this CPU/memory-bound workload,
+not the upgrade intended. Checked the `release` job's `goreleaser` step (also RunsOn) for
+comparison: its "large" family is an `r7a.xlarge`, 4 cores, 31GB RAM.
+
+- `.github/workflows/test.yml`: switched `race`'s `runs-on` from `runner=terraform` to
+  `runner=large`; guarded the `ubuntu.sources` `sed` behind a `[ -f ... ]` check so the step
+  works on either runner image instead of erroring outright when the file doesn't exist.
 
 ## Follow-ups
 

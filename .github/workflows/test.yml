@@ -612,12 +612,16 @@ jobs:
     name: "[race] full test suite"
     # `go test`'s package-level concurrency scales with available cores, and
     # this job compiles+runs ~400 race-instrumented packages -- the standard
-    # ubuntu-latest runner's 4 cores were the bottleneck (this job became the
-    # slowest check once every other job's own timeout issues were fixed).
-    # Reuse the same RunsOn "terraform" runner family the build job's linux
-    # leg already uses for CPU-heavy Go work in this file, rather than
-    # inventing a new profile.
-    runs-on: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false"
+    # ubuntu-latest runner's ~4 cores were the bottleneck (this job became
+    # the slowest check once every other job's own timeout issues were
+    # fixed). The RunsOn "terraform" family used elsewhere in this file for
+    # Go work (the build job's linux leg) turned out to be an i4i.large: 2
+    # cores, 15.7GB RAM -- fewer cores than ubuntu-latest, a downgrade for
+    # this CPU/memory-bound workload. "large" (used by the release job's
+    # goreleaser step) is an r7a.xlarge: 4 cores, 31GB RAM -- double the
+    # cores and RAM of "terraform", a real upgrade over ubuntu-latest given
+    # -race's extra memory overhead per test binary.
+    runs-on: "runs-on=${{github.run_id}}/runner=large/tag=atmos/extras=s3-cache/private=false"
     # Race-instrumented binaries run several times slower and use substantially
     # more memory than normal test binaries; this runs the entire `./...` suite
     # unsharded (unlike the `test` job's acceptance+unit sweep), so budget
@@ -647,7 +651,16 @@ jobs:
 
       - name: Install Linux build dependencies (libudev-dev for CGO_ENABLED=1 -- see comment above)
         run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          # The DEB822 /etc/apt/sources.list.d/ubuntu.sources file (and the
+          # Azure mirror it points at) is a GitHub-hosted-runner-image thing
+          # (Ubuntu 24.04+); this job now runs on the RunsOn "terraform"
+          # runner (Ubuntu 22.04, no DEB822 sources file at all -- see
+          # docs/fixes for the incident where this sed failed outright with
+          # "No such file or directory"). Only rewrite the mirror if that
+          # file actually exists, so this step works on either runner image.
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
