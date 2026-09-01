@@ -33,7 +33,18 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            sts.us-east-2.amazonaws.com:443
+            github.com:443
+            api.github.com:443
+            nodejs.org:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            proxy.golang.org:443
+            storage.googleapis.com:443
+            us.i.posthog.com:443
+            cplive-plat-ue2-prod-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
 
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials

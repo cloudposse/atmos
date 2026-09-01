@@ -25,7 +25,18 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            us.i.posthog.com:443
+            dl.cloudsmith.io:443
+            dl.google.com:443
+            packages.microsoft.com:443
+            azure.archive.ubuntu.com:80
+            esm.ubuntu.com:443
+            motd.ubuntu.com:443
 
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0

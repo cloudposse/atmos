@@ -43,6 +43,9 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
+          # No StepSecurity telemetry found across 3 sampled release runs despite
+          # this job succeeding on GitHub — a data gap (rare release-only trigger),
+          # not zero egress. Stays audit until a real run can be sampled.
           egress-policy: audit
 
       # mislav/bump-homebrew-formula-action is broken: GitHub now returns HTTP 303
@@ -71,6 +74,9 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
+          # No StepSecurity telemetry found across sampled release runs despite
+          # this job succeeding on GitHub — a data gap (rare release-only trigger),
+          # not zero egress. Stays audit until a real run can be sampled.
           egress-policy: audit
 
       - name: "Checkout source code at current commit"
@@ -170,6 +176,9 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
+          # No StepSecurity telemetry found across sampled release runs despite
+          # this job succeeding on GitHub — a data gap (rare release-only trigger),
+          # not zero egress. Stays audit until a real run can be sampled.
           egress-policy: audit
 
       - name: "Checkout source at release tag"
