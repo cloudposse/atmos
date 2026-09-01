@@ -1,0 +1,55 @@
+---
+slug: toolchain-lockfile-default
+title: "Toolchain Installs Are Reproducible by Default Now"
+authors: [osterman]
+tags: [experimental, enhancement]
+---
+
+Atmos's toolchain has had a lockfile for a while. The lockfile records the exact resolved artifact
+and checksum for each platform. A package manager's lockfile pins a dependency tree the same way.
+But the lockfile was opt-in. The setting was not documented anywhere a user could find it. Almost
+nobody turned it on. Almost nobody's installs were actually reproducible. The installs only looked
+reproducible, because the version string matched.
+
+<!--truncate-->
+
+## The Problem
+
+A version in `.tool-versions` pins what you asked for. It does not pin what Atmos actually
+installed. Every `atmos toolchain install` command resolves that version against the live registry
+again. The exact download URL, checksum, and platform artifact are not fixed anywhere. Only the
+version number is fixed.
+
+## The Fix
+
+Toolchain installs now write a lockfile by default. You do not need to configure anything. Run
+`atmos toolchain install`. Atmos records the exact resolved version, download URL, checksum, and
+size for your platform. The next install resolves against that lockfile instead of asking the
+registry again. This applies on a teammate's machine and in CI. Everyone on the same operating
+system and architecture gets the same artifact, byte for byte.
+
+If a project's `atmos.yaml` pins an edition dated before this change, the project keeps the old
+opt-in behavior. Nothing changes for a project that relied on the previous default. New and
+unpinned projects get the lockfile from the start.
+
+## How to Use It
+
+You do not need to opt in. Install as usual:
+
+```shell
+$ atmos toolchain install
+```
+
+Commit the resulting `toolchain.lock.yaml` file next to `.tool-versions`. After that, every install
+resolves the exact pinned artifact. This applies on your machine, a teammate's machine, and a CI
+runner. Atmos does not resolve the version against the registry again.
+
+The `atmos toolchain` command is still experimental. Its interface may change. The reproducibility
+does not depend on that.
+
+## Get Involved
+
+If you already use the toolchain, check for `toolchain.lock.yaml` next to your `.tool-versions`
+file after you run `atmos toolchain install`. Commit the lockfile. If your installs still do not
+reproduce the same way across machines, [open an
+issue](https://github.com/cloudposse/atmos/issues). That is exactly the gap this fix closes.
