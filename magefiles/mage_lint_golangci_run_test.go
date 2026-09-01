@@ -136,6 +136,66 @@ func TestUniqueSortedPackageDirs(t *testing.T) {
 	}
 }
 
+func TestIsForeignModulePackage(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "tools", "noticegen"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "tools", "noticegen", "go.mod"),
+		[]byte("module github.com/cloudposse/atmos/tools/noticegen\n\ngo 1.26\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "magefiles"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg", "foo"), 0o755))
+
+	cases := []struct {
+		name string
+		pkg  string
+		want bool
+	}{
+		{"root package", ".", false},
+		{"same-module nested package", "./magefiles", false},
+		{"deep same-module package", "./pkg/foo", false},
+		{"package inside a nested module", "./tools/noticegen", true},
+		{"package deeper inside a nested module", "./tools/noticegen/sub", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, isForeignModulePackage(root, tc.pkg))
+		})
+	}
+}
+
+func TestFilterForeignModulePackages(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "tools", "noticegen"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "tools", "noticegen", "go.mod"),
+		[]byte("module github.com/cloudposse/atmos/tools/noticegen\n\ngo 1.26\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "magefiles"), 0o755))
+
+	got := filterForeignModulePackages(root, []string{".", "./magefiles", "./tools/noticegen"})
+
+	assert.Equal(t, []string{".", "./magefiles"}, got)
+}
+
+// TestBuildStagedPatchAndPackagesExcludesForeignModule covers the
+// end-to-end case that motivated filterForeignModulePackages: staging a
+// change in a nested-module package (tools/noticegen, which has its own
+// go.mod, mirroring the real repository layout) alongside a root-module
+// change must exclude the nested package from the args golangci-lint gets,
+// since the root module's custom-gcl binary can't typecheck it.
+func TestBuildStagedPatchAndPackagesExcludesForeignModule(t *testing.T) {
+	root := initGitRepoFixture(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "main.go"), []byte("package main"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "tools", "noticegen"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "tools", "noticegen", "go.mod"),
+		[]byte("module github.com/cloudposse/atmos/tools/noticegen\n\ngo 1.26\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "tools", "noticegen", "main.go"), []byte("package main"), 0o644))
+	runGit(t, root, "add", "main.go", "tools/noticegen/main.go")
+
+	patch, cleanup, err := buildStagedPatchAndPackages(root, t.TempDir())
+	require.NoError(t, err)
+	defer cleanup()
+
+	assert.Equal(t, []string{"."}, patch.packages, "tools/noticegen must be excluded, main.go's package kept")
+}
+
 func TestBuildStagedPatchAndPackages(t *testing.T) {
 	t.Run("single staged file", func(t *testing.T) {
 		root := initGitRepoFixture(t)

@@ -220,7 +220,7 @@ func buildStagedPatchAndPackages(root, tmpDir string) (stagedPatch, func(), erro
 		return stagedPatch{}, nil, fmt.Errorf("mage: git diff --cached --name-only: %w", outErr)
 	}
 
-	packages := uniqueSortedPackageDirs(strings.Split(strings.TrimSpace(string(out)), "\n"))
+	packages := filterForeignModulePackages(root, uniqueSortedPackageDirs(strings.Split(strings.TrimSpace(string(out)), "\n")))
 	return stagedPatch{path: patchFile.Name(), packages: packages}, cleanup, nil
 }
 
@@ -246,4 +246,44 @@ func uniqueSortedPackageDirs(files []string) []string {
 	}
 	sort.Strings(pkgs)
 	return pkgs
+}
+
+// filterForeignModulePackages drops packages that belong to a separate Go
+// module nested inside this worktree (tools/noticegen, tools/gomodcheck,
+// tools/lintroller, ...). Passing one of those as a package arg to the root
+// module's custom-gcl binary fails outright, rather than just being
+// skipped, because that binary can't typecheck a foreign module at all.
+// Those nested modules are linted, if at all, on their own terms, not by
+// this repo's root-scoped pass.
+func filterForeignModulePackages(root string, packages []string) []string {
+	filtered := packages[:0]
+	for _, pkg := range packages {
+		if !isForeignModulePackage(root, pkg) {
+			filtered = append(filtered, pkg)
+		}
+	}
+	return filtered
+}
+
+// isForeignModulePackage reports whether pkg (a "./dir" or "." package
+// pattern relative to root, as produced by uniqueSortedPackageDirs) sits
+// inside a directory tree with its own go.mod between it and root.
+func isForeignModulePackage(root, pkg string) bool {
+	relDir := strings.TrimPrefix(pkg, "./")
+	if relDir == "." || relDir == "" {
+		return false
+	}
+
+	dir := filepath.Join(root, relDir)
+	for dir != root {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false
+		}
+		dir = parent
+	}
+	return false
 }

@@ -41,7 +41,7 @@ If `gh api` calls below still 404/403 even with `-X GET` present, that's a genui
    - **GitHub Action pins**: bump to the patched SHA/tag referenced by the alert.
    - **npm/pnpm alerts** (in `website/`): bump via `pnpm.overrides` in `website/package.json`, then regenerate `NOTICE`:
      ```bash
-     ./scripts/generate-notice.sh
+     go tool mage notice:generate
      ```
 
 4. **Apply fixes in the working tree**, then verify before committing anything:
