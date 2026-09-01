@@ -1,21 +1,28 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Layout from '@theme/Layout';
 import useGlobalData from '@docusaurus/useGlobalData';
+import { RiShieldCheckLine } from 'react-icons/ri';
 import ScorecardTable from '@site/src/components/SecurityPosture/ScorecardTable';
 import BestPracticesBadge from '@site/src/components/SecurityPosture/BestPracticesBadge';
+import ScoreGauge from '@site/src/components/SecurityPosture/ScoreGauge';
 import styles from './security.module.css';
 
 const SCORECARD_VIEWER_URL = 'https://scorecard.dev/viewer/?uri=github.com/cloudposse/atmos';
 const BEST_PRACTICES_PROJECT_ID = 14393;
 const BEST_PRACTICES_URL = `https://www.bestpractices.dev/projects/${BEST_PRACTICES_PROJECT_ID}`;
+const SECURITY_POLICY_URL = 'https://github.com/cloudposse/atmos/security/policy';
+const SECURITY_ADVISORIES_URL = 'https://github.com/cloudposse/atmos/security/advisories';
 
 interface ScorecardData {
   date: string;
   score: number;
+  repo?: { name?: string; commit?: string };
+  scorecard?: { version?: string };
   checks: Array<{
     name: string;
     score: number;
     reason: string;
+    details?: string[] | null;
     documentation?: { url?: string; short?: string };
   }>;
 }
@@ -32,6 +39,41 @@ interface SecurityPostureData {
   fetchedAt: string;
 }
 
+function formatDate(iso: string, timeZone?: string): string {
+  const date = new Date(iso);
+  const zoneOpt = timeZone ? { timeZone } : {};
+  // dateStyle/timeStyle can't be combined with timeZoneName (throws), so format the
+  // zone abbreviation separately and append it.
+  const formatted = new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+    ...zoneOpt,
+  }).format(date);
+  const zoneName = new Intl.DateTimeFormat('en-US', {
+    timeZoneName: 'short',
+    ...zoneOpt,
+  })
+    .formatToParts(date)
+    .find((part) => part.type === 'timeZoneName')?.value;
+
+  return zoneName ? `${formatted} ${zoneName}` : formatted;
+}
+
+// Server-rendered HTML always uses UTC (the build machine's zone shouldn't leak into
+// static output); after hydration we re-render in the visitor's local zone. Doing the
+// swap in an effect (post-hydration) avoids a React hydration mismatch.
+function useLocalDate(iso: string | null): string | null {
+  const [formatted, setFormatted] = useState<string | null>(() =>
+    iso ? formatDate(iso, 'UTC') : null,
+  );
+
+  useEffect(() => {
+    if (iso) setFormatted(formatDate(iso));
+  }, [iso]);
+
+  return formatted;
+}
+
 export default function SecurityPage() {
   const globalData = useGlobalData();
   const data: SecurityPostureData | undefined =
@@ -39,13 +81,9 @@ export default function SecurityPage() {
 
   const scorecard = data?.scorecard ?? null;
   const bestPractices = data?.bestPractices ?? null;
-  const fetchedAt = data?.fetchedAt
-    ? new Date(data.fetchedAt).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      })
-    : null;
+  const fetchedAt = useLocalDate(data?.fetchedAt ?? null);
+  const scanDate = useLocalDate(scorecard?.date ?? null);
+  const shortCommit = scorecard?.repo?.commit ? scorecard.repo.commit.slice(0, 7) : null;
 
   return (
     <Layout
@@ -55,88 +93,113 @@ export default function SecurityPage() {
       <main className={styles.security}>
         <section className={styles.hero}>
           <p className={styles.eyebrow}>Security</p>
-          <h1>Security &amp; trust</h1>
+          <h1>Security &amp; Trust</h1>
           <p className={styles.lede}>
-            We publish our OpenSSF security posture with live data and direct
-            links to the source, so teams evaluating Atmos can verify it
-            themselves instead of trusting a static badge.
+            We publish our OpenSSF security posture from a build-time snapshot
+            and direct links to the source, so teams evaluating Atmos can
+            verify it themselves instead of trusting a static badge.
           </p>
         </section>
 
-        <section className={styles.verifyPanel} aria-labelledby="verify-yourself">
-          <h2 id="verify-yourself">Verify this yourself</h2>
+        <section className={styles.aboutSection} aria-labelledby="about-openssf">
+          <h2 id="about-openssf">What is OpenSSF?</h2>
           <p>
-            The scores below are pulled directly from the same APIs that power
-            these public tools. Don&apos;t take our word for it — check the
-            source.
-          </p>
-          <div className={styles.verifyLinks}>
-            <a
-              className="button button--primary"
-              href={SCORECARD_VIEWER_URL}
-              target="_blank"
-              rel="noreferrer"
-            >
-              OpenSSF Scorecard viewer
-            </a>
-            <a
-              className="button button--secondary"
-              href={BEST_PRACTICES_URL}
-              target="_blank"
-              rel="noreferrer"
-            >
+            The{' '}
+            <a href="https://openssf.org" target="_blank" rel="noreferrer">
+              Open Source Security Foundation
+            </a>{' '}
+            (OpenSSF) is a Linux Foundation project that runs two independent,
+            automated assessments of open source projects: Scorecard, which
+            checks a repository against ~18 supply-chain security practices,
+            and the Best Practices badge, which verifies a project against a
+            broader set of security and quality criteria. Both re-scan and
+            re-verify Atmos on an ongoing basis — these aren&apos;t one-time
+            certifications, they&apos;re a continuously updated assessment.
+            Verify it yourself at the{' '}
+            <a href={SCORECARD_VIEWER_URL} target="_blank" rel="noreferrer">
+              Scorecard viewer
+            </a>{' '}
+            or the{' '}
+            <a href={BEST_PRACTICES_URL} target="_blank" rel="noreferrer">
               Best Practices project page
             </a>
-          </div>
+            .
+          </p>
         </section>
 
-        <section className={styles.summaryGrid}>
+        <section className={styles.reportCard} aria-labelledby="scorecard-heading">
+          <h2 id="scorecard-heading" className={styles.reportHeading}>
+            <RiShieldCheckLine className={styles.reportIcon} />
+            OpenSSF Scorecard Report
+          </h2>
+
           <BestPracticesBadge bestPractices={bestPractices} projectId={BEST_PRACTICES_PROJECT_ID} />
 
-          <div className={styles.panel}>
-            <h2>OpenSSF Scorecard</h2>
-            {scorecard ? (
-              <>
-                <div className={styles.scoreRow}>
-                  <span className={styles.scoreValue}>{scorecard.score.toFixed(1)}</span>
-                  <span className={styles.scoreOutOf}>/ 10</span>
-                </div>
-                <p>
-                  Across {scorecard.checks.length} automated checks. Verify at{' '}
-                  <a href={SCORECARD_VIEWER_URL} target="_blank" rel="noreferrer">
-                    scorecard.dev
-                  </a>
-                  .
-                </p>
-              </>
-            ) : (
-              <p>
-                Data temporarily unavailable — verify directly at{' '}
-                <a href={SCORECARD_VIEWER_URL} target="_blank" rel="noreferrer">
-                  scorecard.dev
-                </a>
-                .
-              </p>
-            )}
-          </div>
+          {scorecard ? (
+            <>
+              <div className={styles.summaryRow}>
+                <ScoreGauge score={scorecard.score} />
+                <dl className={styles.meta}>
+                  <div>
+                    <dt>Repository</dt>
+                    <dd>{scorecard.repo?.name ?? 'github.com/cloudposse/atmos'}</dd>
+                  </div>
+                  {shortCommit && (
+                    <div>
+                      <dt>Commit</dt>
+                      <dd>{shortCommit}</dd>
+                    </div>
+                  )}
+                  {scorecard.scorecard?.version && (
+                    <div>
+                      <dt>Scorecard version</dt>
+                      <dd>{scorecard.scorecard.version}</dd>
+                    </div>
+                  )}
+                  {scanDate && (
+                    <div>
+                      <dt>Scan generated</dt>
+                      <dd>{scanDate}</dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+
+              <ScorecardTable checks={scorecard.checks} />
+            </>
+          ) : (
+            <p>
+              Data temporarily unavailable — verify directly at{' '}
+              <a href={SCORECARD_VIEWER_URL} target="_blank" rel="noreferrer">
+                scorecard.dev
+              </a>
+              .
+            </p>
+          )}
+
+          {fetchedAt && (
+            <p className={styles.fetchedAt}>Data fetched at build time: {fetchedAt}.</p>
+          )}
         </section>
 
-        {fetchedAt && <p className={styles.fetchedAt}>Data fetched as of {fetchedAt}.</p>}
-
-        {scorecard && (
-          <section className={styles.checksSection} aria-labelledby="scorecard-checks">
-            <h2 id="scorecard-checks">Scorecard checks</h2>
-            <ScorecardTable checks={scorecard.checks} />
-          </section>
-        )}
-
-        <section className={styles.hardeningNote} aria-labelledby="hardening">
+        <section className={styles.aboutSection} aria-labelledby="hardening">
           <h2 id="hardening">Actively hardening</h2>
           <p>
             Security posture is an ongoing effort, not a one-time score. We
             track open gaps against these checks and work through them as part
             of our normal development process, the same way we track any other
             open issue.
+          </p>
+          <p>
+            Found a vulnerability? See our{' '}
+            <a href={SECURITY_POLICY_URL} target="_blank" rel="noreferrer">
+              security policy
+            </a>{' '}
+            for how to report it. Disclosed issues are published as{' '}
+            <a href={SECURITY_ADVISORIES_URL} target="_blank" rel="noreferrer">
+              security advisories
+            </a>
+            .
           </p>
         </section>
       </main>

@@ -1,0 +1,59 @@
+---
+slug: security-trust-page
+title: "Verify Our Security Posture Yourself"
+authors: [osterman]
+tags: [security]
+date: 2026-09-01T12:00:00.000Z
+draft: true
+---
+
+A security badge in a README is a claim. The badge is a static image. It does not show
+when a scan last ran. It does not show what the scan checked. A reader must trust the
+badge without proof.
+
+Atmos now publishes live links to two independent, third-party checks instead: the
+OpenSSF Scorecard and the OpenSSF Best Practices badge. Any reader can open the same
+public data we use and confirm it.
+
+<!--truncate-->
+
+## The Problem
+
+Most open source projects show a security badge. The badge is a static image. It does
+not update on its own. It does not show a date. It does not link to raw data behind the
+claim. A reader cannot confirm the claim without extra work, so most readers do not
+bother. They either trust the badge or ignore it.
+
+## The Fix
+
+Atmos now has a [Security & Trust page](/security). The page shows our current OpenSSF
+Scorecard result. The page shows our current OpenSSF Best Practices badge status. Every
+number on the page links back to the public API behind it, so a reader can confirm the
+claim in one click. OpenSSF re-scans the Atmos repository on its own schedule. Each site
+build pulls the latest result, so the page reflects an ongoing assessment, not a
+one-time snapshot pinned to a badge image.
+
+Security posture is not a fixed state. We track open gaps against these checks the same
+way we track any other open issue, and we work through them as part of normal
+development. The page states this directly, and lists every open gap next to every
+passing check — nothing is hidden.
+
+## How to Use It
+
+Visit [atmos.tools/security](/security) to view the current report. The report lists
+every Scorecard check with its score and its reason. Each check name links to the
+official OpenSSF documentation for that check. A check with extra detail shows an arrow;
+select the row to expand it. The report also links to the OpenSSF Scorecard viewer and
+the Best Practices project page, so you can cross-check our page against the source
+directly.
+
+Found a security issue in Atmos? Report it through our
+[security policy](https://github.com/cloudposse/atmos/security/policy). Past disclosures
+are public in our
+[security advisories](https://github.com/cloudposse/atmos/security/advisories).
+
+## Get Involved
+
+Atmos is open source and we would love your feedback. Join the conversation in the
+[Cloud Posse community](https://cloudposse.com/slack) or open an issue on
+[GitHub](https://github.com/cloudposse/atmos).

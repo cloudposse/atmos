@@ -1,10 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { RiArrowRightSLine } from 'react-icons/ri';
+import { scoreTier } from './scoreTier';
+import { CHECK_RISK_LEVEL } from './checkRiskLevel';
 import styles from './ScorecardTable.module.css';
 
 interface ScorecardCheck {
   name: string;
   score: number;
   reason: string;
+  details?: string[] | null;
   documentation?: {
     url?: string;
     short?: string;
@@ -15,49 +19,77 @@ interface ScorecardTableProps {
   checks: ScorecardCheck[];
 }
 
-function scoreTier(score: number): 'good' | 'warn' | 'bad' {
-  if (score >= 8) {
-    return 'good';
-  }
-  if (score >= 4) {
-    return 'warn';
-  }
-  return 'bad';
-}
-
 export default function ScorecardTable({ checks }: ScorecardTableProps) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  function toggle(name: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  }
+
   return (
-    <div className={styles.tableWrapper}>
-      <table className={styles.table}>
-        <thead>
-          <tr>
-            <th>Check</th>
-            <th>Score</th>
-            <th>Reason</th>
-          </tr>
-        </thead>
-        <tbody>
-          {checks.map((check) => (
-            <tr key={check.name}>
-              <td>
+    <div className={styles.list}>
+      {checks.map((check) => {
+        const tier = scoreTier(check.score);
+        const risk = CHECK_RISK_LEVEL[check.name];
+        const hasDetails = Array.isArray(check.details) && check.details.length > 0;
+        const isOpen = expanded.has(check.name);
+
+        return (
+          <div
+            key={check.name}
+            className={`${styles.row} ${hasDetails ? styles.expandableRow : ''}`}
+            onClick={hasDetails ? () => toggle(check.name) : undefined}
+          >
+            <div className={styles.scoreCol}>
+              <span className={styles.scoreNumber}>{check.score < 0 ? 'N/A' : check.score}</span>
+              <span className={`${styles.scoreUnderline} ${styles[tier]}`} />
+            </div>
+            <div className={styles.content}>
+              <div className={styles.nameLine}>
                 {check.documentation?.url ? (
-                  <a href={check.documentation.url} target="_blank" rel="noreferrer">
+                  <a
+                    className={styles.checkName}
+                    href={check.documentation.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => event.stopPropagation()}
+                  >
                     {check.name}
                   </a>
                 ) : (
-                  check.name
+                  <span className={styles.checkName}>{check.name}</span>
                 )}
-              </td>
-              <td>
-                <span className={`${styles.scorePill} ${styles[scoreTier(check.score)]}`}>
-                  {check.score}/10
-                </span>
-              </td>
-              <td className={styles.reason}>{check.reason}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                {risk && (
+                  <span className={`${styles.riskBadge} ${styles[risk.toLowerCase()]}`}>
+                    {risk}
+                  </span>
+                )}
+              </div>
+              <p className={styles.reason}>{check.reason}</p>
+              {hasDetails && isOpen && (
+                <ul className={styles.detailsList}>
+                  {check.details!.map((detail, index) => (
+                    <li key={index}>{detail}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {hasDetails && (
+              <RiArrowRightSLine
+                className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ''}`}
+              />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

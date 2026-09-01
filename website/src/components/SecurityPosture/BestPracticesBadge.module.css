@@ -1,44 +1,17 @@
-.panel {
-  padding: 1.25rem 1.5rem;
-  border: 1px solid var(--ifm-color-emphasis-200);
-  border-radius: 8px;
-  background: var(--ifm-card-background-color);
-}
-
-.panel h2 {
-  margin-top: 0;
-  font-size: 1.05rem;
-}
-
-.panel p {
-  margin-bottom: 0;
-  color: var(--ifm-color-emphasis-700);
-}
-
-.badgeRow {
+.row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
+  gap: 0.5rem;
+  margin: 0 0 1.25rem;
+  color: var(--ifm-color-emphasis-700);
 }
 
 .badgeLevel {
-  display: inline-block;
-  padding: 0.25rem 0.75rem;
-  border-radius: 999px;
-  font-weight: 700;
-  font-size: 0.85rem;
-  text-transform: capitalize;
-  background: color-mix(in srgb, var(--ifm-color-success) 18%, transparent);
-  color: var(--ifm-color-success-darkest);
+  composes: badge from './Badge.module.css';
+  --badge-color: var(--ifm-color-success-darkest);
 }
 
 .badgeLevel.in_progress {
-  background: color-mix(in srgb, var(--ifm-color-warning) 22%, transparent);
-  color: var(--ifm-color-warning-darkest);
-}
-
-.updatedAt {
-  color: var(--ifm-color-emphasis-700);
-  font-size: 0.85rem;
+  --badge-color: var(--ifm-color-warning-darkest);
 }

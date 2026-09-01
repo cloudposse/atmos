@@ -31,6 +31,13 @@ async function fetchBestPractices() {
   return fetchJson(BEST_PRACTICES_URL, 'OpenSSF Best Practices badge');
 }
 
+// A 2xx response with an unexpected shape (e.g. `{"error":"unavailable"}`) must not be
+// treated as valid Scorecard data -- security.tsx calls score.toFixed()/checks.length
+// on it unconditionally once it's non-null.
+function isValidScorecard(data) {
+  return !!data && typeof data.score === 'number' && Array.isArray(data.checks);
+}
+
 module.exports = function(context, options) {
   return {
     name: 'fetch-security-posture',
@@ -41,7 +48,7 @@ module.exports = function(context, options) {
       ]);
 
       return {
-        scorecard,
+        scorecard: isValidScorecard(scorecard) ? scorecard : null,
         bestPractices,
         fetchedAt: new Date().toISOString(),
       };

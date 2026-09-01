@@ -1,59 +1,135 @@
-.tableWrapper {
-  overflow-x: auto;
-  border: 1px solid var(--ifm-color-emphasis-200);
-  border-radius: 8px;
+.list {
+  display: flex;
+  flex-direction: column;
 }
 
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.92rem;
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.9rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--ifm-color-emphasis-300) 40%, transparent);
 }
 
-.table th,
-.table td {
-  padding: 0.7rem 1rem;
-  text-align: left;
-  border-bottom: 1px solid var(--ifm-color-emphasis-200);
-  vertical-align: top;
-}
-
-.table thead th {
-  background: var(--ifm-color-emphasis-100);
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--ifm-color-emphasis-700);
-}
-
-.table tbody tr:last-child td {
+.list > .row:last-child {
   border-bottom: none;
 }
 
-.reason {
-  color: var(--ifm-color-emphasis-700);
+.expandableRow {
+  cursor: pointer;
 }
 
-.scorePill {
-  display: inline-block;
-  padding: 0.15rem 0.55rem;
-  border-radius: 999px;
+.expandableRow:hover {
+  background: var(--ifm-color-emphasis-100);
+}
+
+.scoreCol {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex-shrink: 0;
+  width: 2.5rem;
+}
+
+.scoreNumber {
   font-weight: 600;
+}
+
+.scoreUnderline {
+  display: block;
+  width: 1.5rem;
+  height: 0;
+  margin-top: 0.3rem;
+  border-bottom: 3px solid transparent;
+}
+
+.scoreUnderline.good {
+  border-color: var(--ifm-color-success);
+}
+
+.scoreUnderline.warn {
+  border-color: var(--ifm-color-warning);
+}
+
+.scoreUnderline.bad {
+  border-color: var(--ifm-color-danger);
+}
+
+.scoreUnderline.neutral {
+  border-color: var(--ifm-color-emphasis-400);
+}
+
+.content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.nameLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.checkName {
+  color: inherit;
+}
+
+a.checkName {
+  color: var(--ifm-link-color);
+}
+
+.riskBadge {
+  composes: badge from './Badge.module.css';
+}
+
+.riskBadge.critical {
+  --badge-color: var(--ifm-color-danger-darkest);
+}
+
+.riskBadge.high {
+  --badge-color: var(--ifm-color-danger-dark);
+}
+
+.riskBadge.medium {
+  --badge-color: var(--ifm-color-warning-darkest);
+}
+
+.riskBadge.low {
+  --badge-color: var(--ifm-color-emphasis-700);
+}
+
+.reason {
+  margin: 0.2rem 0 0;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.88rem;
+}
+
+.chevron {
+  flex-shrink: 0;
+  align-self: center;
+  color: var(--ifm-color-emphasis-500);
+  font-size: 1.1rem;
+  transition: transform 0.15s ease;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.detailsList {
+  margin: 0.6rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--ifm-color-emphasis-600);
   font-size: 0.82rem;
-  white-space: nowrap;
+  font-family: var(--ifm-font-family-monospace);
 }
 
-.scorePill.good {
-  background: color-mix(in srgb, var(--ifm-color-success) 18%, transparent);
-  color: var(--ifm-color-success-darkest);
+.detailsList li {
+  margin-bottom: 0.3rem;
 }
 
-.scorePill.warn {
-  background: color-mix(in srgb, var(--ifm-color-warning) 22%, transparent);
-  color: var(--ifm-color-warning-darkest);
-}
-
-.scorePill.bad {
-  background: color-mix(in srgb, var(--ifm-color-danger) 18%, transparent);
-  color: var(--ifm-color-danger-darkest);
+.detailsList li:last-child {
+  margin-bottom: 0;
 }

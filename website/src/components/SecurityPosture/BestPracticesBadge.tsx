@@ -7,7 +7,16 @@ interface BestPractices {
   badge_level: string;
   achieve_passing_status?: string;
   updated_at?: string;
+  achieved_passing_at?: string;
+  achieved_silver_at?: string;
+  achieved_gold_at?: string;
 }
+
+const ACHIEVED_AT_FIELD: Partial<Record<string, keyof BestPractices>> = {
+  passing: 'achieved_passing_at',
+  silver: 'achieved_silver_at',
+  gold: 'achieved_gold_at',
+};
 
 interface BestPracticesBadgeProps {
   bestPractices: BestPractices | null;
@@ -19,21 +28,20 @@ export default function BestPracticesBadge({ bestPractices, projectId }: BestPra
 
   if (!bestPractices) {
     return (
-      <div className={styles.panel}>
-        <h2>OpenSSF Best Practices badge</h2>
-        <p>
-          Data temporarily unavailable — verify directly at{' '}
-          <a href={projectUrl} target="_blank" rel="noreferrer">
-            bestpractices.dev/projects/{projectId}
-          </a>
-          .
-        </p>
-      </div>
+      <p className={styles.row}>
+        Best Practices badge data temporarily unavailable — verify directly at{' '}
+        <a href={projectUrl} target="_blank" rel="noreferrer">
+          bestpractices.dev/projects/{projectId}
+        </a>
+        .
+      </p>
     );
   }
 
-  const updatedAt = bestPractices.updated_at
-    ? new Date(bestPractices.updated_at).toLocaleDateString('en-US', {
+  const achievedAtField = ACHIEVED_AT_FIELD[bestPractices.badge_level];
+  const achievedAtRaw = achievedAtField ? bestPractices[achievedAtField] : undefined;
+  const achievedAt = achievedAtRaw
+    ? new Date(achievedAtRaw).toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
@@ -41,21 +49,17 @@ export default function BestPracticesBadge({ bestPractices, projectId }: BestPra
     : null;
 
   return (
-    <div className={styles.panel}>
-      <h2>OpenSSF Best Practices badge</h2>
-      <div className={styles.badgeRow}>
-        <span className={`${styles.badgeLevel} ${styles[bestPractices.badge_level] ?? ''}`}>
-          {bestPractices.badge_level}
-        </span>
-        {updatedAt && <span className={styles.updatedAt}>Achieved {updatedAt}</span>}
-      </div>
-      <p>
-        Verify directly at{' '}
+    <p className={styles.row}>
+      <span className={`${styles.badgeLevel} ${styles[bestPractices.badge_level] ?? ''}`}>
+        {bestPractices.badge_level}
+      </span>
+      <span>
+        Best Practices badge{achievedAt ? ` — achieved ${achievedAt}` : ''}. Verify at{' '}
         <a href={projectUrl} target="_blank" rel="noreferrer">
           bestpractices.dev/projects/{projectId}
         </a>
         .
-      </p>
-    </div>
+      </span>
+    </p>
   );
 }
