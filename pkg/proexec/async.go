@@ -86,6 +86,8 @@ func SetPendingAsyncData(data any) {
 // delivery paths are mutually exclusive per invocation (FR-007) — a command
 // must never produce two execution records for the same run.
 func CaptureAsync(cmd *cobra.Command, err error) {
+	defer perf.Track(currentAtmosConfig, "proexec.CaptureAsync")()
+
 	commandPath := ""
 	if cmd != nil {
 		commandPath = cmd.CommandPath()
@@ -97,7 +99,6 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 	}
 
 	atmosConfig := currentAtmosConfig
-	defer perf.Track(atmosConfig, "proexec.CaptureAsync")()
 
 	if !gateOpen(atmosConfig) {
 		return

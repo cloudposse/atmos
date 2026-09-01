@@ -104,7 +104,8 @@ func TestDiffRusage_CounterDeltas(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			baseline := rusageSnapshot{rusage: tt.baseline}
 
-			m := diffRusageValues(rusageSnapshot{rusage: tt.now}, &baseline)
+			now := rusageSnapshot{rusage: tt.now}
+			m := diffRusageValues(&now, &baseline)
 
 			assert.Equal(t, tt.want.MinorPageFaults, m.MinorPageFaults)
 			assert.Equal(t, tt.want.MajorPageFaults, m.MajorPageFaults)
@@ -130,7 +131,7 @@ func TestDiffRusage_CPUTimeDeltas(t *testing.T) {
 		},
 	}
 
-	m := diffRusageValues(now, &baseline)
+	m := diffRusageValues(&now, &baseline)
 
 	assert.Equal(t, time.Second, m.UserCPUTime)
 	assert.Equal(t, 400*time.Microsecond, m.SystemCPUTime)

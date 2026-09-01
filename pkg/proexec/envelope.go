@@ -113,7 +113,7 @@ func VersionedData(version int, key string, payload any) map[string]any {
 
 // sanitizeRepoURL strips userinfo (e.g. "user:token@") from a git remote URL
 // before it is copied into the upload record, so credentials embedded in the
-// remote URL never leave the machine. repoInfo.RepoUrl itself is left
+// remote URL never leave the machine. RepoInfo.RepoUrl itself is left
 // untouched by callers — only the value copied into the upload request is
 // sanitized. URLs that fail to parse (e.g. SCP-style git@host:owner/repo.git,
 // which carries no credentials) are returned unchanged.

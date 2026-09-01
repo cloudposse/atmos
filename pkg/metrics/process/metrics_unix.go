@@ -27,13 +27,14 @@ func captureRusage() rusageSnapshot {
 // Cumulative counters (rusage is process-lifetime-cumulative, not
 // incremental) are diffed against a fresh sample taken now.
 func diffRusage(baseline *rusageSnapshot) ProcessMetrics {
-	return diffRusageValues(captureRusage(), baseline)
+	now := captureRusage()
+	return diffRusageValues(&now, baseline)
 }
 
 // diffRusageValues computes the ProcessMetrics delta between two already
 // captured samples. Split out from diffRusage so the delta arithmetic can be
 // exercised with fixed inputs in tests.
-func diffRusageValues(now rusageSnapshot, baseline *rusageSnapshot) ProcessMetrics {
+func diffRusageValues(now, baseline *rusageSnapshot) ProcessMetrics {
 	// syscall.Rusage's integer fields are int32 on Linux but already int64 on
 	// Darwin, so these conversions are only redundant on the platform the
 	// linter happens to run on (nolint:unconvert — needed cross-platform).
