@@ -83,9 +83,20 @@ export default function ScorecardTable({ checks }: ScorecardTableProps) {
               )}
             </div>
             {hasDetails && (
-              <RiArrowRightSLine
-                className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ''}`}
-              />
+              <button
+                type="button"
+                className={styles.chevronButton}
+                aria-expanded={isOpen}
+                aria-label={`${isOpen ? 'Collapse' : 'Expand'} details for ${check.name}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggle(check.name);
+                }}
+              >
+                <RiArrowRightSLine
+                  className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ''}`}
+                />
+              </button>
             )}
           </div>
         );

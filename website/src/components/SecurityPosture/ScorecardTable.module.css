@@ -106,9 +106,26 @@ a.checkName {
   font-size: 0.88rem;
 }
 
-.chevron {
+.chevronButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   align-self: center;
+  padding: 0.25rem;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.chevronButton:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.chevron {
+  flex-shrink: 0;
   color: var(--ifm-color-emphasis-500);
   font-size: 1.1rem;
   transition: transform 0.15s ease;
