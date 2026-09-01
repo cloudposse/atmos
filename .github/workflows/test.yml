@@ -595,6 +595,58 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+  # `-race` requires CGO_ENABLED=1 (the detector's runtime is itself a cgo
+  # library), unlike every other Go build/test path in this repo (CGO_ENABLED=0).
+  # Enabling cgo pulls in the cgo half of github.com/bearsh/hid (transitive, via
+  # saml2aws's U2F support) on linux/amd64 -- see hid_libusb_udev_linux.go, which
+  # links against libudev -- so the compile fails without libudev-dev installed.
+  # This is the same trap the govulncheck job documents (codeql.yml), but that
+  # job works around it by forcing CGO_ENABLED=0; that's not an option here since
+  # it would silently disable the race detector itself. Install libudev-dev
+  # instead, reusing the floci-go job's apt-get invocation below (same trap, hit
+  # there because that job also leaves CGO_ENABLED at the runner default).
+  #
+  # GOFIPS140=latest (set inside the `race` command itself, .atmos.d/test.yaml)
+  # is unaffected by CGO_ENABLED: Go's FIPS 140-3 module is pure Go, no cgo.
+  race:
+    name: "[race] full test suite"
+    runs-on: ubuntu-latest
+    # Race-instrumented binaries run several times slower and use substantially
+    # more memory than normal test binaries; this runs the entire `./...` suite
+    # unsharded (unlike the `test` job's acceptance+unit sweep), so budget
+    # generously.
+    timeout-minutes: 45
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Set up Atmos bootstrap
+        uses: ./.github/actions/setup-atmos-bootstrap
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+
+      - name: Install Linux build dependencies (libudev-dev for CGO_ENABLED=1 -- see comment above)
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
+
+      - name: Run atmos test race
+        run: atmos test race
+
   # Sharding the `test` job fans it out into TEST_SHARD_COUNT x 3 per-leg checks.
   # Keep the three historical required-check names as compatibility aliases so
   # branch protection does not need to change. `needs.test.result` aggregates
