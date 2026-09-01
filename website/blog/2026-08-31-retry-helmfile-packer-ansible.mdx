@@ -6,13 +6,13 @@ authors: [osterman]
 tags: [enhancement]
 ---
 
-CI environments are flaky. This is especially true for systems with many interconnected parts. A network blip, a rate limit, or a dropped connection can fail a step for no real reason. Retrying that step often fixes it. Atmos has supported this pattern for Terraform for a while, and it has proven effective at making pipelines more robust. Now that same support extends to Helmfile, Packer, and Ansible.
+Terraform components already recover from a transient error automatically — a 502, a dropped registry connection, an S3 backend timeout. Helmfile, Packer, and Ansible components in that same pipeline did not. The exact same class of failure that Terraform shrugged off would still fail your Helmfile sync or Ansible playbook outright, because a `retry:` block on either was silently inert. Now all four component types share the same retry engine.
 
 <!--truncate-->
 
 ## The Problem
 
-Component retry already recovered Terraform from transient errors. Examples include a 502 during `terraform init`, a dropped registry connection, or an S3 backend timeout. The same class of error can just as easily hit `helmfile sync` pulling a chart, `packer build` downloading a plugin, or `ansible-playbook` reaching a remote inventory. None of those got the same protection. A `retry:` block on a Helmfile or Packer component was silently inert.
+The same class of error can just as easily hit `helmfile sync` pulling a chart, `packer build` downloading a plugin, or `ansible-playbook` reaching a remote inventory. None of those got the same protection until now.
 
 That gap got harder to miss once stacks could set retry once for the whole stack. A stack-root `retry:` block reads as "every component here recovers from this." But that was only true for the Terraform components.
 

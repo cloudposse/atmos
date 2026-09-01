@@ -6,13 +6,13 @@ authors: [osterman]
 tags: [enhancement]
 ---
 
-CI environments are notoriously flaky, especially in distributed systems that depend on a lot of integrations and services. Most of those blips are easily solved with a retry. Atmos has supported this for Terraform for a while now, and it's worked well. The catch was that you had to set the retry policy on every component that needed it. Now you can define it once at the stack level, and every component in that stack inherits it automatically. Configure it once, and get the benefit everywhere.
+Component retry already recovers a single component from a transient error: a 502, a dropped registry connection, a flaky provider lookup. The hard part was sharing that same policy across every component in a stack. You'd copy the same `retry:` block onto each component, wire up a shared abstract base component just to hold it, or set up a mixin. Now you can define the policy once at the stack level, and every component in that stack inherits it automatically.
 
 <!--truncate-->
 
 ## The Problem
 
-Component retry matches transient failures against `conditions` regex patterns. It retries with backoff. A 502 during `terraform init` recovers on its own instead of failing your pipeline. That works well for one component. Sharing the same policy across many components in a stack is harder. You can copy the `retry:` block onto every component. You can restructure unrelated components to share an abstract base, just so they inherit one. You can set up a mixin file with `overrides.retry` and import it everywhere. None of those match the real goal: every component in this stack should recover the same way.
+Component retry matches transient failures against `conditions` regex patterns and retries with backoff. That mechanism works well for one component. Restructuring unrelated components to share an abstract base just so they inherit a policy, or setting up a mixin file with `overrides.retry` and importing it everywhere, gets you there too — but none of those match the real goal: every component in this stack should recover the same way, without extra plumbing.
 
 ## The Fix
 
