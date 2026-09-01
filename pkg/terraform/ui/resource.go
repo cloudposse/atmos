@@ -277,7 +277,11 @@ func (rt *ResourceTracker) GetTotalCount() int {
 	return len(rt.resources)
 }
 
-// GetErrorCount returns the number of failed resources.
+// GetErrorCount returns the number of failures: failed resources plus error-severity
+// diagnostics with no resource address (e.g. a plan-file write failure). Must stay in sync
+// with HasErrors' definition of "has an error" -- otherwise a diagnostic-only failure (no
+// resource individually errored) trips the "failed" banner while this reports 0, producing
+// a confusing "failed: 0 error(s)" summary.
 func (rt *ResourceTracker) GetErrorCount() int {
 	defer perf.Track(nil, "terraform.ui.ResourceTracker.GetErrorCount")()
 
@@ -287,6 +291,11 @@ func (rt *ResourceTracker) GetErrorCount() int {
 	count := 0
 	for _, op := range rt.resources {
 		if op.State == ResourceStateError {
+			count++
+		}
+	}
+	for _, d := range rt.diagnostics {
+		if d.Diagnostic.Severity == "error" {
 			count++
 		}
 	}

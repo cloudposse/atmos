@@ -208,6 +208,7 @@ func TestResourceTracker_HandleDiagnostic(t *testing.T) {
 	assert.Len(t, diags, 1)
 	assert.Equal(t, "warning", diags[0].Diagnostic.Severity)
 	assert.False(t, rt.HasErrors())
+	assert.Equal(t, 0, rt.GetErrorCount())
 
 	// Error diagnostic.
 	errDiag := &DiagnosticMessage{
@@ -223,6 +224,10 @@ func TestResourceTracker_HandleDiagnostic(t *testing.T) {
 	assert.Len(t, diags, 2)
 	assert.Equal(t, PhaseError, rt.GetPhase())
 	assert.True(t, rt.HasErrors())
+	// Regression: a diagnostic-only failure (no resource individually errored, e.g. a
+	// plan-file write failure) must still be reflected in GetErrorCount, or the "failed"
+	// summary line reports a confusing "failed: 0 error(s)".
+	assert.Equal(t, 1, rt.GetErrorCount())
 }
 
 func TestResourceTracker_HandleChangeSummary(t *testing.T) {
