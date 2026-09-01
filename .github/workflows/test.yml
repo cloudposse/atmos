@@ -645,6 +645,13 @@ jobs:
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
       - name: Run atmos test race
+        env:
+          # pkg/toolchain's registry lookups hit the real GitHub API with no
+          # mock seam; unauthenticated requests share this runner's IP-wide
+          # 60/hr limit across every package running here, unlike the `test`
+          # job's acceptance steps, which already set this for the same
+          # reason (see their own "Use the GitHub token" comment).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: atmos test race
 
   # Sharding the `test` job fans it out into TEST_SHARD_COUNT x 3 per-leg checks.

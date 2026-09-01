@@ -191,7 +191,17 @@ commands:
             # race coverage on the binary under test. Running it here blew
             # past every timeout budget with no race-detection value to show
             # for it.
-            command: go test -race -shuffle=on ${TEST:-$(go list ./... | grep -v '^github.com/cloudposse/atmos/tests')} ${TESTARGS:-} -timeout 10m
+            #
+            # -timeout 20m (not the default per-package 10m): pkg/toolchain's
+            # tests install real tool binaries from real registries (no mock
+            # seam), and this command runs the full ./... suite unsharded, so
+            # every package's network/registry calls compete for the same
+            # runner instead of getting a shard's worth of headroom the way
+            # the sharded `test` job's packages do. -race's CPU/memory
+            # overhead compounds that contention. 10m wasn't enough headroom
+            # in CI (pkg/toolchain timed out) even though no single test
+            # itself hangs -- see docs/fixes for the incident.
+            command: go test -race -shuffle=on ${TEST:-$(go list ./... | grep -v '^github.com/cloudposse/atmos/tests')} ${TESTARGS:-} -timeout 20m
 
       - name: magefiles
         description: Run magefiles/ unit tests with coverage (excluded from `go test ./...` by the mage build tag, so CI runs it as a separate step)
