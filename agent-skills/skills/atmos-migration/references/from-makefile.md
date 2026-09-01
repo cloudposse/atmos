@@ -49,13 +49,18 @@ clean: ## Remove build artifacts
 1. Turn each leaf target into a custom command in `atmos.yaml`. If the Makefile is large, put
     the commands in a separate file. See
     [Split commands across files](#split-commands-across-files) below.
-2. Turn the silent-recipe `@` prefix into the step field `output: none`.
+2. Turn the silent-recipe `@` prefix into `show: { command: false }`. Make's `@` only suppresses
+    the echoed command line -- the recipe's own stdout/stderr still prints. `output: none` is not
+    the same thing: it sends the step's stdout *and* stderr to the void, which would hide real
+    command output (for example, `go test` diagnostics). Reserve `output: none` for a step whose
+    output genuinely needs to be discarded entirely.
 3. Delete the `help` target. Atmos generates the same information from each command's
     `description:` field. Run `atmos --help` or `atmos <command> --help` to see it.
 4. When one target depends on another leaf target, such as `test: build`, add a step that runs
-    the dependency's command. Do not use a `type: atmos` step to call a custom command. That step
-    type is only for native Atmos verbs, such as `terraform plan`. Use a `type: shell` step with
-    `command: atmos build` instead.
+    the dependency's command. Use a `type: atmos` step with `command: build` to call the other
+    custom command -- `type: atmos` preserves step-level stack context and gives you structured
+    output handling (captured stdout/stderr, exit code) that a `type: shell` step invoking
+    `atmos build` does not.
 
 ```yaml
 commands:
@@ -68,8 +73,8 @@ commands:
   - name: test
     description: Run unit tests
     steps:
-      - type: shell
-        command: atmos build
+      - type: atmos
+        command: build
       - type: shell
         command: go test ./...
 
@@ -84,7 +89,8 @@ commands:
     steps:
       - type: shell
         command: rm -rf bin/
-        output: none
+        show:
+          command: false
 ```
 
 ## Shape B: Target Chains with Dependencies
@@ -172,12 +178,34 @@ build-parallel:
 
 **Steps:**
 
-1. Turn `$(MAKE) -j` into a `parallel` step. Use `max_concurrency` to set the fan-out width.
+1. `build-all`'s recipe is a shell `for` loop, not multiple Make targets -- `make -j` only
+    parallelizes independent targets within a single `make` invocation, it does not parallelize
+    commands inside one recipe's shell script. So `$(MAKE) -j4 build-all` still runs `vpc`, `eks`,
+    and `rds` one at a time, in order, exactly like plain `build-all` would. `-j4` here does
+    nothing.
 2. Turn `$(MAKE) -C dir target` recursion over a fixed set of directories into a `matrix` step.
-    Define a `service` axis, and call the per-service command once for each value.
+    Define a `service` axis, and call the per-service command once for each value. Using
+    `max_concurrency` on the matrix step is a deliberate upgrade over the sequential source
+    behavior, not a literal translation of `-j4` -- call it out to whoever is reviewing the
+    migration, since it changes execution behavior (all services build concurrently instead of
+    one at a time).
+3. The per-directory `build` target here is a different recipe than Shape A's top-level `build`
+    command -- it lives in each `services/<dir>/` directory, not at the repo root. Give it its own
+    custom command, `build-service`, with a `service` flag/argument that maps into the
+    `services/<name>` path. Do not reuse Shape A's `build` command as-is; it has no way to receive
+    a per-service value.
 
 ```yaml
 commands:
+  - name: build-service
+    description: Build a single service
+    flags:
+      - name: service
+        required: true
+    steps:
+      - type: shell
+        command: go build -o bin/{{ .Flags.service }} ./services/{{ .Flags.service }}
+
   - name: build-all
     description: Build every service
     steps:
@@ -187,8 +215,8 @@ commands:
           service: [vpc, eks, rds]
         max_concurrency: 4
         steps:
-          - type: shell
-            command: atmos build --service {{ .matrix.service }}
+          - type: atmos
+            command: build-service --service {{ .matrix.service }}
 ```
 
 ## Common Problems
@@ -214,8 +242,10 @@ than spreading `inputs`/`artifacts` across several steps.
 
 ### Silent recipes and command echo
 
-`@command` suppresses the echo of one command line. It maps to the step field `output: none` on
-that one step. It does not mean you should add `output: none` to every step.
+`@command` suppresses the echo of one command line -- it does not touch the recipe's own output.
+It maps to `show: { command: false }` on that one step, not `output: none`. `output: none`
+discards the step's stdout and stderr entirely, which is a much bigger change in behavior than
+Make's `@` prefix ever was; reserve it for steps whose output genuinely needs to be thrown away.
 
 ### Split commands across files
 

@@ -77,17 +77,18 @@ deploy env='dev': build test
 ```
 
 **Steps:** use the same method as Make's dependency chains. See
-[from-makefile.md Shape B](from-makefile.md#shape-b-target-chains-with-dependencies). Do not use
-a `type: atmos` step to call another custom command. That step type is only for native Atmos
-verbs. Call the dependency with a `type: shell` step and `command: atmos build`.
+[from-makefile.md Shape B](from-makefile.md#shape-b-target-chains-with-dependencies). Use a
+`type: atmos` step with `command: build` to call another custom command -- `type: atmos` preserves
+step-level stack context and structured output handling, which a `type: shell` step running
+`atmos build` does not.
 
 ```yaml
 commands:
   - name: test
     description: Run tests (builds first)
     steps:
-      - type: shell
-        command: atmos build
+      - type: atmos
+        command: build
       - type: shell
         command: go test ./...
 
@@ -98,8 +99,8 @@ commands:
         shorthand: e
         default: "dev"
     steps:
-      - type: shell
-        command: atmos test
+      - type: atmos
+        command: test
       - type: atmos
         command: terraform apply infra -s {{ .Flags.env }}
 ```

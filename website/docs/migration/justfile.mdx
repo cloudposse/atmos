@@ -80,11 +80,18 @@ only cares what the recipe does.
   </TabItem>
   <TabItem value="after" label="After (atmos.yaml)">
     ```yaml
+    # AWS_REGION (and anything else in .env) applies to every Atmos operation, not just one
+    # command's own steps -- this matches the source Justfile's `set dotenv-load`/`export`,
+    # which apply to every recipe. A command-level `env:` map only reaches that command's own
+    # steps, so `test` invoking `atmos build` (a separate process) and `deploy` invoking
+    # `atmos test` would not inherit it.
+    env:
+      <<: !include .env
+      AWS_REGION: us-east-1
+
     commands:
       - name: build
         description: Build the deployable artifact
-        env:
-          AWS_REGION: us-east-1
         steps:
           - type: shell
             command: go build -o bin/handler ./cmd/handler
@@ -92,8 +99,8 @@ only cares what the recipe does.
       - name: test
         description: Run tests (builds first)
         steps:
-          - type: shell
-            command: atmos build
+          - type: atmos
+            command: build
           - type: shell
             command: go test ./...
 
@@ -104,8 +111,8 @@ only cares what the recipe does.
             shorthand: e
             default: "dev"
         steps:
-          - type: shell
-            command: atmos test
+          - type: atmos
+            command: test
           - type: atmos
             command: terraform apply infra -s {{ .Flags.env }}
     ```
@@ -115,7 +122,28 @@ only cares what the recipe does.
 `infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Move the old
 `terraform/` directory's `.tf` files to `components/terraform/infra/` (the default
 `components.terraform.base_path` is `components/terraform`), then swap `infra` for whatever you
-actually name the component.
+actually name the component. Alternatively, keep the existing `terraform/` directory where it is:
+set `components.terraform.base_path: "."` and add `metadata.component: terraform` on the `infra`
+stack component -- `metadata.component` points the stack component at the physical directory, so
+no files need to move.
+
+`-s {{ .Flags.env }}` only selects *which stack* runs, the way `terraform.apply` picks a stack by
+name (`dev`, `staging`, `prod`); it does not, by itself, load that environment's Terraform
+variables the way the source `-var-file=envs/{{env}}.tfvars` did. Bring the per-environment
+`.tfvars` files in through each stack file instead, one per environment (`stacks/dev.yaml`,
+`stacks/staging.yaml`, `stacks/prod.yaml`), each pointing at its own file:
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    infra:
+      vars: !include ../components/terraform/infra/envs/dev.tfvars
+```
+</File>
+
+See [Migrating from Native Terraform](/migration/native-terraform) for the full `.tfvars`/stack
+mapping.
 
 ## Named Parameters Become Flags and Arguments
 
