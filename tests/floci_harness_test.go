@@ -236,18 +236,26 @@ func requireFlociEndpoint(t *testing.T, endpointEnvVar, defaultEndpoint string) 
 }
 
 // pollUntil retries fn every 500ms until it succeeds or timeout elapses, returning
-// fn's last error on timeout.
+// fn's last error on timeout. The deadline is checked before each call to fn so a
+// slow fn can't push the total run time past timeout by an extra call, and the
+// retry sleep is capped to the time remaining so it never oversleeps the deadline.
 func pollUntil(timeout time.Duration, fn func() error) error {
 	deadline := time.Now().Add(timeout)
 	var lastErr error
 	for {
-		if lastErr = fn(); lastErr == nil {
-			return nil
-		}
 		if time.Now().After(deadline) {
 			return lastErr
 		}
-		time.Sleep(500 * time.Millisecond)
+		if lastErr = fn(); lastErr == nil {
+			return nil
+		}
+		if remaining := time.Until(deadline); remaining > 0 {
+			sleep := 500 * time.Millisecond
+			if remaining < sleep {
+				sleep = remaining
+			}
+			time.Sleep(sleep)
+		}
 	}
 }
 
