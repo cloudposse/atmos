@@ -70,6 +70,7 @@ jobs:
             release-assets.githubusercontent.com:443
             us.i.posthog.com:443
             proxy.golang.org:443
+            sum.golang.org:443
             storage.googleapis.com:443
             google.golang.org:443
             modernc.org:443
@@ -143,6 +144,7 @@ jobs:
             mirror.gcr.io:443
             check.trivy.dev:443
             proxy.golang.org:443
+            sum.golang.org:443
             storage.googleapis.com:443
             google.golang.org:443
             modernc.org:443
@@ -220,6 +222,7 @@ jobs:
             registry.terraform.io:443
             releases.hashicorp.com:443
             proxy.golang.org:443
+            sum.golang.org:443
             storage.googleapis.com:443
             google.golang.org:443
             modernc.org:443

@@ -25,6 +25,23 @@ if command_exists curl && curl --retry-all-errors --version >/dev/null 2>&1; the
 	curl_retry_flags+=(--retry-all-errors)
 fi
 
+# On Windows (Git Bash/MSYS/Cygwin), curl uses the schannel TLS backend, which
+# performs a live OCSP/CRL revocation check on every TLS handshake. Public CA
+# revocation responders are frequently slow or transiently unreachable
+# (corporate proxies, outages), which fails the handshake with
+# CRYPT_E_REVOCATION_OFFLINE even though the certificate itself is valid and
+# the destination is reachable — a well-known schannel-specific class of
+# flakiness, not a sign anything is actually wrong. Skip the revocation check
+# on Windows only; probe for the flag first since non-Windows curl builds
+# aren't schannel-backed and may not support it.
+case "$(uname -s)" in
+	MINGW* | MSYS* | CYGWIN*)
+		if command_exists curl && curl --ssl-no-revoke --version >/dev/null 2>&1; then
+			curl_retry_flags+=(--ssl-no-revoke)
+		fi
+		;;
+esac
+
 # Function to run a command with root privileges if needed, using sudo when available.
 maybe_sudo() {
 	if [ "$(id -u)" -eq 0 ]; then

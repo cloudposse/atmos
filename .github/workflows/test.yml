@@ -107,6 +107,7 @@ jobs:
             tuf-repo-cdn.sigstore.dev:443
             us.i.posthog.com:443
             proxy.golang.org:443
+            sum.golang.org:443
             storage.googleapis.com:443
             google.golang.org:443
             modernc.org:443
@@ -278,6 +279,7 @@ jobs:
             tuf-repo-cdn.sigstore.dev:443
             us.i.posthog.com:443
             proxy.golang.org:443
+            sum.golang.org:443
             storage.googleapis.com:443
             google.golang.org:443
             modernc.org:443
