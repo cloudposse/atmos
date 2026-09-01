@@ -18,21 +18,21 @@ go run . <repo-root> [output-path]
 ## How it works
 
 1. Installs [`go-licenses`](https://github.com/google/go-licenses) on demand
-   (via `go install`) if it isn't already on `PATH`.
+    (via `go install`) if it isn't already on `PATH`.
 2. Runs `go-licenses report .` to get a `module,url,license` CSV for every
-   Go dependency.
+    Go dependency.
 3. Rewrites the URL for modules `go-licenses` can't resolve reliably --
-   vanity import paths (`dario.cat/mergo`, `inet.af/netaddr`, ...) and
-   split-module repos (`gopkg.in/*.vN`, `cloud.google.com/go/*`) -- to a
-   deterministic, version-pinned GitHub blob URL. See `overrides.go` for the
-   per-module table and `googlecloud.go` for the generic
-   `cloud.google.com/go[/*]` rule (one rule covers every submodule, since
-   they all share a predictable tag/URL shape).
+    vanity import paths (`dario.cat/mergo`, `inet.af/netaddr`, ...) and
+    split-module repos (`gopkg.in/*.vN`, `cloud.google.com/go/*`) -- to a
+    deterministic, version-pinned GitHub blob URL. See `overrides.go` for the
+    per-module table and `googlecloud.go` for the generic
+    `cloud.google.com/go[/*]` rule (one rule covers every submodule, since
+    they all share a predictable tag/URL shape).
 4. Renders `NOTICE`, grouped by license family: Apache-2.0 and BSD sections
-   are always present (even if empty); MPL-2.0 and MIT sections only appear
-   when there's at least one matching dependency. Other license families
-   (ISC, ...) are counted in the summary but not rendered as their own
-   section -- this matches the file's historical format.
+    are always present (even if empty); MPL-2.0 and MIT sections only appear
+    when there's at least one matching dependency. Other license families
+    (ISC, ...) are counted in the summary but not rendered as their own
+    section -- this matches the file's historical format.
 
 ## Env knobs
 
