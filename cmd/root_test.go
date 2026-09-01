@@ -91,7 +91,7 @@ func TestSyncGlobalFlagsToViperIncludesEdition(t *testing.T) {
 }
 
 func TestInitFunction(t *testing.T) {
-	// Test doesn't modify os.Args, so no need to save/restore.
+	// Test doesn't modify os.Args or RootCmd, so no need for TestKit.
 
 	// Test cases
 	tests := []struct {
@@ -570,6 +570,8 @@ func TestVersionFlagParsing(t *testing.T) {
 }
 
 func TestVersionFlagExecutionPath(t *testing.T) {
+	_ = NewTestKit(t)
+
 	tests := []struct {
 		name        string
 		setup       func()
