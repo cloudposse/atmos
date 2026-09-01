@@ -1,18 +1,24 @@
-# Fix: `[race] full test suite` CI job — timeouts, a shuffle-order test bug, and a real data race
+# Fix: `[race] full test suite` CI job — timeouts, shuffle-order test bugs, and real data races
 
 **Date:** 2026-09-01
 
 ## Summary
 
 The new `[race] full test suite` CI job (added to run `atmos test race` on pull requests)
-failed on its first three real runs. Rounds 1–2: the package list included the CLI acceptance
+failed on its first four real runs. Rounds 1–2: the package list included the CLI acceptance
 suite (deliberately sharded elsewhere because it takes ~90 minutes unsharded),
 `pkg/toolchain`'s real-network registry tests didn't fit the per-package timeout once running
 unsharded and unauthenticated, and `-shuffle=on` exposed a pre-existing test-isolation bug in
-`pkg/utils`. Round 3, with the first two rounds' fixes in place: the job caught a genuine
-production data race in `pkg/toolchain`'s concurrent batch installer (exactly what this job
-exists to catch), plus a second `-shuffle=on`-exposed test-isolation bug, this time in
-`pkg/toolchain` itself.
+`pkg/utils`. Round 3: a genuine production data race in `pkg/toolchain`'s concurrent batch
+installer (exactly what this job exists to catch), plus a second `-shuffle=on`-exposed
+test-isolation bug, this time in `pkg/toolchain` itself. Round 4, once the job stopped timing
+out and started running the full suite to completion: seven more independent failures surfaced at
+once, spread across unrelated packages — two real data races (an LSP document-manager race and a
+package-var-capture race in a trust-store installer), four more shuffle-order test-isolation bugs
+(a reset-without-reinitialize in a test I/O helper, a backend-registry wipe-without-restore, a
+viper.Set-vs-env-var-tracking conflict, and a style cache left seeded with a partial scheme), and
+one dead/unused test-only field that was itself racing for no reason. Also bumped the job's
+runner: once every timeout was fixed, this became the slowest check in the PR.
 
 ## Context
 
@@ -64,6 +70,55 @@ been exercised together before:
   previously-dormant assertion in `TestGitHubTokenEnvBinding` actually run, and `-shuffle=on`
   meant `set_test.go`'s reset could land before it.
 
+Round 4, once the job ran the full suite to completion instead of timing out partway through, one
+run surfaced seven more independent failures:
+
+- `pkg/runner/step`'s `TestCastHandlerExecuteWithWorkflowRecordsSimulatedSteps` panicked with
+  `data.InitWriter() must be called before using data package functions`. This package's
+  `TestMain` initializes `pkg/data`'s global I/O context once for the whole binary, but
+  `output_mode_execution_test.go`'s `setupOutputModeCapture` helper (used by 3 tests to capture
+  redirected stdout/stderr) called `iolib.Reset()`/`ui.Reset()`/`data.Reset()` in its `cleanup`
+  closure to undo its own setup — and never re-initialized afterward, leaving the package-level
+  I/O context permanently nil for whatever test ran next under `-shuffle=on`.
+- `pkg/lsp/server`'s `TestTextDocumentConcurrentOperations` (a test that deliberately drives
+  concurrent `TextDocumentDidChange` calls) hit a real `WARNING: DATA RACE`:
+  `DocumentManager.Update` mutated an existing `*Document`'s `Text`/`Version` fields in place
+  under its own lock, but `Handler.validateDocument` (called synchronously right after `Update`
+  returns, per that code's own comment) reads those same fields through the returned pointer with
+  no lock held at all — so a second, overlapping `Update` for the same URI could mutate the exact
+  struct an earlier caller was still reading.
+- `pkg/terraform/cache`'s `TestInstallTrust_WindowsTimeoutsBlockingTrustStore` hit a real
+  `WARNING: DATA RACE`: `runTrustOperation` runs the install function in a background goroutine
+  racing a timer, and on timeout returns to the caller while that goroutine keeps running (there's
+  no context to cancel a plain `func(string) error` with). `nativeWindowsTrustInstall`'s closure
+  read the package-level `installWindowsTrustFunc` var *inside* that still-running goroutine,
+  so the test's `t.Cleanup` (restoring the var after the test function returns, well before the
+  10-second fake install finishes) raced against it.
+- `pkg/terraform/registry`'s `TestProviderMirror_VersionListsAllPlatforms` hit a real
+  `WARNING: DATA RACE`: its `fakeRegistry` test helper incremented `dlHits`/`verHits` int fields
+  from `httptest.Server` HTTP handlers, which `net/http` dispatches one goroutine per connection —
+  concurrent platform-version requests (the test's own point) raced on the plain `int++`.
+- `pkg/provisioner/backend`'s `TestAzurermBackendRegisteredInRegistry` failed
+  (`GetBackendCreate(azurerm)` etc. all nil) — the same "reset without restore" shape as round 3's
+  `github-token` binding, but for the backend registry: `azurerm.go`'s `init()` registers azurerm
+  exactly once at process start, and roughly 15 sibling tests in `backend_test.go` call
+  `ResetRegistryForTesting()`/`resetBackendRegistry()` (many via `t.Cleanup`) to get an empty
+  registry for their own isolated fixtures. Any of those landing before this test under
+  `-shuffle=on` leaves the registry permanently empty for the rest of the process.
+- `pkg/scanners/sarif`'s `TestHandler_RichTerminalBodyIncludesSourceExcerpt` failed (source
+  excerpt missing from the rendered output entirely). `normalize_test.go`'s
+  `TestNormalizeArtifactURIsRewritesNestedSARIFLocations` captured
+  `viper.GetString(githubWorkspaceViperKey)` and restored it via `viper.Set(...)` in cleanup, on
+  the assumption that this "restores" the pre-test state. It doesn't: `githubWorkspace()` resolves
+  this key by binding it to `GITHUB_WORKSPACE` and reading it live via `viper.BindEnv`+`GetString`
+  on every call; `viper.Set` installs a literal override that outranks the env binding in viper's
+  precedence and is never cleared by `t.Setenv`. Once that cleanup ran (capturing whatever
+  `GITHUB_WORKSPACE` happened to be — the real GitHub Actions runner value, in CI), every later
+  call to `githubWorkspace()` for the rest of the process returned that frozen value regardless of
+  `t.Setenv("GITHUB_WORKSPACE", "")`, so the excerpt reader looked for the source file under the
+  real CI workspace path instead of the test's own temp dir and silently found nothing (by
+  design: `pkg/validation`'s `writeRichDiagnosticSource` is a documented no-op on a read error).
+
 ## Changes
 
 - `.atmos.d/test.yaml`: exclude `./tests/...` from the `race` command's package list
@@ -99,6 +154,36 @@ been exercised together before:
 - `pkg/toolchain/github_token_test.go`: `TestMain_binds_environment_correctly` now re-binds
   `"github-token"` defensively before asserting on it, rather than assuming `TestMain`'s
   one-time binding survived every sibling test that happened to run first.
+- `pkg/runner/step/output_mode_execution_test.go`: `setupOutputModeCapture`'s `cleanup` closure
+  now re-initializes `iolib`/`ui`/`data` against the restored `os.Stdout`/`os.Stderr` after
+  resetting them, mirroring `TestMain`'s own setup, instead of leaving the package-level I/O
+  context nil for the rest of the process.
+- `.github/workflows/test.yml`: the `race` job now runs on the RunsOn `runner=terraform` family
+  (the same one the `build` job's linux leg already uses for CPU-heavy Go work), not
+  `ubuntu-latest`, since `go test`'s package-level concurrency scales with cores and 4 cores was
+  the bottleneck. `Harden Runner` (doesn't cover RunsOn) is replaced with the same
+  `runs-on/action` setup step the build job's linux leg uses.
+- `pkg/lsp/server/documents.go`: `DocumentManager.Update` now builds a new `*Document` (copying
+  `URI`/`LanguageID` from the existing entry) instead of mutating the existing struct's fields in
+  place, so a caller still holding an earlier `Update`/`Open` call's returned pointer keeps
+  reading a frozen, private snapshot no matter what a later `Update` does to the map.
+- `pkg/terraform/cache/trust_install.go`: `nativeWindowsTrustInstall`/`nativeWindowsTrustRemove`
+  now snapshot `installWindowsTrustFunc`/`removeWindowsTrustFunc` into a local variable before
+  `runTrustOperation` spawns its background goroutine, so that goroutine only ever touches its own
+  private copy, never the shared package var a test's `t.Cleanup` might reassign mid-flight.
+- `pkg/terraform/registry/provider_mirror_test.go`: removed `fakeRegistry`'s `dlHits`/`verHits`
+  fields — write-only, never read anywhere in the codebase; deleting the dead counters removes the
+  race along with the pointless state.
+- `pkg/provisioner/backend/azurerm_test.go`: `TestAzurermBackendRegisteredInRegistry` now re-runs
+  azurerm's four `RegisterBackend*` calls (the same ones `init()` makes) before asserting, instead
+  of assuming `init()`'s registrations survived every sibling test that resets the registry.
+- `pkg/scanners/sarif/normalize_test.go`: `TestNormalizeArtifactURIsRewritesNestedSARIFLocations`
+  now uses `t.Setenv("GITHUB_WORKSPACE", workspace)` instead of `viper.Set`/`viper.GetString`
+  capture-and-restore, matching how every other test in this codebase controls this env-bound key.
+- `pkg/ui/theme/styles_test.go`: `TestInitializeStyles` now calls `t.Cleanup(InvalidateStyleCache)`
+  after seeding the package-level style cache with a partial `ColorScheme` (no `Border` set),
+  matching the sibling `TestComponentLabelStyleCyclesPalette` (log_styles_test.go), which already
+  does this for the same reason — `TestGetBorderColor` was asserting an empty string.
 
 ## Validation
 
@@ -137,6 +222,19 @@ been exercised together before:
 - Did not get a clean full-package `pkg/toolchain` run locally (see above) to directly confirm
   `TestRunInstallWithNoArgs` no longer races; the next real CI run is the actual validation for
   that specific test, though `TestConcurrentBindEnvAndGet` exercises the identical race shape.
+- Round 4: `go build ./...` and `go vet` clean; `./custom-gcl run --new-from-rev=origin/main` — 0
+  issues; `gofumpt -l` — no output on every changed file.
+- `go test -race -shuffle=on ./pkg/lsp/server/... -run TestTextDocumentConcurrentOperations -count=5`
+  and the full package (`-count=1`) — all pass.
+- `go test -race -shuffle=on ./pkg/terraform/cache/... -run 'TestInstallTrust|TestRemoveTrust' -count=3`
+  — all pass (3 full shuffled passes over every install/remove test in the file).
+- `go test -race -shuffle=on ./pkg/terraform/registry/... -count=3` — full package passes.
+- `go test -race -shuffle=on ./pkg/provisioner/backend/... -count=3` — full package passes.
+- `go test -race -shuffle=on ./pkg/scanners/sarif/... -count=3` — full package passes.
+- `go test -race -shuffle=on ./pkg/ui/theme/... -count=5` — full package passes.
+- `go test -race -shuffle=on ./pkg/runner/step/... -count=3` — full package passes.
+- Did not reproduce the runner-swap's actual speedup locally (no access to RunsOn from this
+  sandbox); the next real CI run is the validation for that change specifically.
 
 ## Follow-ups
 
