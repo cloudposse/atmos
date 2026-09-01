@@ -70,6 +70,13 @@ func setupTest() {
 
 func teardownTest() {
 	viper.Reset()
+	// Restore TestMain's "github-token" env binding: Reset() discards it, and
+	// leaving it unbound would silently break every test that runs after this
+	// one in the same process (-shuffle=on means this is not always the last
+	// test) and expects GITHUB_TOKEN/ATMOS_GITHUB_TOKEN to reach viper --
+	// e.g. this package's registry tests falling back to unauthenticated
+	// GitHub API calls. BindEnv is safe to call again (idempotent).
+	viper.BindEnv("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
 }
 
 // Tests for versionListModel.
