@@ -201,20 +201,54 @@ func requireFlociEndpoint(t *testing.T, endpointEnvVar, defaultEndpoint string) 
 		address = net.JoinHostPort(parsed.Hostname(), port)
 	}
 
-	conn, err := net.DialTimeout("tcp", address, 2*time.Second)
-	require.NoErrorf(t, err, "Floci is not reachable at %s", endpoint)
-	require.NoError(t, conn.Close())
+	// Poll for up to flociStartupTimeout instead of checking once: CI pre-supplies
+	// these endpoints via GitHub Actions service containers, which are only
+	// guaranteed to have started the container process, not to have the app inside
+	// actually serving HTTP yet -- the same cold-start window the local
+	// testcontainers auto-start path already tolerates via
+	// wait.ForHTTP(...).WithStartupTimeout(flociStartupTimeout) in
+	// startFlociContainer. A single 2s check here previously failed
+	// TestAzureSecretsFlociE2E with the TCP port already accepting connections but
+	// the HTTP handler not yet ready to respond.
+	err = pollUntil(flociStartupTimeout, func() error {
+		conn, dialErr := net.DialTimeout("tcp", address, 2*time.Second)
+		if dialErr != nil {
+			return dialErr
+		}
+		defer func() { _ = conn.Close() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	require.NoError(t, err)
-	// #nosec G107 -- endpoint is an opt-in local Floci test target.
-	resp, err := http.DefaultClient.Do(req)
-	require.NoErrorf(t, err, "Floci HTTP endpoint is not reachable at %s", endpoint)
-	require.NoError(t, resp.Body.Close())
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if reqErr != nil {
+			return reqErr
+		}
+		// #nosec G107 -- endpoint is an opt-in local Floci test target.
+		resp, respErr := http.DefaultClient.Do(req)
+		if respErr != nil {
+			return respErr
+		}
+		return resp.Body.Close()
+	})
+	require.NoErrorf(t, err, "Floci HTTP endpoint is not reachable at %s within %s", endpoint, flociStartupTimeout)
 
 	return endpoint
+}
+
+// pollUntil retries fn every 500ms until it succeeds or timeout elapses, returning
+// fn's last error on timeout.
+func pollUntil(timeout time.Duration, fn func() error) error {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for {
+		if lastErr = fn(); lastErr == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return lastErr
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 }
 
 // resolveFlociEndpoint determines the Floci endpoint to use and reports whether it
@@ -336,4 +370,44 @@ func uniqueFlociTestID(t *testing.T) string {
 	name = regexp.MustCompile(`[^a-z0-9-]+`).ReplaceAllString(name, "-")
 	name = strings.Trim(name, "-")
 	return fmt.Sprintf("%d-%s", time.Now().UnixNano(), name)
+}
+
+func TestPollUntilSucceedsImmediately(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	err := pollUntil(time.Second, func() error {
+		calls++
+		return nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, calls, "fn should not be retried once it succeeds")
+}
+
+func TestPollUntilRetriesUntilSuccessWithinBudget(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	err := pollUntil(5*time.Second, func() error {
+		calls++
+		if calls < 3 {
+			return errors.New("not ready yet")
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, 3, calls, "should stop retrying as soon as fn succeeds")
+}
+
+func TestPollUntilReturnsLastErrorOnTimeout(t *testing.T) {
+	t.Parallel()
+
+	sentinel := errors.New("still not ready")
+	calls := 0
+	err := pollUntil(600*time.Millisecond, func() error {
+		calls++
+		return sentinel
+	})
+	require.ErrorIs(t, err, sentinel)
+	require.Greater(t, calls, 1, "should have retried at least once before the budget elapsed")
 }
