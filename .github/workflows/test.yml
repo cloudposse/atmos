@@ -106,6 +106,7 @@ jobs:
             releases.hashicorp.com:443
             tuf-repo-cdn.sigstore.dev:443
             us.i.posthog.com:443
+            proxy.golang.org:443
 
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc # v2.2.0
         if: matrix.target == 'linux'
@@ -273,6 +274,7 @@ jobs:
             releases.hashicorp.com:443
             tuf-repo-cdn.sigstore.dev:443
             us.i.posthog.com:443
+            proxy.golang.org:443
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}

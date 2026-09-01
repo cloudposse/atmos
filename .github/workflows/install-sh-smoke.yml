@@ -37,6 +37,8 @@ jobs:
             azure.archive.ubuntu.com:80
             esm.ubuntu.com:443
             motd.ubuntu.com:443
+            ocsp.sectigo.com:443
+            crl.sectigo.com:443
 
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0

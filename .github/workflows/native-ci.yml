@@ -69,6 +69,7 @@ jobs:
             api.github.com:443
             release-assets.githubusercontent.com:443
             us.i.posthog.com:443
+            proxy.golang.org:443
 
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -138,6 +139,7 @@ jobs:
             api0.prismacloud.io:443
             mirror.gcr.io:443
             check.trivy.dev:443
+            proxy.golang.org:443
 
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -208,6 +210,7 @@ jobs:
             checkpoint-api.hashicorp.com:443
             registry.terraform.io:443
             releases.hashicorp.com:443
+            proxy.golang.org:443
 
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
