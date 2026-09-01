@@ -464,7 +464,6 @@ jobs:
             checkpoint-api.hashicorp.com:443
             dc.services.visualstudio.com:443
             dl.k8s.io:443
-            example.com:443
             get.helm.sh:443
             ghcr.io:443
             github.com:443
@@ -1002,6 +1001,7 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            archive.ubuntu.com:80
             auth.docker.io:443
             azure.archive.ubuntu.com:80
             checkpoint-api.hashicorp.com:443

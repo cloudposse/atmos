@@ -36,6 +36,7 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             sts.us-east-2.amazonaws.com:443
+            *.actions.githubusercontent.com:443
             github.com:443
             api.github.com:443
             nodejs.org:443

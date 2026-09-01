@@ -42,6 +42,7 @@ jobs:
             sts.us-east-2.amazonaws.com:443
             cplive-plat-ue2-dev-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
             api.github.com:443
+            *.actions.githubusercontent.com:443
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
