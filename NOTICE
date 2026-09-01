@@ -403,7 +403,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/google/cel-go
     License: Apache-2.0
-    URL: https://github.com/google/cel-go/blob/v0.29.2/LICENSE
+    URL: https://github.com/google/cel-go/blob/v0.30.0/LICENSE
 
   - github.com/google/gnostic-models
     License: Apache-2.0
