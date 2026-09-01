@@ -53,7 +53,7 @@ func ensureGoLicenses(version string) (string, error) {
 		return path, nil
 	}
 
-	fmt.Printf("Installing go-licenses %s...\n", version)
+	fmt.Fprintf(os.Stderr, "Installing go-licenses %s...\n", version)
 	installCmd := exec.Command("go", "install", "github.com/google/go-licenses@"+version) // #nosec G204 -- version is a controlled default/env knob, not user input.
 	installCmd.Stdout = os.Stdout
 	installCmd.Stderr = os.Stderr

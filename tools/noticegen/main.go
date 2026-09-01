@@ -28,17 +28,17 @@ func run() error {
 		return err
 	}
 
-	fmt.Printf("NOTICE file generated successfully: %s\n", outputPath)
-	fmt.Println()
-	fmt.Println("Summary:")
-	fmt.Printf("  - Total dependencies: %d\n", summary.Total)
-	fmt.Printf("  - Apache-2.0: %d\n", summary.Apache)
-	fmt.Printf("  - BSD: %d\n", summary.BSD)
+	fmt.Fprintf(os.Stderr, "NOTICE file generated successfully: %s\n", outputPath)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Summary:")
+	fmt.Fprintf(os.Stderr, "  - Total dependencies: %d\n", summary.Total)
+	fmt.Fprintf(os.Stderr, "  - Apache-2.0: %d\n", summary.Apache)
+	fmt.Fprintf(os.Stderr, "  - BSD: %d\n", summary.BSD)
 	if summary.MPL > 0 {
-		fmt.Printf("  - MPL-2.0: %d\n", summary.MPL)
+		fmt.Fprintf(os.Stderr, "  - MPL-2.0: %d\n", summary.MPL)
 	}
 	if summary.MIT > 0 {
-		fmt.Printf("  - MIT: %d\n", summary.MIT)
+		fmt.Fprintf(os.Stderr, "  - MIT: %d\n", summary.MIT)
 	}
 	return nil
 }

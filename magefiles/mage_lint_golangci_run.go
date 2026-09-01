@@ -68,6 +68,15 @@ func runGolangciLintPrecommit(root, binPath string) error {
 	}
 	defer cleanup()
 
+	// If every staged .go file belongs to a nested module (e.g.
+	// tools/noticegen), filterForeignModulePackages leaves patch.packages
+	// empty. Passing no package args to golangci-lint run makes it default
+	// to linting ./... (the whole root module) instead of skipping, so
+	// return early rather than invoking the binary at all.
+	if len(patch.packages) == 0 {
+		return nil
+	}
+
 	args = append(args, "--new-from-patch="+patch.path)
 	args = append(args, patch.packages...)
 	return sh.RunWithV(env, binPath, args...)

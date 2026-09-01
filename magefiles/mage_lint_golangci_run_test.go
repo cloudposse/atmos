@@ -426,4 +426,28 @@ func TestRunGolangciLintPrecommit(t *testing.T) {
 		err := runGolangciLintPrecommit(root, "irrelevant-bin")
 		require.Error(t, err)
 	})
+
+	// TestRunGolangciLintPrecommit/nested-module-only staged change skips the
+	// binary covers the case that motivated the early return: staging a
+	// change only inside a nested module (its own go.mod, like
+	// tools/noticegen) leaves filterForeignModulePackages' result empty, so
+	// running custom-gcl with zero package args would silently default to
+	// linting the whole root module (./...) instead of skipping.
+	t.Run("nested-module-only staged change skips the binary", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "tools", "noticegen"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "tools", "noticegen", "go.mod"),
+			[]byte("module github.com/cloudposse/atmos/tools/noticegen\n\ngo 1.26\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "tools", "noticegen", "main.go"), []byte("package main"), 0o644))
+		runGit(t, root, "add", "tools/noticegen/main.go")
+
+		binPath := customGCLBinaryPath(root)
+		argsFile := setUpFakeBin(t, binPath)
+		t.Setenv("ATMOS_LINT_SHARED_CACHE", "1")
+
+		require.NoError(t, runGolangciLintPrecommit(root, binPath))
+
+		_, statErr := os.Stat(argsFile)
+		assert.True(t, os.IsNotExist(statErr), "fake binary must not have been invoked")
+	})
 }
