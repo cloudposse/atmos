@@ -1,0 +1,131 @@
+.security {
+  width: 100vw;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 4rem 1rem 5rem;
+  box-sizing: border-box;
+  color: var(--ifm-font-color-base);
+  overflow-x: hidden;
+}
+
+.hero {
+  max-width: 720px;
+  margin-bottom: 2rem;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin: 0 0 0.9rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 4px;
+  color: var(--ifm-color-emphasis-700);
+  background: var(--ifm-color-emphasis-100);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 0;
+  color: var(--ifm-heading-color);
+  font-size: clamp(2.1rem, 5vw, 3.4rem);
+  line-height: 1;
+}
+
+.lede {
+  margin: 1.2rem 0 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 1.15rem;
+  line-height: 1.7;
+}
+
+.verifyPanel {
+  margin: 0 0 2.5rem;
+  padding: 1.5rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 8px;
+  background: var(--ifm-color-emphasis-100);
+}
+
+.verifyPanel h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+.verifyLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.panel {
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  background: var(--ifm-card-background-color);
+}
+
+.panel h2 {
+  margin-top: 0;
+  font-size: 1.05rem;
+}
+
+.panel p {
+  margin-bottom: 0;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.scoreRow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.scoreValue {
+  font-size: 2.4rem;
+  font-weight: 700;
+  color: var(--ifm-heading-color);
+}
+
+.scoreOutOf {
+  font-size: 1.1rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.fetchedAt {
+  margin: 0 0 2.5rem;
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.85rem;
+}
+
+.checksSection {
+  margin-bottom: 2.5rem;
+}
+
+.hardeningNote {
+  padding: 1.25rem 1.5rem;
+  border-left: 3px solid var(--ifm-color-emphasis-300);
+  color: var(--ifm-color-emphasis-700);
+}
+
+.hardeningNote h2 {
+  margin-top: 0;
+  font-size: 1.05rem;
+  color: var(--ifm-heading-color);
+}
+
+.hardeningNote p {
+  margin-bottom: 0;
+}

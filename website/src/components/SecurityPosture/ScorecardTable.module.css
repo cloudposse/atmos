@@ -1,0 +1,59 @@
+.tableWrapper {
+  overflow-x: auto;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.table th,
+.table td {
+  padding: 0.7rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+  vertical-align: top;
+}
+
+.table thead th {
+  background: var(--ifm-color-emphasis-100);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.reason {
+  color: var(--ifm-color-emphasis-700);
+}
+
+.scorePill {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.scorePill.good {
+  background: color-mix(in srgb, var(--ifm-color-success) 18%, transparent);
+  color: var(--ifm-color-success-darkest);
+}
+
+.scorePill.warn {
+  background: color-mix(in srgb, var(--ifm-color-warning) 22%, transparent);
+  color: var(--ifm-color-warning-darkest);
+}
+
+.scorePill.bad {
+  background: color-mix(in srgb, var(--ifm-color-danger) 18%, transparent);
+  color: var(--ifm-color-danger-darkest);
+}
