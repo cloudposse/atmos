@@ -5,7 +5,7 @@
 ## Summary
 
 The new `[race] full test suite` CI job (added to run `atmos test race` on pull requests)
-failed on its first five real runs. Rounds 1–2: the package list included the CLI acceptance
+failed on its first six real runs. Rounds 1–2: the package list included the CLI acceptance
 suite (deliberately sharded elsewhere because it takes ~90 minutes unsharded),
 `pkg/toolchain`'s real-network registry tests didn't fit the per-package timeout once running
 unsharded and unauthenticated, and `-shuffle=on` exposed a pre-existing test-isolation bug in
@@ -20,7 +20,12 @@ viper.Set-vs-env-var-tracking conflict, and a style cache left seeded with a par
 one dead/unused test-only field that was itself racing for no reason. Round 5: bumping the job's
 runner (once every timeout was fixed, this became the slowest check in the PR) picked the wrong
 RunsOn family on the first attempt -- fewer cores than before, and its AMI's older Ubuntu broke an
-apt-mirror workaround copied from a GitHub-hosted-runner job.
+apt-mirror workaround copied from a GitHub-hosted-runner job. Round 6, once the runner was fixed
+and the job ran to completion for the first time: a single root cause in `pkg/perf`'s hot-path
+performance-tracking code (used by nearly every function in the codebase) explained 21 of 24
+data races and, once combined with three tests that left tracking permanently enabled, most of
+~20 fanned-out `cmd`-package test failures. One further failure in that batch was unrelated: a
+pflag `Value.Set` vs `Flags().Set` distinction that silently didn't mark a flag as changed.
 
 ## Context
 
@@ -252,6 +257,71 @@ comparison: its "large" family is an `r7a.xlarge`, 4 cores, 31GB RAM.
 - `.github/workflows/test.yml`: switched `race`'s `runs-on` from `runner=terraform` to
   `runner=large`; guarded the `ubuntu.sources` `sed` behind a `[ -f ... ]` check so the step
   works on either runner image instead of erroring outright when the file doesn't exist.
+
+Round 6: with the runner fixed, the job ran to completion (~40 minutes) and failed with ~20
+distinct `cmd` package test failures and 24 `WARNING: DATA RACE` blocks. 21 of the 24 race blocks
+traced back to a single root cause: `pkg/perf.finishSimpleStackTracking`, the "simple stack"
+performance-tracking fast path used by the `defer perf.Track(...)` call at the top of nearly
+every public function repo-wide. `trackWithSimpleStack`'s own comment already documents a "known
+limitation" -- it only verifies goroutine ownership of the shared global `simpleStack` at call
+depth 0 or 1, "trusting" ownership at deeper nesting for speed, so a second goroutine's calls can
+silently start sharing that stack undetected. The resulting cross-goroutine frame mixing wasn't
+just producing wrong metrics (the accepted tradeoff) -- `StackFrame.childTime`, read and written
+via plain `time.Duration` field access with no synchronization at all, was a genuine, unguarded
+data race once two goroutines' frames were actually interleaved on the same stack.
+
+That still leaves the question of why so many otherwise-unrelated `cmd` tests hit this: perf
+tracking is off (`Track` a no-op) unless something calls `perf.EnableTracking(true)`, and normal
+test runs never do. `cmd/root_heatmap_test.go`'s `TestDisplayPerformanceHeatmap` (both table-driven
+cases) and `TestHeatmapNonTTYOutput` do call it directly to exercise the heatmap display, with
+misleading comments claiming to "Reset perf registry" (no such function existed) -- and, unlike
+the well-behaved sibling `TestEnableHeatmapIfRequested` (`cmd/cmd_utils_test.go`), never called
+`perf.EnableTracking(false)` afterward. Once any of the three ran under `-shuffle=on`, tracking
+stayed permanently on for the rest of the `cmd` package's test binary, so every real
+`perf.Track()` call in every subsequent test -- hundreds of them, many touching goroutines via
+`internal/exec`'s concurrent YAML/stack processing -- became live and exposed to the race above.
+`TestEnableHeatmapIfRequested` failed itself for a related but distinct reason: with no registry
+reset ever available, its own few tracked calls got crowded out of the heatmap's top-N display by
+the (now real) flood of accumulated metrics from whatever ran before it.
+
+One further failure, `TestUninstallCmd_RunE_MultipleSkills`, was unrelated to the perf issue
+entirely: it set the `force` flag via `uninstallCmd.Flags().Lookup("force").Value.Set("true")`,
+which updates the flag's value but -- unlike `Flags().Set("force", "true")`, which every other
+force-flag test in the same file correctly uses -- does not mark the pflag as `Changed`. Since
+`uninstall.go` reads the value through viper (`v.GetBool("force")`, per the flag-handling
+mandate), not the raw flag, and viper's precedence favors an explicitly-changed flag, an unmarked
+"true" could resolve to whatever unrelated value was left over from a prior test instead, which
+under `-shuffle=on` could genuinely be "prompt for confirmation" -- and the test always ran
+headless, so that prompt itself errors immediately as impossible.
+
+- `pkg/perf/perf.go`: `StackFrame.childTime` changed from `time.Duration` to `atomic.Int64`
+  (nanoseconds), with `.Load()`/`.Add()` at both read/write sites (shared by both the simple-stack
+  and goroutine-local-stack code paths, which use the same struct). New `ResetForTesting()` clears
+  the metrics registry, matching what the misleading pre-existing comments already claimed to do.
+- `cmd/root_heatmap_test.go`: all three call sites now pair `perf.EnableTracking(true)` with
+  `t.Cleanup(func() { perf.EnableTracking(false) })` and call `perf.ResetForTesting()` first.
+- `cmd/cmd_utils_test.go`: `TestEnableHeatmapIfRequested` now also calls
+  `perf.ResetForTesting()` before its own assertions, for the same reason.
+- `cmd/ai/skill/uninstall_test.go`: `TestUninstallCmd_RunE_MultipleSkills` now sets the force flag
+  via `Flags().Set("force", "true")` (matching every sibling test in the file) instead of
+  `Lookup("force").Value.Set("true")`, and resets it to `"false"` via `t.Cleanup`.
+
+Round 6 validation:
+
+- `go build ./...`, `go vet ./cmd/... ./pkg/perf/...` — clean.
+- `./custom-gcl run --new-from-rev=origin/main` — 0 issues (one `godot` finding on the new
+  `StackFrame` doc comment, fixed).
+- `gofumpt -l` on every changed file — no output.
+- `go test -race -shuffle=on ./pkg/perf/... -count=3` — full package passes.
+- `go test -race -shuffle=on ./cmd/... -run 'TestEnableHeatmapIfRequested|TestDisplayPerformanceHeatmap|TestHeatmapNonTTYOutput' -count=3`
+  — passes (exit 0 across the whole `./cmd/...` tree, no FAIL anywhere).
+- `go test -race -shuffle=on ./cmd/ai/skill/... -count=3` — full package passes.
+- Re-ran the exact set of 18 originally-failing top-level test names (everything from the CI log
+  except `TestPackerValidateCmd`, a separate, pre-existing environment issue -- `packer init` was
+  never run, so its plugins aren't installed; unrelated to this incident) across the whole
+  `./cmd/...` tree with `-race -shuffle=on`: exit 0, no FAIL lines anywhere in ~19000 lines of
+  output. This is the strongest signal yet that the fan-out is resolved, though (as with every
+  other round) the actual CI run against the real RunsOn `large` runner is the final check.
 
 ## Follow-ups
 
