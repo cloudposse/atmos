@@ -71,7 +71,7 @@ jobs:
           go-version-file: "go.mod"
 
       - name: Set up Atmos
-        uses: cloudposse/github-action-setup-atmos@89c34b209108da66a27c8d6565d8d4b21dbdaa73 # v3.2.0
+        uses: cloudposse/github-action-setup-atmos@60878d48037763f759aedee74e9cc0c2dc88e9ec # v3.5.0
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
           install-wrapper: false
@@ -113,7 +113,7 @@ jobs:
           go-version-file: "go.mod"
 
       - name: Set up Atmos
-        uses: cloudposse/github-action-setup-atmos@89c34b209108da66a27c8d6565d8d4b21dbdaa73 # v3.2.0
+        uses: cloudposse/github-action-setup-atmos@60878d48037763f759aedee74e9cc0c2dc88e9ec # v3.5.0
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
           install-wrapper: false
