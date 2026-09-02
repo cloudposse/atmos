@@ -157,7 +157,7 @@ func Reset() {
 // A store that fails to resolve or construct (unresolvable kind, an incompatible
 // `secret: true`, or a factory error) is skipped and logged as a warning naming the
 // specific store, rather than aborting the whole build: `stores:` config load must not
-// fail globally because one store — possibly one nothing in the stack even references —
+// fail globally because one store — possibly one that nothing in the stack even references —
 // is misconfigured. Code that actually looks up a skipped store by name still gets a clear
 // error at the point of use, since it is simply absent from the returned registry.
 // See https://github.com/cloudposse/atmos/issues/2930.
