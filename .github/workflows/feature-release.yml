@@ -23,7 +23,7 @@ jobs:
     # independent of which token is used for git/API calls elsewhere.
     permissions:
       id-token: write
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@auto-release-cosign # main
     with:
       publish: true
       prerelease: true
