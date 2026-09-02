@@ -125,6 +125,9 @@ var (
 			},
 		},
 		Initialized: true,
+		Toolchain: schema.Toolchain{
+			UseLockFile: true, // Changed from false to true since PR toolchain-lockfile-default (journaled in pkg/edition).
+		},
 		Version: schema.Version{
 			Check: schema.VersionCheck{
 				Enabled:   true,

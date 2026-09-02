@@ -572,6 +572,8 @@ var (
 	ErrGeneratorValidation   = errors.New("generator validation failed")
 	ErrGenerationFailed      = errors.New("generation failed")
 	ErrGeneratorWriteFailed  = errors.New("failed to write generated file")
+	ErrGeneratorRemoveFailed = errors.New("failed to remove generated file")
+	ErrGeneratedNotRegular   = errors.New("generated file path is not a regular file")
 	ErrMissingWorkingDir     = errors.New("working directory is required")
 	ErrMissingProviderSource = errors.New("required_providers entry missing 'source' field")
 
