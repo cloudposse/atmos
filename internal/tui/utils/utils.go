@@ -60,32 +60,54 @@ func PrintStyledText(text string) error {
 	// Check --force-color flag (via Viper).
 	// This allows `atmos version --force-color` to work for screenshot generation.
 	if viper.GetBool("force-color") {
-		return figurine.Write(iolib.Data, sanitizeForFigurine(text), AnsiRegularFont)
+		return writeStyledFigurine(iolib.Data, text)
 	}
 
 	// Check standard CLICOLOR_FORCE and FORCE_COLOR env vars.
 	if os.Getenv("CLICOLOR_FORCE") != "" || os.Getenv("FORCE_COLOR") != "" { //nolint:forbidigo // Standard terminal env vars
-		return figurine.Write(iolib.Data, sanitizeForFigurine(text), AnsiRegularFont)
+		return writeStyledFigurine(iolib.Data, text)
 	}
 
 	// Fall back to automatic color detection.
 	// supportscolor automatically detects TTY and other standard environment variables.
 	if supportscolor.Stdout().SupportsColor {
-		return figurine.Write(iolib.Data, sanitizeForFigurine(text), AnsiRegularFont)
+		return writeStyledFigurine(iolib.Data, text)
+	}
+	return nil
+}
+
+// writeStyledFigurine renders text through figurine.Write, splitting on '\n'
+// first so each line becomes its own figlet block joined by a real newline.
+// The go-figure library has no concept of a multi-line phrase -- Slicify
+// treats the whole input as a single row of glyphs -- so passing multi-line
+// text straight through would collapse every line onto one (via
+// sanitizeForFigurine, below) or crash outright (via go-figure's strict-mode
+// log.Fatal on the newline character itself). Splitting first preserves the
+// caller's line breaks. Always renders with AnsiRegularFont: every current
+// caller uses that font, so it isn't a parameter here.
+func writeStyledFigurine(out io.Writer, text string) error {
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		if err := figurine.Write(out, sanitizeForFigurine(line), AnsiRegularFont); err != nil {
+			return err
+		}
+		if i < len(lines)-1 {
+			if _, err := io.WriteString(out, "\n"); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
 
 // sanitizeForFigurine replaces every character outside go-figure's supported
-// printable-ASCII range (' ' through '~', i.e. no newlines, tabs, or other
+// printable-ASCII range (' ' through '~', i.e. no tabs or other
 // control/non-ASCII characters) with '?', mirroring go-figure's own
-// non-strict fallback (figure.go's Slicify: "else { char = '?' }"). The
-// figurine library always renders in strict mode, which cannot be
-// configured from here and calls log.Fatal -- a hard, unrecoverable process
-// exit, not a returned error -- on the first out-of-range character,
-// including a plain '\n' in multi-line banner text. Sanitizing first keeps
-// this a graceful (if visually imperfect) render instead of taking down the
-// whole process.
+// non-strict fallback (figure.go's Slicify: "else { char = '?' }"). Callers
+// split on '\n' before calling this (see writeStyledFigurine) so it never
+// sees a newline itself; a lone '\n' reaching go-figure's strict mode -- the
+// only mode figurine.Write renders in, not configurable from here -- calls
+// log.Fatal, a hard, unrecoverable process exit, not a returned error.
 func sanitizeForFigurine(text string) string {
 	var b strings.Builder
 	b.Grow(len(text))
@@ -135,7 +157,7 @@ func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 	forceColor := viper.GetBool("force-color") || isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv)
 	if supportscolor.Stdout().SupportsColor || forceColor {
 		// Write to the specified output writer, not os.Stdout
-		return figurine.Write(out, sanitizeForFigurine(text), AnsiRegularFont)
+		return writeStyledFigurine(out, text)
 	}
 	return nil
 }

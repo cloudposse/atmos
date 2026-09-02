@@ -412,10 +412,6 @@ Round 7 validation:
   open (see Follow-ups) after it didn't reproduce on retries with the seed that had just produced
   it.
 
-## Follow-ups
-
-None.
-
 ## Round 9 (resolved `cmd/list` flake)
 
 The `cmd/list` failure documented in the prior round's Follow-ups (`TestListStacksWithOptions_CoverageIntegration`
@@ -588,6 +584,33 @@ reruns locally (`pkg/auth/identities/aws`, `pkg/auth/identities/azure`, `pkg/gen
 `cmd/ai/skill`, `internal/tui/utils`). A full local run of the exact CI command across the entire package
 set (minus `tests/`, `-timeout 20m`) completed with 390 of 391 testable packages passing; the one failure was
 `internal/tui/utils` before this round's fix, now also passing across 15 reruns.
+
+## Round 12 (a genuine data race, caught exactly as intended)
+
+The push containing Round 11's fixes (plus a merge from `main` and Dependabot remediation) produced a CI
+run with a real `WARNING: DATA RACE` block, alongside `TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly`
+(already documented above, unchanged) and `TestInitializeAIComponents_WithToolLists`, whose only failure
+message was `race detected during execution of test` — i.e. the race *was* the failure, not a separate bug.
+
+**`pkg/ai/tools/atmos/list_commands.go`'s `commandTreeProvider`** is a package-level variable injected once
+at MCP server startup (`SetCommandTreeProvider`, called from `cmd/mcp/server`'s `initializeAIComponents`) and
+read on every `atmos_list_commands`/`atmos_command_help` tool call (`commandTreeRoots`), with no
+synchronization at all. `cmd/mcp/server`'s own tests call `SetCommandTreeProvider` from more than one
+goroutine — one directly (`TestInitializeAIComponents_WithToolLists`), another indirectly through
+`setupMCPServer`'s own config-loading path — and the write in each goroutine raced the other. This is a real,
+narrow-but-genuine production bug: two concurrent MCP server initializations (or an initialization racing a
+tool call) could corrupt or silently drop the provider assignment. Fixed with a `sync.RWMutex`
+(`commandTreeProviderMu`) guarding both the write (`SetCommandTreeProvider`) and the read
+(`commandTreeRoots`); the two same-package test files that read the raw variable directly for save/restore
+(`command_help_test.go`, `list_commands_test.go`) were updated to take the read lock too.
+
+Validation: `go build ./...`, `go vet ./...` — clean. `./custom-gcl run --new-from-rev=origin/main` — 0
+issues. `go test -race -shuffle=on ./cmd/mcp/server/...` — passes cleanly (previously reproduced the race).
+`go test -race -shuffle=on ./pkg/ai/tools/atmos/... -run 'TestListCommandsTool|TestCommandHelpTool'` — passes
+cleanly across the tests that touch `commandTreeProvider`/the new mutex directly. (A broader, unfiltered
+`./pkg/ai/tools/atmos/...` run separately hit an unrelated real-network test hang in this sandbox — the same
+established "local sandbox network unreliability" pattern documented earlier in this incident, not a
+regression from this fix.)
 
 ## Follow-ups
 

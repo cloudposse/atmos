@@ -46,7 +46,12 @@ type cmdStateSnapshot struct {
 	chdirProcessed bool
 	colorProfile   termenv.Profile // Lipgloss color profile
 	openDocsURL    func(string) error
-	commands       []*cobra.Command // RootCmd.Commands() at snapshot time.
+	// childCommands maps every command reachable from RootCmd (including RootCmd
+	// itself) to its own Commands() list at snapshot time. Covers grandchildren
+	// and deeper: a test that adds/removes a subcommand under e.g. "toolchain"
+	// (not RootCmd directly) would otherwise leave that nested registration in
+	// the shared Cobra tree for later tests to observe.
+	childCommands map[*cobra.Command][]*cobra.Command
 }
 
 // walkCommandTree calls fn for RootCmd and every command reachable from it
@@ -77,7 +82,7 @@ func snapshotRootCmdState() *cmdStateSnapshot {
 		chdirProcessed: chdirProcessed,
 		colorProfile:   lipgloss.ColorProfile(),
 		openDocsURL:    openDocsURL,
-		commands:       append([]*cobra.Command(nil), RootCmd.Commands()...),
+		childCommands:  make(map[*cobra.Command][]*cobra.Command),
 	}
 
 	// Copy args.
@@ -86,7 +91,8 @@ func snapshotRootCmdState() *cmdStateSnapshot {
 	// Copy os.Args.
 	copy(snapshot.osArgs, os.Args)
 
-	// Snapshot every command's own flags (both local and persistent).
+	// Snapshot every command's own flags (both local and persistent) and its
+	// own child-command list.
 	walkCommandTree(RootCmd, func(c *cobra.Command) {
 		flags := make(map[string]flagSnapshot)
 		snapshotFlags := func(flagSet *pflag.FlagSet) {
@@ -100,6 +106,7 @@ func snapshotRootCmdState() *cmdStateSnapshot {
 		snapshotFlags(c.Flags())
 		snapshotFlags(c.PersistentFlags())
 		snapshot.flags[c] = flags
+		snapshot.childCommands[c] = append([]*cobra.Command(nil), c.Commands()...)
 	})
 
 	return snapshot
@@ -167,13 +174,14 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 	// Restore chdirProcessed flag.
 	chdirProcessed = snapshot.chdirProcessed
 
-	// Remove any command registered on RootCmd since the snapshot was taken
-	// (e.g. by a test loading real custom commands via InitCliConfig +
-	// processCustomCommands). Left in place, a later test can collide with
-	// or silently observe a command from an unrelated, already-finished test.
-	// Done before the flag walk below so that walk visits exactly the
-	// commands present in the snapshot.
-	restoreRootCmdCommands(snapshot.commands)
+	// Remove any command registered anywhere in the tree since the snapshot was
+	// taken (e.g. by a test loading real custom commands via InitCliConfig +
+	// processCustomCommands, or one that adds/removes a subcommand under a
+	// non-RootCmd parent like "toolchain"). Left in place, a later test can
+	// collide with or silently observe a command from an unrelated,
+	// already-finished test. Done before the flag walk below so that walk
+	// visits exactly the commands present in the snapshot.
+	restoreCommandChildren(snapshot)
 
 	// Restore every snapshotted command's flags to their captured values.
 	restoreFlagsOn := func(c *cobra.Command) {
@@ -211,26 +219,39 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 	openDocsURL = snapshot.openDocsURL
 }
 
-// restoreRootCmdCommands removes every command currently on RootCmd that
-// wasn't present in the given snapshot, and re-adds every snapshot command a
-// test removed (e.g. via RootCmd.RemoveCommand), restoring RootCmd's command
-// set to what it was when the snapshot was taken.
-func restoreRootCmdCommands(original []*cobra.Command) {
-	originalSet := make(map[*cobra.Command]bool, len(original))
-	for _, c := range original {
-		originalSet[c] = true
-	}
-	for _, c := range RootCmd.Commands() {
-		if !originalSet[c] {
-			RootCmd.RemoveCommand(c)
+// restoreCommandChildren recursively restores every command's own
+// child-command list (not just RootCmd's) to what it was at snapshot time.
+// Walking down through the snapshot's own recorded tree (rather than the
+// live, possibly-mutated one) ensures every level gets visited even if a
+// test added a new subtree of commands that doesn't exist in the snapshot
+// at all.
+func restoreCommandChildren(snapshot *cmdStateSnapshot) {
+	var restore func(c *cobra.Command)
+	restore = func(c *cobra.Command) {
+		original, ok := snapshot.childCommands[c]
+		if !ok {
+			return
+		}
+		originalSet := make(map[*cobra.Command]bool, len(original))
+		for _, child := range original {
+			originalSet[child] = true
+		}
+		for _, child := range c.Commands() {
+			if !originalSet[child] {
+				c.RemoveCommand(child)
+			}
+		}
+		// Cobra's RemoveCommand clears the removed command's Parent(); AddCommand
+		// sets it back to the new parent. So a snapshot child whose Parent() is no
+		// longer c was removed by the test and must be re-added.
+		for _, child := range original {
+			if child.Parent() != c {
+				c.AddCommand(child)
+			}
+		}
+		for _, child := range original {
+			restore(child)
 		}
 	}
-	// Cobra's RemoveCommand clears the removed command's Parent(); AddCommand sets it
-	// back to the new parent. So a snapshot command whose Parent() is no longer RootCmd
-	// was removed by the test and must be re-added.
-	for _, c := range original {
-		if c.Parent() != RootCmd {
-			RootCmd.AddCommand(c)
-		}
-	}
+	restore(RootCmd)
 }

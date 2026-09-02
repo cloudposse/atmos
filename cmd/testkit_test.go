@@ -256,6 +256,50 @@ func TestTestKit_RootCmdCommandRemovalRestoration(t *testing.T) {
 		"a command removed inside a nested NewTestKit test must be restored by that test's cleanup")
 }
 
+// TestTestKit_GrandchildCommandRestoration verifies that NewTestKit restores a
+// subcommand added under (or removed from) a *non-RootCmd* parent, not just
+// direct RootCmd children. The restoreCommandChildren helper walks the whole
+// snapshotted tree recursively; this is the regression test for the case a
+// flat, RootCmd-only restore would miss.
+//
+// Uses a throwaway parent command registered on RootCmd for the duration of
+// the test, rather than mutating a real subcommand's (e.g. "toolchain")
+// actual children: real commands are shared with other tests that drive
+// them through RootCmd.ExecuteC() (see TestRootHelpFunc_RealTree_*), and
+// even correctly-restored churn on their child list is enough to make those
+// tests' own shuffle-order assumptions flaky.
+func TestTestKit_GrandchildCommandRestoration(t *testing.T) {
+	tk := NewTestKit(t)
+
+	parent := &cobra.Command{Use: "testkit-grandchild-parent"}
+	original := &cobra.Command{Use: "testkit-original-grandchild"}
+	parent.AddCommand(original)
+	RootCmd.AddCommand(parent)
+	require.NotNil(tk, findChildCommand(parent, "testkit-original-grandchild"),
+		"fixture parent should start with its one original grandchild")
+
+	t.Run("adds and removes a grandchild command", func(t *testing.T) {
+		innerTk := NewTestKit(t)
+
+		added := &cobra.Command{Use: "testkit-added-grandchild"}
+		parent.AddCommand(added)
+		require.NotNil(innerTk, findChildCommand(parent, "testkit-added-grandchild"),
+			"added grandchild should be present mid-test")
+
+		parent.RemoveCommand(original)
+		assert.Nil(innerTk, findChildCommand(parent, "testkit-original-grandchild"),
+			"removed grandchild should be absent mid-test")
+		// Cleanup happens automatically when this subtest ends.
+	})
+
+	// After cleanup, the added grandchild must be gone and the original
+	// grandchild (removed mid-test) must be back.
+	assert.Nil(t, findChildCommand(parent, "testkit-added-grandchild"),
+		"grandchild added during the test should be removed by restore")
+	assert.NotNil(t, findChildCommand(parent, "testkit-original-grandchild"),
+		"grandchild removed during the test should be restored")
+}
+
 // Note: Viper restoration tests were removed because viper.Set(key, nil) breaks BindPFlag connections.
 // Viper state isolation between tests requires a different approach (e.g., temporary viper instances)
 // which is out of scope for the current TestKit implementation. Tests that need viper isolation
