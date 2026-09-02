@@ -1123,6 +1123,26 @@ func TestSetupColorProfileFromEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// setupColorProfileFromEnvWithArgs has real, permanent side effects
+			// when force-color is detected: it calls the raw os.Setenv (not
+			// t.Setenv) to set CLICOLOR_FORCE=1 for Boa's help renderer, and
+			// lipgloss.SetColorProfile(TrueColor) globally. NewTestKit restores
+			// the color profile; CLICOLOR_FORCE needs its own explicit
+			// save/restore since the test doesn't own that Setenv call itself.
+			// Left leaking, this silently defeats NO_COLOR for every later test
+			// in the binary that renders through the logger/Boa color path
+			// (confirmed root cause of TestTerraformGenerateVarfileCmdNoColor's
+			// intermittent -shuffle=on failures).
+			_ = NewTestKit(t)
+			originalCliColorForce, hadCliColorForce := os.LookupEnv("CLICOLOR_FORCE")
+			t.Cleanup(func() {
+				if hadCliColorForce {
+					_ = os.Setenv("CLICOLOR_FORCE", originalCliColorForce)
+				} else {
+					_ = os.Unsetenv("CLICOLOR_FORCE")
+				}
+			})
+
 			if tt.envVar != "" {
 				t.Setenv(tt.envVar, tt.envValue)
 			}

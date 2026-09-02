@@ -627,14 +627,20 @@ regression from this fix.)
   with `##[group]`/timestamps intact (this repo's log fetch already includes per-line timestamps) and check
   whether the `pkg/io` package's own timestamp range genuinely contains that warning line, or whether it
   falls in a different package's timestamp window.
-- `cmd/terraform/migrate`'s `TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly` failed once in CI with
-  `exec: "tofu": executable file not found in $PATH`, even though the test's own comment states it must
-  succeed "without ever needing a real tfmigrate/opentofu binary." It passed in isolation and across several
-  full-package `-shuffle=on` reruns locally, including with `tofu`/`terraform` removed from `PATH` (which
-  would surface an erroneous invocation immediately rather than mask it) — not reproducible locally after
-  reasonable effort. Left open; if it recurs, capture the exact `-shuffle` seed from the failing CI run and
-  retry with that seed plus the full, unfiltered package (not `-run`-narrowed, per Round 9's lesson that
-  narrowing changes the deterministic order).
+- `cmd/terraform/migrate`'s `TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly` has now failed in at
+  least two separate CI runs (Rounds 12 and 16) with `exec: "tofu": executable file not found in $PATH`, even
+  though the test's own comment states it must succeed "without ever needing a real tfmigrate/opentofu
+  binary." Both times, retrying locally with the exact CI-failing `-test.shuffle` seed for
+  `cmd/terraform/migrate` (unfiltered, per Round 9's lesson that `-run`-narrowing changes the deterministic
+  order) passed cleanly — still not reproducible locally after two full rounds of dedicated effort. Round 16
+  considered making the "tofu never invoked" guarantee deterministic by deliberately breaking `PATH` (mirroring
+  the sibling `TestRunTerraformMigrate_SelectWorkspaceErrorPropagates`'s own idiom) but backed out: the test's
+  only assertion is `require.NoError`, which doesn't verify tofu was never invoked at all — if a real,
+  narrow invocation-skip bug exists, forcing `PATH` to always break would convert today's intermittent CI
+  flake into a deterministic CI failure instead of fixing anything, which is the wrong trade under this level
+  of uncertainty. Left open; if it recurs again, the next investigation should focus on why CI's ambient PATH
+  differs run-to-run in a way this local sandbox doesn't reproduce (e.g. runner image variance in where `tofu`
+  is installed) rather than re-attempting local `-shuffle` reproduction a third time.
 - `cmd/root_test.go`'s `TestApplyCIGitCloneBootstrap_CICloneExplicitFalseOptsOut` and
   `TestApplyCIGitCloneBootstrap_NoCIProviderDetected` failed in a full local `-race -shuffle=on` run of the
   entire package set with `atmosConfig.CI.Enabled` unexpectedly `true` (`assert.False` on that field, not on
@@ -658,13 +664,6 @@ regression from this fix.)
   spinner's animation goroutine racing the actual error-render call. Unrelated to Round 15's diff (which only
   touches `cmd` package command-tree/flag/helpFunc test restoration); not reproduced in isolation or
   root-caused within this round's budget — left open.
-- `TestTerraformGenerateVarfileCmdNoColor` failed once in the same Round 15 validation batch with
-  `Output should not contain ANSI codes when NO_COLOR=1` — ANSI codes leaked through despite `NO_COLOR=1`.
-  Likely the same category as the documented `pkg/ui` triple color-profile cache gotcha (env changes need
-  `ui.ReinitFormatter()`, not just `SetColorProfile`+`InvalidateStyleCache`, which is all
-  `restoreRootCmdState` currently does) — plausibly another test leaking a forced-color profile forward that
-  a later `NO_COLOR=1` test doesn't fully override. Not reproduced in isolation or root-caused within this
-  round's budget — left open.
 
 ## Round 11 (the `--help`-flag leak fix, generalized)
 
@@ -848,6 +847,51 @@ Validation: `go build ./cmd/...`, `go vet ./cmd/...` -- clean. `./custom-gcl run
 15m once bug 2 alone was fixed). `go test -race ./cmd/ -run
 'TestSnapshotRootCmdState|TestTestKit_|TestRootHelpFunc_RealTree'` -- all pass. 5 additional full-package `go
 test -race -shuffle=on ./cmd/` reruns -- 3 passed cleanly; 2 failed on tests unrelated to this round's diff
-(see Follow-ups: `TestApplyCIGitCloneBootstrap_*`, already a documented open issue; and two newly-surfaced
-flakes in unrelated subsystems, `TestValidateStacksCmd_Failure` and `TestTerraformGenerateVarfileCmdNoColor`,
-neither touching command-tree/flag/helpFunc state this round's diff modifies).
+(see Follow-ups: `TestApplyCIGitCloneBootstrap_*`, already a documented open issue; and a newly-surfaced flake
+in an unrelated subsystem, `TestValidateStacksCmd_Failure`, not touching command-tree/flag/helpFunc state this
+round's diff modifies). A second newly-surfaced failure from this same validation batch,
+`TestTerraformGenerateVarfileCmdNoColor`, was root-caused and fixed in Round 16 below rather than left open.
+
+## Round 16 (root-caused `TestTerraformGenerateVarfileCmdNoColor`, and it turned out to matter for real CI)
+
+Round 15's own validation batch surfaced `TestTerraformGenerateVarfileCmdNoColor` failing intermittently under
+`-race -shuffle=on` and it was provisionally logged as an unrelated, deferred flake. The very next real CI run
+(after Round 15's fix landed) failed on this exact test, confirming it isn't a local-sandbox curiosity -- it
+actively blocks the race job. Root-caused: `TestSetupColorProfileFromEnv` (`cmd/root_test.go`) exercises the
+real `setupColorProfileFromEnvWithArgs` (`cmd/root.go`) for its "ATMOS_FORCE_COLOR set" and "force-color flag"
+cases, and that function has two genuine, permanent side effects when force-color is detected:
+`lipgloss.SetColorProfile(termenv.TrueColor)` and a raw `os.Setenv("CLICOLOR_FORCE", "1")` (not `t.Setenv` --
+this env var backs Boa's help-renderer color detection, so it's deliberately process-wide in production, not
+scoped to any one command invocation). The test never wrapped itself in `NewTestKit(t)` and never restored
+either side effect. Once either subtest ran, `CLICOLOR_FORCE=1` stayed set in the process environment for the
+rest of the test binary's life. `TestTerraformGenerateVarfileCmdNoColor` sets `NO_COLOR=1` and expects zero
+ANSI codes in its captured output; `configureEarlyColorProfile` (which checks `NO_COLOR` first) still worked
+correctly, but a *different*, later-executing path -- `atmosConfig.Settings.Terminal.ForceColor`, populated
+from `viper.GetBool("force-color")` during real config load, which is bound to both `ATMOS_FORCE_COLOR` and
+`CLICOLOR_FORCE` -- picked up the leaked `CLICOLOR_FORCE=1` and forced the logger back to `TrueColor`,
+overriding the test's own explicit `ui.SetColorProfile(termenv.Ascii)` call. Fixed by having
+`TestSetupColorProfileFromEnv` wrap itself in `NewTestKit(t)` (restores the lipgloss/theme side of the leak,
+matching this codebase's established pattern) and explicitly save/restore `CLICOLOR_FORCE` around each subtest
+via `t.Cleanup` (the raw `os.Setenv` call is production code's own side effect, not something the test can
+scope with `t.Setenv` itself).
+
+A second, already-repeatedly-documented flake, `TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly`,
+failed in the same CI run. Investigated again this round with the exact CI-failing `-test.shuffle` seed for
+`cmd/terraform/migrate` -- still does not reproduce locally (matching every prior attempt across Rounds 9-15).
+Considered deliberately breaking `PATH` in the test (mirroring its sibling
+`TestRunTerraformMigrate_SelectWorkspaceErrorPropagates`'s own idiom) to make the "tofu is never invoked"
+guarantee deterministic, but backed out of that change: the test's assertion is only `require.NoError`, which
+doesn't verify tofu was never invoked in the first place -- if a real (rare) invocation-skip bug exists,
+forcing `PATH` to always break would convert an intermittent CI flake into a deterministic CI failure, making
+things worse under the exact uncertainty that makes this worth investigating further rather than guessing.
+Left open, still tracked below.
+
+Files: `cmd/root_test.go` (`TestSetupColorProfileFromEnv`'s `NewTestKit` + `CLICOLOR_FORCE` save/restore).
+
+Validation: `go build ./cmd/...`, `go vet ./cmd/...` -- clean. `./custom-gcl run --new-from-rev=origin/main` --
+0 issues. `gofumpt -l cmd/root_test.go` -- no output. `go test -race ./cmd/ -run
+'TestSetupColorProfileFromEnv|TestTerraformGenerateVarfileCmdNoColor'` -- both pass. 4 additional full-package
+`go test -race -shuffle=on ./cmd/` reruns -- `TestTerraformGenerateVarfileCmdNoColor` did not fail in any of
+them (previously failed in roughly half of comparable reruns); the one failure across the 4 reruns was
+`TestValidateStacksCmd_Failure` + `TestApplyCIGitCloneBootstrap_NoCIProviderDetected`, both already-documented,
+unrelated pre-existing flakes (see Follow-ups).
