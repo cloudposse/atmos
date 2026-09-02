@@ -23,9 +23,11 @@ mechanical. The one gap is tofuenv's partial or range-based version selectors. S
 # .opentofu-version
 1.10.3
 ```
-You can also set the version with the `tofuenv use 1.10.3` command. tofuenv records this version
-in `~/.tofuenv/version` as the global default. Or tofuenv records the version in
-`.opentofu-version` as a per-project pin.
+You can also set the version with the `tofuenv use 1.10.3` command. This command switches the
+active version by recording it in `~/.tofuenv/version`, the global default. It does not write
+`.opentofu-version`. To write a per-project pin instead, run `tofuenv use 1.10.3` followed by
+`tofuenv pin`. `tofuenv pin` writes the currently active version to `.opentofu-version` in the
+current directory.
 
 **After:**
 ```text
@@ -76,7 +78,7 @@ atmos toolchain install
 | `tofuenv use 1.10.3` | `atmos toolchain set opentofu 1.10.3` |
 | `tofuenv version-name` | `atmos toolchain get opentofu` |
 | `tofuenv list` (installed versions) | `atmos toolchain list` |
-| `tofuenv list-remote` (available versions) | `atmos toolchain search opentofu` |
+| `tofuenv list-remote` (available versions) | `atmos toolchain get opentofu --all` |
 | `tofuenv uninstall 1.10.3` | `atmos toolchain uninstall opentofu@1.10.3` |
 
 ## Shell Integration

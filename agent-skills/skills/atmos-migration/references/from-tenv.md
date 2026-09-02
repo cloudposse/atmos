@@ -11,7 +11,7 @@ multi-tool scope only.
 ## Overview
 
 tenv replaces tfenv and tofuenv. It is one binary that manages version pinning for Terraform,
-OpenTofu, Terragrunt, and TFLint. Each tool uses its own version file, or a `tenv <tool> use`
+OpenTofu, and Terragrunt. Each tool uses its own version file, or a `tenv <tool> use`
 command.
 
 The Atmos toolchain treats each tool as an independent tool declaration. To migrate, apply the
@@ -24,10 +24,9 @@ same one-line-per-tool process to each tool that tenv currently manages.
 | `.terraform-version`    | Terraform    | `terraform <version>`      |
 | `.opentofu-version`     | OpenTofu     | `opentofu <version>`       |
 | `.terragrunt-version`   | Terragrunt   | `terragrunt <version>`     |
-| `.tflint-version`       | TFLint       | `tflint <version>`         |
 
 Convert only the files that exist in the repo. Most projects use 1 or 2 of these files. Few
-projects use all 4.
+projects use all 3.
 
 ## Before / After
 
@@ -35,23 +34,23 @@ projects use all 4.
 ```text
 # .terraform-version
 1.9.8
-# .tflint-version
-0.54.0
+# .terragrunt-version
+0.67.0
 ```
-You can also set versions with commands: `tenv terraform use 1.9.8` or `tenv tflint use 0.54.0`.
+You can also set versions with commands: `tenv terraform use 1.9.8` or `tenv terragrunt use 0.67.0`.
 
 **After:**
 ```text
 # .tool-versions
 terraform 1.9.8
-tflint 0.54.0
+terragrunt 0.67.0
 ```
 ```yaml
 # atmos.yaml
 toolchain:
   aliases:
     terraform: hashicorp/terraform
-    tflint: terraform-linters/tflint
+    terragrunt: gruntwork-io/terragrunt
   registries:
     - name: aqua
       type: aqua
@@ -89,20 +88,19 @@ atmos toolchain install
 | `tenv tofu install 1.10.3` | `atmos toolchain install opentofu@1.10.3` |
 | `tenv tofu use 1.10.3` | `atmos toolchain set opentofu 1.10.3` |
 | `tenv terragrunt install 0.67.0` | `atmos toolchain install terragrunt@0.67.0` |
-| `tenv tflint install 0.54.0` | `atmos toolchain install tflint@0.54.0` |
 | `tenv terraform list` (installed) | `atmos toolchain list` |
-| `tenv terraform list --remote` (available) | `atmos toolchain search terraform` |
+| `tenv terraform list --remote` (available) | `atmos toolchain get terraform --all` |
 | `tenv terraform detect` | `atmos toolchain get terraform` |
 | `tenv terraform uninstall 1.9.8` | `atmos toolchain uninstall terraform@1.9.8` |
 
-For the last 4 rows, replace `terraform` with `tofu`, `terragrunt`, or `tflint` as needed.
+For the last 4 rows, replace `terraform` with `tofu` or `terragrunt` as needed.
 
 ## Shell Integration
 
 tenv works through shims. Its installer adds `~/.tenv/bin` to `PATH`, typically with
 `export PATH="$HOME/.tenv/bin:$PATH"` in `~/.bashrc` or `~/.zshrc`.
 
-Each shim (`terraform`, `tofu`, `terragrunt`, `tflint`) reads its matching version file again on
+Each shim (`terraform`, `tofu`, `terragrunt`) reads its matching version file again on
 every invocation. Plain commands such as `terraform` or `tofu` always resolve correctly in any
 shell. This setup needs no per-project configuration.
 
@@ -139,7 +137,7 @@ Invoke-Expression (atmos toolchain env --format powershell | Out-String)
 
 Verify the setup with `which terraform` (use `Get-Command terraform` on PowerShell). The command
 must resolve under the Atmos toolchain install directory, not a tenv shim. Repeat this check for
-`tofu`, `terragrunt`, and `tflint` as needed.
+`tofu` and `terragrunt` as needed.
 
 Run `atmos` commands, including the shell integration commands above, from the directory that
 contains `atmos.yaml`. If your shell is in a different directory, add `--chdir /path/to/project`

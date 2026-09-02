@@ -78,13 +78,13 @@ atmos toolchain install
 | `asdf plugin add terraform` | No plugin step needed. Add the tool to `toolchain.aliases`/`registries` only if the public Aqua registry does not already resolve it. |
 | `asdf install` | `atmos toolchain install` |
 | `asdf install terraform 1.9.8` | `atmos toolchain install terraform@1.9.8` |
-| `asdf global terraform 1.9.8` | `atmos toolchain set terraform 1.9.8` (writes the default version to `.tool-versions`) |
-| `asdf local terraform 1.9.8` | `atmos toolchain add terraform@1.9.8` (adds/updates the `.tool-versions` entry) |
+| `asdf set -u terraform 1.9.8` (home-level default, asdf 0.16+; `asdf global` on older asdf) | `atmos toolchain set --tool-versions "$HOME/.tool-versions" terraform 1.9.8` (writes the default version to the home-level `.tool-versions` file) |
+| `asdf set terraform 1.9.8` (current-directory pin, asdf 0.16+; `asdf local` on older asdf) | `atmos toolchain add terraform@1.9.8` (adds/updates the project `.tool-versions` entry) |
 | `asdf current` | `atmos toolchain list` |
 | `asdf current terraform` | `atmos toolchain get terraform` |
 | `asdf which terraform` | `atmos toolchain which terraform` |
 | `asdf uninstall terraform 1.9.8` | `atmos toolchain uninstall terraform@1.9.8` |
-| `asdf plugin list all` | `atmos toolchain registry search <name>` |
+| `asdf plugin list all` (browse every short-name plugin) | No exact equivalent. `atmos toolchain registry list aqua` browses every entry in the public Aqua registry. `atmos toolchain registry search <name>` matches a specific query instead of browsing everything. |
 | `asdf shell terraform 1.9.8` (session-only override) | `atmos toolchain exec terraform@1.9.8 -- <args>` (one-off pinned run of the raw binary) |
 | `. ~/.asdf/asdf.sh` in shell rc (shim-based, automatic) | `eval "$(atmos toolchain env --format=bash)"` in shell rc |
 

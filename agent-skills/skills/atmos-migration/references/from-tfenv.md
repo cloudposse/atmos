@@ -21,9 +21,11 @@ tfenv's partial or range-based version selectors. See Functional Gaps.
 # .terraform-version
 1.9.8
 ```
-You can also set the version with the `tfenv use 1.9.8` command. This command records the version
-in `~/.tfenv/version` as the global default. Or it records the version in `.terraform-version` for
-a per-project pin.
+You can also set the version with the `tfenv use 1.9.8` command. This command switches the active
+version by recording it in `~/.tfenv/version`, the global default. It does not write
+`.terraform-version`. To write a per-project pin instead, run `tfenv use 1.9.8` followed by
+`tfenv pin`. `tfenv pin` writes the currently active version to `.terraform-version` in the
+current directory.
 
 **After:**
 ```text
@@ -70,7 +72,7 @@ atmos toolchain install
 | `tfenv use 1.9.8` | `atmos toolchain set terraform 1.9.8` |
 | `tfenv version-name` | `atmos toolchain get terraform` |
 | `tfenv list` (installed versions) | `atmos toolchain list` |
-| `tfenv list-remote` (available versions) | `atmos toolchain search terraform` |
+| `tfenv list-remote` (available versions) | `atmos toolchain get terraform --all` |
 | `tfenv uninstall 1.9.8` | `atmos toolchain uninstall terraform@1.9.8` |
 
 ## Shell Integration
