@@ -518,6 +518,110 @@ func TestBuildRelationships_WithDependencies(t *testing.T) {
 	assert.Equal(t, vpcNode, subnetNode.Parent)
 }
 
+// TestBuildRelationships_ForEachInstanceAddress is a regression test: a for_each/count
+// resource's ResourceChanges address carries an instance key (e.g. aws_subnet.a["public"]),
+// but plan.Config.RootModule.Resources — where extractDependencies reads depends_on from —
+// only ever has the base, uninstanced address (aws_subnet.a). Without stripping the instance
+// key before the dependsOn lookup, every for_each/count instance misses its dependency entry
+// and falls back to root regardless of its real chain, silently flattening the tree and
+// breaking the rendered gutters for anything nested under it.
+func TestBuildRelationships_ForEachInstanceAddress(t *testing.T) {
+	tree := &DependencyTree{
+		Root:  &TreeNode{Address: "root"},
+		nodes: map[string]*TreeNode{},
+	}
+
+	vpcNode := &TreeNode{Address: "aws_vpc.main", Action: "create"}
+	subnetPublic := &TreeNode{Address: `aws_subnet.a["public"]`, Action: "create"}
+	subnetPrivate := &TreeNode{Address: `aws_subnet.a["private"]`, Action: "create"}
+	tree.nodes["aws_vpc.main"] = vpcNode
+	tree.nodes[`aws_subnet.a["public"]`] = subnetPublic
+	tree.nodes[`aws_subnet.a["private"]`] = subnetPrivate
+
+	plan := &tfjson.Plan{
+		Config: &tfjson.Config{
+			RootModule: &tfjson.ConfigModule{
+				Resources: []*tfjson.ConfigResource{
+					{Address: "aws_vpc.main"},
+					// Config-level resource address never carries a for_each instance key.
+					{Address: "aws_subnet.a", DependsOn: []string{"aws_vpc.main"}},
+				},
+			},
+		},
+	}
+
+	buildRelationships(tree, plan)
+
+	assert.Contains(t, tree.Root.Children, vpcNode)
+	assert.Contains(t, vpcNode.Children, subnetPublic,
+		"for_each instance must attach to its real dependency parent, not fall back to root")
+	assert.Contains(t, vpcNode.Children, subnetPrivate,
+		"for_each instance must attach to its real dependency parent, not fall back to root")
+	assert.Equal(t, vpcNode, subnetPublic.Parent)
+	assert.Equal(t, vpcNode, subnetPrivate.Parent)
+}
+
+// TestBuildRelationships_DependsOnForEachCollection is a regression test for the mirror
+// case of TestBuildRelationships_ForEachInstanceAddress: a resource that depends on an
+// *entire* count/for_each resource (Terraform has no syntax to depend on just one
+// instance) has a DependsOn/reference address with no instance key at all (e.g.
+// "aws_subnet.a"), which never exactly matches any instanced node address in the change
+// set (only "aws_subnet.a[\"public\"]" etc. exist). Without resolving it to a
+// representative instance, the dependent falls back to root instead of nesting under the
+// collection it actually depends on.
+func TestBuildRelationships_DependsOnForEachCollection(t *testing.T) {
+	tree := &DependencyTree{
+		Root:  &TreeNode{Address: "root"},
+		nodes: map[string]*TreeNode{},
+	}
+
+	subnetPublic := &TreeNode{Address: `aws_subnet.a["public"]`, Action: "create"}
+	subnetPrivate := &TreeNode{Address: `aws_subnet.a["private"]`, Action: "create"}
+	rtaNode := &TreeNode{Address: "aws_route_table_association.b", Action: "create"}
+	tree.nodes[`aws_subnet.a["public"]`] = subnetPublic
+	tree.nodes[`aws_subnet.a["private"]`] = subnetPrivate
+	tree.nodes["aws_route_table_association.b"] = rtaNode
+
+	plan := &tfjson.Plan{
+		Config: &tfjson.Config{
+			RootModule: &tfjson.ConfigModule{
+				Resources: []*tfjson.ConfigResource{
+					{Address: "aws_subnet.a"},
+					// Depends on the whole for_each collection, not one instance.
+					{Address: "aws_route_table_association.b", DependsOn: []string{"aws_subnet.a"}},
+				},
+			},
+		},
+	}
+
+	buildRelationships(tree, plan)
+
+	assert.NotEqual(t, tree.Root, rtaNode.Parent,
+		"a dependency on an entire for_each collection must not fall back to root")
+	assert.Contains(t, []*TreeNode{subnetPublic, subnetPrivate}, rtaNode.Parent,
+		"must anchor under one of the collection's real instances")
+	// Deterministic: "private" sorts before "public".
+	assert.Equal(t, subnetPrivate, rtaNode.Parent)
+}
+
+func TestStripInstanceKey(t *testing.T) {
+	tests := []struct {
+		name string
+		addr string
+		want string
+	}{
+		{name: "no instance key", addr: "aws_vpc.main", want: "aws_vpc.main"},
+		{name: "for_each string key", addr: `aws_subnet.a["public"]`, want: "aws_subnet.a"},
+		{name: "count numeric key", addr: "aws_subnet.a[0]", want: "aws_subnet.a"},
+		{name: "module-nested with instance key", addr: `module.vpc.aws_subnet.a["public"]`, want: "module.vpc.aws_subnet.a"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, stripInstanceKey(tt.addr))
+		})
+	}
+}
+
 func TestExtractDependencies_ExplicitDependsOn(t *testing.T) {
 	module := &tfjson.ConfigModule{
 		Resources: []*tfjson.ConfigResource{

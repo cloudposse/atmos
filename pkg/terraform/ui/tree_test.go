@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/schema"
+	uitree "github.com/cloudposse/atmos/pkg/ui/tree"
 )
 
 func TestResolveRenderConfig_NilUsesDefaults(t *testing.T) {
@@ -201,7 +202,7 @@ func TestSortChildren(t *testing.T) {
 func TestRenderChildren_Empty(t *testing.T) {
 	var b strings.Builder
 	// No styling in test for simplicity.
-	renderChildren(&b, nil, "", nil)
+	renderChildren(&b, nil, nil, nil)
 
 	assert.Empty(t, b.String())
 }
@@ -212,7 +213,7 @@ func TestRenderChildren_SingleNode(t *testing.T) {
 		{Address: "aws_vpc.main", Action: "create"},
 	}
 
-	renderChildren(&b, nodes, "", nil)
+	renderChildren(&b, nodes, nil, nil)
 
 	result := b.String()
 	assert.Contains(t, result, "aws_vpc.main")
@@ -226,13 +227,168 @@ func TestRenderChildren_MultipleNodes(t *testing.T) {
 		{Address: "aws_security_group.default", Action: "update"},
 	}
 
-	renderChildren(&b, nodes, "", nil)
+	renderChildren(&b, nodes, nil, nil)
 
 	result := b.String()
 	assert.Contains(t, result, "aws_vpc.main")
 	assert.Contains(t, result, "aws_security_group.default")
 	assert.Contains(t, result, "├─") // First child uses ├─
 	assert.Contains(t, result, "└─") // Last child uses └─
+}
+
+// TestRenderChildren_AttributeChangesPreserveGutterForNonLastSibling is a regression test:
+// an attribute-diff block rendered under a node that is NOT the last child at its level must
+// carry the tree's "│" continuation bar on every line, so the gutter stays visually connected
+// down to the next sibling's connector instead of breaking for the height of the diff block.
+func TestRenderChildren_AttributeChangesPreserveGutterForNonLastSibling(t *testing.T) {
+	var b strings.Builder
+	nodes := []*TreeNode{
+		{
+			Address: "null_resource.vpc",
+			Action:  "create",
+			Changes: []*AttributeChange{
+				{Key: "cidr_block", Before: nil, After: "10.0.0.0/16"},
+			},
+		},
+		{Address: "time_sleep.after_vpc", Action: "create"},
+	}
+
+	renderChildren(&b, nodes, nil, nil)
+
+	var attrLine string
+	for _, line := range strings.Split(b.String(), "\n") {
+		if strings.Contains(line, "cidr_block") {
+			attrLine = line
+			break
+		}
+	}
+
+	assert.NotEmpty(t, attrLine, "expected to find the cidr_block attribute line")
+	assert.Contains(t, attrLine, "│",
+		"attribute row under a non-last sibling must carry the continuation bar so the gutter connects to the next sibling")
+}
+
+// TestRenderChildren_AttributeRowsCarryRailToChildren is a regression test for the
+// parent-to-child connection: when a node has both attribute changes and children, its
+// attribute rows sit between the node's connector and its children's connectors, so those
+// rows must carry a "│" at the children's column. Otherwise the first child's "├"/"└"
+// floats below the diff block with nothing above it.
+func TestRenderChildren_AttributeRowsCarryRailToChildren(t *testing.T) {
+	var b strings.Builder
+	nodes := []*TreeNode{
+		{
+			Address: "time_sleep.after_vpc",
+			Action:  "create",
+			Changes: []*AttributeChange{
+				{Key: "create_duration", Before: nil, After: "600ms"},
+			},
+			Children: []*TreeNode{
+				{Address: "null_resource.subnet", Action: "create"},
+			},
+		},
+	}
+
+	renderChildren(&b, nodes, nil, nil)
+
+	lines := strings.Split(ansi.Strip(b.String()), "\n")
+	var attrLine, childLine string
+	for _, line := range lines {
+		switch {
+		case strings.Contains(line, "create_duration"):
+			attrLine = line
+		case strings.Contains(line, "null_resource.subnet"):
+			childLine = line
+		}
+	}
+	assert.NotEmpty(t, attrLine)
+	assert.NotEmpty(t, childLine)
+
+	// Index by rune, not byte: the "●" symbol ahead of the connector is multi-byte.
+	childCol := -1
+	for i, r := range []rune(childLine) {
+		if r == '├' || r == '└' {
+			childCol = i
+			break
+		}
+	}
+	assert.Positive(t, childCol, "child row must have a connector")
+	attrRunes := []rune(attrLine)
+	assert.Less(t, childCol, len(attrRunes), "attribute row must reach the child column")
+	assert.Equal(t, '│', attrRunes[childCol],
+		"attribute row under a node with children must carry the rail at the child connector column")
+}
+
+// TestRenderChildren_AttributeRowsNoRailWithoutChildren is the negative case: a node with
+// attribute changes but no children has nothing to connect to below its diff block, so
+// its attribute rows must not draw a rail at the (would-be) child column.
+func TestRenderChildren_AttributeRowsNoRailWithoutChildren(t *testing.T) {
+	var b strings.Builder
+	nodes := []*TreeNode{
+		{
+			Address: "null_resource.leaf",
+			Action:  "create",
+			Changes: []*AttributeChange{
+				{Key: "name", Before: nil, After: "x"},
+			},
+		},
+	}
+
+	renderChildren(&b, nodes, nil, nil)
+
+	for _, line := range strings.Split(ansi.Strip(b.String()), "\n") {
+		if strings.Contains(line, "name") {
+			assert.NotContains(t, line, "│", "leaf node's attribute rows must not draw a child rail")
+		}
+	}
+}
+
+// TestRenderChildren_NonCompactSpacerCarriesRail verifies the spacer line between
+// sibling resource blocks in non-compact mode keeps this level's rail, so the gutter
+// doesn't break at the gap before the next sibling.
+func TestRenderChildren_NonCompactSpacerCarriesRail(t *testing.T) {
+	var b strings.Builder
+	nodes := []*TreeNode{
+		{Address: "aws_vpc.main", Action: "create"},
+		{Address: "aws_security_group.default", Action: "update"},
+	}
+
+	renderChildren(&b, nodes, nil, &RenderConfig{Compact: false})
+
+	lines := strings.Split(ansi.Strip(b.String()), "\n")
+	// Line 0 is aws_vpc.main, line 1 is the spacer, line 2 is the next sibling.
+	if assert.GreaterOrEqual(t, len(lines), 3) {
+		assert.Equal(t, "     │", lines[1], "spacer must carry the sibling rail, not be blank")
+	}
+}
+
+// TestRenderTree_IsConnected asserts the invariant the gutter package guarantees, against
+// the real renderer: with attribute changes on every node of a deep, branching tree, every
+// connector and rail has something above it in the same column (see uitree.Violations),
+// in both compact and non-compact modes.
+func TestRenderTree_IsConnected(t *testing.T) {
+	change := []*AttributeChange{{Key: "k", Before: nil, After: "v"}, {Key: "k2", Before: "a", After: "b"}}
+	tree := &DependencyTree{
+		Stack: "dev", Component: "vpc",
+		Root: &TreeNode{Address: "root", Children: []*TreeNode{
+			{Address: "vpc", Action: "create", Changes: change, Children: []*TreeNode{
+				{Address: "after_vpc", Action: "create", Changes: change, Children: []*TreeNode{
+					{Address: "subnet_a", Action: "create", Changes: change, Children: []*TreeNode{
+						{Address: "after_subnets", Action: "create", Changes: change, Children: []*TreeNode{
+							{Address: "rta_a", Action: "create", Changes: change},
+							{Address: "rta_b", Action: "create", Changes: change},
+						}},
+					}},
+					{Address: "subnet_b", Action: "create", Changes: change},
+				}},
+			}},
+			{Address: "sibling", Action: "update", Changes: change},
+		}},
+	}
+	for _, compact := range []bool{true, false} {
+		out := tree.RenderTreeWithConfig(&RenderConfig{Compact: compact})
+		rows := strings.Split(strings.TrimRight(ansi.Strip(out), "\n"), "\n")
+		assert.Empty(t, uitree.Violations(rows), "compact=%v:\n%s", compact, ansi.Strip(out))
+	}
 }
 
 func TestExtractReferences(t *testing.T) {
@@ -967,7 +1123,7 @@ func TestRenderChildren_CompactMode_NoBlankLines(t *testing.T) {
 		{Address: "aws_security_group.default", Action: "update"},
 	}
 
-	renderChildren(&b, nodes, "", &RenderConfig{Compact: true})
+	renderChildren(&b, nodes, nil, &RenderConfig{Compact: true})
 
 	result := b.String()
 	assert.NotContains(t, result, "\n\n", "compact mode must not add blank lines between resources")
@@ -1134,7 +1290,7 @@ func TestRenderChildren_WithAttributeChanges(t *testing.T) {
 		},
 	}
 
-	renderChildren(&b, nodes, "", nil)
+	renderChildren(&b, nodes, nil, nil)
 
 	result := b.String()
 	assert.Contains(t, result, "aws_instance.web")

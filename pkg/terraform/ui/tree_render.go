@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	uitree "github.com/cloudposse/atmos/pkg/ui/tree"
 )
 
 // spaceChar is the literal single-space string. It's extracted into a constant since it's
@@ -27,6 +28,10 @@ const newlineStr = "\n"
 
 // fmtIndentedSymbolLine formats an indented "<symbol> <line>" row (used by diff rendering).
 const fmtIndentedSymbolLine = "%s%s %s\n"
+
+// symbolColumnWidth is the width of the leading "  ●  " action-symbol column that every
+// tree and attribute-diff row is indented past.
+const symbolColumnWidth = 5
 
 // RenderTree renders the tree as a string with box-drawing characters.
 // Uses a two-column layout: action symbol (fixed width) | tree structure.
@@ -47,49 +52,45 @@ func (t *DependencyTree) RenderTreeWithConfig(config *RenderConfig) string {
 	fmt.Fprintf(&b, "     %s\n", headerStyle.Render(t.Stack+"/"+t.Component))
 
 	// Render resource tree.
-	renderChildren(&b, t.Root.Children, "", config)
+	renderChildren(&b, t.Root.Children, nil, config)
 	return b.String()
 }
 
-func renderChildren(b *strings.Builder, nodes []*TreeNode, prefix string, config *RenderConfig) {
+// renderChildren renders nodes and their subtrees. The path argument is the position of the nodes'
+// parent (nil at the root); every gutter -- the connector, the attribute rows' rail, the
+// non-compact spacer -- comes from pkg/ui/tree, so the rows stay connected by
+// construction (see that package's Violations for the invariant this relies on).
+func renderChildren(b *strings.Builder, nodes []*TreeNode, path uitree.Path, config *RenderConfig) {
 	config = resolveRenderConfig(config)
 
 	for i, node := range nodes {
 		isLastChild := i == len(nodes)-1
-
-		// Determine box-drawing characters.
-		var connector, childPrefix string
-		if isLastChild {
-			connector = "└── "
-			childPrefix = prefix + "    "
-		} else {
-			connector = "├── "
-			childPrefix = prefix + "│   "
-		}
+		nodePath := append(append(uitree.Path{}, path...), isLastChild)
 
 		// Colorized action symbol (fixed 2-char width: symbol + space).
 		symbol := colorizedActionSymbol(node.Action)
 
 		// Build tree line: "  +  ├── resource_name"
 		// Column 1: 2 spaces + symbol + 2 spaces (5 chars total for alignment)
-		// Column 2: tree prefix + connector + resource address
-		treeLine := config.TreeStyle.Render(prefix+connector) + node.Address
+		// Column 2: tree gutter + connector + resource address
+		treeLine := config.TreeStyle.Render(uitree.Connector(nodePath)) + node.Address
 
 		fmt.Fprintf(b, "  %s  %s\n", symbol, treeLine)
 
-		// Render attribute changes below the resource.
+		// Attribute changes sit between this row and the children's rows; their gutter
+		// carries a rail down to the children when there are any.
 		if len(node.Changes) > 0 {
-			renderAttributeChanges(b, node.Changes, childPrefix, config)
+			renderAttributeChanges(b, node.Changes, uitree.ContentGutter(nodePath, len(node.Children) > 0), config)
 		}
 
-		// Render children.
 		if len(node.Children) > 0 {
-			renderChildren(b, node.Children, childPrefix, config)
+			renderChildren(b, node.Children, nodePath, config)
 		}
 
-		// Add blank line after resource block if not compact mode.
+		// Non-compact mode separates sibling blocks with a spacer row, which still has
+		// to carry the rails passing through it.
 		if !config.Compact && !isLastChild {
-			b.WriteString(newlineStr)
+			fmt.Fprintf(b, "%s%s\n", strings.Repeat(spaceChar, symbolColumnWidth), config.TreeStyle.Render(uitree.SpacerGutter(nodePath)))
 		}
 	}
 }
@@ -298,16 +299,18 @@ func precomputeAttributeFormatting(changes []*AttributeChange) (formatted []form
 	return formatted, maxKeyWidth, maxOldValWidth
 }
 
-// renderAttributeChanges renders attribute-level changes with clean indentation.
-// Uses simple indentation instead of tree continuation characters for cleaner output.
-func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, prefix string, config *RenderConfig) {
+// renderAttributeChanges renders attribute-level changes, aligned under the resource line.
+//
+// The gutter argument is the full tree gutter the rows sit behind: the node's ancestor rails plus one
+// more level covering the node's own connector column. The caller builds it (see
+// renderChildren) so a node with children keeps a rail there and its child connectors
+// below the diff block stay connected. The gutter's box-drawing characters are rendered
+// verbatim (styled), never blanked to spaces: blanking them is what used to break the
+// vertical rails for the height of every attribute block.
+func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, gutter string, config *RenderConfig) {
 	config = resolveRenderConfig(config)
 
-	// Calculate base indent for attributes (aligned with tree structure).
-	// Base indent: 5 spaces (for "  ●  ") + prefix display width + 4 (for "├── ").
-	// Use display width, not byte length: prefix carries multi-byte box-drawing
-	// characters (e.g. "│", 3 bytes / 1 cell) that would otherwise overcount.
-	baseIndent := strings.Repeat(spaceChar, 5+lipgloss.Width(prefix)+4)
+	baseIndent := strings.Repeat(spaceChar, symbolColumnWidth) + config.TreeStyle.Render(gutter)
 
 	// Build attribute bar if enabled.
 	var attrBar string

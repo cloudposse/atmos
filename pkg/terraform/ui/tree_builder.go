@@ -132,6 +132,51 @@ func isModuleAddress(addr string) bool {
 	return len(parts) == 2
 }
 
+// stripInstanceKey removes a trailing count/for_each instance key (e.g. ["public"] or [0])
+// from a resource instance address, returning the base config-declared address. Config-level
+// dependency maps (built by extractDependencies from plan.Config, which has no notion of
+// instances) are keyed by this base address, while ResourceChanges addresses carry the
+// instance key, so this normalization is required before any dependsOn lookup.
+func stripInstanceKey(addr string) string {
+	if idx := strings.IndexByte(addr, '['); idx != -1 {
+		return addr[:idx]
+	}
+	return addr
+}
+
+// buildInstancesByBaseIndex indexes tree.nodes' instance addresses by their base (uninstanced)
+// address. A dependency on an entire count/for_each resource references the resource's base
+// address (Terraform has no syntax to depend on just one instance of a collection), so
+// resolving it needs a representative instance node — sorting each base's instances makes
+// resolveDependencyNode's choice of "first" deterministic.
+func buildInstancesByBaseIndex(tree *DependencyTree) map[string][]string {
+	instancesByBase := make(map[string][]string, len(tree.nodes))
+	for addr := range tree.nodes {
+		base := stripInstanceKey(addr)
+		instancesByBase[base] = append(instancesByBase[base], addr)
+	}
+	for _, addrs := range instancesByBase {
+		sort.Strings(addrs)
+	}
+	return instancesByBase
+}
+
+// resolveDependencyNode resolves a dependency reference address to a tree node: an exact
+// (already-instanced) match first, else — when dep is a count/for_each resource's base
+// address referencing the whole collection, since Terraform has no syntax to depend on just
+// one instance of it — the alphabetically-first instance of that resource in the change set,
+// so the dependency still anchors under a real node instead of falling back to root.
+func resolveDependencyNode(tree *DependencyTree, instancesByBase map[string][]string, dep string) *TreeNode {
+	if node, ok := tree.nodes[dep]; ok {
+		return node
+	}
+	instances := instancesByBase[dep]
+	if len(instances) == 0 {
+		return nil
+	}
+	return tree.nodes[instances[0]]
+}
+
 // attachAllToRoot attaches every node directly to the tree root (used when no config is available).
 func attachAllToRoot(tree *DependencyTree) {
 	for _, node := range tree.nodes {
@@ -155,18 +200,26 @@ func buildRelationships(tree *DependencyTree, plan *tfjson.Plan) {
 		}
 	}
 
+	instancesByBase := buildInstancesByBaseIndex(tree)
+
 	// Find root resources (resources with no dependencies in our change set).
 	attached := make(map[string]bool)
 	for addr, node := range tree.nodes {
-		deps := dependsOn[addr]
+		// dependsOn is keyed by the config-declared resource address (extractDependencies
+		// reads plan.Config, which has no instance keys), but addr here comes from
+		// ResourceChanges and carries a count/for_each instance key (e.g.
+		// aws_subnet.a["public"]). Without stripping it, every count/for_each instance
+		// misses its dependsOn entry and falls through to root, regardless of its real
+		// dependency chain.
+		deps := dependsOn[stripInstanceKey(addr)]
 		hasParentInChangeSet := false
 		for _, dep := range deps {
-			if _, exists := tree.nodes[dep]; !exists {
+			parentNode := resolveDependencyNode(tree, instancesByBase, dep)
+			if parentNode == nil {
 				continue
 			}
 			hasParentInChangeSet = true
 			// Find the first dependency that's in the change set and use it as parent.
-			parentNode := tree.nodes[dep]
 			node.Parent = parentNode
 			parentNode.Children = append(parentNode.Children, node)
 			attached[addr] = true
