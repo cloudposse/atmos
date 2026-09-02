@@ -857,6 +857,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             check.trivy.dev:443
+            get.trivy.dev:443
             github.com:443
             release-assets.githubusercontent.com:443
 
