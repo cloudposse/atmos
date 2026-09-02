@@ -133,7 +133,7 @@ func TestValidateFieldValuesReportsAllInvalidFieldsInFieldOrder(t *testing.T) {
 	err := ValidateFieldValues(config, map[string]interface{}{"first": "two", "second": "not-a-bool"})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGeneratorValidation), err)
-	assert.Equal(t, "generator validation failed: field has unsupported option: field \"first\" option \"two\"; field must be true or false: \"second\"", err.Error())
+	assert.Equal(t, "generator validation failed: field has unsupported option: field \"first\" option \"two\" (valid values: one); field must be true or false: \"second\"", err.Error())
 }
 
 func TestValidateFieldValuesReportsMissingFieldsInFieldOrder(t *testing.T) {
@@ -366,7 +366,7 @@ func TestLoadScaffoldConfigRejectsInvalidFileMatrix(t *testing.T) {
 // element" above), so this exercises the function as a defense-in-depth
 // backstop instead.
 func TestValidateMatrixAxisValueRejectsNonStringElement(t *testing.T) {
-	err := validateMatrixAxisValue("deploy.yaml", "region", []any{5}, defaultAxisDelimiters(nil))
+	err := validateMatrixAxisValue("deploy.yaml", "region", []any{5}, defaultDelimiters(nil))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
 	assert.ErrorContains(t, err, "region")
@@ -381,14 +381,14 @@ func TestValidateMatrixAxisValueRejectsNonStringElement(t *testing.T) {
 // []string exists for a caller that already has a typed slice -- so both
 // need their own case.
 func TestValidateMatrixAxisValueRejectsEmptyStringSlice(t *testing.T) {
-	err := validateMatrixAxisValue("deploy.yaml", "region", []string{}, defaultAxisDelimiters(nil))
+	err := validateMatrixAxisValue("deploy.yaml", "region", []string{}, defaultDelimiters(nil))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
 	assert.ErrorContains(t, err, "region")
 }
 
 func TestValidateMatrixAxisValueRejectsEmptyAnySlice(t *testing.T) {
-	err := validateMatrixAxisValue("deploy.yaml", "region", []any{}, defaultAxisDelimiters(nil))
+	err := validateMatrixAxisValue("deploy.yaml", "region", []any{}, defaultDelimiters(nil))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
 	assert.ErrorContains(t, err, "region")
@@ -400,7 +400,7 @@ func TestValidateMatrixAxisValueRejectsEmptyAnySlice(t *testing.T) {
 // the tests above (see "axis of unsupported type" in
 // TestLoadScaffoldConfigRejectsInvalidFileMatrix).
 func TestValidateMatrixAxisValueRejectsUnsupportedType(t *testing.T) {
-	err := validateMatrixAxisValue("deploy.yaml", "region", true, defaultAxisDelimiters(nil))
+	err := validateMatrixAxisValue("deploy.yaml", "region", true, defaultDelimiters(nil))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
 	assert.ErrorContains(t, err, "region")
