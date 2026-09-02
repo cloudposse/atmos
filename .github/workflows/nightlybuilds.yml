@@ -9,18 +9,25 @@ on:
   # • Eastern Time (ET): 7:15 PM (previous day)
     - cron: "15 0 * * *"
 
-# Matches feature-release.yml's permissions for the same reusable release
-# workflow (shared-go-auto-release.yml) called with publish: true below.
 permissions:
-  attestations: write
-  contents: write
-  id-token: write
-  pull-requests: write
-  packages: write
-  issues: write
+  contents: read
 
 jobs:
   release:
+    # Matches feature-release.yml's permissions for the same reusable release
+    # workflow (shared-go-auto-release.yml) called with publish: true below.
+    # Scoped to this job (the workflow's only job) instead of the top level:
+    # OpenSSF Scorecard's Token-Permissions check penalizes top-level
+    # contents/packages/actions write grants heavily (they apply workflow-wide
+    # by default), but doesn't penalize the same grant scoped to the job that
+    # actually needs it -- same effective access, better score.
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+      pull-requests: write
+      packages: write
+      issues: write
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
     with:
       publish: true

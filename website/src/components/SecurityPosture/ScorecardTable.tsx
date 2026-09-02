@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { RiArrowRightSLine } from 'react-icons/ri';
 import { scoreTier } from './scoreTier';
 import { CHECK_RISK_LEVEL, sortChecksByRisk } from './checkRiskLevel';
+import { CHECK_ANNOTATIONS } from './checkAnnotations';
 import styles from './ScorecardTable.module.css';
 
 interface ScorecardCheck {
@@ -40,17 +41,26 @@ export default function ScorecardTable({ checks }: ScorecardTableProps) {
       {sortedChecks.map((check) => {
         const tier = scoreTier(check.score);
         const risk = CHECK_RISK_LEVEL[check.name];
+        const annotation = CHECK_ANNOTATIONS[check.name];
         const hasDetails = Array.isArray(check.details) && check.details.length > 0;
+        const isExpandable = hasDetails || !!annotation;
         const isOpen = expanded.has(check.name);
 
         return (
           <div
             key={check.name}
-            className={`${styles.row} ${hasDetails ? styles.expandableRow : ''}`}
-            onClick={hasDetails ? () => toggle(check.name) : undefined}
+            className={`${styles.row} ${isExpandable ? styles.expandableRow : ''}`}
+            onClick={isExpandable ? () => toggle(check.name) : undefined}
           >
             <div className={styles.scoreCol}>
-              <span className={styles.scoreNumber}>{check.score < 0 ? 'N/A' : check.score}</span>
+              <span className={styles.scoreNumber}>
+                {check.score < 0 ? 'N/A' : check.score}
+                {annotation && (
+                  <sup className={styles.annotationMark} title="See Cloud Posse's note on this score">
+                    *
+                  </sup>
+                )}
+              </span>
               <span className={`${styles.scoreUnderline} ${styles[tier]}`} />
             </div>
             <div className={styles.content}>
@@ -73,17 +83,32 @@ export default function ScorecardTable({ checks }: ScorecardTableProps) {
                     {risk}
                   </span>
                 )}
+                {annotation && (
+                  <span className={`${styles.riskBadge} ${styles.annotated}`}>
+                    Score inaccurate
+                  </span>
+                )}
               </div>
               <p className={styles.reason}>{check.reason}</p>
-              {hasDetails && isOpen && (
-                <ul className={styles.detailsList}>
-                  {check.details!.map((detail, index) => (
-                    <li key={index}>{detail}</li>
-                  ))}
-                </ul>
+              {isOpen && (
+                <>
+                  {annotation && (
+                    <div className={styles.annotationNote}>
+                      <p className={styles.annotationLabel}>Cloud Posse&apos;s response</p>
+                      <p>{annotation.note}</p>
+                    </div>
+                  )}
+                  {hasDetails && (
+                    <ul className={styles.detailsList}>
+                      {check.details!.map((detail, index) => (
+                        <li key={index}>{detail}</li>
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
             </div>
-            {hasDetails && (
+            {isExpandable && (
               <button
                 type="button"
                 className={styles.chevronButton}

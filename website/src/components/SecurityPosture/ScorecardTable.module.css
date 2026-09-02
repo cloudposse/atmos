@@ -100,6 +100,42 @@ a.checkName {
   --badge-color: var(--ifm-color-emphasis-700);
 }
 
+.riskBadge.annotated {
+  --badge-color: var(--ifm-color-info-dark, var(--ifm-color-primary));
+}
+
+.annotationMark {
+  margin-left: 0.1rem;
+  color: var(--ifm-color-info-dark, var(--ifm-color-primary));
+  cursor: help;
+}
+
+.annotationNote {
+  margin: 0.6rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  background: var(--ifm-color-emphasis-100);
+  font-size: 0.85rem;
+}
+
+.annotationNote p {
+  margin: 0;
+  color: var(--ifm-color-emphasis-800);
+}
+
+.annotationNote p + p {
+  margin-top: 0.4rem;
+}
+
+.annotationNote .annotationLabel {
+  font-weight: 700;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
 .reason {
   margin: 0.2rem 0 0;
   color: var(--ifm-color-emphasis-700);
