@@ -4,7 +4,7 @@ This reference describes how to replace [tofuenv](https://github.com/tofuutils/t
 Atmos toolchain. For the decision guide, see [../SKILL.md](../SKILL.md). For the full toolchain
 feature reference, see [atmos-toolchain](../../atmos-toolchain/SKILL.md).
 
-The user can also manage Terraform versions with tfenv, or Terragrunt and TFLint versions with
+The user can also manage Terraform versions with tfenv, or Terragrunt versions with
 tenv. In that case, see [from-tfenv.md](from-tfenv.md) and [from-tenv.md](from-tenv.md). The steps
 are the same. Only the tool differs.
 

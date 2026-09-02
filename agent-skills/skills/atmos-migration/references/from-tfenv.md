@@ -3,7 +3,7 @@
 This reference explains how to replace [tfenv](https://github.com/tfutils/tfenv) with the Atmos
 toolchain. For the skill's decision guide, see [../SKILL.md](../SKILL.md). For the full toolchain
 feature reference, see [atmos-toolchain](../../atmos-toolchain/SKILL.md). Some users also manage
-OpenTofu versions with tofuenv, or Terragrunt and TFLint versions with tenv. For these tools, see
+OpenTofu versions with tofuenv, or Terragrunt versions with tenv. For these tools, see
 [from-tofuenv.md](from-tofuenv.md) and [from-tenv.md](from-tenv.md). The steps are the same. Only
 the tool changes.
 

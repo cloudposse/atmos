@@ -256,7 +256,7 @@ Things to push back on if a user (or another agent) proposes them during migrati
   `tofuenv use` pins to the Atmos toolchain. Includes a command mapping and shell integration
   steps.
 - [References/from-tenv.md](references/from-tenv.md): steps to move tenv's version files for
-  Terraform, OpenTofu, Terragrunt, and TFLint to the Atmos toolchain. Includes a command mapping
+  Terraform, OpenTofu, and Terragrunt to the Atmos toolchain. Includes a command mapping
   and shell integration steps.
 - [References/from-homebrew-brewfile.md](references/from-homebrew-brewfile.md): steps to move the
   CLI-tool part of a Brewfile to the Atmos toolchain. Includes the partial-scope rules, a command
