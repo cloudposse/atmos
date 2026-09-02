@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-`atmos scaffold` is a command suite for generating code, configurations, and directory structures from templates. It provides a flexible scaffolding system that supports embedded templates, custom templates from `atmos.yaml`, and remote templates from Git repositories. The command enables teams to standardize component creation, enforce best practices, and accelerate development.
+`atmos scaffold` is a command suite for generating code, configurations, and directory structures from templates. It provides a flexible scaffolding system that supports embedded templates, custom templates from `atmos.yaml`, and remote templates from Git repositories, HTTPS/S3 archives, and OCI registries. The command enables teams to standardize component creation, enforce best practices, and accelerate development.
 
 ## Problem Statement
 
@@ -62,6 +62,11 @@ and `pkg/generator/` for the source of truth on current behavior.
   don't apply. The resolved combination is available as `.matrix.<axis>` in
   `target:`, in `when:`, and in the file's own content — see "Dynamic File
   Generation (`matrix`)" below.
+- OCI registry template sources (`oci://ghcr.io/org/template:v1`) — a
+  template argument or `scaffold.templates` `source:` can point at an OCI
+  registry reference, pulled via the same `pkg/oci` client `atmos vendor
+  pull` and JIT component-source provisioning use. See "Phase 3: Remote
+  Templates" below.
 
 **Still not implemented** (see "Future Enhancements" below):
 - ❌ Remote-template caching/version pinning beyond a single `--ref`
@@ -897,20 +902,48 @@ supplies the same template/target-dir on `--update` as on initial generation.
 one; the shipped design reads bases directly from git instead — see "Update
 Flow" above), and `pre_generate`/`post_generate` hooks.
 
-### Phase 3: Remote Templates (Future)
+### Phase 3: Remote Templates
 
-**Support Git sources**:
-- Parse Git URLs with go-getter syntax
-- Clone/fetch remote repositories
-- Cache templates locally
-- Version pinning support
+**Status**: Remote sources are git, HTTPS, and S3 (via go-getter) plus OCI
+registries, which reuse `pkg/oci` (the same client `atmos vendor pull` and
+JIT terraform-source provisioning use) rather than go-getter, since OCI
+registries aren't a go-getter scheme. All of this is implemented in
+`pkg/generator/source` (`Resolve`/`Hydrate`), the seam that lets both `atmos
+scaffold generate` and `atmos init` distribute templates remotely while
+reusing the same generator engine.
 
-**Example**:
+**Git/HTTPS/S3 sources** (go-getter):
 ```bash
 atmos scaffold generate \
   git::https://github.com/company/templates.git//eks?ref=v1.0.0 \
   ./components/terraform/eks
 ```
+`--ref` is sugar that appends `?ref=<value>` to a git source (`source.WithRef`);
+it's a documented no-op for OCI, S3, and local sources, which address a
+specific version through the source string itself instead.
+
+**OCI registry sources**:
+```bash
+atmos scaffold generate \
+  oci://ghcr.io/company/templates:v1.0.0 \
+  ./components/terraform/eks
+```
+Pulled via `oci.ProcessImage` into a temporary directory, then loaded the
+same way any other fetched source is (`requireScaffoldConfig` still requires
+a `scaffold.yaml` at the artifact's root). Authentication follows `pkg/oci`'s
+precedence (Docker keychain → `ATMOS_GITHUB_TOKEN` for ghcr.io → anonymous,
+with automatic anonymous retry on a 401/403) — see the `atmos-vendoring`
+skill's OCI auth documentation rather than duplicating it here. A
+`scaffold.templates` entry in `atmos.yaml` can declare an `oci://...`
+`source:` exactly like a git source; `source:` is a freeform string with no
+scheme-specific schema.
+
+`--git`, `--base-ref`, and `--update` behave the same regardless of source
+type, OCI included: `--git` only initializes a git repository in the
+*generated output directory* after generation completes, and `--update`'s
+3-way-merge base is always read from that output directory's own git history
+(`pkg/generator/engine/merge_update.go`'s `SetupGitStorage`), never by
+re-fetching or re-checking-out the template source at a ref.
 
 ## CLI Usage Examples
 
@@ -1157,7 +1190,7 @@ Location: `website/docs/cli/commands/scaffold.mdx`
 6. **Template Structure** - scaffold.yaml format
 7. **Template Syntax** - Go templates, Gomplate, Sprig
 8. **Updating Scaffolds** - Using `--update` flag (shipped)
-9. **Remote Templates** - Git sources (Phase 3)
+9. **Remote Templates** - Git/HTTPS/S3 and OCI registry sources (shipped)
 10. **Troubleshooting** - Common errors and solutions
 
 ### Template Documentation

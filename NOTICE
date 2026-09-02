@@ -327,7 +327,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/go-logr/logr
     License: Apache-2.0
-    URL: https://github.com/go-logr/logr/blob/v1.4.3/LICENSE
+    URL: https://github.com/go-logr/logr/blob/v1.4.4/LICENSE
 
   - github.com/go-logr/stdr
     License: Apache-2.0
@@ -403,7 +403,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/google/cel-go
     License: Apache-2.0
-    URL: https://github.com/google/cel-go/blob/v0.29.0/LICENSE
+    URL: https://github.com/google/cel-go/blob/v0.30.0/LICENSE
 
   - github.com/google/gnostic-models
     License: Apache-2.0
@@ -663,23 +663,23 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - go.opentelemetry.io/otel
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/v1.43.0/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/v1.46.0/LICENSE
 
   - go.opentelemetry.io/otel/metric
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.43.0/metric/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.46.0/metric/LICENSE
 
   - go.opentelemetry.io/otel/sdk
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/v1.43.0/sdk/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/v1.46.0/sdk/LICENSE
 
   - go.opentelemetry.io/otel/sdk/metric
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/metric/v1.43.0/sdk/metric/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/metric/v1.46.0/sdk/metric/LICENSE
 
   - go.opentelemetry.io/otel/trace
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.43.0/trace/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.46.0/trace/LICENSE
 
   - go.opentelemetry.io/proto/otlp
     License: Apache-2.0
@@ -1058,6 +1058,10 @@ BSD LICENSED DEPENDENCIES
     License: BSD-3-Clause
     URL: https://github.com/spf13/pflag/blob/v1.0.10/LICENSE
 
+  - github.com/stretchr/testify/internal/difflib
+    License: BSD-3-Clause
+    URL: https://github.com/stretchr/testify/blob/v1.12.1/internal/difflib/LICENSE
+
   - github.com/ulikunitz/xz
     License: BSD-3-Clause
     URL: https://github.com/ulikunitz/xz/blob/v0.5.15/LICENSE
@@ -1084,7 +1088,7 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/crypto
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/crypto/+/v0.54.0:LICENSE
+    URL: https://cs.opensource.google/go/x/crypto/+/v0.55.0:LICENSE
 
   - golang.org/x/exp
     License: BSD-3-Clause
@@ -1092,15 +1096,15 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/image
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/image/+/v0.43.0:LICENSE
+    URL: https://cs.opensource.google/go/x/image/+/v0.45.0:LICENSE
 
   - golang.org/x/mod/semver
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/mod/+/v0.38.0:LICENSE
+    URL: https://cs.opensource.google/go/x/mod/+/v0.40.0:LICENSE
 
   - golang.org/x/net
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/net/+/v0.57.0:LICENSE
+    URL: https://cs.opensource.google/go/x/net/+/v0.58.0:LICENSE
 
   - golang.org/x/oauth2
     License: BSD-3-Clause
@@ -1120,7 +1124,7 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/text
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/text/+/v0.40.0:LICENSE
+    URL: https://cs.opensource.google/go/x/text/+/v0.41.0:LICENSE
 
   - golang.org/x/time/rate
     License: BSD-3-Clause
@@ -2142,7 +2146,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/stretchr/testify
     License: MIT
-    URL: https://github.com/stretchr/testify/blob/v1.11.1/LICENSE
+    URL: https://github.com/stretchr/testify/blob/v1.12.1/LICENSE
 
   - github.com/subosito/gotenv
     License: MIT
@@ -2250,7 +2254,7 @@ MIT LICENSED DEPENDENCIES
 
   - go.yaml.in/yaml/v3
     License: MIT
-    URL: https://github.com/yaml/go-yaml/blob/v3.0.4/LICENSE
+    URL: https://github.com/yaml/go-yaml/blob/v3.0.5/LICENSE
 
   - gopkg.in/yaml.v3
     License: MIT
