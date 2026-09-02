@@ -93,9 +93,9 @@ Organization-wide settings: multi-factor authentication is required, personnel a
 ## 6. Release Process
 
 1. **release-drafter** maintains a **draft release** for the next version. On each merge to `main` it resolves the next semantic version from the pull-request labels described in Section 3, and it generates the changelog from the merged pull requests. Version resolution is therefore mechanical, and it derives from a label that a required status check enforced before merge.
-2. **GoReleaser** builds the platform binaries from `main` and attaches them to that draft release.
+2. **GoReleaser** builds the platform binaries and attaches them to that draft release. This stage runs in the protected `release` deployment environment. That environment's deployment-branch policy admits only the `main` branch, version tags, and `release/**` maintenance branches, and it holds the release App's private key and the GPG signing key. A workflow running on a feature branch cannot obtain those credentials, whatever it builds, because GitHub refuses the deployment when the ref does not match the policy. This is enforced by credential scoping rather than by a condition in a workflow file, which a change on that same branch could edit.
 3. The release manager publishes the draft. Publication is the human decision point.
-4. Publication triggers the build pipeline. The pipeline runs in a protected `release` deployment environment whose deployment-branch policy admits only workflows running on `main`. A release cannot be produced from an untrusted branch.
+4. Publication triggers the signing and attestation pipeline. That pipeline holds no long-lived secrets: it signs with keyless Sigstore OIDC and authenticates with the ephemeral workflow token, so it has no key material to protect and needs no environment of its own.
 5. The pipeline rebuilds the binaries from source at the published tag, rather than re-signing artifacts it downloaded. This closes the time-of-check to time-of-use gap present in download-then-sign designs.
 6. The pipeline produces:
    - Platform binaries and native `.deb`, `.rpm`, and `.apk` packages
@@ -106,7 +106,7 @@ Organization-wide settings: multi-factor authentication is required, personnel a
    - A container image, signed by digest with cosign and scanned with Trivy
 7. Release binaries link Go's native FIPS 140-3 cryptographic module and default to FIPS-enforcing mode at runtime. This is not a CMVP certification for Atmos, and it does not cover the age and NaCl cryptography used by declarative secrets management.
 
-Feature previews are prereleases cut from a pull-request branch through a separate `feature-releases` environment. They are temporary, are marked as prereleases, and are not production releases.
+Feature previews are prereleases cut from a pull-request branch. They run in a separate `feature-releases` environment, under a **different GitHub App**, and build from a reduced GoReleaser configuration. They are marked as prereleases and are temporary. The publishing identity appears in the metadata of every release, so the pipeline that produced any given artifact is externally verifiable without relying on Cloud Posse's assertion.
 
 ## 7. Third-Party Components
 
