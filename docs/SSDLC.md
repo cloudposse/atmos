@@ -13,7 +13,9 @@ This document describes how Cloud Posse develops, reviews, builds, and releases 
 
 It does not cover Atmos Pro, a separate hosted SaaS offering with its own controls and its own SOC 2 programme.
 
-Cloud Posse develops Atmos in the open. Every control described here is visible in the public repository and can be verified independently. Assertions in this document are inspectable, not self-reported.
+Cloud Posse develops Atmos in the open. Controls that live in the repository — workflow definitions, scanner configuration, dependency pinning, and the commit and review history — are visible to anyone and can be verified independently without Cloud Posse's assistance.
+
+Controls that live at the organization or environment level are a separate class. Repository ruleset enforcement and bypass lists, deployment-environment branch policies, multi-factor and single-sign-on enforcement, and the AWS account that CI runners execute in cannot be read from the repository. Sections 5, 6, and 9 describe several of them. Cloud Posse states those here and can evidence them from organization settings on request.
 
 ## 2. Roles
 
@@ -97,21 +99,24 @@ Organization-wide settings: multi-factor authentication is required, personnel a
 3. The release manager publishes the draft. Publication is the human decision point.
 4. Publication triggers the signing and attestation pipeline. That pipeline holds no long-lived secrets: it signs with keyless Sigstore OIDC and authenticates with the ephemeral workflow token, so it has no key material to protect and needs no environment of its own.
 5. The pipeline rebuilds the binaries from source at the published tag, rather than re-signing artifacts it downloaded. This closes the time-of-check to time-of-use gap present in download-then-sign designs.
-6. The pipeline produces:
+6. The pipeline is configured to produce:
    - Platform binaries and native `.deb`, `.rpm`, and `.apk` packages
    - A SHA256 checksums manifest covering the release artifacts
    - A keyless Sigstore signature over the checksums manifest, recorded in the Rekor transparency log
    - SPDX SBOMs, per archive and for the source tree
    - Build-provenance attestations for every artifact
    - A container image, signed by digest with cosign and scanned with Trivy
-7. Release binaries link Go's native FIPS 140-3 cryptographic module and default to FIPS-enforcing mode at runtime. This is not a CMVP certification for Atmos, and it does not cover the age and NaCl cryptography used by declarative secrets management.
+
+   **Current status.** These outputs are configured in `.goreleaser.yml` and are not yet present on published releases. The `sign-and-attest-release` job fails while cross-compiling for `linux/386` and `linux/arm`, so no published release carries a Sigstore signature, an SBOM, a build-provenance attestation, or a native package today. Section 12 records this.
+7. Release binaries are built with `GOFIPS140=latest`. That links Go's native FIPS 140-3 cryptographic module and embeds `DefaultGODEBUG=fips140=on`, so a release binary runs in FIPS 140-3 mode by default. `fips140=only`, which makes non-approved algorithms return an error or panic, is not used; Go documents that mode as unsupported for production. This is not a CMVP certification for Atmos, and it does not cover the age and NaCl cryptography used by declarative secrets management.
 
 Feature previews are prereleases cut from a pull-request branch. They run in a separate `feature-releases` environment, under a **different GitHub App**, and build from a reduced GoReleaser configuration. They are marked as prereleases and are temporary. The publishing identity appears in the metadata of every release, so the pipeline that produced any given artifact is externally verifiable without relying on Cloud Posse's assertion.
 
 ## 7. Third-Party Components
 
 - Go modules resolve through the public Go module proxy. The proxy is a cache, not a trust anchor.
-- Every module is pinned by cryptographic digest in the committed `go.sum` and verified against the `sum.golang.org` checksum transparency log on each fetch. A modified module fails the build.
+- Every module is pinned by cryptographic digest in the committed `go.sum`. Every build verifies each downloaded module against that file, so a modified module fails the build.
+- A module version that is not already in `go.sum` is verified against the `sum.golang.org` checksum transparency log before its hash is recorded. Verification of an already-pinned module is local to `go.sum` and does not call the checksum database at build time.
 - No checksum-bypass environment variable is configured anywhere in the repository, its workflows, its scripts, or its Dockerfile.
 - Every GitHub Action is pinned to a commit SHA. A drift check enforces this.
 - Dependency updates are proposed automatically and reviewed through the same pull-request process. Dependabot security updates are enabled.
@@ -165,6 +170,8 @@ CI jobs run on ephemeral runners. Runners provisioned through RunsOn execute in 
 
 Cloud Posse states these rather than leaving them to discovery.
 
+- The release pipeline's signing, SBOM, provenance, and native-package outputs are configured but are not reaching published releases, because the `sign-and-attest-release` job fails cross-compiling for `linux/386` and `linux/arm`. This is an open work item. Until it is resolved, do not treat those artifacts as available.
+- The organization- and environment-level controls in Sections 5, 6, and 9 cannot be verified from the repository and require organization-settings evidence. Section 1 states which class each control falls in.
 - Several scanners operate in advisory mode. Section 4.2 lists them.
 - Patch-level coverage is a target, not a gate.
 - Formal incident-response, access-control, and personnel-security policies are not yet written. They are being produced under the SOC 2 programme Cloud Posse is pursuing for Atmos Pro.
