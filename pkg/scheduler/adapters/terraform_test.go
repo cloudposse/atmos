@@ -1795,7 +1795,7 @@ func TestValidateTerraformUIConcurrency(t *testing.T) {
 	t.Run("streaming UI would be attempted", func(t *testing.T) {
 		err := validateTerraformUIConcurrency(true)
 		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
-		require.ErrorContains(t, err, "--ui is not supported with --max-concurrency > 1")
+		require.ErrorContains(t, err, "streaming UI is not supported with --max-concurrency > 1")
 	})
 
 	t.Run("streaming UI would not be attempted", func(t *testing.T) {

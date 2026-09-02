@@ -129,7 +129,7 @@ The doc also claimed `compact` defaults to `true`, but since it was never wired,
 - `pkg/ui/theme/icons.go`: removed `IconRefresh` - defined but never referenced anywhere; replace
   actions already render via a colored dot (`colorizedActionSymbol`'s `replaceStyle`), not this
   glyph.
-- `.claude/skills/atmos-terraform/SKILL.md`: added a "Streaming UI (`--ui`)" section - previously
+- `agent-skills/skills/atmos-terraform/SKILL.md`: added a "Streaming UI (`--ui`)" section - previously
   no skill anywhere documented this feature.
 
 ## Validation

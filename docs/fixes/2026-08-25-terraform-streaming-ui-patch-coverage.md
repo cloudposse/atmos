@@ -30,7 +30,7 @@ real TTY, no seam added — out of scope for one line).
 
 ## Changes
 
-Five batches of test-only work, run in parallel against disjoint files:
+Five batches of coverage and supporting work, run in parallel against disjoint files:
 
 - **Pure-logic files** (`tree_utils.go`, `executor_outputs.go`, `model_diagnostics.go`, `init_model.go`):
   new/expanded `_test.go` files covering color-parsing/collapse branches, output table-building

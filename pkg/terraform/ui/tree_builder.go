@@ -138,10 +138,21 @@ func isModuleAddress(addr string) bool {
 // instances) are keyed by this base address, while ResourceChanges addresses carry the
 // instance key, so this normalization is required before any dependsOn lookup.
 func stripInstanceKey(addr string) string {
-	if idx := strings.IndexByte(addr, '['); idx != -1 {
-		return addr[:idx]
+	var b strings.Builder
+	depth := 0
+	for _, r := range addr {
+		switch {
+		case r == '[':
+			depth++
+		case r == ']':
+			if depth > 0 {
+				depth--
+			}
+		case depth == 0:
+			b.WriteRune(r)
+		}
 	}
-	return addr
+	return b.String()
 }
 
 // buildInstancesByBaseIndex indexes tree.nodes' instance addresses by their base (uninstanced)
@@ -326,11 +337,17 @@ func normalizeModuleReference(ref string) string {
 	}
 
 	if moduleCount > 1 {
-		// Nested module - extract only up to the last module.name.
-		if lastModuleIdx >= 0 && lastModuleIdx+1 < len(parts) {
-			return strings.Join(parts[:lastModuleIdx+2], dotSeparator)
+		// Nested module - extract the module path, plus the resource type/name
+		// that follows it when present (e.g. module.a.module.b.aws_subnet.main.id ->
+		// module.a.module.b.aws_subnet.main).
+		if lastModuleIdx < 0 || lastModuleIdx+1 >= len(parts) {
+			return ref
 		}
-		return ref
+		end := lastModuleIdx + 2 // Through the last module.<name>.
+		if end+2 <= len(parts) {
+			end += 2 // Also keep resource_type.resource_name when present.
+		}
+		return strings.Join(parts[:end], dotSeparator)
 	}
 
 	// Single module - extract module.name.resource_type.resource_name.

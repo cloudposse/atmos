@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
@@ -285,6 +286,14 @@ func TestExtractPlanFile(t *testing.T) {
 		{"positional tfvars file is not a planfile", []string{"apply", "extra.tfvars"}, ""},
 		{"empty args", []string{}, ""},
 		{"single arg apply only", []string{"apply"}, ""},
+		{"space-separated -var value is not a planfile", []string{"apply", "-var", "env=dev"}, ""},
+		{"space-separated -lock-timeout value is not a planfile", []string{"apply", "-lock-timeout", "30s"}, ""},
+		{"space-separated -var-file value is not a planfile", []string{"apply", "-var-file", "extra.tfvars.json"}, ""},
+		{
+			"positional planfile after a preceding boolean-ish flag is still detected",
+			[]string{"apply", "-compact-warnings", "myplan.tfplan"},
+			"myplan.tfplan",
+		},
 	}
 
 	for _, tt := range tests {
@@ -538,6 +547,32 @@ func TestStreamStderrToLog_LogsEachLine(t *testing.T) {
 	assert.Contains(t, output, "second diagnostic line")
 }
 
+// TestStreamStderrToLog_MasksSecrets verifies streamStderrToLog masks secrets before handing
+// lines to the logger, since the logger writes straight to raw os.Stderr (bypassing
+// iolib.MaskWriter) whenever no log file is configured (see SetupLogger in cmd/root.go).
+// Terraform stderr can carry secrets (backend errors, provider crash output), so this line-level
+// masking is the only protection in that default configuration.
+func TestStreamStderrToLog_MasksSecrets(t *testing.T) {
+	origLevel := log.GetLevel()
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	log.SetLevel(log.DebugLevel)
+	t.Cleanup(func() {
+		log.SetOutput(os.Stderr)
+		log.SetLevel(origLevel)
+	})
+
+	const secret = "super-secret-terraform-diagnostic-value"
+	iolib.RegisterSecret(secret)
+	t.Cleanup(iolib.Reset)
+
+	streamStderrToLog(strings.NewReader("Error: backend init failed, token=" + secret + "\n"))
+
+	output := buf.String()
+	assert.NotContains(t, output, secret, "the raw secret must never reach the log output")
+	assert.Contains(t, output, "Error: backend init failed, token=", "surrounding diagnostic text must still be logged")
+}
+
 // TestNewStreamingCommand_StartsRealProcess verifies newStreamingCommand actually starts the
 // subprocess and returns a readable stdout pipe, using the test binary itself (per this
 // repo's self-re-exec pattern) instead of a real terraform binary.
@@ -685,13 +720,22 @@ func TestRunTUIProgram_TUIErrorKillsProcess(t *testing.T) {
 	assert.Nil(t, finalModel)
 	assert.False(t, cancelled)
 
+	// runTUIProgram must reap the killed process itself (cmd.Wait()) rather than leaving it a
+	// zombie with the stderr pipe still open for the caller to notice - ProcessState is only
+	// populated once Wait has completed, so a nil ProcessState here means the process (and the
+	// streamStderrToLog goroutine blocked reading its stderr pipe) were left dangling.
+	require.NotNil(t, cmd.ProcessState, "runTUIProgram must reap the killed process via cmd.Wait()")
+	assert.False(t, cmd.ProcessState.Success(), "process should have been killed after the TUI run failed")
+
+	// A second Wait() must not block or hang now that the first one (inside runTUIProgram)
+	// already reaped the process.
 	waitDone := make(chan error, 1)
 	go func() { waitDone <- cmd.Wait() }()
 	select {
 	case werr := <-waitDone:
-		require.Error(t, werr, "process should have been killed after the TUI run failed")
+		require.Error(t, werr, "a second Wait() on an already-reaped process must report an error, not hang")
 	case <-time.After(5 * time.Second):
-		t.Fatal("subprocess was not killed within 5s after TUI run error")
+		t.Fatal("second cmd.Wait() call did not return within 5s")
 	}
 }
 

@@ -100,6 +100,21 @@ func hasFlag(args []string, flag string) bool {
 	return false
 }
 
+// terraformValueFlags are apply/destroy flags that consume the next argument as their value
+// (Go's flag.FlagSet semantics, which Terraform's CLI follows), so that value must never be
+// mistaken for a trailing positional plan-file argument.
+var terraformValueFlags = map[string]bool{
+	"-backup":       true,
+	"-lock-timeout": true,
+	"-parallelism":  true,
+	"-state":        true,
+	"-state-out":    true,
+	"-var":          true,
+	"-var-file":     true,
+	"-target":       true,
+	"-replace":      true,
+}
+
 func extractPlanFile(args []string) string {
 	// Look for a planfile argument (positional argument that's a file path).
 	// Also check for --from-plan or --planfile flags.
@@ -117,20 +132,26 @@ func extractPlanFile(args []string) string {
 		}
 	}
 
-	// Check for a positional planfile. Terraform's apply accepts any filename for a
-	// saved plan (the ".tfplan" convention is not required), so any non-flag final
-	// argument qualifies — except one that looks like Terraform configuration or
-	// variables source (.tf, .tf.json, .tfvars, .tfvars.json), which Terraform
-	// itself warns against using as a plan-file name because it would otherwise be
-	// parsed as config source rather than a saved plan.
-	if len(args) > 1 {
-		lastArg := args[len(args)-1]
-		if !strings.HasPrefix(lastArg, "-") && !looksLikeTerraformConfigFile(lastArg) {
-			return lastArg
-		}
-	}
+	return extractPositionalPlanFile(args)
+}
 
-	return ""
+// extractPositionalPlanFile checks for a positional planfile. Terraform's apply accepts any
+// filename for a saved plan (the ".tfplan" convention is not required), so any non-flag final
+// argument qualifies — except one that looks like Terraform configuration or variables source
+// (.tf, .tf.json, .tfvars, .tfvars.json), which Terraform itself warns against using as a
+// plan-file name because it would otherwise be parsed as config source rather than a saved
+// plan, and except one that's actually the value of a preceding value-taking flag (e.g. the
+// "30s" in "-lock-timeout 30s"), not a standalone positional argument.
+func extractPositionalPlanFile(args []string) string {
+	if len(args) <= 1 {
+		return ""
+	}
+	lastArg := args[len(args)-1]
+	precedingArg := args[len(args)-2]
+	if strings.HasPrefix(lastArg, "-") || looksLikeTerraformConfigFile(lastArg) || terraformValueFlags[precedingArg] {
+		return ""
+	}
+	return lastArg
 }
 
 // looksLikeTerraformConfigFile reports whether name has an extension Terraform

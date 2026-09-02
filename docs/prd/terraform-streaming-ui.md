@@ -35,7 +35,7 @@ Add an optional streaming TUI (Terminal User Interface) mode that transforms Ter
 ### Example Output
 
 **During execution:**
-```
+```text
 ⠋ apply plat-ue2-dev/vpc Creating aws_security_group.default (5.2s)  ████████░░░░ 2/5
 
   ✓ Created  aws_vpc.main (2.1s)
@@ -45,7 +45,7 @@ Add an optional streaming TUI (Terminal User Interface) mode that transforms Ter
 The inline progress bar shows spinner, command, current activity, and completion status on a single line.
 
 **Dependency tree with attribute changes:**
-```
+```text
       plat-ue2-dev/myapp
   ●  ├── aws_s3_object.file
       │     content_type  "text/html"  →  "text/plain"
@@ -58,7 +58,7 @@ The inline progress bar shows spinner, command, current activity, and completion
 Resources are marked with colored dots (●): green for create, yellow for update, red for delete. Attribute changes display in a two-column layout with color-coded keys.
 
 **Multi-line value changes:**
-```
+```text
   ●  └── aws_s3_object.weather
             content
           - Current weather: Sunny, 72°F
@@ -69,18 +69,18 @@ Resources are marked with colored dots (●): green for create, yellow for updat
 ```
 
 **Interactive confirmation:**
-```
+```text
   Do you want to apply these changes?
   > Yes   No
 ```
 
 **On completion:**
-```
+```text
 ✓ Apply plat-ue2-dev/vpc completed (15.2s)
 ```
 
 **On error:**
-```
+```text
 ✗ Apply plat-ue2-dev/vpc failed: 1 error (12.1s)
   Error: aws_instance.web[0]: InvalidAMIID.NotFound
 ```
@@ -164,7 +164,7 @@ The streaming executor captures and propagates these codes via `errUtils.ExitCod
 
 ### Package Structure
 
-```
+```text
 pkg/terraform/ui/
 ├── types.go       # Terraform JSON message type definitions
 ├── parser.go      # Line-by-line JSON parser

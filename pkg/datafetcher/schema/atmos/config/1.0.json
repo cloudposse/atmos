@@ -12356,7 +12356,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Enabled enables the streaming TUI mode for plan/apply/init/refresh commands.\nWhen enabled, terraform output is streamed in real-time with a progress display."
+          "description": "Enabled enables the streaming TUI mode for plan/apply/destroy/init/refresh commands.\nWhen enabled, terraform output is streamed in real-time with a progress display."
         },
         "compact": {
           "anyOf": [
@@ -12389,7 +12389,8 @@
         "max_lines": {
           "anyOf": [
             {
-              "type": "integer"
+              "type": "integer",
+              "minimum": 0
             },
             {
               "type": "null"

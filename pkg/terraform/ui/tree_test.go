@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	tfjson "github.com/hashicorp/terraform-json"
@@ -441,10 +442,17 @@ func TestExtractReferences(t *testing.T) {
 			expected: []string{"aws_vpc.main"},
 		},
 		{
-			name:     "nested module reference",
-			refs:     []string{"module.network.module.vpc.aws_subnet.main"},
+			name:   "nested module reference",
+			refs:   []string{"module.network.module.vpc.aws_subnet.main.id"},
+			prefix: "",
+			// Module path plus the trailing resource type/name, dropping only the attribute (.id).
+			expected: []string{"module.network.module.vpc.aws_subnet.main"},
+		},
+		{
+			name:     "nested module reference with no trailing resource",
+			refs:     []string{"module.network.module.vpc"},
 			prefix:   "",
-			expected: []string{"module.network.module.vpc"}, // First module path is extracted.
+			expected: []string{"module.network.module.vpc"}, // Module path only, unchanged.
 		},
 		{
 			name:     "nested module reference ending exactly at the module keyword",
@@ -1257,6 +1265,28 @@ func TestRenderMultilineDiffSimple_LongLineTruncated(t *testing.T) {
 	assert.Contains(t, result, "...")
 	assert.NotContains(t, result, longBefore, "the full untruncated deleted line should not appear")
 	assert.NotContains(t, result, longAfter, "the full untruncated added line should not appear")
+}
+
+// TestMakeTruncator_RuneSafe verifies makeTruncator cuts on rune boundaries, not byte indices,
+// so a multi-byte UTF-8 character (e.g. in a tag/description/template attribute value) is never
+// split into an invalid partial sequence.
+func TestMakeTruncator_RuneSafe(t *testing.T) {
+	truncate := makeTruncator(10)
+
+	// Each "é" is 2 bytes in UTF-8; a byte-index slice at width-3=7 would land mid-rune.
+	line := strings.Repeat("é", 20)
+	result := truncate(line)
+
+	assert.True(t, strings.HasSuffix(result, "..."), "truncated line must end with the ellipsis")
+	assert.True(t, utf8.ValidString(result), "truncated line must remain valid UTF-8, never split mid-rune")
+	// 10-3=7 runes kept, plus "...".
+	assert.Equal(t, strings.Repeat("é", 7)+"...", result)
+}
+
+// TestMakeTruncator_ShortLineUnchanged verifies lines at or under maxWidth pass through untouched.
+func TestMakeTruncator_ShortLineUnchanged(t *testing.T) {
+	truncate := makeTruncator(10)
+	assert.Equal(t, "short", truncate("short"))
 }
 
 // TestTransformLines_NilTransform verifies transformLines returns the input slice unchanged

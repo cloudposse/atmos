@@ -516,11 +516,12 @@ func renderJSONDiff(b *strings.Builder, beforeLines, afterLines []string, indent
 	}
 }
 
-// makeTruncator returns a function that truncates lines to maxWidth.
+// makeTruncator returns a function that truncates lines to maxWidth, measuring and slicing by
+// rune rather than byte index so a cut point never lands inside a multi-byte UTF-8 rune.
 func makeTruncator(maxWidth int) func(string) string {
 	return func(line string) string {
-		if maxWidth > 3 && len(line) > maxWidth {
-			return line[:maxWidth-3] + "..."
+		if maxWidth > 3 && lipgloss.Width(line) > maxWidth {
+			return string([]rune(line)[:maxWidth-3]) + "..."
 		}
 		return line
 	}
@@ -549,14 +550,11 @@ func renderMultilineDiffSimple(b *strings.Builder, before, after, indent string,
 
 // renderMultilineValueSimple renders multi-line content with clean indentation.
 func renderMultilineValueSimple(b *strings.Builder, content, indent, symbol string, symbolStyle *lipgloss.Style) {
-	maxWidth := getMaxLineWidth()
+	truncateLine := makeTruncator(getMaxLineWidth())
 	lines := strings.Split(content, newlineStr)
 
 	for _, line := range lines {
-		if maxWidth > 3 && len(line) > maxWidth {
-			line = line[:maxWidth-3] + "..."
-		}
-		fmt.Fprintf(b, fmtIndentedSymbolLine, indent, symbolStyle.Render(symbol), line)
+		fmt.Fprintf(b, fmtIndentedSymbolLine, indent, symbolStyle.Render(symbol), truncateLine(line))
 	}
 }
 

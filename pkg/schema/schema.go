@@ -747,7 +747,7 @@ type TerraformFlags struct {
 
 // TerraformUI contains streaming UI configuration.
 type TerraformUI struct {
-	// Enabled enables the streaming TUI mode for plan/apply/init/refresh commands.
+	// Enabled enables the streaming TUI mode for plan/apply/destroy/init/refresh commands.
 	// When enabled, terraform output is streamed in real-time with a progress display.
 	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 
@@ -761,7 +761,7 @@ type TerraformUI struct {
 
 	// MaxLines controls collapsing large JSON values in attribute rendering.
 	// 0 (default) = show all lines like Terraform, >0 = collapse after N lines.
-	MaxLines int `yaml:"max_lines" json:"max_lines" mapstructure:"max_lines"`
+	MaxLines int `yaml:"max_lines" json:"max_lines" mapstructure:"max_lines" jsonschema:"minimum=0"`
 }
 
 // TerraformLint configures TFLint for Terraform components. Config may be an

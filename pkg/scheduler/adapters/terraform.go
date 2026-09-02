@@ -576,7 +576,7 @@ func validateTerraformConcurrentExecution(atmosConfig *schema.AtmosConfiguration
 // stdout, the same TTY-gating limitation documented in terraform_streaming_ui_test.go.
 func validateTerraformUIConcurrency(wouldAttemptStreamingUI bool) error {
 	if wouldAttemptStreamingUI {
-		return fmt.Errorf("%w: --ui is not supported with --max-concurrency > 1", errUtils.ErrInvalidConfig)
+		return fmt.Errorf("%w: streaming UI is not supported with --max-concurrency > 1", errUtils.ErrInvalidConfig)
 	}
 	return nil
 }

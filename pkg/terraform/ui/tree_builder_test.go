@@ -614,6 +614,16 @@ func TestStripInstanceKey(t *testing.T) {
 		{name: "for_each string key", addr: `aws_subnet.a["public"]`, want: "aws_subnet.a"},
 		{name: "count numeric key", addr: "aws_subnet.a[0]", want: "aws_subnet.a"},
 		{name: "module-nested with instance key", addr: `module.vpc.aws_subnet.a["public"]`, want: "module.vpc.aws_subnet.a"},
+		{
+			name: "instance key on the module segment itself",
+			addr: `module.network["blue"].aws_subnet.main`,
+			want: "module.network.aws_subnet.main",
+		},
+		{
+			name: "instance keys on both the module and the resource segments",
+			addr: `module.network["blue"].aws_subnet.main["public"]`,
+			want: "module.network.aws_subnet.main",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

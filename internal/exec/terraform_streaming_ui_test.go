@@ -15,12 +15,13 @@ package exec
 // implementation. That branch is intentionally left uncovered by this package's
 // tests (see the coverage report for this file).
 //
-// The switch cases inside dispatchStreamingExecutor ARE covered directly: this test
-// binary never runs with a real TTY, so every tfui.Execute* variant hits its own
-// precondition check (stdout/stdin TTY, CI) and returns errUtils.ErrStreamingNotSupported
-// before doing any real work. That's a genuine safety property worth asserting: no
-// matter which subcommand is dispatched, the streaming path never attempts to spawn a
-// real terraform process outside a supported interactive environment.
+// The switch cases inside dispatchStreamingExecutor ARE covered directly: each test pins
+// CI=true so telemetry.IsCI() deterministically forces every tfui.Execute* variant's own
+// precondition check (stdout/stdin TTY, CI) to return errUtils.ErrStreamingNotSupported
+// before doing any real work, regardless of whether the runner's stdout happens to be a
+// real TTY. That's a genuine safety property worth asserting: no matter which subcommand
+// is dispatched, the streaming path never attempts to spawn a real terraform process
+// outside a supported interactive environment.
 
 import (
 	"context"
@@ -179,6 +180,12 @@ func TestDispatchStreamingExecutor_RoutesSafely(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Pin the CI gate explicitly: checkStreamingUIPreconditions returns
+			// ErrStreamingNotSupported when either stdout isn't a real TTY or CI is set.
+			// Setting CI=true forces that regardless of the runner's TTY state, instead of
+			// relying on go test's stdout incidentally not being a TTY.
+			t.Setenv("CI", "true")
+
 			execOpts := &tfui.ExecuteOptions{
 				Command:    "terraform",
 				WorkingDir: t.TempDir(),

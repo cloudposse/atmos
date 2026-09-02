@@ -290,7 +290,10 @@ func shouldSkipRepoCopyPath(src string) bool {
 	// terraform apply can hold the file open exactly when the copy tries to read it,
 	// failing with "The process cannot access the file because another process has
 	// locked a portion of the file."
-	if strings.Contains(filepath.Base(src), ".tfstate") {
+	base := filepath.Base(src)
+	if strings.HasSuffix(base, ".tfstate") ||
+		strings.HasSuffix(base, ".tfstate.backup") ||
+		strings.HasSuffix(base, ".tfstate.d") {
 		return true
 	}
 	return false

@@ -157,6 +157,9 @@ func runTUIProgram(model tea.Model, cmd *exec.Cmd) (tea.Model, bool, error) {
 	if err != nil {
 		// Kill the process if TUI failed.
 		_ = cmd.Process.Kill()
+		// Reap the killed process so it isn't left as a zombie, and so Wait closes
+		// the stdout/stderr pipes that the reader goroutines are blocked on.
+		_ = cmd.Wait()
 		return nil, false, fmt.Errorf(fmtWrapErr, errUtils.ErrTUIRun, err)
 	}
 
@@ -185,7 +188,10 @@ func killIfCancelled(cancelled bool, cmd *exec.Cmd) {
 func streamStderrToLog(r io.Reader) {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		log.Debug(scanner.Text())
+		// Mask before logging: when no log file is configured, log output goes straight
+		// to raw os.Stderr (see SetupLogger in cmd/root.go), bypassing iolib.MaskWriter.
+		// Terraform stderr can carry secrets (backend errors, provider crash output).
+		log.Debug(iolib.MaskString(scanner.Text()))
 	}
 }
 
