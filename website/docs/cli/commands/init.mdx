@@ -50,6 +50,16 @@ configured and remote sources available to the current project.
 an application SDLC layout with development, staging, and production stacks. The landing-zone
 templates establish cloud-specific platform foundations.
 
+`[template]` also accepts a direct source instead of a catalog name — a local path, git, HTTPS,
+S3, or an OCI registry reference:
+
+```shell
+atmos init oci://ghcr.io/example/templates:v1.0.0 ./my-project
+```
+
+An OCI source is pulled the same way `atmos vendor pull` fetches OCI-hosted components; see
+[Vendor URL Syntax](/vendor/url-syntax#oci-syntax) for authentication details.
+
 ## Shared Scaffold Contract
 
 Project templates use the same `AtmosScaffoldConfig` manifest and generation engine as
