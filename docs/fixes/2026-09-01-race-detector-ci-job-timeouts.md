@@ -635,13 +635,6 @@ regression from this fix.)
   reasonable effort. Left open; if it recurs, capture the exact `-shuffle` seed from the failing CI run and
   retry with that seed plus the full, unfiltered package (not `-run`-narrowed, per Round 9's lesson that
   narrowing changes the deterministic order).
-- `pkg/provisioner/provisioner_test.go`'s `TestAutoProvisionBackendWritesWarningsToOutputWriter` fails
-  deterministically when run in isolation (`-run <name>`), with or without `-race`/`-shuffle`, and identically
-  with every change from this whole incident stashed out (verified against the exact commit already on
-  `origin` before this round). It passes when the full `pkg/provisioner` package runs unfiltered (both local
-  full-suite runs in this round show it passing), so some other test in that package incidentally provides
-  setup this test is missing on its own — a real test-hygiene gap, but not one that affects the actual CI
-  race job (which always runs full packages, never `-run`-narrowed) or this incident. Not fixed here.
 - `cmd/root_test.go`'s `TestApplyCIGitCloneBootstrap_CICloneExplicitFalseOptsOut` and
   `TestApplyCIGitCloneBootstrap_NoCIProviderDetected` failed in a full local `-race -shuffle=on` run of the
   entire package set with `atmosConfig.CI.Enabled` unexpectedly `true` (`assert.False` on that field, not on
@@ -659,6 +652,19 @@ regression from this fix.)
   fix) reappeared in the CI log that also contained Round 13's gomonkey hang. Not yet re-investigated to
   confirm whether the fix regressed, was affected by an unrelated change, or a new failure mode emerged —
   flagged here rather than guessed at, pending the next CI run once Round 13's fix lands.
+- `TestValidateStacksCmd_Failure` surfaced a genuine `WARNING: DATA RACE` in a local full-package
+  `-race -shuffle=on` rerun during Round 15's validation, in `pkg/ui/markdown.(*CustomRenderer).Render`
+  reached via `pkg/ui/spinner.(*Spinner).Error` — concurrent writes to shared renderer state from the
+  spinner's animation goroutine racing the actual error-render call. Unrelated to Round 15's diff (which only
+  touches `cmd` package command-tree/flag/helpFunc test restoration); not reproduced in isolation or
+  root-caused within this round's budget — left open.
+- `TestTerraformGenerateVarfileCmdNoColor` failed once in the same Round 15 validation batch with
+  `Output should not contain ANSI codes when NO_COLOR=1` — ANSI codes leaked through despite `NO_COLOR=1`.
+  Likely the same category as the documented `pkg/ui` triple color-profile cache gotcha (env changes need
+  `ui.ReinitFormatter()`, not just `SetColorProfile`+`InvalidateStyleCache`, which is all
+  `restoreRootCmdState` currently does) — plausibly another test leaking a forced-color profile forward that
+  a later `NO_COLOR=1` test doesn't fully override. Not reproduced in isolation or root-caused within this
+  round's budget — left open.
 
 ## Round 11 (the `--help`-flag leak fix, generalized)
 
@@ -731,3 +737,117 @@ local darwin/arm64 dev machine exactly as before (confirming the generalized hel
 ARM64 behavior, not just adding the new `-race` path).
 
 See Follow-ups above for a `cmd/ci` test that reappeared in the same CI log as this round's gomonkey hang.
+
+## Round 14 (root-caused the `pkg/provisioner` "test-hygiene gap" left open in Round 12's Follow-ups)
+
+The same CI run that exposed Round 13's gomonkey hang also failed `pkg/provisioner`'s
+`TestAutoProvisionBackendWrapsCreationError` with `An error is expected but got nil` — a different test than
+the one Round 12's Follow-ups already flagged (`TestAutoProvisionBackendWritesWarningsToOutputWriter`), in the
+same file, with the same symptom shape (expects a mocked backend-create function's error/warnings to surface,
+gets a silent no-op instead). Reproduced locally with the CI log's exact `-test.shuffle` seed
+(`go test -race -shuffle=1788356795585686757 ./pkg/provisioner/`) — this time actually root-caused instead of
+re-deferred, since the same failure shape recurring on a *second* test in the same file (previously guessed to
+be "some other test incidentally provides missing setup") pointed at a real, general bug rather than one
+test's isolated gap.
+
+`autoProvisionBackend` (`pkg/provisioner/backend_hook.go`) calls `backend.BackendExists` before ever invoking
+the registered create function; if that check errors, `autoProvisionBackend` silently returns `nil` ("defer to
+terraform init" — `backend_hook.go:69-74`), never calling create. `backend.BackendExists` looks up an
+exists-checker from a *separate* package-level registry (`backendExistsCheckers`,
+`pkg/provisioner/backend/backend.go`) that s3.go's own `init()` populates at process start with the real,
+network-calling `S3BackendExists`. Both `TestAutoProvisionBackendWrapsCreationError` and
+`TestAutoProvisionBackendWritesWarningsToOutputWriter` register a mock *create* function but never touch the
+*exists* registry, and only call `backend.ResetRegistryForTesting()` via `t.Cleanup` (i.e. after the test, not
+before). Whichever of these two tests happens to run *first* under `-shuffle=on` — before anything else in the
+package has called `ResetRegistryForTesting`, which wipes `backendExistsCheckers` back to empty — inherits the
+real `S3BackendExists` checker. With no AWS credentials/network in CI, that checker errors, `BackendExists`
+propagates the error, and `autoProvisionBackend` silently no-ops instead of ever calling the mock create
+function the test means to exercise. Every other order works "by accident," relying on an earlier test's
+cleanup having already emptied the registry — exactly the ambient-setup dependency Round 12's Follow-ups
+suspected, just not yet traced to its actual mechanism.
+
+Fixed by calling `backend.ResetRegistryForTesting()` at the *start* of both tests (in addition to the existing
+`t.Cleanup`), so each is self-sufficient regardless of what ran before it: with the registry empty,
+`backend.GetBackendExists("s3")` returns `nil`, `BackendExists` takes its documented "no exists checker
+registered → assume backend doesn't exist" default (`(false, nil)`), and the mock create function the test
+actually registered gets called every time.
+
+Validation: `go build ./pkg/provisioner/...`, `go vet ./pkg/provisioner/...` — clean. `go test -race
+-shuffle=1788356795585686757 ./pkg/provisioner/` (the exact CI-failing seed) — passes (previously failed on
+`TestAutoProvisionBackendWrapsCreationError`). 5 additional `go test -race -shuffle=on` reruns of the full
+package — all pass. Both fixed tests also pass individually via `-run '^Test...$'` (previously
+`TestAutoProvisionBackendWritesWarningsToOutputWriter` failed in isolation per Round 12's Follow-ups; it now
+passes, confirming the fix removes the dependency on run order rather than papering over this one seed).
+
+## Round 15 (root-caused the recurring `--help` flag leak, for real this time)
+
+Rounds 10 and 11 both attempted to close `TestRootHelpFunc_RealTree_UnknownSubcommandErrors`'s recurring
+failure (`toolchain`/`terraform`/`version` + an unrecognized subcommand + `--help` silently succeeding
+instead of reporting "Unknown command" and exiting 1), and Round 11 in particular generalized the fix to walk
+the *entire* command tree's flags, not just `RootCmd`'s own. It reappeared a third time in the CI run that
+also contained Round 13's gomonkey hang. This round finally instrumented the actual failing dispatch (temporary
+`fmt.Fprintf(os.Stderr, ...)` debug prints inside `rootHelpFunc`/`rejectUnknownSubcommandForHelp`, removed
+before committing) rather than reasoning about it statically, and found the real mechanism -- two distinct,
+previously-undiscovered bugs, neither of which is a leaked `pflag.Flag`:
+
+- **A lazily-created flag with no snapshot to restore from.** Cobra's `InitDefaultHelpFlag()` /
+  `InitDefaultVersionFlag()` / `InitDefaultCompletionCmd()` all add their flags *lazily*, inside
+  `Command.execute()` on a command's first real dispatch -- not at registration time. `NewTestKit`'s
+  `restoreFlagsOn` (Round 11) looked up each live flag by name in the snapshot map and silently skipped
+  restoring any flag not found there (`if !ok { return }`). A flag that didn't exist yet when a given test's
+  snapshot was taken has no "before" state in that snapshot; skipping it means whatever that same test's own
+  invocation left the flag at (e.g. `RootCmd`'s own `--help`, `Value: true, Changed: true` after
+  `TestPagerDoesNotRunWithoutTTY`'s first subtest) leaks forward to every later test, forever, since no
+  *earlier* snapshot ever captured it either. Traced to its origin with a temporary debug print in
+  `snapshotRootCmdState`/`restoreRootCmdState` gated behind `ATMOS_DEBUG_HELP_LEAK` (also removed before
+  committing), confirming `RootCmd.help` first flips to `Value: true` and never resets starting from that
+  exact subtest, in a shuffle-ordered full-package run using the CI log's own `-test.shuffle` seed. Fixed:
+  `restoreFlagsOn` now resets any live flag absent from the snapshot to `f.DefValue`/`Changed: false` instead
+  of skipping it -- there being no "before" state to restore *is* the fix's premise, since the correct
+  baseline for a flag your own snapshot never saw is its own registered default.
+- **`SetHelpFunc` leaking across real, package-level singleton commands (the actual proximate cause of the
+  observed failure).** `applyColoredHelpTemplateForTopic` (`cmd/help_template.go`) calls
+  `cmd.SetHelpFunc(func(c, args) { printHelpForTopic(...) })` on whatever command it renders help for --
+  this runs on *every* successful, valid `--help` render (`renderFlagHelp`/`renderInteractiveHelp`/the
+  default branch, and `rootHelpFunc`'s own normal completion path), including real commands like
+  `toolchain`/`terraform`/`version`. `Command.helpFunc` is an *unexported, per-command function-pointer
+  field* on `cobra.Command` -- not a `pflag.Flag` -- so nothing in the flag-walk mechanism (Rounds 10-11)
+  ever touched it. The very first test anywhere in the whole binary that successfully renders real
+  `--help` for e.g. "toolchain" (any of `TestRootHelpFunc_RealTree_ValidCasesStillRenderHelp`'s "toolchain
+  --help" cases, or any other test exercising the same real command) permanently overwrites
+  `toolchainCmd.helpFunc` with that one-off closure. From that point on, `Command.HelpFunc()` (which returns
+  the local `helpFunc` if non-nil, walking up to the parent only when it's nil) stops walking up to
+  `RootCmd`'s `rootHelpFunc` -- Cobra's dispatch for `atmos toolchain <bogus> --help` still resolves and
+  parses correctly, but the actual help rendering silently bypasses `rejectUnknownSubcommandForHelp`
+  entirely, explaining every observed symptom at once: no call into `rootHelpFunc` (confirmed via the debug
+  prints -- zero hits for the failing subtests despite `--help` genuinely being present and recognized),
+  `OsExit` never invoked (so `assert.Panics` fails with a nil panic value), and empty captured output (the
+  leaked closure renders through `cmd.OutOrStdout()`/its own `ctx.writer`, not the test's swapped
+  `os.Stderr` pipe). Fixed by resetting every command's `helpFunc` in the same tree walk: `RootCmd` gets
+  `rootHelpFunc` re-set explicitly (defensive, matches its own real registration); every other command gets
+  `SetHelpFunc(nil)`, clearing back to "inherits from parent" -- exactly the state a freshly registered
+  command that has never rendered help would be in.
+
+Fixing bug 2 exposed a **third, previously-masked issue**: with `rootHelpFunc` finally reachable again,
+`TestRootHelpFunc_RealTree_UnknownSubcommandErrors`'s own `os.Pipe()`-based stderr capture deadlocked --
+`showUsageAndExit`'s fully-styled "Unknown command" error (hints + the full subcommand list; worst case
+"terraform" with 40 children) is large enough to exceed the OS pipe buffer (64KB on macOS/Linux), and the test
+only started draining the pipe (`io.Copy`) *after* `RootCmd.ExecuteC()` returned -- which itself couldn't
+return until the blocked write completed, a classic unbuffered-pipe deadlock. This had never surfaced before
+because bug 2 always intercepted the dispatch first, so this code path had effectively never run to
+completion in CI. Fixed by starting the `io.Copy` drain in a goroutine before invoking `ExecuteC()`, so reads
+happen concurrently with the write instead of after it.
+
+Files: `cmd/testing_helpers_test.go` (`restoreFlagsOn`'s two fixes above), `cmd/root_help_routing_test.go`
+(concurrent pipe drain in `TestRootHelpFunc_RealTree_UnknownSubcommandErrors`).
+
+Validation: `go build ./cmd/...`, `go vet ./cmd/...` -- clean. `./custom-gcl run --new-from-rev=origin/main` --
+0 issues. `gofumpt -l` on both touched files -- no output. `go test -race -shuffle=1788355849065485169 ./cmd/`
+(the exact CI-failing seed, extracted from the failing job's log) -- passes (previously failed on all three
+`TestRootHelpFunc_RealTree_UnknownSubcommandErrors` subtests, then hit the pipe deadlock and timed out at
+15m once bug 2 alone was fixed). `go test -race ./cmd/ -run
+'TestSnapshotRootCmdState|TestTestKit_|TestRootHelpFunc_RealTree'` -- all pass. 5 additional full-package `go
+test -race -shuffle=on ./cmd/` reruns -- 3 passed cleanly; 2 failed on tests unrelated to this round's diff
+(see Follow-ups: `TestApplyCIGitCloneBootstrap_*`, already a documented open issue; and two newly-surfaced
+flakes in unrelated subsystems, `TestValidateStacksCmd_Failure` and `TestTerraformGenerateVarfileCmdNoColor`,
+neither touching command-tree/flag/helpFunc state this round's diff modifies).

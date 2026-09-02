@@ -193,6 +193,22 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 			flagSet.VisitAll(func(f *pflag.Flag) {
 				snap, ok := flags[f.Name]
 				if !ok {
+					// This flag didn't exist on this command at snapshot time, so
+					// there is no prior state to restore -- it must have been
+					// lazily added by Cobra mid-test (InitDefaultHelpFlag /
+					// InitDefaultVersionFlag / InitDefaultCompletionCmd all run
+					// inside Command.execute() on first dispatch to a given
+					// command, not at registration time). Left alone, a lazily
+					// created --help/--version left Changed=true by this test's
+					// own invocation would never be seen by any earlier
+					// snapshot and would leak forward to every later test
+					// permanently, since no snapshot ever captured a "before"
+					// state to restore it to. Reset to the flag's own registered
+					// default instead of skipping, so it can never leak.
+					if f.Value.Type() != "stringSlice" && f.Value.Type() != "stringArray" {
+						_ = f.Value.Set(f.DefValue)
+					}
+					f.Changed = false
 					return
 				}
 				// StringSlice/StringArray flags need special handling due to append behavior.
@@ -207,6 +223,25 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 		}
 		restoreFlags(c.Flags())
 		restoreFlags(c.PersistentFlags())
+
+		// applyColoredHelpTemplateForTopic (cmd/help_template.go) calls
+		// cmd.SetHelpFunc(...) on whatever command it renders help for --
+		// including real, package-level singleton subcommands like
+		// "toolchain"/"terraform"/"version" -- overwriting Cobra's
+		// unexported per-command helpFunc field with a one-off closure that
+		// bypasses rootHelpFunc's unknown-subcommand rejection entirely.
+		// That field isn't a pflag.Flag, so nothing above touches it; left
+		// alone, ANY earlier test that successfully renders real "--help"
+		// for a command poisons that command's help dispatch for the rest
+		// of the test binary. RootCmd keeps its real rootHelpFunc; every
+		// other command clears back to nil so HelpFunc() resumes inheriting
+		// from its parent, exactly like a freshly registered command that
+		// has never rendered help.
+		if c == RootCmd {
+			c.SetHelpFunc(rootHelpFunc)
+		} else {
+			c.SetHelpFunc(nil)
+		}
 	}
 	walkCommandTree(RootCmd, restoreFlagsOn)
 

@@ -251,6 +251,21 @@ func TestRootHelpFunc_RealTree_UnknownSubcommandErrors(t *testing.T) {
 			os.Stderr = w
 			t.Cleanup(func() { os.Stderr = oldStderr })
 
+			// Drain the pipe concurrently with the write side. showUsageAndExit's
+			// rendered "Unknown command" error (with hints, styling, and the full
+			// subcommand list -- worst case "terraform" with 40 children) can
+			// exceed the OS pipe buffer (64KB on macOS/Linux); writing it
+			// synchronously then reading afterward deadlocks the write once the
+			// buffer fills, since nothing drains the pipe until after
+			// ExecuteC() returns -- which itself can't return until the write
+			// (inside it) completes.
+			outputCh := make(chan []byte, 1)
+			go func() {
+				var output bytes.Buffer
+				_, _ = io.Copy(&output, r)
+				outputCh <- output.Bytes()
+			}()
+
 			args := []string{tt.parentName, tt.bogus, "--help"}
 			os.Args = append([]string{"atmos"}, args...)
 			RootCmd.SetArgs(args)
@@ -266,8 +281,7 @@ func TestRootHelpFunc_RealTree_UnknownSubcommandErrors(t *testing.T) {
 			require.NoError(t, w.Close())
 			os.Stderr = oldStderr
 			var output bytes.Buffer
-			_, copyErr := io.Copy(&output, r)
-			require.NoError(t, copyErr)
+			output.Write(<-outputCh)
 
 			assert.True(t, exitCalled, "unknown subcommand + --help must call OsExit")
 			assert.Equal(t, 1, exitCode)
