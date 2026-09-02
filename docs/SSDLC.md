@@ -99,14 +99,16 @@ Organization-wide settings: multi-factor authentication is required, personnel a
 3. The release manager publishes the draft. Publication is the human decision point.
 4. Publication triggers the signing and attestation pipeline. That pipeline holds no long-lived secrets: it signs with keyless Sigstore OIDC and authenticates with the ephemeral workflow token, so it has no key material to protect and needs no environment of its own.
 5. The pipeline rebuilds the binaries from source at the published tag, rather than re-signing artifacts it downloaded. This closes the time-of-check to time-of-use gap present in download-then-sign designs.
-6. The pipeline is configured to produce:
-   - Platform binaries and native `.deb`, `.rpm`, and `.apk` packages
-   - A SHA256 checksums manifest covering the release artifacts
-   - A keyless Sigstore signature over the checksums manifest, recorded in the Rekor transparency log
-   - SPDX SBOMs, per archive and for the source tree
-   - Build-provenance attestations for every artifact
-   - A container image, signed by digest with cosign and scanned with Trivy
-7. Release binaries are built with `GOFIPS140=latest`. That links Go's native FIPS 140-3 cryptographic module and embeds `DefaultGODEBUG=fips140=on`, so a release binary runs in FIPS 140-3 mode by default. `fips140=only`, which makes non-approved algorithms return an error or panic, is not used; Go documents that mode as unsupported for production. This is not a CMVP certification for Atmos, and it does not cover the age and NaCl cryptography used by declarative secrets management.
+6. Release binaries are built with `GOFIPS140=latest`. That links Go's native FIPS 140-3 cryptographic module and embeds `DefaultGODEBUG=fips140=on`, so a release binary runs in FIPS 140-3 mode by default. `fips140=only`, which makes non-approved algorithms return an error or panic, is not used; Go documents that mode as unsupported for production. This is not a CMVP certification for Atmos, and it does not cover the age and NaCl cryptography used by declarative secrets management.
+
+The pipeline is configured to produce:
+
+- Platform binaries and native `.deb`, `.rpm`, and `.apk` packages
+- A SHA256 checksums manifest covering the release artifacts
+- A keyless Sigstore signature over the checksums manifest, recorded in the Rekor transparency log
+- SPDX SBOMs, per archive and for the source tree
+- Build-provenance attestations for every artifact
+- A container image, signed by digest with cosign and scanned with Trivy
 
 Feature previews are prereleases cut from a pull-request branch. They run in a separate `feature-releases` environment, under a **different GitHub App**, and build from a reduced GoReleaser configuration. They are marked as prereleases and are temporary. The publishing identity appears in the metadata of every release, so the pipeline that produced any given artifact is externally verifiable without relying on Cloud Posse's assertion.
 
