@@ -403,7 +403,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/google/cel-go
     License: Apache-2.0
-    URL: https://github.com/google/cel-go/blob/v0.29.0/LICENSE
+    URL: https://github.com/google/cel-go/blob/v0.30.0/LICENSE
 
   - github.com/google/gnostic-models
     License: Apache-2.0
@@ -671,11 +671,11 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - go.opentelemetry.io/otel/sdk
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/v1.43.0/sdk/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/v1.46.0/sdk/LICENSE
 
   - go.opentelemetry.io/otel/sdk/metric
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/metric/v1.43.0/sdk/metric/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/metric/v1.46.0/sdk/metric/LICENSE
 
   - go.opentelemetry.io/otel/trace
     License: Apache-2.0

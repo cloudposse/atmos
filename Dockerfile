@@ -22,6 +22,11 @@ RUN if [ -z "$ATMOS_VERSION" ]; then echo "ERROR: ATMOS_VERSION argument must be
 SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
 
 RUN set -ex; \
+    # Disable APT recommends globally (not just on our own invocations) so the
+    # piped install-opentofu.sh script below -- which runs its own internal
+    # `apt-get install tofu` we don't control the flags of -- inherits the
+    # same no-recommends policy instead of silently pulling extras in.
+    echo 'APT::Install-Recommends "false";' > /etc/apt/apt.conf.d/99-no-recommends; \
     # Update the package list
     apt-get update; \
     # Install runtime dependencies required by Atmos-managed tools.
@@ -74,3 +79,7 @@ RUN case ${TARGETPLATFORM} in \
     echo "Downloading Atmos v${ATMOS_VERSION#v} for ${OS}/${ARCH}" && \
     curl -1sSLf "https://github.com/cloudposse/atmos/releases/download/v${ATMOS_VERSION#v}/atmos_${ATMOS_VERSION#v}_${OS}_${ARCH}" -o /usr/local/bin/atmos && \
     chmod +x /usr/local/bin/atmos
+
+# Confirms the atmos binary itself is present and runnable; this image has no
+# long-running daemon to probe.
+HEALTHCHECK CMD ["atmos", "version"]
