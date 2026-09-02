@@ -27,7 +27,7 @@ jobs:
       id-token: write
     timeout-minutes: 15
     steps:
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc # v2.2.0
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
