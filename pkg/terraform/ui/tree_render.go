@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -517,11 +518,18 @@ func renderJSONDiff(b *strings.Builder, beforeLines, afterLines []string, indent
 }
 
 // makeTruncator returns a function that truncates lines to maxWidth, measuring and slicing by
-// rune rather than byte index so a cut point never lands inside a multi-byte UTF-8 rune.
+// terminal-cell display width (via runewidth, already used elsewhere in this package for the
+// same purpose - see init_model.go) rather than byte or rune count. Wide characters (e.g. CJK)
+// occupy two cells per rune, so slicing by rune count alone can either cut a wide rune in half
+// or, worse, index past the end of the rune slice (lipgloss.Width(line) can exceed maxWidth
+// while len([]rune(line)) is still less than maxWidth-3, which panics on a naive rune slice).
 func makeTruncator(maxWidth int) func(string) string {
 	return func(line string) string {
-		if maxWidth > 3 && lipgloss.Width(line) > maxWidth {
-			return string([]rune(line)[:maxWidth-3]) + "..."
+		if maxWidth > 3 && runewidth.StringWidth(line) > maxWidth {
+			// runewidth.Truncate's width budget already accounts for the tail ("...")
+			// it appends, so pass maxWidth itself rather than maxWidth-3 - the total
+			// (content + tail) display width comes out to at most maxWidth.
+			return runewidth.Truncate(line, maxWidth, "...")
 		}
 		return line
 	}

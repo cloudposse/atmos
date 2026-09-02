@@ -1289,6 +1289,27 @@ func TestMakeTruncator_ShortLineUnchanged(t *testing.T) {
 	assert.Equal(t, "short", truncate("short"))
 }
 
+// TestMakeTruncator_WideCharacterSafe verifies makeTruncator measures and truncates by
+// terminal-cell display width, not rune count: a wide (e.g. CJK) character occupies two cells
+// per rune, so lipgloss.Width(line) can exceed maxWidth while len([]rune(line)) is still less
+// than maxWidth-3 - slicing the rune slice directly at maxWidth-3 (the earlier, buggy
+// implementation) indexes past the end of a short-enough rune slice and panics. 6 "界"
+// characters have a rune length of 6 but a display width of 12.
+func TestMakeTruncator_WideCharacterSafe(t *testing.T) {
+	truncate := makeTruncator(10)
+
+	line := strings.Repeat("界", 6)
+	var result string
+	assert.NotPanics(t, func() {
+		result = truncate(line)
+	})
+
+	assert.True(t, strings.HasSuffix(result, "..."), "truncated line must end with the ellipsis")
+	assert.True(t, utf8.ValidString(result), "truncated line must remain valid UTF-8")
+	assert.LessOrEqual(t, lipgloss.Width(result), 10, "truncated output must not exceed maxWidth in display cells")
+	assert.Equal(t, "界界界...", result)
+}
+
 // TestTransformLines_NilTransform verifies transformLines returns the input slice unchanged
 // when no transform function is supplied (the identity path used defensively but never
 // actually reached by the current call site, which always passes a non-nil truncator).
