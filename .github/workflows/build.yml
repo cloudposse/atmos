@@ -26,7 +26,7 @@ jobs:
       id-token: write
       contents: write
       pull-requests: write
-    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@49ac8cd5c4cf74abdbf24a80027cd3bde811133a # main
+    uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
     secrets: inherit
 
   homebrew:
@@ -128,7 +128,7 @@ jobs:
 
       - name: "Upload Trivy scan results to code-scanning"
         if: always()
-        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: trivy-results.sarif
 
@@ -189,7 +189,7 @@ jobs:
 
       # syft binary that .goreleaser.yml's sboms: block shells out to.
       - name: "Install syft"
-        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
 
       - name: "Run goreleaser release"
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
@@ -244,7 +244,7 @@ jobs:
       # from .goreleaser.yml's per-archive sboms: block (bound to individual
       # archives, uploaded to the release directly by GoReleaser itself).
       - name: "Generate and attest source-tree SBOM"
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           path: .
           format: spdx-json
