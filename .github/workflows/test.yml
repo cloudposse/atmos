@@ -238,8 +238,20 @@ jobs:
     # cache save (tar + zstd) runs after that and is much slower on Windows,
     # so a flat 20m job budget can expire mid-save even though the test
     # itself already passed (see the Acceptance tests step's timeout comment
-    # below for the same Windows-is-slower pattern).
-    timeout-minutes: ${{ matrix.flavor.target == 'windows' && 30 || 20 }}
+    # below for the same Windows-is-slower pattern). 30m (raised from 20 in
+    # #2959) was still not enough: GitHub Job ID 99475416637 hit it at
+    # 30m27s even though every step had genuinely completed or nearly
+    # completed -- "Get dependencies" (normally ~5s) took ~5m, the test step
+    # itself (normally ~1m, well under its own 15m budget) took ~10.5m, and
+    # "Post Set up Go" (normally near-instant) took ~10.5m before finishing
+    # successfully; only the next step, "Post Cache Atmos toolchain"
+    # (normally ~42s), was still running when the job clock ran out. That
+    # uniform ~10x slowdown across three unrelated operations (dependency
+    # download, test execution, cache save) is the signature of a
+    # degraded/throttled runner that day, not a code regression -- see
+    # docs/fixes/2026-08-31-terraform-registry-cache-windows-runner-degradation.md.
+    # Raised to 45m for real headroom above that worst case.
+    timeout-minutes: ${{ matrix.flavor.target == 'windows' && 45 || 20 }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Harden Runner
