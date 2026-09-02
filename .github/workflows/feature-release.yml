@@ -31,10 +31,9 @@ jobs:
       environment: 'feature-releases'
       runs-on: '["runs-on=${{github.run_id}}", "runner=large", "tag=atmos","extras=s3-cache", "private=false"]'
       draft: ${{ github.event.pull_request.draft }}
-    # Explicit least-privilege list instead of `secrets: inherit` -- the full set this
-    # reusable workflow (and its own nested reusable-workflow calls) actually consumes,
-    # traced through cloudposse/.github's shared-go-auto-release.yml -> shared-auto-release.yml.
-    secrets:
-      BOT_GITHUB_APP_PRIVATE_KEY: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
-      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-      GPG_PRIVATE_KEY_PASSPHRASE: ${{ secrets.GPG_PRIVATE_KEY_PASSPHRASE }}
+    # `secrets: inherit`, not an explicit map: shared-go-auto-release.yml doesn't declare a
+    # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
+    # (observed as a startup_failure -- "likely failed because of a workflow file issue" -- with
+    # zero jobs ever created, on both this workflow and test.yml after an earlier attempt to
+    # narrow this to an explicit list).
+    secrets: inherit

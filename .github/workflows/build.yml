@@ -27,11 +27,13 @@ jobs:
       contents: write
       pull-requests: write
     uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
-    # Explicit least-privilege list instead of `secrets: inherit` -- the only secret this
-    # reusable workflow (cloudposse/.github's shared-release-branches.yml) consumes; it
-    # doesn't delegate to any further nested reusable-workflow call.
-    secrets:
-      BOT_GITHUB_APP_PRIVATE_KEY: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+    # `secrets: inherit`, not an explicit map: shared-release-branches.yml doesn't declare a
+    # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
+    # (this job only triggers on `release`/`workflow_dispatch`, not `pull_request`, so the
+    # earlier attempt to narrow this never actually ran here -- but test.yml and
+    # feature-release.yml hit the identical mistake against shared-go-auto-release.yml, which
+    # has the same missing-schema shape, and failed with a startup_failure).
+    secrets: inherit
 
   homebrew:
     if: ${{ github.event.release.prerelease == false }}
