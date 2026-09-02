@@ -127,6 +127,7 @@ jobs:
             golang.org:443
             go.googlesource.com:443
             proxy.golang.org:443
+            sum.golang.org:443
             vuln.go.dev:443
 
       - name: Checkout code
