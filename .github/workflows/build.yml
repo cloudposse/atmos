@@ -27,7 +27,11 @@ jobs:
       contents: write
       pull-requests: write
     uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@49ac8cd5c4cf74abdbf24a80027cd3bde811133a # main
-    secrets: inherit
+    # Explicit least-privilege list instead of `secrets: inherit` -- the only secret this
+    # reusable workflow (cloudposse/.github's shared-release-branches.yml) consumes; it
+    # doesn't delegate to any further nested reusable-workflow call.
+    secrets:
+      BOT_GITHUB_APP_PRIVATE_KEY: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
 
   homebrew:
     if: ${{ github.event.release.prerelease == false }}
