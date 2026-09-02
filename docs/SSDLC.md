@@ -15,7 +15,7 @@ It does not cover Atmos Pro, a separate hosted SaaS offering with its own contro
 
 Cloud Posse develops Atmos in the open. Controls that live in the repository — workflow definitions, scanner configuration, dependency pinning, and the commit and review history — are visible to anyone and can be verified independently without Cloud Posse's assistance.
 
-Controls that live at the organization or environment level are a separate class. Repository ruleset enforcement and bypass lists, deployment-environment branch policies, multi-factor and single-sign-on enforcement, and the AWS account that CI runners execute in cannot be read from the repository. Sections 5, 6, and 9 describe several of them. Cloud Posse states those here and can evidence them from organization settings on request.
+Controls that live at the organization or environment level are a separate class. Repository ruleset enforcement and bypass lists, deployment-environment branch policies, multi-factor and single-sign-on enforcement, and the AWS account that self-hosted runners execute in cannot be read from the repository. Sections 5, 6, and 9 describe several of them. Cloud Posse states those here and can evidence them from organization settings on request.
 
 ## 2. Roles
 
@@ -124,8 +124,8 @@ Feature previews are prereleases cut from a pull-request branch. They run in a s
 
 ## 8. Vulnerability Management and Disclosure
 
-- Reports are received at `security@cloudposse.com`. Cloud Posse acknowledges a report within 48 hours, provides an estimated remediation timeframe, and notifies the reporter on resolution.
-- The published policy is at `github.com/cloudposse/atmos/security/policy`.
+- Reports are received at [security@cloudposse.com](mailto:security@cloudposse.com). Cloud Posse acknowledges a report within 48 hours, provides an estimated remediation timeframe, and notifies the reporter on resolution.
+- The published policy is at [github.com/cloudposse/atmos/security/policy](https://github.com/cloudposse/atmos/security/policy).
 - Remediation targets: Critical within 7 days, or 72 hours where the vulnerability is reachable in Atmos and an upstream fix is available; High within 30 days; Medium within 90 days; Low in the next regular release. Measured from confirmation.
 - Confirmed vulnerabilities are disclosed through a GitHub Security Advisory and in the release notes.
 - Cloud Posse supports coordinated disclosure. Cloud Posse does not operate a bug bounty.
@@ -139,7 +139,7 @@ Three independent layers protect against credential exposure.
 2. TruffleHog across full repository history in CI, verified results only, blocking.
 3. Atmos itself masks secrets in output and handles configured secrets through dedicated backends rather than environment interpolation.
 
-CI jobs run on ephemeral runners. Runners provisioned through RunsOn execute in a dedicated AWS automation account.
+CI jobs run on a hybrid of GitHub-hosted runners and self-hosted runners provisioned through RunsOn, which execute in a dedicated AWS automation account. Runners of both kinds are ephemeral: one is created for a job and destroyed when the job ends, so no state carries between jobs.
 
 ## 10. Records
 
