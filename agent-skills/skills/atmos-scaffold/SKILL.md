@@ -61,8 +61,11 @@ Mark a file as a Go template (rendered with the collected answers) either by:
   `<!-- atmos:template -->` (HTML/XML/Markdown)
 
 Template sources: embedded (built into the Atmos binary), custom (declared under
-`scaffold.templates` in `atmos.yaml`), or catalog/remote (git/https/s3 — advertised
-as stubs, fetched on selection).
+`scaffold.templates` in `atmos.yaml`), or catalog/remote (git/https/s3/oci — advertised
+as stubs, fetched on selection). An OCI source (`oci://ghcr.io/org/template:v1`) is pulled
+via the same `pkg/oci` client `atmos vendor pull` reuses (load `atmos-vendoring` for the
+URL syntax and auth precedence). `--ref` only applies to git sources; OCI/S3/local sources
+address a version through the source string itself.
 
 ## Form Fields
 
@@ -265,6 +268,7 @@ the JSON Schema.
 | Every registered step type and aliases usable in a hook's `with:` | `atmos-steps` |
 | Go-template/Gomplate/Sprig functions available in file content | `atmos-templates` |
 | Project bootstrap from the built-in template catalog | `atmos-init` |
+| OCI registry URL syntax, auth precedence, full source-type reference | `atmos-vendoring` |
 | Generated JSON Schema for IDE validation | `atmos-schemas` |
 | `when:`/CEL syntax reference | `atmos-workflows` |
 
