@@ -61,7 +61,7 @@ func CollectCoverage(ctx context.Context, options *CoverageOptions, packages, te
 	args = append(args, "-cover", "-covermode=atomic", "-coverpkg=./...")
 	args = append(args, testArgs...)
 	args = append(args, "-timeout", defaultValue(options.Timeout, defaultTestTimeout), "-args", "-test.gocoverdir="+absUnit)
-	if err := runner.run(ctx, options.RepoRoot, goCommandEnvironment("GOCOVERDIR="+absIntegration), "go", args...); err != nil {
+	if err := runner.run(ctx, runOptions{dir: options.RepoRoot, env: goCommandEnvironment("GOCOVERDIR=" + absIntegration), retryTransient: true}, "go", args...); err != nil {
 		return err
 	}
 
@@ -88,7 +88,7 @@ func MergeCoverage(ctx context.Context, repoRoot, dataOut, textOut string, input
 		return err
 	}
 	runner := newCommandRunner()
-	if err := runner.run(ctx, repoRoot, nil, "go", "tool", "covdata", "merge", "-pcombine", "-i="+strings.Join(normalizedInputs, ","), "-o="+dataOut); err != nil {
+	if err := runner.run(ctx, runOptions{dir: repoRoot}, "go", "tool", "covdata", "merge", "-pcombine", "-i="+strings.Join(normalizedInputs, ","), "-o="+dataOut); err != nil {
 		return err
 	}
 	if textOut != "" {
@@ -172,7 +172,7 @@ func writeCoverageText(ctx context.Context, runner commandRunner, repoRoot, data
 		return fmt.Errorf("close temporary coverage profile: %w", closeErr)
 	}
 	defer func() { _ = os.Remove(rawPath) }()
-	if err := runner.run(ctx, repoRoot, nil, "go", "tool", "covdata", "textfmt", "-i="+dataOut, "-o="+rawPath); err != nil {
+	if err := runner.run(ctx, runOptions{dir: repoRoot}, "go", "tool", "covdata", "textfmt", "-i="+dataOut, "-o="+rawPath); err != nil {
 		return err
 	}
 	if err := filterCoverageProfile(rawPath, textOut); err != nil {
