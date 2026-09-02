@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/agiledragon/gomonkey/v2"
@@ -28,9 +27,7 @@ func boolPtr(b bool) *bool {
 
 func skipGomonkeyOnDarwinARM64(t testing.TB) {
 	t.Helper()
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		t.Skip("gomonkey binary patching is not supported on macOS ARM64")
-	}
+	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.ApplyFunc to mock terraform util functions")
 }
 
 func TestIsWorkspacesEnabled(t *testing.T) {

@@ -655,6 +655,10 @@ regression from this fix.)
   variable) without using that same helper — not identified within this round's time budget. Neither test
   appeared in any real CI run's failure list in this incident (rounds 9–11), only in this round's local
   full-suite reproductions — left open rather than force a guess-fix across an unbounded search space.
+- `cmd/ci/validate_test.go`'s `TestWorkflowValidationErrorOwnsDiagnostics` (Round 10's `MaxLineLength: 200`
+  fix) reappeared in the CI log that also contained Round 13's gomonkey hang. Not yet re-investigated to
+  confirm whether the fix regressed, was affected by an unrelated change, or a new failure mode emerged —
+  flagged here rather than guessed at, pending the next CI run once Round 13's fix lands.
 
 ## Round 11 (the `--help`-flag leak fix, generalized)
 
@@ -687,3 +691,43 @@ with zero failures. A subsequent full local run of the entire package set (minus
 390 of 391 packages passing; the one remaining failure (`cmd`, two different tests than the ones this round
 fixed) is the separate, still-open `atmosConfig.CI.Enabled` leak documented in Follow-ups — the `--help`-flag
 leak this round targeted did not recur.
+
+## Round 13 (gomonkey's runtime patching hangs forever under `-race`, not just crashes on ARM64)
+
+The push containing Rounds 11–12 produced a CI run where `internal/exec` never finished: the job hit its
+20-minute per-package `go test` timeout inside `TestGetAffectedComponents`, which had already been (correctly)
+skipped on `darwin/arm64` via an inline `runtime.GOARCH == "arm64"` check, but CI runs on `linux/amd64` — a
+platform that check never covered.
+
+`gomonkey.ApplyFunc`/`gomonkey.NewPatches` mock functions by overwriting the target function's compiled
+machine code in-place with a jump instruction to the replacement, sized for that function's normal
+(non-instrumented) layout. `go test -race` recompiles every package with race-detector instrumentation, which
+changes each function's compiled layout. The two interact badly: the patch still writes, but at the wrong
+offsets/size for the now-larger instrumented function, corrupting it. Unlike the ARM64 case (an immediate
+SIGBUS from macOS memory protection), the corruption here left the patched call in a state where it neither
+executed the replacement nor errored — it simply hung, forever, taking the whole package's `go test` run down
+with it once the package `-timeout` fired. This is a second, independent gomonkey/`-race` incompatibility,
+undocumented anywhere in gomonkey's own issue tracker as of this fix; the existing ARM64 skip checks in this
+repo were never designed to cover it.
+
+Fixed by generalizing the skip: added `tests.RaceEnabled` (a `//go:build race`/`//go:build !race`-gated
+`const bool`, `tests/race_enabled.go` / `tests/race_disabled.go` — Go has no direct runtime API to detect
+`-race` at test time) and `tests.SkipIfGomonkeyUnsafe(t testing.TB, reason string)` (`tests/preconditions.go`),
+which checks `RaceEnabled` first, then falls through to the pre-existing `darwin/arm64` check. Replaced every
+inline `runtime.GOARCH == "arm64"` (and one package-local `skipGomonkeyOnDarwinARM64` helper that only checked
+ARM64) gomonkey guard across the four files that use `gomonkey.ApplyFunc`/`gomonkey.NewPatches`:
+`internal/exec/terraform_affected_test.go` (`TestGetAffectedComponents`, `TestExecuteTerraformAffected`, and
+`BenchmarkGetAffectedComponents` — the benchmark is why `SkipIfGomonkeyUnsafe` takes `testing.TB` rather than
+`*testing.T`, since `*testing.B` doesn't satisfy the latter), `internal/exec/terraform_utils_test.go` (updated
+the shared `skipGomonkeyOnDarwinARM64` helper's body instead of each of its 3 call sites), `cmd/terraform/lint_test.go`
+(2 call sites), and `pkg/vendoring/install/copy_glob_test.go` (4 call sites).
+
+Validation: `go build ./...`, `go vet ./...` — clean. `./custom-gcl run --new-from-rev=origin/main` — 0 issues.
+`gofumpt -l` on all touched files — no output. `go test -race -run 'TestGetAffectedComponents|TestExecuteTerraformAffected'
+./internal/exec/...` — both skip cleanly under `-race` (previously hung indefinitely). `go test -run
+'TestGetAffectedComponents|TestExecuteTerraformAffected|TestRunTerraformLintDispatchesDirectAndAffectedModes|TestRunTerraformLintReturnsPreparationErrors'
+./internal/exec/... ./cmd/terraform/...` and the four `pkg/vendoring/install` gomonkey tests — all skip on this
+local darwin/arm64 dev machine exactly as before (confirming the generalized helper preserves the pre-existing
+ARM64 behavior, not just adding the new `-race` path).
+
+See Follow-ups above for a `cmd/ci` test that reappeared in the same CI log as this round's gomonkey hang.
