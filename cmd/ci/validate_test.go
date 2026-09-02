@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	cipkg "github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -103,8 +104,15 @@ func TestWorkflowValidationErrorOwnsDiagnostics(t *testing.T) {
 	cfg := errUtils.DefaultFormatterConfig()
 	cfg.MaxLineLength = 200
 	rendered := errUtils.Format(validationErr, cfg)
-	assert.Contains(t, rendered, "GitHub Actions workflow validation failed")
-	assert.Contains(t, rendered, "actionlint-style diagnostic")
+	// When color is enabled, lipgloss's own word-wrap machinery re-applies a
+	// separate ANSI style run per word while reflowing the paragraph, even
+	// when the words end up on the same visual line -- so raw ANSI-embedded
+	// output can split "validation" and " failed" across escape sequences
+	// regardless of MaxLineLength. Strip ANSI before the substring checks so
+	// this test verifies the rendered text, not the exact styling boundaries.
+	plain := atmosansi.Strip(rendered)
+	assert.Contains(t, plain, "GitHub Actions workflow validation failed")
+	assert.Contains(t, plain, "actionlint-style diagnostic")
 }
 
 func TestActionlintOutputUsesNativeDiagnostics(t *testing.T) {

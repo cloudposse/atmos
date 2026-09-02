@@ -654,10 +654,6 @@ regression from this fix.)
   variable) without using that same helper — not identified within this round's time budget. Neither test
   appeared in any real CI run's failure list in this incident (rounds 9–11), only in this round's local
   full-suite reproductions — left open rather than force a guess-fix across an unbounded search space.
-- `cmd/ci/validate_test.go`'s `TestWorkflowValidationErrorOwnsDiagnostics` (Round 10's `MaxLineLength: 200`
-  fix) reappeared in the CI log that also contained Round 13's gomonkey hang. Not yet re-investigated to
-  confirm whether the fix regressed, was affected by an unrelated change, or a new failure mode emerged —
-  flagged here rather than guessed at, pending the next CI run once Round 13's fix lands.
 - `TestValidateStacksCmd_Failure` surfaced a genuine `WARNING: DATA RACE` in a local full-package
   `-race -shuffle=on` rerun during Round 15's validation, in `pkg/ui/markdown.(*CustomRenderer).Render`
   reached via `pkg/ui/spinner.(*Spinner).Error` — concurrent writes to shared renderer state from the
@@ -895,3 +891,33 @@ Validation: `go build ./cmd/...`, `go vet ./cmd/...` -- clean. `./custom-gcl run
 them (previously failed in roughly half of comparable reruns); the one failure across the 4 reruns was
 `TestValidateStacksCmd_Failure` + `TestApplyCIGitCloneBootstrap_NoCIProviderDetected`, both already-documented,
 unrelated pre-existing flakes (see Follow-ups).
+
+## Round 17 (finally root-caused `TestWorkflowValidationErrorOwnsDiagnostics`, open since Round 10)
+
+This test reappeared in the very next CI run after Round 16's fix -- the third time it's failed in this
+incident (first flagged in Round 10, "reappeared" and re-flagged without investigation in Round 13's
+Follow-ups) -- so this round finally investigated it instead of re-deferring. Round 10's `MaxLineLength: 200`
+fix addressed a real issue (auto-detected terminal width varying by environment) but didn't address the actual
+failure mode: `assert.Contains(t, rendered, "GitHub Actions workflow validation failed")` checks the **raw**,
+ANSI-embedded string. When color rendering is active, lipgloss's own word-wrap machinery re-applies a separate
+style/reset ANSI escape run *per word* while reflowing a styled paragraph -- even when the words end up on the
+same visual line, confirmed by dumping the raw rendered string: `...workflow validation\x1b[0m\x1b[97m
+failed\x1b[0m...`, i.e. "validation" and " failed" are visually adjacent but literally non-contiguous once the
+embedded escape codes are counted as bytes. `strings.Contains` (which `assert.Contains` uses under the hood)
+operates byte-for-byte, so it can never reliably find "GitHub Actions workflow validation failed" as one
+substring whenever color is on, regardless of `MaxLineLength` -- Round 10's fix targeted a real but different
+bug (wrapping onto a second visual line) that happened to look similar. Confirmed directly: reverted to the
+pre-fix raw `assert.Contains` temporarily and ran under `ATMOS_FORCE_COLOR=1 CLICOLOR_FORCE=1` (matching a
+colorized CI runner) -- it failed identically to the CI log. Fixed by stripping ANSI codes
+(`atmosansi.Strip`, already this codebase's established pattern for exactly this class of assertion) from the
+rendered output before the `Contains` checks, so the test verifies rendered *text*, not incidental per-word
+styling boundaries -- correct and deterministic regardless of `MaxLineLength`, terminal width, or whether
+color is enabled at all.
+
+Files: `cmd/ci/validate_test.go`.
+
+Validation: `go build ./cmd/ci/...`, `go vet ./cmd/ci/...` -- clean. `./custom-gcl run
+--new-from-rev=origin/main` -- 0 issues. `gofumpt -l cmd/ci/validate_test.go` -- no output. `go test -race
+./cmd/ci/... -run TestWorkflowValidationErrorOwnsDiagnostics` -- passes both with and without
+`ATMOS_FORCE_COLOR=1 CLICOLOR_FORCE=1` (previously failed only under forced/CI color, confirmed by a temporary
+revert-and-rerun before applying the fix). `go test -race ./cmd/ci/...` (full package) -- passes.
