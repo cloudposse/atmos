@@ -106,8 +106,6 @@ Organization-wide settings: multi-factor authentication is required, personnel a
    - SPDX SBOMs, per archive and for the source tree
    - Build-provenance attestations for every artifact
    - A container image, signed by digest with cosign and scanned with Trivy
-
-   **Current status.** These outputs are configured in `.goreleaser.yml` and are not yet present on published releases. The `sign-and-attest-release` job fails while cross-compiling for `linux/386` and `linux/arm`, so no published release carries a Sigstore signature, an SBOM, a build-provenance attestation, or a native package today. Section 12 records this.
 7. Release binaries are built with `GOFIPS140=latest`. That links Go's native FIPS 140-3 cryptographic module and embeds `DefaultGODEBUG=fips140=on`, so a release binary runs in FIPS 140-3 mode by default. `fips140=only`, which makes non-approved algorithms return an error or panic, is not used; Go documents that mode as unsupported for production. This is not a CMVP certification for Atmos, and it does not cover the age and NaCl cryptography used by declarative secrets management.
 
 Feature previews are prereleases cut from a pull-request branch. They run in a separate `feature-releases` environment, under a **different GitHub App**, and build from a reduced GoReleaser configuration. They are marked as prereleases and are temporary. The publishing identity appears in the metadata of every release, so the pipeline that produced any given artifact is externally verifiable without relying on Cloud Posse's assertion.
@@ -170,7 +168,6 @@ CI jobs run on ephemeral runners. Runners provisioned through RunsOn execute in 
 
 Cloud Posse states these rather than leaving them to discovery.
 
-- The release pipeline's signing, SBOM, provenance, and native-package outputs are configured but are not reaching published releases, because the `sign-and-attest-release` job fails cross-compiling for `linux/386` and `linux/arm`. This is an open work item. Until it is resolved, do not treat those artifacts as available.
 - The organization- and environment-level controls in Sections 5, 6, and 9 cannot be verified from the repository and require organization-settings evidence. Section 1 states which class each control falls in.
 - Several scanners operate in advisory mode. Section 4.2 lists them.
 - Patch-level coverage is a target, not a gate.
