@@ -38,4 +38,9 @@ type InstanceStatusUploadRequest struct {
 	Stack         string `json:"stack"`
 	Command       string `json:"command"`
 	ExitCode      int    `json:"exit_code"`
+	// ComponentType identifies the component type (e.g., "terraform", "helmfile", "packer").
+	ComponentType string `json:"component_type,omitempty"`
+	// Metadata contains structured plan/apply data as a flexible map.
+	// Each component type populates its own keys. Omitted when ci.enabled is false.
+	Metadata map[string]any `json:"metadata,omitempty"`
 }

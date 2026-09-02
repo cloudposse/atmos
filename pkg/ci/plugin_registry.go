@@ -98,3 +98,22 @@ func ClearPlugins() {
 	defer pluginsMu.Unlock()
 	plugins = make(map[string]plugin.Plugin)
 }
+
+// BuildStatusData looks up the plugin for the given component type and, if it
+// implements StatusDataProvider, calls BuildStatusData on it.
+// Returns nil if the plugin is not found or does not support StatusDataProvider.
+func BuildStatusData(componentType string, output string, command string) map[string]any {
+	defer perf.Track(nil, "ci.BuildStatusData")()
+
+	p, ok := GetPlugin(componentType)
+	if !ok {
+		return nil
+	}
+
+	provider, ok := p.(plugin.StatusDataProvider)
+	if !ok {
+		return nil
+	}
+
+	return provider.BuildStatusData(output, command)
+}
