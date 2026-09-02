@@ -113,6 +113,33 @@ directory where it is: set `components.terraform.base_path: "."` and add
 `metadata.component: terraform` on the `infra` stack component -- `metadata.component` points
 the stack component at the physical directory, so no files need to move.
 
+`-s {{ .Flags.env }}` only selects *which stack* runs; it does not, by itself, load that
+environment's Terraform variables the way the source `-var-file=envs/{{env}}.tfvars` did. Bring
+the per-environment `.tfvars` files in through each stack file instead, one per environment
+(`stacks/dev.yaml`, `stacks/staging.yaml`, `stacks/prod.yaml`), each pointing at its own file. The
+relative path depends on which of the two options above you picked:
+
+```yaml
+# stacks/dev.yaml (moved to components/terraform/infra/)
+components:
+  terraform:
+    infra:
+      vars: !include ../components/terraform/infra/envs/dev.tfvars
+```
+
+```yaml
+# stacks/dev.yaml (no-move, terraform/ stays put)
+components:
+  terraform:
+    infra:
+      metadata:
+        component: terraform    # points at the existing `terraform/` directory
+      vars: !include ../terraform/envs/dev.tfvars
+```
+
+See [Migrating from Native Terraform](from-native-terraform.md) for the full `.tfvars`/stack
+mapping.
+
 ## Shape C: Environment and Shell Settings
 
 **Before:**
