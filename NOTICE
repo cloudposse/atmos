@@ -75,7 +75,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp
     License: Apache-2.0
-    URL: https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/blob/detectors/gcp/v1.32.0/detectors/gcp/LICENSE
+    URL: https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/blob/detectors/gcp/v1.33.0/detectors/gcp/LICENSE
 
   - github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric
     License: Apache-2.0
@@ -575,7 +575,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/spiffe/go-spiffe/v2
     License: Apache-2.0
-    URL: https://github.com/spiffe/go-spiffe/blob/v2.6.0/LICENSE
+    URL: https://github.com/spiffe/go-spiffe/blob/v2.7.0/LICENSE
 
   - github.com/tetratelabs/wabin
     License: Apache-2.0
@@ -651,7 +651,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - go.opentelemetry.io/contrib/detectors/gcp
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/detectors/gcp/v1.43.0/detectors/gcp/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/detectors/gcp/v1.44.0/detectors/gcp/LICENSE
 
   - go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc
     License: Apache-2.0
@@ -711,15 +711,15 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - google.golang.org/genproto/googleapis/api
     License: Apache-2.0
-    URL: https://github.com/googleapis/go-genproto/blob/0a33c5d7ca68/googleapis/api/LICENSE
+    URL: https://github.com/googleapis/go-genproto/blob/3dc84a4a5aaa/googleapis/api/LICENSE
 
   - google.golang.org/genproto/googleapis/rpc
     License: Apache-2.0
-    URL: https://github.com/googleapis/go-genproto/blob/0a33c5d7ca68/googleapis/rpc/LICENSE
+    URL: https://github.com/googleapis/go-genproto/blob/3dc84a4a5aaa/googleapis/rpc/LICENSE
 
   - google.golang.org/grpc
     License: Apache-2.0
-    URL: https://github.com/grpc/grpc-go/blob/v1.82.1/LICENSE
+    URL: https://github.com/grpc/grpc-go/blob/v1.83.2/LICENSE
 
   - gopkg.in/ini.v1
     License: Apache-2.0
