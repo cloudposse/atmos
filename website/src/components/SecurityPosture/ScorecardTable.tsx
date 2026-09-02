@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { RiArrowRightSLine } from 'react-icons/ri';
 import { scoreTier } from './scoreTier';
-import { CHECK_RISK_LEVEL } from './checkRiskLevel';
+import { CHECK_RISK_LEVEL, sortChecksByRisk } from './checkRiskLevel';
 import styles from './ScorecardTable.module.css';
 
 interface ScorecardCheck {
@@ -21,6 +21,7 @@ interface ScorecardTableProps {
 
 export default function ScorecardTable({ checks }: ScorecardTableProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const sortedChecks = useMemo(() => sortChecksByRisk(checks), [checks]);
 
   function toggle(name: string) {
     setExpanded((prev) => {
@@ -36,7 +37,7 @@ export default function ScorecardTable({ checks }: ScorecardTableProps) {
 
   return (
     <div className={styles.list}>
-      {checks.map((check) => {
+      {sortedChecks.map((check) => {
         const tier = scoreTier(check.score);
         const risk = CHECK_RISK_LEVEL[check.name];
         const hasDetails = Array.isArray(check.details) && check.details.length > 0;

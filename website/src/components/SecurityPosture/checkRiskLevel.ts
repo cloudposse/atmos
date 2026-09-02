@@ -25,3 +25,17 @@ export const CHECK_RISK_LEVEL: Record<string, RiskLevel> = {
   Vulnerabilities: 'High',
   Webhooks: 'Critical',
 };
+
+const RISK_ORDER: Record<RiskLevel, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+
+// The Scorecard API returns checks in whatever order it happened to run them in, which
+// reads as arbitrary to a viewer. Surface the checks that matter most first: highest
+// risk level, then (within a risk level) worst score first.
+export function sortChecksByRisk<T extends { name: string; score: number }>(checks: T[]): T[] {
+  return [...checks].sort((a, b) => {
+    const riskA = RISK_ORDER[CHECK_RISK_LEVEL[a.name]] ?? RISK_ORDER.Low + 1;
+    const riskB = RISK_ORDER[CHECK_RISK_LEVEL[b.name]] ?? RISK_ORDER.Low + 1;
+    if (riskA !== riskB) return riskA - riskB;
+    return a.score - b.score;
+  });
+}
