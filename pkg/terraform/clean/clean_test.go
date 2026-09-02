@@ -292,7 +292,7 @@ func TestInitializeFilesToClear(t *testing.T) {
 				ComponentFromArg: "",
 			},
 			atmosConfig:      &schema.AtmosConfiguration{},
-			expectedContains: []string{".terraform", ".terraform.lock.hcl", "*.tfvars.json", "terraform.tfstate.d"},
+			expectedContains: []string{".terraform", ".terraform.lock.hcl", "*.tfvars.json", "terraform.tfstate.d", "providers_override.tf.json"},
 		},
 		{
 			name: "With component - includes varfile and planfile",
@@ -300,7 +300,7 @@ func TestInitializeFilesToClear(t *testing.T) {
 				ComponentFromArg: "vpc",
 			},
 			atmosConfig:      &schema.AtmosConfiguration{},
-			expectedContains: []string{".terraform", "test-stack.tfvars.json", "test-stack.planfile", ".terraform.lock.hcl"},
+			expectedContains: []string{".terraform", "test-stack.tfvars.json", "test-stack.planfile", ".terraform.lock.hcl", "providers_override.tf.json"},
 		},
 		{
 			name: "With component - skip lock file",
