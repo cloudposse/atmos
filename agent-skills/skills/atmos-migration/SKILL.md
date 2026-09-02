@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration."
+description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration; also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos toolchain."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -14,6 +14,8 @@ references:
   - references/from-justfile.md
   - references/from-taskfile.md
   - references/from-component-updater.md
+  - references/from-mise.md
+  - references/from-aqua.md
 ---
 
 # Migrating to Atmos
@@ -24,6 +26,10 @@ This skill is a decision guide. Use it to migrate an existing Terraform reposito
 Atmos can adopt an existing repository without a reorganization. The `components/terraform/`
 layout is a recommendation. It is not a requirement. Start with the smallest change that gives
 value. Add more only when the user has a real need for it.
+
+This skill also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos
+toolchain -- see [from-mise.md](references/from-mise.md) and
+[from-aqua.md](references/from-aqua.md) in the routing table below.
 
 For full tutorials for end users, see:
 
@@ -96,6 +102,8 @@ reference file:
 | User has a Justfile (`just` command runner)                          | [from-justfile.md](references/from-justfile.md) |
 | User has a Taskfile.yml (go-task)                                    | [from-taskfile.md](references/from-taskfile.md) |
 | `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
+| mise config (`mise.toml`, `.mise.toml`, `.mise/config.toml`, `.tool-versions`) for tool versions | [from-mise.md](references/from-mise.md) |
+| `aqua.yaml` (Aqua CLI) for tool versions                             | [from-aqua.md](references/from-aqua.md) |
 
 The remote-state-bridge pattern makes progressive migration possible. It lets a team migrate one
 component at a time. Without it, the team must migrate everything at once. Use this pattern when
@@ -273,3 +281,7 @@ Push back if a user or another agent proposes one of these methods during migrat
   each shape.
 - [References/from-taskfile.md](references/from-taskfile.md): steps for a Taskfile.yml (go-task)
   file, matched to each shape.
+- [References/from-mise.md](references/from-mise.md) -- migrating tool versions, tasks, and env
+  vars from mise to the Atmos toolchain
+- [References/from-aqua.md](references/from-aqua.md) -- migrating tool versions from Aqua CLI's
+  `aqua.yaml` to the Atmos toolchain
