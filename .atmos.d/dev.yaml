@@ -137,7 +137,7 @@ commands:
             steps:
               - type: spin
                 title: Generating NOTICE from Go dependency licenses
-                command: ./scripts/generate-notice.sh
+                command: go tool mage notice:generate
                 timeout: 10m
               - type: toast
                 level: success
