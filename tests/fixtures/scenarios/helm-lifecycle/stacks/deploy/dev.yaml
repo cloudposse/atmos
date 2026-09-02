@@ -1,6 +1,19 @@
 vars:
   stage: dev
 
+secrets:
+  vars:
+    oss-token:
+      description: Synthetic single-line secret used by the Helm integration scenario.
+      store: helm-lifecycle-secrets
+      scope: stack
+      required: true
+    oss-private-key:
+      description: Synthetic multiline secret used by the Helm integration scenario.
+      store: helm-lifecycle-secrets
+      scope: stack
+      required: true
+
 # Native Helm lifecycle defaults for every Helm component in this stack.
 helm:
   release:
@@ -28,6 +41,70 @@ components:
       ephemeral: true
 
   helm:
+    oss-ingress-base:
+      metadata:
+        type: abstract
+        component: ingress-nginx
+      repositories:
+        - name: ingress-nginx
+          url: https://kubernetes.github.io/ingress-nginx
+      chart: ingress-nginx/ingress-nginx
+      version: 4.15.1
+      name: oss-ingress
+      namespace: helm-oss
+      release:
+        wait:
+          jobs: true
+        install:
+          on_failure: uninstall
+        upgrade:
+          on_failure: rollback
+          cleanup_on_failure: true
+      values:
+        fullnameOverride: oss-ingress
+        controller:
+          replicaCount: 1
+          ingressClass: atmos-oss
+          ingressClassResource:
+            name: atmos-oss
+            controllerValue: atmos.test/ingress-nginx
+          service:
+            type: ClusterIP
+          image:
+            digest: ""
+            digestChroot: ""
+          admissionWebhooks:
+            patch:
+              image:
+                digest: ""
+          extraEnvs:
+            - name: ATMOS_SINGLE_LINE_SECRET
+              value: !secret oss-token
+            - name: ATMOS_MULTILINE_SECRET
+              value: !secret oss-private-key | raw
+
+    oss-ingress:
+      metadata:
+        component: ingress-nginx
+        inherits:
+          - oss-ingress-base
+
+    oss-ingress-upgrade:
+      metadata:
+        component: ingress-nginx
+        inherits:
+          - oss-ingress
+      values:
+        controller:
+          replicaCount: 2
+          extraEnvs:
+            - name: ATMOS_SINGLE_LINE_SECRET
+              value: !secret oss-token
+            - name: ATMOS_MULTILINE_SECRET
+              value: !secret oss-private-key | raw
+            - name: ATMOS_UPGRADE_MARKER
+              value: upgraded
+
     demo:
       metadata:
         component: demo
