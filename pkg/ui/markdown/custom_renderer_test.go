@@ -1,6 +1,10 @@
 package markdown
 
 import (
+	"bytes"
+	"fmt"
+	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -658,4 +662,107 @@ func TestApplyStrictLinkify(t *testing.T) {
 	stripped := stripANSIForTest(output)
 	assert.NotContains(t, stripped, "mailto:", "tool@version spec must not be auto-linked as an email")
 	assert.Contains(t, stripped, "terraform@1.5.0", "tool@version spec must still appear in the rendered output")
+}
+
+// customSyntaxSampleDocument exercises every custom syntax NewCustomRenderer
+// adds plus the GFM/DefinitionList constructs glamour enables, including the
+// package-reference form that produces an ast.String node via the strict
+// linkify extension -- the one kind glamour registers but does not handle.
+const customSyntaxSampleDocument = `# Heading
+
+Plain paragraph with **bold**, _italic_, ~~strike~~, ==highlight==, ((muted)) and :rocket: emoji.
+
+Install with foo/bar@1.0.0 or tool@2.3.4, then visit https://atmos.tools and www.example.com.
+
+> [!NOTE]
+> An admonition body.
+
+> [!WARNING]
+> Another admonition body.
+
+[!BADGE experimental] [!BADGE stable]
+
+- item one
+- [ ] task two
+- [x] task three
+
+1. first
+2. second
+
+| Column | Value |
+| --- | --- |
+| a | 1 |
+
+Term
+: Definition
+
+` + "```" + `yaml
+key: value
+` + "```" + `
+
+Inline ` + "`code`" + ` and a [link](https://atmos.tools).
+
+---
+`
+
+// TestCustomRendererWritesNothingToStdout guards the reasoning in Render's doc
+// comment: glamour prints "Warning: unhandled element" straight to os.Stdout for
+// any node kind it registers but cannot render, and Render no longer hides that
+// by swapping os.Stdout (a data race against every concurrent stdout reader).
+// If a glamour upgrade ever adds such a kind, this test catches it instead of
+// leaking warnings into the data channel.
+func TestCustomRendererWritesNothingToStdout(t *testing.T) {
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = oldStdout })
+
+	for _, profile := range []termenv.Profile{termenv.TrueColor, termenv.ANSI256, termenv.Ascii} {
+		renderer, err := NewCustomRenderer(WithColorProfile(profile), WithWordWrap(80))
+		require.NoError(t, err)
+		out, err := renderer.Render(customSyntaxSampleDocument)
+		require.NoError(t, err)
+		require.NotEmpty(t, out)
+	}
+
+	require.NoError(t, w.Close())
+	os.Stdout = oldStdout
+	var captured bytes.Buffer
+	_, err = io.Copy(&captured, r)
+	require.NoError(t, err)
+	assert.Empty(t, captured.String(), "glamour wrote to os.Stdout during Render; a node kind is registered but unhandled")
+}
+
+// TestCustomRendererRenderDoesNotRaceStdoutReaders is the -race regression for
+// the removed os.Stdout swap: rendering while another goroutine reads os.Stdout
+// (as fmt.Fprint, pkg/io's dynamic writers, and bubbletea all do) must not be
+// flagged as a data race on the os.Stdout variable.
+func TestCustomRendererRenderDoesNotRaceStdoutReaders(t *testing.T) {
+	renderer, err := NewCustomRenderer(WithColorProfile(termenv.TrueColor))
+	require.NoError(t, err)
+
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				// Reads the os.Stdout variable on every call; a zero-length
+				// write reaches the file descriptor but emits nothing.
+				_, _ = fmt.Fprint(os.Stdout, "")
+			}
+		}
+	}()
+
+	for range 50 {
+		out, err := renderer.Render(customSyntaxSampleDocument)
+		require.NoError(t, err)
+		require.NotEmpty(t, out)
+	}
+	close(stop)
+	<-done
 }

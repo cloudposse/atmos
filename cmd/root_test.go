@@ -260,10 +260,13 @@ func newBootstrapCloneCmd(t *testing.T, rawArgs []string) (*cobra.Command, []str
 // saveRestoreAtmosConfig snapshots the package-level atmosConfig (which
 // applyCIGitCloneBootstrap writes to) and restores it after the test, since
 // it is shared global state across this package's tests.
+// Kept as a named alias for readability at its call sites: NewTestKit now
+// snapshots and restores the package-level atmosConfig for every test that
+// uses it, so saveRestoreAtmosConfig delegates rather than maintaining a
+// second, narrower mechanism.
 func saveRestoreAtmosConfig(t *testing.T) {
 	t.Helper()
-	original := atmosConfig
-	t.Cleanup(func() { atmosConfig = original })
+	_ = NewTestKit(t)
 }
 
 func TestApplyCIGitCloneBootstrap_AllowsBootstrap(t *testing.T) {

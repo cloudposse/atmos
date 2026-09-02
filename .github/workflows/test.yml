@@ -635,9 +635,11 @@ jobs:
     # Go work (the build job's linux leg) turned out to be an i4i.large: 2
     # cores, 15.7GB RAM -- fewer cores than ubuntu-latest, a downgrade for
     # this CPU/memory-bound workload. "large" (used by the release job's
-    # goreleaser step) is an r7a.xlarge: 4 cores, 31GB RAM -- double the
-    # cores and RAM of "terraform", a real upgrade over ubuntu-latest given
-    # -race's extra memory overhead per test binary.
+    # goreleaser step) resolves to a 4-core/~32GB instance from that family
+    # (r7a.xlarge or i4i.xlarge, whichever spot capacity RunsOn picks; both
+    # appear in real run logs) -- double the cores and RAM of "terraform", a
+    # real upgrade over ubuntu-latest given -race's extra memory overhead per
+    # test binary.
     runs-on: "runs-on=${{github.run_id}}/runner=large/tag=atmos/extras=s3-cache/private=false"
     # Race-instrumented binaries run several times slower and use substantially
     # more memory than normal test binaries; this runs the entire `./...` suite

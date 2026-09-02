@@ -627,25 +627,12 @@ regression from this fix.)
   with `##[group]`/timestamps intact (this repo's log fetch already includes per-line timestamps) and check
   whether the `pkg/io` package's own timestamp range genuinely contains that warning line, or whether it
   falls in a different package's timestamp window.
-- `cmd/root_test.go`'s `TestApplyCIGitCloneBootstrap_CICloneExplicitFalseOptsOut` and
-  `TestApplyCIGitCloneBootstrap_NoCIProviderDetected` failed in a full local `-race -shuffle=on` run of the
-  entire package set with `atmosConfig.CI.Enabled` unexpectedly `true` (`assert.False` on that field, not on
-  `applied` or `tmpConfig.CI.Enabled`, which both passed). `applyCIGitCloneBootstrap` (`cmd/root.go`) only
-  ever sets the package-level `atmosConfig.CI.Enabled = true` on its "bootstrap applied" branch — the branch
-  these two tests exercise returns early without touching it — so `atmosConfig.CI.Enabled` was already `true`
-  *before* either test ran. All three tests that call `applyCIGitCloneBootstrap` directly correctly wrap
-  themselves in `saveRestoreAtmosConfig(t)` (save-before/restore-after, not reset-to-clean), so the leak's
-  source is some *other* test elsewhere in the large `cmd` package that sets `atmosConfig.CI.Enabled = true`
-  (directly, or indirectly via a real `Execute()`/`InitCliConfig()` call that detects a real CI environment
-  variable) without using that same helper — not identified within this round's time budget. Neither test
-  appeared in any real CI run's failure list in this incident (rounds 9–11), only in this round's local
-  full-suite reproductions — left open rather than force a guess-fix across an unbounded search space.
-- `TestValidateStacksCmd_Failure` surfaced a genuine `WARNING: DATA RACE` in a local full-package
-  `-race -shuffle=on` rerun during Round 15's validation, in `pkg/ui/markdown.(*CustomRenderer).Render`
-  reached via `pkg/ui/spinner.(*Spinner).Error` — concurrent writes to shared renderer state from the
-  spinner's animation goroutine racing the actual error-render call. Unrelated to Round 15's diff (which only
-  touches `cmd` package command-tree/flag/helpFunc test restoration); not reproduced in isolation or
-  root-caused within this round's budget — left open.
+- **Resolved in Round 19:** the `atmosConfig.CI.Enabled` leak behind `TestApplyCIGitCloneBootstrap_*`
+  is closed generically -- `NewTestKit` now snapshots and restores the package-level `atmosConfig`, so the
+  identity of the one leaking test no longer matters.
+- **Resolved in Round 19:** the `TestValidateStacksCmd_Failure` race in
+  `pkg/ui/markdown.(*CustomRenderer).Render` was `Render` reassigning the process-global `os.Stdout`
+  on every call; removed.
 
 ## Round 11 (the `--help`-flag leak fix, generalized)
 
@@ -958,3 +945,97 @@ break the skip path; full exercise of the fix itself can only happen in CI, wher
 toolchain-installed. The workflow change cannot be executed locally at all (no local GitHub Actions runner);
 its correctness rests on mirroring the `test`/`build` jobs' already-proven step verbatim, plus the exact
 CI failure logs this round diagnosed.
+
+## Round 19 (the migrate "flake" was deterministic all along; a real `os.Stdout` race; two generalized fixes)
+
+Ran in parallel with Round 18 (a separate session on the same branch) and started from the same two
+failures in the run for `1ed448f7`. Round 18's workflow fix (pre-installing the toolchain in the `race` job)
+is kept -- it makes the job's environment match the `test` job's, and the packer plugin story it traced is
+right. Its explanation of `TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly` as a lazy-install race
+is not, and matters because the toolchain install only masks the underlying bug:
+
+- **The migrate test failed deterministically whenever `tofu` was absent -- 9 of the last 10 race-job runs.**
+  Every "retried locally with the exact CI seed, still passes" verdict in Rounds 10, 12 and 16 (and Round
+  18's "never could reproduce") ran on a machine with Homebrew `tofu` on `PATH`; the shuffle seed was never
+  the variable. Reproduced on the first attempt by compiling the test binary and running it with
+  `PATH=/usr/bin:/bin`. The bug is in production code: `executeTfmigrateSingle`
+  (`cmd/terraform/migrate/migrate.go`) called `selectTfmigrateWorkspace` (`tofu workspace select`) *before*
+  `resolveTfmigrateDefaultConfig` decided `Skip=true` for "history mode with no `migrations/` directory", so
+  the "tfmigrate is skipped entirely, no binary needed" contract the test's own comment asserts was not
+  true -- Atmos spawned the terraform binary to select a workspace it was about to do nothing in. Fixed by
+  resolving the default config (and returning on `Skip`) first; `resolveTfmigrateDefaultConfig` reads only
+  `execCtx` state that `ProcessStacks` already resolved, so the reorder is behaviour-preserving for every
+  path that does have migrations (`TestRunTerraformMigrate_SelectWorkspaceErrorPropagates`, whose fixture
+  has a `migrations/` dir, still reaches the workspace select and still gets its expected error). The test
+  now sets `PATH` to an empty temp dir, the idiom its sibling already uses, so it asserts the guarantee
+  instead of assuming it and fails identically on a developer machine with `tofu` and in CI. Verified both
+  ways: the compiled test binary passes with `PATH=/usr/bin:/bin` (previously failed there) and the full
+  package passes with Homebrew `tofu` present.
+- **`pkg/ui/markdown.(*CustomRenderer).Render` reassigned the process-global `os.Stdout`** to `/dev/null`
+  around every glamour render, under a mutex that only serialized *other renders*. Any other goroutine
+  reading `os.Stdout` at that moment -- `fmt.Println`, `pkg/io`'s dynamic writers, bubbletea, a parallel
+  stack-processing worker that logs -- is a data race on the `os.Stdout` variable itself, which is what
+  the `TestValidateStacksCmd_Failure` trace (`Spinner.Error` -> `ui.Error` -> `Render`) left open in Round
+  15 was reporting. The redirect existed to hide glamour's `fmt.Println("Warning: unhandled element", ...)`
+  and is dead code: diffing glamour v1.0.0's `ansi/renderer.go` registrations against its
+  `ansi/elements.go` cases shows the warning can only fire for `ast.KindString` and the four goldmark
+  footnote kinds. `ast.KindString` is already overridden by Atmos's own `stringNodeRenderer`
+  (`pkg/ui/markdown/extensions/linkify.go`, priority 500 -- goldmark calls `RegisterFuncs` from the
+  lowest-priority renderer up, so 500 registers after glamour's 1000 and wins), and footnotes can never
+  parse because glamour enables only `extension.GFM` and `extension.DefinitionList`. Every Atmos custom
+  kind (Badge/Highlight/Admonition/Muted) has its own renderer or is transformed into a kind glamour
+  handles. Removed the swap and its mutex; `Render`'s doc comment records the reasoning.
+  `TestCustomRendererWritesNothingToStdout` renders a document covering every custom syntax plus the
+  package-reference form that produces the `ast.String` node, under three colour profiles, with
+  `os.Stdout` captured, and asserts nothing was written -- the guard against a future glamour bump adding
+  a registered-but-unhandled kind. `TestCustomRendererRenderDoesNotRaceStdoutReaders` renders while a
+  second goroutine reads `os.Stdout`, the exact shape that raced. `pkg/ai/analyze/capture.go` also swaps
+  `os.Stdout`; that is the designed, single-goroutine `--ai` capture mechanism and was left alone.
+- **`NewTestKit` now snapshots and restores the package-level `atmosConfig`** (`cmd/testing_helpers_test.go`),
+  closing the `atmosConfig.CI.Enabled` leak (`TestApplyCIGitCloneBootstrap_*`) generically instead of
+  hunting the one test in a 460-second package that ran a real config load with a CI provider detected.
+  `saveRestoreAtmosConfig` (`cmd/root_test.go`) delegates to `NewTestKit` so there is one mechanism;
+  `TestTestKit_RestoresAtmosConfig` covers it.
+- **A bool-flag trap in Round 15's "reset flags absent from the snapshot" logic**, found while reading
+  that path rather than from a failure: `cmd/root.go` blanks RootCmd's `--version` flag's `DefValue` to
+  `""` for cleaner `--help` output; pflag's bool `Value.Set("")` fails (`strconv.ParseBool`) and the reset
+  ignored the error, so a lazily-created `--version` left at `true` would survive -- and a leaked
+  `--version=true` makes cobra print the version and return `nil` from every later `Execute()` without
+  running the requested command. Extracted `resetFlagToDefault`, which falls back to `"false"` for a bool
+  with an empty `DefValue`; `TestResetFlagToDefault` covers it.
+- **`TestPackerValidateCmd`**: on top of Round 18's prerequisite `atmos packer init`, the test now asks
+  `packer plugins installed` whether the amazon plugin is actually present before validating
+  (`requirePackerPluginInstalled`). A `nil` from `Execute()` is not proof the prerequisite ran -- leaked
+  global state can short-circuit cobra/atmos into returning `nil` without spawning packer -- and without
+  this check the only symptom is validate's "Missing plugins" much further down. Skips locally exactly as
+  before when `packer` is absent.
+- **Latent-race scan** (package-level vars, `sync.Once` resets, `SetXxx` singletons, bubbletea models,
+  `pkg/io`/`pkg/perf`/`pkg/logger`, the parallel stack processors, httptest counter tests): nothing new is
+  reachable concurrently in today's call graph. Recorded so the same ground isn't re-scanned: the store
+  providers' `SetAuthContext` resets `initOnce`/`client` unguarded (`pkg/store/providers/*_store.go`) and
+  *would* race if two goroutines shared one store instance, but the scheduler's per-node executor runs
+  `cfg.InitCliConfig` per node and builds a fresh `StoreRegistry` (`pkg/config/utils.go`), and the
+  resolver injection runs only on the pre-scheduler goroutine -- a mutex there is reasonable hardening for
+  a separate PR, not a race-job blocker. `pkg/ui/theme`'s global style cache is unguarded, but every reader
+  traced runs on one bubbletea event loop or the main goroutine.
+
+Files: `cmd/terraform/migrate/migrate.go`, `cmd/terraform/migrate/migrate_test.go`,
+`pkg/ui/markdown/custom_renderer.go`, `pkg/ui/markdown/custom_renderer_test.go`,
+`cmd/testing_helpers_test.go`, `cmd/testkit_test.go`, `cmd/root_test.go`, `cmd/packer_validate_test.go`,
+`.github/workflows/test.yml` (runner-family comment only: real run logs show the `large` family as
+`i4i.xlarge` as often as `r7a.xlarge`).
+
+Validation: `go build ./...`, `go vet ./cmd/... ./pkg/ui/markdown/...` -- clean. `./custom-gcl run
+--new-from-rev=origin/main` -- 0 issues. `gofumpt -l` on every touched file -- no output.
+`go test -race -c ./cmd/terraform/migrate/` + running the binary with `PATH=/usr/bin:/bin` and `-test.count=3`
+over every `TestRunTerraformMigrate*` test -- passes (previously failed on
+`TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly`); `go test -race -shuffle=on ./cmd/terraform/migrate/`
+with `tofu` on `PATH` -- passes. `go test -race -shuffle=on -count=3 ./pkg/ui/markdown/...` -- passes.
+`go test -race ./cmd/ -run 'TestTestKit_|TestResetFlagToDefault|TestSnapshotRootCmdState|TestApplyCIGitCloneBootstrap'`
+-- passes. A full `go test -race -shuffle=1788384400324155143 ./cmd/ -timeout 900s` (the `cmd` package's
+seed from the failing CI log) -- `ok` in 533s, exit 0, no `--- FAIL` and no `WARNING: DATA RACE`. Caveat on
+that last run: it was started before this round's `cmd` test-helper edits were finished (the race-instrumented
+`cmd` binary compiles for a couple of minutes, so which edits it picked up is not certain), so it counts as
+evidence that the package is clean under that seed, not as a test of this round's `cmd` changes -- those
+are covered by the targeted runs above. `TestPackerValidateCmd` skips locally (no `packer` binary here), so
+its new `requirePackerPluginInstalled` check is exercised only in CI, where Round 18 now installs `packer`.

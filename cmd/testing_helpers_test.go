@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -46,12 +47,46 @@ type cmdStateSnapshot struct {
 	chdirProcessed bool
 	colorProfile   termenv.Profile // Lipgloss color profile
 	openDocsURL    func(string) error
+	// atmosConfig is the package-level configuration value at snapshot time.
+	// Any test that drives a real Execute()/InitCliConfig() path (or calls a
+	// helper like applyCIGitCloneBootstrap directly) mutates that global --
+	// e.g. CI.Enabled flips to true whenever a CI provider is detected -- and
+	// nothing else ever puts it back, so a later test asserting on the
+	// pristine value fails depending on shuffle order. A shallow copy is
+	// enough: the leaks seen so far are scalar fields, and the maps inside
+	// are re-created by every InitCliConfig call rather than mutated in place.
+	atmosConfig schema.AtmosConfiguration
 	// childCommands maps every command reachable from RootCmd (including RootCmd
 	// itself) to its own Commands() list at snapshot time. Covers grandchildren
 	// and deeper: a test that adds/removes a subcommand under e.g. "toolchain"
 	// (not RootCmd directly) would otherwise leave that nested registration in
 	// the shared Cobra tree for later tests to observe.
 	childCommands map[*cobra.Command][]*cobra.Command
+}
+
+// resetFlagToDefault puts a flag back to its registered default with
+// Changed=false. The root command (cmd/root.go) blanks the --version flag's
+// DefValue to "" purely for cleaner --help output; pflag's bool Value.Set("") fails
+// (strconv.ParseBool), so a naive Value.Set(f.DefValue) would silently leave
+// such a flag at whatever a previous test set it to -- and a leaked
+// --version=true makes every later Execute() print the version and return
+// nil without running the requested command. Fall back to the type's zero
+// value when DefValue is empty for a bool.
+func resetFlagToDefault(f *pflag.Flag) {
+	switch f.Value.Type() {
+	case "stringSlice", "stringArray":
+		// Slice flags append on Set; restoreStringSliceFlag handles them when a
+		// snapshot exists, and a lazily-created slice flag has no prior state.
+	case "bool":
+		def := f.DefValue
+		if def == "" {
+			def = "false"
+		}
+		_ = f.Value.Set(def)
+	default:
+		_ = f.Value.Set(f.DefValue)
+	}
+	f.Changed = false
 }
 
 // walkCommandTree calls fn for RootCmd and every command reachable from it
@@ -83,6 +118,7 @@ func snapshotRootCmdState() *cmdStateSnapshot {
 		colorProfile:   lipgloss.ColorProfile(),
 		openDocsURL:    openDocsURL,
 		childCommands:  make(map[*cobra.Command][]*cobra.Command),
+		atmosConfig:    atmosConfig,
 	}
 
 	// Copy args.
@@ -174,6 +210,9 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 	// Restore chdirProcessed flag.
 	chdirProcessed = snapshot.chdirProcessed
 
+	// Restore the package-level atmosConfig (see cmdStateSnapshot.atmosConfig).
+	atmosConfig = snapshot.atmosConfig
+
 	// Remove any command registered anywhere in the tree since the snapshot was
 	// taken (e.g. by a test loading real custom commands via InitCliConfig +
 	// processCustomCommands, or one that adds/removes a subcommand under a
@@ -205,10 +244,7 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 					// permanently, since no snapshot ever captured a "before"
 					// state to restore it to. Reset to the flag's own registered
 					// default instead of skipping, so it can never leak.
-					if f.Value.Type() != "stringSlice" && f.Value.Type() != "stringArray" {
-						_ = f.Value.Set(f.DefValue)
-					}
-					f.Changed = false
+					resetFlagToDefault(f)
 					return
 				}
 				// StringSlice/StringArray flags need special handling due to append behavior.

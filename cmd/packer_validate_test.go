@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -37,6 +38,13 @@ func TestPackerValidateCmd(t *testing.T) {
 	// it self-sufficient regardless of run order.
 	RootCmd.SetArgs([]string{"packer", "init", "aws/bastion", "-s", "nonprod"})
 	require.NoError(t, Execute(), "packer init prerequisite should execute without error")
+	// A nil error from Execute() is not proof the prerequisite ran: leaked
+	// global state (a stray --version/--help flag, a viper key, dry-run) can
+	// make cobra or atmos return nil without ever spawning packer, and the
+	// only symptom is validate's "Missing plugins" much further down. Ask
+	// packer itself whether the plugin is now present so a silent no-op fails
+	// here, on the line that names the real problem.
+	requirePackerPluginInstalled(t, "github.com/hashicorp/amazon")
 
 	// Capture stdout and logger output
 	oldStd := os.Stdout
@@ -69,4 +77,17 @@ func TestPackerValidateCmd(t *testing.T) {
 		t.Logf("TestPackerValidateCmd output: %s", output)
 		t.Errorf("Output should contain: %s", expected)
 	}
+}
+
+// requirePackerPluginInstalled fails the test unless `packer plugins installed`
+// lists the given plugin source, so a prerequisite `atmos packer init` that
+// silently did nothing is caught at the prerequisite rather than surfacing as a
+// confusing "Missing plugins" from a later validate/build.
+func requirePackerPluginInstalled(t *testing.T, source string) {
+	t.Helper()
+	out, err := exec.Command("packer", "plugins", "installed").CombinedOutput()
+	require.NoError(t, err, "packer plugins installed: %s", out)
+	require.Contains(t, string(out), strings.TrimPrefix(source, "github.com/"),
+		"prerequisite `atmos packer init` returned nil but did not install %s -- "+
+			"Execute() was short-circuited by leaked global state; output:\n%s", source, out)
 }

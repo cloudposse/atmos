@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -304,3 +305,44 @@ func TestTestKit_GrandchildCommandRestoration(t *testing.T) {
 // Viper state isolation between tests requires a different approach (e.g., temporary viper instances)
 // which is out of scope for the current TestKit implementation. Tests that need viper isolation
 // should use explicit cleanup as demonstrated in auth_login_test.go.
+
+// TestTestKit_RestoresAtmosConfig covers the package-level atmosConfig
+// snapshot: a test that flips a field on the global (as any real
+// Execute()/InitCliConfig() path does when it detects a CI provider) must not
+// leak that value into the next test.
+func TestTestKit_RestoresAtmosConfig(t *testing.T) {
+	_ = NewTestKit(t)
+	initial := atmosConfig.CI.Enabled
+
+	t.Run("mutates atmosConfig", func(t *testing.T) {
+		_ = NewTestKit(t)
+		atmosConfig.CI.Enabled = !initial
+		assert.Equal(t, !initial, atmosConfig.CI.Enabled)
+	})
+
+	assert.Equal(t, initial, atmosConfig.CI.Enabled, "atmosConfig should be restored after subtest")
+}
+
+// TestResetFlagToDefault covers the bool DefValue trap: cmd/root.go blanks the
+// --version flag's DefValue to "" for cleaner help output, and pflag's bool
+// Set("") fails, so a naive Set(DefValue) would leave a leaked true in place.
+func TestResetFlagToDefault(t *testing.T) {
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	fs.Bool("version", false, "")
+	fs.String("stack", "", "")
+	fs.StringSlice("skip", nil, "")
+
+	versionFlag := fs.Lookup("version")
+	versionFlag.DefValue = "" // Mirror cmd/root.go's cosmetic blanking.
+	require.NoError(t, fs.Set("version", "true"))
+	require.NoError(t, fs.Set("stack", "prod"))
+	require.NoError(t, fs.Set("skip", "a,b"))
+
+	fs.VisitAll(resetFlagToDefault)
+
+	assert.Equal(t, "false", versionFlag.Value.String())
+	assert.False(t, versionFlag.Changed)
+	assert.Equal(t, "", fs.Lookup("stack").Value.String())
+	assert.False(t, fs.Lookup("stack").Changed)
+	assert.False(t, fs.Lookup("skip").Changed)
+}
