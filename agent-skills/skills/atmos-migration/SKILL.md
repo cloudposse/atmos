@@ -207,7 +207,7 @@ Things to push back on if a user (or another agent) proposes them during migrati
 - [References/from-terramate.md](references/from-terramate.md) -- construct-by-construct mapping
   from Terramate (`stack.tm.hcl`, globals, `generate_hcl`, `script{}`, tags/labels) to Atmos,
   including the one remaining known gap (`.tmtriggers`)
-- [References/from-terragrunt.md](references/from-terragrunt.md) -- concept mapping and migration
+- [references/from-terragrunt.md](references/from-terragrunt.md) -- concept mapping and migration
   workflow for classic Terragrunt and Terragrunt Stacks
 - [References/from-mise.md](references/from-mise.md) -- migrating tool versions, tasks, and env
   vars from mise to the Atmos toolchain

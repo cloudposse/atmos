@@ -30,8 +30,8 @@ not resolve host: github.com
 uncached `atmos vendor pull` against `tests/fixtures/scenarios/vendor`,
 which genuinely clones `github/stargazers` from
 `github.com/cloudposse/atmos.git` over the network -- by design for this
-fixture (it also exercises an OCI-sourced component and a plain HTTPS
-component in the same run), not a gap introduced by this branch.
+fixture (it also exercises a local file source and a Git source over HTTPS
+in the same run), not a gap introduced by this branch.
 
 On this run, `git` itself failed to resolve `github.com` at the OS level
 (`Could not resolve host: github.com`), before any TLS handshake or HTTP
