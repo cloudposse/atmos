@@ -3,8 +3,10 @@ package exec
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -324,4 +326,106 @@ func TestExecuteHelmfileNodeHooks_AfterErrorDroppedWhenExecAlreadyFailed(t *test
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, afterErr, "the after-hook error must be dropped when the exec error already won")
 	assert.Error(t, nodeHooks.afterExecErr, "After must have been called with the real (non-nil) exec error")
+}
+
+// buildFakeAWSBinaryDir copies the current test binary into a temp directory under the
+// name "aws" (or "aws.exe" on Windows) and returns that directory. Prepending it to PATH
+// lets tests intercept `aws` subprocess invocations without a real AWS CLI installation
+// or a Unix-only binary — the copy is the test binary itself, gated by
+// _ATMOS_TEST_ENV_DUMP_FILE in TestMain (see testmain_test.go).
+func buildFakeAWSBinaryDir(t *testing.T) string {
+	t.Helper()
+
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	contents, err := os.ReadFile(exePath)
+	require.NoError(t, err)
+
+	fileInfo, err := os.Stat(exePath)
+	require.NoError(t, err)
+
+	name := "aws"
+	if runtime.GOOS == "windows" {
+		name = "aws.exe"
+	}
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), contents, fileInfo.Mode()))
+
+	return dir
+}
+
+// TestExecuteHelmfileEKSAuthEnvReachesAwsSubprocess is a regression test for the bug where
+// ComponentEnvSection (populated by stack `env:` config and auth hooks) was converted to
+// ComponentEnvList only AFTER the EKS `aws eks update-kubeconfig` subprocess had already been
+// launched, so Atmos-managed credential file paths never reached that subprocess.
+//
+// It drives the real ExecuteHelmfile code path with `use_eks: true` and a stand-in `aws`
+// binary (the test binary itself, invoked under that name via an overridden PATH) that dumps
+// its received environment to a file, then asserts the stack-configured
+// AWS_SHARED_CREDENTIALS_FILE value was actually present in that environment.
+func TestExecuteHelmfileEKSAuthEnvReachesAwsSubprocess(t *testing.T) {
+	tempDir := t.TempDir()
+	kubeconfigDir := filepath.ToSlash(t.TempDir())
+	credentialsMarker := filepath.ToSlash(filepath.Join(t.TempDir(), "credentials"))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "components", "helmfile", "myapp"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks", "deploy"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(fmt.Sprintf(`base_path: "./"
+components:
+  helmfile:
+    base_path: "components/helmfile"
+    use_eks: true
+    cluster_name: "fake-cluster"
+    helm_aws_profile_pattern: "{stage}-profile"
+    kubeconfig_path: %q
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+logs:
+  level: Info
+`, kubeconfigDir)), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "stacks", "deploy", "dev.yaml"), []byte(fmt.Sprintf(`vars:
+  stage: dev
+components:
+  helmfile:
+    myapp:
+      vars:
+        foo: bar
+      env:
+        AWS_SHARED_CREDENTIALS_FILE: %q
+`, credentialsMarker)), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "components", "helmfile", "myapp", "helmfile.yaml"), []byte("releases: []\n"), 0o644))
+
+	t.Chdir(tempDir)
+
+	fakeAWSDir := buildFakeAWSBinaryDir(t)
+	t.Setenv("PATH", fakeAWSDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	dumpFile := filepath.Join(t.TempDir(), "aws-env.dump")
+	t.Setenv(testEnvEnvDumpFile, dumpFile)
+	t.Setenv(testEnvEnvDumpKeys, "AWS_SHARED_CREDENTIALS_FILE")
+
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "myapp",
+		Stack:            "dev",
+		SubCommand:       "diff",
+		ComponentType:    "helmfile",
+	}
+
+	// The final `helmfile` invocation is expected to fail (helmfile is not on the
+	// overridden PATH) -- what matters is that the `aws eks update-kubeconfig`
+	// subprocess ran first and received the auth-derived environment.
+	_ = ExecuteHelmfile(info)
+
+	require.FileExists(t, dumpFile, "the fake aws binary must have been invoked")
+	dumpedEnv, err := os.ReadFile(dumpFile)
+	require.NoError(t, err)
+	envMap := envListToMap(strings.Split(string(dumpedEnv), "\n"))
+
+	assert.Equal(t, credentialsMarker, envMap["AWS_SHARED_CREDENTIALS_FILE"],
+		"AWS_SHARED_CREDENTIALS_FILE from the stack env section must reach the EKS aws subprocess")
 }
