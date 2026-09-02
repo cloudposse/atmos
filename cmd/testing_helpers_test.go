@@ -4,6 +4,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"unsafe"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
@@ -75,8 +76,12 @@ type cmdStateSnapshot struct {
 func resetFlagToDefault(f *pflag.Flag) {
 	switch f.Value.Type() {
 	case "stringSlice", "stringArray":
-		// Slice flags append on Set; restoreStringSliceFlag handles them when a
-		// snapshot exists, and a lazily-created slice flag has no prior state.
+		// Slice flags append on Set, so clear the underlying slice via
+		// reflection before restoring the registered default.
+		clearFlagSliceValue(f)
+		if def := f.DefValue; def != "" && def != "[]" {
+			_ = f.Value.Set(def)
+		}
 	case "bool":
 		def := f.DefValue
 		if def == "" {
@@ -148,23 +153,39 @@ func snapshotRootCmdState() *cmdStateSnapshot {
 	return snapshot
 }
 
-// restoreStringSliceFlag handles restoration of StringSlice/StringArray flags.
-// These flag types have Set() methods that append rather than replace, so we need
-// to use reflection to clear the underlying slice first.
-func restoreStringSliceFlag(f *pflag.Flag, snap flagSnapshot) {
-	// Use reflection to access the underlying slice and clear it.
+// clearFlagSliceValue resets a stringSlice/stringArray flag's underlying slice
+// and pflag's own private "changed" tracking via reflection, so a later Set()
+// call replaces rather than appends. Both pflag.stringSliceValue's "value"
+// (a *[]string) and "changed" fields are unexported; reflect's read-only flag
+// persists even through pointer indirection (Value.Elem()), so plain
+// reflect.Value.Set is not enough here -- hence the unsafe.Pointer +
+// reflect.NewAt trick (same pattern as getGlamourGoldmark in
+// pkg/ui/markdown/custom_renderer.go).
+func clearFlagSliceValue(f *pflag.Flag) {
 	v := reflect.ValueOf(f.Value)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
-	// Look for a field that holds the slice (usually "value").
-	if v.Kind() == reflect.Struct {
-		valueField := v.FieldByName("value")
-		if valueField.IsValid() && valueField.CanSet() {
-			// Reset to empty slice to prevent append behavior.
-			valueField.Set(reflect.MakeSlice(valueField.Type(), 0, 0))
+	if v.Kind() != reflect.Struct {
+		return
+	}
+	if valueField := v.FieldByName("value"); valueField.IsValid() && valueField.Kind() == reflect.Ptr {
+		if elem := valueField.Elem(); elem.IsValid() && elem.CanAddr() {
+			settable := reflect.NewAt(elem.Type(), unsafe.Pointer(elem.UnsafeAddr())).Elem()
+			settable.Set(reflect.MakeSlice(elem.Type(), 0, 0))
 		}
 	}
+	if changedField := v.FieldByName("changed"); changedField.IsValid() && changedField.Kind() == reflect.Bool && changedField.CanAddr() {
+		settable := reflect.NewAt(changedField.Type(), unsafe.Pointer(changedField.UnsafeAddr())).Elem()
+		settable.SetBool(false)
+	}
+}
+
+// restoreStringSliceFlag handles restoration of StringSlice/StringArray flags.
+// These flag types have Set() methods that append rather than replace, so we need
+// to use reflection to clear the underlying slice first.
+func restoreStringSliceFlag(f *pflag.Flag, snap flagSnapshot) {
+	clearFlagSliceValue(f)
 	// Reset Changed state before setting value.
 	f.Changed = false
 	// Set the snapshot value if not default.

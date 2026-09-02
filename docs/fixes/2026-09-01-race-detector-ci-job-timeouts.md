@@ -704,7 +704,7 @@ Validation: `go build ./...`, `go vet ./...` — clean. `./custom-gcl run --new-
 local darwin/arm64 dev machine exactly as before (confirming the generalized helper preserves the pre-existing
 ARM64 behavior, not just adding the new `-race` path).
 
-See Follow-ups above for a `cmd/ci` test that reappeared in the same CI log as this round's gomonkey hang.
+The `cmd/ci` failure (`TestWorkflowValidationErrorOwnsDiagnostics`) that reappeared in this CI log was later root-caused and fixed in Round 17.
 
 ## Round 14 (root-caused the `pkg/provisioner` "test-hygiene gap" left open in Round 12's Follow-ups)
 

@@ -345,4 +345,5 @@ func TestResetFlagToDefault(t *testing.T) {
 	assert.Equal(t, "", fs.Lookup("stack").Value.String())
 	assert.False(t, fs.Lookup("stack").Changed)
 	assert.False(t, fs.Lookup("skip").Changed)
+	assert.Equal(t, "[]", fs.Lookup("skip").Value.String())
 }

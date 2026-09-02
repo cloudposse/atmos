@@ -757,12 +757,14 @@ func TestCustomRendererRenderDoesNotRaceStdoutReaders(t *testing.T) {
 			}
 		}
 	}()
+	t.Cleanup(func() {
+		close(stop)
+		<-done
+	})
 
 	for range 50 {
 		out, err := renderer.Render(customSyntaxSampleDocument)
 		require.NoError(t, err)
 		require.NotEmpty(t, out)
 	}
-	close(stop)
-	<-done
 }

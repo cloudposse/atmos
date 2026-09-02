@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -82,12 +83,14 @@ func TestPackerValidateCmd(t *testing.T) {
 // requirePackerPluginInstalled fails the test unless `packer plugins installed`
 // lists the given plugin source, so a prerequisite `atmos packer init` that
 // silently did nothing is caught at the prerequisite rather than surfacing as a
-// confusing "Missing plugins" from a later validate/build.
+// confusing "Missing plugins" from a later validate/build. The command reports
+// an OS-native filesystem path (backslash-separated on Windows), while source
+// is a forward-slash plugin id, so normalize before comparing.
 func requirePackerPluginInstalled(t *testing.T, source string) {
 	t.Helper()
 	out, err := exec.Command("packer", "plugins", "installed").CombinedOutput()
 	require.NoError(t, err, "packer plugins installed: %s", out)
-	require.Contains(t, string(out), strings.TrimPrefix(source, "github.com/"),
+	require.Contains(t, filepath.ToSlash(string(out)), strings.TrimPrefix(source, "github.com/"),
 		"prerequisite `atmos packer init` returned nil but did not install %s -- "+
 			"Execute() was short-circuited by leaked global state; output:\n%s", source, out)
 }
