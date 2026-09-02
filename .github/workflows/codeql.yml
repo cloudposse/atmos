@@ -125,6 +125,7 @@ jobs:
             api.github.com:443
             release-assets.githubusercontent.com:443
             golang.org:443
+            go.googlesource.com:443
             proxy.golang.org:443
             vuln.go.dev:443
 
