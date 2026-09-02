@@ -287,6 +287,20 @@ func TestMasker_MasksIndentedMultilineLiteral(t *testing.T) {
 	}
 }
 
+func TestMasker_MasksTruncatedMultilineLiteral(t *testing.T) {
+	const secret = "-----BEGIN PRIVATE KEY-----\nATMOS-OSS-LINE-A\nATMOS-OSS-LINE-B\n-----END PRIVATE KEY-----"
+
+	m := newMasker(nil)
+	m.RegisterSecret(secret)
+	input := "...\n              ATMOS-OSS-LINE-A\n              ATMOS-OSS-LINE-B\n              -----END PRIVATE KEY-----\n...\n"
+
+	masked := m.Mask(input)
+	assert.NotContains(t, masked, "ATMOS-OSS-LINE-A")
+	assert.NotContains(t, masked, "ATMOS-OSS-LINE-B")
+	assert.NotContains(t, masked, "END PRIVATE KEY")
+	assert.Contains(t, masked, MaskReplacement)
+}
+
 func TestMasker_MasksFoldedLongLiteral(t *testing.T) {
 	const secret = "alpha bravo charlie delta echo foxtrot golf hotel"
 
