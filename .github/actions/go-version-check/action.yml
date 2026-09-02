@@ -31,9 +31,11 @@ runs:
     - name: Get base branch Go version
       id: base-version
       shell: bash
+      env:
+        BASE_REF: ${{ inputs.base-ref }}
       run: |
-        git fetch origin ${{ inputs.base-ref }}
-        BASE_VERSION=$(git show origin/${{ inputs.base-ref }}:go.mod | grep '^go ' | awk '{print $2}')
+        git fetch origin "$BASE_REF"
+        BASE_VERSION=$(git show "origin/$BASE_REF:go.mod" | grep '^go ' | awk '{print $2}')
         echo "version=$BASE_VERSION" >> $GITHUB_OUTPUT
         echo "Base branch Go version: $BASE_VERSION"
 
@@ -48,10 +50,10 @@ runs:
     - name: Compare versions
       id: compare
       shell: bash
+      env:
+        BASE: ${{ steps.base-version.outputs.version }}
+        PR: ${{ steps.pr-version.outputs.version }}
       run: |
-        BASE="${{ steps.base-version.outputs.version }}"
-        PR="${{ steps.pr-version.outputs.version }}"
-
         echo "base-version=$BASE" >> $GITHUB_OUTPUT
         echo "pr-version=$PR" >> $GITHUB_OUTPUT
 
@@ -73,13 +75,18 @@ runs:
     - name: Comment on PR
       if: steps.compare.outputs.changed == 'true'
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        BASE_VERSION: ${{ steps.compare.outputs.base-version }}
+        PR_VERSION: ${{ steps.compare.outputs.pr-version }}
+        BASE_REF: ${{ inputs.base-ref }}
+        IS_UPGRADE: ${{ steps.compare.outputs.is-upgrade }}
       with:
         github-token: ${{ inputs.token }}
         script: |
-          const baseVersion = '${{ steps.compare.outputs.base-version }}';
-          const prVersion = '${{ steps.compare.outputs.pr-version }}';
-          const baseRef = '${{ inputs.base-ref }}';
-          const isUpgrade = '${{ steps.compare.outputs.is-upgrade }}' === 'true';
+          const baseVersion = process.env.BASE_VERSION;
+          const prVersion = process.env.PR_VERSION;
+          const baseRef = process.env.BASE_REF;
+          const isUpgrade = process.env.IS_UPGRADE === 'true';
 
           const emoji = isUpgrade ? '🚀' : '⚠️';
           const versionChange = isUpgrade ? '⬆️ Upgrade' : '⬇️ Downgrade';

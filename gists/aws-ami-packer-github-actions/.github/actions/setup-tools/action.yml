@@ -15,12 +15,12 @@ runs:
   using: composite
   steps:
     - name: Install Atmos
-      uses: cloudposse/github-action-setup-atmos@v2
+      uses: cloudposse/github-action-setup-atmos@822766b3aaa9a3b4aa2628baaccb58dd576ad0ff # v2
       with:
         atmos-version: ${{ inputs.atmos-version }}
 
     - name: Install Packer
-      uses: hashicorp/setup-packer@v3
+      uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # v3
       with:
         version: ${{ inputs.packer-version }}
 
