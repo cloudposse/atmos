@@ -105,10 +105,13 @@ commands:
         command: terraform apply infra -s {{ .Flags.env }}
 ```
 
-`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Move the
+`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Moving the
 recipe's Terraform code to `components/terraform/infra/` (the default
-`components.terraform.base_path` is `components/terraform`), then swap `infra` for whatever the
-user actually names the component.
+`components.terraform.base_path` is `components/terraform`) is one option -- swap `infra` for
+whatever the user actually names the component. Alternatively, keep the existing `terraform/`
+directory where it is: set `components.terraform.base_path: "."` and add
+`metadata.component: terraform` on the `infra` stack component -- `metadata.component` points
+the stack component at the physical directory, so no files need to move.
 
 ## Shape C: Environment and Shell Settings
 
@@ -147,10 +150,12 @@ commands:
 
 ### `{{ }}` interpolation looks like Atmos templates but is not
 
-Just's `{{ var }}` syntax and Atmos's `{{ .Flags.var }}` syntax both use Go templates, but they
-run in different tools at different times. Do not copy Just interpolation syntax into Atmos
-YAML. Change each reference to the matching `{{ .Flags.<name> }}` or
-`{{ .Arguments.<name> }}` form.
+Just's `{{ var }}` syntax looks like Atmos's `{{ .Flags.var }}` syntax, but the two are not the
+same templating tool. Just evaluates `{{ ... }}` with its own built-in expression language
+(variables, operators, string and path functions), not Go's `text/template` package. Atmos's
+`{{ .Flags.var }}` syntax is a real Go template, rendered by Atmos itself at a different time.
+Do not copy Just interpolation syntax into Atmos YAML. Change each reference to the matching
+`{{ .Flags.<name> }}` or `{{ .Arguments.<name> }}` form.
 
 ### `[private]` recipes map to `internal: true`
 

@@ -42,7 +42,7 @@ See [AI Agent Skills](/ai/skills) for details.
 | `vars:` / `env:`                                  | Command `flags:` (with `default:`) / `env:` map                   |
 | `sources:` / `generates:` (freshness check)       | Step [`inputs.sources`](/workflows/steps/inputs) / [`artifacts.paths`](/workflows/steps/artifacts) |
 | `includes:` (multi-file composition)              | Auto-discovered `atmos.d/*.yaml`, or separate workflow files       |
-| `internal: true` task                             | Command `internal: true`                                            |
+| `internal: true` task                             | Command `internal: true` (weaker guarantee -- see below)             |
 
 ## `deps:` Becomes `dependencies.commands`
 
@@ -79,10 +79,13 @@ runs concurrently by default — matching Task's `deps:` behavior directly, not 
   </TabItem>
 </Tabs>
 
-`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Move the old
+`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Moving the old
 `terraform/` directory's `.tf` files to `components/terraform/infra/` (the default
-`components.terraform.base_path` is `components/terraform`), then swap `infra` for whatever you
-actually name the component.
+`components.terraform.base_path` is `components/terraform`) is one option -- swap `infra` for
+whatever you actually name the component. Alternatively, keep the existing `terraform/` directory
+where it is: set `components.terraform.base_path: "."` and add `metadata.component: terraform`
+on the `infra` stack component -- `metadata.component` points the stack component at the physical
+directory, so no files need to move.
 
 `dependencies.commands` also matches a behavior Task itself has that a hand-rolled `parallel`
 step does not: if two commands both depend on the same one — for example both `test` and `lint`
@@ -137,9 +140,20 @@ step rather than spreading `inputs`/`artifacts` across several migrated steps.
 
 Set `internal: true` on the custom command. The command still runs (`atmos <name> ...`, or as a
 `default:` target, or from another command's steps), but it's excluded from `atmos --help`
-listings and completion suggestions — matching an `internal: true` task's behavior in
-`task --list`. Reserve inlining the logic into a caller's step for a helper that's genuinely
-single-caller and has no reason to be invoked on its own.
+listings and completion suggestions — matching how an `internal: true` task disappears from
+`task --list`.
+
+**This is not the same guarantee Task gives you.** In Task, `internal: true` also blocks direct
+invocation — running an internal task by name from the CLI fails with an error; it is only
+reachable from another task's `deps:`/`cmds:`. Atmos's `internal: true` maps to Cobra's `Hidden`
+field: it removes the command from help output and shell completion, but the command still
+executes if invoked directly (`atmos <name> ...`). If the user has a Task helper that must
+genuinely be unreachable on its own — not just hidden from discovery — migrating it straight to
+`internal: true` does not reproduce that constraint. Tell the user to audit any such helpers and,
+if true unreachability matters, add their own guard inside the command (for example a
+precondition or an early check on an expected caller-only flag/env var) rather than relying on
+`internal: true` alone. Reserve inlining the logic into a caller's step for a helper that's
+genuinely single-caller and has no reason to be invoked on its own.
 
 ## Before and After
 
@@ -291,7 +305,10 @@ Yes, through either step type: `type: atmos` with `command: <other-command-name>
 <FAQItem question="What replaces internal: true tasks?">
 Set `internal: true` on the custom command. It stays fully runnable, including as a `default:`
 target or from another command's steps, but disappears from `atmos --help` listings and
-completion suggestions.
+completion suggestions. Unlike Task, where an internal task cannot be invoked directly at all,
+Atmos's `internal: true` only hides the command from discovery — running it directly by name
+still works. If a Task helper must genuinely be unreachable on its own, add a guard inside the
+migrated command rather than relying on `internal: true` for that guarantee.
 </FAQItem>
 
 <FAQItem question="What if I use Make or Just instead of Task?">

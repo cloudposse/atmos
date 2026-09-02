@@ -249,10 +249,11 @@ Push back if a user or another agent proposes one of these methods during migrat
   wrapper is a good bridge while the user builds trust in Atmos. But it is not the final state.
   Change each leaf target to a custom command. An ordinary Make or Just dependency chain (for
   example, `deploy: build test`) stays a custom command with ordered steps or
-  `dependencies.commands` -- it does not need a workflow. A Taskfile's `deps:` maps the same way,
-  onto ordered steps or `dependencies.commands` on the custom command. Reserve workflows for
-  fixed, multi-step orchestration across more than one component, not for an ordinary target
-  chain.
+  `dependencies.commands` -- it does not need a workflow. A Taskfile's `deps:` is different: Task
+  runs `deps:` concurrently by default, so it maps directly onto `dependencies.commands` (also
+  concurrent by default) on the custom command -- reach for ordered steps instead only when the
+  user's dependency chain actually requires serial execution. Reserve workflows for fixed,
+  multi-step orchestration across more than one component, not for an ordinary target chain.
 
 ## Additional Resources
 

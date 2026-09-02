@@ -42,7 +42,9 @@ See [AI Agent Skills](/ai/skills) for details.
 | `target: dep1 dep2` (dependency order)            | Steps in order (`make`'s own default is sequential); command [`dependencies.commands`](/cli/configuration/commands/dependencies#named-command-and-workflow-dependencies) only when a prerequisite is shared by more than one target, or the source used `-j` |
 | Recipe shell lines (`@`-silenced, tab-indented)    | Steps (`type: shell`, `output: none`)                        |
 | `ifeq (...)` conditional                          | Go template `{{ if }}` in a command, or `when:` in a workflow |
-| `$(MAKE) -j`, `$(MAKE) -C dir`                    | `parallel` / `matrix` steps                                  |
+| `$(MAKE) -j` (parallel targets)                    | `parallel` step                                              |
+| `$(MAKE) -C dir target` (one invocation, one dir)  | `working_directory:` on the step                              |
+| Recursive make looping over `$(SUBDIRS)`           | `matrix` step                                                 |
 | Self-documenting `help` target (`awk`-parsed)     | Free: `atmos --help` and each command's `description:`       |
 
 ## Before and After
@@ -115,10 +117,13 @@ See [AI Agent Skills](/ai/skills) for details.
   </TabItem>
 </Tabs>
 
-`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Move the old
+`infra` is a placeholder Atmos component name, not the `terraform` verb repeated. Moving the old
 `terraform/` directory's `.tf` files to `components/terraform/infra/` (the default
-`components.terraform.base_path` is `components/terraform`), then swap `infra` for whatever you
-actually name the component.
+`components.terraform.base_path` is `components/terraform`) is one option -- swap `infra` for
+whatever you actually name the component. Alternatively, keep the existing `terraform/` directory
+where it is: set `components.terraform.base_path: "."` and add `metadata.component: terraform`
+on the `infra` stack component -- `metadata.component` points the stack component at the physical
+directory, so no files need to move.
 
 ## Independent Targets Become Custom Commands
 
@@ -203,8 +208,39 @@ side maps to stacks and `.tfvars` files.
 ## Parallel and Recursive Make Become `parallel` and `matrix`
 
 `$(MAKE) -j` runs independent targets at the same time. It maps to a
-[`parallel`](/workflows/steps/type/parallel) step. `$(MAKE) -C dir target` runs the same target
-across a fixed set of directories. It maps to a [`matrix`](/workflows/steps/type/matrix) step:
+[`parallel`](/workflows/steps/type/parallel) step.
+
+`$(MAKE) -C dir target` (or `--directory=dir`) changes the working directory for **one**
+`make` invocation. It does not iterate over multiple directories, so it does not map to
+`matrix`. Use `working_directory:` on the step instead:
+
+<File title="atmos.yaml">
+```yaml
+commands:
+  - name: build-vpc
+    description: Build the vpc component
+    steps:
+      - type: shell
+        command: make build
+        working_directory: components/terraform/vpc
+```
+</File>
+
+A *recursive* Makefile pattern that loops `$(MAKE) -C $@` over a list such as `$(SUBDIRS)` is the
+case that actually enumerates multiple directories:
+
+```makefile
+SUBDIRS := vpc eks rds
+
+.PHONY: subdirs $(SUBDIRS)
+subdirs: $(SUBDIRS)
+
+$(SUBDIRS):
+	$(MAKE) -C $@
+```
+
+That pattern maps to a [`matrix`](/workflows/steps/type/matrix) step, with each `$(SUBDIRS)`
+entry becoming a matrix value:
 
 <File title="atmos.yaml">
 ```yaml
@@ -219,7 +255,8 @@ commands:
         max_concurrency: 4
         steps:
           - type: shell
-            command: atmos build --service {{ .matrix.service }}
+            command: make build
+            working_directory: components/terraform/{{ .matrix.service }}
 ```
 </File>
 
@@ -294,7 +331,7 @@ than spreading `inputs`/`artifacts` across several steps.
 - [ ] Turn independent targets into custom commands in `atmos.yaml`
 - [ ] Turn `VAR ?= default` variables into command `flags:` with defaults
 - [ ] Turn dependency chains into steps in order (`make`'s own default) -- reach for `dependencies.commands` only when a prerequisite is shared by more than one target, or the source used `-j`
-- [ ] Replace `$(MAKE) -j`/`-C` with `parallel`/`matrix` steps
+- [ ] Replace `$(MAKE) -j` with a `parallel` step; replace a single `$(MAKE) -C dir` with `working_directory:` on the step; replace a recursive `$(SUBDIRS)`-style loop with a `matrix` step
 - [ ] Delete any hand-written `help` target. `atmos --help` replaces it
 - [ ] Keep the Makefile for as long as you want -- call `make <target>` from a step, or migrate the logic into `steps:`, whichever fits
 - [ ] Turn file-timestamp targets into step `inputs.sources`/`artifacts.paths`
