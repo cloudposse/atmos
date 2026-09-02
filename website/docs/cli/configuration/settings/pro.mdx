@@ -134,7 +134,7 @@ settings:
 
   <dt>`settings.pro.exec.sync_timeout_seconds`</dt>
   <dd>
-    How long (in seconds) Atmos waits for command-execution metadata delivery to Atmos Pro to be confirmed for the small set of commands that report synchronously (`terraform plan`, `terraform apply`, `describe affected`). Execution-metadata upload only happens automatically when Atmos detects it is running in CI **and** Atmos Pro is configured — there is no separate opt-in/opt-out flag. This setting only *lengthens* the wait: values below the 10-second default are clamped up to 10 seconds rather than allowed to shorten it. All other commands report asynchronously with a short, fixed, non-configurable best-effort flush and never block on this setting.
+    How long (in seconds) Atmos waits for command-execution metadata delivery to Atmos Pro to be confirmed for the small set of commands that report synchronously (`terraform plan`, `terraform apply`, `describe affected`). Execution-metadata upload only happens automatically when Atmos detects it is running in a recognized CI environment **and** Atmos Pro is configured — there is no separate opt-in/opt-out flag, and unsupported or unrecognized CI environments never initiate uploads. This setting only *lengthens* the wait: values below the 10-second default are clamped up to 10 seconds rather than allowed to shorten it. All other commands report asynchronously with a short, fixed, non-configurable best-effort flush and never block on this setting.
 
     - **Type:** `integer`
     - **Default:** `10`
