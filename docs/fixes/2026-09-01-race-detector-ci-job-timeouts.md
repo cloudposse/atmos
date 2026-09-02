@@ -423,7 +423,7 @@ and, in a later CI run, three siblings — `TestExecuteListInstancesCmd_TreeForm
 `TestExecuteListInstancesCmd_MatrixFormat`, `TestListStacksWithOptions_TreeFormatWithProvenance` — all
 failing with `authentication requires at least one identity configured in atmos.yaml`) is a genuine
 test-order leak, not goroutine-timing nondeterminism as the previous round concluded (that conclusion was
-wrong: retrying with the same `-shuffle` seed via `-run <name>` narrows the compiled test set, which changes
+wrong: retrying with the same `-shuffle` seed via `-run <name>` narrows the executed test set, which changes
 the deterministic order and hides the leak — it doesn't prove the failure is non-order-related).
 
 Root cause: `cmd/list/affected_test.go`'s `TestAffectedIdentityFlagParsing`, `cmd/list/instances_test.go`'s
@@ -445,8 +445,9 @@ elsewhere in this package and throughout this incident.
 
 Validation: `go build ./cmd/list/...`, `go vet ./cmd/list/...` — clean. `go test -race -shuffle=on
 ./cmd/list/... -timeout 300s`, run twice (each with its own random shuffle order) — both pass, no
-`authentication requires at least one identity` failures. (A `-count=3` invocation at the same 300s timeout
-hit that budget mid-run and was killed — `cmd/list` under `-race` takes ~90-110s per single pass locally, so
-3 consecutive passes need a longer timeout than 300s; that's a local verification-budget artifact, not a
-test failure — the goroutine dump it produced was ordinary `t.Parallel()` tests waiting their turn, not a
-deadlock.)
+`authentication requires at least one identity` failures. A separate `-count=3` invocation at the same
+300s timeout is **not** part of this validation record: it was interrupted by the timeout before all three
+passes finished (`cmd/list` under `-race` takes ~90-110s per single pass locally, so three consecutive
+passes need a longer timeout than 300s) and produced no result, passing or failing — the goroutine dump it
+printed was ordinary `t.Parallel()` tests waiting their turn, not a deadlock, but the run itself proves
+nothing either way and would need to be rerun with a longer timeout to count as evidence.

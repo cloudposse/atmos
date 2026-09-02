@@ -38,7 +38,7 @@ RUN set -ex; \
     # effect for the standalone install method), so pin the package version
     # explicitly after.
     curl -1sSLf 'https://raw.githubusercontent.com/opentofu/get.opentofu.org/3d354dfa62d9a36f33df16cdd6bb506ace1e6e2e/static/install-opentofu.sh' | bash -s -- --root-method none --install-method deb; \
-    apt-get install -y --allow-downgrades tofu=1.12.6; \
+    apt-get install -y --no-install-recommends --allow-downgrades tofu=1.12.6; \
     # Install Kustomize binary (required by Helmfile).
     # Direct download instead of install_kustomize.sh which has known bugs (kubernetes-sigs/kustomize#5562).
     KUSTOMIZE_VERSION=5.8.1; \
