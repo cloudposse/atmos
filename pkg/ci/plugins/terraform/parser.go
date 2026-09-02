@@ -662,14 +662,17 @@ func extractApplyOutputs(output string) map[string]plugin.TerraformOutput {
 			value = value[1 : len(value)-1]
 		}
 
-		// Terraform prints the literal placeholder "<sensitive>" (unquoted, no
+		// Terraform prints the literal placeholder <sensitive> (unquoted, no
 		// real value ever reaches this text) in place of a sensitive-flagged
 		// output's value, so that literal is itself a reliable signal to flag
 		// Sensitive: true here — unlike most fields in this regex-based
 		// parser, this one doesn't need the real value to detect sensitivity.
+		// Compare the raw (unquoted-stripped) value so a real string output
+		// whose value happens to be the quoted literal "<sensitive>" isn't
+		// misflagged as sensitive.
 		outputs[key] = plugin.TerraformOutput{
 			Value:     value,
-			Sensitive: value == sensitiveOutputPlaceholder,
+			Sensitive: rawValue == sensitiveOutputPlaceholder,
 		}
 	}
 

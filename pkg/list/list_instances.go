@@ -550,19 +550,20 @@ func uploadInstancesWithDeps(
 		Instances: uploadInstances,
 	}
 
-	// Attach the same instance list to this command's exec-metadata
-	// execution record, so Atmos Pro gets it without a separate lookup
-	// against POST /api/v1/instances (FR-006c, research.md Decision 23).
-	// This only fires here, inside the --upload branch — a plain
-	// `list instances` (no --upload) never computes uploadInstances at all,
-	// so it never reaches this call.
-	proexec.SetPendingAsyncData(proexec.VersionedData(1, "instances", req.Instances))
-
 	err = apiClient.UploadInstances(&req)
 	if err != nil {
 		log.Error(errUtils.ErrFailedToUploadInstances.Error(), "error", err)
 		return errors.Join(errUtils.ErrFailedToUploadInstances, err)
 	}
+
+	// Attach the same instance list to this command's exec-metadata
+	// execution record, so Atmos Pro gets it without a separate lookup
+	// against POST /api/v1/instances (FR-006c, research.md Decision 23).
+	// This only fires here, inside the --upload branch, after a successful
+	// upload — a plain `list instances` (no --upload) never computes
+	// uploadInstances at all, so it never reaches this call, and a failed
+	// upload never records pending inventory that wasn't actually accepted.
+	proexec.SetPendingAsyncData(proexec.VersionedData(1, "instances", req.Instances))
 
 	enabled, disabled, drift := countEnabledDisabled(instances)
 	ui.Writef("Successfully uploaded %d instances to Atmos Pro API (%d enabled, %d disabled, %d drift enabled).", len(instances), enabled, disabled, drift)

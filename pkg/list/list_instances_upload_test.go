@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -370,7 +371,7 @@ func TestUploadInstancesWithDeps_SetsPendingAsyncDataForExecMetadata(t *testing.
 	// upload by exercising the real CaptureAsync consumer end-to-end.
 	t.Setenv("CI", "true")
 
-	var received []dtos.ExecUploadRequest
+	receivedCh := make(chan dtos.ExecUploadRequest, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/atmos/exec") {
 			w.WriteHeader(http.StatusNotFound)
@@ -378,7 +379,7 @@ func TestUploadInstancesWithDeps_SetsPendingAsyncDataForExecMetadata(t *testing.
 		}
 		var req dtos.ExecUploadRequest
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
-		received = append(received, req)
+		receivedCh <- req
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"success":true}`))
@@ -393,10 +394,21 @@ func TestUploadInstancesWithDeps_SetsPendingAsyncDataForExecMetadata(t *testing.
 
 	proexec.CaptureAsync(&cobra.Command{Use: "list-instances"}, nil)
 
-	require.Len(t, received, 1)
-	require.NotNil(t, received[0].Data)
+	// CaptureAsync races the upload against its own internal flush ceiling,
+	// so the HTTP handler may still be in flight when CaptureAsync returns.
+	// Synchronize on the handler's own signal instead of assuming it already
+	// ran, avoiding a data race between the handler goroutine and this
+	// assertion.
+	var received dtos.ExecUploadRequest
+	select {
+	case received = <-receivedCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for exec-metadata upload request")
+	}
+
+	require.NotNil(t, received.Data)
 	var decoded map[string]any
-	require.NoError(t, json.Unmarshal(received[0].Data, &decoded))
+	require.NoError(t, json.Unmarshal(received.Data, &decoded))
 	assert.Equal(t, float64(1), decoded["version"])
 	instancesVal, ok := decoded["instances"].([]any)
 	require.True(t, ok, "data.instances must be an array")

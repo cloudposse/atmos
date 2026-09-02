@@ -310,6 +310,15 @@ func TestExecuteListInstancesCmd_NoUploadNoProGate_NoPendingData(t *testing.T) {
 	preserved := telemetry.PreserveCIEnvVars()
 	t.Cleanup(func() { telemetry.RestoreCIEnvVars(preserved) })
 	os.Unsetenv("CI")
+
+	origProToken, hadProToken := os.LookupEnv("ATMOS_PRO_TOKEN")
+	t.Cleanup(func() {
+		if hadProToken {
+			os.Setenv("ATMOS_PRO_TOKEN", origProToken)
+		} else {
+			os.Unsetenv("ATMOS_PRO_TOKEN")
+		}
+	})
 	os.Unsetenv("ATMOS_PRO_TOKEN")
 
 	cmd := &cobra.Command{}

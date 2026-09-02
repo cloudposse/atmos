@@ -905,6 +905,29 @@ secret_key = <sensitive>
 	assert.False(t, got["instance_id"].Sensitive, "non-sensitive output must not be flagged Sensitive: true")
 }
 
+// TestExtractApplyOutputs_QuotedSensitivePlaceholderIsNotSensitive guards
+// against false-positive sensitivity detection: a genuine, non-sensitive
+// string output whose real value happens to be the literal text
+// "<sensitive>" is printed quoted by Terraform, unlike the unquoted
+// placeholder Terraform substitutes for an actual sensitive output. Sensitive
+// detection must key off the raw (pre-quote-stripping) value so this quoted
+// literal is correctly treated as ordinary data, not flagged sensitive.
+func TestExtractApplyOutputs_QuotedSensitivePlaceholderIsNotSensitive(t *testing.T) {
+	output := `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+literal_value = "<sensitive>"
+`
+
+	got := extractApplyOutputs(output)
+
+	require.Contains(t, got, "literal_value")
+	value := got["literal_value"]
+	assert.Equal(t, "<sensitive>", value.Value, "quotes must still be stripped from the literal string value")
+	assert.False(t, value.Sensitive, "a quoted literal matching the placeholder text must not be flagged Sensitive: true")
+}
+
 func TestParseApplyOutput_WithOutputs(t *testing.T) {
 	output := `aws_instance.web: Creating...
 aws_instance.web: Creation complete after 35s [id=i-12345678]

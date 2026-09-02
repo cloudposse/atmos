@@ -41,7 +41,7 @@ func diffRusageValues(now, baseline *rusageSnapshot) ProcessMetrics {
 	return ProcessMetrics{
 		UserCPUTime:      timevalToDuration(now.rusage.Utime) - timevalToDuration(baseline.rusage.Utime),
 		SystemCPUTime:    timevalToDuration(now.rusage.Stime) - timevalToDuration(baseline.rusage.Stime),
-		MaxRSSBytes:      maxRSSBytes(now.rusage.Maxrss),
+		MaxRSSBytes:      maxRSSBytes(int64(now.rusage.Maxrss)), //nolint:unconvert // cross-platform: int32 on Linux, int64 on Darwin
 		MinorPageFaults:  int64(now.rusage.Minflt) - int64(baseline.rusage.Minflt),   //nolint:unconvert // cross-platform: int32 on Linux, int64 on Darwin
 		MajorPageFaults:  int64(now.rusage.Majflt) - int64(baseline.rusage.Majflt),   //nolint:unconvert // cross-platform: int32 on Linux, int64 on Darwin
 		InBlockOps:       int64(now.rusage.Inblock) - int64(baseline.rusage.Inblock), //nolint:unconvert // cross-platform: int32 on Linux, int64 on Darwin

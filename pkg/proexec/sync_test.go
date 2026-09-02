@@ -76,17 +76,18 @@ func TestCaptureSync_NoOpOnGateClosed(t *testing.T) {
 func TestCaptureSync_DeliversSuccessfully(t *testing.T) {
 	withCIEnv(t, true)
 
-	var (
-		gotMethod string
-		gotPath   string
-		gotBody   map[string]any
-	)
+	type gotRequest struct {
+		method string
+		path   string
+		body   map[string]any
+	}
+	gotCh := make(chan gotRequest, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
-		gotPath = r.URL.Path
 		body, readErr := io.ReadAll(r.Body)
 		require.NoError(t, readErr)
-		require.NoError(t, json.Unmarshal(body, &gotBody))
+		var parsedBody map[string]any
+		require.NoError(t, json.Unmarshal(body, &parsedBody))
+		gotCh <- gotRequest{method: r.Method, path: r.URL.Path, body: parsedBody}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -103,9 +104,16 @@ func TestCaptureSync_DeliversSuccessfully(t *testing.T) {
 	elapsed := time.Since(start)
 
 	assert.NoError(t, err)
-	assert.Equal(t, http.MethodPost, gotMethod)
-	assert.Contains(t, gotPath, "/atmos/exec")
-	assert.Equal(t, "terraform apply", gotBody["command"])
+
+	var got gotRequest
+	select {
+	case got = <-gotCh:
+	default:
+		t.Fatal("server handler was never invoked")
+	}
+	assert.Equal(t, http.MethodPost, got.method)
+	assert.Contains(t, got.path, "/atmos/exec")
+	assert.Equal(t, "terraform apply", got.body["command"])
 	assert.Less(t, elapsed, defaultSyncTimeoutSeconds*time.Second)
 }
 
