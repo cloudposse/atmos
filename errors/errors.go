@@ -1252,7 +1252,6 @@ var (
 	ErrInitializationPartialFailure     = errors.New("initialization partially failed")
 	ErrInitTemplateNotFound             = errors.New("init template not found")
 	ErrInvalidScaffoldSection           = errors.New("invalid scaffold section")
-	ErrScaffoldSourceUnsupported        = errors.New("scaffold source scheme not supported")
 	ErrScaffoldFetchSource              = errors.New("failed to fetch scaffold source")
 	ErrScaffoldCatalogLoad              = errors.New("failed to load scaffold catalog")
 	ErrTemplateConfigNameRequired       = errors.New("template config with metadata.name is required to write a project record")
