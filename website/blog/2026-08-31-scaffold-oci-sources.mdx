@@ -1,0 +1,41 @@
+---
+slug: scaffold-oci-sources
+title: "Distribute scaffold templates through your existing OCI registry"
+date: 2026-08-31T12:00:00.000Z
+authors: [jorrite]
+tags: [feature]
+---
+If your team already publishes container images, Atmos components, or Helm charts to a private
+OCI registry, that registry is probably the most secure, versioned, and well-understood
+distribution channel you have. Reusable project scaffolding rarely gets to use it — instead it
+tends to live in its own git repository, with its own access controls and its own line in the
+onboarding docs, just to hand out a `scaffold.yaml` and a handful of files.
+<!--truncate-->
+## The Problem
+Both `atmos scaffold generate` and `atmos init` could already pull templates from git, HTTPS, and
+S3 sources, but nothing else. A team standardizing on OCI for internal distribution —
+components, container images, Helm charts — had no way to publish a scaffold template the same
+way. Templates were the one artifact type still forced onto a separate channel.
+## The Fix
+Both commands now accept an `oci://` source directly, pulled through the same client Atmos
+already uses for `atmos vendor pull` and just-in-time component provisioning. Authentication
+follows the identical precedence: Docker credentials from `docker login`, then
+`ATMOS_GITHUB_TOKEN` for `ghcr.io`, then anonymous — nothing new to configure if OCI sources are
+already working elsewhere in the project.
+## How to Use It
+Point either command at an OCI reference the same way you would a git URL:
+```shell
+atmos scaffold generate oci://ghcr.io/example/templates:v1.0.0 ./components/terraform/vpc
+atmos init oci://ghcr.io/example/templates:v1.0.0 ./my-project
+```
+A version lives directly in the reference (`:v1.0.0`), the same way an OCI vendor source is
+pinned — there's no separate `--ref` flag to learn for this case, since that flag only ever
+applied to git sources. `--update`'s three-way merge, `--git`/`--no-git`, and `--base-ref` all
+work exactly as they already do for every other source type: the merge base always comes from
+the generated project's own git history, never from re-fetching the template, so switching a
+template to OCI changes nothing about how updates behave.
+A `scaffold.templates` entry in `atmos.yaml` can point at an `oci://...` source too, right
+alongside existing git-hosted entries.
+## Get Involved
+[Open an issue](https://github.com/cloudposse/atmos/issues) with feedback, or let us know what
+registry you're publishing scaffold templates to.

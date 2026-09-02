@@ -2,7 +2,7 @@
 # trixie (glibc 2.41) is required so PyInstaller-bundled tools installed via the
 # Atmos toolchain — notably Checkov, which needs GLIBC_2.38+ — can load their
 # frozen Python runtime. bookworm (glibc 2.36) fails with a missing-version error.
-FROM debian:trixie-slim@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258
+FROM debian:trixie-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132
 
 # Define the arguments for the Atmos version and target platform.
 ARG TARGETPLATFORM
@@ -22,6 +22,11 @@ RUN if [ -z "$ATMOS_VERSION" ]; then echo "ERROR: ATMOS_VERSION argument must be
 SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
 
 RUN set -ex; \
+    # Disable APT recommends globally (not just on our own invocations) so the
+    # piped install-opentofu.sh script below -- which runs its own internal
+    # `apt-get install tofu` we don't control the flags of -- inherits the
+    # same no-recommends policy instead of silently pulling extras in.
+    echo 'APT::Install-Recommends "false";' > /etc/apt/apt.conf.d/99-no-recommends; \
     # Update the package list
     apt-get update; \
     # Install runtime dependencies required by Atmos-managed tools.
@@ -38,7 +43,7 @@ RUN set -ex; \
     # effect for the standalone install method), so pin the package version
     # explicitly after.
     curl -1sSLf 'https://raw.githubusercontent.com/opentofu/get.opentofu.org/3d354dfa62d9a36f33df16cdd6bb506ace1e6e2e/static/install-opentofu.sh' | bash -s -- --root-method none --install-method deb; \
-    apt-get install -y --allow-downgrades tofu=1.12.6; \
+    apt-get install -y --no-install-recommends --allow-downgrades tofu=1.12.6; \
     # Install Kustomize binary (required by Helmfile).
     # Direct download instead of install_kustomize.sh which has known bugs (kubernetes-sigs/kustomize#5562).
     KUSTOMIZE_VERSION=5.8.1; \
@@ -74,3 +79,7 @@ RUN case ${TARGETPLATFORM} in \
     echo "Downloading Atmos v${ATMOS_VERSION#v} for ${OS}/${ARCH}" && \
     curl -1sSLf "https://github.com/cloudposse/atmos/releases/download/v${ATMOS_VERSION#v}/atmos_${ATMOS_VERSION#v}_${OS}_${ARCH}" -o /usr/local/bin/atmos && \
     chmod +x /usr/local/bin/atmos
+
+# Confirms the atmos binary itself is present and runnable; this image has no
+# long-running daemon to probe.
+HEALTHCHECK CMD ["atmos", "version"]
