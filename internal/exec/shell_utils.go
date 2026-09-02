@@ -373,9 +373,12 @@ func ExecuteShellCommand(
 		if cfg.stderrCapture != nil {
 			extraStderrWriters = append(extraStderrWriters, cfg.stderrCapture)
 		}
-		if cfg.execMetadataStderrCapture != nil {
-			extraStderrWriters = append(extraStderrWriters, cfg.execMetadataStderrCapture)
-		}
+		// Note: cfg.execMetadataStderrCapture is intentionally NOT appended here.
+		// stdout already includes cfg.execMetadataStdoutCapture (see above), and
+		// maskedStderr writes through stdout, so also appending
+		// execMetadataStderrCapture would duplicate this stderr content into
+		// combineExecMetadataOutput's stderr buffer alongside the copy already
+		// captured via stdout.
 		if len(extraStderrWriters) > 1 {
 			stderr = io.MultiWriter(extraStderrWriters...)
 		} else {

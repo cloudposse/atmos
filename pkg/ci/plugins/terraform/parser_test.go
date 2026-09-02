@@ -621,6 +621,7 @@ func TestParseApplyOutput(t *testing.T) {
 		create          int
 		change          int
 		destroy         int
+		replace         int
 		wantCreatedRes  []string
 		wantUpdatedRes  []string
 		wantDeletedRes  []string
@@ -713,9 +714,10 @@ random_id.id: Creation complete after 0s [id=lZlJAXQo6DA]
 Apply complete! Resources: 1 added, 0 changed, 1 destroyed.
 `,
 			hasChanges:      true,
-			create:          1,
+			create:          0,
 			change:          0,
-			destroy:         1,
+			destroy:         0,
+			replace:         1,
 			wantReplacedRes: []string{"random_id.id"},
 		},
 	}
@@ -732,6 +734,7 @@ Apply complete! Resources: 1 added, 0 changed, 1 destroyed.
 				assert.Equal(t, tt.create, data.ResourceCounts.Create, "Create count mismatch")
 				assert.Equal(t, tt.change, data.ResourceCounts.Change, "Change count mismatch")
 				assert.Equal(t, tt.destroy, data.ResourceCounts.Destroy, "Destroy count mismatch")
+				assert.Equal(t, tt.replace, data.ResourceCounts.Replace, "Replace count mismatch")
 
 				if len(tt.wantCreatedRes) > 0 {
 					assert.ElementsMatch(t, tt.wantCreatedRes, data.CreatedResources, "CreatedResources mismatch")

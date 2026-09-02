@@ -36,8 +36,9 @@ doesn't disappear silently.
 
 ## How to Use It
 
-There's nothing to turn on. If Atmos Pro is already configured and Atmos is running in
-CI, execution records start flowing immediately.
+There's nothing to turn on. If Atmos Pro is already configured and Atmos is running in a
+recognized CI environment with the usual CI prerequisites in place, execution records
+start flowing immediately — not every CI provider is supported yet.
 
 The only knob is how long a critical command (`terraform plan`, `terraform apply`,
 `describe affected`) is willing to wait for Atmos Pro to confirm it received the record

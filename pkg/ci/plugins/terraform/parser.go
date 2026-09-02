@@ -546,6 +546,15 @@ func reconcileApplyReplacements(data *plugin.TerraformOutputData) {
 		deletedOnly = append(deletedOnly, addr)
 	}
 	data.DeletedResources = deletedOnly
+
+	// Keep ResourceCounts consistent with the reconciled resource lists: each
+	// reconciled pair was originally counted as one create and one delete, but
+	// now represents a single replace action.
+	for range replaced {
+		data.ResourceCounts.Create--
+		data.ResourceCounts.Destroy--
+		data.ResourceCounts.Replace++
+	}
 }
 
 // ParseDestroyOutput parses terraform destroy stdout.
