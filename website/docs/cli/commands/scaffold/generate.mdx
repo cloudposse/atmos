@@ -49,13 +49,21 @@ atmos scaffold generate terraform-component ./components/terraform/vpc \
 ## Template Sources
 
 Select an embedded template, a template declared under `scaffold.templates` in `atmos.yaml`, or a
-local/remote source. A source can be pinned with `--ref` to make a release, tag, or commit explicit.
+local/remote source — git, HTTPS, S3, or an OCI registry reference. A git source can be pinned
+with `--ref` to make a release, tag, or commit explicit; `--ref` has no effect on OCI/S3/local
+sources, which address a specific version through the source string itself.
 
 ```shell
 atmos scaffold list
 atmos scaffold generate ./scaffolds/terraform-component ./components/terraform/vpc
 atmos scaffold generate https://github.com/example/platform-templates.git ./output --ref v1.2.0
+atmos scaffold generate oci://ghcr.io/example/templates:v1.0.0 ./components/terraform/vpc
 ```
+
+An OCI source is pulled the same way `atmos vendor pull` fetches OCI-hosted components —
+authentication uses the same precedence (Docker keychain, then `ATMOS_GITHUB_TOKEN` for
+`ghcr.io`, then anonymous); see [Vendor URL Syntax](/vendor/url-syntax#oci-syntax) for
+details.
 
 ## Template Configuration
 

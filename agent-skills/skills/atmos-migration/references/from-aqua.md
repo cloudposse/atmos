@@ -6,9 +6,11 @@ feature reference, see [atmos-toolchain](../../atmos-toolchain/SKILL.md).
 
 ## Overview
 
-The Atmos toolchain reimplements the Aqua registry YAML schema with its own parser. It does not
-use the Aqua Go SDK. The toolchain understands the same `pkgs/` registry format as Aqua. However,
-the toolchain supports only a **subset** of the schema. It is **not** a full reimplementation.
+Aqua is a tool-version manager and a CLI. Its config file is `aqua.yaml`. Atmos does not run the
+Aqua CLI and does not read `aqua.yaml`. Atmos reuses only the Aqua **registry** data format: the
+`pkgs/` package listings the Aqua CLI also reads. The Atmos toolchain reimplements that registry
+YAML schema with its own parser. It does not use the Aqua Go SDK. However, the toolchain supports
+only a **subset** of the schema. It is **not** a full reimplementation.
 
 Migration is mechanical for plain GitHub-release packages. Migration is not purely mechanical for
 packages that use the schema features listed in Functional Gaps below. Check each package against
@@ -37,7 +39,7 @@ verification.
 ```yaml
 # atmos.yaml
 toolchain:
-  use_lock_file: true
+  use_lock_file: true # Explicit here; only required if you pin an edition before 2026-08-05.
   registries:
     - name: aqua
       type: aqua
@@ -57,8 +59,12 @@ jqlang/jq 1.7.1
 ```bash
 atmos toolchain install
 ```
-Atmos also generates a lock file when you set `use_lock_file: true`. By default, Atmos writes it
-as `toolchain.lock.yaml` under the toolchain install path. Set `toolchain.lock_file` to choose a
+Atmos also generates a lock file. Whether it does so automatically depends on the project's
+edition. An unpinned project, or one anchored to an edition on or after `2026-08-05`, gets
+`use_lock_file: true` as its default. No configuration is needed. A project whose `atmos.yaml`
+pins an edition dated before `2026-08-05` keeps the old default, `false`, and must set
+`toolchain.use_lock_file: true` explicitly. By default, Atmos writes the lock file as
+`toolchain.lock.yaml` under the toolchain install path. Set `toolchain.lock_file` to choose a
 different path, for example a repo-relative path you can commit. This file records the resolved
 version and checksum for each tool. It serves the same purpose as `aqua-checksums.json`.
 
@@ -67,9 +73,12 @@ version and checksum for each tool. It serves the same purpose as `aqua-checksum
 1. **Mirror the registry.** Map Aqua's `type: standard` registry with a `ref:` pin to a
   `toolchain.registries` entry of `type: aqua`. Set `source` to
   `https://github.com/aquaproj/aqua-registry/pkgs`. Set `ref` to the same tag Aqua pinned. Atmos
-  resolves the pin through the separate `ref` field, not through the URL path. If `aqua.yaml` used
-  a private or custom registry, add it as a second `type: aqua` registry entry. Use a `file://` or
-  GitHub `source` for this entry. Set its `priority` higher than the public registry.
+  resolves the pin through the separate `ref` field, not through the URL path. Atmos accepts `ref`
+  only when `source` is a `github.com` URL. If `aqua.yaml` used a private or custom registry
+  (including one declared with Aqua's `type: github_content`), add it as a second `type: aqua`
+  registry entry. Use a `file://` or GitHub `source` for this entry. Set its `priority` higher
+  than the public registry. Pin `ref` to a tag or commit SHA, not a branch. A branch such as `main`
+  is mutable and can change what installs without any change to `atmos.yaml`.
 2. **Convert each plain package.** For a `packages:` entry with no unusual fields, run
   `atmos toolchain add owner/repo@version`. You can also hand-write the `.tool-versions` line.
   Both methods produce the same result.
@@ -82,7 +91,12 @@ version and checksum for each tool. It serves the same purpose as `aqua-checksum
   `use_lock_file: true` to also record resolved versions and checksums in `toolchain.lock.yaml`,
   for the same reproducibility `aqua-checksums.json` provides.
 5. **Verify the migration.** Run `atmos toolchain install`, then run `atmos toolchain list`.
-  Confirm the resolved versions match what `aqua list` reported before.
+  Confirm the resolved versions match what `aqua list` reported before. If you added a custom
+  registry, confirm Atmos actually used it. A registry entry that cannot resolve a tool fails
+  silently: Atmos falls back to the built-in public registry instead of raising an error. For a
+  tool that also exists publicly, this produces no visible symptom, just the wrong source. Run
+  `atmos toolchain install --reinstall` with `logs.level: Debug` set in `atmos.yaml`, and confirm
+  the log shows the tool resolved from your configured registry, not the public fallback.
 
 ## Command Mapping
 
@@ -93,6 +107,7 @@ version and checksum for each tool. It serves the same purpose as `aqua-checksum
 | `aqua g -i` (generate + insert into `aqua.yaml`) | `atmos toolchain add owner/repo@version` (writes to `.tool-versions`) |
 | `aqua list` | `atmos toolchain list` |
 | `aqua which terraform` | `atmos toolchain which terraform` |
+| `aqua info hashicorp/terraform` | `atmos toolchain info terraform` (registry metadata for one tool) |
 | `aqua exec -- terraform plan` | `atmos toolchain exec terraform@<version> -- plan` (direct third-party use only). `atmos terraform plan` already resolves the toolchain automatically. Do not wrap it in `atmos toolchain exec`. |
 | `aqua update-checksum` | No separate command. `toolchain.verification` handles this automatically at install time. |
 
@@ -169,6 +184,8 @@ from the "Unsupported Aqua Features" list in [atmos-toolchain](../../atmos-toolc
 |---|---|---|
 | `go_build` package type | Not implemented. Atmos does not build tools from source. | Use a pre-built release if the project publishes one. Add it via a `type: atmos` inline registry. |
 | `cargo` package type | Not implemented. Atmos has no Cargo or crates.io installer. | No direct equivalent exists. Source the binary another way. |
+| `go_install` package type | Not implemented. Atmos does not run `go install`. | Use a pre-built release if the project publishes one. Add it via a `type: atmos` inline registry. |
+| `aqua-policy.yaml` / `AQUA_POLICY_CONFIG` | Atmos has no trust or policy-gating step. Aqua uses its policy file to control which configs and registries a user trusts, because some Aqua package types run arbitrary build or install scripts. Atmos supports only package types that download a pre-built asset directly, so it never runs an install script and needs no matching trust step. | None needed. Drop the policy file. |
 | `version_filter` | Atmos does not support this Aqua registry field. Aqua uses it to filter candidate GitHub tags before version resolution. | Pin an exact, already-known-good version in `.tool-versions`. |
 | `version_expr` / `version_expr_prefix` | Atmos does not support version-string manipulation through an expression. | Pin an exact version. |
 | `go_version_file` | Atmos does not support reading a version from a Go source file. | Pin the version explicitly in `.tool-versions`. |

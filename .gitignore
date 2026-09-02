@@ -144,9 +144,10 @@ TEST_QUALITY_*.md
 /lintroller
 /.lintroller
 tools/lintroller/.lintroller
+tools/gomodcheck/.gomodcheck
 .golangci/lintroller/lintroller
 /custom-gcl
-tools/gomodcheck/.gomodcheck
+tools/noticegen/noticegen
 
 # golangci-lint per-worktree cache + lock isolation (see
 # magefiles/mage_lint_golangci_run.go). The cache is large (100MB+); .golangci-tmp

@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "Migrating to Atmos from existing IaC: techniques, tactics, and design patterns for native Terraform, Terraform Workspaces, and Terramate — minimum-disruption paths, file-layout options, workspace mapping, tag/generate_hcl/script decomposition, and the remote-state bridge for progressive migration. This skill also explains how to move from asdf, aqua, tfenv, tofuenv, tenv, or a Homebrew Brewfile to the Atmos toolchain."
+description: "Migrating to Atmos from existing IaC: techniques, tactics, and design patterns for native Terraform, Terraform Workspaces, and Terramate — minimum-disruption paths, file-layout options, workspace mapping, tag/generate_hcl/script decomposition, and the remote-state bridge for progressive migration. This skill also explains how to move from asdf, aqua, tfenv, tofuenv, tenv, mise, or a Homebrew Brewfile to the Atmos toolchain."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -17,6 +17,7 @@ references:
   - references/from-tofuenv.md
   - references/from-tenv.md
   - references/from-homebrew-brewfile.md
+  - references/from-mise.md
 ---
 
 # Migrating to Atmos
@@ -27,6 +28,10 @@ This skill is the agent's decision guide for migrating an existing Terraform rep
 Atmos is designed to **adopt an existing repo without forcing a reorganization** -- the canonical
 `components/terraform/` layout is a recommendation, not a requirement. Lead with the minimum
 change that delivers value, then escalate only as the user's needs grow.
+
+This skill also covers migrating CLI tool-version management from asdf, aqua, tfenv, tofuenv,
+tenv, mise, or a Homebrew Brewfile to the Atmos toolchain -- see
+[Replace a Tool-Version Manager](#replace-a-tool-version-manager) below.
 
 For full prose tutorials aimed at end users, link to:
 
@@ -87,6 +92,10 @@ different reference:
 | Need to read outputs from un-migrated TF (legacy or another repo)    | [remote-state-bridge.md](references/remote-state-bridge.md) |
 | `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
 
+This table covers only the IaC-layout shape. If the user's question is instead about a
+tool-version manager (asdf, aqua, tfenv, tofuenv, tenv, mise, or a Homebrew Brewfile), skip this
+table and go to [Replace a Tool-Version Manager](#replace-a-tool-version-manager) below.
+
 The remote-state-bridge pattern is what makes **progressive, component-by-component migration**
 possible. Without it, a team is forced into a big-bang cutover. Cover it any time the user has
 existing Terraform state they need to read from new Atmos components.
@@ -96,8 +105,9 @@ existing Terraform state they need to read from new Atmos components.
 This section covers a topic separate from the IaC-layout question above. A user can migrate the
 Terraform or OpenTofu layout, the tool-version manager, or both. Each choice is independent.
 
-If the user currently pins CLI tool versions with asdf, aqua, tfenv, tofuenv, tenv, or a Homebrew
-Brewfile, use the matching reference below. Do not write a new config translation by hand.
+If the user currently pins CLI tool versions with asdf, aqua, tfenv, tofuenv, tenv, mise, or a
+Homebrew Brewfile, use the matching reference below. Do not write a new config translation by
+hand.
 
 | Current tool               | Reference                                                          |
 |-----------------------------|---------------------------------------------------------------------|
@@ -106,17 +116,20 @@ Brewfile, use the matching reference below. Do not write a new config translatio
 | tfenv                       | [from-tfenv.md](references/from-tfenv.md)                           |
 | tofuenv                     | [from-tofuenv.md](references/from-tofuenv.md)                       |
 | tenv                        | [from-tenv.md](references/from-tenv.md)                             |
+| mise                        | [from-mise.md](references/from-mise.md)                             |
 | Homebrew Brewfile           | [from-homebrew-brewfile.md](references/from-homebrew-brewfile.md)   |
 
 Each reference includes a command-mapping table. This table shows the old tool's commands next to
 the equivalent Atmos toolchain command. Use it to translate familiar commands directly.
 
-Each reference also includes a Shell Integration section. Most tools that a user migrates from add
-themselves to every shell automatically. asdf, aqua, tfenv, tofuenv, and tenv do this through a
-shim or proxy on `PATH`. The shim or proxy re-resolves the nearest per-directory config file on
-every invocation. Homebrew works a different way. `brew shellenv` puts one global `bin` directory
-on `PATH`. It has no per-directory resolution. Either way, the Atmos toolchain does not add itself
-to `PATH` by default. The Atmos toolchain resolves tools only while an `atmos <subcommand>` runs.
+Each reference also includes a Shell Integration section, or an equivalent set of shell-activation
+steps for references that use a different section layout. Most tools that a user migrates from add
+themselves to every shell automatically. asdf, aqua, tfenv, tofuenv, tenv, and mise do this through
+a shim or proxy on `PATH`, or an activation hook. The shim, proxy, or hook re-resolves the nearest
+per-directory config file on every invocation. Homebrew works a different way. `brew shellenv` puts
+one global `bin` directory on `PATH`. It has no per-directory resolution. Either way, the Atmos
+toolchain does not add itself to `PATH` by default. The Atmos toolchain resolves tools only while
+an `atmos <subcommand>` runs.
 
 A user can still get the old shell experience back, where a plain `terraform` command works in any
 shell. This is a supported feature, not a missing feature. To enable it, add a wrapped form of
@@ -261,3 +274,5 @@ Things to push back on if a user (or another agent) proposes them during migrati
 - [References/from-homebrew-brewfile.md](references/from-homebrew-brewfile.md): steps to move the
   CLI-tool part of a Brewfile to the Atmos toolchain. Includes the partial-scope rules, a command
   mapping, and shell integration steps.
+- [References/from-mise.md](references/from-mise.md): steps to move tool versions, tasks, and env
+  vars from mise to the Atmos toolchain. Includes a command mapping and shell integration steps.
