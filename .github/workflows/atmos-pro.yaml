@@ -77,7 +77,7 @@ jobs:
 
       # Generate NOTICE file on all PRs to ensure it stays up-to-date
       - name: Generate NOTICE file
-        run: ./scripts/generate-notice.sh
+        run: go tool mage notice:generate
 
       # Format HCL files in test fixtures and examples
       - name: Format HCL
