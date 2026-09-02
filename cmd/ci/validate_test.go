@@ -94,7 +94,15 @@ func TestWorkflowValidationErrorOwnsDiagnostics(t *testing.T) {
 	assert.ErrorIs(t, validationErr, errWorkflowValidationFailed)
 	assert.Equal(t, 1, errUtils.GetExitCode(validationErr))
 
-	rendered := errUtils.Format(validationErr, errUtils.DefaultFormatterConfig())
+	// MaxLineLength: 0 (DefaultFormatterConfig's zero value) auto-detects from the
+	// terminal, which varies across CI runners/local dev and can wrap "GitHub
+	// Actions workflow validation failed" onto two lines right where the substring
+	// check below expects it on one -- pin a width wide enough that this short
+	// message never wraps, so the assertion is deterministic regardless of the
+	// environment's detected terminal width.
+	cfg := errUtils.DefaultFormatterConfig()
+	cfg.MaxLineLength = 200
+	rendered := errUtils.Format(validationErr, cfg)
 	assert.Contains(t, rendered, "GitHub Actions workflow validation failed")
 	assert.Contains(t, rendered, "actionlint-style diagnostic")
 }

@@ -451,3 +451,216 @@ passes finished (`cmd/list` under `-race` takes ~90-110s per single pass locally
 passes need a longer timeout than 300s) and produced no result, passing or failing — the goroutine dump it
 printed was ordinary `t.Parallel()` tests waiting their turn, not a deadlock, but the run itself proves
 nothing either way and would need to be rerun with a longer timeout to count as evidence.
+
+## Round 9 addendum
+
+Two more shuffle-order bugs were fixed alongside Round 9's `cmd/list` root cause, in the same commit, since
+they surfaced in the same CI log and follow the identical pattern:
+
+- **`cmd/describe_workflows_test.go`'s `TestDescribeWorkflows`** panicked with `workflows flag redefined:
+  pager`. The test unconditionally calls `describeWorkflowsCmd.Flags().StringP("pager", ...)`; `--pager` is
+  also a `RootCmd` persistent flag, and cobra's `mergePersistentFlags()` (itself `Lookup`-guarded, unlike a
+  raw `StringP`/`AddFlag` call) merges it into `describeWorkflowsCmd`'s local `FlagSet` the first time some
+  *other* test drives the command through the full `Execute()` pipeline. Under `-shuffle=on`, if that other
+  test runs first, the flag already exists and the direct `StringP` call panics. Fixed by guarding it with a
+  `Lookup` check first, matching `AddFlagSet`'s own safety.
+- **`pkg/auth/manager_test.go`'s `TestManager_Whoami_FallbackAuthenticationFails`** expected an authentication
+  failure but got a *success* result with credentials from a completely different test's provider.
+  `pkg/auth/manager_chain.go`'s `processCredentialCache` (a package-level `sync.Map`, intentionally
+  process-scoped so it doesn't hold data across separate CLI invocations) was never reset between tests that
+  reuse the same provider/identity names (`"p"`/`"dev"`, used throughout this file) — a passing test's cached
+  credentials leaked into a later test asserting failure. Fixed by adding `resetProcessCredentialCache()` +
+  `t.Cleanup(resetProcessCredentialCache)` to the 11 `TestManager_Whoami*`/`TestManager_Authenticate*` tests
+  that build a `manager` and call `Authenticate`/`Whoami`/`AuthenticateProvider`, matching the pattern already
+  used in this package's other test files (`manager_chain_process_cache_test.go`,
+  `manager_ambient_provider_test.go`, `manager_chain_ambient_test.go`).
+- **`cmd/terraform/cache/mirror_test.go`'s `TestMirrorCmdRunSingle`** expected `Options.All == false` but got
+  `true`. `TestMirrorCmdRunAll` (a sibling test) passes `--all`, which cobra parses onto the package-level
+  `mirrorCmd`'s own `--all` flag with `Changed = true`; `Options.All` is read via `v.GetBool("all")` (viper's
+  flag binding, which honors `Changed`, not just the flag's default), so a later test that never passes
+  `--all` still observed `All = true` if it ran after `TestMirrorCmdRunAll` under `-shuffle=on`. Fixed by
+  capturing the flag's original value and `Changed` state before `TestMirrorCmdRunAll` mutates it, and
+  restoring both (not just the value) in cleanup — the same pattern CodeRabbit flagged for
+  `cmd/ai/skill/uninstall_test.go`'s `force` flag in this same PR's review.
+
+## Round 10 (seven more independent fixes, including one production crash bug)
+
+The push containing Round 9's fixes produced a new CI run (`33574641692`) with nine `--- FAIL` entries. The
+Round 9 addendum fixes above were confirmed resolved (none of those three tests appear in this run's failure
+list). Two of the nine need a real `tofu`/`packer` binary the race job's runner doesn't install —
+`TestPackerValidateCmd` was already a documented pre-existing gap; `TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly`
+passed in isolation and across several full-package `-shuffle=on` local reruns (even with `tofu`/`terraform`
+removed from `PATH`, which would make an erroneous invocation loud), so its CI-only failure could not be
+reproduced or root-caused locally — left open below rather than force a guess-fix. `TestContextWriteRecordsMaskedOutput`
+is also left open below: it did not reproduce locally, and its adjacent CI log line looks like unrelated
+output interleaved from a concurrently-running package's own test binary rather than genuine contamination
+of its own captured stdout. The other six were root-caused and fixed. (A separate CI run, `33576003604`, for
+the commit that already contained Round 9's fixes but not yet this round's, independently re-confirmed two of
+these: `TestInstallCmd_RunE_AlreadyInstalledOmitsLocationWhenNothingInstalled` reappeared, and its sibling
+`TestUserIdentity_LoadCredentials` hit the exact same `us-east-2` symptom as `TestPermissionSetIdentity_LoadCredentials`
+below, confirming the `setupAWSEnv` fix covers more than the one test that first exposed it.)
+
+- **`pkg/auth/identities/aws/permission_set_test.go`'s `TestPermissionSetIdentity_LoadCredentials`** expected
+  region `us-east-1` (from its own written SSO config file) but got `us-east-2`. Root cause in production
+  code: `pkg/auth/identities/aws/credentials_loader.go`'s `setupAWSEnv` only added `AWS_REGION` to the
+  save/restore map when the identity resolved a non-empty region, so when it didn't (this test's identity has
+  no configured region), any ambient `AWS_REGION` left over from an *earlier* identity's credential load in
+  the same process was never cleared, and the AWS SDK gives an explicit env var precedence over the shared
+  config file's per-profile region. Fixed by always tracking `AWS_REGION` in `setupAWSEnv`'s save/restore map
+  and explicitly `os.Unsetenv`-ing it when the resolved region is empty, instead of leaving it untouched —
+  this is a real production correctness fix, not just a test-isolation one: region resolution must not depend
+  on whichever other identity's credentials were loaded earlier in the process.
+- **`pkg/auth/identities/azure/subscription_test.go`'s `TestSubscriptionIdentity_PostAuthenticate`** expected
+  `credentials.json` under a sandboxed `HOME` but got "no such file or directory". `pkg/config/homedir` caches
+  the resolved home directory across calls; the test sandboxes `HOME` via `t.Setenv` but never called
+  `homedir.Reset()` + `homedir.DisableCache = true`, so a prior test's cached (real) home directory could
+  outlive the `t.Setenv` and `SetupFiles` would write somewhere other than the test's temp dir. Fixed with the
+  same `homedir.Reset()`/`DisableCache`/cleanup pattern already used in `cmd/ai/skill/uninstall_test.go`.
+- **`pkg/generator/generator_test.go`'s `TestGenerate`** ("runs single generator by name" subtest) failed with
+  `generator not found: single` immediately after the subtest assigned that exact generator into the
+  package-level `registry` var. Root cause: `GetRegistry()` lazily initializes `registry` via `sync.Once`
+  (`registryOnce`) on its first-ever call in the whole test binary process. Several tests in this file
+  (`TestGeneratorRegistry`, `TestGenerateAll`, `TestGenerate`, ...) assign `registry` directly and then call a
+  function (`Register`, `Generate`, `GenerateAll`) that reaches `GetRegistry()` internally; if that call is the
+  first `GetRegistry()` call in the process, the `Once` fires there and silently overwrites the test's
+  manually-assigned registry with a fresh empty one, discarding whatever it just registered. Fixed with a
+  package-level `init()` in the test file that calls `GetRegistry()` once, before any test runs, so the
+  `Once` is always already settled.
+- **`cmd/ci/validate_test.go`'s `TestWorkflowValidationErrorOwnsDiagnostics`** expected the rendered error to
+  contain the literal string `"GitHub Actions workflow validation failed"` but it didn't. Root cause:
+  `errUtils.DefaultFormatterConfig()`'s `MaxLineLength` is `0`, which auto-detects wrapping width from the
+  terminal; the race job's CI runner apparently detects a narrower width than local dev, which wrapped
+  "validation" and "failed" onto separate lines, breaking the single-line substring match. Fixed by pinning
+  `MaxLineLength: 200` in this test (wide enough that this short message never wraps), matching the existing
+  precedent of pinning a fixed width in `errors/examples_test.go` and `errors/formatter_test.go` rather than
+  relying on auto-detection in a test assertion.
+- **`cmd/root_help_routing_test.go`'s `TestRootHelpFunc_RealTree_UnknownSubcommandErrors`** ("toolchain
+  versions --help" case) expected an "Unknown command" error but got silent success (no panic, exit 0, empty
+  output). Root cause: `TestRootHelpFunc_RealTree_ValidCasesStillRenderHelp` (a sibling test in the same file)
+  genuinely invokes `atmos toolchain --help` through the real `RootCmd` tree, which cobra parses onto
+  `toolchain`'s own `--help` flag; `NewTestKit` does not reach nested subcommands' flags (only `RootCmd`'s
+  own), so that flag stayed `true` afterward. Cobra's `execute()` checks `helpVal, _ :=
+  c.Flags().GetBool("help")` on *every* call regardless of that call's own args — the same
+  leaked-`--help`-flag mechanism already fixed for `cmd/init` and `cmd/scaffold` earlier in this incident, this
+  time on `cmd/toolchain`. Fixed by resetting the invoked command's (and its child's, where applicable)
+  `--help` flag in both this test and its sibling.
+- **`cmd/ai/skill/install_test.go`'s `TestInstallCmd_RunE_AlreadyInstalledOmitsLocationWhenNothingInstalled`**
+  expected "0 skills installed" on a second run against an already-populated fake `HOME`, but got "52 skills
+  updated successfully" — and its sibling `TestInstallCmd_RunE_NoArgsInstallsEveryBundledSkill` intermittently
+  failed the opposite way, missing "skills installed successfully in" from its output. Both tests'
+  `resetFlags` closures only reset `yes` (and, inconsistently, sometimes `force`) via a direct
+  `flag.Value.Set("false")` call, which does *not* clear `Changed` (only `Flags().Set` does) and left every
+  other flag `installCmd` registers (`path`, `client`, `all-clients`, `scope`, `global`) completely untouched.
+  `installCmd` is a package-level singleton; a later test in this same file leaking any of those flags'
+  `Changed` state changed which skills the next test's run considered already-installed or where it
+  distributed them. This file already had the correct pattern established elsewhere
+  (`resetFlagChangedForTest`, used by `TestInstallCmd_RunE_PathWithClientWarns` and its sibling) but these two
+  older tests predated it. Fixed by adding a `resetInstallCmdFlagsForTest` helper that resets every flag
+  `installCmd` registers via the existing `resetFlagChangedForTest`/`resetStringSliceFlagForTest` helpers, and
+  using it in both tests.
+
+A seventh fix, found while running the full local suite once with the exact CI command
+(`go test -race -shuffle=on $(go list ./... | grep -v '^github.com/cloudposse/atmos/tests') -timeout 20m`),
+is a genuine **production crash bug**, not just test isolation:
+
+- **`internal/tui/utils/utils.go`'s `PrintStyledText`/`PrintStyledTextToSpecifiedOutput`** (used by the
+  `atmos version` banner and help templates) call `figurine.Write`, which renders via
+  `github.com/common-nighthawk/go-figure` in *strict* mode (hardcoded `true` inside figurine, not
+  configurable from Atmos's side). Strict mode's `Slicify` calls `log.Fatal("invalid input.")` — a hard,
+  unrecoverable `os.Exit`, not a returned error — on the first character outside printable ASCII (`' '`
+  through `'~'`), which includes a plain `'\n'`. Any styled text containing a newline or control character,
+  rendered while color is enabled (`--force-color`, `FORCE_COLOR`, `CLICOLOR_FORCE`, or auto-detected color
+  support), crashes the whole `atmos` process instead of erroring gracefully. `internal/tui/utils/utils_test.go`'s
+  own `TestPrintStyledText`/`TestPrintStyledTextToSpecifiedOutput` tables already covered "multiline text" and
+  "text with special characters" cases expecting `wantErr: false`, so this was a real, if narrow, latent
+  crash — masked locally because it only reproduces when the color-support path is actually taken (this
+  environment's terminal-color auto-detection is not fully deterministic across otherwise-identical runs, so
+  the crash surfaced intermittently rather than every time even before this fix). Fixed with a
+  `sanitizeForFigurine` helper that replaces out-of-range characters with `'?'` before calling
+  `figurine.Write`, mirroring go-figure's own non-strict fallback behavior (`figure.go`'s `Slicify`: `else {
+  char = '?' }`) since figurine's strict flag itself can't be turned off from here. Verified directly: forcing
+  `viper.Set("force-color", true)` and calling `PrintStyledTextToSpecifiedOutput` with `"Line1\nLine2\nLine3"`
+  now renders successfully instead of crashing.
+
+Validation for all seven: `go build ./...`, `go vet ./...` — clean. `./custom-gcl run
+--new-from-rev=origin/main` — 0 issues. Each fixed package's own tests pass across 3–15 `-race -shuffle=on`
+reruns locally (`pkg/auth/identities/aws`, `pkg/auth/identities/azure`, `pkg/generator`, `cmd/ci`, `cmd`,
+`cmd/ai/skill`, `internal/tui/utils`). A full local run of the exact CI command across the entire package
+set (minus `tests/`, `-timeout 20m`) completed with 390 of 391 testable packages passing; the one failure was
+`internal/tui/utils` before this round's fix, now also passing across 15 reruns.
+
+## Follow-ups
+
+- `pkg/io/recorder_test.go`'s `TestContextWriteRecordsMaskedOutput` failed once in CI with
+  `recorder received unmasked output`, and the failing CI log's very next line (unindented, not part of the
+  test framework's own `--- FAIL` output block) is a `WARN Skipping invalid mask pattern from atmos.yaml`
+  line whose exact pattern (`[invalid(`) matches a completely unrelated table-driven case in
+  `pkg/io/masker_test.go`, which builds its own fully-isolated masker and config and cannot reach this
+  test's global state. Did not reproduce across 5 local `-race -shuffle=on` reruns of the whole `pkg/io`
+  package. Most likely explanation: the CI log aggregates multiple concurrently-running `go test` package
+  processes' stdout, and that adjacent line is simply interleaved output from a different package's test
+  binary, not genuine contamination of this test's own `os.Stdout`-redirecting pipe — but this wasn't
+  confirmed, so treat the failure itself (not the theory) as still open. If it recurs, capture the CI log
+  with `##[group]`/timestamps intact (this repo's log fetch already includes per-line timestamps) and check
+  whether the `pkg/io` package's own timestamp range genuinely contains that warning line, or whether it
+  falls in a different package's timestamp window.
+- `cmd/terraform/migrate`'s `TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly` failed once in CI with
+  `exec: "tofu": executable file not found in $PATH`, even though the test's own comment states it must
+  succeed "without ever needing a real tfmigrate/opentofu binary." It passed in isolation and across several
+  full-package `-shuffle=on` reruns locally, including with `tofu`/`terraform` removed from `PATH` (which
+  would surface an erroneous invocation immediately rather than mask it) — not reproducible locally after
+  reasonable effort. Left open; if it recurs, capture the exact `-shuffle` seed from the failing CI run and
+  retry with that seed plus the full, unfiltered package (not `-run`-narrowed, per Round 9's lesson that
+  narrowing changes the deterministic order).
+- `pkg/provisioner/provisioner_test.go`'s `TestAutoProvisionBackendWritesWarningsToOutputWriter` fails
+  deterministically when run in isolation (`-run <name>`), with or without `-race`/`-shuffle`, and identically
+  with every change from this whole incident stashed out (verified against the exact commit already on
+  `origin` before this round). It passes when the full `pkg/provisioner` package runs unfiltered (both local
+  full-suite runs in this round show it passing), so some other test in that package incidentally provides
+  setup this test is missing on its own — a real test-hygiene gap, but not one that affects the actual CI
+  race job (which always runs full packages, never `-run`-narrowed) or this incident. Not fixed here.
+- `cmd/root_test.go`'s `TestApplyCIGitCloneBootstrap_CICloneExplicitFalseOptsOut` and
+  `TestApplyCIGitCloneBootstrap_NoCIProviderDetected` failed in a full local `-race -shuffle=on` run of the
+  entire package set with `atmosConfig.CI.Enabled` unexpectedly `true` (`assert.False` on that field, not on
+  `applied` or `tmpConfig.CI.Enabled`, which both passed). `applyCIGitCloneBootstrap` (`cmd/root.go`) only
+  ever sets the package-level `atmosConfig.CI.Enabled = true` on its "bootstrap applied" branch — the branch
+  these two tests exercise returns early without touching it — so `atmosConfig.CI.Enabled` was already `true`
+  *before* either test ran. All three tests that call `applyCIGitCloneBootstrap` directly correctly wrap
+  themselves in `saveRestoreAtmosConfig(t)` (save-before/restore-after, not reset-to-clean), so the leak's
+  source is some *other* test elsewhere in the large `cmd` package that sets `atmosConfig.CI.Enabled = true`
+  (directly, or indirectly via a real `Execute()`/`InitCliConfig()` call that detects a real CI environment
+  variable) without using that same helper — not identified within this round's time budget. Neither test
+  appeared in any real CI run's failure list in this incident (rounds 9–11), only in this round's local
+  full-suite reproductions — left open rather than force a guess-fix across an unbounded search space.
+
+## Round 11 (the `--help`-flag leak fix, generalized)
+
+`TestRootHelpFunc_RealTree_UnknownSubcommandErrors` reappeared in a full local `-race -shuffle=on` run of the
+*entire* `cmd` package (461s, run directly rather than filtered to just `root_help_routing_test.go`) — this
+time both the "toolchain versions --help" *and* "terraform bogus-subcommand --help" cases failed, even though
+Round 10 had already reset both implicated tests' own `--help` flags. The `cmd` package has 461 seconds worth
+of tests; evidently some *other* test elsewhere in the package also drives a real `atmos toolchain --help` or
+`atmos terraform --help` invocation through `RootCmd.ExecuteC()`, leaking that flag the same way, and
+per-test whack-a-mole fixes don't scale to "some other test, somewhere in a very large package."
+
+Fixed at the root instead: `cmd/testing_helpers_test.go`'s `snapshotRootCmdState`/`restoreRootCmdState`
+(the mechanism behind every test's `NewTestKit(t)` call) previously only snapshotted and restored `RootCmd`'s
+*own* `Flags()`/`PersistentFlags()` — never any subcommand's. A real `--help` invocation against any
+subcommand (`toolchain`, `terraform`, `version`, or anything else) parses onto *that command's own* FlagSet,
+which is just as much a package-level singleton as `RootCmd`'s, and was never covered. Added
+`walkCommandTree`, which recursively visits `RootCmd` and every command reachable from it, and used it in
+both the snapshot and restore paths so every command's flags (not just `RootCmd`'s) are captured and put
+back after each `NewTestKit`-protected test — closing this leak for the whole command tree at once instead
+of one flag-and-command pair at a time. `cmdStateSnapshot.flags` changed from `map[string]flagSnapshot`
+(flag name only, ambiguous across commands) to `map[*cobra.Command]map[string]flagSnapshot`; the three
+direct-field-access tests in `cmd/testing_helpers_snapshot_test.go` were updated to index by `RootCmd`
+explicitly (`snapshot.flags[RootCmd]["chdir"]`, etc.) since they only ever exercised `RootCmd`'s own flags.
+
+Validation: `go build ./...`, `go vet ./...` — clean. `./custom-gcl run --new-from-rev=origin/main` — 0
+issues. `go test -race -shuffle=on ./cmd/... -run 'TestSnapshotRootCmdState|TestTestKit_|TestRootHelpFunc_RealTree'`
+— all pass, including both previously-flaking subtests. A full `go test -race -shuffle=on ./cmd/ -timeout
+900s` (the entire package, no `-run` filter, matching the exact shape that exposed this) completed in 461s
+with zero failures. A subsequent full local run of the entire package set (minus `tests/`) completed with
+390 of 391 packages passing; the one remaining failure (`cmd`, two different tests than the ones this round
+fixed) is the separate, still-open `atmosConfig.CI.Enabled` leak documented in Follow-ups — the `--help`-flag
+leak this round targeted did not recur.

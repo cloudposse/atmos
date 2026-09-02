@@ -60,20 +60,43 @@ func PrintStyledText(text string) error {
 	// Check --force-color flag (via Viper).
 	// This allows `atmos version --force-color` to work for screenshot generation.
 	if viper.GetBool("force-color") {
-		return figurine.Write(iolib.Data, text, AnsiRegularFont)
+		return figurine.Write(iolib.Data, sanitizeForFigurine(text), AnsiRegularFont)
 	}
 
 	// Check standard CLICOLOR_FORCE and FORCE_COLOR env vars.
 	if os.Getenv("CLICOLOR_FORCE") != "" || os.Getenv("FORCE_COLOR") != "" { //nolint:forbidigo // Standard terminal env vars
-		return figurine.Write(iolib.Data, text, AnsiRegularFont)
+		return figurine.Write(iolib.Data, sanitizeForFigurine(text), AnsiRegularFont)
 	}
 
 	// Fall back to automatic color detection.
 	// supportscolor automatically detects TTY and other standard environment variables.
 	if supportscolor.Stdout().SupportsColor {
-		return figurine.Write(iolib.Data, text, AnsiRegularFont)
+		return figurine.Write(iolib.Data, sanitizeForFigurine(text), AnsiRegularFont)
 	}
 	return nil
+}
+
+// sanitizeForFigurine replaces every character outside go-figure's supported
+// printable-ASCII range (' ' through '~', i.e. no newlines, tabs, or other
+// control/non-ASCII characters) with '?', mirroring go-figure's own
+// non-strict fallback (figure.go's Slicify: "else { char = '?' }"). The
+// figurine library always renders in strict mode, which cannot be
+// configured from here and calls log.Fatal -- a hard, unrecoverable process
+// exit, not a returned error -- on the first out-of-range character,
+// including a plain '\n' in multi-line banner text. Sanitizing first keeps
+// this a graceful (if visually imperfect) render instead of taking down the
+// whole process.
+func sanitizeForFigurine(text string) string {
+	var b strings.Builder
+	b.Grow(len(text))
+	for _, r := range text {
+		if r < ' ' || r > '~' {
+			b.WriteRune('?')
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
@@ -112,7 +135,7 @@ func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 	forceColor := viper.GetBool("force-color") || isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv)
 	if supportscolor.Stdout().SupportsColor || forceColor {
 		// Write to the specified output writer, not os.Stdout
-		return figurine.Write(out, text, AnsiRegularFont)
+		return figurine.Write(out, sanitizeForFigurine(text), AnsiRegularFont)
 	}
 	return nil
 }

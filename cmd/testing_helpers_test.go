@@ -42,21 +42,38 @@ type flagSnapshot struct {
 type cmdStateSnapshot struct {
 	args           []string
 	osArgs         []string
-	flags          map[string]flagSnapshot
+	flags          map[*cobra.Command]map[string]flagSnapshot
 	chdirProcessed bool
 	colorProfile   termenv.Profile // Lipgloss color profile
 	openDocsURL    func(string) error
 	commands       []*cobra.Command // RootCmd.Commands() at snapshot time.
 }
 
-// snapshotRootCmdState captures the current state of RootCmd including all flag values and I/O streams.
-// This allows tests to save state at the beginning and restore it in cleanup via NewTestKit,
-// preventing test pollution without needing to maintain a hardcoded list of flags.
+// walkCommandTree calls fn for RootCmd and every command reachable from it
+// (recursively, through every level of subcommands). Used to snapshot/restore
+// flag state across the whole command tree, not just RootCmd's own flags: a
+// real invocation of e.g. "atmos toolchain --help" through RootCmd.ExecuteC()
+// parses --help onto toolchain's own FlagSet, and that FlagSet is a
+// package-level singleton no different from RootCmd's -- left un-reset, it
+// leaks into whichever later test's dispatch reaches the same subcommand. See
+// docs/fixes for the incident this closes.
+func walkCommandTree(root *cobra.Command, fn func(*cobra.Command)) {
+	fn(root)
+	for _, c := range root.Commands() {
+		walkCommandTree(c, fn)
+	}
+}
+
+// snapshotRootCmdState captures the current state of RootCmd (and every
+// subcommand reachable from it) including all flag values and I/O streams.
+// This allows tests to save state at the beginning and restore it in cleanup
+// via NewTestKit, preventing test pollution without needing to maintain a
+// hardcoded list of flags.
 func snapshotRootCmdState() *cmdStateSnapshot {
 	snapshot := &cmdStateSnapshot{
 		args:           make([]string, len(RootCmd.Flags().Args())),
 		osArgs:         make([]string, len(os.Args)),
-		flags:          make(map[string]flagSnapshot),
+		flags:          make(map[*cobra.Command]map[string]flagSnapshot),
 		chdirProcessed: chdirProcessed,
 		colorProfile:   lipgloss.ColorProfile(),
 		openDocsURL:    openDocsURL,
@@ -69,18 +86,21 @@ func snapshotRootCmdState() *cmdStateSnapshot {
 	// Copy os.Args.
 	copy(snapshot.osArgs, os.Args)
 
-	// Snapshot all flags (both local and persistent).
-	snapshotFlags := func(flagSet *pflag.FlagSet) {
-		flagSet.VisitAll(func(f *pflag.Flag) {
-			snapshot.flags[f.Name] = flagSnapshot{
-				value:   f.Value.String(),
-				changed: f.Changed,
-			}
-		})
-	}
-
-	snapshotFlags(RootCmd.Flags())
-	snapshotFlags(RootCmd.PersistentFlags())
+	// Snapshot every command's own flags (both local and persistent).
+	walkCommandTree(RootCmd, func(c *cobra.Command) {
+		flags := make(map[string]flagSnapshot)
+		snapshotFlags := func(flagSet *pflag.FlagSet) {
+			flagSet.VisitAll(func(f *pflag.Flag) {
+				flags[f.Name] = flagSnapshot{
+					value:   f.Value.String(),
+					changed: f.Changed,
+				}
+			})
+		}
+		snapshotFlags(c.Flags())
+		snapshotFlags(c.PersistentFlags())
+		snapshot.flags[c] = flags
+	})
 
 	return snapshot
 }
@@ -147,10 +167,26 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 	// Restore chdirProcessed flag.
 	chdirProcessed = snapshot.chdirProcessed
 
-	// Restore all flags to their snapshotted values.
-	restoreFlags := func(flagSet *pflag.FlagSet) {
-		flagSet.VisitAll(func(f *pflag.Flag) {
-			if snap, ok := snapshot.flags[f.Name]; ok {
+	// Remove any command registered on RootCmd since the snapshot was taken
+	// (e.g. by a test loading real custom commands via InitCliConfig +
+	// processCustomCommands). Left in place, a later test can collide with
+	// or silently observe a command from an unrelated, already-finished test.
+	// Done before the flag walk below so that walk visits exactly the
+	// commands present in the snapshot.
+	restoreRootCmdCommands(snapshot.commands)
+
+	// Restore every snapshotted command's flags to their captured values.
+	restoreFlagsOn := func(c *cobra.Command) {
+		flags, ok := snapshot.flags[c]
+		if !ok {
+			return
+		}
+		restoreFlags := func(flagSet *pflag.FlagSet) {
+			flagSet.VisitAll(func(f *pflag.Flag) {
+				snap, ok := flags[f.Name]
+				if !ok {
+					return
+				}
 				// StringSlice/StringArray flags need special handling due to append behavior.
 				if f.Value.Type() == "stringSlice" || f.Value.Type() == "stringArray" {
 					restoreStringSliceFlag(f, snap)
@@ -159,12 +195,12 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 				// For other flag types, direct Set() works fine.
 				_ = f.Value.Set(snap.value)
 				f.Changed = snap.changed
-			}
-		})
+			})
+		}
+		restoreFlags(c.Flags())
+		restoreFlags(c.PersistentFlags())
 	}
-
-	restoreFlags(RootCmd.Flags())
-	restoreFlags(RootCmd.PersistentFlags())
+	walkCommandTree(RootCmd, restoreFlagsOn)
 
 	// Restore lipgloss color profile and regenerate theme styles.
 	// This prevents test pollution from color settings.
@@ -173,12 +209,6 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 
 	// Restore package-level test seams.
 	openDocsURL = snapshot.openDocsURL
-
-	// Remove any command registered on RootCmd since the snapshot was taken
-	// (e.g. by a test loading real custom commands via InitCliConfig +
-	// processCustomCommands). Left in place, a later test can collide with
-	// or silently observe a command from an unrelated, already-finished test.
-	restoreRootCmdCommands(snapshot.commands)
 }
 
 // restoreRootCmdCommands removes every command currently on RootCmd that
