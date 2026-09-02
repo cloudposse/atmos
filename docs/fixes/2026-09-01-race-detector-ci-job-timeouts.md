@@ -627,20 +627,6 @@ regression from this fix.)
   with `##[group]`/timestamps intact (this repo's log fetch already includes per-line timestamps) and check
   whether the `pkg/io` package's own timestamp range genuinely contains that warning line, or whether it
   falls in a different package's timestamp window.
-- `cmd/terraform/migrate`'s `TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly` has now failed in at
-  least two separate CI runs (Rounds 12 and 16) with `exec: "tofu": executable file not found in $PATH`, even
-  though the test's own comment states it must succeed "without ever needing a real tfmigrate/opentofu
-  binary." Both times, retrying locally with the exact CI-failing `-test.shuffle` seed for
-  `cmd/terraform/migrate` (unfiltered, per Round 9's lesson that `-run`-narrowing changes the deterministic
-  order) passed cleanly — still not reproducible locally after two full rounds of dedicated effort. Round 16
-  considered making the "tofu never invoked" guarantee deterministic by deliberately breaking `PATH` (mirroring
-  the sibling `TestRunTerraformMigrate_SelectWorkspaceErrorPropagates`'s own idiom) but backed out: the test's
-  only assertion is `require.NoError`, which doesn't verify tofu was never invoked at all — if a real,
-  narrow invocation-skip bug exists, forcing `PATH` to always break would convert today's intermittent CI
-  flake into a deterministic CI failure instead of fixing anything, which is the wrong trade under this level
-  of uncertainty. Left open; if it recurs again, the next investigation should focus on why CI's ambient PATH
-  differs run-to-run in a way this local sandbox doesn't reproduce (e.g. runner image variance in where `tofu`
-  is installed) rather than re-attempting local `-shuffle` reproduction a third time.
 - `cmd/root_test.go`'s `TestApplyCIGitCloneBootstrap_CICloneExplicitFalseOptsOut` and
   `TestApplyCIGitCloneBootstrap_NoCIProviderDetected` failed in a full local `-race -shuffle=on` run of the
   entire package set with `atmosConfig.CI.Enabled` unexpectedly `true` (`assert.False` on that field, not on
@@ -921,3 +907,54 @@ Validation: `go build ./cmd/ci/...`, `go vet ./cmd/ci/...` -- clean. `./custom-g
 ./cmd/ci/... -run TestWorkflowValidationErrorOwnsDiagnostics` -- passes both with and without
 `ATMOS_FORCE_COLOR=1 CLICOLOR_FORCE=1` (previously failed only under forced/CI color, confirmed by a temporary
 revert-and-rerun before applying the fix). `go test -race ./cmd/ci/...` (full package) -- passes.
+
+## Round 18 (the `[race]` job's workflow was missing a toolchain install step -- root-caused both remaining flakes)
+
+The very next CI run after Round 17's fix failed on two tests: `TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly`
+(its fourth CI occurrence across Rounds 12, 15, 16, and now this run) and a brand new one,
+`TestPackerValidateCmd` ("Missing plugins ... Did you run packer init for this project?"). Both are the same
+underlying category of bug, and this time it was actually found: `.github/workflows/test.yml`'s `race` job
+never runs `atmos toolchain install --default ...` at all -- every other job that runs Go tests needing
+terraform/opentofu/packer/helm/helmfile (`test`, `build`) explicitly pre-installs all five before testing;
+the `race` job goes straight from installing `libudev-dev` (for `CGO_ENABLED=1`) to `atmos test race`, with no
+equivalent step. Without a pre-install, any test needing these binaries depends entirely on Atmos's own
+lazy/auto-install triggering successfully and in time -- unreliable in this job specifically, since `go test
+./...` runs roughly 400 packages as separate, concurrent OS processes with nothing serializing a shared
+install across them, unlike the sharded `test` job. Rounds 12-16 spent real effort trying to reproduce
+`TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly` locally with the CI's own exact `-shuffle` seed and
+never could -- consistent with this theory, since a local single-process `go test` run never faces the same
+install race a real CI run with ~400 concurrent test processes does.
+
+`TestPackerValidateCmd`'s failure had a second, more precise layer once traced: it's in the same `cmd` package
+as `TestPackerInitCmd`, which runs `atmos packer init aws/bastion -s nonprod` against the identical fixture --
+installing the `aws/bastion` template's "amazon" packer plugin into the shared on-disk plugin cache as a side
+effect. `TestPackerValidateCmd` never does this itself; it only ever passed because `TestPackerInitCmd`
+happened to run first in whatever order Go picked. Under `-shuffle=on`, if `TestPackerValidateCmd` runs before
+`TestPackerInitCmd`, the plugin cache isn't populated yet and `packer validate` fails exactly as CI showed --
+an implicit intra-package test-order dependency, the same class of bug this whole incident has repeatedly
+found and fixed (Rounds 14's `pkg/provisioner` registry gap is the closest precedent). Installing the
+`packer` *binary* via the workflow fix above doesn't touch this -- the "amazon" plugin is fetched by `packer
+init`, not `atmos toolchain install`.
+
+Fixed both together: added the same "Install Terraform, OpenTofu, Packer, Helm, and Helmfile" step (`atmos
+toolchain install --default ...` x5 + `atmos toolchain env --format=github`) already used by the `test`/`build`
+jobs to the `race` job, before `atmos test race` runs -- this removes the install race entirely for every test
+in every package, not just the two that happened to hit it in these specific CI runs, and validates the
+now-guaranteed-present `tofu` binary keeps `TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly` passing
+regardless of whether its own "tfmigrate should be skipped" logic has any narrow, still-unconfirmed gap (a real
+`tofu` invocation would now just succeed instead of failing with "not found"). Separately, made
+`TestPackerValidateCmd` self-sufficient by having it run `atmos packer init aws/bastion -s nonprod` itself
+before validating, mirroring `TestPackerInitCmd`'s own exact call -- so it no longer depends on that other
+test having already run first.
+
+Files: `.github/workflows/test.yml` (`race` job), `cmd/packer_validate_test.go`.
+
+Validation: `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/test.yml'))"` -- valid YAML.
+`go build ./cmd/...`, `go vet ./cmd/...` -- clean. `./custom-gcl run --new-from-rev=origin/main` -- 0 issues.
+`gofumpt -l cmd/packer_validate_test.go` -- no output. `go test -race ./cmd/ -run
+'TestPackerValidateCmd|TestPackerInitCmd'` -- both correctly skip locally (no `packer` binary in this dev
+sandbox, via the existing `skipIfPackerNotInstalled` precondition), confirming the added init call doesn't
+break the skip path; full exercise of the fix itself can only happen in CI, where `packer` is now
+toolchain-installed. The workflow change cannot be executed locally at all (no local GitHub Actions runner);
+its correctness rests on mirroring the `test`/`build` jobs' already-proven step verbatim, plus the exact
+CI failure logs this round diagnosed.

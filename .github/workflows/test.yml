@@ -686,6 +686,25 @@ jobs:
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
+      - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
+        # Unlike the `test`/`build` jobs, this job never ran this step, so
+        # tests needing these binaries (e.g. cmd/terraform/migrate,
+        # TestPackerValidateCmd) fell back to Atmos's own lazy/auto-install
+        # path -- unreliable here since `go test ./...` runs ~400 packages as
+        # separate concurrent processes, and nothing serializes a shared
+        # install across them. Pre-installing once, before any test process
+        # starts, removes that race entirely (see docs/fixes for the
+        # incident this closes).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install --default hashicorp/terraform
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install --default hashicorp/packer@${{ env.PACKER_VERSION }}
+          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
+          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
+          atmos toolchain env --format=github
+
       - name: Run atmos test race
         env:
           # pkg/toolchain's registry lookups hit the real GitHub API with no

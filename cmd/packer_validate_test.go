@@ -8,6 +8,7 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPackerValidateCmd(t *testing.T) {
@@ -26,6 +27,16 @@ func TestPackerValidateCmd(t *testing.T) {
 		log.SetOutput(os.Stderr)
 	}()
 	log.SetLevel(log.WarnLevel) // Match ATMOS_LOGS_LEVEL=Warning
+
+	// Run "packer init" first rather than relying on TestPackerInitCmd having
+	// already run and left the "amazon" plugin installed in the shared
+	// packer plugin cache: under -shuffle=on, this test can run before that
+	// one, and "packer validate" doesn't install missing plugins itself
+	// (confirmed in CI: "Missing plugins ... Did you run packer init for
+	// this project?"). Making this test install its own prerequisite makes
+	// it self-sufficient regardless of run order.
+	RootCmd.SetArgs([]string{"packer", "init", "aws/bastion", "-s", "nonprod"})
+	require.NoError(t, Execute(), "packer init prerequisite should execute without error")
 
 	// Capture stdout and logger output
 	oldStd := os.Stdout
