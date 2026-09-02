@@ -625,8 +625,13 @@ jobs:
     # Race-instrumented binaries run several times slower and use substantially
     # more memory than normal test binaries; this runs the entire `./...` suite
     # unsharded (unlike the `test` job's acceptance+unit sweep), so budget
-    # generously.
-    timeout-minutes: 45
+    # generously. `./cmd/...` alone -- one subtree out of the full package set
+    # this job actually runs -- took ~45 minutes locally in isolation (see
+    # docs/fixes/2026-09-01-race-detector-ci-job-timeouts.md); real runs on
+    # this runner have finished within a few minutes of the previous 45-minute
+    # budget, leaving too little slack for checkout/setup/apt overhead plus
+    # natural runner variance.
+    timeout-minutes: 75
     steps:
       # Harden Runner doesn't cover RunsOn self-hosted runners (see the build
       # job's linux leg, which skips it the same way); runs-on/action sets up

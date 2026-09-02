@@ -78,9 +78,11 @@ func GetStringSlice(key string) []string {
 	return slices.Clone(viper.GetViper().GetStringSlice(key))
 }
 
-// IsSet reports whether key has an explicit value from any source (flag, env,
-// config, override) -- unlike a plain Get, it does not count a registered
-// default as "set".
+// IsSet reports whether key has a value from any source, including a
+// registered default: viper.IsSet's underlying find() also checks
+// viper.defaults, so a key registered only via SetDefault also reports true
+// here. It cannot distinguish an explicit value (flag, env, config, override)
+// from a default; callers needing that distinction need a separate check.
 func IsSet(key string) bool {
 	defer perf.Track(nil, "viperguard.IsSet")()
 
@@ -96,9 +98,8 @@ func IsSet(key string) bool {
 // defeating the whole point of View. Extend with more read methods as
 // callers need them; never add a mutator here.
 type ViperReader interface {
-	// IsSet reports whether key has an explicit value from any source (flag,
-	// env, config, override) -- unlike a plain Get, it does not count a
-	// registered default as "set".
+	// IsSet reports whether key has a value from any source, including a
+	// registered default (see the package-level IsSet's doc comment for why).
 	IsSet(key string) bool
 	// GetBool returns key's value coerced to bool. Returns false if unset.
 	GetBool(key string) bool
@@ -152,6 +153,11 @@ func (a viperReaderAdapter) GetStringSlice(key string) []string {
 // individual function in this package locks and unlocks independently, so a
 // concurrent Set() between two separate calls could let the decision combine
 // one snapshot's presence result with a different snapshot's value.
+//
+// The callback fn must not call Set, BindEnv, or any other guard writer,
+// directly or transitively: mu.RLock is held for the whole call, and those
+// writers block on mu.Lock until fn returns, so fn calling one deadlocks
+// against itself.
 func View(fn func(v ViperReader)) {
 	defer perf.Track(nil, "viperguard.View")()
 

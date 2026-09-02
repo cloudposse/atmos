@@ -145,6 +145,19 @@ func TestAffectedIdentityFlagParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// viper is the global singleton; setupViper's own viper.Reset()
+			// leaves the "identity" key set for the rest of the test binary
+			// (e.g. "viper-identity") unless restored here. A later test
+			// building a fresh cmd with no --identity flag would otherwise
+			// pick up this leaked value via the same viper.GetString("identity")
+			// fallback, which is exactly what happened to cmd/list's
+			// TestListStacksWithOptions_CoverageIntegration and its siblings
+			// under -shuffle=on: the leaked identity name is non-empty, so
+			// resolveIdentityName returns it unchecked, and the downstream
+			// isAuthConfigured check then fails against the (deliberately
+			// identity-less) `complete` fixture. See docs/fixes.
+			t.Cleanup(viper.Reset)
+
 			cmd := tt.setupCmd()
 			tt.setupViper()
 			v := viper.GetViper()

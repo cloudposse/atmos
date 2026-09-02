@@ -414,17 +414,39 @@ Round 7 validation:
 
 ## Follow-ups
 
-- `cmd/list`'s `TestListStacksWithOptions_CoverageIntegration` failed once locally with
-  `authentication requires at least one identity configured in atmos.yaml` even though the
-  `complete` fixture it uses has identities configured and the test normally passes. It did not
-  reproduce on two follow-up attempts using the exact `-shuffle` seed that produced the original
-  failure, which rules out a simple test-ordering/leftover-value explanation (those are
-  seed-deterministic) in favor of genuine goroutine-timing nondeterminism between some earlier
-  test and this one. Investigated and ruled out: `cmd/list`'s only two `t.Parallel()` tests
-  (`cmd/list/closure_test.go`) touch no auth/config/viper state; `t.Chdir` (used by
-  `chdirToCompleteFixture`) has Go's own built-in serialization against concurrent misuse; no
-  obvious `sync.Once`/singleton pattern in `pkg/auth`'s manager code. Left unfixed. If it recurs
-  in a future CI run, the next investigation should reach for the actual race-detector output
-  (this failure carries no `WARNING: DATA RACE` block itself, but the CI log may show one nearby
-  that this local investigation didn't capture) rather than repeating the same seed-replay
-  approach that already came up empty twice.
+None.
+
+## Round 9 (resolved `cmd/list` flake)
+
+The `cmd/list` failure documented in the prior round's Follow-ups (`TestListStacksWithOptions_CoverageIntegration`
+and, in a later CI run, three siblings — `TestExecuteListInstancesCmd_TreeFormat`,
+`TestExecuteListInstancesCmd_MatrixFormat`, `TestListStacksWithOptions_TreeFormatWithProvenance` — all
+failing with `authentication requires at least one identity configured in atmos.yaml`) is a genuine
+test-order leak, not goroutine-timing nondeterminism as the previous round concluded (that conclusion was
+wrong: retrying with the same `-shuffle` seed via `-run <name>` narrows the compiled test set, which changes
+the deterministic order and hides the leak — it doesn't prove the failure is non-order-related).
+
+Root cause: `cmd/list/affected_test.go`'s `TestAffectedIdentityFlagParsing`, `cmd/list/instances_test.go`'s
+`TestInstancesIdentityFlagLogic`, and `cmd/list/utils_test.go`'s `TestGetIdentityFromCommand` and
+`TestGetIdentityFromCommand_NormalizesIdentityEnvFalse` all call `viper.Reset()` then
+`viper.Set("identity", "viper-identity"|"env-identity"|"no")` against the global viper singleton with no
+`t.Cleanup` to restore it. Under `-shuffle=on`, if any of these run before an executor-integration test that
+builds a fresh `cmd` (no `--identity` flag set), `getIdentityFromCommand`'s viper fallback
+(`cmd/list/utils.go`) picks up the leaked identity name. Since a non-empty `identityName` short-circuits
+`resolveIdentityName` (`pkg/auth/manager_helpers.go`) without checking whether auth is even configured, the
+leaked value reaches `CreateAndAuthenticateManagerWithAtmosConfigForStack`'s `isAuthConfigured` check — which
+then correctly fails, because the `complete` fixture (used by `chdirToCompleteFixture`) has no `auth:` section
+at all. `cmd/list/settings_test.go`'s `TestSettingsCmd_RunE_CoverageIntegration` already carried a comment
+describing this exact mechanism and worked around it locally (`cmd.Flags().Set("identity", "false")`); the
+other executor-integration tests never got the same treatment, which is why only they flaked.
+
+Fix: added `t.Cleanup(viper.Reset)` to each of the four leaking tests, matching the pattern already used
+elsewhere in this package and throughout this incident.
+
+Validation: `go build ./cmd/list/...`, `go vet ./cmd/list/...` — clean. `go test -race -shuffle=on
+./cmd/list/... -timeout 300s`, run twice (each with its own random shuffle order) — both pass, no
+`authentication requires at least one identity` failures. (A `-count=3` invocation at the same 300s timeout
+hit that budget mid-run and was killed — `cmd/list` under `-race` takes ~90-110s per single pass locally, so
+3 consecutive passes need a longer timeout than 300s; that's a local verification-budget artifact, not a
+test failure — the goroutine dump it produced was ordinary `t.Parallel()` tests waiting their turn, not a
+deadlock.)

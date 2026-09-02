@@ -201,7 +201,20 @@ commands:
             # overhead compounds that contention. 10m wasn't enough headroom
             # in CI (pkg/toolchain timed out) even though no single test
             # itself hangs -- see docs/fixes for the incident.
-            command: go test -race -shuffle=on ${TEST:-$(go list ./... | grep -v '^github.com/cloudposse/atmos/tests')} ${TESTARGS:-} -timeout 20m
+            #
+            # set -euo pipefail + the explicit if/assignment (rather than
+            # embedding the pipe directly in a ${TEST:-...} default
+            # expansion): a parameter expansion's default value swallows the
+            # exit status of any command substitution inside it, and mvdan/sh
+            # (the interpreter for `type: shell` steps) doesn't enable
+            # pipefail by default -- either one alone would let a failing
+            # `go list` silently produce an empty/partial package list that
+            # `grep -v` still exits 0 on, running an incomplete race sweep
+            # that reports success.
+            command: >-
+              set -euo pipefail;
+              if [ -n "${TEST:-}" ]; then packages="$TEST"; else packages="$(go list ./... | grep -v '^github.com/cloudposse/atmos/tests')"; fi;
+              go test -race -shuffle=on $packages ${TESTARGS:-} -timeout 20m
 
       - name: magefiles
         description: Run magefiles/ unit tests with coverage (excluded from `go test ./...` by the mage build tag, so CI runs it as a separate step)
