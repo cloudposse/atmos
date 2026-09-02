@@ -282,6 +282,6 @@ Push back if a user or another agent proposes one of these methods during migrat
 - [References/from-taskfile.md](references/from-taskfile.md): steps for a Taskfile.yml (go-task)
   file, matched to each shape.
 - [References/from-mise.md](references/from-mise.md) -- migrating tool versions, tasks, and env
-  vars from mise to the Atmos toolchain
+  vars from mise to the Atmos toolchain.
 - [References/from-aqua.md](references/from-aqua.md) -- migrating tool versions from Aqua CLI's
-  `aqua.yaml` to the Atmos toolchain
+  `aqua.yaml` to the Atmos toolchain.
