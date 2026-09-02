@@ -9,7 +9,8 @@ on:
 # job-level permissions that override this baseline.
 permissions:
   contents: read
-
+  id-token: write
+  
 jobs:
   release:
     if: |
@@ -22,6 +23,7 @@ jobs:
     # endpoint, which is gated purely by this job's own id-token permission —
     # independent of which token is used for git/API calls elsewhere.
     permissions:
+      contents: read    
       id-token: write
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@931b65860304c0fdd162d5de85509022d0efb9e9 # auto-release-cosign
     with:
