@@ -1039,3 +1039,59 @@ that last run: it was started before this round's `cmd` test-helper edits were f
 evidence that the package is clean under that seed, not as a test of this round's `cmd` changes -- those
 are covered by the targeted runs above. `TestPackerValidateCmd` skips locally (no `packer` binary here), so
 its new `requirePackerPluginInstalled` check is exercised only in CI, where Round 18 now installs `packer`.
+
+## Round 20 (`.tool-versions` as the single source of truth; the race command becomes a mage target)
+
+Two follow-ups, prompted by review of Round 18's workflow fix rather than a new CI failure.
+
+**Duplicated, drifted tool-version pins.** Round 18 closed the `[race]` job's missing toolchain-install gap by
+copying the same `atmos toolchain install --default <tool>@${{ env.<TOOL>_VERSION }}` pattern already used by
+the `test`/`build` jobs -- but that pattern itself was already duplicated across 9 separate blocks in
+`.github/workflows/test.yml` (`build`, `test`, `race`, `floci`, `floci-go`, `mock`, `lint`, `hooks-tflint`),
+each hardcoding its own copy of the same version strings via top-level `env:` vars. This is exactly what
+`.tool-versions` (already present at the repo root, already what `atmos toolchain install`/`atmos toolchain
+env` read from when a tool's version isn't given explicitly) exists to prevent, and it had already drifted
+silently: the workflow's `OPEN_TOFU_VERSION` env var was pinned to `1.12.2`, while `.tool-versions`'s own
+`opentofu/opentofu` entry -- last touched by a dedicated toolchain-versioning commit a month later -- had
+already moved to `1.12.5`, undetected because nothing cross-checked the two. Fixed by adding the workflow's
+other pinned tools (`hashicorp/packer`, `helm/helm`, `helmfile/helmfile`, `terraform-linters/tflint`) to
+`.tool-versions` and replacing every `--default <tool>@${{ env.X_VERSION }}` install line with a bare `atmos
+toolchain install <tool>` (no explicit version, no `--default`), across all 9 blocks. Verified this is safe
+for narrowly-scoped jobs (e.g. `floci`, which only needs `opentofu/opentofu`) before applying it everywhere:
+`buildPathEntriesWithLocator` (`pkg/toolchain/path_helpers.go`) silently skips any `.tool-versions` entry
+that isn't actually installed rather than erroring, so `atmos toolchain env --format=github` still succeeds
+even though `.tool-versions` now lists more tools than a given job installs. Also verified (via
+`atmos toolchain info <name>`) that plain short names resolve correctly for `terraform`, `opentofu`, `packer`,
+`helm`, and `tflint`, but not for `helmfile` -- it's ambiguous between `helmfile/helmfile` and the legacy
+`roboll/helmfile`, both indexed under the same short name -- so every install line keeps the full `owner/repo`
+form for consistency rather than mixing short and full names.
+
+**The race command's shell script becomes a tested mage target.** `.atmos.d/test.yaml`'s `race` custom
+command's own `type: shell` step held a non-trivial script (package listing, `tests/` exclusion, `TEST`/
+`TESTARGS` handling, `-race -shuffle=on` invocation) with no way to unit-test it, matching this repo's
+existing convention of Go-backed mage targets for other custom commands with real logic (`atmos build binary`
+-> `Build.Binary`, `atmos test coverage collect` -> `Coverage.Collect`). Added `Test.Race`
+(`magefiles/test_race.go`, backing the new `test:race` mage target) with the same package-listing/filtering/
+argument-construction logic, decomposed into small pure functions (`filterRacePackages`, `racePackages`,
+`racePackagesFromEnv`) unit-tested via this repo's established PATH-based fake-binary harness
+(`setUpFakePathBinary`, already used by `TestRunIn`/`TestBuildBinary`) rather than shelling out to a real `go
+test` inside a test. `.atmos.d/test.yaml`'s `race` command's shell step now just runs `go tool mage test:race`,
+matching the existing `go tool mage coverage:collect`/`go tool mage notice:generate` pattern used elsewhere in
+this repo for the same reason.
+
+Files: `.tool-versions`, `.github/workflows/test.yml`, `.atmos.d/test.yaml`, `magefiles/test_race.go` (new),
+`magefiles/test_race_test.go` (new).
+
+Validation: `go build ./...`, `go vet -tags=mage ./magefiles/...` -- clean. `./custom-gcl run
+--new-from-rev=origin/main --build-tags=mage ./magefiles/...` -- 0 issues (this round's diff only; a
+concurrent session's own in-progress, uncommitted edits elsewhere in the tree left `cmd` non-compiling at the
+time of this check, unrelated to this round). `gofumpt -l` on both new files -- no output. `go test -tags=mage
+./magefiles/...` (full package) -- passes, including the new `TestFilterRacePackages`, `TestRacePackages`,
+`TestRacePackagesFromEnv`, and `TestTestRace` (which covers repo-root-resolution failure, `TEST`/`TESTARGS`
+argument construction end-to-end via the fake-binary harness, and `go test` failure propagation).
+`go tool mage -l` lists `test:race` with its doc comment. `TEST=./pkg/ansi/... go tool mage test:race` (with
+`GOTOOLCHAIN=auto CGO_ENABLED=1 GOFIPS140=latest`, matching the custom command's own `env:`) -- passes,
+confirming the wired-up `.atmos.d/test.yaml` -> mage path works end-to-end for a real (small) package.
+`python3 -c "import yaml; yaml.safe_load(...)"` on the edited workflow -- valid YAML. Local reproduction of
+the full `[race]` job (all ~400 packages, unsharded, `-race -shuffle=on`) was not attempted here -- that is
+exactly what the next real CI run of this job validates.

@@ -183,38 +183,13 @@ commands:
           - type: atmos
             command: build deps
           - type: shell
-            # Exclude ./tests/... (the CLI acceptance suite): the `test` job's
-            # own comment measures its unsharded runtime at ~90m on Linux,
-            # which is why that job shards it 10-way per OS. It also builds
-            # and shells out to a plain (non -race) `atmos` binary, so
-            # instrumenting the driving test process with -race provides no
-            # race coverage on the binary under test. Running it here blew
-            # past every timeout budget with no race-detection value to show
-            # for it.
-            #
-            # -timeout 20m (not the default per-package 10m): pkg/toolchain's
-            # tests install real tool binaries from real registries (no mock
-            # seam), and this command runs the full ./... suite unsharded, so
-            # every package's network/registry calls compete for the same
-            # runner instead of getting a shard's worth of headroom the way
-            # the sharded `test` job's packages do. -race's CPU/memory
-            # overhead compounds that contention. 10m wasn't enough headroom
-            # in CI (pkg/toolchain timed out) even though no single test
-            # itself hangs -- see docs/fixes for the incident.
-            #
-            # set -euo pipefail + the explicit if/assignment (rather than
-            # embedding the pipe directly in a ${TEST:-...} default
-            # expansion): a parameter expansion's default value swallows the
-            # exit status of any command substitution inside it, and mvdan/sh
-            # (the interpreter for `type: shell` steps) doesn't enable
-            # pipefail by default -- either one alone would let a failing
-            # `go list` silently produce an empty/partial package list that
-            # `grep -v` still exits 0 on, running an incomplete race sweep
-            # that reports success.
-            command: >-
-              set -euo pipefail;
-              if [ -n "${TEST:-}" ]; then packages="$TEST"; else packages="$(go list ./... | grep -v '^github.com/cloudposse/atmos/tests')"; fi;
-              go test -race -shuffle=on $packages ${TESTARGS:-} -timeout 20m
+            # The package listing, tests/ exclusion, TEST/TESTARGS handling,
+            # and -race -shuffle=on invocation all live in
+            # magefiles/test_race.go (Test.Race), unit-tested there. See that
+            # file's doc comments (and docs/fixes for the incident that
+            # motivated the tests/ exclusion and the 20m timeout) for the
+            # reasoning behind each choice.
+            command: go tool mage test:race
 
       - name: magefiles
         description: Run magefiles/ unit tests with coverage (excluded from `go test ./...` by the mage build tag, so CI runs it as a separate step)

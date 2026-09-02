@@ -3,3 +3,7 @@ opentofu/opentofu 1.12.5
 peteretelej/tree v1.3.0
 sharkdp/bat v0.26.1
 tofu v1.11.6
+hashicorp/packer 1.14.2
+helm/helm v3.19.2
+helmfile/helmfile v1.1.0
+terraform-linters/tflint 0.59.1

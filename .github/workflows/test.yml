@@ -36,11 +36,12 @@ permissions:
 
 env:
   ATMOS_BOOTSTRAP_VERSION: "1.223.0"
-  OPEN_TOFU_VERSION: "1.12.2"
-  HELM_VERSION: "v3.19.2"
+  # terraform/opentofu/packer/helm/helmfile/tflint versions are pinned once in
+  # .tool-versions (the source `atmos toolchain install`/`atmos toolchain env`
+  # already read from), not duplicated here -- see docs/fixes for the
+  # incident where a stale OPEN_TOFU_VERSION here (1.12.2) drifted behind
+  # .tool-versions's actual pin (1.12.5) undetected.
   HELM_DIFF_VERSION: "v3.15.10"
-  HELMFILE_VERSION: "v1.1.0"
-  PACKER_VERSION: "1.14.2"
   # helmfile's own `version` subcommand makes an outbound network call to GitHub to check
   # for a newer release. On CI runners that call is a source of flakiness (e.g. "context
   # deadline exceeded" on Windows runners) unrelated to anything this repo controls, and
@@ -276,11 +277,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default hashicorp/packer@${{ env.PACKER_VERSION }}
-          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
-          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install hashicorp/packer
+          atmos toolchain install helm/helm
+          atmos toolchain install helmfile/helmfile
           atmos toolchain env --format=github
 
       - name: Verify Terraform, OpenTofu, Packer, Helm, and Helmfile
@@ -449,11 +450,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default hashicorp/packer@${{ env.PACKER_VERSION }}
-          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
-          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install hashicorp/packer
+          atmos toolchain install helm/helm
+          atmos toolchain install helmfile/helmfile
           atmos toolchain env --format=github
 
       - name: Verify Terraform, OpenTofu, Packer, Helm, and Helmfile
@@ -700,11 +701,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default hashicorp/packer@${{ env.PACKER_VERSION }}
-          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
-          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install hashicorp/packer
+          atmos toolchain install helm/helm
+          atmos toolchain install helmfile/helmfile
           atmos toolchain env --format=github
 
       - name: Run atmos test race
@@ -990,7 +991,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install opentofu/opentofu
           atmos toolchain env --format=github
 
       - name: Verify OpenTofu
@@ -1059,7 +1060,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install opentofu/opentofu
           atmos toolchain env --format=github
 
       - name: Verify OpenTofu
@@ -1377,7 +1378,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install opentofu/opentofu
           atmos toolchain env --format=github
 
       - name: Verify OpenTofu
@@ -1478,8 +1479,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default terraform-linters/tflint@0.59.1
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install terraform-linters/tflint
           atmos toolchain env --format=github
 
       - name: Verify OpenTofu and TFLint
@@ -1518,8 +1519,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default terraform-linters/tflint@0.59.1
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install terraform-linters/tflint
           atmos toolchain env --format=github
 
       - name: Run the TFLint hook example
