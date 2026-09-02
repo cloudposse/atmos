@@ -139,7 +139,7 @@ Three independent layers protect against credential exposure.
 2. TruffleHog across full repository history in CI, verified results only, blocking.
 3. Atmos itself masks secrets in output and handles configured secrets through dedicated backends rather than environment interpolation.
 
-CI jobs run on a hybrid of GitHub-hosted runners and self-hosted runners provisioned through RunsOn, which execute in a dedicated AWS automation account. Runners of both kinds are ephemeral: one is created for a job and destroyed when the job ends, so no state carries between jobs.
+CI jobs run on a hybrid of GitHub-hosted runners and self-hosted runners provisioned through RunsOn, which execute in a dedicated AWS automation account. Runners of both kinds are ephemeral: one is created for a job and destroyed when the job ends, so no local runner state survives a job. Two channels do carry state between jobs — the dependency and build cache, and workflow artifacts. Both are scoped to this repository, and GitHub's cache isolation prevents a pull-request branch from writing to the base branch's cache.
 
 ## 10. Records
 
