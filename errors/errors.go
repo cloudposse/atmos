@@ -1259,7 +1259,6 @@ var (
 	ErrInitializationPartialFailure     = errors.New("initialization partially failed")
 	ErrInitTemplateNotFound             = errors.New("init template not found")
 	ErrInvalidScaffoldSection           = errors.New("invalid scaffold section")
-	ErrScaffoldSourceUnsupported        = errors.New("scaffold source scheme not supported")
 	ErrScaffoldFetchSource              = errors.New("failed to fetch scaffold source")
 	ErrScaffoldCatalogLoad              = errors.New("failed to load scaffold catalog")
 	ErrTemplateConfigNameRequired       = errors.New("template config with metadata.name is required to write a project record")
@@ -1275,6 +1274,8 @@ var (
 	ErrScaffoldMatrixExpressionFailed   = errors.New("matrix axis expression failed to render")
 	ErrScaffoldMatrixAxisValueNotScalar = errors.New("matrix axis value is not scalar")
 	ErrScaffoldDuplicateOutputPath      = errors.New("two files rendered to the same output path")
+	ErrScaffoldFieldOptionsInvalid      = errors.New("field options must be a static list, an answers.* dot-path, or a template expression")
+	ErrScaffoldExpressionFailed         = errors.New("template expression failed to render")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")

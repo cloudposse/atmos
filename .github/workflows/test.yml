@@ -602,6 +602,23 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+      # tools/noticegen is its own module (like tools/gomodcheck), so it's
+      # also outside every other job's `go build ./...`/`go test ./...`
+      # scope. Run its tests here too, for the same reason as magefiles
+      # above.
+      - name: Run tools/noticegen unit tests with coverage
+        run: go test -race -coverprofile=../../noticegen-coverage.out ./...
+        working-directory: tools/noticegen
+
+      - name: Upload tools/noticegen coverage report artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: noticegen-coverage-linux
+          path: noticegen-coverage.out
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
   # Sharding the `test` job fans it out into TEST_SHARD_COUNT x 3 per-leg checks.
   # Keep the three historical required-check names as compatibility aliases so
   # branch protection does not need to change. `needs.test.result` aggregates
@@ -736,6 +753,12 @@ jobs:
           name: magefiles-coverage-linux
           path: ${{ github.workspace }}
 
+      - name: Download tools/noticegen coverage report artifact
+        uses: ./.github/actions/download-artifact-retry
+        with:
+          name: noticegen-coverage-linux
+          path: ${{ github.workspace }}
+
       - name: Upload coverage report to Codecov
         timeout-minutes: 10
         continue-on-error: true
@@ -743,7 +766,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
-          files: coverage.out,magefiles-coverage.out
+          files: coverage.out,magefiles-coverage.out,noticegen-coverage.out
           disable_search: true
           # Codecov's uploader downloads its CLI and verifies the binary's GPG
           # signature. Transient Codecov-side issues (e.g. an empty public-key

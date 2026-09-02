@@ -327,7 +327,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/go-logr/logr
     License: Apache-2.0
-    URL: https://github.com/go-logr/logr/blob/v1.4.3/LICENSE
+    URL: https://github.com/go-logr/logr/blob/v1.4.4/LICENSE
 
   - github.com/go-logr/stdr
     License: Apache-2.0
@@ -663,23 +663,23 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - go.opentelemetry.io/otel
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/v1.44.0/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/v1.46.0/LICENSE
 
   - go.opentelemetry.io/otel/metric
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.44.0/metric/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.46.0/metric/LICENSE
 
   - go.opentelemetry.io/otel/sdk
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/v1.44.0/sdk/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/v1.46.0/sdk/LICENSE
 
   - go.opentelemetry.io/otel/sdk/metric
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/metric/v1.44.0/sdk/metric/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/metric/v1.46.0/sdk/metric/LICENSE
 
   - go.opentelemetry.io/otel/trace
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.44.0/trace/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.46.0/trace/LICENSE
 
   - go.opentelemetry.io/proto/otlp
     License: Apache-2.0
@@ -1057,6 +1057,10 @@ BSD LICENSED DEPENDENCIES
   - github.com/spf13/pflag
     License: BSD-3-Clause
     URL: https://github.com/spf13/pflag/blob/v1.0.10/LICENSE
+
+  - github.com/stretchr/testify/internal/difflib
+    License: BSD-3-Clause
+    URL: https://github.com/stretchr/testify/blob/v1.12.1/internal/difflib/LICENSE
 
   - github.com/ulikunitz/xz
     License: BSD-3-Clause
@@ -2142,7 +2146,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/stretchr/testify
     License: MIT
-    URL: https://github.com/stretchr/testify/blob/v1.11.1/LICENSE
+    URL: https://github.com/stretchr/testify/blob/v1.12.1/LICENSE
 
   - github.com/subosito/gotenv
     License: MIT
@@ -2250,7 +2254,7 @@ MIT LICENSED DEPENDENCIES
 
   - go.yaml.in/yaml/v3
     License: MIT
-    URL: https://github.com/yaml/go-yaml/blob/v3.0.4/LICENSE
+    URL: https://github.com/yaml/go-yaml/blob/v3.0.5/LICENSE
 
   - gopkg.in/yaml.v3
     License: MIT
