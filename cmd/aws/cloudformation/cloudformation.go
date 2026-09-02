@@ -9,13 +9,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
-	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
 )
@@ -73,28 +71,7 @@ func init() {
 	outputCmd := newOperationCommand("output", "Show the deployed stack's Outputs")
 	outputCmd.Aliases = []string{"outputs"}
 	CloudFormationCmd.AddCommand(outputCmd)
-
-	internal.Register(&CommandProvider{})
 }
-
-// CommandProvider registers the cloudformation command with the command registry.
-type CommandProvider struct{}
-
-func (p *CommandProvider) GetCommand() *cobra.Command { return CloudFormationCmd }
-
-func (p *CommandProvider) GetName() string { return "cloudformation" }
-
-func (p *CommandProvider) GetGroup() string { return "Core Stack Commands" }
-
-func (p *CommandProvider) GetAliases() []internal.CommandAlias { return nil }
-
-func (p *CommandProvider) GetFlagsBuilder() flags.Builder { return nil }
-
-func (p *CommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder { return nil }
-
-func (p *CommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag { return nil }
-
-func (p *CommandProvider) IsExperimental() bool { return false }
 
 func newOperationCommand(name, short string) *cobra.Command {
 	var parser *flags.StandardParser
