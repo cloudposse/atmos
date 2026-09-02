@@ -160,7 +160,7 @@ func runSourceTestGroup(
 	args = append(args, group.packages...)
 	args = append(args, group.testArgs...)
 	args = append(args, "-timeout", defaultValue(options.GoTestTimeout, defaultTestTimeout))
-	return "", runner.run(ctx, options.RepoRoot, goCommandEnvironment(), "go", args...)
+	return "", runner.run(ctx, runOptions{dir: options.RepoRoot, env: goCommandEnvironment(), retryTransient: true}, "go", args...)
 }
 
 func runWindowsTests(ctx context.Context, runner commandRunner, options *RunOptions) error {
@@ -175,7 +175,7 @@ func runWindowsTests(ctx context.Context, runner commandRunner, options *RunOpti
 	}
 	assigned := windowsTestsForShard(tests, options.Shard)
 	args := []string{"-test.run=" + testRunPattern(assigned), "-test.timeout=" + defaultValue(options.GoTestTimeout, defaultTestTimeout)}
-	return runner.run(ctx, dir, nil, binary, args...)
+	return runner.run(ctx, runOptions{dir: dir}, binary, args...)
 }
 
 func runWindowsExecTests(ctx context.Context, runner commandRunner, options *RunOptions) error {
@@ -193,7 +193,7 @@ func runWindowsExecTests(ctx context.Context, runner commandRunner, options *Run
 		return nil
 	}
 	args := []string{"-test.run=" + testRunPattern(assigned), "-test.timeout=" + defaultValue(options.GoTestTimeout, defaultTestTimeout)}
-	return runner.run(ctx, dir, nil, binary, args...)
+	return runner.run(ctx, runOptions{dir: dir}, binary, args...)
 }
 
 func runCmdTests(ctx context.Context, runner commandRunner, options *RunOptions) (string, error) {
@@ -228,7 +228,7 @@ func runCmdTests(ctx context.Context, runner commandRunner, options *RunOptions)
 		coverDir = temporary
 	}
 	absCoverDir := absoluteFromRoot(options.RepoRoot, coverDir)
-	if err := runner.run(ctx, dir, []string{"GOCOVERDIR=" + absCoverDir}, binary, args...); err != nil {
+	if err := runner.run(ctx, runOptions{dir: dir, env: []string{"GOCOVERDIR=" + absCoverDir}}, binary, args...); err != nil {
 		return "", err
 	}
 	if options.Mode == ModeCoverage {
@@ -247,7 +247,7 @@ func Precompile(ctx context.Context, repoRoot string, target Target, outputDir s
 	if target == TargetWindows {
 		extension = ".exe"
 	}
-	if err := runner.run(ctx, repoRoot, goCommandEnvironment(), "go", "test", "-c", "-covermode=atomic", "-coverpkg=./...",
+	if err := runner.run(ctx, runOptions{dir: repoRoot, env: goCommandEnvironment()}, "go", "test", "-c", "-covermode=atomic", "-coverpkg=./...",
 		"-o", filepath.Join(outputDir, "cmd.test"+extension), "./cmd"); err != nil {
 		return err
 	}
@@ -261,7 +261,7 @@ func Precompile(ctx context.Context, repoRoot string, target Target, outputDir s
 		{name: "tests.test.exe", pkgPath: "./tests"},
 		{name: "internal-exec.test.exe", pkgPath: "./internal/exec"},
 	} {
-		if err := runner.run(ctx, repoRoot, goCommandEnvironment(), "go", "test", "-c",
+		if err := runner.run(ctx, runOptions{dir: repoRoot, env: goCommandEnvironment()}, "go", "test", "-c",
 			"-o", filepath.Join(outputDir, testBinary.name), testBinary.pkgPath); err != nil {
 			return err
 		}

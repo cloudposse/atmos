@@ -145,10 +145,10 @@ TEST_QUALITY_*.md
 /lintroller
 /.lintroller
 tools/lintroller/.lintroller
+tools/gomodcheck/.gomodcheck
 .golangci/lintroller/lintroller
 tools/gomodcheck/.gomodcheck
 /custom-gcl
-tools/gomodcheck/.gomodcheck
 tools/noticegen/noticegen
 
 # golangci-lint per-worktree cache + lock isolation (see
