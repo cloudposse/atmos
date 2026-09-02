@@ -294,6 +294,22 @@ func TestModel_View_Done_Success(t *testing.T) {
 	assert.Contains(t, view, "10.0s")
 }
 
+// TestModel_View_Done_ErasesBelowWithoutMovingUp is a regression test: bubbletea moves the
+// cursor to the top of the previous frame before writing the done-state view, so that view
+// must erase the stale progress block *below* the cursor and must never move up. Moving up
+// erased rows above the block (the typed command, the init and workspace lines) and left
+// the summary stranded high on the screen with a blank tail.
+func TestModel_View_Done_ErasesBelowWithoutMovingUp(t *testing.T) {
+	m := NewModel("myapp", "dev", "apply", strings.NewReader(""), WithClock(newTestClock()))
+	m.done = true
+
+	view := m.View()
+
+	assert.True(t, strings.HasPrefix(view, "\r"+clearToEOS), "done view must start by erasing to end of screen from the frame top")
+	assert.NotContains(t, view, "\x1b[A", "done view must not move the cursor up")
+	assert.NotContains(t, view, "\x1b[K", "done view must not rely on per-line erase")
+}
+
 func TestModel_View_Done_WithErrors(t *testing.T) {
 	clock := newTestClock()
 	reader := strings.NewReader("")

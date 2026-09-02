@@ -20,7 +20,7 @@ const (
 
 	// ANSI escape sequences for terminal control.
 	clearToEOL = "\x1b[K" // Clear from cursor to end of line.
-	cursorUp   = "\x1b[A" // Move cursor up one line.
+	clearToEOS = "\x1b[J" // Clear from cursor to end of screen.
 )
 
 // Model is the bubbletea model for streaming terraform output.
@@ -209,15 +209,16 @@ func (m Model) View() string {
 	defer perf.Track(nil, "terraform.ui.Model.View")()
 
 	if m.done {
-		// Clear all lines that progressView() rendered.
-		// progressView outputs: header line + 2 newlines + completed resources.
-		// We need to clear at least 2 extra lines to prevent floating artifacts.
-		linesToClear := 2 + len(m.getCompletedResources())
-		var clearLines string
-		for i := 0; i < linesToClear; i++ {
-			clearLines += cursorUp + "\r" + clearToEOL
-		}
-		return clearLines + "\r" + clearToEOL + m.finalView()
+		// Bubbletea has already moved the cursor to the top of the previous frame before
+		// it writes this view, so the stale progress block is entirely below the cursor:
+		// erase from here to the end of the screen and draw the summary in its place.
+		//
+		// This must not move the cursor up. An earlier version walked up one row per
+		// progress line to clear them, on top of bubbletea's own repositioning, so it
+		// erased that many rows *above* the block -- the command the user typed, the
+		// init and workspace lines, whatever was there -- and left the summary stranded
+		// high on the screen with a blank tail below it.
+		return "\r" + clearToEOS + m.finalView()
 	}
 	return m.progressView()
 }
