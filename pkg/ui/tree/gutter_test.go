@@ -54,6 +54,27 @@ func TestSpacerGutter(t *testing.T) {
 	assert.Equal(t, "│       │", SpacerGutter(Path{false, true, false}))
 }
 
+func TestSpacerFromConnectorRow(t *testing.T) {
+	tests := []struct {
+		name string
+		row  string
+		want string
+	}{
+		{"root-level spacer with siblings after it", "├── <<<SPACER>>>", "│"},
+		{"root-level spacer as last child", "└── <<<SPACER>>>", ""},
+		{"nested spacer keeps the ancestor rail and adds its own", "│   ├── <<<SPACER>>>", "│   │"},
+		{"nested spacer under a last parent", "    ├── <<<SPACER>>>", "    │"},
+		{"nested last spacer keeps only the ancestor rail", "│   └── <<<SPACER>>>", "│"},
+		{"leading fixed column is preserved", "  ●  │   ├── x", "  ●  │   │"},
+		{"no connector", "just text", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, SpacerFromConnectorRow(tt.row))
+		})
+	}
+}
+
 func TestViolations_Connected(t *testing.T) {
 	rows := []string{
 		"  dev/vpc",
@@ -63,6 +84,23 @@ func TestViolations_Connected(t *testing.T) {
 		"      │   │   attr",
 		"      │   └── rta",
 		"      └── other",
+	}
+	assert.Empty(t, Violations(rows))
+}
+
+// TestViolations_LipglossThreeWideArms verifies trees rendered by lipgloss/tree, whose
+// default enumerator arm is three columns wide, are recognized as connected.
+func TestViolations_LipglossThreeWideArms(t *testing.T) {
+	rows := []string{
+		"│",
+		"├──stack-a",
+		"│  ├──eks",
+		"│  │  └──catalog/eks",
+		"│  │",
+		"│  └──vpc",
+		"│",
+		"└──stack-b",
+		"   └──vpc",
 	}
 	assert.Empty(t, Violations(rows))
 }

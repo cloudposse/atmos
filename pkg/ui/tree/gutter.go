@@ -28,6 +28,11 @@ const (
 
 	// Width is the display width of every gutter segment above.
 	Width = 4
+
+	// The narrowest connector arm Violations recognizes. Lipgloss/tree's default
+	// enumerator ("├──", no trailing space) puts a child's connector three columns right
+	// of its parent's, while this package's segments put it four (Width).
+	minArmWidth = 3
 )
 
 // Path is a node's position in a tree, one entry per level from the root's children down
@@ -88,16 +93,41 @@ func writeLevels(b *strings.Builder, levels []bool) {
 	}
 }
 
+// SpacerFromConnectorRow derives the spacer row that belongs in place of a rendered tree row
+// whose connector introduces a spacer placeholder (a blank line between sibling blocks).
+//
+// The row is the rendered row with ANSI styling stripped. Everything before the connector -- the
+// ancestor rails -- is kept as is; the connector itself becomes a rail when it is "├" (rows
+// still follow at that level) and nothing when it is "└"; the connector's arm and the
+// placeholder text are dropped. This is SpacerGutter for renderers that emit spacers as
+// tree nodes (lipgloss/tree) rather than tracking a Path themselves. A row without a
+// connector has no tree position and yields an empty spacer.
+func SpacerFromConnectorRow(row string) string {
+	runes := []rune(row)
+	for c, ch := range runes {
+		if !isConnector(ch) {
+			continue
+		}
+		gutter := string(runes[:c])
+		if ch == '├' {
+			gutter += "│"
+		}
+		return strings.TrimRight(gutter, " ")
+	}
+	return ""
+}
+
 // Violations checks that a rendered tree is connected and returns one message per break.
 //
 // The rows are the rendered lines with any ANSI styling already stripped; any fixed leading
 // column (an action symbol, indentation) is fine as long as it is the same width on every
 // row. The invariant: every box-drawing character must have, on the row directly above
 // it, either a box-drawing character in the same column (the rail it continues) or a
-// connector one segment to the left (the parent it hangs from). The one exception is a
-// root-level connector -- one in the tree's leftmost box-drawing column -- which may sit
-// under a row with no tree characters at all, such as a header. Nothing deeper may:
-// a nested connector or a rail under a bare row is exactly a broken rail.
+// connector one arm's width to the left (the parent it hangs from; both this package's
+// four-column segments and lipgloss/tree's three-column enumerator are recognized). The one
+// exception is a root-level connector -- one in the tree's leftmost box-drawing column --
+// which may sit under a row with no tree characters at all, such as a header. Nothing
+// deeper may: a nested connector or a rail under a bare row is exactly a broken rail.
 func Violations(rows []string) []string {
 	root := rootColumn(rows)
 	var out []string
@@ -110,7 +140,7 @@ func Violations(rows []string) []string {
 			}
 			above := at(prev, c)
 			switch {
-			case isBox(above), isConnector(at(prev, c-Width)):
+			case isBox(above), hangsFromParent(prev, c):
 				// Continues a rail, or hangs from its parent's connector.
 			case isBare(prev) && isConnector(ch) && c == root:
 				// A root-level connector under a header row.
@@ -121,6 +151,17 @@ func Violations(rows []string) []string {
 		prev = cur
 	}
 	return out
+}
+
+// hangsFromParent reports whether column c on the row above holds a connector one arm's
+// width to the left, i.e. the parent this row's box-drawing character hangs from.
+func hangsFromParent(prev []rune, c int) bool {
+	for w := minArmWidth; w <= Width; w++ {
+		if isConnector(at(prev, c-w)) {
+			return true
+		}
+	}
+	return false
 }
 
 // rootColumn returns the leftmost column holding a box-drawing character anywhere in
