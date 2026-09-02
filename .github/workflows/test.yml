@@ -1010,6 +1010,7 @@ jobs:
             dl.google.com:443
             esm.ubuntu.com:443
             github.com:443
+            mirror.gcr.io:443
             motd.ubuntu.com:443
             openidconnect.googleapis.com:443
             production.cloudfront.docker.com:443
