@@ -878,11 +878,17 @@ func TestPlanFilePath_AbsolutizesRelativeWorkingDir(t *testing.T) {
 	got := planFilePath(relativeWorkingDir, ".atmos-plan-123.tfplan")
 
 	require.True(t, filepath.IsAbs(got), "expected an absolute path, got %q", got)
-	// Resolve symlinks in tmp (e.g. macOS's /tmp -> /private/tmp) since planFilePath's
-	// os.Getwd()-backed filepath.Abs returns the resolved form.
-	resolvedTmp, err := filepath.EvalSymlinks(tmp)
+	// Build the expected prefix from os.Getwd() (called after the chdir above) rather than
+	// from tmp directly. planFilePath resolves the relative path via filepath.Abs, which
+	// joins against the OS's own notion of the current directory — os.Getwd() is the only
+	// way to observe that same value. tmp's literal string can differ from what the OS
+	// reports: on macOS, tmp itself is a symlink (e.g. /tmp -> /private/tmp) that getcwd()
+	// resolves; on Windows CI runners, GetCurrentDirectory can report the current directory
+	// in its short 8.3-alias form (e.g. "RUNNER~1") even though tmp was created with a long
+	// user-profile name. Comparing against os.Getwd()'s output is robust to both.
+	cwdAfterChdir, err := os.Getwd()
 	require.NoError(t, err)
-	want := filepath.Join(resolvedTmp, relativeWorkingDir, ".atmos-plan-123.tfplan")
+	want := filepath.Join(cwdAfterChdir, relativeWorkingDir, ".atmos-plan-123.tfplan")
 	assert.Equal(t, want, got)
 	// The doubled-path bug this guards against would produce a path with the working dir's
 	// own name segments appearing twice in a row.
