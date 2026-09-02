@@ -77,6 +77,7 @@ func (m *masker) RegisterSecret(secret string) {
 	}
 
 	m.RegisterValue(secret)
+	m.registerMultilineSecretLines(secret)
 
 	// Register base64 encoded versions.
 	m.RegisterValue(base64.StdEncoding.EncodeToString([]byte(secret)))
@@ -99,6 +100,21 @@ func (m *masker) RegisterSecret(secret string) {
 			if escapedInner != secret {
 				m.RegisterValue(escapedInner)
 			}
+		}
+	}
+}
+
+// registerMultilineSecretLines protects partial renderings where a formatter or diff
+// elides part of a multiline secret and the complete registered literal is no longer
+// present. Empty lines are ignored because they carry no secret information.
+func (m *masker) registerMultilineSecretLines(secret string) {
+	normalized := strings.ReplaceAll(secret, "\r\n", "\n")
+	if !strings.Contains(normalized, "\n") {
+		return
+	}
+	for _, line := range strings.Split(normalized, "\n") {
+		if line != "" {
+			m.RegisterValue(line)
 		}
 	}
 }
