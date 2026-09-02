@@ -329,7 +329,7 @@ func executePlanWithUserFile(ctx context.Context, opts *ExecuteOptions, planFile
 // executePlanWithTempFile generates a temporary planfile, runs plan into it, displays the
 // dependency tree, then cleans up the temp file.
 func executePlanWithTempFile(ctx context.Context, opts *ExecuteOptions) error {
-	planFile := filepath.Join(opts.WorkingDir, fmt.Sprintf(".atmos-plan-%d.tfplan", time.Now().UnixNano()))
+	planFile := planFilePath(opts.WorkingDir, fmt.Sprintf(".atmos-plan-%d.tfplan", time.Now().UnixNano()))
 	defer os.Remove(planFile)
 
 	// Add -out flag to args (copy slice to avoid modifying original).
@@ -551,7 +551,31 @@ func generateTwoPhasePlanFile(workingDir string, isDestroy bool) string {
 	if isDestroy {
 		pattern = ".atmos-destroy-%d.tfplan"
 	}
-	return filepath.Join(workingDir, fmt.Sprintf(pattern, time.Now().UnixNano()))
+	return planFilePath(workingDir, fmt.Sprintf(pattern, time.Now().UnixNano()))
+}
+
+// planFilePath joins workingDir and filename into an absolute path. Every planfile path built
+// here is used two ways: as a `-out=`/apply-from-file argument to a terraform subprocess whose
+// cmd.Dir is already set to this same workingDir, and later reopened directly by this atmos
+// process (e.g. by BuildDependencyTree) to parse the plan.
+//
+// The working directory argument isn't guaranteed to be absolute — it derives from
+// atmosConfig.BasePath, which (unlike BasePathAbsolute) can be relative. A relative working
+// directory joined with the filename and then handed to the subprocess as `-out=` gets
+// re-resolved against the subprocess's own cwd (already that same directory), silently
+// doubling the path (e.g. "<workdir>/<workdir>/.atmos-plan-....tfplan") and failing with "no
+// such file or directory" once the subprocess tries to create it. Absolute paths sidestep the
+// problem entirely, since they're immune to whatever the subprocess's cwd is.
+//
+// The absolute conversion can only fail if the process's own working directory lookup fails (a
+// broken process environment); fall back to the plain join rather than erroring a planfile-path
+// helper for that unrecoverable case.
+func planFilePath(workingDir, filename string) string {
+	joined := filepath.Join(workingDir, filename)
+	if abs, err := filepath.Abs(joined); err == nil {
+		return abs
+	}
+	return joined
 }
 
 // runTwoPhasePlan runs the plan phase (with -destroy when applicable) into planFile.

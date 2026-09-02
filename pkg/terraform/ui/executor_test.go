@@ -858,6 +858,37 @@ func TestFinalizeExecuteInitResult(t *testing.T) {
 	})
 }
 
+// TestPlanFilePath_AbsolutizesRelativeWorkingDir is a regression test. A relative working
+// directory (e.g. atmosConfig.BasePath, which unlike BasePathAbsolute isn't guaranteed
+// absolute) joined naively with a filename and passed as `-out=` to a subprocess whose cmd.Dir
+// is already that same relative directory gets re-resolved against the subprocess's own cwd,
+// silently doubling the path and failing with "no such file or directory" when the subprocess
+// tries to create it. The function under test must always return an absolute path regardless
+// of the working directory's form.
+func TestPlanFilePath_AbsolutizesRelativeWorkingDir(t *testing.T) {
+	tmp := t.TempDir()
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(wd) })
+	require.NoError(t, os.Chdir(tmp))
+
+	relativeWorkingDir := filepath.Join(".workdir", "terraform", "core-ue2-auto-vpc-05bc9914")
+	require.NoError(t, os.MkdirAll(relativeWorkingDir, 0o755))
+
+	got := planFilePath(relativeWorkingDir, ".atmos-plan-123.tfplan")
+
+	require.True(t, filepath.IsAbs(got), "expected an absolute path, got %q", got)
+	// Resolve symlinks in tmp (e.g. macOS's /tmp -> /private/tmp) since planFilePath's
+	// os.Getwd()-backed filepath.Abs returns the resolved form.
+	resolvedTmp, err := filepath.EvalSymlinks(tmp)
+	require.NoError(t, err)
+	want := filepath.Join(resolvedTmp, relativeWorkingDir, ".atmos-plan-123.tfplan")
+	assert.Equal(t, want, got)
+	// The doubled-path bug this guards against would produce a path with the working dir's
+	// own name segments appearing twice in a row.
+	assert.NotContains(t, got, filepath.Join(relativeWorkingDir, relativeWorkingDir))
+}
+
 // TestGenerateTwoPhasePlanFile verifies the apply and destroy planfile name patterns differ
 // and both land in the requested working directory.
 func TestGenerateTwoPhasePlanFile(t *testing.T) {
