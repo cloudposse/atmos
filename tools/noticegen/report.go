@@ -75,10 +75,18 @@ func goLicensesVersion() string {
 	return envOrDefault("GO_LICENSES_VERSION", defaultGoLicensesVersion)
 }
 
+// lookPathGoLicenses resolves an already-installed go-licenses binary on
+// PATH. A package-level var so tests can force the "not found" branch
+// deterministically instead of relying on the real PATH not already
+// containing go-licenses (which it may, e.g. from a prior local run).
+var lookPathGoLicenses = func() (string, error) {
+	return exec.LookPath("go-licenses")
+}
+
 // ensureGoLicenses returns the path to a go-licenses binary, installing it
 // via `go install` if it isn't already on PATH.
 func ensureGoLicenses(version string) (string, error) {
-	if path, err := exec.LookPath("go-licenses"); err == nil {
+	if path, err := lookPathGoLicenses(); err == nil {
 		return path, nil
 	}
 

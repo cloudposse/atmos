@@ -59,7 +59,7 @@ normal and expected regardless of the mechanism.
   (`if: ${{ cancelled() }}`) and gated both existing check steps ("Check per-OS test matrix result",
   "Check terraform-registry-cache result") with `if: ${{ !cancelled() }}` (the latter combined with
   its existing `matrix.check != 'Acceptance Tests (macos)'` condition), so a cancelled run resolves
-  as a passing (all-steps-skipped) job instead of a hard failure. The per-shard/API-based
+  as a passing job whose verification steps are skipped, instead of a hard failure. The per-shard/API-based
   verification logic itself is unchanged.
 - `k3s-required`: same pattern -- an explicit skip step plus `if: ${{ !cancelled() }}` on the
   existing "Check k3s matrix result" step.

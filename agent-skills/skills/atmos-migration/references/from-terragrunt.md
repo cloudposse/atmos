@@ -136,9 +136,15 @@ the real value once the dependency is deployed.
 
 ### `mock_outputs` → the `mocks` component field and `--use-mocks`
 
-Atmos has a first-class, direct equivalent to `mock_outputs`, not a workaround. A
-Terraform component declares literal output values under `mocks`, and any caller
-resolves them explicitly with `--use-mocks`:
+Atmos has a first-class mock mode, but its scope differs from Terragrunt's
+per-dependency `mock_outputs`. Terragrunt lets each `dependency` block set its own
+mock values for the same target module; Atmos stores one `mocks` map on the producer
+component (in a given stack), shared by every consumer that reads it. Use this
+mapping directly only when every consumer of a producer is fine with the same mock
+values. If consumers genuinely need different values for the same output, give
+each consumer its own producer component instance (a second logical component
+name pointing at the same Terraform root module) with its own `mocks` block,
+rather than expecting one shared map to vary per caller.
 
 ```hcl
 dependency "vpc" {

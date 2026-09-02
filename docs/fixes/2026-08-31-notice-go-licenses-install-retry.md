@@ -1,4 +1,4 @@
-# Fix: retry `go install go-licenses` in `scripts/generate-notice.sh` on transient sum.golang.org failures
+# Fix: retry `go install go-licenses` in `tools/noticegen` on transient sum.golang.org failures
 
 **Date:** 2026-08-31
 
@@ -23,28 +23,36 @@ script.
 
 ## Context
 
-`scripts/generate-notice.sh`'s `go install "github.com/google/go-licenses@${GO_LICENSES_VERSION}"`
-call had no retry logic, so a single mid-stream `sum.golang.org` hiccup failed the whole NOTICE
-regeneration outright, before it ever got to actually scanning dependencies. Confirmed via `gh api
+The original NOTICE generator, `scripts/generate-notice.sh`, called
+`go install "github.com/google/go-licenses@${GO_LICENSES_VERSION}"` with no retry logic, so a
+single mid-stream `sum.golang.org` hiccup failed the whole NOTICE regeneration outright, before it
+ever got to actually scanning dependencies. Confirmed via `gh api
 repos/cloudposse/atmos/actions/jobs/99522359137` that this ran against `head_sha: 5ac5d9739f` --
 the immediately preceding commit on this branch, which itself only touched the `REPO_OVERRIDES`
 list and `NOTICE` for an unrelated `cuelang.org/go` URL fix
 (`docs/fixes/2026-08-31-required-check-gates-fail-on-cancelled-run.md`'s sibling commit) -- ruling
 out a regression from that change.
 
+`scripts/generate-notice.sh` has since been replaced by `tools/noticegen`, a Go tool invoked via
+`go tool mage notice:generate` (see the commit that rewrote the NOTICE generator as a Go tool + mage
+target). The retry fix below was ported into `tools/noticegen/report.go`'s `ensureGoLicenses` as
+part of that rewrite, so it survives in the current implementation even though the original shell
+script it was written against no longer exists.
+
 ## Changes
 
-- `scripts/generate-notice.sh`: wrapped the bare `go install` call in a 3-attempt/15s-backoff
-  `until` retry loop, matching the established convention (`.github/actions/download-artifact-retry`,
-  `magefiles/build.go`'s `runGoModDownload`). `set -euo pipefail` doesn't short-circuit this, since
-  a command used as an `until`/`while` condition is exempt from `set -e`'s early-exit behavior
-  (same reasoning documented in the original `go mod download` fix).
+- `tools/noticegen/report.go`: `ensureGoLicenses` wraps its `go install` call (via the
+  package-level `runGoInstall` var) in a 3-attempt/15s-backoff retry loop (`goInstallMaxAttempts`,
+  `goInstallRetryDelay`, `goInstallSleep`), matching the established convention
+  (`.github/actions/download-artifact-retry`, `magefiles/build.go`'s `runGoModDownload`).
+- `tools/noticegen/report_test.go`: `TestEnsureGoLicensesRetriesOnTransientInstallFailure` and
+  `TestEnsureGoLicensesFailsAfterExhaustingRetries` cover the retry loop by faking `runGoInstall`
+  and `goInstallSleep`, so the tests run without real subprocesses, network access, or sleeps.
 
 ## Validation
 
-- `bash -n scripts/generate-notice.sh` -- clean.
-- `shellcheck scripts/generate-notice.sh` -- only two pre-existing, unrelated SC2129 style notes
-  (lines 221/238, `cat >>` redirects) untouched by this change; zero new findings.
+- `cd tools/noticegen && go test ./... -run 'TestEnsureGoLicenses' -v` -- both new tests pass.
+- `cd tools/noticegen && go test ./...` -- full package suite passes.
 - Not exercised end-to-end against a real `sum.golang.org` outage (not reproducible on demand);
   the fix is a direct, narrow port of an already-validated pattern (see the two referenced prior
   fix docs) to a second call site hitting the same failure class.

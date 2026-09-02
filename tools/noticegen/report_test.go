@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -177,6 +178,14 @@ func TestEnsureGoLicensesRetriesOnTransientInstallFailure(t *testing.T) {
 	// resolveGoLicensesBinPath's real `go env GOBIN` call.
 	t.Setenv("PATH", gobin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
+	// Force the "not found" branch regardless of whether go-licenses happens
+	// to already be resolvable on the real PATH (e.g. from a prior local
+	// run) -- otherwise ensureGoLicenses would return early and the retry
+	// assertions below would never see an install attempt.
+	origLookPath := lookPathGoLicenses
+	t.Cleanup(func() { lookPathGoLicenses = origLookPath })
+	lookPathGoLicenses = func() (string, error) { return "", exec.ErrNotFound }
+
 	name := "go-licenses"
 	if runtime.GOOS == "windows" {
 		name += ".exe"
@@ -217,6 +226,12 @@ func TestEnsureGoLicensesFailsAfterExhaustingRetries(t *testing.T) {
 	gobin := t.TempDir()
 	t.Setenv("GOBIN", gobin)
 	t.Setenv("PATH", gobin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	// See TestEnsureGoLicensesRetriesOnTransientInstallFailure: force the
+	// "not found" branch so runGoInstall actually runs for every attempt.
+	origLookPath := lookPathGoLicenses
+	t.Cleanup(func() { lookPathGoLicenses = origLookPath })
+	lookPathGoLicenses = func() (string, error) { return "", exec.ErrNotFound }
 
 	attempt := 0
 	wantErr := errors.New("persistent network error")
