@@ -174,5 +174,6 @@ Cloud Posse states these rather than leaving them to discovery.
 - Several scanners operate in advisory mode. Section 4.2 lists them.
 - Patch-level coverage is a target, not a gate.
 - Formal incident-response, access-control, and personnel-security policies are not yet written. They are being produced under the SOC 2 programme Cloud Posse is pursuing for Atmos Pro.
+- Egress monitoring through harden-runner runs in audit mode on GitHub-hosted jobs only. StepSecurity's free open-source tier does not extend to self-hosted runners, so the RunsOn half of the hybrid described in Section 9 is outside that coverage. This is a vendor licensing boundary rather than a configuration choice.
 - Multi-factor authentication is enforced but is not restricted to phishing-resistant factors.
 - The build attains SLSA Build Level 2.
