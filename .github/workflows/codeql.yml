@@ -143,6 +143,20 @@ jobs:
         with:
           persist-credentials: false
 
+      # govulncheck-action has no download retry of its own and GOPROXY no
+      # longer falls back to direct fetches, so pre-populate the module cache
+      # (shared with the action's own setup-go) with bounded retries first.
+      # Only the action's small `go install .../govulncheck@latest` remains
+      # a single-shot proxy request.
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download Go module dependencies
+        uses: ./.github/actions/go-mod-download-retry
+
       - name: Run govulncheck
         uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
         env:

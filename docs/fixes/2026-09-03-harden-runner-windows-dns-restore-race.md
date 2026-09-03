@@ -132,6 +132,7 @@ while read id; do
     def ts: sub("\\.[0-9]+Z$"; "Z") | fromdate;
     .jobs[] | select(.conclusion=="cancelled") |
     select(any(.labels[]?; test("windows"; "i")) or (.name|test("windows"; "i"))) |
+    select((.steps|length) > 0 and .completed_at != null and .steps[-1].completed_at != null) |
     select(all(.steps[]; .conclusion=="success" or .conclusion=="skipped")) |
     select(((.completed_at|ts) - (.steps[-1].completed_at|ts)) >= 300) |
     [.run_id, .name] | @tsv'
