@@ -698,8 +698,15 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	// Filter computed fields
 	filtered := FilterComputedFields(result.ComponentSection)
 
-	// Verify filtered section only has stack-defined fields
-	allowedFields := []string{"vars", "settings", "env", "backend", "metadata", "overrides", "providers", "imports", "dependencies", "provision", "component", "hooks"}
+	// Verify filtered section only has stack-defined fields. Mirrors FilterComputedFields'
+	// fieldsToKeep exactly so this doesn't drift out of sync as more type-specific
+	// sections (helm/kubernetes) are added to the whitelist.
+	allowedFields := []string{
+		"vars", "settings", "env", "backend", "metadata", "overrides", "providers", "imports",
+		"dependencies", "component", "hooks",
+		"chart", "values", "values_files", "repositories",
+		"provider", "paths", "manifests", "render", "generate", "source", "provision",
+	}
 	for k := range filtered {
 		assert.Contains(t, allowedFields, k, "Filtered component section should only contain stack-defined fields")
 	}
@@ -828,6 +835,44 @@ func TestFilterComputedFields(t *testing.T) {
 			name:     "Handles nil input",
 			input:    nil,
 			expected: map[string]any{},
+		},
+		{
+			name: "Keeps helm-specific fields",
+			input: map[string]any{
+				"chart":           "some-chart",
+				"values":          map[string]any{"key": "value"},
+				"values_files":    []string{"values.yaml"},
+				"repositories":    []any{map[string]any{"name": "repo"}},
+				"atmos_component": "test-component",
+			},
+			expected: map[string]any{
+				"chart":        "some-chart",
+				"values":       map[string]any{"key": "value"},
+				"values_files": []string{"values.yaml"},
+				"repositories": []any{map[string]any{"name": "repo"}},
+			},
+		},
+		{
+			name: "Keeps kubernetes-specific fields",
+			input: map[string]any{
+				"provider":        "kubectl",
+				"paths":           []string{"manifests/"},
+				"manifests":       map[string]any{"key": "value"},
+				"render":          map[string]any{"output": "yaml"},
+				"generate":        map[string]any{"enabled": true},
+				"source":          map[string]any{"uri": "github.com/acme/manifests"},
+				"provision":       map[string]any{"default": "cluster"},
+				"atmos_component": "test-component",
+			},
+			expected: map[string]any{
+				"provider":  "kubectl",
+				"paths":     []string{"manifests/"},
+				"manifests": map[string]any{"key": "value"},
+				"render":    map[string]any{"output": "yaml"},
+				"generate":  map[string]any{"enabled": true},
+				"source":    map[string]any{"uri": "github.com/acme/manifests"},
+				"provision": map[string]any{"default": "cluster"},
+			},
 		},
 	}
 

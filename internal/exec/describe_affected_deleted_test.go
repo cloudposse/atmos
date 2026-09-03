@@ -57,6 +57,55 @@ func TestDetectDeletedComponents_ComponentDeleted(t *testing.T) {
 	assert.Contains(t, deleted[0].AffectedAll, affectedReasonDeleted)
 }
 
+// TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted guards against
+// helm/kubernetes deletions going undetected (both were previously omitted
+// from the hardcoded [terraform, helmfile, packer] search list).
+func TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted(t *testing.T) {
+	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	remoteStacks := map[string]any{
+		"dev-us-east-1": map[string]any{
+			"components": map[string]any{
+				cfg.HelmComponentType: map[string]any{
+					"nginx-ingress": map[string]any{
+						"vars": map[string]any{"replicas": 3},
+					},
+				},
+				cfg.KubernetesComponentType: map[string]any{
+					"cert-manager": map[string]any{
+						"vars": map[string]any{"namespace": "cert-manager"},
+					},
+				},
+			},
+		},
+	}
+
+	// Both deleted in HEAD.
+	currentStacks := map[string]any{
+		"dev-us-east-1": map[string]any{
+			"components": map[string]any{
+				cfg.HelmComponentType:       map[string]any{},
+				cfg.KubernetesComponentType: map[string]any{},
+			},
+		},
+	}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	require.NoError(t, err)
+	require.Len(t, deleted, 2)
+
+	byComponent := make(map[string]schema.Affected, len(deleted))
+	for _, d := range deleted {
+		byComponent[d.Component] = d
+	}
+	require.Contains(t, byComponent, "nginx-ingress")
+	require.Contains(t, byComponent, "cert-manager")
+	assert.Equal(t, cfg.HelmComponentType, byComponent["nginx-ingress"].ComponentType)
+	assert.Equal(t, cfg.KubernetesComponentType, byComponent["cert-manager"].ComponentType)
+}
+
 // TestDetectDeletedComponents_EntireStackDeleted tests detection when an entire stack is deleted.
 func TestDetectDeletedComponents_EntireStackDeleted(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
