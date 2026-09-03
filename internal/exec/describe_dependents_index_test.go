@@ -1,13 +1,56 @@
 package exec
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	comp "github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// fakeComponentProvider is a minimal comp.ComponentProvider stub used to
+// populate the component registry in tests. Internal/exec's test binary
+// cannot import the real pkg/component/{helm,kubernetes,...} packages to
+// trigger their init()-time registration (those packages import
+// internal/exec, which would be an import cycle), so tests that need to
+// prove behavior generalizes over "whatever is registered" register a fake
+// provider directly instead.
+type fakeComponentProvider struct {
+	componentType string
+}
+
+func (f *fakeComponentProvider) GetType() string                                 { return f.componentType }
+func (f *fakeComponentProvider) GetGroup() string                                { return "Test" }
+func (f *fakeComponentProvider) GetBasePath(_ *schema.AtmosConfiguration) string { return "" }
+
+func (f *fakeComponentProvider) ListComponents(_ context.Context, _ string, _ map[string]any) ([]string, error) {
+	return nil, nil
+}
+
+func (f *fakeComponentProvider) ValidateComponent(_ map[string]any) error { return nil }
+func (f *fakeComponentProvider) Execute(_ *comp.ExecutionContext) error   { return nil }
+func (f *fakeComponentProvider) GenerateArtifacts(_ *comp.ExecutionContext) error {
+	return nil
+}
+func (f *fakeComponentProvider) GetAvailableCommands() []string { return nil }
+
+// registerFakeComponentTypes registers a fake provider for each given type in
+// the shared component registry, and restores an empty registry via
+// t.Cleanup. Callers must not run in parallel with other tests that touch
+// the registry (none in this package call t.Parallel(), so sequential
+// per-package test execution keeps this safe).
+func registerFakeComponentTypes(t *testing.T, types ...string) {
+	t.Helper()
+	comp.Reset()
+	for _, typ := range types {
+		require.NoError(t, comp.Register(&fakeComponentProvider{componentType: typ}))
+	}
+	t.Cleanup(comp.Reset)
+}
 
 func TestBuildDependencyIndex_Empty(t *testing.T) {
 	idx := buildDependencyIndex(map[string]any{})
@@ -215,6 +258,46 @@ func TestFindComponentSectionInCachedStacks_Helmfile(t *testing.T) {
 	section := findComponentSectionInCachedStacks(stacks, "dev-use1", "nginx")
 	require.NotNil(t, section)
 	assert.Equal(t, "nginx", section["vars"].(map[string]any)["chart"])
+}
+
+// TestFindComponentSectionInCachedStacks_RegisteredProviderTypes guards
+// against a dependency resolving to nothing for any component type
+// registered via the component-provider registry (previously only
+// terraform/helmfile were checked here).
+func TestFindComponentSectionInCachedStacks_RegisteredProviderTypes(t *testing.T) {
+	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType)
+	require.NotEmpty(t, comp.ListTypes(), "test setup should have registered fake provider types")
+
+	for _, componentType := range comp.ListTypes() {
+		stacks := map[string]any{
+			"dev-use1": map[string]any{
+				"components": map[string]any{
+					componentType: map[string]any{
+						"widget": map[string]any{
+							"vars": map[string]any{"marker": componentType},
+						},
+					},
+				},
+			},
+		}
+
+		section := findComponentSectionInCachedStacks(stacks, "dev-use1", "widget")
+		require.NotNil(t, section, "component type %q should resolve", componentType)
+		assert.Equal(t, componentType, section["vars"].(map[string]any)["marker"])
+	}
+}
+
+func TestComponentSectionSearchOrder_IncludesLegacyAndRegisteredTypes(t *testing.T) {
+	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType)
+	require.NotEmpty(t, comp.ListTypes(), "test setup should have registered fake provider types")
+
+	order := componentSectionSearchOrder()
+	assert.Contains(t, order, cfg.TerraformComponentType)
+	assert.Contains(t, order, cfg.HelmfileComponentType)
+	assert.Contains(t, order, cfg.PackerComponentType)
+	for _, componentType := range comp.ListTypes() {
+		assert.Contains(t, order, componentType)
+	}
 }
 
 func TestFindComponentSectionInCachedStacks_InvalidStackSection(t *testing.T) {
