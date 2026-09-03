@@ -1948,10 +1948,14 @@ func TestSetToolVersion_WithValidVersion(t *testing.T) {
 	err = SetToolVersion("terraform", "1.11.4", 3)
 	assert.NoError(t, err)
 
-	// Verify the file was updated
+	// Verify the file was updated. Written under the raw "terraform" key (what the
+	// caller passed), not the resolved canonical "hashicorp/terraform" form --
+	// matching AddToolVersion's (add.go) established contract, see
+	// TestAddCommand_ValidTool.
 	content, err := os.ReadFile(tmpFile.Name())
 	require.NoError(t, err)
-	assert.Contains(t, string(content), "hashicorp/terraform")
+	assert.Contains(t, string(content), "terraform")
+	assert.NotContains(t, string(content), "hashicorp/terraform")
 	assert.Contains(t, string(content), "1.11.4")
 }
 
@@ -1991,6 +1995,48 @@ func TestSetToolVersion_ReplacesExistingDefault(t *testing.T) {
 	// second entry. Checking versions[0] alone (as this test previously did) passes even
 	// when the old version is silently retained -- assert the full, exact shape instead.
 	assert.Equal(t, []string{"1.11.4"}, versions, "set on a single-version tool must not leave the old default (1.5.7) pinned as a stale second entry")
+}
+
+// TestSetToolVersion_UpdatesExistingAliasKeyInPlace tests that SetToolVersion updates
+// the existing entry when the file already tracks the tool under a configured short
+// alias (e.g. "jq" for "jqlang/jq", as in the atmos-migration skill's from-mise.md
+// recipe), instead of writing a second, disconnected entry under the resolved
+// owner/repo form. Regression coverage for SetToolVersion writing spec.key (always
+// the canonical form) instead of toolName (the string the user/on-disk file actually
+// uses), which AddToolVersion (add.go) already gets right.
+func TestSetToolVersion_UpdatesExistingAliasKeyInPlace(t *testing.T) {
+	setupTestIO(t)
+
+	tmpFile, err := os.CreateTemp("", "tool-versions-*")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	// Seed the file with an existing default version under the short alias key,
+	// matching what a real .tool-versions file looks like per the migration recipe.
+	toolVersions := &ToolVersions{Tools: make(map[string][]string)}
+	AddVersionToTool(toolVersions, "jq", "1.7.1", false)
+	require.NoError(t, SaveToolVersions(tmpFile.Name(), toolVersions))
+
+	oldConfig := atmosConfig
+	defer func() { atmosConfig = oldConfig }()
+	atmosConfig = &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile: tmpFile.Name(),
+			Aliases:      map[string]string{"jq": "jqlang/jq"},
+		},
+	}
+
+	err = SetToolVersion("jq", "1.9.0", 3)
+	assert.NoError(t, err)
+
+	loaded, err := LoadToolVersions(tmpFile.Name())
+	require.NoError(t, err)
+	require.Len(t, loaded.Tools, 1, "should update the existing 'jq' entry, not add a second entry under the canonical form")
+	// set replaces (not merges into) the default, matching TestSetToolVersion_ReplacesExistingDefault --
+	// the old 1.7.1 must not survive as a stale second entry under "jq".
+	assert.Equal(t, []string{"1.9.0"}, loaded.Tools["jq"], "set should replace the existing alias-keyed entry, not append to it")
+	_, hasCanonicalKey := loaded.Tools["jqlang/jq"]
+	assert.False(t, hasCanonicalKey, "must not create a second entry under the resolved owner/repo form")
 }
 
 // TestSetToolVersion_RejectsRangeSyntax reproduces a gap where SetToolVersion could write

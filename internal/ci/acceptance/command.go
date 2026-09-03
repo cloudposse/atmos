@@ -11,17 +11,29 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
 	directoryPermissions = 0o755
 	defaultTestTimeout   = "40m"
 	cgoDisabled          = "CGO_ENABLED=0"
+
 	// Links Go's native FIPS 140-3 crypto module so acceptance-test binaries
 	// default to FIPS-enforcing mode (GODEBUG=fips140=on) at runtime, matching
 	// release builds. This is FIPS 140-3 mode, not a CMVP compliance
 	// certification. See docs/prd/fips-140-mode.md.
 	fips140Latest = "GOFIPS140=latest"
+
+	// Retry bounds for the known-benign Windows race handled by isTransientWindowsUnlinkError.
+	transientUnlinkRetries = 2
+	transientUnlinkDelay   = 2 * time.Second
+
+	// Bounds how much trailing stderr transientErrorDetector retains while looking
+	// for isTransientWindowsUnlinkError's diagnostic, so a verbose `go test` run
+	// can't grow that buffer without limit. The real diagnostic is one short line
+	// (well under this), so bounding it doesn't affect detection.
+	maxTransientMatchWindow = 4096
 )
 
 var (
@@ -29,16 +41,18 @@ var (
 	errCoverageData         = errors.New("invalid coverage data")
 	errShardPlan            = errors.New("invalid acceptance shard plan")
 	errRequiredArtifact     = errors.New("required acceptance artifact")
+	errCommandFailed        = errors.New("command failed")
 )
 
 type commandRunner struct {
-	stdout io.Writer
-	stderr io.Writer
-	stdin  io.Reader
+	stdout     io.Writer
+	stderr     io.Writer
+	stdin      io.Reader
+	retryDelay time.Duration
 }
 
 func newCommandRunner() commandRunner {
-	return commandRunner{stdout: os.Stdout, stderr: os.Stderr, stdin: os.Stdin}
+	return commandRunner{stdout: os.Stdout, stderr: os.Stderr, stdin: os.Stdin, retryDelay: transientUnlinkDelay}
 }
 
 func environment(name string) string {
@@ -58,17 +72,109 @@ func writeStatus(format string, args ...any) error {
 	return nil
 }
 
-func (r commandRunner) run(ctx context.Context, dir string, env []string, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...) // #nosec G702 -- CI executes only repository-selected tools and test binaries.
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), env...)
-	cmd.Stdin = r.stdin
-	cmd.Stdout = r.stdout
-	cmd.Stderr = r.stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("run %s: %w", commandString(name, args), err)
+// runOptions configures how commandRunner.run executes a command.
+type runOptions struct {
+	// dir is the working directory for the command.
+	dir string
+	// env is appended to the current process environment for the command.
+	env []string
+	// retryTransient enables the known-benign Windows go-test unlinkat retry (see
+	// run's doc comment). Note: it must be false for anything other than a bare
+	// `go test <pkgs>` invocation -- `go test -c` (which writes a persistent binary
+	// Go never deletes), `go tool covdata`, and precompiled *.test.exe binaries run
+	// directly cannot hit this specific race, and blindly retrying them on a
+	// coincidental stderr match could rerun a command with real side effects (e.g.
+	// writing coverage data) or mask a genuine, unrelated failure that happens to
+	// mention both substrings.
+	retryTransient bool
+}
+
+// run executes name/args in opts.dir with opts.env appended to the current
+// environment. When opts.retryTransient is true, it also retries on the known-benign
+// Windows race where a bare `go test` invocation fails to delete its own temp binary
+// after every test case has already reported ok/FAIL -- see isTransientWindowsUnlinkError.
+// Retrying is safe there: by the time that error appears, the process under test has
+// already exited and its actual pass/fail result was already written to stdout, so a
+// retry re-runs already-cached work rather than masking a real failure.
+func (r commandRunner) run(ctx context.Context, opts runOptions, name string, args ...string) error {
+	var lastErr error
+	for attempt := 0; attempt <= transientUnlinkRetries; attempt++ {
+		cmd := exec.CommandContext(ctx, name, args...) // #nosec G702 -- CI executes only repository-selected tools and test binaries.
+		cmd.Dir = opts.dir
+		cmd.Env = append(os.Environ(), opts.env...)
+		cmd.Stdin = r.stdin
+		cmd.Stdout = r.stdout
+
+		// Only retry-enabled invocations need to watch stderr for the transient
+		// diagnostic; everything else forwards stderr directly instead of paying for
+		// a capture that's never inspected.
+		var detector *transientErrorDetector
+		cmd.Stderr = r.stderr
+		if opts.retryTransient {
+			detector = &transientErrorDetector{}
+			cmd.Stderr = io.MultiWriter(r.stderr, detector)
+		}
+
+		err := cmd.Run()
+		if err == nil {
+			return nil
+		}
+		lastErr = fmt.Errorf("%w: run %s: %w", errCommandFailed, commandString(name, args), err)
+		if attempt == transientUnlinkRetries || !opts.retryTransient || !detector.matched() {
+			return lastErr
+		}
+		_, _ = fmt.Fprintf(r.stderr, "::warning::retrying %s after a transient Windows go-test cleanup race (attempt %d/%d): %v\n",
+			commandString(name, args), attempt+1, transientUnlinkRetries, err)
+		select {
+		case <-ctx.Done():
+			return lastErr
+		case <-time.After(r.retryDelay):
+		}
 	}
-	return nil
+	return lastErr
+}
+
+// isTransientWindowsUnlinkError reports whether output is the Go toolchain's own
+// "go: unlinkat ...: The process cannot access the file because it is being used by
+// another process" diagnostic -- a documented Windows race (another process, commonly
+// Windows Defender's real-time scanner, briefly holds the temp test binary open right
+// as `go test` tries to delete it) that fires only after every test case in the run has
+// already reported its real result. It is never emitted for an actual test failure.
+func isTransientWindowsUnlinkError(output string) bool {
+	return strings.Contains(output, "unlinkat") &&
+		strings.Contains(output, "cannot access the file because it is being used by another process")
+}
+
+// transientErrorDetector is an io.Writer that reports whether
+// isTransientWindowsUnlinkError has matched anywhere in everything written to it so
+// far, without retaining unbounded output: it keeps only the trailing
+// maxTransientMatchWindow bytes while unmatched, and drops that window entirely once
+// matched, since the sticky matched flag is all run needs from then on. The real
+// diagnostic is one short line, so bounding the window doesn't affect detection.
+type transientErrorDetector struct {
+	window []byte
+	found  bool
+}
+
+// Write implements io.Writer.
+func (d *transientErrorDetector) Write(p []byte) (int, error) {
+	if !d.found {
+		d.window = append(d.window, p...)
+		if len(d.window) > maxTransientMatchWindow {
+			d.window = d.window[len(d.window)-maxTransientMatchWindow:]
+		}
+		if isTransientWindowsUnlinkError(string(d.window)) {
+			d.found = true
+			d.window = nil
+		}
+	}
+	return len(p), nil
+}
+
+// matched reports whether the diagnostic has been observed. A nil detector (the
+// retryTransient=false path, where nothing is watching stderr) never matches.
+func (d *transientErrorDetector) matched() bool {
+	return d != nil && d.found
 }
 
 func (r commandRunner) output(ctx context.Context, dir string, env []string, name string, args ...string) (string, error) {
