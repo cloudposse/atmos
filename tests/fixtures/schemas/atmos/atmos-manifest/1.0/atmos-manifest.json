@@ -22,6 +22,9 @@
     "helm": {
       "$ref": "#/definitions/helm"
     },
+    "aws/cloudformation": {
+      "$ref": "#/definitions/aws_cloudformation"
+    },
     "vars": {
       "$ref": "#/definitions/vars"
     },
@@ -305,6 +308,9 @@
             },
             "helm": {
               "$ref": "#/definitions/helm_components"
+            },
+            "aws/cloudformation": {
+              "$ref": "#/definitions/aws_cloudformation_components"
             }
           },
           "additionalProperties": {
@@ -1072,6 +1078,170 @@
             },
             "plugins": {
               "$ref": "#/definitions/plugins"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "aws_cloudformation": {
+      "title": "aws_cloudformation",
+      "description": "aws/cloudformation component type defaults",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "aws_cloudformation_components": {
+      "title": "aws_cloudformation_components",
+      "description": "aws/cloudformation components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/aws_cloudformation_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "aws_cloudformation_component_manifest": {
+      "title": "aws_cloudformation_component_manifest",
+      "description": "aws/cloudformation component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "template": {
+              "type": "string"
+            },
+            "stack_name": {
+              "type": "string"
+            },
+            "parameters": {
+              "type": "object"
+            },
+            "capabilities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "stack_policy": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "file": {
+                  "type": "string"
+                }
+              }
+            },
+            "role_arn": {
+              "type": "string"
+            },
+            "notification_arns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "disable_rollback": {
+              "type": "boolean"
+            },
+            "termination_protection": {
+              "type": "boolean"
+            },
+            "timeout_in_minutes": {
+              "type": "integer"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
             }
           },
           "required": []

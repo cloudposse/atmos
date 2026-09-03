@@ -2183,6 +2183,203 @@
       "type": "object",
       "description": "AuthConsoleConfig defines global console behavior settings under auth.console."
     },
+    "AwsCloudFormation": {
+      "properties": {
+        "base_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "template": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Template is the path to the CloudFormation template, relative to the component's base path."
+        },
+        "stack_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "StackName is the explicit CloudFormation stack name (no legacy name-pattern interpolation)."
+        },
+        "parameters": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Parameters are CloudFormation template parameters, normalized at the API boundary\n(scalars stringified, lists comma-joined for List\u003cType\u003e/CommaDelimitedList)."
+        },
+        "capabilities": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Capabilities are the acknowledged IAM capabilities (e.g. CAPABILITY_IAM, CAPABILITY_NAMED_IAM)."
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Tags are applied to the CloudFormation stack."
+        },
+        "stack_policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StackPolicy"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "StackPolicy protects specific resources from update during UpdateStack."
+        },
+        "role_arn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "RoleArn is the IAM role CloudFormation assumes to deploy the stack."
+        },
+        "notification_arns": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "NotificationArns are SNS topic ARNs CloudFormation publishes stack events to."
+        },
+        "disable_rollback": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "DisableRollback prevents automatic rollback on stack creation failure."
+        },
+        "termination_protection": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "TerminationProtection prevents the stack from being deleted; must be explicitly disabled before delete."
+        },
+        "timeout_in_minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "TimeoutInMinutes bounds how long stack creation may run before CloudFormation rolls back."
+        }
+      },
+      "type": "object",
+      "description": "AwsCloudFormation defines configuration for native aws/cloudformation components.\nCloudFormation components deploy a stack-scoped CloudFormation stack directly through the\nAWS SDK for Go v2, with no external binary/toolchain dependency."
+    },
     "CIAnnotationsConfig": {
       "properties": {
         "enabled": {
@@ -3914,6 +4111,19 @@
           "anyOf": [
             {
               "$ref": "#/$defs/ContainerComponentsConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "aws/cloudformation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AwsCloudFormation"
             },
             {
               "type": "null"
@@ -8479,6 +8689,39 @@
             }
           ],
           "description": "PullRequest configures pull-request publishing (git kind; not yet supported by the cli provider)."
+        },
+        "bucket": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Bucket is the destination S3 bucket for packaged template/asset uploads (aws/s3 kind)."
+        },
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Prefix is the destination key prefix within Bucket (aws/s3 kind)."
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Region overrides the bucket's region (aws/s3 kind; defaults to the active identity's region)."
         }
       },
       "type": "object",
@@ -9171,6 +9414,23 @@
       },
       "type": "object",
       "description": "SourceSettings holds global source configuration defaults for JIT-vendored components."
+    },
+    "StackPolicy": {
+      "properties": {
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "File is the path to the stack policy JSON document, relative to the component's base path."
+        }
+      },
+      "type": "object",
+      "description": "StackPolicy references a CloudFormation stack policy document."
     },
     "Stacks": {
       "properties": {
@@ -16577,6 +16837,16 @@
       ]
     },
     "containerDirAbsolutePath": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cloudFormationDirAbsolutePath": {
       "anyOf": [
         {
           "type": "string"

@@ -63,6 +63,9 @@
       "container": {
         "base_path": "components/container"
       },
+      "aws/cloudformation": {
+        "base_path": ""
+      },
       "list": {
         "format": "",
         "columns": null

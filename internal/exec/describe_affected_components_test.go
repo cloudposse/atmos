@@ -554,6 +554,91 @@ func TestAddHelmSectionAffected_NoFalsePositives(t *testing.T) {
 	})
 }
 
+const (
+	cfnTestStack     = "dev"
+	cfnTestComponent = "vpc"
+)
+
+func cfnRemoteStacksWith(remoteComp map[string]any) map[string]any {
+	return map[string]any{
+		cfnTestStack: map[string]any{
+			"components": map[string]any{
+				cfg.CloudFormationComponentType: map[string]any{
+					cfnTestComponent: remoteComp,
+				},
+			},
+		},
+	}
+}
+
+func cfnAtmosConfig() *schema.AtmosConfiguration {
+	return &schema.AtmosConfiguration{
+		Components: schema.Components{
+			CloudFormation: schema.AwsCloudFormation{BasePath: "components/cloudformation"},
+		},
+	}
+}
+
+// TestAddCloudFormationSectionAffected covers every first-class aws/cloudformation
+// section addCloudFormationSectionAffected checks, including stack_name — a change
+// to stack_name retargets the deployed CloudFormation stack entirely, so it must be
+// detected the same as template/parameters/etc.
+func TestAddCloudFormationSectionAffected(t *testing.T) {
+	tests := []struct {
+		name       string
+		section    string
+		localVal   any
+		remoteVal  any
+		wantReason string
+	}{
+		{"stack_name", sectionNameStackName, "vpc-prod", "vpc-staging", affectedReasonStackStackName},
+		{"template", sectionNameTemplate, "template-a.yaml", "template-b.yaml", affectedReasonStackTemplate},
+		{"parameters", sectionNameParameters, map[string]any{"CidrBlock": "10.0.0.0/16"}, map[string]any{"CidrBlock": "10.1.0.0/16"}, affectedReasonStackParameters},
+		{"capabilities", sectionNameCapabilities, []any{"CAPABILITY_IAM"}, []any{"CAPABILITY_NAMED_IAM"}, affectedReasonStackCapabilities},
+		{"tags", sectionNameTags, map[string]any{"env": "a"}, map[string]any{"env": "b"}, affectedReasonStackTags},
+		{"stack_policy", sectionNameStackPolicy, map[string]any{"file": "a.json"}, map[string]any{"file": "b.json"}, affectedReasonStackStackPolicy},
+		{"role_arn", sectionNameRoleArn, "arn:aws:iam::111:role/a", "arn:aws:iam::111:role/b", affectedReasonStackRoleArn},
+		{"notification_arns", sectionNameNotificationArns, []any{"arn:aws:sns:a"}, []any{"arn:aws:sns:b"}, affectedReasonStackNotificationArns},
+		{"disable_rollback", sectionNameDisableRollback, true, false, affectedReasonStackDisableRollback},
+		{"termination_protection", sectionNameTerminationProtection, true, false, affectedReasonStackTerminationProtection},
+		{"timeout_in_minutes", sectionNameTimeoutInMinutes, 10, 20, affectedReasonStackTimeoutInMinutes},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			componentSection := map[string]any{tt.section: tt.localVal}
+			remoteStacks := cfnRemoteStacksWith(map[string]any{tt.section: tt.remoteVal})
+
+			var affected []schema.Affected
+			err := addCloudFormationSectionAffected(
+				&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+				&componentSection, &remoteStacks, &remoteStacks,
+				false, false,
+			)
+			require.NoError(t, err)
+
+			require.Len(t, affected, 1)
+			assert.Equal(t, cfnTestComponent, affected[0].Component)
+			assert.Equal(t, cfg.CloudFormationComponentType, affected[0].ComponentType)
+			assert.Equal(t, tt.wantReason, affected[0].Affected)
+		})
+	}
+}
+
+func TestAddCloudFormationSectionAffected_NoFalsePositives(t *testing.T) {
+	componentSection := map[string]any{sectionNameStackName: "vpc-prod"}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{sectionNameStackName: "vpc-prod"})
+
+	var affected []schema.Affected
+	err := addCloudFormationSectionAffected(
+		&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+		&componentSection, &remoteStacks, &remoteStacks,
+		false, false,
+	)
+	require.NoError(t, err)
+	assert.Empty(t, affected)
+}
+
 func TestIsComponentSectionEqual(t *testing.T) {
 	remoteStacks := helmRemoteStacksWith(map[string]any{
 		sectionNameChart:  "bitnami/nginx",

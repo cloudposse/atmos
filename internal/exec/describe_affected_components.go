@@ -53,6 +53,19 @@ const (
 	affectedReasonStackAuth                   = "stack.auth"
 	affectedReasonStackCommand                = "stack.command"
 	affectedReasonStackDependencies           = "stack.dependencies"
+
+	// Affected reasons for aws/cloudformation-specific sections.
+	affectedReasonStackStackName             = "stack.stack_name"
+	affectedReasonStackTemplate              = "stack.template"
+	affectedReasonStackParameters            = "stack.parameters"
+	affectedReasonStackCapabilities          = "stack.capabilities"
+	affectedReasonStackTags                  = "stack.tags"
+	affectedReasonStackStackPolicy           = "stack.stack_policy"
+	affectedReasonStackRoleArn               = "stack.role_arn"
+	affectedReasonStackNotificationArns      = "stack.notification_arns"
+	affectedReasonStackDisableRollback       = "stack.disable_rollback"
+	affectedReasonStackTerminationProtection = "stack.termination_protection"
+	affectedReasonStackTimeoutInMinutes      = "stack.timeout_in_minutes"
 )
 
 // Deletion type constants.
@@ -76,6 +89,19 @@ const (
 	sectionNameValuesF   = "values_files"
 	sectionNameChart     = "chart"
 	sectionNameRepos     = "repositories"
+
+	// Section name constants for aws/cloudformation-specific isEqual comparisons.
+	sectionNameStackName             = "stack_name"
+	sectionNameTemplate              = "template"
+	sectionNameParameters            = "parameters"
+	sectionNameCapabilities          = "capabilities"
+	sectionNameTags                  = "tags"
+	sectionNameStackPolicy           = "stack_policy"
+	sectionNameRoleArn               = "role_arn"
+	sectionNameNotificationArns      = "notification_arns"
+	sectionNameDisableRollback       = "disable_rollback"
+	sectionNameTerminationProtection = "termination_protection"
+	sectionNameTimeoutInMinutes      = "timeout_in_minutes"
 )
 
 // shouldSkipComponent determines if a component should be skipped based on metadata.
@@ -692,6 +718,130 @@ func processHelmComponentsIndexed(
 	}
 
 	return affected, nil
+}
+
+// processCloudFormationComponentsIndexed detects affected aws/cloudformation
+// components, mirroring processHelmComponentsIndexed's shape (SDK-native
+// component types use the *Indexed helpers, not the legacy per-file scan path).
+//
+//nolint:funlen,dupl // Mirrors the per-type indexed processors (Terraform/Helmfile/Packer/Kubernetes/Helm) with aws/cloudformation-specific sections.
+func processCloudFormationComponentsIndexed(
+	stackName string,
+	cloudFormationSection map[string]any,
+	remoteStacks *map[string]any,
+	currentStacks *map[string]any,
+	atmosConfig *schema.AtmosConfiguration,
+	filesIndex *changedFilesIndex,
+	patternCache *componentPathPatternCache,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+	excludeLocked bool,
+) ([]schema.Affected, error) {
+	var affected []schema.Affected
+
+	for componentName, compSection := range cloudFormationSection {
+		componentSection, ok := compSection.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
+		if hasMetadata {
+			if shouldSkipComponent(metadataSection, componentName, excludeLocked) {
+				continue
+			}
+
+			if !isEqual(remoteStacks, stackName, cfg.CloudFormationComponentType, componentName, metadataSection, sectionNameMetadata) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
+					&componentSection, affectedReasonStackMetadata, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		component := GetComponentFolder(&componentSection, componentName)
+
+		changed, err := isComponentFolderChangedIndexed(component, cfg.CloudFormationComponentType, atmosConfig, filesIndex, patternCache)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
+				&componentSection, affectedReasonComponent, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if err := addCloudFormationSectionAffected(&affected, atmosConfig, componentName, stackName, &componentSection, remoteStacks, currentStacks, includeSpaceliftAdminStacks, includeSettings); err != nil {
+			return nil, err
+		}
+
+		if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
+			err := checkSettingsAndDependenciesIndexed(
+				&affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
+				&componentSection, settingsSection, remoteStacks, currentStacks, filesIndex,
+				includeSpaceliftAdminStacks, includeSettings,
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return affected, nil
+}
+
+// addCloudFormationSectionAffected checks the aws/cloudformation-specific
+// first-class sections (stack_name, template, parameters, capabilities, tags,
+// stack_policy, role_arn, notification_arns, disable_rollback,
+// termination_protection, timeout_in_minutes) for inline config changes
+// between the remote and current stacks, mirroring addHelmSectionAffected.
+func addCloudFormationSectionAffected(
+	affected *[]schema.Affected,
+	atmosConfig *schema.AtmosConfiguration,
+	componentName string,
+	stackName string,
+	componentSection *map[string]any,
+	remoteStacks *map[string]any,
+	currentStacks *map[string]any,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+) error {
+	sections := []struct {
+		name   string
+		reason string
+	}{
+		{sectionNameStackName, affectedReasonStackStackName},
+		{sectionNameTemplate, affectedReasonStackTemplate},
+		{sectionNameParameters, affectedReasonStackParameters},
+		{sectionNameCapabilities, affectedReasonStackCapabilities},
+		{sectionNameTags, affectedReasonStackTags},
+		{sectionNameStackPolicy, affectedReasonStackStackPolicy},
+		{sectionNameRoleArn, affectedReasonStackRoleArn},
+		{sectionNameNotificationArns, affectedReasonStackNotificationArns},
+		{sectionNameDisableRollback, affectedReasonStackDisableRollback},
+		{sectionNameTerminationProtection, affectedReasonStackTerminationProtection},
+		{sectionNameTimeoutInMinutes, affectedReasonStackTimeoutInMinutes},
+	}
+
+	for _, section := range sections {
+		value, ok := (*componentSection)[section.name]
+		if !ok {
+			continue
+		}
+		if isComponentSectionEqual(remoteStacks, stackName, cfg.CloudFormationComponentType, componentName, value, section.name) {
+			continue
+		}
+		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
+			componentSection, section.reason, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func addHelmSectionAffected(

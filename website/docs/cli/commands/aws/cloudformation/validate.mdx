@@ -1,0 +1,74 @@
+---
+title: atmos aws cloudformation validate
+sidebar_label: validate
+sidebar_class_name: command
+id: validate
+description: Validate a CloudFormation template server-side with the ValidateTemplate API.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Validate the component's template with CloudFormation's server-side
+  `ValidateTemplate` API — a syntax and capability-discovery check, not a local
+  linter.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation validate --help" src="/casts/screengrabs/atmos-aws-cloudformation-validate--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation validate <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation validate vpc -s plat-ue2-dev
+```
+
+Validate all or affected components in dependency order:
+
+```shell
+atmos aws cloudformation validate --all -s plat-ue2-dev
+atmos aws cloudformation validate --affected --base origin/main
+```
+
+Validate components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos aws cloudformation validate --all --tags production,tier-1
+atmos aws cloudformation validate --affected --labels cost-center=platform
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Validate all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Validate affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+:::note
+`validate` only checks template syntax and discovers required capabilities
+(e.g. `CAPABILITY_IAM`) via the AWS API. It does not run local linters such as
+`cfn-lint` or `cfn-guard` — declare those tools via the
+[toolchain subsystem](/cli/configuration/toolchain) and run them from
+[hooks](/stacks/hooks) or workflow steps if you want that check.
+:::

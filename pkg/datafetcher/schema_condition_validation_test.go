@@ -232,6 +232,61 @@ func TestManifestSchema_KubernetesComponentProvisionTargetSplitField(t *testing.
 	}
 }
 
+// TestManifestSchema_CloudFormationComponentManifest guards against the
+// aws_cloudformation_component_manifest definition drifting out of sync
+// between the schema copies (stack-config/1.0.json vs atmos/manifest/1.0.json)
+// the same way TestManifestSchema_KubernetesComponentValidateField guards
+// Kubernetes's validate field — a definition added to one copy but omitted
+// from the other causes an additionalProperties rejection under the schema
+// atmos describe stacks/atmos validate stacks actually enforce by default.
+// The fixture copy under tests/fixtures/schemas predates the aws/cloudformation
+// component feature entirely and is intentionally excluded here, same as the
+// Kubernetes/container precedents above.
+func TestManifestSchema_CloudFormationComponentManifest(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"website":      loadWebsiteSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/accepts a full component manifest", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, cloudFormationComponentManifest())
+		})
+	}
+}
+
+func cloudFormationComponentManifest() map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			"aws/cloudformation": map[string]any{
+				"vpc": map[string]any{
+					"metadata": map[string]any{
+						"type": "real",
+					},
+					"stack_name": "acme-plat-ue2-dev-vpc",
+					"template":   "template.yaml",
+					"parameters": map[string]any{
+						"CidrBlock": "10.0.0.0/16",
+					},
+					"capabilities": []any{"CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"},
+					"tags": map[string]any{
+						"Team": "platform",
+					},
+					"stack_policy": map[string]any{
+						"file": "stack-policy.json",
+					},
+					"role_arn":               "arn:aws:iam::123456789012:role/cfn-deploy",
+					"notification_arns":      []any{},
+					"disable_rollback":       false,
+					"termination_protection": true,
+					"timeout_in_minutes":     30,
+				},
+			},
+		},
+	}
+}
+
 // TestManifestSchema_ContainerRuntimeProviderAuto guards against container_runtime.provider
 // rejecting "auto" -- a value pkg/schema/container_config.go documents as a first-class supported
 // option (distinct from "", though both mean the same thing at runtime: auto-detect Docker, then

@@ -551,6 +551,14 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.ContainerDirAbsolutePath = containerDirAbsPath
 
+	// Convert aws/cloudformation dir to an absolute path.
+	cloudFormationBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.CloudFormation.BasePath)
+	cloudFormationDirAbsPath, err := filepath.Abs(cloudFormationBasePath)
+	if err != nil {
+		return err
+	}
+	atmosConfig.CloudFormationDirAbsolutePath = cloudFormationDirAbsPath
+
 	// Convert Vendor base path to an absolute path. Consumers previously re-joined the raw
 	// (possibly still-relative) atmosConfig.BasePath at call time instead of using a
 	// precomputed absolute path -- the same bug shape #2864 fixed for the top-level
