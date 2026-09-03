@@ -292,6 +292,10 @@ func processContextAwareTags(
 		result, err := processTagTerraformStateWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo)
 		return result, true, err
 	}
+	if matchesPrefix(input, u.AtmosYamlFuncAwsCloudFormationOutput, skip) {
+		result, err := processTagAwsCloudFormationOutputWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo)
+		return result, true, err
+	}
 	return nil, false, nil
 }
 

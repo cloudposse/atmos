@@ -43,6 +43,22 @@ atmos aws cloudformation delete <component> --stack <stack>
 atmos aws cloudformation validate <component> --stack <stack>
 atmos aws cloudformation output <component> --stack <stack>
 
+atmos aws cloudformation changeset create <component> --stack <stack>
+atmos aws cloudformation changeset execute <component> --stack <stack> --changeset-name <name>
+atmos aws cloudformation changeset list <component> --stack <stack>
+atmos aws cloudformation changeset delete <component> --stack <stack> --changeset-name <name>
+
+atmos aws cloudformation drift detect <component> --stack <stack>
+atmos aws cloudformation drift describe <component> --stack <stack>
+
+atmos aws cloudformation get template <component> --stack <stack>
+atmos aws cloudformation get policy <component> --stack <stack>
+
+atmos aws cloudformation fmt <component> --stack <stack>
+atmos aws cloudformation list --stack <stack>
+
+atmos aws cloudformation source pull <component> --stack <stack>
+
 atmos aws cloudformation apply --all --stack <stack>
 atmos aws cloudformation apply --affected --base origin/main
 

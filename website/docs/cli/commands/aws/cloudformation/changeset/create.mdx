@@ -1,0 +1,76 @@
+---
+title: atmos aws cloudformation changeset create
+sidebar_label: create
+sidebar_class_name: command
+id: create
+description: Create a changeset and leave it for later review or execution.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Create a CloudFormation changeset for the component and leave it in place for
+  later manual review and execution — the explicit-control complement to
+  [`diff`](/cli/commands/aws/cloudformation/diff)/[`plan`](/cli/commands/aws/cloudformation/plan)'s
+  implicit, preview-only changeset (which is also left in place, but framed as
+  a one-off preview rather than a named, reusable artifact).
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation changeset create --help" src="/casts/screengrabs/atmos-aws-cloudformation-changeset-create--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation changeset create <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation changeset create vpc -s plat-ue2-dev
+```
+
+Create changesets for all or affected components in dependency order:
+
+```shell
+atmos aws cloudformation changeset create --all -s plat-ue2-dev
+atmos aws cloudformation changeset create --affected --base origin/main
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Create changesets for all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Create changesets for affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+## Output
+
+On success, the summary includes the changeset's ID and name, whether it was a
+no-op (no changes to apply), and the predicted changes — the same diff summary
+[`diff`](/cli/commands/aws/cloudformation/diff) renders. Execute the named
+changeset later with
+[`changeset execute`](/cli/commands/aws/cloudformation/changeset/execute).
+
+:::note
+`changeset create` does not fire `before`/`after` hook events — only
+[`apply`](/cli/commands/aws/cloudformation/apply),
+[`diff`](/cli/commands/aws/cloudformation/diff), and
+[`delete`](/cli/commands/aws/cloudformation/delete) do.
+:::

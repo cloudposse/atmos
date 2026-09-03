@@ -1623,12 +1623,15 @@ var (
 	ErrInvalidComponentsAwsCloudFormation         = errors.New("invalid 'components.aws/cloudformation' section")
 	ErrInvalidSpecificAwsCloudFormationComponent  = errors.New("invalid aws/cloudformation component configuration")
 	ErrAwsCloudFormationChangeSetFailed           = errors.New("aws/cloudformation changeset failed")
+	ErrAwsCloudFormationChangeSetNotFound         = errors.New("aws/cloudformation changeset not found")
 	ErrAwsCloudFormationDriftDetected             = errors.New("aws/cloudformation stack has drifted")
 	ErrAwsCloudFormationFlagsMutuallyExclusive    = errors.New("--all and --affected are mutually exclusive")
 	ErrAwsCloudFormationComponentArgWithSelection = errors.New("component argument cannot be used with --all, --affected, --tags, or --labels")
 	ErrAwsCloudFormationComponentArgRequired      = errors.New("requires exactly one component argument unless --all or --affected is set")
 	ErrAwsCloudFormationIdentityResolutionFailed  = errors.New("aws/cloudformation component requested an identity, but the auth manager could not resolve it")
 	ErrAwsCloudFormationAPICallFailed             = errors.New("aws/cloudformation API call failed")
+	ErrAwsCloudFormationFmtNotClean               = errors.New("aws/cloudformation template is not formatted")
+	ErrAwsCloudFormationStackNotFound             = errors.New("aws/cloudformation stack not found")
 )
 
 // Stack dependency (`depends_on`) resolution errors.

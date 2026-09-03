@@ -89,6 +89,7 @@ linters:
             - "!**/pkg/aws/identity/**"
             - "!**/pkg/aws/organization/**"
             - "!**/pkg/aws/security/**"
+            - "!**/pkg/aws/cloudformation/**"
             - "!**/pkg/provisioner/backend/**"
             # pkg/component/aws/cloudformation is the SDK-native aws/cloudformation
             # component type; it deploys directly through the CloudFormation API and
