@@ -55,11 +55,15 @@ includes the upstream fix that declares `id-token: write` in the called workflow
 - Confirmed no open Atmos PR already bumps this pin.
 - `actionlint` passes on `test.yml`, `nightlybuilds.yml`, and `feature-release.yml`; all three parse
   as YAML.
-- The fix itself cannot be confirmed from a pull request: the `release` job in `test.yml` only runs
-  on `push` to `main`, and the nightly workflow runs on its schedule. Confirm after merge with
-  `gh run list -R cloudposse/atmos -w test.yml --event push -L 3` (expect `success` on the first run
-  after this lands) and by checking the next Nightly Builds run.
+- **Not yet verified end to end.** The fix cannot be confirmed from a pull request: the `release`
+  job in `test.yml` only runs on `push` to `main`, and the nightly workflow runs on its schedule.
+  The fix remains unverified until the first post-merge `test.yml` push run and the next Nightly
+  Builds run both succeed. See Follow-ups for the pending checks.
 
 ## Follow-ups
 
-None.
+- Pending post-merge verification (no separate issue; tracked here until both checks succeed):
+  - The first `test.yml` run on `push` to `main` after this lands must reach `success` in the
+    `release / goreleaser` job. Check with `gh run list -R cloudposse/atmos -w test.yml --event push -L 3`.
+  - The next Nightly Builds run must succeed. Check with
+    `gh run list -R cloudposse/atmos -w nightlybuilds.yml -L 1`.
