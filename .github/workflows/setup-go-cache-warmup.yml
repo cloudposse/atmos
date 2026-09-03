@@ -81,7 +81,7 @@ jobs:
             *.apple-dns.net:443
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
-            0.pool.ntp.org:123
+            *.pool.ntp.org:123
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.target == 'windows'

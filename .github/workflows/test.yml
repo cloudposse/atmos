@@ -163,7 +163,7 @@ jobs:
             *.apple-dns.net:443
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
-            0.pool.ntp.org:123
+            *.pool.ntp.org:123
 
       - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
         if: matrix.target == 'linux'
@@ -395,7 +395,7 @@ jobs:
             *.apple-dns.net:443
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
-            0.pool.ntp.org:123
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -648,7 +648,7 @@ jobs:
             *.apple-dns.net:443
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
-            0.pool.ntp.org:123
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -1335,7 +1335,7 @@ jobs:
             *.apple-dns.net:443
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
-            0.pool.ntp.org:123
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1507,7 +1507,7 @@ jobs:
             *.apple-dns.net:443
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
-            0.pool.ntp.org:123
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1648,7 +1648,7 @@ jobs:
             *.apple-dns.net:443
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
-            0.pool.ntp.org:123
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
