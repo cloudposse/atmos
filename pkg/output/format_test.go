@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestFormatOutputs_JSON(t *testing.T) {
@@ -1263,4 +1264,41 @@ func TestFlattenValue(t *testing.T) {
 	flattenValue("items", []any{"x", "y"}, "_", result)
 	assert.Equal(t, "x", result["items_0"])
 	assert.Equal(t, "y", result["items_1"])
+}
+
+// TestHighlightValue_NilConfig tests the highlightValue function with nil config.
+func TestHighlightValue_NilConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		config   *schema.AtmosConfiguration
+		expected string
+	}{
+		{
+			name:     "nil config returns input unchanged",
+			input:    `{"key": "value"}`,
+			config:   nil,
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "with config attempts highlighting",
+			input:    `{"key": "value"}`,
+			config:   &schema.AtmosConfiguration{},
+			expected: `{"key": "value"}`, // May be highlighted or not depending on TTY.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := highlightValue(tt.input, tt.config)
+			// For nil config, result should be exactly the input.
+			if tt.config == nil {
+				assert.Equal(t, tt.expected, result)
+			} else {
+				// For non-nil config, result may be highlighted or unchanged.
+				// Just ensure it contains the key content.
+				assert.Contains(t, result, "key")
+			}
+		})
+	}
 }

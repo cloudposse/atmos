@@ -238,6 +238,12 @@ func getBasePathForComponentType(atmosConfig *schema.AtmosConfiguration, compone
 		envVarName = "ATMOS_COMPONENTS_CONTAINER_BASE_PATH"
 		resolvedPath = atmosConfig.ContainerDirAbsolutePath
 		configBasePath = atmosConfig.Components.Container.BasePath
+	case "aws/cloudformation":
+		// The env-var name can't literally contain "/", so it's manually mangled
+		// to "_" here, same as every other type's hardcoded case above.
+		envVarName = "ATMOS_COMPONENTS_AWS_CLOUDFORMATION_BASE_PATH"
+		resolvedPath = atmosConfig.CloudFormationDirAbsolutePath
+		configBasePath = atmosConfig.Components.CloudFormation.BasePath
 	default:
 		return "", "", fmt.Errorf("%w: %s", ErrUnknownComponentType, componentType)
 	}

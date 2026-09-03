@@ -48,6 +48,8 @@ components:
         auto_generate_files: false
     container:
         base_path: components/container
+    aws/cloudformation:
+        base_path: ""
 stacks:
     base_path: stacks
     included_paths:
@@ -111,6 +113,7 @@ ansibleDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentat
 kubernetesDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 helmDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 containerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation/components/container
+cloudFormationDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 vendorDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 workflowsDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 default: false

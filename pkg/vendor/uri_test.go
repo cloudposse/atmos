@@ -406,6 +406,23 @@ func TestIsS3URI(t *testing.T) {
 	assert.False(t, IsS3URI(""))
 }
 
+func TestIsArchiveURI(t *testing.T) {
+	assert.True(t, IsArchiveURI("https://example.com/module.tar.gz"))
+	assert.True(t, IsArchiveURI("file:///tmp/source.tar.gz"))
+	assert.True(t, IsArchiveURI("https://example.com/module.tgz"))
+	assert.True(t, IsArchiveURI("https://example.com/module.zip"))
+	assert.True(t, IsArchiveURI("https://example.com/module.tar"))
+	assert.True(t, IsArchiveURI("https://example.com/module.tar.bz2"))
+	assert.True(t, IsArchiveURI("https://example.com/archive.zip?checksum=sha256:abc123"))
+	// Single-compressed-file formats unpack to one file, not a directory.
+	assert.False(t, IsArchiveURI("https://example.com/dns.yaml.gz"))
+	assert.False(t, IsArchiveURI("https://example.com/dns.yaml.bz2"))
+	// Non-archive sources.
+	assert.False(t, IsArchiveURI("https://example.com/dns.yaml"))
+	assert.False(t, IsArchiveURI("github.com/cloudposse/terraform-null-label//exports"))
+	assert.False(t, IsArchiveURI(""))
+}
+
 func TestIsNonGitHTTPURI(t *testing.T) {
 	tests := []struct {
 		name     string

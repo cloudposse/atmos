@@ -79,6 +79,10 @@ components:
     base_path: components/ansible
     command: ansible
     # ... ansible-specific settings
+
+  "aws/cloudformation":
+    base_path: components/cloudformation
+    # ... native aws/cloudformation-specific settings
 ```
 </File>
 
@@ -102,5 +106,5 @@ All component types share these common configuration options:
 - [Kubernetes Configuration](/cli/configuration/components/kubernetes)
 - [Packer Configuration](/cli/configuration/components/packer)
 - [Ansible Configuration](/cli/configuration/components/ansible)
+- [CloudFormation Configuration](/cli/configuration/components/aws-cloudformation)
 - [Stack Configuration](/cli/configuration/stacks)
-```

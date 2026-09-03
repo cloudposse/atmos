@@ -68,6 +68,9 @@
     "container": {
       "base_path": "components/container"
     },
+    "aws/cloudformation": {
+      "base_path": ""
+    },
     "list": {
       "format": "",
       "columns": null
@@ -263,6 +266,7 @@
   "kubernetesDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "helmDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "containerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/components/container",
+  "cloudFormationDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "vendorDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "workflowsDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,

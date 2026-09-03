@@ -32,7 +32,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.43.0
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
-	github.com/aws/aws-sdk-go-v2 v1.42.1
+	github.com/aws/aws-sdk-go-v2 v1.43.7
 	github.com/aws/aws-sdk-go-v2/config v1.32.18
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.17
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.52.0
@@ -48,7 +48,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.17
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1
-	github.com/aws/smithy-go v1.27.3
+	github.com/aws/smithy-go v1.27.8
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
@@ -192,8 +192,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.23 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.19 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.30 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.30 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.38 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.38 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.24 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.9 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.15 // indirect
@@ -482,6 +482,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v6 v6.6.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources v1.2.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage/v4 v4.1.0
+	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.76.4
 	github.com/databus23/helm-diff/v3 v3.15.10
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/magefile/mage v1.17.2

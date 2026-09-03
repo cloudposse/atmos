@@ -323,6 +323,12 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentHelm = extractHelmComponentSection(opts.ComponentMap)
 	}
 
+	// Native aws/cloudformation component fields are captured as a single bag
+	// and deep-merged with base-component inheritance in mergeComponentConfigurations.
+	if opts.ComponentType == cfg.CloudFormationComponentType {
+		result.ComponentCloudFormation = extractCloudFormationComponentSection(opts.ComponentMap)
+	}
+
 	// Extract the Helm CLI plugins list (helm and helmfile components). The value
 	// is kept as a raw list (any) so it deep-merges/replaces correctly with
 	// base-component inheritance in mergeComponentConfigurations.
@@ -361,11 +367,42 @@ func extractHelmComponentSection(componentMap map[string]any) map[string]any {
 	return bag
 }
 
+// cloudFormationComponentSectionKeys are the native aws/cloudformation component
+// fields that participate in base-component inheritance and flow through to the
+// final component config.
+var cloudFormationComponentSectionKeys = []string{
+	cfg.TemplateSectionName,
+	cfg.ParametersSectionName,
+	cfg.CapabilitiesSectionName,
+	cfg.TagsSectionName,
+	cfg.StackPolicySectionName,
+	cfg.RoleArnSectionName,
+	cfg.NotificationArnsSectionName,
+	cfg.DisableRollbackSectionName,
+	cfg.TerminationProtectionSectionName,
+	cfg.TimeoutInMinutesSectionName,
+	cfg.StackNameSectionName,
+}
+
+// extractCloudFormationComponentSection copies the recognized aws/cloudformation
+// fields out of a component map into a standalone bag (nil-safe; only present
+// keys are copied).
+func extractCloudFormationComponentSection(componentMap map[string]any) map[string]any {
+	bag := make(map[string]any)
+	for _, key := range cloudFormationComponentSectionKeys {
+		if value, ok := componentMap[key]; ok {
+			bag[key] = value
+		}
+	}
+	return bag
+}
+
 func supportsComponentHooks(componentType string) bool {
 	return componentType == cfg.TerraformComponentType ||
 		componentType == cfg.KubernetesComponentType ||
 		componentType == cfg.HelmComponentType ||
-		componentType == cfg.HelmfileComponentType
+		componentType == cfg.HelmfileComponentType ||
+		componentType == cfg.CloudFormationComponentType
 }
 
 func supportsGenerate(componentType string) bool {
@@ -383,7 +420,7 @@ func supportsPlugins(componentType string) bool {
 
 func supportsSourceProvision(componentType string) bool {
 	switch componentType {
-	case cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType, cfg.KubernetesComponentType, cfg.HelmComponentType:
+	case cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType, cfg.KubernetesComponentType, cfg.HelmComponentType, cfg.CloudFormationComponentType:
 		return true
 	default:
 		return false

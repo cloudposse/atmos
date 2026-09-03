@@ -1395,43 +1395,6 @@ func TestExecutor_GetOutput_ExecuteError(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrTerraformOutputFailed), "expected ErrTerraformOutputFailed")
 }
 
-// TestHighlightValue_NilConfig tests the highlightValue function with nil config.
-func TestHighlightValue_NilConfig(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		config   *schema.AtmosConfiguration
-		expected string
-	}{
-		{
-			name:     "nil config returns input unchanged",
-			input:    `{"key": "value"}`,
-			config:   nil,
-			expected: `{"key": "value"}`,
-		},
-		{
-			name:     "with config attempts highlighting",
-			input:    `{"key": "value"}`,
-			config:   validAtmosConfig(),
-			expected: `{"key": "value"}`, // May be highlighted or not depending on TTY.
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := highlightValue(tt.input, tt.config)
-			// For nil config, result should be exactly the input.
-			if tt.config == nil {
-				assert.Equal(t, tt.expected, result)
-			} else {
-				// For non-nil config, result may be highlighted or unchanged.
-				// Just ensure it contains the key content.
-				assert.Contains(t, result, "key")
-			}
-		})
-	}
-}
-
 // TestExecutor_ExecuteWithSections_ComponentPathResolution tests that component paths
 // are correctly resolved using utils.GetComponentPath, ensuring proper path construction
 // based on atmosConfig.BasePath and component settings.

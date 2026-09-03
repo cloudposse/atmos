@@ -1,0 +1,274 @@
+---
+title: CloudFormation Components
+sidebar_position: 8
+sidebar_label: aws/cloudformation
+sidebar_class_name: command
+description: Configure native aws/cloudformation components in Atmos stack manifests.
+id: aws-cloudformation
+---
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
+import Experimental from "@site/src/components/Experimental";
+
+<Intro>
+  Define CloudFormation stacks in stack manifests when you want Atmos to
+  deploy them alongside Terraform, Helm, Kubernetes, Helmfile, Packer, and
+  Ansible components. A CloudFormation component describes which template to
+  deploy, which parameters and capabilities to pass, and how the stack should
+  behave for each environment — all deployed directly through the AWS SDK for
+  Go v2, with no `aws` CLI or `cfn`/`sam`/`Rain` binary dependency.
+</Intro>
+
+<Experimental />
+
+## Available Configuration Sections
+
+CloudFormation components use the same stack sections as other Atmos
+components, so the stack can inherit values, run hooks, use Auth, declare
+dependencies, and be included in affected runs.
+
+<dl>
+  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
+  <dd>Component behavior, inheritance, and base component selection.</dd>
+
+  <dt>[`vars`](/stacks/vars)</dt>
+  <dd>Variables available to stack template rendering.</dd>
+
+  <dt>[`env`](/stacks/env)</dt>
+  <dd>Environment variables applied before CloudFormation operations run.</dd>
+
+  <dt>[`settings`](/stacks/settings)</dt>
+  <dd>
+    Integration metadata and legacy dependency settings, including
+    `settings.aws_cloudformation.region` (see [Region Resolution](/cli/configuration/components/aws-cloudformation#region-resolution)).
+  </dd>
+
+  <dt>[`hooks`](/stacks/hooks)</dt>
+  <dd>
+    Lifecycle event handlers. `diff`, `apply`, and `delete` fire
+    `before`/`after` events (`before.aws/cloudformation.diff`,
+    `after.aws/cloudformation.apply`, and so on); `plan` and `deploy` fire the
+    same events as `diff` and `apply` respectively. `render`, `validate`, and
+    `output` do not fire hook events.
+  </dd>
+
+  <dt>`source`</dt>
+  <dd>
+    JIT provisioning of a remote template before operations run — see
+    [Source Provisioning](#source-provisioning) below.
+  </dd>
+
+  <dt>`provision`</dt>
+  <dd>Delivery targets for `apply`/`deploy` — the account/region (default) or a Git deployment repository.</dd>
+
+  <dt>`auth`</dt>
+  <dd>Component-level Atmos Auth providers, identities, and integrations.</dd>
+
+  <dt>[`dependencies`](/stacks/dependencies/components)</dt>
+  <dd>Cross-component ordering for `--all` and `--affected` runs.</dd>
+</dl>
+
+CloudFormation components do **not** support a `generate:` section — there is
+no codegen-artifact output the way Terraform generates backend/provider files.
+They also do not support a `plugins:` section — there is no chart-style plugin
+system, unlike native Helm.
+
+## CloudFormation-Specific Sections
+
+<dl>
+  <dt>`template` <em>(required)</em></dt>
+  <dd>Path to the CloudFormation template, relative to the component's base path.</dd>
+
+  <dt>`stack_name`</dt>
+  <dd>The explicit CloudFormation stack name. There is no legacy name-pattern interpolation — set the name you want directly (Go templates are supported, like any other stack field).</dd>
+
+  <dt>`parameters`</dt>
+  <dd>
+    CloudFormation template parameters as a YAML map. Values are normalized at
+    the API boundary: scalars are stringified, and list values are
+    comma-joined to match CloudFormation's `List<Type>`/`CommaDelimitedList`
+    wire format (the API only accepts strings). `UsePreviousValue` is not
+    expressible — Atmos config is the source of truth for every parameter on
+    every deploy, the same declarative stance the Terraform component takes
+    toward variables.
+  </dd>
+
+  <dt>`capabilities`</dt>
+  <dd>Acknowledged IAM capabilities, e.g. `CAPABILITY_IAM`, `CAPABILITY_NAMED_IAM`, `CAPABILITY_AUTO_EXPAND`.</dd>
+
+  <dt>`tags`</dt>
+  <dd>A map of `key: value` tags applied to the CloudFormation stack (not to be confused with Atmos's own component `tags`/`--tags` selection, which is separate).</dd>
+
+  <dt>`stack_policy`</dt>
+  <dd>
+    Protects specific resources from update during `UpdateStack`. Set
+    `stack_policy.file` to a stack policy JSON document path, relative to the
+    component's base path. Applied after a successful `apply`.
+  </dd>
+
+  <dt>`role_arn`</dt>
+  <dd>IAM role ARN that CloudFormation assumes to deploy the stack.</dd>
+
+  <dt>`notification_arns`</dt>
+  <dd>SNS topic ARNs that CloudFormation publishes stack events to.</dd>
+
+  <dt>`disable_rollback`</dt>
+  <dd>Prevents automatic rollback on stack creation failure.</dd>
+
+  <dt>`termination_protection`</dt>
+  <dd>
+    Prevents the stack from being deleted. `atmos aws cloudformation delete`
+    respects this and fails with an actionable hint instead of silently
+    disabling it — pass `--disable-termination-protection` to delete anyway,
+    or set this to `false` and re-apply first.
+  </dd>
+
+  <dt>`timeout_in_minutes`</dt>
+  <dd>Bounds how long stack creation may run before CloudFormation rolls back.</dd>
+</dl>
+
+## Example
+
+<File title="stacks/catalog/vpc.yaml">
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      template: template.yaml
+      stack_name: "{{ .vars.stage }}-vpc"
+      parameters:
+        CidrBlock: "10.0.0.0/16"
+        AvailabilityZones:
+          - us-east-1a
+          - us-east-1b
+      capabilities:
+        - CAPABILITY_IAM
+      tags:
+        team: platform
+      stack_policy:
+        file: stack-policy.json
+      termination_protection: true
+      timeout_in_minutes: 30
+      dependencies:
+        components:
+          - vpc-flow-logs
+```
+</File>
+
+## Component Directory Structure
+
+CloudFormation components are located under
+`components."aws/cloudformation".base_path` from `atmos.yaml` (defaults to
+`components/cloudformation`):
+
+```text
+components/cloudformation/
+└── vpc/
+    ├── template.yaml
+    └── stack-policy.json
+```
+
+## Source Provisioning
+
+Point a component at a remote template through the top-level `source:`
+section — the same JIT vendoring used by other component types — instead of
+committing the template to your infrastructure repository. Two shapes are
+supported:
+
+<dl>
+  <dt>Directory/subdirectory source</dt>
+  <dd>
+    Any go-getter URI (Git, HTTP archive, S3, OCI) pointing at a directory. The
+    component directory (template, stack policy, and any local assets) is
+    vendored, and `template:` resolves relative to it, exactly like other
+    component types' `source:` behavior.
+
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      source:
+        uri: github.com/acme/cfn-templates.git//vpc?ref={{ .Version }}
+        version: 1.2.0
+      template: template.yaml
+```
+  </dd>
+
+  <dt>Single-file source</dt>
+  <dd>
+    When the `source.uri` resolves to exactly one file — a bare template URI,
+    with no surrounding directory structure — Atmos fetches it directly as the
+    component's `template:` file. A CloudFormation component is often exactly
+    one file, and demanding a directory structure around it would be
+    ceremony.
+
+```yaml
+components:
+  "aws/cloudformation":
+    dns:
+      source:
+        uri: https://raw.githubusercontent.com/acme/cfn-templates/v1.2.0/dns.yaml
+```
+
+  `template:` does not need to be set in the single-file case — Atmos names
+  the vendored file after the source URI's basename and uses it directly.
+  </dd>
+</dl>
+
+:::note Manifest-driven vendoring is not supported
+`aws/cloudformation` components cannot be vendored through a `vendor.yaml`
+manifest (`atmos vendor pull`) — only the `source:`-based JIT provisioning
+described above, the same restriction native Helm and Kubernetes components
+have. Use `source:` for every CloudFormation component that isn't authored
+directly in your infrastructure repository.
+:::
+
+## Delivery Targets
+
+By default, `apply`/`deploy` deploy directly to the account/region resolved
+for the component (see
+[Region Resolution](/cli/configuration/components/aws-cloudformation#region-resolution))
+via `CreateChangeSet`/`ExecuteChangeSet` — this is the implicit behavior when
+`--target` is omitted and no `provision.default` is set. A component can
+declare additional named targets under `provision.targets`, selected with
+`--target`:
+
+<dl>
+  <dt>`kind: aws/s3`</dt>
+  <dd>
+    Uploads the template to S3 and stops — a publish-only target, useful for a
+    review step or a template too large to pass inline. This same target is
+    also used automatically to package (upload) any template that exceeds
+    CloudFormation's 51,200-byte inline size limit, whichever target is
+    selected for the deploy.
+
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      provision:
+        targets:
+          packaged:
+            kind: aws/s3
+            bucket: my-cfn-artifacts
+            prefix: templates
+            region: us-east-1
+```
+  </dd>
+
+  <dt>`kind: git`</dt>
+  <dd>
+    Commits the template YAML to a Git repository (declared in
+    `git.repositories`) instead of deploying it — for example, a review or
+    GitOps-style pipeline that applies from the committed template separately.
+    Follows the same `provision.targets` shape used by native Helm and
+    Kubernetes components.
+  </dd>
+</dl>
+
+## Related
+
+- [`atmos aws cloudformation`](/cli/commands/aws/cloudformation) command reference
+- [CloudFormation `atmos.yaml` configuration](/cli/configuration/components/aws-cloudformation)
+- [Component dependencies](/stacks/dependencies/components)

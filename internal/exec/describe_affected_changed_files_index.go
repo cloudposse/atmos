@@ -185,6 +185,8 @@ func (idx *changedFilesIndex) getRelevantFiles(componentType string, atmosConfig
 		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Kubernetes.BasePath)
 	case cfg.HelmComponentType:
 		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helm.BasePath)
+	case cfg.CloudFormationComponentType:
+		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.CloudFormation.BasePath)
 	default:
 		// Unknown component type - return all files as fallback.
 		return idx.allFiles
