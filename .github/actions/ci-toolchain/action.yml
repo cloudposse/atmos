@@ -1,0 +1,153 @@
+name: 'Set up CI toolchain'
+description: >
+  Installs the external tools the CI jobs need (Terraform, OpenTofu, Packer,
+  Helm, Helmfile) with `atmos toolchain install`, optionally seeding the Atmos
+  toolchain cache from a `toolchain.tar` artifact produced earlier in the same
+  run, and exports their directories to PATH via `atmos toolchain env`.
+
+  The pins are written to a job-local tool-versions file, and both the install
+  and the PATH export read that file (`--tool-versions`), for two reasons:
+
+  1. `atmos toolchain install` only takes its "already installed, skip" path
+     when installing from a tool-versions file. The per-tool
+     `atmos toolchain install --default owner/repo@version` form always
+     re-resolves the registry, re-downloads or re-verifies the release
+     signature, and re-extracts, even when the exact version is already on
+     disk, so it can never be a no-op and always needs the network. With a
+     restored artifact, the from-file form skips every tool without a single
+     network request; without one (or for a tool the artifact lacks) it
+     installs exactly what is missing, so the network install remains the
+     safety net.
+  2. The repository's own `.tool-versions` is left untouched: nothing in CI
+     rewrites its defaults any more.
+
+  `hashicorp/terraform` is always pinned to the version in the repository's
+  `.tool-versions`; every other tool comes from the `tool-versions` input.
+
+  Requires the `atmos` binary to be on PATH (install it before this step).
+
+inputs:
+  tool-versions:
+    description: >
+      Tools to install, one per line, in `.tool-versions` format
+      (`owner/repo version`). `hashicorp/terraform` is added automatically
+      from the repository's `.tool-versions`. Blank lines are ignored.
+    required: true
+  artifact:
+    description: >
+      Name of a workflow artifact containing a `toolchain.tar` (as packaged by
+      the `build` job) to unpack into the Atmos toolchain cache before
+      installing. Tools present in it are skipped by the install step. Leave
+      empty to install everything from the network (what the `build` job does
+      to produce the artifact in the first place). A missing or failed
+      download is a warning, not an error: the install step then falls back
+      to the network for whatever is absent.
+    required: false
+    default: ''
+  github-token:
+    description: 'GitHub token for the toolchain registry and release-asset lookups (raises the unauthenticated API rate limit)'
+    required: true
+
+outputs:
+  tool-versions-file:
+    description: 'Absolute path of the generated tool-versions file'
+    value: ${{ steps.pins.outputs.file }}
+  cache-root:
+    description: 'Absolute path of the Atmos cache root (the parent of the `toolchain` directory), in the OS-native form'
+    value: ${{ steps.root.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Write the CI tool pins
+      id: pins
+      shell: bash
+      env:
+        CI_TOOL_VERSIONS: ${{ inputs.tool-versions }}
+      run: |
+        file="${RUNNER_TEMP}/atmos-ci.tool-versions"
+        # Terraform is pinned once, in the repository's .tool-versions; the
+        # first version on that line is the default.
+        terraform_version="$(sed -n 's#^hashicorp/terraform[[:space:]]\{1,\}\([^[:space:]]*\).*#\1#p' .tool-versions | head -n 1)"
+        if [ -z "${terraform_version}" ]; then
+          echo "::error::.tool-versions has no hashicorp/terraform entry to pin Terraform from"
+          exit 1
+        fi
+        {
+          echo "hashicorp/terraform ${terraform_version}"
+          printf '%s\n' "${CI_TOOL_VERSIONS}" | sed '/^[[:space:]]*$/d'
+        } > "${file}"
+        echo "Tool pins (${file}):"
+        cat "${file}"
+        echo "file=${file}" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve the Atmos cache root
+      id: root
+      shell: bash
+      run: |
+        # The toolchain lives at <cache root>/toolchain (see pkg/toolchain
+        # GetInstallPath). Ask atmos for the root instead of hardcoding the
+        # per-OS XDG default; --format=env prints one KEY=VALUE per line.
+        root="$(atmos ci cache paths --format=env 2>/dev/null | sed -n 's/^ATMOS_CI_CACHE_PATHS=//p')"
+        if [ -z "${root}" ]; then
+          echo "::error::atmos ci cache paths did not report a cache root"
+          exit 1
+        fi
+        echo "Atmos cache root: ${root}"
+        echo "path=${root}" >> "$GITHUB_OUTPUT"
+
+    - name: Download the toolchain artifact
+      id: download
+      if: inputs.artifact != ''
+      # A pure accelerator: if the artifact is missing (the build leg that
+      # produces it was skipped) or the download keeps failing, fall through
+      # to the network install below instead of failing the job.
+      continue-on-error: true
+      uses: ./.github/actions/download-artifact-retry
+      with:
+        name: ${{ inputs.artifact }}
+        path: ${{ runner.temp }}/atmos-ci-toolchain
+
+    - name: Unpack the toolchain into the Atmos cache root
+      if: inputs.artifact != '' && steps.download.outcome == 'success'
+      shell: bash
+      env:
+        ATMOS_CACHE_ROOT: ${{ steps.root.outputs.path }}
+        TOOLCHAIN_TAR: ${{ runner.temp }}/atmos-ci-toolchain/toolchain.tar
+      run: |
+        root="${ATMOS_CACHE_ROOT}"
+        tarball="${TOOLCHAIN_TAR}"
+        # Git Bash on Windows: give tar POSIX paths. A native `D:\...` path
+        # would be read by GNU tar as a `host:file` remote archive.
+        if command -v cygpath >/dev/null 2>&1; then
+          root="$(cygpath -u "${root}")"
+          tarball="$(cygpath -u "${tarball}")"
+        fi
+        if [ ! -f "${tarball}" ]; then
+          echo "::warning::toolchain artifact contained no toolchain.tar; installing from the network instead"
+          exit 0
+        fi
+        mkdir -p "${root}"
+        tar -C "${root}" -xf "${tarball}"
+        echo "Restored toolchain into ${root}/toolchain:"
+        find "${root}/toolchain/bin" -mindepth 3 -maxdepth 3 -type d | sort
+
+    - name: Report a missing toolchain artifact
+      if: inputs.artifact != '' && steps.download.outcome != 'success'
+      shell: bash
+      env:
+        ARTIFACT_NAME: ${{ inputs.artifact }}
+      run: echo "::warning::could not download the ${ARTIFACT_NAME} artifact; installing the toolchain from the network instead"
+
+    - name: Install any tool the cache is missing
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        TOOL_VERSIONS_FILE: ${{ steps.pins.outputs.file }}
+      run: atmos toolchain install --tool-versions "${TOOL_VERSIONS_FILE}"
+
+    - name: Export the toolchain directories to PATH
+      shell: bash
+      env:
+        TOOL_VERSIONS_FILE: ${{ steps.pins.outputs.file }}
+      run: atmos toolchain env --tool-versions "${TOOL_VERSIONS_FILE}" --format=github

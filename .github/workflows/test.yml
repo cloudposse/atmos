@@ -130,6 +130,7 @@ jobs:
           # other Windows/macOS legs in this file.
           allowed-endpoints: >
             api.github.com:443
+            get.helm.sh:443
             github.com:443
             raw.githubusercontent.com:443
             rekor.sigstore.dev:443
@@ -256,6 +257,72 @@ jobs:
         if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         shell: bash
         run: go tool mage acceptance:verify "${{ matrix.target }}" "$TEST_SHARD_COUNT"
+
+      # The acceptance shards, the terraform-registry-cache job, and the mock
+      # jobs all need the same external tools (Terraform, OpenTofu, Packer,
+      # Helm, Helmfile). Install them once per OS here and ship the installed
+      # tree as a `toolchain-<target>` artifact; those jobs unpack it into
+      # their own toolchain cache before `atmos toolchain install`, which then
+      # skips every tool. That replaces 30+ per-shard installs (~400 MB of
+      # release downloads and ~2 min each, plus a per-shard dependency on
+      # releases.hashicorp.com/GitHub/get.helm.sh) and the "Cache Atmos
+      # toolchain" step that never hits because the Go caches churn the 10 GB
+      # Actions cache. Uses the atmos just built, not the bootstrap release, so
+      # the on-disk layout is the one the consumers' binary expects. See
+      # docs/fixes/2026-09-03-ci-toolchain-shipped-in-build-artifact.md.
+      # macos-intel is skipped: its only consumer (the k3s macOS job) installs
+      # no toolchain.
+      - name: Put the freshly built atmos on PATH for the toolchain install
+        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        shell: bash
+        run: echo "${GITHUB_WORKSPACE}/build" >> "$GITHUB_PATH"
+
+      - name: Install the CI toolchain (Terraform, OpenTofu, Packer, Helm, Helmfile)
+        id: toolchain
+        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        uses: ./.github/actions/ci-toolchain
+        with:
+          tool-versions: |
+            opentofu/opentofu ${{ env.OPEN_TOFU_VERSION }}
+            hashicorp/packer ${{ env.PACKER_VERSION }}
+            helm/helm ${{ env.HELM_VERSION }}
+            helmfile/helmfile ${{ env.HELMFILE_VERSION }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package the CI toolchain
+        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        shell: bash
+        env:
+          ATMOS_CACHE_ROOT: ${{ steps.toolchain.outputs.cache-root }}
+        run: |
+          root="${ATMOS_CACHE_ROOT}"
+          out="${RUNNER_TEMP}/toolchain.tar"
+          # Git Bash on Windows: give tar POSIX paths. A native `D:\...` path
+          # would be read by GNU tar as a `host:file` remote archive.
+          if command -v cygpath >/dev/null 2>&1; then
+            root="$(cygpath -u "${root}")"
+            out="$(cygpath -u "${out}")"
+          fi
+          cd "${root}"
+          # Ship the installed tree (bin/<owner>/<repo>/<version>/...) plus the
+          # registry index and lockfile. The downloaded release archives that
+          # sit next to them are left out: once a tool is on disk,
+          # `atmos toolchain install` never looks at them again.
+          members=(toolchain/bin)
+          for f in toolchain/toolchain.lock.yaml toolchain/aqua-registry-index.json; do
+            [ -f "${f}" ] && members+=("${f}")
+          done
+          tar -cf "${out}" "${members[@]}"
+          ls -la "${out}"
+
+      - name: Upload the CI toolchain artifact
+        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: toolchain-${{ matrix.target }}
+          path: ${{ runner.temp }}/toolchain.tar
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -438,17 +505,22 @@ jobs:
         continue-on-error: true
         uses: ./actions/cache
 
-      - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
+      # Seed the toolchain cache from the tarball the `build` job packaged for
+      # this OS (its "Package the CI toolchain" step), so every tool is already
+      # on disk and `atmos toolchain install` skips it without touching the
+      # network; anything the tarball lacks is installed from the network as
+      # before. The pins here must match the build job's.
+      - name: Set up Terraform, OpenTofu, Packer, Helm, and Helmfile from the build artifact
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install --default hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default hashicorp/packer@${{ env.PACKER_VERSION }}
-          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
-          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
-          atmos toolchain env --format=github
+        uses: ./.github/actions/ci-toolchain
+        with:
+          artifact: toolchain-${{ matrix.flavor.target }}
+          tool-versions: |
+            opentofu/opentofu ${{ env.OPEN_TOFU_VERSION }}
+            hashicorp/packer ${{ env.PACKER_VERSION }}
+            helm/helm ${{ env.HELM_VERSION }}
+            helmfile/helmfile ${{ env.HELMFILE_VERSION }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify Terraform, OpenTofu, Packer, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -700,17 +772,22 @@ jobs:
         continue-on-error: true
         uses: ./actions/cache
 
-      - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
+      # Seed the toolchain cache from the tarball the `build` job packaged for
+      # this OS (its "Package the CI toolchain" step), so every tool is already
+      # on disk and `atmos toolchain install` skips it without touching the
+      # network; anything the tarball lacks is installed from the network as
+      # before. The pins here must match the build job's.
+      - name: Set up Terraform, OpenTofu, Packer, Helm, and Helmfile from the build artifact
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install --default hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default hashicorp/packer@${{ env.PACKER_VERSION }}
-          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
-          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
-          atmos toolchain env --format=github
+        uses: ./.github/actions/ci-toolchain
+        with:
+          artifact: toolchain-${{ matrix.flavor.target }}
+          tool-versions: |
+            opentofu/opentofu ${{ env.OPEN_TOFU_VERSION }}
+            hashicorp/packer ${{ env.PACKER_VERSION }}
+            helm/helm ${{ env.HELM_VERSION }}
+            helmfile/helmfile ${{ env.HELMFILE_VERSION }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify Terraform, OpenTofu, Packer, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -1692,14 +1769,17 @@ jobs:
           path: ${{ github.workspace }}
           add-to-path: 'true'
 
-      - name: Install Terraform and OpenTofu with Atmos toolchain
+      # Seed the toolchain cache from the tarball the `build` job packaged for
+      # this OS, so both tools are already on disk and `atmos toolchain install`
+      # skips them (see the `test` job's step of the same shape).
+      - name: Set up Terraform and OpenTofu from the build artifact
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain env --format=github
+        uses: ./.github/actions/ci-toolchain
+        with:
+          artifact: toolchain-${{ matrix.flavor.target }}
+          tool-versions: |
+            opentofu/opentofu ${{ env.OPEN_TOFU_VERSION }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify OpenTofu
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
