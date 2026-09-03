@@ -4,10 +4,11 @@
 
 ## Summary
 
-Every one of the 30 acceptance shards in `test.yml` (`test` job, 10 shards × linux/windows/macos), plus the
-three `terraform-registry-cache` legs and the `mock` jobs, ran `atmos toolchain install --default ...` for
-Terraform, OpenTofu, Packer, Helm and Helmfile: ~400 MB of release downloads and ~2 minutes per job, with
-a per-job dependency on releases.hashicorp.com, GitHub releases, get.helm.sh and Sigstore. The
+Every one of the 30 acceptance shards in `test.yml` (`test` job, 10 shards × linux/windows/macos) and the
+three `terraform-registry-cache` legs ran `atmos toolchain install --default ...` for Terraform, OpenTofu,
+Packer, Helm and Helmfile; the `mock` jobs did the same for just Terraform and OpenTofu, the only two they
+need. ~400 MB of release downloads and ~2 minutes per job, with a per-job dependency on
+releases.hashicorp.com, GitHub releases, get.helm.sh and Sigstore. The
 "Cache Atmos toolchain" step meant to short-circuit that never hit, because the ~5 GB of Go caches written
 per run churn the repository's 10 GB Actions cache before any toolchain entry survives. This change installs
 the five tools once per OS in the `build` job, packages the installed tree as a `toolchain-<target>`
