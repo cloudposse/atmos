@@ -96,6 +96,11 @@ jobs:
         if: steps.classify.outputs.verdict == 'rerun'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          PR_NUMBERS: ${{ join(github.event.workflow_run.pull_requests.*.number, ' ') }}
         # ci:rerunInfraFailures (magefiles/ci_rerun.go, backed by
         # internal/ci/rerun) re-verifies every associated PR is still at the
         # run's head SHA - a run superseded by a newer push is never rerun -
@@ -105,12 +110,10 @@ jobs:
         # dependents, and carries over the rest, so test-required's shard
         # count still holds on the new attempt). Appends its decision to the
         # step summary; only a genuine API failure (not "the run hasn't
-        # finished yet") fails the step.
+        # finished yet") fails the step. Event fields go through env, not
+        # direct ${{ }} interpolation into the script, so event-payload data
+        # can never be spliced into the shell text itself (GitHub Actions
+        # script-injection hardening).
         run: |
           set -euo pipefail
-          go tool mage ci:rerunInfraFailures \
-            "${{ github.repository }}" \
-            "${{ github.event.workflow_run.id }}" \
-            "${{ github.event.workflow_run.event }}" \
-            "${{ github.event.workflow_run.head_sha }}" \
-            "${{ join(github.event.workflow_run.pull_requests.*.number, ' ') }}"
+          go tool mage ci:rerunInfraFailures "$REPO" "$RUN_ID" "$RUN_EVENT" "$HEAD_SHA" "$PR_NUMBERS"

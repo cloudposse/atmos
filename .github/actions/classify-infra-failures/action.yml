@@ -68,9 +68,15 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         ATMOS_CI_STUCK_GAP: ${{ inputs.stuck-gap-seconds }}s
+        REPO: ${{ inputs.repo }}
+        RUN_ID: ${{ inputs.run-id }}
+        RUN_ATTEMPT: ${{ inputs.run-attempt }}
       # The mage target fetches the run's jobs itself (GH_TOKEN authenticates
       # it) and, because GITHUB_OUTPUT and GITHUB_STEP_SUMMARY are set here,
       # records verdict/reason/table and appends the Markdown summary itself.
+      # REPO/RUN_ID/RUN_ATTEMPT go through env, not direct ${{ }} interpolation
+      # into the script, so untrusted values can never be spliced into the
+      # shell text itself (GitHub Actions script-injection hardening).
       run: |
         set -euo pipefail
-        go tool mage ci:classifyInfraFailures "${{ inputs.repo }}" "${{ inputs.run-id }}" "${{ inputs.run-attempt }}"
+        go tool mage ci:classifyInfraFailures "$REPO" "$RUN_ID" "$RUN_ATTEMPT"
