@@ -95,10 +95,18 @@ linters:
             # component type; it deploys directly through the CloudFormation API and
             # deliberately depends on the AWS SDK (docs/prd/aws-cloudformation-component.md).
             - "!**/pkg/component/aws/cloudformation/**"
+            # cmd/aws/cloudformation/backend's tests construct a fake S3ClientAPI (the
+            # same pattern pkg/provisioner/backend/s3_test.go and
+            # pkg/component/aws/cloudformation/backend_test.go use) to exercise
+            # backend describe/list without a real AWS call.
+            - "!**/cmd/aws/cloudformation/backend/**"
             - "!**/pkg/ci/github/**"
             - "!**/pkg/ci/providers/github/**"
             - "!**/pkg/ci/planfile/github/**"
             - "!**/pkg/ci/planfile/s3/**"
+            # pkg/ci/artifact/s3 is the S3-backed CI artifact store; it legitimately
+            # depends on the AWS SDK, same rationale as pkg/ci/planfile/s3 above.
+            - "!**/pkg/ci/artifact/s3/**"
             - "!**/pkg/github/**"
             - "$test"
           deny:

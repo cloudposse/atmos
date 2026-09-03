@@ -76,7 +76,7 @@ func TestFetchAndFilterSources_InvalidLabelsFlag(t *testing.T) {
 
 	opts := &SourcesOptions{
 		AtmosConfig: &atmosConfig,
-		LabelsRaw:   "not-a-valid-label",
+		LabelsRaw:   []string{"not-a-valid-label"},
 	}
 
 	_, err = fetchAndFilterSources(opts)
@@ -143,7 +143,7 @@ func TestFetchAndFilterSources_ScopesDescribeCall(t *testing.T) {
 	opts := &SourcesOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Tags:        []string{"prod"},
-		LabelsRaw:   "team=platform",
+		LabelsRaw:   []string{"team=platform"},
 	}
 
 	sources, err := fetchAndFilterSources(opts)

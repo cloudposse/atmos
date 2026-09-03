@@ -63,7 +63,7 @@ what's already on disk matches vendor.lock.yaml — see 'atmos vendor verify' fo
 		typeChanged := cmd.Flags().Changed("type")
 
 		stack := v.GetString("stack")
-		labels, labelsErr := pkgtags.ParseLabelsFlag(v.GetString("labels"))
+		labels, labelsErr := pkgtags.ParseLabelsFlag(v.GetStringSlice("labels"))
 		if labelsErr != nil {
 			return labelsErr
 		}
@@ -372,7 +372,7 @@ func init() {
 		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
 		flags.WithStringFlag("tags", "", "", "Update only components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
 		flags.WithStringFlag("stack", "s", "", "Update only components belonging to the specified stack"),
-		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
+		flags.WithStringSliceFlag("labels", "", nil, vendorLabelsFlagHelp),
 		flags.WithBoolFlag("check", "", false, "Dry run: show available updates without modifying files"),
 		flags.WithBoolFlag("pull", "", false, "After updating versions, run 'atmos vendor pull'"),
 		flags.WithBoolFlag("all", "", false, "Update all discoverable vendor sources (the default when no selector is given)"),

@@ -27,7 +27,7 @@ const componentTypeFlagHelp = "Component type (terraform, helmfile, or packer)"
 // `atmos list components --labels` (see docs/prd/tags-and-labels-standard.md). The two flags query
 // different things and compose: --labels selects stack components, while --tags filters their
 // declared vendor sources.
-const vendorLabelsFlagHelp = "Only act on components whose stack metadata.labels match ALL of these (comma-separated key=value or key:value pairs): --labels=tier=1,cost-center:platform"
+const vendorLabelsFlagHelp = "Only act on components whose stack metadata.labels match ALL of these (comma-separated key=value or key:value pairs within an occurrence, and/or repeated): --labels=tier=1,cost-center:platform or --labels tier=1 --labels cost-center:platform"
 
 // vendorCmd executes 'atmos vendor' CLI commands.
 var vendorCmd = &cobra.Command{
@@ -62,7 +62,7 @@ func init() {
 		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
 		flags.WithBoolFlag("dry-run", "", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes."),
 		flags.WithStringFlag("tags", "", "", "Only vendor the components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
-		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
+		flags.WithStringSliceFlag("labels", "", nil, vendorLabelsFlagHelp),
 		flags.WithBoolFlag("everything", "", false, "Vendor all components"),
 		flags.WithBoolFlag("refresh-lock", "", false, "Refresh immutable vendor lock entries from declared sources"),
 		flags.WithStringFlag("lock-enforcement", "", "", "Override vendor.lock.enforcement (strict, warn, or silent)"),

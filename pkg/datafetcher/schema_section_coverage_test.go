@@ -119,6 +119,7 @@ var nonManifestSections = map[string]struct{}{
 	// aws/cloudformation component sub-fields (modeled in aws_cloudformation_component_manifest,
 	// not as standalone top-level/component-generic sections — same treatment as Helm's chart/
 	// values/values_files/repositories above).
+	"path":                   {}, // aws/cloudformation component sub-field (file-based template reference).
 	"stack_name":             {},
 	"parameters":             {},
 	"capabilities":           {},

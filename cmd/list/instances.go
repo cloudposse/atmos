@@ -37,7 +37,7 @@ type InstancesOptions struct {
 	Skip             []string
 	AuthDisabled     bool
 	Tags             []string
-	LabelsRaw        string
+	LabelsRaw        []string
 	// IncludeDependencies/IncludeDependents preview the dependency closure
 	// (0 = off, -1 = unlimited, N>0 = N levels).
 	IncludeDependencies int
@@ -98,7 +98,7 @@ func parseInstancesOptions(cmd *cobra.Command, v *viper.Viper) *InstancesOptions
 		Skip:             v.GetStringSlice("skip"),
 		AuthDisabled:     identityName == cfg.IdentityFlagDisabledValue,
 		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
-		LabelsRaw:        v.GetString("labels"),
+		LabelsRaw:        v.GetStringSlice("labels"),
 	}
 }
 

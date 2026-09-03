@@ -351,8 +351,11 @@ func TestRunLogs_MergesAndSortsAcrossStacks(t *testing.T) {
 		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 	}, nil)
 
-	out := captureStderr(t, func() {
-		summary, err := runLogs(context.Background(), client, "root", false, map[string]any{})
+	// logs is a data command (docs/io-and-ui-output.md); its non-chart output
+	// must go to stdout, not stderr — captureStdout (not captureStderr) is the
+	// regression guard for that.
+	out := captureStdout(t, func() {
+		summary, err := runLogs(context.Background(), client, "root", logsOptions{}, map[string]any{})
 		require.NoError(t, err)
 		assert.Equal(t, 2, summary["event_count"])
 	})
@@ -398,12 +401,83 @@ func TestRunLogs_ChartMode(t *testing.T) {
 	}, nil)
 
 	out := captureStdout(t, func() {
-		summary, err := runLogs(context.Background(), client, "root", true, map[string]any{})
+		summary, err := runLogs(context.Background(), client, "root", logsOptions{Chart: true}, map[string]any{})
 		require.NoError(t, err)
 		assert.Equal(t, 2, summary["event_count"])
 	})
 	assert.Contains(t, out, "MyBucket")
 	assert.Contains(t, out, "CREATE_IN_PROGRESS -> CREATE_COMPLETE")
+}
+
+// runLogs with follow=true must dispatch to followLogs (the continuous-tail
+// path) after building the stack tree once, rather than the one-shot path.
+func TestRunLogs_Follow_DispatchesToFollowLogs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString("root")}).Return(&cloudformation.ListStackResourcesOutput{}, nil)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("e1"), LogicalResourceId: awsString("RootResource"), ResourceStatus: cfntypes.ResourceStatusCreateComplete},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	out := captureStdout(t, func() {
+		summary, err := runLogs(ctx, client, "root", logsOptions{Follow: true}, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, 1, summary["event_count"])
+	})
+	assert.Contains(t, out, "RootResource")
+}
+
+// followLogs must merge and chronologically sort events collected across every
+// stack within a single poll iteration, not just write each stack's events as
+// soon as they're fetched (which would print in poll order, not event-time
+// order, whenever an earlier-polled stack's events are actually newer than a
+// later-polled stack's).
+func TestFollowLogs_MergesAndSortsAcrossStacksPerIteration(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	rootLater := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	childEarlier := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+
+	// "root" is polled before "child" (names order), but child's event has the
+	// earlier timestamp — the output must still print child before root.
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("root-1"), LogicalResourceId: awsString("RootResource"), Timestamp: &rootLater},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("child-1"), LogicalResourceId: awsString("ChildResource"), Timestamp: &childEarlier},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	out := captureStdout(t, func() {
+		summary, err := followLogs(ctx, client, []string{"root", "child"}, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, 2, summary["event_count"])
+	})
+
+	childIdx := indexOf(t, out, "ChildResource")
+	rootIdx := indexOf(t, out, "RootResource")
+	assert.Less(t, childIdx, rootIdx, "events must be merged in chronological order, not poll order")
 }
 
 // runLogs must propagate a buildStackTree failure.
@@ -412,7 +486,7 @@ func TestRunLogs_BuildTreeError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
 
-	_, err := runLogs(context.Background(), client, "root", false, map[string]any{})
+	_, err := runLogs(context.Background(), client, "root", logsOptions{}, map[string]any{})
 	require.Error(t, err)
 }
 
@@ -423,7 +497,7 @@ func TestRunLogs_PollStackEventsError(t *testing.T) {
 	client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackResourcesOutput{}, nil)
 	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
 
-	_, err := runLogs(context.Background(), client, "root", false, map[string]any{})
+	_, err := runLogs(context.Background(), client, "root", logsOptions{}, map[string]any{})
 	require.Error(t, err)
 }
 
@@ -472,7 +546,7 @@ func TestRunWatch_FailedStatus(t *testing.T) {
 
 	_, err := runWatch(context.Background(), client, "root", map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 }
 
 // runWatch must propagate a streamStackEvents failure.

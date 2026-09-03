@@ -31,7 +31,8 @@ func newFakeS3(t *testing.T) *fakeS3 {
 	faker := gofakes3.New(backend)
 	server := httptest.NewServer(faker.Server())
 
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
+	cfg, err := config.LoadDefaultConfig(
+		context.TODO(),
 		config.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider("fake-key", "fake-secret", ""),
 		),
@@ -285,7 +286,7 @@ func TestIntegration_ListAllObjects(t *testing.T) {
 	}
 
 	// List objects using our function.
-	totalObjects, stateFiles, err := listAllObjects(ctx, fake.client, bucketName)
+	totalObjects, stateFiles, err := listAllObjects(ctx, fake.client, bucketName, defaultStateFileSuffix)
 	require.NoError(t, err)
 	assert.Equal(t, 5, totalObjects, "Should count all objects")
 	assert.Equal(t, 3, stateFiles, "Should count only .tfstate files")
@@ -319,7 +320,7 @@ func TestIntegration_DeleteS3BucketAndContents_FullFlow(t *testing.T) {
 	}
 
 	// Delete bucket contents and bucket.
-	err = deleteS3BucketAndContents(ctx, fake.client, bucketName)
+	err = deleteS3BucketAndContents(ctx, fake.client, bucketName, stateFileTagging{Suffix: defaultStateFileSuffix, Label: defaultStateFileLabel})
 	require.NoError(t, err)
 
 	// Verify bucket deleted.
@@ -368,7 +369,7 @@ func TestIntegration_EmptyBucket_ListAllObjects(t *testing.T) {
 	require.NoError(t, err)
 
 	// List objects in empty bucket.
-	totalObjects, stateFiles, err := listAllObjects(ctx, fake.client, bucketName)
+	totalObjects, stateFiles, err := listAllObjects(ctx, fake.client, bucketName, defaultStateFileSuffix)
 	require.NoError(t, err)
 	assert.Equal(t, 0, totalObjects, "Empty bucket should have 0 objects")
 	assert.Equal(t, 0, stateFiles, "Empty bucket should have 0 state files")

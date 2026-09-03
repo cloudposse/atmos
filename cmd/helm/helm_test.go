@@ -35,6 +35,31 @@ func TestCommandProviderMetadata(t *testing.T) {
 	assert.ElementsMatch(t, []string{"template", "diff", "plan", "apply", "deploy", "delete", "plugin", "repo"}, subcommands)
 }
 
+// helmCmd must not re-register the global flag set as its own local
+// persistent flags — see the identical fix/rationale on CloudFormationCmd
+// (cmd/aws/cloudformation/cloudformation_test.go's
+// TestCloudFormationCmd_DoesNotDuplicateGlobalFlags). Both command families
+// previously used flags.WithCommonFlags(), which pulls in the entire
+// flags.GlobalFlagsRegistry() (already registered persistently on RootCmd
+// and inherited by every subcommand) as a second, separately-viper-bound
+// local copy.
+func TestHelmCmd_DoesNotDuplicateGlobalFlags(t *testing.T) {
+	globalOnlyFlags := []string{
+		"base-path", "chdir", "config", "config-path", "cast", "ai",
+		"force-color", "force-tty", "heatmap", "heatmap-mode", "logs-file",
+		"logs-level", "mask", "no-color", "pager", "profile", "profiler-host",
+		"profiler-port", "redirect-stderr", "settings-list-merge-strategy",
+		"skill", "edition", "identity",
+	}
+	for _, name := range globalOnlyFlags {
+		assert.Nil(t, helmCmd.PersistentFlags().Lookup(name),
+			"%q must not be locally registered on helmCmd — it is already a global RootCmd persistent flag", name)
+	}
+
+	assert.NotNil(t, helmCmd.PersistentFlags().Lookup("stack"), "expected --stack to remain a local persistent flag")
+	assert.NotNil(t, helmCmd.PersistentFlags().Lookup("dry-run"), "expected --dry-run to remain a local persistent flag")
+}
+
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	templateCmd := newOperationCommand("template", "Render")
 	for _, name := range []string{"all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels"} {

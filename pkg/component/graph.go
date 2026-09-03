@@ -113,6 +113,15 @@ func executeGraphNode(opts *GraphExecutionOptions, node *dependency.Node) error 
 	nodeInfo.SubCommand = opts.SubCommand
 	nodeInfo.All = false
 	nodeInfo.Affected = false
+	// Tags/Labels must also be cleared: each component package's top-level Execute()
+	// re-enters the bulk path whenever len(info.Tags) > 0 || len(info.Labels) > 0, and
+	// tag/label-based selection has already been applied by filterGraphByTagsAndLabels
+	// before this node was ever selected for dispatch. Leaving them set here caused a
+	// real infinite recursion (executeBulk -> executeGraph -> executeGraphNode ->
+	// Provider.Execute -> Execute -> executeBulk -> ...) for any --tags/--labels-only
+	// bulk run (no --all/--affected).
+	nodeInfo.Tags = nil
+	nodeInfo.Labels = nil
 
 	if err := opts.Provider.Execute(&ExecutionContext{
 		AtmosConfig:         opts.AtmosConfig,

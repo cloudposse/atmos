@@ -56,6 +56,9 @@ Render components filtered by tags or labels (composes with `--all`/`--affected`
 ```shell
 atmos helm template --all --tags production,tier-1
 atmos helm template --affected --labels cost-center=platform
+
+# Repeat --labels to combine multiple selectors across occurrences
+atmos helm template --affected --labels cost-center=platform --labels compliance=sox
 ```
 
 `--output` and `--output-dir` are only supported when rendering one component.
@@ -88,7 +91,7 @@ atmos helm template --affected --labels cost-center=platform
   <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
 
   <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs within one occurrence, and/or repeated for more, matches all): `--labels=cost-center=platform,compliance=sox` or `--labels cost-center=platform --labels compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
 </dl>
 
 :::note

@@ -148,10 +148,12 @@ func resolveSpecAndTemplate(atmosConfig *schema.AtmosConfiguration, info *schema
 		return spec, nil
 	}
 
-	spec.TemplateAbsPath = resolveTemplateFilePath(componentPath, spec)
-	spec.TemplateBody, err = loadTemplateBody(componentPath, spec)
-	if err != nil {
-		return nil, err
+	if spec.TemplateBody == "" {
+		spec.TemplateAbsPath = resolveTemplateFilePath(componentPath, spec)
+		spec.TemplateBody, err = loadTemplateBody(componentPath, spec)
+		if err != nil {
+			return nil, err
+		}
 	}
 	registerNoEchoValues(spec.TemplateBody, spec)
 
@@ -204,7 +206,7 @@ type operationHandler func(octx *opContext, client CloudFormationClient, spec *s
 // dispatch keeps runOperation a flat lookup instead of a long switch.
 var operationHandlers = map[Operation]operationHandler{
 	OperationValidate: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
-		return summary, validateTemplate(octx.Ctx, client, spec.TemplateBody)
+		return summary, validateTemplate(octx.Ctx, client, spec.StackName, spec.TemplateBody)
 	},
 	OperationDiff: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 		return runDiff(octx.Ctx, client, spec, summary)
@@ -266,7 +268,8 @@ var operationHandlers = map[Operation]operationHandler{
 	},
 	OperationLogs: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 		chart, _ := octx.Flags["chart"].(bool)
-		return runLogs(octx.Ctx, client, spec.StackName, chart, summary)
+		follow, _ := octx.Flags["follow"].(bool)
+		return runLogs(octx.Ctx, client, spec.StackName, logsOptions{Chart: chart, Follow: follow}, summary)
 	},
 	OperationWatch: func(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 		return runWatch(octx.Ctx, client, spec.StackName, summary)
@@ -318,8 +321,11 @@ func runOperation(octx *opContext, operation Operation, spec *stackSpec) (map[st
 	return handler(octx, client, spec, summary)
 }
 
-// runDiff creates (or reuses) a changeset and renders the predicted changes
-// without executing it.
+// runDiff creates a changeset, renders the predicted changes, then deletes the
+// changeset — diff/plan is a preview, and unlike changeset create (an explicit,
+// named, reusable artifact the user asked to keep), a diff's changeset has no
+// reason to outlive the command: leaving it would silently accumulate an AWS
+// object (against the account's changeset quota) on every single diff run.
 func runDiff(ctx context.Context, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 	result, err := createChangeSet(ctx, client, spec)
 	if err != nil {
@@ -329,6 +335,13 @@ func runDiff(ctx context.Context, client CloudFormationClient, spec *stackSpec, 
 	summary["no_op"] = result.NoOp
 	summary["changes"] = result.Changes
 	renderDiffSummary(spec.StackName, result)
+
+	// Best-effort cleanup: the diff itself already succeeded and was rendered,
+	// so a failure to delete the preview changeset shouldn't fail the command
+	// — surface it as a warning instead.
+	if err := deleteChangeSet(ctx, client, spec.StackName, result.ChangeSetName); err != nil {
+		ui.Warning(fmt.Sprintf("failed to clean up preview changeset %q: %v", result.ChangeSetName, err))
+	}
 	return summary, nil
 }
 
@@ -387,7 +400,9 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 		return summary, err
 	}
 	summary["outputs"] = outputs
-	renderOutputsSummary(outputs, octx.Flags)
+	if err := renderOutputsSummary(outputs, octx.Flags); err != nil {
+		return summary, err
+	}
 	return summary, nil
 }
 
@@ -403,7 +418,7 @@ func runDelete(ctx context.Context, client CloudFormationClient, flags map[strin
 	}
 	summary["final_status"] = string(status)
 	if isFailedStackStatus(status) {
-		return summary, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationChangeSetFailed, spec.StackName, status)
+		return summary, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationOperationFailed, spec.StackName, status)
 	}
 	return summary, nil
 }
@@ -428,14 +443,18 @@ func runOutput(ctx context.Context, client CloudFormationClient, stackName strin
 		return summary, err
 	}
 	summary["outputs"] = outputs
-	renderOutputsSummary(outputs, flags)
+	if err := renderOutputsSummary(outputs, flags); err != nil {
+		return summary, err
+	}
 	return summary, nil
 }
 
 // renderOutputsSummary writes the Outputs to the data channel (stdout) in the
 // requested format (default: table), reusing the shared pkg/output formatter —
 // the full standard format set (json/yaml/hcl/env/dotenv/bash/csv/tsv/github).
-func renderOutputsSummary(outputs map[string]any, flags map[string]any) {
+// Returns an error on an invalid --format instead of swallowing it: a bad
+// value must fail the command, not silently exit 0 with empty stdout.
+func renderOutputsSummary(outputs map[string]any, flags map[string]any) error {
 	format := sharedoutput.FormatTable
 	if f, ok := flags["format"].(string); ok && f != "" {
 		format = sharedoutput.Format(f)
@@ -451,8 +470,8 @@ func renderOutputsSummary(outputs map[string]any, flags map[string]any) {
 
 	rendered, err := sharedoutput.FormatOutputsWithOptions(outputs, format, opts)
 	if err != nil {
-		ui.Error(fmt.Sprintf("failed to format outputs: %v", err))
-		return
+		return fmt.Errorf("%w: failed to format outputs: %w", errUtils.ErrInvalidFlag, err)
 	}
 	_ = data.Write(rendered)
+	return nil
 }

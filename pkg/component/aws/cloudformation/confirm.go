@@ -30,6 +30,7 @@ var confirmedOperationVerbs = map[Operation]string{
 	OperationApply:            "apply",
 	OperationDelete:           "delete",
 	OperationChangesetExecute: "execute changeset against",
+	OperationChangesetDelete:  "delete changeset for",
 	OperationStackSetCreate:   "create stackset for",
 	OperationStackSetUpdate:   "update stackset for",
 	OperationStackSetDelete:   "delete stackset for",

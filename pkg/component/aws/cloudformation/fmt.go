@@ -54,6 +54,10 @@ func formatTemplate(body string) (string, error) {
 // whether the file is already formatted (via ErrAwsCloudFormationFmtNotClean,
 // for CI) without writing; otherwise formats in place.
 func runFmt(spec *stackSpec, flags map[string]any, summary map[string]any) (map[string]any, error) {
+	if spec.TemplateAbsPath == "" {
+		return summary, errUtils.ErrAwsCloudFormationFmtRequiresPath
+	}
+
 	formatted, err := formatTemplate(spec.TemplateBody)
 	if err != nil {
 		return summary, err

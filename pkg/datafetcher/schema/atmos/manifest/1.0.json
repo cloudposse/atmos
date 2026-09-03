@@ -1425,7 +1425,22 @@
               "$ref": "#/definitions/component"
             },
             "template": {
-              "type": "string"
+              "description": "Inline CloudFormation template body: a YAML/JSON string, or a structured map. Mutually exclusive with 'path'.",
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "minProperties": 1
+                }
+              ]
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Path to the CloudFormation template file, relative to the component's base path. Mutually exclusive with 'template'."
             },
             "stack_name": {
               "type": "string"
@@ -1503,7 +1518,13 @@
               "$ref": "#/definitions/dependencies"
             }
           },
-          "required": []
+          "required": [],
+          "not": {
+            "required": [
+              "template",
+              "path"
+            ]
+          }
         }
       ]
     },

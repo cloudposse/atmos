@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -43,14 +44,18 @@ func buildStackSpec(componentSection map[string]any) (*stackSpec, error) {
 		return nil, errUtils.ErrMissingAwsCloudFormationStackName
 	}
 
-	templatePath, _ := componentSection[cfg.TemplateSectionName].(string)
-	if templatePath == "" && !isAbstractComponent(componentSection) {
+	templateBody, templatePath, err := resolveTemplateSection(componentSection, stackName)
+	if err != nil {
+		return nil, err
+	}
+	if templateBody == "" && templatePath == "" && !isAbstractComponent(componentSection) {
 		return nil, errUtils.ErrMissingAwsCloudFormationTemplate
 	}
 
 	spec := &stackSpec{
 		StackName:    stackName,
 		TemplatePath: templatePath,
+		TemplateBody: templateBody,
 	}
 
 	params, err := normalizeParameters(componentSection[cfg.ParametersSectionName])
@@ -77,6 +82,35 @@ func buildStackSpec(componentSection map[string]any) (*stackSpec, error) {
 	}
 
 	return spec, nil
+}
+
+// resolveTemplateSection reads the component's `template`/`path` keys and
+// returns the resolved inline template body and/or file path. `template` is
+// polymorphic: a string is used as the body almost verbatim (a literal
+// YAML/JSON block scalar), a map is treated as structured inline authoring
+// and marshaled to YAML — mirroring Kubernetes's `manifests:` string-or-map
+// entries. `path` stays string-only, unchanged from the pre-rename `template`
+// key's file-reference role. The two are mutually exclusive.
+func resolveTemplateSection(componentSection map[string]any, stackName string) (templateBody, templatePath string, err error) {
+	templatePath, _ = componentSection[cfg.TemplatePathSectionName].(string)
+
+	switch v := componentSection[cfg.TemplateSectionName].(type) {
+	case string:
+		templateBody = v
+	case map[string]any:
+		if len(v) > 0 {
+			marshaled, marshalErr := yaml.Marshal(v)
+			if marshalErr != nil {
+				return "", "", fmt.Errorf("%w: %w", errUtils.ErrInvalidAwsCloudFormationSettings, marshalErr)
+			}
+			templateBody = string(marshaled)
+		}
+	}
+
+	if templateBody != "" && templatePath != "" {
+		return "", "", fmt.Errorf("%w: stack %q", errUtils.ErrAwsCloudFormationTemplateAndPathMutuallyExclusive, stackName)
+	}
+	return templateBody, templatePath, nil
 }
 
 // isAbstractComponent reports whether the component is marked `metadata.type: abstract`,

@@ -87,6 +87,42 @@ func TestRequireConfirmation_ChangesetExecuteDeclinedAborts(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
 }
 
+// changeset-delete must prompt, for consistency with every other mutating
+// verb (stackset delete already did; changeset delete previously didn't).
+func TestRequireConfirmation_ChangesetDeletePrompts(t *testing.T) {
+	var gotMessage string
+	original := confirmOperation
+	confirmOperation = func(message string) (bool, error) {
+		gotMessage = message
+		return true, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	require.NoError(t, requireConfirmation(OperationChangesetDelete, "vpc", map[string]any{}))
+	assert.Contains(t, gotMessage, "delete changeset for")
+	assert.Contains(t, gotMessage, "vpc")
+}
+
+// changeset-delete must respect --auto-approve.
+func TestRequireConfirmation_ChangesetDeleteAutoApproveSkipsPrompt(t *testing.T) {
+	original := confirmOperation
+	confirmOperation = func(_ string) (bool, error) {
+		t.Fatal("confirmOperation must not be called when --auto-approve is set")
+		return false, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	require.NoError(t, requireConfirmation(OperationChangesetDelete, "vpc", map[string]any{"auto-approve": true}))
+}
+
+// changeset-delete must abort with ErrUserAborted when declined.
+func TestRequireConfirmation_ChangesetDeleteDeclinedAborts(t *testing.T) {
+	stubConfirmOperation(t, false, nil)
+	err := requireConfirmation(OperationChangesetDelete, "vpc", map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+}
+
 // A confirmed prompt allows the operation to proceed.
 func TestRequireConfirmation_ConfirmedProceeds(t *testing.T) {
 	stubConfirmOperation(t, true, nil)

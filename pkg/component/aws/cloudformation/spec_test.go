@@ -11,7 +11,7 @@ import (
 )
 
 func TestBuildStackSpec_RequiresStackName(t *testing.T) {
-	_, err := buildStackSpec(map[string]any{"template": "template.yaml"})
+	_, err := buildStackSpec(map[string]any{"path": "template.yaml"})
 	require.ErrorIs(t, err, errUtils.ErrMissingAwsCloudFormationStackName)
 }
 
@@ -28,10 +28,54 @@ func TestBuildStackSpec_RequiresTemplateUnlessAbstract(t *testing.T) {
 	assert.Empty(t, spec.TemplatePath)
 }
 
+func TestBuildStackSpec_PathIsFileReference(t *testing.T) {
+	spec, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"path":       "template.yaml",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "template.yaml", spec.TemplatePath)
+	assert.Empty(t, spec.TemplateBody)
+}
+
+func TestBuildStackSpec_InlineStringTemplate(t *testing.T) {
+	spec, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"template":   "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, spec.TemplatePath)
+	assert.Equal(t, "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n", spec.TemplateBody)
+}
+
+func TestBuildStackSpec_InlineMapTemplate(t *testing.T) {
+	spec, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"template": map[string]any{
+			"Resources": map[string]any{
+				"Bucket": map[string]any{"Type": "AWS::S3::Bucket"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, spec.TemplatePath)
+	assert.Contains(t, spec.TemplateBody, "Resources:")
+	assert.Contains(t, spec.TemplateBody, "AWS::S3::Bucket")
+}
+
+func TestBuildStackSpec_TemplateAndPathMutuallyExclusive(t *testing.T) {
+	_, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"template":   "Resources: {}\n",
+		"path":       "template.yaml",
+	})
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationTemplateAndPathMutuallyExclusive)
+}
+
 func TestBuildStackSpec_FullConfig(t *testing.T) {
 	componentSection := map[string]any{
 		"stack_name": "acme-plat-ue2-dev-vpc",
-		"template":   "template.yaml",
+		"path":       "template.yaml",
 		"parameters": map[string]any{
 			"CidrBlock":   "10.0.0.0/16",
 			"Environment": "dev",

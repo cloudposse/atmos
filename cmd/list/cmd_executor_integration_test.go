@@ -321,7 +321,7 @@ func TestInitAndExtractComponents_InvalidLabelsFlag(t *testing.T) {
 	cmd := newCmdWithListParser("components", componentsParser.RegisterFlags)
 	opts := &ComponentsOptions{
 		Format:           "json",
-		LabelsRaw:        "not-a-valid-label",
+		LabelsRaw:        []string{"not-a-valid-label"},
 		ProcessTemplates: true,
 		ProcessFunctions: false,
 	}
@@ -342,7 +342,7 @@ func TestExecuteAndExtractStacks_InvalidLabelsFlag(t *testing.T) {
 	require.NoError(t, cmd.Flags().Set("identity", "false"))
 	opts := &StacksOptions{
 		Format:           "json",
-		LabelsRaw:        "not-a-valid-label",
+		LabelsRaw:        []string{"not-a-valid-label"},
 		ProcessTemplates: true,
 		ProcessFunctions: false,
 	}
