@@ -56,7 +56,10 @@ func TestDisplayPerformanceHeatmap(t *testing.T) {
 			// crowded out of the top-N display by whatever ran before it either.
 			perf.ResetForTesting()
 			perf.EnableTracking(true)
-			t.Cleanup(func() { perf.EnableTracking(false) })
+			t.Cleanup(func() {
+				perf.EnableTracking(false)
+				perf.ResetForTesting()
+			})
 
 			// Add some test tracking data.
 			done := perf.Track(nil, "testFunction")
@@ -149,7 +152,10 @@ func TestHeatmapNonTTYOutput(t *testing.T) {
 	// this must be disabled again afterward, and the registry reset too.
 	perf.ResetForTesting()
 	perf.EnableTracking(true)
-	t.Cleanup(func() { perf.EnableTracking(false) })
+	t.Cleanup(func() {
+		perf.EnableTracking(false)
+		perf.ResetForTesting()
+	})
 
 	// Add test data.
 	done := perf.Track(nil, "nonTTYTest")

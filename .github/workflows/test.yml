@@ -711,7 +711,7 @@ jobs:
   # GOFIPS140=latest (set inside the `race` command itself, .atmos.d/test.yaml)
   # is unaffected by CGO_ENABLED: Go's FIPS 140-3 module is pure Go, no cgo.
   race:
-    name: "[race] full test suite"
+    name: "[race] non-acceptance test suite"
     # `go test`'s package-level concurrency scales with available cores, and
     # this job compiles+runs ~400 race-instrumented packages -- the standard
     # ubuntu-latest runner's ~4 cores were the bottleneck (this job became

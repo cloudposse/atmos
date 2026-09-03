@@ -365,6 +365,7 @@ func TestClearInternPool(t *testing.T) {
 	// (-shuffle=on runs tests in random order, so that assumption doesn't
 	// hold in CI's race job).
 	ClearInternPool()
+	t.Cleanup(ClearInternPool)
 
 	atmosConfig := &schema.AtmosConfiguration{}
 

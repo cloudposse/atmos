@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -20,6 +21,16 @@ const (
 	// Logging keys.
 	logKeyProfile = "profile"
 )
+
+// envMu serializes setupAWSEnv/loadCredentialsViaSDK/cleanup as one transaction.
+// The env vars this package sets (AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE,
+// AWS_PROFILE, AWS_REGION) are process-wide, so two concurrent identity
+// resolutions racing through setup->load->restore could each load the other's
+// profile/region. The AWS SDK has no equivalent to "load from these files under
+// this profile, but ignore the process's ambient AWS_REGION" (see setupAWSEnv's
+// doc comment for why AWS_REGION specifically must be masked), so the env-var
+// approach stays; this lock is what makes it safe under concurrent callers.
+var envMu sync.Mutex
 
 // loadAWSCredentialsFromEnvironment loads AWS credentials from files using environment variables.
 // This is a shared helper for all AWS identity types to use with noop keyring.
@@ -38,6 +49,11 @@ func loadAWSCredentialsFromEnvironment(ctx context.Context, env map[string]strin
 		logKeyProfile, envVars.profile,
 		"region", envVars.region,
 	)
+
+	// The whole setup -> load -> restore sequence must run as one transaction:
+	// see envMu's doc comment.
+	envMu.Lock()
+	defer envMu.Unlock()
 
 	// Setup and restore environment variables.
 	cleanup := setupAWSEnv(envVars.credsFile, envVars.configFile, envVars.profile, envVars.region)
