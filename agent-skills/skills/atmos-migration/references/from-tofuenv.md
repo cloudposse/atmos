@@ -75,7 +75,8 @@ atmos toolchain install
 | tofuenv command | Atmos toolchain equivalent |
 |---|---|
 | `tofuenv install 1.10.3` | `atmos toolchain install opentofu@1.10.3` |
-| `tofuenv use 1.10.3` | `atmos toolchain set opentofu 1.10.3` |
+| `tofuenv use 1.10.3` (switches the global default in `~/.tofuenv/version`) | `atmos toolchain set --tool-versions "$HOME/.tool-versions" opentofu 1.10.3` (writes the home-level default) |
+| `tofuenv pin` (writes `.opentofu-version` in the current directory) | `atmos toolchain add opentofu@1.10.3` (adds/updates the project `.tool-versions` entry) |
 | `tofuenv version-name` | `atmos toolchain get opentofu` |
 | `tofuenv list` (installed versions) | `atmos toolchain list` |
 | `tofuenv list-remote` (available versions) | `atmos toolchain get opentofu --all` |

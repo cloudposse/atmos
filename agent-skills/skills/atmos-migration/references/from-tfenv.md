@@ -69,7 +69,8 @@ atmos toolchain install
 | tfenv command | Atmos toolchain equivalent |
 |---|---|
 | `tfenv install 1.9.8` | `atmos toolchain install terraform@1.9.8` |
-| `tfenv use 1.9.8` | `atmos toolchain set terraform 1.9.8` |
+| `tfenv use 1.9.8` (switches the global default in `~/.tfenv/version`) | `atmos toolchain set --tool-versions "$HOME/.tool-versions" terraform 1.9.8` (writes the home-level default) |
+| `tfenv pin` (writes `.terraform-version` in the current directory) | `atmos toolchain add terraform@1.9.8` (adds/updates the project `.tool-versions` entry) |
 | `tfenv version-name` | `atmos toolchain get terraform` |
 | `tfenv list` (installed versions) | `atmos toolchain list` |
 | `tfenv list-remote` (available versions) | `atmos toolchain get terraform --all` |
