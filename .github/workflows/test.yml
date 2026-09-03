@@ -150,7 +150,7 @@ jobs:
             client.wns.windows.com:443
             settings-win.data.microsoft.com:443
             *.events.data.microsoft.com:443
-            fe2cr.update.microsoft.com:443
+            *.update.microsoft.com:443
             ecs.office.com:443
             pti.store.microsoft.com:443
             login.live.com:443
@@ -276,6 +276,7 @@ jobs:
         with:
           egress-policy: block
           allowed-endpoints: >
+            api.github.com:443
             github.com:443
             us.i.posthog.com:443
 
@@ -385,7 +386,7 @@ jobs:
             client.wns.windows.com:443
             settings-win.data.microsoft.com:443
             *.events.data.microsoft.com:443
-            fe2cr.update.microsoft.com:443
+            *.update.microsoft.com:443
             ecs.office.com:443
             pti.store.microsoft.com:443
             login.live.com:443
@@ -641,7 +642,7 @@ jobs:
             client.wns.windows.com:443
             settings-win.data.microsoft.com:443
             *.events.data.microsoft.com:443
-            fe2cr.update.microsoft.com:443
+            *.update.microsoft.com:443
             ecs.office.com:443
             pti.store.microsoft.com:443
             login.live.com:443
@@ -1143,6 +1144,7 @@ jobs:
         with:
           egress-policy: block
           allowed-endpoints: >
+            api.github.com:443
             checkpoint-api.hashicorp.com:443
             github.com:443
             mirror.gcr.io:443
@@ -1316,6 +1318,7 @@ jobs:
           # listed below the job-specific endpoints; see the `test` job's
           # allowed-endpoints comment for the rationale.
           allowed-endpoints: >
+            api.github.com:443
             auth.docker.io:443
             charts.bitnami.com:443
             contracts.canonical.com:443
@@ -1644,7 +1647,7 @@ jobs:
             client.wns.windows.com:443
             settings-win.data.microsoft.com:443
             *.events.data.microsoft.com:443
-            fe2cr.update.microsoft.com:443
+            *.update.microsoft.com:443
             ecs.office.com:443
             pti.store.microsoft.com:443
             login.live.com:443
@@ -1903,6 +1906,7 @@ jobs:
         with:
           egress-policy: block
           allowed-endpoints: >
+            api.github.com:443
             github.com:443
             us.i.posthog.com:443
 
