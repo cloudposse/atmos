@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -38,11 +39,20 @@ func jobsResponse(body string) *http.Response {
 	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{}}
 }
 
+// expectRunAttempt stubs the live run-attempt lookup requestRerun makes,
+// for TestRerunInfraFailures' baseParams repo/runID, before calling
+// RerunFailedJobs.
+func expectRunAttempt(t *testing.T, client *rerun.MockRESTClient, attempt int) {
+	t.Helper()
+	client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, "repos/cloudposse/atmos/actions/runs/999", nil).
+		Return(jobsResponse(fmt.Sprintf(`{"run_attempt":%d}`, attempt)), nil) //nolint:bodyclose // closed by the code under test, not this fixture.
+}
+
 // expectFetchJobs stubs a single-page jobs response for the given run.
 func expectFetchJobs(t *testing.T, client *rerun.MockRESTClient, run rerun.RunRef, body string) {
 	t.Helper()
 	path := "repos/" + run.Repo + "/actions/runs/" + run.RunID + "/attempts/" + run.RunAttempt + "/jobs?per_page=100"
-	client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, path, nil).Return(jobsResponse(body), nil) //nolint:bodyclose // closed by the code under test, not this fixture
+	client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, path, nil).Return(jobsResponse(body), nil) //nolint:bodyclose // closed by the code under test, not this fixture.
 }
 
 func TestClassifyInfraFailures(t *testing.T) {
@@ -237,6 +247,7 @@ func TestRerunInfraFailures(t *testing.T) {
 		t.Parallel()
 		ctrl := gomock.NewController(t)
 		client := rerun.NewMockRESTClient(ctrl)
+		expectRunAttempt(t, client, 1)
 		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodPost, "repos/cloudposse/atmos/actions/runs/999/rerun-failed-jobs", nil).
 			Return(&http.Response{StatusCode: 201, Body: http.NoBody}, nil)
 		var stdout bytes.Buffer
@@ -263,6 +274,7 @@ func TestRerunInfraFailures(t *testing.T) {
 		client := rerun.NewMockRESTClient(ctrl)
 		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, "repos/cloudposse/atmos/pulls/42", nil).
 			Return(&http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"head":{"sha":"deadbeef"}}`))}, nil)
+		expectRunAttempt(t, client, 1)
 		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodPost, "repos/cloudposse/atmos/actions/runs/999/rerun-failed-jobs", nil).
 			Return(&http.Response{StatusCode: 201, Body: http.NoBody}, nil)
 		var stdout bytes.Buffer
@@ -318,7 +330,8 @@ func TestRerunInfraFailures(t *testing.T) {
 		t.Parallel()
 		ctrl := gomock.NewController(t)
 		client := rerun.NewMockRESTClient(ctrl)
-		client.EXPECT().RequestWithContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		expectRunAttempt(t, client, 1)
+		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodPost, "repos/cloudposse/atmos/actions/runs/999/rerun-failed-jobs", nil).
 			Return(nil, &api.HTTPError{StatusCode: 403, Message: "Run is already running", RequestURL: &url.URL{}})
 		var stdout bytes.Buffer
 
@@ -331,7 +344,8 @@ func TestRerunInfraFailures(t *testing.T) {
 		t.Parallel()
 		ctrl := gomock.NewController(t)
 		client := rerun.NewMockRESTClient(ctrl)
-		client.EXPECT().RequestWithContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		expectRunAttempt(t, client, 1)
+		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodPost, "repos/cloudposse/atmos/actions/runs/999/rerun-failed-jobs", nil).
 			Return(nil, &api.HTTPError{StatusCode: 404, Message: "Not Found", RequestURL: &url.URL{}})
 		var stdout bytes.Buffer
 
@@ -344,7 +358,8 @@ func TestRerunInfraFailures(t *testing.T) {
 		t.Parallel()
 		ctrl := gomock.NewController(t)
 		client := rerun.NewMockRESTClient(ctrl)
-		client.EXPECT().RequestWithContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		expectRunAttempt(t, client, 1)
+		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodPost, "repos/cloudposse/atmos/actions/runs/999/rerun-failed-jobs", nil).
 			Return(&http.Response{StatusCode: 201, Body: http.NoBody}, nil)
 		summaryPath := filepath.Join(t.TempDir(), "summary")
 
@@ -359,10 +374,33 @@ func TestRerunInfraFailures(t *testing.T) {
 		t.Parallel()
 		ctrl := gomock.NewController(t)
 		client := rerun.NewMockRESTClient(ctrl)
-		client.EXPECT().RequestWithContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		expectRunAttempt(t, client, 1)
+		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodPost, "repos/cloudposse/atmos/actions/runs/999/rerun-failed-jobs", nil).
 			Return(&http.Response{StatusCode: 201, Body: http.NoBody}, nil)
 
 		err := rerunInfraFailures(context.Background(), client, &bytes.Buffer{}, filepath.Join(t.TempDir(), "no-such-dir", "summary"), &baseParams)
+		require.Error(t, err)
+	})
+
+	t.Run("already at the attempt cap is skipped, not rerun", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		client := rerun.NewMockRESTClient(ctrl)
+		expectRunAttempt(t, client, maxRerunAttempts) // no POST EXPECT: must not call rerun-failed-jobs
+		var stdout bytes.Buffer
+
+		require.NoError(t, rerunInfraFailures(context.Background(), client, &stdout, "", &baseParams))
+		assert.Contains(t, stdout.String(), "already at attempt")
+	})
+
+	t.Run("run-attempt lookup failure is an error", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		client := rerun.NewMockRESTClient(ctrl)
+		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, "repos/cloudposse/atmos/actions/runs/999", nil).
+			Return(nil, errors.New("network unreachable"))
+
+		err := rerunInfraFailures(context.Background(), client, &bytes.Buffer{}, "", &baseParams)
 		require.Error(t, err)
 	})
 }

@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"regexp"
 	"strings"
 	"time"
 
@@ -43,7 +42,7 @@ const (
 	// ClassRunnerLost is a failed job with no failed step: the runner vanished.
 	ClassRunnerLost Class = "runner-lost"
 	// ClassCheckCascade is a failed job whose only failed steps are aggregator
-	// steps named `Check <x> result` (test.yml's test-required, k3s and
+	// steps named in checkResultStepNames (test.yml's test-required, k3s and
 	// terraform-registry-cache verdict jobs). Those steps only inspect other
 	// jobs' conclusions and never run tests, so they fail as a consequence of
 	// a zombie upstream job. Coupled to test.yml's step-naming convention.
@@ -81,11 +80,26 @@ const (
 	statusCompleted     = "completed"
 )
 
-var (
-	errInvalidJobsJSON = errors.New("invalid jobs JSON")
+var errInvalidJobsJSON = errors.New("invalid jobs JSON")
 
-	checkResultStepPattern = regexp.MustCompile(`^Check .* result$`)
-)
+// checkResultStepNames is the exact, closed set of aggregator step names
+// test.yml defines today. A closed set - rather than a broad "Check .*
+// result" pattern this package used before - narrows, but cannot fully
+// close, a real gap: a pull_request-triggered `Tests` run executes the PR's
+// own copy of test.yml, so a same-repo PR could in principle name one of its
+// own (always-failing) steps to match one of these exact names, gaming
+// check-cascade into tolerating it. Accepted rather than solved outright:
+// GitHub's jobs API carries no signal distinguishing "this step name came
+// from main" from "this step name came from the PR branch" for a
+// pull_request trigger, and the blast radius stays small regardless - at
+// most a couple of extra reruns of that PR's own run
+// (rerun-infra-failures.yml's run_attempt < 3 cap), never another PR's run,
+// and a same-repo PR can already run arbitrary code in this CI either way.
+var checkResultStepNames = map[string]bool{
+	"Check per-OS test matrix result":       true,
+	"Check terraform-registry-cache result": true,
+	"Check k3s matrix result":               true,
+}
 
 // Step is one step of a job as returned by the GitHub jobs API.
 type Step struct {
@@ -250,7 +264,7 @@ func failedSteps(steps []Step) []Step {
 
 func allCheckResultSteps(steps []Step) bool {
 	for _, step := range steps {
-		if !checkResultStepPattern.MatchString(step.Name) {
+		if !checkResultStepNames[step.Name] {
 			return false
 		}
 	}

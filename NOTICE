@@ -1088,7 +1088,7 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/crypto
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/crypto/+/v0.56.0:LICENSE
+    URL: https://cs.opensource.google/go/x/crypto/+/v0.55.0:LICENSE
 
   - golang.org/x/exp
     License: BSD-3-Clause

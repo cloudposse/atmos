@@ -22,7 +22,7 @@ func TestRerunFailedJobs(t *testing.T) {
 		client := NewMockRESTClient(ctrl)
 		client.EXPECT().
 			RequestWithContext(gomock.Any(), http.MethodPost, "repos/cloudposse/atmos/actions/runs/123/rerun-failed-jobs", nil).
-			Return(jsonResponse(201, "", nil), nil) //nolint:bodyclose // closed by the code under test, not this fixture
+			Return(jsonResponse(201, "", nil), nil) //nolint:bodyclose // closed by the code under test, not this fixture.
 
 		stillRunning, err := RerunFailedJobs(context.Background(), client, "cloudposse/atmos", "123")
 		require.NoError(t, err)

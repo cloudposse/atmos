@@ -33,7 +33,7 @@ func TestFetchJobs(t *testing.T) {
 		client := NewMockRESTClient(ctrl)
 		client.EXPECT().
 			RequestWithContext(gomock.Any(), http.MethodGet, "repos/cloudposse/atmos/actions/runs/1/attempts/1/jobs?per_page=100", nil).
-			Return(jsonResponse(200, `{"jobs":[{"name":"Build","status":"completed","conclusion":"failure"}]}`, nil), nil) //nolint:bodyclose // closed by the code under test, not this fixture
+			Return(jsonResponse(200, `{"jobs":[{"name":"Build","status":"completed","conclusion":"failure"}]}`, nil), nil) //nolint:bodyclose // closed by the code under test, not this fixture.
 
 		jobs, err := FetchJobs(context.Background(), client, "cloudposse/atmos", "1", "1")
 		require.NoError(t, err)
@@ -50,11 +50,11 @@ func TestFetchJobs(t *testing.T) {
 		gomock.InOrder(
 			client.EXPECT().
 				RequestWithContext(gomock.Any(), http.MethodGet, "repos/cloudposse/atmos/actions/runs/1/attempts/1/jobs?per_page=100", nil).
-				Return(jsonResponse(200, `{"jobs":[{"name":"Build (linux)","status":"completed","conclusion":"success"}]}`, //nolint:bodyclose // closed by the code under test, not this fixture
+				Return(jsonResponse(200, `{"jobs":[{"name":"Build (linux)","status":"completed","conclusion":"success"}]}`, //nolint:bodyclose // closed by the code under test, not this fixture.
 					http.Header{"Link": {`<` + nextURL + `>; rel="next", <https://api.github.com/x?page=2>; rel="last"`}}), nil),
 			client.EXPECT().
 				RequestWithContext(gomock.Any(), http.MethodGet, nextURL, nil).
-				Return(jsonResponse(200, `{"jobs":[{"name":"Build (windows)","status":"completed","conclusion":"cancelled"}]}`, nil), nil), //nolint:bodyclose // closed by the code under test, not this fixture
+				Return(jsonResponse(200, `{"jobs":[{"name":"Build (windows)","status":"completed","conclusion":"cancelled"}]}`, nil), nil), //nolint:bodyclose // closed by the code under test, not this fixture.
 		)
 
 		jobs, err := FetchJobs(context.Background(), client, "cloudposse/atmos", "1", "1")
@@ -81,7 +81,7 @@ func TestFetchJobs(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		client := NewMockRESTClient(ctrl)
 		client.EXPECT().RequestWithContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-			Return(jsonResponse(200, `{"jobs":[`, nil), nil) //nolint:bodyclose // closed by the code under test, not this fixture
+			Return(jsonResponse(200, `{"jobs":[`, nil), nil) //nolint:bodyclose // closed by the code under test, not this fixture.
 
 		_, err := FetchJobs(context.Background(), client, "cloudposse/atmos", "1", "1")
 		require.Error(t, err)
@@ -97,6 +97,35 @@ func TestNextLink(t *testing.T) {
 		nextLink(`<https://api.github.com/x?page=2>; rel="next", <https://api.github.com/x?page=9>; rel="last"`))
 }
 
+// testLookupErrors runs the two error-path subtests shared by every single-
+// request/JSON-decode lookup (PRHeadSHA, RunAttempt): a transport error and
+// a malformed response body must both surface as errors.
+func testLookupErrors[T any](t *testing.T, call func(client RESTClient) (T, error)) {
+	t.Helper()
+
+	t.Run("request error", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		client := NewMockRESTClient(ctrl)
+		client.EXPECT().RequestWithContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			Return(nil, errors.New("not found"))
+
+		_, err := call(client)
+		require.Error(t, err)
+	})
+
+	t.Run("malformed body is an error", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		client := NewMockRESTClient(ctrl)
+		client.EXPECT().RequestWithContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			Return(jsonResponse(200, `{`, nil), nil) //nolint:bodyclose // closed by the code under test, not this fixture.
+
+		_, err := call(client)
+		require.Error(t, err)
+	})
+}
+
 func TestPRHeadSHA(t *testing.T) {
 	t.Parallel()
 
@@ -106,32 +135,35 @@ func TestPRHeadSHA(t *testing.T) {
 		client := NewMockRESTClient(ctrl)
 		client.EXPECT().
 			RequestWithContext(gomock.Any(), http.MethodGet, "repos/cloudposse/atmos/pulls/42", nil).
-			Return(jsonResponse(200, `{"head":{"sha":"deadbeef"}}`, nil), nil) //nolint:bodyclose // closed by the code under test, not this fixture
+			Return(jsonResponse(200, `{"head":{"sha":"deadbeef"}}`, nil), nil) //nolint:bodyclose // closed by the code under test, not this fixture.
 
 		sha, err := PRHeadSHA(context.Background(), client, "cloudposse/atmos", 42)
 		require.NoError(t, err)
 		assert.Equal(t, "deadbeef", sha)
 	})
 
-	t.Run("request error", func(t *testing.T) {
+	testLookupErrors(t, func(client RESTClient) (string, error) {
+		return PRHeadSHA(context.Background(), client, "cloudposse/atmos", 42)
+	})
+}
+
+func TestRunAttempt(t *testing.T) {
+	t.Parallel()
+
+	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 		ctrl := gomock.NewController(t)
 		client := NewMockRESTClient(ctrl)
-		client.EXPECT().RequestWithContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-			Return(nil, errors.New("not found"))
+		client.EXPECT().
+			RequestWithContext(gomock.Any(), http.MethodGet, "repos/cloudposse/atmos/actions/runs/123", nil).
+			Return(jsonResponse(200, `{"run_attempt":2}`, nil), nil) //nolint:bodyclose // closed by the code under test, not this fixture.
 
-		_, err := PRHeadSHA(context.Background(), client, "cloudposse/atmos", 42)
-		require.Error(t, err)
+		attempt, err := RunAttempt(context.Background(), client, "cloudposse/atmos", "123")
+		require.NoError(t, err)
+		assert.Equal(t, 2, attempt)
 	})
 
-	t.Run("malformed body is an error", func(t *testing.T) {
-		t.Parallel()
-		ctrl := gomock.NewController(t)
-		client := NewMockRESTClient(ctrl)
-		client.EXPECT().RequestWithContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-			Return(jsonResponse(200, `{`, nil), nil) //nolint:bodyclose // closed by the code under test, not this fixture
-
-		_, err := PRHeadSHA(context.Background(), client, "cloudposse/atmos", 42)
-		require.Error(t, err)
+	testLookupErrors(t, func(client RESTClient) (int, error) {
+		return RunAttempt(context.Background(), client, "cloudposse/atmos", "123")
 	})
 }

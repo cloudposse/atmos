@@ -215,7 +215,25 @@ func checkPRHeadsCurrent(ctx context.Context, client rerun.RESTClient, p *rerunP
 	return false, "", nil
 }
 
+// maxRerunAttempts mirrors `.github/workflows/rerun-infra-failures.yml`'s
+// job-level `run_attempt < 3` if-gate. That gate reads the triggering
+// event's attempt count once, when this workflow starts; by the time
+// requestRerun actually calls the rerun API - after harden-runner setup,
+// checkout and classification - the run's real attempt count can have moved
+// (another trigger of this same workflow, or a manual rerun in the UI).
+// Re-checking live here, immediately before the call that would create the
+// next attempt, closes that gap instead of just narrowing it.
+const maxRerunAttempts = 3
+
 func requestRerun(ctx context.Context, client rerun.RESTClient, stdout io.Writer, summaryPath string, p *rerunParams) error {
+	attempt, err := rerun.RunAttempt(ctx, client, p.repo, p.runID)
+	if err != nil {
+		return err
+	}
+	if attempt >= maxRerunAttempts {
+		return appendSummaryLine(stdout, summaryPath, fmt.Sprintf("Rerun skipped: run %s is already at attempt %d (cap %d).", p.runID, attempt, maxRerunAttempts))
+	}
+
 	stillRunning, err := rerun.RerunFailedJobs(ctx, client, p.repo, p.runID)
 	if err != nil {
 		fmt.Fprintf(stdout, "::error::rerun failed jobs for run %s: %s\n", p.runID, err)

@@ -138,6 +138,17 @@ func TestClassify(t *testing.T) {
 			want: ClassCheckCascade,
 		},
 		{
+			// checkResultStepNames is a closed set, not the old "^Check .* result$"
+			// pattern: a pull_request-triggered run executes the PR's own test.yml,
+			// so a step name shaped like a real aggregator but not one of the three
+			// known ones must not be tolerated as a cascade.
+			name: "a step shaped like an aggregator but not a known one is real-failure",
+			job: job("Acceptance Tests (windows)", conclusionFailure, at(t43m), []Step{
+				step("Check totally-made-up result", statusCompleted, conclusionFailure, at(t43m)),
+			}),
+			want: ClassRealFailure,
+		},
+		{
 			name: "failure with a real failed step is real-failure",
 			job: job("Acceptance Tests (linux, shard 4/10)", conclusionFailure, at(t0.Add(20*time.Minute)), []Step{
 				okStep("Set up job", t0),

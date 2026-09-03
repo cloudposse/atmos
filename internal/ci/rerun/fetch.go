@@ -91,3 +91,28 @@ func PRHeadSHA(ctx context.Context, client RESTClient, repo string, number int) 
 	}
 	return pr.Head.SHA, nil
 }
+
+// RunAttempt returns runID's current attempt number (repos/{repo}/actions/runs/{id}).
+// Callers gating on an attempt-count cap should call this immediately before
+// acting on it rather than trusting an attempt number from an earlier event
+// payload: `gh run rerun`/rerun-failed-jobs creates a new attempt from the
+// run's latest execution regardless of which attempt triggered the caller,
+// so a stale count can under-count how many attempts already exist.
+func RunAttempt(ctx context.Context, client RESTClient, repo, runID string) (int, error) {
+	defer perf.Track(nil, "rerun.RunAttempt")()
+
+	path := fmt.Sprintf("repos/%s/actions/runs/%s", repo, runID)
+	resp, err := client.RequestWithContext(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return 0, fmt.Errorf("rerun: get run %s: %w", runID, err)
+	}
+	defer resp.Body.Close()
+
+	var run struct {
+		RunAttempt int `json:"run_attempt"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&run); err != nil {
+		return 0, fmt.Errorf("rerun: decode run %s: %w", runID, err)
+	}
+	return run.RunAttempt, nil
+}
