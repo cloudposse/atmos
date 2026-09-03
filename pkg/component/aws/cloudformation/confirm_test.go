@@ -101,6 +101,60 @@ func TestRequireConfirmation_DeclinedAborts(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
 }
 
+// stackset create/update/delete must each prompt for confirmation, using
+// their own distinct verb, and must skip the prompt when --auto-approve is set.
+func TestRequireConfirmation_StackSetOperationsPrompt(t *testing.T) {
+	tests := []struct {
+		op       Operation
+		wantVerb string
+	}{
+		{OperationStackSetCreate, "create stackset for"},
+		{OperationStackSetUpdate, "update stackset for"},
+		{OperationStackSetDelete, "delete stackset for"},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.op), func(t *testing.T) {
+			var gotMessage string
+			original := confirmOperation
+			confirmOperation = func(message string) (bool, error) {
+				gotMessage = message
+				return true, nil
+			}
+			t.Cleanup(func() { confirmOperation = original })
+
+			require.NoError(t, requireConfirmation(tt.op, "vpc", map[string]any{}))
+			assert.Contains(t, gotMessage, tt.wantVerb)
+			assert.Contains(t, gotMessage, "vpc")
+		})
+	}
+}
+
+// stackset create/update/delete must respect --auto-approve like apply/delete.
+func TestRequireConfirmation_StackSetOperationsAutoApproveSkipsPrompt(t *testing.T) {
+	original := confirmOperation
+	confirmOperation = func(_ string) (bool, error) {
+		t.Fatal("confirmOperation must not be called when --auto-approve is set")
+		return false, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	flags := map[string]any{"auto-approve": true}
+	require.NoError(t, requireConfirmation(OperationStackSetCreate, "vpc", flags))
+	require.NoError(t, requireConfirmation(OperationStackSetUpdate, "vpc", flags))
+	require.NoError(t, requireConfirmation(OperationStackSetDelete, "vpc", flags))
+}
+
+// stackset create/update/delete must abort with ErrUserAborted when declined.
+func TestRequireConfirmation_StackSetOperationsDeclinedAborts(t *testing.T) {
+	stubConfirmOperation(t, false, nil)
+	for _, op := range []Operation{OperationStackSetCreate, OperationStackSetUpdate, OperationStackSetDelete} {
+		err := requireConfirmation(op, "vpc", map[string]any{})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+	}
+}
+
 // An error from the underlying prompt propagates unchanged.
 func TestRequireConfirmation_PromptErrorPropagates(t *testing.T) {
 	sentinel := errors.New("tty unavailable")

@@ -1,0 +1,80 @@
+---
+title: atmos aws cloudformation stackset
+sidebar_label: stackset
+sidebar_class_name: command
+id: stackset
+description: Manage multi-account/multi-region CloudFormation StackSets.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import DocCardList from '@theme/DocCardList'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Manage multi-account/multi-region [CloudFormation StackSets](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/what-is-cfnstacksets.html)
+through a `kind: aws/stackset` `provision.targets` entry — a separate delivery
+mechanism from `apply`/`deploy`'s single-account/region changeset flow. A
+StackSet target is used exclusively by these `stackset` verbs; it is never
+selected through `apply --target`.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation stackset --help" src="/casts/screengrabs/atmos-aws-cloudformation-stackset--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation stackset create <component> --stack <stack>
+atmos aws cloudformation stackset update <component> --stack <stack>
+atmos aws cloudformation stackset delete <component> --stack <stack>
+atmos aws cloudformation stackset instances <component> --stack <stack>
+```
+
+## Configuration
+
+Declare a `kind: aws/stackset` target under the component's `provision.targets`:
+
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      provision:
+        targets:
+          multi-account:
+            kind: aws/stackset
+            accounts:
+              - "111111111111"
+              - "222222222222"
+            regions:
+              - us-east-1
+              - us-west-2
+            permission_model: SELF_MANAGED
+            administration_role_arn: arn:aws:iam::111111111111:role/AWSCloudFormationStackSetAdministrationRole
+            execution_role_name: AWSCloudFormationStackSetExecutionRole
+```
+
+See [Delivery Targets](/stacks/components/aws-cloudformation#delivery-targets)
+for the full field reference.
+
+## Target Resolution
+
+`stackset create` and `stackset update` are the only verbs that resolve a
+`kind: aws/stackset` provision target — they need its `accounts`, `regions`,
+`permission_model`, and role settings. Unlike `apply`'s `--target` (which
+defaults to `provision.default`, then the implicit direct-deploy target), a
+StackSet target is never implicit by default:
+
+- **Exactly one `kind: aws/stackset` target declared** — used automatically,
+  no `--target` needed.
+- **More than one declared** — `--target <name>` is required to disambiguate.
+- **None declared** — `stackset create`/`stackset update` fail with a hint to
+  add one.
+
+`stackset delete` and `stackset instances` act directly on the StackSet whose
+name matches the component's `stack_name` — they take no `--target` flag and
+do not need a `kind: aws/stackset` target declared at all.
+
+## Subcommands
+
+<DocCardList/>

@@ -29,6 +29,10 @@ const (
 
 	flagAutoApprove = "auto-approve"
 
+	// The msgSkipConfirmation const is the shared --auto-approve flag description
+	// across every mutating operation.
+	msgSkipConfirmation = "Skip interactive confirmation."
+
 	// The subCommandApply/subCommandDelete consts are the Operation-dispatch
 	// identifiers shared by the top-level apply/deploy and delete verbs, and by
 	// verb-group entries that reuse the same literal (e.g. `changeset delete`'s
@@ -84,7 +88,11 @@ func init() {
 	CloudFormationCmd.AddCommand(newChangesetCmd())
 	CloudFormationCmd.AddCommand(newDriftCmd())
 	CloudFormationCmd.AddCommand(newGetCmd())
+	CloudFormationCmd.AddCommand(newStackSetCmd())
 	CloudFormationCmd.AddCommand(newOperationCommand("fmt", "fmt", "Format the local template in place (or check formatting with --check)"))
+	CloudFormationCmd.AddCommand(newOperationCommand("tree", "tree", "Render the nested-stack dependency tree"))
+	CloudFormationCmd.AddCommand(newOperationCommand("logs", "logs", "Show the combined event log across a stack and its nested stacks"))
+	CloudFormationCmd.AddCommand(newOperationCommand("watch", "watch", "Attach to a stack's in-progress (or already-terminal) operation and stream events"))
 	CloudFormationCmd.AddCommand(newListCmd())
 	CloudFormationCmd.AddCommand(source.GetSourceCommand())
 }
@@ -125,6 +133,22 @@ func newGetCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newOperationCommand("template", "get-template", "Fetch the deployed stack's template"))
 	cmd.AddCommand(newOperationCommand("policy", "get-policy", "Fetch the deployed stack's policy"))
+	return cmd
+}
+
+// newStackSetCmd is the `atmos aws cloudformation stackset` verb group:
+// multi-account/multi-region deployment orchestration via a `kind:
+// aws/stackset` provision target.
+func newStackSetCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "stackset",
+		Short: "Manage multi-account/multi-region StackSets",
+		RunE:  func(cmd *cobra.Command, _ []string) error { return cmd.Usage() },
+	}
+	cmd.AddCommand(newOperationCommand("create", "stackset-create", "Create a StackSet (and its initial stack instances, if configured)"))
+	cmd.AddCommand(newOperationCommand("update", "stackset-update", "Update a StackSet's template/parameters/capabilities"))
+	cmd.AddCommand(newOperationCommand(subCommandDelete, "stackset-delete", "Delete every stack instance, then the StackSet itself"))
+	cmd.AddCommand(newOperationCommand("instances", "stackset-instances", "List a StackSet's stack instances"))
 	return cmd
 }
 
@@ -206,13 +230,13 @@ func operationSpecificFlagOptions(use, subCommand string) []flags.Option {
 	switch subCommand {
 	case subCommandApply:
 		options := []flags.Option{
-			flags.WithBoolFlag(flagAutoApprove, "", use == "deploy", "Skip interactive confirmation."),
+			flags.WithBoolFlag(flagAutoApprove, "", use == "deploy", msgSkipConfirmation),
 			flags.WithStringFlag("target", "", "", "Provision target to deliver to. Defaults to provision.default, otherwise the implicit direct-deploy target."),
 		}
 		return options
 	case subCommandDelete:
 		return []flags.Option{
-			flags.WithBoolFlag(flagAutoApprove, "", false, "Skip interactive confirmation."),
+			flags.WithBoolFlag(flagAutoApprove, "", false, msgSkipConfirmation),
 			flags.WithStringSliceFlag("retain-resources", "", nil, "Logical IDs of resources to retain (only valid for a DELETE_FAILED stack)."),
 			flags.WithBoolFlag("disable-termination-protection", "", false, "Disable termination protection before deleting (never done silently)."),
 		}
@@ -225,7 +249,7 @@ func operationSpecificFlagOptions(use, subCommand string) []flags.Option {
 	case "changeset-execute":
 		return []flags.Option{
 			flags.WithRequiredStringFlag("changeset-name", "", "Name of the changeset to execute."),
-			flags.WithBoolFlag(flagAutoApprove, "", false, "Skip interactive confirmation."),
+			flags.WithBoolFlag(flagAutoApprove, "", false, msgSkipConfirmation),
 		}
 	case "changeset-delete":
 		return []flags.Option{
@@ -242,6 +266,29 @@ func operationSpecificFlagOptions(use, subCommand string) []flags.Option {
 	case "fmt":
 		return []flags.Option{
 			flags.WithBoolFlag("check", "", false, "Report whether the template is formatted without writing changes (non-zero exit if not)."),
+		}
+	default:
+		return phase3FlagOptions(subCommand)
+	}
+}
+
+// phase3FlagOptions returns flags specific to stackset/observability
+// operations, split out of operationSpecificFlagOptions to keep its
+// cyclomatic complexity low.
+func phase3FlagOptions(subCommand string) []flags.Option {
+	switch subCommand {
+	case "stackset-create", "stackset-update":
+		return []flags.Option{
+			flags.WithBoolFlag(flagAutoApprove, "", false, msgSkipConfirmation),
+			flags.WithStringFlag("target", "", "", "The `kind: aws/stackset` provision target to use. Required when more than one is declared."),
+		}
+	case "stackset-delete":
+		return []flags.Option{
+			flags.WithBoolFlag(flagAutoApprove, "", false, msgSkipConfirmation),
+		}
+	case "logs":
+		return []flags.Option{
+			flags.WithBoolFlag("chart", "", false, "Render a per-resource timeline instead of a flat chronological event list."),
 		}
 	default:
 		return nil
@@ -327,7 +374,7 @@ func runOperation(cmd *cobra.Command, subCommand string, args []string) error {
 
 func getOperationFlags(cmd *cobra.Command) map[string]any {
 	result := make(map[string]any)
-	for _, name := range []string{flagAll, flagAffected, "include-dependents", "clone-target-ref", flagAutoApprove, "disable-termination-protection", "flatten", "uppercase", "fail-on-drift", "original", "check"} {
+	for _, name := range []string{flagAll, flagAffected, "include-dependents", "clone-target-ref", flagAutoApprove, "disable-termination-protection", "flatten", "uppercase", "fail-on-drift", "original", "check", "chart"} {
 		if flag := cmd.Flag(name); flag != nil {
 			result[name] = flag.Value.String() == valueTrue
 		}

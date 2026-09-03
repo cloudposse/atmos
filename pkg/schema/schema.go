@@ -582,6 +582,16 @@ type ProvisionTarget struct {
 	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty" mapstructure:"prefix"`
 	// Region overrides the bucket's region (aws/s3 kind; defaults to the active identity's region).
 	Region string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
+	// Accounts are the target AWS account IDs for stack instances (aws/stackset kind, self-managed permissions).
+	Accounts []string `yaml:"accounts,omitempty" json:"accounts,omitempty" mapstructure:"accounts"`
+	// Regions are the target AWS regions for stack instances (aws/stackset kind).
+	Regions []string `yaml:"regions,omitempty" json:"regions,omitempty" mapstructure:"regions"`
+	// PermissionModel is "SELF_MANAGED" (default) or "SERVICE_MANAGED" (aws/stackset kind).
+	PermissionModel string `yaml:"permission_model,omitempty" json:"permission_model,omitempty" mapstructure:"permission_model"`
+	// AdministrationRoleArn is the IAM role CloudFormation assumes to create/manage the StackSet (aws/stackset kind, self-managed permissions).
+	AdministrationRoleArn string `yaml:"administration_role_arn,omitempty" json:"administration_role_arn,omitempty" mapstructure:"administration_role_arn"`
+	// ExecutionRoleName is the IAM role name CloudFormation assumes in each target account (aws/stackset kind, self-managed permissions).
+	ExecutionRoleName string `yaml:"execution_role_name,omitempty" json:"execution_role_name,omitempty" mapstructure:"execution_role_name"`
 }
 
 // ProvisionTargetAuth selects the Atmos Auth identity for a delivery.
