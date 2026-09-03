@@ -62,10 +62,13 @@ func fetchRepoDescription(apiURL string) (string, error) {
 
 // isSingleLinePrintable reports whether s is safe to embed verbatim in
 // NOTICE's header: no line breaks or other control characters that could
-// reshape the generated file's fixed layout.
+// reshape the generated file's fixed layout. unicode.IsControl alone misses
+// U+2028 (Line Separator) and U+2029 (Paragraph Separator) -- valid in a
+// JSON string but rendered as line breaks by many consumers -- so those are
+// checked separately via their Zl/Zp categories.
 func isSingleLinePrintable(s string) bool {
 	for _, r := range s {
-		if unicode.IsControl(r) {
+		if unicode.IsControl(r) || unicode.In(r, unicode.Zl, unicode.Zp) {
 			return false
 		}
 	}

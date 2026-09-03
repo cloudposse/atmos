@@ -108,12 +108,70 @@ func TestFetchRepoDescriptionRejectsControlCharacter(t *testing.T) {
 	assert.Contains(t, err.Error(), "line breaks or non-printable characters")
 }
 
+func TestFetchRepoDescriptionRejectsLineSeparator(t *testing.T) {
+	// U+2028 (Line Separator): valid inside a JSON string, but rendered as
+	// a line break by many consumers, so unicode.IsControl alone misses it.
+	body, err := json.Marshal(struct {
+		Description string `json:"description"`
+	}{Description: "line one" + string(rune(0x2028)) + "line two"})
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+
+	_, err = fetchRepoDescription(server.URL)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "line breaks or non-printable characters")
+}
+
+func TestFetchRepoDescriptionRejectsParagraphSeparator(t *testing.T) {
+	// U+2029 (Paragraph Separator): same rationale as the Line Separator
+	// case above.
+	body, err := json.Marshal(struct {
+		Description string `json:"description"`
+	}{Description: "line one" + string(rune(0x2029)) + "line two"})
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+
+	_, err = fetchRepoDescription(server.URL)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "line breaks or non-printable characters")
+}
+
+func TestFetchRepoDescriptionBuildRequestError(t *testing.T) {
+	// A raw control character in the URL fails http.NewRequest's underlying
+	// url.Parse before any network call is attempted.
+	_, err := fetchRepoDescription("http://example.com/" + string(rune(0x7f)))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "build request")
+}
+
+func TestFetchRepoDescriptionDoError(t *testing.T) {
+	// An unsupported URL scheme makes http.Client.Do fail immediately,
+	// without depending on a real unreachable network address.
+	_, err := fetchRepoDescription("unsupported-scheme://example.com")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fetch")
+}
+
 func TestIsSingleLinePrintable(t *testing.T) {
 	assert.True(t, isSingleLinePrintable("Atmos is the open-source runtime for infrastructure."))
-	assert.True(t, isSingleLinePrintable("unicode em dash - is fine"))
+	assert.True(t, isSingleLinePrintable("unicode em dash "+string(rune(0x2014))+" is fine"))
 	assert.False(t, isSingleLinePrintable("line one\nline two"))
 	assert.False(t, isSingleLinePrintable("carriage\rreturn"))
 	assert.False(t, isSingleLinePrintable("tab\ttab"))
+	assert.False(t, isSingleLinePrintable("line one"+string(rune(0x2028))+"line two"), "U+2028 Line Separator")
+	assert.False(t, isSingleLinePrintable("line one"+string(rune(0x2029))+"line two"), "U+2029 Paragraph Separator")
 }
 
 func TestHTTPClientHasFiniteTimeout(t *testing.T) {
