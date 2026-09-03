@@ -152,11 +152,18 @@ type rerunParams struct {
 // (repos/{repo}/actions/runs/{runID}/rerun-failed-jobs, mirroring
 // `gh run rerun <runID> --failed`), but only after re-verifying - for
 // pull_request runs - that the run's head SHA still matches every associated
-// PR's current head: a run superseded by a newer push must not be rerun. A
-// fork PR (whose pull_requests list GitHub always leaves empty) can't be
-// verified this way and is never rerun either. Every decision is appended to
-// GITHUB_STEP_SUMMARY when set; only a genuine rerun-request failure (not
-// "the run hasn't finished yet") is returned as an error.
+// PR's current head, skipping the rerun otherwise. This is best-effort, not a
+// hard guarantee: a new push can still land in the gap between that check and
+// the rerun-request call below, so a just-superseded run can occasionally get
+// rerun anyway. Workflow_run triggers only fire after the triggering run has
+// already finished, so there's no live "cancel this if a newer run starts"
+// concurrency group to attach here the way pull_request triggers get one -
+// the wasted cost of that rare case is one extra CI run for an already-stale
+// commit, not a correctness problem. A fork PR (whose pull_requests list
+// GitHub always leaves empty) can't be verified this way and is never rerun
+// either. Every decision is appended to GITHUB_STEP_SUMMARY when set; only a
+// genuine rerun-request failure (not "the run hasn't finished yet") is
+// returned as an error.
 func (CI) RerunInfraFailures(repo, runID, event, headSHA, prNumbers string) error {
 	client, err := api.DefaultRESTClient()
 	if err != nil {
