@@ -47,11 +47,11 @@ What the code says about the mechanics (read, then verified locally, see Validat
 - `.github/actions/ci-toolchain/action.yml` (new composite action, used by all four jobs so the tool list
   and the install command are identical everywhere):
   1. writes a job-local tool-versions file from the `tool-versions` input plus the repository's
-     `hashicorp/terraform` pin;
+    `hashicorp/terraform` pin;
   2. resolves the Atmos cache root with `atmos ci cache paths --format=env`;
   3. when `artifact` is set, downloads it (`download-artifact-retry`, `continue-on-error`) and untars
-     `toolchain.tar` into the cache root (`cygpath` on Windows so GNU tar does not read `D:\...` as a
-     remote `host:file`); a missing artifact is a `::warning::`, not a failure;
+    `toolchain.tar` into the cache root (`cygpath` on Windows so GNU tar does not read `D:\...` as a
+    remote `host:file`); a missing artifact is a `::warning::`, not a failure;
   4. `atmos toolchain install --tool-versions <file>` (skips what is on disk, installs the rest);
   5. `atmos toolchain env --tool-versions <file> --format=github`.
 - `.github/workflows/test.yml`:
