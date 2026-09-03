@@ -87,7 +87,10 @@ the missing SARIF file, evicting the PR from the queue.
   - Windows and macOS OS endpoints added to the `allowed-endpoints` of `build`, `terraform-registry-cache`,
     `test`, `mock`, `k3s` (macOS leg) and `kubernetes-e2e` (macOS leg), with a comment naming the source and
     the trade-off. `test` also gains `sum.golang.org`, `google.golang.org` and `modernc.org` for parity with
-    `build` (its Linux/macOS legs run `atmos build deps`). Firefox telemetry stays blocked.
+    `build` (its Linux/macOS legs run `atmos build deps`). Firefox telemetry stays blocked. Two gaps surfaced
+    by StepSecurity notices during review are closed too: `api.github.com` was never allowlisted on
+    `validate-affected`, `floci`, `k3s` and `validate`, and the Windows Software Licensing Service probes
+    `tas02.sls.update.microsoft.com`, so the update entry is the wildcard `*.update.microsoft.com`.
   - `GOPROXY` drops `|direct`; `atmos build deps`'s retry policy covers the transient proxy errors it existed
     for.
   - Workflow-level `concurrency` cancels a PR's superseded run on a new push; `merge_group`, `push` and
