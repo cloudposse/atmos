@@ -2010,6 +2010,7 @@ func TestSetToolVersion_UpdatesExistingAliasKeyInPlace(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "tool-versions-*")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
+	require.NoError(t, tmpFile.Close())
 
 	// Seed the file with an existing default version under the short alias key,
 	// matching what a real .tool-versions file looks like per the migration recipe.
