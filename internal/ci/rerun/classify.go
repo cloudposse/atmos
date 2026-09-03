@@ -1,15 +1,20 @@
 // Package rerun classifies the non-success jobs of a GitHub Actions
 // workflow-run attempt as infrastructure zombies or real failures, and turns
 // that classification into a rerun verdict. It backs the
-// `go tool mage ci:classifyInfraFailures` target used by
-// .github/workflows/rerun-infra-failures.yml (via
+// `go tool mage ci:classifyInfraFailures` and `ci:rerunInfraFailures` targets
+// used by .github/workflows/rerun-infra-failures.yml (via
 // .github/actions/classify-infra-failures), which re-runs a `Tests` run only
 // when nothing in it genuinely failed. See
 // docs/fixes/2026-09-03-rerun-infra-cancelled-ci-runs.md.
 //
-// The package deliberately does no HTTP: the workflow fetches the jobs with
-// `gh api ... --paginate` and hands the JSON over as a file, which keeps this
-// code a pure, unit-testable function of the API payload.
+// classify.go is deliberately HTTP-free: Classify/Verdict/WriteTSV/
+// WriteMarkdownSummary are pure functions of a decoded job list, which keeps
+// the classification rules unit-testable against recorded API payloads
+// (testdata/run-*.json) with no network or mocking involved. The network
+// calls this package's callers need - listing a run attempt's jobs, reading a
+// pull request's head SHA, and requesting a rerun - live in fetch.go and
+// actions.go behind the small RESTClient interface, so those too are testable
+// without a live GitHub API.
 package rerun
 
 import (
@@ -290,6 +295,35 @@ func WriteTSV(w io.Writer, classified []Classified) error {
 	for _, entry := range classified {
 		fmt.Fprintf(&b, "%s\t%s\t%s\n", entry.Job, entry.Conclusion, entry.Class)
 	}
+	_, err := io.WriteString(w, b.String())
+	return err
+}
+
+// RunRef identifies the run/attempt a WriteMarkdownSummary header links to.
+type RunRef struct {
+	Repo       string
+	RunID      string
+	RunAttempt string
+}
+
+// url is the GitHub URL for the run/attempt this ref points to.
+func (r RunRef) url() string {
+	return fmt.Sprintf("https://github.com/%s/actions/runs/%s/attempts/%s", r.Repo, r.RunID, r.RunAttempt)
+}
+
+// WriteMarkdownSummary renders a classification as a GitHub Actions
+// step-summary block: a header linking to the run, a Markdown table of
+// non-success jobs, and the verdict line.
+func WriteMarkdownSummary(w io.Writer, run RunRef, classified []Classified, outcome Outcome, reason string) error {
+	defer perf.Track(nil, "rerun.WriteMarkdownSummary")()
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "### Infra-failure classification: run [%s attempt %s](%s)\n\n", run.RunID, run.RunAttempt, run.url())
+	fmt.Fprintf(&b, "| Job | Conclusion | Class |\n|---|---|---|\n")
+	for _, entry := range classified {
+		fmt.Fprintf(&b, "| %s | %s | %s |\n", entry.Job, entry.Conclusion, entry.Class)
+	}
+	fmt.Fprintf(&b, "\nVerdict: **%s** (%s)\n", outcome, reason)
 	_, err := io.WriteString(w, b.String())
 	return err
 }

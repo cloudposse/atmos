@@ -16,10 +16,12 @@ name: Rerun infra failures
 #                                because a zombie upstream job never reported.
 #
 # Any job with a genuinely failed step (`real-failure`) or an interrupted step
-# (`superseded`) vetoes the rerun. The classification is typed, unit-tested Go
-# (internal/ci/rerun, dispatched through `go tool mage ci:classifyInfraFailures`
-# by the local action .github/actions/classify-infra-failures), so test.yml can
-# reuse it later.
+# (`superseded`) vetoes the rerun. Both the classification and the rerun
+# decision (including the PR-head-SHA re-check and the rerun-failed-jobs API
+# call) are typed, unit-tested Go (internal/ci/rerun, dispatched through
+# `go tool mage ci:classifyInfraFailures`/`ci:rerunInfraFailures` - the former
+# via the local action .github/actions/classify-infra-failures), so test.yml
+# can reuse the classifier later.
 #
 # Scope: `pull_request` and `push` runs only. A rerun cannot help `merge_group`
 # runs: a failed required check evicts the PR from the merge queue immediately,
@@ -94,44 +96,21 @@ jobs:
         if: steps.classify.outputs.verdict == 'rerun'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
-          RUN_EVENT: ${{ github.event.workflow_run.event }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          PR_NUMBERS: ${{ join(github.event.workflow_run.pull_requests.*.number, ' ') }}
+        # ci:rerunInfraFailures (magefiles/ci_rerun.go, backed by
+        # internal/ci/rerun) re-verifies every associated PR is still at the
+        # run's head SHA - a run superseded by a newer push is never rerun -
+        # then requests the rerun (repos/{repo}/actions/runs/{id}/rerun-failed-jobs,
+        # the same endpoint `gh run rerun --failed` calls: it re-queues every
+        # job that did not succeed, cancelled ones included, plus their
+        # dependents, and carries over the rest, so test-required's shard
+        # count still holds on the new attempt). Appends its decision to the
+        # step summary; only a genuine API failure (not "the run hasn't
+        # finished yet") fails the step.
         run: |
           set -euo pipefail
-          summary() { printf '%s\n' "$@" | tee -a "$GITHUB_STEP_SUMMARY"; }
-
-          # A PR run whose head SHA is no longer the PR head has been superseded
-          # by a newer push, which already started a fresh run. Checked right
-          # before rerunning so a push that lands during classification is seen.
-          if [ "$RUN_EVENT" = "pull_request" ]; then
-            if [ -z "$PR_NUMBERS" ]; then
-              summary "Run $RUN_ID has no associated pull request (fork PR?); cannot verify it is current, not rerunning."
-              exit 0
-            fi
-            for pr in $PR_NUMBERS; do
-              pr_head=$(gh api "repos/$REPO/pulls/$pr" --jq '.head.sha')
-              if [ "$pr_head" != "$HEAD_SHA" ]; then
-                summary "Run $RUN_ID was for $HEAD_SHA but PR #$pr is now at $pr_head; superseded, not rerunning."
-                exit 0
-              fi
-            done
-          fi
-
-          # `--failed` (POST .../rerun-failed-jobs) re-queues every job that
-          # did not succeed, cancelled ones included (verified on run
-          # 33788174036: 14 cancelled jobs were re-queued, 42 successful ones
-          # carried over), plus their dependents. Carried-over jobs stay in the
-          # new attempt's listing, so test-required's shard count still holds.
-          if ! out=$(gh run rerun "$RUN_ID" --failed --repo "$REPO" 2>&1); then
-            if grep -qi "already running\|in progress" <<< "$out"; then
-              echo "::warning::Run $RUN_ID is still finishing; skipping rerun. $out"
-              summary "Rerun skipped: the run is still finishing ($out)."
-              exit 0
-            fi
-            echo "::error::gh run rerun failed: $out"
-            exit 1
-          fi
-          summary "Rerun requested for run $RUN_ID: $out"
+          go tool mage ci:rerunInfraFailures \
+            "${{ github.repository }}" \
+            "${{ github.event.workflow_run.id }}" \
+            "${{ github.event.workflow_run.event }}" \
+            "${{ github.event.workflow_run.head_sha }}" \
+            "${{ join(github.event.workflow_run.pull_requests.*.number, ' ') }}"

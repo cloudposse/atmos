@@ -285,6 +285,39 @@ func TestWriteTSV(t *testing.T) {
 	assert.Empty(t, buf.String())
 }
 
+func TestWriteMarkdownSummary(t *testing.T) {
+	t.Parallel()
+
+	t.Run("zombie run", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		require.NoError(t, WriteMarkdownSummary(&buf, RunRef{Repo: "cloudposse/atmos", RunID: "33774798945", RunAttempt: "2"}, []Classified{
+			{Job: "Build (windows)", Conclusion: conclusionCancelled, Class: ClassRunnerStuckAfterComplete},
+			{Job: "Acceptance Tests (windows)", Conclusion: conclusionFailure, Class: ClassCheckCascade},
+		}, OutcomeRerun, "all 2 non-success job(s) are infrastructure zombies or cascades of one"))
+
+		want := "### Infra-failure classification: run [33774798945 attempt 2](https://github.com/cloudposse/atmos/actions/runs/33774798945/attempts/2)\n\n" +
+			"| Job | Conclusion | Class |\n" +
+			"|---|---|---|\n" +
+			"| Build (windows) | cancelled | runner-stuck-after-complete |\n" +
+			"| Acceptance Tests (windows) | failure | check-cascade |\n" +
+			"\nVerdict: **rerun** (all 2 non-success job(s) are infrastructure zombies or cascades of one)\n"
+		assert.Equal(t, want, buf.String())
+	})
+
+	t.Run("no non-success jobs", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		require.NoError(t, WriteMarkdownSummary(&buf, RunRef{Repo: "cloudposse/atmos", RunID: "1", RunAttempt: "1"}, nil, OutcomeNoJobs, "no non-success jobs"))
+
+		want := "### Infra-failure classification: run [1 attempt 1](https://github.com/cloudposse/atmos/actions/runs/1/attempts/1)\n\n" +
+			"| Job | Conclusion | Class |\n" +
+			"|---|---|---|\n" +
+			"\nVerdict: **no-jobs** (no non-success jobs)\n"
+		assert.Equal(t, want, buf.String())
+	})
+}
+
 // TestRealRuns replays the job listings of four real `Tests` runs from
 // 2026-09-03 (trimmed to their non-success jobs plus two successful ones; the
 // full listings classify identically). Two are zombie runs that a human
