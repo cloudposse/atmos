@@ -69,7 +69,7 @@ jobs:
     # changes plus that save pushes the job past a tight limit and the run gets
     # cancelled mid-save (see #2713's windows build being killed at 30m10s).
     # Give the slowest target real headroom for build + cache save.
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
