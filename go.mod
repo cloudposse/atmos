@@ -141,7 +141,7 @@ require (
 	golang.org/x/text v0.41.0
 	google.golang.org/api v0.280.0
 	google.golang.org/genai v1.58.0
-	google.golang.org/grpc v1.83.1
+	google.golang.org/grpc v1.83.2
 	gopkg.in/ini.v1 v1.67.3
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1

@@ -964,7 +964,7 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 // provisioners itself) use this directly to avoid running the provisioners twice.
 func executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...ShellCommandOption) error {
 	initArgs := buildInitArgs(atmosConfig, info, varFile)
-	err := executeShellCommandWithRetry(
+	err := ExecuteShellCommandWithRetry(
 		atmosConfig,
 		info,
 		"init",
