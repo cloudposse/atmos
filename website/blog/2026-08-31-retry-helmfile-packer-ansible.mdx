@@ -1,0 +1,52 @@
+---
+slug: retry-helmfile-packer-ansible
+title: "Component retry now covers Helmfile, Packer, and Ansible too"
+date: 2026-08-31T13:00:00.000Z
+authors: [osterman]
+tags: [enhancement]
+---
+
+Terraform components already recover from a transient error automatically — a 502, a dropped registry connection, an S3 backend timeout. Helmfile, Packer, and Ansible components in that same pipeline did not. The exact same class of failure that Terraform shrugged off would still fail your Helmfile sync or Ansible playbook outright, because a `retry:` block on either was silently inert. Now all four component types share the same retry engine.
+
+<!--truncate-->
+
+## The Problem
+
+The same class of error can just as easily hit `helmfile sync` pulling a chart, `packer build` downloading a plugin, or `ansible-playbook` reaching a remote inventory. None of those got the same protection until now.
+
+That gap got harder to miss once stacks could set retry once for the whole stack. A stack-root `retry:` block reads as "every component here recovers from this." But that was only true for the Terraform components.
+
+## The Fix
+
+`retry:` now works the same way for every component type that shells out to a binary. Terraform, Helmfile, Packer, and Ansible all share the same retry engine. It captures the subprocess output, matches it against your `conditions` regex patterns, and retries with backoff only on a match.
+
+```yaml
+components:
+  helmfile:
+    myapp:
+      retry:
+        max_attempts: 5
+        backoff_strategy: exponential
+        initial_delay: 2s
+        conditions:
+          - /Bad Gateway/
+          - /connection reset/
+  packer:
+    ami:
+      retry:
+        max_attempts: 3
+        conditions:
+          - /rate limit/
+```
+
+Nothing changes for existing Terraform retry configuration. This change only adds new coverage. A real failure still fails immediately. Examples include a bad Helmfile release, a Packer template error, or a broken playbook. Only output that matches your `conditions` triggers a retry.
+
+## How to Use It
+
+Add `retry:` to any Helmfile, Packer, or Ansible component the same way you would for Terraform. See the [component retry docs](/stacks/components/terraform/retry) for the full field reference. A stack-root `retry:` block now protects every supported component in the stack.
+
+Native Kubernetes and native Helm components don't shell out to a binary. They call Go SDKs directly. So they aren't covered by this change yet. That gap is tracked as a follow-up.
+
+## Get Involved
+
+Open a discussion in the [Atmos repo](https://github.com/cloudposse/atmos). Let us know if you hit a transient failure pattern in Helmfile, Packer, or Ansible that `conditions` doesn't catch cleanly.

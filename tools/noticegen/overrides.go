@@ -22,6 +22,7 @@ type overrideRule struct {
 }
 
 var repoOverrides = []overrideRule{
+	{"al.essio.dev/pkg/shellescape", "github.com/alessio/shellescape", "", "LICENSE"},
 	{"dario.cat/mergo", "github.com/imdario/mergo", "", "LICENSE"},
 	{"inet.af/netaddr", "github.com/inetaf/netaddr", "", "LICENSE"},
 	{"go4.org/intern", "github.com/go4org/intern", "", "LICENSE"},
