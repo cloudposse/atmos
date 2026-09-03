@@ -9,7 +9,7 @@ date: 2026-09-02T12:00:00.000Z
 Atmos lets you configure the Kubernetes namespace where a Helm release should be installed. This
 prevents charts that do not specify a namespace from being installed into `default`.
 
-But that namespace still has to exist. Native Helm creates it for you automatically, so a release
+That namespace may not exist. Native Helm creates it for you automatically, so a release
 deploys in a single operation instead of requiring a separate command, component, or workflow to
 create the namespace first.
 
