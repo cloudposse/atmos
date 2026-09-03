@@ -112,8 +112,8 @@ func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 // newInstallClient builds the Helm Install action for a release install, wiring
 // the release name, namespace, namespace-creation policy, and chart version.
 // CreateNamespace comes from the component config (default true); setting it to
-// false lets a namespace-scoped identity install into a pre-existing namespace
-// without needing cluster-level permission to create the namespace.
+// false installs into a pre-existing namespace and needs no cluster-level
+// permission to create the namespace.
 func newInstallClient(actx *actionContext, spec *chartSpec, dryRun bool) *action.Install {
 	client := action.NewInstall(actx.cfg)
 	client.SetRegistryClient(actx.cfg.RegistryClient)

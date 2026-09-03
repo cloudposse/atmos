@@ -25,9 +25,9 @@ func TestResolveCreateNamespace(t *testing.T) {
 		section map[string]any
 		want    bool
 	}{
-		{name: "absent defaults to true (Helm's historical behavior, back-compat)", section: map[string]any{}, want: true},
+		{name: "absent defaults to true (preserves existing native-helm behavior)", section: map[string]any{}, want: true},
 		{name: "explicit true", section: map[string]any{"create_namespace": true}, want: true},
-		{name: "explicit false must not create the namespace", section: map[string]any{"create_namespace": false}, want: false},
+		{name: "explicit false installs into a pre-existing namespace", section: map[string]any{"create_namespace": false}, want: false},
 		{name: "wrong type falls back to the default, not false", section: map[string]any{"create_namespace": "false"}, want: true},
 	}
 	for _, tt := range tests {

@@ -1,84 +1,77 @@
 ---
 slug: native-helm-create-namespace
-title: "Deploy Helm Releases with a Namespace-Scoped Identity"
+title: "Automatically Create the Configured Namespace for Helm Releases"
 authors: [aknysh]
 tags: [enhancement]
 date: 2026-09-02T12:00:00.000Z
 ---
 
-Least-privilege is the rule everyone agrees on for CI: the credentials a pipeline uses should be
-able to touch exactly what it deploys and nothing else. On Kubernetes that usually means scoping the
-deploy identity to a single namespace — it can manage workloads in `team-a`, and it has no rights
-anywhere else in the cluster. The platform team owns the namespace itself, along with its
-NetworkPolicies, quotas, and labels, and hands the application pipeline a key that fits one door.
+Atmos lets you configure the Kubernetes namespace where a Helm release should be installed. This
+prevents charts that do not specify a namespace from being installed into `default`.
 
-Then the first deploy fails. Not on anything the pipeline is trying to install — it fails trying to
-*create the namespace* that already exists, because Helm asks to create it on a fresh install, and a
-namespace-scoped identity has no permission to create namespaces. The deploy returns a `403` before
-it ever touches a workload.
+But that namespace still has to exist. Native Helm creates it for you automatically, so a release
+deploys in a single operation instead of requiring a separate command, component, or workflow to
+create the namespace first.
+
+Sometimes, though, the deployment should not be creating namespaces at all.
 
 <!--truncate-->
 
 ## The Problem
 
-A first-time Helm install creates the release's target namespace by default. That is convenient when
-whoever runs the install can create namespaces — and a hard stop when they can't.
-
-The failure is easy to misread. The namespace is already there; the platform created it. But Helm
-still issues a namespace create request on every fresh install, and only ignores it if the API says
-"already exists." A namespace-scoped identity never gets that far: the request is rejected with a
-`403 Forbidden` first. So the pre-existing namespace doesn't help, and the deploy dies on a resource
-the pipeline was never supposed to manage.
-
-The usual escape hatch is to run the very first deploy as a higher-privileged operator, which
-creates the release, after which the scoped identity's later deploys succeed as upgrades (upgrades
-don't try to create the namespace). That works, but it means a manual privileged step for every new
-app and every new environment — and it couples who owns the release to a cluster-level permission the
-application pipeline shouldn't need in the first place.
-
-## The Fix
-
-Native Helm components now take a `create_namespace` setting. It defaults to `true`, so nothing
-changes for existing components. Set it to `false` and Helm installs into the namespace that's
-already there instead of trying to create one:
+A Helm chart does not always specify the namespace where its resources should be installed. Atmos
+solves this by installing the release into the namespace configured for the component:
 
 ```yaml
 components:
   helm:
-    typescript-api:
-      chart: "../../../apps/typescript-api/charts/typescript-api"
-      namespace: typescript-api
+    backend-api:
+      chart: "backend-api"
+      namespace: backend-api
+```
+
+This keeps the release out of the `default` namespace, and native Helm creates the namespace
+automatically when it is missing, so the deployment is self-contained.
+
+Automatic creation is not always wanted. When a platform team owns the namespace along with its
+labels, quotas, and NetworkPolicies, the release should not create it. And when the deploy identity
+is scoped to a single namespace and cannot create namespaces, the forced creation fails with a `403`,
+even when the namespace already exists.
+
+## The Fix
+
+Native Helm components now support `create_namespace`. It defaults to `true`, so the namespace is
+created automatically as before. Set it to `false` to install into a pre-existing namespace instead:
+
+```yaml
+components:
+  helm:
+    backend-api:
+      chart: "backend-api"
+      namespace: backend-api
       create_namespace: false
       values:
         replicaCount: 1
 ```
 
-With `create_namespace: false`, a namespace-scoped identity can run the first `atmos helm apply`
-itself: the namespace already exists, and turning off namespace creation removes the one cluster-level
-action a namespace-scoped credential can't perform — no operator bootstrap step needed. One caveat: the
-setting only suppresses the namespace-create call, not anything else in the chart. The credential still
-needs rights for every object the chart installs, so a chart that includes cluster-scoped resources
-(a `ClusterRole`, a CRD) still needs those permissions. This works cleanly when the chart is entirely
-namespaced.
+The release then deploys into the namespace that already exists, with no cluster-level permission to
+create namespaces:
 
-This lines up with how platform teams already split ownership: the platform provisions the namespace
-and its guardrails as its own infrastructure, and the application pipeline deploys workloads into it
-with a credential scoped to exactly that namespace.
+```shell
+atmos helm apply backend-api -s plat-ue2-dev
+```
 
-## How to Use It
+Left at its default, Helm creates the namespace when it is missing. Set to `false`, Helm installs
+into the namespace that is already there.
 
-1. Provision the namespace (and its NetworkPolicies, quotas, and labels) as platform-owned
-   infrastructure — a native Kubernetes component, Terraform, or however your platform already
-   manages cluster guardrails.
-2. Set `create_namespace: false` on the Helm component and give it the matching `namespace`.
-3. Deploy with the namespace-scoped identity:
+## When to Use It
 
-   ```shell
-   atmos helm apply typescript-api -s plat-ue2-dev
-   ```
+Keep `create_namespace` enabled (the default) when the Helm deployment should manage its own namespace
+and the deploying identity has permission to create namespaces.
 
-The first install and every deploy after it run with the same scoped identity. Leave the setting off
-(or set it to `true`) and Helm keeps creating the namespace on first install exactly as before.
+Set it to `false` when namespaces are managed separately, for example when a platform component is
+responsible for namespace labels, quotas, NetworkPolicies, or other guardrails, or when the deploy
+identity is scoped to a single namespace.
 
 ## Get Involved
 

@@ -38,10 +38,10 @@ type chartSpec struct {
 	// Namespace is the target Kubernetes namespace.
 	Namespace string
 	// CreateNamespace tells Helm to create the target namespace during install
-	// when it does not exist. Defaults to true. Set `create_namespace: false` on
-	// the component to install into a pre-existing namespace instead, so a
-	// namespace-scoped identity that lacks cluster-level namespace-create
-	// permission can run the first install itself.
+	// when it does not exist. Defaults to true, preserving the existing native-helm
+	// behavior. Set `create_namespace: false` on the component to install into a
+	// pre-existing namespace instead, so an identity that lacks cluster-level
+	// namespace-create permission can run the install.
 	CreateNamespace bool
 	// Values is the merged Helm values map.
 	Values map[string]any

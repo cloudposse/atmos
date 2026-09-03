@@ -127,10 +127,11 @@ func resolveNamespace(section map[string]any) string {
 }
 
 // resolveCreateNamespace reports whether Helm should create the target namespace
-// during install. It defaults to true (Helm's historical behavior). Set
-// `create_namespace: false` on the component to install into a pre-existing
-// namespace instead, so a namespace-scoped identity that lacks cluster-level
-// namespace-create permission can run the first install without a 403.
+// during install when it does not exist. It defaults to true, preserving the
+// existing native-helm behavior of creating the configured namespace
+// automatically. Set `create_namespace: false` on the component to install into a
+// pre-existing namespace instead, so an identity that lacks cluster-level
+// namespace-create permission can run the install.
 func resolveCreateNamespace(section map[string]any) bool {
 	return boolFieldDefault(section, "create_namespace", true)
 }

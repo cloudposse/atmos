@@ -60,7 +60,7 @@ included in affected runs.
   <dd>The target Kubernetes namespace. Defaults to <code>default</code>.</dd>
 
   <dt>`create_namespace`</dt>
-  <dd>Whether Helm creates the target <code>namespace</code> during the first install when it does not exist. Defaults to <code>true</code>. Set to <code>false</code> to install into a pre-existing namespace instead. This is useful when the identity running <code>atmos helm apply</code> is scoped to a single namespace (for example a CI identity with namespace-scoped RBAC) and lacks cluster-level permission to create namespaces: pre-create the namespace out of band, then let that identity run the first install without a <code>403</code>.</dd>
+  <dd>Whether Helm creates the target <code>namespace</code> during install when it does not exist. Defaults to <code>true</code>, preserving the existing behavior of creating the configured namespace automatically. Set to <code>false</code> to install into a pre-existing namespace instead, for example when a platform component owns the namespace (its labels, quotas, or NetworkPolicies), or when the identity running <code>atmos helm apply</code> is scoped to a single namespace and lacks cluster-level permission to create namespaces.</dd>
 
   <dt>`name`</dt>
   <dd>The Helm release name. Defaults to the component's last path segment.</dd>
