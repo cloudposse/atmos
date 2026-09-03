@@ -68,10 +68,12 @@ jobs:
           # Add Go bin to PATH
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
+      # Pre-download dependencies to prevent go mod tidy from trying to fetch
+      # internal packages. With retry: GOPROXY no longer falls back to direct
+      # fetches (they only hit blocked vanity hosts under harden-runner's block
+      # mode), so transient proxy errors are handled by retrying instead.
       - name: Download Go module dependencies
-        run: |
-          # Pre-download dependencies to prevent go mod tidy from trying to fetch internal packages
-          go mod download
+        uses: ./.github/actions/go-mod-download-retry
 
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0

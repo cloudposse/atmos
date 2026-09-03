@@ -107,8 +107,12 @@ jobs:
       # (what this repo uses) only covers GitHub-hosted runners — self-hosted
       # runners including RunsOn need a StepSecurity Enterprise license plus
       # RunsOn-side config we're not doing here.
+      # Draft PRs skip every Windows step below (no checkout, nothing to
+      # protect), so skip Harden Runner there too: its post step would still
+      # race the agent's DNS restore, and the DNS guard (a local action) needs
+      # the checkout.
       - name: Harden Runner
-        if: matrix.target != 'linux'
+        if: matrix.target != 'linux' && ! ( matrix.target == 'windows' && github.event.pull_request.draft )
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: block
@@ -337,7 +341,10 @@ jobs:
     timeout-minutes: ${{ matrix.flavor.target == 'windows' && 45 || 20 }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
+      # Draft PRs skip every Windows step in this job (no checkout), so skip
+      # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: block
@@ -569,7 +576,10 @@ jobs:
     timeout-minutes: ${{ matrix.jobTimeoutOverride || matrix.flavor.jobTimeout }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
+      # Draft PRs skip every Windows step in this job (no checkout), so skip
+      # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           # Union of core, tool-driven endpoints across the linux/windows/macos
@@ -1594,7 +1604,10 @@ jobs:
 
     timeout-minutes: 20
     steps:
+      # Draft PRs skip every Windows step in this job (no checkout), so skip
+      # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: block

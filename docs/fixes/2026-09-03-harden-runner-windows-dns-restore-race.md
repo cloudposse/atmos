@@ -73,7 +73,7 @@ the missing SARIF file, evicting the PR from the queue.
 ## Changes
 
 - `.github/actions/windows-dns-guard/` (new): composite action that registers a one-shot scheduled task
-  (`atmos-dns-guard`, SYSTEM, outside the runner's process tree so it survives step teardown and the
+  (`atmos-dns-guard`, running as the runner's own Administrator account, outside the runner's process tree so it survives step teardown and the
   runner's orphan-process cleanup) running `dns-guard.ps1`. The script polls once a second and resets DNS
   (`Set-DnsClientServerAddress -ResetServerAddresses` + `Clear-DnsClientCache`) only when
   `C:\agent\post_event.json` exists, the agent from `C:\agent\agent.pid` is gone, and an IPv4 interface still
@@ -81,7 +81,9 @@ the missing SARIF file, evicting the PR from the queue.
   `$RUNNER_TEMP\atmos-dns-guard.log` and exits after acting or when DNS is already healthy.
 - `.github/workflows/test.yml`:
   - Guard step on every Windows leg (`build`, `terraform-registry-cache`, `test` × 10 shards, `mock`),
-    right after checkout, gated the same way as the other Windows steps (skipped on draft PRs).
+    right after checkout, gated the same way as the other Windows steps. Draft PRs skip every Windows step
+    including checkout, so Harden Runner is now skipped for them too rather than left to race without the
+    guard.
   - Windows and macOS OS endpoints added to the `allowed-endpoints` of `build`, `terraform-registry-cache`,
     `test`, `mock`, `k3s` (macOS leg) and `kubernetes-e2e` (macOS leg), with a comment naming the source and
     the trade-off. `test` also gains `sum.golang.org`, `google.golang.org` and `modernc.org` for parity with
@@ -115,9 +117,11 @@ gh run list -R cloudposse/atmos -w test.yml --created ">=2026-09-04" -L 300 \
   --json databaseId,conclusion --jq '.[]|select(.conclusion!="success")|.databaseId' |
 while read id; do
   gh api "repos/cloudposse/atmos/actions/runs/$id/jobs?per_page=100" --paginate --jq '
+    def ts: sub("\\.[0-9]+Z$"; "Z") | fromdate;
     .jobs[] | select(.conclusion=="cancelled") |
+    select(any(.labels[]?; test("windows"; "i")) or (.name|test("windows"; "i"))) |
     select(all(.steps[]; .conclusion=="success" or .conclusion=="skipped")) |
-    select(((.completed_at|fromdate) - (.steps[-1].completed_at|fromdate)) >= 300) |
+    select(((.completed_at|ts) - (.steps[-1].completed_at|ts)) >= 300) |
     [.run_id, .name] | @tsv'
 done
 
