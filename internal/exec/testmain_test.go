@@ -127,7 +127,6 @@ func TestMain(m *testing.M) {
 		}
 	}
 
-
 	// Isolate the Terraform provider plugin cache for this package's tests.
 	// Terraform's plugin cache is NOT safe for concurrent use, and `go test ./...`
 	// runs package test binaries in parallel. Sharing the global XDG plugin cache
