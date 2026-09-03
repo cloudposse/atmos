@@ -221,7 +221,6 @@ jobs:
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\go-build"
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\Temp"
           Add-MpPreference -ExclusionPath "$env:RUNNER_TEMP"
-          Add-MpPreference -ExclusionProcess 'go.exe'
 
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -475,7 +474,6 @@ jobs:
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\go-build"
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\Temp"
           Add-MpPreference -ExclusionPath "$env:RUNNER_TEMP"
-          Add-MpPreference -ExclusionProcess 'go.exe'
 
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -757,7 +755,6 @@ jobs:
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\go-build"
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\Temp"
           Add-MpPreference -ExclusionPath "$env:RUNNER_TEMP"
-          Add-MpPreference -ExclusionProcess 'go.exe'
 
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -1799,7 +1796,6 @@ jobs:
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\go-build"
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\Temp"
           Add-MpPreference -ExclusionPath "$env:RUNNER_TEMP"
-          Add-MpPreference -ExclusionProcess 'go.exe'
 
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}

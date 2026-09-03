@@ -47,8 +47,13 @@ locked-down image cannot fail the job.
     Windows legs of `build` (after the `Guard DNS against the harden-runner post-step race` step, before
     `Set up Go`), `terraform-registry-cache`, `test`, and `mock` (each immediately after `Add GNU tar to
     PATH`). It runs `Add-MpPreference -ExclusionPath` for `D:\a`, `C:\hostedtoolcache\windows`,
-    `$env:USERPROFILE\go`, `$env:LOCALAPPDATA\go-build`, `$env:LOCALAPPDATA\Temp`, `$env:RUNNER_TEMP`, and
-    `Add-MpPreference -ExclusionProcess 'go.exe'`.
+    `$env:USERPROFILE\go`, `$env:LOCALAPPDATA\go-build`, `$env:LOCALAPPDATA\Temp`, and `$env:RUNNER_TEMP` -
+    path-scoped exclusions only. An earlier draft also added
+    `Add-MpPreference -ExclusionProcess 'go.exe'`, a name-only process exclusion that would have skipped
+    real-time scanning for *any* binary named `go.exe` regardless of where it actually lives - including one
+    planted by a compromised dependency during `go build`/`go generate`. Dropped it: the path exclusions
+    above already cover the actual scanning cost this fix targets (file I/O in the Go caches and workspace),
+    so nothing measured is given up.
   - The `test` job's `Cache Atmos toolchain` step (all three OSes) now passes `restore-only: 'true'`, with a
     comment carrying the cache data above and naming `terraform-registry-cache` as the single writer. The
     `terraform-registry-cache` job's cache step is unchanged.

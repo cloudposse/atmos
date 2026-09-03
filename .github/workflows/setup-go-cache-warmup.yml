@@ -123,7 +123,6 @@ jobs:
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\go-build"
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\Temp"
           Add-MpPreference -ExclusionPath "$env:RUNNER_TEMP"
-          Add-MpPreference -ExclusionProcess 'go.exe'
 
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
