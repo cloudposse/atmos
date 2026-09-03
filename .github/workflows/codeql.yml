@@ -162,7 +162,17 @@ jobs:
           # marginally reduced peak memory (govulncheck's SSA construction
           # parallelizes via goroutines internally, which -p doesn't govern)
           # while nearly tripling run time.
-          GOMEMLIMIT: "12GiB"
+          #
+          # Lowered from 12GiB as the module has grown: 12GiB was no longer
+          # enough headroom below the 16GB runner's physical ceiling — instead
+          # of the process itself getting SIGKILLed (exit 137), the whole VM
+          # was becoming unresponsive under memory pressure and getting
+          # reclaimed by GitHub's infrastructure ("the runner has received a
+          # shutdown signal"), observed consistently ~9-10 minutes in,
+          # reproducing even in isolation (no concurrent jobs). 8GiB leaves
+          # twice the prior headroom (8GB vs 4GB) for the OS, runner agent,
+          # and Go toolchain overhead alongside the analysis heap.
+          GOMEMLIMIT: "8GiB"
         with:
           go-version-file: go.mod
           output-format: sarif
