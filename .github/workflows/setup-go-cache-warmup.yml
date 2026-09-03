@@ -99,6 +99,32 @@ jobs:
         if: matrix.target == 'windows'
         uses: ./.github/actions/windows-dns-guard
 
+      # Windows Defender exclusions. Measured on the Windows shards (Aug 24 -
+      # Sept 3): "Set up Go" averages 5.2 min (max 10.5) restoring a 1.9 GB
+      # go-build+mod cache; the download is ~20 s at 100 MB/s and the rest is
+      # tar/zstd extraction with Defender's real-time scanner inspecting every
+      # extracted file. The same scanner holds handles on freshly written test
+      # files, which surfaces as testing.TempDir cleanup failures
+      # ("unlinkat ... being used by another process"). These runners are
+      # ephemeral VMs discarded at job end, so there is nothing to protect from
+      # files the job itself just wrote. Landing this right after the
+      # harden-runner block-mode PR is fine: it does not touch the egress
+      # policy at all, it only stops the AV from re-scanning the workspace, the
+      # hosted tool cache, the Go caches, and the temp dirs. continue-on-error
+      # keeps a future locked-down image from failing the job.
+      - name: Exclude the workspace and Go caches from Windows Defender
+        if: matrix.target == 'windows'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Add-MpPreference -ExclusionPath 'D:\a'
+          Add-MpPreference -ExclusionPath 'C:\hostedtoolcache\windows'
+          Add-MpPreference -ExclusionPath "$env:USERPROFILE\go"
+          Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\go-build"
+          Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\Temp"
+          Add-MpPreference -ExclusionPath "$env:RUNNER_TEMP"
+          Add-MpPreference -ExclusionProcess 'go.exe'
+
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
