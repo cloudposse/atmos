@@ -397,6 +397,13 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 			expectedError: errUtils.ErrGlobalMetadataFieldNotAllowed,
 		},
 		{
+			name: "invalid global retry section type",
+			config: map[string]any{
+				cfg.RetrySectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidGlobalRetrySection,
+		},
+		{
 			name: "invalid generate section type",
 			config: map[string]any{
 				cfg.GenerateSectionName: "invalid-not-a-map",
@@ -820,6 +827,52 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 			validateResult: func(t *testing.T, result map[string]any) {
 				metadata := resultComponentMetadata(t, result, "vpc")
 				assert.Equal(t, map[string]any{"org": "platform-team"}, metadata["labels"])
+			},
+		},
+		{
+			// Global retry.max_attempts flowing into a component with no local
+			// retry of its own — same scope-inheritance behavior as global metadata.
+			name: "global retry inherited by component with no own retry",
+			config: map[string]any{
+				cfg.RetrySectionName: map[string]any{
+					"max_attempts": 5,
+					"conditions":   []any{"/Bad Gateway/"},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				retry := resultComponentRetry(t, result, "vpc")
+				assert.EqualValues(t, 5, retry["max_attempts"])
+				assert.Equal(t, []any{"/Bad Gateway/"}, retry["conditions"])
+			},
+		},
+		{
+			// Component-local retry overrides the global default for the same key.
+			name: "component-local retry overrides global retry",
+			config: map[string]any{
+				cfg.RetrySectionName: map[string]any{
+					"max_attempts": 5,
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+							cfg.RetrySectionName: map[string]any{
+								"max_attempts": 9,
+							},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				retry := resultComponentRetry(t, result, "vpc")
+				assert.EqualValues(t, 9, retry["max_attempts"])
 			},
 		},
 		{
@@ -1507,6 +1560,76 @@ func TestProcessStackConfig_CustomComponentTypeGlobalMetadata(t *testing.T) {
 	assert.Equal(t, []any{"prod"}, overrideMetadata["tags"], "custom component must still inherit global keys it doesn't override locally")
 }
 
+// TestProcessStackConfig_CustomComponentTypeGlobalRetry verifies that
+// stack-root global retry is merged into custom (non-built-in) component
+// types the same way it is for terraform/helmfile/etc., and that a custom
+// component's own local retry still wins on key conflicts. Custom types go
+// through the same builtInTypes passthrough loop as global metadata, so this
+// mirrors TestProcessStackConfig_CustomComponentTypeGlobalMetadata.
+func TestProcessStackConfig_CustomComponentTypeGlobalRetry(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.RetrySectionName: map[string]any{
+			"max_attempts": 5,
+			"conditions":   []any{"/Bad Gateway/"},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			"script": map[string]any{
+				"deploy-app": map[string]any{
+					cfg.VarsSectionName: map[string]any{"app_name": "myapp"},
+				},
+				"local-override": map[string]any{
+					cfg.VarsSectionName: map[string]any{"app_name": "otherapp"},
+					cfg.RetrySectionName: map[string]any{
+						// "max_attempts" conflicts with the global value and must win
+						// locally; global's "conditions" must still be inherited.
+						"max_attempts": 9,
+					},
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should exist")
+	scriptSection, ok := components["script"].(map[string]any)
+	require.True(t, ok, "script components should be present")
+
+	deployApp, ok := scriptSection["deploy-app"].(map[string]any)
+	require.True(t, ok, "deploy-app component should exist")
+	deployRetry, ok := deployApp[cfg.RetrySectionName].(map[string]any)
+	require.True(t, ok, "deploy-app must have a retry section merged in from global, got: %v", deployApp[cfg.RetrySectionName])
+	assert.EqualValues(t, 5, deployRetry["max_attempts"], "custom component with no local retry must inherit global retry")
+	assert.Equal(t, []any{"/Bad Gateway/"}, deployRetry["conditions"])
+
+	localOverride, ok := scriptSection["local-override"].(map[string]any)
+	require.True(t, ok, "local-override component should exist")
+	overrideRetry, ok := localOverride[cfg.RetrySectionName].(map[string]any)
+	require.True(t, ok, "local-override must have a retry section, got: %v", localOverride[cfg.RetrySectionName])
+	assert.EqualValues(t, 9, overrideRetry["max_attempts"], "custom component's own retry must win over global on conflicting keys")
+	assert.Equal(t, []any{"/Bad Gateway/"}, overrideRetry["conditions"], "custom component must still inherit global keys it doesn't override locally")
+}
+
 // TestProcessStackConfig_CustomComponentTypeSettingsEnvMerge verifies that stack-root global
 // `settings:`/`env:` are merged into custom (non-built-in) component types the same way metadata
 // is (TestProcessStackConfig_CustomComponentTypeGlobalMetadata), with the component's own
@@ -1776,6 +1899,19 @@ func resultComponentMetadata(t *testing.T, result map[string]any, component stri
 	metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
 	require.True(t, ok, "component %q must have a metadata section, got: %v", component, comp[cfg.MetadataSectionName])
 	return metadata
+}
+
+func resultComponentRetry(t *testing.T, result map[string]any, component string) map[string]any {
+	t.Helper()
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	terraform, ok := components[cfg.TerraformComponentType].(map[string]any)
+	require.True(t, ok, "result must contain terraform components")
+	comp, ok := terraform[component].(map[string]any)
+	require.True(t, ok, "terraform component %q must exist", component)
+	retry, ok := comp[cfg.RetrySectionName].(map[string]any)
+	require.True(t, ok, "component %q must have a retry section, got: %v", component, comp[cfg.RetrySectionName])
+	return retry
 }
 
 // TestProcessStackConfig_HooksWrongScopeNotInherited locks in the scope
