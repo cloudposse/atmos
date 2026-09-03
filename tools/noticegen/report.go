@@ -10,9 +10,38 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 )
 
 const defaultGoLicensesVersion = "v1.6.0"
+
+// goInstallMaxAttempts and goInstallRetryDelay bound the retry loop around
+// `go install github.com/google/go-licenses`: a transient mid-stream network
+// error (e.g. a sum.golang.org HTTP/2 stream reset during go.sum
+// verification) otherwise fails NOTICE generation outright on a single
+// hiccup, unrelated to any real dependency problem. Matches the convention
+// already used for `go mod download` (magefiles/build.go's
+// runGoModDownload).
+const (
+	goInstallMaxAttempts = 3
+	goInstallRetryDelay  = 15 * time.Second
+)
+
+// goInstallSleep is a package-level var so tests can swap in a no-op and
+// exercise the retry loop without real 15s sleeps.
+var goInstallSleep = time.Sleep
+
+// runGoInstall runs `go install <module>`, streaming output directly to this
+// process's stdout/stderr. A package-level var so tests can fake install
+// failures/successes without a real subprocess or network access.
+var runGoInstall = defaultRunGoInstall
+
+func defaultRunGoInstall(module string) error {
+	cmd := exec.Command("go", "install", module) // #nosec G204 -- module is a controlled default/env knob, not user input.
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
 
 // licenseEnv is the GOOS/GOARCH/CGO_ENABLED triple go-licenses and `go
 // list` are run under, so license detection matches a specific build
@@ -46,19 +75,35 @@ func goLicensesVersion() string {
 	return envOrDefault("GO_LICENSES_VERSION", defaultGoLicensesVersion)
 }
 
+// lookPathGoLicenses resolves an already-installed go-licenses binary on
+// PATH. A package-level var so tests can force the "not found" branch
+// deterministically instead of relying on the real PATH not already
+// containing go-licenses (which it may, e.g. from a prior local run).
+var lookPathGoLicenses = func() (string, error) {
+	return exec.LookPath("go-licenses")
+}
+
 // ensureGoLicenses returns the path to a go-licenses binary, installing it
 // via `go install` if it isn't already on PATH.
 func ensureGoLicenses(version string) (string, error) {
-	if path, err := exec.LookPath("go-licenses"); err == nil {
+	if path, err := lookPathGoLicenses(); err == nil {
 		return path, nil
 	}
 
 	fmt.Fprintf(os.Stderr, "Installing go-licenses %s...\n", version)
-	installCmd := exec.Command("go", "install", "github.com/google/go-licenses@"+version) // #nosec G204 -- version is a controlled default/env knob, not user input.
-	installCmd.Stdout = os.Stdout
-	installCmd.Stderr = os.Stderr
-	if err := installCmd.Run(); err != nil {
-		return "", fmt.Errorf("go install go-licenses: %w", err)
+	module := "github.com/google/go-licenses@" + version
+	var lastErr error
+	for attempt := 1; attempt <= goInstallMaxAttempts; attempt++ {
+		lastErr = runGoInstall(module)
+		if lastErr == nil {
+			break
+		}
+		if attempt == goInstallMaxAttempts {
+			return "", fmt.Errorf("go install go-licenses: failed after %d attempts: %w", goInstallMaxAttempts, lastErr)
+		}
+		fmt.Fprintf(os.Stderr, "go install go-licenses failed (attempt %d/%d), retrying in %s...\n",
+			attempt, goInstallMaxAttempts, goInstallRetryDelay)
+		goInstallSleep(goInstallRetryDelay)
 	}
 
 	binPath, err := resolveGoLicensesBinPath(goEnv)
