@@ -27,6 +27,9 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
+          # lychee hits every external URL referenced in whatever markdown changed
+          # (87+ distinct domains observed in a single run, a different set each
+          # time) — unbounded/content-driven egress, stays in audit intentionally.
           egress-policy: audit
 
       - name: Checkout Code
