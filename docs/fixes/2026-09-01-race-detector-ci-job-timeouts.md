@@ -1146,3 +1146,39 @@ entries (the new `tofu` line included) installed cleanly, `opentofu/opentofu` an
 the same `.../opentofu/opentofu/1.12.6/tofu` binary. Not validated: the actual `ghcr.io/cloudposse/atmos:
 1.215.0` container locally (no local Docker pull attempted) -- the next CI run is the real test, same as
 every other round in this file.
+
+## Round 22 (another walk-order-dependent error shape in the invalid-stacks fixture)
+
+CI job 100836458008 (this PR's `[race]` job) failed with a single test failure in `internal/exec`:
+`TestExecuteTerraform_TerraformPlanWithInvalidTemplates` at `terraform_test.go:379`, `Error: Should be true`,
+`Messages: expected an invalid-stacks error mentioning invalid/unclosed/template/function/no matches, got:
+stack import not found: import 'catalog/this-file-does-not-exist-at-all' in file
+'orgs/acme/platform/missing-import.yaml': failed to find import`.
+
+This test's own doc comment already explains the shape of the problem: the `invalid-stacks` fixture
+(`tests/fixtures/scenarios/invalid-stacks/`) has several files that are each invalid in a different way, the
+filesystem walk order that decides which one's error surfaces first is not deterministic across OSes, and an
+earlier round already widened the assertion from a single substring to an OR of several to stop the test
+being brittle to that non-determinism. `missing-import.yaml` (an `import:` pointing at a catalog file that
+doesn't exist) produces `errors.ErrStackImportNotFound` wrapping `errors.ErrFailedToFindImport`
+(`errors/errors.go`) -- neither sentinel's text ("stack import not found", "failed to find import") matched
+any of the OR'd substrings, so on whichever run's walk order hit this file first (here, Linux, race job), the
+test failed. Root cause is the same underlying non-determinism the prior round already identified; this round
+just closes the one remaining gap in the OR list rather than being a new class of bug.
+
+Fixed by adding `strings.Contains(errMsg, "import not found")` and `strings.Contains(errMsg, "failed to find
+import")` to the assertion's OR list, and updating the doc comment and failure message to name the sentinels
+involved so the next gap (if another invalid-file error shape is added to the fixture) is easier to trace
+back to this same brittleness pattern.
+
+Files: `internal/exec/terraform_test.go`.
+
+Validation: `go build ./...` -- clean. `go test ./internal/exec/ -run
+TestExecuteTerraform_TerraformPlanWithInvalidTemplates -v -count=5` -- 5/5 pass. `go test ./internal/exec/
+-run TestExecuteTerraform -v` (full `TestExecuteTerraform*` family, 33 tests) -- all pass, no regressions.
+`gofumpt -l internal/exec/terraform_test.go` -- no output. `./custom-gcl run --new-from-rev=origin/main
+./internal/exec/...` -- 0 issues. Local runs all hit a different invalid file each time than
+`missing-import.yaml` (this machine's directory-walk order didn't reproduce the exact CI ordering), so this
+validates the fix doesn't regress the already-covered shapes rather than directly reproducing the new one --
+the error text itself was taken verbatim from the CI log and confirmed to contain "import not found", so the
+new branch is provably reachable. The next CI run of the `[race]` job is what confirms it end-to-end.
