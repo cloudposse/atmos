@@ -8,8 +8,10 @@ helmfile/helmfile v1.7.4
 terraform-linters/tflint 0.64.0
 # tofu is a required duplicate of opentofu/opentofu above, not stale: the
 # atmos.ci "Format HCL" job runs `atmos toolchain exec -- tofu fmt ...`
-# inside ghcr.io/cloudposse/atmos:1.215.0, whose toolchain resolver needs an
-# exact `tofu` key in this file (unlike current HEAD, it doesn't auto-resolve
-# bare short-name aliases against the registry). Keep this version equal to
-# opentofu/opentofu's, above.
+# inside the pinned ghcr.io/cloudposse/atmos:1.215.0 container image, whose
+# toolchain resolver predates the "tofu" -> "opentofu/opentofu" BuiltinAlias
+# (pkg/toolchain/installer/installer.go) and has no short-name registry
+# search either. Remove this line once that job's pinned image is bumped to
+# an atmos release built with the alias. Keep this version equal to
+# opentofu/opentofu's, above, until then.
 tofu 1.12.6

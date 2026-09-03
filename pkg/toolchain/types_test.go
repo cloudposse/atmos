@@ -119,7 +119,13 @@ func TestBuiltinAliases(t *testing.T) {
 	assert.NotNil(t, BuiltinAliases)
 
 	// Verify the expected atmos alias exists.
-	// Currently, BuiltinAliases only contains "atmos" -> "cloudposse/atmos".
-	_, exists := BuiltinAliases["atmos"]
+	atmosOwnerRepo, exists := BuiltinAliases["atmos"]
 	assert.True(t, exists, "Expected builtin alias 'atmos' to exist")
+	assert.Equal(t, "cloudposse/atmos", atmosOwnerRepo)
+
+	// Verify the expected tofu alias exists (explicit rather than relying on
+	// aqua-registry short-name search -- see BuiltinAliases' doc comment).
+	tofuOwnerRepo, exists := BuiltinAliases["tofu"]
+	assert.True(t, exists, "Expected builtin alias 'tofu' to exist")
+	assert.Equal(t, "opentofu/opentofu", tofuOwnerRepo)
 }
