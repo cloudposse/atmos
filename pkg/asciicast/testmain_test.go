@@ -2,7 +2,6 @@ package asciicast
 
 import (
 	"bufio"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -75,7 +74,15 @@ func runAsciicastSessionHelper() {
 	for {
 		b, err := reader.ReadByte()
 		if err != nil {
-			if err == io.EOF {
+			// isExpectedSessionReadError (session.go) already classifies a closed
+			// stdin pipe as a normal shutdown for the parent's stdout-read loop;
+			// apply the same classification here. finishSession sends EOT then
+			// closes the input pipe as part of ordinary teardown, and under CI
+			// load that race can surface as io.ErrClosedPipe (or an "input/output
+			// error" on some platforms) instead of a plain io.EOF -- exiting 1 in
+			// that case turned a normal teardown race into a spurious test
+			// failure ("exit status 1").
+			if isExpectedSessionReadError(err) {
 				return
 			}
 			os.Exit(1)
