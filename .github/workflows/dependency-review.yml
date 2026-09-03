@@ -114,6 +114,11 @@ jobs:
           comment-summary-in-pr: always
 
       - name: Generate NOTICE file
+        env:
+          # Authenticates NOTICE's live GitHub API tagline fetch (see
+          # tools/noticegen/repo.go), avoiding the unauthenticated 60
+          # req/hour rate limit.
+          GH_TOKEN: ${{ github.token }}
         run: go tool mage notice:generate
 
       - name: Check if NOTICE is up to date

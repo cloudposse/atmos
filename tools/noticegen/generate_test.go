@@ -40,6 +40,10 @@ func buildStubGoLicenses(t *testing.T, csv string) string {
 	return binDir
 }
 
+// stubDescription is a fetchDescription stand-in used by every generate()
+// test below, so none of them make a real network call to the GitHub API.
+func stubDescription() (string, error) { return "A test tagline.", nil }
+
 func TestGenerateEndToEnd(t *testing.T) {
 	stubDir := buildStubGoLicenses(t, "example.com/dep,https://example.com/dep/LICENSE,MIT\n")
 	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -48,7 +52,7 @@ func TestGenerateEndToEnd(t *testing.T) {
 	writeTestModule(t, root)
 	outPath := filepath.Join(root, "NOTICE")
 
-	summary, err := Generate(root, outPath)
+	summary, err := generate(root, outPath, stubDescription)
 
 	require.NoError(t, err)
 	assert.Equal(t, Summary{Total: 1, MIT: 1}, summary)
@@ -68,7 +72,7 @@ func TestGenerateNoDependencies(t *testing.T) {
 	writeTestModule(t, root)
 	outPath := filepath.Join(root, "NOTICE")
 
-	summary, err := Generate(root, outPath)
+	summary, err := generate(root, outPath, stubDescription)
 
 	require.NoError(t, err)
 	assert.Equal(t, Summary{}, summary)
@@ -86,6 +90,6 @@ func TestGeneratePropagatesGoLicensesInstallFailure(t *testing.T) {
 	root := t.TempDir()
 	writeTestModule(t, root)
 
-	_, err := Generate(root, filepath.Join(root, "NOTICE"))
+	_, err := generate(root, filepath.Join(root, "NOTICE"), stubDescription)
 	require.Error(t, err)
 }

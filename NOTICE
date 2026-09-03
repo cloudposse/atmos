@@ -1,7 +1,7 @@
 NOTICE
 
-Atmos - Universal Tool for DevOps and Cloud Automation
-Copyright 2021-2025 Cloud Posse, LLC
+Atmos is the open-source runtime for infrastructure — it builds, authenticates, and ships Terraform, OpenTofu, Kubernetes, Helm, and containers the same way on your laptop, in CI, and with AI agents.
+Copyright 2021-2026 Cloud Posse, LLC
 
 This product includes software developed by Cloud Posse, LLC and the Atmos community.
 
