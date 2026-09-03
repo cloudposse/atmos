@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration; also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos toolchain."
+description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Terragrunt, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration; also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos toolchain."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -14,6 +14,7 @@ references:
   - references/from-justfile.md
   - references/from-taskfile.md
   - references/from-component-updater.md
+  - references/from-terragrunt.md
   - references/from-mise.md
   - references/from-aqua.md
 ---
@@ -35,7 +36,8 @@ For full tutorials for end users, see:
 
 - [Migrating from Native Terraform](https://atmos.tools/migration/native-terraform)
 - [Migrating from Terraform Workspaces](https://atmos.tools/migration/terraform-workspaces)
-- [Migrating from Terragrunt](https://atmos.tools/migration/terragrunt) (this skill does not cover Terragrunt)
+- [Migrating from Terragrunt](https://atmos.tools/migration/terragrunt) -- see
+  [from-terragrunt.md](references/from-terragrunt.md) for the agent-actionable recipes
 - Migrating from Terramate -- covered by this skill via
   [references/from-terramate.md](references/from-terramate.md) (no atmos.tools tutorial yet)
 - [Migrating from Makefiles](https://atmos.tools/migration/makefile)
@@ -102,6 +104,7 @@ reference file:
 | User has a Justfile (`just` command runner)                          | [from-justfile.md](references/from-justfile.md) |
 | User has a Taskfile.yml (go-task)                                    | [from-taskfile.md](references/from-taskfile.md) |
 | `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
+| Terragrunt (`terragrunt.hcl` or `terragrunt.stack.hcl`)               | [from-terragrunt.md](references/from-terragrunt.md) |
 | mise config (`mise.toml`, `.mise.toml`, `.mise/config.toml`, `.tool-versions`) for tool versions | [from-mise.md](references/from-mise.md) |
 | `aqua.yaml` (Aqua CLI) for tool versions                             | [from-aqua.md](references/from-aqua.md) |
 
@@ -275,6 +278,8 @@ Push back if a user or another agent proposes one of these methods during migrat
 - [References/from-terramate.md](references/from-terramate.md): construct-by-construct mapping
   from Terramate (`stack.tm.hcl`, globals, `generate_hcl`, `script{}`, tags/labels) to Atmos,
   including the one remaining known gap (`.tmtriggers`).
+- [references/from-terragrunt.md](references/from-terragrunt.md) -- concept mapping and migration
+  workflow for classic Terragrunt and Terragrunt Stacks.
 - [References/from-makefile.md](references/from-makefile.md): steps for a Makefile, matched to
   each shape.
 - [References/from-justfile.md](references/from-justfile.md): steps for a Justfile, matched to
