@@ -2,6 +2,8 @@ package exec
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -291,7 +293,7 @@ func shouldSkipRepoCopyPath(src string) bool {
 //     housekeeping (e.g. an automatic repack writes tmp_pack_*/tmp_idx_*/tmp_rev_* files and
 //     renames or removes them within milliseconds) -- the otiai10/copy directory walk stats every
 //     entry it lists, so it can observe one of these files mid-flight and fail with
-//     "no such file or directory" (os.IsNotExist).
+//     "no such file or directory" (os.ErrNotExist, possibly wrapped).
 //   - fixture files locked by another concurrently running test's terraform process (e.g. a
 //     terraform.tfstate under tests/fixtures/scenarios/plan-diff held open mid-plan/apply), which
 //     on Windows surfaces as a sharing/lock violation rather than IsNotExist.
@@ -319,12 +321,17 @@ func copyRepoWithRetry(t *testing.T, src, dest string, opts *cp.Options) error {
 }
 
 // isTransientRepoCopyError reports whether err is expected to resolve on its own shortly, and so
-// is worth retrying rather than failing the test outright. Windows reports a locked file via its
-// error message text rather than a portable sentinel/errno, so this matches on that text the same
-// way pkg/git/worktree.go's isTransientWorktreeRemoveError does for transient worktree-removal
-// errors.
+// is worth retrying rather than failing the test outright. See copyRepoWithRetry's doc comment
+// for the two known causes. Windows reports a locked file via its error message text rather than
+// a portable sentinel/errno, so this matches on that text the same way pkg/git/worktree.go's
+// isTransientWorktreeRemoveError does for transient worktree-removal errors.
 func isTransientRepoCopyError(err error) bool {
-	if os.IsNotExist(err) {
+	if err == nil {
+		return false
+	}
+	// errors.Is (not os.IsNotExist) so a wrapped os.ErrNotExist is still recognized --
+	// os.IsNotExist does not reliably unwrap.
+	if errors.Is(err, os.ErrNotExist) {
 		return true
 	}
 	lower := strings.ToLower(err.Error())
@@ -338,6 +345,55 @@ func isTransientRepoCopyError(err error) bool {
 		}
 	}
 	return false
+}
+
+func TestIsTransientRepoCopyError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "nil error is not transient",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "not-exist error is transient",
+			err:  os.ErrNotExist,
+			want: true,
+		},
+		{
+			name: "wrapped not-exist error is transient",
+			// os.IsNotExist does not reliably unwrap; errors.Is does. This case
+			// guards against a regression back to os.IsNotExist.
+			err:  fmt.Errorf("copy failed: %w", os.ErrNotExist),
+			want: true,
+		},
+		{
+			name: "windows lock violation is transient",
+			// Exact error text observed on Windows CI (ERROR_LOCK_VIOLATION).
+			err:  errors.New(`read ..\..\tests\fixtures\scenarios\hooks-test\components\terraform\hook-and-store\terraform.tfstate.d\test-component2\terraform.tfstate: The process cannot access the file because another process has locked a portion of the file.`),
+			want: true,
+		},
+		{
+			name: "windows sharing violation is transient",
+			// ERROR_SHARING_VIOLATION wording, distinct from the lock-violation text above.
+			err:  errors.New(`open foo.txt: The process cannot access the file because it is being used by another process.`),
+			want: true,
+		},
+		{
+			name: "unrelated error is not transient",
+			err:  errors.New("permission denied"),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isTransientRepoCopyError(tt.err))
+		})
+	}
 }
 
 // setupDescribeAffectedTest sets up the test environment for describe affected tests.
