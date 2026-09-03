@@ -29,18 +29,9 @@ installing the release objects. Helm only ignores the result when the API return
 
 ### Gaps
 
-1. **No way to disable namespace creation.** There was no component setting and no CLI flag to turn
-   the behavior off. Every first install attempted to create the namespace.
-2. **Fails for namespace-scoped identities.** When the identity running `atmos helm apply` is scoped
-   to a single namespace and lacks cluster-level permission to create namespaces, the namespace
-   `CREATE` call is rejected with `403 Forbidden`. This happens *even when the namespace already
-   exists*, because Helm still issues the `CREATE` and the `403` arrives before the `AlreadyExists`
-   check can matter.
-3. **The workaround is awkward.** The only way through was to run the first install as a
-   higher-privileged operator (which creates the release), after which the scoped identity's later
-   applies succeed as upgrades — the upgrade path does not run the namespace-create block. Requiring
-   an operator step for every new app or environment is friction, and it couples release ownership to
-   a privilege the app pipeline should not need.
+1. **No way to disable namespace creation.** There was no component setting and no CLI flag to turn the behavior off. Every first install attempted to create the namespace.
+2. **Fails for namespace-scoped identities.** When the identity running `atmos helm apply` is scoped to a single namespace and lacks cluster-level permission to create namespaces, the namespace `CREATE` call is rejected with `403 Forbidden`. This happens *even when the namespace already exists*, because Helm still issues the `CREATE` and the `403` arrives before the `AlreadyExists` check can matter.
+3. **The workaround is awkward.** The only way through was to run the first install as a higher-privileged operator (which creates the release), after which the scoped identity's later applies succeed as upgrades — the upgrade path does not run the namespace-create block. Requiring an operator step for every new app or environment is friction, and it couples release ownership to a privilege the app pipeline should not need.
 
 This is the natural division of responsibility for platform teams: the platform owns the namespace
 and its guardrails (NetworkPolicies, quotas, labels), and the application pipeline only deploys
@@ -96,13 +87,9 @@ needs no manual edit.
 `pkg/component/helm`:
 
 1. **`chartSpec.CreateNamespace bool`** (`chart.go`) — the resolved spec carries the setting.
-2. **`resolveCreateNamespace(section)`** (`values.go`) — reads the top-level `create_namespace` key,
-   defaulting to `true`. Backed by a new `boolFieldDefault(section, key, fallback)` helper that
-   distinguishes an unset key from an explicit `false` (a plain type assertion cannot).
+2. **`resolveCreateNamespace(section)`** (`values.go`) — reads the top-level `create_namespace` key, defaulting to `true`. Backed by a new `boolFieldDefault(section, key, fallback)` helper that distinguishes an unset key from an explicit `false` (a plain type assertion cannot).
 3. **`buildChartSpec`** (`values.go`) — populates `CreateNamespace` from `resolveCreateNamespace`.
-4. **`newInstallClient(actx, spec, dryRun)`** (`client.go`) — extracted from `installRelease`; wires
-   `client.CreateNamespace = spec.CreateNamespace` instead of the hardcoded `true`, keeping
-   `installRelease` a thin call plus `runInstall`.
+4. **`newInstallClient(actx, spec, dryRun)`** (`client.go`) — extracted from `installRelease`; wires `client.CreateNamespace = spec.CreateNamespace` instead of the hardcoded `true`, keeping `installRelease` a thin call plus `runInstall`.
 
 The default of `true` preserves existing behavior for every component that does not set the key.
 
@@ -117,12 +104,17 @@ The default of `true` preserves existing behavior for every component that does 
 
 With `create_namespace: false`, the recommended flow is:
 
-1. The platform creates the namespace and its guardrails (NetworkPolicies, quotas, labels) as
-   platform-owned infrastructure — a native Kubernetes component, Terraform, or equivalent.
-2. The application's namespace-scoped identity runs `atmos helm apply`, including the first install,
-   installing only namespaced resources into the pre-existing namespace.
+1. The platform creates the namespace and its guardrails (NetworkPolicies, quotas, labels) as platform-owned infrastructure — a native Kubernetes component, Terraform, or equivalent.
+2. The application's namespace-scoped identity runs `atmos helm apply`, including the first install. Because the namespace already exists and `create_namespace: false` suppresses the namespace-create call, no cluster-level namespace-create permission is needed.
 
 No operator bootstrap step is required.
+
+`create_namespace: false` only suppresses the namespace-create API call; it does not restrict what the
+chart installs. The deploying identity still needs permission for every object in the chart, so a chart
+that includes cluster-scoped objects (for example a `ClusterRole`, a `ClusterRoleBinding`, or a CRD)
+still requires the corresponding cluster-level permissions and can otherwise fail with a `403`. This
+pattern assumes an entirely namespaced chart, or an identity that additionally holds rights for the
+cluster-scoped objects the chart includes.
 
 ## Testing
 

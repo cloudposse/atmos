@@ -3,6 +3,7 @@ package helm
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,24 +20,42 @@ import (
 // Install action.
 
 func TestResolveCreateNamespace(t *testing.T) {
-	// Absent -> defaults to true (Helm's historical behavior, back-compat).
-	assert.True(t, resolveCreateNamespace(map[string]any{}))
-	// Explicit true.
-	assert.True(t, resolveCreateNamespace(map[string]any{"create_namespace": true}))
-	// Explicit false -> Helm must not attempt to create the namespace.
-	assert.False(t, resolveCreateNamespace(map[string]any{"create_namespace": false}))
-	// Wrong type -> falls back to the default rather than treating it as false.
-	assert.True(t, resolveCreateNamespace(map[string]any{"create_namespace": "false"}))
+	tests := []struct {
+		name    string
+		section map[string]any
+		want    bool
+	}{
+		{name: "absent defaults to true (Helm's historical behavior, back-compat)", section: map[string]any{}, want: true},
+		{name: "explicit true", section: map[string]any{"create_namespace": true}, want: true},
+		{name: "explicit false must not create the namespace", section: map[string]any{"create_namespace": false}, want: false},
+		{name: "wrong type falls back to the default, not false", section: map[string]any{"create_namespace": "false"}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, resolveCreateNamespace(tt.section))
+		})
+	}
 }
 
 func TestBoolFieldDefault(t *testing.T) {
-	assert.True(t, boolFieldDefault(map[string]any{"k": true}, "k", false))
-	assert.False(t, boolFieldDefault(map[string]any{"k": false}, "k", true))
-	// Absent key -> fallback.
-	assert.True(t, boolFieldDefault(map[string]any{}, "k", true))
-	assert.False(t, boolFieldDefault(map[string]any{}, "k", false))
-	// Non-bool value -> fallback (an unset key must not read as an explicit false).
-	assert.True(t, boolFieldDefault(map[string]any{"k": "true"}, "k", true))
+	tests := []struct {
+		name     string
+		section  map[string]any
+		key      string
+		fallback bool
+		want     bool
+	}{
+		{name: "present true", section: map[string]any{"k": true}, key: "k", fallback: false, want: true},
+		{name: "present false", section: map[string]any{"k": false}, key: "k", fallback: true, want: false},
+		{name: "absent returns fallback true", section: map[string]any{}, key: "k", fallback: true, want: true},
+		{name: "absent returns fallback false", section: map[string]any{}, key: "k", fallback: false, want: false},
+		{name: "non-bool value returns fallback (unset must not read as explicit false)", section: map[string]any{"k": "true"}, key: "k", fallback: true, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, boolFieldDefault(tt.section, tt.key, tt.fallback))
+		})
+	}
 }
 
 // buildChartSpec must carry the component's create_namespace setting through to
@@ -81,29 +100,51 @@ func TestNewInstallClient_WiresCreateNamespace(t *testing.T) {
 	}
 }
 
-// With create_namespace disabled, the install path must still install the
-// release into the (pre-existing) namespace. Exercised end-to-end against the
-// in-memory storage driver.
-func TestApplyRelease_CreateNamespaceFalseInstalls(t *testing.T) {
-	actx := memoryActionContext(t)
-	stubActionContext(t, actx)
-
+// create_namespace controls whether Helm's install path issues a Namespace create.
+// With it false, no Namespace object is built or created, so a namespace-scoped
+// identity is never asked to create one; with it true, the namespace is created.
+// This is verified against a recording kube client, because a plain install would
+// "succeed" either way against the in-memory fake — success alone does not prove
+// the namespace-create call was skipped.
+func TestApplyRelease_CreateNamespaceControlsNamespaceCreate(t *testing.T) {
 	chartPath, err := filepath.Abs(filepath.Join("testdata", "chart"))
 	require.NoError(t, err)
-	spec := &chartSpec{
-		Chart:           chartPath,
-		ReleaseName:     "no-create-ns",
-		Namespace:       "preexisting",
-		CreateNamespace: false,
-		Values:          map[string]any{"replicaCount": 1, "image": map[string]any{"tag": "1.0"}},
+
+	tests := []struct {
+		name               string
+		createNamespace    bool
+		wantNamespaceBuilt bool
+	}{
+		{name: "false skips the namespace create", createNamespace: false, wantNamespaceBuilt: false},
+		{name: "true issues the namespace create", createNamespace: true, wantNamespaceBuilt: true},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actx, rec := recordingActionContext(t)
+			stubActionContext(t, actx)
 
-	manifest, err := applyRelease(context.Background(), spec, false)
-	require.NoError(t, err)
-	assert.Contains(t, manifest, "kind: ConfigMap")
-	assert.Contains(t, manifest, "name: no-create-ns")
+			spec := &chartSpec{
+				Chart:           chartPath,
+				ReleaseName:     "ns-toggle",
+				Namespace:       "preexisting",
+				CreateNamespace: tt.createNamespace,
+				Values:          map[string]any{"replicaCount": 1, "image": map[string]any{"tag": "1.0"}},
+			}
 
-	deployed, err := getDeployedManifest("no-create-ns", "preexisting")
-	require.NoError(t, err)
-	assert.Contains(t, deployed, "kind: ConfigMap")
+			manifest, err := applyRelease(context.Background(), spec, false)
+			require.NoError(t, err)
+			assert.Contains(t, manifest, "kind: ConfigMap")
+			assert.Contains(t, manifest, "name: ns-toggle")
+
+			namespaceBuilt := false
+			for _, doc := range rec.BuiltDocs {
+				if strings.Contains(doc, "kind: Namespace") {
+					namespaceBuilt = true
+					break
+				}
+			}
+			assert.Equal(t, tt.wantNamespaceBuilt, namespaceBuilt,
+				"Helm should build and create a Namespace only when create_namespace is true")
+		})
+	}
 }

@@ -54,8 +54,12 @@ components:
 ```
 
 With `create_namespace: false`, a namespace-scoped identity can run the first `atmos helm apply`
-itself. It only ever installs namespaced resources into the pre-existing namespace, so no
-cluster-level permission — and no operator bootstrap step — is involved.
+itself: the namespace already exists, and turning off namespace creation removes the one cluster-level
+action a namespace-scoped credential can't perform — no operator bootstrap step needed. One caveat: the
+setting only suppresses the namespace-create call, not anything else in the chart. The credential still
+needs rights for every object the chart installs, so a chart that includes cluster-scoped resources
+(a `ClusterRole`, a CRD) still needs those permissions. This works cleanly when the chart is entirely
+namespaced.
 
 This lines up with how platform teams already split ownership: the platform provisions the namespace
 and its guardrails as its own infrastructure, and the application pipeline deploys workloads into it

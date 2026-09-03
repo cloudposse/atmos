@@ -1,6 +1,7 @@
 package helm
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/chart/common"
 	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/kube"
 	kubefake "helm.sh/helm/v4/pkg/kube/fake"
 	"helm.sh/helm/v4/pkg/registry"
 	release "helm.sh/helm/v4/pkg/release/v1"
@@ -44,6 +46,35 @@ func stubActionContext(t *testing.T, actx *actionContext) {
 	original := newActionContext
 	t.Cleanup(func() { newActionContext = original })
 	newActionContext = func(string) (*actionContext, error) { return actx, nil }
+}
+
+// recordingKubeClient wraps the fake kube client to record every Build input, so a
+// test can assert whether Helm's CreateNamespace path ran: the install action only
+// builds a `kind: Namespace` object (and then creates it) when CreateNamespace is
+// true. The fake's Build returns an empty resource list, so inspecting Create's
+// arguments cannot distinguish the two — the Build input is the observable signal.
+type recordingKubeClient struct {
+	*kubefake.FailingKubeClient
+	BuiltDocs []string
+}
+
+func (r *recordingKubeClient) Build(reader io.Reader, strict bool) (kube.ResourceList, error) {
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+	r.BuiltDocs = append(r.BuiltDocs, string(data))
+	return r.FailingKubeClient.Build(bytes.NewReader(data), strict)
+}
+
+// recordingActionContext returns an in-memory action context whose kube client
+// records Build inputs, plus the recorder itself for assertions.
+func recordingActionContext(t *testing.T) (*actionContext, *recordingKubeClient) {
+	t.Helper()
+	actx := memoryActionContext(t)
+	rec := &recordingKubeClient{FailingKubeClient: actx.cfg.KubeClient.(*kubefake.FailingKubeClient)}
+	actx.cfg.KubeClient = rec
+	return actx, rec
 }
 
 func testdataChartSpec(t *testing.T, releaseName string) *chartSpec {
