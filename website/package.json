@@ -108,7 +108,7 @@
       "brace-expansion@^2": "2.1.4",
       "browserslist@^4": "^4.28.7",
       "dompurify@^3": "^3.4.13",
-      "fast-uri@^3": "^3.1.5",
+      "fast-uri@^3": "^3.1.6",
       "follow-redirects@^1": "^1.16.0",
       "http-proxy-middleware@^2": "^2.0.10",
       "joi@^17": "^17.13.4",
