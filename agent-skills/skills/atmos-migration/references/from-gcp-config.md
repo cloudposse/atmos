@@ -112,7 +112,10 @@ auth:
 
 This requires the base identity (the user or the WIF principal) to already hold
 `roles/iam.serviceAccountTokenCreator` on the target service account -- the same IAM binding
-`gcloud --impersonate-service-account` needed.
+`gcloud --impersonate-service-account` needed. `lifetime` values above `3600s` also require the
+org to have the target service account allowlisted under the
+`iam.allowServiceAccountCredentialLifetimeExtension` organization policy constraint -- without it,
+Google's API rejects the extended lifetime and token generation fails.
 
 ## Project/Region Defaults → `gcp/project`
 

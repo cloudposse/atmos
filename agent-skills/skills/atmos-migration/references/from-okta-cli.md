@@ -148,9 +148,13 @@ no general-purpose Okta identity provider yet. Same planned-but-not-shipped road
 
 ## Common Gotchas
 
-- **There is one Okta AWS Federation Application type, not two.** Don't ask users to check for a
-  "SAML app vs. OIDC app" -- that distinction doesn't exist on the Okta side. The fork is entirely
-  about which Okta-side auth policy applies to `/api/v1/authn` for their org.
+- **The AWS Federation Application itself is always SAML-based -- there's no "OIDC-flavored"
+  variant of it.** Don't ask users to check whether their org's AWS Federation app is "SAML vs.
+  OIDC"; that distinction doesn't exist for the Fed app itself. `okta-aws-cli web` does involve a
+  *second*, separate Okta object -- an OIDC Native Application used only for the device-authorization
+  login step -- paired with the Fed app via its "Allowed Web SSO Client" setting, but that's a
+  different object for a different purpose, not a different kind of Fed app. The real fork is
+  which Okta-side auth policy applies to `/api/v1/authn` for their org, not which app type exists.
 - **`driver: Okta` is SAML under the hood** -- it produces a SAML assertion for
   `AssumeRoleWithSAML`, same as `okta-aws-cli web` ultimately does, just reached via a different
   client-side login method (direct password+MFA vs. OIDC device/browser flow).

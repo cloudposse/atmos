@@ -161,6 +161,10 @@ questions need Atmos Pro.
 
 Configure servers once in `atmos.yaml`. `atmos mcp export` writes them to per-CLI config files.
 
+`@latest` below is for brevity -- pin every `uvx` package to a reviewed version before treating
+this as a production setup (unpinned `@latest` on an MCP server is a supply-chain risk; see
+Guardrails below).
+
 ```yaml
 toolchain:
   aliases:
@@ -316,12 +320,18 @@ atmos mcp export
 `atmos mcp restart <name>` validates that the server can stop and start during the command; do
 not describe it as creating a long-running background service for stdio servers.
 
-## Gemini Trusted Folders Gotcha
+## Gemini CLI Gotchas
 
-Gemini's Trusted Folders feature blocks MCP servers in untrusted directories. After
-`atmos mcp export --output .gemini/settings.json`, the user must trust the folder once via
-the Gemini UI/settings before the MCP servers will start. Symptom: servers configured
-correctly but no tools available in Gemini.
+- **Personal Google accounts lost access on 2026-06-18.** Gemini CLI stopped serving requests
+  authenticated via "Login with Google" for free-tier and Google One individual accounts, which
+  were redirected to Antigravity CLI instead. Before recommending a Gemini CLI export, confirm
+  the user authenticates with an API key (billing enabled) or an enterprise Code Assist license --
+  personal-account users need a different client (Claude Code, Codex, Cursor) or Antigravity CLI,
+  which `atmos mcp export` does not target.
+- **Trusted Folders blocks MCP servers in untrusted directories.** After
+  `atmos mcp export --output .gemini/settings.json`, the user must trust the folder once via
+  the Gemini UI/settings before the MCP servers will start. Symptom: servers configured
+  correctly but no tools available in Gemini.
 
 ## Related Patterns
 

@@ -53,7 +53,7 @@ without checking; some of the commands below don't have a 1:1 Atmos flag equival
 |------------------------------------------------------------|--------------------------------------|
 | `assume` (no args -- interactive fuzzy role picker)          | any `atmos auth` command with `-i` omitted (interactive picker when no `default: true` identity is set) |
 | `assume <profile>`                                          | `atmos auth shell -i <identity>`      |
-| `assume <profile> --export` / `assume <profile> -ex`         | `atmos auth env -i <identity>`        |
+| `assume <profile> --export` / `assume <profile> -ex`         | `eval $(atmos auth env -i <identity>)` -- `env` alone doesn't authenticate; add `--login` or run `atmos auth login -i <identity>` first |
 | `assume -c <profile>` (console; repeat with another profile for simultaneous multi-account sessions) | `atmos auth console -i <identity> --isolated` |
 | `assume <profile> -d 3h` / `--duration 3h`                    | `session.duration` on the identity or provider (see [providers-and-identities.md](../../atmos-auth/references/providers-and-identities.md#session-configuration)) |
 
