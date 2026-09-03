@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration. It also covers migrating CLI tool-version management from asdf, aqua, tfenv, tofuenv, tenv, mise, or a Homebrew Brewfile to the Atmos toolchain."
+description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Terragrunt, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration. It also covers migrating CLI tool-version management from asdf, aqua, tfenv, tofuenv, tenv, mise, or a Homebrew Brewfile to the Atmos toolchain."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -14,6 +14,7 @@ references:
   - references/from-justfile.md
   - references/from-taskfile.md
   - references/from-component-updater.md
+  - references/from-terragrunt.md
   - references/from-asdf.md
   - references/from-aqua.md
   - references/from-tfenv.md
@@ -38,10 +39,11 @@ tenv, mise, or a Homebrew Brewfile to the Atmos toolchain -- see
 
 Full end-user tutorials exist for [Native Terraform](https://atmos.tools/migration/native-terraform),
 [Terraform Workspaces](https://atmos.tools/migration/terraform-workspaces),
-[Terragrunt](https://atmos.tools/migration/terragrunt) (not covered by this skill),
-[Makefiles](https://atmos.tools/migration/makefile), [Justfiles](https://atmos.tools/migration/justfile),
-and [Taskfile.yml](https://atmos.tools/migration/taskfile). Terramate has no atmos.tools tutorial
-yet -- this skill covers it via [from-terramate.md](references/from-terramate.md).
+[Terragrunt](https://atmos.tools/migration/terragrunt) (agent-actionable recipes in
+[from-terragrunt.md](references/from-terragrunt.md)), [Makefiles](https://atmos.tools/migration/makefile),
+[Justfiles](https://atmos.tools/migration/justfile), and [Taskfile.yml](https://atmos.tools/migration/taskfile).
+Terramate has no atmos.tools tutorial yet -- this skill covers it via
+[from-terramate.md](references/from-terramate.md).
 
 ## Terraform or OpenTofu
 
@@ -94,6 +96,7 @@ reference file:
 | Multiple TF root modules in scattered dirs | [from-native-terraform.md](references/from-native-terraform.md) |
 | `terraform.workspace`-driven environments with shared state backend | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
 | `.tm.hcl` files, `stack.tm.hcl`, `generate_hcl` blocks (Terramate project) | [from-terramate.md](references/from-terramate.md) |
+| Terragrunt (`terragrunt.hcl` or `terragrunt.stack.hcl`) | [from-terragrunt.md](references/from-terragrunt.md) |
 | Need to read outputs from un-migrated TF (legacy or another repo) | [remote-state-bridge.md](references/remote-state-bridge.md) |
 | User has a Makefile driving builds/tests/deploys | [from-makefile.md](references/from-makefile.md) |
 | User has a Justfile (`just` command runner) | [from-justfile.md](references/from-justfile.md) |
@@ -302,6 +305,7 @@ applicable.
 | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) | Mapping workspaces to stacks without losing state |
 | [remote-state-bridge.md](references/remote-state-bridge.md) | Dummy/abstract-component patterns for un-migrated or external Terraform state |
 | [from-terramate.md](references/from-terramate.md) | Construct-by-construct Terramate mapping (`.tmtriggers` is the one known gap) |
+| [from-terragrunt.md](references/from-terragrunt.md) | Concept mapping and migration workflow for classic Terragrunt and Terragrunt Stacks |
 | [from-makefile.md](references/from-makefile.md) | Makefile migration, matched to each shape |
 | [from-justfile.md](references/from-justfile.md) | Justfile migration, matched to each shape |
 | [from-taskfile.md](references/from-taskfile.md) | Taskfile.yml (go-task) migration, matched to each shape |

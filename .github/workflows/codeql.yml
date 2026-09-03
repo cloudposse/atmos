@@ -49,12 +49,14 @@ jobs:
             api.github.com:443
             release-assets.githubusercontent.com:443
             golang.org:443
+            go.googlesource.com:443
+            go.dev:443
+            pkg.go.dev:443
             google.golang.org:443
             proxy.golang.org:443
             storage.googleapis.com:443
             modernc.org:443
             sum.golang.org:443
-            storage.googleapis.com:443
 
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -130,6 +132,8 @@ jobs:
             release-assets.githubusercontent.com:443
             golang.org:443
             go.googlesource.com:443
+            go.dev:443
+            pkg.go.dev:443
             google.golang.org:443
             proxy.golang.org:443
             storage.googleapis.com:443
