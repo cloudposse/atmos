@@ -310,7 +310,7 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	wsOpts := append([]ShellCommandOption{}, opts...)
 	wsOpts = append(wsOpts, WithStdoutOverride(&workspaceOutput))
 
-	err := executeShellCommandWithRetry(
+	err := ExecuteShellCommandWithRetry(
 		atmosConfig,
 		info,
 		"workspace-select",
@@ -354,7 +354,7 @@ func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schem
 	wsOpts := append([]ShellCommandOption{}, opts...)
 	wsOpts = append(wsOpts, WithStdoutOverride(&workspaceOutput))
 
-	newErr := executeShellCommandWithRetry(
+	newErr := ExecuteShellCommandWithRetry(
 		atmosConfig,
 		info,
 		"workspace-new",
@@ -451,7 +451,7 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 		return nil
 	}
 
-	err := executeShellCommandWithRetry(
+	err := ExecuteShellCommandWithRetry(
 		atmosConfig,
 		info,
 		info.SubCommand,
@@ -557,7 +557,7 @@ func cleanupTerraformFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 	}
 }
 
-// invokeShellCommandFunc is the signature used by executeShellCommandWithRetry to delegate
+// invokeShellCommandFunc is the signature used by ExecuteShellCommandWithRetry to delegate
 // the actual subprocess invocation back to its caller.  The caller provides a closure that
 // already binds the command, args, dir, env, etc., and only needs the variadic options
 // (used by the retry wrapper to inject stdout/stderr capture writers).
@@ -576,26 +576,41 @@ func resetExecMetadataBufs(stdoutW, stderrW io.Writer) {
 	}
 }
 
-// executeShellCommandWithRetry runs invoke exactly once when info.ComponentRetrySection is
+// retryExecParams bundles the per-invocation shell command inputs shared by the
+// helmfile/packer retry-wrapping helpers (executeHelmfileCommandWithRetry,
+// executePackerCommandWithRetry), keeping their parameter lists within the argument-limit.
+type retryExecParams struct {
+	allArgsAndFlags []string
+	componentPath   string
+	envVars         []string
+}
+
+// ExecuteShellCommandWithRetry runs invoke exactly once when info.ComponentRetrySection is
 // nil or has no Conditions configured (zero behavioural change for non-retry components).
+// It is component-type agnostic: terraform, helmfile, packer, and ansible all shell out
+// through ExecuteShellCommand and share this same wrapper.
 //
 // When retry is configured, stdout and stderr are tee'd into a buffer and the buffer is
 // matched against the compiled retry conditions after each attempt.  Errors whose captured
 // output matches at least one condition trigger another attempt with the configured backoff;
-// other errors fail fast.  This is intentionally pattern-driven so that real terraform
-// failures (e.g., `plan` exit-code-2) are never retried unless the user opts in by listing
-// a matching condition.
+// other errors fail fast.  This is intentionally pattern-driven so that real failures (e.g.,
+// `terraform plan` exit-code-2) are never retried unless the user opts in by listing a
+// matching condition.
+//
+// If baseOpts already requests its own stdout/stderr capture (e.g. helmfile capturing output
+// for a NodeHooks.After callback), that writer keeps receiving the full output — the retry
+// buffer is teed in alongside it via io.MultiWriter, not substituted for it.
 //
 // `phase` is included in retry log lines so users can see which subprocess invocation is
-// being retried (e.g. "init", "workspace-select", "apply").
-func executeShellCommandWithRetry(
+// being retried (e.g. "init", "workspace-select", "apply", "sync", "build").
+func ExecuteShellCommandWithRetry(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	phase string,
 	invoke invokeShellCommandFunc,
 	baseOpts ...ShellCommandOption,
 ) error {
-	defer perf.Track(atmosConfig, "exec.executeShellCommandWithRetry")()
+	defer perf.Track(atmosConfig, "exec.ExecuteShellCommandWithRetry")()
 
 	cfg := info.ComponentRetrySection
 	if cfg == nil || len(cfg.Conditions) == 0 {
@@ -608,8 +623,9 @@ func executeShellCommandWithRetry(
 	}
 
 	var buf bytes.Buffer
+	stdoutWriter, stderrWriter := composeRetryCaptureWriters(baseOpts, &buf)
 	captureOpts := append([]ShellCommandOption{}, baseOpts...)
-	captureOpts = append(captureOpts, WithStdoutCapture(&buf), WithStderrCapture(&buf))
+	captureOpts = append(captureOpts, WithStdoutCapture(stdoutWriter), WithStderrCapture(stderrWriter))
 
 	execMetadataStdout, execMetadataStderr := execMetadataOutputCaptureFromOpts(baseOpts...)
 
@@ -623,7 +639,7 @@ func executeShellCommandWithRetry(
 			resetExecMetadataBufs(execMetadataStdout, execMetadataStderr)
 			if attempt > 1 {
 				log.Warn(
-					"Retrying terraform subprocess after recoverable error",
+					"Retrying subprocess after recoverable error",
 					"phase", phase,
 					logFieldComponent, info.ComponentFromArg,
 					"stack", info.StackFromArg,
@@ -639,4 +655,26 @@ func executeShellCommandWithRetry(
 			return retry.MatchesAny(patterns, buf.String())
 		},
 	)
+}
+
+// composeRetryCaptureWriters returns the stdout/stderr writers ExecuteShellCommandWithRetry
+// should inject: buf alone when baseOpts requests no capture of its own, or an
+// io.MultiWriter teeing into both buf and the caller's writer when it does — so a caller's
+// own capture (e.g. helmfile's NodeHooks.After output) keeps receiving output instead of
+// being silently replaced by the retry buffer.
+func composeRetryCaptureWriters(baseOpts []ShellCommandOption, buf *bytes.Buffer) (stdout, stderr io.Writer) {
+	var probe shellCommandConfig
+	for _, opt := range baseOpts {
+		opt(&probe)
+	}
+
+	stdout = buf
+	if probe.stdoutCapture != nil {
+		stdout = io.MultiWriter(probe.stdoutCapture, buf)
+	}
+	stderr = buf
+	if probe.stderrCapture != nil {
+		stderr = io.MultiWriter(probe.stderrCapture, buf)
+	}
+	return stdout, stderr
 }

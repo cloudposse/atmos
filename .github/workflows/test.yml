@@ -88,12 +88,29 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       # Only applies to GitHub-hosted legs (windows/macos); the linux leg runs
-      # on the RunsOn self-hosted runner, which this action doesn't cover.
+      # on the RunsOn self-hosted runner. Harden Runner's free/community tier
+      # (what this repo uses) only covers GitHub-hosted runners — self-hosted
+      # runners including RunsOn need a StepSecurity Enterprise license plus
+      # RunsOn-side config we're not doing here.
       - name: Harden Runner
         if: matrix.target != 'linux'
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            raw.githubusercontent.com:443
+            rekor.sigstore.dev:443
+            release-assets.githubusercontent.com:443
+            releases.hashicorp.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            us.i.posthog.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
 
       - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
         if: matrix.target == 'linux'
@@ -190,7 +207,10 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            us.i.posthog.com:443
 
       - name: Check out source with validation base history
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -258,7 +278,24 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            checkpoint-api.hashicorp.com:443
+            get.helm.sh:443
+            github.com:443
+            raw.githubusercontent.com:443
+            registry.terraform.io:443
+            rekor.sigstore.dev:443
+            release-assets.githubusercontent.com:443
+            releases.hashicorp.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            us.i.posthog.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -425,7 +462,42 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          # Union of core, tool-driven endpoints across the linux/windows/macos
+          # acceptance-test legs — bounded by which providers/registries the test
+          # fixtures exercise, not by arbitrary PR content, but re-verify when the
+          # acceptance suite adds a new external integration. Only sampled from a
+          # single run (MCP pagination limitation), so carries more residual risk
+          # of an untested-path endpoint than other workflows in this rollout.
+          egress-policy: block
+          allowed-endpoints: >
+            accounts.google.com:443
+            api.bitbucket.org:443
+            api.github.com:443
+            atmos.tools:443
+            auth.docker.io:443
+            azcliprod.blob.core.windows.net:443
+            checkpoint-api.hashicorp.com:443
+            dc.services.visualstudio.com:443
+            dl.k8s.io:443
+            get.helm.sh:443
+            ghcr.io:443
+            github.com:443
+            management.azure.com:443
+            pkg-containers.githubusercontent.com:443
+            production.cloudfront.docker.com:443
+            proxy.golang.org:443
+            raw.githubusercontent.com:443
+            registry-1.docker.io:443
+            registry.opentofu.org:443
+            registry.terraform.io:443
+            rekor.sigstore.dev:443
+            release-assets.githubusercontent.com:443
+            releases.hashicorp.com:443
+            secretmanager.googleapis.com:443
+            storage.googleapis.com:443
+            sts.us-east-1.amazonaws.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            us.i.posthog.com:443
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -650,7 +722,9 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
 
       - name: Check per-OS test matrix result
         env:
@@ -723,6 +797,9 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
+          # This job was skipped in the only sampled run (upstream test matrix
+          # had a failed shard), so there's no observed egress data to build an
+          # allowlist from yet. Stays audit until re-sampled from a green run.
           egress-policy: audit
 
       - name: Check out code into the Go module directory
@@ -812,7 +889,13 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            check.trivy.dev:443
+            get.trivy.dev:443
+            github.com:443
+            release-assets.githubusercontent.com:443
 
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -881,7 +964,18 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            checkpoint-api.hashicorp.com:443
+            github.com:443
+            mirror.gcr.io:443
+            raw.githubusercontent.com:443
+            registry.terraform.io:443
+            rekor.sigstore.dev:443
+            release-assets.githubusercontent.com:443
+            releases.hashicorp.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            us.i.posthog.com:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -944,7 +1038,31 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            archive.ubuntu.com:80
+            auth.docker.io:443
+            azure.archive.ubuntu.com:80
+            checkpoint-api.hashicorp.com:443
+            dl.google.com:443
+            esm.ubuntu.com:443
+            github.com:443
+            mirror.gcr.io:443
+            motd.ubuntu.com:443
+            openidconnect.googleapis.com:443
+            production.cloudfront.docker.com:443
+            proxy.golang.org:443
+            raw.githubusercontent.com:443
+            registry-1.docker.io:443
+            registry.opentofu.org:443
+            registry.terraform.io:443
+            rekor.sigstore.dev:443
+            release-assets.githubusercontent.com:443
+            releases.hashicorp.com:443
+            storage.googleapis.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            us.i.posthog.com:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1015,7 +1133,30 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            auth.docker.io:443
+            charts.bitnami.com:443
+            contracts.canonical.com:443
+            dl.k8s.io:443
+            download.docker.com:443
+            esm.ubuntu.com:443
+            get.helm.sh:443
+            ghcr.io:443
+            github.com:443
+            livepatch.canonical.com:443
+            mirror.gcr.io:443
+            pkg-containers.githubusercontent.com:443
+            production.cloudfront.docker.com:443
+            raw.githubusercontent.com:443
+            registry-1.docker.io:443
+            rekor.sigstore.dev:443
+            release-assets.githubusercontent.com:443
+            repo.broadcom.com:443
+            archive.ubuntu.com:80
+            security.ubuntu.com:80
+            tuf-repo-cdn.sigstore.dev:443
+            us.i.posthog.com:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1133,7 +1274,8 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          # Pure bash conditional on needs.k3s.result; no external calls at all.
+          egress-policy: block
 
       - name: Check k3s matrix result
         run: |
@@ -1168,7 +1310,13 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            proxy.golang.org:443
+            release-assets.githubusercontent.com:443
+            storage.googleapis.com:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1258,7 +1406,20 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            checkpoint-api.hashicorp.com:443
+            ghcr.io:443
+            github.com:443
+            pkg-containers.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            registry.terraform.io:443
+            rekor.sigstore.dev:443
+            release-assets.githubusercontent.com:443
+            releases.hashicorp.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            us.i.posthog.com:443
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -1370,7 +1531,16 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            raw.githubusercontent.com:443
+            rekor.sigstore.dev:443
+            release-assets.githubusercontent.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            tuf-repo.github.com:443
+            us.i.posthog.com:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1410,7 +1580,16 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            raw.githubusercontent.com:443
+            rekor.sigstore.dev:443
+            release-assets.githubusercontent.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            tuf-repo.github.com:443
+            us.i.posthog.com:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1470,7 +1649,10 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            us.i.posthog.com:443
 
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1518,7 +1700,18 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            auth.docker.io:443
+            github.com:443
+            mirror.gcr.io:443
+            production.cloudfront.docker.com:443
+            proxy.golang.org:443
+            registry-1.docker.io:443
+            release-assets.githubusercontent.com:443
+            storage.googleapis.com:443
+            us.i.posthog.com:443
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
