@@ -1030,6 +1030,78 @@ func TestProcessComponentOverrides_Retry(t *testing.T) {
 	})
 }
 
+// TestProcessComponentOverrides_Provision covers the provision-overrides extraction.
+// `provision` is only wired up for component types that support source/provision delivery
+// (see supportsSourceProvision), so it must populate ComponentOverridesProvision for those
+// types on success and produce a precise error on a non-map type.
+func TestProcessComponentOverrides_Provision(t *testing.T) {
+	tests := []struct {
+		name               string
+		componentType      string
+		component          string
+		provisionOverride  any
+		expectedError      string
+		expectedProvision  map[string]any
+		expectNilProvision bool
+	}{
+		{
+			name:              "valid overrides.provision populates result",
+			componentType:     cfg.HelmfileComponentType,
+			component:         "app",
+			provisionOverride: map[string]any{"workdir": "/tmp/override-wd"},
+			expectedProvision: map[string]any{"workdir": "/tmp/override-wd"},
+		},
+		{
+			name:              "non-map overrides.provision returns error",
+			componentType:     cfg.HelmfileComponentType,
+			component:         "app",
+			provisionOverride: 42, // not a map.
+			expectedError:     "components.helmfile.app.overrides.provision",
+		},
+		{
+			// A component type outside supportsSourceProvision (like "ansible") must
+			// not populate ComponentOverridesProvision at all — even if the manifest
+			// happens to include a `provision:` key under `overrides:`.
+			name:               "component type without source/provision support ignores the override",
+			componentType:      cfg.AnsibleComponentType,
+			component:          "playbook",
+			provisionOverride:  map[string]any{"workdir": "/tmp/ignored"},
+			expectNilProvision: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := ComponentProcessorOptions{
+				ComponentType: tt.componentType,
+				Component:     tt.component,
+				StackName:     "test-stack",
+				ComponentMap: map[string]any{
+					cfg.OverridesSectionName: map[string]any{
+						cfg.ProvisionSectionName: tt.provisionOverride,
+					},
+				},
+				AtmosConfig: &schema.AtmosConfiguration{},
+			}
+			result := &ComponentProcessorResult{}
+			err := processComponentOverrides(&opts, result)
+
+			if tt.expectedError != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+				return
+			}
+			require.NoError(t, err)
+
+			if tt.expectNilProvision {
+				assert.Nil(t, result.ComponentOverridesProvision)
+				return
+			}
+			assert.Equal(t, tt.expectedProvision, result.ComponentOverridesProvision)
+		})
+	}
+}
+
 // TestProcessComponentOverrides_Flags covers the flags-overrides extraction added by the
 // declarative terraform flags feature, mirroring TestProcessComponentOverrides_Retry's
 // style. Overrides flags must populate ComponentOverridesFlags on success and produce a
