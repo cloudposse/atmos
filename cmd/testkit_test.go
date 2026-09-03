@@ -327,6 +327,8 @@ func TestTestKit_RestoresAtmosConfig(t *testing.T) {
 // --version flag's DefValue to "" for cleaner help output, and pflag's bool
 // Set("") fails, so a naive Set(DefValue) would leave a leaked true in place.
 func TestResetFlagToDefault(t *testing.T) {
+	_ = NewTestKit(t)
+
 	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	fs.Bool("version", false, "")
 	fs.String("stack", "", "")
