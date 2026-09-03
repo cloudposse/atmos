@@ -28,6 +28,7 @@ var repoOverrides = []overrideRule{
 	{"go4.org/intern", "github.com/go4org/intern", "", "LICENSE"},
 	{"go4.org/netipx", "github.com/go4org/netipx", "", "LICENSE"},
 	{"go4.org/unsafe/assume-no-moving-gc", "github.com/go4org/unsafe-assume-no-moving-gc", "", "LICENSE"},
+	{"cuelang.org/go", "github.com/cue-lang/cue", "", "LICENSE"},
 	{"gopkg.in/ini.v1", "github.com/go-ini/ini", "", "LICENSE"},
 	{"gopkg.in/evanphx/json-patch.v4", "github.com/evanphx/json-patch", "", "LICENSE"},
 	{"gopkg.in/inf.v0", "github.com/go-inf/inf", "", "LICENSE"},
