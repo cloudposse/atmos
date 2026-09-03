@@ -1095,3 +1095,26 @@ confirming the wired-up `.atmos.d/test.yaml` -> mage path works end-to-end for a
 `python3 -c "import yaml; yaml.safe_load(...)"` on the edited workflow -- valid YAML. Local reproduction of
 the full `[race]` job (all ~400 packages, unsharded, `-race -shuffle=on`) was not attempted here -- that is
 exactly what the next real CI run of this job validates.
+
+## Round 21 (`.tool-versions` still had a stale duplicate and outdated pins; bumped and cleaned)
+
+A parallel session drafting an unrelated CI change (`ci: install the toolchain once per OS and ship it as a
+build artifact`) noticed two things Round 20 didn't catch: `.tool-versions` still carried a `tofu v1.11.6`
+line -- a stale duplicate of `opentofu/opentofu`, added a bare `tofu` registry entry in April, superseded by
+the canonical `opentofu/opentofu` entry in August but never deleted -- and every version Round 20 copied into
+`.tool-versions` (`packer 1.14.2`, `helm v3.19.2`, `helmfile v1.1.0`, `tflint 0.59.1`, `opentofu 1.12.5`) was
+already behind upstream's latest release. Both are the same class of bug this whole investigation exists to
+close: an unmanaged duplicate/stale pin nobody notices because nothing cross-checks it.
+
+Removed the `tofu` line and bumped every tool to its latest stable release at the time (`opentofu/opentofu
+1.12.6`, `hashicorp/packer 1.16.0`, `helm/helm v3.21.4` -- latest stable v3.x; v4 is a major version bump not
+made here, since helmfile/chart-repo compatibility with the Helm v4 CLI wasn't verified -- `helmfile/helmfile
+v1.7.4`, `terraform-linters/tflint 0.64.0`). `hashicorp/terraform` (`1.15.8`) and the two non-IaC dev tools
+(`peteretelej/tree`, `sharkdp/bat`) were left untouched; nothing reported them as stale.
+
+Validation: `atmos toolchain install --tool-versions .tool-versions` against a scratch
+`ATMOS_XDG_CACHE_HOME`, using a local build of this branch -- all 8 tools installed successfully (registry
+metadata, checksums and, for OpenTofu, the cosign signature all resolved for the bumped versions). Spot
+ran the installed binaries: `tofu version` -> `OpenTofu v1.12.6`, `packer version` -> `Packer v1.16.0`, `helm
+version --short` -> `v3.21.4+g813176c`, `helmfile version` -> `1.7.4`, `tflint --version` -> `TFLint version
+0.64.0`.
