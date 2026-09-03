@@ -16,8 +16,10 @@ name: Rerun infra failures
 #                                because a zombie upstream job never reported.
 #
 # Any job with a genuinely failed step (`real-failure`) or an interrupted step
-# (`superseded`) vetoes the rerun. The classification lives in
-# .github/scripts/classify-infra-failures.sh so test.yml can reuse it later.
+# (`superseded`) vetoes the rerun. The classification is typed, unit-tested Go
+# (internal/ci/rerun, dispatched through `go tool mage ci:classifyInfraFailures`
+# by the local action .github/actions/classify-infra-failures), so test.yml can
+# reuse it later.
 #
 # Scope: `pull_request` and `push` runs only. A rerun cannot help `merge_group`
 # runs: a failed required check evicts the PR from the merge queue immediately,
@@ -25,10 +27,10 @@ name: Rerun infra failures
 # in-job DNS guard helps there; this workflow is the backstop for PRs.
 #
 # Security: this workflow holds `actions: write`. It runs from the default
-# branch (workflow_run always does) and checks out the classifier from the
-# default branch too, so PR code can never influence what gets executed here.
-# The only input taken from the triggering run is its id, attempt, event,
-# head SHA and conclusion.
+# branch (workflow_run always does) and checks out the default branch too, so
+# PR code can never influence the classifier that decides here. The only input
+# taken from the triggering run is its id, attempt, event, head SHA and
+# conclusion.
 
 on:
   workflow_run:
@@ -40,105 +42,89 @@ permissions: {}
 jobs:
   rerun:
     name: Rerun if every failure is infrastructure
-    # Cheap pre-filter; the step below re-checks the conclusion and logs why it
-    # is (or is not) acting so the run history stays explainable.
+    # Only failed/cancelled runs, only PR and push events (see above), and at
+    # most three attempts per run so a persistent zombie cannot loop forever.
     if: >-
       (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'cancelled')
       && (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'push')
+      && github.event.workflow_run.run_attempt < 3
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # `gh run rerun` needs actions:write; nothing else is granted.
+      # actions:write for `gh run rerun` (implies actions:read for the job
+      # listing); contents:read for actions/checkout; pull-requests:read for
+      # the PR head lookup.
       actions: write
+      contents: read
+      pull-requests: read
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: block
           # api.github.com: run/job/PR lookups and the rerun call.
-          # github.com: actions/checkout fetching the classifier script.
+          # github.com: actions/checkout. The Go hosts are for the module
+          # download behind `go tool mage` (same set as test.yml's build job).
           allowed-endpoints: >
             api.github.com:443
             github.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
 
-      - name: Checkout classifier script
+      - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           # Deliberately no `ref:` - workflow_run checks out the default branch,
-          # never the triggering PR's head, so the script is always trusted.
+          # never the triggering PR's head, so the classifier is always trusted.
           persist-credentials: false
-          sparse-checkout: .github/scripts
-          sparse-checkout-cone-mode: false
 
-      - name: Classify failures and rerun if all are infrastructure
+      - name: Classify the run's failures
+        id: classify
+        uses: ./.github/actions/classify-infra-failures
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          run-attempt: ${{ github.event.workflow_run.run_attempt }}
+          repo: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rerun failed jobs
+        if: steps.classify.outputs.verdict == 'rerun'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.event.workflow_run.id }}
-          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
-          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           RUN_EVENT: ${{ github.event.workflow_run.event }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           PR_NUMBERS: ${{ join(github.event.workflow_run.pull_requests.*.number, ' ') }}
-          MAX_ATTEMPTS: "3"
         run: |
           set -euo pipefail
-
-          run_url="https://github.com/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT"
           summary() { printf '%s\n' "$@" | tee -a "$GITHUB_STEP_SUMMARY"; }
 
-          case "$RUN_CONCLUSION" in
-            failure|cancelled) ;;
-            *) summary "Run $run_url concluded '$RUN_CONCLUSION'; nothing to do."; exit 0 ;;
-          esac
-
-          if [ "$RUN_ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
-            summary "Run $run_url is already attempt $RUN_ATTEMPT (limit $MAX_ATTEMPTS); not rerunning."
-            exit 0
-          fi
-
           # A PR run whose head SHA is no longer the PR head has been superseded
-          # by a newer push; that push already started a fresh run.
+          # by a newer push, which already started a fresh run. Checked right
+          # before rerunning so a push that lands during classification is seen.
           if [ "$RUN_EVENT" = "pull_request" ]; then
             if [ -z "$PR_NUMBERS" ]; then
-              summary "Run $run_url has no associated pull request (fork PR?); cannot verify it is current, not rerunning."
+              summary "Run $RUN_ID has no associated pull request (fork PR?); cannot verify it is current, not rerunning."
               exit 0
             fi
             for pr in $PR_NUMBERS; do
               pr_head=$(gh api "repos/$REPO/pulls/$pr" --jq '.head.sha')
               if [ "$pr_head" != "$HEAD_SHA" ]; then
-                summary "Run $run_url was for $HEAD_SHA but PR #$pr is now at $pr_head; superseded, not rerunning."
+                summary "Run $RUN_ID was for $HEAD_SHA but PR #$pr is now at $pr_head; superseded, not rerunning."
                 exit 0
               fi
             done
           fi
 
-          gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100" --paginate \
-            | bash .github/scripts/classify-infra-failures.sh > classes.tsv
-
-          summary "### Rerun infra failures: run [$RUN_ID attempt $RUN_ATTEMPT]($run_url) ($RUN_EVENT, $RUN_CONCLUSION)" "" \
-            "| Job | Conclusion | Class |" "|---|---|---|"
-          awk -F'\t' '{ printf "| %s | %s | %s |\n", $1, $2, $3 }' classes.tsv | tee -a "$GITHUB_STEP_SUMMARY"
-          summary ""
-
-          total=$(wc -l < classes.tsv | tr -d ' ')
-          zombies=$(awk -F'\t' '$3 == "runner-stuck-after-complete" || $3 == "runner-lost"' classes.tsv | wc -l | tr -d ' ')
-          vetoes=$(awk -F'\t' '$3 != "runner-stuck-after-complete" && $3 != "runner-lost" && $3 != "check-cascade"' classes.tsv | wc -l | tr -d ' ')
-
-          if [ "$total" -eq 0 ]; then
-            summary "No non-success jobs found in attempt $RUN_ATTEMPT; nothing to rerun."
-            exit 0
-          fi
-          if [ "$zombies" -eq 0 ]; then
-            summary "No runner-stuck-after-complete or runner-lost jobs; not rerunning."
-            exit 0
-          fi
-          if [ "$vetoes" -ne 0 ]; then
-            summary "$vetoes job(s) are real-failure or superseded; not rerunning (a human must look)."
-            exit 0
-          fi
-
-          summary "All $total non-success job(s) are infrastructure zombies (or cascades of one); rerunning failed jobs."
+          # `--failed` (POST .../rerun-failed-jobs) re-queues every job that
+          # did not succeed, cancelled ones included (verified on run
+          # 33788174036: 14 cancelled jobs were re-queued, 42 successful ones
+          # carried over), plus their dependents. Carried-over jobs stay in the
+          # new attempt's listing, so test-required's shard count still holds.
           if ! out=$(gh run rerun "$RUN_ID" --failed --repo "$REPO" 2>&1); then
             if grep -qi "already running\|in progress" <<< "$out"; then
               echo "::warning::Run $RUN_ID is still finishing; skipping rerun. $out"
@@ -148,4 +134,4 @@ jobs:
             echo "::error::gh run rerun failed: $out"
             exit 1
           fi
-          summary "Rerun requested: $out"
+          summary "Rerun requested for run $RUN_ID: $out"

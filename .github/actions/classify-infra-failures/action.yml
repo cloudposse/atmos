@@ -1,0 +1,105 @@
+name: Classify Infra Failures
+description: >
+  Classifies every non-success job of a workflow-run attempt as an
+  infrastructure zombie or a real failure and returns a rerun verdict.
+  Fetches the attempt's jobs with `gh api ... --paginate` and hands the JSON
+  to `go tool mage ci:classifyInfraFailures` (magefiles/ci_rerun.go, backed by
+  internal/ci/rerun), which prints one TSV line per non-success job:
+  `job<TAB>conclusion<TAB>class`. Classes: runner-stuck-after-complete
+  (cancelled, all steps green, job completion landed >= stuck-gap-seconds
+  after the last step), runner-lost (failure with no failed step),
+  check-cascade (failure whose only failed steps are `Check ... result`
+  aggregator steps), superseded (any other cancellation) and real-failure
+  (anything else). The verdict is `rerun` only when at least one job is
+  runner-stuck-after-complete or runner-lost and every other one is
+  check-cascade; `no-jobs` when nothing failed; `no-rerun` otherwise. The
+  table is also written to the step summary. Requires a checkout of the
+  repository (the Go module is built on the fly). Used by
+  .github/workflows/rerun-infra-failures.yml; see
+  docs/fixes/2026-09-03-rerun-infra-cancelled-ci-runs.md. Unit tests:
+  `go test ./internal/ci/rerun/...` and
+  `go test -tags=mage ./magefiles/... -run TestClassifyInfraFailures`.
+
+inputs:
+  run-id:
+    description: 'Workflow run ID whose jobs to classify'
+    required: true
+  run-attempt:
+    description: 'Attempt number of that run to classify'
+    required: true
+  repo:
+    description: 'Repository in owner/name form'
+    required: true
+  github-token:
+    description: 'Token used to list the run''s jobs (needs actions:read)'
+    required: true
+  stuck-gap-seconds:
+    description: >
+      Minimum seconds between a cancelled job's last step completing and the
+      job itself completing for it to count as runner-stuck-after-complete
+    required: false
+    default: '300'
+
+outputs:
+  verdict:
+    description: 'One of: rerun, no-rerun, no-jobs'
+    value: ${{ steps.classify.outputs.verdict }}
+  reason:
+    description: 'Short justification for the verdict'
+    value: ${{ steps.classify.outputs.reason }}
+  table:
+    description: 'TSV table of non-success jobs: job, conclusion, class'
+    value: ${{ steps.classify.outputs.table }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      with:
+        go-version-file: "go.mod"
+        cache: true
+
+    - name: Fetch the attempt's jobs
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ inputs.repo }}
+        RUN_ID: ${{ inputs.run-id }}
+        RUN_ATTEMPT: ${{ inputs.run-attempt }}
+      run: |
+        set -euo pipefail
+        gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100" --paginate \
+          > "$RUNNER_TEMP/jobs.json"
+
+    - name: Classify non-success jobs
+      id: classify
+      shell: bash
+      env:
+        ATMOS_CI_STUCK_GAP: ${{ inputs.stuck-gap-seconds }}s
+      # The mage target prints the TSV table to stdout and, because
+      # GITHUB_OUTPUT is set here, records verdict/reason/table itself.
+      run: |
+        set -euo pipefail
+        go tool mage ci:classifyInfraFailures "$RUNNER_TEMP/jobs.json" | tee "$RUNNER_TEMP/classes.tsv"
+
+    - name: Summarize
+      shell: bash
+      env:
+        REPO: ${{ inputs.repo }}
+        RUN_ID: ${{ inputs.run-id }}
+        RUN_ATTEMPT: ${{ inputs.run-attempt }}
+        VERDICT: ${{ steps.classify.outputs.verdict }}
+        REASON: ${{ steps.classify.outputs.reason }}
+      run: |
+        set -euo pipefail
+        run_url="https://github.com/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT"
+        {
+          echo "### Infra-failure classification: run [$RUN_ID attempt $RUN_ATTEMPT]($run_url)"
+          echo
+          echo "| Job | Conclusion | Class |"
+          echo "|---|---|---|"
+          awk -F'\t' '{ printf "| %s | %s | %s |\n", $1, $2, $3 }' "$RUNNER_TEMP/classes.tsv"
+          echo
+          echo "Verdict: **$VERDICT** ($REASON)"
+        } | tee -a "$GITHUB_STEP_SUMMARY"
