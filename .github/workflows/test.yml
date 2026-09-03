@@ -725,7 +725,21 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
 
+      # A whole-run cancellation (e.g. superseded by a newer push to the same
+      # PR) skips the `test` matrix before it ever dispatches shard jobs, so
+      # the API query below would legitimately find 0 shards - not a real
+      # anomaly to fail loudly on. cancelled() reflects the run itself, unlike
+      # needs.test.result, which reports "skipped" for both this case and a
+      # genuine upstream (e.g. build) failure - so it can't replace this
+      # check. cancelled() is only valid in an `if:`, not inside a script, so
+      # the verification steps below are skipped via `if: ${{ !cancelled() }}`
+      # rather than early-exiting from within their run: blocks.
+      - name: Skip verification (workflow run was cancelled)
+        if: ${{ cancelled() }}
+        run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
+
       - name: Check per-OS test matrix result
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
           CHECK: ${{ matrix.check }}
@@ -773,7 +787,7 @@ jobs:
         # terraform-registry-cache only runs a linux/windows matrix (no macos
         # leg - see its `matrix.flavor` above), so its aggregated result must
         # not gate the macos alias.
-        if: matrix.check != 'Acceptance Tests (macos)'
+        if: ${{ !cancelled() && matrix.check != 'Acceptance Tests (macos)' }}
         run: |
           if [ "${{ needs.terraform-registry-cache.result }}" != "success" ]; then
             echo "terraform-registry-cache result was '${{ needs.terraform-registry-cache.result }}'"
@@ -1276,7 +1290,15 @@ jobs:
           # Pure bash conditional on needs.k3s.result; no external calls at all.
           egress-policy: block
 
+      # See the matching comment on test-required's per-OS check step: a
+      # whole-run cancellation is not a genuine k3s failure, and cancelled()
+      # is only valid in an `if:`, not inside a script.
+      - name: Skip verification (workflow run was cancelled)
+        if: ${{ cancelled() }}
+        run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
+
       - name: Check k3s matrix result
+        if: ${{ !cancelled() }}
         run: |
           if [ "${{ needs.k3s.result }}" != "success" ]; then
             echo "k3s matrix result was '${{ needs.k3s.result }}'"
