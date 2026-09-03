@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import Admonition from '@theme/Admonition';
 import { RiArrowRightSLine } from 'react-icons/ri';
 import { scoreTier } from './scoreTier';
 import { CHECK_RISK_LEVEL, sortChecksByRisk } from './checkRiskLevel';
@@ -93,10 +94,9 @@ export default function ScorecardTable({ checks }: ScorecardTableProps) {
               {isOpen && (
                 <>
                   {annotation && (
-                    <div className={styles.annotationNote}>
-                      <p className={styles.annotationLabel}>Cloud Posse&apos;s response</p>
-                      <p>{annotation.note}</p>
-                    </div>
+                    <Admonition type="info" title="Cloud Posse's response" className={styles.annotationNote}>
+                      {annotation.note}
+                    </Admonition>
                   )}
                   {hasDetails && (
                     <ul className={styles.detailsList}>
