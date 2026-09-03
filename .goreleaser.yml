@@ -134,7 +134,7 @@ nfpms:
     file_name_template: '{{ replace .ConventionalFileName "~" "-" }}'
 
 sboms:
-  - artifacts: any
+  - artifacts: binary
 
 # Keyless OIDC signing of the checksums file (which covers every archive by
 # digest) — no --key, no static key material. cosign is installed by the
