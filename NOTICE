@@ -1088,7 +1088,7 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/crypto
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/crypto/+/v0.55.0:LICENSE
+    URL: https://cs.opensource.google/go/x/crypto/+/v0.56.0:LICENSE
 
   - golang.org/x/exp
     License: BSD-3-Clause
@@ -1454,7 +1454,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/alecthomas/chroma/v2
     License: MIT
-    URL: https://github.com/alecthomas/chroma/blob/v2.24.1/COPYING
+    URL: https://github.com/alecthomas/chroma/blob/v2.27.0/COPYING
 
   - github.com/alecthomas/participle/v2/lexer
     License: MIT
@@ -1624,9 +1624,9 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/deckarep/golang-set/blob/v2.9.0/LICENSE
 
-  - github.com/dlclark/regexp2
+  - github.com/dlclark/regexp2/v2
     License: MIT
-    URL: https://github.com/dlclark/regexp2/blob/v1.12.0/LICENSE
+    URL: https://github.com/dlclark/regexp2/blob/v2.2.1/LICENSE
 
   - github.com/docker/docker-credential-helpers
     License: MIT
