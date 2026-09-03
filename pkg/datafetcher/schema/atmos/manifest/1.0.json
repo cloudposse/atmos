@@ -1270,6 +1270,9 @@
             "namespace": {
               "type": "string"
             },
+            "create_namespace": {
+              "type": "boolean"
+            },
             "name": {
               "type": "string"
             },

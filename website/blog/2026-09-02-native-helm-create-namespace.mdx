@@ -1,0 +1,83 @@
+---
+slug: native-helm-create-namespace
+title: "Deploy Helm Releases with a Namespace-Scoped Identity"
+authors: [aknysh]
+tags: [enhancement]
+date: 2026-09-02T12:00:00.000Z
+---
+
+Least-privilege is the rule everyone agrees on for CI: the credentials a pipeline uses should be
+able to touch exactly what it deploys and nothing else. On Kubernetes that usually means scoping the
+deploy identity to a single namespace — it can manage workloads in `team-a`, and it has no rights
+anywhere else in the cluster. The platform team owns the namespace itself, along with its
+NetworkPolicies, quotas, and labels, and hands the application pipeline a key that fits one door.
+
+Then the first deploy fails. Not on anything the pipeline is trying to install — it fails trying to
+*create the namespace* that already exists, because Helm asks to create it on a fresh install, and a
+namespace-scoped identity has no permission to create namespaces. The deploy returns a `403` before
+it ever touches a workload.
+
+<!--truncate-->
+
+## The Problem
+
+A first-time Helm install creates the release's target namespace by default. That is convenient when
+whoever runs the install can create namespaces — and a hard stop when they can't.
+
+The failure is easy to misread. The namespace is already there; the platform created it. But Helm
+still issues a namespace create request on every fresh install, and only ignores it if the API says
+"already exists." A namespace-scoped identity never gets that far: the request is rejected with a
+`403 Forbidden` first. So the pre-existing namespace doesn't help, and the deploy dies on a resource
+the pipeline was never supposed to manage.
+
+The usual escape hatch is to run the very first deploy as a higher-privileged operator, which
+creates the release, after which the scoped identity's later deploys succeed as upgrades (upgrades
+don't try to create the namespace). That works, but it means a manual privileged step for every new
+app and every new environment — and it couples who owns the release to a cluster-level permission the
+application pipeline shouldn't need in the first place.
+
+## The Fix
+
+Native Helm components now take a `create_namespace` setting. It defaults to `true`, so nothing
+changes for existing components. Set it to `false` and Helm installs into the namespace that's
+already there instead of trying to create one:
+
+```yaml
+components:
+  helm:
+    typescript-api:
+      chart: "../../../apps/typescript-api/charts/typescript-api"
+      namespace: typescript-api
+      create_namespace: false
+      values:
+        replicaCount: 1
+```
+
+With `create_namespace: false`, a namespace-scoped identity can run the first `atmos helm apply`
+itself. It only ever installs namespaced resources into the pre-existing namespace, so no
+cluster-level permission — and no operator bootstrap step — is involved.
+
+This lines up with how platform teams already split ownership: the platform provisions the namespace
+and its guardrails as its own infrastructure, and the application pipeline deploys workloads into it
+with a credential scoped to exactly that namespace.
+
+## How to Use It
+
+1. Provision the namespace (and its NetworkPolicies, quotas, and labels) as platform-owned
+   infrastructure — a native Kubernetes component, Terraform, or however your platform already
+   manages cluster guardrails.
+2. Set `create_namespace: false` on the Helm component and give it the matching `namespace`.
+3. Deploy with the namespace-scoped identity:
+
+   ```shell
+   atmos helm apply typescript-api -s plat-ue2-dev
+   ```
+
+The first install and every deploy after it run with the same scoped identity. Leave the setting off
+(or set it to `true`) and Helm keeps creating the namespace on first install exactly as before.
+
+## Get Involved
+
+Atmos is open source and we'd love your feedback. Join the conversation in the
+[Atmos community Slack](https://cloudposse.com/slack) or open an issue on
+[GitHub](https://github.com/cloudposse/atmos).
