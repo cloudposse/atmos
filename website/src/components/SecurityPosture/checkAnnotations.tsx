@@ -8,6 +8,8 @@ export interface CheckAnnotation {
 
 const MERGE_QUEUE_DOCS_URL =
   'https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue';
+const SCORECARD_MERGE_QUEUE_ISSUE_URL =
+  'https://github.com/ossf/scorecard/issues/3678#issuecomment-5519312442';
 
 export const CHECK_ANNOTATIONS: Record<string, CheckAnnotation> = {
   'Branch-Protection': {
@@ -24,6 +26,12 @@ export const CHECK_ANNOTATIONS: Record<string, CheckAnnotation> = {
         different: they build from a separate GitHub environment, are marked as
         test/pre-release, and can only be cut from main through environment protection
         rules. An unprotected feature branch doesn&apos;t expose production releases.
+        Scorecard can&apos;t yet detect a merge queue as a substitute for this setting;
+        we&apos;ve documented how to, including the Rulesets API call that exposes it, in{' '}
+        <a href={SCORECARD_MERGE_QUEUE_ISSUE_URL} target="_blank" rel="noreferrer">
+          ossf/scorecard#3678
+        </a>
+        .
       </>
     ),
   },
