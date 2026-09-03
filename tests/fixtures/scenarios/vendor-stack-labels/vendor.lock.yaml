@@ -1,0 +1,23 @@
+version: 1
+artifacts:
+  dce366c055e0385c4f2393e987c045b5f758a8bc9151460f9b7c2ab9a6ff185c:
+    name: comp-a
+    kind: local
+    target: components/terraform/comp-a
+    source:
+      declared: /Users/erik/conductor/atmos/.conductor/victoria-v11/tests/fixtures/components/terraform/mock
+      resolved: /Users/erik/conductor/atmos/.conductor/victoria-v11/tests/fixtures/components/terraform/mock
+      digest: sha256:8d3fd99f576962534b5fd52f6c874b36692c6f0a2b39ce92814caf4c8d9a7c5c
+    files:
+      - path: README.md
+        type: file
+        mode: 420
+        sha256: 6f5408315571c3fc24e52f3da83a06a933ca9ccbf2b23a1a739ffb41a04bbd58
+      - path: main.tf
+        type: file
+        mode: 420
+        sha256: 2ec9ab1464dc01baa6a2792204a4cdf31351cc2b70eae03e17e61e4507ef1b9b
+    order: 1
+    included_paths:
+      - '**/*.tf'
+      - '**/*.md'
