@@ -151,16 +151,22 @@ components:
 
 ### AWS Systems Manager Parameter
 
+An `aws+smp://` datasource returns the parameter value directly, with no wrapper object, so there is no `.Value` field
+to unwrap. Add `?type=application/json` to the URL when the parameter holds a JSON document whose fields you want to address.
+
 <File>
 ```yaml
 settings:
   templates:
     settings:
+      # AWS region and credentials come from the environment passed to datasources
+      env:
+        AWS_REGION: "us-east-1"
       gomplate:
         datasources:
-          # Fetch from AWS SSM Parameter Store
+          # Fetch from AWS SSM Parameter Store; parse the parameter value as JSON
           database:
-            url: "aws+smp:///myapp/database/config?region=us-east-1"
+            url: "aws+smp:///myapp/database/config?type=application/json"
 
 components:
   terraform:

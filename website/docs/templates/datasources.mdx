@@ -133,6 +133,49 @@ The following are the types of data sources are supported by Atmos via [Gomplate
     </dd>
 </dl>
 
+## Behavior Notes
+
+:::note
+Atmos embeds Gomplate v5. If you wrote datasource templates against older Atmos releases (which embedded Gomplate v3),
+the following upstream behavior changes apply. See the [Gomplate v4 release notes](https://github.com/hairyhenderson/gomplate/releases/tag/v4.0.0)
+for the full list.
+:::
+
+<dl>
+  <dt>Subpaths are relative URLs</dt>
+  <dd>
+    An optional second argument to `datasource` is resolved as a relative URL against the datasource `url`.
+    For example, with a datasource `url: "file:///configs/"`, the expression `{{ (datasource "configs" "app.yaml").name }}`
+    reads `/configs/app.yaml`. A subpath that starts with `/` replaces the base path of the datasource URL instead of
+    being appended to it.
+  </dd>
+
+  <dt>Directory datasources must end with `/`</dt>
+  <dd>
+    A datasource that points at a directory (for `file://`, `s3://`, `gs://`, `git://`, and similar backends) must end
+    its URL path with a trailing `/`. Without it, the URL is treated as a single file.
+  </dd>
+
+  <dt>`aws+smp://` returns the parameter value directly</dt>
+  <dd>
+    An AWS Systems Manager Parameter Store datasource returns the parameter's value itself as a string (a `StringList`
+    parameter is returned as a comma-separated string). There is no wrapper object, so do not reference a `.Value`
+    (or `.value`) field. To address the fields of a parameter that holds JSON, add the `type` query parameter to the URL,
+    for example `aws+smp:///myapp/database/config?type=application/json`, and then use `{{ (datasource "database").host }}`.
+  </dd>
+
+  <dt>Consul directory listings return key names</dt>
+  <dd>
+    A `consul://` datasource whose path ends with `/` returns a list of key names under that prefix, rather than a map
+    of keys to values.
+  </dd>
+
+  <dt>BoltDB datasources are not available</dt>
+  <dd>
+    The `boltdb://` scheme was removed upstream and is not supported.
+  </dd>
+</dl>
+
 ## Environment Variables
 
 Some data sources might need environment variables that are different from the environment variables in Stack configuration. Environment variables may be passed to data sources when processing and executing templates by defining `env` map.
@@ -149,7 +192,7 @@ settings:
       # Environment variables passed to `datasources` when evaluating templates
       # https://docs.gomplate.ca/datasources/#using-awssmp-datasources
       # https://docs.gomplate.ca/functions/aws/#configuring-aws
-      # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
+      # https://docs.aws.amazon.com/sdk-for-go/v2/developer-guide/configure-gosdk.html
       env:
         AWS_PROFILE: "<AWS profile>"
         AWS_TIMEOUT: 2000
@@ -240,7 +283,8 @@ components:
     vpc-1:
       settings:
         provisioned_by_ip: '{{ (datasource "ip").ip }}'
-        secret-1: '{{ (datasource "secret-1").secret1.value }}'
+        # `aws+smp` returns the parameter value directly (no `.Value` wrapper)
+        secret-1: '{{ datasource "secret-1" }}'
       vars:
         enabled: '{{ (datasource "config-2").config.enabled }}'
 ```
@@ -353,7 +397,7 @@ settings:
     settings:
       # Environment variables passed to data sources when evaluating templates
       # https://docs.gomplate.ca/functions/aws/#configuring-aws
-      # https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html
+      # https://docs.aws.amazon.com/sdk-for-go/v2/developer-guide/configure-gosdk.html
       env:
         # AWS profile with permissions to access the S3 bucket
         AWS_PROFILE: "<AWS profile>"

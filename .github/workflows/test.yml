@@ -696,6 +696,12 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+      # tools/gomodcheck is its own module too (see the noticegen note above),
+      # so its tests only run when invoked from inside that directory.
+      - name: Run tools/gomodcheck unit tests
+        run: go test -race ./...
+        working-directory: tools/gomodcheck
+
   # Sharding the `test` job fans it out into TEST_SHARD_COUNT x 3 per-leg checks.
   # Keep the three historical required-check names as compatibility aliases so
   # branch protection does not need to change. `needs.test.result` aggregates
