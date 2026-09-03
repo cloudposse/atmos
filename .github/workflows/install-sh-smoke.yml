@@ -25,7 +25,33 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            us.i.posthog.com:443
+            dl.cloudsmith.io:443
+            dl.google.com:443
+            packages.microsoft.com:443
+            azure.archive.ubuntu.com:80
+            esm.ubuntu.com:443
+            motd.ubuntu.com:443
+            ocsp.sectigo.com:443
+            crl.sectigo.com:443
+
+      # Harden Runner's action step returns before its background Windows agent
+      # finishes hooking every network adapter's DNS config (observed: DNS proxy
+      # logged "listening" ~2.8s before checkout's DNS query fired, with adapter
+      # hooking still in progress) — this job has no steps between Harden Runner
+      # and its first network call to absorb that gap, unlike other Windows jobs
+      # in this repo that happen to have enough setup steps first. A short wait
+      # avoids the race; see the exit-code-35/"no upstream DNS servers available"
+      # failures this job hit repeatedly before this was added.
+      - name: Wait for Harden Runner's Windows agent to finish hooking adapters
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: sleep 10
 
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0

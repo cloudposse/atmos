@@ -63,7 +63,18 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            proxy.golang.org:443
+            storage.googleapis.com:443
+            raw.githubusercontent.com:443
+            us.i.posthog.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            rekor.sigstore.dev:443
+            registry.opentofu.org:443
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -110,7 +121,18 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            proxy.golang.org:443
+            storage.googleapis.com:443
+            raw.githubusercontent.com:443
+            us.i.posthog.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            rekor.sigstore.dev:443
+            registry.opentofu.org:443
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -149,7 +171,18 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            proxy.golang.org:443
+            storage.googleapis.com:443
+            raw.githubusercontent.com:443
+            us.i.posthog.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            rekor.sigstore.dev:443
+            registry.opentofu.org:443
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
