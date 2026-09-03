@@ -6,6 +6,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain/installer"
 )
 
 func TestNewInstaller(t *testing.T) {
@@ -128,4 +131,20 @@ func TestBuiltinAliases(t *testing.T) {
 	tofuOwnerRepo, exists := BuiltinAliases["tofu"]
 	assert.True(t, exists, "Expected builtin alias 'tofu' to exist")
 	assert.Equal(t, "opentofu/opentofu", tofuOwnerRepo)
+}
+
+// TestDefaultToolResolver_BuiltinAliasResolution exercises the builtin-alias
+// branch of Resolve itself (installer.go step 1b), not just the map entry:
+// TestDefaultToolResolver_AliasResolution's "tofu" case supplies the same
+// mapping through AtmosConfig.Toolchain.Aliases (the user-alias branch, step
+// 1), so it would not catch a regression that broke the builtin fallback.
+func TestDefaultToolResolver_BuiltinAliasResolution(t *testing.T) {
+	resolver := &installer.DefaultToolResolver{
+		AtmosConfig: &schema.AtmosConfiguration{},
+	}
+
+	owner, repo, err := resolver.Resolve("tofu")
+	require.NoError(t, err)
+	assert.Equal(t, "opentofu", owner)
+	assert.Equal(t, "opentofu", repo)
 }
