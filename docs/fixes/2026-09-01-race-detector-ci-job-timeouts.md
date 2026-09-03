@@ -1118,3 +1118,31 @@ metadata, checksums and, for OpenTofu, the cosign signature all resolved for the
 ran the installed binaries: `tofu version` -> `OpenTofu v1.12.6`, `packer version` -> `Packer v1.16.0`, `helm
 version --short` -> `v3.21.4+g813176c`, `helmfile version` -> `1.7.4`, `tflint --version` -> `TFLint version
 0.64.0`.
+
+## Round 22 (the `tofu` line wasn't stale -- it's a required compat shim for an older pinned atmos)
+
+Round 21 shipped, and the very next CI run of `.github/workflows/atmos-pro.yaml`'s `autofix` job failed at
+"Format HCL": `atmos toolchain exec -- tofu fmt -recursive tests/fixtures/components/terraform` errored
+`tool 'tofu' not configured in .tool-versions`.
+
+Root cause: that job's steps all run inside `container: image: ghcr.io/cloudposse/atmos:1.215.0` -- a
+released, externally-pinned atmos binary, not one built from this branch. `atmos toolchain info tofu` (run
+with a local build of current HEAD) confirms `tofu` is a registry short-name alias for the exact same
+package as `opentofu/opentofu` (`Type: github_release`, `Repository: https://github.com/opentofu/opentofu`),
+so at HEAD `atmos toolchain exec -- tofu ...` auto-resolves and installs it with no `.tool-versions` entry
+needed at all (verified: `atmos toolchain exec -- tofu version` against an empty `.tool-versions` and a
+fresh cache installed `opentofu/opentofu@1.12.6` and ran it). v1.215.0 predates that alias-auto-resolution
+behavior and requires an exact `tofu` key in `.tool-versions` to know what version to install -- which
+Round 21 removed as what looked like a plain stale duplicate.
+
+Restored the `tofu` entry, pinned to the same version as `opentofu/opentofu` (`1.12.6`, not the stale
+`v1.11.6` Round 21 found), with a comment explaining why it must stay in lockstep and can't just be deleted
+again. `atmos toolchain info tofu`'s "Available Versions" list confirms the registry's own version strings
+for this alias have no `v` prefix (`1.12.6`, `1.12.5`, ...), matching `opentofu/opentofu`'s convention, so
+the two entries are safe to keep numerically identical.
+
+Validation: `atmos toolchain install --tool-versions .tool-versions` against a fresh scratch cache -- all 9
+entries (the new `tofu` line included) installed cleanly, `opentofu/opentofu` and `tofu` both resolving to
+the same `.../opentofu/opentofu/1.12.6/tofu` binary. Not validated: the actual `ghcr.io/cloudposse/atmos:
+1.215.0` container locally (no local Docker pull attempted) -- the next CI run is the real test, same as
+every other round in this file.
