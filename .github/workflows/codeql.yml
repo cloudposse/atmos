@@ -57,6 +57,7 @@ jobs:
             storage.googleapis.com:443
             modernc.org:443
             sum.golang.org:443
+            gocloud.dev:443
 
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -140,6 +141,7 @@ jobs:
             modernc.org:443
             sum.golang.org:443
             vuln.go.dev:443
+            gocloud.dev:443
 
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
