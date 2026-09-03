@@ -105,17 +105,27 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (string, er
 }
 
 func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, dryRun bool) (string, error) {
+	client := newInstallClient(actx, spec, dryRun)
+	return runInstall(ctx, client, actx.settings, spec)
+}
+
+// newInstallClient builds the Helm Install action for a release install, wiring
+// the release name, namespace, namespace-creation policy, and chart version.
+// CreateNamespace comes from the component config (default true); setting it to
+// false lets a namespace-scoped identity install into a pre-existing namespace
+// without needing cluster-level permission to create the namespace.
+func newInstallClient(actx *actionContext, spec *chartSpec, dryRun bool) *action.Install {
 	client := action.NewInstall(actx.cfg)
 	client.SetRegistryClient(actx.cfg.RegistryClient)
 	client.ReleaseName = spec.ReleaseName
 	client.Namespace = spec.Namespace
-	client.CreateNamespace = true
+	client.CreateNamespace = spec.CreateNamespace
 	client.Version = spec.Version
 	client.WaitStrategy = kube.HookOnlyStrategy
 	if dryRun {
 		client.DryRunStrategy = action.DryRunServer
 	}
-	return runInstall(ctx, client, actx.settings, spec)
+	return client
 }
 
 func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, dryRun bool) (string, error) {

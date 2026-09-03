@@ -37,6 +37,12 @@ type chartSpec struct {
 	ReleaseName string
 	// Namespace is the target Kubernetes namespace.
 	Namespace string
+	// CreateNamespace tells Helm to create the target namespace during install
+	// when it does not exist. Defaults to true. Set `create_namespace: false` on
+	// the component to install into a pre-existing namespace instead, so a
+	// namespace-scoped identity that lacks cluster-level namespace-create
+	// permission can run the first install itself.
+	CreateNamespace bool
 	// Values is the merged Helm values map.
 	Values map[string]any
 	// IncludeCRDs includes CRDs from the chart's crds/ directory in the output.
