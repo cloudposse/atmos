@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   release:
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@da6de3218cc965251e38d84f6addd37e7ddde2e6 # main
     with:
       publish: true
       format: binary

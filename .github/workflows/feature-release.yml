@@ -14,16 +14,17 @@ jobs:
   release:
     if: |
       github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release/feature')
-    # shared-go-auto-release.yml declares permissions: {} itself — all
-    # release-writing operations go through a separately-scoped GitHub App
-    # installation token (BOT_GITHUB_APP_ID), not GITHUB_TOKEN. id-token:
-    # write is still needed here, though: cosign's keyless OIDC signing (in
-    # the goreleaser job's `signs` step) reads the runner's OIDC token-minting
-    # endpoint, which is gated purely by this job's own id-token permission —
-    # independent of which token is used for git/API calls elsewhere.
+    # shared-go-auto-release.yml declares only id-token: write and
+    # contents: read itself — all release-writing operations go through a
+    # separately-scoped GitHub App installation token (BOT_GITHUB_APP_ID),
+    # not GITHUB_TOKEN. id-token: write is still needed here, though:
+    # cosign's keyless OIDC signing (in the goreleaser job's `signs` step)
+    # reads the runner's OIDC token-minting endpoint, which is gated by this
+    # job's id-token permission and by the called workflow's own permissions
+    # block — independent of which token is used for git/API calls elsewhere.
     permissions:
       id-token: write
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@da6de3218cc965251e38d84f6addd37e7ddde2e6 # main
     with:
       publish: true
       prerelease: true
