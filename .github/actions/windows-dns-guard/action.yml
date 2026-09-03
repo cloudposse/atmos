@@ -1,0 +1,42 @@
+name: 'Windows DNS guard (harden-runner post-step race)'
+description: >
+  Registers a one-shot Windows scheduled task that repairs the runner's DNS
+  client settings if step-security/harden-runner's Windows post step kills
+  its agent before the agent has finished restoring them. Without this, the
+  job's steps all succeed but the runner is left pointing at a DNS proxy
+  that no longer exists, cannot reach the Actions service to report
+  completion, and is cancelled by GitHub 30-40 minutes later. See
+  docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
+
+  The task runs under the Task Scheduler service, outside the step's and
+  runner's process trees, so it survives step teardown and the runner's
+  "Cleaning up orphan processes" pass. It only acts once harden-runner's own
+  post step has started (C:\agent\post_event.json exists), the agent process
+  is gone, and an interface still lists 127.0.0.1 as its DNS server -- so it
+  can never fail open while egress enforcement is live. No-op (exits) when
+  harden-runner restores DNS itself, which is the common case.
+
+  Windows-only; a no-op on other runners. Safe to place anywhere after the
+  Harden Runner step (it needs the checkout for its script file).
+
+runs:
+  using: composite
+  steps:
+    - name: Register DNS guard task
+      if: runner.os == 'Windows'
+      shell: powershell
+      env:
+        GUARD_SCRIPT: ${{ github.action_path }}/dns-guard.ps1
+      run: |
+        $dest = Join-Path $env:RUNNER_TEMP 'atmos-dns-guard.ps1'
+        Copy-Item -LiteralPath $env:GUARD_SCRIPT -Destination $dest -Force
+        $log = Join-Path $env:RUNNER_TEMP 'atmos-dns-guard.log'
+        $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
+          -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$dest`" -LogPath `"$log`""
+        $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 2) `
+          -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+        Register-ScheduledTask -TaskName 'atmos-dns-guard' -Action $action -Principal $principal `
+          -Settings $settings -Force | Out-Null
+        Start-ScheduledTask -TaskName 'atmos-dns-guard'
+        Write-Host "DNS guard task registered (script: $dest, log: $log)"

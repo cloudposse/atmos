@@ -15,9 +15,10 @@ on:
     - cron: "27 19 * * 2"
 
 env:
-  # Use pipe fallback so transient proxy.golang.org 5xx errors during
-  # `go mod download` fall back to direct module fetches.
-  GOPROXY: "https://proxy.golang.org|direct"
+  # No `|direct` fallback: under harden-runner's block mode a direct fetch
+  # only fans out to blocked vanity-import hosts and burns minutes; see the
+  # GOPROXY comment in test.yml.
+  GOPROXY: "https://proxy.golang.org"
 
 # Least-privilege default; every job below declares its own narrower
 # job-level permissions that override this baseline.
