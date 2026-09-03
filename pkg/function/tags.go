@@ -101,6 +101,9 @@ const (
 	// TagAwsOrganizationID returns the AWS Organization ID.
 	TagAwsOrganizationID = fntag.AwsOrganizationID
 
+	// TagAwsCloudFormationOutput retrieves an aws/cloudformation stack Output value.
+	TagAwsCloudFormationOutput = fntag.AwsCloudFormationOutput
+
 	// TagEmulator resolves a value from a local emulator.
 	TagEmulator = fntag.Emulator
 

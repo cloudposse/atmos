@@ -1,0 +1,79 @@
+---
+title: atmos aws cloudformation changeset execute
+sidebar_label: execute
+sidebar_class_name: command
+id: execute
+description: Execute a previously-created, named changeset.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Execute a previously-created, named changeset (`ExecuteChangeSet`) and stream
+  stack events until the operation reaches a terminal state — unlike
+  [`apply`](/cli/commands/aws/cloudformation/apply), which creates (or reuses)
+  and executes a changeset in one step, `changeset execute` acts on an
+  existing changeset by name, created earlier with
+  [`changeset create`](/cli/commands/aws/cloudformation/changeset/create).
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation changeset execute --help" src="/casts/screengrabs/atmos-aws-cloudformation-changeset-execute--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation changeset execute <component> --stack <stack> --changeset-name <name> [options]
+```
+
+```shell
+atmos aws cloudformation changeset execute vpc -s plat-ue2-dev --changeset-name vpc-2026-08-25
+```
+
+Skip the interactive confirmation prompt:
+
+```shell
+atmos aws cloudformation changeset execute vpc -s plat-ue2-dev --changeset-name vpc-2026-08-25 --auto-approve
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--changeset-name` <em>(required)</em></dt>
+  <dd>Name of the changeset to execute.</dd>
+
+  <dt>`--auto-approve` <em>(optional)</em></dt>
+  <dd>Skip the interactive confirmation prompt. Without it, `changeset execute` prompts for confirmation on a TTY before executing the changeset.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Execute the named changeset for all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Execute the named changeset for affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+## Behavior
+
+If the stack ends in a failed status after executing the changeset (e.g.
+`UPDATE_ROLLBACK_COMPLETE`), `changeset execute` exits non-zero.
+
+:::note
+`changeset execute` does not fire `before`/`after` hook events — only
+[`apply`](/cli/commands/aws/cloudformation/apply),
+[`diff`](/cli/commands/aws/cloudformation/diff), and
+[`delete`](/cli/commands/aws/cloudformation/delete) do.
+:::

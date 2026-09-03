@@ -1,0 +1,36 @@
+---
+title: atmos aws cloudformation changeset
+sidebar_label: changeset
+sidebar_class_name: command
+id: changeset
+description: Manage aws/cloudformation changesets directly.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import DocCardList from '@theme/DocCardList'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Manage `aws/cloudformation` changesets directly — manual control over changesets,
+complementing [`apply`](/cli/commands/aws/cloudformation/apply)/[`deploy`](/cli/commands/aws/cloudformation/deploy)/[`diff`](/cli/commands/aws/cloudformation/diff)'s
+implicit flow (each of those creates or reuses a changeset internally). Use these
+verbs when you need to review a changeset before executing it, name it for later
+execution, or manage changesets outside a normal deploy.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation changeset --help" src="/casts/screengrabs/atmos-aws-cloudformation-changeset--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation changeset create <component> --stack <stack>
+atmos aws cloudformation changeset execute <component> --stack <stack> --changeset-name <name>
+atmos aws cloudformation changeset list <component> --stack <stack>
+atmos aws cloudformation changeset delete <component> --stack <stack> --changeset-name <name>
+```
+
+## Subcommands
+
+<DocCardList/>

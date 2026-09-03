@@ -22,9 +22,20 @@ var confirmOperation = defaultConfirmOperation
 // Production code never reassigns this.
 var runConfirmField = func(f huh.Field) error { return f.Run() }
 
+// confirmedOperationVerbs maps each mutating operation to the verb shown in its
+// confirmation prompt. Operations absent from this map (render, diff, changeset
+// create/list, drift, get, output) never require confirmation — they don't
+// change a deployed stack's state.
+var confirmedOperationVerbs = map[Operation]string{
+	OperationApply:            "apply",
+	OperationDelete:           "delete",
+	OperationChangesetExecute: "execute changeset against",
+}
+
 // requireConfirmation prompts for the given operation unless auto-approve is set.
 func requireConfirmation(operation Operation, stackName string, flags map[string]any) error {
-	if operation != OperationApply && operation != OperationDelete {
+	verb, ok := confirmedOperationVerbs[operation]
+	if !ok {
 		return nil
 	}
 	autoApprove, _ := flags["auto-approve"].(bool)
@@ -32,10 +43,6 @@ func requireConfirmation(operation Operation, stackName string, flags map[string
 		return nil
 	}
 
-	verb := "apply"
-	if operation == OperationDelete {
-		verb = "delete"
-	}
 	confirmed, err := confirmOperation(fmt.Sprintf("%s stack %q?", verb, stackName))
 	if err != nil {
 		return err
