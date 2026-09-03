@@ -85,6 +85,14 @@ func TestComponentProvider_GetAvailableCommands(t *testing.T) {
 	assert.Contains(t, commands, "destroy")
 	assert.Contains(t, commands, "outputs")
 	assert.Contains(t, commands, "fmt")
+	// Phase 3: stacksets and nested-stack observability.
+	assert.Contains(t, commands, "stackset-create")
+	assert.Contains(t, commands, "stackset-update")
+	assert.Contains(t, commands, "stackset-delete")
+	assert.Contains(t, commands, "stackset-instances")
+	assert.Contains(t, commands, "tree")
+	assert.Contains(t, commands, "logs")
+	assert.Contains(t, commands, "watch")
 }
 
 func TestComponentProvider_GenerateArtifacts_NoOp(t *testing.T) {
@@ -125,6 +133,13 @@ func TestComponentProvider_Execute_MapsSubcommandsToOperations(t *testing.T) {
 		{"get-template", OperationGetTemplate},
 		{"get-policy", OperationGetPolicy},
 		{"fmt", OperationFmt},
+		{"stackset-create", OperationStackSetCreate},
+		{"stackset-update", OperationStackSetUpdate},
+		{"stackset-delete", OperationStackSetDelete},
+		{"stackset-instances", OperationStackSetInstances},
+		{"tree", OperationTree},
+		{"logs", OperationLogs},
+		{"watch", OperationWatch},
 	}
 
 	original := executeOperation

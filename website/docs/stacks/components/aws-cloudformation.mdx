@@ -265,10 +265,66 @@ components:
     Follows the same `provision.targets` shape used by native Helm and
     Kubernetes components.
   </dd>
+
+  <dt>`kind: aws/stackset`</dt>
+  <dd>
+    Delivers to a multi-account/multi-region
+    [CloudFormation StackSet](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/what-is-cfnstacksets.html)
+    instead of a single-account/region stack. Unlike `kind: aws/s3` and
+    `kind: git`, an `aws/stackset` target is **not** selected through
+    `apply --target` — it is used exclusively by the
+    [`atmos aws cloudformation stackset`](/cli/commands/aws/cloudformation/stackset)
+    verb group, and only by `create`/`update`, which resolve it to learn the
+    target accounts/regions/permission model. `delete` and `instances` act
+    directly on `stack_name` (the StackSet's own name) and don't resolve or
+    require a `provision.targets` entry.
+
+```yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      provision:
+        targets:
+          multi-account:
+            kind: aws/stackset
+            accounts:
+              - "111111111111"
+              - "222222222222"
+            regions:
+              - us-east-1
+              - us-west-2
+            permission_model: SELF_MANAGED
+            administration_role_arn: arn:aws:iam::111111111111:role/AWSCloudFormationStackSetAdministrationRole
+            execution_role_name: AWSCloudFormationStackSetExecutionRole
+```
+
+  <dl>
+    <dt>`accounts`</dt>
+    <dd>Target AWS account IDs for stack instances.</dd>
+
+    <dt>`regions`</dt>
+    <dd>Target AWS regions for stack instances.</dd>
+
+    <dt>`permission_model`</dt>
+    <dd>`SELF_MANAGED` (default) or `SERVICE_MANAGED`.</dd>
+
+    <dt>`administration_role_arn`</dt>
+    <dd>IAM role ARN CloudFormation assumes to create/manage the StackSet (self-managed permissions).</dd>
+
+    <dt>`execution_role_name`</dt>
+    <dd>IAM role name CloudFormation assumes in each target account (self-managed permissions).</dd>
+  </dl>
+
+  `stackset create` creates the StackSet's initial stack instances only when
+  both `accounts` and `regions` are set; `stackset update` updates the
+  template/parameters/capabilities and propagates the change to every
+  existing instance, without changing which accounts/regions have one.
+  </dd>
 </dl>
 
 ## Related
 
 - [`atmos aws cloudformation`](/cli/commands/aws/cloudformation) command reference
+- [`atmos aws cloudformation stackset`](/cli/commands/aws/cloudformation/stackset) command reference
 - [CloudFormation `atmos.yaml` configuration](/cli/configuration/components/aws-cloudformation)
 - [Component dependencies](/stacks/dependencies/components)

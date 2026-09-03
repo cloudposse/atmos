@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -301,4 +302,13 @@ func TestWaitForChangeSet_FollowsPagination(t *testing.T) {
 func TestSanitizeChangeSetSuffix(t *testing.T) {
 	assert.Equal(t, "acme-plat-ue2-dev-vpc", sanitizeChangeSetSuffix("acme-plat-ue2-dev-vpc"))
 	assert.Equal(t, "acme-plat-vpc", sanitizeChangeSetSuffix("acme_plat-vpc"), "non-alphanumeric-non-hyphen characters (e.g. underscore) become hyphens")
+}
+
+// timeValue must return the zero time.Time for a nil pointer and the pointee
+// value for a non-nil one.
+func TestTimeValue(t *testing.T) {
+	assert.True(t, timeValue(nil).IsZero())
+
+	ts := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	assert.Equal(t, ts, timeValue(&ts))
 }

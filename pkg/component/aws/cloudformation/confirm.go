@@ -24,12 +24,15 @@ var runConfirmField = func(f huh.Field) error { return f.Run() }
 
 // confirmedOperationVerbs maps each mutating operation to the verb shown in its
 // confirmation prompt. Operations absent from this map (render, diff, changeset
-// create/list, drift, get, output) never require confirmation — they don't
-// change a deployed stack's state.
+// create/list, drift, get, output, stackset instances, fmt) never require
+// confirmation — they don't change a deployed stack's/StackSet's state.
 var confirmedOperationVerbs = map[Operation]string{
 	OperationApply:            "apply",
 	OperationDelete:           "delete",
 	OperationChangesetExecute: "execute changeset against",
+	OperationStackSetCreate:   "create stackset for",
+	OperationStackSetUpdate:   "update stackset for",
+	OperationStackSetDelete:   "delete stackset for",
 }
 
 // requireConfirmation prompts for the given operation unless auto-approve is set.

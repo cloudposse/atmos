@@ -11,9 +11,9 @@ import (
 
 // CloudFormationClient is the subset of the AWS SDK v2 CloudFormation API used
 // by this component type. Phase 1 covered the core lifecycle (changeset-driven
-// apply/deploy, delete, validate, describe); Phase 2 adds explicit changeset
+// apply/deploy, delete, validate, describe); Phase 2 added explicit changeset
 // management, drift detection, template/policy retrieval, and account-wide
-// listing. Stack sets remain out of scope (Phase 3).
+// listing. Phase 3 adds stack sets and nested-stack observability (tree/logs).
 //
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=mock_client_test.go -package=cloudformation -source=client.go CloudFormationClient
 type CloudFormationClient interface {
@@ -34,6 +34,14 @@ type CloudFormationClient interface {
 	DetectStackDrift(ctx context.Context, params *cloudformation.DetectStackDriftInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DetectStackDriftOutput, error)
 	DescribeStackDriftDetectionStatus(ctx context.Context, params *cloudformation.DescribeStackDriftDetectionStatusInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeStackDriftDetectionStatusOutput, error)
 	DescribeStackResourceDrifts(ctx context.Context, params *cloudformation.DescribeStackResourceDriftsInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeStackResourceDriftsOutput, error)
+	CreateStackSet(ctx context.Context, params *cloudformation.CreateStackSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.CreateStackSetOutput, error)
+	UpdateStackSet(ctx context.Context, params *cloudformation.UpdateStackSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.UpdateStackSetOutput, error)
+	DeleteStackSet(ctx context.Context, params *cloudformation.DeleteStackSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DeleteStackSetOutput, error)
+	CreateStackInstances(ctx context.Context, params *cloudformation.CreateStackInstancesInput, optFns ...func(*cloudformation.Options)) (*cloudformation.CreateStackInstancesOutput, error)
+	DeleteStackInstances(ctx context.Context, params *cloudformation.DeleteStackInstancesInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DeleteStackInstancesOutput, error)
+	ListStackInstances(ctx context.Context, params *cloudformation.ListStackInstancesInput, optFns ...func(*cloudformation.Options)) (*cloudformation.ListStackInstancesOutput, error)
+	DescribeStackSetOperation(ctx context.Context, params *cloudformation.DescribeStackSetOperationInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeStackSetOperationOutput, error)
+	ListStackResources(ctx context.Context, params *cloudformation.ListStackResourcesInput, optFns ...func(*cloudformation.Options)) (*cloudformation.ListStackResourcesOutput, error)
 }
 
 // newClient constructs the real AWS SDK v2 CloudFormation client from a resolved

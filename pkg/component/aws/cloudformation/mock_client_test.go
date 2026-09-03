@@ -61,6 +61,46 @@ func (mr *MockCloudFormationClientMockRecorder) CreateChangeSet(ctx, params any,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateChangeSet", reflect.TypeOf((*MockCloudFormationClient)(nil).CreateChangeSet), varargs...)
 }
 
+// CreateStackInstances mocks base method.
+func (m *MockCloudFormationClient) CreateStackInstances(ctx context.Context, params *cloudformation.CreateStackInstancesInput, optFns ...func(*cloudformation.Options)) (*cloudformation.CreateStackInstancesOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CreateStackInstances", varargs...)
+	ret0, _ := ret[0].(*cloudformation.CreateStackInstancesOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateStackInstances indicates an expected call of CreateStackInstances.
+func (mr *MockCloudFormationClientMockRecorder) CreateStackInstances(ctx, params any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateStackInstances", reflect.TypeOf((*MockCloudFormationClient)(nil).CreateStackInstances), varargs...)
+}
+
+// CreateStackSet mocks base method.
+func (m *MockCloudFormationClient) CreateStackSet(ctx context.Context, params *cloudformation.CreateStackSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.CreateStackSetOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CreateStackSet", varargs...)
+	ret0, _ := ret[0].(*cloudformation.CreateStackSetOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateStackSet indicates an expected call of CreateStackSet.
+func (mr *MockCloudFormationClientMockRecorder) CreateStackSet(ctx, params any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateStackSet", reflect.TypeOf((*MockCloudFormationClient)(nil).CreateStackSet), varargs...)
+}
+
 // DeleteChangeSet mocks base method.
 func (m *MockCloudFormationClient) DeleteChangeSet(ctx context.Context, params *cloudformation.DeleteChangeSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DeleteChangeSetOutput, error) {
 	m.ctrl.T.Helper()
@@ -99,6 +139,46 @@ func (mr *MockCloudFormationClientMockRecorder) DeleteStack(ctx, params any, opt
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, params}, optFns...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteStack", reflect.TypeOf((*MockCloudFormationClient)(nil).DeleteStack), varargs...)
+}
+
+// DeleteStackInstances mocks base method.
+func (m *MockCloudFormationClient) DeleteStackInstances(ctx context.Context, params *cloudformation.DeleteStackInstancesInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DeleteStackInstancesOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteStackInstances", varargs...)
+	ret0, _ := ret[0].(*cloudformation.DeleteStackInstancesOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteStackInstances indicates an expected call of DeleteStackInstances.
+func (mr *MockCloudFormationClientMockRecorder) DeleteStackInstances(ctx, params any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteStackInstances", reflect.TypeOf((*MockCloudFormationClient)(nil).DeleteStackInstances), varargs...)
+}
+
+// DeleteStackSet mocks base method.
+func (m *MockCloudFormationClient) DeleteStackSet(ctx context.Context, params *cloudformation.DeleteStackSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DeleteStackSetOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteStackSet", varargs...)
+	ret0, _ := ret[0].(*cloudformation.DeleteStackSetOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteStackSet indicates an expected call of DeleteStackSet.
+func (mr *MockCloudFormationClientMockRecorder) DeleteStackSet(ctx, params any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteStackSet", reflect.TypeOf((*MockCloudFormationClient)(nil).DeleteStackSet), varargs...)
 }
 
 // DescribeChangeSet mocks base method.
@@ -179,6 +259,26 @@ func (mr *MockCloudFormationClientMockRecorder) DescribeStackResourceDrifts(ctx,
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, params}, optFns...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeStackResourceDrifts", reflect.TypeOf((*MockCloudFormationClient)(nil).DescribeStackResourceDrifts), varargs...)
+}
+
+// DescribeStackSetOperation mocks base method.
+func (m *MockCloudFormationClient) DescribeStackSetOperation(ctx context.Context, params *cloudformation.DescribeStackSetOperationInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeStackSetOperationOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeStackSetOperation", varargs...)
+	ret0, _ := ret[0].(*cloudformation.DescribeStackSetOperationOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeStackSetOperation indicates an expected call of DescribeStackSetOperation.
+func (mr *MockCloudFormationClientMockRecorder) DescribeStackSetOperation(ctx, params any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeStackSetOperation", reflect.TypeOf((*MockCloudFormationClient)(nil).DescribeStackSetOperation), varargs...)
 }
 
 // DescribeStacks mocks base method.
@@ -301,6 +401,46 @@ func (mr *MockCloudFormationClientMockRecorder) ListChangeSets(ctx, params any, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListChangeSets", reflect.TypeOf((*MockCloudFormationClient)(nil).ListChangeSets), varargs...)
 }
 
+// ListStackInstances mocks base method.
+func (m *MockCloudFormationClient) ListStackInstances(ctx context.Context, params *cloudformation.ListStackInstancesInput, optFns ...func(*cloudformation.Options)) (*cloudformation.ListStackInstancesOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListStackInstances", varargs...)
+	ret0, _ := ret[0].(*cloudformation.ListStackInstancesOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListStackInstances indicates an expected call of ListStackInstances.
+func (mr *MockCloudFormationClientMockRecorder) ListStackInstances(ctx, params any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListStackInstances", reflect.TypeOf((*MockCloudFormationClient)(nil).ListStackInstances), varargs...)
+}
+
+// ListStackResources mocks base method.
+func (m *MockCloudFormationClient) ListStackResources(ctx context.Context, params *cloudformation.ListStackResourcesInput, optFns ...func(*cloudformation.Options)) (*cloudformation.ListStackResourcesOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListStackResources", varargs...)
+	ret0, _ := ret[0].(*cloudformation.ListStackResourcesOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListStackResources indicates an expected call of ListStackResources.
+func (mr *MockCloudFormationClientMockRecorder) ListStackResources(ctx, params any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListStackResources", reflect.TypeOf((*MockCloudFormationClient)(nil).ListStackResources), varargs...)
+}
+
 // ListStacks mocks base method.
 func (m *MockCloudFormationClient) ListStacks(ctx context.Context, params *cloudformation.ListStacksInput, optFns ...func(*cloudformation.Options)) (*cloudformation.ListStacksOutput, error) {
 	m.ctrl.T.Helper()
@@ -339,6 +479,26 @@ func (mr *MockCloudFormationClientMockRecorder) SetStackPolicy(ctx, params any, 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, params}, optFns...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetStackPolicy", reflect.TypeOf((*MockCloudFormationClient)(nil).SetStackPolicy), varargs...)
+}
+
+// UpdateStackSet mocks base method.
+func (m *MockCloudFormationClient) UpdateStackSet(ctx context.Context, params *cloudformation.UpdateStackSetInput, optFns ...func(*cloudformation.Options)) (*cloudformation.UpdateStackSetOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateStackSet", varargs...)
+	ret0, _ := ret[0].(*cloudformation.UpdateStackSetOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateStackSet indicates an expected call of UpdateStackSet.
+func (mr *MockCloudFormationClientMockRecorder) UpdateStackSet(ctx, params any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateStackSet", reflect.TypeOf((*MockCloudFormationClient)(nil).UpdateStackSet), varargs...)
 }
 
 // UpdateTerminationProtection mocks base method.

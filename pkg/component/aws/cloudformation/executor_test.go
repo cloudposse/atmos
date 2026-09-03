@@ -19,6 +19,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -961,4 +962,256 @@ func TestOperationHandlers_DriftDetect_ThreadsFailOnDriftFlag(t *testing.T) {
 			})
 		})
 	}
+}
+
+// operationsSkippingTemplateLoad must contain exactly the Phase 2 + Phase 3
+// operations that act on a deployed stack by name/ID and never send a local
+// template — adding an operation here must be a deliberate decision.
+func TestOperationsSkippingTemplateLoad_Contents(t *testing.T) {
+	mustSkip := []Operation{
+		OperationDelete,
+		OperationChangesetExecute,
+		OperationChangesetList,
+		OperationChangesetDelete,
+		OperationDriftDetect,
+		OperationDriftDescribe,
+		OperationGetTemplate,
+		OperationGetPolicy,
+		OperationStackSetDelete,
+		OperationStackSetInstances,
+		OperationTree,
+		OperationLogs,
+		OperationWatch,
+	}
+	for _, op := range mustSkip {
+		assert.True(t, operationsSkippingTemplateLoad[op], "operation %q must skip template load", op)
+	}
+	assert.Len(t, operationsSkippingTemplateLoad, len(mustSkip), "adding an operation here must be a deliberate decision, not an accident")
+
+	for _, op := range []Operation{OperationApply, OperationDiff, OperationValidate, OperationStackSetCreate, OperationStackSetUpdate} {
+		assert.False(t, operationsSkippingTemplateLoad[op], "operation %q must still load its template", op)
+	}
+}
+
+// operationHandlers' stackset-create/update entries must resolve the `kind:
+// aws/stackset` target via resolveStackSetTargetFromContext, then dispatch to
+// runStackSetCreate/runStackSetUpdate.
+func TestOperationHandlers_StackSetCreate_Dispatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().CreateStackSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateStackSetOutput{}, nil)
+
+	spec := &stackSpec{StackName: "vpc"}
+	octx := &opContext{
+		Ctx: context.Background(),
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentSection: map[string]any{
+				cfg.ProvisionSectionName: map[string]any{
+					"targets": map[string]any{
+						"multi-region": map[string]any{"kind": kindAwsStackSet},
+					},
+				},
+			},
+		},
+		Flags: map[string]any{},
+	}
+
+	handler, ok := operationHandlers[OperationStackSetCreate]
+	require.True(t, ok)
+	captureStdout(t, func() {
+		summary, err := handler(octx, client, spec, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, "vpc", summary["stackset_name"])
+	})
+}
+
+// operationHandlers' stackset-create entry must propagate a
+// resolveStackSetTargetFromContext failure (no declared target) without
+// ever reaching the AWS API.
+func TestOperationHandlers_StackSetCreate_ResolveTargetError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	// No CreateStackSet expectation: a call would fail via gomock's
+	// unexpected-call panic, proving resolution failed before dispatch.
+
+	spec := &stackSpec{StackName: "vpc"}
+	octx := &opContext{
+		Ctx:   context.Background(),
+		Info:  &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
+		Flags: map[string]any{},
+	}
+
+	handler, ok := operationHandlers[OperationStackSetCreate]
+	require.True(t, ok)
+	_, err := handler(octx, client, spec, map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+}
+
+func TestOperationHandlers_StackSetUpdate_Dispatch(t *testing.T) {
+	shrinkStackSetTiming(t, time.Millisecond, time.Minute)
+
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().UpdateStackSet(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateStackSetOutput{
+		OperationId: awsString("op-1"),
+	}, nil)
+	client.EXPECT().DescribeStackSetOperation(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackSetOperationOutput{
+		StackSetOperation: &cfntypes.StackSetOperation{Status: cfntypes.StackSetOperationStatusSucceeded},
+	}, nil)
+
+	spec := &stackSpec{StackName: "vpc"}
+	octx := &opContext{
+		Ctx: context.Background(),
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentSection: map[string]any{
+				cfg.ProvisionSectionName: map[string]any{
+					"targets": map[string]any{
+						"multi-region": map[string]any{"kind": kindAwsStackSet},
+					},
+				},
+			},
+		},
+		Flags: map[string]any{},
+	}
+
+	handler, ok := operationHandlers[OperationStackSetUpdate]
+	require.True(t, ok)
+	captureStdout(t, func() {
+		_, err := handler(octx, client, spec, map[string]any{})
+		require.NoError(t, err)
+	})
+}
+
+func TestOperationHandlers_StackSetDelete_Dispatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().ListStackInstances(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackInstancesOutput{}, nil)
+	client.EXPECT().DeleteStackSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackSetOutput{}, nil)
+
+	spec := &stackSpec{StackName: "vpc"}
+	octx := &opContext{Ctx: context.Background(), Flags: map[string]any{}}
+
+	handler, ok := operationHandlers[OperationStackSetDelete]
+	require.True(t, ok)
+	captureStdout(t, func() {
+		summary, err := handler(octx, client, spec, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, "vpc", summary["stackset_name"])
+	})
+}
+
+func TestOperationHandlers_StackSetInstances_Dispatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().ListStackInstances(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackInstancesOutput{}, nil)
+
+	spec := &stackSpec{StackName: "vpc"}
+	octx := &opContext{Ctx: context.Background(), Flags: map[string]any{}}
+
+	handler, ok := operationHandlers[OperationStackSetInstances]
+	require.True(t, ok)
+	captureStdout(t, func() {
+		_, err := handler(octx, client, spec, map[string]any{})
+		require.NoError(t, err)
+	})
+}
+
+func TestOperationHandlers_Tree_Dispatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackResourcesOutput{}, nil)
+
+	spec := &stackSpec{StackName: "vpc"}
+	octx := &opContext{Ctx: context.Background(), Flags: map[string]any{}}
+
+	handler, ok := operationHandlers[OperationTree]
+	require.True(t, ok)
+	captureStdout(t, func() {
+		summary, err := handler(octx, client, spec, map[string]any{})
+		require.NoError(t, err)
+		assert.NotNil(t, summary["tree"])
+	})
+}
+
+// operationHandlers' logs entry must thread the --chart flag through to runLogs.
+func TestOperationHandlers_Logs_ThreadsChartFlag(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackResourcesOutput{}, nil)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("e1"), LogicalResourceId: awsString("MyBucket"), ResourceStatus: cfntypes.ResourceStatusCreateComplete},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+
+	spec := &stackSpec{StackName: "vpc"}
+	octx := &opContext{Ctx: context.Background(), Flags: map[string]any{"chart": true}}
+
+	handler, ok := operationHandlers[OperationLogs]
+	require.True(t, ok)
+	out := captureStdout(t, func() {
+		summary, err := handler(octx, client, spec, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, 1, summary["event_count"])
+	})
+	assert.Contains(t, out, "MyBucket", "--chart must render via renderEventChart (data channel), not the flat ui.Writeln list")
+}
+
+func TestOperationHandlers_Watch_Dispatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusUpdateComplete}},
+	}, nil)
+
+	spec := &stackSpec{StackName: "vpc"}
+	octx := &opContext{Ctx: context.Background(), Flags: map[string]any{}}
+
+	handler, ok := operationHandlers[OperationWatch]
+	require.True(t, ok)
+	summary, err := handler(octx, client, spec, map[string]any{})
+	require.NoError(t, err)
+	assert.Equal(t, string(cfntypes.StackStatusUpdateComplete), summary["final_status"])
+}
+
+// resolveStackSetTargetFromContext must read provision.targets from the
+// component section and thread the --target flag through to
+// resolveStackSetTarget, exactly as deliverApply does for its own target
+// resolution.
+func TestResolveStackSetTargetFromContext(t *testing.T) {
+	octx := &opContext{
+		Info: &schema.ConfigAndStacksInfo{
+			ComponentSection: map[string]any{
+				cfg.ProvisionSectionName: map[string]any{
+					"targets": map[string]any{
+						"east": map[string]any{"kind": kindAwsStackSet},
+						"west": map[string]any{"kind": kindAwsStackSet},
+					},
+				},
+			},
+		},
+		Flags: map[string]any{"target": "west"},
+	}
+
+	ssCfg, err := resolveStackSetTargetFromContext(octx)
+	require.NoError(t, err)
+	assert.Equal(t, "west", ssCfg.Name)
+}
+
+// resolveStackSetTargetFromContext must propagate a resolveStackSetTarget
+// failure (e.g. no `kind: aws/stackset` target declared at all).
+func TestResolveStackSetTargetFromContext_Error(t *testing.T) {
+	octx := &opContext{
+		Info:  &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
+		Flags: map[string]any{},
+	}
+
+	_, err := resolveStackSetTargetFromContext(octx)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
 }
