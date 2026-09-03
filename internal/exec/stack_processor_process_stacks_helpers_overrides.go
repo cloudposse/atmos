@@ -30,6 +30,9 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 	if supportsGenerate(opts.ComponentType) {
 		result.ComponentOverridesGenerate = make(map[string]any, componentOverridesCapacity)
 	}
+	if supportsSourceProvision(opts.ComponentType) {
+		result.ComponentOverridesProvision = make(map[string]any, componentOverridesCapacity)
+	}
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.ComponentOverridesFlags = make(map[string]any, componentOverridesCapacity)
 	}
@@ -152,6 +155,17 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 				return fmt.Errorf("%w: 'components.%s.%s.overrides.generate' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesGenerate, opts.ComponentType, opts.Component, opts.StackName)
 			}
 			result.ComponentOverridesGenerate = componentOverridesGenerate
+		}
+	}
+
+	// Extract provision overrides for component types with source/provision delivery.
+	if supportsSourceProvision(opts.ComponentType) {
+		if i, ok := componentOverrides[cfg.ProvisionSectionName]; ok {
+			componentOverridesProvision, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.overrides.provision' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesProvision, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentOverridesProvision = componentOverridesProvision
 		}
 	}
 

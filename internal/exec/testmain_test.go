@@ -36,8 +36,12 @@ const (
 //	                                   successfully (for command argument assertions).
 //	_ATMOS_TEST_STDOUT=<text>         — if set, write text to stdout.
 //	_ATMOS_TEST_STDERR=<text>         — if set, write text to stderr.
-//	_ATMOS_TEST_EXIT_ONE=1           — if set, exit 1 immediately after the optional
-//	                                   counter-file write (for workspace recovery tests).
+//	_ATMOS_TEST_EXIT_ONE=1           — if set, exit 1 (writing _ATMOS_TEST_STDOUT/
+//	                                   _ATMOS_TEST_STDERR first when also set — used to
+//	                                   drive retry.conditions matching in end-to-end
+//	                                   retry-wiring tests). Without those, exits 1
+//	                                   immediately after the optional counter-file write
+//	                                   (for workspace recovery tests).
 func TestMain(m *testing.M) {
 	// Initialize the I/O writer and ui formatter so data.Write*/ui.Write* calls
 	// (used throughout internal/exec and its pkg/ci dependency, e.g. CI log
@@ -61,15 +65,38 @@ func TestMain(m *testing.M) {
 	// the file length: len(file) == number of invocations.
 	if counterFile := os.Getenv("_ATMOS_TEST_COUNTER_FILE"); counterFile != "" {
 		fd, err := os.OpenFile(counterFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-		if err == nil {
-			_, _ = fd.WriteString("x")
-			_ = fd.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "open counter file: %v\n", err)
+			os.Exit(1)
+		}
+		if _, err := fd.WriteString("x"); err != nil {
+			fmt.Fprintf(os.Stderr, "write counter file: %v\n", err)
+			os.Exit(1)
+		}
+		if err := fd.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close counter file: %v\n", err)
+			os.Exit(1)
 		}
 	}
 
 	if argsFile := os.Getenv("_ATMOS_TEST_ARGS_FILE"); argsFile != "" {
 		_ = os.WriteFile(argsFile, []byte(strings.Join(os.Args[1:], "\n")), 0o600)
 		os.Exit(0)
+	}
+
+	// Subprocess helper: when the test binary is invoked as the "terraform" command,
+	// this env var causes it to exit 1, simulating a failed command without requiring
+	// the POSIX "false" command. Combined with _ATMOS_TEST_STDOUT/_ATMOS_TEST_STDERR,
+	// it writes the given text before exiting 1 -- used to drive retry.conditions
+	// pattern-matching in end-to-end retry-wiring tests (e.g. packer/helmfile).
+	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {
+		if stdout := os.Getenv("_ATMOS_TEST_STDOUT"); stdout != "" {
+			_, _ = os.Stdout.WriteString(stdout)
+		}
+		if stderr := os.Getenv("_ATMOS_TEST_STDERR"); stderr != "" {
+			_, _ = os.Stderr.WriteString(stderr)
+		}
+		os.Exit(1)
 	}
 
 	wroteOutput := false
@@ -83,13 +110,6 @@ func TestMain(m *testing.M) {
 	}
 	if wroteOutput {
 		os.Exit(0)
-	}
-
-	// Subprocess helper: when the test binary is invoked as the "terraform" command,
-	// this env var causes it to exit 1 immediately, simulating a failed workspace
-	// command without requiring the POSIX "false" command.
-	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {
-		os.Exit(1)
 	}
 
 	// Isolate the Terraform provider plugin cache for this package's tests.
