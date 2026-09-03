@@ -25,7 +25,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@b79c7ca56463fdcd80ac61c11bccb0e38a59a6c6 # auto-release-cosign
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@ba36c3cc0a8688d4ec317249d5a4690a99890c9e # auto-release-cosign
     with:
       publish: true
       prerelease: true
