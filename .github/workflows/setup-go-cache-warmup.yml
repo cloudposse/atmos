@@ -112,6 +112,16 @@ jobs:
       # policy at all, it only stops the AV from re-scanning the workspace, the
       # hosted tool cache, the Go caches, and the temp dirs. continue-on-error
       # keeps a future locked-down image from failing the job.
+      - name: TEMP DIAGNOSTIC - Windows Defender live state
+        if: matrix.target == 'windows'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Write-Host "--- Get-MpComputerStatus ---"
+          Get-MpComputerStatus | Format-List AntivirusEnabled, RealTimeProtectionEnabled, AMServiceEnabled, AntispywareEnabled, OnAccessProtectionEnabled, IsTamperProtected
+          Write-Host "--- Get-MpPreference (pre-exclusion) ---"
+          Get-MpPreference | Format-List DisableRealtimeMonitoring, DisableBehaviorMonitoring, DisableIOAVProtection, ExclusionPath
+
       - name: Exclude the workspace and Go caches from Windows Defender
         if: matrix.target == 'windows'
         shell: pwsh
@@ -123,6 +133,13 @@ jobs:
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\go-build"
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\Temp"
           Add-MpPreference -ExclusionPath "$env:RUNNER_TEMP"
+
+      - name: TEMP DIAGNOSTIC - Windows Defender state after our exclusions
+        if: matrix.target == 'windows'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Get-MpPreference | Format-List DisableRealtimeMonitoring, ExclusionPath
 
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
