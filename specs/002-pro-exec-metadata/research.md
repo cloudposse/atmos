@@ -225,13 +225,13 @@ whole record from scratch.
 
 ## Decision 7: Synchronous wait timeout configuration surface
 
-**Decision**: New `schema.ProSettings.Exec.SyncTimeoutSeconds int` (nested
-`ExecSettings` struct), default `10` when unset/zero, bound via the existing
-`viper`-in-`pkg/config/load.go` pattern already used for `settings.pro.token` /
-`settings.pro.workspace_id` (env var `ATMOS_PRO_EXEC_SYNC_TIMEOUT_SECONDS`). Only
-lengthens the wait — `CaptureSync` clamps any configured value below the 10s default up
-to the default rather than allowing it to shorten (per the clarification: "increase in
-configs," not decrease).
+**Decision**: New `schema.ProSettings.Exec.SyncTimeout time.Duration` (nested
+`ExecSettings` struct), authored as a Go duration string (e.g. `20s`), default `10s`
+when unset/zero, bound via the existing `viper`-in-`pkg/config/load.go` pattern already
+used for `settings.pro.token` / `settings.pro.workspace_id` (env var
+`ATMOS_PRO_EXEC_SYNC_TIMEOUT`). Only lengthens the wait — `CaptureSync` clamps any
+configured value below the 10s default up to the default rather than allowing it to
+shorten (per the clarification: "increase in configs," not decrease).
 
 **Rationale**: Matches the existing `settings.pro.*` config surface exactly (same file,
 same binding mechanism, same nesting convention as `GitSTS`/`GithubOIDC`). Keeping it a

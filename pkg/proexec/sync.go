@@ -11,9 +11,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-// defaultSyncTimeoutSeconds is the default (and floor) wait for a
-// synchronous command's execution-record upload (FR-008a).
-const defaultSyncTimeoutSeconds = 10
+// defaultSyncTimeout is the default (and floor) wait for a synchronous
+// command's execution-record upload (FR-008a).
+const defaultSyncTimeout = 10 * time.Second
 
 // CaptureSync uploads an execution record for a command classified as
 // synchronous (terraform plan/apply, describe affected), blocking until the
@@ -73,12 +73,12 @@ func CaptureSync(atmosConfig *schema.AtmosConfiguration, in *ExecRecordInput) er
 // (never below) the 10-second default — the setting can only lengthen the
 // wait, never shorten or disable it (research.md Decision 7).
 func syncTimeout(atmosConfig *schema.AtmosConfiguration) time.Duration {
-	configured := 0
+	configured := time.Duration(0)
 	if atmosConfig != nil {
-		configured = atmosConfig.Settings.Pro.Exec.SyncTimeoutSeconds
+		configured = atmosConfig.Settings.Pro.Exec.SyncTimeout
 	}
-	if configured < defaultSyncTimeoutSeconds {
-		configured = defaultSyncTimeoutSeconds
+	if configured < defaultSyncTimeout {
+		configured = defaultSyncTimeout
 	}
-	return time.Duration(configured) * time.Second
+	return configured
 }

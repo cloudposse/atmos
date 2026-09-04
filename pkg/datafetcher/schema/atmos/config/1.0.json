@@ -5040,19 +5040,21 @@
     },
     "ExecSettings": {
       "properties": {
-        "sync_timeout_seconds": {
+        "sync_timeout": {
           "anyOf": [
             {
-              "type": "integer"
+              "type": "string",
+              "description": "Go duration string (e.g. \"500ms\", \"30s\", \"5m\")."
+            },
+            {
+              "type": "integer",
+              "description": "Duration in nanoseconds."
             },
             {
               "type": "null"
-            },
-            {
-              "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "SyncTimeoutSeconds bounds how long a synchronous command (terraform\nplan/apply, describe affected) waits for its execution-record upload to\nbe confirmed. Defaults to 10 seconds when unset/zero; values below 10\nare clamped up to 10 rather than allowed to shorten the default."
+          "description": "SyncTimeout bounds how long a synchronous command (terraform\nplan/apply, describe affected) waits for its execution-record upload to\nbe confirmed. Defaults to 10 seconds when unset/zero; values below 10\nseconds are clamped up to 10 seconds rather than allowed to shorten the\ndefault. Accepts a Go duration string (e.g. \"20s\", \"5m\")."
         }
       },
       "type": "object",

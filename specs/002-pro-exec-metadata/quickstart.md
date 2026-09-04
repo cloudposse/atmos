@@ -218,7 +218,7 @@ the same contract, covering both `Data` shapes (inline and blob-URL) plus the ne
 settings:
   pro:
     exec:
-      sync_timeout_seconds: 10   # default; only increasing this value has any effect
+      sync_timeout: 10s   # default; only increasing this value has any effect
 ```
 
 No opt-out flag exists — delivery is always attempted whenever CI is detected and Atmos

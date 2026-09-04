@@ -25,18 +25,18 @@ func TestSyncTimeout(t *testing.T) {
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					Pro: schema.ProSettings{
-						Exec: schema.ExecSettings{SyncTimeoutSeconds: 3},
+						Exec: schema.ExecSettings{SyncTimeout: 3 * time.Second},
 					},
 				},
 			},
-			expected: defaultSyncTimeoutSeconds * time.Second,
+			expected: defaultSyncTimeout,
 		},
 		{
 			name: "above default is honored",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					Pro: schema.ProSettings{
-						Exec: schema.ExecSettings{SyncTimeoutSeconds: 30},
+						Exec: schema.ExecSettings{SyncTimeout: 30 * time.Second},
 					},
 				},
 			},
@@ -45,12 +45,12 @@ func TestSyncTimeout(t *testing.T) {
 		{
 			name:        "zero uses default",
 			atmosConfig: &schema.AtmosConfiguration{},
-			expected:    defaultSyncTimeoutSeconds * time.Second,
+			expected:    defaultSyncTimeout,
 		},
 		{
 			name:        "nil config uses default",
 			atmosConfig: nil,
-			expected:    defaultSyncTimeoutSeconds * time.Second,
+			expected:    defaultSyncTimeout,
 		},
 	}
 
@@ -97,7 +97,7 @@ func TestCaptureSync_DeliversSuccessfully(t *testing.T) {
 	atmosConfig.Settings.Pro.BaseURL = server.URL
 	// Deliberately longer than the delivery time, so CaptureSync must return
 	// once the delivery completes rather than waiting out the full timeout.
-	atmosConfig.Settings.Pro.Exec.SyncTimeoutSeconds = defaultSyncTimeoutSeconds * 10
+	atmosConfig.Settings.Pro.Exec.SyncTimeout = defaultSyncTimeout * 10
 
 	start := time.Now()
 	err := CaptureSync(atmosConfig, &ExecRecordInput{Command: "terraform apply"})
@@ -114,7 +114,7 @@ func TestCaptureSync_DeliversSuccessfully(t *testing.T) {
 	assert.Equal(t, http.MethodPost, got.method)
 	assert.Contains(t, got.path, "/atmos/exec")
 	assert.Equal(t, "terraform apply", got.body["command"])
-	assert.Less(t, elapsed, defaultSyncTimeoutSeconds*time.Second)
+	assert.Less(t, elapsed, defaultSyncTimeout)
 }
 
 // TestCaptureSync_WarnAndContinueOnFailure verifies a delivery failure (here,
@@ -138,7 +138,7 @@ func TestCaptureSync_WarnAndContinueOnFailure(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Settings.Pro.Token = "test-token"
 	atmosConfig.Settings.Pro.BaseURL = server.URL
-	atmosConfig.Settings.Pro.Exec.SyncTimeoutSeconds = defaultSyncTimeoutSeconds
+	atmosConfig.Settings.Pro.Exec.SyncTimeout = defaultSyncTimeout
 
 	start := time.Now()
 	err := CaptureSync(atmosConfig, &ExecRecordInput{Command: "terraform apply"})
@@ -147,7 +147,7 @@ func TestCaptureSync_WarnAndContinueOnFailure(t *testing.T) {
 	assert.NoError(t, err, "CaptureSync must warn-and-continue, never return the upload error")
 	// The endpoint never responds, so CaptureSync must have hit its timeout
 	// branch — not returned early on an immediate connection failure.
-	assert.GreaterOrEqual(t, elapsed, defaultSyncTimeoutSeconds*time.Second)
+	assert.GreaterOrEqual(t, elapsed, defaultSyncTimeout)
 	// Must not hang indefinitely — bounded well beyond the configured timeout.
 	assert.Less(t, elapsed, 60*time.Second)
 }

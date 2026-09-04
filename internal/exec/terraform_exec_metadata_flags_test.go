@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -65,7 +66,7 @@ func TestCaptureExecMetadataSync_FlagsReflectRealInvocation(t *testing.T) {
 	atmosConfig.Settings.Pro.Token = "test-token"
 	// A short-lived Pro exec sync timeout keeps this test fast if the upload
 	// path ever regresses to hanging instead of completing.
-	atmosConfig.Settings.Pro.Exec.SyncTimeoutSeconds = 2
+	atmosConfig.Settings.Pro.Exec.SyncTimeout = 2 * time.Second
 
 	// Mirrors the real invocation `atmos terraform plan cdn -s plat-use2-dev
 	// --upload-status`: the planCmd's own flags are set exactly as the user
@@ -126,7 +127,7 @@ func TestCaptureExecMetadataSync_SkipsPerNodeWhenNodeHooksWired(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Settings.Pro.BaseURL = server.URL
 	atmosConfig.Settings.Pro.Token = "test-token"
-	atmosConfig.Settings.Pro.Exec.SyncTimeoutSeconds = 2
+	atmosConfig.Settings.Pro.Exec.SyncTimeout = 2 * time.Second
 
 	plan := &cobra.Command{Use: "plan"}
 
@@ -161,7 +162,7 @@ func TestCaptureExecMetadataSync_CallsParserForSyncAllowlistedSingleComponent(t 
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Settings.Pro.BaseURL = server.URL
 	atmosConfig.Settings.Pro.Token = "test-token"
-	atmosConfig.Settings.Pro.Exec.SyncTimeoutSeconds = 2
+	atmosConfig.Settings.Pro.Exec.SyncTimeout = 2 * time.Second
 
 	plan := &cobra.Command{Use: "plan"}
 	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "cdn", Stack: "plat-use2-dev"}
