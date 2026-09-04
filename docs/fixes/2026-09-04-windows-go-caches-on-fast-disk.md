@@ -84,9 +84,9 @@ reference a local one. Every cache-using action now provisions its own tar, and 
 
 ## Follow-ups
 
-- The two "Cache Atmos toolchain" steps (`./actions/cache`, toolchain bits under the Atmos cache
-  root on C:) go through the same disk and would benefit from the same relocation; left alone here
-  because the acceptance tests assert XDG defaults and `ATMOS_XDG_CACHE_HOME` can't be exported for
-  them wholesale.
+- The "Cache Atmos toolchain" archive was checked and deliberately left on C:: it is ~361 MB of a
+  few large binaries, restores in 6-16 s and saves in 34 s on the Windows shards, so the small-file
+  IOPS penalty that makes D: matter for the Go caches barely applies, and relocating it would mean
+  moving the Atmos cache root (`ATMOS_XDG_CACHE_HOME`) job-wide, which the acceptance tests forbid.
 - The 10 GB quota saturation is a separate problem (every Tests run writes ~5 GB); smaller
   archives or fewer cached jobs would let main's entry survive between runs.
