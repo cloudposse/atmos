@@ -291,16 +291,15 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		info,
 		"workspace-select",
 		func(o ...ShellCommandOption) error {
-			return ExecuteShellCommand(
-				*atmosConfig,
-				info.Command,
-				[]string{"workspace", "select", "-or-create", info.TerraformWorkspace},
-				componentPath,
-				info.ComponentEnvList,
-				info.DryRun,
-				redirectStdErr,
-				o...,
-			)
+			return executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
+				componentPath:  componentPath,
+				args:           []string{"workspace", "select", "-or-create", info.TerraformWorkspace},
+				gatePhase:      subcommandInit,
+				subCommand:     subcommandWorkspace,
+				workspace:      info.TerraformWorkspace,
+				redirectStdErr: redirectStdErr,
+				shellOpts:      o,
+			})
 		},
 		wsOpts...,
 	)
@@ -335,16 +334,15 @@ func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schem
 		info,
 		"workspace-new",
 		func(o ...ShellCommandOption) error {
-			return ExecuteShellCommand(
-				*atmosConfig,
-				info.Command,
-				[]string{"workspace", "new", info.TerraformWorkspace},
-				componentPath,
-				info.ComponentEnvList,
-				info.DryRun,
-				redirectStdErr,
-				o...,
-			)
+			return executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
+				componentPath:  componentPath,
+				args:           []string{"workspace", "new", info.TerraformWorkspace},
+				gatePhase:      subcommandInit,
+				subCommand:     subcommandWorkspace,
+				workspace:      info.TerraformWorkspace,
+				redirectStdErr: redirectStdErr,
+				shellOpts:      o,
+			})
 		},
 		wsOpts...,
 	)
@@ -432,16 +430,14 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 		info,
 		info.SubCommand,
 		func(o ...ShellCommandOption) error {
-			return ExecuteShellCommand(
-				*atmosConfig,
-				info.Command,
-				allArgsAndFlags,
-				componentPath,
-				info.ComponentEnvList,
-				info.DryRun,
-				info.RedirectStdErr,
-				o...,
-			)
+			return executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
+				componentPath:  componentPath,
+				args:           allArgsAndFlags,
+				gatePhase:      info.SubCommand,
+				subCommand:     info.SubCommand,
+				redirectStdErr: info.RedirectStdErr,
+				shellOpts:      o,
+			})
 		},
 		opts...,
 	)
