@@ -1,0 +1,82 @@
+name: Classify Infra Failures
+description: >
+  Classifies every non-success job of a workflow-run attempt as an
+  infrastructure zombie or a real failure and returns a rerun verdict.
+  `go tool mage ci:classifyInfraFailures` (magefiles/ci_rerun.go) fetches the
+  attempt's jobs itself, paginating repos/{repo}/actions/runs/{id}/attempts/{n}/jobs
+  via the go-gh REST client (internal/ci/rerun.FetchJobs; GH_TOKEN
+  authenticates it, same as `gh` itself), then prints one TSV line per
+  non-success job: `job<TAB>conclusion<TAB>class`. Classes:
+  runner-stuck-after-complete (cancelled, all steps green, job completion
+  landed >= stuck-gap-seconds after the last step), runner-lost (failure with
+  no failed step), check-cascade (failure whose only failed steps are
+  `Check ... result` aggregator steps), superseded (any other cancellation)
+  and real-failure (anything else). The verdict is `rerun` only when at least
+  one job is runner-stuck-after-complete or runner-lost and every other one is
+  check-cascade; `no-jobs` when nothing failed; `no-rerun` otherwise. The mage
+  target also appends a Markdown rendering of the table and verdict directly
+  to the step summary. Requires a checkout of the repository (the Go module
+  is built on the fly). Used by
+  .github/workflows/rerun-infra-failures.yml; see
+  docs/fixes/2026-09-03-rerun-infra-cancelled-ci-runs.md. Unit tests:
+  `go test ./internal/ci/rerun/...` and
+  `go test -tags=mage ./magefiles/... -run TestClassifyInfraFailures`.
+
+inputs:
+  run-id:
+    description: 'Workflow run ID whose jobs to classify'
+    required: true
+  run-attempt:
+    description: 'Attempt number of that run to classify'
+    required: true
+  repo:
+    description: 'Repository in owner/name form'
+    required: true
+  github-token:
+    description: 'Token used to list the run''s jobs (needs actions:read)'
+    required: true
+  stuck-gap-seconds:
+    description: >
+      Minimum seconds between a cancelled job's last step completing and the
+      job itself completing for it to count as runner-stuck-after-complete
+    required: false
+    default: '300'
+
+outputs:
+  verdict:
+    description: 'One of: rerun, no-rerun, no-jobs'
+    value: ${{ steps.classify.outputs.verdict }}
+  reason:
+    description: 'Short justification for the verdict'
+    value: ${{ steps.classify.outputs.reason }}
+  table:
+    description: 'TSV table of non-success jobs: job, conclusion, class'
+    value: ${{ steps.classify.outputs.table }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      with:
+        go-version-file: "go.mod"
+        cache: true
+
+    - name: Classify non-success jobs
+      id: classify
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        ATMOS_CI_STUCK_GAP: ${{ inputs.stuck-gap-seconds }}s
+        REPO: ${{ inputs.repo }}
+        RUN_ID: ${{ inputs.run-id }}
+        RUN_ATTEMPT: ${{ inputs.run-attempt }}
+      # The mage target fetches the run's jobs itself (GH_TOKEN authenticates
+      # it) and, because GITHUB_OUTPUT and GITHUB_STEP_SUMMARY are set here,
+      # records verdict/reason/table and appends the Markdown summary itself.
+      # REPO/RUN_ID/RUN_ATTEMPT go through env, not direct ${{ }} interpolation
+      # into the script, so untrusted values can never be spliced into the
+      # shell text itself (GitHub Actions script-injection hardening).
+      run: |
+        set -euo pipefail
+        go tool mage ci:classifyInfraFailures "$REPO" "$RUN_ID" "$RUN_ATTEMPT"
