@@ -260,10 +260,13 @@ func newBootstrapCloneCmd(t *testing.T, rawArgs []string) (*cobra.Command, []str
 // saveRestoreAtmosConfig snapshots the package-level atmosConfig (which
 // applyCIGitCloneBootstrap writes to) and restores it after the test, since
 // it is shared global state across this package's tests.
+// Kept as a named alias for readability at its call sites: NewTestKit now
+// snapshots and restores the package-level atmosConfig for every test that
+// uses it, so saveRestoreAtmosConfig delegates rather than maintaining a
+// second, narrower mechanism.
 func saveRestoreAtmosConfig(t *testing.T) {
 	t.Helper()
-	original := atmosConfig
-	t.Cleanup(func() { atmosConfig = original })
+	_ = NewTestKit(t)
 }
 
 func TestApplyCIGitCloneBootstrap_AllowsBootstrap(t *testing.T) {
@@ -1123,6 +1126,26 @@ func TestSetupColorProfileFromEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// setupColorProfileFromEnvWithArgs has real, permanent side effects
+			// when force-color is detected: it calls the raw os.Setenv (not
+			// t.Setenv) to set CLICOLOR_FORCE=1 for Boa's help renderer, and
+			// lipgloss.SetColorProfile(TrueColor) globally. NewTestKit restores
+			// the color profile; CLICOLOR_FORCE needs its own explicit
+			// save/restore since the test doesn't own that Setenv call itself.
+			// Left leaking, this silently defeats NO_COLOR for every later test
+			// in the binary that renders through the logger/Boa color path
+			// (confirmed root cause of TestTerraformGenerateVarfileCmdNoColor's
+			// intermittent -shuffle=on failures).
+			_ = NewTestKit(t)
+			originalCliColorForce, hadCliColorForce := os.LookupEnv("CLICOLOR_FORCE")
+			t.Cleanup(func() {
+				if hadCliColorForce {
+					_ = os.Setenv("CLICOLOR_FORCE", originalCliColorForce)
+				} else {
+					_ = os.Unsetenv("CLICOLOR_FORCE")
+				}
+			})
+
 			if tt.envVar != "" {
 				t.Setenv(tt.envVar, tt.envValue)
 			}
