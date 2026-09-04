@@ -239,15 +239,16 @@ func TestExtractAWSEnvVars(t *testing.T) {
 
 func TestSetupAWSEnv(t *testing.T) {
 	tests := []struct {
-		name          string
-		credsFile     string
-		configFile    string
-		profile       string
-		region        string
-		existingEnv   map[string]string
-		expectedEnv   map[string]string
-		expectedAfter map[string]string // Environment after cleanup
-		expectedUnset []string          // Keys that should be unset after cleanup
+		name                       string
+		credsFile                  string
+		configFile                 string
+		profile                    string
+		region                     string
+		existingEnv                map[string]string
+		expectedEnv                map[string]string
+		expectedAfter              map[string]string // Environment after cleanup
+		expectedUnset              []string          // Keys that should be unset after cleanup
+		expectedClearedWhileActive []string          // Keys that must be unset while setupAWSEnv's cleanup has not yet run
 	}{
 		{
 			name:        "sets all vars with no existing env",
@@ -312,6 +313,40 @@ func TestSetupAWSEnv(t *testing.T) {
 				"AWS_PROFILE",
 			},
 		},
+		{
+			// Ambient static keys must not survive into the SDK's default
+			// credential chain: the SDK checks AWS_ACCESS_KEY_ID/
+			// AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN before the shared
+			// credentials-file/profile provider this loader drives, so
+			// leaving them set would let ambient keys silently outrank the
+			// selected profile.
+			name:       "clears ambient static credential env vars during the transaction and restores them after",
+			credsFile:  "/new/creds",
+			configFile: "/new/config",
+			profile:    "new-profile",
+			region:     "us-west-2",
+			existingEnv: map[string]string{
+				"AWS_ACCESS_KEY_ID":     "AKIAAMBIENT",
+				"AWS_SECRET_ACCESS_KEY": "ambient-secret",
+				"AWS_SESSION_TOKEN":     "ambient-token",
+			},
+			expectedEnv: map[string]string{
+				"AWS_SHARED_CREDENTIALS_FILE": "/new/creds",
+				"AWS_CONFIG_FILE":             "/new/config",
+				"AWS_PROFILE":                 "new-profile",
+				"AWS_REGION":                  "us-west-2",
+			},
+			expectedClearedWhileActive: []string{
+				"AWS_ACCESS_KEY_ID",
+				"AWS_SECRET_ACCESS_KEY",
+				"AWS_SESSION_TOKEN",
+			},
+			expectedAfter: map[string]string{
+				"AWS_ACCESS_KEY_ID":     "AKIAAMBIENT",
+				"AWS_SECRET_ACCESS_KEY": "ambient-secret",
+				"AWS_SESSION_TOKEN":     "ambient-token",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -323,6 +358,9 @@ func TestSetupAWSEnv(t *testing.T) {
 				"AWS_CONFIG_FILE",
 				"AWS_PROFILE",
 				"AWS_REGION",
+				"AWS_ACCESS_KEY_ID",
+				"AWS_SECRET_ACCESS_KEY",
+				"AWS_SESSION_TOKEN",
 			}
 			for _, key := range keysToSave {
 				if val, exists := os.LookupEnv(key); exists {
@@ -357,6 +395,13 @@ func TestSetupAWSEnv(t *testing.T) {
 			for key, want := range tt.expectedEnv {
 				got := os.Getenv(key)
 				assert.Equal(t, want, got, "env var %s should be set to %s", key, want)
+			}
+
+			// Verify ambient vars that must not reach the SDK's default
+			// credential chain are cleared while the transaction is active.
+			for _, key := range tt.expectedClearedWhileActive {
+				got, exists := os.LookupEnv(key)
+				assert.False(t, exists, "env var %s should be cleared while setupAWSEnv is active, but has value %s", key, got)
 			}
 
 			// Call cleanup.

@@ -112,6 +112,12 @@ func extractAWSEnvVars(env map[string]string) (awsEnvVars, error) {
 // exactly the symptom that made this loader's region resolution depend on whichever
 // other identity's credentials were loaded earlier in the same process (see
 // docs/fixes for the incident this closes).
+//
+// AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_SESSION_TOKEN are always
+// cleared too: the SDK's default credential chain checks the static-key env
+// provider before the shared-file/profile provider this loader exists to
+// drive, so any ambient static keys in the process environment would
+// silently outrank the file/profile this function was asked to load from.
 func setupAWSEnv(credsFile, configFile, profile, region string) func() {
 	originalEnv := make(map[string]string)
 	envVarsToSet := map[string]string{
@@ -119,6 +125,9 @@ func setupAWSEnv(credsFile, configFile, profile, region string) func() {
 		"AWS_CONFIG_FILE":             configFile,
 		"AWS_PROFILE":                 profile,
 		"AWS_REGION":                  region,
+		"AWS_ACCESS_KEY_ID":           "",
+		"AWS_SECRET_ACCESS_KEY":       "",
+		"AWS_SESSION_TOKEN":           "",
 	}
 
 	// Save original values and set new ones.
