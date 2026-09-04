@@ -2032,23 +2032,10 @@ jobs:
           fi
           echo "failing-check correctly returned a non-zero exit code"
 
-  release:
-    needs: [test, terraform-registry-cache, kubernetes-e2e, lint, mock, k3s, floci, floci-go, docker, validate, container-step, magefiles]
-    if: github.event_name == 'push'
-    # Workflow-level default above is read-only. id-token: write is needed
-    # here: cosign's keyless OIDC signing (in shared-go-auto-release.yml's
-    # goreleaser job, invoked below) reads the runner's OIDC token-minting
-    # endpoint, which is gated purely by this job's own id-token permission.
-    permissions:
-      id-token: write
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
-    with:
-      publish: false
-      format: binary
-      runs-on: '["runs-on=${{github.run_id}}", "runner=large", "tag=atmos","extras=s3-cache", "private=false"]'
-    # `secrets: inherit`, not an explicit map: shared-go-auto-release.yml doesn't declare a
-    # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
-    # (observed as a startup_failure -- "likely failed because of a workflow file issue" -- with
-    # zero jobs ever created, on both this workflow and feature-release.yml after an earlier
-    # attempt to narrow this to an explicit list).
-    secrets: inherit
+  # The release job used to live here, gated on `needs: [test,
+  # terraform-registry-cache, kubernetes-e2e, lint, mock, k3s, floci,
+  # floci-go, docker, validate, container-step, magefiles]`. It's now
+  # .github/workflows/release.yml, triggered by this workflow's completion
+  # instead - a release-drafter or summarization hiccup no longer shows up as
+  # a "Tests" failure on main (see docs/fixes), and the workflow_run trigger
+  # doesn't need that job list hand-maintained.
