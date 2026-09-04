@@ -163,6 +163,19 @@ func TestRunAttempt(t *testing.T) {
 		assert.Equal(t, 2, attempt)
 	})
 
+	for _, body := range []string{`{}`, `{"run_attempt":null}`, `{"run_attempt":0}`} {
+		t.Run("body "+body+" is an error", func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			client := NewMockRESTClient(ctrl)
+			client.EXPECT().RequestWithContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(jsonResponse(200, body, nil), nil) //nolint:bodyclose // closed by the code under test, not this fixture.
+
+			_, err := RunAttempt(context.Background(), client, "cloudposse/atmos", "123")
+			require.ErrorIs(t, err, errInvalidRunAttempt)
+		})
+	}
+
 	testLookupErrors(t, func(client RESTClient) (int, error) {
 		return RunAttempt(context.Background(), client, "cloudposse/atmos", "123")
 	})

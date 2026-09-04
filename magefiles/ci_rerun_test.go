@@ -250,22 +250,22 @@ func TestRerunInfraFailures(t *testing.T) {
 		expectRunAttempt(t, client, 1)
 		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodPost, "repos/cloudposse/atmos/actions/runs/999/rerun-failed-jobs", nil).
 			Return(&http.Response{StatusCode: 201, Body: http.NoBody}, nil)
-		var stdout bytes.Buffer
+		var stderr bytes.Buffer
 
-		require.NoError(t, rerunInfraFailures(context.Background(), client, &stdout, "", &baseParams))
-		assert.Contains(t, stdout.String(), "Rerun requested for run 999.")
+		require.NoError(t, rerunInfraFailures(context.Background(), client, &stderr, "", &baseParams))
+		assert.Contains(t, stderr.String(), "Rerun requested for run 999.")
 	})
 
 	t.Run("pull_request with no PR numbers is not rerun", func(t *testing.T) {
 		t.Parallel()
 		ctrl := gomock.NewController(t)
 		client := rerun.NewMockRESTClient(ctrl) // no EXPECT: must not call the API
-		var stdout bytes.Buffer
+		var stderr bytes.Buffer
 		p := baseParams
 		p.event = "pull_request"
 
-		require.NoError(t, rerunInfraFailures(context.Background(), client, &stdout, "", &p))
-		assert.Contains(t, stdout.String(), "no associated pull request")
+		require.NoError(t, rerunInfraFailures(context.Background(), client, &stderr, "", &p))
+		assert.Contains(t, stderr.String(), "no associated pull request")
 	})
 
 	t.Run("pull_request whose head still matches reruns", func(t *testing.T) {
@@ -277,13 +277,13 @@ func TestRerunInfraFailures(t *testing.T) {
 		expectRunAttempt(t, client, 1)
 		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodPost, "repos/cloudposse/atmos/actions/runs/999/rerun-failed-jobs", nil).
 			Return(&http.Response{StatusCode: 201, Body: http.NoBody}, nil)
-		var stdout bytes.Buffer
+		var stderr bytes.Buffer
 		p := baseParams
 		p.event = "pull_request"
 		p.prNumbers = []string{"42"}
 
-		require.NoError(t, rerunInfraFailures(context.Background(), client, &stdout, "", &p))
-		assert.Contains(t, stdout.String(), "Rerun requested for run 999.")
+		require.NoError(t, rerunInfraFailures(context.Background(), client, &stderr, "", &p))
+		assert.Contains(t, stderr.String(), "Rerun requested for run 999.")
 	})
 
 	t.Run("pull_request whose head moved on is superseded, not rerun", func(t *testing.T) {
@@ -292,13 +292,13 @@ func TestRerunInfraFailures(t *testing.T) {
 		client := rerun.NewMockRESTClient(ctrl)
 		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, "repos/cloudposse/atmos/pulls/42", nil).
 			Return(&http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"head":{"sha":"newsha"}}`))}, nil)
-		var stdout bytes.Buffer
+		var stderr bytes.Buffer
 		p := baseParams
 		p.event = "pull_request"
 		p.prNumbers = []string{"42"}
 
-		require.NoError(t, rerunInfraFailures(context.Background(), client, &stdout, "", &p))
-		assert.Contains(t, stdout.String(), "superseded, not rerunning")
+		require.NoError(t, rerunInfraFailures(context.Background(), client, &stderr, "", &p))
+		assert.Contains(t, stderr.String(), "superseded, not rerunning")
 	})
 
 	t.Run("invalid PR number is an error", func(t *testing.T) {
@@ -333,11 +333,11 @@ func TestRerunInfraFailures(t *testing.T) {
 		expectRunAttempt(t, client, 1)
 		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodPost, "repos/cloudposse/atmos/actions/runs/999/rerun-failed-jobs", nil).
 			Return(nil, &api.HTTPError{StatusCode: 403, Message: "Run is already running", RequestURL: &url.URL{}})
-		var stdout bytes.Buffer
+		var stderr bytes.Buffer
 
-		require.NoError(t, rerunInfraFailures(context.Background(), client, &stdout, "", &baseParams))
-		assert.Contains(t, stdout.String(), "::warning::")
-		assert.Contains(t, stdout.String(), "Rerun skipped")
+		require.NoError(t, rerunInfraFailures(context.Background(), client, &stderr, "", &baseParams))
+		assert.Contains(t, stderr.String(), "::warning::")
+		assert.Contains(t, stderr.String(), "Rerun skipped")
 	})
 
 	t.Run("a genuine rerun API failure is returned and annotated", func(t *testing.T) {
@@ -347,11 +347,11 @@ func TestRerunInfraFailures(t *testing.T) {
 		expectRunAttempt(t, client, 1)
 		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodPost, "repos/cloudposse/atmos/actions/runs/999/rerun-failed-jobs", nil).
 			Return(nil, &api.HTTPError{StatusCode: 404, Message: "Not Found", RequestURL: &url.URL{}})
-		var stdout bytes.Buffer
+		var stderr bytes.Buffer
 
-		err := rerunInfraFailures(context.Background(), client, &stdout, "", &baseParams)
+		err := rerunInfraFailures(context.Background(), client, &stderr, "", &baseParams)
 		require.Error(t, err)
-		assert.Contains(t, stdout.String(), "::error::")
+		assert.Contains(t, stderr.String(), "::error::")
 	})
 
 	t.Run("appends the decision to GITHUB_STEP_SUMMARY", func(t *testing.T) {
@@ -386,11 +386,11 @@ func TestRerunInfraFailures(t *testing.T) {
 		t.Parallel()
 		ctrl := gomock.NewController(t)
 		client := rerun.NewMockRESTClient(ctrl)
-		expectRunAttempt(t, client, maxRerunAttempts) // no POST EXPECT: must not call rerun-failed-jobs
-		var stdout bytes.Buffer
+		expectRunAttempt(t, client, maxRerunAttempts) // no POST EXPECT: must not call rerun-failed-jobs.
+		var stderr bytes.Buffer
 
-		require.NoError(t, rerunInfraFailures(context.Background(), client, &stdout, "", &baseParams))
-		assert.Contains(t, stdout.String(), "already at attempt")
+		require.NoError(t, rerunInfraFailures(context.Background(), client, &stderr, "", &baseParams))
+		assert.Contains(t, stderr.String(), "already at attempt")
 	})
 
 	t.Run("run-attempt lookup failure is an error", func(t *testing.T) {

@@ -5,6 +5,7 @@ package rerun
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,11 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// errInvalidRunAttempt means the GitHub API response had no usable
+// run_attempt (missing, null, or non-positive); GitHub's own attempts are
+// 1-indexed.
+var errInvalidRunAttempt = errors.New("invalid run_attempt")
 
 // RESTClient is the slice of *api.RESTClient's (github.com/cli/go-gh/v2/pkg/api)
 // method set that this package needs: one authenticated request, returning
@@ -113,6 +119,13 @@ func RunAttempt(ctx context.Context, client RESTClient, repo, runID string) (int
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&run); err != nil {
 		return 0, fmt.Errorf("rerun: decode run %s: %w", runID, err)
+	}
+	// A missing, null, or zero run_attempt would silently look like "plenty of
+	// room" to a caller comparing against an attempt cap; GitHub's own attempts
+	// are 1-indexed, so anything below that means the field wasn't populated
+	// the way this function's contract expects.
+	if run.RunAttempt < 1 {
+		return 0, fmt.Errorf("rerun: run %s: %w: got run_attempt %d", runID, errInvalidRunAttempt, run.RunAttempt)
 	}
 	return run.RunAttempt, nil
 }

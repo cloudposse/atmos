@@ -50,6 +50,17 @@ jobs:
       (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'cancelled')
       && (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'push')
       && github.event.workflow_run.run_attempt < 3
+    # Scoped to the triggering run's id, not this workflow's own: two
+    # invocations for the *same* triggering run (a duplicate workflow_run
+    # delivery, or this workflow itself being manually rerun) must not both
+    # pass ci:rerunInfraFailures' live attempt-count check and both call
+    # rerun-failed-jobs, since neither the check nor the call is atomic
+    # against the GitHub API. cancel-in-progress makes a later invocation
+    # cancel an earlier one instead of racing it, so at most one invocation
+    # per triggering run ever reaches the rerun call.
+    concurrency:
+      group: rerun-infra-failures-${{ github.event.workflow_run.id }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

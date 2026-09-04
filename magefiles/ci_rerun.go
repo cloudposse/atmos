@@ -169,7 +169,7 @@ func (CI) RerunInfraFailures(repo, runID, event, headSHA, prNumbers string) erro
 	if err != nil {
 		return fmt.Errorf("mage: create GitHub REST client: %w", err)
 	}
-	return rerunInfraFailures(context.Background(), client, os.Stdout, os.Getenv("GITHUB_STEP_SUMMARY"), &rerunParams{
+	return rerunInfraFailures(context.Background(), client, os.Stderr, os.Getenv("GITHUB_STEP_SUMMARY"), &rerunParams{
 		repo:      repo,
 		runID:     runID,
 		event:     event,
@@ -178,17 +178,17 @@ func (CI) RerunInfraFailures(repo, runID, event, headSHA, prNumbers string) erro
 	})
 }
 
-func rerunInfraFailures(ctx context.Context, client rerun.RESTClient, stdout io.Writer, summaryPath string, p *rerunParams) error {
+func rerunInfraFailures(ctx context.Context, client rerun.RESTClient, stderr io.Writer, summaryPath string, p *rerunParams) error {
 	if p.event == "pull_request" {
 		superseded, reason, err := checkPRHeadsCurrent(ctx, client, p)
 		if err != nil {
 			return err
 		}
 		if superseded {
-			return appendSummaryLine(stdout, summaryPath, reason)
+			return appendSummaryLine(stderr, summaryPath, reason)
 		}
 	}
-	return requestRerun(ctx, client, stdout, summaryPath, p)
+	return requestRerun(ctx, client, stderr, summaryPath, p)
 }
 
 // checkPRHeadsCurrent re-verifies that every PR associated with the run is
@@ -222,32 +222,37 @@ func checkPRHeadsCurrent(ctx context.Context, client rerun.RESTClient, p *rerunP
 // checkout and classification - the run's real attempt count can have moved
 // (another trigger of this same workflow, or a manual rerun in the UI).
 // Re-checking live here, immediately before the call that would create the
-// next attempt, closes that gap instead of just narrowing it.
+// next attempt, closes that gap for a single invocation - but two concurrent
+// invocations for the same triggering run could both read the same
+// still-under-cap count and both call the rerun API. The workflow's
+// concurrency group (keyed on the triggering run's id, cancel-in-progress)
+// closes that remaining gap by ensuring at most one invocation per
+// triggering run ever reaches this check.
 const maxRerunAttempts = 3
 
-func requestRerun(ctx context.Context, client rerun.RESTClient, stdout io.Writer, summaryPath string, p *rerunParams) error {
+func requestRerun(ctx context.Context, client rerun.RESTClient, stderr io.Writer, summaryPath string, p *rerunParams) error {
 	attempt, err := rerun.RunAttempt(ctx, client, p.repo, p.runID)
 	if err != nil {
 		return err
 	}
 	if attempt >= maxRerunAttempts {
-		return appendSummaryLine(stdout, summaryPath, fmt.Sprintf("Rerun skipped: run %s is already at attempt %d (cap %d).", p.runID, attempt, maxRerunAttempts))
+		return appendSummaryLine(stderr, summaryPath, fmt.Sprintf("Rerun skipped: run %s is already at attempt %d (cap %d).", p.runID, attempt, maxRerunAttempts))
 	}
 
 	stillRunning, err := rerun.RerunFailedJobs(ctx, client, p.repo, p.runID)
 	if err != nil {
-		fmt.Fprintf(stdout, "::error::rerun failed jobs for run %s: %s\n", p.runID, err)
+		fmt.Fprintf(stderr, "::error::rerun failed jobs for run %s: %s\n", p.runID, err)
 		return err
 	}
 	if stillRunning {
-		fmt.Fprintf(stdout, "::warning::Run %s is still finishing; skipping rerun.\n", p.runID)
-		return appendSummaryLine(stdout, summaryPath, fmt.Sprintf("Rerun skipped: run %s is still finishing.", p.runID))
+		fmt.Fprintf(stderr, "::warning::Run %s is still finishing; skipping rerun.\n", p.runID)
+		return appendSummaryLine(stderr, summaryPath, fmt.Sprintf("Rerun skipped: run %s is still finishing.", p.runID))
 	}
-	return appendSummaryLine(stdout, summaryPath, fmt.Sprintf("Rerun requested for run %s.", p.runID))
+	return appendSummaryLine(stderr, summaryPath, fmt.Sprintf("Rerun requested for run %s.", p.runID))
 }
 
-func appendSummaryLine(stdout io.Writer, summaryPath, line string) error {
-	fmt.Fprintln(stdout, line)
+func appendSummaryLine(stderr io.Writer, summaryPath, line string) error {
+	fmt.Fprintln(stderr, line)
 	if summaryPath == "" {
 		return nil
 	}
