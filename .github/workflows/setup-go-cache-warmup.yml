@@ -64,7 +64,7 @@ jobs:
             client.wns.windows.com:443
             settings-win.data.microsoft.com:443
             *.events.data.microsoft.com:443
-            fe2cr.update.microsoft.com:443
+            *.update.microsoft.com:443
             ecs.office.com:443
             pti.store.microsoft.com:443
             login.live.com:443
