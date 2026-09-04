@@ -61,6 +61,7 @@ func TestGetTelemetryFromConfig(t *testing.T) {
 
 // TestCaptureCmdString tests capturing command telemetry with string command and CI environment.
 func TestCaptureCmdString(t *testing.T) {
+	isolateTelemetryCache(t)
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -108,6 +109,7 @@ func TestCaptureCmdString(t *testing.T) {
 
 // TestCaptureCmdErrorString tests capturing command telemetry when an error occurs.
 func TestCaptureCmdErrorString(t *testing.T) {
+	isolateTelemetryCache(t)
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -193,6 +195,7 @@ func TestCaptureCmdFailureStringDisabledWithEnvvar(t *testing.T) {
 
 // TestGetTelemetryFromConfigTokenWithEnvvar tests telemetry configuration with custom token, endpoint, and enabled status via environment variables.
 func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
+	isolateTelemetryCache(t)
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
 
@@ -257,6 +260,8 @@ func TestGetTelemetryFromConfigIntergration(t *testing.T) {
 // TestCaptureCmd tests the captureCmd function for successful command execution
 // by setting up mock expectations and verifying telemetry data is captured correctly.
 func TestCaptureCmd(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)
@@ -313,6 +318,8 @@ func TestCaptureCmd(t *testing.T) {
 // TestCaptureCmdError tests the captureCmd function for failed command execution
 // by setting up mock expectations and verifying error telemetry data is captured correctly.
 func TestCaptureCmdError(t *testing.T) {
+	isolateTelemetryCache(t)
+
 	// Preserve and restore CI environment variables to avoid interference.
 	currentEnvVars := PreserveCIEnvVars()
 	defer RestoreCIEnvVars(currentEnvVars)

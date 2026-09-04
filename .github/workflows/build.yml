@@ -27,6 +27,12 @@ jobs:
       contents: write
       pull-requests: write
     uses: cloudposse/.github/.github/workflows/shared-release-branches.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
+    # `secrets: inherit`, not an explicit map: shared-release-branches.yml doesn't declare a
+    # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
+    # (this job only triggers on `release`/`workflow_dispatch`, not `pull_request`, so the
+    # earlier attempt to narrow this never actually ran here -- but test.yml and
+    # feature-release.yml hit the identical mistake against shared-go-auto-release.yml, which
+    # has the same missing-schema shape, and failed with a startup_failure).
     secrets: inherit
 
   homebrew:
@@ -41,7 +47,7 @@ jobs:
       contents: read
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           # No StepSecurity telemetry found across 3 sampled release runs despite
           # this job succeeding on GitHub — a data gap (rare release-only trigger),
@@ -72,7 +78,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           # No StepSecurity telemetry found across sampled release runs despite
           # this job succeeding on GitHub — a data gap (rare release-only trigger),
@@ -134,7 +140,7 @@ jobs:
 
       - name: "Upload Trivy scan results to code-scanning"
         if: always()
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: trivy-results.sarif
 
@@ -174,7 +180,7 @@ jobs:
       attestations: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           # No StepSecurity telemetry found across sampled release runs despite
           # this job succeeding on GitHub — a data gap (rare release-only trigger),

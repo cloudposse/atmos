@@ -15,9 +15,10 @@ on:
     - cron: "27 19 * * 2"
 
 env:
-  # Use pipe fallback so transient proxy.golang.org 5xx errors during
-  # `go mod download` fall back to direct module fetches.
-  GOPROXY: "https://proxy.golang.org|direct"
+  # No `|direct` fallback: under harden-runner's block mode a direct fetch
+  # only fans out to blocked vanity-import hosts and burns minutes; see the
+  # GOPROXY comment in test.yml.
+  GOPROXY: "https://proxy.golang.org"
 
 # Least-privilege default; every job below declares its own narrower
 # job-level permissions that override this baseline.
@@ -41,7 +42,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -65,7 +66,7 @@ jobs:
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           languages: ${{ matrix.language }}
           # If you wish to specify custom queries, you can do so here or in a config file.
@@ -78,7 +79,7 @@ jobs:
       # Autobuild attempts to build any compiled languages (C/C++, C#, Go, Java, or Swift).
       # If this step fails, then you should remove it and run the build manually (see below)
       - name: Autobuild
-        uses: github/codeql-action/autobuild@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/autobuild@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
 
       # ℹ️ Command-line programs to run using the OS shell.
       # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
@@ -91,7 +92,7 @@ jobs:
       #     ./location_of_script_within_repo/buildscript.sh
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           category: "/language:${{matrix.language}}"
           # The merge queue's ephemeral gh-readonly-queue/... ref is deleted as
@@ -123,7 +124,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -146,8 +147,42 @@ jobs:
         with:
           persist-credentials: false
 
+      # GOPROXY no longer falls back to direct fetches (they only reach
+      # blocked vanity hosts under harden-runner's block mode), so every proxy
+      # request here gets bounded retries: the module graph via the shared
+      # retry action, and the govulncheck install via the loop below. The
+      # two steps that follow reproduce what golang/govulncheck-action does
+      # (install @latest, run with -format/-C) minus its non-retried install.
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download Go module dependencies
+        uses: ./.github/actions/go-mod-download-retry
+
+      - name: Install govulncheck
+        shell: bash
+        env:
+          GOOS: ''
+          GOARCH: ''
+        run: |
+          set -euo pipefail
+          attempt=1
+          max_attempts=3
+          until go install golang.org/x/vuln/cmd/govulncheck@latest; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "go install govulncheck failed after $max_attempts attempts" >&2
+              exit 1
+            fi
+            echo "go install govulncheck failed (attempt $attempt/$max_attempts), retrying in 15s..." >&2
+            sleep 15
+            attempt=$((attempt + 1))
+          done
+
       - name: Run govulncheck
-        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+        shell: bash
         env:
           # Atmos ships with CGO disabled (see Makefile/test.yml) — without this,
           # the runner's default CGO_ENABLED=1 makes govulncheck try to compile
@@ -167,14 +202,11 @@ jobs:
           # parallelizes via goroutines internally, which -p doesn't govern)
           # while nearly tripling run time.
           GOMEMLIMIT: "12GiB"
-        with:
-          go-version-file: go.mod
-          output-format: sarif
-          output-file: govulncheck.sarif
+        run: govulncheck -format sarif ./... > govulncheck.sarif
 
       - name: Upload SARIF file
         if: always()
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: govulncheck.sarif
           category: govulncheck
@@ -192,7 +224,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -221,7 +253,7 @@ jobs:
 
       - name: Upload SARIF to code-scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: semgrep.sarif
           category: semgrep
@@ -271,8 +303,10 @@ jobs:
       # Pre-populate module cache to prevent goanalysis_metalinter failures.
       # Without this, the linter may fail with "could not load export data" errors.
       # See: https://github.com/golangci/golangci-lint/issues/5437
+      # With retry: GOPROXY no longer falls back to direct fetches (they only
+      # hit blocked vanity hosts under harden-runner's block mode).
       - name: Download modules
-        run: go mod download
+        uses: ./.github/actions/go-mod-download-retry
 
       # Install the golangci-lint v2 CLI tool (not the linters themselves).
       # This tool is needed to run `golangci-lint custom` which builds a custom binary
@@ -348,7 +382,7 @@ jobs:
         # option here either: it would leave the native "CodeQL" code-scanning
         # required check without this SARIF's contribution.
         if: always()
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: golangci-lint.sarif
           ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
@@ -371,7 +405,7 @@ jobs:
       issues: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
