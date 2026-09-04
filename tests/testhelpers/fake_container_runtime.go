@@ -126,9 +126,12 @@ func recordArgs(args []string) {
 	// newline or a tab (a forwarded -e KEY=VALUE for a multi-line environment
 	// variable, which GitHub Actions jobs legitimately have), so those are
 	// escaped inside the field rather than allowed to break the record.
+	// Backslash must be escaped first: otherwise a literal "\n" in the
+	// original argument and an actual embedded newline both encode to the
+	// same two characters, making the encoding ambiguous to decode.
 	escaped := make([]string, len(args))
 	for i, arg := range args {
-		escaped[i] = strings.NewReplacer("\n", "\\n", "\t", "\\t").Replace(arg)
+		escaped[i] = strings.NewReplacer("\\", "\\\\", "\n", "\\n", "\t", "\\t").Replace(arg)
 	}
 	_, _ = fmt.Fprintln(f, strings.Join(escaped, "\t"))
 }

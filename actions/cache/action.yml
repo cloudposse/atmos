@@ -85,6 +85,19 @@ runs:
           echo "::error::Atmos cache metadata did not include any cache paths. Check ci.cache configuration and the previous metadata step output."
           exit 1
         fi
+        # Reject CR/LF: the key is written verbatim as a single-line KEY=VALUE
+        # record in the export step below, and a newline would let it inject
+        # arbitrary extra environment variables.
+        if [[ "${ATMOS_CACHE_KEY}" == *$'\n'* || "${ATMOS_CACHE_KEY}" == *$'\r'* ]]; then
+          echo "::error::Cache key must not contain CR or LF characters."
+          exit 1
+        fi
+    - name: Validate cache mode
+      if: inputs.mode != 'restore-only' && inputs.mode != 'restore-and-save'
+      shell: bash
+      run: |
+        echo "::error::mode must be restore-only or restore-and-save."
+        exit 1
     # On Windows runners, actions/cache extracts and creates its archives with
     # whichever tar it finds: Git for Windows' GNU tar if it is first on PATH,
     # else Windows' own bsdtar, whose @actions/cache code path decompresses the
@@ -119,14 +132,19 @@ runs:
         ATMOS_CACHE_PATH: ${{ steps.meta.outputs.path }}
         ATMOS_CACHE_RESTORE_KEYS: ${{ steps.meta.outputs.restore-keys }}
       run: |
+        # Random per-run delimiter: a fixed one could collide with a path or
+        # restore-key value that happens to contain that exact line, ending
+        # the heredoc early and letting the rest of the value inject
+        # arbitrary extra environment variables.
+        eof="ATMOS_CACHE_EOF_${RANDOM}${RANDOM}_$$"
         {
           echo "ATMOS_CACHE_KEY=${ATMOS_CACHE_KEY}"
-          echo "ATMOS_CACHE_PATH<<ATMOS_CACHE_EOF"
+          echo "ATMOS_CACHE_PATH<<${eof}"
           echo "${ATMOS_CACHE_PATH}"
-          echo "ATMOS_CACHE_EOF"
-          echo "ATMOS_CACHE_RESTORE_KEYS<<ATMOS_CACHE_EOF"
+          echo "${eof}"
+          echo "ATMOS_CACHE_RESTORE_KEYS<<${eof}"
           echo "${ATMOS_CACHE_RESTORE_KEYS}"
-          echo "ATMOS_CACHE_EOF"
+          echo "${eof}"
         } >> "$GITHUB_ENV"
     - id: cache
       if: inputs.mode != 'restore-only'
