@@ -60,6 +60,22 @@ func TestParseDraftedBody_CategoryAppliesToFollowingEntries(t *testing.T) {
 	assert.Equal(t, "## 🚀 Enhancements", entries[2].Category)
 }
 
+func TestParseDraftedBody_SkipsBlockWithNoSummaryLine(t *testing.T) {
+	body := `<details>
+  no summary tag in this block, just stray text
+</details>
+
+<details>
+  <summary>feat: valid entry @alice (#5)</summary>
+body
+</details>
+`
+	entries, err := ParseDraftedBody(body)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, 5, entries[0].Number)
+}
+
 func TestParseDraftedBody_Errors(t *testing.T) {
 	tests := []struct {
 		name string
@@ -87,6 +103,7 @@ func TestExtractPRNumber(t *testing.T) {
 		{name: "standard release-drafter format", summary: "feat: thing @author (#42)", want: 42},
 		{name: "no trailing number", summary: "feat: thing with no number", want: 0},
 		{name: "number not at end", summary: "#42 feat: thing @author", want: 0},
+		{name: "number too large to fit in int", summary: "feat: thing (#99999999999999999999)", want: 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

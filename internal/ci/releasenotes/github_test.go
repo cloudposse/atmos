@@ -36,6 +36,7 @@ func TestGetReleaseBody_Errors(t *testing.T) {
 		{name: "transport error", doErr: assert.AnError, wantErr: "get release"},
 		{name: "non-200", resp: jsonResponse(http.StatusNotFound, `{"message":"not found"}`), wantErr: "returned"}, //nolint:bodyclose // closed by the code under test, not this fixture.
 		{name: "invalid json", resp: jsonResponse(http.StatusOK, `not json`), wantErr: "decode release"},           //nolint:bodyclose // closed by the code under test, not this fixture.
+		{name: "response body read fails", resp: brokenBodyResponse(http.StatusOK), wantErr: "read release"},       //nolint:bodyclose // closed by the code under test, not this fixture.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

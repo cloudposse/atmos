@@ -20,6 +20,18 @@ func jsonResponse(status int, body string) *http.Response {
 	}
 }
 
+// errReader simulates a connection dropping mid-read: a real failure mode
+// for response bodies, distinct from a non-200 status or a transport error
+// on Do itself.
+type errReader struct{}
+
+func (errReader) Read([]byte) (int, error) { return 0, assert.AnError }
+func (errReader) Close() error             { return nil }
+
+func brokenBodyResponse(status int) *http.Response {
+	return &http.Response{StatusCode: status, Status: http.StatusText(status), Body: errReader{}}
+}
+
 func TestSummarize(t *testing.T) {
 	entries := []PREntry{
 		{Summary: "feat: add widget @alice (#101)", Number: 101, Body: "adds a widget"},
@@ -72,6 +84,11 @@ func TestSummarize_Errors(t *testing.T) {
 			name:    "non-200 status",
 			resp:    jsonResponse(http.StatusTooManyRequests, `{"error":"rate limited"}`), //nolint:bodyclose // closed by the code under test, not this fixture.
 			wantErr: "OpenAI returned",
+		},
+		{
+			name:    "response body read fails",
+			resp:    brokenBodyResponse(http.StatusOK), //nolint:bodyclose // closed by the code under test, not this fixture.
+			wantErr: "read OpenAI response",
 		},
 		{
 			name:    "invalid response envelope",

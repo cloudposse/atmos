@@ -35,7 +35,9 @@ var (
 	// of any entry.
 	detailsOpen  = regexp.MustCompile(`(?m)^<details>\s*$`)
 	detailsClose = regexp.MustCompile(`(?m)^</details>\s*$`)
-	summaryLine  = regexp.MustCompile(`(?m)^\s*<summary>(.*)</summary>\s*$`)
+	// Non-greedy: matches up to the first </summary>, not the last, in the
+	// unlikely event a PR title contains that literal substring.
+	summaryLine  = regexp.MustCompile(`(?m)^\s*<summary>(.*?)</summary>\s*$`)
 	categoryLine = regexp.MustCompile(`(?m)^(## .+)$`)
 	prNumber     = regexp.MustCompile(`#(\d+)\)?\s*$`)
 )
