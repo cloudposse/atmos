@@ -25,14 +25,18 @@ const (
 	maxEntryBodyChars = 6000
 
 	summarizerSystemPrompt = `You condense GitHub pull request descriptions into release notes ` +
-		`for end users of the Atmos CLI. For each pull request write a short Markdown summary: ` +
-		`3 to 6 bullet points, about 60 to 150 words in total, that keep what changed and why ` +
-		`it matters, using the concrete names of commands, flags, configuration keys, and ` +
-		`behaviors from the description. Do not repeat the pull request title, do not mention ` +
-		`tests, CI, coverage, or internal refactoring unless that is the whole change, and do ` +
-		`not invent details that are not in the description. Return ONLY a JSON array of ` +
-		`objects: [{"number": <PR number>, "summary": "<markdown>"}, ...], one per pull ` +
-		`request, in the same order as given, with no other text before or after the array.`
+		`for end users of the Atmos CLI. The pull request title is already shown above the ` +
+		`summary, so never restate it: write only what the title does not say. Write Markdown ` +
+		`bullets, one per distinct change the description actually describes - a small pull ` +
+		`request gets a single bullet, a large one at most six. Each bullet names the concrete ` +
+		`command, flag, configuration key, or behavior and, when the description gives one, ` +
+		`the reason it matters. Never say the same thing twice in different words, and do not ` +
+		`add generic benefit statements such as "this makes it easier" or "provides a starting ` +
+		`point". Do not mention tests, CI, coverage, or internal refactoring unless that is the ` +
+		`whole change, and do not invent details that are not in the description. Keep each ` +
+		`summary under about 120 words. Return ONLY a JSON array of objects: ` +
+		`[{"number": <PR number>, "summary": "<markdown>"}, ...], one per pull request, in ` +
+		`the same order as given, with no other text before or after the array.`
 )
 
 // errSummaryMismatch means the model's response didn't cover every entry
