@@ -13,9 +13,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// errNoEntries means a drafted release body had no `<details>` blocks to
-// summarize - either release-drafter's template changed shape, or the body
-// was empty.
+// errNoEntries means a drafted release body had no pull request entries in
+// either shape this package understands (<details> blocks or bullet lines
+// ending in a PR number) - release-drafter's template changed shape, or the
+// body was empty.
 var errNoEntries = errors.New("releasenotes: no pull request entries found in body")
 
 // PREntry is one pull request as release-drafter rendered it: a category
@@ -40,19 +41,28 @@ var (
 	summaryLine  = regexp.MustCompile(`(?m)^\s*<summary>(.*?)</summary>\s*$`)
 	categoryLine = regexp.MustCompile(`(?m)^(## .+)$`)
 	prNumber     = regexp.MustCompile(`#(\d+)\)?\s*$`)
+	// One entry of the skeleton template in .github/auto-release.yml:
+	// `- $TITLE @$AUTHOR (#$NUMBER)`.
+	bulletLine = regexp.MustCompile(`^- (.+\(#\d+\))\s*$`)
 )
 
 // ParseDraftedBody extracts every pull request entry from a release-drafter
-// body built from the default `<details><summary>$TITLE @$AUTHOR
-// (#$NUMBER)</summary>$BODY</details>` change-template, in document order,
-// tagging each with the nearest preceding `## ` category heading (release-drafter
-// emits one per matched category, "" for entries under no heading).
+// body, in document order, tagging each with the nearest preceding `## `
+// category heading (release-drafter emits one per matched category, "" for
+// entries under no heading). Two change-template shapes are understood:
+// the org default `<details><summary>$TITLE @$AUTHOR (#$NUMBER)</summary>
+// $BODY</details>`, whose entries carry the PR body, and this repo's
+// skeleton `- $TITLE @$AUTHOR (#$NUMBER)`, whose entries carry none (the
+// body is fetched from the pull request instead, see SummarizeRelease).
 func ParseDraftedBody(raw string) ([]PREntry, error) {
 	defer perf.Track(nil, "releasenotes.ParseDraftedBody")()
 
 	opens := detailsOpen.FindAllStringIndex(raw, -1)
 	closes := detailsClose.FindAllStringIndex(raw, -1)
-	if len(opens) == 0 || len(opens) != len(closes) {
+	if len(opens) == 0 {
+		return parseBulletBody(raw)
+	}
+	if len(opens) != len(closes) {
 		return nil, errNoEntries
 	}
 
@@ -81,6 +91,30 @@ func ParseDraftedBody(raw string) ([]PREntry, error) {
 		entries = append(entries, entry)
 	}
 
+	if len(entries) == 0 {
+		return nil, errNoEntries
+	}
+	return entries, nil
+}
+
+// parseBulletBody handles the skeleton template: one `- title @author (#N)`
+// line per PR under `## ` category headings, no bodies. A line that is
+// neither is ignored.
+func parseBulletBody(raw string) ([]PREntry, error) {
+	var entries []PREntry
+	category := ""
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if m := categoryLine.FindStringSubmatch(line); m != nil {
+			category = m[1]
+			continue
+		}
+		m := bulletLine.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		entries = append(entries, PREntry{Category: category, Summary: m[1], Number: extractPRNumber(m[1])})
+	}
 	if len(entries) == 0 {
 		return nil, errNoEntries
 	}

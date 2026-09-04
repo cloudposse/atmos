@@ -35,13 +35,31 @@ func testParams(apiKey, ghToken string) *releasenotes.SummarizeParams {
 	}
 }
 
-func TestSummarizeNotes_SkipsWithoutAPIKey(t *testing.T) {
+// fakeAPIs answers the skeleton release, one PR, the model, and the update.
+func fakeAPIs(t *testing.T) (releasenotes.HTTPClient, map[string]int) {
 	ctrl := gomock.NewController(t)
-	client := releasenotes.NewMockHTTPClient(ctrl) // no .Do() expectation: must not be called.
-
-	var stderr bytes.Buffer
-	summarizeNotes(context.Background(), &stderr, client, testParams("", "gh-token"))
-	assert.Contains(t, stderr.String(), "OPENAI_API_KEY not set")
+	client := releasenotes.NewMockHTTPClient(ctrl)
+	calls := map[string]int{}
+	client.EXPECT().Do(gomock.Any()).AnyTimes().DoAndReturn(func(req *http.Request) (*http.Response, error) {
+		url := req.URL.String()
+		switch {
+		case req.Method == http.MethodGet && strings.Contains(url, "/releases/"):
+			calls["get-release"]++
+			return jsonResponse(`{"body":"- feat: x @a (#1)\n"}`), nil
+		case req.Method == http.MethodGet && strings.Contains(url, "/pulls/1"):
+			calls["get-pr"]++
+			return jsonResponse(`{"body":"Does x in detail."}`), nil
+		case req.Method == http.MethodPost:
+			calls["openai"]++
+			return jsonResponse(`{"choices":[{"message":{"content":"[{\"number\":1,\"summary\":\"Does x.\"}]"}}]}`), nil
+		case req.Method == http.MethodPatch:
+			calls["patch"]++
+			return jsonResponse(`{}`), nil
+		}
+		t.Fatalf("unexpected request %s %s", req.Method, url)
+		return nil, nil
+	})
+	return client, calls
 }
 
 func TestSummarizeNotes_SkipsWithoutGitHubToken(t *testing.T) {
@@ -53,40 +71,31 @@ func TestSummarizeNotes_SkipsWithoutGitHubToken(t *testing.T) {
 	assert.Contains(t, stderr.String(), "GITHUB_TOKEN not set")
 }
 
-func TestSummarizeNotes_Success(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	client := releasenotes.NewMockHTTPClient(ctrl)
+func TestSummarizeNotes_WithoutAPIKeyStillRewritesWithFallback(t *testing.T) {
+	client, calls := fakeAPIs(t)
 
-	calls := 0
-	client.EXPECT().Do(gomock.Any()).Times(3).DoAndReturn(func(req *http.Request) (*http.Response, error) {
-		calls++
-		switch calls {
-		case 1:
-			return jsonResponse(`{"body":"<details>\n  <summary>feat: x @a (#1)</summary>\nbody\n</details>\n"}`), nil
-		case 2:
-			return jsonResponse(`{"choices":[{"message":{"content":"[{\"number\":1,\"summary\":\"Does x.\"}]"}}]}`), nil
-		default:
-			return jsonResponse(`{}`), nil
-		}
-	})
+	var stderr bytes.Buffer
+	summarizeNotes(context.Background(), &stderr, client, testParams("", "gh-token"))
+	assert.Contains(t, stderr.String(), "OPENAI_API_KEY not set")
+	assert.Contains(t, stderr.String(), "release notes rewritten (1 entries")
+	assert.Contains(t, stderr.String(), "fallback summaries")
+	assert.Equal(t, 0, calls["openai"])
+	assert.Equal(t, 1, calls["patch"])
+}
+
+func TestSummarizeNotes_WithAPIKeyUsesModel(t *testing.T) {
+	client, calls := fakeAPIs(t)
 
 	var stderr bytes.Buffer
 	summarizeNotes(context.Background(), &stderr, client, testParams("openai-key", "gh-token"))
-	assert.Contains(t, stderr.String(), "release notes summarized")
+	assert.Contains(t, stderr.String(), "release notes rewritten (1 entries")
+	assert.Contains(t, stderr.String(), "model summaries")
+	assert.Equal(t, 1, calls["openai"])
+	assert.Equal(t, 1, calls["patch"])
 }
 
 func TestSummarizeNotes_DryRunPrintsBodyAndSkipsUpdate(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	client := releasenotes.NewMockHTTPClient(ctrl)
-
-	calls := 0
-	client.EXPECT().Do(gomock.Any()).Times(2).DoAndReturn(func(_ *http.Request) (*http.Response, error) {
-		calls++
-		if calls == 1 {
-			return jsonResponse(`{"body":"<details>\n  <summary>feat: x @a (#1)</summary>\nbody\n</details>\n"}`), nil
-		}
-		return jsonResponse(`{"choices":[{"message":{"content":"[{\"number\":1,\"summary\":\"Does x.\"}]"}}]}`), nil
-	})
+	client, calls := fakeAPIs(t)
 
 	var stdout, stderr bytes.Buffer
 	params := testParams("openai-key", "gh-token")
@@ -95,6 +104,7 @@ func TestSummarizeNotes_DryRunPrintsBodyAndSkipsUpdate(t *testing.T) {
 	summarizeNotes(context.Background(), &stderr, client, params)
 	assert.Contains(t, stdout.String(), "Does x.")
 	assert.Contains(t, stderr.String(), "dry run: release not updated")
+	assert.Equal(t, 0, calls["patch"])
 }
 
 func TestSummarizeNotes_FailureIsWarnedNotReturned(t *testing.T) {

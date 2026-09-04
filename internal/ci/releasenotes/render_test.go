@@ -64,11 +64,16 @@ func TestRenderBody_RoundTripsThroughParseDraftedBody(t *testing.T) {
 	}
 }
 
-func TestRenderBody_EmptySummaryKeepsOriginalBody(t *testing.T) {
-	entries := []PREntry{{Category: "", Summary: "chore: bump deps @dependabot (#5)", Number: 5, Body: "Bumps foo from 1 to 2.\n"}}
-	got, err := RenderBody(entries, []string{""})
+func TestRenderBody_EmptySummaryRendersSkeletonBullet(t *testing.T) {
+	entries := []PREntry{
+		{Category: "", Summary: "chore: bump deps @dependabot (#5)", Number: 5, Body: "Bumps foo from 1 to 2.\n"},
+		{Category: "", Summary: "feat: x @a (#6)", Number: 6},
+	}
+	got, err := RenderBody(entries, []string{"", "Does x."})
 	require.NoError(t, err)
-	assert.Contains(t, got, "<details>\n  <summary>chore: bump deps @dependabot (#5)</summary>\nBumps foo from 1 to 2.\n</details>\n")
+	assert.Contains(t, got, "- chore: bump deps @dependabot (#5)\n")
+	assert.NotContains(t, got, "Bumps foo", "an empty summary must not fall back to re-embedding the body")
+	assert.Contains(t, got, "<details>\n  <summary>feat: x @a (#6)</summary>\nDoes x.\n</details>\n")
 }
 
 func TestRenderBody_MismatchedLengthsError(t *testing.T) {

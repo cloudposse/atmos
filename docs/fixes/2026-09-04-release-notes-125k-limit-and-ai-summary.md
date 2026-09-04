@@ -31,20 +31,29 @@ job: `body is too long` recurred, byte-for-byte the same error.
 
 Two independent, durable changes:
 
-1. **`internal/ci/releasenotes`** (new package) + **`magefiles/ci_release_notes.go`**
-    (`release:summarizeNotes`): after release-drafter produces its (still full-body) draft, an
-    opt-in step parses its `<details>` entries, sends each PR's title+body to an OpenAI model in
-    one batched request, and rewrites the release in release-drafter's exact shape - the same
+1. **`.github/auto-release.yml`** (new, repo-level release-drafter config) +
+    **`internal/ci/releasenotes`** (new package) + **`magefiles/ci_release_notes.go`**
+    (`release:summarizeNotes`). The org-wide release-drafter template embeds every PR's full body,
+    and there is no hook between release-drafter computing that body and writing it, so once it
+    passes 125,000 characters the draft cannot be written at all and nothing downstream can run.
+    Reading the drafted body back is therefore not a workable source. Instead the repo-level config
+    keeps the org's categories and version resolution but reduces `change-template` to a skeleton,
+    `- $TITLE @$AUTHOR (#$NUMBER)`, which never approaches the limit. After that draft is written,
+    `summarize-notes` fetches each PR's description from the pull-request API (which has no such
+    cap), condenses it, and rewrites the release in the org template's exact shape - the same
     category headings and the same collapsible `<details><summary>title @author (#N)</summary>`
-    block per PR - with the AI-condensed summary as each block's body instead of the full embedded
-    PR description. The notes read and expand the same; only the hidden part got shorter. Entirely
-    optional - with no `OPENAI_API_KEY` secret configured it logs why and exits 0, leaving
-    release-drafter's own body untouched. Any OpenAI/GitHub API failure is caught and logged, never
-    fails the job - this must never be able to block the release path over a summarization hiccup.
-    `RELEASE_NOTES_DRY_RUN=1` prints the summarized body to stdout instead of updating the release,
-    for previewing the result (or checking the key/model) against any real release without touching
-    it. The model defaults to `gpt-5.6-luna` and is overridable with `OPENAI_MODEL`; the request
-    sends no `temperature`, because the gpt-5 family rejects any non-default value.
+    block per PR - with the condensed text as each block's body. The notes read and expand as
+    before; only the hidden part is short. With `OPENAI_API_KEY` configured the condensing is done
+    by the model (default `gpt-5.6-luna`, overridable with `OPENAI_MODEL`; no `temperature` is
+    sent, the gpt-5 family rejects any non-default value); without it, each entry gets CodeRabbit's
+    own "Summary by CodeRabbit" block when the PR has one, else its description truncated to 1,200
+    characters. If even the summarized body would exceed 120,000 characters the release is
+    rewritten as the bare skeleton bullets, which are always valid. Any API failure is caught and
+    logged, never fails the job: the skeleton is readable release notes on its own.
+    `RELEASE_NOTES_DRY_RUN=1` prints the rewritten body to stdout instead of updating the release,
+    for previewing the result (or checking the key/model) against any real release without
+    touching it. The parser accepts both the skeleton and the org template's `<details>` shape,
+    so a draft produced under either config is handled.
 2. **`.github/workflows/release.yml`** (new): the `release:` job (and the new summarization job)
     moved out of `test.yml` into their own `workflow_run`-triggered workflow, gated on
     `github.event.workflow_run.conclusion == 'success'`. Previously `release:` lived inside
@@ -67,22 +76,26 @@ Two independent, durable changes:
   (render → `ParseDraftedBody` → identical entries) that pins the output to release-drafter's shape.
 - `atmos lint --changed` (`custom-gcl run --new-from-rev=origin/main`) - 0 issues.
 - `atmos ci validate .github/workflows/test.yml .github/workflows/release.yml` - both valid.
-- Validated live with a real key (`RELEASE_NOTES_DRY_RUN=1 go tool mage release:summarizeNotes
-  cloudposse/atmos 378837775`, the `v1.228.0-rc.2` release with three real entries): body went from
-  9,763 to 1,072 characters with every `<details>` block, summary line and category heading intact.
-  The first live attempts surfaced two things. `temperature: 0.3` returned `400 unsupported_value`
-  on the gpt-5 family - a real defect, fixed by not sending one. And `gpt-5.6-luna` returned
-  `403 model_not_found` for the cloudposse OpenAI project, which turned out to be a project
-  permission (the project had not been granted the 5.6 models); after the grant, the same call
-  flapped between 403 and success for several minutes while it propagated. So a 403 here is a
-  project setting to fix, not a reason to change the default, and the job's log-and-skip behavior
-  already handles the propagation window.
+- Validated live with a real key against the actual `v1.228.0` draft (release `379499446`, whose
+  body is the skeleton: 19 PRs under 2 category headings):
+  `RELEASE_NOTES_DRY_RUN=1 go tool mage release:summarizeNotes cloudposse/atmos 379499446` fetched
+  19 PR descriptions, made one model call, and produced 19 `<details>` blocks under the 2 headings
+  in 4,420 characters. Earlier live attempts (against `v1.228.0-rc.2`, an org-template draft) had
+  surfaced two things fixed along the way: `temperature: 0.3` returned `400 unsupported_value` on
+  the gpt-5 family, and `gpt-5.6-luna` returned `403 model_not_found` until the cloudposse OpenAI
+  project was granted the 5.6 models, after which the call flapped between 403 and success for
+  several minutes while the grant propagated - a project setting, not a code problem, and the job's
+  log-and-skip behavior covers the propagation window.
 - Not yet validated in CI: the `summarize-notes` job needs `OPENAI_API_KEY` configured as a repo/org
   secret before it does anything beyond log-and-skip; the `draft`/summarization split needs a real
   push-triggered `Tests` run to complete before `workflow_run` fires it.
 
 ## Follow-ups
 
-- `OPENAI_API_KEY` secret needs to be added (repo or org level) to activate summarization.
+- `OPENAI_API_KEY` secret needs to be added (repo or org level) for model summaries; without it the
+  job still runs with CodeRabbit/truncated fallbacks.
+- Release-drafter reads `.github/auto-release.yml` from the default branch, so the skeleton template
+  takes effect on the first `Tests` run on `main` after this merges; that run also repairs the
+  current oversized draft.
 - PR #3039 (the standalone `shared-go-auto-release.yml` pin bump on `test.yml`) is superseded by
   this change once merged, since the same fix now lives in `release.yml` instead.

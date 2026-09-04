@@ -27,15 +27,19 @@ type Release mg.Namespace
 const defaultSummaryModel = "gpt-5.6-luna"
 
 // releaseNotesHTTPTimeout bounds the whole SummarizeNotes call: one release
-// GET, one OpenAI request covering every PR at once, one release PATCH.
-const releaseNotesHTTPTimeout = 2 * time.Minute
+// GET, one pull-request GET per entry, one OpenAI request covering every PR
+// at once, one release PATCH.
+const releaseNotesHTTPTimeout = 5 * time.Minute
 
-// SummarizeNotes condenses a drafted GitHub release's body with an LLM so it
-// stays well under GitHub's 125,000-character limit on repos that merge many
-// pull requests between releases (see docs/fixes). Thin: reads the
-// environment and builds the real HTTP client, then delegates to
-// summarizeNotes, which holds the actual (tested) skip/success/warning
-// logic.
+// SummarizeNotes rewrites a drafted GitHub release's skeleton body (see
+// .github/auto-release.yml) as collapsible per-PR notes with condensed
+// descriptions, so the release stays well under GitHub's 125,000-character
+// limit on a repo that merges many pull requests between releases (see
+// docs/fixes). With OPENAI_API_KEY the descriptions are summarized by the
+// model; without it, CodeRabbit's summary or a truncated description stands
+// in. Thin: reads the environment and builds the real HTTP client, then
+// delegates to summarizeNotes, which holds the actual (tested)
+// skip/success/warning logic.
 //
 // Set RELEASE_NOTES_DRY_RUN=1 to print the summarized body to stdout instead
 // of updating the release - the way to preview the result, or to verify the
@@ -62,31 +66,36 @@ func (Release) SummarizeNotes(repo, releaseID string) error {
 	return nil
 }
 
-// summarizeNotes never returns an error: it's opt-in (with no
-// params.OpenAIAPIKey it logs why and does nothing, so a workflow step gated
-// only by this target's presence degrades cleanly on a fork or a repo that
-// hasn't configured the secret), and any failure past that point (OpenAI
-// down, malformed response, GitHub API error) is caught and logged, not
+// summarizeNotes never returns an error: any failure (OpenAI down,
+// malformed response, GitHub API error) is caught and logged, not
 // propagated - this must never be able to fail the release job over a
-// summarization hiccup, since release-drafter's own (unsummarized) body is
-// still perfectly usable.
+// summarization hiccup, since release-drafter's skeleton body is still
+// usable release notes on its own. No OPENAI_API_KEY is not a failure: the
+// release is still rewritten, with fallback summaries.
 func summarizeNotes(ctx context.Context, stderr io.Writer, client releasenotes.HTTPClient, params *releasenotes.SummarizeParams) {
-	if params.OpenAIAPIKey == "" {
-		fmt.Fprintln(stderr, "mage: OPENAI_API_KEY not set, skipping release notes summarization")
-		return
-	}
 	if params.GHToken == "" {
 		fmt.Fprintln(stderr, "mage: GITHUB_TOKEN not set, skipping release notes summarization")
 		return
 	}
+	if params.OpenAIAPIKey == "" {
+		fmt.Fprintln(stderr, "mage: OPENAI_API_KEY not set, using CodeRabbit summaries or truncated descriptions instead of the model")
+	}
 
-	if err := releasenotes.SummarizeRelease(ctx, client, params); err != nil {
+	res, err := releasenotes.SummarizeRelease(ctx, client, params)
+	if err != nil {
 		fmt.Fprintf(stderr, "::warning::release notes summarization skipped: %s\n", err)
 		return
 	}
+	mode := "fallback summaries"
+	if res.AI {
+		mode = "model summaries"
+	}
+	if res.Degraded {
+		fmt.Fprintf(stderr, "::warning::release notes rewritten as bare bullets: even the summarized body exceeded the size limit (%d entries)\n", res.Entries)
+	}
 	if params.DryRun {
-		fmt.Fprintln(stderr, "mage: release notes summarized (dry run: release not updated)")
+		fmt.Fprintf(stderr, "mage: release notes rewritten (%d entries, %d chars, %s; dry run: release not updated)\n", res.Entries, res.Chars, mode)
 		return
 	}
-	fmt.Fprintln(stderr, "mage: release notes summarized")
+	fmt.Fprintf(stderr, "mage: release notes rewritten (%d entries, %d chars, %s)\n", res.Entries, res.Chars, mode)
 }

@@ -8,12 +8,11 @@ import (
 )
 
 // RenderBody rebuilds a release body from entries and their summaries (same
-// length and order as entries, e.g. Summarize's return value) in exactly the
-// shape release-drafter's change-template produced it: category headings,
-// then one collapsible `<details>` block per pull request with the
-// title/author/number line as its `<summary>`. The only difference is that
-// each block's body is the condensed summary instead of the full embedded PR
-// description, so the notes read and expand the same - just shorter inside.
+// length and order as entries) in the shape of the org-wide release-drafter
+// change-template: category headings, then one collapsible `<details>` block
+// per pull request with the title/author/number line as its `<summary>` and
+// the condensed text as the block's body. An entry whose summary is empty
+// is rendered as the plain skeleton bullet instead of an empty block.
 func RenderBody(entries []PREntry, summaries []string) (string, error) {
 	defer perf.Track(nil, "releasenotes.RenderBody")()
 
@@ -34,19 +33,11 @@ func RenderBody(entries []PREntry, summaries []string) (string, error) {
 			}
 			lastCategory = e.Category
 		}
-		writeDetails(&b, e, summaries[i])
+		if summary := strings.TrimSpace(summaries[i]); summary != "" {
+			fmt.Fprintf(&b, "<details>\n  <summary>%s</summary>\n%s\n</details>\n", e.Summary, summary)
+		} else {
+			fmt.Fprintf(&b, "- %s\n", e.Summary)
+		}
 	}
 	return b.String(), nil
-}
-
-// writeDetails mirrors release-drafter's default change-template
-// (`<details>\n  <summary>$TITLE @$AUTHOR (#$NUMBER)</summary>\n$BODY\n</details>`).
-// An empty summary keeps the original body: an entry the model had nothing
-// to say about should still show what the PR did, not an empty block.
-func writeDetails(b *strings.Builder, e PREntry, summary string) {
-	body := strings.TrimSpace(summary)
-	if body == "" {
-		body = strings.TrimSpace(e.Body)
-	}
-	fmt.Fprintf(b, "<details>\n  <summary>%s</summary>\n%s\n</details>\n", e.Summary, body)
 }

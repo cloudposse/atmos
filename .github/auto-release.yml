@@ -1,0 +1,55 @@
+# Release-drafter config for cloudposse/atmos. Identical to the org-wide
+# default in cloudposse/.github except for `change-template`.
+#
+# The org template embeds every merged PR's full body ($BODY) inside a
+# <details> block. On this repo that grows past GitHub's 125,000-character
+# release-body limit within a few dozen merges, at which point release-drafter
+# can no longer write the draft at all (docs/fixes/2026-09-04-release-notes-
+# 125k-limit-and-ai-summary.md). So release-drafter only produces the
+# skeleton here: category headings plus one bullet per PR carrying the title,
+# author and number. The `summarize-notes` job in .github/workflows/release.yml
+# then fetches each PR's body from the pull-request API (which has no such
+# cap), condenses it, and rewrites the release as <details> blocks with the
+# condensed text as each block's body - the org template's shape, without
+# the size problem. The skeleton is readable on its own, so a summarization
+# failure leaves usable notes rather than a failed release.
+filter-by-commitish: true
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+version-resolver:
+  major:
+    labels:
+    - 'major'
+  minor:
+    labels:
+    - 'minor'
+    - 'enhancement'
+  patch:
+    labels:
+    - 'auto-update'
+    - 'patch'
+    - 'fix'
+    - 'bugfix'
+    - 'bug'
+    - 'hotfix'
+    - 'no-release'
+  default: 'minor'
+
+categories:
+- title: '🚀 Enhancements'
+  labels:
+  - 'enhancement'
+  - 'patch'
+- title: '🐛 Bug Fixes'
+  labels:
+  - 'fix'
+  - 'bugfix'
+  - 'bug'
+  - 'hotfix'
+- title: '🤖 Automatic Updates'
+  labels:
+  - 'auto-update'
+
+change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
+template: |
+  $CHANGES

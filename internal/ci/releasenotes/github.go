@@ -33,27 +33,50 @@ func GetReleaseBody(ctx context.Context, client HTTPClient, token string, ref Re
 	if err != nil {
 		return "", err
 	}
+	return fetchBodyField(client, req, "release "+ref.ID)
+}
+
+// GetPullRequestBody fetches one pull request's description via the REST
+// API. A release body is capped at 125,000 characters and cannot even be
+// written past that, but a pull request's own description is always
+// readable in full - which is why summarization draws on this, not on the
+// drafted release.
+func GetPullRequestBody(ctx context.Context, client HTTPClient, token, repo string, number int) (string, error) {
+	defer perf.Track(nil, "releasenotes.GetPullRequestBody")()
+
+	url := fmt.Sprintf("https://api.github.com/repos/%s/pulls/%d", repo, number)
+	req, err := newGitHubAPIRequest(ctx, http.MethodGet, token, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("releasenotes: build request for PR #%d: %w", number, err)
+	}
+	return fetchBodyField(client, req, fmt.Sprintf("PR #%d", number))
+}
+
+// fetchBodyField performs a GET whose JSON response carries a "body" field
+// (releases and pull requests both do) and returns that field; what names
+// the resource in errors.
+func fetchBodyField(client HTTPClient, req *http.Request, what string) (string, error) {
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("releasenotes: get release %s: %w", ref.ID, err)
+		return "", fmt.Errorf("releasenotes: get %s: %w", what, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("releasenotes: read release %s response: %w", ref.ID, err)
+		return "", fmt.Errorf("releasenotes: read %s response: %w", what, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%w: get release %s returned %s: %s", errGitHubRequestFailed, ref.ID, resp.Status, string(body))
+		return "", fmt.Errorf("%w: get %s returned %s: %s", errGitHubRequestFailed, what, resp.Status, string(body))
 	}
 
-	var release struct {
+	var parsed struct {
 		Body string `json:"body"`
 	}
-	if err := json.Unmarshal(body, &release); err != nil {
-		return "", fmt.Errorf("releasenotes: decode release %s: %w", ref.ID, err)
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return "", fmt.Errorf("releasenotes: decode %s: %w", what, err)
 	}
-	return release.Body, nil
+	return parsed.Body, nil
 }
 
 // UpdateReleaseBody sets ref's release body. Every other field is left
@@ -88,9 +111,17 @@ func UpdateReleaseBody(ctx context.Context, client HTTPClient, token string, ref
 
 func newGitHubRequest(ctx context.Context, method, token string, ref ReleaseRef, body io.Reader) (*http.Request, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/%s", ref.Repo, ref.ID)
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	req, err := newGitHubAPIRequest(ctx, method, token, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("releasenotes: build %s request for release %s: %w", method, ref.ID, err)
+	}
+	return req, nil
+}
+
+func newGitHubAPIRequest(ctx context.Context, method, token, url string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Authorization", "Bearer "+token)

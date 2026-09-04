@@ -99,6 +99,26 @@ body
 	assert.Equal(t, "", entries[1].Category)
 }
 
+func TestParseDraftedBody_SkeletonBullets(t *testing.T) {
+	body := "- feat: add widget @alice (#101)\r\n" +
+		"some stray text release-drafter never writes\r\n" +
+		"- a bullet with no number\r\n\r\n" +
+		"## 🚀 Enhancements\r\n\r\n" +
+		"- fix: correct gizmo @bob (#102)\r\n" +
+		"- fix: another gizmo fix @carol (#103)\r\n"
+
+	entries, err := ParseDraftedBody(body)
+	require.NoError(t, err)
+	require.Len(t, entries, 3)
+
+	assert.Equal(t, PREntry{Category: "", Summary: "feat: add widget @alice (#101)", Number: 101}, entries[0])
+	assert.Equal(t, PREntry{Category: "## 🚀 Enhancements", Summary: "fix: correct gizmo @bob (#102)", Number: 102}, entries[1])
+	assert.Equal(t, PREntry{Category: "## 🚀 Enhancements", Summary: "fix: another gizmo fix @carol (#103)", Number: 103}, entries[2])
+	for _, e := range entries {
+		assert.Empty(t, e.Body, "skeleton entries carry no body")
+	}
+}
+
 func TestParseDraftedBody_Errors(t *testing.T) {
 	tests := []struct {
 		name string
