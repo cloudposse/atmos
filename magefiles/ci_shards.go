@@ -41,7 +41,7 @@ func (CI) CheckShardResults(repo, runID, runAttempt, check string) error {
 	if err != nil {
 		return fmt.Errorf("mage: create GitHub REST client: %w", err)
 	}
-	return acceptance.CheckShardResults(context.Background(), client, os.Stdout, &acceptance.ShardResultsParams{
+	return acceptance.CheckShardResults(context.Background(), client, os.Stderr, &acceptance.ShardResultsParams{
 		Run:        rerun.RunRef{Repo: repo, RunID: runID, RunAttempt: runAttempt},
 		Target:     target,
 		ShardCount: count,
