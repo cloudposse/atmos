@@ -3,9 +3,7 @@ package markdown
 
 import (
 	"encoding/json"
-	"os"
 	"reflect"
-	"sync"
 	"unsafe"
 
 	"github.com/charmbracelet/glamour"
@@ -29,9 +27,6 @@ import (
 type CustomRenderer struct {
 	glamour *glamour.TermRenderer
 }
-
-// stdoutRedirectMu serializes stdout redirects during rendering to prevent races.
-var stdoutRedirectMu sync.Mutex
 
 // CustomRendererOption configures the CustomRenderer.
 type CustomRendererOption func(*customRendererConfig)
@@ -226,29 +221,25 @@ func getGlamourGoldmark(renderer *glamour.TermRenderer) goldmark.Markdown {
 }
 
 // Render converts markdown content to ANSI styled text.
-// Stdout is temporarily suppressed during rendering to prevent glamour from printing
-// "Warning: unhandled element" messages when it encounters markdown elements it can't handle.
+//
+// Render deliberately does NOT redirect os.Stdout while glamour runs. An earlier
+// version swapped the process-global os.Stdout to /dev/null here (under a mutex
+// that only serialized other Render calls) to hide glamour's
+// `fmt.Println("Warning: unhandled element", ...)`. Reassigning os.Stdout is a
+// data race against every other goroutine that reads os.Stdout at the same
+// time (fmt.Println, pkg/io's dynamic writers, bubbletea, parallel stack
+// processing that logs), and `go test -race` flags it. The redirect is also
+// unnecessary: glamour only prints that warning for node kinds it registers but
+// never handles -- ast.KindString and the goldmark footnote kinds. Atmos's
+// stringNodeRenderer (extensions/linkify.go) overrides ast.KindString for every
+// renderer built here (goldmark registers higher-priority renderers last, so
+// priority 500 wins over glamour's 1000), and footnotes can never appear
+// because glamour enables only extension.GFM and extension.DefinitionList.
+// Every Atmos custom kind (Badge/Highlight/Admonition/Muted) has its own
+// renderer or is transformed into a kind glamour handles. See
+// TestCustomRendererWritesNothingToStdout, which guards this reasoning
+// against a future glamour upgrade.
 func (r *CustomRenderer) Render(content string) (string, error) {
-	// Suppress glamour warnings by temporarily redirecting stdout to /dev/null.
-	// Glamour's internal ANSI renderer prints "Warning: unhandled element" directly to stdout
-	// via fmt.Println when it encounters nodes it doesn't know how to handle.
-	// These warnings are not useful to users and can be confusing.
-	//
-	// The mutex serializes stdout redirects to prevent races when Render() is called
-	// concurrently or when other goroutines write to stdout during rendering.
-	stdoutRedirectMu.Lock()
-	defer stdoutRedirectMu.Unlock()
-
-	oldStdout := os.Stdout
-	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
-	if err == nil {
-		os.Stdout = devNull
-		defer func() {
-			os.Stdout = oldStdout
-			devNull.Close()
-		}()
-	}
-
 	return r.glamour.Render(content)
 }
 
