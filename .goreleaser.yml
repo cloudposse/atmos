@@ -134,8 +134,8 @@ nfpms:
     file_name_template: '{{ replace .ConventionalFileName "~" "-" }}'
 
 sboms:
-  - id: source
-    artifacts: source
+  - id: binary
+    artifacts: binary
   - id: package
     artifacts: package
 
