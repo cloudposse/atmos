@@ -73,9 +73,9 @@ func New(opts ...Option) *Provider {
 	return p
 }
 
-// tokenFromEnv reads the Azure DevOps personal access token from AZURE_DEVOPS_EXT_PAT, the
-// environment variable this org's other Azure DevOps tooling (ado.sh's ensure_pr/inject_pat_url)
-// already standardizes on, used as HTTP Basic auth with an empty username.
+// tokenFromEnv reads the Azure DevOps personal access token from AZURE_DEVOPS_EXT_PAT, the same
+// environment variable the official az devops/az repos CLI extension uses for PAT auth, used here
+// as HTTP Basic auth with an empty username.
 func tokenFromEnv() (string, error) {
 	defer perf.Track(nil, "azuredevops.tokenFromEnv")()
 
