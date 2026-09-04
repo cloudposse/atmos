@@ -38,11 +38,35 @@ ci:
       - 'atmos-toolchain-{{.OS}}-{{.Arch}}-'
 ```
 
+### Inputs
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `restore-only` | `'false'` | When `'true'`, restore the cache but never save it (uses `actions/cache/restore` instead of `actions/cache`, so there is no post step). |
+
+#### Many parallel consumers, one writer
+
+If several jobs (for example, a matrix of test shards) restore the same key,
+let exactly one job save it and mark the rest `restore-only`. Otherwise every
+shard that misses tries to save the same key at the end of the job: all but
+one fail with `Unable to reserve cache with key ..., another job may be
+creating this cache`, and each still pays the tar + zstd + upload cost first.
+
+```yaml
+# The single writer (saves on a miss):
+- uses: cloudposse/atmos/actions/cache@v1
+
+# Every parallel consumer (restores only, no post step):
+- uses: cloudposse/atmos/actions/cache@v1
+  with:
+    restore-only: 'true'
+```
+
 ### Outputs
 
 | Output | Description |
 | --- | --- |
-| `cache-hit` | `true` when `actions/cache` found an exact key match. |
+| `cache-hit` | `true` when `actions/cache` (or `actions/cache/restore`) found an exact key match. |
 | `key` | The resolved cache key. |
 
 ## How it compares
@@ -87,4 +111,4 @@ tooling assert Atmos's default cache locations.
 
 This action ships inside the Atmos repository, so the ref is an Atmos release:
 pin to `@v1` (moving major tag), `@vX.Y.Z`, or a commit SHA. It internally pins
-`actions/cache` to a SHA (`v5.0.5`).
+`actions/cache` and `actions/cache/restore` to the same SHA (`v5.0.5`).

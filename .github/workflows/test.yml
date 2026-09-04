@@ -666,10 +666,23 @@ jobs:
       # defaults and Terraform's plugin cache is not safe for shared concurrent
       # use. This cache step restores/saves toolchain bits only; it must stay a
       # pure accelerator.
+      #
+      # Restore-only on the shards. The repo's Actions cache holds 18.9 GB in
+      # 17 entries against a 10 GB LRU quota, every entry scoped to a
+      # refs/pull/N/merge ref and minutes old, so the static key
+      # atmos-toolchain-<os>-<arch>-v2 never hits from main (every shard logs
+      # "Cache not found for input keys"). All 10 shards then raced to save
+      # the same key and logged "Unable to reserve cache with key ..., another
+      # job may be creating this cache", with "Post Cache Atmos toolchain"
+      # costing 43 s avg / 3 min max per shard for nothing. The
+      # terraform-registry-cache job keeps the plain (restore+save) step and is
+      # the single writer of this key per OS.
       - name: Cache Atmos toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         continue-on-error: true
         uses: ./actions/cache
+        with:
+          restore-only: 'true'
 
       - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}

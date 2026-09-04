@@ -15,6 +15,16 @@ branding:
   color: 'blue'
 
 inputs:
+  restore-only:
+    description: >-
+      When 'true', only restore the cache (actions/cache/restore) and never
+      save it in the post step. Use this on jobs that fan out into many
+      parallel consumers of one key (for example test shards) and leave a
+      single writer job to save. Saves otherwise race for the same key
+      ("Unable to reserve cache ... another job may be creating this cache")
+      and each one still pays the tar+zstd upload cost.
+    required: false
+    default: 'false'
   cache-home:
     description: >-
       Directory to use as the Atmos cache root for this job. When set, it is exported as
@@ -27,8 +37,9 @@ inputs:
 
 outputs:
   cache-hit:
-    description: 'Whether an exact key match was found (from actions/cache).'
-    value: ${{ steps.cache.outputs.cache-hit }}
+    description: 'Whether an exact key match was found (from actions/cache or actions/cache/restore).'
+    # Exactly one of the two cache steps runs; a skipped step's output is empty.
+    value: ${{ steps.cache.outputs.cache-hit || steps.cache-restore.outputs.cache-hit }}
   key:
     description: 'The resolved cache key.'
     value: ${{ steps.meta.outputs.key }}
@@ -95,7 +106,17 @@ runs:
         Write-Host "Prepending $dir to PATH so actions/cache uses GNU tar"
         echo "$dir" >> $Env:GITHUB_PATH
     - id: cache
+      if: inputs.restore-only != 'true'
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        key: ${{ steps.meta.outputs.key }}
+        path: ${{ steps.meta.outputs.path }}
+        restore-keys: ${{ steps.meta.outputs.restore-keys }}
+    # actions/cache/restore ships in the same repository and tag as
+    # actions/cache, so the same SHA pins both.
+    - id: cache-restore
+      if: inputs.restore-only == 'true'
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         key: ${{ steps.meta.outputs.key }}
         path: ${{ steps.meta.outputs.path }}
