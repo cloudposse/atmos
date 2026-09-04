@@ -2,10 +2,15 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/pkg/flags"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 )
+
+// refreshParser handles flag parsing for refresh command.
+var refreshParser *flags.StandardParser
 
 // refreshCmd represents the terraform refresh command.
 var refreshCmd = &cobra.Command{
@@ -35,7 +40,23 @@ For complete Terraform/OpenTofu documentation, see:
 			}
 		}()
 
-		return terraformRun(terraformCmd, cmd, args)
+		v := viper.GetViper()
+
+		// Bind both parent and subcommand parsers.
+		if err := terraformParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+		if err := refreshParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		// Parse base terraform options with command context for UI flag detection.
+		opts, err := ParseTerraformRunOptions(v, cmd)
+		if err != nil {
+			return err
+		}
+
+		return terraformRunWithOptions(terraformCmd, cmd, args, opts)
 	},
 	PostRunE: func(cmd *cobra.Command, args []string) error {
 		// In multi-component mode, per-component hooks already fired inside the
@@ -48,6 +69,19 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
+	// Create parser with refresh-specific flags (backend execution for init).
+	refreshParser = flags.NewStandardParser(
+		WithBackendExecutionFlags(),
+	)
+
+	// Register refresh-specific flags with Cobra.
+	refreshParser.RegisterFlags(refreshCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := refreshParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
 	// Register completions for refreshCmd.
 	RegisterTerraformCompletions(refreshCmd)
 

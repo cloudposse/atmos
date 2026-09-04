@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=schema.json
+
+# Smoke tests for Terraform diagnostic streaming through the logger.
+# These tests verify that warnings and errors from Terraform are properly
+# routed through the Atmos logger at the correct severity levels.
+
+tests:
+  # Test warning diagnostics from Terraform check blocks
+  - name: "terraform plan with warning diagnostic"
+    enabled: true
+    snapshot: false
+    tty: true
+    description: "Verify Terraform check block warnings are captured and logged"
+    workdir: "fixtures/scenarios/diagnostic-test"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "warning"
+      - "-s"
+      - "test-dev"
+      - "--ui"
+    env:
+      ATMOS_LOGS_LEVEL: "Warn"
+      ATMOS_TELEMETRY_ENABLED: "false"
+      CI: "false"  # Disable CI detection to enable streaming UI
+    skip:
+      # PTY not supported on windows
+      os: !not windows
+    expect:
+      exit_code: 0
+      tty:
+        # Check block warning message (formatted by formatDiagnosticMessage)
+        - "check failed"
+        - "warning_threshold.*exceeds safe limit"
+
+  # Test error diagnostics from Terraform precondition
+  - name: "terraform plan with error diagnostic"
+    enabled: true
+    snapshot: false
+    tty: true
+    description: "Verify Terraform precondition errors are captured and logged"
+    workdir: "fixtures/scenarios/diagnostic-test"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "error"
+      - "-s"
+      - "test-dev"
+      - "--ui"
+    env:
+      ATMOS_LOGS_LEVEL: "Error"
+      ATMOS_TELEMETRY_ENABLED: "false"
+      CI: "false"  # Disable CI detection to enable streaming UI
+    skip:
+      # PTY not supported on windows
+      os: !not windows
+    expect:
+      exit_code: 1
+      tty:
+        # Precondition error message (formatted by formatDiagnosticMessage)
+        - "precondition failed"
+        - "trigger_error is true"

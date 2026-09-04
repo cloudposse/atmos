@@ -188,6 +188,21 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
         ```
     </dd>
 
+    <dt>`--ui` <em>(optional)</em></dt>
+    <dd>
+        Enable streaming UI mode for real-time resource status display. Shows a Docker-build-style progress view with spinners, progress bar, and resource states.
+
+        The UI automatically disables when output is piped, in CI environments, or when running unsupported commands.
+
+        `--ui` errors when combined with `--max-concurrency` greater than `1`, since concurrently-scheduled components can't share one terminal for their full-screen UI sessions. Use `--max-concurrency 1` (the default) with `--ui`, or drop `--ui` to run concurrently.
+
+        ```shell
+        atmos terraform deploy <component> -s <stack> --ui
+        ```
+
+        Use `--ui=false` to explicitly disable when enabled by config.
+    </dd>
+
     <dt>`--max-concurrency` <em>(optional)</em></dt>
     <dd>
         Maximum number of components to deploy concurrently when running with `--all`, `--affected`, `--components`, or `--query`. Default is `1` (sequential).
