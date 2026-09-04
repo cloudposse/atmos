@@ -16,10 +16,12 @@ import (
 	"github.com/cloudposse/atmos/internal/ci/releasenotes"
 )
 
-func jsonResponse(status int, body string) *http.Response {
+// jsonResponse is a 200 OK with the given body; the non-200 paths are
+// covered in internal/ci/releasenotes, not here.
+func jsonResponse(body string) *http.Response {
 	return &http.Response{
-		StatusCode: status,
-		Status:     http.StatusText(status),
+		StatusCode: http.StatusOK,
+		Status:     http.StatusText(http.StatusOK),
 		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 }
@@ -28,7 +30,7 @@ func testParams(apiKey, ghToken string) *releasenotes.SummarizeParams {
 	return &releasenotes.SummarizeParams{
 		GHToken:      ghToken,
 		OpenAIAPIKey: apiKey,
-		Model:        "gpt-5.6-luna",
+		Model:        defaultSummaryModel,
 		Release:      releasenotes.ReleaseRef{Repo: "cloudposse/atmos", ID: "1"},
 	}
 }
@@ -60,17 +62,39 @@ func TestSummarizeNotes_Success(t *testing.T) {
 		calls++
 		switch calls {
 		case 1:
-			return jsonResponse(http.StatusOK, `{"body":"<details>\n  <summary>feat: x @a (#1)</summary>\nbody\n</details>\n"}`), nil
+			return jsonResponse(`{"body":"<details>\n  <summary>feat: x @a (#1)</summary>\nbody\n</details>\n"}`), nil
 		case 2:
-			return jsonResponse(http.StatusOK, `{"choices":[{"message":{"content":"[{\"number\":1,\"summary\":\"Does x.\"}]"}}]}`), nil
+			return jsonResponse(`{"choices":[{"message":{"content":"[{\"number\":1,\"summary\":\"Does x.\"}]"}}]}`), nil
 		default:
-			return jsonResponse(http.StatusOK, `{}`), nil
+			return jsonResponse(`{}`), nil
 		}
 	})
 
 	var stderr bytes.Buffer
 	summarizeNotes(context.Background(), &stderr, client, testParams("openai-key", "gh-token"))
 	assert.Contains(t, stderr.String(), "release notes summarized")
+}
+
+func TestSummarizeNotes_DryRunPrintsBodyAndSkipsUpdate(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := releasenotes.NewMockHTTPClient(ctrl)
+
+	calls := 0
+	client.EXPECT().Do(gomock.Any()).Times(2).DoAndReturn(func(_ *http.Request) (*http.Response, error) {
+		calls++
+		if calls == 1 {
+			return jsonResponse(`{"body":"<details>\n  <summary>feat: x @a (#1)</summary>\nbody\n</details>\n"}`), nil
+		}
+		return jsonResponse(`{"choices":[{"message":{"content":"[{\"number\":1,\"summary\":\"Does x.\"}]"}}]}`), nil
+	})
+
+	var stdout, stderr bytes.Buffer
+	params := testParams("openai-key", "gh-token")
+	params.DryRun = true
+	params.Output = &stdout
+	summarizeNotes(context.Background(), &stderr, client, params)
+	assert.Contains(t, stdout.String(), "Does x.")
+	assert.Contains(t, stderr.String(), "dry run: release not updated")
 }
 
 func TestSummarizeNotes_FailureIsWarnedNotReturned(t *testing.T) {

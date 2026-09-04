@@ -1,6 +1,7 @@
 package releasenotes
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -40,6 +41,54 @@ func TestSummarizeRelease(t *testing.T) {
 	})
 
 	err := SummarizeRelease(context.Background(), client, &SummarizeParams{GHToken: "gh-token", OpenAIAPIKey: "openai-key", Model: "gpt-4o-mini", Release: ReleaseRef{Repo: "cloudposse/atmos", ID: "123"}})
+	require.NoError(t, err)
+}
+
+func TestSummarizeRelease_DryRunWritesBodyWithoutUpdating(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockHTTPClient(ctrl)
+
+	calls := 0
+	// Exactly two calls: the release GET and the OpenAI request. A third
+	// (the PATCH) would fail the Times(2) expectation.
+	client.EXPECT().Do(gomock.Any()).Times(2).DoAndReturn(func(req *http.Request) (*http.Response, error) {
+		calls++
+		if calls == 1 {
+			return jsonResponse(http.StatusOK, `{"body":"<details>\n  <summary>feat: x @a (#1)</summary>\nbody\n</details>\n"}`), nil
+		}
+		assert.NotEqual(t, http.MethodPatch, req.Method)
+		return jsonResponse(http.StatusOK, `{"choices":[{"message":{"content":"[{\"number\":1,\"summary\":\"Does x.\"}]"}}]}`), nil
+	})
+
+	var out bytes.Buffer
+	err := SummarizeRelease(context.Background(), client, &SummarizeParams{
+		GHToken: "gh-token", OpenAIAPIKey: "openai-key", Model: "gpt-4o-mini",
+		Release: ReleaseRef{Repo: "cloudposse/atmos", ID: "123"},
+		DryRun:  true, Output: &out,
+	})
+	require.NoError(t, err)
+	assert.Contains(t, out.String(), "Does x.")
+	assert.Contains(t, out.String(), "#1")
+}
+
+func TestSummarizeRelease_DryRunWithNilOutputDiscards(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockHTTPClient(ctrl)
+
+	calls := 0
+	client.EXPECT().Do(gomock.Any()).Times(2).DoAndReturn(func(_ *http.Request) (*http.Response, error) {
+		calls++
+		if calls == 1 {
+			return jsonResponse(http.StatusOK, `{"body":"<details>\n  <summary>feat: x @a (#1)</summary>\nbody\n</details>\n"}`), nil
+		}
+		return jsonResponse(http.StatusOK, `{"choices":[{"message":{"content":"[{\"number\":1,\"summary\":\"Does x.\"}]"}}]}`), nil
+	})
+
+	err := SummarizeRelease(context.Background(), client, &SummarizeParams{
+		GHToken: "gh-token", OpenAIAPIKey: "openai-key", Model: "gpt-4o-mini",
+		Release: ReleaseRef{Repo: "cloudposse/atmos", ID: "123"},
+		DryRun:  true,
+	})
 	require.NoError(t, err)
 }
 

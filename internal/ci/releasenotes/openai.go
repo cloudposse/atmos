@@ -23,10 +23,6 @@ const (
 	// whole batch. Release notes only need the gist.
 	maxEntryBodyChars = 2000
 
-	// Favors consistent, literal summaries over creative ones - release
-	// notes should read as a faithful condensation, not a rewrite.
-	summarizerTemperature = 0.3
-
 	summarizerSystemPrompt = `You summarize GitHub pull request descriptions into a single ` +
 		`concise sentence suitable for release notes, written for end users rather than ` +
 		`contributors. Return ONLY a JSON array of objects: ` +
@@ -53,11 +49,13 @@ type HTTPClient interface {
 }
 
 // chatCompletionRequest is the subset of OpenAI's Chat Completions request
-// body this package uses.
+// body this package uses. Deliberately no `temperature`: the gpt-5 family
+// rejects any value but the default with a 400 (verified live), and the
+// "faithful condensation, not a rewrite" steer lives in the system prompt
+// instead, which every model honors.
 type chatCompletionRequest struct {
-	Model       string    `json:"model"`
-	Messages    []chatMsg `json:"messages"`
-	Temperature float64   `json:"temperature"`
+	Model    string    `json:"model"`
+	Messages []chatMsg `json:"messages"`
 }
 
 type chatMsg struct {
@@ -90,7 +88,6 @@ func Summarize(ctx context.Context, client HTTPClient, apiKey, model string, ent
 			{Role: "system", Content: summarizerSystemPrompt},
 			{Role: "user", Content: buildPrompt(entries)},
 		},
-		Temperature: summarizerTemperature,
 	}
 	content, err := doChatCompletion(ctx, client, apiKey, reqBody)
 	if err != nil {

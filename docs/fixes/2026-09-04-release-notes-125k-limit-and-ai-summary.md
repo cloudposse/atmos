@@ -34,11 +34,17 @@ Two independent, durable changes:
 1. **`internal/ci/releasenotes`** (new package) + **`magefiles/ci_release_notes.go`**
     (`release:summarizeNotes`): after release-drafter produces its (still full-body) draft, an
     opt-in step parses its `<details>` entries, sends each PR's title+body to an OpenAI model in
-    one batched request, and rewrites the release with one AI-condensed sentence per PR instead of
-    the full embedded body. Entirely optional - with no `OPENAI_API_KEY` secret configured it logs
-    why and exits 0, leaving release-drafter's own body untouched. Any OpenAI/GitHub API failure is
-    caught and logged, never fails the job - this must never be able to block the release path over
-    a summarization hiccup.
+    one batched request, and rewrites the release in release-drafter's exact shape - the same
+    category headings and the same collapsible `<details><summary>title @author (#N)</summary>`
+    block per PR - with the AI-condensed summary as each block's body instead of the full embedded
+    PR description. The notes read and expand the same; only the hidden part got shorter. Entirely
+    optional - with no `OPENAI_API_KEY` secret configured it logs why and exits 0, leaving
+    release-drafter's own body untouched. Any OpenAI/GitHub API failure is caught and logged, never
+    fails the job - this must never be able to block the release path over a summarization hiccup.
+    `RELEASE_NOTES_DRY_RUN=1` prints the summarized body to stdout instead of updating the release,
+    for previewing the result (or checking the key/model) against any real release without touching
+    it. The model defaults to `gpt-5-mini` and is overridable with `OPENAI_MODEL`; the request sends
+    no `temperature`, because the gpt-5 family rejects any non-default value.
 2. **`.github/workflows/release.yml`** (new): the `release:` job (and the new summarization job)
     moved out of `test.yml` into their own `workflow_run`-triggered workflow, gated on
     `github.event.workflow_run.conclusion == 'success'`. Previously `release:` lived inside
@@ -57,10 +63,18 @@ Two independent, durable changes:
 ## Validation
 
 - `go build ./...`, `go vet -tags mage ./...` - clean.
-- `go test ./internal/ci/releasenotes/... -cover` - 27 tests, 92.4% coverage.
+- `go test ./internal/ci/releasenotes/... -cover` - 95.6% coverage, including a round-trip test
+  (render → `ParseDraftedBody` → identical entries) that pins the output to release-drafter's shape.
 - `atmos lint --changed` (`custom-gcl run --new-from-rev=origin/main`) - 0 issues.
 - `atmos ci validate .github/workflows/test.yml .github/workflows/release.yml` - both valid.
-- Not yet validated live: the `summarize-notes` job needs `OPENAI_API_KEY` configured as a repo/org
+- Validated live with a real key (`RELEASE_NOTES_DRY_RUN=1 go tool mage release:summarizeNotes
+  cloudposse/atmos 378837775`, the `v1.228.0-rc.2` release with three real entries): body went from
+  9,763 to 1,072 characters with every `<details>` block, summary line and category heading intact.
+  The first two live attempts found two defects fixed in the same change: the originally coded
+  default model (`gpt-5.6-luna`) returned `403 model_not_found` for the cloudposse OpenAI project
+  (its newest reachable models are the gpt-5.4 line), and `temperature: 0.3` returned
+  `400 unsupported_value` on the gpt-5 family.
+- Not yet validated in CI: the `summarize-notes` job needs `OPENAI_API_KEY` configured as a repo/org
   secret before it does anything beyond log-and-skip; the `draft`/summarization split needs a real
   push-triggered `Tests` run to complete before `workflow_run` fires it.
 

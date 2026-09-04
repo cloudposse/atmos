@@ -18,9 +18,13 @@ import (
 // Release groups CI targets for the drafted-release-notes pipeline.
 type Release mg.Namespace
 
-// defaultSummaryModel is used when OPENAI_MODEL is unset; the lowest tier
+// defaultSummaryModel is used when OPENAI_MODEL is unset. The lowest tier
 // is cheap and fast enough for a one-sentence-per-PR summarization pass.
-const defaultSummaryModel = "gpt-5.6-luna"
+// It is gpt-5-mini rather than a 5.6-series model because that is the
+// newest small model the cloudposse OpenAI project can actually reach (a
+// live dry-run against gpt-5.6-luna returned 403 model_not_found); bump
+// this once the project has access.
+const defaultSummaryModel = "gpt-5-mini"
 
 // releaseNotesHTTPTimeout bounds the whole SummarizeNotes call: one release
 // GET, one OpenAI request covering every PR at once, one release PATCH.
@@ -32,6 +36,10 @@ const releaseNotesHTTPTimeout = 2 * time.Minute
 // environment and builds the real HTTP client, then delegates to
 // summarizeNotes, which holds the actual (tested) skip/success/warning
 // logic.
+//
+// Set RELEASE_NOTES_DRY_RUN=1 to print the summarized body to stdout instead
+// of updating the release - the way to preview the result, or to verify the
+// OpenAI key and model work, against a real draft without modifying it.
 func (Release) SummarizeNotes(repo, releaseID string) error {
 	model := os.Getenv("OPENAI_MODEL")
 	if model == "" {
@@ -47,6 +55,8 @@ func (Release) SummarizeNotes(repo, releaseID string) error {
 		OpenAIAPIKey: os.Getenv("OPENAI_API_KEY"),
 		Model:        model,
 		Release:      releasenotes.ReleaseRef{Repo: repo, ID: releaseID},
+		DryRun:       os.Getenv("RELEASE_NOTES_DRY_RUN") != "",
+		Output:       os.Stdout,
 	}
 	summarizeNotes(ctx, os.Stderr, client, params)
 	return nil
@@ -72,6 +82,10 @@ func summarizeNotes(ctx context.Context, stderr io.Writer, client releasenotes.H
 
 	if err := releasenotes.SummarizeRelease(ctx, client, params); err != nil {
 		fmt.Fprintf(stderr, "::warning::release notes summarization skipped: %s\n", err)
+		return
+	}
+	if params.DryRun {
+		fmt.Fprintln(stderr, "mage: release notes summarized (dry run: release not updated)")
 		return
 	}
 	fmt.Fprintln(stderr, "mage: release notes summarized")

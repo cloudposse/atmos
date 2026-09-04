@@ -3,6 +3,7 @@ package releasenotes
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -14,6 +15,13 @@ type SummarizeParams struct {
 	OpenAIAPIKey string
 	Model        string
 	Release      ReleaseRef
+
+	// DryRun stops short of updating the release: the summarized body is
+	// written to Output instead, so the result can be previewed (or the
+	// OpenAI wiring tested) without touching the draft. Output defaults to
+	// io.Discard when nil.
+	DryRun bool
+	Output io.Writer
 }
 
 // SummarizeRelease rewrites p.Release with an AI-condensed body: it fetches
@@ -46,5 +54,13 @@ func SummarizeRelease(ctx context.Context, client HTTPClient, p *SummarizeParams
 		return err
 	}
 
+	if p.DryRun {
+		out := p.Output
+		if out == nil {
+			out = io.Discard
+		}
+		_, err = io.WriteString(out, rendered)
+		return err
+	}
 	return UpdateReleaseBody(ctx, client, p.GHToken, p.Release, rendered)
 }
