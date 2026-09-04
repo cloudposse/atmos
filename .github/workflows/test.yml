@@ -682,7 +682,7 @@ jobs:
         continue-on-error: true
         uses: ./actions/cache
         with:
-          restore-only: 'true'
+          mode: restore-only
 
       - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}

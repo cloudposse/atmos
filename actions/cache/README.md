@@ -42,12 +42,12 @@ ci:
 
 | Input | Default | Description |
 | --- | --- | --- |
-| `restore-only` | `'false'` | When `'true'`, restore the cache but never save it (uses `actions/cache/restore` instead of `actions/cache`, so there is no post step). |
+| `mode` | `'restore-and-save'` | `restore-and-save`: restore and save in the post step (`actions/cache`). `restore-only`: restore but never save (`actions/cache/restore`, no post step). |
 
 #### Many parallel consumers, one writer
 
 If several jobs (for example, a matrix of test shards) restore the same key,
-let exactly one job save it and mark the rest `restore-only`. Otherwise every
+let exactly one job save it and put the rest on `mode: restore-only`. Otherwise every
 shard that misses tries to save the same key at the end of the job: all but
 one fail with `Unable to reserve cache with key ..., another job may be
 creating this cache`, and each still pays the tar + zstd + upload cost first.
@@ -59,7 +59,7 @@ creating this cache`, and each still pays the tar + zstd + upload cost first.
 # Every parallel consumer (restores only, no post step):
 - uses: cloudposse/atmos/actions/cache@v1
   with:
-    restore-only: 'true'
+    mode: restore-only
 ```
 
 ### Outputs
