@@ -252,6 +252,13 @@ func TestGetIdentityFromCommand(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// viper is the global singleton; setupViper's viper.Reset() +
+			// viper.Set("identity", ...) leaks the "identity" key to every
+			// later test in this binary unless restored here. See
+			// TestAffectedIdentityFlagParsing (affected_test.go) for the
+			// full explanation of the downstream failure this caused.
+			t.Cleanup(viper.Reset)
+
 			tc.setupViper()
 			cmd := tc.setupCmd()
 			result := getIdentityFromCommand(cmd)
@@ -263,6 +270,7 @@ func TestGetIdentityFromCommand(t *testing.T) {
 func TestGetIdentityFromCommand_NormalizesIdentityEnvFalse(t *testing.T) {
 	t.Setenv("ATMOS_IDENTITY", "false")
 	viper.Reset()
+	t.Cleanup(viper.Reset)
 	viper.SetEnvPrefix("ATMOS")
 	assert.NoError(t, viper.BindEnv(cfg.IdentityFlagName))
 
