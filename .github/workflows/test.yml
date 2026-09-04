@@ -204,6 +204,19 @@ jobs:
         if: matrix.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
 
+      - name: Upload DNS guard log
+        # Best-effort diagnostic for the "guard ran but the job still hung"
+        # case (see docs/fixes/2026-09-04-dns-guard-log-artifact.md): the log
+        # was previously never uploaded, so a residual occurrence of the race
+        # this guard exists for couldn't be root-caused after the fact.
+        if: always() && (matrix.target == 'windows' && ! github.event.pull_request.draft)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dns-guard-log-${{ github.job }}-${{ strategy.job-index }}
+          path: ${{ runner.temp }}\atmos-dns-guard.log
+          if-no-files-found: ignore
+          retention-days: 3
+
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
@@ -427,6 +440,19 @@ jobs:
       - name: Guard DNS against the harden-runner post-step race
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
+
+      - name: Upload DNS guard log
+        # Best-effort diagnostic for the "guard ran but the job still hung"
+        # case (see docs/fixes/2026-09-04-dns-guard-log-artifact.md): the log
+        # was previously never uploaded, so a residual occurrence of the race
+        # this guard exists for couldn't be root-caused after the fact.
+        if: always() && (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dns-guard-log-${{ github.job }}-${{ strategy.job-index }}
+          path: ${{ runner.temp }}\atmos-dns-guard.log
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -673,6 +699,19 @@ jobs:
       - name: Guard DNS against the harden-runner post-step race
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
+
+      - name: Upload DNS guard log
+        # Best-effort diagnostic for the "guard ran but the job still hung"
+        # case (see docs/fixes/2026-09-04-dns-guard-log-artifact.md): the log
+        # was previously never uploaded, so a residual occurrence of the race
+        # this guard exists for couldn't be root-caused after the fact.
+        if: always() && (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dns-guard-log-${{ github.job }}-${{ strategy.job-index }}
+          path: ${{ runner.temp }}\atmos-dns-guard.log
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -1699,6 +1738,19 @@ jobs:
       - name: Guard DNS against the harden-runner post-step race
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
+
+      - name: Upload DNS guard log
+        # Best-effort diagnostic for the "guard ran but the job still hung"
+        # case (see docs/fixes/2026-09-04-dns-guard-log-artifact.md): the log
+        # was previously never uploaded, so a residual occurrence of the race
+        # this guard exists for couldn't be root-caused after the fact.
+        if: always() && (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dns-guard-log-${{ github.job }}-${{ strategy.job-index }}
+          path: ${{ runner.temp }}\atmos-dns-guard.log
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Add GNU tar to flavor.target (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
