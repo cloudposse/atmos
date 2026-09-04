@@ -52,8 +52,10 @@ And from the lab's seed jobs (both GNU tar): cache **save** 590 s on C: vs **175
 actions/toolkit#2379) reports it ~4x faster at extraction: `@actions/cache`'s BSD-tar path is two
 passes - `zstd -d -o cache.tar` writes the full uncompressed tar to disk, then `tar -xf cache.tar`
 reads it back - and that extra multi-GB write costs more than the MSYS per-file overhead it avoids.
-So the existing "Add GNU tar to PATH" steps stay; their comments now cite these numbers instead of
-the 2024 belief (#877) that was never measured.
+So GNU tar stays - now codified once as **`.github/actions/windows-gnu-tar`** (idempotent, no-op off
+Windows), which `setup-go-cache` calls as its first step and which the three jobs whose toolchain
+cache step runs before Set up Go (`terraform-registry-cache`, `test`, `mock`) call directly. The
+four hand-copied "Add GNU tar to PATH" steps and their 2024 comment (#877, never measured) are gone.
 
 ## Things learned the hard way
 

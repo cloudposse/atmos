@@ -1,7 +1,8 @@
 name: Set up Go with its caches on the fast disk
 description: >-
-  actions/setup-go with caching, plus one Windows-specific fix: Go's build and module caches are
-  relocated onto the runner's work disk before setup-go runs. On GitHub's windows-latest runners
+  actions/setup-go with caching, plus two Windows-specific fixes applied first: Git's GNU tar goes
+  first on PATH for @actions/cache (see windows-gnu-tar), and Go's build and module caches are
+  relocated onto the runner's work disk. On GitHub's windows-latest runners
   the work disk (D:, where RUNNER_TEMP and the workspace live) is a separate, much faster disk
   than C:, where Go's default cache locations (%LOCALAPPDATA%, %GOPATH%) sit. Measured on our
   ~1.7 GB go-build+mod archive with .github/workflows/cache-perf.yml: restore 276 s -> 94 s, save
@@ -33,6 +34,11 @@ outputs:
 runs:
   using: composite
   steps:
+    # Both of setup-go's cache archives (restore and post-step save) go
+    # through @actions/cache, which picks its tar at that point.
+    - name: Use GNU tar for cache archives (Windows)
+      uses: ./.github/actions/windows-gnu-tar
+
     # Must run before setup-go: it reads `go env GOCACHE`/`GOMODCACHE` to
     # decide both what to restore and what its post step saves, and the
     # cache *version* hashes those paths - so this also means a fresh cache

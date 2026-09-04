@@ -183,14 +183,6 @@ jobs:
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         run: echo "Building on ${{ matrix.os }}"
 
-      # Measured (docs/fixes/2026-09-04-windows-go-caches-on-fast-disk.md):
-      # Git's GNU tar restores our 1.7 GB Go cache in 264 s on C: / 94 s on
-      # D:; Windows' own bsdtar takes 353 s / 117 s, because @actions/cache's
-      # bsdtar path decompresses the whole archive to a .tar on disk first.
-      - name: Add GNU tar to PATH (faster than bsdtar for cache restores)
-        if: matrix.target == 'windows' && ! github.event.pull_request.draft
-        shell: pwsh
-        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -423,14 +415,11 @@ jobs:
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
 
-      # Measured (docs/fixes/2026-09-04-windows-go-caches-on-fast-disk.md):
-      # Git's GNU tar restores our 1.7 GB Go cache in 264 s on C: / 94 s on
-      # D:; Windows' own bsdtar takes 353 s / 117 s, because @actions/cache's
-      # bsdtar path decompresses the whole archive to a .tar on disk first.
-      - name: Add GNU tar to PATH (faster than bsdtar for cache restores)
+      # A cache step runs before Set up Go in this job, so the tar choice
+      # must already be in place; setup-go-cache repeats it harmlessly.
+      - name: Use GNU tar for cache archives (Windows)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        shell: pwsh
-        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
+        uses: ./.github/actions/windows-gnu-tar
 
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -669,14 +658,11 @@ jobs:
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
 
-      # Measured (docs/fixes/2026-09-04-windows-go-caches-on-fast-disk.md):
-      # Git's GNU tar restores our 1.7 GB Go cache in 264 s on C: / 94 s on
-      # D:; Windows' own bsdtar takes 353 s / 117 s, because @actions/cache's
-      # bsdtar path decompresses the whole archive to a .tar on disk first.
-      - name: Add GNU tar to PATH (faster than bsdtar for cache restores)
+      # A cache step runs before Set up Go in this job, so the tar choice
+      # must already be in place; setup-go-cache repeats it harmlessly.
+      - name: Use GNU tar for cache archives (Windows)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        shell: pwsh
-        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
+        uses: ./.github/actions/windows-gnu-tar
 
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -1684,14 +1670,11 @@ jobs:
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
 
-      # Measured (docs/fixes/2026-09-04-windows-go-caches-on-fast-disk.md):
-      # Git's GNU tar restores our 1.7 GB Go cache in 264 s on C: / 94 s on
-      # D:; Windows' own bsdtar takes 353 s / 117 s, because @actions/cache's
-      # bsdtar path decompresses the whole archive to a .tar on disk first.
-      - name: Add GNU tar to PATH (faster than bsdtar for cache restores)
+      # A cache step runs before Set up Go in this job, so the tar choice
+      # must already be in place; setup-go-cache repeats it harmlessly.
+      - name: Use GNU tar for cache archives (Windows)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        shell: pwsh
-        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
+        uses: ./.github/actions/windows-gnu-tar
 
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
