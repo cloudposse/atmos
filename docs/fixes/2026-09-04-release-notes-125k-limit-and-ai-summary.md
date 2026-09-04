@@ -42,11 +42,13 @@ Two independent, durable changes:
     `summarize-notes` fetches each PR's description from the pull-request API (which has no such
     cap), condenses it, and rewrites the release in the org template's exact shape - the same
     category headings and the same collapsible `<details><summary>title @author (#N)</summary>`
-    block per PR - with the condensed text as each block's body: Markdown bullets, one per distinct
-    change (a small PR gets one, a large one at most six), naming the concrete command/flag/config
-    and the reason when the description gives one, never restating the title or padding with
-    generic benefit sentences. (A first pass at one sentence per PR was too little to justify
-    expanding a block; a second pass demanding 3-6 bullets padded small PRs with restatements.) The
+    block per PR - with the condensed text as each block's body: one to three sentences of plain
+    prose saying what changed and, when the description says so, why, naming the concrete
+    commands/flags/config keys; Markdown bullets only when a PR covers separate, unrelated topics
+    ("Add X, fix Y, fix Z"), one full sentence per topic. The prompt carries one example of each
+    shape. (Earlier passes were tuned live on the draft: one sentence per PR was too little to
+    justify expanding a block; demanding 3-6 bullets padded small PRs with restatements; one
+    bullet per distinct change atomized related details into parallel stub sentences.) The
     blank lines inside each block are load-bearing: a line starting with `<details>` opens a GFM
     HTML block that swallows everything up to the next blank line as raw HTML, so without them the
     Markdown in the summary line (dependabot's author link, backticks) and in the body rendered raw.
@@ -87,8 +89,7 @@ Two independent, durable changes:
   body is the skeleton: 19 PRs under 2 category headings):
   `RELEASE_NOTES_DRY_RUN=1 go tool mage release:summarizeNotes cloudposse/atmos 379499446` fetched
   19 PR descriptions, made one model call, and produced 19 `<details>` blocks under the 2 headings
-  in 4,968 characters (one bullet per distinct change); written to the draft itself afterwards and
-  checked in the GitHub UI. Earlier live attempts (against `v1.228.0-rc.2`, an org-template draft) had
+  in 4,942 characters; written to the draft itself afterwards and checked in the GitHub UI. Earlier live attempts (against `v1.228.0-rc.2`, an org-template draft) had
   surfaced two things fixed along the way: `temperature: 0.3` returned `400 unsupported_value` on
   the gpt-5 family, and `gpt-5.6-luna` returned `403 model_not_found` until the cloudposse OpenAI
   project was granted the 5.6 models, after which the call flapped between 403 and success for

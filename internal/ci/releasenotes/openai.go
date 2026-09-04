@@ -24,22 +24,30 @@ const (
 	// (typically 2-4k) so the model condenses the real content, not a cut.
 	maxEntryBodyChars = 6000
 
-	summarizerSystemPrompt = `You condense GitHub pull request descriptions into release notes ` +
-		`for end users of the Atmos CLI. The pull request title is already shown above the ` +
-		`summary, so never restate it: write only what the title does not say. Write Markdown ` +
-		`bullets, exactly one per distinct change. A distinct change is a separately usable ` +
-		`capability, command, flag, configuration key, behavior, or fixed bug; the description's ` +
-		`own "what" list, and a title of the form "Add X, fix Y, fix Z", tell you how many there ` +
-		`are. Never merge distinct changes into one bullet joined by commas or "and"; a pull ` +
-		`request with one change gets one bullet, one with five changes gets five, never more ` +
-		`than six. Each bullet is one or two sentences naming the concrete command, flag, ` +
-		`configuration key, or behavior and, when the description gives one, the reason it ` +
-		`matters. Never say the same thing twice in different words, and do not add generic ` +
-		`benefit statements such as "this makes it easier" or "provides a starting point". Do ` +
-		`not mention tests, CI, coverage, or internal refactoring unless that is the whole ` +
-		`change, and do not invent details that are not in the description. Return ONLY a JSON ` +
-		`array of objects: [{"number": <PR number>, "summary": "<markdown>"}, ...], one per pull ` +
-		`request, in the same order as given, with no other text before or after the array.`
+	summarizerSystemPrompt = `You write the release notes entry for a GitHub pull request, for end ` +
+		`users of the Atmos CLI, from its description. Write the way a careful engineer writes ` +
+		`release notes: plain prose, one to three sentences, saying what changed and, when the ` +
+		`description says so, why it matters. The title is already shown above the entry, so do ` +
+		`not restate it; add what it does not say. Name the concrete commands, flags, ` +
+		`configuration keys, and behaviors. Fold related details into one sentence with a natural ` +
+		`list rather than writing several sentences with the same subject. Use Markdown bullets ` +
+		`only when the pull request covers separate, unrelated topics (a title like "Add X, fix ` +
+		`Y, fix Z"), one bullet per topic, each a full sentence in the same style. Do not pad, do ` +
+		`not repeat yourself, do not add generic benefit statements such as "this makes it ` +
+		`easier", and do not mention tests, CI, coverage, or internal refactoring unless that is ` +
+		`the whole change. Do not invent anything the description does not say. Keep each entry ` +
+		`under about 80 words. ` +
+		`Example of a single-topic entry: "Custom command when: conditions can now inspect the ` +
+		`command's flags, positional arguments, and the current component, so a command can apply ` +
+		`only when it is invoked a certain way." ` +
+		`Example of a multi-topic entry: "- Version tracking gains a json file manager that ` +
+		`patches a single field in place, leaving the rest of the document untouched.\n- An ` +
+		`explicitly empty version.files list now means manage nothing, instead of falling back ` +
+		`to each manager's defaults.\n- Lock files are written with two-space YAML indentation ` +
+		`like every other generated file." ` +
+		`Return ONLY a JSON array of objects: [{"number": <PR number>, "summary": "<markdown>"}, ` +
+		`...], one per pull request, in the same order as given, with no other text before or ` +
+		`after the array.`
 )
 
 // errSummaryMismatch means the model's response didn't cover every entry
