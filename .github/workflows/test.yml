@@ -46,11 +46,12 @@ permissions:
 
 env:
   ATMOS_BOOTSTRAP_VERSION: "1.223.0"
-  OPEN_TOFU_VERSION: "1.12.2"
-  HELM_VERSION: "v3.19.2"
+  # terraform/opentofu/packer/helm/helmfile/tflint versions are pinned once in
+  # .tool-versions (the source `atmos toolchain install`/`atmos toolchain env`
+  # already read from), not duplicated here -- see docs/fixes for the
+  # incident where a stale OPEN_TOFU_VERSION here (1.12.2) drifted behind
+  # .tool-versions's actual pin (1.12.5) undetected.
   HELM_DIFF_VERSION: "v3.15.10"
-  HELMFILE_VERSION: "v1.1.0"
-  PACKER_VERSION: "1.14.2"
   # helmfile's own `version` subcommand makes an outbound network call to GitHub to check
   # for a newer release. On CI runners that call is a source of flakiness (e.g. "context
   # deadline exceeded" on Windows runners) unrelated to anything this repo controls, and
@@ -452,11 +453,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default hashicorp/packer@${{ env.PACKER_VERSION }}
-          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
-          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install hashicorp/packer
+          atmos toolchain install helm/helm
+          atmos toolchain install helmfile/helmfile
           atmos toolchain env --format=github
 
       - name: Verify Terraform, OpenTofu, Packer, Helm, and Helmfile
@@ -704,11 +705,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default hashicorp/packer@${{ env.PACKER_VERSION }}
-          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
-          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install hashicorp/packer
+          atmos toolchain install helm/helm
+          atmos toolchain install helmfile/helmfile
           atmos toolchain env --format=github
 
       - name: Verify Terraform, OpenTofu, Packer, Helm, and Helmfile
@@ -865,6 +866,111 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
+
+  # `-race` requires CGO_ENABLED=1 (the detector's runtime is itself a cgo
+  # library), unlike every other Go build/test path in this repo (CGO_ENABLED=0).
+  # Enabling cgo pulls in the cgo half of github.com/bearsh/hid (transitive, via
+  # saml2aws's U2F support) on linux/amd64 -- see hid_libusb_udev_linux.go, which
+  # links against libudev -- so the compile fails without libudev-dev installed.
+  # This is the same trap the govulncheck job documents (codeql.yml), but that
+  # job works around it by forcing CGO_ENABLED=0; that's not an option here since
+  # it would silently disable the race detector itself. Install libudev-dev
+  # instead, reusing the floci-go job's apt-get invocation below (same trap, hit
+  # there because that job also leaves CGO_ENABLED at the runner default).
+  #
+  # GOFIPS140=latest (set inside the `race` command itself, .atmos.d/test.yaml)
+  # is unaffected by CGO_ENABLED: Go's FIPS 140-3 module is pure Go, no cgo.
+  race:
+    name: "[race] non-acceptance test suite"
+    # `go test`'s package-level concurrency scales with available cores, and
+    # this job compiles+runs ~400 race-instrumented packages -- the standard
+    # ubuntu-latest runner's ~4 cores were the bottleneck (this job became
+    # the slowest check once every other job's own timeout issues were
+    # fixed). The RunsOn "terraform" family used elsewhere in this file for
+    # Go work (the build job's linux leg) turned out to be an i4i.large: 2
+    # cores, 15.7GB RAM -- fewer cores than ubuntu-latest, a downgrade for
+    # this CPU/memory-bound workload. "large" (used by the release job's
+    # goreleaser step) resolves to a 4-core/~32GB instance from that family
+    # (r7a.xlarge or i4i.xlarge, whichever spot capacity RunsOn picks; both
+    # appear in real run logs) -- double the cores and RAM of "terraform", a
+    # real upgrade over ubuntu-latest given -race's extra memory overhead per
+    # test binary.
+    runs-on: "runs-on=${{github.run_id}}/runner=large/tag=atmos/extras=s3-cache/private=false"
+    # Race-instrumented binaries run several times slower and use substantially
+    # more memory than normal test binaries; this runs the entire `./...` suite
+    # unsharded (unlike the `test` job's acceptance+unit sweep), so budget
+    # generously. `./cmd/...` alone -- one subtree out of the full package set
+    # this job actually runs -- took ~45 minutes locally in isolation (see
+    # docs/fixes/2026-09-01-race-detector-ci-job-timeouts.md); real runs on
+    # this runner have finished within a few minutes of the previous 45-minute
+    # budget, leaving too little slack for checkout/setup/apt overhead plus
+    # natural runner variance.
+    timeout-minutes: 75
+    steps:
+      # Harden Runner doesn't cover RunsOn self-hosted runners (see the build
+      # job's linux leg, which skips it the same way); runs-on/action sets up
+      # this job's runner metadata/labels instead.
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc # v2.2.0
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Set up Atmos bootstrap
+        uses: ./.github/actions/setup-atmos-bootstrap
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+
+      - name: Install Linux build dependencies (libudev-dev for CGO_ENABLED=1 -- see comment above)
+        run: |
+          # The DEB822 /etc/apt/sources.list.d/ubuntu.sources file (and the
+          # Azure mirror it points at) is a GitHub-hosted-runner-image thing
+          # (Ubuntu 24.04+); this job now runs on the RunsOn "terraform"
+          # runner (Ubuntu 22.04, no DEB822 sources file at all -- see
+          # docs/fixes for the incident where this sed failed outright with
+          # "No such file or directory"). Only rewrite the mirror if that
+          # file actually exists, so this step works on either runner image.
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
+
+      - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
+        # Unlike the `test`/`build` jobs, this job never ran this step, so
+        # tests needing these binaries (e.g. cmd/terraform/migrate,
+        # TestPackerValidateCmd) fell back to Atmos's own lazy/auto-install
+        # path -- unreliable here since `go test ./...` runs ~400 packages as
+        # separate concurrent processes, and nothing serializes a shared
+        # install across them. Pre-installing once, before any test process
+        # starts, removes that race entirely (see docs/fixes for the
+        # incident this closes).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install hashicorp/packer
+          atmos toolchain install helm/helm
+          atmos toolchain install helmfile/helmfile
+          atmos toolchain env --format=github
+
+      - name: Run atmos test race
+        env:
+          # pkg/toolchain's registry lookups hit the real GitHub API with no
+          # mock seam; unauthenticated requests share this runner's IP-wide
+          # 60/hr limit across every package running here, unlike the `test`
+          # job's acceptance steps, which already set this for the same
+          # reason (see their own "Use the GitHub token" comment).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: atmos test race
 
   # Sharding the `test` job fans it out into TEST_SHARD_COUNT x 3 per-leg checks.
   # Keep the three historical required-check names as compatibility aliases so
@@ -1182,7 +1288,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install opentofu/opentofu
           atmos toolchain env --format=github
 
       - name: Verify OpenTofu
@@ -1275,7 +1381,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install opentofu/opentofu
           atmos toolchain env --format=github
 
       - name: Verify OpenTofu
@@ -1720,7 +1826,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install opentofu/opentofu
           atmos toolchain env --format=github
 
       - name: Verify OpenTofu
@@ -1830,8 +1936,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default terraform-linters/tflint@0.59.1
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install terraform-linters/tflint
           atmos toolchain env --format=github
 
       - name: Verify OpenTofu and TFLint
@@ -1879,8 +1985,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default terraform-linters/tflint@0.59.1
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install terraform-linters/tflint
           atmos toolchain env --format=github
 
       - name: Run the TFLint hook example
