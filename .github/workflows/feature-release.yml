@@ -9,7 +9,6 @@ on:
 # job-level permissions that override this baseline.
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   release:
