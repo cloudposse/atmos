@@ -14,6 +14,17 @@ branding:
   icon: 'archive'
   color: 'blue'
 
+inputs:
+  cache-home:
+    description: >-
+      Directory to use as the Atmos cache root for this job. When set, it is exported as
+      ATMOS_XDG_CACHE_HOME for every later step (toolchain installs, the cache save at job end),
+      and the cached paths are derived under it. Point it under `runner.temp` on Windows runners
+      to put the cache on the fast work disk (D:), see README. Leave unset to keep Atmos's default
+      (~/.cache/atmos, or ATMOS_XDG_CACHE_HOME / XDG_CACHE_HOME from the environment).
+    required: false
+    default: ""
+
 outputs:
   cache-hit:
     description: 'Whether an exact key match was found (from actions/cache).'
@@ -25,6 +36,19 @@ outputs:
 runs:
   using: composite
   steps:
+    # Must precede the paths step and any step that installs into the cache:
+    # GITHUB_ENV applies to every later step of the job, so the runtime and
+    # this cache see the same root. Changing the root changes the cached
+    # paths, and so the cache version: the first run after setting it is a
+    # cold start.
+    - name: Use a custom Atmos cache root
+      if: inputs.cache-home != ''
+      shell: bash
+      env:
+        CACHE_HOME: ${{ inputs.cache-home }}
+      run: |
+        echo "ATMOS_XDG_CACHE_HOME=${CACHE_HOME}" >> "$GITHUB_ENV"
+        echo "Atmos cache root for this job: ${CACHE_HOME}"
     - id: meta
       shell: bash
       run: atmos ci cache paths --format=github

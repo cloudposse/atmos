@@ -58,11 +58,30 @@ If you need Atmos to *own* restore/save (rather than `actions/cache`), use the
 
 ## Windows runners
 
-On Windows the action puts Git for Windows' GNU tar first on `PATH` before caching (when it is
+Two things matter for cache speed on Windows runners, and the action handles both.
+
+**Which tar.** The action puts Git for Windows' GNU tar first on `PATH` before caching (when it is
 installed, as on GitHub-hosted runners), because `actions/cache` otherwise falls back to Windows'
 own bsdtar, whose code path decompresses the whole archive to disk before extracting it. On a
-1.7 GB archive that is the difference between a 264 s and a 353 s restore. The step is idempotent
-and does nothing on Linux or macOS.
+1.7 GB archive that is the difference between a 264 s and a 353 s restore. Automatic, idempotent,
+and a no-op on Linux or macOS.
+
+**Which disk.** On GitHub's `windows-latest` runners the work disk (D:, where `runner.temp` and
+the workspace live) is a separate disk with roughly nine times the small-file write rate of C:,
+where Atmos's default cache root (`%LOCALAPPDATA%\cache\atmos`) sits. That matters when the
+cached tree is many small files (provider mirrors, plugin caches); for a few large binaries it
+barely registers. Opt in with `cache-home`, which exports `ATMOS_XDG_CACHE_HOME` for the rest of
+the job so toolchain installs, the cache save and the cached paths all use the same root:
+
+```yaml
+- uses: cloudposse/atmos/actions/cache@main
+  with:
+    cache-home: ${{ runner.temp }}/atmos
+```
+
+Two caveats. The cached paths change, so the cache version changes: the first run after setting
+it is a cold start. And the root moves for the whole job, so don't set it in a job whose tests or
+tooling assert Atmos's default cache locations.
 
 ## Versioning
 

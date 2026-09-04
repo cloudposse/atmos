@@ -88,5 +88,7 @@ reference a local one. Every cache-using action now provisions its own tar, and 
   few large binaries, restores in 6-16 s and saves in 34 s on the Windows shards, so the small-file
   IOPS penalty that makes D: matter for the Go caches barely applies, and relocating it would mean
   moving the Atmos cache root (`ATMOS_XDG_CACHE_HOME`) job-wide, which the acceptance tests forbid.
+  For consumers of the published `actions/cache` action, whose cached trees may well be small-file
+  heavy (provider mirrors, plugin caches), the pattern is codified as its opt-in `cache-home` input.
 - The 10 GB quota saturation is a separate problem (every Tests run writes ~5 GB); smaller
   archives or fewer cached jobs would let main's entry survive between runs.
