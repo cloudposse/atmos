@@ -18,6 +18,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 const (
@@ -341,13 +342,18 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 func GetGitHubTokenFromEnv(v ...*viper.Viper) string {
 	defer perf.Track(nil, "http.GetGitHubTokenFromEnv")()
 
-	viperInst := viper.GetViper()
+	// First try viper (for toolchain commands with --github-token flag). A
+	// caller-supplied instance isn't shared, so it's read directly; the
+	// global singleton has no locking of its own and this runs from
+	// concurrent callers (e.g. the toolchain's concurrent batch installer),
+	// so that path goes through pkg/viperguard instead.
+	var token string
 	if len(v) > 0 && v[0] != nil {
-		viperInst = v[0]
+		token = v[0].GetString("github-token")
+	} else {
+		token = viperguard.GetString("github-token")
 	}
-
-	// First try viper (for toolchain commands with --github-token flag).
-	if token := viperInst.GetString("github-token"); token != "" {
+	if token != "" {
 		return token
 	}
 
