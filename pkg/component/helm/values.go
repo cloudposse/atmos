@@ -37,14 +37,15 @@ func buildChartSpec(
 	}
 
 	return &chartSpec{
-		Chart:        chart,
-		RepoURL:      stringField(section, "repository"),
-		Version:      stringField(section, "version"),
-		ReleaseName:  resolveReleaseName(section, info),
-		Namespace:    resolveNamespace(section),
-		Values:       values,
-		IncludeCRDs:  true,
-		Repositories: mergeRepositories(atmosConfig, section),
+		Chart:           chart,
+		RepoURL:         stringField(section, "repository"),
+		Version:         stringField(section, "version"),
+		ReleaseName:     resolveReleaseName(section, info),
+		Namespace:       resolveNamespace(section),
+		CreateNamespace: resolveCreateNamespace(section),
+		Values:          values,
+		IncludeCRDs:     true,
+		Repositories:    mergeRepositories(atmosConfig, section),
 	}, nil
 }
 
@@ -123,6 +124,16 @@ func resolveNamespace(section map[string]any) string {
 		return ns
 	}
 	return defaultNamespace
+}
+
+// resolveCreateNamespace reports whether Helm should create the target namespace
+// during install when it does not exist. It defaults to true, preserving the
+// existing native-helm behavior of creating the configured namespace
+// automatically. Set `create_namespace: false` on the component to install into a
+// pre-existing namespace instead, so an identity that lacks cluster-level
+// namespace-create permission can run the install.
+func resolveCreateNamespace(section map[string]any) bool {
+	return boolFieldDefault(section, "create_namespace", true)
 }
 
 // repositoriesMap converts a `repositories:` list of {name,url} into a name->url
@@ -235,6 +246,15 @@ func stringField(section map[string]any, key string) string {
 func boolField(section map[string]any, key string) bool {
 	value, _ := section[key].(bool)
 	return value
+}
+
+// boolFieldDefault reads a bool config key, returning fallback when the key is
+// absent or not a bool. This distinguishes an unset key from an explicit false.
+func boolFieldDefault(section map[string]any, key string, fallback bool) bool {
+	if value, ok := section[key].(bool); ok {
+		return value
+	}
+	return fallback
 }
 
 func asStringSlice(value any) []string {
