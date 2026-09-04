@@ -56,6 +56,13 @@ func (p *Provider) Reconcile(ctx context.Context, options *atmosgit.PullRequestO
 	if options.Owner == "" || options.Repository == "" || options.Base == "" || options.Head == "" {
 		return nil, fmt.Errorf("%w: owner, repository, base, and head are required", errUtils.ErrComponentUpdaterConfig)
 	}
+	if len(options.Namespace) > 0 {
+		// GitHub addresses repositories with exactly two segments (owner/repository); a non-empty
+		// Namespace means the caller built options for a forge that needs a third segment (e.g.
+		// Azure DevOps' project) and pointed it at the wrong provider. Reject outright rather than
+		// silently ignoring Namespace and resolving to the wrong repository.
+		return nil, fmt.Errorf("%w: github does not support a pull request namespace (got %v); GitHub repositories are addressed as owner/repository", errUtils.ErrComponentUpdaterConfig, options.Namespace)
+	}
 	c, err := p.newClient()
 	if err != nil {
 		return nil, fmt.Errorf("%w: configure ATMOS_CI_GITHUB_TOKEN, ATMOS_PRO_GITHUB_TOKEN (via github/sts), GITHUB_TOKEN, or GH_TOKEN: %w", errUtils.ErrGitHubAuthorization, err)

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	_ "github.com/cloudposse/atmos/pkg/git/providers/cli"
 	githubprovider "github.com/cloudposse/atmos/pkg/git/providers/github"
@@ -190,6 +191,56 @@ func TestPublishComponentUpdatePartialReconcileErrorStillReturnsPullRequest(t *t
 	require.NotNil(t, pr, "the already-created pull request must still be reported")
 	assert.Equal(t, 99, pr.Number)
 	assert.Equal(t, "https://github.com/acme/repo/pull/99", pr.URL)
+}
+
+// TestPublishComponentUpdateAzureDevOpsAddressing proves the azuredevops provider addresses its
+// repository directly from prConfig.Organization/Project/Repository rather than resolving it from
+// the local Git remote (which is a GitHub-specific convention -- see GitHubRepository) -- and that
+// PullRequestOptions.Owner/Namespace/Repository come out formatted the way the azuredevops
+// provider expects (Owner: organization, Namespace: [project], Repository: repository).
+func TestPublishComponentUpdateAzureDevOpsAddressing(t *testing.T) {
+	_, workdir := newGitFixture(t)
+
+	publisher := &fakePullRequestPublisher{}
+	atmosgit.RegisterPullRequestPublisher(azureDevOpsProviderName, func() (atmosgit.PullRequestPublisher, error) { return publisher, nil })
+
+	branch, base, err := PrepareBranch(context.Background(), workdir, "origin", "main", "", "all")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "vendor.yaml"), []byte("after\n"), 0o644))
+
+	// A resolver that fails if called at all -- proves the azuredevops path never falls back to
+	// GitHub's git-remote-parsing convention.
+	unusedGitHubResolver := func(context.Context, string, string) (string, string, error) {
+		return "", "", assert.AnError
+	}
+
+	prConfig := schema.VendorPullRequestConfig{Provider: azureDevOpsProviderName, Organization: "acme-org", Project: "platform", Repository: "infra"}
+	publication := Publication{Scope: "all", Branch: branch, Base: base, Report: &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "vpc", Status: vendoring.StatusUpdated}}}}
+	pr, commit, err := PublishComponentUpdate(context.Background(), workdir, "origin", publication, &prConfig, unusedGitHubResolver)
+	require.NoError(t, err)
+	require.NotEmpty(t, commit)
+	require.NotNil(t, pr)
+
+	require.NotNil(t, publisher.options)
+	assert.Equal(t, "acme-org", publisher.options.Owner)
+	assert.Equal(t, []string{"platform"}, publisher.options.Namespace)
+	assert.Equal(t, "infra", publisher.options.Repository)
+}
+
+// TestPublishComponentUpdateAzureDevOpsMissingConfig proves a missing organization/project/repository
+// fails loudly with an actionable, sentinel-wrapped error instead of silently falling back to
+// GitHub's git-remote resolution (which would resolve to the wrong repository shape entirely).
+func TestPublishComponentUpdateAzureDevOpsMissingConfig(t *testing.T) {
+	_, workdir := newGitFixture(t)
+
+	branch, base, err := PrepareBranch(context.Background(), workdir, "origin", "main", "", "all")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "vendor.yaml"), []byte("after\n"), 0o644))
+
+	prConfig := schema.VendorPullRequestConfig{Provider: azureDevOpsProviderName, Organization: "acme-org"} // Project/Repository left unset.
+	publication := Publication{Scope: "all", Branch: branch, Base: base, Report: &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "vpc", Status: vendoring.StatusUpdated}}}}
+	_, _, err = PublishComponentUpdate(context.Background(), workdir, "origin", publication, &prConfig, fakeGitHubRepository)
+	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterConfig)
 }
 
 func TestPublishComponentUpdateInvalidTemplateError(t *testing.T) {
