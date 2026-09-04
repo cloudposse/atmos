@@ -37,8 +37,14 @@ Two independent, durable changes:
     and there is no hook between release-drafter computing that body and writing it, so once it
     passes 125,000 characters the draft cannot be written at all and nothing downstream can run.
     Reading the drafted body back is therefore not a workable source. Instead the repo-level config
-    keeps the org's categories and version resolution but reduces `change-template` to a skeleton,
-    `- $TITLE @$AUTHOR (#$NUMBER)`, which never approaches the limit. After that draft is written,
+    keeps the org's version resolution but reduces `change-template` to a skeleton,
+    `- $TITLE @$AUTHOR (#$NUMBER)`, which never approaches the limit, and maps this repo's actual
+    labels onto categories: `major` → Breaking Changes, `minor` → Features, `patch` → Bug Fixes (the
+    org config filed `patch` under Enhancements and knew no `minor`, so fixes read as enhancements,
+    no Bug Fixes chapter ever appeared, and features sat uncategorized at the top with no heading).
+    The renderer also gives any still-uncategorized group an "Other Changes" heading when the
+    release has categorized groups, and converts the `<summary>` line's Markdown (bot author links,
+    backticks) to HTML, since GitHub never renders Markdown inside that tag. After that draft is written,
     `summarize-notes` fetches each PR's description from the pull-request API (which has no such
     cap), condenses it, and rewrites the release in the org template's exact shape - the same
     category headings and the same collapsible `<details><summary>title @author (#N)</summary>`

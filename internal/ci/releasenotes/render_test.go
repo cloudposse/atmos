@@ -31,8 +31,11 @@ func TestRenderBody_KeepsDetailsBlocksWithSummarizedBodies(t *testing.T) {
 	assert.NotContains(t, got, "long body")
 
 	// The category heading appears exactly once, before the entries it
-	// groups and after the uncategorized one.
+	// groups and after the uncategorized one - which, since the release has
+	// categories, gets the Other Changes heading so it does not read as a
+	// missing chapter.
 	assert.Equal(t, 1, strings.Count(got, "## 🚀 Enhancements"))
+	assert.True(t, strings.HasPrefix(got, uncategorizedHeading+"\n\n<details>"), got[:60])
 	assert.Less(t, strings.Index(got, "(#101)"), strings.Index(got, "## 🚀 Enhancements"))
 	assert.Less(t, strings.Index(got, "## 🚀 Enhancements"), strings.Index(got, "(#102)"))
 }
@@ -58,7 +61,11 @@ func TestRenderBody_RoundTripsThroughParseDraftedBody(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, parsed, len(entries))
 	for i := range entries {
-		assert.Equal(t, entries[i].Category, parsed[i].Category, "entry %d category", i)
+		wantCategory := entries[i].Category
+		if wantCategory == "" {
+			wantCategory = uncategorizedHeading // Rendered with the fallback heading.
+		}
+		assert.Equal(t, wantCategory, parsed[i].Category, "entry %d category", i)
 		assert.Equal(t, entries[i].Summary, parsed[i].Summary, "entry %d summary line", i)
 		assert.Equal(t, entries[i].Number, parsed[i].Number, "entry %d number", i)
 		assert.Equal(t, summaries[i], strings.TrimSpace(parsed[i].Body), "entry %d body", i)
@@ -79,9 +86,9 @@ func TestRenderBody_EmptySummaryRendersSkeletonBullet(t *testing.T) {
 
 // A line starting with <details> opens a GFM HTML block that swallows
 // everything up to the next blank line as raw HTML, so without the blank
-// lines the Markdown in the summary line (bot author links, backticks) and
-// in the body renders raw - seen live on dependabot entries. The summary
-// line itself is passed through untouched.
+// lines the body's Markdown renders raw. The <summary> line never renders
+// Markdown, so its links and code spans are converted to HTML - seen live
+// on dependabot entries.
 func TestRenderBody_BlankLinesKeepMarkdownRendering(t *testing.T) {
 	entries := []PREntry{{
 		Summary: "build(deps): bump base from `025b74b` to `b8c3669` @[dependabot[bot]](https://github.com/apps/dependabot) (#3014)",
@@ -89,7 +96,34 @@ func TestRenderBody_BlankLinesKeepMarkdownRendering(t *testing.T) {
 	}}
 	got, err := RenderBody(entries, []string{"- Bumps the **base** image."})
 	require.NoError(t, err)
-	assert.Equal(t, "<details>\n\n<summary>build(deps): bump base from `025b74b` to `b8c3669` @[dependabot[bot]](https://github.com/apps/dependabot) (#3014)</summary>\n\n- Bumps the **base** image.\n\n</details>\n", got)
+	assert.Equal(t, "<details>\n\n<summary>build(deps): bump base from <code>025b74b</code> to <code>b8c3669</code> @<a href=\"https://github.com/apps/dependabot\">dependabot[bot]</a> (#3014)</summary>\n\n- Bumps the **base** image.\n\n</details>\n", got)
+}
+
+func TestRenderSummaryLine(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "plain human author untouched", in: "feat: x @alice (#1)", want: "feat: x @alice (#1)"},
+		{name: "html special chars escaped", in: "fix: a < b && c > d @alice (#2)", want: "fix: a &lt; b &amp;&amp; c &gt; d @alice (#2)"},
+		{name: "link with nested brackets", in: "@[dependabot[bot]](https://github.com/apps/dependabot)", want: `@<a href="https://github.com/apps/dependabot">dependabot[bot]</a>`},
+		{name: "code span", in: "bump from `1.0` to `2.0`", want: "bump from <code>1.0</code> to <code>2.0</code>"},
+		{name: "code span content escaped", in: "use `a<b`", want: "use <code>a&lt;b</code>"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, renderSummaryLine(tt.in))
+		})
+	}
+}
+
+func TestRenderBody_AllUncategorizedGetsNoHeading(t *testing.T) {
+	entries := []PREntry{{Summary: "feat: x @a (#1)", Number: 1}, {Summary: "fix: y @b (#2)", Number: 2}}
+	got, err := RenderBody(entries, []string{"Does x.", "Does y."})
+	require.NoError(t, err)
+	assert.NotContains(t, got, "## ")
+	assert.True(t, strings.HasPrefix(got, "<details>"))
 }
 
 func TestBulletize(t *testing.T) {
