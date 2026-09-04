@@ -66,6 +66,15 @@ run fanned `go mod download` out to ~25 vanity-import hosts (`k8s.io`, `go.uber.
 …), all blocked, and `Get dependencies` took 9+ minutes of retries. Under block mode the fallback can only
 ever cost time.
 
+The same fallback also breaks `govulncheck` in `codeql.yml` on merge-queue runs (run 33785801022:
+`unrecognized import path "sigs.k8s.io/kustomize/kyaml": https fetch ... lookup sigs.k8s.io ... operation not
+permitted`), evicting the PR; the job passes on this branch with the fallback removed.
+
+**macOS agent matches by IP.** StepSecurity shows `api.github.com:443` dropped on a macOS shard with
+`matched_policy: EXACT_IP` even though the host is allowlisted: the macOS agent did not observe the DNS answer
+(Runner.Worker and a test binary reused a cached resolution) and blocked the connection by IP. This is an
+agent limitation, not an allowlist gap, and is included in the upstream report below.
+
 **Merge queue.** `[lint] Dockerfile` failed on 16 `merge_group` runs: `codeql-action/upload-sarif` fails with
 `ref 'refs/heads/gh-readonly-queue/…' not found`, which skips the Trivy scan and fails the second upload on
 the missing SARIF file, evicting the PR from the queue.
@@ -87,7 +96,10 @@ the missing SARIF file, evicting the PR from the queue.
   - Windows and macOS OS endpoints added to the `allowed-endpoints` of `build`, `terraform-registry-cache`,
     `test`, `mock`, `k3s` (macOS leg) and `kubernetes-e2e` (macOS leg), with a comment naming the source and
     the trade-off. `test` also gains `sum.golang.org`, `google.golang.org` and `modernc.org` for parity with
-    `build` (its Linux/macOS legs run `atmos build deps`). Firefox telemetry stays blocked.
+    `build` (its Linux/macOS legs run `atmos build deps`). Firefox telemetry stays blocked. Two gaps surfaced
+    by StepSecurity notices during review are closed too: `api.github.com` was never allowlisted on
+    `validate-affected`, `floci`, `k3s` and `validate`, and the Windows Software Licensing Service probes
+    `tas02.sls.update.microsoft.com`, so the update entry is the wildcard `*.update.microsoft.com`.
   - `GOPROXY` drops `|direct`; `atmos build deps`'s retry policy covers the transient proxy errors it existed
     for.
   - Workflow-level `concurrency` cancels a PR's superseded run on a new push; `merge_group`, `push` and
@@ -120,6 +132,7 @@ while read id; do
     def ts: sub("\\.[0-9]+Z$"; "Z") | fromdate;
     .jobs[] | select(.conclusion=="cancelled") |
     select(any(.labels[]?; test("windows"; "i")) or (.name|test("windows"; "i"))) |
+    select((.steps|length) > 0 and .completed_at != null and .steps[-1].completed_at != null) |
     select(all(.steps[]; .conclusion=="success" or .conclusion=="skipped")) |
     select(((.completed_at|ts) - (.steps[-1].completed_at|ts)) >= 300) |
     [.run_id, .name] | @tsv'
@@ -163,4 +176,7 @@ comparison 100688004653, 100532566215.
 
 Requests: (1) wait for the DNS restore to finish (or restore DNS from the action as a fallback after killing
 the agent); (2) consider implicitly allowing Windows/macOS OS endpoints in block mode (NCSI probes, WNS,
-update/settings/telemetry, time sync, OCSP/CRL, Apple update/CDN) — they are blocked on every job today.
+update/settings/telemetry, time sync, OCSP/CRL, Apple update/CDN) — they are blocked on every job today;
+(3) on macOS, allowlisted hosts are sometimes dropped with `matched_policy: EXACT_IP` when the agent did not
+see the DNS answer (e.g. `api.github.com:443` from Runner.Worker and from a Go test binary in
+cloudposse/atmos run 33766077354, job 100692423806, while `api.github.com:443` was in `allowed-endpoints`).

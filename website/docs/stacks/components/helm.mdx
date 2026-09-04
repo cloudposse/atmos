@@ -59,6 +59,9 @@ included in affected runs.
   <dt>`namespace`</dt>
   <dd>The target Kubernetes namespace. Defaults to <code>default</code>.</dd>
 
+  <dt>`create_namespace`</dt>
+  <dd>Whether Helm creates the target <code>namespace</code> during install when it does not exist. Defaults to <code>true</code>, preserving the existing behavior of creating the configured namespace automatically. Set to <code>false</code> to install into a pre-existing namespace instead, for example when a platform component owns the namespace (its labels, quotas, or NetworkPolicies), or when the identity running <code>atmos helm apply</code> is scoped to a single namespace and lacks cluster-level permission to create namespaces.</dd>
+
   <dt>`name`</dt>
   <dd>The Helm release name. Defaults to the component's last path segment.</dd>
 
