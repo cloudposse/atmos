@@ -27,9 +27,11 @@ name: Cache perf lab (windows)
 #            step defeats the check, and with C:\Windows\System32 first on
 #            PATH the lookup resolves to bsdtar. Same archive, same key.
 #
-# Dispatch (the workflow must exist on the default branch for this to
-# resolve; the --ref can then be any iteration branch):
-#   gh workflow run cache-perf.yml --repo cloudposse/atmos --ref <branch>
+# Running it: push to any branch named *ci-cache-perf* and this branch's copy
+# of the workflow runs on its own - edit, push, read the step summary, repeat.
+# Nothing has to land on the default branch to iterate. (Once the file is on
+# the default branch, `gh workflow run cache-perf.yml --ref <branch>` also
+# works, since workflow_dispatch only resolves workflows that exist there.)
 #
 # The `topology` job answers a separate question the same run: whether the
 # D:\ that windows-2025-vs2026 images still expose is a distinct disk from
@@ -37,7 +39,19 @@ name: Cache perf lab (windows)
 # actions/setup-go#515) or just a path onto the same slow volume.
 
 on:
+  # Every push to a ci-cache-perf* branch runs this branch's copy of the
+  # workflow directly - no merge to main needed to iterate. (workflow_dispatch
+  # additionally becomes available once the file exists on the default
+  # branch.)
+  push:
+    branches:
+      - '**/ci-cache-perf*'
   workflow_dispatch:
+
+# A newer push to the same branch supersedes a stale in-flight run.
+concurrency:
+  group: cache-perf-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions: {}
 
