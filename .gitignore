@@ -4,6 +4,7 @@
 *.tfstate.*
 **/*.tf.json
 **/*.planfile
+**/.atmos-*.tfplan
 **/*.kubeconfig
 **/terraform.tfvars.json
 **/helmfile.vars.yaml
@@ -146,6 +147,7 @@ TEST_QUALITY_*.md
 tools/lintroller/.lintroller
 tools/gomodcheck/.gomodcheck
 .golangci/lintroller/lintroller
+tools/gomodcheck/.gomodcheck
 /custom-gcl
 tools/noticegen/noticegen
 

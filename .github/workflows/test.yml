@@ -22,6 +22,16 @@ on:
 
   workflow_dispatch:
 
+# A newer push to the same PR supersedes the previous run: cancel it instead
+# of letting both compete for runners (30 acceptance shards each, and the org
+# macOS concurrency cap is small enough that a second run's macOS legs queue
+# for up to ~30 minutes). merge_group, push, and workflow_dispatch runs are
+# keyed by SHA and are never cancelled -- a merge-queue entry or a main-branch
+# run must always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Grant `packages: read` so jobs that pull OCI images from ghcr.io
 # (e.g. vendor pulls in mock/acceptance tests) can authenticate with
 # the auto-generated GITHUB_TOKEN. The default PR-event scope is
@@ -36,11 +46,12 @@ permissions:
 
 env:
   ATMOS_BOOTSTRAP_VERSION: "1.223.0"
-  OPEN_TOFU_VERSION: "1.12.2"
-  HELM_VERSION: "v3.19.2"
+  # terraform/opentofu/packer/helm/helmfile/tflint versions are pinned once in
+  # .tool-versions (the source `atmos toolchain install`/`atmos toolchain env`
+  # already read from), not duplicated here -- see docs/fixes for the
+  # incident where a stale OPEN_TOFU_VERSION here (1.12.2) drifted behind
+  # .tool-versions's actual pin (1.12.5) undetected.
   HELM_DIFF_VERSION: "v3.15.10"
-  HELMFILE_VERSION: "v1.1.0"
-  PACKER_VERSION: "1.14.2"
   # helmfile's own `version` subcommand makes an outbound network call to GitHub to check
   # for a newer release. On CI runners that call is a source of flakiness (e.g. "context
   # deadline exceeded" on Windows runners) unrelated to anything this repo controls, and
@@ -52,11 +63,16 @@ env:
   # OS (see tests/cli_test.go's testShard/testCaseShard and the `test` job's
   # matrix.shard list below, which must stay in sync with this count).
   TEST_SHARD_COUNT: "10"
-  # Use pipe fallback so transient proxy.golang.org errors (5xx, HTTP/2 stream
-  # resets) during `go mod download` fall back to direct module fetches. The
-  # default comma-separated GOPROXY list only falls through on "not found"
-  # responses, not network errors. See .github/workflows/native-ci.yml.
-  GOPROXY: "https://proxy.golang.org|direct"
+  # No `|direct` fallback: every job here runs under harden-runner's block
+  # mode, where a direct fetch fans out to ~25 vanity-import hosts (k8s.io,
+  # go.uber.org, gopkg.in, helm.sh, ...) that are not allowlisted, so the
+  # fallback can only ever burn minutes on blocked lookups (observed: a 9+
+  # minute "Get dependencies" step after one proxy.golang.org hiccup). The
+  # transient 5xx / HTTP/2 stream resets the fallback used to paper over are
+  # handled by `atmos build deps`'s retry policy (.atmos.d/build.yaml)
+  # instead. If the retry policy ever proves insufficient, allowlist the
+  # vanity hosts rather than restoring the fallback.
+  GOPROXY: "https://proxy.golang.org"
 
 jobs:
   # ensure the code builds...
@@ -69,7 +85,14 @@ jobs:
     # changes plus that save pushes the job past a tight limit and the run gets
     # cancelled mid-save (see #2713's windows build being killed at 30m10s).
     # Give the slowest target real headroom for build + cache save.
-    timeout-minutes: 45
+    #
+    # 45 minutes still wasn't enough after a large merge from main cold-started
+    # the cache: every real step (build, tests, upload) finished by 12:01, but
+    # the "Post Set up Go" cache-save step alone ran another 23+ minutes before
+    # the job timeout cancelled it mid-save (run 33387953802, job 99474734663,
+    # 2026-08-31). Raised further to keep genuine cold-cache saves from
+    # tripping the timeout.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -92,11 +115,27 @@ jobs:
       # (what this repo uses) only covers GitHub-hosted runners — self-hosted
       # runners including RunsOn need a StepSecurity Enterprise license plus
       # RunsOn-side config we're not doing here.
+      # Draft PRs skip every Windows step below (no checkout, nothing to
+      # protect), so skip Harden Runner there too: its post step would still
+      # race the agent's DNS restore, and the DNS guard (a local action) needs
+      # the checkout.
       - name: Harden Runner
-        if: matrix.target != 'linux'
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        if: matrix.target != 'linux' && ! ( matrix.target == 'windows' && github.event.pull_request.draft )
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
+          # Operating-system background services on the hosted Windows and
+          # macOS images (connectivity probes, push notifications, update and
+          # settings/telemetry checks, time sync, certificate revocation for
+          # GitHub's Sectigo chain, Apple software-update and CDN hosts) are
+          # listed below their job-specific endpoints. StepSecurity Insights
+          # showed them blocked on every Windows/macOS job -- they are not
+          # implicitly allowed -- and each blocked lookup is retried by the OS
+          # for the whole job (NCSI probes every few seconds; schannel
+          # revocation checks stall TLS to github.com). Allowing them removes
+          # that churn without widening what our own steps can reach. Source:
+          # StepSecurity Insights -> Network Events; keep in sync with the
+          # other Windows/macOS legs in this file.
           allowed-endpoints: >
             api.github.com:443
             github.com:443
@@ -111,6 +150,32 @@ jobs:
             storage.googleapis.com:443
             google.golang.org:443
             modernc.org:443
+            www.msftconnecttest.com:443
+            ipv6.msftconnecttest.com:443
+            www.msftncsi.com:443
+            ipv6.msftncsi.com:443
+            time.windows.com:443
+            client.wns.windows.com:443
+            settings-win.data.microsoft.com:443
+            *.events.data.microsoft.com:443
+            *.update.microsoft.com:443
+            ecs.office.com:443
+            pti.store.microsoft.com:443
+            login.live.com:443
+            go.microsoft.com:443
+            www.microsoft.com:443
+            ocsp.sectigo.com:80
+            ocsp.sectigo.com:443
+            crl.sectigo.com:80
+            crl.sectigo.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
 
       - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
         if: matrix.target == 'linux'
@@ -129,6 +194,16 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      # Repairs the runner's DNS if harden-runner's Windows post step kills its
+      # agent mid-"restoring system DNS" (a race against its 10-second wait);
+      # without it the job's steps all pass but the job never reports
+      # completion and GitHub cancels it 30-40 minutes later. Windows-only,
+      # no-op elsewhere. See the action's description and
+      # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
+      - name: Guard DNS against the harden-runner post-step race
+        if: matrix.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-dns-guard
 
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -205,10 +280,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
+            api.github.com:443
             github.com:443
             us.i.posthog.com:443
 
@@ -274,10 +350,25 @@ jobs:
     timeout-minutes: ${{ matrix.flavor.target == 'windows' && 45 || 20 }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
+      # Draft PRs skip every Windows step in this job (no checkout), so skip
+      # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
+          # Operating-system background services on the hosted Windows and
+          # macOS images (connectivity probes, push notifications, update and
+          # settings/telemetry checks, time sync, certificate revocation for
+          # GitHub's Sectigo chain, Apple software-update and CDN hosts) are
+          # listed below their job-specific endpoints. StepSecurity Insights
+          # showed them blocked on every Windows/macOS job -- they are not
+          # implicitly allowed -- and each blocked lookup is retried by the OS
+          # for the whole job (NCSI probes every few seconds; schannel
+          # revocation checks stall TLS to github.com). Allowing them removes
+          # that churn without widening what our own steps can reach. Source:
+          # StepSecurity Insights -> Network Events; keep in sync with the
+          # other Windows/macOS legs in this file.
           allowed-endpoints: >
             api.github.com:443
             checkpoint-api.hashicorp.com:443
@@ -295,12 +386,48 @@ jobs:
             storage.googleapis.com:443
             google.golang.org:443
             modernc.org:443
+            www.msftconnecttest.com:443
+            ipv6.msftconnecttest.com:443
+            www.msftncsi.com:443
+            ipv6.msftncsi.com:443
+            time.windows.com:443
+            client.wns.windows.com:443
+            settings-win.data.microsoft.com:443
+            *.events.data.microsoft.com:443
+            *.update.microsoft.com:443
+            ecs.office.com:443
+            pti.store.microsoft.com:443
+            login.live.com:443
+            go.microsoft.com:443
+            www.microsoft.com:443
+            ocsp.sectigo.com:80
+            ocsp.sectigo.com:443
+            crl.sectigo.com:80
+            crl.sectigo.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      # Repairs the runner's DNS if harden-runner's Windows post step kills its
+      # agent mid-"restoring system DNS" (a race against its 10-second wait);
+      # without it the job's steps all pass but the job never reports
+      # completion and GitHub cancels it 30-40 minutes later. Windows-only,
+      # no-op elsewhere. See the action's description and
+      # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
+      - name: Guard DNS against the harden-runner post-step race
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-dns-guard
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -325,11 +452,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default hashicorp/packer@${{ env.PACKER_VERSION }}
-          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
-          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install hashicorp/packer
+          atmos toolchain install helm/helm
+          atmos toolchain install helmfile/helmfile
           atmos toolchain env --format=github
 
       - name: Verify Terraform, OpenTofu, Packer, Helm, and Helmfile
@@ -412,17 +539,19 @@ jobs:
         # paying a cold compile/link penalty. Windows is also the slowest
         # platform for this suite's post-job Go module/build cache save
         # (much slower on Windows than Linux/macOS -- see
-        # terraform-registry-cache's own timeout comment). windows'
-        # stepTimeout=55 was set by measuring real job timings across 5
-        # consecutive runs on this CI provider's (spot instance) Windows
-        # runners: typical shards land 10-18min, but 20-30min is a routine
-        # occurrence (not a fixed "slow shard" -- shards 1, 2, 4, 5, 8, and 9
-        # each independently hit 26-28min across different runs), and two
-        # separate shards were cancelled at 39m57s/40m8s after their own
-        # tests had already printed PASS -- genuine runner-pool variance
-        # hitting the wall, not a hang. jobTimeout then adds real headroom
-        # above stepTimeout for the setup/cache-save overhead around it,
-        # rather than matching it 1:1.
+        # terraform-registry-cache's own timeout comment). windows' budgets
+        # were set from 378 successful Windows shard jobs across 38 main runs
+        # (2026-08-19..09-02): whole job p50 14.8m / p95 27.4m / max 44.5m;
+        # the "Acceptance tests" step alone p50 6.8m / p95 18.8m / max 30.1m
+        # (shard 3 is consistently the slowest). jobTimeout=50 and
+        # stepTimeout=40 clear those maxima with headroom. They are
+        # deliberately not larger: the only Windows jobs that ever exceeded
+        # ~45m were ones whose steps had all finished and passed, after which
+        # the runner's end-of-job results upload stalled indefinitely (the
+        # job's log blob is never even received), and in the same 378-job
+        # sample no job ever stalled after "Complete job" and then recovered.
+        # A bigger budget therefore only lengthens how long such a dead job
+        # holds the run before failing it; it cannot rescue anything.
         # linux's jobTimeout is 50, not 40: its "Acceptance tests with
         # coverage" step below (linux-only) has its own coverageStepTimeout
         # budget of 40, and a job timeout merely equal to a step's own budget
@@ -431,7 +560,7 @@ jobs:
         # Windows here (see this matrix's own history).
         flavor:
           - { os: "ubuntu-latest", target: linux, jobTimeout: 50, stepTimeout: 30, coverageStepTimeout: 40 }
-          - { os: "windows-latest", target: windows, jobTimeout: 65, stepTimeout: 55 }
+          - { os: "windows-latest", target: windows, jobTimeout: 50, stepTimeout: 40 }
           - { os: "macos-15", target: macos, jobTimeout: 40, stepTimeout: 30 }
         # tests/cli_test.go's TestCLICommands splits its ~388 CLI-driven subtests
         # across these shards by bin-packing each test case's workdir
@@ -439,27 +568,18 @@ jobs:
         # below); keep this list and env.TEST_SHARD_COUNT in sync if the shard
         # count ever changes.
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        # Shard 1 does somewhat more work than every other shard, regardless
-        # of platform (see the "Acceptance tests with coverage" step below),
-        # so it needs a higher timeout than any flavor's own jobTimeout/
-        # stepTimeout. An include entry naming only `shard` (not `flavor`)
-        # applies its extra keys to every matrix combination whose shard
-        # matches -- all three platforms' shard-1 jobs here -- without
-        # widening the matrix with new combinations; see GitHub's own
-        # "Expanding configurations" docs for this exact partial-match
-        # pattern. jobTimeoutOverride/stepTimeoutOverride are read in
-        # preference to matrix.flavor.jobTimeout/stepTimeout below, so the
-        # override lives here as data instead of a `shard == 1 &&` branch
-        # duplicated at each timeout-minutes site.
-        include:
-          - shard: 1
-            jobTimeoutOverride: 65
-            stepTimeoutOverride: 60
-    timeout-minutes: ${{ matrix.jobTimeoutOverride || matrix.flavor.jobTimeout }}
+        # No per-shard overrides: shard 1 used to carry a higher budget for
+        # doing more work, but per-shard maxima over the sample above are
+        # linux 16.3m / macos 19.8m / windows 31.1m, all inside the flavor
+        # budgets; shard 3 is the slow one on Windows, not shard 1.
+    timeout-minutes: ${{ matrix.flavor.jobTimeout }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
+      # Draft PRs skip every Windows step in this job (no checkout), so skip
+      # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           # Union of core, tool-driven endpoints across the linux/windows/macos
           # acceptance-test legs — bounded by which providers/registries the test
@@ -468,6 +588,18 @@ jobs:
           # single run (MCP pagination limitation), so carries more residual risk
           # of an untested-path endpoint than other workflows in this rollout.
           egress-policy: block
+          # Operating-system background services on the hosted Windows and
+          # macOS images (connectivity probes, push notifications, update and
+          # settings/telemetry checks, time sync, certificate revocation for
+          # GitHub's Sectigo chain, Apple software-update and CDN hosts) are
+          # listed below their job-specific endpoints. StepSecurity Insights
+          # showed them blocked on every Windows/macOS job -- they are not
+          # implicitly allowed -- and each blocked lookup is retried by the OS
+          # for the whole job (NCSI probes every few seconds; schannel
+          # revocation checks stall TLS to github.com). Allowing them removes
+          # that churn without widening what our own steps can reach. Source:
+          # StepSecurity Insights -> Network Events; keep in sync with the
+          # other Windows/macOS legs in this file.
           allowed-endpoints: >
             accounts.google.com:443
             api.bitbucket.org:443
@@ -497,12 +629,51 @@ jobs:
             sts.us-east-1.amazonaws.com:443
             tuf-repo-cdn.sigstore.dev:443
             us.i.posthog.com:443
+            sum.golang.org:443
+            google.golang.org:443
+            modernc.org:443
+            www.msftconnecttest.com:443
+            ipv6.msftconnecttest.com:443
+            www.msftncsi.com:443
+            ipv6.msftncsi.com:443
+            time.windows.com:443
+            client.wns.windows.com:443
+            settings-win.data.microsoft.com:443
+            *.events.data.microsoft.com:443
+            *.update.microsoft.com:443
+            ecs.office.com:443
+            pti.store.microsoft.com:443
+            login.live.com:443
+            go.microsoft.com:443
+            www.microsoft.com:443
+            ocsp.sectigo.com:80
+            ocsp.sectigo.com:443
+            crl.sectigo.com:80
+            crl.sectigo.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      # Repairs the runner's DNS if harden-runner's Windows post step kills its
+      # agent mid-"restoring system DNS" (a race against its 10-second wait);
+      # without it the job's steps all pass but the job never reports
+      # completion and GitHub cancels it 30-40 minutes later. Windows-only,
+      # no-op elsewhere. See the action's description and
+      # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
+      - name: Guard DNS against the harden-runner post-step race
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-dns-guard
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -533,11 +704,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default hashicorp/packer@${{ env.PACKER_VERSION }}
-          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
-          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install hashicorp/packer
+          atmos toolchain install helm/helm
+          atmos toolchain install helmfile/helmfile
           atmos toolchain env --format=github
 
       - name: Verify Terraform, OpenTofu, Packer, Helm, and Helmfile
@@ -600,7 +771,7 @@ jobs:
       - name: Acceptance tests with coverage
         # coverageStepTimeout lives on the linux flavor entry above,
         # alongside why the job-level budget needs to exceed it.
-        timeout-minutes: ${{ matrix.stepTimeoutOverride || matrix.flavor.coverageStepTimeout }}
+        timeout-minutes: ${{ matrix.flavor.coverageStepTimeout }}
         if: matrix.flavor.target == 'linux'
         shell: bash
         env:
@@ -617,10 +788,9 @@ jobs:
         # windows-latest is the slowest target for this suite too (see the
         # Build job's timeout comment above): before sharding, runs of the
         # unsharded step were observed between 37m43s and 60m17s. Per-platform
-        # budgets (stepTimeout) and shard 1's override (stepTimeoutOverride)
-        # both live on the matrix above, alongside the measured timing data
-        # and incident history behind them.
-        timeout-minutes: ${{ matrix.stepTimeoutOverride || matrix.flavor.stepTimeout }}
+        # budgets (stepTimeout) live on the matrix above, alongside the measured
+        # timing data and incident history behind them.
+        timeout-minutes: ${{ matrix.flavor.stepTimeout }}
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         shell: bash
         env:
@@ -696,6 +866,111 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+  # `-race` requires CGO_ENABLED=1 (the detector's runtime is itself a cgo
+  # library), unlike every other Go build/test path in this repo (CGO_ENABLED=0).
+  # Enabling cgo pulls in the cgo half of github.com/bearsh/hid (transitive, via
+  # saml2aws's U2F support) on linux/amd64 -- see hid_libusb_udev_linux.go, which
+  # links against libudev -- so the compile fails without libudev-dev installed.
+  # This is the same trap the govulncheck job documents (codeql.yml), but that
+  # job works around it by forcing CGO_ENABLED=0; that's not an option here since
+  # it would silently disable the race detector itself. Install libudev-dev
+  # instead, reusing the floci-go job's apt-get invocation below (same trap, hit
+  # there because that job also leaves CGO_ENABLED at the runner default).
+  #
+  # GOFIPS140=latest (set inside the `race` command itself, .atmos.d/test.yaml)
+  # is unaffected by CGO_ENABLED: Go's FIPS 140-3 module is pure Go, no cgo.
+  race:
+    name: "[race] non-acceptance test suite"
+    # `go test`'s package-level concurrency scales with available cores, and
+    # this job compiles+runs ~400 race-instrumented packages -- the standard
+    # ubuntu-latest runner's ~4 cores were the bottleneck (this job became
+    # the slowest check once every other job's own timeout issues were
+    # fixed). The RunsOn "terraform" family used elsewhere in this file for
+    # Go work (the build job's linux leg) turned out to be an i4i.large: 2
+    # cores, 15.7GB RAM -- fewer cores than ubuntu-latest, a downgrade for
+    # this CPU/memory-bound workload. "large" (used by the release job's
+    # goreleaser step) resolves to a 4-core/~32GB instance from that family
+    # (r7a.xlarge or i4i.xlarge, whichever spot capacity RunsOn picks; both
+    # appear in real run logs) -- double the cores and RAM of "terraform", a
+    # real upgrade over ubuntu-latest given -race's extra memory overhead per
+    # test binary.
+    runs-on: "runs-on=${{github.run_id}}/runner=large/tag=atmos/extras=s3-cache/private=false"
+    # Race-instrumented binaries run several times slower and use substantially
+    # more memory than normal test binaries; this runs the entire `./...` suite
+    # unsharded (unlike the `test` job's acceptance+unit sweep), so budget
+    # generously. `./cmd/...` alone -- one subtree out of the full package set
+    # this job actually runs -- took ~45 minutes locally in isolation (see
+    # docs/fixes/2026-09-01-race-detector-ci-job-timeouts.md); real runs on
+    # this runner have finished within a few minutes of the previous 45-minute
+    # budget, leaving too little slack for checkout/setup/apt overhead plus
+    # natural runner variance.
+    timeout-minutes: 75
+    steps:
+      # Harden Runner doesn't cover RunsOn self-hosted runners (see the build
+      # job's linux leg, which skips it the same way); runs-on/action sets up
+      # this job's runner metadata/labels instead.
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc # v2.2.0
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Set up Atmos bootstrap
+        uses: ./.github/actions/setup-atmos-bootstrap
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+
+      - name: Install Linux build dependencies (libudev-dev for CGO_ENABLED=1 -- see comment above)
+        run: |
+          # The DEB822 /etc/apt/sources.list.d/ubuntu.sources file (and the
+          # Azure mirror it points at) is a GitHub-hosted-runner-image thing
+          # (Ubuntu 24.04+); this job now runs on the RunsOn "terraform"
+          # runner (Ubuntu 22.04, no DEB822 sources file at all -- see
+          # docs/fixes for the incident where this sed failed outright with
+          # "No such file or directory"). Only rewrite the mirror if that
+          # file actually exists, so this step works on either runner image.
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
+
+      - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
+        # Unlike the `test`/`build` jobs, this job never ran this step, so
+        # tests needing these binaries (e.g. cmd/terraform/migrate,
+        # TestPackerValidateCmd) fell back to Atmos's own lazy/auto-install
+        # path -- unreliable here since `go test ./...` runs ~400 packages as
+        # separate concurrent processes, and nothing serializes a shared
+        # install across them. Pre-installing once, before any test process
+        # starts, removes that race entirely (see docs/fixes for the
+        # incident this closes).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install hashicorp/packer
+          atmos toolchain install helm/helm
+          atmos toolchain install helmfile/helmfile
+          atmos toolchain env --format=github
+
+      - name: Run atmos test race
+        env:
+          # pkg/toolchain's registry lookups hit the real GitHub API with no
+          # mock seam; unauthenticated requests share this runner's IP-wide
+          # 60/hr limit across every package running here, unlike the `test`
+          # job's acceptance steps, which already set this for the same
+          # reason (see their own "Use the GitHub token" comment).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: atmos test race
+
   # Sharding the `test` job fans it out into TEST_SHARD_COUNT x 3 per-leg checks.
   # Keep the three historical required-check names as compatibility aliases so
   # branch protection does not need to change. `needs.test.result` aggregates
@@ -719,7 +994,7 @@ jobs:
         check: ["Acceptance Tests (linux)", "Acceptance Tests (macos)", "Acceptance Tests (windows)"]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -808,7 +1083,7 @@ jobs:
       contents: read
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           # This job was skipped in the only sampled run (upstream test matrix
           # had a failed shard), so there's no observed egress data to build an
@@ -900,7 +1175,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -926,9 +1201,15 @@ jobs:
           # DL3008 Pin versions in apt-get install
           ignore: DL3008
 
+      # Code scanning cannot attach results to a merge queue's synthetic
+      # `refs/heads/gh-readonly-queue/...` ref: the upload fails with "ref ...
+      # not found", which (with wait-for-processing) fails this step, skips the
+      # Trivy scan below, and then fails the second upload on the missing SARIF
+      # file -- evicting the PR from the queue for a result nobody consumes.
+      # The same commit was already scanned on the PR run.
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
-        if: always()
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        if: always() && github.event_name != 'merge_group'
         with:
           # Path to SARIF file relative to the root of the repository
           sarif_file: hadolint.sarif
@@ -949,8 +1230,8 @@ jobs:
           output: trivy-config.sarif
 
       - name: Upload Trivy config scan results
-        if: always()
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        if: always() && github.event_name != 'merge_group'
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config
@@ -975,10 +1256,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
+            api.github.com:443
             checkpoint-api.hashicorp.com:443
             github.com:443
             mirror.gcr.io:443
@@ -1005,7 +1287,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install opentofu/opentofu
           atmos toolchain env --format=github
 
       - name: Verify OpenTofu
@@ -1049,7 +1331,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -1098,7 +1380,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install opentofu/opentofu
           atmos toolchain env --format=github
 
       - name: Verify OpenTofu
@@ -1144,10 +1426,15 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
+          # Operating-system background services on the hosted macOS image
+          # (software update, CDN, certificate revocation, time sync) are
+          # listed below the job-specific endpoints; see the `test` job's
+          # allowed-endpoints comment for the rationale.
           allowed-endpoints: >
+            api.github.com:443
             auth.docker.io:443
             charts.bitnami.com:443
             contracts.canonical.com:443
@@ -1170,6 +1457,14 @@ jobs:
             security.ubuntu.com:80
             tuf-repo-cdn.sigstore.dev:443
             us.i.posthog.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1285,7 +1580,7 @@ jobs:
     if: ${{ always() }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           # Pure bash conditional on needs.k3s.result; no external calls at all.
           egress-policy: block
@@ -1329,15 +1624,27 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
+          # Operating-system background services on the hosted macOS image
+          # (software update, CDN, certificate revocation, time sync) are
+          # listed below the job-specific endpoints; see the `test` job's
+          # allowed-endpoints comment for the rationale.
           allowed-endpoints: >
             api.github.com:443
             github.com:443
             proxy.golang.org:443
             release-assets.githubusercontent.com:443
             storage.googleapis.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1424,10 +1731,25 @@ jobs:
 
     timeout-minutes: 20
     steps:
+      # Draft PRs skip every Windows step in this job (no checkout), so skip
+      # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
+          # Operating-system background services on the hosted Windows and
+          # macOS images (connectivity probes, push notifications, update and
+          # settings/telemetry checks, time sync, certificate revocation for
+          # GitHub's Sectigo chain, Apple software-update and CDN hosts) are
+          # listed below their job-specific endpoints. StepSecurity Insights
+          # showed them blocked on every Windows/macOS job -- they are not
+          # implicitly allowed -- and each blocked lookup is retried by the OS
+          # for the whole job (NCSI probes every few seconds; schannel
+          # revocation checks stall TLS to github.com). Allowing them removes
+          # that churn without widening what our own steps can reach. Source:
+          # StepSecurity Insights -> Network Events; keep in sync with the
+          # other Windows/macOS legs in this file.
           allowed-endpoints: >
             api.github.com:443
             checkpoint-api.hashicorp.com:443
@@ -1441,12 +1763,48 @@ jobs:
             releases.hashicorp.com:443
             tuf-repo-cdn.sigstore.dev:443
             us.i.posthog.com:443
+            www.msftconnecttest.com:443
+            ipv6.msftconnecttest.com:443
+            www.msftncsi.com:443
+            ipv6.msftncsi.com:443
+            time.windows.com:443
+            client.wns.windows.com:443
+            settings-win.data.microsoft.com:443
+            *.events.data.microsoft.com:443
+            *.update.microsoft.com:443
+            ecs.office.com:443
+            pti.store.microsoft.com:443
+            login.live.com:443
+            go.microsoft.com:443
+            www.microsoft.com:443
+            ocsp.sectigo.com:80
+            ocsp.sectigo.com:443
+            crl.sectigo.com:80
+            crl.sectigo.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      # Repairs the runner's DNS if harden-runner's Windows post step kills its
+      # agent mid-"restoring system DNS" (a race against its 10-second wait);
+      # without it the job's steps all pass but the job never reports
+      # completion and GitHub cancels it 30-40 minutes later. Windows-only,
+      # no-op elsewhere. See the action's description and
+      # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
+      - name: Guard DNS against the harden-runner post-step race
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-dns-guard
 
       - name: Add GNU tar to flavor.target (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -1467,7 +1825,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain install opentofu/opentofu
           atmos toolchain env --format=github
 
       - name: Verify OpenTofu
@@ -1550,7 +1908,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -1577,8 +1935,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default terraform-linters/tflint@0.59.1
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install terraform-linters/tflint
           atmos toolchain env --format=github
 
       - name: Verify OpenTofu and TFLint
@@ -1599,7 +1957,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -1626,8 +1984,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
-          atmos toolchain install --default terraform-linters/tflint@0.59.1
+          atmos toolchain install opentofu/opentofu
+          atmos toolchain install terraform-linters/tflint
           atmos toolchain env --format=github
 
       - name: Run the TFLint hook example
@@ -1668,10 +2026,11 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
+            api.github.com:443
             github.com:443
             us.i.posthog.com:443
 
@@ -1719,7 +2078,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -1793,4 +2152,9 @@ jobs:
       publish: false
       format: binary
       runs-on: '["runs-on=${{github.run_id}}", "runner=large", "tag=atmos","extras=s3-cache", "private=false"]'
+    # `secrets: inherit`, not an explicit map: shared-go-auto-release.yml doesn't declare a
+    # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
+    # (observed as a startup_failure -- "likely failed because of a workflow file issue" -- with
+    # zero jobs ever created, on both this workflow and feature-release.yml after an earlier
+    # attempt to narrow this to an explicit list).
     secrets: inherit
