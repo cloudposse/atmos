@@ -64,3 +64,15 @@ warmup's writer role.
   existing `build-artifacts-<target>` artifact so the shards stop installing them at all.
 - Phase 2c (measure the cache-free Windows shard) and the `setup-go` single-writer change are also still
   open; same tracking note.
+
+## Addendum (2026-09-04): the save silently did nothing when the action was nested
+
+Calling `./actions/cache` from inside another composite action (`.github/actions/ci-toolchain`, PR
+#3041) showed the post-step save running with `Input required and not supplied: path` and storing
+nothing: a post step of an action nested inside a composite cannot see the composite's
+`steps.*.outputs` (actions/runner#2800), so `path: ${{ steps.meta.outputs.path }}` evaluated
+empty at save time. Direct use from a job never hit this. The action now also exports
+`ATMOS_CACHE_KEY`, `ATMOS_CACHE_PATH` and `ATMOS_CACHE_RESTORE_KEYS` to the job env and the cache
+steps read those, since the job env is visible to post steps. Also: the `restore-only` boolean
+became a `mode` input (`restore-and-save` | `restore-only`) so a caller can pass its own mode
+through in one step.
