@@ -1447,7 +1447,7 @@ func parseTerraformRunOptions(cmd *cobra.Command, parsers ...*flags.StandardPars
 		}
 	}
 
-	opts, err := ParseTerraformRunOptions(v)
+	opts, err := ParseTerraformRunOptions(v, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -1457,6 +1457,10 @@ func parseTerraformRunOptions(cmd *cobra.Command, parsers ...*flags.StandardPars
 // applyOptionsToInfo transfers parsed options to the info struct.
 func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOptions) {
 	shared.ApplyRunOptions(info, opts)
+
+	// UI flags.
+	info.UIEnabled = opts.UI
+	info.UIFlagExplicitlySet = opts.UIFlagSet
 }
 
 // terraformRunWithOptions is the shared execution logic for terraform subcommands.

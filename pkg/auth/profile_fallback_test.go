@@ -468,6 +468,42 @@ func TestMaybeOfferAnyProfileFallback_Exported_LoopGuard(t *testing.T) {
 		"exported wrapper must respect the loop guard")
 }
 
+// MaybeOfferProfileFallbackForIdentity is the manager-independent entry point used by
+// exec-layer callers (terraform/helmfile/packer/native components) that hit an
+// invalid/missing identity before any AuthManager exists. It must satisfy the same
+// gating rules as the method it wraps, using only a cliConfigPath — no manager
+// construction required.
+func TestMaybeOfferProfileFallbackForIdentity_NoCandidatesReturnsNil(t *testing.T) {
+	resetGlobalProfileState(t)
+	tmpDir := profileFallbackFixture(t)
+
+	err := MaybeOfferProfileFallbackForIdentity(context.Background(), tmpDir, "nonexistent")
+	assert.NoError(t, err, "no candidate profile → no fallback error")
+}
+
+func TestMaybeOfferProfileFallbackForIdentity_LoopGuardSkips(t *testing.T) {
+	resetGlobalProfileState(t)
+	tmpDir := profileFallbackFixture(t)
+	t.Setenv(reexec.DepthEnvVar, "1")
+
+	err := MaybeOfferProfileFallbackForIdentity(context.Background(), tmpDir, "root-admin")
+	assert.NoError(t, err, "loop guard must short-circuit without error")
+}
+
+func TestMaybeOfferProfileFallbackForIdentity_NonInteractiveEnrichesError(t *testing.T) {
+	resetGlobalProfileState(t)
+	tmpDir := profileFallbackFixture(t)
+
+	err := MaybeOfferProfileFallbackForIdentity(context.Background(), tmpDir, "root-admin")
+	require.Error(t, err, "non-interactive must return an enriched error")
+	assert.ErrorIs(t, err, errUtils.ErrIdentityNotFound)
+
+	assert.True(t, hintsContain(err, "alpha"),
+		"enriched error hints must mention the profile that defines the identity")
+	assert.True(t, hintsContain(err, "root-admin"),
+		"enriched error hints must mention the requested identity")
+}
+
 // reExecWithProfile must strip --chdir/-C from the child argv so a relative
 // chdir applied to the parent is not re-applied against the already-changed
 // cwd. This is the regression guard for the chdir family of fixes documented

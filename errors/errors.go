@@ -29,6 +29,7 @@ var (
 	ErrInvalidErrorMode                      = errors.New("invalid error mode")
 	ErrParseFile                             = errors.New("failed to parse file")
 	ErrParseURL                              = errors.New("failed to parse URL")
+	ErrParseHexColor                         = errors.New("failed to parse hex color")
 	ErrInvalidURL                            = errors.New("invalid URL")
 	ErrCreateDownloadClient                  = errors.New("failed to create download client")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
@@ -46,6 +47,9 @@ var (
 	ErrValidPackage                          = errors.New("no valid installer package provided for")
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
 	ErrTUIRun                                = errors.New("failed to run TUI")
+	ErrStdoutPipe                            = errors.New("failed to get stdout pipe")
+	ErrStderrPipe                            = errors.New("failed to get stderr pipe")
+	ErrCommandStart                          = errors.New("failed to start command")
 	ErrUIFormatterNotInitialized             = errors.New("ui formatter not initialized")
 	ErrMarkdownRendererInit                  = errors.New("failed to initialize markdown renderer")
 	ErrMarkdownRender                        = errors.New("failed to render markdown content")
@@ -114,6 +118,7 @@ var (
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
+	ErrUnexpectedModelType                   = errors.New("unexpected model type")
 	ErrSpinnerOperationInterrupted           = errors.New("operation was interrupted")
 
 	// Version Tracker errors.
@@ -160,6 +165,7 @@ var (
 	ErrUnknownHelpTopic       = errors.New("unknown help topic")
 	ErrTTYRequired            = errors.New("requires a TTY")
 	ErrInvalidAuthManagerType = errors.New("invalid authManager type")
+	ErrStreamingNotSupported  = errors.New("streaming UI not supported in this environment")
 
 	// Component and positional argument errors.
 	ErrComponentRequired          = errors.New("component is required")
@@ -204,6 +210,7 @@ var (
 	ErrTerraformStateNotProvisioned = errors.New("terraform state not provisioned")
 	ErrTerraformOutputNotFound      = errors.New("terraform output not found")
 	ErrTerraformOutputFailed        = errors.New("failed to retrieve terraform outputs")
+	ErrParseTerraformOutput         = errors.New("failed to parse terraform output")
 
 	// Terraform output component configuration errors.
 	ErrMissingExecutable      = errors.New("component does not have 'command' (executable) defined")
@@ -224,7 +231,7 @@ var (
 
 	// --use-mocks errors.
 	ErrTerraformComponentMocksNotDeclared = errors.New("terraform component does not declare `mocks` required by --use-mocks")
-	ErrTerraformMockOutputNotDeclared     = errors.New("mocked terraform output is not declared for component")
+	ErrTerraformMockOutputNotDeclared     = errors.New("mocked terraform output is not declared")
 
 	// API/infrastructure errors - should cause non-zero exit.
 	// These errors indicate backend API failures that should not use YQ defaults.

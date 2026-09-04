@@ -361,6 +361,7 @@ func TestBuildChartSpecAndValueHelpers(t *testing.T) {
 	assert.Equal(t, "1.2.3", spec.Version)
 	assert.Equal(t, "demo", spec.ReleaseName)
 	assert.Equal(t, "apps", spec.Namespace)
+	assert.True(t, spec.CreateNamespace, "create_namespace defaults to true when the key is absent")
 	assert.True(t, spec.IncludeCRDs)
 	repo, found := findRepository(spec.Repositories, "bitnami")
 	require.True(t, found)
