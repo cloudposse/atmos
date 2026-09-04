@@ -60,6 +60,10 @@ components:
     plugin_cache: true
     plugin_cache_dir: ""  # Uses ~/.cache/atmos/terraform/plugins by default
 
+    # Streaming UI mode for real-time progress
+    ui:
+      enabled: false
+
     # Registry cache proxy (disabled by default)
     cache:
       enabled: false
@@ -234,6 +238,40 @@ components:
 
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR`
     **Default:** `""` (uses XDG cache directory)
+  </dd>
+
+  <dt>`ui.enabled`</dt>
+  <dd>
+    When `true`, Atmos displays a streaming terminal UI during `terraform plan`, `apply`, `deploy`, `init`, and `destroy` commands. The UI shows real-time resource status with progress indicators, similar to Docker build output.
+
+    `refresh` doesn't support the streaming UI (Terraform's `refresh` doesn't emit the structured `-json` output it depends on); passing `--ui` with `refresh` prints a warning and falls back to standard output.
+
+    The streaming UI automatically disables when:
+    - Output is piped or redirected (no TTY)
+    - Running in CI environments (`CI=true`)
+    - Using commands that don't support JSON streaming (`refresh`)
+
+    `--ui` is rejected with an error (not a silent fallback) when combined with `--max-concurrency` greater than `1`: concurrently-scheduled components would each try to take over the same terminal with their own full-screen UI session. Use `--max-concurrency 1` (the default) with `--ui`, or drop `--ui` to run components concurrently.
+
+    **Environment variable:** `ATMOS_TERRAFORM_UI`
+    **Command-line flag:** `--ui`
+    **Default:** `false`
+
+    Example output during apply:
+    ```
+    ⠋ apply plat-ue2-dev/vpc
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 40% (2/5) 12.3s
+
+      ✓ Created  aws_vpc.main (2.1s)
+      ✓ Created  aws_subnet.public[0] (1.3s)
+      ⠋ Creating aws_security_group.default (5.2s)
+      ○ Pending  aws_instance.web[0]
+    ```
+
+    On completion, output condenses to a summary:
+    ```
+    ✓ Apply plat-ue2-dev/vpc completed (15.2s)
+    ```
   </dd>
 
   <dt>`auto_provision_workdir_for_outputs`</dt>

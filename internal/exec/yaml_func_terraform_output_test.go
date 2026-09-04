@@ -4,7 +4,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
@@ -207,7 +209,34 @@ func isolateTerraformTestBinary(t *testing.T, source string) {
 		t.Fatalf("copy Terraform-compatible executable to test directory: %v", err)
 	}
 
+	// Registered after t.TempDir()'s own cleanup, so it runs first (t.Cleanup is LIFO): on
+	// Windows, a tofu/terraform subprocess launched from this copy can still hold its exe
+	// file handle open for a brief window after the test body returns, which makes
+	// t.TempDir()'s single-shot RemoveAll fail with "process cannot access the file".
+	// Retrying with a short backoff lets that lock clear before TempDir's own cleanup runs,
+	// matching the copyRepoWithRetry pattern in describe_affected_test.go.
+	t.Cleanup(func() { removeWithRetryForTransientLock(t, destination) })
+
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// removeWithRetryForTransientLock removes path, retrying briefly if the OS reports it as
+// still in use by another process rather than failing immediately. See
+// isTransientRepoCopyError in describe_affected_test.go for the same Windows-lock pattern.
+func removeWithRetryForTransientLock(t *testing.T, path string) {
+	t.Helper()
+
+	const maxAttempts = 10
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err := os.Remove(path)
+		if err == nil || os.IsNotExist(err) {
+			return
+		}
+		if attempt == maxAttempts || !strings.Contains(strings.ToLower(err.Error()), "being used by another process") {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 func TestIsolateTerraformTestBinary(t *testing.T) {

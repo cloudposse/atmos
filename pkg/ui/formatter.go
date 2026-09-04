@@ -587,6 +587,29 @@ func FormatSuccess(text string) string {
 	return f.Success(text)
 }
 
+// FormatSuccessf returns a formatted success message with green checkmark as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatSuccessf(format string, a ...interface{}) string {
+	return FormatSuccess(fmt.Sprintf(format, a...))
+}
+
+// FormatWarning returns a warning message with yellow warning sign as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatWarning(text string) string {
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted
+		return "⚠ " + text
+	}
+	return f.Warning(text)
+}
+
+// FormatWarningf returns a formatted warning message with yellow warning sign as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatWarningf(format string, a ...interface{}) string {
+	return FormatWarning(fmt.Sprintf(format, a...))
+}
+
 // FormatError returns an error message with red X as a formatted string.
 // Use this when you need the formatted string without writing (e.g., in bubbletea views).
 func FormatError(text string) string {
@@ -596,6 +619,12 @@ func FormatError(text string) string {
 		return "✗ " + text
 	}
 	return f.Error(text)
+}
+
+// FormatErrorf returns a formatted error message with red X as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatErrorf(format string, a ...interface{}) string {
+	return FormatError(fmt.Sprintf(format, a...))
 }
 
 // FormatInline renders inline markdown (backticks, bold, etc.) without icons or newlines.
