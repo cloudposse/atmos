@@ -93,7 +93,7 @@ func TestReconcilePullRequest(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantNumber, result.Number)
 			assert.Equal(t, tt.wantCreated, result.Created)
-			assert.Equal(t, server.URL+"/acme/_git/repo/pullrequest/"+strconv.Itoa(tt.wantNumber), result.URL)
+			assert.Equal(t, server.URL+"/acme/proj/_git/repo/pullrequest/"+strconv.Itoa(tt.wantNumber), result.URL)
 			assert.Subset(t, methods, tt.expectedMethods)
 		})
 	}
@@ -139,7 +139,9 @@ func TestReconcileMissingToken(t *testing.T) {
 }
 
 func TestReconcileRejectsAssignees(t *testing.T) {
+	var requests []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodGet {
 			_, _ = w.Write([]byte(`{"value":[]}`))
@@ -154,10 +156,10 @@ func TestReconcileRejectsAssignees(t *testing.T) {
 	options.Assignees = []string{"someone"}
 	result, err := p.Reconcile(context.Background(), options)
 	assert.ErrorIs(t, err, errUtils.ErrAzureDevOpsAssigneesUnsupported)
-	// The pull request itself was already created before the assignees check ran -- its
-	// number/URL must still be reported, not discarded alongside the error.
-	require.NotNil(t, result, "the already-created pull request must still be reported")
-	assert.Equal(t, 9, result.Number)
+	// Assignees are rejected before reconcilePullRequest runs, so no pull request is created or
+	// updated on invalid configuration -- the server must not see any request at all.
+	assert.Nil(t, result, "invalid configuration must not report a pull request")
+	assert.Empty(t, requests, "invalid configuration must not reach the Azure DevOps API")
 }
 
 func TestReconcileReturnsAuthorizationErrorOnUnauthorized(t *testing.T) {
@@ -249,7 +251,7 @@ func TestReconcileWrapsServerErrors(t *testing.T) {
 func TestSplitPathHelpers(t *testing.T) {
 	repo := repositoryEndpoint{baseURL: "https://dev.azure.com", organization: "acme", project: "proj", repository: "repo"}
 	assert.Equal(t, "https://dev.azure.com/acme/proj/_apis/git/repositories/repo", repo.apiBase())
-	assert.Equal(t, "https://dev.azure.com/acme/_git/repo/pullrequest/42", repo.pullRequestWebURL(42))
+	assert.Equal(t, "https://dev.azure.com/acme/proj/_git/repo/pullrequest/42", repo.pullRequestWebURL(42))
 	assert.Equal(t, "refs/heads/main", refName("main"))
 }
 
