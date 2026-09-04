@@ -25,9 +25,9 @@ func TestRenderBody_KeepsDetailsBlocksWithSummarizedBodies(t *testing.T) {
 
 	// Exactly release-drafter's change-template shape, with the summary
 	// where the full PR body used to be.
-	assert.Contains(t, got, "<details>\n  <summary>feat: add widget @alice (#101)</summary>\nAdds a new widget component.\n</details>\n")
-	assert.Contains(t, got, "<details>\n  <summary>fix: correct gizmo @bob (#102)</summary>\nFixes an off-by-one in the gizmo.\n</details>\n")
-	assert.Contains(t, got, "<details>\n  <summary>fix: another gizmo fix @carol (#103)</summary>\nFixes a related gizmo edge case.\n</details>\n")
+	assert.Contains(t, got, "<details>\n\n<summary>feat: add widget @alice (#101)</summary>\n\nAdds a new widget component.\n\n</details>\n")
+	assert.Contains(t, got, "<details>\n\n<summary>fix: correct gizmo @bob (#102)</summary>\n\nFixes an off-by-one in the gizmo.\n\n</details>\n")
+	assert.Contains(t, got, "<details>\n\n<summary>fix: another gizmo fix @carol (#103)</summary>\n\nFixes a related gizmo edge case.\n\n</details>\n")
 	assert.NotContains(t, got, "long body")
 
 	// The category heading appears exactly once, before the entries it
@@ -73,7 +73,22 @@ func TestRenderBody_EmptySummaryRendersSkeletonBullet(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, got, "- chore: bump deps @dependabot (#5)\n")
 	assert.NotContains(t, got, "Bumps foo", "an empty summary must not fall back to re-embedding the body")
-	assert.Contains(t, got, "<details>\n  <summary>feat: x @a (#6)</summary>\nDoes x.\n</details>\n")
+	assert.Contains(t, got, "<details>\n\n<summary>feat: x @a (#6)</summary>\n\nDoes x.\n\n</details>\n")
+}
+
+// A line starting with <details> opens a GFM HTML block that swallows
+// everything up to the next blank line as raw HTML, so without the blank
+// lines the Markdown in the summary line (bot author links, backticks) and
+// in the body renders raw - seen live on dependabot entries. The summary
+// line itself is passed through untouched.
+func TestRenderBody_BlankLinesKeepMarkdownRendering(t *testing.T) {
+	entries := []PREntry{{
+		Summary: "build(deps): bump base from `025b74b` to `b8c3669` @[dependabot[bot]](https://github.com/apps/dependabot) (#3014)",
+		Number:  3014,
+	}}
+	got, err := RenderBody(entries, []string{"- Bumps the **base** image."})
+	require.NoError(t, err)
+	assert.Equal(t, "<details>\n\n<summary>build(deps): bump base from `025b74b` to `b8c3669` @[dependabot[bot]](https://github.com/apps/dependabot) (#3014)</summary>\n\n- Bumps the **base** image.\n\n</details>\n", got)
 }
 
 func TestRenderBody_MismatchedLengthsError(t *testing.T) {

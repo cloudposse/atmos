@@ -20,14 +20,19 @@ const (
 
 	// Bounds how much of one PR's body is sent to the model: a single very
 	// long description should not blow up the prompt (or the bill) for the
-	// whole batch. Release notes only need the gist.
-	maxEntryBodyChars = 2000
+	// whole batch. Sized to fit a full "what / why / references" description
+	// (typically 2-4k) so the model condenses the real content, not a cut.
+	maxEntryBodyChars = 6000
 
-	summarizerSystemPrompt = `You summarize GitHub pull request descriptions into a single ` +
-		`concise sentence suitable for release notes, written for end users rather than ` +
-		`contributors. Return ONLY a JSON array of objects: ` +
-		`[{"number": <PR number>, "summary": "<one sentence>"}, ...], one per pull request, ` +
-		`in the same order as given, with no other text before or after the array.`
+	summarizerSystemPrompt = `You condense GitHub pull request descriptions into release notes ` +
+		`for end users of the Atmos CLI. For each pull request write a short Markdown summary: ` +
+		`3 to 6 bullet points, about 60 to 150 words in total, that keep what changed and why ` +
+		`it matters, using the concrete names of commands, flags, configuration keys, and ` +
+		`behaviors from the description. Do not repeat the pull request title, do not mention ` +
+		`tests, CI, coverage, or internal refactoring unless that is the whole change, and do ` +
+		`not invent details that are not in the description. Return ONLY a JSON array of ` +
+		`objects: [{"number": <PR number>, "summary": "<markdown>"}, ...], one per pull ` +
+		`request, in the same order as given, with no other text before or after the array.`
 )
 
 // errSummaryMismatch means the model's response didn't cover every entry

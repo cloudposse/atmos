@@ -127,9 +127,9 @@ func TestSummarizeRelease_SkeletonFetchesPRBodiesAndRewritesAsDetails(t *testing
 	assert.NotContains(t, s.openAIPrompt, "Summary by CodeRabbit")
 
 	// The release gets the org template's shape with the summaries inside.
-	assert.Contains(t, s.patched, "<details>\n  <summary>feat: add widget @alice (#101)</summary>\nAdds a widget.\n</details>")
+	assert.Contains(t, s.patched, "<details>\n\n<summary>feat: add widget @alice (#101)</summary>\n\nAdds a widget.\n\n</details>")
 	assert.Contains(t, s.patched, "## 🚀 Enhancements")
-	assert.Contains(t, s.patched, "<details>\n  <summary>fix: correct gizmo @bob (#102)</summary>\nFixes the gizmo.\n</details>")
+	assert.Contains(t, s.patched, "<details>\n\n<summary>fix: correct gizmo @bob (#102)</summary>\n\nFixes the gizmo.\n\n</details>")
 	assert.Positive(t, res.Chars)
 }
 
@@ -145,10 +145,10 @@ func TestSummarizeRelease_WithoutKeyUsesCodeRabbitOrTruncatedDescription(t *test
 	assert.Equal(t, 0, s.calls["openai"], "no model call without a key")
 	assert.Equal(t, 1, s.calls["patch"])
 	// #101 has a CodeRabbit summary: that is the fallback, heading dropped.
-	assert.Contains(t, s.patched, "<summary>feat: add widget @alice (#101)</summary>\n* **New Features**\n  * A widget.\n</details>")
+	assert.Contains(t, s.patched, "<summary>feat: add widget @alice (#101)</summary>\n\n* **New Features**\n  * A widget.\n\n</details>")
 	assert.NotContains(t, s.patched, "Summary by CodeRabbit")
 	// #102 has none: its (short) description is used as-is.
-	assert.Contains(t, s.patched, "<summary>fix: correct gizmo @bob (#102)</summary>\nFixes the gizmo.\n</details>")
+	assert.Contains(t, s.patched, "<summary>fix: correct gizmo @bob (#102)</summary>\n\nFixes the gizmo.\n\n</details>")
 }
 
 func TestSummarizeRelease_OrgTemplateBodyNeedsNoPRFetch(t *testing.T) {

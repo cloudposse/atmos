@@ -13,6 +13,14 @@ import (
 // per pull request with the title/author/number line as its `<summary>` and
 // the condensed text as the block's body. An entry whose summary is empty
 // is rendered as the plain skeleton bullet instead of an empty block.
+//
+// The blank lines inside each block matter: in GitHub-flavored Markdown a
+// line starting with `<details>` opens an HTML block that swallows every
+// following line up to the next blank line as raw HTML. With a blank line
+// after `<details>`, the `<summary>` line is an ordinary paragraph with
+// inline HTML - so the Markdown release-drafter puts in it (bot author
+// links, backticks) renders - and the body after the next blank line is
+// ordinary Markdown too.
 func RenderBody(entries []PREntry, summaries []string) (string, error) {
 	defer perf.Track(nil, "releasenotes.RenderBody")()
 
@@ -34,7 +42,7 @@ func RenderBody(entries []PREntry, summaries []string) (string, error) {
 			lastCategory = e.Category
 		}
 		if summary := strings.TrimSpace(summaries[i]); summary != "" {
-			fmt.Fprintf(&b, "<details>\n  <summary>%s</summary>\n%s\n</details>\n", e.Summary, summary)
+			fmt.Fprintf(&b, "<details>\n\n<summary>%s</summary>\n\n%s\n\n</details>\n", e.Summary, summary)
 		} else {
 			fmt.Fprintf(&b, "- %s\n", e.Summary)
 		}
