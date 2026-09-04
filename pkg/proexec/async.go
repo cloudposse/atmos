@@ -93,6 +93,16 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 		commandPath = cmd.CommandPath()
 	}
 
+	// Read and clear the pending structured-data hand-off (if any) first,
+	// unconditionally — before any early return below. pendingAsyncData must
+	// never survive past this one CaptureAsync call: if it were only cleared
+	// on the happy path, a caller that set it ahead of a call that then
+	// short-circuits (sync-command skip, closed gate, client-creation
+	// failure) would leave it dangling for the *next* CaptureAsync call to
+	// pick up and misattribute (research.md Decision 23).
+	data := pendingAsyncData
+	pendingAsyncData = nil
+
 	if IsSyncCommand(commandPath) {
 		log.Debug("Skipping async exec-metadata upload: command is on the synchronous allowlist.", logKeyCommand, commandPath)
 		return
@@ -113,12 +123,6 @@ func CaptureAsync(cmd *cobra.Command, err error) {
 	exitCode := errUtils.GetExitCode(err)
 
 	reportedCommand, args, flags := commandArgsAndFlags(cmd)
-
-	// Read and clear the pending structured-data hand-off (if any) so it
-	// applies to this one call only and never leaks into the next
-	// invocation's CaptureAsync call (research.md Decision 23).
-	data := pendingAsyncData
-	pendingAsyncData = nil
 
 	in := &ExecRecordInput{Command: reportedCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data}
 	done := make(chan error, 1)
