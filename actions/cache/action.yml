@@ -47,6 +47,12 @@ runs:
       env:
         CACHE_HOME: ${{ inputs.cache-home }}
       run: |
+        # Reject CR/LF: the value is written verbatim to GITHUB_ENV below, and a
+        # newline would let it inject arbitrary extra environment variables.
+        if [[ "${CACHE_HOME}" == *$'\n'* || "${CACHE_HOME}" == *$'\r'* ]]; then
+          echo "::error::cache-home must not contain CR or LF characters."
+          exit 1
+        fi
         echo "ATMOS_XDG_CACHE_HOME=${CACHE_HOME}" >> "$GITHUB_ENV"
         echo "Atmos cache root for this job: ${CACHE_HOME}"
     - id: meta

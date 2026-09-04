@@ -74,7 +74,7 @@ barely registers. Opt in with `cache-home`, which exports `ATMOS_XDG_CACHE_HOME`
 the job so toolchain installs, the cache save and the cached paths all use the same root:
 
 ```yaml
-- uses: cloudposse/atmos/actions/cache@main
+- uses: cloudposse/atmos/actions/cache@v1     # pin to a release or SHA
   with:
     cache-home: ${{ runner.temp }}/atmos
 ```
