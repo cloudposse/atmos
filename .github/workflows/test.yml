@@ -1792,6 +1792,10 @@ jobs:
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
             *.pool.ntp.org:123
+            get.helm.sh:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            google.golang.org:443
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
