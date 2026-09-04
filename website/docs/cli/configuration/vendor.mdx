@@ -195,7 +195,7 @@ vendor:
     lists against component paths; exclusions win.
   </dd>
   <dt>`ci.pull_request.provider`</dt>
-  <dd>Pull request provider. **Valid values:** `github`. **Default:** `github`.</dd>
+  <dd>Pull request provider. **Valid values:** `github`, `azuredevops`. **Default:** `github`.</dd>
   <dt>`ci.pull_request.base_branch`</dt>
   <dd>Base branch for the pull request. **Default:** the remote's advertised default branch.</dd>
   <dt>`ci.pull_request.branch_prefix`</dt>
@@ -208,9 +208,20 @@ vendor:
     `{{ .updates | markdownTable }}` — not just the bare table on its own.
   </dd>
   <dt>`ci.pull_request.labels` / `.reviewers` / `.assignees`</dt>
-  <dd>Atmos applies these additively on every reconciliation. **Default label:** `[component-update]`.</dd>
+  <dd>
+    Atmos applies these additively on every reconciliation. **Default label:** `[component-update]`.
+    Azure DevOps pull requests have no assignee concept — setting `assignees` with
+    `provider: azuredevops` fails with an error instead of silently dropping it; use `reviewers`
+    there instead.
+  </dd>
   <dt>`ci.pull_request.draft`</dt>
   <dd>Create the pull request as a draft. **Default:** `false`.</dd>
+  <dt>`ci.pull_request.organization` / `.project` / `.repository`</dt>
+  <dd>
+    Required when `provider: azuredevops`. Azure DevOps addresses a repository with three
+    segments — organization, project, and repository — instead of GitHub's owner/repository pair
+    derived from the Git remote.
+  </dd>
   <dt>`ci.summary.enabled`</dt>
   <dd>Whether to write a GitHub Actions step summary. **Default:** `true`.</dd>
 </dl>
@@ -220,6 +231,21 @@ A default `GITHUB_TOKEN` won't trigger downstream `on: pull_request`/`on: push` 
 Pair the Component Updater with the [`github/sts`](/cli/configuration/auth#github-sts-atmos-pro)
 auth integration to get a token that does. See
 <a href="/cli/commands/vendor/vendor-update">`atmos vendor update`</a>'s token precedence notes for details.
+:::
+
+:::note
+The `azuredevops` provider authenticates with a personal access token in the
+`AZURE_DEVOPS_EXT_PAT` environment variable, used as HTTP Basic auth with an empty username. The
+token needs Code (Read & Write) permission on the target project.
+
+```yaml
+ci:
+  pull_request:
+    provider: azuredevops
+    organization: my-org
+    project: my-project
+    repository: my-repo
+```
 :::
 
 ## Vendor Manifest Structure
