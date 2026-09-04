@@ -58,6 +58,37 @@ every "Cache Atmos toolchain" step) carries the same step inline, since a publis
 reference a local one. Every cache-using action now provisions its own tar, and the four hand-copied
 "Add GNU tar to PATH" steps and their 2024 comment (#877, never measured) are gone.
 
+## Temp directories too
+
+A test log path (`C:\Users\RUNNER~1\AppData\Local\Temp\TestParse...`) showed the acceptance tests'
+`t.TempDir()` scratch on the same slow disk, and Go's build scratch (`GOTMPDIR`) with it. The action
+now also points `GOTMPDIR`, `TEMP` and `TMP` at the work disk. Measured on the Windows acceptance
+shards' "Acceptance tests" step (same commit, temp on C: vs D:):
+
+| shard | C: | D: |
+|-------|-----|-----|
+| 1 | 350 s | 231 s |
+| 2 | 239 s | 180 s |
+| 4 | 409 s | 278 s |
+| 5 | 390 s | 249 s |
+| 6 | 403 s | 280 s |
+| 7 | 247 s | 230 s |
+| 8 | 252 s | 228 s |
+| 9 | 251 s | 235 s |
+| 10 | 285 s | 260 s |
+| **sum** | **2,826 s** | **2,171 s** |
+
+23% less test time, most of it on the shards that copy the most fixtures.
+
+The temp dir lives *beside* `RUNNER_TEMP` (`D:\a\tmp`), not under it: `RUNNER_TEMP` is `D:\a\_temp`,
+and with `TEMP` under it `TestCleanToolsAndCaches` failed because atmos printed
+`D:\a_temp\...` for `D:\a\_temp\...`. That is a real bug in the output layer - messages such as
+`ui.Successf("Deleted **%d** files from %s", ...)` contain Markdown, so the whole line goes through
+the Markdown renderer, where `\_` in the interpolated path is an escape sequence. Any Windows path
+with a backslash before an underscore prints wrong in every `ui.*` message that mixes Markdown with
+interpolated text; it needs fixing in `pkg/ui` (escape interpolated arguments before rendering),
+separately from this change.
+
 ## Things learned the hard way
 
 - **Main's Go cache never survives.** The repo sits at the 10 GB cache quota (9.9 GB across 5
