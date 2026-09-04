@@ -33,23 +33,22 @@ The [pre-commit](https://pre-commit.com/) framework is the de-facto industry sta
 1. **Official Pre-Commit Manifest**: Ship an official, maintained `.pre-commit-hooks.yaml` in the root of `github.com/cloudposse/atmos`.
 2. **Turnkey Hook Catalog**: Provide curated, high-value hooks covering:
    - Documentation generation (`atmos docs generate readme`).
-   - Stack manifest validation (`atmos validate stacks`).
-   - Comprehensive project validation (`atmos validate`).
-   - EditorConfig compliance (`atmos validate editorconfig`).
-   - Component schema and policy validation (`atmos validate component`).
-   - Terraform component linting (`atmos terraform lint`).
-   - Vendoring consistency checks (`atmos vendor diff`).
+   - Stack manifest validation (`atmos validate stacks --affected`).
+   - Comprehensive project validation (`atmos validate --affected`).
+   - EditorConfig compliance (`atmos validate editorconfig --affected`).
+   - Terraform component linting (`atmos terraform lint --affected`).
 3. **Dual Runtime Support**:
    - **`language: golang`**: Hermetic, self-compiling execution using pre-commit's built-in Go virtual environment (`go install ./...`), pinned to the specified Git revision `rev: vX.Y.Z`.
    - **`language: system`**: Fast execution delegating to the locally installed `atmos` binary (via Aqua, Homebrew, Devbox, or container runtime).
 4. **Git-Aware Scoping**: Seamlessly support both `--affected` (validating only files changed since the Git merge-base) and staged file filtering.
 5. **Zero-Configuration Degradation**: Seamlessly format terminal output via `pkg/io/` and `pkg/ui/` so errors are readable both in interactive terminals and non-TTY pre-commit logs.
-6. **Dogfooding**: Update the Atmos repository's own `.pre-commit-config.yaml` to consume the standard Atmos hooks.
+6. **Dogfooding**: Align the Atmos repository's own `.pre-commit-config.yaml` to consume the standard Atmos hook patterns.
 
 ### Non-Goals
 
 1. **Replacing Pre-Commit**: Atmos is not building its own Git hook manager; this feature enables Atmos to integrate seamlessly with the existing Python-based `pre-commit` ecosystem.
 2. **Slow End-to-End Operations in Hooks**: Operations requiring live cloud authentication, remote state locking, or full `terraform plan`/`apply` will not be bundled as default pre-commit hooks, preserving sub-second to low-second commit responsiveness.
+3. **Arbitrary Positional Component Validation in Default Hooks**: Commands requiring positional arguments like `atmos validate component <component> -s <stack>` are not suited for zero-arg default hooks, though users can invoke them via custom `args` overrides.
 
 ---
 
@@ -65,7 +64,7 @@ A top-level manifest `.pre-commit-hooks.yaml` will be added to the repository ro
 # .pre-commit-hooks.yaml
 - id: atmos-generate-docs
   name: Atmos Generate Documentation
-  description: Automatically generate component and stack README documentation.
+  description: Generate documentation configured under docs.generate.readme in atmos.yaml.
   entry: atmos docs generate readme
   language: golang
   pass_filenames: false
@@ -77,7 +76,6 @@ A top-level manifest `.pre-commit-hooks.yaml` will be added to the repository ro
   entry: atmos validate stacks --affected
   language: golang
   pass_filenames: false
-  always_run: false
   files: ^stacks/.*\.ya?ml$
 
 - id: atmos-validate
@@ -98,19 +96,11 @@ A top-level manifest `.pre-commit-hooks.yaml` will be added to the repository ro
 
 - id: atmos-terraform-lint
   name: Atmos Terraform Lint
-  description: Run TFLint on Terraform components configured in Atmos stacks.
-  entry: atmos terraform lint
+  description: Run TFLint on affected Terraform components configured in Atmos stacks.
+  entry: atmos terraform lint --affected
   language: golang
   pass_filenames: false
   files: ^components/terraform/.*
-
-- id: atmos-vendor-diff
-  name: Atmos Vendor Diff
-  description: Ensure vendored components have not drifted from their vendor specifications.
-  entry: atmos vendor diff
-  language: golang
-  pass_filenames: false
-  files: ^(components/.*|vendor\.yaml)$
 
 # System-language variants (for environments using pre-installed Atmos binaries)
 - id: atmos-generate-docs-system
@@ -136,6 +126,22 @@ A top-level manifest `.pre-commit-hooks.yaml` will be added to the repository ro
   language: system
   pass_filenames: false
   always_run: true
+
+- id: atmos-validate-editorconfig-system
+  name: Atmos Validate EditorConfig (System)
+  description: Validate non-Go files against EditorConfig rules using the system-installed atmos binary.
+  entry: atmos validate editorconfig --affected
+  language: system
+  pass_filenames: false
+  always_run: true
+
+- id: atmos-terraform-lint-system
+  name: Atmos Terraform Lint (System)
+  description: Run TFLint on affected Terraform components using the system-installed atmos binary.
+  entry: atmos terraform lint --affected
+  language: system
+  pass_filenames: false
+  files: ^components/terraform/.*
 ```
 
 ---
@@ -147,12 +153,12 @@ A top-level manifest `.pre-commit-hooks.yaml` will be added to the repository ro
 | **Installation** | Managed entirely by `pre-commit` via `go install ./...` in an isolated cache directory (`~/.cache/pre-commit/`). | Requires `atmos` pre-installed on the developer host or in the container. |
 | **Prerequisites** | Go toolchain installed on host. | Any installation method (Homebrew, Aqua, Devbox, Docker, GitHub Actions). |
 | **Hermeticity** | Exact version locked to `rev: vX.Y.Z` in `.pre-commit-config.yaml`. | Uses whichever binary is first in `$PATH`. |
-| **First-Run Latency** | ~10-15s (one-time compilation per `rev`). Subsequent runs are instantaneous. | Instantaneous (no compile step). |
+| **First-Run Latency** | ~45-90s (one-time compilation of Atmos and dependencies per `rev`). Subsequent runs are instantaneous. | Instantaneous (no compile step). |
 | **Best For** | Standard Go/IaC developer setups and teams seeking strictly reproducible versions. | CI containers, developers managing tools via Aqua/Brew, or environments without Go. |
 
-Both variants will be supported:
+Both variants are supported across all hooks:
 - The default hooks (`atmos-generate-docs`, `atmos-validate-stacks`, etc.) use `language: golang` for maximum portability and version fidelity.
-- Companion `-system` hooks (`atmos-generate-docs-system`, `atmos-validate-stacks-system`, `atmos-validate-system`) use `language: system` for zero-overhead local toolchains.
+- Companion `-system` hooks (`atmos-generate-docs-system`, `atmos-validate-stacks-system`, `atmos-validate-system`, `atmos-validate-editorconfig-system`, `atmos-terraform-lint-system`) use `language: system` for zero-overhead local toolchains.
 
 ---
 
@@ -167,7 +173,13 @@ Pre-commit hooks typically operate in one of two modes:
 For Atmos, `pass_filenames: false` combined with `--affected` is the optimal design:
 - Stack manifests frequently rely on deep multi-file inheritance (`import: [ catalog/*, mixins/* ]`). Validating only an isolated file passed as an argument can miss upstream broken imports.
 - `atmos validate --affected` and `atmos validate stacks --affected` internally compute affected stacks using the Git merge-base (`pkg/validation/affected.go`).
-- The `files:` regex filter in `.pre-commit-hooks.yaml` ensures that hooks only trigger when relevant files (e.g., `^stacks/.*\.ya?ml$`) are staged.
+- **Pre-commit Stashing Interaction**: By default, `pre-commit` stashes unstaged changes before executing hooks, ensuring that only staged changes exist in the working directory during validation. Atmos's merge-base resolution inspects committed changes plus the staged working tree diff. If `origin/HEAD` is unset, Atmos falls back to `HEAD~1`.
+- The `files:` regex filter in `.pre-commit-hooks.yaml` ensures that hooks only trigger when relevant files (e.g., `^stacks/.*\.ya?ml$`) are staged, preventing unnecessary hook invocations on unrelated changes.
+
+#### Tool-Specific Prerequisites
+
+- **`atmos-generate-docs`**: Requires a `docs.generate.readme` configuration block in `atmos.yaml`. The hook triggers when stacks, components, or root documentation manifests change, updating the configured documentation target.
+- **`atmos-terraform-lint`**: Uses `--affected` to identify changed components across stacks. Requires `tflint` to be available in `$PATH` or configured via the Atmos toolchain (`components.terraform.lint.toolchain`).
 
 #### Base Path Resolution
 
@@ -177,7 +189,7 @@ Per the [Base Path Resolution Semantics PRD](./base-path-resolution-semantics.md
 
 ### 4. Output Formatting & Terminal Degradation
 
-Pre-commit captures stdout and stderr from hooks and only displays output when a hook fails (non-zero exit code) or when output is modified:
+Pre-commit captures stdout and stderr from hooks and only displays output when a hook fails (non-zero exit code) or when output files are modified:
 
 - **Clean Streaming**: Atmos separates data streams (`pkg/io/`) from UI messages (`pkg/ui/`).
 - **TTY Auto-Detection**: When executed under pre-commit, stdout is not a TTY. Atmos's zero-configuration degradation automatically strips interactive spinners and TrueColor sequences while preserving clean diagnostics.
@@ -188,7 +200,8 @@ Pre-commit captures stdout and stderr from hooks and only displays output when a
 ### 5. Exit Code Contract
 
 In adherence to the [Exit Codes PRD](./exit-codes.md):
-- **Exit Code 0**: Check passed cleanly. If `atmos docs generate readme` re-generated a file without error, and pre-commit detects a staged modification, pre-commit will mark the commit as interrupted so the user can inspect the changes.
+- **Exit Code 0**: Check passed cleanly.
+- **File Modifications by Hook**: If `atmos docs generate readme` modifies or regenerates documentation on disk, `pre-commit` detects the uncommitted file modification, halts the commit, and displays the changes for user review and staging.
 - **Exit Code 1**: Validation failure, schema violation, or lint error. Pre-commit halts the commit and prints the diagnostic report.
 - **Exit Code 2**: CLI configuration or invalid flag syntax error.
 
@@ -226,6 +239,7 @@ repos:
     hooks:
       - id: atmos-validate-stacks-system
       - id: atmos-generate-docs-system
+      - id: atmos-validate-editorconfig-system
 ```
 
 ### Example 3: Advanced Monorepo Setup with Custom Args
@@ -246,7 +260,9 @@ repos:
 
 ## Dogfooding in the Atmos Repository
 
-The Atmos repository itself will dogfood this implementation by updating `.pre-commit-config.yaml`:
+The Atmos repository itself utilizes `language: system` in its `.pre-commit-config.yaml` to avoid re-compiling Atmos binaries inside pre-commit environments during active Go development (preventing worktree locks and compiler contention).
+
+The repository will update its existing hook entry to use the native `atmos validate editorconfig` subcommand and align with the standard system hook definition:
 
 **Before:**
 ```yaml
@@ -279,14 +295,14 @@ The Atmos repository itself will dogfood this implementation by updating `.pre-c
 
 ### Phase 1: Core Hook Manifest Definition
 1. Create `.pre-commit-hooks.yaml` in the root of the repository.
-2. Define primary hooks: `atmos-generate-docs`, `atmos-validate-stacks`, `atmos-validate`, and `atmos-validate-editorconfig`.
-3. Define companion `-system` hooks for environments utilizing pre-installed binaries.
+2. Define primary hooks: `atmos-generate-docs`, `atmos-validate-stacks`, `atmos-validate`, `atmos-validate-editorconfig`, and `atmos-terraform-lint`.
+3. Define companion `-system` hooks for all defined hooks.
 4. Verify local installation with `pre-commit try-repo . atmos-validate-stacks`.
 
-### Phase 2: Specialized Hooks & File Filtering Refinements
-1. Add `atmos-terraform-lint` and `atmos-vendor-diff` hooks.
-2. Fine-tune regex patterns (`files:` and `exclude:`) to ensure hooks do not trigger on unrelated changes (e.g., Markdown edits shouldn't trigger stack validation unless stacks are modified).
-3. Ensure `--affected` flag works properly when called from pre-commit subshells where `git rev-parse --show-toplevel` is active.
+### Phase 2: File Filtering & Scoping Refinements
+1. Fine-tune regex patterns (`files:` and `exclude:`) to ensure hooks only trigger on relevant staged changes.
+2. Ensure `--affected` flag works properly within pre-commit execution subshells.
+3. Validate TFLint discovery and execution behavior under `atmos terraform lint --affected`.
 
 ### Phase 3: CI Integration & Pre-Commit Validation Test Suite
 1. Add a GitHub Actions workflow job or test case in `.github/workflows/test.yml` running `pre-commit run --all-files` or `pre-commit try-repo .`.
