@@ -1102,7 +1102,7 @@ jobs:
       # file -- evicting the PR from the queue for a result nobody consumes.
       # The same commit was already scanned on the PR run.
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         if: always() && github.event_name != 'merge_group'
         with:
           # Path to SARIF file relative to the root of the repository
@@ -1125,7 +1125,7 @@ jobs:
 
       - name: Upload Trivy config scan results
         if: always() && github.event_name != 'merge_group'
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config
