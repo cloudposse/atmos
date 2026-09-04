@@ -43,6 +43,7 @@ ci:
 | Input | Default | Description |
 | --- | --- | --- |
 | `mode` | `'restore-and-save'` | `restore-and-save`: restore and save in the post step (`actions/cache`). `restore-only`: restore but never save (`actions/cache/restore`, no post step). |
+| `restore-only` | `'false'` | Deprecated, use `mode: restore-only` instead. `restore-only: true` still behaves exactly like `mode: restore-only`. |
 
 #### Many parallel consumers, one writer
 
