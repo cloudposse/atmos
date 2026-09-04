@@ -151,10 +151,9 @@ sboms:
 #     --certificate-identity-regexp='^https://github.com/cloudposse/atmos/' \
 #     --certificate-oidc-issuer=https://token.actions.githubusercontent.com
 signs:
-  - id: checksum
-    cmd: cosign
+  - cmd: cosign
     args: ["sign-blob", "--yes", "--bundle=${signature}", "${artifact}"]
-    artifacts: all
+    artifacts: checksum
     signature: "${artifact}.sigstore.json"
 
 
