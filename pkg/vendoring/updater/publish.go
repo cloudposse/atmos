@@ -2,12 +2,20 @@ package updater
 
 import (
 	"context"
+	"fmt"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
+
+// azureDevOpsProviderName matches azuredevops.ProviderName. Compared by string, not by importing
+// the provider package, so this package (and the production binary paths that don't otherwise
+// need pull-request publishing) doesn't gain a hard dependency on every registered provider --
+// mirrors how the "github" default just below is also a literal, not githubprovider.ProviderName.
+const azureDevOpsProviderName = "azuredevops"
 
 // GitHubRepositoryFunc resolves the owner/repository for workdir's remote -- matches
 // atmosgit.GitHubRepository's signature. An explicit parameter (not a package-level var) so tests
@@ -87,7 +95,7 @@ func CommitAndPushComponentUpdate(ctx context.Context, workdir, remote, branch s
 func ReconcileComponentUpdatePullRequest(ctx context.Context, workdir, remote string, publication Publication, prConfig *schema.VendorPullRequestConfig, githubRepository GitHubRepositoryFunc) (*PullRequest, error) {
 	defer perf.Track(nil, "updater.ReconcileComponentUpdatePullRequest")()
 
-	owner, repository, err := githubRepository(ctx, workdir, remote)
+	address, err := resolveRepositoryAddress(ctx, workdir, remote, prConfig, githubRepository)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +115,10 @@ func ReconcileComponentUpdatePullRequest(ctx context.Context, workdir, remote st
 	if len(labels) == 0 {
 		labels = []string{"component-update"}
 	}
-	pr, err := publisher.Reconcile(ctx, &atmosgit.PullRequestOptions{Owner: owner, Repository: repository, Base: publication.Base, Head: publication.Branch, Title: title, Body: body, Labels: labels, Draft: prConfig.Draft, Reviewers: prConfig.Reviewers, Assignees: prConfig.Assignees})
+	pr, err := publisher.Reconcile(ctx, &atmosgit.PullRequestOptions{
+		Owner: address.Owner, Namespace: address.Namespace, Repository: address.Repository, Base: publication.Base, Head: publication.Branch,
+		Title: title, Body: body, Labels: labels, Draft: prConfig.Draft, Reviewers: prConfig.Reviewers, Assignees: prConfig.Assignees,
+	})
 	if pr == nil {
 		return nil, err
 	}
@@ -115,4 +126,32 @@ func ReconcileComponentUpdatePullRequest(ctx context.Context, workdir, remote st
 	// later label/assignee/reviewer step failed) -- surface it either way so the caller isn't left
 	// with no way to find a pull request that was, in fact, created.
 	return &PullRequest{Number: pr.Number, URL: pr.URL}, err
+}
+
+// repositoryAddress is the owner/namespace/repository triple ReconcileComponentUpdatePullRequest
+// hands the selected publisher (bundled into one return value: CLAUDE.md's revive
+// function-result-limit caps functions at 3 return values).
+type repositoryAddress struct {
+	Owner      string
+	Namespace  []string
+	Repository string
+}
+
+// resolveRepositoryAddress resolves the repositoryAddress a publisher.Reconcile call needs.
+// GitHub derives owner/repository from workdir's Git remote (it doesn't need explicit config);
+// Azure DevOps has no equivalent remote-parsing convention (see pkg/git.GitHubRepository's own
+// github.com-specific parsing), so it addresses its organization/project/repository directly from
+// prConfig instead.
+func resolveRepositoryAddress(ctx context.Context, workdir, remote string, prConfig *schema.VendorPullRequestConfig, githubRepository GitHubRepositoryFunc) (repositoryAddress, error) {
+	defer perf.Track(nil, "updater.resolveRepositoryAddress")()
+
+	if prConfig.Provider == azureDevOpsProviderName {
+		if prConfig.Organization == "" || prConfig.Project == "" || prConfig.Repository == "" {
+			return repositoryAddress{}, fmt.Errorf("%w: the azuredevops provider requires vendor.ci.pull_request.organization, .project, and .repository to be set",
+				errUtils.ErrComponentUpdaterConfig)
+		}
+		return repositoryAddress{Owner: prConfig.Organization, Namespace: []string{prConfig.Project}, Repository: prConfig.Repository}, nil
+	}
+	owner, repository, err := githubRepository(ctx, workdir, remote)
+	return repositoryAddress{Owner: owner, Repository: repository}, err
 }

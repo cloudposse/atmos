@@ -1645,6 +1645,15 @@ var (
 	ErrGitHubAuthorization = errors.New("GitHub authorization failed")
 	// ErrPullRequestReconciliation indicates Atmos could not reconcile an existing or new PR.
 	ErrPullRequestReconciliation = errors.New("pull request reconciliation failed")
+	// ErrAzureDevOpsTokenNotFound indicates AZURE_DEVOPS_EXT_PAT is not set.
+	ErrAzureDevOpsTokenNotFound = errors.New("azure DevOps personal access token not found")
+	// ErrAzureDevOpsAuthorization indicates an authentication or permission failure from the Azure DevOps API.
+	ErrAzureDevOpsAuthorization = errors.New("azure DevOps authorization failed")
+	// ErrAzureDevOpsAssigneesUnsupported indicates Azure DevOps pull requests do not support assignees.
+	ErrAzureDevOpsAssigneesUnsupported = errors.New("azure DevOps pull requests do not support assignees")
+	// ErrAzureDevOpsNamespaceInvalid indicates PullRequestOptions.Namespace was not exactly the
+	// single project segment Azure DevOps' organization/project/repository addressing requires.
+	ErrAzureDevOpsNamespaceInvalid = errors.New("azure DevOps pull request namespace must be exactly one project segment")
 	// ErrGitFetchFailed indicates `git fetch` of a base or feature branch failed.
 	ErrGitFetchFailed = errors.New("git fetch failed")
 	// ErrGitCheckoutFailed indicates `git checkout` of a feature branch failed.
