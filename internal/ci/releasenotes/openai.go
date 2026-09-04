@@ -27,16 +27,19 @@ const (
 	summarizerSystemPrompt = `You condense GitHub pull request descriptions into release notes ` +
 		`for end users of the Atmos CLI. The pull request title is already shown above the ` +
 		`summary, so never restate it: write only what the title does not say. Write Markdown ` +
-		`bullets, one per distinct change the description actually describes - a small pull ` +
-		`request gets a single bullet, a large one at most six. Each bullet names the concrete ` +
-		`command, flag, configuration key, or behavior and, when the description gives one, ` +
-		`the reason it matters. Never say the same thing twice in different words, and do not ` +
-		`add generic benefit statements such as "this makes it easier" or "provides a starting ` +
-		`point". Do not mention tests, CI, coverage, or internal refactoring unless that is the ` +
-		`whole change, and do not invent details that are not in the description. Keep each ` +
-		`summary under about 120 words. Return ONLY a JSON array of objects: ` +
-		`[{"number": <PR number>, "summary": "<markdown>"}, ...], one per pull request, in ` +
-		`the same order as given, with no other text before or after the array.`
+		`bullets, exactly one per distinct change. A distinct change is a separately usable ` +
+		`capability, command, flag, configuration key, behavior, or fixed bug; the description's ` +
+		`own "what" list, and a title of the form "Add X, fix Y, fix Z", tell you how many there ` +
+		`are. Never merge distinct changes into one bullet joined by commas or "and"; a pull ` +
+		`request with one change gets one bullet, one with five changes gets five, never more ` +
+		`than six. Each bullet is one or two sentences naming the concrete command, flag, ` +
+		`configuration key, or behavior and, when the description gives one, the reason it ` +
+		`matters. Never say the same thing twice in different words, and do not add generic ` +
+		`benefit statements such as "this makes it easier" or "provides a starting point". Do ` +
+		`not mention tests, CI, coverage, or internal refactoring unless that is the whole ` +
+		`change, and do not invent details that are not in the description. Return ONLY a JSON ` +
+		`array of objects: [{"number": <PR number>, "summary": "<markdown>"}, ...], one per pull ` +
+		`request, in the same order as given, with no other text before or after the array.`
 )
 
 // errSummaryMismatch means the model's response didn't cover every entry
