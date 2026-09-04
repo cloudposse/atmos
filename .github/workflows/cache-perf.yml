@@ -31,10 +31,14 @@ name: Cache perf lab (windows)
 #            PATH, so @actions/cache picks MSYS GNU tar.
 #   bsdtar   the proposed fix, using only released @actions/cache code: the
 #            toolkit finds GNU tar via a hardcoded %PROGRAMFILES%\Git\usr\bin\
-#            tar.exe check, falling back to a PATH lookup; pointing
-#            PROGRAMFILES at a nonexistent directory for the cache-restoring
-#            step defeats the check, and with C:\Windows\System32 first on
-#            PATH the lookup resolves to bsdtar. Same archive, same key.
+#            tar.exe existence check, falling back to a PATH lookup that
+#            accepts anything reporting "GNU tar". Renaming Git's tar.exe
+#            aside for the job and putting C:\Windows\System32 first on PATH
+#            makes the lookup land on Windows' native bsdtar. Same archive,
+#            same key. (Overriding PROGRAMFILES in a step's env: does not
+#            work - the runner keeps the process's own ProgramFiles value,
+#            so run 2's "bsdtar" legs silently used GNU tar; verified from
+#            the tar command lines in their logs.)
 #
 # Cache layouts:
 #   c        Go's defaults: GOCACHE under %LOCALAPPDATA% and GOMODCACHE under
@@ -43,8 +47,10 @@ name: Cache perf lab (windows)
 #            the way actions/setup-go#515 proposes. The `topology` job
 #            measured D: as a separate disk with ~8.8x the small-file write
 #            rate of C: (4,545 vs 515 files/s), so this is the bigger lever;
-#            the second run's seeds already showed the cache *save* dropping
-#            from 590 s (C:) to 175 s (D:) through the same bsdtar. It needs
+#            measured: the same ~1.7 GB archive through the same GNU tar
+#            restores in 94 s on D: vs 276 s on C: (run 3), and the seeds'
+#            cache *save* dropped from 590 s (C:) to 175 s (D:), with
+#            go build ./... 599 s -> 455 s (run 2). It needs
 #            its own seed: setup-go's cache *version* hashes the restore
 #            paths, and @actions/cache tars with -P (absolute paths), so a D:
 #            archive only restores onto D:. Adopting this in production means
@@ -156,15 +162,14 @@ jobs:
         with:
           persist-credentials: false
 
-      # The seed's own restore and save go through bsdtar; the tar
-      # comparison happens in the restore jobs, not here.
+      # The seed saves through production's GNU tar; the tar comparison
+      # happens in the restore jobs, not here.
       - name: "Seed the C: layout"
         uses: ./.github/actions/cache-perf-lab
         with:
           mode: seed
           layout: c
-          tar-dir: 'C:\Windows\System32'
-          programfiles: 'C:\atmos-no-gnu-tar'
+          tar: gnu
 
   seed-d:
     name: seed (d)
@@ -228,8 +233,7 @@ jobs:
         with:
           mode: seed
           layout: d
-          tar-dir: 'C:\Windows\System32'
-          programfiles: 'C:\atmos-no-gnu-tar'
+          tar: gnu
 
   restore-c:
     name: restore (${{ matrix.config }}, c)
@@ -243,11 +247,9 @@ jobs:
       matrix:
         include:
           - config: gnu-tar
-            tar-dir: 'C:\Program Files\Git\usr\bin'
-            programfiles: 'C:\Program Files'
+            tar: gnu
           - config: bsdtar
-            tar-dir: 'C:\Windows\System32'
-            programfiles: 'C:\atmos-no-gnu-tar'
+            tar: bsd
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -299,16 +301,14 @@ jobs:
         with:
           persist-credentials: false
 
-      # For gnu-tar the PROGRAMFILES override is the real value, keeping that
-      # leg byte-identical to production.
+      # The gnu-tar leg is byte-identical to production's cache restore.
       - name: "Restore the C: layout (${{ matrix.config }})"
         uses: ./.github/actions/cache-perf-lab
         with:
           mode: restore
           layout: c
           config: ${{ matrix.config }}
-          tar-dir: ${{ matrix.tar-dir }}
-          programfiles: ${{ matrix.programfiles }}
+          tar: ${{ matrix.tar }}
 
   restore-d:
     name: restore (bsdtar, d)
@@ -374,8 +374,7 @@ jobs:
           mode: restore
           layout: d
           config: bsdtar
-          tar-dir: 'C:\Windows\System32'
-          programfiles: 'C:\atmos-no-gnu-tar'
+          tar: bsd
 
   topology:
     name: "disk topology (C: vs D:)"
