@@ -753,6 +753,76 @@ text`,
 	}
 }
 
+// TestHasUnresolvedConflictMarkers covers the stricter, false-positive-safe
+// check engine.Processor.mergeFile uses to reject re-running --update against
+// a file a previous conflict already left with real markers: unlike
+// HasConflictMarkers, a single bare "=======" line (e.g. a markdown rule) or
+// an out-of-order/incomplete triplet must NOT match.
+func TestHasUnresolvedConflictMarkers(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{name: "no markers", content: "plain text content", want: false},
+		{
+			name: "full triplet in order",
+			content: `<<<<<<< Ours
+user version
+=======
+template version
+>>>>>>> Theirs
+`,
+			want: true,
+		},
+		{
+			name: "indented triplet (nested/block-style YAML conflict)",
+			content: `key:
+  <<<<<<< Ours
+  nested: true
+  =======
+  - item
+  >>>>>>> Theirs
+`,
+			want: true,
+		},
+		{
+			name:    "bare separator alone is not a false positive",
+			content: "Title\n=======\nSome content",
+			want:    false,
+		},
+		{
+			name:    "start marker with no separator or end marker",
+			content: "<<<<<<< Ours\nsomething\n",
+			want:    false,
+		},
+		{
+			name:    "start and separator but no end marker",
+			content: "<<<<<<< Ours\na\n=======\nb\n",
+			want:    false,
+		},
+		{
+			name:    "end marker before start marker does not count",
+			content: ">>>>>>> Theirs\n<<<<<<< Ours\n=======\n",
+			want:    false,
+		},
+		{
+			name:    "generic diff3 labels (not our Ours/Theirs) do not match",
+			content: "<<<<<<< HEAD\na\n=======\nb\n>>>>>>> branch\n",
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := HasUnresolvedConflictMarkers(tt.content)
+			if got != tt.want {
+				t.Errorf("HasUnresolvedConflictMarkers() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestTextMerger_TrailingNewlinePreservation asserts exact byte-for-byte
 // merge output, trailing-newline count included, split into merges with no
 // genuine ours/theirs divergence (result must equal the unchanged content

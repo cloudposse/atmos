@@ -1,6 +1,7 @@
 package merge
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -914,6 +915,83 @@ func TestYAMLMerger_PreservesTagsAndStyle(t *testing.T) {
 			t.Logf("Result:\n%s", result.Content)
 		})
 	}
+}
+
+// TestYAMLMerger_ConflictMarkers_Scalar covers the inline-marker path: both
+// sides of the conflict are scalars, so the reconstructed markers fit on the
+// same line as the key. This is the exact shape from the original bug report
+// (github.com/cloudposse/atmos/issues/2912): a scalar value diverges on both
+// sides while an unrelated key is added by each side too.
+func TestYAMLMerger_ConflictMarkers_Scalar(t *testing.T) {
+	base := "setting: original\nkey1: v1\n"
+	ours := "setting: user-change\nkey1: v1\ncustom: mine\n"
+	theirs := "setting: template-change\nkey1: v1\nfeature: enabled\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+	require.Equal(t, []string{"documents[0].setting"}, result.ConflictPaths)
+
+	assert.Equal(t, `<<<<<<< Ours
+setting: user-change
+=======
+setting: template-change
+>>>>>>> Theirs
+key1: v1
+custom: mine
+feature: enabled
+`, result.Content)
+}
+
+// TestYAMLMerger_ConflictMarkers_KindDivergence covers the block-marker path:
+// one side is a scalar and the other a mapping (a real structural
+// divergence), so the reconstructed markers wrap an indented block beneath
+// the key rather than fitting inline.
+func TestYAMLMerger_ConflictMarkers_KindDivergence(t *testing.T) {
+	base := "key: value\n"
+	ours := "key:\n  nested: true\n"
+	theirs := "key:\n  - item\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	assert.Equal(t, `key:
+  <<<<<<< Ours
+  nested: true
+  =======
+  - item
+  >>>>>>> Theirs
+`, result.Content)
+}
+
+// TestYAMLMerger_ConflictMarkers_MultipleConflictsDoNotCollide guards the
+// fixed-width sentinel format: with more than 10 conflicts in one document, a
+// naive substring search (e.g. sentinel "...0" matching inside "...01") would
+// misattribute markers to the wrong conflict. Every conflict here must
+// resolve to its own value on both sides.
+func TestYAMLMerger_ConflictMarkers_MultipleConflictsDoNotCollide(t *testing.T) {
+	var base, ours, theirs strings.Builder
+	const count = 12
+	for i := 0; i < count; i++ {
+		fmt.Fprintf(&base, "k%d: base%d\n", i, i)
+		fmt.Fprintf(&ours, "k%d: ours%d\n", i, i)
+		fmt.Fprintf(&theirs, "k%d: theirs%d\n", i, i)
+	}
+
+	result, err := NewYAMLMerger(100).Merge(base.String(), ours.String(), theirs.String())
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, count, result.ConflictCount)
+
+	for i := 0; i < count; i++ {
+		assert.Contains(t, result.Content, fmt.Sprintf("k%d: ours%d", i, i))
+		assert.Contains(t, result.Content, fmt.Sprintf("k%d: theirs%d", i, i))
+	}
+	assert.Equal(t, count, strings.Count(result.Content, "<<<<<<< Ours"))
+	assert.Equal(t, count, strings.Count(result.Content, ">>>>>>> Theirs"))
 }
 
 func TestYAMLMerger_PreservesLineComments(t *testing.T) {

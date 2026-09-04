@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-git/go-git/v5"
 
@@ -136,6 +137,24 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 			Err()
 	}
 
+	// A file left with real conflict markers from a previous --update can't
+	// be merged again as-is: re-parsing it as "ours" either fails outright
+	// (YAMLMerger) or silently garbles the result (TextMerger, which has no
+	// syntax requirement on its inputs). Fail fast with a specific message
+	// naming the real problem, instead of surfacing whatever opaque failure
+	// that produces.
+	if merge.HasUnresolvedConflictMarkers(string(existingContent)) {
+		return errUtils.Build(errUtils.ErrMergeConflict).
+			WithExplanationf("`%s` still has unresolved conflict markers from a previous `--update`", file.Path).
+			WithHint("Open the file, resolve the `<<<<<<<`/`=======`/`>>>>>>>` blocks, and remove the markers").
+			WithHint("Then re-run `--update`").
+			WithHint("Or drop `--update` and use `--force` alone to overwrite the file completely").
+			WithContext("file_path", file.Path).
+			WithContext("absolute_path", existingPath).
+			WithExitCode(1).
+			Err()
+	}
+
 	// Determine base content for 3-way merge
 	baseContent, shouldSkip, err := p.determineBaseContent(file, existingPath)
 	if err != nil {
@@ -170,25 +189,45 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 		return errUtils.Build(errUtils.ErrThreeWayMerge).
 			WithExplanationf("Failed to perform 3-way merge for file: `%s`", file.Path).
 			WithHint("The changes may be too extensive for automatic merging").
-			WithHint("Try using `--force` to overwrite instead").
+			WithHint("Try `--force` to resolve every conflict to the template's version instead").
 			WithHint("Or manually merge the changes").
 			WithContext("file_path", file.Path).
 			WithExitCode(1).
 			Err()
 	}
 
-	// Check for conflicts
+	// Check for conflicts. Manual (default) strategy still writes the merged
+	// content — with real <<<<<<< / ======= / >>>>>>> conflict markers, and
+	// every non-conflicting change from the template applied — so the user
+	// has something to actually resolve, rather than the file being left
+	// completely untouched. Dry-run never writes, same as the clean path below.
 	if result.HasConflicts {
-		return errUtils.Build(errUtils.ErrMergeConflict).
+		if !p.DryRun {
+			if err := writeFileSecure(existingPath, []byte(result.Content), file.Permissions, true); err != nil {
+				return errUtils.Build(errUtils.ErrFileWrite).
+					WithCause(err).
+					WithExplanationf("Failed to write conflict markers to file: `%s`", existingPath).
+					WithHint("Check directory permissions").
+					WithHint("Verify sufficient disk space").
+					WithContext("file_path", file.Path).
+					WithContext("absolute_path", existingPath).
+					WithExitCode(2).
+					Err()
+			}
+		}
+
+		builder := errUtils.Build(errUtils.ErrMergeConflict).
 			WithExplanationf("Merge resulted in **%d conflict(s)** in file: `%s`", result.ConflictCount, file.Path).
-			WithHint("Open the file and look for conflict markers: `<<<<<<<`, `=======`, `>>>>>>>`").
-			WithHint("Resolve conflicts manually and re-run the command").
-			WithHint("Or use `--force` to overwrite the file completely").
+			WithHint("Conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) have been written to the file").
+			WithHint("Open it, resolve the conflicts, and remove the markers").
+			WithHint("Or re-run with `--force` (or `--merge-strategy=theirs`) to resolve every conflict to the template's version").
 			WithContext("file_path", file.Path).
 			WithContext("conflict_count", result.ConflictCount).
-			WithContext("absolute_path", existingPath).
-			WithExitCode(1).
-			Err()
+			WithContext("absolute_path", existingPath)
+		if len(result.ConflictPaths) > 0 {
+			builder = builder.WithContext("conflict_paths", strings.Join(result.ConflictPaths, ", "))
+		}
+		return builder.WithExitCode(1).Err()
 	}
 
 	// Dry-run: the merge above already ran (and would have surfaced conflicts
@@ -229,7 +268,7 @@ func (p *Processor) determineBaseContent(file File, existingPath string) (string
 		return "", false, errUtils.Build(errUtils.ErrThreeWayMerge).
 			WithExplanationf("Cannot determine the merge base for `%s` without a git repository", file.Path).
 			WithHint("Run inside a git repository so the base version can be loaded").
-			WithHint("Or use `--force` to overwrite the file").
+			WithHint("Or drop `--update` and use `--force` alone to overwrite the file").
 			WithContext("file_path", file.Path).
 			WithExitCode(2).
 			Err()
@@ -248,7 +287,7 @@ func (p *Processor) determineBaseContent(file File, existingPath string) (string
 			WithCause(err).
 			WithExplanationf("Failed to load the merge base for `%s` from git", file.Path).
 			WithHint("Verify the base ref exists: `git show <base-ref>`").
-			WithHint("Or use `--force` to overwrite the file").
+			WithHint("Or drop `--update` and use `--force` alone to overwrite the file").
 			WithContext("file_path", file.Path).
 			WithContext("relative_path", relativePath).
 			WithExitCode(2).

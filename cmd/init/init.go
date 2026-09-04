@@ -18,6 +18,7 @@ import (
 	gen "github.com/cloudposse/atmos/pkg/generator"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/source"
+	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/generator/ui"
 	"github.com/cloudposse/atmos/pkg/hooks"
@@ -69,8 +70,20 @@ If no target directory is specified, you will be prompted for one.`,
 		force := v.GetBool("force")
 		update := v.GetBool("update")
 		baseRef := v.GetString("base-ref")
-		if update {
-			baseRef = defaultBaseRef(baseRef)
+		// Only pre-resolve here when target is already the real, final
+		// target directory (i.e. it was given positionally). When target is
+		// "" the interactive flow still has to prompt for one -- see
+		// resolveInteractiveInitBaseRef, which resolves the base ref itself
+		// once the actual directory is known. Resolving against "" here
+		// would read .atmos/init/metadata.yaml from the wrong (empty/cwd)
+		// path and permanently overwrite baseRef with "HEAD", discarding any
+		// pin at the directory the user goes on to pick.
+		if update && target != "" {
+			resolvedBaseRef, err := defaultBaseRef(baseRef, target)
+			if err != nil {
+				return err
+			}
+			baseRef = resolvedBaseRef
 		}
 		sourceOverride := v.GetString("source-override")
 		ref := v.GetString("ref")
@@ -131,7 +144,7 @@ func init() {
 		flags.WithBoolFlag("no-git", "", false, "Do not initialize a git repository"),
 		flags.WithStringFlag("merge-driver", "", "auto", "Merge driver for --update: auto (YAML-aware for .yaml/.yml, text otherwise, default), text (force line-oriented text merge for every file)"),
 		flags.WithValidValues("merge-driver", "auto", "text"),
-		flags.WithStringFlag("merge-strategy", "", "manual", "Conflict resolution strategy for --update: manual (surface conflicts, default), ours (keep your version), theirs (use the template's version)"),
+		flags.WithStringFlag("merge-strategy", "", "", "Conflict resolution strategy for --update: manual (surface conflicts, default; theirs if --force is set), ours (keep your version), theirs (use the template's version)"),
 		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
 		// Skip scaffold hooks at runtime, mirroring `terraform`'s --skip-hooks
 		// (see cmd/terraform/flags.go): --skip-hooks (no value) skips all
@@ -256,7 +269,7 @@ func executeInit(_ context.Context, opts *initOptions) error {
 		return err
 	}
 
-	conflictStrategy, err := merge.ParseConflictStrategy(opts.mergeStrategy)
+	conflictStrategy, err := merge.ResolveConflictStrategy(opts.mergeStrategy, opts.force, opts.update)
 	if err != nil {
 		return err
 	}
@@ -312,12 +325,22 @@ func maybeInitGeneratedProjectGit(targetDir string, selectedConfig *templates.Co
 	if !opts.git || targetDir == "" {
 		return nil
 	}
-	_, _, err := gen.InitGitRepository(gen.InitGitOptions{
+	_, headSHA, err := gen.InitGitRepository(gen.InitGitOptions{
 		TargetPath:      targetDir,
 		TemplateName:    selectedConfig.Name,
 		TemplateVersion: selectedConfig.Version,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// No-op when headSHA is empty (targetDir was already a git repo; see
+	// gen.PinInitialBaseRefForInit).
+	return gen.PinInitialBaseRefForInit(
+		targetDir, headSHA,
+		gen.WithTemplateName(selectedConfig.Name),
+		gen.WithTemplateVersion(selectedConfig.Version),
+		gen.WithSource(selectedConfig.Source),
+	)
 }
 
 // resolveTargetDir converts a target directory to an absolute path if provided.
@@ -389,20 +412,86 @@ func runInitInteractiveFlow(initUI *ui.InitUI, selectedConfig *templates.Configu
 	if !opts.interactive {
 		return "", fmt.Errorf("%w: target directory is required in non-interactive mode", errUtils.ErrInitialization)
 	}
-	targetDir, err := initUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, "", opts.force, opts.update, !opts.interactive, opts.baseRef, opts.templateVars)
-	if offer, retryBaseRef := shouldOfferUpdate(err, opts); offer {
-		if confirmed, cErr := initUI.ConfirmUpdateInstead(targetDir); cErr == nil && confirmed {
-			return initUI.ExecuteWithInteractiveFlowAndBaseRefResult(selectedConfig, targetDir, opts.force, true, !opts.interactive, retryBaseRef, opts.templateVars)
+
+	resolved, err := resolveInteractiveInitBaseRef(initUI, selectedConfig, opts)
+	if err != nil {
+		return resolved.targetDir, err
+	}
+
+	finalTargetDir, err := initUI.ExecuteWithInteractiveFlowAndBaseRefResult(
+		selectedConfig, resolved.targetDir, opts.force, opts.update, resolved.useDefaults, resolved.baseRef, resolved.templateValues,
+	)
+	offer, retryBaseRef, offerErr := shouldOfferUpdate(err, opts, finalTargetDir)
+	if offerErr != nil {
+		return finalTargetDir, offerErr
+	}
+	if offer {
+		if confirmed, cErr := initUI.ConfirmUpdateInstead(finalTargetDir); cErr == nil && confirmed {
+			return initUI.ExecuteWithInteractiveFlowAndBaseRefResult(
+				selectedConfig, finalTargetDir, opts.force, true, resolved.useDefaults, retryBaseRef, resolved.templateValues,
+			)
 		}
 	}
-	return targetDir, err
+	return finalTargetDir, err
+}
+
+// interactiveInitBaseRef bundles resolveInteractiveInitBaseRef's results
+// (grouped into a struct, rather than five separate return values, to stay
+// under revive's function-result-limit).
+type interactiveInitBaseRef struct {
+	targetDir      string
+	baseRef        string
+	templateValues map[string]interface{}
+	useDefaults    bool
+}
+
+// resolveInteractiveInitBaseRef resolves the --update merge base ref for the
+// no-positional-target interactive flow, mirroring cmd/scaffold's
+// resolveInteractiveBaseRef. --base-ref's default (the pinned ref from
+// .atmos/init/metadata.yaml, see defaultBaseRef) can only be looked up once
+// the real target directory is known, but in this flow that directory
+// doesn't exist until the interactive prompt below picks one -- so for
+// --update, resolve the target directory first (initUI.ResolveTargetPath
+// runs the same prompt/setup-form logic
+// ExecuteWithInteractiveFlowAndBaseRefResult would, and is a no-op once
+// targetDir is non-empty), then resolve the base ref against it, and
+// finally hand both back to the caller's
+// ExecuteWithInteractiveFlowAndBaseRefResult call -- which skips prompting
+// again since targetDir is already set.
+//
+// Without --update the base ref is unused (ExecuteWithDelimiters only sets
+// up git storage when update is true), so this is a no-op passthrough that
+// still lets the interactive flow prompt for the target itself.
+func resolveInteractiveInitBaseRef(
+	initUI *ui.InitUI,
+	selectedConfig *templates.Configuration,
+	opts *initOptions,
+) (interactiveInitBaseRef, error) {
+	if !opts.update {
+		return interactiveInitBaseRef{baseRef: opts.baseRef, templateValues: opts.templateVars, useDefaults: !opts.interactive}, nil
+	}
+
+	targetDir, templateValues, useDefaults, err := initUI.ResolveTargetPath(selectedConfig, "", opts.update, !opts.interactive, opts.templateVars)
+	if err != nil {
+		return interactiveInitBaseRef{targetDir: targetDir}, err
+	}
+
+	baseRef, err := defaultBaseRef(opts.baseRef, targetDir)
+	if err != nil {
+		return interactiveInitBaseRef{targetDir: targetDir}, err
+	}
+	return interactiveInitBaseRef{targetDir: targetDir, baseRef: baseRef, templateValues: templateValues, useDefaults: useDefaults}, nil
 }
 
 // runInitTargetedFlow handles init when a target directory was provided
 // (offering the same 3-way-merge update fallback as the interactive flow).
 func runInitTargetedFlow(initUI *ui.InitUI, selectedConfig *templates.Configuration, opts *initOptions) (string, error) {
 	err := initUI.ExecuteWithBaseRef(selectedConfig, opts.targetDir, opts.force, opts.update, !opts.interactive, opts.baseRef, opts.templateVars)
-	if offer, retryBaseRef := shouldOfferUpdate(err, opts); offer {
+	offer, retryBaseRef, offerErr := shouldOfferUpdate(err, opts, opts.targetDir)
+	if offerErr != nil {
+		return opts.targetDir, offerErr
+	}
+	if offer {
 		if confirmed, cErr := initUI.ConfirmUpdateInstead(opts.targetDir); cErr == nil && confirmed {
 			return opts.targetDir, initUI.ExecuteWithBaseRef(selectedConfig, opts.targetDir, opts.force, true, !opts.interactive, retryBaseRef, opts.templateVars)
 		}
@@ -413,27 +502,34 @@ func runInitTargetedFlow(initUI *ui.InitUI, selectedConfig *templates.Configurat
 // shouldOfferUpdate decides whether to offer a 3-way-merge update instead of
 // failing outright on a non-empty target directory: only when the failure is
 // exactly that, the caller isn't already using --force/--update, and a real
-// terminal is available to prompt on. Returns the base ref to retry with
-// (the caller's --base-ref, defaulting to HEAD) alongside the decision.
-func shouldOfferUpdate(err error, opts *initOptions) (bool, string) {
+// terminal is available to prompt on. TargetDir must be the actual, final
+// target directory generation just ran against (not opts.targetDir, which is
+// the raw positional arg and can be "" when the interactive flow picked the
+// real directory itself -- see resolveInteractiveInitBaseRef). Returns the
+// base ref to retry with (the caller's --base-ref, defaulting to HEAD or a
+// pinned metadata ref) alongside the decision.
+func shouldOfferUpdate(err error, opts *initOptions, targetDir string) (offer bool, baseRef string, resolveErr error) {
 	if err == nil || opts.force || opts.update || !opts.interactive {
-		return false, ""
+		return false, "", nil
 	}
 	if !errors.Is(err, errUtils.ErrTargetDirectoryNotEmpty) {
-		return false, ""
+		return false, "", nil
 	}
-	return true, defaultBaseRef(opts.baseRef)
+	resolvedBaseRef, resolveErr := defaultBaseRef(opts.baseRef, targetDir)
+	if resolveErr != nil {
+		return false, "", resolveErr
+	}
+	return true, resolvedBaseRef, nil
 }
 
-// defaultBaseRef fills in HEAD as the 3-way-merge base ref when the caller
-// didn't supply one. Without this, --update silently sets up no git storage
-// at all (ExecuteWithDelimiters only calls SetupGitStorage when baseRef is
-// non-empty) and every file fails with an opaque "three-way merge failed" --
-// HEAD is the obvious default since `atmos init --git` always creates an
-// initial commit.
-func defaultBaseRef(baseRef string) string {
-	if baseRef == "" {
-		return "HEAD"
-	}
-	return baseRef
+// defaultBaseRef resolves init's --update base ref against this target's own
+// pinned metadata (.atmos/init/metadata.yaml, written by
+// gen.PinInitialBaseRefForInit). See gen.ResolveDefaultBaseRef's doc for the
+// full rationale -- that function is shared with cmd/scaffold's equivalent
+// so the two commands' base-ref resolution can't drift apart again (as it
+// did before: this command shipped with the same silent-overwrite bug
+// cmd/scaffold fixed, because the fix lived only in cmd/scaffold and was
+// never ported here).
+func defaultBaseRef(baseRef, targetDir string) (string, error) {
+	return gen.ResolveDefaultBaseRef(baseRef, targetDir, storage.InitMetadataPath(targetDir))
 }

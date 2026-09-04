@@ -446,18 +446,89 @@ func TestProcessorMergeFile_ConflictBranchReturnsError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+
+	// The conflict branch must still write the merged content — with real
+	// conflict markers and any non-conflicting changes — instead of leaving
+	// the file completely untouched (the original bug: a non-zero exit with
+	// an explicit error, but nothing on disk to actually resolve).
+	written, readErr := os.ReadFile(testRepo.configPath)
+	require.NoError(t, readErr)
+	writtenContent := string(written)
+	assert.Contains(t, writtenContent, "<<<<<<< Ours")
+	assert.Contains(t, writtenContent, "user-change")
+	assert.Contains(t, writtenContent, "=======")
+	assert.Contains(t, writtenContent, "template-change")
+	assert.Contains(t, writtenContent, ">>>>>>> Theirs")
 }
 
-// Note: mergeFile's os.WriteFile failure branch (writing merged content back
-// to existingPath) is not covered here. Reaching it requires existingPath to
-// remain a valid, readable regular file through os.ReadFile at the top of
-// mergeFile, then fail specifically at the write step — the "directory
-// already exists at this path" trick used elsewhere (e.g.
-// templating_coverage_test.go's TestWriteFileErrors) does not apply here,
-// since that trick fails at the read step instead for a path mergeFile
-// requires to already be a regular file. Forcing this branch portably would
-// need either a chmod-based permission trick (root/Windows-unsafe, per repo
-// convention) or a new injectable write seam, both out of scope here.
+// TestProcessorMergeFile_ConflictBranchDryRunDoesNotWrite verifies dry-run
+// still reports the conflict (mergeFile returns the same error) but never
+// touches the file on disk, matching the clean-merge path's dry-run behavior.
+func TestProcessorMergeFile_ConflictBranchDryRunDoesNotWrite(t *testing.T) {
+	initialContent := "setting: original\n"
+	userContent := "setting: user-change\n"
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+	testRepo.processor.SetMaxChanges(100)
+	testRepo.processor.SetDryRun(true)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: template-change\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+
+	written, readErr := os.ReadFile(testRepo.configPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, userContent, string(written), "dry-run must not modify the file even on conflict")
+}
+
+// TestProcessorMergeFile_RejectsUnresolvedMarkers verifies mergeFile fails
+// fast with a specific error when the existing file already contains
+// unresolved conflict markers from a previous --update, instead of
+// re-attempting a merge against corrupted "ours" content and surfacing
+// whatever opaque failure that produces (a YAML parse error, in this case,
+// but TextMerger has no syntax requirement on its inputs and would silently
+// garble the result rather than error at all).
+func TestProcessorMergeFile_RejectsUnresolvedMarkers(t *testing.T) {
+	initialContent := "setting: original\n"
+	unresolvedContent := "<<<<<<< Ours\nsetting: user-change\n=======\nsetting: template-change\n>>>>>>> Theirs\n"
+	testRepo := setupGitTestRepo(t, initialContent, unresolvedContent)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: template-change\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+
+	// This is a fail-fast check, not another merge attempt -- the file must
+	// be left completely untouched.
+	written, readErr := os.ReadFile(testRepo.configPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, unresolvedContent, string(written))
+}
+
+// Note: mergeFile's os.WriteFile failure branches (writing merged content, or
+// writing conflict markers, back to existingPath) are not covered here.
+// Reaching either requires existingPath to remain a valid, readable regular
+// file through os.ReadFile at the top of mergeFile, then fail specifically at
+// the write step — the "directory already exists at this path" trick used
+// elsewhere (e.g. templating_coverage_test.go's TestWriteFileErrors) does not
+// apply here, since that trick fails at the read step instead for a path
+// mergeFile requires to already be a regular file. Forcing this branch
+// portably would need either a chmod-based permission trick (root/Windows-unsafe,
+// per repo convention) or a new injectable write seam, both out of scope here.
 
 // TestProcessorDetermineBaseContent_LoadBaseError covers LoadBase returning a
 // non-nil error (as opposed to the found=true and gitStorage==nil cases

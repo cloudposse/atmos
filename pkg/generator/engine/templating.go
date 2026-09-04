@@ -554,7 +554,7 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 			return errUtils.Build(errUtils.ErrThreeWayMerge).
 				WithExplanation("`--update` requires a git repository to compute a 3-way merge base").
 				WithHint("Run inside a git repository and/or pass `--base-ref`").
-				WithHint("Or use `--force` to overwrite the file").
+				WithHint("Or drop `--update` and use `--force` alone to overwrite the file").
 				WithContext("file_path", file.Path).
 				WithExitCode(2).
 				Err()
