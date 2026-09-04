@@ -17,7 +17,7 @@ defaults to the previous behavior.
 Measured on `test.yml` runs from Aug 24 to Sept 3 (80 successful Windows shards, step-level timelines, raw
 job logs, and `gh api repos/cloudposse/atmos/actions/cache/usage`).
 
-**Toolchain cache.** The repository's Actions cache holds 18.9 GB across 17 entries against a 10 GB LRU
+**Toolchain cache.** The repository's Actions cache holds 18.9 GB across 22 entries against a 10 GB LRU
 quota. Every entry is scoped to a `refs/pull/N/merge` ref and is minutes old (14 `setup-go-*` entries at
 1.6 to 1.9 GB, 8 `atmos-toolchain-*` entries at 350 to 470 MB). Each run writes about 5 GB, so nothing
 saved from `main` survives and the static key `atmos-toolchain-<os>-<arch>-v2` never hits: every shard
@@ -44,9 +44,8 @@ warmup's writer role.
 
 ## Validation
 
-- `python3 -c 'import yaml; yaml.safe_load(open(f))'` on `.github/workflows/test.yml` and
-  `actions/cache/action.yml`: both parse; the action parses with `inputs: [mode]` and steps `meta`,
-  `validate`, `cache`, `cache-restore`.
+- `for f in .github/workflows/test.yml actions/cache/action.yml; do python3 -c 'import sys, yaml; yaml.safe_load(open(sys.argv[1]))' "$f"; done`:
+  both parse; the action parses with `inputs: [mode]` and steps `meta`, `validate`, `cache`, `cache-restore`.
 - `actionlint .github/workflows/test.yml`: clean (exit 0). actionlint does not lint composite actions, so
   `actions/cache/action.yml` is covered by the YAML parse and the Go regression test below only.
 - `go test github.com/cloudposse/atmos/cmd -run TestAtmosCacheActionValidatesMetadataBeforeActionsCache`:

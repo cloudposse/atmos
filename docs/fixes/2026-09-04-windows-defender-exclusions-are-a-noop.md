@@ -26,7 +26,7 @@ Confirmed live, not just from the build script, by adding a temporary diagnostic
 `setup-go-cache-warmup.yml` and running it on an actual `windows-latest` runner (queried via
 `Get-MpComputerStatus`/`Get-MpPreference` immediately before and after the exclusion step):
 
-```
+```text
 --- before our exclusion step ---
 RealTimeProtectionEnabled : False
 DisableRealtimeMonitoring : True
