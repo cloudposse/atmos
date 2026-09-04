@@ -18,10 +18,21 @@ The conclusion column is empty. Every macOS shard had succeeded; shard 9 had com
 
 ## Fix
 
-"Check per-OS test matrix result" now treats an empty conclusion as *not settled yet*: it re-lists
-the shards (up to 20 times, 15 s apart) until every shard has a conclusion and the count matches
-`TEST_SHARD_COUNT`, and only then judges. A shard that truly failed still fails the check; a
-listing that never settles fails loudly with the last listing printed.
+The check moved out of shell into Go, next to the classify step that already lives there:
+`internal/ci/acceptance.CheckShardResults` (with `TargetFromCheckName`), exposed as
+`go tool mage ci:checkShardResults <repo> <run-id> <attempt> <check-name>`. It lists the attempt's
+jobs through the same go-gh `RESTClient` and `rerun.FetchJobs` the classify step uses, keeps the
+"Acceptance Tests (<os>, shard N/M)" ones, and treats an empty conclusion as *not settled yet*:
+it re-lists (up to 20 times, 15 s apart, context-aware) until every shard has a conclusion, then
+judges. A shard that truly failed still fails the check with the offending shards listed; a shard
+count other than `TEST_SHARD_COUNT` fails at once (every job of an attempt exists from the start,
+so a mismatch means the workflow changed shape); a listing that never settles fails loudly with
+the last listing printed. Unit-tested with the generated `MockRESTClient` (settles immediately,
+settles after retries, never settles, failed shards, count mismatch, cancelled context).
+
+The `test-required` job gains a checkout and a `setup-go` (with `cache: false`, so this tiny job
+never writes a thin archive under the Linux setup-go key every other Linux job shares), `contents:
+read`, and the Go download hosts in its egress allowlist. The workflow step is one line.
 
 ## Validation
 

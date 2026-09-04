@@ -986,8 +986,11 @@ jobs:
     # `gh api .../actions/runs/.../jobs` (below) hits the REST API for this
     # run's job list and needs actions:read - unlike needs.<job>.result, which
     # is ambient but only exposes the whole matrix job's aggregated verdict.
+    # actions: read for the jobs listing; contents: read for the checkout
+    # that `go tool mage` needs.
     permissions:
       actions: read
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -999,6 +1002,14 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            github.com:443
+            release-assets.githubusercontent.com:443
+            golang.org:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
 
       # A whole-run cancellation (e.g. superseded by a newer push to the same
       # PR) skips the `test` matrix before it ever dispatches shard jobs, so
@@ -1013,77 +1024,40 @@ jobs:
         if: ${{ cancelled() }}
         run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
 
+      - name: Check out code into the Go module directory
+        if: ${{ !cancelled() }}
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      # cache: false on purpose - this job compiles only the mage helper, and a
+      # save from here would put a thin archive under the Linux setup-go key
+      # that every other Linux job shares.
+      - name: Set up Go
+        if: ${{ !cancelled() }}
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: "go.mod"
+          cache: false
+
+      # The check itself lives in internal/ci/acceptance (CheckShardResults):
+      # it lists this attempt's jobs, waits for every "Acceptance Tests
+      # (<os>, shard N/M)" job to have a conclusion - the jobs API is
+      # eventually consistent and has returned an empty conclusion for a
+      # shard that finished minutes earlier - and fails unless all succeeded.
+      # The matrix stays a literal `check: [...]` list of the legacy check
+      # names because internal/ci/acceptance/verify.go's
+      # workflowRequiredCheckPattern requires it; the target OS is derived
+      # from the name in Go.
       - name: Check per-OS test matrix result
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
           CHECK: ${{ matrix.check }}
-        run: |
-          set -euo pipefail
-
-          # Derive the OS token (e.g. "linux") from the legacy check name
-          # (e.g. "Acceptance Tests (linux)") instead of a separate matrix
-          # field, so internal/ci/acceptance/verify.go's
-          # workflowRequiredCheckPattern - which requires this job's matrix
-          # to stay a literal `check: [...]` list - keeps matching.
-          target=${CHECK#Acceptance Tests (}
-          target=${target%)}
-          export TARGET="$target"
-
-          list_shards() {
-            gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs" \
-              --paginate \
-              --jq ".jobs[] | select(.name | startswith(\"Acceptance Tests (\" + env.TARGET + \", shard\")) | [.name, (.conclusion // \"\")] | @tsv"
-          }
-
-          # The jobs API is eventually consistent: it has returned an empty
-          # conclusion for a shard that had finished seven minutes earlier,
-          # which this check then reported as "did not succeed". An empty
-          # conclusion means "not settled yet", not "failed": re-poll for a
-          # while and only judge once every shard has a conclusion.
-          settled=0
-          for attempt in $(seq 1 20); do
-            mapfile -t shard_jobs < <(list_shards)
-            unsettled=0
-            for job in "${shard_jobs[@]}"; do
-              [ -z "${job##*$'\t'}" ] && unsettled=$((unsettled + 1))
-            done
-            if [ "$unsettled" -eq 0 ] && [ "${#shard_jobs[@]}" -eq "$TEST_SHARD_COUNT" ]; then
-              settled=1
-              break
-            fi
-            echo "attempt $attempt: ${#shard_jobs[@]} '$TARGET' shard jobs listed, $unsettled without a conclusion yet; retrying in 15s"
-            sleep 15
-          done
-          if [ "$settled" -ne 1 ]; then
-            echo "shard results never settled; last listing:"
-            printf '%s\n' "${shard_jobs[@]}"
-            exit 1
-          fi
-
-          # Fail loudly if the job list itself looks wrong (renamed job, API
-          # hiccup, shard count drift) rather than silently treating a missing
-          # shard as a pass.
-          job_count=${#shard_jobs[@]}
-          if [ "$job_count" -ne "$TEST_SHARD_COUNT" ]; then
-            echo "expected $TEST_SHARD_COUNT '$TARGET' shard jobs, found $job_count"
-            printf '%s\n' "${shard_jobs[@]}"
-            exit 1
-          fi
-
-          failed=()
-          for job in "${shard_jobs[@]}"; do
-            conclusion=${job##*$'\t'}
-            if [ "$conclusion" != "success" ]; then
-              failed+=("$job")
-            fi
-          done
-
-          if [ "${#failed[@]}" -gt 0 ]; then
-            echo "the following '$TARGET' shard jobs did not succeed:"
-            printf '%s\n' "${failed[@]}"
-            exit 1
-          fi
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: go tool mage ci:checkShardResults "$REPO" "$RUN_ID" "$RUN_ATTEMPT" "$CHECK"
 
       - name: Check terraform-registry-cache result
         # terraform-registry-cache only runs a linux/windows matrix (no macos
