@@ -107,6 +107,7 @@ type modelVendor struct {
 	height         int
 	spinner        spinner.Model
 	progress       progress.Model
+	percent        float64
 	done           bool
 	dryRun         bool
 	failedPkg      int
@@ -268,12 +269,6 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
-	case progress.FrameMsg:
-		newModel, cmd := m.progress.Update(msg)
-		if newModel, ok := newModel.(progress.Model); ok {
-			m.progress = newModel
-		}
-		return m, cmd
 	}
 	return m, nil
 }
@@ -329,12 +324,19 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 		}
 	}
 	m.index++
-	// Update progress bar
-	progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
+	// Update progress bar. charmbracelet/bubbles's progress.Model.SetPercent
+	// mutates m.tag and returns a tea.Cmd (nextFrame) whose closure reads
+	// m.tag/m.id back from the *Model pointer when its tick fires, on
+	// bubbletea's own command-execution goroutine -- a data race against a
+	// second SetPercent call landing before that tick fires (which packages
+	// completing faster than one animation frame reliably triggers; upstream
+	// bug, not an Atmos usage issue). Track the target percent as a plain
+	// field instead and render it with ViewAs (no animation, no internal
+	// Model state, no tea.Cmd), which sidesteps the race entirely.
+	m.percent = float64(m.index) / float64(len(m.packages))
 
 	version = grayColor.Render(version)
 	return m, tea.Batch(
-		progressCmd,
 		tea.Printf("%s %s %s %s", mark, pkg.Name, version, errMsg),                                   // print message above our program
 		ExecuteInstall(m.packages[m.index], install.InstallOptions{DryRun: m.dryRun}, m.atmosConfig), // download the next package
 	)
@@ -458,7 +460,7 @@ func (m *modelVendor) View() string {
 
 	pkgCount := fmt.Sprintf(" %*d/%*d", w, m.index, w, n)
 	spin := m.spinner.View() + " "
-	prog := m.progress.View()
+	prog := m.progress.ViewAs(m.percent)
 	// effectiveWidth reserves liveLineMargin trailing columns so the rendered line never touches
 	// the terminal's true last column (see liveLineMargin's doc comment).
 	effectiveWidth := max(0, m.width-liveLineMargin)
