@@ -20,6 +20,11 @@ commands:
         path: "../../.context/cast-fixtures/native-terraform"
         reset: true
       - type: workdir
+        name: streaming-ui-fixture
+        source: fixtures/streaming-ui
+        path: "../../.context/cast-fixtures/streaming-ui"
+        reset: true
+      - type: workdir
         name: demo-vendoring-fixture
         source: fixtures/demo-vendoring
         path: "../../.context/cast-fixtures/demo-vendoring"
