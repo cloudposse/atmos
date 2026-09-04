@@ -281,7 +281,7 @@ jobs:
         if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         uses: ./.github/actions/ci-toolchain
         with:
-          cache: save
+          cache: restore-and-save
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload build artifacts

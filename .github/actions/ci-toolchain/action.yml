@@ -8,8 +8,8 @@ description: >
 
   Persistence across jobs and runs is atmos's own `ci.cache` (the Atmos Cache
   action, ./actions/cache): the one producer job per OS saves the toolchain
-  directory at job end (`cache: save`); every consumer restores it and never
-  saves (`cache: restore-only`), so ten shards do not race to write one key.
+  directory at job end (`cache: restore-and-save`); every consumer restores it
+  and never saves (`cache: restore-only`), so ten shards do not race to write one key.
   On a miss, `atmos toolchain install` installs from the network as it always
   did.
 
@@ -21,26 +21,21 @@ inputs:
     required: true
   cache:
     description: >
-      How this job uses the Atmos toolchain cache: `save` (restore, and save
-      at job end - one producer job per OS), `restore-only` (consumers), or
-      `none`.
+      Passed through to the Atmos Cache action's `mode`: `restore-and-save`
+      (the one producer job per OS - restore, and save at job end),
+      `restore-only` (consumers, the default), or `none` to skip the cache.
     required: false
     default: 'restore-only'
 
 runs:
   using: composite
   steps:
-    - name: Restore and save the Atmos toolchain cache
-      if: inputs.cache == 'save'
-      continue-on-error: true
-      uses: ./actions/cache
-
     - name: Restore the Atmos toolchain cache
-      if: inputs.cache == 'restore-only'
+      if: inputs.cache != 'none'
       continue-on-error: true
       uses: ./actions/cache
       with:
-        restore-only: 'true'
+        mode: ${{ inputs.cache }}
 
     - name: Install the tools in .tool-versions that are not already on disk
       shell: bash
