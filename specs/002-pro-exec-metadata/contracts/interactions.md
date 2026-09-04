@@ -83,7 +83,7 @@ shape regardless of how many components the invocation targeted — there is no 
 | Field | Type | Matcher |
 |-------|------|---------|
 | `resource_counts` | object `{create, change, replace, destroy}` (integers) | `Like` per field |
-| `outputs` | object, values `{value, type, sensitive}` | `Like` per key |
+| `outputs` | object, values `{value, sensitive}` | `Like` per key |
 | `warnings` | array of string | `EachLike(...)` |
 | `changes` | array of `{action, address}` | `EachLike({action: Like("created"), address: Like("aws_s3_bucket.example")})` |
 | `has_changes` | boolean | `Like(true)` |
@@ -148,7 +148,7 @@ never an exact literal, since it is freshly generated per invocation.
 separately numbered interaction here, since it is the identical wire shape as interaction 9
 with a longer list, not a distinct contract.
 
-**`apply` examples**: `command: "atmos terraform apply"` is additionally exercised, by value
+**`apply` examples**: `command: "terraform apply"` is additionally exercised, by value
 rather than by shape, in `TestPact_UploadExecMetadata_Apply` (success) and
 `TestPact_UploadExecMetadata_ApplyFailure` (`has_errors: true`, populated `errors`,
 `resource_counts` all zero, `changes`/`warnings` empty) — again not separately numbered

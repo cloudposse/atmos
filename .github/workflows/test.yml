@@ -2146,11 +2146,18 @@ jobs:
     # here: cosign's keyless OIDC signing (in shared-go-auto-release.yml's
     # goreleaser job, invoked below) reads the runner's OIDC token-minting
     # endpoint, which is gated purely by this job's own id-token permission.
+    # contents: read matches feature-release.yml/nightlybuilds.yml's grant to
+    # the same reusable workflow, and its own declared
+    # `permissions: {id-token: write, contents: read}`.
     permissions:
+      contents: read
       id-token: write
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8293d764b32a1211aacc40e24328f13e8fc5cf32 # main
     with:
-      publish: false
+      # shared-go-auto-release.yml declares publish as `type: string`, not
+      # boolean — quote/stringify this so the value matches the declared
+      # input type.
+      publish: 'false'
       format: binary
       runs-on: '["runs-on=${{github.run_id}}", "runner=large", "tag=atmos","extras=s3-cache", "private=false"]'
     # `secrets: inherit`, not an explicit map: shared-go-auto-release.yml doesn't declare a

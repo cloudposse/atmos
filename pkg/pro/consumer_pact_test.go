@@ -426,12 +426,10 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 							"outputs": body{
 								"bucket_arn": body{
 									"value":     matchers.Like("arn:aws:s3:::prod-bucket"),
-									"type":      matchers.Like("string"),
 									"sensitive": matchers.Like(false),
 								},
 								"secret_key": body{
 									"value":     iolib.MaskReplacement,
-									"type":      matchers.Like("string"),
 									"sensitive": matchers.Like(true),
 								},
 							},
@@ -469,8 +467,8 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 							"destroy": 0,
 						},
 						"outputs": map[string]any{
-							"bucket_arn": map[string]any{"value": "arn:aws:s3:::prod-bucket", "type": "string", "sensitive": false},
-							"secret_key": map[string]any{"value": iolib.MaskReplacement, "type": "string", "sensitive": true},
+							"bucket_arn": map[string]any{"value": "arn:aws:s3:::prod-bucket", "sensitive": false},
+							"secret_key": map[string]any{"value": iolib.MaskReplacement, "sensitive": true},
 						},
 						"warnings": []string{"deprecated argument used"},
 						"changes": []map[string]any{
@@ -537,7 +535,7 @@ func TestPact_UploadExecMetadata(t *testing.T) {
 // `plan`/`apply`/`deploy` (research.md Decisions 37/38, spec.md FR-006a,
 // specs/002-pro-exec-metadata/contracts/interactions.md interaction 9) — this
 // is not a distinct contract from TestPact_UploadExecMetadata, just an
-// explicit `command: "atmos terraform apply"` example exercising a
+// explicit `command: "terraform apply"` example exercising a
 // successful-apply-shaped fixture (subprocess exit_code 0 — apply has no
 // `-detailed-exitcode` convention the way `plan` does, so 0 covers both
 // "succeeded" and "succeeded with changes applied").
@@ -583,7 +581,6 @@ func TestPact_UploadExecMetadata_Apply(t *testing.T) {
 							"outputs": body{
 								"bucket_arn": body{
 									"value":     matchers.Like("arn:aws:s3:::prod-bucket"),
-									"type":      matchers.Like("string"),
 									"sensitive": matchers.Like(false),
 								},
 							},
@@ -621,7 +618,7 @@ func TestPact_UploadExecMetadata_Apply(t *testing.T) {
 							"destroy": 0,
 						},
 						"outputs": map[string]any{
-							"bucket_arn": map[string]any{"value": "arn:aws:s3:::prod-bucket", "type": "string", "sensitive": false},
+							"bucket_arn": map[string]any{"value": "arn:aws:s3:::prod-bucket", "sensitive": false},
 						},
 						"warnings": []string{},
 						"changes": []map[string]any{
@@ -646,7 +643,7 @@ func TestPact_UploadExecMetadata_Apply(t *testing.T) {
 				AtmosVersion:  "1.2.3",
 				AtmosOS:       "linux",
 				AtmosArch:     "amd64",
-				Command:       "atmos terraform apply",
+				Command:       "terraform apply",
 				Args:          []string{},
 				Flags:         []string{},
 				ExitCode:      0,
@@ -764,7 +761,7 @@ func TestPact_UploadExecMetadata_ApplyFailure(t *testing.T) {
 				AtmosVersion:  "1.2.3",
 				AtmosOS:       "linux",
 				AtmosArch:     "amd64",
-				Command:       "atmos terraform apply",
+				Command:       "terraform apply",
 				Args:          []string{},
 				Flags:         []string{},
 				ExitCode:      1,

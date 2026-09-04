@@ -372,7 +372,6 @@
                 "outputs": {
                   "bucket_arn": {
                     "sensitive": false,
-                    "type": "string",
                     "value": "arn:aws:s3:::prod-bucket"
                   }
                 },
@@ -452,9 +451,6 @@
             "match": "type"
           },
           "$.body.data.components[*].outputs.bucket_arn.sensitive": {
-            "match": "type"
-          },
-          "$.body.data.components[*].outputs.bucket_arn.type": {
             "match": "type"
           },
           "$.body.data.components[*].outputs.bucket_arn.value": {
@@ -556,12 +552,10 @@
                 "outputs": {
                   "bucket_arn": {
                     "sensitive": false,
-                    "type": "string",
                     "value": "arn:aws:s3:::prod-bucket"
                   },
                   "secret_key": {
                     "sensitive": true,
-                    "type": "string",
                     "value": "<MASKED>"
                   }
                 },
@@ -652,16 +646,10 @@
           "$.body.data.components[*].outputs.bucket_arn.sensitive": {
             "match": "type"
           },
-          "$.body.data.components[*].outputs.bucket_arn.type": {
-            "match": "type"
-          },
           "$.body.data.components[*].outputs.bucket_arn.value": {
             "match": "type"
           },
           "$.body.data.components[*].outputs.secret_key.sensitive": {
-            "match": "type"
-          },
-          "$.body.data.components[*].outputs.secret_key.type": {
             "match": "type"
           },
           "$.body.data.components[*].resource_counts.change": {
