@@ -91,8 +91,8 @@ func (r repositoryEndpoint) apiBase() string {
 // pullRequestWebURL builds the browser-facing URL for pull request id, since Azure DevOps' REST
 // responses don't include one directly.
 func (r repositoryEndpoint) pullRequestWebURL(id int) string {
-	return fmt.Sprintf("%s/%s/_git/%s/pullrequest/%d",
-		r.baseURL, url.PathEscape(r.organization), url.PathEscape(r.repository), id)
+	return fmt.Sprintf("%s/%s/%s/_git/%s/pullrequest/%d",
+		r.baseURL, url.PathEscape(r.organization), url.PathEscape(r.project), url.PathEscape(r.repository), id)
 }
 
 // refName qualifies branch as a full Git ref, as Azure DevOps' PR API requires.

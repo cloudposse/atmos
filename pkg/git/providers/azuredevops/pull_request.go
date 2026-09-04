@@ -94,6 +94,12 @@ func (p *Provider) Reconcile(ctx context.Context, options *atmosgit.PullRequestO
 	if err := validateOptions(options); err != nil {
 		return nil, err
 	}
+	// Reject unsupported assignees before touching the API: Azure DevOps pull requests don't
+	// support assignees, and failing here (rather than after reconcilePullRequest) avoids
+	// creating or updating a pull request on invalid configuration.
+	if len(options.Assignees) > 0 {
+		return nil, fmt.Errorf("%w: configure reviewers instead", errUtils.ErrAzureDevOpsAssigneesUnsupported)
+	}
 	project, err := requireProjectNamespace(options.Namespace)
 	if err != nil {
 		return nil, err
@@ -141,15 +147,12 @@ func (p *Provider) reconcilePullRequest(ctx context.Context, repo repositoryEndp
 	return result, pr, nil
 }
 
-// applyMetadata applies labels and reviewers to prID, and rejects assignees outright since Azure
-// DevOps pull requests don't support them (failing loudly rather than silently dropping the
-// configured value).
+// applyMetadata applies labels and reviewers to prID. Assignees are rejected earlier, in
+// Reconcile, since Azure DevOps pull requests don't support them and failing before
+// reconcilePullRequest avoids creating or updating a pull request on invalid configuration.
 func (p *Provider) applyMetadata(ctx context.Context, repo repositoryEndpoint, token string, prID int, options *atmosgit.PullRequestOptions) error {
 	defer perf.Track(nil, "azuredevops.Provider.applyMetadata")()
 
-	if len(options.Assignees) > 0 {
-		return fmt.Errorf("%w: configure reviewers instead", errUtils.ErrAzureDevOpsAssigneesUnsupported)
-	}
 	for _, label := range options.Labels {
 		if err := p.addLabel(ctx, repo, token, prID, label); err != nil {
 			return err
