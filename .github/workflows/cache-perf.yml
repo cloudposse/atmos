@@ -1,0 +1,233 @@
+name: Cache perf lab (windows)
+
+# A dispatch-only lab for iterating on Windows Go-cache restore time without
+# running the full Tests suite. Each `restore` matrix leg restores the SAME
+# production setup-go archive (setup-go's key is
+# setup-go-Windows-x64-go-<version>-<go.sum hash>; the default branch's cache
+# is readable from any branch) under one tar configuration, asserts it was a
+# real cache hit, prints which `tar` was actually selected, and writes its own
+# "Set up Go" duration to the step summary. Compare the rows.
+#
+# Why this exists: on windows-2025 hosted runners, restoring our ~1.9 GB
+# go-build+mod cache is ~6.5 minutes of pure tar extraction (download is
+# ~16 s). Two measured causes: the runner's C: disk (~540 IOPS -- the fast
+# D: was removed from Windows Server 2025 images, actions/runner-images#12416,
+# #12647) and the extractor (Git-for-Windows' MSYS GNU tar pays a per-file
+# POSIX-shim cost; native bsdtar extracts ~4x faster on the same archive,
+# actions/cache#752, actions/toolkit#2379 - unmerged). Windows Defender is
+# not a factor: real-time monitoring is disabled at the image level.
+#
+# Configurations:
+#   gnu-tar  exactly what test.yml does today: Git's usr\bin prepended to
+#            PATH, so @actions/cache picks MSYS GNU tar.
+#   bsdtar   the proposed fix, using only released @actions/cache code: the
+#            toolkit finds GNU tar via a hardcoded %PROGRAMFILES%\Git\usr\bin\
+#            tar.exe check, falling back to a PATH lookup; pointing
+#            PROGRAMFILES at a nonexistent directory for the cache-restoring
+#            step defeats the check, and with C:\Windows\System32 first on
+#            PATH the lookup resolves to bsdtar. Same archive, same key.
+#
+# Dispatch (the workflow must exist on the default branch for this to
+# resolve; the --ref can then be any iteration branch):
+#   gh workflow run cache-perf.yml --repo cloudposse/atmos --ref <branch>
+#
+# The `topology` job answers a separate question the same run: whether the
+# D:\ that windows-2025-vs2026 images still expose is a distinct disk from
+# C: (a fast local disk would be worth a further ~13x on extraction, per
+# actions/setup-go#515) or just a path onto the same slow volume.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  restore:
+    name: restore (${{ matrix.config }})
+    runs-on: windows-latest
+    timeout-minutes: 30
+    # actions:read for the jobs-API self-lookup that reports step timing.
+    permissions:
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - config: gnu-tar
+            tar-dir: 'C:\Program Files\Git\usr\bin'
+            programfiles: 'C:\Program Files'
+          - config: bsdtar
+            tar-dir: 'C:\Windows\System32'
+            programfiles: 'C:\atmos-no-gnu-tar'
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          # Same list as test.yml's `build` job, whose Windows leg restores this
+          # exact archive under block mode (the Actions cache download itself
+          # comes from a GitHub-managed *.blob.core.windows.net host that is
+          # not listed here and evidently does not need to be).
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
+            releases.hashicorp.com:443
+            rekor.sigstore.dev:443
+            tuf-repo-cdn.sigstore.dev:443
+            us.i.posthog.com:443
+            www.msftconnecttest.com:443
+            ipv6.msftconnecttest.com:443
+            www.msftncsi.com:443
+            ipv6.msftncsi.com:443
+            time.windows.com:443
+            client.wns.windows.com:443
+            settings-win.data.microsoft.com:443
+            *.events.data.microsoft.com:443
+            *.update.microsoft.com:443
+            ecs.office.com:443
+            pti.store.microsoft.com:443
+            login.live.com:443
+            go.microsoft.com:443
+            www.microsoft.com:443
+            ocsp.sectigo.com:80
+            ocsp.sectigo.com:443
+            crl.sectigo.com:80
+            crl.sectigo.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Put the selected tar first on PATH
+        shell: pwsh
+        env:
+          TAR_DIR: ${{ matrix.tar-dir }}
+        run: echo "$env:TAR_DIR" >> $Env:GITHUB_PATH
+
+      - name: Show which tar the cache restore will use
+        shell: pwsh
+        env:
+          PROGRAMFILES: ${{ matrix.programfiles }}
+        run: |
+          Write-Host "PROGRAMFILES for the restore step: $env:PROGRAMFILES"
+          Write-Host "first tar on PATH: $((Get-Command tar.exe).Source)"
+          Write-Host "tar --version:     $((tar --version | Select-Object -First 1))"
+
+      - name: Set up Go (timed cache restore)
+        id: go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        # The env override only matters for the bsdtar leg; for gnu-tar it is
+        # the real value, keeping that leg byte-identical to production.
+        env:
+          PROGRAMFILES: ${{ matrix.programfiles }}
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Assert the restore was a real cache hit
+        shell: pwsh
+        env:
+          CACHE_HIT: ${{ steps.go.outputs.cache-hit }}
+        run: |
+          if ($env:CACHE_HIT -ne 'true') {
+            throw "setup-go reported cache-hit='$env:CACHE_HIT'; a miss would time a no-op, not a restore. Check go.sum matches the default branch."
+          }
+
+      - name: Report timing to the step summary
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_NAME: restore (${{ matrix.config }})
+          CONFIG: ${{ matrix.config }}
+          TAR_DIR: ${{ matrix.tar-dir }}
+        run: |
+          $jobs = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID/jobs?per_page=100" --paginate | ConvertFrom-Json
+          $job  = $jobs.jobs | Where-Object { $_.name -eq $env:JOB_NAME }
+          $step = $job.steps | Where-Object { $_.name -eq 'Set up Go (timed cache restore)' }
+          $secs = [int]([datetime]$step.completed_at - [datetime]$step.started_at).TotalSeconds
+          Write-Host "Set up Go (timed cache restore): ${secs}s"
+          $row = "| $env:CONFIG | ``$env:TAR_DIR`` | ${secs}s |"
+          if (-not (Test-Path $env:GITHUB_STEP_SUMMARY) -or -not (Get-Content $env:GITHUB_STEP_SUMMARY | Select-String -Quiet 'Cache restore timing')) {
+            Add-Content $env:GITHUB_STEP_SUMMARY "### Cache restore timing`n`n| config | tar | Set up Go |`n|---|---|---|"
+          }
+          Add-Content $env:GITHUB_STEP_SUMMARY $row
+
+  topology:
+    name: "disk topology (C: vs D:)"
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            www.msftconnecttest.com:443
+            ipv6.msftconnecttest.com:443
+            www.msftncsi.com:443
+            ipv6.msftncsi.com:443
+            time.windows.com:443
+            client.wns.windows.com:443
+            settings-win.data.microsoft.com:443
+            *.events.data.microsoft.com:443
+            *.update.microsoft.com:443
+            ecs.office.com:443
+            pti.store.microsoft.com:443
+            login.live.com:443
+            go.microsoft.com:443
+            www.microsoft.com:443
+            ocsp.sectigo.com:80
+            ocsp.sectigo.com:443
+            crl.sectigo.com:80
+            crl.sectigo.com:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
+
+      - name: Disk and volume layout
+        shell: pwsh
+        run: |
+          Write-Host "--- Get-Disk ---";      Get-Disk | Format-Table Number, FriendlyName, Size, BusType, MediaType -AutoSize
+          Write-Host "--- Get-Partition ---"; Get-Partition | Where-Object DriveLetter | Format-Table DriveLetter, DiskNumber, Size -AutoSize
+          Write-Host "--- Get-Volume ---";    Get-Volume | Where-Object DriveLetter | Format-Table DriveLetter, FileSystemType, Size, SizeRemaining -AutoSize
+          Write-Host "--- Get-PSDrive ---";   Get-PSDrive -PSProvider FileSystem | Format-Table Name, Used, Free -AutoSize
+          Write-Host "RUNNER_TEMP=$env:RUNNER_TEMP  LOCALAPPDATA=$env:LOCALAPPDATA  TEMP=$env:TEMP"
+
+      # Small-file writes are what a go-build cache restore is made of, so
+      # this is the shape that matters, not sequential throughput.
+      - name: "Small-file write benchmark (20,000 x 1 KiB) on C: and D:"
+        shell: pwsh
+        run: |
+          $payload = New-Object byte[] 1024
+          foreach ($root in @("$env:LOCALAPPDATA\cache-perf-lab", "$env:RUNNER_TEMP\cache-perf-lab")) {
+            $drive = $root.Substring(0, 2)
+            if (-not (Test-Path "$drive\")) { Write-Host "$drive not present, skipping"; continue }
+            New-Item -ItemType Directory -Force -Path $root | Out-Null
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            for ($i = 0; $i -lt 20000; $i++) { [System.IO.File]::WriteAllBytes("$root\f$i", $payload) }
+            $sw.Stop()
+            $secs = [math]::Round($sw.Elapsed.TotalSeconds, 1)
+            Write-Host "$drive ($root): 20,000 x 1 KiB files in ${secs}s (~$([int](20000 / $secs)) files/s)"
+            Add-Content $env:GITHUB_STEP_SUMMARY "- **$drive** small-file writes: ${secs}s for 20,000 files (~$([int](20000 / $secs)) files/s)"
+            Remove-Item -Recurse -Force $root
+          }
