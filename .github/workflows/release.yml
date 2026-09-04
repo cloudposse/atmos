@@ -44,7 +44,9 @@ jobs:
     # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
     # (observed as a startup_failure -- "likely failed because of a workflow file issue" -- with
     # zero jobs ever created, on both this workflow and feature-release.yml after an earlier
-    # attempt to narrow this to an explicit list).
+    # attempt to narrow this to an explicit list). Same accepted pattern as build.yml,
+    # feature-release.yml and nightlybuilds.yml's calls to this same reusable workflow.
+    # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit
     secrets: inherit
 
   summarize-notes:
