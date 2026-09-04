@@ -1,12 +1,15 @@
 package store
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 // TestRegisterConcurrentWithNewStoreRegistry verifies that the storeFactories map
@@ -38,7 +41,8 @@ func TestRegisterConcurrentWithNewStoreRegistry(t *testing.T) {
 			config := &StoresConfig{
 				"probe": StoreConfig{Type: "definitely-not-registered"},
 			}
-			// Returns ErrStoreTypeNotFound; we only care that the map read is race-free.
+			// The unregistered type is skipped with a warning, not an error; we only care
+			// that the map read is race-free.
 			_, _ = NewStoreRegistry(config)
 		}()
 	}
@@ -73,27 +77,33 @@ func TestReset_ClearsFactories(t *testing.T) {
 	Register("reset-type", noopFactory)
 
 	// Sanity check: the type resolves before Reset.
-	_, err := NewStoreRegistry(&StoresConfig{"s": StoreConfig{Type: "reset-type"}})
+	registry, err := NewStoreRegistry(&StoresConfig{"s": StoreConfig{Type: "reset-type"}})
 	assert.NoError(t, err)
+	assert.Contains(t, registry, "s")
 
 	Reset()
 
-	// After Reset the type is gone.
-	_, err = NewStoreRegistry(&StoresConfig{"s": StoreConfig{Type: "reset-type"}})
-	assert.ErrorIs(t, err, ErrStoreTypeNotFound)
+	// After Reset the type no longer resolves: the store is skipped (warned), not fatal.
+	registry, err = NewStoreRegistry(&StoresConfig{"s": StoreConfig{Type: "reset-type"}})
+	assert.NoError(t, err)
+	assert.NotContains(t, registry, "s")
 }
 
-// TestNewStoreRegistry_UnknownType verifies the not-found error for unregistered types.
-func TestNewStoreRegistry_UnknownType(t *testing.T) {
+// TestNewStoreRegistry_UnknownTypeIsSkippedWithoutError verifies that an unresolvable store
+// kind is omitted from the registry with a warning instead of failing the whole build. See
+// https://github.com/cloudposse/atmos/issues/2930.
+func TestNewStoreRegistry_UnknownTypeIsSkippedWithoutError(t *testing.T) {
 	t.Cleanup(Reset)
 	Reset()
 
-	_, err := NewStoreRegistry(&StoresConfig{"s": StoreConfig{Type: "no-such-type"}})
-	assert.ErrorIs(t, err, ErrStoreTypeNotFound)
+	registry, err := NewStoreRegistry(&StoresConfig{"s": StoreConfig{Type: "no-such-type"}})
+	assert.NoError(t, err, "an unresolvable store must not fail the whole registry build")
+	assert.NotContains(t, registry, "s")
 }
 
-// TestNewStoreRegistry_FactoryError verifies that a factory error propagates.
-func TestNewStoreRegistry_FactoryError(t *testing.T) {
+// TestNewStoreRegistry_FactoryErrorIsSkippedWithoutError verifies that a factory error for one
+// store is warned and skipped rather than aborting the whole registry build.
+func TestNewStoreRegistry_FactoryErrorIsSkippedWithoutError(t *testing.T) {
 	t.Cleanup(Reset)
 
 	sentinel := errors.New("factory boom")
@@ -101,6 +111,65 @@ func TestNewStoreRegistry_FactoryError(t *testing.T) {
 		return nil, sentinel
 	})
 
-	_, err := NewStoreRegistry(&StoresConfig{"s": StoreConfig{Type: "err-type"}})
-	assert.ErrorIs(t, err, sentinel)
+	registry, err := NewStoreRegistry(&StoresConfig{"s": StoreConfig{Type: "err-type"}})
+	assert.NoError(t, err, "a factory error for one store must not fail the whole registry build")
+	assert.NotContains(t, registry, "s")
+}
+
+// TestNewStoreRegistry_SecretIncapableIsSkippedWithoutError verifies that marking a
+// non-encrypting backend `secret: true` is warned and skipped, not fatal to the build.
+func TestNewStoreRegistry_SecretIncapableIsSkippedWithoutError(t *testing.T) {
+	t.Cleanup(Reset)
+	Reset()
+
+	Register(KindRedis, noopFactory)
+
+	registry, err := NewStoreRegistry(&StoresConfig{"s": StoreConfig{Type: KindRedis, Secret: true}})
+	assert.NoError(t, err)
+	assert.NotContains(t, registry, "s")
+}
+
+// TestNewStoreRegistry_OneBadStoreDoesNotBlockOthers verifies the blast-radius hardening: a
+// single misconfigured store (unresolvable kind) must not prevent the other, valid stores in
+// the same config from being built. Before this fix, one bad store — even one nothing in any
+// stack referenced — failed the entire atmos.yaml config load. See
+// https://github.com/cloudposse/atmos/issues/2930.
+func TestNewStoreRegistry_OneBadStoreDoesNotBlockOthers(t *testing.T) {
+	t.Cleanup(Reset)
+	Reset()
+
+	Register("good-type", noopFactory)
+
+	registry, err := NewStoreRegistry(&StoresConfig{
+		"bad":  StoreConfig{Type: "no-such-type"},
+		"good": StoreConfig{Type: "good-type"},
+	})
+
+	assert.NoError(t, err)
+	assert.NotContains(t, registry, "bad")
+	assert.Contains(t, registry, "good")
+}
+
+// TestNewStoreRegistry_UnresolvedKindWarningNamesStore verifies the diagnosability hardening:
+// the warning logged for an unresolvable store kind names the specific store, not just the
+// kind, so a config with several stores can be triaged from the log alone. See
+// https://github.com/cloudposse/atmos/issues/2930.
+func TestNewStoreRegistry_UnresolvedKindWarningNamesStore(t *testing.T) {
+	t.Cleanup(Reset)
+	Reset()
+
+	originalLogger := log.Default()
+	buffer := &bytes.Buffer{}
+	testLogger := log.New()
+	testLogger.SetOutput(buffer)
+	testLogger.SetLevel(log.WarnLevel)
+	testLogger.SetReportTimestamp(false)
+	log.SetDefault(testLogger)
+	t.Cleanup(func() { log.SetDefault(originalLogger) })
+
+	_, err := NewStoreRegistry(&StoresConfig{"my-broken-store": StoreConfig{Type: "no-such-type"}})
+	assert.NoError(t, err)
+
+	logged := buffer.String()
+	assert.Contains(t, logged, "my-broken-store", "the warning must name the specific store, not just its kind")
 }
