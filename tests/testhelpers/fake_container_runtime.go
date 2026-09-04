@@ -122,7 +122,15 @@ func recordArgs(args []string) {
 		return
 	}
 	defer f.Close()
-	_, _ = fmt.Fprintln(f, strings.Join(args, "\t"))
+	// One line per invocation, tab-separated. An argument may itself contain a
+	// newline or a tab (a forwarded -e KEY=VALUE for a multi-line environment
+	// variable, which GitHub Actions jobs legitimately have), so those are
+	// escaped inside the field rather than allowed to break the record.
+	escaped := make([]string, len(args))
+	for i, arg := range args {
+		escaped[i] = strings.NewReplacer("\n", "\\n", "\t", "\\t").Replace(arg)
+	}
+	_, _ = fmt.Fprintln(f, strings.Join(escaped, "\t"))
 }
 
 func requiresForwardedEnv(command string) bool {
