@@ -42,10 +42,28 @@ func RenderBody(entries []PREntry, summaries []string) (string, error) {
 			lastCategory = e.Category
 		}
 		if summary := strings.TrimSpace(summaries[i]); summary != "" {
-			fmt.Fprintf(&b, "<details>\n\n<summary>%s</summary>\n\n%s\n\n</details>\n", e.Summary, summary)
+			fmt.Fprintf(&b, "<details>\n\n<summary>%s</summary>\n\n%s\n\n</details>\n", e.Summary, bulletize(summary))
 		} else {
 			fmt.Fprintf(&b, "- %s\n", e.Summary)
 		}
 	}
 	return b.String(), nil
+}
+
+// bulletize makes every paragraph of a summary a Markdown list item unless
+// it already is one. Inside a <details> block, flush-left prose is visually
+// indistinguishable from the summary line above it; the indent is what
+// makes the notes scannable, so the layout must not depend on whether the
+// model chose bullets.
+func bulletize(summary string) string {
+	paras := strings.Split(summary, "\n\n")
+	for i, para := range paras {
+		para = strings.TrimSpace(para)
+		if para == "" || strings.HasPrefix(para, "- ") || strings.HasPrefix(para, "* ") {
+			paras[i] = para
+			continue
+		}
+		paras[i] = "- " + strings.Join(strings.Split(para, "\n"), " ")
+	}
+	return strings.Join(paras, "\n")
 }
