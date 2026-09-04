@@ -41,7 +41,9 @@ Two independent, durable changes:
     `- $TITLE @$AUTHOR (#$NUMBER)`, which never approaches the limit, and maps this repo's actual
     labels onto categories: `major` → Breaking Changes, `minor` → Features, `patch` → Bug Fixes (the
     org config filed `patch` under Enhancements and knew no `minor`, so fixes read as enhancements,
-    no Bug Fixes chapter ever appeared, and features sat uncategorized at the top with no heading).
+    no Bug Fixes chapter ever appeared, and features sat uncategorized at the top with no heading;
+    the same mapping is proposed org-wide in cloudposse/.github#279, and since a repo-level file
+    replaces the org's rather than layering on it, the atmos file must stay a full copy in sync).
     The renderer also gives any still-uncategorized group an "Other Changes" heading when the
     release has categorized groups, and converts the `<summary>` line's Markdown (bot author links,
     backticks) to HTML, since GitHub never renders Markdown inside that tag. After that draft is written,

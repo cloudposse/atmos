@@ -37,11 +37,12 @@ version-resolver:
 
 categories:
 # This repo labels PRs major / minor / patch / no-release (see the
-# pull-request skill: minor = feature, patch = fix). The org categories know
-# enhancement, patch, fix and auto-update only, and file `patch` under
+# pull-request skill: minor = feature, patch = fix). The org categories knew
+# enhancement, patch, fix and auto-update only, and filed `patch` under
 # Enhancements: every fix showed up as an enhancement, no Bug Fixes chapter
 # ever appeared, and every `minor` feature was uncategorized - which
-# release-drafter lists first, with no heading at all.
+# release-drafter lists first, with no heading at all. Same mapping as
+# cloudposse/.github#279.
 - title: '💥 Breaking Changes'
   labels:
   - 'major'
