@@ -60,6 +60,14 @@ func TestGitHubTokenEnvBinding(t *testing.T) {
 
 	t.Run("TestMain binds environment correctly", func(t *testing.T) {
 		// This test verifies that the binding in TestMain is working.
+		// Re-bind defensively: other tests in this package (e.g. set_test.go's
+		// setupTest/teardownTest) call viper.Reset(), which discards the
+		// global instance TestMain bound "github-token" into. -shuffle=on
+		// randomizes test order, so this subtest can no longer assume
+		// TestMain's one-time binding survived every sibling test that ran
+		// before it; BindEnv is safe to call again (idempotent).
+		viper.BindEnv("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
+
 		// If GITHUB_TOKEN is set in environment, it should be accessible.
 		if envToken := os.Getenv("GITHUB_TOKEN"); envToken != "" {
 			// The global viper instance should have the binding from TestMain.
