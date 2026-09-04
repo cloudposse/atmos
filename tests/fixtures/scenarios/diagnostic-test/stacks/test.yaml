@@ -1,0 +1,17 @@
+# Test stack for diagnostic components
+
+vars:
+  environment: test
+  stage: dev
+
+components:
+  terraform:
+    warning:
+      vars:
+        enabled: true
+        warning_threshold: 100  # This will trigger the warning (threshold > 50)
+
+    error:
+      vars:
+        enabled: true
+        trigger_error: true  # This will trigger the error
