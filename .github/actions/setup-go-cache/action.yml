@@ -64,8 +64,12 @@ runs:
         # Scratch space too: Go's build temp (GOTMPDIR) and the process temp
         # dir that t.TempDir()/os.TempDir() resolve from (TEMP/TMP) default to
         # %LOCALAPPDATA%\Temp on the same slow disk, so every fixture copy and
-        # scratch file the tests make paid the same IOPS penalty.
-        $tmp = Join-Path $env:RUNNER_TEMP 'tmp'
+        # scratch file the tests make paid the same IOPS penalty. Placed next
+        # to RUNNER_TEMP (D:\a\tmp) rather than under it: temp paths show up
+        # in atmos's own output, and RUNNER_TEMP is D:\a\_temp, whose "\_"
+        # the output layer mangles into "_" (a Markdown-escape bug that the
+        # acceptance tests then catch; tracked separately).
+        $tmp = Join-Path (Split-Path -Parent $env:RUNNER_TEMP) 'tmp'
         New-Item -ItemType Directory -Force -Path $tmp | Out-Null
         Write-Host "Relocating temp dirs (GOTMPDIR, TEMP, TMP) to $tmp"
         Add-Content $env:GITHUB_ENV "GOTMPDIR=$tmp"
