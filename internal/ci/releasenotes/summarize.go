@@ -2,11 +2,22 @@ package releasenotes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// errFallbackTooLarge means even the bare-bullet fallback - release-drafter's
+// own skeleton, re-rendered under headings - still crosses
+// maxReleaseBodyChars. This is not expected in practice (the skeleton is
+// what release-drafter itself already wrote to the draft, so it is bounded
+// by GitHub's own 125,000-character limit already), but a release that sat
+// undrafted across enough merges could still grow past this package's
+// tighter margin. Failing loudly here beats sending UpdateReleaseBody a body
+// that GitHub will reject anyway.
+var errFallbackTooLarge = errors.New("releasenotes: fallback body still exceeds the release body limit")
 
 // SummarizeParams bundles SummarizeRelease's inputs so the function itself
 // stays within revive's argument-count limit.
@@ -76,12 +87,9 @@ func SummarizeRelease(ctx context.Context, client HTTPClient, p *SummarizeParams
 	if err != nil {
 		return Result{}, err
 	}
-	if len(rendered) > maxReleaseBodyChars {
-		// Bare bullets are the skeleton itself: always small, always valid.
-		res.Degraded = true
-		if rendered, err = RenderBody(entries, make([]string, len(entries))); err != nil {
-			return Result{}, err
-		}
+	rendered, res.Degraded, err = degradeIfTooLarge(entries, rendered)
+	if err != nil {
+		return Result{}, err
 	}
 	res.Chars = len(rendered)
 
@@ -94,6 +102,28 @@ func SummarizeRelease(ctx context.Context, client HTTPClient, p *SummarizeParams
 		return res, err
 	}
 	return res, UpdateReleaseBody(ctx, client, p.GHToken, p.Release, rendered)
+}
+
+// degradeIfTooLarge re-renders entries as bare bullets - release-drafter's
+// own skeleton, dropping every summary - when rendered already exceeds
+// maxReleaseBodyChars. Bare bullets are in practice always small enough (the
+// skeleton is what release-drafter itself already wrote to the draft, so it
+// is bounded by GitHub's own 125,000-character limit already), but this
+// checks rather than assumes: a release that sat undrafted across enough
+// merges could still grow past this package's tighter margin, and
+// UpdateReleaseBody must never be handed a body GitHub will reject anyway.
+func degradeIfTooLarge(entries []PREntry, rendered string) (string, bool, error) {
+	if len(rendered) <= maxReleaseBodyChars {
+		return rendered, false, nil
+	}
+	fallback, err := RenderBody(entries, make([]string, len(entries)))
+	if err != nil {
+		return "", false, err
+	}
+	if len(fallback) > maxReleaseBodyChars {
+		return "", false, fmt.Errorf("%w: %d chars", errFallbackTooLarge, len(fallback))
+	}
+	return fallback, true, nil
 }
 
 // fetchMissingBodies fills in Body for entries the skeleton left empty, from

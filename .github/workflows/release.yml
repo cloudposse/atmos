@@ -18,6 +18,16 @@ on:
 
 permissions: {}
 
+# The single draft release is a shared, mutable resource: summarize-notes
+# reads it, then writes it back. Two overlapping runs (two Tests runs
+# finishing close together) would race on that read-modify-write and one
+# run's rewrite could clobber the other's. A release-wide group serializes
+# runs instead; cancel-in-progress stays false so a run mid-write is never
+# torn down, it just makes the next run wait its turn.
+concurrency:
+  group: release-notes
+  cancel-in-progress: false
+
 jobs:
   draft:
     name: Draft release

@@ -202,6 +202,24 @@ func TestSummarizeRelease_DegradesToBulletsWhenStillTooLong(t *testing.T) {
 	assert.Contains(t, s.patched, "- fix: correct gizmo @bob (#102)")
 }
 
+// TestSummarizeRelease_ErrorsWhenEvenTheFallbackIsTooLarge covers the case
+// the degrade path can't recover from: the skeleton itself (the entries'
+// original title lines, not the model's summaries) already crosses
+// maxReleaseBodyChars, so re-rendering as bare bullets doesn't help. It
+// should not attempt UpdateReleaseBody with an oversized body.
+func TestSummarizeRelease_ErrorsWhenEvenTheFallbackIsTooLarge(t *testing.T) {
+	hugeTitle := strings.Repeat("x", maxReleaseBodyChars+1)
+	huge := "- " + hugeTitle + " @alice (#101)\n"
+	s := newAPIScript(t, huge)
+	s.prBodies = map[string]string{"101": "Adds a widget."}
+	s.openAIReply = `[{"number":101,"summary":"Adds a widget."}]`
+
+	_, err := SummarizeRelease(context.Background(), scriptedClient(t, s), testParams())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errFallbackTooLarge)
+	assert.Equal(t, 0, s.calls["patch"], "an oversized fallback must not be written")
+}
+
 func TestSummarizeRelease_PropagatesPRFetchError(t *testing.T) {
 	s := newAPIScript(t, skeletonBody)
 	delete(s.prBodies, "102")
