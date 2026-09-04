@@ -1030,9 +1030,36 @@ jobs:
           target=${target%)}
           export TARGET="$target"
 
-          mapfile -t shard_jobs < <(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs" \
-            --paginate \
-            --jq ".jobs[] | select(.name | startswith(\"Acceptance Tests (\" + env.TARGET + \", shard\")) | [.name, .conclusion] | @tsv")
+          list_shards() {
+            gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs" \
+              --paginate \
+              --jq ".jobs[] | select(.name | startswith(\"Acceptance Tests (\" + env.TARGET + \", shard\")) | [.name, (.conclusion // \"\")] | @tsv"
+          }
+
+          # The jobs API is eventually consistent: it has returned an empty
+          # conclusion for a shard that had finished seven minutes earlier,
+          # which this check then reported as "did not succeed". An empty
+          # conclusion means "not settled yet", not "failed": re-poll for a
+          # while and only judge once every shard has a conclusion.
+          settled=0
+          for attempt in $(seq 1 20); do
+            mapfile -t shard_jobs < <(list_shards)
+            unsettled=0
+            for job in "${shard_jobs[@]}"; do
+              [ -z "${job##*$'\t'}" ] && unsettled=$((unsettled + 1))
+            done
+            if [ "$unsettled" -eq 0 ] && [ "${#shard_jobs[@]}" -eq "$TEST_SHARD_COUNT" ]; then
+              settled=1
+              break
+            fi
+            echo "attempt $attempt: ${#shard_jobs[@]} '$TARGET' shard jobs listed, $unsettled without a conclusion yet; retrying in 15s"
+            sleep 15
+          done
+          if [ "$settled" -ne 1 ]; then
+            echo "shard results never settled; last listing:"
+            printf '%s\n' "${shard_jobs[@]}"
+            exit 1
+          fi
 
           # Fail loudly if the job list itself looks wrong (renamed job, API
           # hiccup, shard count drift) rather than silently treating a missing
