@@ -1,0 +1,120 @@
+name: Cache perf lab step sequence
+description: >-
+  The shared step sequence of the Windows cache-perf lab (.github/workflows/cache-perf.yml):
+  optionally relocate Go's caches to D:, pick which tar @actions/cache will use, run
+  actions/setup-go with caching under a per-layout key, then either populate the caches
+  (mode: seed - setup-go's post step saves them) or assert a real cache hit and report how long
+  the restore took (mode: restore).
+
+inputs:
+  mode:
+    description: "seed: populate the caches for setup-go's post step to save. restore: time the restore and assert a hit."
+    required: true
+  layout:
+    description: "c: Go's default cache locations (on C:). d: GOCACHE and GOMODCACHE relocated to D:\\a\\ before setup-go runs."
+    required: true
+  tar-dir:
+    description: Directory prepended to PATH so its tar.exe is the one @actions/cache's PATH lookup finds.
+    required: true
+  programfiles:
+    description: >-
+      Value of PROGRAMFILES for the setup-go step. The real value lets @actions/cache find Git's
+      MSYS GNU tar via its hardcoded %PROGRAMFILES%\Git\usr\bin\tar.exe check; a nonexistent
+      directory defeats that check so the PATH lookup (and with C:\Windows\System32 first, bsdtar)
+      wins. Same archive, same key either way.
+    required: true
+  config:
+    description: Label for the timing row (restore mode).
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # Must run before setup-go: it reads `go env GOCACHE`/`GOMODCACHE` to
+    # decide both what to restore and what its post step saves. GITHUB_ENV
+    # written here applies to every later step of the job, the post step
+    # included.
+    - name: "Relocate Go caches to D: (layout d only)"
+      if: inputs.layout == 'd'
+      shell: pwsh
+      run: |
+        Add-Content $env:GITHUB_ENV 'GOCACHE=D:\a\go-build'
+        Add-Content $env:GITHUB_ENV 'GOMODCACHE=D:\a\go\pkg\mod'
+
+    - name: Put the selected tar first on PATH
+      shell: pwsh
+      env:
+        TAR_DIR: ${{ inputs.tar-dir }}
+      run: echo "$env:TAR_DIR" >> $Env:GITHUB_PATH
+
+    # Hashed into setup-go's cache key (cache-dependency-path below) so each
+    # layout has its own key rather than sharing go.sum's.
+    - name: Write the cache layout marker
+      shell: pwsh
+      env:
+        LAYOUT: ${{ inputs.layout }}
+      run: Set-Content -Path .cache-layout -Value $env:LAYOUT -NoNewline
+
+    - name: Show which tar the cache step will use
+      shell: pwsh
+      env:
+        PROGRAMFILES: ${{ inputs.programfiles }}
+      run: |
+        Write-Host "PROGRAMFILES for the cache step: $env:PROGRAMFILES"
+        Write-Host "first tar on PATH: $((Get-Command tar.exe).Source)"
+        Write-Host "tar --version:     $((tar --version | Select-Object -First 1))"
+
+    # The jobs API only lists a job's top-level steps, so a nested step's
+    # duration is measured here instead: wall clock around setup-go.
+    - name: Start the restore timer
+      shell: pwsh
+      run: Add-Content $env:GITHUB_ENV "LAB_T0=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
+
+    - name: Set up Go (timed cache restore)
+      id: go
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      env:
+        PROGRAMFILES: ${{ inputs.programfiles }}
+      with:
+        go-version-file: "go.mod"
+        cache: true
+        cache-dependency-path: |
+          go.sum
+          .cache-layout
+
+    - name: Stop the restore timer
+      shell: pwsh
+      run: Add-Content $env:GITHUB_ENV "LAB_RESTORE_SECS=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - [int64]$env:LAB_T0)"
+
+    - name: Populate the module and build caches (seed)
+      if: inputs.mode == 'seed'
+      shell: pwsh
+      env:
+        CACHE_HIT: ${{ steps.go.outputs.cache-hit }}
+      run: |
+        Write-Host "setup-go cache-hit=$env:CACHE_HIT (a hit means this layout is already seeded; setup-go will not save again)"
+        Write-Host "GOCACHE=$(go env GOCACHE)  GOMODCACHE=$(go env GOMODCACHE)"
+        go mod download
+        go build ./...
+
+    - name: Assert the restore was a real cache hit (restore)
+      if: inputs.mode == 'restore'
+      shell: pwsh
+      env:
+        CACHE_HIT: ${{ steps.go.outputs.cache-hit }}
+      run: |
+        if ($env:CACHE_HIT -ne 'true') {
+          throw "setup-go reported cache-hit='$env:CACHE_HIT'; a miss would time a no-op, not a restore. The seed job for this layout saved an archive seconds ago - if it is already gone, the repo cache quota evicted it."
+        }
+
+    - name: Report timing to the step summary (restore)
+      if: inputs.mode == 'restore'
+      shell: pwsh
+      env:
+        CONFIG: ${{ inputs.config }}
+        LAYOUT: ${{ inputs.layout }}
+        TAR_DIR: ${{ inputs.tar-dir }}
+      run: |
+        Write-Host "Set up Go (timed cache restore): $env:LAB_RESTORE_SECS s"
+        Add-Content $env:GITHUB_STEP_SUMMARY "### Cache restore timing`n`n| config | layout | tar | GOCACHE | Set up Go (restore) |`n|---|---|---|---|---|`n| $env:CONFIG | $env:LAYOUT | ``$env:TAR_DIR`` | $(go env GOCACHE) | $env:LAB_RESTORE_SECS s |"
