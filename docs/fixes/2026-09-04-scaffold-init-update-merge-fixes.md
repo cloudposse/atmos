@@ -10,17 +10,17 @@ fix addresses four related problems found across that one code path, all tracked
 [cloudposse/atmos#2912](https://github.com/cloudposse/atmos/issues/2912):
 
 1. With the default `--merge-strategy=manual`, a genuine ours/theirs conflict caused the command to
-   exit non-zero with an explicit error — but wrote nothing to disk at all: no conflict markers, no
-   merged content, not even the file's own non-conflicting changes. This is the still-open half of
-   #2912; the issue was closed as resolved by #2989, but that PR fixed a different bug reported in
-   the same thread (a silent base-ref-pinning problem) and never touched this code path.
+    exit non-zero with an explicit error — but wrote nothing to disk at all: no conflict markers, no
+    merged content, not even the file's own non-conflicting changes. This is the still-open half of
+    #2912; the issue was closed as resolved by #2989, but that PR fixed a different bug reported in
+    the same thread (a silent base-ref-pinning problem) and never touched this code path.
 2. Field-testing fix 1 surfaced that `atmos init --update` still has the *exact* base-ref-pinning
-   bug #2989 fixed for `atmos scaffold generate` — it was never ported to `cmd/init`.
+    bug #2989 fixed for `atmos scaffold generate` — it was never ported to `cmd/init`.
 3. `--force` was silently ignored whenever `--update` was also set, making several existing error
-   hints false.
+    hints false.
 4. Re-running `--update` against a file fix 1 left with unresolved conflict markers produced an
-   opaque `three-way merge failed` instead of naming the real problem — a new consequence of fix 1,
-   not a pre-existing gap.
+    opaque `three-way merge failed` instead of naming the real problem — a new consequence of fix 1,
+    not a pre-existing gap.
 
 ## Context
 
