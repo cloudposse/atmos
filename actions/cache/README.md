@@ -80,6 +80,14 @@ creating this cache`, and each still pays the tar + zstd + upload cost first.
 If you need Atmos to *own* restore/save (rather than `actions/cache`), use the
 [`github-runtime`](../github-runtime/README.md) action instead.
 
+## Using it from another composite action
+
+The action works when called from inside another composite action (for example a repo-local
+"set up the toolchain" action). The key, paths and restore-keys are exported to the job
+environment (`ATMOS_CACHE_KEY`, `ATMOS_CACHE_PATH`, `ATMOS_CACHE_RESTORE_KEYS`) because the save
+runs in `actions/cache`'s post step, which in a nested action cannot see this action's step
+outputs (actions/runner#2800); without that the post step ran with an empty path and saved nothing.
+
 ## Versioning
 
 This action ships inside the Atmos repository, so the ref is an Atmos release:
