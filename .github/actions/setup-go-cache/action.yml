@@ -6,8 +6,10 @@ description: >-
   the work disk (D:, where RUNNER_TEMP and the workspace live) is a separate, much faster disk
   than C:, where Go's default cache locations (%LOCALAPPDATA%, %GOPATH%) sit. Measured on our
   ~1.7 GB go-build+mod archive with .github/workflows/cache-perf.yml: restore 276 s -> 94 s, save
-  590 s -> 175 s, go build ./... 599 s -> 455 s. No-op on Linux/macOS, and on any Windows image
-  where the work disk and LOCALAPPDATA share a drive.
+  590 s -> 175 s, go build ./... 599 s -> 455 s. The same step also points GOTMPDIR, TEMP and TMP
+  at the work disk, since Go's build scratch and every t.TempDir() the tests create otherwise land
+  on the slow one too. No-op on Linux/macOS, and on any Windows image where the work disk and
+  LOCALAPPDATA share a drive.
 
 inputs:
   go-version-file:
@@ -45,7 +47,7 @@ runs:
     # entry the first time it runs (a one-time cold start). GITHUB_ENV
     # written here applies to every later step of the job, post steps
     # included, so `go build`/`go test` in the job use the same caches.
-    - name: Put Go's caches on the runner's work disk (Windows)
+    - name: Put Go's caches and temp dirs on the runner's work disk (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
@@ -59,6 +61,16 @@ runs:
         Write-Host "Relocating Go caches from $local to $root ($work is the runner's work disk)"
         Add-Content $env:GITHUB_ENV "GOCACHE=$root\build"
         Add-Content $env:GITHUB_ENV "GOMODCACHE=$root\pkg\mod"
+        # Scratch space too: Go's build temp (GOTMPDIR) and the process temp
+        # dir that t.TempDir()/os.TempDir() resolve from (TEMP/TMP) default to
+        # %LOCALAPPDATA%\Temp on the same slow disk, so every fixture copy and
+        # scratch file the tests make paid the same IOPS penalty.
+        $tmp = Join-Path $env:RUNNER_TEMP 'tmp'
+        New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+        Write-Host "Relocating temp dirs (GOTMPDIR, TEMP, TMP) to $tmp"
+        Add-Content $env:GITHUB_ENV "GOTMPDIR=$tmp"
+        Add-Content $env:GITHUB_ENV "TEMP=$tmp"
+        Add-Content $env:GITHUB_ENV "TMP=$tmp"
 
     - name: Set up Go
       id: go
