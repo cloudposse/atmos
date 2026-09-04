@@ -1,0 +1,66 @@
+---
+slug: azuredevops-pull-request-provider
+title: "Vendor Update Pull Requests, Now on Azure DevOps"
+authors: [jorrite]
+tags: [feature]
+date: 2026-09-04T12:00:00.000Z
+---
+
+Automating the last mile of a dependency bump — branch, commit, push, open a pull request — only
+pays off if it works wherever the repository actually lives. A team standardized on Azure DevOps
+Repos instead of GitHub gets none of that: every vendor sync still ends in a manual PR, or a
+one-off script bolted on just to close the gap.
+
+<!--truncate-->
+
+## The Problem
+
+The Component Updater (`atmos vendor update --pull-request`) already discovers component updates
+and opens or refreshes a pull request for them, but it only spoke to GitHub. Projects hosted in
+Azure DevOps Repos couldn't use the flag at all — every automated sync there still ended with
+someone opening the PR by hand.
+
+## The Fix
+
+`ci.pull_request.provider` now accepts `azuredevops` alongside the existing `github` value. It
+follows the same create-or-update contract: Atmos looks for an already-open pull request between
+the same source and target branches first, updates that pull request's title and description in
+place when one exists, and only opens a new one when none does — so re-running a vendor sync never
+piles up duplicate PRs, regardless of which provider is configured.
+
+## How to Use It
+
+Azure DevOps addresses a repository with three parts — organization, project, and repository —
+rather than GitHub's owner/repository pair, so those are explicit config fields instead of being
+derived from the Git remote:
+
+```yaml
+vendor:
+  ci:
+    pull_request:
+      provider: azuredevops
+      organization: my-org
+      project: my-project
+      repository: my-repo
+      branch_prefix: atmos/component-updater
+      title: "chore(components): update {{ .scope.name }}"
+      labels: [component-update]
+      reviewers: [alice, bob]
+```
+
+Authenticate with a personal access token in `AZURE_DEVOPS_EXT_PAT`, granted Code (Read & Write)
+on the target project, then run the update exactly as before:
+
+```shell
+atmos vendor update --pull-request
+```
+
+Labels and reviewers apply the same way they do on GitHub. Assignees don't — Azure DevOps pull
+requests have no assignee concept, so setting `ci.pull_request.assignees` with
+`provider: azuredevops` fails loudly instead of silently dropping the configuration; use
+`reviewers` there instead.
+
+## Get Involved
+
+Questions about the Azure DevOps provider, or requests for another forge, are welcome in the
+[Atmos GitHub repository](https://github.com/cloudposse/atmos) and the community Slack.
