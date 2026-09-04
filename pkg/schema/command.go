@@ -73,8 +73,13 @@ type Command struct {
 	// top-level `command_aliases:` map (CommandAliases), which redirects to a possibly-unrelated
 	// command via a subprocess re-exec.
 	Aliases []string `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
-	// Internal hides this command from help/list output while leaving it fully invocable,
-	// mirroring go-task's `internal: true` (maps to Cobra's Command.Hidden).
+	// Internal excludes the command from `atmos --help` / `atmos <group> --help` subcommand
+	// listings, shell-completion suggestions, and the AI `atmos_list_commands` tool, while
+	// leaving it fully runnable: `atmos <name> ...` still executes it directly, and
+	// `atmos <name> --help` still renders its own help when invoked explicitly. Use for
+	// helper commands meant to be called by other commands or run manually for debugging,
+	// analogous to Just's `[private]` recipes or Task's `internal: true` tasks (maps to Cobra's
+	// Command.Hidden).
 	Internal bool `yaml:"internal,omitempty" json:"internal,omitempty" mapstructure:"internal"`
 }
 
@@ -84,14 +89,24 @@ type CommandArgument struct {
 	Description string `yaml:"description" json:"description" mapstructure:"description"`
 	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
 	Default     string `yaml:"default" json:"default" mapstructure:"default"`
-	// Type specifies the semantic type of this argument: "component" or "stack".
+	// Provides specifies what this argument's value provides: "component" or "stack".
 	// When set, the argument value is used to resolve component configuration.
-	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
+	Provides string `yaml:"provides,omitempty" json:"provides,omitempty" mapstructure:"provides"`
+	Type     string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type" jsonschema_extras:"deprecated=true,x-atmos-replacement=provides"` // Deprecated: use Provides.
 	// Values restricts this argument to a fixed set of allowed strings, validated the same way
 	// pkg/flags' built-in-command `valid_values:` already is (flags.ValidateValue). When
 	// Required and missing in an interactive terminal, the user is prompted to pick one instead
 	// of erroring, reusing pkg/flags/interactive.go's PromptForPositionalArg machinery.
 	Values []string `yaml:"values,omitempty" json:"values,omitempty" mapstructure:"values"`
+}
+
+// EffectiveProvides returns Provides, falling back to the deprecated Type field
+// for configs authored before Provides existed.
+func (a *CommandArgument) EffectiveProvides() string {
+	if a.Provides != "" {
+		return a.Provides
+	}
+	return a.Type
 }
 
 // CommandFlag defines a flag for a custom command.
@@ -103,14 +118,24 @@ type CommandFlag struct {
 	Usage       string `yaml:"usage" json:"usage" mapstructure:"usage"`
 	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
 	Default     any    `yaml:"default" json:"default" mapstructure:"default"`
-	// SemanticType specifies the semantic type of this flag: "component" or "stack".
+	// Provides specifies what this flag's value provides: "component" or "stack".
 	// When set, the flag value is used to resolve component configuration.
-	SemanticType string `yaml:"semantic_type,omitempty" json:"semantic_type,omitempty" mapstructure:"semantic_type"`
+	Provides     string `yaml:"provides,omitempty" json:"provides,omitempty" mapstructure:"provides"`
+	SemanticType string `yaml:"semantic_type,omitempty" json:"semantic_type,omitempty" mapstructure:"semantic_type" jsonschema_extras:"deprecated=true,x-atmos-replacement=provides"` // Deprecated: use Provides.
 	// Values restricts this flag to a fixed set of allowed strings, validated the same way
 	// pkg/flags' built-in-command `valid_values:` already is (flags.ValidateValue). When
 	// Required and missing in an interactive terminal, the user is prompted to pick one instead
 	// of erroring, reusing pkg/flags/interactive.go's PromptForMissingRequired machinery.
 	Values []string `yaml:"values,omitempty" json:"values,omitempty" mapstructure:"values"`
+}
+
+// EffectiveProvides returns Provides, falling back to the deprecated SemanticType field
+// for configs authored before Provides existed.
+func (f *CommandFlag) EffectiveProvides() string {
+	if f.Provides != "" {
+		return f.Provides
+	}
+	return f.SemanticType
 }
 
 // CommandEnv defines an environment variable for a custom command.

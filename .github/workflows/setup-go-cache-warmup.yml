@@ -9,11 +9,15 @@ on:
   # • Eastern Time (ET): 7:35 PM (previous day)
     - cron: "35 0 * * *"
 
+permissions:
+  contents: read
+
 env:
   ATMOS_BOOTSTRAP_VERSION: "1.223.0"
-  # Use pipe fallback so transient proxy.golang.org 5xx errors during
-  # `go mod download` fall back to direct module fetches.
-  GOPROXY: "https://proxy.golang.org|direct"
+  # No `|direct` fallback: under harden-runner's block mode a direct fetch
+  # only fans out to blocked vanity-import hosts and burns minutes; see the
+  # GOPROXY comment in test.yml.
+  GOPROXY: "https://proxy.golang.org"
 
 jobs:
   cache-warmup:
@@ -35,6 +39,50 @@ jobs:
             target: macos-intel
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          # Operating-system background services on the hosted Windows and
+          # macOS images are listed after the job-specific endpoints; see the
+          # `test` job's allowed-endpoints comment in test.yml for the
+          # rationale and keep the two lists in sync.
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
+            www.msftconnecttest.com:443
+            ipv6.msftconnecttest.com:443
+            www.msftncsi.com:443
+            ipv6.msftncsi.com:443
+            time.windows.com:443
+            client.wns.windows.com:443
+            settings-win.data.microsoft.com:443
+            *.events.data.microsoft.com:443
+            *.update.microsoft.com:443
+            ecs.office.com:443
+            pti.store.microsoft.com:443
+            login.live.com:443
+            go.microsoft.com:443
+            www.microsoft.com:443
+            ocsp.sectigo.com:80
+            ocsp.sectigo.com:443
+            crl.sectigo.com:80
+            crl.sectigo.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
+
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.target == 'windows'
         shell: pwsh
@@ -45,6 +93,12 @@ jobs:
         with:
           persist-credentials: false
 
+      # See test.yml: repairs DNS if harden-runner's Windows post step kills
+      # its agent before it has restored the runner's DNS settings.
+      - name: Guard DNS against the harden-runner post-step race
+        if: matrix.target == 'windows'
+        uses: ./.github/actions/windows-dns-guard
+
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
@@ -52,7 +106,7 @@ jobs:
         id: go
 
       - name: Set up Atmos
-        uses: cloudposse/github-action-setup-atmos@89c34b209108da66a27c8d6565d8d4b21dbdaa73 # v3.2.0
+        uses: cloudposse/github-action-setup-atmos@60878d48037763f759aedee74e9cc0c2dc88e9ec # v3.5.0
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
           install-wrapper: false

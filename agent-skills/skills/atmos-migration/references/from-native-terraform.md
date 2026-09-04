@@ -43,32 +43,32 @@ terraform/
 **Recipe:**
 
 1. `atmos.yaml` at repo root, **no file moves**:
-   ```yaml
-   base_path: "./"
-   components:
-     terraform:
-       base_path: "terraform"        # Point at the existing dir
-       apply_auto_approve: false
-       deploy_run_init: true
-       auto_generate_backend_file: false
-   stacks:
-     base_path: "stacks"
-     included_paths: ["**/*"]
-     excluded_paths: ["**/_defaults.yaml"]
-   ```
+    ```yaml
+    base_path: "./"
+    components:
+      terraform:
+        base_path: "terraform"        # Point at the existing dir
+        apply_auto_approve: false
+        deploy_run_init: true
+        auto_generate_backend_file: false
+    stacks:
+      base_path: "stacks"
+      included_paths: ["**/*"]
+      excluded_paths: ["**/_defaults.yaml"]
+    ```
 2. Create `stacks/dev.yaml`:
-   ```yaml
-   import:
-     - _defaults
-   components:
-     terraform:
-       vpc:
-         vars: !include ../terraform/vpc/envs/dev.tfvars
-       database:
-         vars: !include ../terraform/database/envs/dev.tfvars
-   ```
+    ```yaml
+    import:
+      - _defaults
+    components:
+      terraform:
+        vpc:
+          vars: !include ../terraform/vpc/envs/dev.tfvars
+        database:
+          vars: !include ../terraform/database/envs/dev.tfvars
+    ```
 3. Run `atmos terraform plan vpc -s dev`. Compare to the previous
-   `cd terraform/vpc && terraform plan -var-file=envs/dev.tfvars` output.
+    `cd terraform/vpc && terraform plan -var-file=envs/dev.tfvars` output.
 
 The user keeps their `.tfvars` files and TF code unchanged. Later, they can convert per-env
 `.tfvars` to native YAML to get deep-merge inheritance across environments.
@@ -90,24 +90,46 @@ With a Makefile like `terraform plan -var-file=envs/$(ENV).tfvars`.
 **Recipe:**
 
 1. `atmos.yaml`:
-   ```yaml
-   base_path: "./"
-   components:
-     terraform:
-       base_path: "."              # The whole repo is one component
-   stacks:
-     base_path: "stacks"
-   ```
-2. Treat the single TF dir as one component (e.g., `infra`):
-   ```yaml
-   # stacks/dev.yaml
-   components:
-     terraform:
-       infra:
-         vars: !include ../terraform/envs/dev.tfvars
-   ```
-3. The Makefile can stay as a thin wrapper around `atmos terraform plan infra -s dev` during
-   transition, then be deleted.
+    ```yaml
+    base_path: "./"
+    components:
+      terraform:
+        base_path: "."              # The whole repo is one component
+    stacks:
+      base_path: "stacks"
+      included_paths:
+        - "**/*"
+    ```
+2. **The component name must match the physical directory name, unless you set
+    `metadata.component`** -- Atmos resolves a component to
+    `<components.terraform.base_path>/<component_name>`, so with `base_path: "."` a stack
+    component named `terraform` resolves to the real directory with no extra configuration:
+    ```yaml
+    # stacks/dev.yaml
+    components:
+      terraform:
+        terraform:
+          vars: !include ../terraform/envs/dev.tfvars
+    ```
+    If the user wants a friendlier stack component name, such as `infra`, without moving or
+    renaming the directory, set `metadata.component` to the physical directory name instead:
+    ```yaml
+    # stacks/dev.yaml
+    components:
+      terraform:
+        infra:
+          metadata:
+            component: terraform    # points at the existing `terraform/` directory
+          vars: !include ../terraform/envs/dev.tfvars
+    ```
+    `metadata.component` is a pointer to the physical directory, resolved the same way the
+    component name normally is (relative to `components.terraform.base_path`, or absolute). It is
+    also how you point multiple stack instances at one shared component (see
+    [remote-state-bridge.md](remote-state-bridge.md)) -- the no-move rename above is the same
+    mechanism applied to a single-component repo. Only rename the directory on disk (e.g.
+    `terraform/` to `infra/`) if the user prefers a physical rename over an alias.
+3. The Makefile can stay as a thin wrapper around `atmos terraform plan terraform -s dev` during
+    transition, then be deleted.
 
 ## Shape C: Multiple Root Modules with Shared Modules
 

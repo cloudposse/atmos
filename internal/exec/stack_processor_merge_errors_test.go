@@ -156,6 +156,13 @@ func TestMergeComponentConfigurations_SectionMergeErrors(t *testing.T) {
 			wantErr: errUtils.ErrMergeKeyCollision,
 		},
 		{
+			name: "flags section",
+			mutate: func(opts *ComponentProcessorOptions, res *ComponentProcessorResult) {
+				opts.GlobalAndTerraformFlags = collidingSection()
+			},
+			wantErr: errUtils.ErrMergeKeyCollision,
+		},
+		{
 			name: "kubernetes paths (shared helper, not kubernetes-only)",
 			mutate: func(opts *ComponentProcessorOptions, res *ComponentProcessorResult) {
 				opts.GlobalKubernetesPaths = collidingSection()

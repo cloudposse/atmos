@@ -8,8 +8,11 @@ on:
   release:
     types: [published]
 
+# The default GITHUB_TOKEN never writes here — the only mutating step below
+# mints and uses a separately-scoped GitHub App token instead (see comment on
+# the `major-tag` job), so this stays read-only.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   major-tag:
@@ -23,6 +26,14 @@ jobs:
     # GitHub App instead, which has been granted the Workflows permission.
     environment: release
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          # No StepSecurity telemetry found across sampled release runs despite
+          # this job succeeding on GitHub — a data gap (rare release-only trigger),
+          # not zero egress. Stays audit until a real run can be sampled.
+          egress-policy: audit
+
       - name: Generate a token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: github-app

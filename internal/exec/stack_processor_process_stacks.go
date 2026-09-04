@@ -120,6 +120,7 @@ func ProcessStackConfig(
 	globalAuthSection := map[string]any{}
 	globalSecretsSection := map[string]any{}
 	globalMetadataSection := map[string]any{}
+	globalRetrySection := map[string]any{}
 
 	terraformVars := map[string]any{}
 	terraformSettings := map[string]any{}
@@ -130,6 +131,7 @@ func ProcessStackConfig(
 	terraformGenerate := map[string]any{}
 	terraformAuth := map[string]any{}
 	terraformDependencies := map[string]any{}
+	terraformFlags := map[string]any{}
 
 	helmfileVars := map[string]any{}
 	helmfileSettings := map[string]any{}
@@ -303,6 +305,19 @@ func ProcessStackConfig(
 		globalMetadataSection = validatedGlobalMetadata
 	}
 
+	// Stack-level (global) retry defaults, the lowest-precedence layer in the retry
+	// merge (global -> base -> component -> overrides). Unlike global metadata, every
+	// RetryConfig field is meaningful at stack scope, so no field allowlist is needed --
+	// just confirm the section is a map, matching the validation already applied to
+	// components.<type>.<name>.retry and .overrides.retry.
+	if i, ok := config[cfg.RetrySectionName]; ok {
+		globalRetrySectionRaw, ok := i.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGlobalRetrySection, stackName)
+		}
+		globalRetrySection = globalRetrySectionRaw
+	}
+
 	// Stack-level (global) secrets declarations/providers; merged into every component's
 	// secrets section so providers and declarations can be defined once per stack.
 	if i, ok := config[cfg.SecretsSectionName]; ok {
@@ -352,6 +367,32 @@ func ProcessStackConfig(
 	}
 
 	globalAndTerraformGenerate, err := m.Merge(atmosConfig, []map[string]any{globalGenerateSection, terraformGenerate})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if i, ok := globalTerraformSection[cfg.FlagsSectionName]; ok {
+		terraformFlags, ok = i.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformFlagsSection, stackName)
+		}
+	}
+
+	// Flags has no cross-component-type root layer (unlike vars/generate) —
+	// these are terraform/tofu-specific CLI flags with no helmfile/packer
+	// equivalent — so the atmos.yaml fleet-wide default (converted to a map)
+	// takes the place of a "global" layer here, merged with the stack-level
+	// `terraform: flags:` block.
+	atmosYamlFlagsBytes, err := json.Marshal(atmosConfig.Components.Terraform.Flags)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: failed to marshal global terraform flags: %w", errUtils.ErrInvalidTerraformFlagsSection, err)
+	}
+	var atmosYamlFlags map[string]any
+	if err := json.Unmarshal(atmosYamlFlagsBytes, &atmosYamlFlags); err != nil {
+		return nil, nil, fmt.Errorf("%w: failed to unmarshal global terraform flags: %w", errUtils.ErrInvalidTerraformFlagsSection, err)
+	}
+
+	globalAndTerraformFlags, err := m.Merge(atmosConfig, []map[string]any{atmosYamlFlags, terraformFlags})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -972,11 +1013,13 @@ func ProcessStackConfig(
 					GlobalSecrets:                   globalSecretsSection,
 					GlobalDependencies:              globalAndTerraformDependencies,
 					GlobalMetadata:                  globalMetadataSection,
+					GlobalComponentRetry:            globalRetrySection,
 					GlobalCommand:                   terraformCommand,
 					AtmosGlobalAuthMap:              atmosAuthConfig,
 					TerraformProviders:              terraformProviders,
 					GlobalAndTerraformHooks:         globalAndTerraformHooks,
 					GlobalAndTerraformGenerate:      globalAndTerraformGenerate,
+					GlobalAndTerraformFlags:         globalAndTerraformFlags,
 					GlobalBackendType:               globalBackendType,
 					GlobalBackendSection:            globalBackendSection,
 					GlobalRemoteStateBackendType:    globalRemoteStateBackendType,
@@ -1023,6 +1066,7 @@ func ProcessStackConfig(
 					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndHelmfileDependencies,
 					GlobalMetadata:           globalMetadataSection,
+					GlobalComponentRetry:     globalRetrySection,
 					GlobalCommand:            helmfileCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
@@ -1065,6 +1109,7 @@ func ProcessStackConfig(
 					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndPackerDependencies,
 					GlobalMetadata:           globalMetadataSection,
+					GlobalComponentRetry:     globalRetrySection,
 					GlobalCommand:            packerCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
@@ -1107,6 +1152,7 @@ func ProcessStackConfig(
 					GlobalSecrets:            globalSecretsSection,
 					GlobalDependencies:       globalAndAnsibleDependencies,
 					GlobalMetadata:           globalMetadataSection,
+					GlobalComponentRetry:     globalRetrySection,
 					GlobalCommand:            ansibleCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
@@ -1156,6 +1202,7 @@ func ProcessStackConfig(
 					GlobalAuth:                 globalAndKubernetesAuth,
 					GlobalDependencies:         globalAndKubernetesDependencies,
 					GlobalMetadata:             globalMetadataSection,
+					GlobalComponentRetry:       globalRetrySection,
 					GlobalCommand:              kubernetesCommand,
 					AtmosGlobalAuthMap:         atmosAuthConfig,
 					GlobalAndTerraformHooks:    globalAndKubernetesHooks,
@@ -1214,6 +1261,7 @@ func ProcessStackConfig(
 					GlobalAuth:                 globalAndHelmAuth,
 					GlobalDependencies:         globalAndHelmDependencies,
 					GlobalMetadata:             globalMetadataSection,
+					GlobalComponentRetry:       globalRetrySection,
 					GlobalCommand:              helmCommand,
 					AtmosGlobalAuthMap:         atmosAuthConfig,
 					GlobalAndTerraformHooks:    globalAndHelmHooks,
@@ -1330,6 +1378,22 @@ func ProcessStackConfig(
 			}
 			if len(componentMetadata) > 0 {
 				componentMap[cfg.MetadataSectionName] = componentMetadata
+			}
+			// Deep-merge global retry into component retry (component-local wins, and
+			// any base-component retry was already folded into componentMap by
+			// resolveCustomComponentInheritance above), consistent with how built-in
+			// component types merge retry in mergeComponentConfigurations. Derive the
+			// effective merge config from the component's resolved settings so
+			// `settings.list_merge_strategy: append` is honored for retry.conditions
+			// too, not just replaced wholesale.
+			componentLocalRetry, _ := componentMap[cfg.RetrySectionName].(map[string]any)
+			effectiveCfg := effectiveAtmosConfig(atmosConfig, componentSettings)
+			componentRetry, retryMergeErr := m.Merge(effectiveCfg, []map[string]any{globalRetrySection, componentLocalRetry})
+			if retryMergeErr != nil {
+				return nil, nil, retryMergeErr
+			}
+			if len(componentRetry) > 0 {
+				componentMap[cfg.RetrySectionName] = componentRetry
 			}
 			// Add metadata fields expected by the template system.
 			componentMap["component"] = componentName

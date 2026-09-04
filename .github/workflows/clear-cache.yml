@@ -6,12 +6,24 @@ on:
     types:
       - closed
 
+# Least-privilege default; the cleanup job below declares its own
+# job-level permissions that override this baseline.
+permissions:
+  contents: read
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
     permissions:
       actions: write
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+
       - name: Cleanup
         run: |
           echo "Fetching list of cache keys"

@@ -44,6 +44,9 @@
     "metadata": {
       "$ref": "#/definitions/global_metadata"
     },
+    "retry": {
+      "$ref": "#/definitions/retry"
+    },
     "components": {
       "$ref": "#/definitions/components"
     },
@@ -451,6 +454,9 @@
             },
             "retry": {
               "$ref": "#/definitions/retry"
+            },
+            "flags": {
+              "$ref": "#/definitions/terraform_flags"
             }
           },
           "required": []
@@ -573,6 +579,9 @@
             },
             "retry": {
               "$ref": "#/definitions/retry"
+            },
+            "flags": {
+              "$ref": "#/definitions/terraform_flags"
             }
           },
           "required": []
@@ -1263,6 +1272,9 @@
             },
             "namespace": {
               "type": "string"
+            },
+            "create_namespace": {
+              "type": "boolean"
             },
             "name": {
               "type": "string"
@@ -4601,6 +4613,43 @@
                 "type": "string"
               },
               "description": "Regex patterns matched against captured stdout/stderr. Only errors whose output matches at least one pattern are retried. Patterns may be wrapped in `/.../` for readability."
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "terraform_flags": {
+      "title": "terraform_flags",
+      "description": "Default values for terraform CLI execution flags (lock-timeout, lock, parallelism, refresh, compact-warnings). Settable globally under components.terraform.flags in atmos.yaml, per stack under a root-level terraform.flags block, and per component under a component's own flags block (field-level override, highest-precedence layer below an explicit CLI-typed compat flag).",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "lock_timeout": {
+              "type": "string",
+              "description": "Default value for terraform's -lock-timeout flag (e.g. \"30s\", \"5m\"). Unset means terraform's own 0s default applies."
+            },
+            "lock": {
+              "type": "boolean",
+              "description": "Default value for terraform's -lock flag. Unset means terraform's own default (true) applies."
+            },
+            "parallelism": {
+              "type": "integer",
+              "description": "Default value for terraform's -parallelism flag. Unset means terraform's own default (10) applies."
+            },
+            "refresh": {
+              "type": "boolean",
+              "description": "Default value for terraform's -refresh flag. Unset means terraform's own default (true) applies. Not applied to `apply <planfile>` — terraform rejects -refresh when applying a saved plan."
+            },
+            "compact_warnings": {
+              "type": "boolean",
+              "description": "Default value for terraform's -compact-warnings flag."
             }
           },
           "required": []

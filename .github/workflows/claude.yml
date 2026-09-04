@@ -8,11 +8,25 @@ on:
       - '.github/workflows/claude.yml'
       - '.github/actions/check-claude-md-size/**'
 
+permissions:
+  contents: read
+  # check-claude-md-size posts/updates a PR comment when a file exceeds its size limit.
+  pull-requests: write
+  issues: write
+
 jobs:
   claude-md-size:
     name: Check CLAUDE.md size
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -29,6 +43,14 @@ jobs:
     name: Check agent file sizes
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

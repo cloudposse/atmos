@@ -338,10 +338,10 @@ func TestBuildConfigForm_DuplicateFieldNameReturnsError(t *testing.T) {
 		},
 	}
 
-	form, getters, err := buildConfigForm(projectConfig, map[string]interface{}{})
+	form, ctx, err := buildConfigForm(projectConfig, map[string]interface{}{})
 
 	assert.Nil(t, form)
-	assert.Nil(t, getters)
+	assert.Nil(t, ctx)
 	assert.ErrorIs(t, err, errUtils.ErrDuplicateScaffoldFieldName)
 }
 

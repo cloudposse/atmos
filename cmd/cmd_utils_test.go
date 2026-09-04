@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -2418,6 +2419,352 @@ func TestExecuteCustomCommandShellStepPropagatesCILogGroupSentinel(t *testing.T)
 	assert.Equal(t, "1", string(got))
 }
 
+func TestCreateCustomCommandHidden(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	t.Run("hidden command is excluded from help listings", func(t *testing.T) {
+		parentCmd := &cobra.Command{Use: "atmos"}
+		hiddenCmd, err := createCustomCommand(atmosConfig, &schema.Command{
+			Name:        "helper",
+			Description: "hidden helper",
+			Internal:    true,
+		}, parentCmd)
+		require.NoError(t, err)
+		assert.True(t, hiddenCmd.Hidden)
+		assert.False(t, hiddenCmd.IsAvailableCommand(), "a hidden command must not report as available for help listings")
+	})
+
+	t.Run("unset hidden keeps the command visible", func(t *testing.T) {
+		parentCmd := &cobra.Command{Use: "atmos"}
+		visibleCmd, err := createCustomCommand(atmosConfig, &schema.Command{
+			Name:        "visible",
+			Description: "visible command",
+		}, parentCmd)
+		require.NoError(t, err)
+		assert.False(t, visibleCmd.Hidden)
+		assert.True(t, visibleCmd.IsAvailableCommand())
+	})
+}
+
+func TestHiddenCommandStillExecutesDirectly(t *testing.T) {
+	_ = NewTestKit(t)
+	ensureIOInitialized(t)
+
+	workDir := t.TempDir()
+	sentinelFile := filepath.Join(workDir, "sentinel.txt")
+
+	atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+	parentCmd := &cobra.Command{Use: "atmos"}
+	commands := []schema.Command{{
+		Name:             "hidden-helper",
+		Description:      "a hidden helper command",
+		Internal:         true,
+		WorkingDirectory: workDir,
+		// TaskTypeShell runs through Atmos's own in-process mvdan/sh interpreter (see
+		// pkg/runner/step/shell.go), not the host shell, so printf and redirection here
+		// are cross-platform including on Windows -- not a platform-specific binary call.
+		Steps: []schema.Task{{
+			Name:    "write-sentinel",
+			Type:    schema.TaskTypeShell,
+			Command: `printf %s "ran" > sentinel.txt`,
+		}},
+	}}
+
+	require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+	hiddenCmd := findSubcommand(parentCmd, "hidden-helper")
+	require.NotNil(t, hiddenCmd)
+	require.True(t, hiddenCmd.Hidden)
+	require.False(t, hiddenCmd.IsAvailableCommand())
+
+	// Hidden must not gate execution: invoking it directly still runs its steps.
+	hiddenCmd.PreRun(hiddenCmd, nil)
+	hiddenCmd.Run(hiddenCmd, nil)
+
+	got, err := os.ReadFile(sentinelFile)
+	require.NoError(t, err)
+	assert.Equal(t, "ran", string(got))
+}
+
+func TestNestedCommandVisibilityIsIndependentOfParent(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	parentCmd := &cobra.Command{Use: "atmos"}
+
+	commands := []schema.Command{
+		{
+			Name:        "hidden-parent",
+			Description: "hidden parent with a visible child",
+			Internal:    true,
+			Commands: []schema.Command{
+				{Name: "visible-child", Description: "visible child of a hidden parent"},
+			},
+		},
+		{
+			Name:        "visible-parent",
+			Description: "visible parent with a hidden child",
+			Commands: []schema.Command{
+				{Name: "hidden-child", Description: "hidden child of a visible parent", Internal: true},
+			},
+		},
+	}
+
+	require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+
+	hiddenParent := findSubcommand(parentCmd, "hidden-parent")
+	require.NotNil(t, hiddenParent)
+	assert.True(t, hiddenParent.Hidden)
+	visibleChild := findSubcommand(hiddenParent, "visible-child")
+	require.NotNil(t, visibleChild)
+	assert.False(t, visibleChild.Hidden, "a visible child must stay visible even though its parent is hidden")
+
+	visibleParent := findSubcommand(parentCmd, "visible-parent")
+	require.NotNil(t, visibleParent)
+	assert.False(t, visibleParent.Hidden)
+	hiddenChild := findSubcommand(visibleParent, "hidden-child")
+	require.NotNil(t, hiddenChild)
+	assert.True(t, hiddenChild.Hidden, "a hidden child must stay hidden even though its parent is visible")
+}
+
+func TestDefaultDispatchToHiddenChildStillExecutes(t *testing.T) {
+	_ = NewTestKit(t)
+	ensureIOInitialized(t)
+
+	workDir := t.TempDir()
+	sentinelFile := filepath.Join(workDir, "sentinel.txt")
+
+	atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+	parentCmd := &cobra.Command{Use: "atmos"}
+	commands := []schema.Command{{
+		Name:        "wrapper",
+		Description: "visible wrapper whose default action is a hidden helper",
+		Default:     "helper",
+		Commands: []schema.Command{
+			{
+				Name:             "helper",
+				Description:      "hidden implementation",
+				Internal:         true,
+				WorkingDirectory: workDir,
+				// TaskTypeShell runs through Atmos's own in-process mvdan/sh interpreter (see
+				// pkg/runner/step/shell.go), not the host shell, so printf and redirection here
+				// are cross-platform including on Windows -- not a platform-specific binary call.
+				Steps: []schema.Task{{
+					Name:    "write-sentinel",
+					Type:    schema.TaskTypeShell,
+					Command: `printf %s "ran" > sentinel.txt`,
+				}},
+			},
+		},
+	}}
+
+	require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+	wrapperCmd := findSubcommand(parentCmd, "wrapper")
+	require.NotNil(t, wrapperCmd)
+
+	wrapperCmd.Run(wrapperCmd, nil)
+
+	got, err := os.ReadFile(sentinelFile)
+	require.NoError(t, err)
+	assert.Equal(t, "ran", string(got))
+}
+
+// TestExecuteCustomCommandStepWhenFlagsFact covers the end-to-end wiring of a custom command's
+// --flag value into a step's `when:` CEL expression via the `flags` fact -- including the
+// `hasRunnableStep` pre-check loop, which runs before the main step loop and must see the same
+// flags/arguments data (previously it evaluated `flags` as always absent/empty).
+func TestExecuteCustomCommandStepWhenFlagsFact(t *testing.T) {
+	ensureIOInitialized(t)
+
+	tests := []struct {
+		name        string
+		dryRun      string
+		wantWritten bool
+	}{
+		{name: "flag true runs the step", dryRun: "true", wantWritten: true},
+		{name: "flag false skips the step", dryRun: "false", wantWritten: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			workDir := t.TempDir()
+			sentinelFile := filepath.Join(workDir, "sentinel.txt")
+			atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+			parentCmd := &cobra.Command{Use: "atmos"}
+			commands := []schema.Command{{
+				Name:             "cover-flags-when",
+				Description:      "exercise the flags fact in when:",
+				WorkingDirectory: workDir,
+				Flags: []schema.CommandFlag{
+					{Name: "dry-run", Type: "bool"},
+				},
+				Steps: []schema.Task{{
+					Name:    "capture-sentinel",
+					Type:    schema.TaskTypeShell,
+					Command: `printf %s "1" > sentinel.txt`,
+					When:    schema.MustCondition(`!cel flags["dry-run"] == true`),
+				}},
+			}}
+
+			require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+			customCmd := findSubcommand(parentCmd, "cover-flags-when")
+			require.NotNil(t, customCmd)
+			require.NoError(t, customCmd.PersistentFlags().Set("dry-run", tt.dryRun))
+
+			customCmd.PreRun(customCmd, nil)
+			customCmd.Run(customCmd, nil)
+
+			_, err := os.Stat(sentinelFile)
+			if tt.wantWritten {
+				require.NoError(t, err)
+			} else {
+				require.True(t, os.IsNotExist(err))
+			}
+		})
+	}
+}
+
+// TestExecuteCustomCommandStepWhenArgumentsAndComponentFacts covers the end-to-end wiring of a
+// custom command's positional arguments into a step's `when:` CEL expression via the `arguments`
+// fact, and the `component` fact resolved from a semantic-typed argument -- exercised through the
+// full command lifecycle (not just the customCommandConditionContext unit test), including the
+// `hasRunnableStep` pre-check loop.
+func TestExecuteCustomCommandStepWhenArgumentsAndComponentFacts(t *testing.T) {
+	ensureIOInitialized(t)
+
+	tests := []struct {
+		name        string
+		argProvides string
+		argDefault  string
+		when        string
+		wantWritten bool
+	}{
+		{name: "arguments fact matches", argDefault: "prod", when: `arguments["env"] == "prod"`, wantWritten: true},
+		{name: "arguments fact does not match", argDefault: "dev", when: `arguments["env"] == "prod"`, wantWritten: false},
+		{name: "component fact matches", argProvides: semanticTypeComponent, argDefault: "vpc", when: `component == "vpc"`, wantWritten: true},
+		{name: "component fact does not match", argProvides: semanticTypeComponent, argDefault: "eks", when: `component == "vpc"`, wantWritten: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			workDir := t.TempDir()
+			sentinelFile := filepath.Join(workDir, "sentinel.txt")
+			atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+			parentCmd := &cobra.Command{Use: "atmos"}
+			commands := []schema.Command{{
+				Name:             "cover-arguments-component-when",
+				Description:      "exercise the arguments/component facts in when:",
+				WorkingDirectory: workDir,
+				Arguments: []schema.CommandArgument{
+					{Name: "env", Provides: tt.argProvides, Default: tt.argDefault},
+				},
+				Steps: []schema.Task{{
+					Name:    "capture-sentinel",
+					Type:    schema.TaskTypeShell,
+					Command: `printf %s "1" > sentinel.txt`,
+					When:    schema.MustCondition("!cel " + tt.when),
+				}},
+			}}
+
+			require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+			customCmd := findSubcommand(parentCmd, "cover-arguments-component-when")
+			require.NotNil(t, customCmd)
+
+			customCmd.PreRun(customCmd, nil)
+			customCmd.Run(customCmd, nil)
+
+			_, err := os.Stat(sentinelFile)
+			if tt.wantWritten {
+				require.NoError(t, err)
+			} else {
+				require.True(t, os.IsNotExist(err))
+			}
+		})
+	}
+}
+
+// TestExecuteCustomCommandStepContinueOnFailure covers the end-to-end wiring of a failed step's
+// `continue:` CEL condition: customCommandConditionContext built for that evaluation carries
+// status: "failure" (unlike when:/pre-check evaluations, which see the command's running status,
+// "success" until a step actually fails), so `continue: !cel status == "failure"` can forgive the
+// failure and let the next default (success-only) step still run. Without a matching continue:,
+// the command's overall status flips to "failure" and the default step is skipped instead.
+// Exercised through the full command lifecycle, not just the context-helper unit test.
+func TestExecuteCustomCommandStepContinueOnFailure(t *testing.T) {
+	ensureIOInitialized(t)
+
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		continueVal schema.Condition
+		wantExit    bool
+		wantWritten bool
+	}{
+		{name: "continue forgives the failure", continueVal: schema.MustCondition(`!cel status == "failure"`), wantExit: false, wantWritten: true},
+		{name: "no continue leaves the command failed", continueVal: schema.Condition{}, wantExit: true, wantWritten: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			originalOsExit := errUtils.OsExit
+			t.Cleanup(func() { errUtils.OsExit = originalOsExit })
+			var exited bool
+			errUtils.OsExit = func(int) {
+				exited = true
+				panic("os exit stub")
+			}
+
+			workDir := t.TempDir()
+			sentinelFile := filepath.Join(workDir, "sentinel.txt")
+			atmosConfig := schema.AtmosConfiguration{BasePath: workDir}
+			parentCmd := &cobra.Command{Use: "atmos"}
+			commands := []schema.Command{{
+				Name:             "cover-continue-when",
+				Description:      "exercise the continue: CEL status fact after a failed step",
+				WorkingDirectory: workDir,
+				Steps: []schema.Task{
+					{
+						Name:     "fail",
+						Type:     schema.TaskTypeShell,
+						Command:  fmt.Sprintf("%q", exePath),
+						Env:      map[string]string{"_ATMOS_TEST_EXIT_ONE": "1"},
+						Continue: tt.continueVal,
+					},
+					{
+						Name:    "capture-sentinel",
+						Type:    schema.TaskTypeShell,
+						Command: `printf %s "1" > sentinel.txt`,
+					},
+				},
+			}}
+
+			require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+			customCmd := findSubcommand(parentCmd, "cover-continue-when")
+			require.NotNil(t, customCmd)
+
+			customCmd.PreRun(customCmd, nil)
+			if tt.wantExit {
+				assert.Panics(t, func() { customCmd.Run(customCmd, nil) })
+			} else {
+				assert.NotPanics(t, func() { customCmd.Run(customCmd, nil) })
+			}
+			assert.Equal(t, tt.wantExit, exited)
+
+			_, statErr := os.Stat(sentinelFile)
+			if tt.wantWritten {
+				require.NoError(t, statErr)
+			} else {
+				require.True(t, os.IsNotExist(statErr))
+			}
+		})
+	}
+}
+
 func TestFindTypedValue(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -2428,11 +2775,11 @@ func TestFindTypedValue(t *testing.T) {
 		want          string
 	}{
 		{
-			name: "finds value in arguments by type",
+			name: "finds value in arguments by provides",
 			cmd: &schema.Command{
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: "component"},
-					{Name: "stack", Type: "stack"},
+					{Name: "component", Provides: "component"},
+					{Name: "stack", Provides: "stack"},
 				},
 			},
 			argumentsData: map[string]string{
@@ -2444,11 +2791,11 @@ func TestFindTypedValue(t *testing.T) {
 			want:         "vpc",
 		},
 		{
-			name: "finds value in flags by semantic type",
+			name: "finds value in flags by provides",
 			cmd: &schema.Command{
 				Flags: []schema.CommandFlag{
-					{Name: "stack", SemanticType: "stack"},
-					{Name: "component", SemanticType: "component"},
+					{Name: "stack", Provides: "stack"},
+					{Name: "component", Provides: "component"},
 				},
 			},
 			argumentsData: map[string]string{},
@@ -2458,6 +2805,42 @@ func TestFindTypedValue(t *testing.T) {
 			},
 			semanticType: "stack",
 			want:         "prod",
+		},
+		{
+			name: "falls back to deprecated Type when Provides unset on argument",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: "component"},
+				},
+			},
+			argumentsData: map[string]string{"component": "vpc"},
+			flagsData:     map[string]any{},
+			semanticType:  "component",
+			want:          "vpc",
+		},
+		{
+			name: "falls back to deprecated SemanticType when Provides unset on flag",
+			cmd: &schema.Command{
+				Flags: []schema.CommandFlag{
+					{Name: "stack", SemanticType: "stack"},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{"stack": "prod"},
+			semanticType:  "stack",
+			want:          "prod",
+		},
+		{
+			name: "Provides takes precedence over deprecated Type on argument",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Provides: "component", Type: "stack"},
+				},
+			},
+			argumentsData: map[string]string{"component": "vpc"},
+			flagsData:     map[string]any{},
+			semanticType:  "component",
+			want:          "vpc",
 		},
 		{
 			name: "returns empty when not found in arguments",
@@ -2499,10 +2882,10 @@ func TestFindTypedValue(t *testing.T) {
 			name: "arguments take precedence over flags",
 			cmd: &schema.Command{
 				Arguments: []schema.CommandArgument{
-					{Name: "comp", Type: "component"},
+					{Name: "comp", Provides: "component"},
 				},
 				Flags: []schema.CommandFlag{
-					{Name: "component", SemanticType: "component"},
+					{Name: "component", Provides: "component"},
 				},
 			},
 			argumentsData: map[string]string{"comp": "from-arg"},
@@ -2527,6 +2910,43 @@ func TestFindTypedValue(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestCustomCommandConditionContext covers that flags/arguments/component reach the CEL `when:`
+// context: flagsData/argumentsData are passed straight through as Flags/Arguments, and Component
+// is resolved via findTypedValue the same way processCustomComponentType already resolves it.
+func TestCustomCommandConditionContext(t *testing.T) {
+	_ = NewTestKit(t)
+
+	commandConfig := &schema.Command{
+		Name: "deploy",
+		Arguments: []schema.CommandArgument{
+			{Name: "comp", Provides: "component"},
+		},
+		Flags: []schema.CommandFlag{
+			{Name: "dry-run"},
+		},
+	}
+	argumentsData := map[string]string{"comp": "vpc"}
+	flagsData := map[string]any{"dry-run": true}
+	step := &schema.Task{Name: "apply", Stack: "prod"}
+
+	ctx := customCommandConditionContext(customCommandConditionParams{
+		commandConfig: commandConfig,
+		step:          step,
+		index:         0,
+		env:           map[string]string{},
+		status:        schema.ConditionPredicateSuccess,
+		argumentsData: argumentsData,
+		flagsData:     flagsData,
+	})
+
+	assert.Equal(t, "deploy", ctx.Workflow)
+	assert.Equal(t, "apply", ctx.Step)
+	assert.Equal(t, "prod", ctx.Stack)
+	assert.Equal(t, "vpc", ctx.Component)
+	assert.Equal(t, flagsData, ctx.Flags)
+	assert.Equal(t, argumentsData, ctx.Arguments)
 }
 
 // errEnsureRegistered is a sentinel error used to verify ensureRegisteredFn error propagation.
@@ -2558,7 +2978,7 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			name: "missing component argument returns ErrComponentArgumentNotFound",
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
-				Arguments: []schema.CommandArgument{{Name: "component", Type: semanticTypeComponent}},
+				Arguments: []schema.CommandArgument{{Name: "component", Provides: semanticTypeComponent}},
 			},
 			argumentsData: map[string]string{},
 			flagsData:     map[string]any{},
@@ -2569,8 +2989,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: semanticTypeComponent},
-					{Name: "stack", Type: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{"component": "deploy-app"},
@@ -2582,8 +3002,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: semanticTypeComponent},
-					{Name: "stack", Type: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
@@ -2597,8 +3017,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: semanticTypeComponent},
-					{Name: "stack", Type: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
@@ -2612,8 +3032,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script"},
 				Arguments: []schema.CommandArgument{
-					{Name: "component", Type: semanticTypeComponent},
-					{Name: "stack", Type: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
@@ -2627,8 +3047,8 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			commandConfig: &schema.Command{
 				Component: &schema.CommandComponent{Type: "script", BasePath: "custom/path"},
 				Flags: []schema.CommandFlag{
-					{Name: "component", SemanticType: semanticTypeComponent},
-					{Name: "stack", SemanticType: semanticTypeStack},
+					{Name: "component", Provides: semanticTypeComponent},
+					{Name: "stack", Provides: semanticTypeStack},
 				},
 			},
 			argumentsData: map[string]string{},
@@ -2636,6 +3056,23 @@ func TestResolveCustomComponentConfig(t *testing.T) {
 			describeRet:   map[string]any{"component": "deploy-app"},
 			wantConfig:    map[string]any{"component": "deploy-app"},
 			wantBasePath:  "custom/path", // explicit basePath is preserved.
+		},
+		{
+			name: "success using deprecated type/semantic_type fields (backward compatibility)",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+				},
+				Flags: []schema.CommandFlag{
+					{Name: "stack", SemanticType: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app"},
+			flagsData:     map[string]any{"stack": "dev"},
+			describeRet:   map[string]any{"vars": map[string]any{"foo": "bar"}},
+			wantConfig:    map[string]any{"vars": map[string]any{"foo": "bar"}},
+			wantBasePath:  "components/script",
 		},
 	}
 

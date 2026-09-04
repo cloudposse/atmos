@@ -224,7 +224,7 @@ var (
 
 	// --use-mocks errors.
 	ErrTerraformComponentMocksNotDeclared = errors.New("terraform component does not declare `mocks` required by --use-mocks")
-	ErrTerraformMockOutputNotDeclared     = errors.New("mocked terraform output is not declared for component")
+	ErrTerraformMockOutputNotDeclared     = errors.New("mocked terraform output is not declared")
 
 	// API/infrastructure errors - should cause non-zero exit.
 	// These errors indicate backend API failures that should not use YQ defaults.
@@ -502,6 +502,7 @@ var (
 	ErrInvalidComponentSecrets                    = errors.New("invalid component secrets section")
 	ErrStoreIsSecret                              = errors.New("store is a secret store; use !secret instead of !store")
 	ErrInvalidComponentGenerate                   = errors.New("invalid component generate section")
+	ErrInvalidComponentFlags                      = errors.New("invalid component flags section")
 	ErrInvalidComponentAuth                       = errors.New("invalid component auth section")
 	ErrInvalidComponentProvision                  = errors.New("invalid component provision section")
 	ErrInvalidComponentMetadata                   = errors.New("invalid component metadata section")
@@ -523,6 +524,8 @@ var (
 	ErrInvalidComponentOverridesRequiredVersion   = errors.New("invalid component overrides required_version attribute")
 	ErrInvalidComponentOverridesHooks             = errors.New("invalid component overrides hooks section")
 	ErrInvalidComponentOverridesGenerate          = errors.New("invalid component overrides generate section")
+	ErrInvalidComponentOverridesProvision         = errors.New("invalid component overrides provision section")
+	ErrInvalidComponentOverridesFlags             = errors.New("invalid component overrides flags section")
 	ErrInvalidComponentAttribute                  = errors.New("invalid component attribute")
 	ErrInvalidComponentMetadataComponent          = errors.New("invalid component metadata.component attribute")
 	ErrInvalidSpaceLiftSettings                   = errors.New("invalid spacelift settings section")
@@ -570,6 +573,8 @@ var (
 	ErrGeneratorValidation   = errors.New("generator validation failed")
 	ErrGenerationFailed      = errors.New("generation failed")
 	ErrGeneratorWriteFailed  = errors.New("failed to write generated file")
+	ErrGeneratorRemoveFailed = errors.New("failed to remove generated file")
+	ErrGeneratedNotRegular   = errors.New("generated file path is not a regular file")
 	ErrMissingWorkingDir     = errors.New("working directory is required")
 	ErrMissingProviderSource = errors.New("required_providers entry missing 'source' field")
 
@@ -651,6 +656,7 @@ var (
 	ErrInvalidAuthSection               = errors.New("invalid auth section")
 	ErrInvalidGlobalMetadataSection     = errors.New("invalid metadata section")
 	ErrGlobalMetadataFieldNotAllowed    = errors.New("metadata field is not allowed at global (stack-wide) scope")
+	ErrInvalidGlobalRetrySection        = errors.New("invalid retry section")
 	ErrInvalidImportSection             = errors.New("invalid import section")
 	ErrInvalidImport                    = errors.New("invalid import")
 	ErrInvalidRemoteImport              = errors.New("invalid remote import")
@@ -670,6 +676,7 @@ var (
 	ErrInvalidTerraformEnv                = errors.New("invalid terraform env section")
 	ErrInvalidTerraformProviders          = errors.New("invalid terraform providers section")
 	ErrInvalidTerraformGenerateSection    = errors.New("invalid terraform generate section")
+	ErrInvalidTerraformFlagsSection       = errors.New("invalid terraform flags section")
 	ErrInvalidTerraformBackendType        = errors.New("invalid terraform backend_type")
 	ErrMissingTerraformBackendType        = errors.New("'backend_type' is missing for the component")
 	ErrMissingTerraformBackendConfig      = errors.New("'backend' config is missing for the component")
@@ -905,6 +912,9 @@ var (
 	ErrReadDirectory       = errors.New("failed to read directory")
 	ErrComputeRelativePath = errors.New("failed to compute relative path")
 	ErrFileOperation       = errors.New("file operation failed")
+
+	// Archive extraction safety errors (pkg/filesystem).
+	ErrArchiveEntryEscapesDest = errors.New("archive entry escapes destination directory")
 
 	// OCI/Container image errors.
 	ErrCreateTempDirectory   = ErrCreateTempDir // Alias to avoid duplicate sentinels
@@ -1246,7 +1256,6 @@ var (
 	ErrInitializationPartialFailure     = errors.New("initialization partially failed")
 	ErrInitTemplateNotFound             = errors.New("init template not found")
 	ErrInvalidScaffoldSection           = errors.New("invalid scaffold section")
-	ErrScaffoldSourceUnsupported        = errors.New("scaffold source scheme not supported")
 	ErrScaffoldFetchSource              = errors.New("failed to fetch scaffold source")
 	ErrScaffoldCatalogLoad              = errors.New("failed to load scaffold catalog")
 	ErrTemplateConfigNameRequired       = errors.New("template config with metadata.name is required to write a project record")
@@ -1262,6 +1271,8 @@ var (
 	ErrScaffoldMatrixExpressionFailed   = errors.New("matrix axis expression failed to render")
 	ErrScaffoldMatrixAxisValueNotScalar = errors.New("matrix axis value is not scalar")
 	ErrScaffoldDuplicateOutputPath      = errors.New("two files rendered to the same output path")
+	ErrScaffoldFieldOptionsInvalid      = errors.New("field options must be a static list, an answers.* dot-path, or a template expression")
+	ErrScaffoldExpressionFailed         = errors.New("template expression failed to render")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")

@@ -9,9 +9,19 @@ on:
   # • Eastern Time (ET): 7:15 PM (previous day)
     - cron: "15 0 * * *"
 
+# Matches feature-release.yml's permissions for the same reusable release
+# workflow (shared-go-auto-release.yml) called with publish: true below.
+permissions:
+  attestations: write
+  contents: write
+  id-token: write
+  pull-requests: write
+  packages: write
+  issues: write
+
 jobs:
   release:
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@49ac8cd5c4cf74abdbf24a80027cd3bde811133a # main
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
     with:
       publish: true
       format: binary

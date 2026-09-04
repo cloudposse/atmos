@@ -30,6 +30,23 @@ jobs:
       url: https://${{ env.DEPLOYMENT_HOST }}
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            sts.us-east-2.amazonaws.com:443
+            *.actions.githubusercontent.com:443
+            github.com:443
+            api.github.com:443
+            nodejs.org:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            proxy.golang.org:443
+            storage.googleapis.com:443
+            us.i.posthog.com:443
+            cplive-plat-ue2-prod-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
+
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
@@ -59,6 +76,13 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: "go.mod"
+
+      # `go run .` below has no prior module cache warm-up, so a single
+      # mid-stream proxy.golang.org reset (e.g. "stream error: ...
+      # INTERNAL_ERROR; received from peer") aborts it outright -- see
+      # docs/fixes/2026-08-25-build-atmos-go-mod-download-retry.md.
+      - name: Download Go modules (with retry)
+        uses: ./.github/actions/go-mod-download-retry
 
       - name: Generate atmos-manifest schema
         # website/static/schemas/atmos/atmos-manifest/ is gitignored (see .gitignore) — it is

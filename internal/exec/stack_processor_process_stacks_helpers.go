@@ -32,8 +32,11 @@ type ComponentProcessorOptions struct {
 	GlobalSecrets      map[string]any
 	GlobalDependencies map[string]any
 	GlobalMetadata     map[string]any
-	GlobalCommand      string
-	AtmosGlobalAuthMap map[string]any // Pre-converted atmosConfig.Auth to prevent race conditions
+	// GlobalComponentRetry holds the stack-manifest-root `retry:` block, the lowest
+	// precedence layer in the retry merge (global -> base -> component -> overrides).
+	GlobalComponentRetry map[string]any
+	GlobalCommand        string
+	AtmosGlobalAuthMap   map[string]any // Pre-converted atmosConfig.Auth to prevent race conditions.
 
 	// Terraform-specific options.
 	TerraformProviders              map[string]any
@@ -41,6 +44,7 @@ type ComponentProcessorOptions struct {
 	TerraformRequiredVersion        string
 	GlobalAndTerraformHooks         map[string]any
 	GlobalAndTerraformGenerate      map[string]any
+	GlobalAndTerraformFlags         map[string]any
 	GlobalBackendType               string
 	GlobalBackendSection            map[string]any
 	GlobalRemoteStateBackendType    string
@@ -129,6 +133,9 @@ type ComponentProcessorResult struct {
 	ComponentOverridesRequiredVersion      string
 	ComponentOverridesHooks                map[string]any
 	ComponentOverridesGenerate             map[string]any
+	ComponentFlags                         map[string]any
+	ComponentOverridesFlags                map[string]any
+	BaseComponentFlags                     map[string]any
 	BaseComponentProviders                 map[string]any
 	BaseComponentRequiredProviders         map[string]any
 	BaseComponentRequiredVersion           string
@@ -143,6 +150,9 @@ type ComponentProcessorResult struct {
 	ComponentSourceSection                 map[string]any
 	BaseComponentSourceSection             map[string]any
 	BaseComponentProvisionSection          map[string]any
+	// ComponentOverridesProvision holds the provision section from the component's
+	// `overrides:` block, which wins over both base and concrete component provision config.
+	ComponentOverridesProvision map[string]any
 	// ComponentRetry holds the raw retry configuration from the concrete component
 	// (decoded to a typed *schema.RetryConfig only after deep-merge with base + overrides).
 	ComponentRetry map[string]any

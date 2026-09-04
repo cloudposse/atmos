@@ -3438,7 +3438,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Internal hides this command from help/list output while leaving it fully invocable,\nmirroring go-task's `internal: true` (maps to Cobra's Command.Hidden)."
+          "description": "Internal excludes the command from `atmos --help` / `atmos \u003cgroup\u003e --help` subcommand\nlistings, shell-completion suggestions, and the AI `atmos_list_commands` tool, while\nleaving it fully runnable: `atmos \u003cname\u003e ...` still executes it directly, and\n`atmos \u003cname\u003e --help` still renders its own help when invoked explicitly. Use for\nhelper commands meant to be called by other commands or run manually for debugging,\nanalogous to Just's `[private]` recipes or Task's `internal: true` tasks (maps to Cobra's\nCommand.Hidden)."
         }
       },
       "type": "object",
@@ -3502,7 +3502,7 @@
             }
           ]
         },
-        "type": {
+        "provides": {
           "anyOf": [
             {
               "type": "string"
@@ -3511,7 +3511,20 @@
               "type": "null"
             }
           ],
-          "description": "Type specifies the semantic type of this argument: \"component\" or \"stack\".\nWhen set, the argument value is used to resolve component configuration."
+          "description": "Provides specifies what this argument's value provides: \"component\" or \"stack\".\nWhen set, the argument value is used to resolve component configuration."
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "provides"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Deprecated: use Provides."
         },
         "values": {
           "anyOf": [
@@ -3700,7 +3713,7 @@
           ]
         },
         "default": true,
-        "semantic_type": {
+        "provides": {
           "anyOf": [
             {
               "type": "string"
@@ -3709,7 +3722,20 @@
               "type": "null"
             }
           ],
-          "description": "SemanticType specifies the semantic type of this flag: \"component\" or \"stack\".\nWhen set, the flag value is used to resolve component configuration."
+          "description": "Provides specifies what this flag's value provides: \"component\" or \"stack\".\nWhen set, the flag value is used to resolve component configuration."
+        },
+        "semantic_type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "deprecated": true,
+              "x-atmos-replacement": "provides"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Deprecated: use Provides."
         },
         "values": {
           "anyOf": [
@@ -11848,6 +11874,20 @@
             }
           ],
           "description": "Platforms lists the target platforms a project builds for, as \u003cos\u003e_\u003carch\u003e\n(e.g. linux_amd64, darwin_arm64). It is consumed by `atmos terraform cache\nmirror` (eager multi-platform pre-seeding) and by the automatic post-init\n`providers lock` that keeps .terraform.lock.hcl complete across platforms.\nEmpty defaults to the current host platform."
+        },
+        "flags": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformFlags"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Flags holds fleet-wide default values for terraform CLI execution flags\n(e.g. -lock-timeout, -parallelism). Overridable per stack via the\nroot-level `terraform: flags:` block, and per component via a\ncomponent's own `flags:` block. An explicit CLI-typed compat flag\n(e.g. `-lock-timeout=5m` typed on the command line) always wins."
         }
       },
       "type": "object"
@@ -12132,6 +12172,79 @@
         }
       },
       "type": "object"
+    },
+    "TerraformFlags": {
+      "properties": {
+        "lock_timeout": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "LockTimeout is the default value for terraform's -lock-timeout flag\n(e.g. \"30s\", \"5m\"). Empty means unset — terraform's own 0s default\napplies. Validated with time.ParseDuration at injection time."
+        },
+        "lock": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Lock is the default value for terraform's -lock flag. nil means unset."
+        },
+        "parallelism": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Parallelism is the default value for terraform's -parallelism flag. nil means unset."
+        },
+        "refresh": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Refresh is the default value for terraform's -refresh flag. nil means unset.\nNot applied to `apply \u003cplanfile\u003e` — terraform rejects -refresh when\napplying a saved plan."
+        },
+        "compact_warnings": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "CompactWarnings is the default value for terraform's -compact-warnings flag."
+        }
+      },
+      "type": "object",
+      "description": "TerraformFlags holds default values for terraform CLI execution flags\n(lock/concurrency/output tuning). Settable globally under\ncomponents.terraform.flags in atmos.yaml, per stack under a root-level\nterraform.flags block, and per component under a component's flags block\n(field-level override, highest-precedence layer below an explicit\nCLI-typed compat flag).\n\nLock and Refresh are *bool (not bool) because terraform's own default for\nboth is true — a plain bool can't distinguish \"not configured\" from\n\"explicitly set to false\" and would silently inject -lock=false /\n-refresh=false for everyone who never touched the setting. Parallelism is\n*int for the same reason (terraform's default is 10, not 0).\nCompactWarnings' terraform default is already false, so a plain bool is\nunambiguous."
     },
     "TerraformInit": {
       "properties": {

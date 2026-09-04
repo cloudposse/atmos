@@ -23,11 +23,12 @@ on:
       - "pkg/workflow/**"
   workflow_dispatch:
 
+# Least-privilege default; the terraform-plan/terraform-apply jobs below
+# declare their own narrower job-level permissions (they're the only jobs
+# that actually call the GitHub statuses/comments/code-scanning APIs via
+# Atmos's native-CI reporting) that override this baseline.
 permissions:
   contents: read
-  pull-requests: write
-  security-events: write
-  statuses: write
 
 env:
   ATMOS_BOOTSTRAP_VERSION: "1.223.0"
@@ -35,15 +36,20 @@ env:
   ATMOS_VERSION_CHECK_ENABLED: "false"
   NATIVE_CI_TRIVY_VERSION: "0.70.0"
   NATIVE_CI_KICS_VERSION: "2.1.20"
-  # Use pipe fallback so transient proxy.golang.org 5xx errors during
-  # `go mod download` fall back to direct module fetches.
-  GOPROXY: "https://proxy.golang.org|direct"
+  # No `|direct` fallback: under harden-runner's block mode a direct fetch
+  # only fans out to blocked vanity-import hosts and burns minutes; see the
+  # GOPROXY comment in test.yml.
+  GOPROXY: "https://proxy.golang.org"
 
 jobs:
   workflow-groups:
     name: "[native ci] workflow groups (${{ matrix.group_mode }})"
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # This job never sets GITHUB_TOKEN/ATMOS_CI_GITHUB_TOKEN and only formats
+    # log-group markers to stdout, so it needs nothing beyond checkout.
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -55,6 +61,21 @@ jobs:
       ATMOS_CI_GROUPS_MODE: ${{ matrix.group_mode }}
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            us.i.posthog.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
+
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -89,6 +110,14 @@ jobs:
     name: "[native ci] terraform plan"
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Atmos's native-CI GitHub reporting (pkg/ci/providers/github) posts commit
+    # statuses, upserts PR comments, and uploads SARIF during `atmos terraform
+    # plan` — see pkg/ci/providers/github/{checks,comments,codescanning}.go.
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+      statuses: write
     env:
       ATMOS_CI_GROUPS_MODE: auto
 
@@ -99,6 +128,31 @@ jobs:
           - 4566:4566
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            us.i.posthog.com:443
+            checkpoint-api.hashicorp.com:443
+            registry.terraform.io:443
+            releases.hashicorp.com:443
+            pypi.org:443
+            api0.prismacloud.io:443
+            mirror.gcr.io:443
+            check.trivy.dev:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
+            raw.githubusercontent.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            rekor.sigstore.dev:443
+
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -139,6 +193,13 @@ jobs:
     needs: terraform-plan
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Same native-CI reporting as terraform-plan above, exercised during
+    # `atmos terraform apply`.
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+      statuses: write
     env:
       ATMOS_CI_GROUPS_MODE: auto
 
@@ -149,6 +210,27 @@ jobs:
           - 4566:4566
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            us.i.posthog.com:443
+            checkpoint-api.hashicorp.com:443
+            registry.terraform.io:443
+            releases.hashicorp.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
+            raw.githubusercontent.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            rekor.sigstore.dev:443
+
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

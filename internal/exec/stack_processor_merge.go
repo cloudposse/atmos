@@ -356,6 +356,29 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		deferredContexts[cfg.GenerateSectionName] = generateCtx
 	}
 
+	// Merge flags section (terraform CLI execution flag defaults). Terraform-only,
+	// no deferred/YAML-function support needed — these are simple scalar values.
+	// Merge order (lowest to highest priority):
+	// 1. atmos.yaml global default + stack-level `terraform: flags:` (opts.GlobalAndTerraformFlags)
+	// 2. Base component flags (from metadata.inherits)
+	// 3. Component flags (component-specific flags section)
+	// 4. Component overrides flags (from overrides section)
+	var finalComponentFlags map[string]any
+	if opts.ComponentType == cfg.TerraformComponentType {
+		finalComponentFlags, err = m.Merge(
+			mergeConfig,
+			[]map[string]any{
+				opts.GlobalAndTerraformFlags,
+				result.BaseComponentFlags,
+				result.ComponentFlags,
+				result.ComponentOverridesFlags,
+			},
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
 	// Resolve the final executable command.
 	// Check for the binary in the following order:
 	// - `components.<type>.command` section in `atmos.yaml` CLI config file.
@@ -504,17 +527,18 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
-	// Merge retry config (base → component → overrides).
+	// Merge retry config (global → base → component → overrides).
 	// Deep-merge handles top-level scalars (max_attempts, backoff_strategy, ...).
 	// The list-valued `conditions:` field follows the project's configured
 	// `settings.list_merge_strategy` (default: replace), so by default a concrete
 	// component's conditions list replaces the inherited one rather than extending it.
 	// Users who want additive conditions can opt in by setting list_merge_strategy: append.
 	var finalComponentRetry map[string]any
-	if len(result.BaseComponentRetry) > 0 || len(result.ComponentRetry) > 0 || len(result.ComponentOverridesRetry) > 0 {
+	if len(opts.GlobalComponentRetry) > 0 || len(result.BaseComponentRetry) > 0 || len(result.ComponentRetry) > 0 || len(result.ComponentOverridesRetry) > 0 {
 		finalComponentRetry, err = m.Merge(
-			atmosConfig,
+			mergeConfig,
 			[]map[string]any{
+				opts.GlobalComponentRetry,
 				result.BaseComponentRetry,
 				result.ComponentRetry,
 				result.ComponentOverridesRetry,
@@ -649,6 +673,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.RemoteStateBackendTypeSectionName] = finalComponentRemoteStateBackendType
 		comp[cfg.RemoteStateBackendSectionName] = finalComponentRemoteStateBackend
 		comp[cfg.AuthSectionName] = mergedAuth
+		if len(finalComponentFlags) > 0 {
+			comp[cfg.FlagsSectionName] = finalComponentFlags
+		}
 	}
 
 	if opts.ComponentType == cfg.KubernetesComponentType {
@@ -721,14 +748,15 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 		comp[cfg.SourceSectionName] = finalComponentSource
 
-		// Merge provision from global, base component, and component levels.
-		// Priority (lowest to highest): global → base component → component.
+		// Merge provision from global, base component, component, and overrides levels.
+		// Priority (lowest to highest): global → base component → component → overrides.
 		finalComponentProvision, err := m.Merge(
 			mergeConfig,
 			[]map[string]any{
 				opts.GlobalProvisionSection,
 				result.BaseComponentProvisionSection,
 				result.ComponentProvision,
+				result.ComponentOverridesProvision,
 			},
 		)
 		if err != nil {

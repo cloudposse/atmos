@@ -567,6 +567,67 @@ func TestMergeComponentConfigurations_TerraformMocks(t *testing.T) {
 	assert.Equal(t, "10.1.0.0/16", res.ComponentMocks["network"].(map[string]any)["cidr"])
 }
 
+// TestMergeComponentConfigurations_TerraformFlags verifies the full precedence chain for
+// the terraform-only `flags:` section: atmos.yaml global + stack-level `terraform: flags:`
+// (opts.GlobalAndTerraformFlags) < base component < component < overrides, merged
+// field-by-field (setting only one field at a higher layer must not drop sibling fields
+// set at a lower layer).
+func TestMergeComponentConfigurations_TerraformFlags(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "vpc",
+		AtmosConfig:   atmosCfg,
+		GlobalAndTerraformFlags: map[string]any{
+			"lock_timeout": "5m",
+			"parallelism":  float64(10),
+		},
+	}
+	res := minimalComponentResult()
+	res.BaseComponentFlags = map[string]any{"refresh": false}
+	res.ComponentFlags = map[string]any{"lock_timeout": "10m"}
+	res.ComponentOverridesFlags = map[string]any{"compact_warnings": true}
+
+	comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+
+	flags, ok := comp[cfg.FlagsSectionName].(map[string]any)
+	require.True(t, ok, "flags section must be a merged map")
+	assert.Equal(t, "10m", flags["lock_timeout"], "component flags.lock_timeout must win over the global default")
+	assert.Equal(t, float64(10), flags["parallelism"], "global parallelism must survive when nothing overrides it")
+	assert.Equal(t, false, flags["refresh"], "base component flags.refresh must survive when nothing overrides it")
+	assert.Equal(t, true, flags["compact_warnings"], "overrides.flags must win")
+}
+
+func TestMergeComponentConfigurations_TerraformFlagsOmittedWhenEmpty(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "app",
+		AtmosConfig:   atmosCfg,
+	}
+	res := minimalComponentResult()
+
+	comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+	assert.NotContains(t, comp, cfg.FlagsSectionName)
+}
+
+func TestMergeComponentConfigurations_TerraformFlagsIgnoredForNonTerraform(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType:           cfg.KubernetesComponentType,
+		Component:               "app",
+		AtmosConfig:             atmosCfg,
+		GlobalAndTerraformFlags: map[string]any{"lock_timeout": "5m"},
+	}
+	res := minimalComponentResult()
+
+	comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+	assert.NotContains(t, comp, cfg.FlagsSectionName, "flags is terraform-only")
+}
+
 // TestMergeComponentConfigurations_GlobalKubernetesDefaults verifies stack-global
 // Kubernetes provider/paths/manifests/render defaults are the lowest-precedence layer:
 // they flow through when the component sets nothing, and the component overrides them.
@@ -712,6 +773,7 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res.ComponentGenerate = map[string]any{"comp.yaml": map[string]any{"from": "component"}}
 		res.ComponentSourceSection = map[string]any{"version": "1.2.3"}
 		res.ComponentProvision = map[string]any{"timeout": "5m"}
+		res.ComponentOverridesProvision = map[string]any{"timeout": "10m", "note": "overridden"}
 		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 
@@ -733,7 +795,8 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		provision, ok := comp[cfg.ProvisionSectionName].(map[string]any)
 		require.True(t, ok, "provision section must be present for kubernetes")
 		assert.Equal(t, "global-wd", provision["workdir"])
-		assert.Equal(t, "5m", provision["timeout"])
+		assert.Equal(t, "10m", provision["timeout"], "overrides must win over concrete component provision")
+		assert.Equal(t, "overridden", provision["note"])
 	})
 
 	t.Run("validate-component-instance-false-overrides-base-true", func(t *testing.T) {
@@ -877,6 +940,39 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		assert.Equal(t, []any{"/Bad Gateway/"}, got["conditions"])
 	})
 
+	t.Run("global-only-flows-through", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			AtmosConfig:   atmosCfg,
+			GlobalComponentRetry: map[string]any{
+				"max_attempts": 5,
+				"conditions":   []any{"/Bad Gateway/"},
+			},
+		}
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		require.NoError(t, err)
+		got, ok := comp[cfg.RetrySectionName].(map[string]any)
+		require.True(t, ok, "retry section must be present and a map")
+		assert.EqualValues(t, 5, got["max_attempts"])
+		assert.Equal(t, []any{"/Bad Gateway/"}, got["conditions"])
+	})
+
+	t.Run("base-overrides-global-scalar", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType:        cfg.TerraformComponentType,
+			Component:            "vpc",
+			AtmosConfig:          atmosCfg,
+			GlobalComponentRetry: map[string]any{"max_attempts": 1},
+		}
+		res := minimalComponentResult()
+		res.BaseComponentRetry = map[string]any{"max_attempts": 3}
+		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got := comp[cfg.RetrySectionName].(map[string]any)
+		assert.EqualValues(t, 3, got["max_attempts"], "base component must override global scalar")
+	})
+
 	t.Run("component-overrides-base-scalar", func(t *testing.T) {
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
@@ -897,6 +993,9 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
 			AtmosConfig:   atmosCfg,
+			// Lowest-precedence layer, set on a key every other layer also sets, so a
+			// regression that lets global win would flip this assertion.
+			GlobalComponentRetry: map[string]any{"max_attempts": 0, "initial_delay": "1s"},
 		}
 		res := minimalComponentResult()
 		res.BaseComponentRetry = map[string]any{"max_attempts": 1, "backoff_strategy": "constant"}
@@ -905,8 +1004,9 @@ func TestMergeComponentConfigurations_Retry(t *testing.T) {
 		comp, _, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 		got := comp[cfg.RetrySectionName].(map[string]any)
-		assert.EqualValues(t, 9, got["max_attempts"], "overrides must win")
+		assert.EqualValues(t, 9, got["max_attempts"], "overrides must win over global/base/component")
 		assert.Equal(t, "exponential", got["backoff_strategy"])
+		assert.Equal(t, "1s", got["initial_delay"], "global-only key not set anywhere else must still flow through")
 	})
 
 	t.Run("conditions-list-replaces-by-default", func(t *testing.T) {
