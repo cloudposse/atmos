@@ -39,12 +39,40 @@ includes the upstream fix that declares `id-token: write` in the called workflow
   `3911c663309ecdda30d8b8fcbec7bde19d1d6ddb` to `da6de3218cc965251e38d84f6addd37e7ddde2e6`, and
   amended the comment above it: the OIDC endpoint is gated by this job's `id-token` permission and by
   the called workflow's own `permissions` block, which is why the pin must include the upstream fix.
-- `.github/workflows/nightlybuilds.yml`: same pin bump.
+  Also added `contents: read` to that job's `permissions:` block (see "Job-level permissions replace,
+  not merge" below).
+- `.github/workflows/nightlybuilds.yml`: same pin bump. No `permissions:` change: its `release` job
+  has no job-level block, so it inherits the workflow-level default (`contents: write`,
+  `id-token: write`, ...), which already satisfies what the called workflow requires.
 - `.github/workflows/feature-release.yml`: same pin bump, plus a comment update because the old
   comment stated that the reusable workflow "declares `permissions: {}` itself", which is no longer
-  true at the new pin.
+  true at the new pin. Also added `contents: read` to that job's `permissions:` block, for the same
+  reason as `test.yml` (see below).
 - `build.yml` is untouched: it pins `shared-release-branches.yml`, which did not change.
-- The caller-side `permissions: id-token: write` blocks are unchanged.
+
+### Job-level permissions replace, not merge
+
+A job-level `permissions:` block replaces the workflow-level default entirely for that job rather
+than merging with it, so every scope the called workflow needs must be listed explicitly. The
+upstream fix at the new pin declares both `id-token: write` **and** `contents: read` at the top of
+`shared-go-auto-release.yml`. Any caller whose `release` job overrides permissions with only
+`id-token: write` therefore grants `contents: none`, and GitHub rejects the whole workflow file at
+parse time — before any job starts, and regardless of the `release` job's `if:` condition — with
+`requesting 'contents: read', but is only allowed 'contents: none'`.
+
+Both `test.yml` and `feature-release.yml` have such a job-level block, so both needed
+`contents: read` added:
+
+```yaml
+    permissions:
+      id-token: write
+      contents: read
+```
+
+`feature-release.yml` had only `id-token: write` when the pin was first bumped, which produced a
+`startup_failure` on every `pull_request` run of the branch (the `release` job is skipped without the
+`release/feature` label, but the parse-time rejection fires anyway). `nightlybuilds.yml` is
+unaffected because it has no job-level override.
 
 ## Validation
 
@@ -54,7 +82,11 @@ includes the upstream fix that declares `id-token: write` in the called workflow
   declares `id-token: write` and `contents: read`, while the old pin declares `permissions: {}`.
 - Confirmed no open Atmos PR already bumps this pin.
 - `actionlint` passes on `test.yml`, `nightlybuilds.yml`, and `feature-release.yml`; all three parse
-  as YAML.
+  as YAML. Note that `actionlint` does **not** validate cross-workflow reusable-workflow permission
+  requirements, so it did not catch the missing `contents: read` — that surfaced only as a runtime
+  `startup_failure`. The parse-time rejection was confirmed empirically: every "Feature release" run
+  on the branch reported `startup_failure` (~1 s, zero jobs) after the pin bump, versus a clean
+  `skipped` on `main`, until `contents: read` was added.
 - **Not yet verified end to end.** The fix cannot be confirmed from a pull request: the `release`
   job in `test.yml` only runs on `push` to `main`, and the nightly workflow runs on its schedule.
   The fix remains unverified until the first post-merge `test.yml` push run and the next Nightly

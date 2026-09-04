@@ -22,8 +22,14 @@ jobs:
     # reads the runner's OIDC token-minting endpoint, which is gated by this
     # job's id-token permission and by the called workflow's own permissions
     # block — independent of which token is used for git/API calls elsewhere.
+    # A job-level `permissions:` block replaces the workflow-level default
+    # entirely rather than merging with it, so contents: read must be listed
+    # here explicitly: the called workflow declares it at its own top level,
+    # and an omitted scope means `none`, which GitHub rejects at parse time
+    # ("requesting 'contents: read', but is only allowed 'contents: none'").
     permissions:
       id-token: write
+      contents: read
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@da6de3218cc965251e38d84f6addd37e7ddde2e6 # main
     with:
       publish: true
