@@ -154,6 +154,43 @@ If you use the `env` function from one templating engine and enable both [Sprig]
 For this reason, you can use the `templates.settings.sprig.enabled` and `templates.settings.gomplate.enabled` settings to selectively enable/disable the [Sprig](https://masterminds.github.io/sprig/) and [Gomplate](https://docs.gomplate.ca/functions/) functions.
 :::
 
+### Removed and Renamed Gomplate Functions
+
+Atmos embeds Gomplate v5. Functions that Gomplate deprecated in v3 were removed upstream in v4, so templates written
+against older Atmos releases may need updating. Each removed function has a direct replacement:
+
+<dl>
+  <dt>`conv.Bool`</dt>
+  <dd>Use [`conv.ToBool`](https://docs.gomplate.ca/functions/conv/#convtobool).</dd>
+
+  <dt>`conv.Slice`, `conv.Dict`, `conv.Has`</dt>
+  <dd>Use [`coll.Slice`](https://docs.gomplate.ca/functions/coll/#collslice), [`coll.Dict`](https://docs.gomplate.ca/functions/coll/#colldict), and [`coll.Has`](https://docs.gomplate.ca/functions/coll/#collhas).</dd>
+
+  <dt>`strings.Sort`</dt>
+  <dd>Use [`coll.Sort`](https://docs.gomplate.ca/functions/coll/#collsort).</dd>
+
+  <dt>`net.ParseIP`, `net.ParseIPPrefix`, `net.ParseIPRange`</dt>
+  <dd>Use [`net.ParseAddr`](https://docs.gomplate.ca/functions/net/#netparseaddr), [`net.ParsePrefix`](https://docs.gomplate.ca/functions/net/#netparseprefix), and [`net.ParseRange`](https://docs.gomplate.ca/functions/net/#netparserange).</dd>
+
+  <dt>`slice`, `contains`, `hasPrefix`, `hasSuffix`, `split`, `splitN`, `trim` (bare aliases)</dt>
+  <dd>
+    Gomplate no longer registers these unqualified names. Use the namespaced forms (`coll.Slice`, `strings.Contains`,
+    `strings.HasPrefix`, `strings.HasSuffix`, `strings.Split`, `strings.SplitN`, `strings.Trim`).
+
+    When `templates.settings.sprig.enabled` is `true` (the default), the bare `contains`, `hasPrefix`, `hasSuffix`,
+    `split`, and `trim` names keep working through [Sprig](https://masterminds.github.io/sprig/), which defines functions
+    of the same name (note that Sprig's argument order differs from Gomplate's in some cases). The bare `slice` name is a
+    Go `text/template` built-in and continues to work. There is no Sprig fallback for `splitN`.
+  </dd>
+</dl>
+
+Two further upstream changes affect existing templates:
+
+- Conversion functions such as `conv.ToInt64`, `conv.ToFloat64`, and `conv.Atoi` (and the functions built on them) now return an error on input they cannot convert, instead of silently returning `0`.
+- The `regexp.*` functions return an error for an invalid pattern instead of panicking.
+
+Gomplate v5 also adds the [`semver.*`](https://docs.gomplate.ca/functions/semver/) namespace for parsing and comparing semantic versions.
+
 ## See Also
 
 - [CLI Configuration](/cli/configuration) — Overview of CLI configuration

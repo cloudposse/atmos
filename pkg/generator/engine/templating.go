@@ -8,10 +8,6 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/Masterminds/sprig/v3"
-	"github.com/hairyhenderson/gomplate/v3"
-	"github.com/hairyhenderson/gomplate/v3/data"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
@@ -19,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
 	"github.com/cloudposse/atmos/pkg/templatefuncs"
+	"github.com/cloudposse/atmos/pkg/templating"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -155,20 +152,17 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 // collectKeys overrides both, registered under its own name so it doesn't
 // shadow Sprig's "keys".
 func buildTemplateFuncMap(userValues map[string]interface{}) template.FuncMap {
-	d := data.Data{}
 	ctx := context.TODO()
 
 	funcs := template.FuncMap{}
 
 	// Add gomplate functions (base layer).
-	gomplateFuncs := gomplate.CreateFuncs(ctx, &d)
-	for k, v := range gomplateFuncs {
+	for k, v := range templating.GomplateFuncs(ctx) {
 		funcs[k] = v
 	}
 
 	// Add sprig functions (overrides gomplate on collisions).
-	sprigFuncs := sprig.FuncMap()
-	for k, v := range sprigFuncs {
+	for k, v := range templating.SprigFuncMap() {
 		funcs[k] = v
 	}
 

@@ -942,9 +942,13 @@ var (
 	ErrGenerateTerraformDocs = errors.New("failed to generate terraform docs")
 	ErrMergeInputYAMLs       = errors.New("failed to merge input YAMLs")
 	ErrRenderTemplate        = errors.New("failed to render template with datasources")
-	ErrResolveOutputPath     = errors.New("failed to resolve output path")
-	ErrWriteOutput           = errors.New("failed to write output")
-	ErrCollectKeysNotMap     = errors.New("collectKeys: argument is not a map")
+	// ErrGomplateDatasourceUnavailable is returned when a gomplate datasource is read outside a
+	// template render, or while gomplate functions are disabled, so no datasource registry exists.
+	ErrGomplateDatasourceUnavailable = errors.New("gomplate datasource functions are unavailable: gomplate is disabled or no template render is in progress")
+	ErrInvalidDatasourceURL          = errors.New("invalid gomplate datasource URL")
+	ErrResolveOutputPath             = errors.New("failed to resolve output path")
+	ErrWriteOutput                   = errors.New("failed to write output")
+	ErrCollectKeysNotMap             = errors.New("collectKeys: argument is not a map")
 
 	// Import-related errors.
 	ErrBasePath             = errors.New("base path required to process imports")

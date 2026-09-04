@@ -1,0 +1,164 @@
+---
+slug: gomplate-v5
+title: "Template Engine Upgrade Drops the End-of-Life AWS SDK from Atmos"
+authors: [osterman]
+tags: [security, breaking-change]
+---
+
+Some scanner findings cannot be fixed by bumping a version. A dependency reaches end of life, its
+advisories stay open forever, and every project that pulls it in transitively inherits a permanent
+red mark. Atmos had exactly this problem: the template engine embedded in Atmos depended on the
+AWS SDK for Go v1, which is no longer maintained and carries advisories that no v1 release will
+ever address. Atmos never executed the affected code, but supply-chain scanners flagged it
+anyway, and there was no version of Atmos that could make the finding go away. The template
+engine has now moved to Gomplate v5, and the end-of-life SDK is gone from the Atmos build
+entirely.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos stack manifests support Go templates, and the Gomplate library supplies most of the
+functions and every datasource behind them. The version Atmos embedded, Gomplate v3, was built on
+the AWS SDK for Go v1. AWS retired that SDK, and its open advisories (GO-2022-0635 and
+GO-2022-0646) will never be resolved upstream because there will never be another v1 release.
+
+Tools like OpenSSF Scorecard and dependency scanners do not distinguish between a library you
+call and a library that merely sits in your dependency tree. Every Atmos release showed the same
+findings, and the only honest explanation was that the code is present but never reached. That is
+not an answer anyone should have to keep giving. The only way to clear it was to remove the SDK
+from the build altogether, which meant upgrading the template engine across two major versions.
+
+## The Fix
+
+Atmos now embeds Gomplate v5, which is built on the AWS SDK for Go v2. Every Gomplate function and
+datasource that Atmos supported before continues to work, and Sprig functions are still layered on
+top by default. What changed is what ships inside the binary: the AWS SDK for Go v1 is no longer
+present in any form.
+
+One HashiCorp Vault authentication library still pulled the old SDK in its latest tagged release,
+even though its development branch had already been ported to v2. Atmos pins that library to the
+ported development revision until HashiCorp tags a release. That pin is temporary. Dependabot will
+propose the bump automatically as soon as a tagged release exists, and nothing about how you use
+Vault datasources changes in the meantime.
+
+The same upgrade moved the Go cryptography library to a release that closes two SSH-related
+denial-of-service advisories (GO-2026-6354 and GO-2026-6355). This is preventative hygiene, not a
+response to an exploited issue, but it is one more finding that will no longer appear on a scan of
+Atmos.
+
+## What to Check in Your Stacks
+
+Gomplate removed functions it had deprecated in v3 and changed a few datasource behaviors between
+v3 and v5. Most stacks will need no changes. If yours uses any of the following, update the
+template before upgrading. The [templates configuration reference](/cli/configuration/templates)
+and the [datasources reference](/templates/datasources) carry the same list.
+
+### Renamed functions
+
+Deprecated function names were removed. Replace them with their namespaced equivalents:
+
+```yaml
+# Before
+enabled: '{{ conv.Bool .vars.flag }}'
+names: '{{ conv.Slice "a" "b" }}'
+cfg: '{{ conv.Dict "k" "v" }}'
+has: '{{ conv.Has .vars "key" }}'
+sorted: '{{ strings.Sort .vars.list }}'
+ip: '{{ net.ParseIP .vars.addr }}'
+cidr: '{{ net.ParseIPPrefix .vars.cidr }}'
+
+# After
+enabled: '{{ conv.ToBool .vars.flag }}'
+names: '{{ coll.Slice "a" "b" }}'
+cfg: '{{ coll.Dict "k" "v" }}'
+has: '{{ coll.Has .vars "key" }}'
+sorted: '{{ coll.Sort .vars.list }}'
+ip: '{{ net.ParseAddr .vars.addr }}'
+cidr: '{{ net.ParsePrefix .vars.cidr }}'
+```
+
+The unqualified aliases `slice`, `contains`, `hasPrefix`, `hasSuffix`, `split`, `splitN`, and
+`trim` are no longer registered by Gomplate. In practice most of them keep working: `slice` is a
+built-in of Go templates, and `contains`, `hasPrefix`, `hasSuffix`, `split`, and `trim` are also
+defined by Sprig, which Atmos enables by default through `templates.settings.sprig.enabled`. Be
+aware that Sprig's argument order differs from Gomplate's for some of these. The only alias with
+no fallback is `splitN`; replace it with `strings.SplitN`. If you have disabled Sprig, switch all of
+them to their `strings.*` or `coll.*` forms.
+
+### Conversions and regular expressions now fail loudly
+
+Conversion functions such as `conv.ToInt64`, `conv.ToFloat64`, and `conv.Atoi` used to return `0`
+when handed something they could not convert. They now return an error, which surfaces as a
+template processing failure. If a stack relied on the silent zero, guard the input first:
+
+```yaml
+retries: '{{ if .vars.retries }}{{ conv.ToInt64 .vars.retries }}{{ else }}0{{ end }}'
+```
+
+Similarly, the `regexp.*` functions return an error for an invalid pattern instead of panicking.
+The failure is the same as before from your point of view, but the message now names the template
+and the pattern.
+
+### Datasource subpaths are relative URLs
+
+A second argument to `datasource` is resolved as a relative URL against the datasource's `url`.
+Directory datasources must end with a trailing `/`, and a subpath that begins with `/` replaces
+the base path rather than appending to it:
+
+```yaml
+settings:
+  templates:
+    settings:
+      gomplate:
+        datasources:
+          configs:
+            url: "file:///configs/"   # trailing slash marks a directory
+
+components:
+  terraform:
+    app:
+      vars:
+        name: '{{ (datasource "configs" "app.yaml").name }}'   # reads /configs/app.yaml
+```
+
+### AWS Parameter Store values are returned directly
+
+An `aws+smp://` datasource returns the parameter's value itself rather than an object with a
+`.Value` field. Drop the field access, and if the parameter holds a JSON document, tell the
+datasource to parse it with the `type` query parameter:
+
+```yaml
+settings:
+  templates:
+    settings:
+      gomplate:
+        datasources:
+          database:
+            url: "aws+smp:///myapp/database/config?type=application/json"
+
+components:
+  terraform:
+    app:
+      vars:
+        # Before: '{{ (datasource "database").Value.host }}'
+        db_host: '{{ (datasource "database").host }}'
+```
+
+### Smaller datasource changes
+
+Consul directory listings (a `consul://` URL ending in `/`) return a list of key names instead of
+a map. BoltDB datasources were removed upstream and are no longer available.
+
+### New: semantic version helpers
+
+Gomplate v5 adds a `semver.*` namespace for parsing and comparing versions inside templates, for
+example `{{ semver.CheckConstraint ">= 1.5.0" .vars.version }}`. See the
+[Gomplate semver reference](https://docs.gomplate.ca/functions/semver/) for the full list.
+
+## Get Involved
+
+If a template that worked before this release fails after it, and the cause is not on the list
+above, [open an issue](https://github.com/cloudposse/atmos/issues) with the template expression
+and the error. The goal of this upgrade was to change what ships in the binary, not what your
+stacks can do.

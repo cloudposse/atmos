@@ -11,23 +11,26 @@ import (
 	"context"
 	"text/template"
 
-	"github.com/hairyhenderson/gomplate/v3/data"
-
+	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/templatefuncs"
+	"github.com/cloudposse/atmos/pkg/templating"
 )
 
-// FuncMap creates and returns a map of template functions.
+// FuncMap creates and returns a map of template functions. The datasources
+// reader serves `atmos.GomplateDatasource`; it is normally the template engine
+// rendering the template, and may be nil when no datasources are available.
 func FuncMap(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	ctx context.Context,
-	gomplateData *data.Data,
+	datasources templating.DatasourceReader,
 ) template.FuncMap {
 	defer perf.Track(atmosConfig, "exec.FuncMap")()
 
-	atmosFuncs := &AtmosFuncs{atmosConfig, configAndStacksInfo, ctx, gomplateData}
+	atmosFuncs := &AtmosFuncs{atmosConfig, configAndStacksInfo, ctx, datasources}
 
 	funcs := templatefuncs.FuncMap()
 	funcs["atmos"] = func() any { return atmosFuncs }
@@ -40,7 +43,7 @@ type AtmosFuncs struct {
 	atmosConfig         *schema.AtmosConfiguration
 	configAndStacksInfo *schema.ConfigAndStacksInfo
 	ctx                 context.Context
-	gomplateData        *data.Data
+	datasources         templating.DatasourceReader
 }
 
 // Component returns component configuration for the given component and stack.
@@ -48,9 +51,26 @@ func (f AtmosFuncs) Component(component string, stack string) (any, error) {
 	return componentFunc(f.atmosConfig, f.configAndStacksInfo, component, stack)
 }
 
-// GomplateDatasource returns data for a gomplate datasource alias.
+// GomplateDatasource returns data for a gomplate datasource alias. Results are
+// cached by the template engine for the lifetime of the process, so a
+// datasource referenced from many stacks and components is fetched once.
 func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error) {
-	return gomplateDatasourceFunc(alias, f.gomplateData, args...)
+	defer perf.Track(f.atmosConfig, "exec.AtmosFuncs.GomplateDatasource")()
+
+	log.Debug("atmos.GomplateDatasource(): processing datasource", "alias", alias)
+
+	if f.datasources == nil {
+		return nil, errUtils.ErrGomplateDatasourceUnavailable
+	}
+
+	result, err := f.datasources.Datasource(alias, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug("atmos.GomplateDatasource(): processed datasource", "alias", alias, "result", result)
+
+	return result, nil
 }
 
 // Store reads a value from a named store for the given stack, component, and key.
