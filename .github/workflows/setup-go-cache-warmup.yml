@@ -83,7 +83,11 @@ jobs:
             ocsp.digicert.com:80
             *.pool.ntp.org:123
 
-      - name: Add GNU tar to PATH (significantly faster than windows tar)
+      # Measured (docs/fixes/2026-09-04-windows-go-caches-on-fast-disk.md):
+      # Git's GNU tar restores our 1.7 GB Go cache in 264 s on C: / 94 s on
+      # D:; Windows' own bsdtar takes 353 s / 117 s, because @actions/cache's
+      # bsdtar path decompresses the whole archive to a .tar on disk first.
+      - name: Add GNU tar to PATH (faster than bsdtar for cache restores)
         if: matrix.target == 'windows'
         shell: pwsh
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
