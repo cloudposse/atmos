@@ -811,6 +811,27 @@ template version
 			content: "<<<<<<< HEAD\na\n=======\nb\n>>>>>>> branch\n",
 			want:    false,
 		},
+		{
+			// Regression: the start marker is always emitted verbatim by both
+			// mergers (diff3's "<<<<<<< %s" label format and YAMLMerger's
+			// literal "<<<<<<< Ours") with no trailing suffix, unlike the
+			// closing marker, which YAMLMerger can append the original line's
+			// suffix to. A prefix match on the start marker would
+			// false-positive here.
+			name:    "start marker with suffix is not a real marker",
+			content: "<<<<<<< OursSomethingElse\na\n=======\nb\n>>>>>>> Theirs\n",
+			want:    false,
+		},
+		{
+			name: "closing marker with suffix still matches (YAMLMerger appends the original line's suffix)",
+			content: `<<<<<<< Ours
+setting: user-change
+=======
+setting: template-change
+>>>>>>> Theirs # trailing comment
+`,
+			want: true,
+		},
 	}
 
 	for _, tt := range tests {

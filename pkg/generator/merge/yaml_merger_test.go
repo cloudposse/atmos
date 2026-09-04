@@ -994,6 +994,37 @@ func TestYAMLMerger_ConflictMarkers_MultipleConflictsDoNotCollide(t *testing.T) 
 	assert.Equal(t, count, strings.Count(result.Content, ">>>>>>> Theirs"))
 }
 
+// TestYAMLMerger_ConflictMarkers_PreexistingSentinelLookalike guards against
+// sentinel collisions: a scalar value already equal to the old, purely
+// sequential sentinel format (ATMOSMERGECONFLICT000000) must not be mistaken
+// for a real conflict placeholder by findSentinel/spliceConflictMarkers, and
+// must survive an unrelated conflict elsewhere in the document untouched.
+// The random suffix and forbidden-corpus check in conflictTracker.nextSentinel
+// guarantee this; without them, this literal value colliding with the first
+// sentinel issued would corrupt it in unpredictable ways.
+func TestYAMLMerger_ConflictMarkers_PreexistingSentinelLookalike(t *testing.T) {
+	base := "setting: original\nlookalike: ATMOSMERGECONFLICT000000\n"
+	ours := "setting: user-change\nlookalike: ATMOSMERGECONFLICT000000\n"
+	theirs := "setting: template-change\nlookalike: ATMOSMERGECONFLICT000000\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	// The lookalike value is identical on all three sides, so it must pass
+	// through untouched -- appearing exactly once, and not wrapped in (or
+	// replaced by) conflict markers meant for the unrelated "setting" key.
+	assert.Equal(t, 1, strings.Count(result.Content, "ATMOSMERGECONFLICT000000"))
+	assert.Equal(t, `<<<<<<< Ours
+setting: user-change
+=======
+setting: template-change
+>>>>>>> Theirs
+lookalike: ATMOSMERGECONFLICT000000
+`, result.Content)
+}
+
 func TestYAMLMerger_PreservesLineComments(t *testing.T) {
 	tests := []struct {
 		name           string

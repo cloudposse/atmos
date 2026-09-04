@@ -282,7 +282,13 @@ func HasUnresolvedConflictMarkers(content string) bool {
 		trimmed := strings.TrimLeft(line, " ")
 		switch {
 		case !sawOurs:
-			sawOurs = strings.HasPrefix(trimmed, "<<<<<<< Ours")
+			// Exact match: both TextMerger (via diff3's "<<<<<<< %s" label
+			// format) and YAMLMerger always emit this opening marker verbatim,
+			// with no trailing suffix -- unlike the closing marker below, which
+			// YAMLMerger can append the original line's suffix to. A prefix
+			// match here would false-positive on unrelated content that merely
+			// starts with this marker (e.g. a line of literal text).
+			sawOurs = trimmed == "<<<<<<< Ours"
 		case !sawSeparator:
 			sawSeparator = trimmed == "======="
 		default:
