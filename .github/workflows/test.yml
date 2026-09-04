@@ -2039,15 +2039,24 @@ jobs:
   release:
     needs: [test, terraform-registry-cache, kubernetes-e2e, lint, mock, k3s, floci, floci-go, docker, validate, container-step, magefiles]
     if: github.event_name == 'push'
-    # Workflow-level default above is read-only. id-token: write is needed
-    # here: cosign's keyless OIDC signing (in shared-go-auto-release.yml's
-    # goreleaser job, invoked below) reads the runner's OIDC token-minting
-    # endpoint. That endpoint is gated by this job's id-token permission AND
-    # by the called workflow's own top-level permissions block (a called
-    # workflow can only narrow what the caller grants), so the pin below must
-    # include the upstream fix that declares id-token: write there.
+    # A job-level `permissions:` block replaces the workflow-level default
+    # entirely for that job -- it does not merge with it, so every scope the
+    # called workflow needs must be listed here explicitly. id-token: write
+    # is needed for cosign's keyless OIDC signing (in
+    # shared-go-auto-release.yml's goreleaser job, invoked below), which
+    # reads the runner's OIDC token-minting endpoint; that endpoint is gated
+    # by this job's id-token permission AND by the called workflow's own
+    # top-level permissions block (a called workflow can only narrow what
+    # the caller grants), so the pin below must include the upstream fix
+    # that declares id-token: write there. contents: read is needed because
+    # that same upstream fix also declares it, and an omitted scope here
+    # means `none`, not the workflow-level `contents: read` default --
+    # without it, GitHub rejects the whole run at parse time ("requesting
+    # 'contents: read', but is only allowed 'contents: none'"), before any
+    # job even starts.
     permissions:
       id-token: write
+      contents: read
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@da6de3218cc965251e38d84f6addd37e7ddde2e6 # main
     with:
       publish: false
