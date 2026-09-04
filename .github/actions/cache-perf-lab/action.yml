@@ -11,7 +11,7 @@ inputs:
     description: "seed: populate the caches for setup-go's post step to save. restore: time the restore and assert a hit."
     required: true
   layout:
-    description: "c: Go's default cache locations (on C:). d: GOCACHE and GOMODCACHE relocated to D:\\a\\ before setup-go runs."
+    description: "c: plain setup-go, Go's default cache locations (on C:). d: the production setup-go-cache action, which relocates GOCACHE and GOMODCACHE onto the runner's work disk (D:)."
     required: true
   tar:
     description: >-
@@ -30,17 +30,6 @@ inputs:
 runs:
   using: composite
   steps:
-    # Must run before setup-go: it reads `go env GOCACHE`/`GOMODCACHE` to
-    # decide both what to restore and what its post step saves. GITHUB_ENV
-    # written here applies to every later step of the job, the post step
-    # included.
-    - name: "Relocate Go caches to D: (layout d only)"
-      if: inputs.layout == 'd'
-      shell: pwsh
-      run: |
-        Add-Content $env:GITHUB_ENV 'GOCACHE=D:\a\go-build'
-        Add-Content $env:GITHUB_ENV 'GOMODCACHE=D:\a\go\pkg\mod'
-
     - name: Use GNU tar (production behavior)
       if: inputs.tar == 'gnu'
       shell: pwsh
@@ -78,8 +67,22 @@ runs:
       shell: pwsh
       run: Add-Content $env:GITHUB_ENV "LAB_T0=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
 
-    - name: Set up Go (timed cache restore)
-      id: go
+    # Layout d is exactly what production runs: the setup-go-cache action,
+    # which relocates Go's caches to the runner's work disk on Windows.
+    - name: Set up Go (timed cache restore, production action)
+      id: go-prod
+      if: inputs.layout == 'd'
+      uses: ./.github/actions/setup-go-cache
+      with:
+        cache-dependency-path: |
+          go.sum
+          .cache-layout
+
+    # Layout c is the pre-fix baseline: plain setup-go, Go's default cache
+    # locations on C:.
+    - name: Set up Go (timed cache restore, baseline)
+      id: go-base
+      if: inputs.layout == 'c'
       uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
       with:
         go-version-file: "go.mod"
@@ -96,7 +99,7 @@ runs:
       if: inputs.mode == 'seed'
       shell: pwsh
       env:
-        CACHE_HIT: ${{ steps.go.outputs.cache-hit }}
+        CACHE_HIT: ${{ steps.go-prod.outputs.cache-hit || steps.go-base.outputs.cache-hit }}
       run: |
         Write-Host "setup-go cache-hit=$env:CACHE_HIT (a hit means this layout is already seeded; setup-go will not save again)"
         Write-Host "GOCACHE=$(go env GOCACHE)  GOMODCACHE=$(go env GOMODCACHE)"
@@ -107,7 +110,7 @@ runs:
       if: inputs.mode == 'restore'
       shell: pwsh
       env:
-        CACHE_HIT: ${{ steps.go.outputs.cache-hit }}
+        CACHE_HIT: ${{ steps.go-prod.outputs.cache-hit || steps.go-base.outputs.cache-hit }}
       run: |
         if ($env:CACHE_HIT -ne 'true') {
           throw "setup-go reported cache-hit='$env:CACHE_HIT'; a miss would time a no-op, not a restore. The seed job for this layout saved an archive seconds ago - if it is already gone, the repo cache quota evicted it."
