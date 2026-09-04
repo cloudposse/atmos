@@ -415,12 +415,6 @@ jobs:
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
 
-      # A cache step runs before Set up Go in this job, so the tar choice
-      # must already be in place; setup-go-cache repeats it harmlessly.
-      - name: Use GNU tar for cache archives (Windows)
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        uses: ./.github/actions/windows-gnu-tar
-
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/setup-atmos-install
@@ -657,12 +651,6 @@ jobs:
       - name: Guard DNS against the harden-runner post-step race
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
-
-      # A cache step runs before Set up Go in this job, so the tar choice
-      # must already be in place; setup-go-cache repeats it harmlessly.
-      - name: Use GNU tar for cache archives (Windows)
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        uses: ./.github/actions/windows-gnu-tar
 
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -1669,12 +1657,6 @@ jobs:
       - name: Guard DNS against the harden-runner post-step race
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
-
-      # A cache step runs before Set up Go in this job, so the tar choice
-      # must already be in place; setup-go-cache repeats it harmlessly.
-      - name: Use GNU tar for cache archives (Windows)
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        uses: ./.github/actions/windows-gnu-tar
 
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}

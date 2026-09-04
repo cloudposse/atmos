@@ -42,6 +42,28 @@ runs:
           echo "::error::Atmos cache metadata did not include any cache paths. Check ci.cache configuration and the previous metadata step output."
           exit 1
         fi
+    # On Windows runners, actions/cache extracts and creates its archives with
+    # whichever tar it finds: Git for Windows' GNU tar if it is first on PATH,
+    # else Windows' own bsdtar, whose @actions/cache code path decompresses the
+    # whole archive to a .tar on disk before extracting it. Measured on a
+    # 1.7 GB archive: GNU tar 264 s vs bsdtar 353 s. Inline (not a reference to
+    # a local action) because this action is published and consumed from other
+    # repositories. Idempotent; no-op off Windows.
+    - name: Use GNU tar for cache archives (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $dir = Join-Path $env:ProgramFiles 'Git\usr\bin'
+        if (-not (Test-Path (Join-Path $dir 'tar.exe'))) {
+          Write-Host "Git's GNU tar not found at $dir; leaving PATH alone"
+          exit 0
+        }
+        if (($env:PATH -split ';')[0] -eq $dir) {
+          Write-Host "GNU tar already first on PATH ($dir)"
+          exit 0
+        }
+        Write-Host "Prepending $dir to PATH so actions/cache uses GNU tar"
+        echo "$dir" >> $Env:GITHUB_PATH
     - id: cache
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:

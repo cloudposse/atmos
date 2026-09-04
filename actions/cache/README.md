@@ -56,6 +56,14 @@ ci:
 If you need Atmos to *own* restore/save (rather than `actions/cache`), use the
 [`github-runtime`](../github-runtime/README.md) action instead.
 
+## Windows runners
+
+On Windows the action puts Git for Windows' GNU tar first on `PATH` before caching (when it is
+installed, as on GitHub-hosted runners), because `actions/cache` otherwise falls back to Windows'
+own bsdtar, whose code path decompresses the whole archive to disk before extracting it. On a
+1.7 GB archive that is the difference between a 264 s and a 353 s restore. The step is idempotent
+and does nothing on Linux or macOS.
+
 ## Versioning
 
 This action ships inside the Atmos repository, so the ref is an Atmos release:
