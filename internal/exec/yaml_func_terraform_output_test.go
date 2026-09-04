@@ -220,22 +220,36 @@ func isolateTerraformTestBinary(t *testing.T, source string) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-// removeWithRetryForTransientLock removes path, retrying briefly if the OS reports it as
-// still in use by another process rather than failing immediately. See
-// isTransientRepoCopyError in describe_affected_test.go for the same Windows-lock pattern.
+// removeWithRetryForTransientLock removes path, retrying if the OS reports it as still in
+// use by another process rather than failing immediately. See isTransientRepoCopyError in
+// describe_affected_test.go for the same Windows-lock pattern.
+//
+// MaxAttempts/retryDelay total ~10s. The previous budget of 10 attempts x 50ms (500ms) was
+// confirmed insufficient in practice: that budget was added in #1908 and the same
+// "being used by another process" failure recurred in CI within hours, so real-world
+// Windows Defender / AV real-time-scan delays on a freshly executed binary can run well
+// past half a second, especially on a loaded shared runner.
 func removeWithRetryForTransientLock(t *testing.T, path string) {
 	t.Helper()
 
-	const maxAttempts = 10
+	const (
+		maxAttempts = 40
+		retryDelay  = 250 * time.Millisecond
+	)
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		err := os.Remove(path)
 		if err == nil || os.IsNotExist(err) {
 			return
 		}
-		if attempt == maxAttempts || !strings.Contains(strings.ToLower(err.Error()), "being used by another process") {
+		if !strings.Contains(strings.ToLower(err.Error()), "being used by another process") {
 			return
 		}
-		time.Sleep(50 * time.Millisecond)
+		if attempt == maxAttempts {
+			t.Logf("cleanup: %q still locked after %d retries (%v total), leaving it for TempDir's own cleanup: %v",
+				path, maxAttempts, time.Duration(maxAttempts)*retryDelay, err)
+			return
+		}
+		time.Sleep(retryDelay)
 	}
 }
 
