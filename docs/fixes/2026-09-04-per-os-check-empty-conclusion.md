@@ -7,7 +7,7 @@
 `Acceptance Tests (macos)` (the per-OS aggregate in `test.yml`) failed on PR #3049's run
 33907449514 with:
 
-```
+```text
 the following 'macos' shard jobs did not succeed:
 Acceptance Tests (macos, shard 9/10)
 ```
