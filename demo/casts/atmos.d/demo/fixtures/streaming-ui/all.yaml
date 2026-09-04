@@ -1,0 +1,15 @@
+commands:
+  - name: casts generate demo fixtures streaming-ui
+    description: Regenerate casts sourced from demo/casts/fixtures/streaming-ui
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: casts-fixtures-streaming-ui-terraform-ui
+        command: atmos casts generate demo fixtures streaming-ui terraform-ui
+  - name: casts validate demo fixtures streaming-ui
+    description: Validate casts sourced from demo/casts/fixtures/streaming-ui
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: casts-fixtures-streaming-ui-terraform-ui
+        command: atmos casts validate demo fixtures streaming-ui terraform-ui
