@@ -957,10 +957,12 @@ jobs:
           fi
 
       - name: Check terraform-registry-cache result
-        # terraform-registry-cache only runs a linux/windows matrix (no macos
-        # leg - see its `matrix.flavor` above), so its aggregated result must
-        # not gate the macos alias.
-        if: ${{ !cancelled() && matrix.check != 'Acceptance Tests (macos)' }}
+        # terraform-registry-cache's matrix now covers linux/windows/macos
+        # (see its `matrix.flavor` above), so its aggregated result gates all
+        # three required-check aliases here, not just linux/windows - a
+        # stale exclusion previously skipped this entirely for the macos
+        # alias, meaning a broken macos leg never failed any required check.
+        if: ${{ !cancelled() }}
         run: |
           if [ "${{ needs.terraform-registry-cache.result }}" != "success" ]; then
             echo "terraform-registry-cache result was '${{ needs.terraform-registry-cache.result }}'"
