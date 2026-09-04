@@ -12,8 +12,24 @@ permissions:
 
 jobs:
   release:
+    # This workflow runs on pull_request by design: it publishes a prerelease binary for a PR
+    # a maintainer has labeled `release/feature`, so the shared workflow checks out the PR's
+    # head ref and signs/publishes with the release secrets. Two things keep that safe:
+    #
+    #   - The label gate. Applying `release/feature` needs triage access, so only
+    #     maintainers can opt a PR into a release.
+    #   - The same-repository gate below. `pull_request` (unlike `pull_request_target`)
+    #     never exposes repository secrets to a fork's PR anyway, but this makes that
+    #     explicit and keeps a labeled fork PR from starting the job at all, instead of
+    #     failing partway through with empty secrets.
+    #
+    # The secrets can't be narrowed further: the callee declares no `workflow_call.secrets`
+    # schema, so an explicit secrets map is rejected at startup (see the note on
+    # `secrets: inherit` below).
     if: |
-      github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release/feature')
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'release/feature')
     # shared-go-auto-release.yml declares only id-token: write and
     # contents: read itself — all release-writing operations go through a
     # separately-scoped GitHub App installation token (BOT_GITHUB_APP_ID),
@@ -38,4 +54,9 @@ jobs:
       environment: 'feature-releases'
       runs-on: '["runs-on=${{github.run_id}}", "runner=large", "tag=atmos","extras=s3-cache", "private=false"]'
       draft: ${{ github.event.pull_request.draft }}
+    # `secrets: inherit`, not an explicit map: shared-go-auto-release.yml doesn't declare a
+    # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
+    # (observed as a startup_failure -- "likely failed because of a workflow file issue" -- with
+    # zero jobs ever created, on both this workflow and test.yml after an earlier attempt to
+    # narrow this to an explicit list).
     secrets: inherit

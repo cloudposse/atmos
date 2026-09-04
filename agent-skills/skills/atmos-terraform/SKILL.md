@@ -221,6 +221,22 @@ Atmos runs `terraform init` automatically before plan, apply, and deploy, so man
 rarely needed. When required, all upstream init flags pass through (`-reconfigure`, `-upgrade`,
 `-migrate-state`): `atmos terraform init vpc -s dev -reconfigure`.
 
+### Streaming UI (`--ui`)
+
+`plan`, `apply`, `deploy`, `init`, and `destroy` support a `--ui` flag that renders a live,
+Docker-build-style progress view (spinners, a dependency tree, per-resource status) instead of
+raw Terraform output:
+
+```shell
+atmos terraform apply vpc -s dev --ui
+```
+
+Enable it by default via `components.terraform.ui.enabled: true` in atmos.yaml or
+`ATMOS_TERRAFORM_UI=true`; pass `--ui=false` to override a config-enabled default for one run.
+The UI auto-disables when output is piped, in CI (`CI=true`), or on unsupported commands.
+`refresh` doesn't support it — Terraform's `refresh` doesn't emit the structured `-json` output
+the UI depends on; `--ui refresh` prints a warning and falls back to standard output.
+
 ## Multi-Component Operations
 
 Atmos supports executing Terraform commands across multiple components simultaneously using filter flags.
