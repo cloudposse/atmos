@@ -107,6 +107,14 @@ Two caveats. The cached paths change, so the cache version changes: the first ru
 it is a cold start. And the root moves for the whole job, so don't set it in a job whose tests or
 tooling assert Atmos's default cache locations.
 
+## Using it from another composite action
+
+The action works when called from inside another composite action (for example a repo-local
+"set up the toolchain" action). The key, paths and restore-keys are exported to the job
+environment (`ATMOS_CACHE_KEY`, `ATMOS_CACHE_PATH`, `ATMOS_CACHE_RESTORE_KEYS`) because the save
+runs in `actions/cache`'s post step, which in a nested action cannot see this action's step
+outputs (actions/runner#2800); without that the post step ran with an empty path and saved nothing.
+
 ## Versioning
 
 This action ships inside the Atmos repository, so the ref is an Atmos release:

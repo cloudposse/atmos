@@ -107,19 +107,40 @@ runs:
         }
         Write-Host "Prepending $dir to PATH so actions/cache uses GNU tar"
         echo "$dir" >> $Env:GITHUB_PATH
+    # The save happens in actions/cache's post step. When this action runs
+    # nested inside another composite action, that post step no longer sees
+    # `steps.meta.outputs` (actions/runner#2800) and would run with an empty
+    # `path`, saving nothing ("Input required and not supplied: path"). The
+    # job env is visible to post steps, so the values go through it.
+    - id: export
+      shell: bash
+      env:
+        ATMOS_CACHE_KEY: ${{ steps.meta.outputs.key }}
+        ATMOS_CACHE_PATH: ${{ steps.meta.outputs.path }}
+        ATMOS_CACHE_RESTORE_KEYS: ${{ steps.meta.outputs.restore-keys }}
+      run: |
+        {
+          echo "ATMOS_CACHE_KEY=${ATMOS_CACHE_KEY}"
+          echo "ATMOS_CACHE_PATH<<ATMOS_CACHE_EOF"
+          echo "${ATMOS_CACHE_PATH}"
+          echo "ATMOS_CACHE_EOF"
+          echo "ATMOS_CACHE_RESTORE_KEYS<<ATMOS_CACHE_EOF"
+          echo "${ATMOS_CACHE_RESTORE_KEYS}"
+          echo "ATMOS_CACHE_EOF"
+        } >> "$GITHUB_ENV"
     - id: cache
       if: inputs.mode != 'restore-only'
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
-        key: ${{ steps.meta.outputs.key }}
-        path: ${{ steps.meta.outputs.path }}
-        restore-keys: ${{ steps.meta.outputs.restore-keys }}
+        key: ${{ env.ATMOS_CACHE_KEY }}
+        path: ${{ env.ATMOS_CACHE_PATH }}
+        restore-keys: ${{ env.ATMOS_CACHE_RESTORE_KEYS }}
     # actions/cache/restore ships in the same repository and tag as
     # actions/cache, so the same SHA pins both.
     - id: cache-restore
       if: inputs.mode == 'restore-only'
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
-        key: ${{ steps.meta.outputs.key }}
-        path: ${{ steps.meta.outputs.path }}
-        restore-keys: ${{ steps.meta.outputs.restore-keys }}
+        key: ${{ env.ATMOS_CACHE_KEY }}
+        path: ${{ env.ATMOS_CACHE_PATH }}
+        restore-keys: ${{ env.ATMOS_CACHE_RESTORE_KEYS }}
