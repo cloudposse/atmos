@@ -22,14 +22,19 @@ name: Cache perf lab (windows)
 # ~16 s). Two measured causes: the runner's C: disk (~540 IOPS -- the fast
 # D: was removed from Windows Server 2025 images, actions/runner-images#12416,
 # #12647) and the extractor (Git-for-Windows' MSYS GNU tar pays a per-file
-# POSIX-shim cost; native bsdtar extracts ~4x faster on the same archive,
-# actions/cache#752, actions/toolkit#2379 - unmerged). Windows Defender is
+# POSIX-shim cost; native bsdtar was reported ~4x faster at extraction,
+#            actions/cache#752, actions/toolkit#2379 - but see below). Windows Defender is
 # not a factor: real-time monitoring is disabled at the image level.
 #
 # Tar configurations:
 #   gnu-tar  exactly what test.yml does today: Git's usr\bin prepended to
 #            PATH, so @actions/cache picks MSYS GNU tar.
-#   bsdtar   the proposed fix, using only released @actions/cache code: the
+#   bsdtar   the hypothesis that turned out wrong: measured 353 s on C: and
+#            117 s on D: vs GNU tar's 264 s and 94 s, because @actions/cache's
+#            bsdtar path decompresses the whole archive to a .tar on disk
+#            before extracting it (run 4). Kept as a leg so the comparison
+#            can be re-run when the toolkit changes. Selected the only way
+#            that works with released @actions/cache code: the
 #            toolkit finds GNU tar via a hardcoded %PROGRAMFILES%\Git\usr\bin\
 #            tar.exe existence check, falling back to a PATH lookup that
 #            accepts anything reporting "GNU tar". Renaming Git's tar.exe
