@@ -137,11 +137,9 @@ jobs:
             golang.org:443
             go.dev:443
             go.googlesource.com:443
-            go.dev:443
             pkg.go.dev:443
             google.golang.org:443
             proxy.golang.org:443
-            pkg.go.dev:443
             storage.googleapis.com:443
             modernc.org:443
             sum.golang.org:443
