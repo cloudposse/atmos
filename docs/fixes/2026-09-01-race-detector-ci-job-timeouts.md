@@ -1182,3 +1182,35 @@ TestExecuteTerraform_TerraformPlanWithInvalidTemplates -v -count=5` -- 5/5 pass.
 validates the fix doesn't regress the already-covered shapes rather than directly reproducing the new one --
 the error text itself was taken verbatim from the CI log and confirmed to contain "import not found", so the
 new branch is provably reachable. The next CI run of the `[race]` job is what confirms it end-to-end.
+
+## Round 23 (`TestGetTerminalWidthPrecedence` left the ui formatter permanently nil)
+
+CI job 101009660640 (this PR's `[race]` job) failed with a single test failure: `TestSupportCommand_RunE`
+(`cmd/support_test.go:39`), `Error: Received unexpected error: ui formatter not initialized`. Package `cmd`
+was the only failure; nothing else in the run failed.
+
+Same shape as every other round in this file: a test resets shared global state in cleanup without restoring
+it, and `-shuffle=on` exposed the gap once the randomized order happened to run the offending test before an
+innocent one. `TestGetTerminalWidthPrecedence` (`cmd/root_helpers_test.go`) registers an outer `t.Cleanup`
+that calls `ui.Reset()` (nils `pkg/ui`'s `globalFormatter`) and does nothing to re-initialize it afterward.
+`TestMain` (`cmd/testing_main_test.go`) calls `ui.InitFormatter` exactly once, at the start of the whole test
+binary -- it's not re-run between tests -- so once `TestGetTerminalWidthPrecedence` finishes, every
+subsequent test in that binary's run sees a nil formatter until something else happens to re-initialize it.
+`TestSupportCommand_RunE`'s own doc comment already flagged that it depends on `TestMain`'s
+`ui.InitFormatter` having run; it had no way to know a sibling test could silently undo that.
+
+Fixed by replacing the outer cleanup's `ui.Reset()` with `ui.ReinitFormatter()`, which re-creates a fresh,
+valid formatter from a new `io.Context()` rather than leaving the global torn down -- the same self-contained
+re-init the third subtest already uses correctly for its own narrower cleanup, just missing from the
+function-level one that runs last and determines the end state visible to every later test.
+
+Files: `cmd/root_helpers_test.go`.
+
+Validation: `go build ./cmd/...` -- clean. `go test ./cmd/ -run
+'TestGetTerminalWidthPrecedence|TestSupportCommand_RunE' -shuffle=on -v`, run 5 times -- every run passed
+regardless of which order `-shuffle=on` picked (`TestSupportCommand_RunE` before `TestGetTerminalWidthPrecedence`
+and vice versa, both observed across the 5 runs). `go test ./cmd/ -shuffle=on -run
+'TestGetTerminalWidth|TestSupportCommand|TestCalculateMaxFlagWidth|TestRenderFlags' -v` -- all 7 tests pass.
+`gofumpt -l cmd/root_helpers_test.go` -- no output. `./custom-gcl run --new-from-rev=origin/main ./cmd/...`
+-- 0 issues. Confirmed only one package (`cmd`) and one test failed in the CI log before this fix (grepped
+for every `^FAIL\t` package-summary line in the full job log, not just the tail).
