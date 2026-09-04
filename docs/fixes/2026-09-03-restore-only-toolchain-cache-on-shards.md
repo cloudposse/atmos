@@ -75,3 +75,11 @@ empty at save time. Direct use from a job never hit this. The action now also ex
 steps read those, since the job env is visible to post steps. Also: the `restore-only` boolean
 became a `mode` input (`restore-and-save` | `restore-only`) so a caller can pass its own mode
 through in one step.
+
+
+Side effect of the env export: `ATMOS_CACHE_PATH` is multi-line (the include glob plus the auth-dir
+exclusion), so every later step of the job carries a multi-line environment variable. That is
+legitimate in Actions, but the acceptance tests' fake container runtime recorded each invocation
+as one tab-joined line and a forwarded `-e ATMOS_CACHE_PATH=...` split the record at the newline,
+failing `TestCustomCommandStepContainerOverrideRunsInsideContainer` on Windows shard 1. The
+recorder now escapes newlines and tabs inside an argument.
