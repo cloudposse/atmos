@@ -105,19 +105,23 @@ func extractAWSEnvVars(env map[string]string) (awsEnvVars, error) {
 
 // setupAWSEnv temporarily sets AWS environment variables and returns a cleanup function.
 //
-// AWS_REGION is always tracked here, even when region is "": the AWS SDK gives an
-// explicit AWS_REGION env var precedence over the shared config file's per-profile
-// `region` setting, so leaving an ambient AWS_REGION untouched when this identity
-// doesn't resolve one would let it silently override the profile's own region --
-// exactly the symptom that made this loader's region resolution depend on whichever
-// other identity's credentials were loaded earlier in the same process (see
-// docs/fixes for the incident this closes).
+// AWS_REGION and AWS_DEFAULT_REGION are always tracked here, even when region is
+// "": the AWS SDK gives an explicit AWS_REGION/AWS_DEFAULT_REGION env var
+// precedence over the shared config file's per-profile `region` setting, so
+// leaving either untouched when this identity doesn't resolve one would let it
+// silently override the profile's own region -- exactly the symptom that made
+// this loader's region resolution depend on whichever other identity's
+// credentials were loaded earlier in the same process (see docs/fixes for the
+// incident this closes).
 //
-// AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_SESSION_TOKEN are always
-// cleared too: the SDK's default credential chain checks the static-key env
+// The credential/identity-selector variables below are always cleared too: the
+// SDK's default credential chain checks the static-key env provider (including
+// its legacy AWS_ACCESS_KEY/AWS_SECRET_KEY aliases) and the web-identity-token
 // provider before the shared-file/profile provider this loader exists to
-// drive, so any ambient static keys in the process environment would
-// silently outrank the file/profile this function was asked to load from.
+// drive, so any ambient values for these in the process environment would
+// silently outrank the file/profile this function was asked to load from. See
+// github.com/aws/aws-sdk-go-v2/config@v1.32.18's env_config.go for the exact
+// set the SDK reads.
 func setupAWSEnv(credsFile, configFile, profile, region string) func() {
 	originalEnv := make(map[string]string)
 	envVarsToSet := map[string]string{
@@ -125,9 +129,15 @@ func setupAWSEnv(credsFile, configFile, profile, region string) func() {
 		"AWS_CONFIG_FILE":             configFile,
 		"AWS_PROFILE":                 profile,
 		"AWS_REGION":                  region,
+		"AWS_DEFAULT_REGION":          region,
 		"AWS_ACCESS_KEY_ID":           "",
+		"AWS_ACCESS_KEY":              "",
 		"AWS_SECRET_ACCESS_KEY":       "",
+		"AWS_SECRET_KEY":              "",
 		"AWS_SESSION_TOKEN":           "",
+		"AWS_WEB_IDENTITY_TOKEN_FILE": "",
+		"AWS_ROLE_ARN":                "",
+		"AWS_ROLE_SESSION_NAME":       "",
 	}
 
 	// Save original values and set new ones.
