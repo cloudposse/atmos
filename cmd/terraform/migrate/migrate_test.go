@@ -649,6 +649,15 @@ func TestRunTerraformMigratePlan_NoMigrationsDirSkipsCleanly(t *testing.T) {
 	// zero-config history mode with no migrations/ dir made tfmigrate scan the
 	// component root and fail trying to parse Atmos's own generated
 	// backend.tf.json/tfvars.json as migration files.
+	//
+	// An empty PATH makes that guarantee an assertion rather than an
+	// assumption (same idiom as TestRunTerraformMigrate_SelectWorkspaceErrorPropagates):
+	// any terraform/tofu/tfmigrate invocation fails loudly with
+	// ErrProcessStartFailed instead of silently succeeding on a developer
+	// machine that happens to have tofu installed. This is exactly how the
+	// race-detector CI job (which installs no toolchain) caught the
+	// workspace-select-before-skip ordering bug this test now guards.
+	t.Setenv("PATH", t.TempDir())
 	configPath := filepath.Join("testdata", "nomigrations")
 
 	err := runTerraformMigrate(cmd, []string{
