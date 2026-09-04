@@ -18,13 +18,13 @@ import (
 // Release groups CI targets for the drafted-release-notes pipeline.
 type Release mg.Namespace
 
-// defaultSummaryModel is used when OPENAI_MODEL is unset. The lowest tier
-// is cheap and fast enough for a one-sentence-per-PR summarization pass.
-// It is gpt-5-mini rather than a 5.6-series model because that is the
-// newest small model the cloudposse OpenAI project can actually reach (a
-// live dry-run against gpt-5.6-luna returned 403 model_not_found); bump
-// this once the project has access.
-const defaultSummaryModel = "gpt-5-mini"
+// defaultSummaryModel is used when OPENAI_MODEL is unset; the lowest 5.6
+// tier is cheap and fast enough for a one-sentence-per-PR summarization
+// pass. A 403 model_not_found here means the OpenAI project has not been
+// granted this model - a project setting, not a code problem - and the
+// grant takes a while to propagate (observed flapping between 403 and
+// success for several minutes after it was made).
+const defaultSummaryModel = "gpt-5.6-luna"
 
 // releaseNotesHTTPTimeout bounds the whole SummarizeNotes call: one release
 // GET, one OpenAI request covering every PR at once, one release PATCH.

@@ -43,8 +43,8 @@ Two independent, durable changes:
     fails the job - this must never be able to block the release path over a summarization hiccup.
     `RELEASE_NOTES_DRY_RUN=1` prints the summarized body to stdout instead of updating the release,
     for previewing the result (or checking the key/model) against any real release without touching
-    it. The model defaults to `gpt-5-mini` and is overridable with `OPENAI_MODEL`; the request sends
-    no `temperature`, because the gpt-5 family rejects any non-default value.
+    it. The model defaults to `gpt-5.6-luna` and is overridable with `OPENAI_MODEL`; the request
+    sends no `temperature`, because the gpt-5 family rejects any non-default value.
 2. **`.github/workflows/release.yml`** (new): the `release:` job (and the new summarization job)
     moved out of `test.yml` into their own `workflow_run`-triggered workflow, gated on
     `github.event.workflow_run.conclusion == 'success'`. Previously `release:` lived inside
@@ -70,10 +70,13 @@ Two independent, durable changes:
 - Validated live with a real key (`RELEASE_NOTES_DRY_RUN=1 go tool mage release:summarizeNotes
   cloudposse/atmos 378837775`, the `v1.228.0-rc.2` release with three real entries): body went from
   9,763 to 1,072 characters with every `<details>` block, summary line and category heading intact.
-  The first two live attempts found two defects fixed in the same change: the originally coded
-  default model (`gpt-5.6-luna`) returned `403 model_not_found` for the cloudposse OpenAI project
-  (its newest reachable models are the gpt-5.4 line), and `temperature: 0.3` returned
-  `400 unsupported_value` on the gpt-5 family.
+  The first live attempts surfaced two things. `temperature: 0.3` returned `400 unsupported_value`
+  on the gpt-5 family - a real defect, fixed by not sending one. And `gpt-5.6-luna` returned
+  `403 model_not_found` for the cloudposse OpenAI project, which turned out to be a project
+  permission (the project had not been granted the 5.6 models); after the grant, the same call
+  flapped between 403 and success for several minutes while it propagated. So a 403 here is a
+  project setting to fix, not a reason to change the default, and the job's log-and-skip behavior
+  already handles the propagation window.
 - Not yet validated in CI: the `summarize-notes` job needs `OPENAI_API_KEY` configured as a repo/org
   secret before it does anything beyond log-and-skip; the `draft`/summarization split needs a real
   push-triggered `Tests` run to complete before `workflow_run` fires it.
