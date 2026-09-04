@@ -96,8 +96,17 @@ type ToolResolver interface {
 
 // BuiltinAliases are always available and can be overridden in atmos.yaml.
 // These provide convenient shortcuts for common tools.
+//
+// "tofu" is explicit rather than relying on the aqua-registry short-name
+// search (Resolve's step 3): that search depends on a populated registry
+// index, which isn't guaranteed in every environment (see the incident
+// where `atmos toolchain exec -- tofu ...` failed inside an older pinned
+// container image whose resolver had no short-name search at all --
+// docs/fixes covers the .tool-versions workaround this alias makes
+// unnecessary for any atmos release built with it).
 var BuiltinAliases = map[string]string{
 	"atmos": "cloudposse/atmos",
+	"tofu":  "opentofu/opentofu",
 }
 
 var defaultRegistry = registry.DefaultRegistry
