@@ -1,12 +1,21 @@
 name: Cache perf lab (windows)
 
-# A dispatch-only lab for iterating on Windows Go-cache restore time without
-# running the full Tests suite. Each `restore` matrix leg restores the SAME
-# production setup-go archive (setup-go's key is
-# setup-go-Windows-x64-go-<version>-<go.sum hash>; the default branch's cache
-# is readable from any branch) under one tar configuration, asserts it was a
-# real cache hit, prints which `tar` was actually selected, and writes its own
+# A lab for iterating on Windows Go-cache restore time without running the
+# full Tests suite. A `seed` job per cache layout populates a real
+# go-build+mod archive (go mod download + go build ./...) that setup-go's post
+# step saves under THIS branch's cache scope; each `restore` matrix leg then
+# restores that archive under one tar configuration, asserts it was a real
+# cache hit, prints which `tar` was actually selected, and writes its own
 # "Set up Go" duration to the step summary. Compare the rows.
+#
+# The lab seeds its own archive rather than reusing main's because main's
+# setup-go archive is routinely evicted: every Tests run writes ~5 GB of
+# caches against a 10 GB LRU quota, so the only setup-go-Windows entries that
+# survive are PR-scoped (refs/pull/N/merge), which other branches cannot
+# read. (The first run of this lab found exactly that: five entries, none on
+# refs/heads/main.) Seeding costs one build per layout, and only on the
+# first run after a go.sum change - after that the seed hits and saves
+# nothing.
 #
 # Why this exists: on windows-2025 hosted runners, restoring our ~1.9 GB
 # go-build+mod cache is ~6.5 minutes of pure tar extraction (download is
@@ -33,10 +42,23 @@ name: Cache perf lab (windows)
 # the default branch, `gh workflow run cache-perf.yml --ref <branch>` also
 # works, since workflow_dispatch only resolves workflows that exist there.)
 #
+# Cache layouts (the second matrix axis):
+#   c        Go's defaults: GOCACHE under %LOCALAPPDATA% and GOMODCACHE under
+#            %GOPATH%, both on C:.
+#   d        GOCACHE and GOMODCACHE relocated to D:\a\ before setup-go runs,
+#            the way actions/setup-go#515 proposes. The `topology` job's
+#            first run measured D: as a separate disk with ~8.8x the
+#            small-file write rate of C: (4,545 vs 515 files/s), so this is
+#            the bigger lever. It needs its own seed: setup-go's cache
+#            *version* hashes the restore paths, and @actions/cache tars with
+#            -P (absolute paths), so a D: archive only restores onto D:.
+#            Adopting this in production means a fresh cache key/version - a
+#            one-time cold start, not a regression.
+#
 # The `topology` job answers a separate question the same run: whether the
 # D:\ that windows-2025-vs2026 images still expose is a distinct disk from
-# C: (a fast local disk would be worth a further ~13x on extraction, per
-# actions/setup-go#515) or just a path onto the same slow volume.
+# C: or just a path onto the same slow volume, and how fast each is at the
+# small-file writes a cache restore is made of.
 
 on:
   # Every push to a ci-cache-perf* branch runs this branch's copy of the
@@ -56,8 +78,105 @@ concurrency:
 permissions: {}
 
 jobs:
+  # Populates a real go-build+mod cache for each layout and lets setup-go's
+  # post step save it under this branch's scope, so the timed legs always
+  # have a populated archive to restore. On a hit the seed is a plain restore
+  # and setup-go saves nothing.
+  seed:
+    name: seed (${{ matrix.layout }})
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        layout: [c, d]
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          # Same list as the `restore` job below (test.yml's `build` job).
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
+            releases.hashicorp.com:443
+            rekor.sigstore.dev:443
+            tuf-repo-cdn.sigstore.dev:443
+            us.i.posthog.com:443
+            www.msftconnecttest.com:443
+            ipv6.msftconnecttest.com:443
+            www.msftncsi.com:443
+            ipv6.msftncsi.com:443
+            time.windows.com:443
+            client.wns.windows.com:443
+            settings-win.data.microsoft.com:443
+            *.events.data.microsoft.com:443
+            *.update.microsoft.com:443
+            ecs.office.com:443
+            pti.store.microsoft.com:443
+            login.live.com:443
+            go.microsoft.com:443
+            www.microsoft.com:443
+            ocsp.sectigo.com:80
+            ocsp.sectigo.com:443
+            crl.sectigo.com:80
+            crl.sectigo.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      # Must run before setup-go: it reads `go env GOCACHE`/`GOMODCACHE` to
+      # decide both what to restore and what its post step saves.
+      - name: "Relocate Go caches to D: (layout d)"
+        if: matrix.layout == 'd'
+        shell: pwsh
+        run: |
+          Add-Content $env:GITHUB_ENV 'GOCACHE=D:\a\go-build'
+          Add-Content $env:GITHUB_ENV 'GOMODCACHE=D:\a\go\pkg\mod'
+
+      # The seed's own restore and save go through bsdtar; the tar
+      # comparison happens in the `restore` job, not here.
+      - name: Use bsdtar for the seed's restore and save
+        shell: pwsh
+        run: echo 'C:\Windows\System32' >> $Env:GITHUB_PATH
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        env:
+          PROGRAMFILES: 'C:\atmos-no-gnu-tar'
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Populate the module and build caches
+        shell: pwsh
+        run: |
+          Write-Host "GOCACHE=$(go env GOCACHE)  GOMODCACHE=$(go env GOMODCACHE)"
+          go mod download
+          go build ./...
+
   restore:
-    name: restore (${{ matrix.config }})
+    name: restore (${{ matrix.config }}, ${{ matrix.layout }})
+    needs: seed
     runs-on: windows-latest
     timeout-minutes: 30
     # actions:read for the jobs-API self-lookup that reports step timing.
@@ -69,9 +188,15 @@ jobs:
       matrix:
         include:
           - config: gnu-tar
+            layout: c
             tar-dir: 'C:\Program Files\Git\usr\bin'
             programfiles: 'C:\Program Files'
           - config: bsdtar
+            layout: c
+            tar-dir: 'C:\Windows\System32'
+            programfiles: 'C:\atmos-no-gnu-tar'
+          - config: bsdtar
+            layout: d
             tar-dir: 'C:\Windows\System32'
             programfiles: 'C:\atmos-no-gnu-tar'
     steps:
@@ -129,6 +254,15 @@ jobs:
         with:
           persist-credentials: false
 
+      # Same relocation as the seed, so this leg restores the archive the
+      # matching seed saved (same paths, same cache version).
+      - name: "Relocate Go caches to D: (layout d)"
+        if: matrix.layout == 'd'
+        shell: pwsh
+        run: |
+          Add-Content $env:GITHUB_ENV 'GOCACHE=D:\a\go-build'
+          Add-Content $env:GITHUB_ENV 'GOMODCACHE=D:\a\go\pkg\mod'
+
       - name: Put the selected tar first on PATH
         shell: pwsh
         env:
@@ -161,15 +295,16 @@ jobs:
           CACHE_HIT: ${{ steps.go.outputs.cache-hit }}
         run: |
           if ($env:CACHE_HIT -ne 'true') {
-            throw "setup-go reported cache-hit='$env:CACHE_HIT'; a miss would time a no-op, not a restore. Check go.sum matches the default branch."
+            throw "setup-go reported cache-hit='$env:CACHE_HIT'; a miss would time a no-op, not a restore. The seed job for this layout should have saved an archive under this branch - check its post step."
           }
 
       - name: Report timing to the step summary
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          JOB_NAME: restore (${{ matrix.config }})
+          JOB_NAME: restore (${{ matrix.config }}, ${{ matrix.layout }})
           CONFIG: ${{ matrix.config }}
+          LAYOUT: ${{ matrix.layout }}
           TAR_DIR: ${{ matrix.tar-dir }}
         run: |
           $jobs = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID/jobs?per_page=100" --paginate | ConvertFrom-Json
@@ -177,9 +312,9 @@ jobs:
           $step = $job.steps | Where-Object { $_.name -eq 'Set up Go (timed cache restore)' }
           $secs = [int]([datetime]$step.completed_at - [datetime]$step.started_at).TotalSeconds
           Write-Host "Set up Go (timed cache restore): ${secs}s"
-          $row = "| $env:CONFIG | ``$env:TAR_DIR`` | ${secs}s |"
+          $row = "| $env:CONFIG | $env:LAYOUT | ``$env:TAR_DIR`` | $(go env GOCACHE) | ${secs}s |"
           if (-not (Test-Path $env:GITHUB_STEP_SUMMARY) -or -not (Get-Content $env:GITHUB_STEP_SUMMARY | Select-String -Quiet 'Cache restore timing')) {
-            Add-Content $env:GITHUB_STEP_SUMMARY "### Cache restore timing`n`n| config | tar | Set up Go |`n|---|---|---|"
+            Add-Content $env:GITHUB_STEP_SUMMARY "### Cache restore timing`n`n| config | layout | tar | GOCACHE | Set up Go |`n|---|---|---|---|---|"
           }
           Add-Content $env:GITHUB_STEP_SUMMARY $row
 
