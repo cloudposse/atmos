@@ -8,7 +8,7 @@
 Part of Phase 2 of the CI-stability plan (see
 `docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md` for Phase 1). The `test` job's ten shards
 per OS restore the Atmos toolchain cache without ever saving it: the `actions/cache` composite action gained
-a `restore-only` input that switches it to `actions/cache/restore`, and `terraform-registry-cache` stays the
+a `mode` input (`restore-only`) that switches it to `actions/cache/restore`, and `terraform-registry-cache` stays the
 single writer of the key per OS. No user-visible behavior changes; the new action input is opt-in and
 defaults to the previous behavior.
 
@@ -28,10 +28,10 @@ toolchain` costs 43 s on average and up to 3 min per shard for nothing.
 ## Changes
 
 - `.github/workflows/test.yml`: the `test` job's `Cache Atmos toolchain` step (all three OSes) now passes
-  `restore-only: 'true'`, with a comment carrying the cache data above and naming
+  `mode: restore-only`, with a comment carrying the cache data above and naming
   `terraform-registry-cache` as the single writer. The `terraform-registry-cache` job's cache step is
   unchanged.
-- `actions/cache/action.yml`: new optional input `restore-only` (string, default `'false'`). When `'true'`
+- `actions/cache/action.yml`: new optional input `mode` (`restore-and-save`, the default, or `restore-only`). When `restore-only`
   the action runs `actions/cache/restore` (same repository and tag as `actions/cache`, so the same pinned
   SHA `27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5`) with identical `key`, `path`, and
   `restore-keys`; otherwise `actions/cache` runs as before. Exactly one of the two steps runs, so the
@@ -45,7 +45,7 @@ warmup's writer role.
 ## Validation
 
 - `python3 -c 'import yaml; yaml.safe_load(open(f))'` on `.github/workflows/test.yml` and
-  `actions/cache/action.yml`: both parse; the action parses with `inputs: [restore-only]` and steps `meta`,
+  `actions/cache/action.yml`: both parse; the action parses with `inputs: [mode]` and steps `meta`,
   `validate`, `cache`, `cache-restore`.
 - `actionlint .github/workflows/test.yml`: clean (exit 0). actionlint does not lint composite actions, so
   `actions/cache/action.yml` is covered by the YAML parse and the Go regression test below only.

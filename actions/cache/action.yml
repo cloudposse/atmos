@@ -15,16 +15,18 @@ branding:
   color: 'blue'
 
 inputs:
-  restore-only:
+  mode:
     description: >-
-      When 'true', only restore the cache (actions/cache/restore) and never
-      save it in the post step. Use this on jobs that fan out into many
-      parallel consumers of one key (for example test shards) and leave a
-      single writer job to save. Saves otherwise race for the same key
-      ("Unable to reserve cache ... another job may be creating this cache")
-      and each one still pays the tar+zstd upload cost.
+      `restore-and-save` (default): restore the cache and save it in the post
+      step, via actions/cache. `restore-only`: restore but never save, via
+      actions/cache/restore (no post step). Use `restore-only` on jobs that
+      fan out into many parallel consumers of one key (for example test
+      shards) and leave a single writer job on `restore-and-save`. Saves
+      otherwise race for the same key ("Unable to reserve cache ... another
+      job may be creating this cache") and each one still pays the tar+zstd
+      upload cost.
     required: false
-    default: 'false'
+    default: 'restore-and-save'
 
 outputs:
   cache-hit:
@@ -56,7 +58,7 @@ runs:
           exit 1
         fi
     - id: cache
-      if: inputs.restore-only != 'true'
+      if: inputs.mode != 'restore-only'
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         key: ${{ steps.meta.outputs.key }}
@@ -65,7 +67,7 @@ runs:
     # actions/cache/restore ships in the same repository and tag as
     # actions/cache, so the same SHA pins both.
     - id: cache-restore
-      if: inputs.restore-only == 'true'
+      if: inputs.mode == 'restore-only'
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         key: ${{ steps.meta.outputs.key }}
