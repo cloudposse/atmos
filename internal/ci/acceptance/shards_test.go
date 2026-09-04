@@ -217,6 +217,50 @@ func TestSleepWithContext_ReturnsAfterDuration(t *testing.T) {
 	assert.GreaterOrEqual(t, time.Since(start), 5*time.Millisecond)
 }
 
+func TestShardResultsParams_Polling(t *testing.T) {
+	customWait := func(context.Context, time.Duration) error { return nil }
+
+	tests := []struct {
+		name         string
+		params       ShardResultsParams
+		wantPolls    int
+		wantInterval time.Duration
+		wantCustom   bool
+	}{
+		{
+			name:         "zero values fall back to defaults",
+			params:       ShardResultsParams{},
+			wantPolls:    DefaultShardPolls,
+			wantInterval: DefaultShardPollInterval,
+		},
+		{
+			name:         "negative values fall back to defaults",
+			params:       ShardResultsParams{Polls: -1, Interval: -1},
+			wantPolls:    DefaultShardPolls,
+			wantInterval: DefaultShardPollInterval,
+		},
+		{
+			name:         "explicit values are kept as-is",
+			params:       ShardResultsParams{Polls: 3, Interval: time.Millisecond, Wait: customWait},
+			wantPolls:    3,
+			wantInterval: time.Millisecond,
+			wantCustom:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			polls, interval, wait := tt.params.polling()
+			assert.Equal(t, tt.wantPolls, polls)
+			assert.Equal(t, tt.wantInterval, interval)
+			require.NotNil(t, wait)
+			if tt.wantCustom {
+				assert.NoError(t, wait(context.Background(), 0))
+			}
+		})
+	}
+}
+
 func TestWriteShardListing_TabSeparated(t *testing.T) {
 	var out bytes.Buffer
 	writeShardListing(&out, []ShardResult{{Name: "a", Conclusion: "success"}, {Name: "b"}})
