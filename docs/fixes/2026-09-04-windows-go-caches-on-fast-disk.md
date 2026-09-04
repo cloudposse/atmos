@@ -34,8 +34,11 @@ The cache *version* hashes the restore paths, so the first run after this lands 
 
 ## Measurements
 
-All from `.github/workflows/cache-perf.yml` (PR #3049), the same ~1.7 GB archive, `Set up Go`
-step wall clock on `windows-latest`:
+All from a throwaway lab workflow that lived on PR #3049's branch while the numbers were
+gathered (`cache-perf.yml` + a `cache-perf-lab` composite, last at commit `8fe6ed6384`; removed
+before merge, resurrectable from git if ever needed). It seeded a real go-build+mod archive per
+cache layout under the branch's own cache scope, then restored it under each tar/disk
+combination and timed the `Set up Go` step. Same ~1.7 GB archive, `windows-latest`:
 
 | Restore              | C: (Go defaults) | D: (work disk) |
 |----------------------|------------------|----------------|
@@ -52,7 +55,7 @@ reads it back - and that extra multi-GB write costs more than the MSYS per-file 
 So the existing "Add GNU tar to PATH" steps stay; their comments now cite these numbers instead of
 the 2024 belief (#877) that was never measured.
 
-## Things learned the hard way (all in the lab's header comment too)
+## Things learned the hard way
 
 - **Main's Go cache never survives.** The repo sits at the 10 GB cache quota (9.9 GB across 5
   entries, ~1.8 GB per Windows setup-go archive), so every save evicts the least recently used
@@ -61,19 +64,19 @@ the 2024 belief (#877) that was never measured.
   matters as much as the restore.
 - **A step-level `PROGRAMFILES` env override does nothing on Windows runners** (the process
   keeps its own `ProgramFiles`), so the first "bsdtar" measurements silently used GNU tar; only
-  the tar command line in the log tells the truth. The lab now renames Git's `tar.exe` aside to
-  select bsdtar, and prints which tar `@actions/cache` will pick.
+  the tar command line in the log tells the truth. The lab selected bsdtar by renaming Git's
+  `tar.exe` aside for the job, and printed which tar `@actions/cache` would pick.
 - **Windows Defender was not a factor**: real-time monitoring is off at the image level (see
   `2026-09-04-windows-defender-exclusions-are-a-noop.md`).
-- **The jobs API does not list nested composite steps**, so the lab times setup-go with its own
+- **The jobs API does not list nested composite steps**, so the lab timed setup-go with its own
   clock.
 - An unquoted `C:`/`D:` inside a YAML step name is a mapping-key parse error; quote such names.
 
 ## Validation
 
-- `actionlint` on `test.yml`, `setup-go-cache-warmup.yml`, `cache-perf.yml`; pre-commit hooks clean.
-- The lab's D: layout now runs the production action itself (`cache-perf-lab` → `setup-go-cache`),
-  so `cache-perf.yml` keeps measuring exactly what production runs.
+- `actionlint` on `test.yml` and `setup-go-cache-warmup.yml`; pre-commit hooks clean.
+- The lab's final run (run 4 on the branch) exercised the production action itself as its D:
+  layout, so the 94 s / 117 s D: restores measured exactly what production now runs.
 - The PR's own `Tests` run exercises the action on every Windows job (first run is the cold start).
 
 ## Follow-ups
