@@ -56,6 +56,13 @@ func registerExecutionFlags(registry *flags.FlagRegistry) {
 		Description: "Customize User-Agent string in Terraform provider requests (sets TF_APPEND_USER_AGENT)",
 		EnvVars:     []string{"ATMOS_APPEND_USER_AGENT"},
 	})
+	registry.Register(&flags.BoolFlag{
+		Name:        "ui",
+		Shorthand:   "",
+		Default:     false,
+		Description: "Enable streaming UI mode for real-time resource status display",
+		EnvVars:     []string{"ATMOS_TERRAFORM_UI"},
+	})
 	// Skip hooks at runtime. --skip-hooks (no value) skips all hooks for the
 	// current invocation; --skip-hooks=name1,name2 skips only the named hooks.
 	// Per-invocation only — does not propagate to nested commands.
