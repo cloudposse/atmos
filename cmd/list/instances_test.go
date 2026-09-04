@@ -248,6 +248,12 @@ func TestInstancesIdentityFlagLogic(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// viper is the global singleton; setupViper's viper.Reset() +
+			// viper.Set("identity", ...) leaks the "identity" key to every
+			// later test in this binary unless restored here. See
+			// TestAffectedIdentityFlagParsing's identical cleanup for why.
+			t.Cleanup(viper.Reset)
+
 			tc.setupViper()
 			cmd := tc.setupCmd()
 
