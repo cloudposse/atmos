@@ -74,7 +74,7 @@ auth:
 |---------------------------------------------------------|--------------------------|
 | Quick-launch a session in the Leapp app                 | `atmos auth login -i <identity>` |
 | Leapp's "Open Terminal" for a session                   | `atmos auth shell -i <identity>` |
-| Leapp's "Generate Credentials" / copy-to-clipboard       | `eval $(atmos auth env -i <identity>)` |
+| Leapp's "Generate Credentials" / copy-to-clipboard       | `eval $(atmos auth env -i <identity>)` -- `env` alone doesn't authenticate; run `atmos auth login -i <identity>` first (see the "Quick-launch a session" row above) |
 
 Unlike Leapp, Atmos does not need to write into `~/.aws/config`/`~/.aws/credentials` to make a
 session usable -- see

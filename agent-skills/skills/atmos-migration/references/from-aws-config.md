@@ -2,8 +2,9 @@
 
 This reference is the agent's decision guide for users coming from `~/.aws/config` and
 `~/.aws/credentials`. There is no standalone prose tutorial for this migration yet -- for the full
-auth configuration schema, see the [atmos-auth](../../atmos-auth/SKILL.md) skill and its
-[providers-and-identities.md](../../atmos-auth/references/providers-and-identities.md) reference.
+auth configuration schema, see [Atmos Auth configuration](https://atmos.tools/cli/configuration/auth)
+and its [providers](https://atmos.tools/cli/configuration/auth/providers) and
+[identities](https://atmos.tools/cli/configuration/auth/identities) reference pages.
 
 ## Identifying the User's Shape
 
@@ -326,6 +327,8 @@ since they often replace scripts the user built by hand.
 
 ## Related Skills
 
-[atmos-auth](../../atmos-auth/SKILL.md) for the full provider/identity schema and command
-reference; [atmos-secrets](../../atmos-secrets/SKILL.md) if the user wants to store static
-credentials as a declared secret rather than relying on the keyring.
+[Atmos Auth configuration](https://atmos.tools/cli/configuration/auth) for the full
+provider/identity schema and [atmos auth commands](https://atmos.tools/cli/commands/auth/usage)
+for the command reference; [Secrets Configuration](https://atmos.tools/cli/configuration/secrets)
+if the user wants to store static credentials as a declared secret rather than relying on the
+keyring.

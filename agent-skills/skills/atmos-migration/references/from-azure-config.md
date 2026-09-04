@@ -3,8 +3,9 @@
 This reference is the agent's decision guide for users coming from the `az` CLI. For a fuller
 prose walkthrough of Azure auth itself (not migration-specific), see the
 [Azure Authentication Tutorial](https://atmos.tools/tutorials/azure-authentication); for the full
-auth configuration schema, see the [atmos-auth](../../atmos-auth/SKILL.md) skill and its
-[providers-and-identities.md](../../atmos-auth/references/providers-and-identities.md) reference.
+auth configuration schema, see [Atmos Auth configuration](https://atmos.tools/cli/configuration/auth)
+and its [providers](https://atmos.tools/cli/configuration/auth/providers) and
+[identities](https://atmos.tools/cli/configuration/auth/identities) reference pages.
 
 ## Identifying the User's Shape
 
@@ -177,5 +178,6 @@ set explicitly even if the user's az CLI is already pointed at the sovereign clo
 
 ## Related Skills
 
-[atmos-auth](../../atmos-auth/SKILL.md) for the full provider/identity schema and command
-reference.
+[Atmos Auth configuration](https://atmos.tools/cli/configuration/auth) for the full
+provider/identity schema, and [atmos auth commands](https://atmos.tools/cli/commands/auth/usage)
+for the command reference.

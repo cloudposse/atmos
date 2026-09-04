@@ -2,8 +2,9 @@
 
 This reference is the agent's decision guide for users coming from the `gcloud` CLI. There is no
 standalone prose tutorial for this migration yet -- for the full auth configuration schema, see
-the [atmos-auth](../../atmos-auth/SKILL.md) skill and its
-[providers-and-identities.md](../../atmos-auth/references/providers-and-identities.md) reference.
+[Atmos Auth configuration](https://atmos.tools/cli/configuration/auth) and its
+[providers](https://atmos.tools/cli/configuration/auth/providers) and
+[identities](https://atmos.tools/cli/configuration/auth/identities) reference pages.
 
 ## Identifying the User's Shape
 
@@ -164,5 +165,6 @@ long-lived key material.
 
 ## Related Skills
 
-[atmos-auth](../../atmos-auth/SKILL.md) for the full provider/identity schema and command
-reference.
+[Atmos Auth configuration](https://atmos.tools/cli/configuration/auth) for the full
+provider/identity schema, and [atmos auth commands](https://atmos.tools/cli/commands/auth/usage)
+for the command reference.

@@ -3,8 +3,9 @@
 This reference is the agent's decision guide for users coming from
 [saml2aws](https://github.com/Versent/saml2aws) (Versent). There is no standalone prose tutorial
 for this migration yet -- for the full auth configuration schema, see the
-[atmos-auth](../../atmos-auth/SKILL.md) skill and its
-[providers-and-identities.md](../../atmos-auth/references/providers-and-identities.md) reference.
+[Atmos Auth configuration](https://atmos.tools/cli/configuration/auth) and its
+[providers](https://atmos.tools/cli/configuration/auth/providers) and
+[identities](https://atmos.tools/cli/configuration/auth/identities) reference pages.
 
 This is the tightest mapping of all the auth migration guides: Atmos's own `aws/saml` provider is
 built directly on the `saml2aws` library plus Playwright for browser automation. Frame this
@@ -115,5 +116,6 @@ for the full explanation.
 
 ## Related Skills
 
-[atmos-auth](../../atmos-auth/SKILL.md) for the full provider/identity schema and command
-reference.
+[Atmos Auth configuration](https://atmos.tools/cli/configuration/auth) for the full
+provider/identity schema, and [atmos auth commands](https://atmos.tools/cli/commands/auth/usage)
+for the command reference.
