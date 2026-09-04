@@ -2,6 +2,8 @@ package merge
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -24,10 +26,19 @@ const (
 	// so a conflicted node is temporarily replaced with a sentinel scalar;
 	// once the whole tree is encoded to text, spliceConflictMarkers finds
 	// each sentinel and replaces it with real <<<<<<< / ======= / >>>>>>>
-	// markers. The fixed %06d width guarantees no sentinel is ever a
-	// substring of another, so a plain text search for one sentinel can
-	// never accidentally match a different one.
-	conflictSentinelFormat = "ATMOSMERGECONFLICT%06d"
+	// markers. The fixed-width %06d index guarantees no two sentinels issued
+	// for the same merge are ever a substring of one another, so a plain text
+	// search for one can never accidentally match another. The random hex
+	// suffix (see conflictTracker.nextSentinel) guarantees a sentinel can
+	// never collide with a pre-existing scalar value already present in the
+	// document being merged -- without it, a value that happened to equal a
+	// sentinel would let spliceConflictMarkers mistake unrelated content for
+	// the inserted conflict placeholder and corrupt it.
+	conflictSentinelFormat = "ATMOSMERGECONFLICT%06d-%s"
+
+	// Number of random bytes (hex-encoded, so twice this many characters)
+	// appended to each sentinel by randomSentinelSuffix.
+	conflictSentinelSuffixBytes = 8
 )
 
 // YAMLMerger handles 3-way merging of YAML files with structure awareness.
@@ -81,12 +92,12 @@ func (m *YAMLMerger) SetConflictStrategy(strategy ConflictStrategy) {
 // spliced in once the whole document has been rendered to text. Ours/theirs
 // pick a side and deliberately do not record a conflict, so the write
 // proceeds with no markers.
-func (m *YAMLMerger) pickConflictValue(ours, theirs *yaml.Node, path string, conflicts *conflictTracker) *yaml.Node {
+func (m *YAMLMerger) pickConflictValue(ours, theirs *yaml.Node, path string, conflicts *conflictTracker) (*yaml.Node, error) {
 	switch m.conflictStrategy {
 	case ConflictStrategyTheirs:
-		return theirs
+		return theirs, nil
 	case ConflictStrategyOurs:
-		return ours
+		return ours, nil
 	default:
 		return conflicts.addNodeConflict(path, ours, theirs)
 	}
@@ -124,7 +135,7 @@ func (m *YAMLMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	}
 
 	// Perform structure-aware merge, document by document.
-	conflicts := &conflictTracker{conflicts: make([]string, 0)}
+	conflicts := &conflictTracker{conflicts: make([]string, 0), forbidden: base + ours + theirs}
 	mergedDocs, err := m.mergeDocumentStreams(baseDocs, oursDocs, theirsDocs, conflicts)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrThreeWayMerge).
@@ -269,6 +280,12 @@ func (m *YAMLMerger) mergeDocumentStreams(baseDocs, oursDocs, theirsDocs []*yaml
 type conflictTracker struct {
 	conflicts     []string
 	nodeConflicts []nodeConflict
+	// forbidden is the concatenation of the raw base/ours/theirs text being
+	// merged. addNodeConflict never hands out a sentinel that appears
+	// anywhere in it, so a pre-existing scalar value coincidentally equal to
+	// a sentinel can never be mistaken for the inserted conflict placeholder
+	// by spliceConflictMarkers/findSentinel.
+	forbidden string
 }
 
 // nodeConflict records a real ours/theirs divergence at a specific path, plus
@@ -293,9 +310,12 @@ func (c *conflictTracker) addConflict(path string) {
 // sentinel scalar node to embed in the tree at that location. The sentinel
 // carries ours' comments so they aren't silently dropped from the encoded
 // output.
-func (c *conflictTracker) addNodeConflict(path string, ours, theirs *yaml.Node) *yaml.Node {
+func (c *conflictTracker) addNodeConflict(path string, ours, theirs *yaml.Node) (*yaml.Node, error) {
 	c.addConflict(path)
-	sentinel := fmt.Sprintf(conflictSentinelFormat, len(c.nodeConflicts))
+	sentinel, err := c.nextSentinel()
+	if err != nil {
+		return nil, err
+	}
 	c.nodeConflicts = append(c.nodeConflicts, nodeConflict{sentinel: sentinel, ours: ours, theirs: theirs})
 	return &yaml.Node{
 		Kind:        yaml.ScalarNode,
@@ -304,7 +324,39 @@ func (c *conflictTracker) addNodeConflict(path string, ours, theirs *yaml.Node) 
 		HeadComment: ours.HeadComment,
 		LineComment: ours.LineComment,
 		FootComment: ours.FootComment,
+	}, nil
+}
+
+// nextSentinel returns a sentinel guaranteed unique among every sentinel
+// issued so far for this merge (the fixed-width index) and absent from every
+// document being merged (the random suffix, regenerated on the vanishingly
+// rare collision against c.forbidden). See conflictSentinelFormat.
+func (c *conflictTracker) nextSentinel() (string, error) {
+	index := len(c.nodeConflicts)
+	for {
+		suffix, err := randomSentinelSuffix()
+		if err != nil {
+			return "", err
+		}
+		sentinel := fmt.Sprintf(conflictSentinelFormat, index, suffix)
+		if !strings.Contains(c.forbidden, sentinel) {
+			return sentinel, nil
+		}
 	}
+}
+
+// randomSentinelSuffix returns a random hex string that makes each sentinel
+// unpredictable, so a value already present in the document being merged
+// cannot coincide with one -- neither by chance nor by construction.
+func randomSentinelSuffix() (string, error) {
+	buf := make([]byte, conflictSentinelSuffixBytes)
+	if _, err := rand.Read(buf); err != nil {
+		return "", errUtils.Build(errUtils.ErrThreeWayMerge).
+			WithCause(err).
+			WithExplanation("Failed to generate a random conflict marker").
+			Err()
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 // spliceConflictMarkers replaces each conflict sentinel embedded in the
@@ -484,7 +536,7 @@ func (m *YAMLMerger) mergeNodes(base, ours, theirs *yaml.Node, path string, conf
 	// when ours is a MappingNode).  Record a conflict and preserve the user's
 	// version whenever kinds diverge.
 	if ours.Kind != base.Kind || theirs.Kind != base.Kind {
-		return m.pickConflictValue(ours, theirs, path, conflicts), nil
+		return m.pickConflictValue(ours, theirs, path, conflicts)
 	}
 
 	// Handle based on node type.
@@ -550,7 +602,7 @@ func (m *YAMLMerger) mergeMappings(base, ours, theirs *yaml.Node, path string, c
 
 	// If there's a kind mismatch, resolve per the configured conflict strategy.
 	if !baseIsMapping || !oursIsMapping || !theirsIsMapping {
-		return m.pickConflictValue(ours, theirs, path, conflicts), nil
+		return m.pickConflictValue(ours, theirs, path, conflicts)
 	}
 
 	result := &yaml.Node{
@@ -606,7 +658,10 @@ func (m *YAMLMerger) mergeMappings(base, ours, theirs *yaml.Node, path string, c
 		case !inBase && inTheirs:
 			// Both added the same key - merge values.
 			if oursValue.Kind != theirsValue.Kind {
-				picked := m.pickConflictValue(oursValue, theirsValue, keyPath, conflicts)
+				picked, err := m.pickConflictValue(oursValue, theirsValue, keyPath, conflicts)
+				if err != nil {
+					return nil, err
+				}
 				result.Content = append(result.Content, keyNode, picked)
 				continue
 			}
@@ -664,7 +719,11 @@ func (m *YAMLMerger) mergeSequences(_, ours, theirs *yaml.Node, path string, con
 	// conflict strategy (manual/ours/theirs); identical sequences need no choice.
 	picked := ours
 	if !nodesEqual(ours, theirs) {
-		picked = m.pickConflictValue(ours, theirs, path, conflicts)
+		var err error
+		picked, err = m.pickConflictValue(ours, theirs, path, conflicts)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Manual strategy on a real divergence returns a scalar sentinel (see
@@ -694,7 +753,11 @@ func (m *YAMLMerger) mergeScalars(base, ours, theirs *yaml.Node, path string, co
 	// the configured conflict strategy (manual/ours/theirs).
 	picked := ours
 	if ours.Value != base.Value && theirs.Value != base.Value && ours.Value != theirs.Value {
-		picked = m.pickConflictValue(ours, theirs, path, conflicts)
+		var err error
+		picked, err = m.pickConflictValue(ours, theirs, path, conflicts)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Preserve the picked side's comments, tag, and style (folding, literal, etc.)
