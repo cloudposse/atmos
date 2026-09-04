@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -21,6 +22,16 @@ const (
 	logKeyProfile = "profile"
 )
 
+// envMu serializes setupAWSEnv/loadCredentialsViaSDK/cleanup as one transaction.
+// The env vars this package sets (AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE,
+// AWS_PROFILE, AWS_REGION) are process-wide, so two concurrent identity
+// resolutions racing through setup->load->restore could each load the other's
+// profile/region. The AWS SDK has no equivalent to "load from these files under
+// this profile, but ignore the process's ambient AWS_REGION" (see setupAWSEnv's
+// doc comment for why AWS_REGION specifically must be masked), so the env-var
+// approach stays; this lock is what makes it safe under concurrent callers.
+var envMu sync.Mutex
+
 // loadAWSCredentialsFromEnvironment loads AWS credentials from files using environment variables.
 // This is a shared helper for all AWS identity types to use with noop keyring.
 // It temporarily sets AWS env vars, loads credentials via SDK, then restores original env.
@@ -31,12 +42,18 @@ func loadAWSCredentialsFromEnvironment(ctx context.Context, env map[string]strin
 		return nil, err
 	}
 
-	log.Debug("Loading AWS credentials from files",
+	log.Debug(
+		"Loading AWS credentials from files",
 		"credentials_file", envVars.credsFile,
 		"config_file", envVars.configFile,
 		logKeyProfile, envVars.profile,
 		"region", envVars.region,
 	)
+
+	// The whole setup -> load -> restore sequence must run as one transaction:
+	// see envMu's doc comment.
+	envMu.Lock()
+	defer envMu.Unlock()
 
 	// Setup and restore environment variables.
 	cleanup := setupAWSEnv(envVars.credsFile, envVars.configFile, envVars.profile, envVars.region)
@@ -48,7 +65,8 @@ func loadAWSCredentialsFromEnvironment(ctx context.Context, env map[string]strin
 		return nil, err
 	}
 
-	log.Debug("Successfully loaded AWS credentials from files",
+	log.Debug(
+		"Successfully loaded AWS credentials from files",
 		logKeyProfile, envVars.profile,
 		"region", creds.Region,
 		"has_session_token", creds.SessionToken != "",
@@ -86,15 +104,40 @@ func extractAWSEnvVars(env map[string]string) (awsEnvVars, error) {
 }
 
 // setupAWSEnv temporarily sets AWS environment variables and returns a cleanup function.
+//
+// AWS_REGION and AWS_DEFAULT_REGION are always tracked here, even when region is
+// "": the AWS SDK gives an explicit AWS_REGION/AWS_DEFAULT_REGION env var
+// precedence over the shared config file's per-profile `region` setting, so
+// leaving either untouched when this identity doesn't resolve one would let it
+// silently override the profile's own region -- exactly the symptom that made
+// this loader's region resolution depend on whichever other identity's
+// credentials were loaded earlier in the same process (see docs/fixes for the
+// incident this closes).
+//
+// The credential/identity-selector variables below are always cleared too: the
+// SDK's default credential chain checks the static-key env provider (including
+// its legacy AWS_ACCESS_KEY/AWS_SECRET_KEY aliases) and the web-identity-token
+// provider before the shared-file/profile provider this loader exists to
+// drive, so any ambient values for these in the process environment would
+// silently outrank the file/profile this function was asked to load from. See
+// github.com/aws/aws-sdk-go-v2/config@v1.32.18's env_config.go for the exact
+// set the SDK reads.
 func setupAWSEnv(credsFile, configFile, profile, region string) func() {
 	originalEnv := make(map[string]string)
 	envVarsToSet := map[string]string{
 		"AWS_SHARED_CREDENTIALS_FILE": credsFile,
 		"AWS_CONFIG_FILE":             configFile,
 		"AWS_PROFILE":                 profile,
-	}
-	if region != "" {
-		envVarsToSet["AWS_REGION"] = region
+		"AWS_REGION":                  region,
+		"AWS_DEFAULT_REGION":          region,
+		"AWS_ACCESS_KEY_ID":           "",
+		"AWS_ACCESS_KEY":              "",
+		"AWS_SECRET_ACCESS_KEY":       "",
+		"AWS_SECRET_KEY":              "",
+		"AWS_SESSION_TOKEN":           "",
+		"AWS_WEB_IDENTITY_TOKEN_FILE": "",
+		"AWS_ROLE_ARN":                "",
+		"AWS_ROLE_SESSION_NAME":       "",
 	}
 
 	// Save original values and set new ones.
@@ -102,7 +145,11 @@ func setupAWSEnv(credsFile, configFile, profile, region string) func() {
 		if origValue, exists := os.LookupEnv(key); exists {
 			originalEnv[key] = origValue
 		}
-		os.Setenv(key, value)
+		if value != "" {
+			os.Setenv(key, value)
+		} else {
+			os.Unsetenv(key)
+		}
 	}
 
 	// Return cleanup function to restore original environment.
@@ -154,7 +201,8 @@ func populateExpiration(creds *types.AWSCredentials, awsCreds *aws.Credentials, 
 		// Try to read expiration from metadata comment in credentials file.
 		if expiration := readExpirationFromMetadata(credsFile, profile); expiration != "" {
 			creds.Expiration = expiration
-			log.Debug("Loaded expiration from credentials file metadata",
+			log.Debug(
+				"Loaded expiration from credentials file metadata",
 				logKeyProfile, profile,
 				"expiration", expiration,
 			)
@@ -169,7 +217,8 @@ func readExpirationFromMetadata(credentialsPath, profile string) string {
 	// Load the credentials file with comment preservation enabled.
 	cfg, err := awsCloud.LoadINIFile(credentialsPath)
 	if err != nil {
-		log.Debug("Failed to load credentials file for metadata",
+		log.Debug(
+			"Failed to load credentials file for metadata",
 			"path", credentialsPath,
 			"error", err,
 		)
@@ -179,7 +228,8 @@ func readExpirationFromMetadata(credentialsPath, profile string) string {
 	// Get the profile section.
 	section, err := cfg.GetSection(profile)
 	if err != nil {
-		log.Debug("Profile section not found in credentials file",
+		log.Debug(
+			"Profile section not found in credentials file",
 			logKeyProfile, profile,
 		)
 		return ""
@@ -214,7 +264,8 @@ func readExpirationFromMetadata(credentialsPath, profile string) string {
 			if _, err := time.Parse(time.RFC3339, expiration); err == nil {
 				return expiration
 			}
-			log.Debug("Invalid expiration format in metadata",
+			log.Debug(
+				"Invalid expiration format in metadata",
 				"expiration", expiration,
 				"error", err,
 			)
