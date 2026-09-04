@@ -80,7 +80,11 @@ reference a local one. Every cache-using action now provisions its own tar, and 
 - `actionlint` on `test.yml` and `setup-go-cache-warmup.yml`; pre-commit hooks clean.
 - The lab's final run (run 4 on the branch) exercised the production action itself as its D:
   layout, so the 94 s / 117 s D: restores measured exactly what production now runs.
-- The PR's own `Tests` run exercises the action on every Windows job (first run is the cold start).
+- First production run (the PR's own `Tests` run 33898160232, after every earlier run on the branch
+  had been cancelled by the next push): `Build (windows)` logged the relocation, took the expected
+  cold miss, and **saved 1.84 GB in 156 s** (main's last Windows build spent 416 s on that save from
+  C:); all ten Windows acceptance shards then **restored it in 90-116 s** (`Cache hit`, 1,840 MB,
+  post step 0 s) where the same restore took 4-7 minutes before.
 
 ## Follow-ups
 
