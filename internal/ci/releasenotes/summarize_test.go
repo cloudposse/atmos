@@ -20,14 +20,14 @@ func TestSummarizeRelease(t *testing.T) {
 	client.EXPECT().Do(gomock.Any()).Times(3).DoAndReturn(func(req *http.Request) (*http.Response, error) {
 		calls++
 		switch calls {
-		case 1: // GetReleaseBody
+		case 1: // GetReleaseBody.
 			assert.Equal(t, http.MethodGet, req.Method)
 			assert.Contains(t, req.URL.String(), "/releases/123")
 			return jsonResponse(http.StatusOK, `{"body":"<details>\n  <summary>feat: x @a (#1)</summary>\nbody\n</details>\n"}`), nil
-		case 2: // Summarize
+		case 2: // Summarize.
 			assert.Equal(t, "https://api.openai.com/v1/chat/completions", req.URL.String())
 			return jsonResponse(http.StatusOK, `{"choices":[{"message":{"content":"[{\"number\":1,\"summary\":\"Does x.\"}]"}}]}`), nil
-		case 3: // UpdateReleaseBody
+		case 3: // UpdateReleaseBody.
 			assert.Equal(t, http.MethodPatch, req.Method)
 			body, err := io.ReadAll(req.Body)
 			require.NoError(t, err)

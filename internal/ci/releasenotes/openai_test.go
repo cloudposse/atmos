@@ -66,6 +66,28 @@ func TestSummarize_ModelWrapsResponseInProse(t *testing.T) {
 	assert.Equal(t, []string{"Does x."}, got)
 }
 
+func TestSummarize_RejectsReorderedResponse(t *testing.T) {
+	entries := []PREntry{
+		{Summary: "feat: add widget @alice (#101)", Number: 101, Body: "adds a widget"},
+		{Summary: "fix: correct gizmo @bob (#102)", Number: 102, Body: "fixes a gizmo"},
+	}
+
+	ctrl := gomock.NewController(t)
+	client := NewMockHTTPClient(ctrl)
+	// The model returned the right count, but swapped the order (#102 first,
+	// #101 second) - index-based assignment would silently attach entry 0's
+	// summary to PR #102 and vice versa.
+	client.EXPECT().Do(gomock.Any()).Return(
+		jsonResponse(http.StatusOK, `{"choices":[{"message":{"content":"[{\"number\":102,\"summary\":\"Fixes a gizmo.\"},{\"number\":101,\"summary\":\"Adds a widget.\"}]"}}]}`), //nolint:bodyclose // closed by the code under test, not this fixture.
+		nil,
+	)
+
+	_, err := Summarize(context.Background(), client, "test-key", "gpt-4o-mini", entries)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errSummaryMismatch)
+	assert.Contains(t, err.Error(), "want PR #101")
+}
+
 func TestSummarize_Errors(t *testing.T) {
 	entries := []PREntry{{Summary: "feat: x @a (#1)", Number: 1, Body: "x"}}
 
@@ -108,7 +130,7 @@ func TestSummarize_Errors(t *testing.T) {
 		{
 			name:    "summary count mismatch",
 			resp:    jsonResponse(http.StatusOK, `{"choices":[{"message":{"content":"[]"}}]}`), //nolint:bodyclose // closed by the code under test, not this fixture.
-			wantErr: "summary count",
+			wantErr: "summary does not match entry",
 		},
 	}
 	for _, tt := range tests {

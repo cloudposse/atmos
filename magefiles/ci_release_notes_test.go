@@ -35,7 +35,7 @@ func testParams(apiKey, ghToken string) *releasenotes.SummarizeParams {
 
 func TestSummarizeNotes_SkipsWithoutAPIKey(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	client := releasenotes.NewMockHTTPClient(ctrl) // no .Do() expectation: must not be called
+	client := releasenotes.NewMockHTTPClient(ctrl) // no .Do() expectation: must not be called.
 
 	var stderr bytes.Buffer
 	summarizeNotes(context.Background(), &stderr, client, testParams("", "gh-token"))
@@ -44,7 +44,7 @@ func TestSummarizeNotes_SkipsWithoutAPIKey(t *testing.T) {
 
 func TestSummarizeNotes_SkipsWithoutGitHubToken(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	client := releasenotes.NewMockHTTPClient(ctrl) // no .Do() expectation: must not be called
+	client := releasenotes.NewMockHTTPClient(ctrl) // no .Do() expectation: must not be called.
 
 	var stderr bytes.Buffer
 	summarizeNotes(context.Background(), &stderr, client, testParams("openai-key", ""))

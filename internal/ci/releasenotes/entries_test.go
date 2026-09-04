@@ -76,6 +76,29 @@ body
 	assert.Equal(t, 5, entries[0].Number)
 }
 
+func TestParseDraftedBody_IgnoresHeadingsInsidePriorEntryBody(t *testing.T) {
+	// The first entry's own PR body contains a "## why" heading. It must not
+	// leak forward and become the category of the second, otherwise
+	// uncategorized entry.
+	body := `<details>
+  <summary>feat: first @alice (#1)</summary>
+## why
+
+Because reasons.
+</details>
+
+<details>
+  <summary>fix: second @bob (#2)</summary>
+body
+</details>
+`
+	entries, err := ParseDraftedBody(body)
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	assert.Equal(t, "", entries[0].Category)
+	assert.Equal(t, "", entries[1].Category)
+}
+
 func TestParseDraftedBody_Errors(t *testing.T) {
 	tests := []struct {
 		name string
@@ -84,6 +107,13 @@ func TestParseDraftedBody_Errors(t *testing.T) {
 		{name: "empty body", body: ""},
 		{name: "no details blocks", body: "## Enhancements\n\nJust text, no PR entries.\n"},
 		{name: "unbalanced details", body: "<details>\n  <summary>x (#1)</summary>\nbody\n"},
+		{
+			// Equal marker counts (two opens, two closes) but out of order: the
+			// first </details> closes before the first <details> even opens.
+			// This must be rejected rather than panic on a low > high slice.
+			name: "balanced but out-of-order details",
+			body: "</details>\n<details>\n  <summary>x (#1)</summary>\n</details>\n<details>\n  <summary>y (#2)</summary>\nbody\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

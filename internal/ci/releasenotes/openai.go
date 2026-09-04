@@ -35,9 +35,11 @@ const (
 )
 
 // errSummaryMismatch means the model's response didn't cover every entry
-// sent to it - callers should not render a partial summary, since a silently
-// dropped entry is worse than no summarization at all.
-var errSummaryMismatch = errors.New("releasenotes: summary count does not match entry count")
+// sent to it, in the same order - either the count is off or a PR number at
+// some position doesn't match the entry sent at that position. Callers
+// should not render a partial or misattributed summary, since a silently
+// dropped or swapped entry is worse than no summarization at all.
+var errSummaryMismatch = errors.New("releasenotes: summary does not match entry")
 
 // errOpenAIRequestFailed wraps a non-200 response from the Chat Completions
 // API, carrying the status and body as %w-wrapped context rather than a
@@ -105,6 +107,12 @@ func Summarize(ctx context.Context, client HTTPClient, apiKey, model string, ent
 
 	out := make([]string, len(summaries))
 	for i, s := range summaries {
+		if s.Number != entries[i].Number {
+			return nil, fmt.Errorf(
+				"%w: got PR #%d at position %d, want PR #%d",
+				errSummaryMismatch, s.Number, i, entries[i].Number,
+			)
+		}
 		out[i] = strings.TrimSpace(s.Summary)
 	}
 	return out, nil

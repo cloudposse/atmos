@@ -57,17 +57,23 @@ func ParseDraftedBody(raw string) ([]PREntry, error) {
 	}
 
 	entries := make([]PREntry, 0, len(opens))
-	category := ""
-	catMatches := categoryLine.FindAllStringSubmatchIndex(raw, -1)
-	catIdx := 0
+	tracker := newCategoryTracker(raw)
 
 	for i, open := range opens {
-		for catIdx < len(catMatches) && catMatches[catIdx][0] < open[0] {
-			category = raw[catMatches[catIdx][2]:catMatches[catIdx][3]]
-			catIdx++
+		// A malformed body (mismatched marker order despite equal counts) can
+		// put a close marker before its paired open; reject it rather than
+		// slicing with a low bound past the high bound below.
+		if closes[i][0] < open[1] {
+			return nil, errNoEntries
 		}
 
+		category := tracker.advanceTo(open[0])
 		block := raw[open[1]:closes[i][0]]
+		// Consume the block even when it fails to parse below: the region is
+		// still spoken for, so a heading inside a skipped block must not
+		// count as a real category heading for the next entry either.
+		tracker.consumeBlock(closes[i][0])
+
 		entry, err := parseBlock(block, category)
 		if err != nil {
 			continue
@@ -79,6 +85,49 @@ func ParseDraftedBody(raw string) ([]PREntry, error) {
 		return nil, errNoEntries
 	}
 	return entries, nil
+}
+
+// categoryTracker walks a drafted body's `## ` category headings in document
+// order alongside its <details> blocks, so ParseDraftedBody can ask "what's
+// the current category" at each block's opening marker. Headings that fall
+// inside a previously-consumed block are skipped rather than adopted: a PR
+// body containing its own `## ` heading must not become the category for the
+// *next* entry.
+type categoryTracker struct {
+	raw     string
+	matches [][]int
+	idx     int
+	current string
+	// prevClose is the end of the last consumed <details> block; -1 before
+	// the first block, so nothing is excluded yet.
+	prevClose int
+}
+
+func newCategoryTracker(raw string) *categoryTracker {
+	return &categoryTracker{
+		raw:       raw,
+		matches:   categoryLine.FindAllStringSubmatchIndex(raw, -1),
+		prevClose: -1,
+	}
+}
+
+// advanceTo consumes every heading match before limit, adopting it as the
+// current category unless it falls inside the previously consumed block, and
+// returns the resulting category.
+func (c *categoryTracker) advanceTo(limit int) string {
+	for c.idx < len(c.matches) && c.matches[c.idx][0] < limit {
+		if c.prevClose == -1 || c.matches[c.idx][0] >= c.prevClose {
+			c.current = c.raw[c.matches[c.idx][2]:c.matches[c.idx][3]]
+		}
+		c.idx++
+	}
+	return c.current
+}
+
+// consumeBlock records the end of the block just processed, so future
+// advanceTo calls exclude any heading inside it.
+func (c *categoryTracker) consumeBlock(closeStart int) {
+	c.prevClose = closeStart
 }
 
 func parseBlock(block, category string) (PREntry, error) {
