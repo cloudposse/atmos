@@ -3,9 +3,11 @@ package main
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -161,4 +163,92 @@ func TestEnsureGoLicensesFindsExistingBinary(t *testing.T) {
 	path, err := ensureGoLicenses("v1.6.0")
 	require.NoError(t, err)
 	assert.Equal(t, stubPath, path)
+}
+
+// TestEnsureGoLicensesRetriesOnTransientInstallFailure covers the retry loop
+// around `go install`: the first two attempts fail (simulating a transient
+// mid-stream network error, e.g. a sum.golang.org HTTP/2 reset during go.sum
+// verification), the third succeeds, and ensureGoLicenses must return the
+// resolved binary path without ever invoking the real 15s retry delay.
+func TestEnsureGoLicensesRetriesOnTransientInstallFailure(t *testing.T) {
+	gobin := t.TempDir()
+	t.Setenv("GOBIN", gobin)
+	// Deliberately does NOT already contain go-licenses, so ensureGoLicenses
+	// falls through to the install path; go itself must stay resolvable for
+	// resolveGoLicensesBinPath's real `go env GOBIN` call.
+	t.Setenv("PATH", gobin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	// Force the "not found" branch regardless of whether go-licenses happens
+	// to already be resolvable on the real PATH (e.g. from a prior local
+	// run) -- otherwise ensureGoLicenses would return early and the retry
+	// assertions below would never see an install attempt.
+	origLookPath := lookPathGoLicenses
+	t.Cleanup(func() { lookPathGoLicenses = origLookPath })
+	lookPathGoLicenses = func() (string, error) { return "", exec.ErrNotFound }
+
+	name := "go-licenses"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	binPath := filepath.Join(gobin, name)
+
+	var installCalls []string
+	attempt := 0
+	origRunGoInstall := runGoInstall
+	t.Cleanup(func() { runGoInstall = origRunGoInstall })
+	runGoInstall = func(module string) error {
+		attempt++
+		installCalls = append(installCalls, module)
+		if attempt < 3 {
+			return errors.New("transient network error")
+		}
+		return os.WriteFile(binPath, nil, 0o755)
+	}
+
+	var sleeps []time.Duration
+	origSleep := goInstallSleep
+	t.Cleanup(func() { goInstallSleep = origSleep })
+	goInstallSleep = func(d time.Duration) { sleeps = append(sleeps, d) }
+
+	path, err := ensureGoLicenses("v1.6.0")
+
+	require.NoError(t, err)
+	assert.Equal(t, binPath, path)
+	assert.Len(t, installCalls, 3, "must retry the failed attempts and stop once install succeeds")
+	assert.Equal(t, []time.Duration{goInstallRetryDelay, goInstallRetryDelay}, sleeps, "sleeps only between attempts, never after the final one")
+}
+
+// TestEnsureGoLicensesFailsAfterExhaustingRetries covers the case where
+// every attempt fails: ensureGoLicenses must give up after
+// goInstallMaxAttempts and return a wrapped error instead of retrying
+// forever.
+func TestEnsureGoLicensesFailsAfterExhaustingRetries(t *testing.T) {
+	gobin := t.TempDir()
+	t.Setenv("GOBIN", gobin)
+	t.Setenv("PATH", gobin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	// See TestEnsureGoLicensesRetriesOnTransientInstallFailure: force the
+	// "not found" branch so runGoInstall actually runs for every attempt.
+	origLookPath := lookPathGoLicenses
+	t.Cleanup(func() { lookPathGoLicenses = origLookPath })
+	lookPathGoLicenses = func() (string, error) { return "", exec.ErrNotFound }
+
+	attempt := 0
+	wantErr := errors.New("persistent network error")
+	origRunGoInstall := runGoInstall
+	t.Cleanup(func() { runGoInstall = origRunGoInstall })
+	runGoInstall = func(string) error {
+		attempt++
+		return wantErr
+	}
+
+	origSleep := goInstallSleep
+	t.Cleanup(func() { goInstallSleep = origSleep })
+	goInstallSleep = func(time.Duration) {}
+
+	_, err := ensureGoLicenses("v1.6.0")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, wantErr)
+	assert.Equal(t, goInstallMaxAttempts, attempt, "must stop after exactly goInstallMaxAttempts attempts")
 }

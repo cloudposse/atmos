@@ -230,14 +230,36 @@ func ExecutePlaybook(
 		return nil
 	}
 
-	return e.ExecuteShellCommand(
+	return executePlaybookCommandWithRetry(&atmosConfig, info, cmdArgs, componentPath, envVars)
+}
+
+// executePlaybookCommandWithRetry runs the resolved ansible-playbook command through
+// e.ExecuteShellCommandWithRetry. Extracted from ExecutePlaybook so the retry wiring can
+// be unit-tested directly with a fake invoke, without standing up ExecutePlaybook's full
+// stack-processing/auth preamble or requiring a real ansible-playbook binary.
+func executePlaybookCommandWithRetry(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	cmdArgs *CommandArgs,
+	componentPath string,
+	envVars []string,
+) error {
+	return e.ExecuteShellCommandWithRetry(
 		atmosConfig,
-		cmdArgs.Command,
-		cmdArgs.Args,
-		componentPath,
-		envVars,
-		info.DryRun,
-		info.RedirectStdErr,
+		info,
+		info.SubCommand,
+		func(o ...e.ShellCommandOption) error {
+			return e.ExecuteShellCommand(
+				*atmosConfig,
+				cmdArgs.Command,
+				cmdArgs.Args,
+				componentPath,
+				envVars,
+				info.DryRun,
+				info.RedirectStdErr,
+				o...,
+			)
+		},
 	)
 }
 

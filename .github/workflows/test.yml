@@ -22,6 +22,16 @@ on:
 
   workflow_dispatch:
 
+# A newer push to the same PR supersedes the previous run: cancel it instead
+# of letting both compete for runners (30 acceptance shards each, and the org
+# macOS concurrency cap is small enough that a second run's macOS legs queue
+# for up to ~30 minutes). merge_group, push, and workflow_dispatch runs are
+# keyed by SHA and are never cancelled -- a merge-queue entry or a main-branch
+# run must always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Grant `packages: read` so jobs that pull OCI images from ghcr.io
 # (e.g. vendor pulls in mock/acceptance tests) can authenticate with
 # the auto-generated GITHUB_TOKEN. The default PR-event scope is
@@ -52,11 +62,16 @@ env:
   # OS (see tests/cli_test.go's testShard/testCaseShard and the `test` job's
   # matrix.shard list below, which must stay in sync with this count).
   TEST_SHARD_COUNT: "10"
-  # Use pipe fallback so transient proxy.golang.org errors (5xx, HTTP/2 stream
-  # resets) during `go mod download` fall back to direct module fetches. The
-  # default comma-separated GOPROXY list only falls through on "not found"
-  # responses, not network errors. See .github/workflows/native-ci.yml.
-  GOPROXY: "https://proxy.golang.org|direct"
+  # No `|direct` fallback: every job here runs under harden-runner's block
+  # mode, where a direct fetch fans out to ~25 vanity-import hosts (k8s.io,
+  # go.uber.org, gopkg.in, helm.sh, ...) that are not allowlisted, so the
+  # fallback can only ever burn minutes on blocked lookups (observed: a 9+
+  # minute "Get dependencies" step after one proxy.golang.org hiccup). The
+  # transient 5xx / HTTP/2 stream resets the fallback used to paper over are
+  # handled by `atmos build deps`'s retry policy (.atmos.d/build.yaml)
+  # instead. If the retry policy ever proves insufficient, allowlist the
+  # vanity hosts rather than restoring the fallback.
+  GOPROXY: "https://proxy.golang.org"
 
 jobs:
   # ensure the code builds...
@@ -92,11 +107,27 @@ jobs:
       # (what this repo uses) only covers GitHub-hosted runners — self-hosted
       # runners including RunsOn need a StepSecurity Enterprise license plus
       # RunsOn-side config we're not doing here.
+      # Draft PRs skip every Windows step below (no checkout, nothing to
+      # protect), so skip Harden Runner there too: its post step would still
+      # race the agent's DNS restore, and the DNS guard (a local action) needs
+      # the checkout.
       - name: Harden Runner
-        if: matrix.target != 'linux'
+        if: matrix.target != 'linux' && ! ( matrix.target == 'windows' && github.event.pull_request.draft )
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: block
+          # Operating-system background services on the hosted Windows and
+          # macOS images (connectivity probes, push notifications, update and
+          # settings/telemetry checks, time sync, certificate revocation for
+          # GitHub's Sectigo chain, Apple software-update and CDN hosts) are
+          # listed below their job-specific endpoints. StepSecurity Insights
+          # showed them blocked on every Windows/macOS job -- they are not
+          # implicitly allowed -- and each blocked lookup is retried by the OS
+          # for the whole job (NCSI probes every few seconds; schannel
+          # revocation checks stall TLS to github.com). Allowing them removes
+          # that churn without widening what our own steps can reach. Source:
+          # StepSecurity Insights -> Network Events; keep in sync with the
+          # other Windows/macOS legs in this file.
           allowed-endpoints: >
             api.github.com:443
             github.com:443
@@ -111,6 +142,32 @@ jobs:
             storage.googleapis.com:443
             google.golang.org:443
             modernc.org:443
+            www.msftconnecttest.com:443
+            ipv6.msftconnecttest.com:443
+            www.msftncsi.com:443
+            ipv6.msftncsi.com:443
+            time.windows.com:443
+            client.wns.windows.com:443
+            settings-win.data.microsoft.com:443
+            *.events.data.microsoft.com:443
+            *.update.microsoft.com:443
+            ecs.office.com:443
+            pti.store.microsoft.com:443
+            login.live.com:443
+            go.microsoft.com:443
+            www.microsoft.com:443
+            ocsp.sectigo.com:80
+            ocsp.sectigo.com:443
+            crl.sectigo.com:80
+            crl.sectigo.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
 
       - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
         if: matrix.target == 'linux'
@@ -129,6 +186,16 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      # Repairs the runner's DNS if harden-runner's Windows post step kills its
+      # agent mid-"restoring system DNS" (a race against its 10-second wait);
+      # without it the job's steps all pass but the job never reports
+      # completion and GitHub cancels it 30-40 minutes later. Windows-only,
+      # no-op elsewhere. See the action's description and
+      # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
+      - name: Guard DNS against the harden-runner post-step race
+        if: matrix.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-dns-guard
 
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -209,6 +276,7 @@ jobs:
         with:
           egress-policy: block
           allowed-endpoints: >
+            api.github.com:443
             github.com:443
             us.i.posthog.com:443
 
@@ -274,10 +342,25 @@ jobs:
     timeout-minutes: ${{ matrix.flavor.target == 'windows' && 45 || 20 }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
+      # Draft PRs skip every Windows step in this job (no checkout), so skip
+      # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: block
+          # Operating-system background services on the hosted Windows and
+          # macOS images (connectivity probes, push notifications, update and
+          # settings/telemetry checks, time sync, certificate revocation for
+          # GitHub's Sectigo chain, Apple software-update and CDN hosts) are
+          # listed below their job-specific endpoints. StepSecurity Insights
+          # showed them blocked on every Windows/macOS job -- they are not
+          # implicitly allowed -- and each blocked lookup is retried by the OS
+          # for the whole job (NCSI probes every few seconds; schannel
+          # revocation checks stall TLS to github.com). Allowing them removes
+          # that churn without widening what our own steps can reach. Source:
+          # StepSecurity Insights -> Network Events; keep in sync with the
+          # other Windows/macOS legs in this file.
           allowed-endpoints: >
             api.github.com:443
             checkpoint-api.hashicorp.com:443
@@ -295,12 +378,48 @@ jobs:
             storage.googleapis.com:443
             google.golang.org:443
             modernc.org:443
+            www.msftconnecttest.com:443
+            ipv6.msftconnecttest.com:443
+            www.msftncsi.com:443
+            ipv6.msftncsi.com:443
+            time.windows.com:443
+            client.wns.windows.com:443
+            settings-win.data.microsoft.com:443
+            *.events.data.microsoft.com:443
+            *.update.microsoft.com:443
+            ecs.office.com:443
+            pti.store.microsoft.com:443
+            login.live.com:443
+            go.microsoft.com:443
+            www.microsoft.com:443
+            ocsp.sectigo.com:80
+            ocsp.sectigo.com:443
+            crl.sectigo.com:80
+            crl.sectigo.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      # Repairs the runner's DNS if harden-runner's Windows post step kills its
+      # agent mid-"restoring system DNS" (a race against its 10-second wait);
+      # without it the job's steps all pass but the job never reports
+      # completion and GitHub cancels it 30-40 minutes later. Windows-only,
+      # no-op elsewhere. See the action's description and
+      # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
+      - name: Guard DNS against the harden-runner post-step race
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-dns-guard
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -458,7 +577,10 @@ jobs:
     timeout-minutes: ${{ matrix.jobTimeoutOverride || matrix.flavor.jobTimeout }}
     runs-on: ${{ matrix.flavor.os }}
     steps:
+      # Draft PRs skip every Windows step in this job (no checkout), so skip
+      # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           # Union of core, tool-driven endpoints across the linux/windows/macos
@@ -468,6 +590,18 @@ jobs:
           # single run (MCP pagination limitation), so carries more residual risk
           # of an untested-path endpoint than other workflows in this rollout.
           egress-policy: block
+          # Operating-system background services on the hosted Windows and
+          # macOS images (connectivity probes, push notifications, update and
+          # settings/telemetry checks, time sync, certificate revocation for
+          # GitHub's Sectigo chain, Apple software-update and CDN hosts) are
+          # listed below their job-specific endpoints. StepSecurity Insights
+          # showed them blocked on every Windows/macOS job -- they are not
+          # implicitly allowed -- and each blocked lookup is retried by the OS
+          # for the whole job (NCSI probes every few seconds; schannel
+          # revocation checks stall TLS to github.com). Allowing them removes
+          # that churn without widening what our own steps can reach. Source:
+          # StepSecurity Insights -> Network Events; keep in sync with the
+          # other Windows/macOS legs in this file.
           allowed-endpoints: >
             accounts.google.com:443
             api.bitbucket.org:443
@@ -497,12 +631,51 @@ jobs:
             sts.us-east-1.amazonaws.com:443
             tuf-repo-cdn.sigstore.dev:443
             us.i.posthog.com:443
+            sum.golang.org:443
+            google.golang.org:443
+            modernc.org:443
+            www.msftconnecttest.com:443
+            ipv6.msftconnecttest.com:443
+            www.msftncsi.com:443
+            ipv6.msftncsi.com:443
+            time.windows.com:443
+            client.wns.windows.com:443
+            settings-win.data.microsoft.com:443
+            *.events.data.microsoft.com:443
+            *.update.microsoft.com:443
+            ecs.office.com:443
+            pti.store.microsoft.com:443
+            login.live.com:443
+            go.microsoft.com:443
+            www.microsoft.com:443
+            ocsp.sectigo.com:80
+            ocsp.sectigo.com:443
+            crl.sectigo.com:80
+            crl.sectigo.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      # Repairs the runner's DNS if harden-runner's Windows post step kills its
+      # agent mid-"restoring system DNS" (a race against its 10-second wait);
+      # without it the job's steps all pass but the job never reports
+      # completion and GitHub cancels it 30-40 minutes later. Windows-only,
+      # no-op elsewhere. See the action's description and
+      # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
+      - name: Guard DNS against the harden-runner post-step race
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-dns-guard
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -725,7 +898,21 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
 
+      # A whole-run cancellation (e.g. superseded by a newer push to the same
+      # PR) skips the `test` matrix before it ever dispatches shard jobs, so
+      # the API query below would legitimately find 0 shards - not a real
+      # anomaly to fail loudly on. cancelled() reflects the run itself, unlike
+      # needs.test.result, which reports "skipped" for both this case and a
+      # genuine upstream (e.g. build) failure - so it can't replace this
+      # check. cancelled() is only valid in an `if:`, not inside a script, so
+      # the verification steps below are skipped via `if: ${{ !cancelled() }}`
+      # rather than early-exiting from within their run: blocks.
+      - name: Skip verification (workflow run was cancelled)
+        if: ${{ cancelled() }}
+        run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
+
       - name: Check per-OS test matrix result
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
           CHECK: ${{ matrix.check }}
@@ -773,7 +960,7 @@ jobs:
         # terraform-registry-cache only runs a linux/windows matrix (no macos
         # leg - see its `matrix.flavor` above), so its aggregated result must
         # not gate the macos alias.
-        if: matrix.check != 'Acceptance Tests (macos)'
+        if: ${{ !cancelled() && matrix.check != 'Acceptance Tests (macos)' }}
         run: |
           if [ "${{ needs.terraform-registry-cache.result }}" != "success" ]; then
             echo "terraform-registry-cache result was '${{ needs.terraform-registry-cache.result }}'"
@@ -912,9 +1099,15 @@ jobs:
           # DL3008 Pin versions in apt-get install
           ignore: DL3008
 
+      # Code scanning cannot attach results to a merge queue's synthetic
+      # `refs/heads/gh-readonly-queue/...` ref: the upload fails with "ref ...
+      # not found", which (with wait-for-processing) fails this step, skips the
+      # Trivy scan below, and then fails the second upload on the missing SARIF
+      # file -- evicting the PR from the queue for a result nobody consumes.
+      # The same commit was already scanned on the PR run.
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
-        if: always()
+        if: always() && github.event_name != 'merge_group'
         with:
           # Path to SARIF file relative to the root of the repository
           sarif_file: hadolint.sarif
@@ -935,7 +1128,7 @@ jobs:
           output: trivy-config.sarif
 
       - name: Upload Trivy config scan results
-        if: always()
+        if: always() && github.event_name != 'merge_group'
         uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: trivy-config.sarif
@@ -965,6 +1158,7 @@ jobs:
         with:
           egress-policy: block
           allowed-endpoints: >
+            api.github.com:443
             checkpoint-api.hashicorp.com:443
             github.com:443
             mirror.gcr.io:443
@@ -1133,7 +1327,12 @@ jobs:
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: block
+          # Operating-system background services on the hosted macOS image
+          # (software update, CDN, certificate revocation, time sync) are
+          # listed below the job-specific endpoints; see the `test` job's
+          # allowed-endpoints comment for the rationale.
           allowed-endpoints: >
+            api.github.com:443
             auth.docker.io:443
             charts.bitnami.com:443
             contracts.canonical.com:443
@@ -1156,6 +1355,14 @@ jobs:
             security.ubuntu.com:80
             tuf-repo-cdn.sigstore.dev:443
             us.i.posthog.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1276,7 +1483,15 @@ jobs:
           # Pure bash conditional on needs.k3s.result; no external calls at all.
           egress-policy: block
 
+      # See the matching comment on test-required's per-OS check step: a
+      # whole-run cancellation is not a genuine k3s failure, and cancelled()
+      # is only valid in an `if:`, not inside a script.
+      - name: Skip verification (workflow run was cancelled)
+        if: ${{ cancelled() }}
+        run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
+
       - name: Check k3s matrix result
+        if: ${{ !cancelled() }}
         run: |
           if [ "${{ needs.k3s.result }}" != "success" ]; then
             echo "k3s matrix result was '${{ needs.k3s.result }}'"
@@ -1310,12 +1525,24 @@ jobs:
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: block
+          # Operating-system background services on the hosted macOS image
+          # (software update, CDN, certificate revocation, time sync) are
+          # listed below the job-specific endpoints; see the `test` job's
+          # allowed-endpoints comment for the rationale.
           allowed-endpoints: >
             api.github.com:443
             github.com:443
             proxy.golang.org:443
             release-assets.githubusercontent.com:443
             storage.googleapis.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1402,10 +1629,25 @@ jobs:
 
     timeout-minutes: 20
     steps:
+      # Draft PRs skip every Windows step in this job (no checkout), so skip
+      # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: block
+          # Operating-system background services on the hosted Windows and
+          # macOS images (connectivity probes, push notifications, update and
+          # settings/telemetry checks, time sync, certificate revocation for
+          # GitHub's Sectigo chain, Apple software-update and CDN hosts) are
+          # listed below their job-specific endpoints. StepSecurity Insights
+          # showed them blocked on every Windows/macOS job -- they are not
+          # implicitly allowed -- and each blocked lookup is retried by the OS
+          # for the whole job (NCSI probes every few seconds; schannel
+          # revocation checks stall TLS to github.com). Allowing them removes
+          # that churn without widening what our own steps can reach. Source:
+          # StepSecurity Insights -> Network Events; keep in sync with the
+          # other Windows/macOS legs in this file.
           allowed-endpoints: >
             api.github.com:443
             checkpoint-api.hashicorp.com:443
@@ -1419,12 +1661,48 @@ jobs:
             releases.hashicorp.com:443
             tuf-repo-cdn.sigstore.dev:443
             us.i.posthog.com:443
+            www.msftconnecttest.com:443
+            ipv6.msftconnecttest.com:443
+            www.msftncsi.com:443
+            ipv6.msftncsi.com:443
+            time.windows.com:443
+            client.wns.windows.com:443
+            settings-win.data.microsoft.com:443
+            *.events.data.microsoft.com:443
+            *.update.microsoft.com:443
+            ecs.office.com:443
+            pti.store.microsoft.com:443
+            login.live.com:443
+            go.microsoft.com:443
+            www.microsoft.com:443
+            ocsp.sectigo.com:80
+            ocsp.sectigo.com:443
+            crl.sectigo.com:80
+            crl.sectigo.com:443
+            *.apple.com:443
+            *.aaplimg.com:443
+            *.mzstatic.com:443
+            *.icloud.com:443
+            *.apple-dns.net:443
+            ocsp.usertrust.com:80
+            ocsp.digicert.com:80
+            *.pool.ntp.org:123
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      # Repairs the runner's DNS if harden-runner's Windows post step kills its
+      # agent mid-"restoring system DNS" (a race against its 10-second wait);
+      # without it the job's steps all pass but the job never reports
+      # completion and GitHub cancels it 30-40 minutes later. Windows-only,
+      # no-op elsewhere. See the action's description and
+      # docs/fixes/2026-09-03-harden-runner-windows-dns-restore-race.md.
+      - name: Guard DNS against the harden-runner post-step race
+        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        uses: ./.github/actions/windows-dns-guard
 
       - name: Add GNU tar to flavor.target (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -1650,6 +1928,7 @@ jobs:
         with:
           egress-policy: block
           allowed-endpoints: >
+            api.github.com:443
             github.com:443
             us.i.posthog.com:443
 
