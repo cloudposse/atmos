@@ -48,6 +48,16 @@ func TestGetStyles_NilScheme(t *testing.T) {
 }
 
 func TestInitializeStyles(t *testing.T) {
+	// InitializeStyles caches this partial scheme (Border and others left at
+	// their zero value) into the package-level lastColorScheme/CurrentStyles
+	// globals, shared by every test in this package. Without this cleanup,
+	// -shuffle=on can run TestGetBorderColor (or any other color getter)
+	// after this test and have it observe an empty string from the stale
+	// cache instead of falling back to a real theme -- see docs/fixes for
+	// the incident. TestComponentLabelStyleCyclesPalette (log_styles_test.go)
+	// already follows this pattern for the same reason.
+	t.Cleanup(InvalidateStyleCache)
+
 	scheme := &ColorScheme{
 		Primary: "#0000FF",
 		Success: "#00FF00",
