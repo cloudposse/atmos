@@ -62,6 +62,14 @@ func ScaffoldMetadataPath(targetDir string) string {
 	return filepath.Join(targetDir, ".atmos", "scaffold", "metadata.yaml")
 }
 
+// InitMetadataPath returns the path to an init-generated target directory's
+// persisted generation metadata (.atmos/init/metadata.yaml).
+func InitMetadataPath(targetDir string) string {
+	defer perf.Track(nil, "storage.InitMetadataPath")()
+
+	return filepath.Join(targetDir, ".atmos", "init", "metadata.yaml")
+}
+
 // NewMetadataStorage creates a new metadata storage for the given metadata file path.
 // For init: .atmos/init/metadata.yaml
 // For scaffold: .atmos/scaffold/metadata.yaml.

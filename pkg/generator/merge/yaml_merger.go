@@ -17,6 +17,17 @@ import (
 // Constants for YAML merging.
 const (
 	maxChangePercentage = 100 // Maximum change percentage when parsing fails.
+
+	// Format for unique placeholder scalar values that stand in for a real
+	// ours/theirs divergence while the YAML tree is being built. YAML has no
+	// syntax for embedding diff3-style conflict markers directly in a node,
+	// so a conflicted node is temporarily replaced with a sentinel scalar;
+	// once the whole tree is encoded to text, spliceConflictMarkers finds
+	// each sentinel and replaces it with real <<<<<<< / ======= / >>>>>>>
+	// markers. The fixed %06d width guarantees no sentinel is ever a
+	// substring of another, so a plain text search for one sentinel can
+	// never accidentally match a different one.
+	conflictSentinelFormat = "ATMOSMERGECONFLICT%06d"
 )
 
 // YAMLMerger handles 3-way merging of YAML files with structure awareness.
@@ -65,11 +76,11 @@ func (m *YAMLMerger) SetConflictStrategy(strategy ConflictStrategy) {
 }
 
 // pickConflictValue resolves a real ours/theirs divergence per the configured
-// conflict strategy. Manual (default) still records the conflict via
-// conflicts.addConflict — MergeResult.HasConflicts then aborts the write in
-// engine.Processor.mergeFile, which is today's existing "surface, don't
-// silently pick a side" behavior. Ours/theirs pick a side and deliberately do
-// not record a conflict, so the write proceeds.
+// conflict strategy. Manual (default) records the conflict and returns a
+// sentinel placeholder node (see addNodeConflict) so the real markers can be
+// spliced in once the whole document has been rendered to text. Ours/theirs
+// pick a side and deliberately do not record a conflict, so the write
+// proceeds with no markers.
 func (m *YAMLMerger) pickConflictValue(ours, theirs *yaml.Node, path string, conflicts *conflictTracker) *yaml.Node {
 	switch m.conflictStrategy {
 	case ConflictStrategyTheirs:
@@ -77,8 +88,7 @@ func (m *YAMLMerger) pickConflictValue(ours, theirs *yaml.Node, path string, con
 	case ConflictStrategyOurs:
 		return ours
 	default:
-		conflicts.addConflict(path)
-		return ours
+		return conflicts.addNodeConflict(path, ours, theirs)
 	}
 }
 
@@ -130,7 +140,7 @@ func (m *YAMLMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 		if changePercentage > m.thresholdPercent {
 			return nil, errUtils.Build(errUtils.ErrMergeThresholdExceeded).
 				WithExplanationf("Too many YAML conflicts detected (%d%% changes, threshold: %d%%). %d conflicts found", changePercentage, m.thresholdPercent, len(conflicts.conflicts)).
-				WithHint("Use --force to overwrite or manually merge").
+				WithHint("Use --force (resolves every conflict to the template's version) or manually merge").
 				Err()
 		}
 	}
@@ -159,10 +169,20 @@ func (m *YAMLMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 			Err()
 	}
 
+	content := buf.String()
+	if len(conflicts.nodeConflicts) > 0 {
+		spliced, err := spliceConflictMarkers(content, conflicts.nodeConflicts)
+		if err != nil {
+			return nil, err
+		}
+		content = spliced
+	}
+
 	return &MergeResult{
-		Content:       buf.String(),
+		Content:       content,
 		HasConflicts:  len(conflicts.conflicts) > 0,
 		ConflictCount: len(conflicts.conflicts),
+		ConflictPaths: conflicts.conflicts,
 	}, nil
 }
 
@@ -247,12 +267,191 @@ func (m *YAMLMerger) mergeDocumentStreams(baseDocs, oursDocs, theirsDocs []*yaml
 
 // conflictTracker keeps track of conflicts during merge.
 type conflictTracker struct {
-	conflicts []string
+	conflicts     []string
+	nodeConflicts []nodeConflict
 }
 
-// addConflict records a conflict at the given path.
+// nodeConflict records a real ours/theirs divergence at a specific path, plus
+// the two competing subtrees, so spliceConflictMarkers can render both sides
+// and inject diff3-style markers at the sentinel's exact location in the
+// encoded text.
+type nodeConflict struct {
+	sentinel string
+	ours     *yaml.Node
+	theirs   *yaml.Node
+}
+
+// addConflict records a conflict at the given path. Used both by
+// addNodeConflict below and by the document-stream-level conflict case
+// (a document the template changed that the user's stream dropped), which
+// has no ours/theirs node pair to splice markers from.
 func (c *conflictTracker) addConflict(path string) {
 	c.conflicts = append(c.conflicts, path)
+}
+
+// addNodeConflict records a real ours/theirs divergence and returns a unique
+// sentinel scalar node to embed in the tree at that location. The sentinel
+// carries ours' comments so they aren't silently dropped from the encoded
+// output.
+func (c *conflictTracker) addNodeConflict(path string, ours, theirs *yaml.Node) *yaml.Node {
+	c.addConflict(path)
+	sentinel := fmt.Sprintf(conflictSentinelFormat, len(c.nodeConflicts))
+	c.nodeConflicts = append(c.nodeConflicts, nodeConflict{sentinel: sentinel, ours: ours, theirs: theirs})
+	return &yaml.Node{
+		Kind:        yaml.ScalarNode,
+		Tag:         "!!str",
+		Value:       sentinel,
+		HeadComment: ours.HeadComment,
+		LineComment: ours.LineComment,
+		FootComment: ours.FootComment,
+	}
+}
+
+// spliceConflictMarkers replaces each conflict sentinel embedded in the
+// encoded YAML text with real diff3-style conflict markers. It works line by
+// line: for each line containing a sentinel, it uses the text before the
+// sentinel (e.g. "  setting: " or "  - ") and the line's indentation to
+// reconstruct both sides of the conflict, rendered independently as their own
+// YAML fragments.
+//
+// Known limitation: flow-style YAML (`{a: 1, b: 2}`) can place more than one
+// sentinel on the same line; the reconstructed markers then wrap only the
+// first match on that line and any trailing flow-syntax after the sentinel
+// (e.g. a closing `}`) is preserved but left outside the marker block. This
+// is an accepted edge case — scaffold templates use block style.
+func spliceConflictMarkers(yamlText string, conflicts []nodeConflict) (string, error) {
+	bySentinel := make(map[string]nodeConflict, len(conflicts))
+	for _, c := range conflicts {
+		bySentinel[c.sentinel] = c
+	}
+
+	lines := strings.Split(yamlText, newlineSeparator)
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		conflict, sentinel, idx := findSentinel(line, bySentinel)
+		if idx == -1 {
+			out = append(out, line)
+			continue
+		}
+
+		block, err := renderConflictBlock(line, idx, sentinel, conflict)
+		if err != nil {
+			return "", err
+		}
+		out = append(out, block...)
+	}
+	return strings.Join(out, newlineSeparator), nil
+}
+
+// findSentinel returns the conflict, sentinel string, and byte index of the
+// first sentinel found in line, or idx == -1 if none is present.
+func findSentinel(line string, bySentinel map[string]nodeConflict) (nodeConflict, string, int) {
+	for sentinel, c := range bySentinel {
+		if idx := strings.Index(line, sentinel); idx != -1 {
+			return c, sentinel, idx
+		}
+	}
+	return nodeConflict{}, "", -1
+}
+
+// renderConflictBlock builds the replacement lines for a single sentinel
+// occurrence, choosing inline markers (both sides are scalars, so the
+// conflict fits on the same line as the key/list-item marker) or block
+// markers (either side is a mapping/sequence, so the conflict needs its own
+// indented block beneath the key).
+func renderConflictBlock(line string, idx int, sentinel string, c nodeConflict) ([]string, error) {
+	prefix := line[:idx]
+	suffix := line[idx+len(sentinel):]
+	trimmed := strings.TrimLeft(line, " ")
+	indent := line[:len(line)-len(trimmed)]
+
+	oursText, err := encodeNodeFragment(c.ours)
+	if err != nil {
+		return nil, err
+	}
+	theirsText, err := encodeNodeFragment(c.theirs)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.ours.Kind == yaml.ScalarNode && c.theirs.Kind == yaml.ScalarNode {
+		return inlineConflictBlock(indent, prefix, suffix, oursText, theirsText), nil
+	}
+	return blockConflictBlock(indent, prefix, suffix, oursText, theirsText), nil
+}
+
+// inlineConflictBlock reconstructs a conflict where both sides are scalars,
+// so the value fits on the same line as the reconstructed key/list-item
+// prefix, e.g.:
+//
+//	<<<<<<< Ours
+//	setting: user-change
+//	=======
+//	setting: template-change
+//	>>>>>>> Theirs
+func inlineConflictBlock(indent, prefix, suffix, oursText, theirsText string) []string {
+	oursLines := strings.Split(strings.TrimRight(oursText, newlineSeparator), newlineSeparator)
+	theirsLines := strings.Split(strings.TrimRight(theirsText, newlineSeparator), newlineSeparator)
+
+	block := []string{indent + "<<<<<<< Ours", prefix + oursLines[0]}
+	for _, l := range oursLines[1:] {
+		block = append(block, indent+l)
+	}
+	block = append(block, indent+"=======", prefix+theirsLines[0])
+	for _, l := range theirsLines[1:] {
+		block = append(block, indent+l)
+	}
+	return append(block, indent+">>>>>>> Theirs"+suffix)
+}
+
+// blockConflictBlock reconstructs a conflict where either side is a
+// mapping/sequence, so both sides are rendered as their own indented block
+// beneath the key, e.g.:
+//
+//	nested:
+//	  <<<<<<< Ours
+//	  a: 1
+//	  =======
+//	  a: 2
+//	  b: 3
+//	  >>>>>>> Theirs
+func blockConflictBlock(indent, prefix, suffix, oursText, theirsText string) []string {
+	keyLine := strings.TrimRight(prefix, " ")
+	nested := indent + "  "
+
+	oursLines := strings.Split(strings.TrimRight(oursText, newlineSeparator), newlineSeparator)
+	theirsLines := strings.Split(strings.TrimRight(theirsText, newlineSeparator), newlineSeparator)
+
+	block := []string{keyLine, nested + "<<<<<<< Ours"}
+	for _, l := range oursLines {
+		block = append(block, nested+l)
+	}
+	block = append(block, nested+"=======")
+	for _, l := range theirsLines {
+		block = append(block, nested+l)
+	}
+	return append(block, nested+">>>>>>> Theirs"+suffix)
+}
+
+// encodeNodeFragment encodes a single YAML node (not necessarily a document)
+// on its own, starting at column 0, for embedding in a conflict block.
+func encodeNodeFragment(node *yaml.Node) (string, error) {
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(node); err != nil {
+		return "", errUtils.Build(errUtils.ErrEncode).
+			WithCause(err).
+			WithExplanation("Failed to encode conflicting YAML fragment").
+			Err()
+	}
+	if err := encoder.Close(); err != nil {
+		return "", errUtils.Build(errUtils.ErrEncode).
+			WithCause(err).
+			WithExplanation("Failed to close YAML encoder for conflicting fragment").
+			Err()
+	}
+	return buf.String(), nil
 }
 
 // mergeNodes recursively merges YAML nodes.
@@ -466,6 +665,13 @@ func (m *YAMLMerger) mergeSequences(_, ours, theirs *yaml.Node, path string, con
 	picked := ours
 	if !nodesEqual(ours, theirs) {
 		picked = m.pickConflictValue(ours, theirs, path, conflicts)
+	}
+
+	// Manual strategy on a real divergence returns a scalar sentinel (see
+	// addNodeConflict), not a sequence — return it as-is rather than
+	// wrapping it in a SequenceNode below, which would discard its value.
+	if picked.Kind != yaml.SequenceNode {
+		return picked, nil
 	}
 
 	// Preserve the picked side's comments and style.
