@@ -599,6 +599,170 @@ func TestOnBeforePlan_CheckEnabled(t *testing.T) {
 	assert.Equal(t, "atmos/plan/dev/vpc", mp.checkRunCalls[0].Name)
 }
 
+// TestOnBeforePlan_SkipsWithoutComponent regression-tests issue #3007: a
+// bulk (--affected/--all) invocation's global before-hook fires before
+// components are resolved, so ComponentFromArg is empty. It must be skipped
+// cleanly instead of creating a status with no component that nothing can
+// ever update.
+func TestOnBeforePlan_SkipsWithoutComponent(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
+		},
+		Provider: mp,
+		Command:  "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "",
+		},
+	}
+
+	err := p.onBeforePlan(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+// TestCreateCheckRun_SkipsWithoutComponent asserts createCheckRun itself
+// returns the invariant-guard sentinel (rather than creating a malformed
+// status) when the component or stack is unresolved.
+func TestCreateCheckRun_SkipsWithoutComponent(t *testing.T) {
+	tests := []struct {
+		name string
+		info *schema.ConfigAndStacksInfo
+	}{
+		{name: "empty component", info: &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: ""}},
+		{name: "empty stack", info: &schema.ConfigAndStacksInfo{Stack: "", ComponentFromArg: "vpc"}},
+		{name: "both empty", info: &schema.ConfigAndStacksInfo{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Plugin{}
+			mp := newMockProvider()
+
+			ctx := &plugin.HookContext{
+				Config:   &schema.AtmosConfiguration{},
+				Provider: mp,
+				Command:  "plan",
+				Info:     tt.info,
+			}
+
+			err := p.createCheckRun(ctx)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrCICheckRunMissingComponent)
+			assert.Empty(t, mp.checkRunCalls)
+		})
+	}
+}
+
+// TestUpdateCheckRun_SkipsWithoutComponent mirrors
+// TestCreateCheckRun_SkipsWithoutComponent for the after-side update path,
+// including the per-operation statuses nested inside it.
+func TestUpdateCheckRun_SkipsWithoutComponent(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
+		},
+		Provider: mp,
+		Command:  "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "",
+			ComponentFromArg: "",
+		},
+	}
+
+	err := p.updateCheckRun(ctx, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCICheckRunMissingComponent)
+	assert.Empty(t, mp.updateRunCalls)
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+// TestCreateCheckRun_InvalidStatusContext covers the FormatStatusContext
+// error branch added to createCheckRun: requireResolvedComponent passes
+// (Stack/ComponentFromArg are set), but an empty ctx.Command still makes
+// FormatStatusContext reject the context as incomplete, and that error must
+// be wrapped in ErrCICheckRunMissingComponent without ever calling the
+// provider.
+func TestCreateCheckRun_InvalidStatusContext(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{},
+		Provider: mp,
+		Command:  "",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+	}
+
+	err := p.createCheckRun(ctx)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCICheckRunMissingComponent)
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+// TestUpdateCheckRun_InvalidStatusContext mirrors
+// TestCreateCheckRun_InvalidStatusContext for the after-side update path.
+func TestUpdateCheckRun_InvalidStatusContext(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
+		},
+		Provider: mp,
+		Command:  "",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+	}
+
+	err := p.updateCheckRun(ctx, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCICheckRunMissingComponent)
+	assert.Empty(t, mp.updateRunCalls)
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+// TestCreatePerOperationStatuses_SkipsInvalidStatusContext covers the
+// per-operation FormatStatusContext error branch: an empty ctx.Command makes
+// the per-operation status context invalid, so that operation is skipped
+// (logged, not created) instead of calling the provider with a malformed name.
+func TestCreatePerOperationStatuses_SkipsInvalidStatusContext(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{},
+		Provider: mp,
+		Command:  "",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+	}
+	result := &plugin.OutputResult{
+		Data: &plugin.TerraformOutputData{
+			ResourceCounts: plugin.ResourceCounts{Create: 1},
+		},
+	}
+
+	p.createPerOperationStatuses(ctx, result, "atmos", schema.CIChecksStatusesConfig{})
+
+	assert.Empty(t, mp.checkRunCalls, "invalid status context must skip the per-operation check run")
+}
+
 func TestOnAfterApply_WritesOutputs(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()

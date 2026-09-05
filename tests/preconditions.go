@@ -759,16 +759,19 @@ func SkipIfShort(t *testing.T) {
 // SkipOnDarwinARM64 skips the test if running on darwin/arm64 (macOS ARM).
 // Use this for tests that are incompatible with ARM64 macOS, such as tests using gomonkey
 // which causes fatal SIGBUS errors due to memory protection on ARM64.
+// SkipOnDarwinARM64 is intentionally NOT gated by ShouldCheckPreconditions/
+// ATMOS_TEST_SKIP_PRECONDITION_CHECKS, unlike other precondition checks in
+// this file: that env var exists so CI can force tests to run despite a
+// missing local dependency (Docker, network, credentials) that CI does have.
+// It cannot make gomonkey safe on darwin/arm64 -- CI sets that env var for
+// exactly the acceptance-test jobs that also run on macOS, so honoring it
+// here would defeat this check's entire purpose on the one platform it
+// exists to protect.
 func SkipOnDarwinARM64(t *testing.T, reason string) {
 	t.Helper()
 
-	if !ShouldCheckPreconditions() {
-		return
-	}
-
-	// Check if we're on darwin/arm64
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		t.Skipf("Skipping on darwin/arm64: %s. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to override", reason)
+		t.Skipf("Skipping on darwin/arm64: %s (fatal SIGBUS from memory protection; not overridable via ATMOS_TEST_SKIP_PRECONDITION_CHECKS)", reason)
 	}
 }
 
@@ -783,19 +786,18 @@ func SkipOnDarwinARM64(t *testing.T, reason string) {
 // Use this instead of an inline runtime.GOARCH check for any test calling
 // gomonkey.ApplyFunc/NewPatches. Accepts testing.TB so it also works from
 // Benchmark functions, not just Test functions.
+// SkipIfGomonkeyUnsafe is intentionally NOT gated by ShouldCheckPreconditions
+// either, matching SkipOnDarwinARM64: both incompatibilities are hard crashes
+// in the current process, not a missing external dependency CI can supply.
 func SkipIfGomonkeyUnsafe(t testing.TB, reason string) {
 	t.Helper()
 
-	if !ShouldCheckPreconditions() {
-		return
-	}
-
 	if RaceEnabled {
-		t.Skipf("Skipping under -race: %s (gomonkey's runtime code patching is incompatible with the race detector's instrumented binary layout). Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to override", reason)
+		t.Skipf("Skipping under -race: %s (gomonkey's runtime code patching is incompatible with the race detector's instrumented binary layout; not overridable via ATMOS_TEST_SKIP_PRECONDITION_CHECKS)", reason)
 	}
 
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		t.Skipf("Skipping on darwin/arm64: %s. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to override", reason)
+		t.Skipf("Skipping on darwin/arm64: %s (fatal SIGBUS from memory protection; not overridable via ATMOS_TEST_SKIP_PRECONDITION_CHECKS)", reason)
 	}
 }
 

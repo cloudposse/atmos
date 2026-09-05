@@ -55,6 +55,10 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 			Handler: p.onAfterPlan,
 		},
 		{
+			Event:   "before.terraform.plan.aggregate",
+			Handler: p.onBeforeTerraformAggregate,
+		},
+		{
 			Event:   "after.terraform.plan.aggregate",
 			Handler: p.onAfterTerraformAggregate,
 		},
@@ -65,6 +69,10 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 		{
 			Event:   "after.terraform.apply",
 			Handler: p.onAfterApply,
+		},
+		{
+			Event:   "before.terraform.apply.aggregate",
+			Handler: p.onBeforeTerraformAggregate,
 		},
 		{
 			Event:   "after.terraform.apply.aggregate",
@@ -85,6 +93,10 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 		{
 			Event:   "after.terraform.deploy",
 			Handler: p.onAfterDeploy,
+		},
+		{
+			Event:   "before.terraform.destroy.aggregate",
+			Handler: p.onBeforeTerraformAggregate,
 		},
 		{
 			Event:   "after.terraform.destroy.aggregate",

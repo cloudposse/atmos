@@ -2247,6 +2247,135 @@ func TestExecuteTerraformCIResultHandlerReceivesCapturedSchedulerResults(t *test
 	require.Contains(t, app.Error, "dependency vpc-dev failed")
 }
 
+type capturingTerraformPlanCIBeforeHandler struct {
+	pending schema.TerraformPlanCIPendingSet
+	calls   int
+	err     error
+}
+
+func (h *capturingTerraformPlanCIBeforeHandler) HandleTerraformPlanCIBefore(pending schema.TerraformPlanCIPendingSet) error {
+	h.calls++
+	h.pending = pending
+	return h.err
+}
+
+func TestExecuteTerraformCIBeforeHandlerReceivesResolvedGraph(t *testing.T) {
+	handler := &capturingTerraformPlanCIBeforeHandler{}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                          true,
+			SubCommand:                   "plan",
+			MaxConcurrency:               2,
+			TerraformFailureMode:         terraformFailureModeKeepGoing,
+			TerraformPlanCIBeforeHandler: handler,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{Stdout: "No changes."}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, handler.calls)
+	require.Equal(t, "plan", handler.pending.Command)
+	require.Len(t, handler.pending.Nodes, 3)
+
+	names := make(map[string]string, len(handler.pending.Nodes))
+	for _, node := range handler.pending.Nodes {
+		names[node.NodeID] = node.Component
+		require.NotEmpty(t, node.Stack)
+		require.NotEmpty(t, node.Component)
+	}
+	require.Equal(t, "vpc", names["vpc-dev"])
+	require.Equal(t, "database", names["database-dev"])
+	require.Equal(t, "app", names["app-dev"])
+}
+
+func TestStartTerraformCIBeforeGuards(t *testing.T) {
+	handler := &capturingTerraformPlanCIBeforeHandler{}
+	graph := &dependency.Graph{Nodes: map[string]*dependency.Node{
+		"vpc-dev": {ID: "vpc-dev", Stack: "dev", Component: "vpc"},
+	}}
+
+	// Nil info, unsupported subcommand, nil handler, and nil graph all no-op.
+	startTerraformCIBefore(nil, graph)
+	startTerraformCIBefore(&schema.ConfigAndStacksInfo{SubCommand: "output"}, graph)
+	startTerraformCIBefore(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, graph)
+	startTerraformCIBefore(&schema.ConfigAndStacksInfo{SubCommand: "plan", TerraformPlanCIBeforeHandler: handler}, nil)
+	require.Zero(t, handler.calls)
+
+	// A node missing Component/Stack must never be advertised as pending.
+	incompleteGraph := &dependency.Graph{Nodes: map[string]*dependency.Node{
+		"bad-node": {ID: "bad-node", Stack: "", Component: ""},
+	}}
+	startTerraformCIBefore(&schema.ConfigAndStacksInfo{SubCommand: "plan", TerraformPlanCIBeforeHandler: handler}, incompleteGraph)
+	require.Zero(t, handler.calls)
+
+	// A handler error is logged, not returned or panicked.
+	failingHandler := &capturingTerraformPlanCIBeforeHandler{err: errors.New("handler failed")}
+	startTerraformCIBefore(&schema.ConfigAndStacksInfo{SubCommand: "plan", TerraformPlanCIBeforeHandler: failingHandler}, graph)
+	require.Equal(t, 1, failingHandler.calls)
+}
+
+// TestResolvedTerraformCIPendingNodesSortOrder exercises the full three-key
+// sort comparator in resolvedTerraformCIPendingNodes directly: nodes across
+// different stacks (Stack tiebreak), nodes in the same stack with different
+// components (Component tiebreak — already covered indirectly elsewhere),
+// and nodes with the same stack AND component but different NodeIDs
+// (NodeID tiebreak, e.g. a component targeted by two different workspaces).
+func TestResolvedTerraformCIPendingNodesSortOrder(t *testing.T) {
+	graph := &dependency.Graph{Nodes: map[string]*dependency.Node{
+		"vpc-zzz":  {ID: "vpc-zzz", Stack: "zzz", Component: "vpc"},
+		"vpc-aaa":  {ID: "vpc-aaa", Stack: "aaa", Component: "vpc"},
+		"vpc-aaa2": {ID: "vpc-aaa2", Stack: "aaa", Component: "vpc"},
+	}}
+
+	nodes := resolvedTerraformCIPendingNodes(graph)
+
+	require.Len(t, nodes, 3)
+	// Stack "aaa" sorts before "zzz" (Stack tiebreak, lines 1594-1596).
+	require.Equal(t, "aaa", nodes[0].Stack)
+	require.Equal(t, "aaa", nodes[1].Stack)
+	require.Equal(t, "zzz", nodes[2].Stack)
+	// Within the same stack+component, NodeID breaks the tie
+	// (lines 1600, reached only once Stack and Component are both equal).
+	require.Equal(t, "vpc-aaa", nodes[0].NodeID)
+	require.Equal(t, "vpc-aaa2", nodes[1].NodeID)
+}
+
+// TestExecuteTerraformResolvesAggregateEvenOnLateFailure proves the invariant
+// this fix depends on: once startTerraformCIBefore creates real pending
+// statuses up front, the after-aggregate handler must be guaranteed to run
+// (via defer) even when a later step in ExecuteTerraform errors and returns
+// early — otherwise those pending statuses would be orphaned exactly like
+// issue #3007.
+func TestExecuteTerraformResolvesAggregateEvenOnLateFailure(t *testing.T) {
+	handler := &capturingTerraformPlanCIResultHandler{}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:                          true,
+			SubCommand:                   "plan",
+			MaxConcurrency:               2,
+			TerraformFailureMode:         terraformFailureModeKeepGoing,
+			TerraformPlanCIResultHandler: handler,
+			// A directory instead of a file path makes writeTerraformSummary
+			// fail after the scheduler run completes.
+			TerraformPlanSummaryFile: t.TempDir(),
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{Stdout: "No changes."}, nil
+		},
+	})
+
+	require.Error(t, err, "writeTerraformSummary should fail because the summary path is a directory")
+	require.Equal(t, 1, handler.calls, "the after-aggregate CI hook must still fire despite the later failure")
+}
+
 func TestFinalizeTerraformCIResultsGuardsAndHandlerError(t *testing.T) {
 	finalizeTerraformCIResults(nil, nil, nil)
 	finalizeTerraformCIResults(&schema.ConfigAndStacksInfo{SubCommand: "output"}, nil, nil)
