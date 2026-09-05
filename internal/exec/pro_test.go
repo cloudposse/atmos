@@ -7,47 +7,13 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"go.uber.org/mock/gomock"
 
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-// MockProAPIClient is a mock implementation of the pro API client.
-type MockProAPIClient struct {
-	mock.Mock
-}
-
-func (m *MockProAPIClient) UploadInstances(req *dtos.InstancesUploadRequest) error {
-	args := m.Called(req)
-	return args.Error(0)
-}
-
-func (m *MockProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadRequest) error {
-	args := m.Called(dto)
-	return args.Error(0)
-}
-
-func (m *MockProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksRequest) error {
-	args := m.Called(dto)
-	return args.Error(0)
-}
-
-func (m *MockProAPIClient) LockStack(dto *dtos.LockStackRequest) (dtos.LockStackResponse, error) {
-	args := m.Called(dto)
-	if args.Get(0) == nil {
-		return dtos.LockStackResponse{}, args.Error(1)
-	}
-	return args.Get(0).(dtos.LockStackResponse), args.Error(1)
-}
-
-func (m *MockProAPIClient) UnlockStack(dto *dtos.UnlockStackRequest) (dtos.UnlockStackResponse, error) {
-	args := m.Called(dto)
-	if args.Get(0) == nil {
-		return dtos.UnlockStackResponse{}, args.Error(1)
-	}
-	return args.Get(0).(dtos.UnlockStackResponse), args.Error(1)
-}
 
 // MockGitRepo is a mock implementation of the git repository.
 type MockGitRepo struct {
@@ -206,7 +172,8 @@ func TestUploadStatus(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockProClient := new(MockProAPIClient)
+			ctrl := gomock.NewController(t)
+			mockProClient := pro.NewMockAtmosProAPIClientInterface(ctrl)
 			mockGitRepo := new(MockGitRepo)
 
 			info := createTestInfo(tc.proEnabled)
@@ -214,8 +181,9 @@ func TestUploadStatus(t *testing.T) {
 			// All exit codes now upload.
 			mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
 			mockGitRepo.On("GetCurrentCommitSHA").Return("abc123def456", nil)
-			mockProClient.On("UploadInstanceStatus", mock.MatchedBy(func(dto *dtos.InstanceStatusUploadRequest) bool {
-				return dto.Command == "plan" && dto.ExitCode == tc.exitCode
+			mockProClient.EXPECT().UploadInstanceStatus(gomock.Cond(func(x any) bool {
+				dto, ok := x.(*dtos.InstanceStatusUploadRequest)
+				return ok && dto.Command == "plan" && dto.ExitCode == tc.exitCode
 			})).Return(nil)
 
 			err := uploadStatus(&info, tc.exitCode, mockProClient, mockGitRepo)
@@ -226,7 +194,6 @@ func TestUploadStatus(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			mockProClient.AssertExpectations(t)
 			mockGitRepo.AssertExpectations(t)
 		})
 	}
@@ -299,7 +266,8 @@ func TestUploadStatusWithDifferentExitCodes(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockProClient := new(MockProAPIClient)
+			ctrl := gomock.NewController(t)
+			mockProClient := pro.NewMockAtmosProAPIClientInterface(ctrl)
 			mockGitRepo := new(MockGitRepo)
 
 			info := createTestInfo(true)
@@ -307,14 +275,14 @@ func TestUploadStatusWithDifferentExitCodes(t *testing.T) {
 			// All exit codes now upload with raw command + exit_code.
 			mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
 			mockGitRepo.On("GetCurrentCommitSHA").Return("abc123", nil)
-			mockProClient.On("UploadInstanceStatus", mock.MatchedBy(func(dto *dtos.InstanceStatusUploadRequest) bool {
-				return dto.Command == "plan" && dto.ExitCode == tc.exitCode
+			mockProClient.EXPECT().UploadInstanceStatus(gomock.Cond(func(x any) bool {
+				dto, ok := x.(*dtos.InstanceStatusUploadRequest)
+				return ok && dto.Command == "plan" && dto.ExitCode == tc.exitCode
 			})).Return(nil)
 
 			err := uploadStatus(&info, tc.exitCode, mockProClient, mockGitRepo)
 			assert.NoError(t, err)
 
-			mockProClient.AssertExpectations(t)
 			mockGitRepo.AssertExpectations(t)
 		})
 	}
@@ -323,7 +291,8 @@ func TestUploadStatusWithDifferentExitCodes(t *testing.T) {
 // TestUploadStatusWithGitErrors tests error handling when git operations fail.
 func TestUploadStatusWithGitErrors(t *testing.T) {
 	t.Run("handles git repo info error", func(t *testing.T) {
-		mockProClient := new(MockProAPIClient)
+		ctrl := gomock.NewController(t)
+		mockProClient := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGitRepo := new(MockGitRepo)
 
 		info := createTestInfo(true)
@@ -338,7 +307,8 @@ func TestUploadStatusWithGitErrors(t *testing.T) {
 	})
 
 	t.Run("continues when git SHA fails", func(t *testing.T) {
-		mockProClient := new(MockProAPIClient)
+		ctrl := gomock.NewController(t)
+		mockProClient := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGitRepo := new(MockGitRepo)
 
 		info := createTestInfo(true)
@@ -353,12 +323,11 @@ func TestUploadStatusWithGitErrors(t *testing.T) {
 		// Git SHA can fail but upload should continue
 		mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
 		mockGitRepo.On("GetCurrentCommitSHA").Return("", assert.AnError)
-		mockProClient.On("UploadInstanceStatus", mock.AnythingOfType("*dtos.InstanceStatusUploadRequest")).Return(nil)
+		mockProClient.EXPECT().UploadInstanceStatus(gomock.AssignableToTypeOf(&dtos.InstanceStatusUploadRequest{})).Return(nil)
 
 		err := uploadStatus(&info, 2, mockProClient, mockGitRepo)
 		assert.NoError(t, err)
 
-		mockProClient.AssertExpectations(t)
 		mockGitRepo.AssertExpectations(t)
 	})
 }
@@ -511,7 +480,8 @@ func TestUnlockStackRequest(t *testing.T) {
 func TestExecuteProLock(t *testing.T) {
 	t.Run("successfully locks stack and shows checkmark", func(t *testing.T) {
 		// Create mocks
-		mockAPI := new(MockProAPIClient)
+		ctrl := gomock.NewController(t)
+		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGit := new(MockGitRepo)
 
 		// Setup mock expectations
@@ -520,8 +490,9 @@ func TestExecuteProLock(t *testing.T) {
 			RepoName:  "test-repo",
 		}, nil)
 
-		mockAPI.On("LockStack", mock.MatchedBy(func(req *dtos.LockStackRequest) bool {
-			return req.Key == "test-owner/test-repo/test-stack/test-component" &&
+		mockAPI.EXPECT().LockStack(gomock.Cond(func(x any) bool {
+			req, ok := x.(*dtos.LockStackRequest)
+			return ok && req.Key == "test-owner/test-repo/test-stack/test-component" &&
 				req.TTL == 30 &&
 				req.LockMessage == "Test lock"
 		})).Return(dtos.LockStackResponse{
@@ -554,12 +525,12 @@ func TestExecuteProLock(t *testing.T) {
 
 		// Verify
 		assert.NoError(t, err)
-		mockAPI.AssertExpectations(t)
 		mockGit.AssertExpectations(t)
 	})
 
 	t.Run("returns error when git repo info fails", func(t *testing.T) {
-		mockAPI := new(MockProAPIClient)
+		ctrl := gomock.NewController(t)
+		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGit := new(MockGitRepo)
 
 		mockGit.On("GetLocalRepoInfo").Return(nil, assert.AnError)
@@ -580,7 +551,8 @@ func TestExecuteProLock(t *testing.T) {
 	})
 
 	t.Run("returns error when API lock fails", func(t *testing.T) {
-		mockAPI := new(MockProAPIClient)
+		ctrl := gomock.NewController(t)
+		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGit := new(MockGitRepo)
 
 		mockGit.On("GetLocalRepoInfo").Return(&atmosgit.RepoInfo{
@@ -588,7 +560,7 @@ func TestExecuteProLock(t *testing.T) {
 			RepoName:  "test-repo",
 		}, nil)
 
-		mockAPI.On("LockStack", mock.Anything).Return(dtos.LockStackResponse{}, assert.AnError)
+		mockAPI.EXPECT().LockStack(gomock.Any()).Return(dtos.LockStackResponse{}, assert.AnError)
 
 		args := ProLockCmdArgs{
 			ProLockUnlockCmdArgs: ProLockUnlockCmdArgs{
@@ -602,7 +574,6 @@ func TestExecuteProLock(t *testing.T) {
 		err := executeProLock(&args, mockAPI, mockGit)
 
 		assert.Error(t, err)
-		mockAPI.AssertExpectations(t)
 		mockGit.AssertExpectations(t)
 	})
 }
@@ -611,7 +582,8 @@ func TestExecuteProLock(t *testing.T) {
 func TestExecuteProUnlock(t *testing.T) {
 	t.Run("successfully unlocks stack and shows checkmark", func(t *testing.T) {
 		// Create mocks
-		mockAPI := new(MockProAPIClient)
+		ctrl := gomock.NewController(t)
+		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGit := new(MockGitRepo)
 
 		// Setup mock expectations
@@ -620,8 +592,9 @@ func TestExecuteProUnlock(t *testing.T) {
 			RepoName:  "test-repo",
 		}, nil)
 
-		mockAPI.On("UnlockStack", mock.MatchedBy(func(req *dtos.UnlockStackRequest) bool {
-			return req.Key == "test-owner/test-repo/test-stack/test-component"
+		mockAPI.EXPECT().UnlockStack(gomock.Cond(func(x any) bool {
+			req, ok := x.(*dtos.UnlockStackRequest)
+			return ok && req.Key == "test-owner/test-repo/test-stack/test-component"
 		})).Return(dtos.UnlockStackResponse{}, nil)
 
 		// Create test args
@@ -637,12 +610,12 @@ func TestExecuteProUnlock(t *testing.T) {
 
 		// Verify
 		assert.NoError(t, err)
-		mockAPI.AssertExpectations(t)
 		mockGit.AssertExpectations(t)
 	})
 
 	t.Run("returns error when git repo info fails", func(t *testing.T) {
-		mockAPI := new(MockProAPIClient)
+		ctrl := gomock.NewController(t)
+		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGit := new(MockGitRepo)
 
 		mockGit.On("GetLocalRepoInfo").Return(nil, assert.AnError)
@@ -661,7 +634,8 @@ func TestExecuteProUnlock(t *testing.T) {
 	})
 
 	t.Run("returns error when API unlock fails", func(t *testing.T) {
-		mockAPI := new(MockProAPIClient)
+		ctrl := gomock.NewController(t)
+		mockAPI := pro.NewMockAtmosProAPIClientInterface(ctrl)
 		mockGit := new(MockGitRepo)
 
 		mockGit.On("GetLocalRepoInfo").Return(&atmosgit.RepoInfo{
@@ -669,7 +643,7 @@ func TestExecuteProUnlock(t *testing.T) {
 			RepoName:  "test-repo",
 		}, nil)
 
-		mockAPI.On("UnlockStack", mock.Anything).Return(dtos.UnlockStackResponse{}, assert.AnError)
+		mockAPI.EXPECT().UnlockStack(gomock.Any()).Return(dtos.UnlockStackResponse{}, assert.AnError)
 
 		args := ProUnlockCmdArgs{
 			ProLockUnlockCmdArgs: ProLockUnlockCmdArgs{
@@ -681,7 +655,6 @@ func TestExecuteProUnlock(t *testing.T) {
 		err := executeProUnlock(&args, mockAPI, mockGit)
 
 		assert.Error(t, err)
-		mockAPI.AssertExpectations(t)
 		mockGit.AssertExpectations(t)
 	})
 }
