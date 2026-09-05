@@ -177,7 +177,7 @@ jobs:
             ocsp.digicert.com:80
             *.pool.ntp.org:123
 
-      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d # v2.3.1
         if: matrix.target == 'linux'
 
       - name: Announce build target
@@ -922,7 +922,7 @@ jobs:
       # Harden Runner doesn't cover RunsOn self-hosted runners (see the build
       # job's linux leg, which skips it the same way); runs-on/action sets up
       # this job's runner metadata/labels instead.
-      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc # v2.2.0
+      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d # v2.3.1
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
