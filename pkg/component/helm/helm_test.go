@@ -309,6 +309,18 @@ func TestLoadChartUpdatesMissingDependenciesWhenRequested(t *testing.T) {
 	assert.FileExists(t, filepath.Join(chartPath, "charts", "helm-test-library-0.1.0.tgz"))
 }
 
+func TestLoadChartUpdateRequiresSettings(t *testing.T) {
+	chartPath, err := filepath.Abs(filepath.Join("testdata", "chart-missing-dependency"))
+	require.NoError(t, err)
+
+	// dependencyUpdate is requested but no Helm environment settings are
+	// supplied, so the missing dependency cannot be fetched and the operation
+	// must fail with an actionable error rather than dereferencing nil settings.
+	_, err = loadChartForAction(context.Background(), chartPath, nil, nil, true)
+	require.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
+	assert.Contains(t, err.Error(), "without Helm environment settings")
+}
+
 func TestLoadChartDoesNotUpdateDependenciesAfterCancellation(t *testing.T) {
 	testdataRoot := t.TempDir()
 	require.NoError(t, os.CopyFS(testdataRoot, os.DirFS("testdata")))
