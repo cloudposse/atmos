@@ -131,6 +131,17 @@ components:
           source: from-stack
           expression: !literal "{{ .Values.tpl.source }}"
 
+    demo-crds:
+      metadata:
+        component: demo
+      chart: "."
+      name: demo-crds
+      namespace: demo-crds
+      release:
+        chart_hooks: false
+        install:
+          crds: create
+
     demo-repo:
       metadata:
         component: demo
