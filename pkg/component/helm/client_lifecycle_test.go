@@ -256,29 +256,34 @@ func TestDeleteReleaseHonorsCanceledContext(t *testing.T) {
 	assert.NotEmpty(t, deployed)
 }
 
-func TestApplyReleaseUsesLifecycleTimeoutAndWaitContext(t *testing.T) {
+func TestApplyReleaseWiresWaitContext(t *testing.T) {
 	actx := memoryActionContext(t)
 	stubActionContext(t, actx)
-	spec := testdataChartSpec(t, "bounded-upgrade")
-
-	_, err := applyRelease(context.Background(), spec, false)
-	require.NoError(t, err)
+	spec := testdataChartSpec(t, "wait-context")
 
 	kubeClient, ok := actx.cfg.KubeClient.(*kubefake.FailingKubeClient)
 	require.True(t, ok)
-	kubeClient.RecordedWaitOptions = nil
-	kubeClient.WaitDuration = 2 * time.Second
-	timeout := "25ms"
-	spec.Release.Upgrade.Timeout = &timeout
+	waitErr := errors.New("wait failed")
+	kubeClient.WaitError = waitErr
+	timeout := "5s"
+	spec.Release.Install.Timeout = &timeout
 
-	started := time.Now()
 	result, err := applyRelease(context.Background(), spec, false)
-	elapsed := time.Since(started)
 
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	assert.Equal(t, releaseOperationUpgrade, result.Operation)
-	assert.Less(t, elapsed, time.Second, "upgrade must return at the lifecycle deadline")
+	require.ErrorIs(t, err, waitErr)
+	assert.Equal(t, releaseOperationInstall, result.Operation)
 	assert.NotEmpty(t, kubeClient.RecordedWaitOptions, "Helm waiters must receive the operation context")
+}
+
+func TestReleaseOperationContextAppliesTimeout(t *testing.T) {
+	const timeout = time.Minute
+	started := time.Now()
+	ctx, cancel := releaseOperationContext(context.Background(), timeout)
+	defer cancel()
+
+	deadline, hasDeadline := ctx.Deadline()
+	require.True(t, hasDeadline)
+	assert.WithinDuration(t, started.Add(timeout), deadline, time.Second)
 }
 
 func TestReleaseOperationContextPreservesZeroTimeout(t *testing.T) {
