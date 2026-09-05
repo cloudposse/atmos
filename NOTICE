@@ -1978,7 +1978,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/mattn/go-runewidth
     License: MIT
-    URL: https://github.com/mattn/go-runewidth/blob/v0.0.23/LICENSE
+    URL: https://github.com/mattn/go-runewidth/blob/v0.0.27/LICENSE
 
   - github.com/mattn/go-shellwords
     License: MIT
