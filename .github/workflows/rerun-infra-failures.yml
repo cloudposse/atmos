@@ -76,11 +76,17 @@ jobs:
         with:
           egress-policy: block
           # api.github.com: run/job/PR lookups and the rerun call.
-          # github.com: actions/checkout. The Go hosts are for the module
-          # download behind `go tool mage` (same set as test.yml's build job).
+          # github.com: actions/checkout. release-assets.githubusercontent.com:
+          # where actions/setup-go downloads the Go toolchain (every run
+          # failed here without it, blocked at getaddrinfo); golang.org is
+          # setup-go's fallback download host. The remaining Go hosts are
+          # for the module download behind `go tool mage` (same set as
+          # test.yml's build job).
           allowed-endpoints: >
             api.github.com:443
             github.com:443
+            release-assets.githubusercontent.com:443
+            golang.org:443
             proxy.golang.org:443
             sum.golang.org:443
             storage.googleapis.com:443
