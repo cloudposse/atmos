@@ -24,7 +24,35 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
+
+// withExecMetadataGateEnv isolates CI-detection env vars for the duration of a
+// test, using telemetry's own preserve/restore helpers (mirroring
+// pkg/proexec/gate_test.go's withCIEnv) so proexec.GateOpen's CI-detection is
+// deterministic regardless of the environment the test suite itself runs in.
+// Jenkins detection requires both JENKINS_URL and BUILD_ID; neither is
+// covered by PreserveCIEnvVars' existence/equals maps.
+func withExecMetadataGateEnv(t *testing.T, ci bool) {
+	t.Helper()
+	preserved := telemetry.PreserveCIEnvVars()
+	jenkinsURL, hadJenkinsURL := os.LookupEnv("JENKINS_URL")
+	buildID, hadBuildID := os.LookupEnv("BUILD_ID")
+	os.Unsetenv("JENKINS_URL")
+	os.Unsetenv("BUILD_ID")
+	t.Cleanup(func() {
+		telemetry.RestoreCIEnvVars(preserved)
+		if hadJenkinsURL {
+			os.Setenv("JENKINS_URL", jenkinsURL)
+		}
+		if hadBuildID {
+			os.Setenv("BUILD_ID", buildID)
+		}
+	})
+	if ci {
+		t.Setenv("CI", "true")
+	}
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // buildTerraformCommandArgs
@@ -352,6 +380,64 @@ func TestBuildPlanSubcommandArgs_UploadStatusFlag(t *testing.T) {
 	assert.Contains(t, args, detailedExitCodeFlag)
 	// Upload status flag should be removed from additional args.
 	assert.NotContains(t, info.AdditionalArgsAndFlags, "--upload-status")
+	// --upload-status is the reason the flag was added, not exec-metadata capture —
+	// the local exit-2 neutralization in executeMainTerraformCommand must not apply
+	// (research.md Decision 36's own pre-existing --upload-status behavior).
+	assert.False(t, info.ExecMetadataDetailedExitCodeAdded)
+}
+
+// TestBuildPlanSubcommandArgs_ExecMetadataActive_AddsDetailedExitCode is the
+// reproduce-first regression test for FR-006e: -detailed-exitcode must be
+// added to `plan` whenever exec-metadata capture is active (CI-detected +
+// Atmos Pro configured), independent of the legacy --upload-status flag, so
+// TerraformExecData.exit_code can report the real subprocess outcome instead
+// of always 0.
+func TestBuildPlanSubcommandArgs_ExecMetadataActive_AddsDetailedExitCode(t *testing.T) {
+	withExecMetadataGateEnv(t, true)
+
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Settings.Pro.Token = "test-token"
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+
+	args, err := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
+
+	require.NoError(t, err)
+	assert.Contains(t, args, detailedExitCodeFlag)
+	assert.True(t, info.ExecMetadataDetailedExitCodeAdded,
+		"executeMainTerraformCommand needs this signal to know the flag was added for exec-metadata, not --upload-status")
+}
+
+// TestBuildPlanSubcommandArgs_ExecMetadataInactive_NoDetailedExitCode verifies
+// the flag is NOT added when exec-metadata capture's gate is closed (no CI,
+// or CI without Atmos Pro configured) and --upload-status wasn't passed —
+// unaffected users see no behavior change.
+func TestBuildPlanSubcommandArgs_ExecMetadataInactive_NoDetailedExitCode(t *testing.T) {
+	withExecMetadataGateEnv(t, false)
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+
+	args, err := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
+
+	require.NoError(t, err)
+	assert.NotContains(t, args, detailedExitCodeFlag)
+	assert.False(t, info.ExecMetadataDetailedExitCodeAdded)
+}
+
+// TestBuildPlanSubcommandArgs_ApplyNeverGetsDetailedExitCode confirms
+// buildApplySubcommandArgs (used by both `apply` and `deploy`'s internal
+// `apply` invocation) never adds -detailed-exitcode under any combination of
+// exec-metadata-active/--upload-status, per FR-006e's plan-only scoping
+// (research.md Decision 35 — version-support risk on older pinned
+// terraform/tofu binaries; apply/deploy keep plain 0/1 exit-code semantics).
+func TestBuildPlanSubcommandArgs_ApplyNeverGetsDetailedExitCode(t *testing.T) {
+	withExecMetadataGateEnv(t, true)
+
+	info := schema.ConfigAndStacksInfo{SubCommand: "apply"}
+	args, err := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json")
+
+	require.NoError(t, err)
+	assert.NotContains(t, args, detailedExitCodeFlag)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

@@ -24,8 +24,18 @@ import (
 )
 
 // initTestIO initializes the I/O and UI contexts so data.Write / ui.* work in tests.
+//
+// It also clears GITHUB_ENV. This package's own test binary runs inside real
+// GitHub Actions CI, so every test here would otherwise inherit an ambient
+// GITHUB_ENV left over from the job. Since emitGitHubCachePaths writes to
+// GITHUB_ENV whenever it's set, a GitHub-format test that never touches
+// GITHUB_ENV itself could still append its fixture cache metadata to the
+// real job's environment file, affecting later CI steps. A test that
+// specifically exercises the GITHUB_ENV write path overrides this with its
+// own explicit t.Setenv call.
 func initTestIO(t *testing.T) {
 	t.Helper()
+	t.Setenv("GITHUB_ENV", "")
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err)
 	ui.InitFormatter(ioCtx)

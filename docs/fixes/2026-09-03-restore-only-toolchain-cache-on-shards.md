@@ -18,8 +18,8 @@ Measured on `test.yml` runs from Aug 24 to Sept 3 (80 successful Windows shards,
 job logs, and `gh api repos/cloudposse/atmos/actions/cache/usage`).
 
 **Toolchain cache.** The repository's Actions cache holds 18.9 GB across 22 entries against a 10 GB LRU
-quota. Every entry is scoped to a `refs/pull/N/merge` ref and is minutes old (14 `setup-go-*` entries up
-to 1.9 GB each, 8 `atmos-toolchain-*` entries up to 470 MB each). Each run writes about 5 GB, so nothing
+quota. Every entry is scoped to a `refs/pull/N/merge` ref and is minutes old (14 `setup-go-*` entries at
+1.6 to 1.9 GB, 8 `atmos-toolchain-*` entries at 350 to 470 MB). Each run writes about 5 GB, so nothing
 saved from `main` survives and the static key `atmos-toolchain-<os>-<arch>-v2` never hits: every shard
 logs `Cache not found for input keys`, then all 10 shards race to save the same key and log
 `Unable to reserve cache with key ..., another job may be creating this cache`. `Post Cache Atmos
@@ -66,8 +66,8 @@ warmup's writer role.
 
 ## Addendum (2026-09-04): the save silently did nothing when the action was nested
 
-Calling `./actions/cache` from inside another composite action (`.github/actions/ci-toolchain`, PR
-#3041) showed the post-step save running with `Input required and not supplied: path` and storing
+Calling `./actions/cache` from inside another composite action (`.github/actions/ci-toolchain`, PR `#3041`)
+showed the post-step save running with `Input required and not supplied: path` and storing
 nothing: a post step of an action nested inside a composite cannot see the composite's
 `steps.*.outputs` (actions/runner#2800), so `path: ${{ steps.meta.outputs.path }}` evaluated
 empty at save time. Direct use from a job never hit this. The action now also exports

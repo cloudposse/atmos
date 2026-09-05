@@ -1,11 +1,19 @@
 package list
 
 import (
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/spf13/cobra"
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -13,6 +21,7 @@ import (
 	pkgGit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
+	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -315,6 +324,95 @@ func TestUploadInstancesWithDeps_PreservesEnabledDisabled(t *testing.T) {
 
 	err := uploadInstancesWithDeps(instances, mockGit, mockConfig, mockClientFactory)
 	assert.NoError(t, err)
+}
+
+// TestUploadInstancesWithDeps_SetsPendingAsyncDataForExecMetadata is the
+// regression test for FR-006c/research.md Decision 23: an `--upload` run
+// must attach the same instance list already sent to POST /api/v1/instances
+// to the command's exec-metadata execution record, as {"version": 1,
+// "instances": [...]}, via proexec.SetPendingAsyncData — since
+// uploadInstancesWithDeps is only ever called from ExecuteListInstancesCmd's
+// `if upload { ... }` branch, this call site is inherently gated on
+// --upload; the "absent when --upload was not passed" half of FR-006c is
+// covered structurally (no other call site exists) and by pkg/proexec's own
+// TestCaptureAsync_UsesAndClearsPendingAsyncData case (c), which already
+// asserts CaptureAsync sees Data: nil when SetPendingAsyncData was never
+// called.
+func TestUploadInstancesWithDeps_SetsPendingAsyncDataForExecMetadata(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockGit := pkgGit.NewMockRepositoryOperations(ctrl)
+	mockConfig := pkgCfg.NewMockLoader(ctrl)
+	mockClientFactory := pro.NewMockClientFactory(ctrl)
+	mockAPIClient := pro.NewMockAPIClient(ctrl)
+
+	instances := []schema.Instance{
+		{Component: "vpc", Stack: "dev"},
+	}
+	mockRepo := &git.Repository{}
+	repoInfo := pkgGit.RepoInfo{
+		RepoUrl:   "https://github.com/test/repo",
+		RepoName:  "repo",
+		RepoOwner: "test",
+		RepoHost:  "github.com",
+	}
+	atmosConfig := schema.AtmosConfiguration{}
+
+	mockGit.EXPECT().GetLocalRepo().Return(mockRepo, nil)
+	mockGit.EXPECT().GetRepoInfo(mockRepo).Return(repoInfo, nil)
+	mockConfig.EXPECT().InitCliConfig(gomock.Any(), false).Return(atmosConfig, nil)
+	mockClientFactory.EXPECT().NewClient(&atmosConfig).Return(mockAPIClient, nil)
+	mockAPIClient.EXPECT().UploadInstances(gomock.Any()).Return(nil)
+
+	require.NoError(t, uploadInstancesWithDeps(instances, mockGit, mockConfig, mockClientFactory))
+
+	// Verify the pending data actually flows into the next exec-metadata
+	// upload by exercising the real CaptureAsync consumer end-to-end.
+	t.Setenv("CI", "true")
+
+	receivedCh := make(chan dtos.ExecUploadRequest, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/atmos/exec") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var req dtos.ExecUploadRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		receivedCh <- req
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	defer server.Close()
+
+	proExecConfig := &schema.AtmosConfiguration{}
+	proExecConfig.Settings.Pro.BaseURL = server.URL
+	proExecConfig.Settings.Pro.Token = "test-token"
+	proexec.SetAtmosConfig(proExecConfig)
+	t.Cleanup(func() { proexec.SetAtmosConfig(nil) })
+
+	proexec.CaptureAsync(&cobra.Command{Use: "list-instances"}, nil)
+
+	// CaptureAsync races the upload against its own internal flush ceiling,
+	// so the HTTP handler may still be in flight when CaptureAsync returns.
+	// Synchronize on the handler's own signal instead of assuming it already
+	// ran, avoiding a data race between the handler goroutine and this
+	// assertion.
+	var received dtos.ExecUploadRequest
+	select {
+	case received = <-receivedCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for exec-metadata upload request")
+	}
+
+	require.NotNil(t, received.Data)
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(received.Data, &decoded))
+	assert.Equal(t, float64(1), decoded["version"])
+	instancesVal, ok := decoded["instances"].([]any)
+	require.True(t, ok, "data.instances must be an array")
+	assert.Len(t, instancesVal, 1)
 }
 
 // TestUploadInstancesWithDeps_EmptyInstances tests behavior with empty instance list.
