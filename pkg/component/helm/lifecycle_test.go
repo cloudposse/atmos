@@ -193,9 +193,10 @@ func TestResolveReleaseLifecycleFlagApplicability(t *testing.T) {
 func TestDecodeReleasePolicyValidation(t *testing.T) {
 	tests := []struct {
 		name    string
-		release map[string]any
+		release any
 		wantErr error
 	}{
+		{name: "release not object", release: "not-a-map", wantErr: errUtils.ErrHelmLifecycleDecode},
 		{name: "unknown release field", release: map[string]any{"unknown": true}, wantErr: errUtils.ErrHelmLifecycleDecode},
 		{name: "unknown operation field", release: map[string]any{cfg.HelmInstallSectionName: map[string]any{cfg.HelmCleanupOnFailureSectionName: true}}, wantErr: errUtils.ErrHelmLifecycleDecode},
 		{name: "wait strategy", release: map[string]any{cfg.HelmWaitSectionName: map[string]any{cfg.HelmWaitStrategySectionName: "unknown"}}, wantErr: errUtils.ErrHelmWaitStrategyInvalid},
@@ -209,6 +210,31 @@ func TestDecodeReleasePolicyValidation(t *testing.T) {
 		{name: "unsupported crd replace", release: map[string]any{cfg.HelmInstallSectionName: map[string]any{cfg.HelmCRDsSectionName: "replace"}}, wantErr: errUtils.ErrHelmLifecycleDecode},
 		{name: "delete wait jobs", release: map[string]any{cfg.HelmDeleteSectionName: map[string]any{cfg.HelmWaitSectionName: map[string]any{cfg.HelmWaitJobsSectionName: true}}}, wantErr: errUtils.ErrHelmLifecycleDecode},
 		{name: "jobs with hook only", release: map[string]any{cfg.HelmWaitSectionName: map[string]any{cfg.HelmWaitJobsSectionName: true}}, wantErr: errUtils.ErrHelmWaitForJobsRequiresWait},
+		// Wrong-type inputs at every nested field position: each must surface a
+		// decode error rather than being silently coerced.
+		{name: "timeout not string", release: map[string]any{cfg.HelmTimeoutSectionName: 5}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "chart_hooks not bool", release: map[string]any{cfg.HelmChartHooksSectionName: "yes"}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "wait not object", release: map[string]any{cfg.HelmWaitSectionName: "watcher"}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "wait strategy not string", release: map[string]any{cfg.HelmWaitSectionName: map[string]any{cfg.HelmWaitStrategySectionName: 5}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "wait jobs not bool", release: map[string]any{cfg.HelmWaitSectionName: map[string]any{cfg.HelmWaitJobsSectionName: "true"}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "history not object", release: map[string]any{cfg.HelmHistorySectionName: "10"}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "history max not int", release: map[string]any{cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: "ten"}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "install not object", release: map[string]any{cfg.HelmInstallSectionName: "yes"}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "install timeout not string", release: map[string]any{cfg.HelmInstallSectionName: map[string]any{cfg.HelmTimeoutSectionName: 5}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "install chart_hooks not bool", release: map[string]any{cfg.HelmInstallSectionName: map[string]any{cfg.HelmChartHooksSectionName: "yes"}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "install wait not object", release: map[string]any{cfg.HelmInstallSectionName: map[string]any{cfg.HelmWaitSectionName: "watcher"}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "install crds not string", release: map[string]any{cfg.HelmInstallSectionName: map[string]any{cfg.HelmCRDsSectionName: 5}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "install on_failure not string", release: map[string]any{cfg.HelmInstallSectionName: map[string]any{cfg.HelmOnFailureSectionName: 5}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "upgrade not object", release: map[string]any{cfg.HelmUpgradeSectionName: "yes"}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "upgrade timeout not string", release: map[string]any{cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmTimeoutSectionName: 5}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "upgrade chart_hooks not bool", release: map[string]any{cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmChartHooksSectionName: "yes"}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "upgrade wait not object", release: map[string]any{cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmWaitSectionName: "watcher"}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "upgrade on_failure not string", release: map[string]any{cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmOnFailureSectionName: 5}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "upgrade cleanup_on_failure not bool", release: map[string]any{cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmCleanupOnFailureSectionName: "yes"}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "delete not object", release: map[string]any{cfg.HelmDeleteSectionName: "yes"}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "delete timeout not string", release: map[string]any{cfg.HelmDeleteSectionName: map[string]any{cfg.HelmTimeoutSectionName: 5}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "delete chart_hooks not bool", release: map[string]any{cfg.HelmDeleteSectionName: map[string]any{cfg.HelmChartHooksSectionName: "yes"}}, wantErr: errUtils.ErrHelmLifecycleDecode},
+		{name: "delete wait not object", release: map[string]any{cfg.HelmDeleteSectionName: map[string]any{cfg.HelmWaitSectionName: "legacy"}}, wantErr: errUtils.ErrHelmLifecycleDecode},
 	}
 
 	for _, tt := range tests {
