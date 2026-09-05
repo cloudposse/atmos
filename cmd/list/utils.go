@@ -273,6 +273,7 @@ func skipCredentialBackedYAMLFunctionsForInventory(skip []string, authManager au
 		u.AtmosYamlFuncAwsCallerIdentityUserID,
 		u.AtmosYamlFuncAwsRegion,
 		u.AtmosYamlFuncAwsOrganizationID,
+		u.AtmosYamlFuncExec,
 	} {
 		name := strings.TrimPrefix(functionName, "!")
 		if !containsString(merged, name) {
