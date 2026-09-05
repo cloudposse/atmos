@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/chart/loader"
 	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/registry"
+	helmrelease "helm.sh/helm/v4/pkg/release"
 	release "helm.sh/helm/v4/pkg/release/v1"
+	"helm.sh/helm/v4/pkg/storage"
 	"helm.sh/helm/v4/pkg/storage/driver"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -165,6 +168,11 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	}
 
 	rel, err := client.RunWithContext(ctx, spec.ReleaseName, loaded, spec.Values)
+	if err != nil && !dryRun && spec.Lifecycle.Policy.OnFailure == failurePolicyRollback {
+		if historyErr := enforceReleaseHistoryLimit(actx.cfg.Releases, spec.ReleaseName, spec.Lifecycle.Policy.MaxHistory); historyErr != nil {
+			err = errors.Join(err, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr))
+		}
+	}
 	if err != nil {
 		return "", err
 	}
@@ -173,6 +181,63 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 		return "", fmt.Errorf("%w: unexpected release type %T", errUtils.ErrHelmRenderFailed, rel)
 	}
 	return rendered.Manifest, nil
+}
+
+// enforceReleaseHistoryLimit repairs Helm's rollback-on-failure path, which
+// does not propagate Upgrade.MaxHistory to the internal Rollback action.
+func enforceReleaseHistoryLimit(releases *storage.Storage, name string, maxHistory int) error {
+	releases.MaxHistory = maxHistory
+	if maxHistory <= 0 {
+		return nil
+	}
+
+	history, err := releases.History(name)
+	if errors.Is(err, driver.ErrReleaseNotFound) {
+		return nil
+	}
+	if err != nil || len(history) <= maxHistory {
+		return err
+	}
+
+	revisions := make([]int, 0, len(history))
+	for _, stored := range history {
+		accessor, accessorErr := helmrelease.NewAccessor(stored)
+		if accessorErr != nil {
+			return accessorErr
+		}
+		revisions = append(revisions, accessor.Version())
+	}
+	sort.Ints(revisions)
+
+	deployedVersion := -1
+	deployed, err := releases.Deployed(name)
+	if err != nil && !errors.Is(err, driver.ErrNoDeployedReleases) {
+		return err
+	}
+	if err == nil {
+		accessor, accessorErr := helmrelease.NewAccessor(deployed)
+		if accessorErr != nil {
+			return accessorErr
+		}
+		deployedVersion = accessor.Version()
+	}
+
+	remaining := len(revisions) - maxHistory
+	var deleteErrs []error
+	for _, version := range revisions {
+		if remaining == 0 {
+			break
+		}
+		if version == deployedVersion {
+			continue
+		}
+		if _, deleteErr := releases.Delete(name, version); deleteErr != nil {
+			deleteErrs = append(deleteErrs, deleteErr)
+			continue
+		}
+		remaining--
+	}
+	return errors.Join(deleteErrs...)
 }
 
 // resolveUpgradeChartRef applies the same repo/name resolution as the install

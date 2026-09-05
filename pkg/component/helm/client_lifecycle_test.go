@@ -3,6 +3,7 @@ package helm
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"path/filepath"
 	"testing"
@@ -56,6 +57,19 @@ func stubActionContext(t *testing.T, actx *actionContext) {
 type recordingKubeClient struct {
 	*kubefake.FailingKubeClient
 	BuiltDocs []string
+}
+
+type failNextUpdateKubeClient struct {
+	*kubefake.FailingKubeClient
+	failNext bool
+}
+
+func (f *failNextUpdateKubeClient) Update(current, target kube.ResourceList, options ...kube.ClientUpdateOption) (*kube.Result, error) {
+	if f.failNext {
+		f.failNext = false
+		return &kube.Result{}, errors.New("forced upgrade failure")
+	}
+	return f.FailingKubeClient.Update(current, target, options...)
 }
 
 func (r *recordingKubeClient) Build(reader io.Reader, strict bool) (kube.ResourceList, error) {
@@ -171,4 +185,36 @@ func TestDeleteReleaseDryRunPreservesRelease(t *testing.T) {
 	deployed, err := getDeployedManifest(spec.ReleaseName, spec.Namespace)
 	require.NoError(t, err)
 	assert.Contains(t, deployed, "kind: ConfigMap")
+}
+
+func TestUpgradeRollbackPreservesHistoryLimit(t *testing.T) {
+	maxHistory := 3
+
+	actx := memoryActionContext(t)
+	kubeClient := &failNextUpdateKubeClient{
+		FailingKubeClient: actx.cfg.KubeClient.(*kubefake.FailingKubeClient),
+	}
+	actx.cfg.KubeClient = kubeClient
+	stubActionContext(t, actx)
+
+	spec := testdataChartSpec(t, "rollback-history")
+	onFailure := string(failurePolicyRollback)
+	spec.Release.History.Max = &maxHistory
+	spec.Release.Upgrade.OnFailure = &onFailure
+
+	for revision := 1; revision <= maxHistory; revision++ {
+		spec.Values["replicaCount"] = revision
+		_, err := applyRelease(context.Background(), spec, false)
+		require.NoError(t, err)
+	}
+
+	kubeClient.failNext = true
+	spec.Values["replicaCount"] = maxHistory + 1
+	_, err := applyRelease(context.Background(), spec, false)
+	require.ErrorContains(t, err, "forced upgrade failure")
+
+	history, err := actx.cfg.Releases.History(spec.ReleaseName)
+	require.NoError(t, err)
+	assert.Len(t, history, maxHistory)
+	assert.Equal(t, maxHistory, actx.cfg.Releases.MaxHistory)
 }
