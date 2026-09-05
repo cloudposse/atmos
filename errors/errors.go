@@ -774,6 +774,10 @@ var (
 	ErrTokenRefreshFailed           = errors.New("failed to refresh API token")
 	ErrFailedToUnmarshalAPIResponse = errors.New("failed to unmarshal API response")
 	ErrNilRequestDTO                = errors.New("nil request DTO")
+	ErrFailedToUploadExecMetadata   = errors.New("failed to upload execution metadata")
+	ErrFailedToUploadExecData       = errors.New("failed to upload execution data")
+	ErrExecPayloadTooLarge          = errors.New("execution metadata payload too large")
+	ErrExecSyncTimeout              = errors.New("execution metadata upload timed out")
 
 	// Pro commit errors.
 	ErrCommitMessageRequired = errors.New("commit message is required")
@@ -1431,6 +1435,7 @@ var (
 	ErrCacheBackendNotFound = errors.New("cache backend not found")
 	ErrCacheInvalidArgs     = errors.New("invalid cache arguments")
 	ErrCacheKeyRequired     = errors.New("cache key is required")
+	ErrCachePathsRequired   = errors.New("cache paths are required")
 	ErrCacheArchiveFailed   = errors.New("failed to build cache archive")
 	ErrCacheExtractFailed   = errors.New("failed to extract cache archive")
 	ErrCacheBackendRequest  = errors.New("cache backend request failed")
