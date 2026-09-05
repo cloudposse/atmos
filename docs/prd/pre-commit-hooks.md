@@ -152,7 +152,7 @@ A top-level manifest `.pre-commit-hooks.yaml` will be added to the repository ro
 | :--- | :--- | :--- |
 | **Installation** | Managed entirely by `pre-commit` via `go install ./...` in an isolated cache directory (`~/.cache/pre-commit/`). | Requires `atmos` pre-installed on the developer host or in the container. |
 | **Prerequisites** | Go toolchain installed on host. | Any installation method (Homebrew, Aqua, Devbox, Docker, GitHub Actions). |
-| **Hermeticity** | Exact version locked to `rev: vX.Y.Z` in `.pre-commit-config.yaml`. | Uses whichever binary is first in `$PATH`. |
+| **Hermeticity** | Exact Atmos binary version locked to `rev: vX.Y.Z` in `.pre-commit-config.yaml`. Note that external toolchain dependencies invoked by Atmos (such as `tflint` for `atmos-terraform-lint`) still resolve from the project toolchain or ambient `$PATH` and fail when neither provides them. | Uses whichever binary is first in `$PATH`. |
 | **First-Run Latency** | ~45-90s (one-time compilation of Atmos and dependencies per `rev`). Subsequent runs are instantaneous. | Instantaneous (no compile step). |
 | **Best For** | Standard Go/IaC developer setups and teams seeking strictly reproducible versions. | CI containers, developers managing tools via Aqua/Brew, or environments without Go. |
 
@@ -173,13 +173,16 @@ Pre-commit hooks typically operate in one of two modes:
 For Atmos, `pass_filenames: false` combined with `--affected` is the optimal design:
 - Stack manifests frequently rely on deep multi-file inheritance (`import: [ catalog/*, mixins/* ]`). Validating only an isolated file passed as an argument can miss upstream broken imports.
 - `atmos validate --affected` and `atmos validate stacks --affected` internally compute affected stacks using the Git merge-base (`pkg/validation/affected.go`).
-- **Pre-commit Stashing Interaction**: By default, `pre-commit` stashes unstaged changes before executing hooks, ensuring that only staged changes exist in the working directory during validation. Atmos's merge-base resolution inspects committed changes plus the staged working tree diff. If `origin/HEAD` is unset, Atmos falls back to `HEAD~1`.
+- **Pre-commit Stashing Interaction**: By default, `pre-commit` stashes unstaged changes before executing hooks, ensuring that only staged changes exist in the working directory during validation. Atmos's merge-base resolution inspects committed changes plus the staged working tree diff.
+  - When `origin/HEAD` is unavailable (such as in shallow clones or local environments without remote-tracking branches), `resolveAffectedMergeBase` falls back to `HEAD~1`.
+  - If `HEAD~1` is also unavailable (which occurs on the initial root commit of a repository or at a shallow-history boundary where parent commits are not fetched), Atmos returns an error (`resolve validation base "origin/HEAD": ...`) and halts hook execution.
+  - Consumers running pre-commit in shallow CI checkouts should ensure adequate fetch depth (e.g., `fetch-depth: 0` or at least 2 commits) or supply an explicit base revision to avoid merge-base resolution errors.
 - The `files:` regex filter in `.pre-commit-hooks.yaml` ensures that hooks only trigger when relevant files (e.g., `^stacks/.*\.ya?ml$`) are staged, preventing unnecessary hook invocations on unrelated changes.
 
 #### Tool-Specific Prerequisites
 
 - **`atmos-generate-docs`**: Requires a `docs.generate.readme` configuration block in `atmos.yaml`. The hook triggers when stacks, components, or root documentation manifests change, updating the configured documentation target.
-- **`atmos-terraform-lint`**: Uses `--affected` to identify changed components across stacks. Requires `tflint` to be available in `$PATH` or configured via the Atmos toolchain (`components.terraform.lint.toolchain`).
+- **`atmos-terraform-lint`**: Uses `--affected` to identify changed components across stacks. Requires `tflint` to be available in `$PATH` or configured via the Atmos toolchain (`components.terraform.lint.toolchain`). If TFLint is not discoverable through either the project toolchain or `$PATH`, the hook fails with an error and a non-zero exit code.
 
 #### Base Path Resolution
 
@@ -287,7 +290,7 @@ The repository will update its existing hook entry to use the native `atmos vali
       pass_filenames: false
       always_run: true
 ```
-*(And in testing/CI, validating the packaged `.pre-commit-hooks.yaml` directly against the current branch using `pre-commit try-repo .`).*
+*(And in testing/CI, validating the packaged `.pre-commit-hooks.yaml` directly against the current branch using `pre-commit try-repo . --all-files`).*
 
 ---
 
@@ -301,11 +304,11 @@ The repository will update its existing hook entry to use the native `atmos vali
 
 ### Phase 2: File Filtering & Scoping Refinements
 1. Fine-tune regex patterns (`files:` and `exclude:`) to ensure hooks only trigger on relevant staged changes.
-2. Ensure `--affected` flag works properly within pre-commit execution subshells.
+2. Ensure `--affected` flag works properly within pre-commit execution subshells. Add test coverage for `resolveAffectedMergeBase` covering fallback to `HEAD~1` when `origin/HEAD` is unavailable, as well as failure handling when `HEAD~1` is missing (root commits or shallow-history boundaries).
 3. Validate TFLint discovery and execution behavior under `atmos terraform lint --affected`.
 
 ### Phase 3: CI Integration & Pre-Commit Validation Test Suite
-1. Add a GitHub Actions workflow job or test case in `.github/workflows/test.yml` running `pre-commit run --all-files` or `pre-commit try-repo .`.
+1. Add a GitHub Actions workflow job or test case in `.github/workflows/test.yml` running `pre-commit try-repo . --all-files`, ensuring all repository files are checked in clean CI checkouts rather than skipped due to absent staged changes.
 2. Ensure Go build caching works correctly when pre-commit compiles `atmos` with `language: golang`.
 
 ### Phase 4: Documentation & Community Templates
