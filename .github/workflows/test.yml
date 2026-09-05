@@ -1436,6 +1436,7 @@ jobs:
             raw.githubusercontent.com:443
             registry-1.docker.io:443
             registry.k8s.io:443
+            cdn.registry.k8s.io:443
             *.pkg.dev:443
             rekor.sigstore.dev:443
             release-assets.githubusercontent.com:443
