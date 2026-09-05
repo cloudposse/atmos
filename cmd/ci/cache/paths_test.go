@@ -93,6 +93,19 @@ func setPathsFormat(t *testing.T, format string) {
 	t.Cleanup(func() { _ = cachePathsCmd.Flags().Set("format", "github") })
 }
 
+func TestInitTestIO_ClearsAmbientGithubEnv(t *testing.T) {
+	// Simulate this package's own test binary running inside real GitHub
+	// Actions CI: GITHUB_ENV is already set, pointing at the real job's
+	// environment file, before any test-specific setup runs.
+	ambientEnvPath := filepath.Join(t.TempDir(), "real_job_github_env")
+	t.Setenv("GITHUB_ENV", ambientEnvPath)
+
+	initTestIO(t)
+
+	assert.Empty(t, os.Getenv("GITHUB_ENV"),
+		"initTestIO must clear an ambient GITHUB_ENV so a github-format test can't append its fixture data to the real job's environment file")
+}
+
 func TestRunCachePaths_GitHubWritesOutput(t *testing.T) {
 	initTestIO(t)
 	out := filepath.Join(t.TempDir(), "gh_output")

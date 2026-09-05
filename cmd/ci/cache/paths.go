@@ -167,7 +167,7 @@ func emitGitHubCachePaths(cfg *cachepkg.Config, paths, excludes []string) error 
 			"ATMOS_CACHE_PATH":         pathValue,
 			"ATMOS_CACHE_RESTORE_KEYS": restoreKeysValue,
 		}, formatGitHub, envPath); err != nil {
-			return err
+			return fmt.Errorf("write cache metadata to GITHUB_ENV: %w", err)
 		}
 	}
 	return nil
