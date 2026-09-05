@@ -38,11 +38,35 @@ ci:
       - 'atmos-toolchain-{{.OS}}-{{.Arch}}-'
 ```
 
+### Inputs
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `mode` | `'restore-and-save'` | `restore-and-save`: restore and save in the post step (`actions/cache`). `restore-only`: restore but never save (`actions/cache/restore`, no post step). |
+
+#### Many parallel consumers, one writer
+
+If several jobs (for example, a matrix of test shards) restore the same key,
+let exactly one job save it and put the rest on `mode: restore-only`. Otherwise every
+shard that misses tries to save the same key at the end of the job: all but
+one fail with `Unable to reserve cache with key ..., another job may be
+creating this cache`, and each still pays the tar + zstd + upload cost first.
+
+```yaml
+# The single writer (saves on a miss):
+- uses: cloudposse/atmos/actions/cache@v1
+
+# Every parallel consumer (restores only, no post step):
+- uses: cloudposse/atmos/actions/cache@v1
+  with:
+    mode: restore-only
+```
+
 ### Outputs
 
 | Output | Description |
 | --- | --- |
-| `cache-hit` | `true` when `actions/cache` found an exact key match. |
+| `cache-hit` | `true` when `actions/cache` (or `actions/cache/restore`) found an exact key match. |
 | `key` | The resolved cache key. |
 
 ## How it compares
@@ -56,8 +80,43 @@ ci:
 If you need Atmos to *own* restore/save (rather than `actions/cache`), use the
 [`github-runtime`](../github-runtime/README.md) action instead.
 
+## Windows runners
+
+Two things matter for cache speed on Windows runners, and the action handles both.
+
+**Which tar.** The action puts Git for Windows' GNU tar first on `PATH` before caching (when it is
+installed, as on GitHub-hosted runners), because `actions/cache` otherwise falls back to Windows'
+own bsdtar, whose code path decompresses the whole archive to disk before extracting it. On a
+1.7 GB archive that is the difference between a 264 s and a 353 s restore. Automatic, idempotent,
+and a no-op on Linux or macOS.
+
+**Which disk.** On GitHub's `windows-latest` runners the work disk (D:, where `runner.temp` and
+the workspace live) is a separate disk with roughly nine times the small-file write rate of C:,
+where Atmos's default cache root (`%LOCALAPPDATA%\cache\atmos`) sits. That matters when the
+cached tree is many small files (provider mirrors, plugin caches); for a few large binaries it
+barely registers. Opt in with `cache-home`, which exports `ATMOS_XDG_CACHE_HOME` for the rest of
+the job so toolchain installs, the cache save and the cached paths all use the same root:
+
+```yaml
+- uses: cloudposse/atmos/actions/cache@v1     # pin to a release or SHA
+  with:
+    cache-home: ${{ runner.temp }}/atmos
+```
+
+Two caveats. The cached paths change, so the cache version changes: the first run after setting
+it is a cold start. And the root moves for the whole job, so don't set it in a job whose tests or
+tooling assert Atmos's default cache locations.
+
+## Using it from another composite action
+
+The action works when called from inside another composite action (for example a repo-local
+"set up the toolchain" action). The key, paths and restore-keys are exported to the job
+environment (`ATMOS_CACHE_KEY`, `ATMOS_CACHE_PATH`, `ATMOS_CACHE_RESTORE_KEYS`) because the save
+runs in `actions/cache`'s post step, which in a nested action cannot see this action's step
+outputs (actions/runner#2800); without that the post step ran with an empty path and saved nothing.
+
 ## Versioning
 
 This action ships inside the Atmos repository, so the ref is an Atmos release:
 pin to `@v1` (moving major tag), `@vX.Y.Z`, or a commit SHA. It internally pins
-`actions/cache` to a SHA (`v5.0.5`).
+`actions/cache` and `actions/cache/restore` to the same SHA (`v5.0.5`).
