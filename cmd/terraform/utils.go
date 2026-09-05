@@ -642,13 +642,15 @@ type terraformOutputResultMirror struct {
 // onAfterDeploy override ("deploy is semantically apply for CI purposes").
 // Returns (nil, false) for subcommands with no terraform-shaped output,
 // empty output, or when parsing finds nothing.
-// These constants name the two subcommands this feature's structured Data
-// shape covers, shared by parseTerraformOutputMirror and
-// terraformCoveredSubcommand to avoid repeating the "plan"/"apply" string
-// literals (golangci-lint revive add-constant).
+// These constants name the Terraform subcommands referenced by name
+// throughout this file (parseTerraformOutputMirror, terraformCoveredSubcommand,
+// the aggregate CI event mappings, and wirePerComponentHook's subcommand
+// switch) to avoid repeating the "plan"/"apply"/"destroy" string literals
+// (golangci-lint revive add-constant).
 const (
-	terraformSubCommandPlan  = "plan"
-	terraformSubCommandApply = "apply"
+	terraformSubCommandPlan    = "plan"
+	terraformSubCommandApply   = "apply"
+	terraformSubCommandDestroy = "destroy"
 )
 
 func parseTerraformOutputMirror(subCommand, output string) (*terraformOutputResultMirror, bool) {
@@ -1191,9 +1193,9 @@ func (handler *terraformPlanCIResultHandler) HandleTerraformPlanCIResults(result
 // terraformAggregateEvent returns the aggregate CI hook event for a Terraform command.
 func terraformAggregateEvent(command string) h.HookEvent {
 	switch command {
-	case "apply":
+	case terraformSubCommandApply:
 		return h.AfterTerraformApplyAggregate
-	case "destroy":
+	case terraformSubCommandDestroy:
 		return h.AfterTerraformDestroyAggregate
 	default:
 		return h.AfterTerraformPlanAggregate
@@ -1242,9 +1244,9 @@ func (handler *terraformPlanCIBeforeHandler) HandleTerraformPlanCIBefore(pending
 // terraformBeforeAggregateEvent returns the before-aggregate CI hook event for a Terraform command.
 func terraformBeforeAggregateEvent(command string) h.HookEvent {
 	switch command {
-	case "apply":
+	case terraformSubCommandApply:
 		return h.BeforeTerraformApplyAggregate
-	case "destroy":
+	case terraformSubCommandDestroy:
 		return h.BeforeTerraformDestroyAggregate
 	default:
 		return h.BeforeTerraformPlanAggregate
@@ -1281,7 +1283,7 @@ func wirePerComponentHook(info *schema.ConfigAndStacksInfo, subCommand string, a
 	ciAggregate := false
 	if terraformCIModeEnabled(actualCmd) {
 		switch subCommand {
-		case "plan", "apply", "destroy":
+		case terraformSubCommandPlan, terraformSubCommandApply, terraformSubCommandDestroy:
 			info.TerraformPlanCIResultHandler = &terraformPlanCIResultHandler{
 				cmd:     actualCmd,
 				info:    info,

@@ -828,6 +828,12 @@ func TestTerraformNodeHooksAfter_ApplyExitCodeForwarding(t *testing.T) {
 // CI summary entries for one of plan/apply/deploy.
 func TestWirePerComponentHook(t *testing.T) {
 	withoutCIDetection(t)
+	// terraformCIModeEnabled falls through to cfg.GlobalViper().GetBool("ci")
+	// when no --ci flag is set; withoutCIDetection only clears the CI/
+	// GITHUB_ACTIONS/ATMOS_CI env vars, not viper's own global "ci" key,
+	// which real CI runners (this suite runs under GitHub Actions) can
+	// otherwise leave set to true across the whole test binary.
+	resetViperCI(t)
 
 	t.Run("plan/deploy/apply/output/refresh install a non-nil NodeHooks", func(t *testing.T) {
 		for _, sub := range []string{"plan", "deploy", "apply", "output", "refresh"} {
