@@ -113,9 +113,9 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseAct
 			return releaseActionResult{Operation: releaseOperationInstall}, resolveErr
 		}
 		spec.Lifecycle = lifecycle
-		operationCtx, cancel := releaseOperationContext(ctx, lifecycle.Policy.Timeout)
-		defer cancel()
-		manifest, installErr := installRelease(operationCtx, actx, spec, dryRun)
+		reportReleaseProgress(spec, releaseOperationInstall, lifecycle)
+		reportResolvedLifecycle(lifecycle)
+		manifest, installErr := installRelease(ctx, actx, spec, dryRun)
 		return releaseActionResult{Manifest: manifest, Operation: releaseOperationInstall, Lifecycle: lifecycle}, installErr
 	} else if historyErr != nil {
 		return releaseActionResult{}, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr)
@@ -125,9 +125,9 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseAct
 		return releaseActionResult{Operation: releaseOperationUpgrade}, resolveErr
 	}
 	spec.Lifecycle = lifecycle
-	operationCtx, cancel := releaseOperationContext(ctx, lifecycle.Policy.Timeout)
-	defer cancel()
-	manifest, upgradeErr := upgradeRelease(operationCtx, actx, spec, dryRun)
+	reportReleaseProgress(spec, releaseOperationUpgrade, lifecycle)
+	reportResolvedLifecycle(lifecycle)
+	manifest, upgradeErr := upgradeRelease(ctx, actx, spec, dryRun)
 	return releaseActionResult{Manifest: manifest, Operation: releaseOperationUpgrade, Lifecycle: lifecycle}, upgradeErr
 }
 
@@ -151,8 +151,11 @@ func releaseWaitOptions(ctx context.Context) []kube.WaitOption {
 
 func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, dryRun bool) (string, error) {
 	client := newInstallClient(actx, spec, dryRun)
-	client.WaitOptions = releaseWaitOptions(ctx)
-	return runInstall(ctx, client, actx.settings, spec)
+	manifest, err := runInstall(ctx, client, actx.settings, spec)
+	if err != nil {
+		return "", releaseOperationError("install", spec, err)
+	}
+	return manifest, nil
 }
 
 // newInstallClient builds the Helm Install action for a release install, wiring
@@ -183,7 +186,6 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	client.Namespace = spec.Namespace
 	client.Version = spec.Version
 	configureUpgradeLifecycle(client, spec.Lifecycle.Policy)
-	client.WaitOptions = releaseWaitOptions(ctx)
 	if dryRun {
 		client.DryRunStrategy = action.DryRunServer
 	}
@@ -198,20 +200,21 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 		return "", err
 	}
 
-	rel, err := client.RunWithContext(ctx, spec.ReleaseName, loaded, spec.Values)
+	operationCtx, cancel := releaseOperationContext(ctx, spec.Lifecycle.Policy.Timeout)
+	defer cancel()
+	client.WaitOptions = releaseWaitOptions(operationCtx)
+
+	rel, err := client.RunWithContext(operationCtx, spec.ReleaseName, loaded, spec.Values)
 	if err != nil && !dryRun && spec.Lifecycle.Policy.OnFailure == failurePolicyRollback {
 		if historyErr := enforceReleaseHistoryLimit(actx.cfg.Releases, spec.ReleaseName, spec.Lifecycle.Policy.MaxHistory); historyErr != nil {
 			err = errors.Join(err, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr))
 		}
 	}
 	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return "", ctxErr
+		if ctxErr := operationCtx.Err(); ctxErr != nil {
+			return "", releaseOperationError("upgrade", spec, errors.Join(ctxErr, err))
 		}
-		if errors.Is(err, errUtils.ErrHelmRenderFailed) {
-			return "", fmt.Errorf("failed to upgrade Helm release %q: %w", spec.ReleaseName, err)
-		}
-		return "", fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseUpgrade, spec.ReleaseName, err)
+		return "", releaseOperationError("upgrade", spec, err)
 	}
 	rendered, ok := rel.(*release.Release)
 	if !ok {
@@ -343,7 +346,7 @@ func deleteRelease(ctx context.Context, spec *chartSpec, dryRun bool) error {
 		if errors.Is(err, driver.ErrReleaseNotFound) {
 			return nil
 		}
-		uninstallErr := fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseUninstall, spec.ReleaseName, err)
+		uninstallErr := releaseOperationError("delete", spec, err)
 		if ctxErr := operationCtx.Err(); ctxErr != nil {
 			return errors.Join(ctxErr, uninstallErr)
 		}
@@ -353,6 +356,19 @@ func deleteRelease(ctx context.Context, spec *chartSpec, dryRun bool) error {
 		return err
 	}
 	return nil
+}
+
+func releaseOperationError(operation string, spec *chartSpec, cause error) error {
+	policy := spec.Lifecycle.Policy
+	return errUtils.Build(errUtils.ErrHelmReleaseOperation).
+		WithCause(cause).
+		WithContext("operation", operation).
+		WithContext("release", spec.ReleaseName).
+		WithContext("namespace", spec.Namespace).
+		WithContext("wait_strategy", policy.WaitStrategy).
+		WithContext("timeout", policy.Timeout).
+		WithContext("timeout_field", spec.Lifecycle.TimeoutField).
+		Err()
 }
 
 func configureInstallLifecycle(client *action.Install, policy effectiveReleasePolicy) {

@@ -1,0 +1,275 @@
+# Atmos configuration for the native Helm lifecycle integration scenario.
+
+base_path: "."
+
+components:
+  helm:
+    # Base path for native Helm components (local charts live here).
+    base_path: "components/helm"
+
+stores:
+  helm-lifecycle-secrets:
+    kind: keychain
+    secret: true
+    options:
+      backend: file
+      file_dir: secrets
+      prefix: helm-lifecycle
+
+auth:
+  identities:
+    local-k3s:
+      kind: kubernetes/emulator
+      emulator: kubernetes
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{.vars.stage}}"
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+ci:
+  enabled: true
+
+toolchain:
+  install_path: .tools
+  aliases:
+    helm: helm/helm
+  registries:
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
+commands:
+  - name: "test"
+    description: "Exercise native Helm lifecycle behavior against the k3s emulator"
+    env:
+      ATMOS_KEYRING_PASSWORD: helm-lifecycle-integration-password
+    steps:
+      # Populate synthetic stack-scoped secrets in the encrypted file keychain.
+      # The same declarations are consumed by the local and real-world charts.
+      - atmos secret set oss-token=atmos-oss-token-ABCD1234 -s dev -c oss-ingress --force
+      - command: >-
+          printf '%s\n' '-----BEGIN PRIVATE KEY-----' 'ATMOS-OSS-LINE-A' 'ATMOS-OSS-LINE-B' '-----END PRIVATE KEY-----' |
+          atmos secret set oss-private-key --stdin -s dev -c oss-ingress --force
+      - atmos validate stacks
+      # Dependency acquisition is explicit: the opt-in flag fetches the missing
+      # file:// library and updates the local chart before the first render.
+      # Template output includes weighted hooks and leaves Helm `tpl` expressions
+      # in values for the chart to evaluate with its native .Values context.
+      - command: >-
+          artifact=$(mktemp ./atmos-helm-template.XXXXXX);
+          trap 'rm -f "$artifact"' EXIT;
+          atmos helm template demo -s dev --dependency-update --output="$artifact" &&
+          test "$(grep -c '^  name: demo-hook-order$' "$artifact")" -eq 2 &&
+          grep -q 'helm.sh/hook-weight: "-2"' "$artifact" &&
+          grep -q 'helm.sh/hook-weight: "-1"' "$artifact" &&
+          grep -q 'rendered: from-stack' "$artifact"
+      # ingress-nginx is a pinned, public chart with pre/post install and upgrade
+      # hook Jobs. Verify Atmos masks stack-level secrets on stdout while
+      # --mask=false preserves the exact values passed to Helm.
+      - command: >-
+          masked=$(mktemp ./atmos-oss-masked.XXXXXX);
+          unmasked=$(mktemp ./atmos-oss-unmasked.XXXXXX);
+          trap 'rm -f "$masked" "$unmasked"' EXIT;
+          atmos helm template oss-ingress -s dev >"$masked" &&
+          atmos helm template oss-ingress -s dev --mask=false >"$unmasked" &&
+          grep -q '<MASKED>' "$masked" &&
+          ! grep -q 'atmos-oss-token-ABCD1234' "$masked" &&
+          ! grep -q 'BEGIN PRIVATE KEY' "$masked" &&
+          ! grep -q 'ATMOS-OSS-LINE-' "$masked" &&
+          grep -q 'atmos-oss-token-ABCD1234' "$unmasked" &&
+          grep -q 'BEGIN PRIVATE KEY' "$unmasked" &&
+          grep -q 'ATMOS-OSS-LINE-A' "$unmasked" &&
+          grep -q 'helm.sh/hook: pre-install,pre-upgrade' "$unmasked" &&
+          grep -q 'helm.sh/hook: post-install,post-upgrade' "$unmasked" &&
+          grep -q 'helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded' "$unmasked"
+      - command: atmos emulator up kubernetes -s dev
+        retry:
+          max_attempts: 2
+          initial_delay: 15s
+          backoff_strategy: constant
+      # Pull workload images through the host runtime and import them into the
+      # nested k3s containerd. This avoids registry pulls through Colima's
+      # nested network while Helm is waiting on Jobs and Deployments.
+      - command: >-
+          docker pull busybox:1.36.1 &&
+          docker pull nginx:1.27 &&
+          docker pull registry.k8s.io/ingress-nginx/controller:v1.15.1 &&
+          docker pull registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9 &&
+          docker save busybox:1.36.1 nginx:1.27 registry.k8s.io/ingress-nginx/controller:v1.15.1 registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9 |
+          docker exec -i atmos-dev-emulator-kubernetes ctr --namespace k8s.io images import -
+        retry:
+          max_attempts: 2
+          initial_delay: 15s
+          backoff_strategy: constant
+      - command: atmos helm diff demo -s dev --identity local-k3s
+        retry:
+          max_attempts: 2
+          initial_delay: 15s
+          backoff_strategy: constant
+      # Apply dry-run must not persist a release or create Kubernetes objects.
+      - atmos helm apply demo -s dev --identity local-k3s --dry-run
+      - command: >-
+          if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo 2>&1); then echo "dry-run unexpectedly created deployment/demo"; exit 1;
+          else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify deployment/demo absence: $output"; exit 1;; esac; fi
+      - command: >-
+          if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo 2>&1); then echo "dry-run unexpectedly created service/demo"; exit 1;
+          else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify service/demo absence: $output"; exit 1;; esac; fi
+      - command: >-
+          if ! releases=$(atmos emulator exec kubernetes -s dev -- kubectl get secrets --all-namespaces -l owner=helm,name=demo -o name); then echo "failed to query Helm release records after dry-run"; exit 1; fi;
+          if [ -n "$releases" ]; then echo "dry-run unexpectedly persisted Helm release records: $releases"; exit 1; fi
+      - command: atmos helm apply demo -s dev --identity local-k3s
+        retry:
+          max_attempts: 2
+          initial_delay: 15s
+          backoff_strategy: constant
+      # The -2 ConfigMap must exist before the -1 hook Job can mount it.
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get configmap demo-hook-order
+      # release.install.crds is a stack-level release default.
+      - command: >-
+          if output=$(atmos emulator exec kubernetes -s dev -- kubectl get crd widgets.lifecycle.atmos.test 2>&1); then echo "skip_crds unexpectedly installed widgets.lifecycle.atmos.test"; exit 1;
+          else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify widgets.lifecycle.atmos.test absence: $output"; exit 1;; esac; fi
+      # A component-level create policy overrides the stack-level skip default.
+      - atmos helm apply demo-crds -s dev --identity local-k3s
+      - command: >-
+          group=$(atmos emulator exec kubernetes -s dev -- kubectl get crd widgets.lifecycle.atmos.test -o jsonpath='{.spec.group}');
+          if [ "$group" != "lifecycle.atmos.test" ]; then echo "create_crds did not install the expected CRD: group=$group"; exit 1; fi
+      - command: atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
+        retry:
+          max_attempts: 3
+          initial_delay: 10s
+          backoff_strategy: constant
+      - command: atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
+        retry:
+          max_attempts: 3
+          initial_delay: 10s
+          backoff_strategy: constant
+      # watcher + release.wait.jobs returns only after the ordinary Job completes.
+      - atmos helm apply demo-jobs -s dev --identity local-k3s
+      - command: >-
+          completed=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-jobs get job demo-jobs-job -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}');
+          if [ "$completed" != "True" ]; then echo "wait_for_jobs returned before demo-jobs-job completed: status=$completed"; exit 1; fi
+      # Disabling chart hooks prevents both weighted hook resources.
+      - atmos helm apply demo-no-hooks -s dev --identity local-k3s
+      - command: >-
+          if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-no-hooks get configmap demo-no-hooks-hook-order 2>&1); then echo "disable_chart_hooks unexpectedly ran Helm hooks"; exit 1;
+          else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify disabled Helm hooks: $output"; exit 1;; esac; fi
+      - command: >-
+          if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-no-hooks get job demo-no-hooks-hook-order 2>&1); then echo "disable_chart_hooks unexpectedly ran the Helm hook Job"; exit 1;
+          else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify disabled Helm hook Job: $output"; exit 1;; esac; fi
+      # hookOnly returns after hooks without waiting for the Deployment's explicit readiness gate.
+      - atmos helm apply demo-hook-only -s dev --identity local-k3s
+      - command: >-
+          if ! available=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only get deployment demo-hook-only -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>&1); then echo "failed to query Deployment/demo-hook-only availability: $available"; exit 1; fi;
+          if [ "$available" = "True" ]; then echo "hookOnly unexpectedly satisfied the Deployment readiness gate"; exit 1; fi
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only patch deployment demo-hook-only --type=json -p='[{"op":"remove","path":"/spec/template/spec/readinessGates"}]'
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only rollout status deployment/demo-hook-only --timeout=2m
+      # watcher honors the release timeout and rollback removes the failed install.
+      - command: >-
+          if output=$(NO_COLOR=1 atmos helm apply demo-timeout -s dev --identity local-k3s 2>&1); then echo "timed release unexpectedly succeeded"; exit 1; fi;
+          case "$output" in *"failed to perform helm release operation"*) ;; *) echo "timed release failed outside the Helm lifecycle operation: $output"; exit 1;; esac;
+          case "$output" in *"context"*"deadline exceeded"*|*"timed out waiting for condition"*) ;; *) echo "timed release did not report a lifecycle timeout: $output"; exit 1;; esac
+      - command: >-
+          if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-timeout get deployment demo-timeout 2>&1); then echo "timeout rollback left release resources"; exit 1;
+          else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify timeout rollback cleanup: $output"; exit 1;; esac; fi
+      # A failed first install is reported as failure and rolled back. The kept
+      # hook ConfigMap survives recovery while ordinary release resources do not.
+      - command: >-
+          if output=$(NO_COLOR=1 atmos helm apply demo-install-fail -s dev --identity local-k3s 2>&1); then echo "failed install unexpectedly succeeded"; exit 1; fi;
+          case "$output" in *"failed to perform helm release operation"*) ;; *) echo "failed install stopped outside the Helm lifecycle operation: $output"; exit 1;; esac;
+          case "$output" in *"job demo-install-fail-failing-hook failed: BackoffLimitExceeded"*|*"job failed job=demo-install-fail-failing-hook reason=BackoffLimitExceeded"*) ;; *) echo "failed install did not report the expected hook failure: $output"; exit 1;; esac
+      - command: >-
+          if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo-install-fail get deployment demo-install-fail 2>&1); then echo "rollback left failed install resources"; exit 1;
+          else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify failed-install rollback cleanup: $output"; exit 1;; esac; fi
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo-install-fail get configmap demo-install-fail-hook-order
+      # A failed upgrade restores the successful demo release and cleanup removes
+      # the resource introduced only by the failed revision. Nested k3s on the
+      # macOS runner can report the bounded lifecycle timeout before the Job
+      # controller condition; the state assertions remain authoritative there.
+      - command: >-
+          if ! before=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo -o jsonpath='{.spec.replicas} {.spec.template.spec.containers[0].image} {.spec.template.spec.containers[0].ports[0].containerPort}' 2>&1); then echo "failed to capture Deployment/demo state before upgrade: $before"; exit 1; fi;
+          if output=$(NO_COLOR=1 atmos helm apply demo-upgrade-fail -s dev --identity local-k3s 2>&1); then echo "failed upgrade unexpectedly succeeded"; exit 1; fi;
+          case "$output" in *"failed to perform helm release operation"*) ;; *) echo "failed upgrade stopped outside the Helm lifecycle operation: $output"; exit 1;; esac;
+          case "$output" in *"job demo-failing-hook failed"*"BackoffLimitExceeded"*|*"job failed job=demo-failing-hook reason=BackoffLimitExceeded"*) ;; *"context"*"deadline exceeded"*) if [ "${RUNNER_OS:-}" != "macOS" ]; then echo "failed upgrade timed out outside the macOS nested-k3s fallback: $output"; exit 1; fi;; *) echo "failed upgrade did not report the expected post-upgrade hook failure: $output"; exit 1;; esac;
+          if ! after=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo -o jsonpath='{.spec.replicas} {.spec.template.spec.containers[0].image} {.spec.template.spec.containers[0].ports[0].containerPort}' 2>&1); then echo "failed to capture Deployment/demo state after rollback: $after"; exit 1; fi;
+          if [ "$before" != "$after" ]; then echo "rollback did not restore Deployment/demo: before=$before after=$after"; exit 1; fi
+      - command: >-
+          if output=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get configmap demo-upgrade-only 2>&1); then echo "cleanup failure action left the upgrade-only ConfigMap"; exit 1;
+          else case "$output" in *"(NotFound)"*) ;; *) echo "failed to verify cleanup failure action: $output"; exit 1;; esac; fi
+      # Dependency execution gates the dependent render on the foundation's
+      # release-managed Deployment readiness state.
+      - atmos helm apply --all -s dev --identity local-k3s --tags lifecycle-dag
+      - atmos emulator exec kubernetes -s dev -- kubectl -n lifecycle-dag get deployment dag-dependent
+      - command: >-
+          observed=$(atmos emulator exec kubernetes -s dev -- kubectl -n lifecycle-dag get configmap dag-dependent-dependency-observed -o jsonpath='{.data.ready}');
+          if [ "$observed" != "true" ]; then echo "dependent did not observe the ready foundation Deployment: ready=$observed"; exit 1; fi
+      # Install a real public chart. Its admission Secret and non-empty webhook
+      # CA prove both the pre-install and post-install hook Jobs completed; the
+      # hook-succeeded policy must then remove those Jobs.
+      - command: >-
+          if ! output=$(atmos helm apply oss-ingress -s dev --identity local-k3s 2>&1); then printf '%s\n' "$output"; exit 1; fi;
+          case "$output" in *"Applied Helm release"*"oss-ingress"*"helm-oss"*) ;; *) echo "apply did not report release progress: $output"; exit 1;; esac
+      - atmos emulator exec kubernetes -s dev -- kubectl -n helm-oss rollout status deployment/oss-ingress-controller --timeout=3m
+      - atmos emulator exec kubernetes -s dev -- kubectl -n helm-oss get secret oss-ingress-admission
+      - command: >-
+          ca=$(atmos emulator exec kubernetes -s dev -- kubectl get validatingwebhookconfiguration oss-ingress-admission -o jsonpath='{.webhooks[0].clientConfig.caBundle}');
+          if [ -z "$ca" ]; then echo "ingress-nginx post-install hook did not populate the webhook CA"; exit 1; fi;
+          jobs=$(atmos emulator exec kubernetes -s dev -- kubectl -n helm-oss get jobs -l app.kubernetes.io/instance=oss-ingress -o name);
+          if [ -n "$jobs" ]; then echo "ingress-nginx hook-succeeded policy left Jobs behind: $jobs"; exit 1; fi
+      - command: >-
+          token=$(atmos emulator exec kubernetes -s dev -- kubectl -n helm-oss get deployment oss-ingress-controller -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ATMOS_SINGLE_LINE_SECRET")].value}');
+          key=$(atmos emulator exec kubernetes -s dev -- kubectl -n helm-oss get deployment oss-ingress-controller -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ATMOS_MULTILINE_SECRET")].value}');
+          test "$token" = 'atmos-oss-token-ABCD1234' &&
+          test "$key" = "$(printf '%s\n' '-----BEGIN PRIVATE KEY-----' 'ATMOS-OSS-LINE-A' 'ATMOS-OSS-LINE-B' '-----END PRIVATE KEY-----')"
+      # Force a real diff near the secret-bearing env list. Both console output
+      # and the GitHub job summary must pass through the same masking layer.
+      - command: >-
+          stdout=$(mktemp ./atmos-oss-plan.XXXXXX);
+          summary=$(mktemp ./atmos-oss-summary.XXXXXX);
+          trap 'rm -f "$stdout" "$summary"' EXIT;
+          GITHUB_ACTIONS=true GITHUB_STEP_SUMMARY="$summary" atmos helm plan oss-ingress-upgrade -s dev --identity local-k3s --ci >"$stdout" 2>&1 &&
+          grep -q 'ATMOS_UPGRADE_MARKER' "$summary" &&
+          grep -q '<MASKED>' "$stdout" &&
+          grep -q '<MASKED>' "$summary" &&
+          ! grep -q 'atmos-oss-token-ABCD1234' "$stdout" &&
+          ! grep -q 'atmos-oss-token-ABCD1234' "$summary" &&
+          ! grep -q 'BEGIN PRIVATE KEY' "$stdout" &&
+          ! grep -q 'BEGIN PRIVATE KEY' "$summary" &&
+          ! grep -q 'ATMOS-OSS-LINE-' "$stdout" &&
+          ! grep -q 'ATMOS-OSS-LINE-' "$summary"
+      - command: >-
+          if ! output=$(atmos helm apply oss-ingress-upgrade -s dev --identity local-k3s 2>&1); then printf '%s\n' "$output"; exit 1; fi;
+          case "$output" in *"Applied Helm release"*"oss-ingress"*"helm-oss"*) ;; *) echo "upgrade did not report release progress: $output"; exit 1;; esac
+      - atmos emulator exec kubernetes -s dev -- kubectl -n helm-oss rollout status deployment/oss-ingress-controller --timeout=3m
+      - command: >-
+          replicas=$(atmos emulator exec kubernetes -s dev -- kubectl -n helm-oss get deployment oss-ingress-controller -o jsonpath='{.spec.replicas}');
+          marker=$(atmos emulator exec kubernetes -s dev -- kubectl -n helm-oss get deployment oss-ingress-controller -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ATMOS_UPGRADE_MARKER")].value}');
+          test "$replicas" = '2' && test "$marker" = 'upgraded'
+      # Delete dry-run must leave the deployed release and resources intact.
+      - atmos helm delete demo -s dev --identity local-k3s --dry-run --wait=watcher --timeout=2m
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
+      - command: >-
+          if ! releases=$(atmos emulator exec kubernetes -s dev -- kubectl -n demo get secrets -l owner=helm,name=demo -o name); then echo "failed to query Helm release records after delete dry-run"; exit 1; fi;
+          if [ -z "$releases" ]; then echo "delete dry-run removed the Helm release record"; exit 1; fi
+      - atmos helm delete demo -s dev --identity local-k3s
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get configmap demo-hook-order
+      - atmos helm delete demo-jobs -s dev --identity local-k3s
+      - atmos helm delete demo-no-hooks -s dev --identity local-k3s
+      - atmos helm delete demo-hook-only -s dev --identity local-k3s
+      - atmos helm delete demo-crds -s dev --identity local-k3s
+      # Helm intentionally retains CRDs on uninstall, so remove the fixture's
+      # cluster-scoped object explicitly before stopping the emulator.
+      - atmos emulator exec kubernetes -s dev -- kubectl delete crd widgets.lifecycle.atmos.test --wait=true
+      - atmos helm delete --all -s dev --identity local-k3s --tags lifecycle-dag
+      - command: >-
+          if ! output=$(atmos helm delete oss-ingress -s dev --identity local-k3s 2>&1); then printf '%s\n' "$output"; exit 1; fi;
+          case "$output" in *"Deleted Helm release"*"oss-ingress"*"helm-oss"*) ;; *) echo "delete did not report release progress: $output"; exit 1;; esac
+      - atmos emulator down kubernetes -s dev

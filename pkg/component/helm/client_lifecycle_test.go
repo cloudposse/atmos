@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -17,11 +18,13 @@ import (
 	"helm.sh/helm/v4/pkg/kube"
 	kubefake "helm.sh/helm/v4/pkg/kube/fake"
 	"helm.sh/helm/v4/pkg/registry"
+	helmrelease "helm.sh/helm/v4/pkg/release"
 	release "helm.sh/helm/v4/pkg/release/v1"
 	"helm.sh/helm/v4/pkg/storage"
 	"helm.sh/helm/v4/pkg/storage/driver"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 // memoryActionContext builds an actionContext backed by Helm's in-memory storage
@@ -271,6 +274,7 @@ func TestApplyReleaseWiresWaitContext(t *testing.T) {
 	result, err := applyRelease(context.Background(), spec, false)
 
 	require.ErrorIs(t, err, waitErr)
+	require.ErrorIs(t, err, errUtils.ErrHelmReleaseOperation)
 	assert.Equal(t, releaseOperationInstall, result.Operation)
 	assert.NotEmpty(t, kubeClient.RecordedWaitOptions, "Helm waiters must receive the operation context")
 }
@@ -286,6 +290,33 @@ func TestReleaseOperationContextAppliesTimeout(t *testing.T) {
 	assert.WithinDuration(t, started.Add(timeout), deadline, time.Second)
 }
 
+func TestApplyReleasePreparesChartBeforeLifecycleTimeout(t *testing.T) {
+	chartDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(chartDir, "Chart.yaml"), []byte("apiVersion: ["), 0o600))
+
+	for _, operation := range []string{releaseOperationInstall, releaseOperationUpgrade} {
+		t.Run(operation, func(t *testing.T) {
+			actx := memoryActionContext(t)
+			stubActionContext(t, actx)
+			spec := testdataChartSpec(t, "prepare-"+operation)
+			spec.Chart = chartDir
+			timeout := "1ns"
+			spec.Release.Timeout = &timeout
+			if operation == releaseOperationUpgrade {
+				require.NoError(t, actx.cfg.Releases.Create(release.Mock(&release.MockReleaseOptions{
+					Name:      spec.ReleaseName,
+					Namespace: spec.Namespace,
+				})))
+			}
+
+			result, err := applyRelease(context.Background(), spec, true)
+			require.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
+			assert.NotErrorIs(t, err, context.DeadlineExceeded)
+			assert.Equal(t, operation, result.Operation)
+		})
+	}
+}
+
 func TestReleaseOperationContextPreservesZeroTimeout(t *testing.T) {
 	parent := context.Background()
 	ctx, cancel := releaseOperationContext(parent, 0)
@@ -294,4 +325,67 @@ func TestReleaseOperationContextPreservesZeroTimeout(t *testing.T) {
 	assert.Equal(t, parent, ctx)
 	_, hasDeadline := ctx.Deadline()
 	assert.False(t, hasDeadline)
+}
+
+func TestUpgradeReleaseHistoryRetention(t *testing.T) {
+	const revisions = cfg.HelmDefaultMaxHistory + 3
+	tests := []struct {
+		name          string
+		releaseName   string
+		maxHistory    int
+		override      bool
+		expectedCount int
+	}{
+		{
+			name:          "default bounded history",
+			releaseName:   "history",
+			expectedCount: cfg.HelmDefaultMaxHistory,
+		},
+		{
+			name:          "explicit unlimited history",
+			releaseName:   "unlimited-history",
+			maxHistory:    0,
+			override:      true,
+			expectedCount: revisions,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actx := memoryActionContext(t)
+			stubActionContext(t, actx)
+			spec := testdataChartSpec(t, tt.releaseName)
+			if tt.override {
+				maxHistory := tt.maxHistory
+				spec.Release.History.Max = &maxHistory
+			}
+
+			for revision := 0; revision < revisions; revision++ {
+				spec.Values["replicaCount"] = revision + 1
+				_, err := applyRelease(context.Background(), spec, false)
+				require.NoError(t, err)
+			}
+
+			history, err := actx.cfg.Releases.History(spec.ReleaseName)
+			require.NoError(t, err)
+			assert.Len(t, history, tt.expectedCount)
+			expected := make([]int, tt.expectedCount)
+			firstRevision := revisions - tt.expectedCount + 1
+			for i := range expected {
+				expected[i] = firstRevision + i
+			}
+			assert.Equal(t, expected, releaseVersions(t, history))
+		})
+	}
+}
+
+func releaseVersions(t *testing.T, history []helmrelease.Releaser) []int {
+	t.Helper()
+	versions := make([]int, len(history))
+	for i, item := range history {
+		typed, ok := item.(*release.Release)
+		require.True(t, ok)
+		versions[i] = typed.Version
+	}
+	return versions
 }

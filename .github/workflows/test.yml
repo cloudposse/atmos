@@ -1382,9 +1382,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: go test ./tests -run 'Test((AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E|LocalGitOpsPushE2E|Scaffold(AWSLandingZone|GCPLandingZone|AzureLandingZone|AWSApp)FlociE2E|InitFromTemplateRepoGiteaE2E|TerraformFlociTfmigrateS3History)' -count=1 -timeout 25m -v
 
-  # run k3s demo tests
+  # Run the approachable k3s demos plus the focused native Helm lifecycle
+  # scenario. Keep failure-path coverage under tests/fixtures so public examples
+  # remain small, happy-path configurations.
   k3s:
-    name: "[k3s-${{ matrix.flavor.target }}] ${{ matrix.demo-folder }}"
+    name: "[k3s-${{ matrix.flavor.target }}] ${{ matrix.fixture.name }}"
     needs: build
     runs-on: ${{ matrix.flavor.os }}
     env:
@@ -1397,11 +1399,25 @@ jobs:
         flavor:
           - { os: ubuntu-latest, target: linux, artifact: linux }
           - { os: "macos-15-intel", target: macos, artifact: macos-intel }
-        demo-folder:
-          - demo-helmfile
-          - helm
+        fixture:
+          - { name: demo-helmfile, path: examples/demo-helmfile }
+          - { name: helm, path: examples/helm }
+          - { name: helm-lifecycle, path: tests/fixtures/scenarios/helm-lifecycle }
+        # helm-lifecycle's watcher-based install/upgrade waits stall on the
+        # doubly-nested k3s of the macOS Colima runner (k3s -> Docker -> Colima
+        # VM), where Helm's status-watcher API watch is unreliable and every
+        # watcher-waited release burns its full timeout. The same fixture passes
+        # in ~4m on Linux and on local macOS Docker Desktop, so this is a Colima
+        # runner limitation, not a lifecycle bug. Run it on Linux only; the
+        # demo-helmfile and helm fixtures still exercise the macOS k3s path.
+        exclude:
+          - flavor: { os: "macos-15-intel", target: macos, artifact: macos-intel }
+            fixture: { name: helm-lifecycle, path: tests/fixtures/scenarios/helm-lifecycle }
 
-    timeout-minutes: 60
+    # The macOS matrix may spend up to 45 minutes starting Colima, followed by
+    # two bounded 45-minute test attempts. Keep the job ceiling above those
+    # nested budgets so the second retry can finish and emit diagnostics.
+    timeout-minutes: 180
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -1422,12 +1438,16 @@ jobs:
             get.helm.sh:443
             ghcr.io:443
             github.com:443
+            kubernetes.github.io:443
             livepatch.canonical.com:443
             mirror.gcr.io:443
             pkg-containers.githubusercontent.com:443
             production.cloudfront.docker.com:443
             raw.githubusercontent.com:443
             registry-1.docker.io:443
+            registry.k8s.io:443
+            cdn.registry.k8s.io:443
+            *.pkg.dev:443
             rekor.sigstore.dev:443
             release-assets.githubusercontent.com:443
             repo.broadcom.com:443
@@ -1474,9 +1494,9 @@ jobs:
         # cleanup ~3m + verify 1m + two 5m pull attempts with backoff. Every
         # cap hit simultaneously sums to ~43m; 40 deliberately undercuts that.
         # The recovery path fits when the final image pull completes normally;
-        # anything past 40 is treated as pathological. The job-level 60m cap
-        # preserves fail-fast behavior; the observed healthy setup leaves ample
-        # time for both 15-minute test attempts.
+        # anything past 40 is treated as pathological. The job-level 180m cap
+        # leaves room for a roughly 45-minute Colima startup plus both bounded
+        # 45-minute test attempts and diagnostics.
         timeout-minutes: 40
         uses: ./.github/actions/setup-colima
 
@@ -1501,9 +1521,9 @@ jobs:
           mkdir -p ~/.aws
           echo '[default]' > ~/.aws/config
 
-      - name: Run tests for ${{ matrix.demo-folder }}
+      - name: Run tests for ${{ matrix.fixture.name }}
         run: |
-          cd examples/${{ matrix.demo-folder }}
+          cd "${{ matrix.fixture.path }}"
           run_with_timeout() {
             python3 - "$@" <<'PY'
           import os
@@ -1529,8 +1549,20 @@ jobs:
           }
 
           cleanup_k3s() {
-            atmos emulator down kubernetes -s dev || true
-            docker rm -f atmos-dev-emulator-kubernetes >/dev/null 2>&1 || true
+            run_with_timeout 60 atmos emulator down kubernetes -s dev || true
+            run_with_timeout 30 docker rm -f atmos-dev-emulator-kubernetes >/dev/null 2>&1 || true
+          }
+
+          diagnose_k3s() {
+            if ! run_with_timeout 15 docker inspect atmos-dev-emulator-kubernetes >/dev/null 2>&1; then
+              return
+            fi
+
+            echo "::group::k3s workload diagnostics"
+            run_with_timeout 30 docker exec atmos-dev-emulator-kubernetes kubectl get pods,jobs,deployments -A -o wide || true
+            run_with_timeout 30 docker exec atmos-dev-emulator-kubernetes kubectl get events -A --sort-by=.lastTimestamp || true
+            run_with_timeout 30 docker exec atmos-dev-emulator-kubernetes ctr --namespace k8s.io images list || true
+            echo "::endgroup::"
           }
 
           # macOS k3s jobs can occasionally hang in the Docker/Colima stack.
@@ -1538,7 +1570,7 @@ jobs:
           # whole job timeout and cancelling the required aggregate check.
           attempt_timeout=1500
           if [ "${{ matrix.flavor.target }}" = "macos" ]; then
-            attempt_timeout=900
+            attempt_timeout=2700
           fi
 
           trap cleanup_k3s EXIT
@@ -1546,6 +1578,7 @@ jobs:
             run_with_timeout "${attempt_timeout}" atmos test && exit 0
             status=$?
             echo "atmos test failed (attempt ${attempt}/2, status ${status})" >&2
+            diagnose_k3s
             cleanup_k3s
             [ "${attempt}" -lt 2 ] && sleep 15
           done

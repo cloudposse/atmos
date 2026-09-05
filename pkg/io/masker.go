@@ -77,6 +77,7 @@ func (m *masker) RegisterSecret(secret string) {
 	}
 
 	m.RegisterValue(secret)
+	m.registerMultilineSecretLines(secret)
 
 	// Register base64 encoded versions.
 	m.RegisterValue(base64.StdEncoding.EncodeToString([]byte(secret)))
@@ -99,6 +100,21 @@ func (m *masker) RegisterSecret(secret string) {
 			if escapedInner != secret {
 				m.RegisterValue(escapedInner)
 			}
+		}
+	}
+}
+
+// registerMultilineSecretLines protects partial renderings where a formatter or diff
+// elides part of a multiline secret and the complete registered literal is no longer
+// present. Empty lines are ignored because they carry no secret information.
+func (m *masker) registerMultilineSecretLines(secret string) {
+	normalized := strings.ReplaceAll(secret, "\r\n", "\n")
+	if !strings.Contains(normalized, "\n") {
+		return
+	}
+	for _, line := range strings.Split(normalized, "\n") {
+		if line != "" {
+			m.RegisterValue(line)
 		}
 	}
 }
@@ -183,6 +199,8 @@ func (m *masker) Mask(input string) string {
 	// Replace literals in order (longest first).
 	for _, literal := range literals {
 		masked = strings.ReplaceAll(masked, literal, m.replacement)
+		masked = maskIndentedMultilineLiteral(masked, literal, m.replacement)
+		masked = maskFoldedLiteral(masked, literal, m.replacement)
 	}
 
 	// Mask regex patterns.
@@ -193,6 +211,51 @@ func (m *masker) Mask(input string) string {
 	}
 
 	return masked
+}
+
+// maskFoldedLiteral masks long scalar values after a YAML emitter folds an ordinary space into
+// a newline plus indentation. All non-whitespace bytes must still match exactly.
+func maskFoldedLiteral(input, literal, replacement string) string {
+	if len(literal) < 32 || !strings.ContainsAny(literal, " \t") {
+		return input
+	}
+
+	var pattern strings.Builder
+	for _, char := range literal {
+		if char == ' ' || char == '\t' {
+			pattern.WriteString(`(?:[ \t]|\r?\n[ \t]+)`)
+		} else {
+			pattern.WriteString(regexp.QuoteMeta(string(char)))
+		}
+	}
+
+	re := regexp.MustCompile(pattern.String())
+	quotedReplacement := strings.ReplaceAll(replacement, "$", "$$")
+	return re.ReplaceAllString(input, quotedReplacement)
+}
+
+// maskIndentedMultilineLiteral masks a registered multiline value after serializers such as
+// YAML have indented its continuation lines. The payload lines must still match exactly; only
+// indentation introduced after a newline is ignored.
+func maskIndentedMultilineLiteral(input, literal, replacement string) string {
+	normalized := strings.ReplaceAll(literal, "\r\n", "\n")
+	normalized = strings.TrimRight(normalized, "\n")
+	if !strings.Contains(normalized, "\n") {
+		return input
+	}
+
+	lines := strings.Split(normalized, "\n")
+	var pattern strings.Builder
+	for i, line := range lines {
+		if i > 0 {
+			pattern.WriteString(`\r?\n[ \t]*`)
+		}
+		pattern.WriteString(regexp.QuoteMeta(line))
+	}
+
+	re := regexp.MustCompile(pattern.String())
+	quotedReplacement := strings.ReplaceAll(replacement, "$", "$$")
+	return re.ReplaceAllString(input, quotedReplacement)
 }
 
 // ContainsSecret reports whether value contains any registered secret literal as a
