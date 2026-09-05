@@ -138,6 +138,7 @@ jobs:
           # other Windows/macOS legs in this file.
           allowed-endpoints: >
             api.github.com:443
+            get.helm.sh:443
             github.com:443
             raw.githubusercontent.com:443
             rekor.sigstore.dev:443
@@ -251,6 +252,24 @@ jobs:
         if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         shell: bash
         run: go tool mage acceptance:verify "${{ matrix.target }}" "$TEST_SHARD_COUNT"
+
+      # Install the toolchain once per OS with the atmos just built (so the
+      # on-disk layout is the one the consumers' binary expects) and save it
+      # to atmos's ci.cache; the acceptance shards, terraform-registry-cache
+      # and mock jobs restore it (never save) and run the same
+      # `atmos toolchain install`, which then skips every tool. macos-intel is
+      # skipped: its only consumer (the k3s macOS job) installs no toolchain.
+      - name: Put the freshly built atmos on PATH for the toolchain install
+        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        shell: bash
+        run: echo "${GITHUB_WORKSPACE}/build" >> "$GITHUB_PATH"
+
+      - name: Install the CI toolchain (atmos toolchain install from .tool-versions; saves the cache)
+        if: ${{ matrix.target != 'macos-intel' && ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
+        uses: ./.github/actions/ci-toolchain
+        with:
+          cache: restore-and-save
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -425,22 +444,17 @@ jobs:
           path: ${{ github.workspace }}
           add-to-path: 'true'
 
-      - name: Cache Atmos toolchain
+      # `atmos toolchain install` from .tool-versions, with the toolchain
+      # directory restored from atmos's own ci.cache (saved by the build job
+      # for this OS; consumers never save, so shards do not race for the key).
+      # Do not export ATMOS_XDG_CACHE_HOME or TF_PLUGIN_CACHE_DIR here: many
+      # tests assert XDG defaults and Terraform's plugin cache is not safe for
+      # shared concurrent use.
+      - name: Set up the CI toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        continue-on-error: true
-        uses: ./actions/cache
-
-      - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install hashicorp/terraform
-          atmos toolchain install opentofu/opentofu
-          atmos toolchain install hashicorp/packer
-          atmos toolchain install helm/helm
-          atmos toolchain install helmfile/helmfile
-          atmos toolchain env --format=github
+        uses: ./.github/actions/ci-toolchain
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify Terraform, OpenTofu, Packer, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -662,12 +676,12 @@ jobs:
           path: ${{ github.workspace }}
           add-to-path: 'true'
 
-      # Dogfood `atmos ci cache`: cache the configured Atmos cache root via the
-      # recommended composite action. Do not export ATMOS_XDG_CACHE_HOME or
-      # TF_PLUGIN_CACHE_DIR for the full acceptance job: many tests assert XDG
-      # defaults and Terraform's plugin cache is not safe for shared concurrent
-      # use. This cache step restores/saves toolchain bits only; it must stay a
-      # pure accelerator.
+      # `atmos toolchain install` from .tool-versions, with the toolchain
+      # directory restored from atmos's own ci.cache (saved by the build job
+      # for this OS; consumers never save, so shards do not race for the key).
+      # Do not export ATMOS_XDG_CACHE_HOME or TF_PLUGIN_CACHE_DIR here: many
+      # tests assert XDG defaults and Terraform's plugin cache is not safe for
+      # shared concurrent use.
       #
       # Restore-only on the shards. The repo's Actions cache holds 18.9 GB in
       # 17 entries against a 10 GB LRU quota, every entry scoped to a
@@ -679,24 +693,11 @@ jobs:
       # costing 43 s avg / 3 min max per shard for nothing. The
       # terraform-registry-cache job keeps the plain (restore+save) step and is
       # the single writer of this key per OS.
-      - name: Cache Atmos toolchain
+      - name: Set up the CI toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        continue-on-error: true
-        uses: ./actions/cache
+        uses: ./.github/actions/ci-toolchain
         with:
-          mode: restore-only
-
-      - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install hashicorp/terraform
-          atmos toolchain install opentofu/opentofu
-          atmos toolchain install hashicorp/packer
-          atmos toolchain install helm/helm
-          atmos toolchain install helmfile/helmfile
-          atmos toolchain env --format=github
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify Terraform, OpenTofu, Packer, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -1762,6 +1763,10 @@ jobs:
             ocsp.usertrust.com:80
             ocsp.digicert.com:80
             *.pool.ntp.org:123
+            get.helm.sh:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            google.golang.org:443
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -1787,14 +1792,11 @@ jobs:
           path: ${{ github.workspace }}
           add-to-path: 'true'
 
-      - name: Install Terraform and OpenTofu with Atmos toolchain
+      - name: Set up the CI toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install hashicorp/terraform
-          atmos toolchain install opentofu/opentofu
-          atmos toolchain env --format=github
+        uses: ./.github/actions/ci-toolchain
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify OpenTofu
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
