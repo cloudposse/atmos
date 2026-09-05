@@ -111,6 +111,7 @@ var nonManifestSections = map[string]struct{}{
 	"max":                {}, // Native Helm history maximum.
 	"chart_hooks":        {}, // Native Helm chart-hook policy.
 	"crds":               {}, // Native Helm CRD policy.
+	"dependency_update":  {}, // Native Helm invocation summary field; not stack-authored.
 	"workspace":          {}, // Terraform workspace (derived/metadata).
 	"inheritance":        {}, // Describe output.
 	"integrations":       {}, // atmos.yaml / describe output.

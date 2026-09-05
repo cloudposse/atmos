@@ -89,7 +89,7 @@ func newOperationCommand(name, short string) *cobra.Command {
 		Use:   name + " [component]",
 		Short: short,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			parsed, err := parser.Parse(context.Background(), args)
+			parsed, err := parser.Parse(cmd.Context(), args)
 			if err != nil {
 				return err
 			}
@@ -149,6 +149,9 @@ func operationFlagOptions(name string) []flags.Option {
 			flags.WithStringFlag("output-dir", "", "", "Write rendered manifests to a directory."),
 			flags.WithBoolFlag("split", "", false, "Write one rendered manifest file per object. Requires --output-dir."),
 		)
+	}
+	if name != "delete" {
+		options = append(options, flags.WithBoolFlag("dependency-update", "", false, "Update missing chart dependencies before rendering or applying."))
 	}
 
 	if name == "apply" || name == "deploy" {
@@ -261,6 +264,7 @@ func runOperation(cmd *cobra.Command, subCommand string, args []string) error {
 	provider := component.MustGetProvider(cfg.HelmComponentType)
 
 	return provider.Execute(&component.ExecutionContext{
+		Context:             cmd.Context(),
 		ComponentType:       cfg.HelmComponentType,
 		Component:           info.ComponentFromArg,
 		Stack:               info.Stack,
@@ -300,6 +304,9 @@ func getOperationFlags(cmd *cobra.Command) map[string]any {
 	}
 	if flag := cmd.Flag("namespace"); flag != nil && flag.Changed {
 		result["namespace"] = flag.Value.String()
+	}
+	if flag := cmd.Flag("dependency-update"); flag != nil && flag.Changed {
+		result[cfg.HelmDependencyUpdateSectionName] = flag.Value.String() == valueTrue
 	}
 	addLifecycleOperationFlags(cmd, result)
 	return result
