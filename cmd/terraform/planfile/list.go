@@ -107,20 +107,15 @@ func runList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Get the storage configuration.
-	storeOpts, err := getStoreOptions(&atmosConfig, opts.Store)
+	// Create the store, keeping the resolved candidate so the columns below
+	// describe the store that is actually in use.
+	store, selected, err := resolveStore(&atmosConfig, opts.Store)
 	if err != nil {
 		return err
 	}
 
 	// Extract owner/repo from store options if available (e.g., GitHub store).
-	owner, repo := extractOwnerRepo(storeOpts)
-
-	// Create the store.
-	store, err := createStore(&atmosConfig, opts.Store)
-	if err != nil {
-		return err
-	}
+	owner, repo := extractOwnerRepo(selected.Options)
 
 	// Resolve SHA context.
 	resolved, err := resolveContext(opts.All)
