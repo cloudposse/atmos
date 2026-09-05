@@ -46,6 +46,8 @@ jobs:
             storage.googleapis.com:443
             us.i.posthog.com:443
             cplive-plat-ue2-prod-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
+            api.scorecard.dev:443
+            www.bestpractices.dev:443
 
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials

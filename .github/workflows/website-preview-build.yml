@@ -37,6 +37,8 @@ jobs:
             proxy.golang.org:443
             storage.googleapis.com:443
             us.i.posthog.com:443
+            api.scorecard.dev:443
+            www.bestpractices.dev:443
 
       - name: Checkout Repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
