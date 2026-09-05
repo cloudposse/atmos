@@ -1,0 +1,48 @@
+name: 'Set up CI toolchain'
+description: >
+  Puts the tools `.tool-versions` pins (Terraform, OpenTofu, Packer, Helm,
+  Helmfile, ...) on PATH the way a developer does: `atmos toolchain install`,
+  which reads `.tool-versions` and skips every tool already on disk, then
+  `atmos toolchain env` to export their directories to PATH. Versions live in
+  `.tool-versions` only.
+
+  Persistence across jobs and runs is atmos's own `ci.cache` (the Atmos Cache
+  action, ./actions/cache): the one producer job per OS saves the toolchain
+  directory at job end (`cache: restore-and-save`); every consumer restores it
+  and never saves (`cache: restore-only`), so ten shards do not race to write one key.
+  On a miss, `atmos toolchain install` installs from the network as it always
+  did.
+
+  Requires the `atmos` binary to be on PATH (install it before this step).
+
+inputs:
+  github-token:
+    description: 'GitHub token for the toolchain registry and release-asset lookups (raises the unauthenticated API rate limit).'
+    required: true
+  cache:
+    description: >
+      Passed through to the Atmos Cache action's `mode`: `restore-and-save`
+      (the one producer job per OS - restore, and save at job end),
+      `restore-only` (consumers, the default), or `none` to skip the cache.
+    required: false
+    default: 'restore-only'
+
+runs:
+  using: composite
+  steps:
+    - name: Restore the Atmos toolchain cache
+      if: inputs.cache != 'none'
+      continue-on-error: true
+      uses: ./actions/cache
+      with:
+        mode: ${{ inputs.cache }}
+
+    - name: Install the tools in .tool-versions that are not already on disk
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: atmos toolchain install
+
+    - name: Export the toolchain directories to PATH
+      shell: bash
+      run: atmos toolchain env --format=github
