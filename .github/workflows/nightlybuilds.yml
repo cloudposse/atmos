@@ -28,10 +28,18 @@ jobs:
       pull-requests: write
       packages: write
       issues: write
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8293d764b32a1211aacc40e24328f13e8fc5cf32 # main
     with:
-      publish: true
+      # shared-go-auto-release.yml declares publish/prerelease as `type: string`,
+      # not boolean — quote/stringify these so the values match the declared
+      # input type.
+      publish: 'true'
       format: binary
-      prerelease: true
+      prerelease: 'true'
       runs-on: '["runs-on=${{github.run_id}}", "runner=large", "tag=atmos","extras=s3-cache", "private=false"]'
+    # `secrets: inherit`, not an explicit map: shared-go-auto-release.yml doesn't declare a
+    # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
+    # (observed as a startup_failure -- "likely failed because of a workflow file issue" -- with
+    # zero jobs ever created, on both test.yml and feature-release.yml after an earlier attempt
+    # to narrow this to an explicit list).
     secrets: inherit

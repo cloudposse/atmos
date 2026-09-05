@@ -4,6 +4,7 @@
 *.tfstate.*
 **/*.tf.json
 **/*.planfile
+**/.atmos-*.tfplan
 **/*.kubeconfig
 **/terraform.tfvars.json
 **/helmfile.vars.yaml
@@ -32,6 +33,9 @@
 # Demo binaries and large audio files
 tools/director/director
 demos/audio/
+
+# gomodcheck compiled binary
+tools/gomodcheck/.gomodcheck
 
 # Generated landing-page demo recordings (VHS output).
 # NEVER commit these — they bloat the repo. The build pipeline renders them and
@@ -146,6 +150,7 @@ TEST_QUALITY_*.md
 tools/lintroller/.lintroller
 tools/gomodcheck/.gomodcheck
 .golangci/lintroller/lintroller
+tools/gomodcheck/.gomodcheck
 /custom-gcl
 tools/noticegen/noticegen
 

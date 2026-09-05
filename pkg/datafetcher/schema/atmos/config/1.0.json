@@ -3438,7 +3438,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Internal hides this command from help/list output while leaving it fully invocable,\nmirroring go-task's `internal: true` (maps to Cobra's Command.Hidden)."
+          "description": "Internal excludes the command from `atmos --help` / `atmos \u003cgroup\u003e --help` subcommand\nlistings, shell-completion suggestions, and the AI `atmos_list_commands` tool, while\nleaving it fully runnable: `atmos \u003cname\u003e ...` still executes it directly, and\n`atmos \u003cname\u003e --help` still renders its own help when invoked explicitly. Use for\nhelper commands meant to be called by other commands or run manually for debugging,\nanalogous to Just's `[private]` recipes or Task's `internal: true` tasks (maps to Cobra's\nCommand.Hidden)."
         }
       },
       "type": "object",
@@ -5037,6 +5037,28 @@
       },
       "type": "object",
       "description": "ErrorsConfig contains configuration for error handling."
+    },
+    "ExecSettings": {
+      "properties": {
+        "sync_timeout": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Go duration string (e.g. \"500ms\", \"30s\", \"5m\")."
+            },
+            {
+              "type": "integer",
+              "description": "Duration in nanoseconds."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "SyncTimeout bounds how long a synchronous command (terraform\nplan/apply, describe affected) waits for its execution-record upload to\nbe confirmed. Defaults to 10 seconds when unset/zero; values below 10\nseconds are clamped up to 10 seconds rather than allowed to shorten the\ndefault. Accepts a Go duration string (e.g. \"20s\", \"5m\")."
+        }
+      },
+      "type": "object",
+      "description": "ExecSettings contains configuration for command-execution metadata upload\n(POST /v1/atmos/exec). This only lengthens the default synchronous-upload\nwait timeout; it is not an opt-out/opt-in switch (see FR-008a)."
     },
     "GitAuthConfig": {
       "properties": {
@@ -8097,6 +8119,20 @@
             }
           ],
           "description": "GitSTS holds global defaults for the github/sts auth integration."
+        },
+        "exec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Exec holds settings for the command-execution metadata upload feature."
         }
       },
       "type": "object",
@@ -11764,6 +11800,19 @@
           ],
           "description": "PluginCacheDir is an optional custom path for the plugin cache.\nIf empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins."
         },
+        "ui": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformUI"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "auto_provision_workdir_for_outputs": {
           "anyOf": [
             {
@@ -12328,6 +12377,69 @@
       },
       "type": "object",
       "description": "TerraformRCConfig is a near-opaque passthrough rendered into Terraform's native\nCLI configuration (HCL). Only `enabled` is typed; all remaining keys are captured\nverbatim in Config and rendered as CLI-config directives (provider_installation,\nhost, credentials, plugin_cache_dir, ...), so new directives require no Atmos\nschema change."
+    },
+    "TerraformUI": {
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Enabled enables the streaming TUI mode for plan/apply/destroy/init/refresh commands.\nWhen enabled, terraform output is streamed in real-time with a progress display."
+        },
+        "compact": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Compact controls line padding between resource branches.\ntrue (default) = no blank lines, false = add blank lines for readability."
+        },
+        "show_attribute_bar": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "ShowAttributeBar controls the vertical \"quote\" line for attribute content.\ntrue = show ┃ bar alongside attributes, false (default) = clean indentation only."
+        },
+        "max_lines": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "MaxLines controls collapsing large JSON values in attribute rendering.\n0 (default) = show all lines like Terraform, \u003e0 = collapse after N lines."
+        }
+      },
+      "type": "object",
+      "description": "TerraformUI contains streaming UI configuration."
     },
     "Toolchain": {
       "properties": {

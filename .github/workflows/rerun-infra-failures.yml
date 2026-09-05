@@ -1,0 +1,138 @@
+name: Rerun infra failures
+
+# Re-run a `Tests` (test.yml) workflow run when, and only when, every job that
+# did not succeed is an infrastructure zombie:
+#
+#   runner-stuck-after-complete  the job's steps all succeeded (including
+#                                `Complete job`) but the runner never reported
+#                                completion and GitHub cancelled it >= 5 min
+#                                later. Cause: harden-runner's Windows post
+#                                step kills its agent mid DNS-restore, leaving
+#                                the runner on a dead resolver (see
+#                                docs/fixes/2026-09-03-rerun-infra-cancelled-ci-runs.md).
+#   runner-lost                  the job failed with no failed step.
+#   check-cascade                a `Check ... result` aggregator job (e.g. the
+#                                `test-required` alias checks) that failed only
+#                                because a zombie upstream job never reported.
+#
+# Any job with a genuinely failed step (`real-failure`) or an interrupted step
+# (`superseded`) vetoes the rerun. Both the classification and the rerun
+# decision (including the PR-head-SHA re-check and the rerun-failed-jobs API
+# call) are typed, unit-tested Go (internal/ci/rerun, dispatched through
+# `go tool mage ci:classifyInfraFailures`/`ci:rerunInfraFailures` - the former
+# via the local action .github/actions/classify-infra-failures), so test.yml
+# can reuse the classifier later.
+#
+# Scope: `pull_request` and `push` runs only. A rerun cannot help `merge_group`
+# runs: a failed required check evicts the PR from the merge queue immediately,
+# and re-running the workflow afterwards does not re-enqueue it. Only Phase 1's
+# in-job DNS guard helps there; this workflow is the backstop for PRs.
+#
+# Security: this workflow holds `actions: write`. It runs from the default
+# branch (workflow_run always does) and checks out the default branch too, so
+# PR code can never influence the classifier that decides here. The only input
+# taken from the triggering run is its id, attempt, event, head SHA and
+# conclusion.
+
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  rerun:
+    name: Rerun if every failure is infrastructure
+    # Only failed/cancelled runs, only PR and push events (see above), and at
+    # most three attempts per run so a persistent zombie cannot loop forever.
+    if: >-
+      (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'cancelled')
+      && (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'push')
+      && github.event.workflow_run.run_attempt < 3
+    # Scoped to the triggering run's id, not this workflow's own: two
+    # invocations for the *same* triggering run (a duplicate workflow_run
+    # delivery, or this workflow itself being manually rerun) must not both
+    # pass ci:rerunInfraFailures' live attempt-count check and both call
+    # rerun-failed-jobs, since neither the check nor the call is atomic
+    # against the GitHub API. cancel-in-progress makes a later invocation
+    # cancel an earlier one instead of racing it, so at most one invocation
+    # per triggering run ever reaches the rerun call.
+    concurrency:
+      group: rerun-infra-failures-${{ github.event.workflow_run.id }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # actions:write for `gh run rerun` (implies actions:read for the job
+      # listing); contents:read for actions/checkout; pull-requests:read for
+      # the PR head lookup.
+      actions: write
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: block
+          # api.github.com: run/job/PR lookups and the rerun call.
+          # github.com: actions/checkout. release-assets.githubusercontent.com:
+          # where actions/setup-go downloads the Go toolchain (every run
+          # failed here without it, blocked at getaddrinfo); golang.org is
+          # setup-go's fallback download host. The remaining Go hosts are
+          # for the module download behind `go tool mage` (same set as
+          # test.yml's build job).
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            release-assets.githubusercontent.com:443
+            golang.org:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # Deliberately no `ref:` - workflow_run checks out the default branch,
+          # never the triggering PR's head, so the classifier is always trusted.
+          persist-credentials: false
+
+      - name: Classify the run's failures
+        id: classify
+        uses: ./.github/actions/classify-infra-failures
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          run-attempt: ${{ github.event.workflow_run.run_attempt }}
+          repo: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rerun failed jobs
+        if: steps.classify.outputs.verdict == 'rerun'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          PR_NUMBERS: ${{ join(github.event.workflow_run.pull_requests.*.number, ' ') }}
+        # ci:rerunInfraFailures (magefiles/ci_rerun.go, backed by
+        # internal/ci/rerun) re-verifies every associated PR is still at the
+        # run's head SHA and skips a superseded run - best-effort, not a hard
+        # guarantee; see the Go doc comment for why closing the gap fully
+        # isn't practical for a workflow_run trigger - then requests the rerun
+        # (repos/{repo}/actions/runs/{id}/rerun-failed-jobs,
+        # the same endpoint `gh run rerun --failed` calls: it re-queues every
+        # job that did not succeed, cancelled ones included, plus their
+        # dependents, and carries over the rest, so test-required's shard
+        # count still holds on the new attempt). Appends its decision to the
+        # step summary; only a genuine API failure (not "the run hasn't
+        # finished yet") fails the step. Event fields go through env, not
+        # direct ${{ }} interpolation into the script, so event-payload data
+        # can never be spliced into the shell text itself (GitHub Actions
+        # script-injection hardening).
+        run: |
+          set -euo pipefail
+          go tool mage ci:rerunInfraFailures "$REPO" "$RUN_ID" "$RUN_EVENT" "$HEAD_SHA" "$PR_NUMBERS"

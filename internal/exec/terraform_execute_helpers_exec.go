@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -204,12 +205,24 @@ func executeCommandPipeline(
 	addRegionEnvVarForImport(info)
 
 	if shouldRunMainTerraformCommand(info) {
+		// FR-006f: capture this invocation's own stdout/stderr into a buffer pair
+		// scoped to ONLY the main command, in addition to (not instead of) whatever
+		// WithStdoutCapture/WithStderrCapture already accumulate across the whole
+		// init+workspace-select+main pipeline for other consumers (e.g.
+		// cmd/terraform's capturedPlanOutput, used by CI job-summary hooks). Without
+		// this, incidental init/workspace-select output (e.g. a stray "No changes."
+		// lookalike) can poison the exec-metadata parser's extraction even though the
+		// real plan/apply's own output is correct (research.md Decision 32).
+		var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
+		mainOpts := append(slices.Clone(opts), withExecMetadataOutputCapture(&execMetadataStdoutBuf, &execMetadataStderrBuf))
+
 		// Phase-level CI log grouping (Dimension "phase"): fold the main subcommand
 		// (plan/apply/destroy/…) into its own collapsible group, separate from init
 		// and workspace setup.
 		err = ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, info.SubCommand), func() error {
-			return executeMainTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, opts...)
+			return executeMainTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, mainOpts...)
 		})
+		info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
 		if err != nil {
 			return err
 		}
@@ -237,6 +250,18 @@ func runWorkspaceSetupPhase(atmosConfig *schema.AtmosConfiguration, info *schema
 
 func shouldRunMainTerraformCommand(info *schema.ConfigAndStacksInfo) bool {
 	return info.SubCommand != subcommandWorkspace || info.SubCommand2 != ""
+}
+
+// combineExecMetadataOutput concatenates the main command's scoped stdout/stderr
+// capture for the exec-metadata parser (FR-006f), mirroring the stdout+"\n"+stderr
+// convention cmd/terraform's terraformExecMetadataParserFunc previously applied
+// when it owned buffer construction directly.
+func combineExecMetadataOutput(stdoutBuf, stderrBuf *bytes.Buffer) string {
+	combined := stdoutBuf.String()
+	if errOut := stderrBuf.String(); errOut != "" {
+		combined += "\n" + errOut
+	}
+	return combined
 }
 
 func addTerraformTestVarfileArg(info *schema.ConfigAndStacksInfo, testVarFile string) {
@@ -285,21 +310,20 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	wsOpts := append([]ShellCommandOption{}, opts...)
 	wsOpts = append(wsOpts, WithStdoutOverride(&workspaceOutput))
 
-	err := executeShellCommandWithRetry(
+	err := ExecuteShellCommandWithRetry(
 		atmosConfig,
 		info,
 		"workspace-select",
 		func(o ...ShellCommandOption) error {
-			return ExecuteShellCommand(
-				*atmosConfig,
-				info.Command,
-				[]string{"workspace", "select", "-or-create", info.TerraformWorkspace},
-				componentPath,
-				info.ComponentEnvList,
-				info.DryRun,
-				redirectStdErr,
-				o...,
-			)
+			return executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
+				componentPath:  componentPath,
+				args:           []string{"workspace", "select", "-or-create", info.TerraformWorkspace},
+				gatePhase:      subcommandInit,
+				subCommand:     subcommandWorkspace,
+				workspace:      info.TerraformWorkspace,
+				redirectStdErr: redirectStdErr,
+				shellOpts:      o,
+			})
 		},
 		wsOpts...,
 	)
@@ -329,21 +353,20 @@ func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schem
 	wsOpts := append([]ShellCommandOption{}, opts...)
 	wsOpts = append(wsOpts, WithStdoutOverride(&workspaceOutput))
 
-	newErr := executeShellCommandWithRetry(
+	newErr := ExecuteShellCommandWithRetry(
 		atmosConfig,
 		info,
 		"workspace-new",
 		func(o ...ShellCommandOption) error {
-			return ExecuteShellCommand(
-				*atmosConfig,
-				info.Command,
-				[]string{"workspace", "new", info.TerraformWorkspace},
-				componentPath,
-				info.ComponentEnvList,
-				info.DryRun,
-				redirectStdErr,
-				o...,
-			)
+			return executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
+				componentPath:  componentPath,
+				args:           []string{"workspace", "new", info.TerraformWorkspace},
+				gatePhase:      subcommandInit,
+				subCommand:     subcommandWorkspace,
+				workspace:      info.TerraformWorkspace,
+				redirectStdErr: redirectStdErr,
+				shellOpts:      o,
+			})
 		},
 		wsOpts...,
 	)
@@ -426,21 +449,19 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 		return nil
 	}
 
-	err := executeShellCommandWithRetry(
+	err := ExecuteShellCommandWithRetry(
 		atmosConfig,
 		info,
 		info.SubCommand,
 		func(o ...ShellCommandOption) error {
-			return ExecuteShellCommand(
-				*atmosConfig,
-				info.Command,
-				allArgsAndFlags,
-				componentPath,
-				info.ComponentEnvList,
-				info.DryRun,
-				info.RedirectStdErr,
-				o...,
-			)
+			return executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
+				componentPath:  componentPath,
+				args:           allArgsAndFlags,
+				gatePhase:      info.SubCommand,
+				subCommand:     info.SubCommand,
+				redirectStdErr: info.RedirectStdErr,
+				shellOpts:      o,
+			})
 		},
 		opts...,
 	)
@@ -455,6 +476,12 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 
 	exitCode := resolveExitCode(err)
 
+	// FR-006e: record the terraform/tofu subprocess's own exit code before any
+	// CI-mode remapping or local neutralization below, so TerraformExecData.exit_code
+	// (via captureExecMetadataSync) reports the real subprocess outcome even when
+	// Atmos's own returned status is remapped/neutralized further down.
+	info.ExecMetadataRawExitCode = exitCode
+
 	// Upload status only when explicitly requested via --upload-status flag.
 	// Upload failures are logged but never cause the terraform command to fail —
 	// the exit code should reflect the plan/apply result, not telemetry.
@@ -467,6 +494,19 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	// Apply CI exit code mapping: remap terraform exit codes for CI runners.
 	// This is independent of upload — it only affects what the caller sees.
 	if mappedCode := mapCIExitCode(atmosConfig, exitCode); mappedCode == 0 {
+		return nil
+	}
+
+	// FR-006e/Decision 36: -detailed-exitcode was added to this invocation solely
+	// because exec-metadata capture required it (info.ExecMetadataDetailedExitCodeAdded),
+	// not because the user explicitly passed --upload-status. The global CI-mode remap
+	// above didn't neutralize this exit code (atmosConfig.CI.Enabled is false, or its
+	// mapping doesn't cover it), so without this local, call-site-scoped neutralization,
+	// Atmos's own process exit code for `plan` would silently change from 0 to 2 in CI
+	// environments that satisfy FR-001 but haven't separately set ci.enabled. This does
+	// NOT touch atmosConfig.CI.Enabled or mapCIExitCode's own gate — those also govern
+	// annotations/SARIF/summaries/hooks CI-mode, well outside this fix's scope.
+	if info.ExecMetadataDetailedExitCodeAdded && exitCode == detailedExitCodeChangesDetected {
 		return nil
 	}
 
@@ -513,32 +553,60 @@ func cleanupTerraformFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 	}
 }
 
-// invokeShellCommandFunc is the signature used by executeShellCommandWithRetry to delegate
+// invokeShellCommandFunc is the signature used by ExecuteShellCommandWithRetry to delegate
 // the actual subprocess invocation back to its caller.  The caller provides a closure that
 // already binds the command, args, dir, env, etc., and only needs the variadic options
 // (used by the retry wrapper to inject stdout/stderr capture writers).
 type invokeShellCommandFunc func(opts ...ShellCommandOption) error
 
-// executeShellCommandWithRetry runs invoke exactly once when info.ComponentRetrySection is
+// resetExecMetadataBufs resets the exec-metadata stdout/stderr tee buffers (if
+// present) between retry attempts, so the exec-metadata parser only ever sees
+// the latest attempt's output rather than every attempt's output concatenated
+// together.
+func resetExecMetadataBufs(stdoutW, stderrW io.Writer) {
+	if resettable, ok := stdoutW.(interface{ Reset() }); ok {
+		resettable.Reset()
+	}
+	if resettable, ok := stderrW.(interface{ Reset() }); ok {
+		resettable.Reset()
+	}
+}
+
+// retryExecParams bundles the per-invocation shell command inputs shared by the
+// helmfile/packer retry-wrapping helpers (executeHelmfileCommandWithRetry,
+// executePackerCommandWithRetry), keeping their parameter lists within the argument-limit.
+type retryExecParams struct {
+	allArgsAndFlags []string
+	componentPath   string
+	envVars         []string
+}
+
+// ExecuteShellCommandWithRetry runs invoke exactly once when info.ComponentRetrySection is
 // nil or has no Conditions configured (zero behavioural change for non-retry components).
+// It is component-type agnostic: terraform, helmfile, packer, and ansible all shell out
+// through ExecuteShellCommand and share this same wrapper.
 //
 // When retry is configured, stdout and stderr are tee'd into a buffer and the buffer is
 // matched against the compiled retry conditions after each attempt.  Errors whose captured
 // output matches at least one condition trigger another attempt with the configured backoff;
-// other errors fail fast.  This is intentionally pattern-driven so that real terraform
-// failures (e.g., `plan` exit-code-2) are never retried unless the user opts in by listing
-// a matching condition.
+// other errors fail fast.  This is intentionally pattern-driven so that real failures (e.g.,
+// `terraform plan` exit-code-2) are never retried unless the user opts in by listing a
+// matching condition.
+//
+// If baseOpts already requests its own stdout/stderr capture (e.g. helmfile capturing output
+// for a NodeHooks.After callback), that writer keeps receiving the full output — the retry
+// buffer is teed in alongside it via io.MultiWriter, not substituted for it.
 //
 // `phase` is included in retry log lines so users can see which subprocess invocation is
-// being retried (e.g. "init", "workspace-select", "apply").
-func executeShellCommandWithRetry(
+// being retried (e.g. "init", "workspace-select", "apply", "sync", "build").
+func ExecuteShellCommandWithRetry(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	phase string,
 	invoke invokeShellCommandFunc,
 	baseOpts ...ShellCommandOption,
 ) error {
-	defer perf.Track(atmosConfig, "exec.executeShellCommandWithRetry")()
+	defer perf.Track(atmosConfig, "exec.ExecuteShellCommandWithRetry")()
 
 	cfg := info.ComponentRetrySection
 	if cfg == nil || len(cfg.Conditions) == 0 {
@@ -551,8 +619,11 @@ func executeShellCommandWithRetry(
 	}
 
 	var buf bytes.Buffer
+	stdoutWriter, stderrWriter := composeRetryCaptureWriters(baseOpts, &buf)
 	captureOpts := append([]ShellCommandOption{}, baseOpts...)
-	captureOpts = append(captureOpts, WithStdoutCapture(&buf), WithStderrCapture(&buf))
+	captureOpts = append(captureOpts, WithStdoutCapture(stdoutWriter), WithStderrCapture(stderrWriter))
+
+	execMetadataStdout, execMetadataStderr := execMetadataOutputCaptureFromOpts(baseOpts...)
 
 	attempt := 0
 	return retry.WithPredicate(
@@ -561,9 +632,10 @@ func executeShellCommandWithRetry(
 		func() error {
 			attempt++
 			buf.Reset()
+			resetExecMetadataBufs(execMetadataStdout, execMetadataStderr)
 			if attempt > 1 {
 				log.Warn(
-					"Retrying terraform subprocess after recoverable error",
+					"Retrying subprocess after recoverable error",
 					"phase", phase,
 					logFieldComponent, info.ComponentFromArg,
 					"stack", info.StackFromArg,
@@ -579,4 +651,26 @@ func executeShellCommandWithRetry(
 			return retry.MatchesAny(patterns, buf.String())
 		},
 	)
+}
+
+// composeRetryCaptureWriters returns the stdout/stderr writers ExecuteShellCommandWithRetry
+// should inject: buf alone when baseOpts requests no capture of its own, or an
+// io.MultiWriter teeing into both buf and the caller's writer when it does — so a caller's
+// own capture (e.g. helmfile's NodeHooks.After output) keeps receiving output instead of
+// being silently replaced by the retry buffer.
+func composeRetryCaptureWriters(baseOpts []ShellCommandOption, buf *bytes.Buffer) (stdout, stderr io.Writer) {
+	var probe shellCommandConfig
+	for _, opt := range baseOpts {
+		opt(&probe)
+	}
+
+	stdout = buf
+	if probe.stdoutCapture != nil {
+		stdout = io.MultiWriter(probe.stdoutCapture, buf)
+	}
+	stderr = buf
+	if probe.stderrCapture != nil {
+		stderr = io.MultiWriter(probe.stderrCapture, buf)
+	}
+	return stdout, stderr
 }

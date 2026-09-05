@@ -44,6 +44,9 @@
     "metadata": {
       "$ref": "#/definitions/global_metadata"
     },
+    "retry": {
+      "$ref": "#/definitions/retry"
+    },
     "components": {
       "$ref": "#/definitions/components"
     },
@@ -1269,6 +1272,9 @@
             },
             "namespace": {
               "type": "string"
+            },
+            "create_namespace": {
+              "type": "boolean"
             },
             "name": {
               "type": "string"
