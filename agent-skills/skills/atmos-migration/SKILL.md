@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Terragrunt, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration; also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos toolchain."
+description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Terragrunt, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration. It also covers migrating CLI tool-version management from asdf, aqua, tfenv, tofuenv, tenv, mise, or a Homebrew Brewfile to the Atmos toolchain."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -15,8 +15,13 @@ references:
   - references/from-taskfile.md
   - references/from-component-updater.md
   - references/from-terragrunt.md
-  - references/from-mise.md
+  - references/from-asdf.md
   - references/from-aqua.md
+  - references/from-tfenv.md
+  - references/from-tofuenv.md
+  - references/from-tenv.md
+  - references/from-homebrew-brewfile.md
+  - references/from-mise.md
 ---
 
 # Migrating to Atmos
@@ -24,25 +29,21 @@ references:
 ## Overview
 
 This skill is a decision guide. Use it to migrate an existing Terraform repository to Atmos.
-Atmos can adopt an existing repository without a reorganization. The `components/terraform/`
-layout is a recommendation. It is not a requirement. Start with the smallest change that gives
-value. Add more only when the user has a real need for it.
+Atmos can adopt an existing repository without a reorganization -- `components/terraform/` is a
+recommendation, not a requirement. Start with the smallest change that gives value; add more only
+when the user has a real need for it.
 
-This skill also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos
-toolchain -- see [from-mise.md](references/from-mise.md) and
-[from-aqua.md](references/from-aqua.md) in the routing table below.
+This skill also covers migrating CLI tool-version management from asdf, aqua, tfenv, tofuenv,
+tenv, mise, or a Homebrew Brewfile to the Atmos toolchain -- see
+[Replace a Tool-Version Manager](#replace-a-tool-version-manager) below.
 
-For full tutorials for end users, see:
-
-- [Migrating from Native Terraform](https://atmos.tools/migration/native-terraform)
-- [Migrating from Terraform Workspaces](https://atmos.tools/migration/terraform-workspaces)
-- [Migrating from Terragrunt](https://atmos.tools/migration/terragrunt) -- see
-  [from-terragrunt.md](references/from-terragrunt.md) for the agent-actionable recipes
-- Migrating from Terramate -- covered by this skill via
-  [references/from-terramate.md](references/from-terramate.md) (no atmos.tools tutorial yet)
-- [Migrating from Makefiles](https://atmos.tools/migration/makefile)
-- [Migrating from Justfiles](https://atmos.tools/migration/justfile)
-- [Migrating from Taskfile.yml](https://atmos.tools/migration/taskfile)
+Full end-user tutorials exist for [Native Terraform](https://atmos.tools/migration/native-terraform),
+[Terraform Workspaces](https://atmos.tools/migration/terraform-workspaces),
+[Terragrunt](https://atmos.tools/migration/terragrunt) (agent-actionable recipes in
+[from-terragrunt.md](references/from-terragrunt.md)), [Makefiles](https://atmos.tools/migration/makefile),
+[Justfiles](https://atmos.tools/migration/justfile), and [Taskfile.yml](https://atmos.tools/migration/taskfile).
+Terramate has no atmos.tools tutorial yet -- this skill covers it via
+[from-terramate.md](references/from-terramate.md).
 
 ## Terraform or OpenTofu
 
@@ -56,57 +57,55 @@ word the user uses. If the user says "OpenTofu," write "OpenTofu" in your respon
 These principles come before your normal instincts. Read them before you propose a change to the
 user's repository.
 
-1. **Migration is opt-in, not all-or-nothing.** Atmos does not require a filesystem
-    reorganization. Point `base_path` at the user's existing layout (e.g., `base_path: "terraform"`
-    or `base_path: "."`) when preserving layout lowers adoption risk. The `components/terraform/`
-    convention is still the best-practice layout for new or fully migrated repos because Atmos
-    supports multiple toolchains (Terraform, Helmfile, Packer, Ansible); it is not a prerequisite
-    for adopting Atmos in Terraform-only repos.
+1. **Migration is opt-in, not all-or-nothing.** No filesystem reorganization is required. Point
+    `base_path` at the user's existing layout (e.g., `base_path: "terraform"` or `base_path: "."`)
+    when preserving layout lowers adoption risk. `components/terraform/` is still the
+    best-practice layout for new or fully migrated repos, since Atmos supports multiple toolchains
+    (Terraform, Helmfile, Packer, Ansible) -- but it is not a prerequisite for a Terraform-only repo.
 2. **Existing `.tfvars` files may be kept during migration.** Use `!include` to pull them into
-    stacks when the user wants minimal disruption. Converting values into native stack YAML remains
-    the best-practice end state when the user wants deep-merge inheritance and richer stack
-    composition, but it can happen progressively.
-3. **No Terraform code changes are required.** Don't rewrite providers, backends, or modules
-    during migration. Atmos generates `backend.tf.json` and `*.auto.tfvars.json` at runtime.
-4. **Workspaces are not the enemy.** If the user has `terraform.workspace`-driven environments,
-    Atmos can map onto their existing state via `metadata.terraform_workspace` and
-    `workspace_key_prefix`. They do not have to abandon their workspace state to adopt Atmos.
+    stacks for minimal disruption. Converting to native stack YAML is the best-practice end state
+    for deep-merge inheritance and richer composition, but it can happen progressively.
+3. **No Terraform code changes are required.** Don't rewrite providers, backends, or modules.
+    Atmos generates `backend.tf.json` and `*.auto.tfvars.json` at runtime.
+4. **Workspaces are not the enemy.** `terraform.workspace`-driven environments can map onto their
+    existing state via `metadata.terraform_workspace` and `workspace_key_prefix` -- no need to
+    abandon workspace state to adopt Atmos.
 5. **Prefer YAML functions over Gomplate datasources.** When both can express the same thing
-    (`!include` vs `gomplate.datasources` for files, `!exec` vs templated shell, `!env` vs
-    `gomplate getenv`, `!store` vs custom datasource URLs), reach for the YAML function first.
-    YAML functions are type-safe, can't break YAML parsing, produce clear errors, and don't
-    require enabling Gomplate. See the [atmos-yaml-functions](../atmos-yaml-functions/SKILL.md)
-    and [atmos-templates](../atmos-templates/SKILL.md) skills for the boundary.
+    (`!include` vs `gomplate.datasources`, `!exec` vs templated shell, `!env` vs `gomplate getenv`,
+    `!store` vs custom datasource URLs), reach for the YAML function first: type-safe, can't break
+    YAML parsing, clear errors, no Gomplate required. See
+    [atmos-yaml-functions](../atmos-yaml-functions/SKILL.md) and
+    [atmos-templates](../atmos-templates/SKILL.md) for the boundary.
 6. **Crawl → walk → run.** Get the user to a working `atmos terraform plan` in 20 minutes; defer
     inheritance, catalogs, and multi-account hierarchies until they have a concrete need.
-7. **Task runners are not a blocker.** Atmos custom commands and workflows can replace the
-    targets, recipes, and tasks that Make, Just, and Task provide. This doesn't have to happen all
-    at once — a Makefile, Justfile, or Taskfile can stay as a thin wrapper around `atmos` commands
-    during migration, the same incremental approach described in Principle 6. The end state turns
+7. **Task runners are not a blocker.** Atmos custom commands and workflows can replace Make/Just/
+    Task targets, recipes, and tasks -- incrementally: a Makefile, Justfile, or Taskfile can stay
+    as a thin wrapper around `atmos` commands during migration (Principle 6). The end state turns
     each leaf target into a custom command; a target chain usually stays a custom command too,
     using `dependencies.commands`/`dependencies.workflows` for its prerequisites. Reserve
-    workflows for fixed, multi-step orchestration across more than one component — not every
-    dependency chain needs one.
+    workflows for fixed, multi-step orchestration across more than one component.
 
 ## Decide the Migration Shape First
 
 Find the user's source pattern before you propose any change. Each pattern points to a different
 reference file:
 
-| User has...                                                          | Use reference                                    |
-|----------------------------------------------------------------------|--------------------------------------------------|
-| One TF root module, env config via `.tfvars` or env vars             | [from-native-terraform.md](references/from-native-terraform.md) |
-| Multiple TF root modules in scattered dirs                           | [from-native-terraform.md](references/from-native-terraform.md) |
-| `terraform.workspace`-driven environments with shared state backend  | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
+| User has... | Use reference |
+|---|---|
+| One TF root module, env config via `.tfvars` or env vars | [from-native-terraform.md](references/from-native-terraform.md) |
+| Multiple TF root modules in scattered dirs | [from-native-terraform.md](references/from-native-terraform.md) |
+| `terraform.workspace`-driven environments with shared state backend | [from-terraform-workspaces.md](references/from-terraform-workspaces.md) |
 | `.tm.hcl` files, `stack.tm.hcl`, `generate_hcl` blocks (Terramate project) | [from-terramate.md](references/from-terramate.md) |
-| Need to read outputs from un-migrated TF (legacy or another repo)    | [remote-state-bridge.md](references/remote-state-bridge.md) |
-| User has a Makefile driving builds/tests/deploys                     | [from-makefile.md](references/from-makefile.md) |
-| User has a Justfile (`just` command runner)                          | [from-justfile.md](references/from-justfile.md) |
-| User has a Taskfile.yml (go-task)                                    | [from-taskfile.md](references/from-taskfile.md) |
-| `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
-| Terragrunt (`terragrunt.hcl` or `terragrunt.stack.hcl`)               | [from-terragrunt.md](references/from-terragrunt.md) |
-| mise config (`mise.toml`, `.mise.toml`, `.mise/config.toml`, `.tool-versions`) for tool versions | [from-mise.md](references/from-mise.md) |
-| `aqua.yaml` (Aqua CLI) for tool versions                             | [from-aqua.md](references/from-aqua.md) |
+| Terragrunt (`terragrunt.hcl` or `terragrunt.stack.hcl`) | [from-terragrunt.md](references/from-terragrunt.md) |
+| Need to read outputs from un-migrated TF (legacy or another repo) | [remote-state-bridge.md](references/remote-state-bridge.md) |
+| User has a Makefile driving builds/tests/deploys | [from-makefile.md](references/from-makefile.md) |
+| User has a Justfile (`just` command runner) | [from-justfile.md](references/from-justfile.md) |
+| User has a Taskfile.yml (go-task) | [from-taskfile.md](references/from-taskfile.md) |
+| `cloudposse/github-action-atmos-component-updater` | [from-component-updater.md](references/from-component-updater.md) |
+
+This table covers only the IaC-layout shape. If the user's question is instead about a
+tool-version manager (asdf, aqua, tfenv, tofuenv, tenv, mise, or a Homebrew Brewfile), skip this
+table and go to [Replace a Tool-Version Manager](#replace-a-tool-version-manager) below.
 
 The remote-state-bridge pattern makes progressive migration possible. It lets a team migrate one
 component at a time. Without it, the team must migrate everything at once. Use this pattern when
@@ -114,40 +113,65 @@ the user has existing Terraform state that a new Atmos component must read.
 
 ### Common Problems in Task-Runner Migration
 
-These behaviors apply to every task runner. Check them before you open a reference file:
+These behaviors apply to every task runner. Each reference file has the exact field names and
+steps; this is only a short summary.
 
-- **The default order can change, and it differs by source tool.** Task runs `deps:` at the same
-  time by default, so command-level `dependencies.commands`/`dependencies.workflows` -- also
-  concurrent by default -- is its direct match. Make and Just run dependencies one after another
-  by default; `make -j` is required for concurrency. Do not describe `dependencies.commands` as
-  matching Make's/Just's *default* -- it changes the order, and can introduce a race between
-  prerequisites that were only ever sequential by accident, not by a declared dependency. For an
-  ordinary Make/Just chain, ordered steps preserve the default; reach for `dependencies.commands`
-  there only when the source used `-j`, the prerequisites are genuinely independent, or a
-  prerequisite is shared by more than one caller (it dedups a shared dependency to a single run
-  regardless of concurrency -- true for every one of these tools). Check the source tool's real
-  default before you move it.
-- **Freshness checks map to `inputs`/`artifacts`, not to plain steps -- and the scope is per
-  step.** Task's `sources:`/`generates:` fields and non-`.PHONY` Make targets both skip the
-  *entire* recipe/task when a file has not changed. Atmos's step-level `inputs.sources`/
-  `artifacts.paths` fields are the direct match: with no explicit `when:`, declaring them
-  implicitly means `when: checksum.changed`, and *that one step* is skipped when nothing has
-  changed since its last successful run -- later steps in the same command still run regardless.
-  If the source recipe/task runs more than one command and the freshness decision must gate all
-  of them together, combine them into a single `shell`/`script` step rather than spreading
-  `inputs`/`artifacts` across several steps. This does not carry over on its own -- add
-  `inputs`/`artifacts` to the migrated step yourself. The `require`/`assert` step type does not
-  replace this. It only checks that a file exists, not whether it is fresh.
-- **`workflows.base_path` needs to be set explicitly once the user has their own `atmos.yaml`.**
-  Only fixed, multi-step orchestration across more than one component becomes an Atmos workflow
-  (Principle 7) -- most target chains stay a custom command with `dependencies.commands` instead.
-  `atmos workflow <name>` fails with
-  `'workflows.base_path' must be configured in 'atmos.yaml'` until you add it (for example,
-  `workflows.base_path: "stacks/workflows"`). None of this skill's `atmos.yaml` snippets show it
-  by default -- add it the moment the user's migration reaches its first workflow.
+- **Default order differs by source tool.** Task runs `deps:` concurrently by default, so
+  `dependencies.commands`/`dependencies.workflows` (also concurrent by default) is a direct match.
+  Make and Just run dependencies sequentially by default (`make -j` opts into concurrency), so
+  `dependencies.commands` changes the order and can introduce races between prerequisites that
+  were only ever sequential by accident. For an ordinary Make/Just chain, keep ordered steps;
+  reach for `dependencies.commands` only when the source used `-j`, the prerequisites are
+  genuinely independent, or a prerequisite is shared by more than one caller (every one of these
+  tools dedups a shared dependency to a single run). Check the source tool's real default first.
+- **Freshness checks map to `inputs`/`artifacts`, scoped per step.** Task's `sources:`/`generates:`
+  and non-`.PHONY` Make targets skip the *entire* recipe/task when nothing changed. Atmos's
+  `inputs.sources`/`artifacts.paths` are the direct match: declaring them implies
+  `when: checksum.changed`, skipping *that one step* only -- later steps in the same command still
+  run. If a source recipe runs several commands that must be gated together, combine them into one
+  `shell`/`script` step instead of spreading `inputs`/`artifacts` across several. This doesn't
+  carry over automatically -- add it to the migrated step yourself. `require`/`assert` only checks
+  that a file exists, not whether it's fresh.
+- **`workflows.base_path` must be set explicitly once the user has their own `atmos.yaml`.** Only
+  fixed, multi-step orchestration across more than one component becomes a workflow (Principle 7)
+  -- most target chains stay a custom command with `dependencies.commands`. `atmos workflow <name>`
+  fails with `'workflows.base_path' must be configured in 'atmos.yaml'` until you set it (e.g.
+  `workflows.base_path: "stacks/workflows"`). Add it the moment the migration reaches its first
+  workflow -- this skill's `atmos.yaml` snippets omit it by default.
 
-Each reference file has its own "Common Problems" section with the exact field names and steps
-for that tool. This section is only a short summary.
+## Replace a Tool-Version Manager
+
+This section covers a topic separate from the IaC-layout question above. A user can migrate the
+Terraform or OpenTofu layout, the tool-version manager, or both. Each choice is independent.
+
+If the user currently pins CLI tool versions with asdf, aqua, tfenv, tofuenv, tenv, mise, or a
+Homebrew Brewfile, use the matching reference below. Do not write a new config translation by
+hand.
+
+| Current tool | Reference |
+|---|---|
+| asdf | [from-asdf.md](references/from-asdf.md) |
+| aqua CLI (`aqua.yaml`) | [from-aqua.md](references/from-aqua.md) |
+| tfenv | [from-tfenv.md](references/from-tfenv.md) |
+| tofuenv | [from-tofuenv.md](references/from-tofuenv.md) |
+| tenv | [from-tenv.md](references/from-tenv.md) |
+| mise | [from-mise.md](references/from-mise.md) |
+| Homebrew Brewfile | [from-homebrew-brewfile.md](references/from-homebrew-brewfile.md) |
+
+Each reference includes a command-mapping table (old tool's commands next to the Atmos toolchain
+equivalent) and a Shell Integration section.
+
+Most source tools (asdf, aqua, tfenv, tofuenv, tenv, mise) add themselves to every shell
+automatically via a shim, proxy, or activation hook that re-resolves the nearest per-directory
+config on every invocation. Homebrew instead puts one global `bin` directory on `PATH` via `brew
+shellenv`, with no per-directory resolution. Either way, the Atmos toolchain does **not** add
+itself to `PATH` by default -- it resolves tools only while an `atmos <subcommand>` runs.
+
+A user can still get a plain `terraform` command working in any shell -- a supported feature, not
+a gap. Wrap `atmos toolchain env` or `atmos toolchain path` in `eval`/`export` in their shell
+profile, for example `eval "$(atmos toolchain env --format=bash)"`. See each reference's Shell
+Integration section for the exact form per shell. Always mention this option to a user coming from
+a tool that added itself to `PATH` automatically.
 
 ## The Minimum-Viable Migration
 
@@ -179,10 +203,10 @@ Pick the layout that matches the user's goals. Atmos recommends the `components/
 layout, especially for a new repository or a multi-tool project. You can keep an existing layout
 when the user wants less disruption.
 
-| `base_path`                              | Use when                                                                |
-|------------------------------------------|-------------------------------------------------------------------------|
-| `base_path: "."`                         | TF root modules live at the repo root; user wants zero file moves       |
-| `base_path: "terraform"`                 | TF-only repo with code already in `terraform/`; preserve dir name       |
+| `base_path` | Use when |
+|---|---|
+| `base_path: "."` | TF root modules live at the repo root; user wants zero file moves |
+| `base_path: "terraform"` | TF-only repo with code already in `terraform/`; preserve dir name |
 | `base_path: "."` + `components.terraform.base_path: "components/terraform"` | Multi-toolchain or new repo; canonical Atmos layout |
 
 For more organization patterns, such as multi-region, multi-account, and organization
@@ -193,14 +217,14 @@ hierarchies, see the skill [atmos-design-patterns](../atmos-design-patterns/SKIL
 This is a common mistake: an agent chooses a Gomplate datasource when a YAML function is safer
 and clearer. Use the option in the right column:
 
-| Goal                          | Reach for (NOT this)                              | Use instead                              |
-|-------------------------------|---------------------------------------------------|------------------------------------------|
-| Include a file's contents     | `gomplate.datasources` with file URL              | `!include path/to/file`                  |
-| Read an environment variable  | `gomplate getenv "FOO"`                           | `!env FOO`                               |
-| Run a shell command           | Template + `gomplate exec`                        | `!exec "command"`                        |
-| Read a store value            | Custom datasource URL                             | `!store store_name component stack key`  |
-| Read Terraform output         | Templated remote-state datasource                 | `!terraform.state component output`      |
-| Get current AWS account ID    | `gomplate.datasources` AWS plugin                 | `!aws.account_id`                        |
+| Goal | Reach for (NOT this) | Use instead |
+|---|---|---|
+| Include a file's contents | `gomplate.datasources` with file URL | `!include path/to/file` |
+| Read an environment variable | `gomplate getenv "FOO"` | `!env FOO` |
+| Run a shell command | Template + `gomplate exec` | `!exec "command"` |
+| Read a store value | Custom datasource URL | `!store store_name component stack key` |
+| Read Terraform output | Templated remote-state datasource | `!terraform.state component output` |
+| Get current AWS account ID | `gomplate.datasources` AWS plugin | `!aws.account_id` |
 
 A YAML function checks its own types. It gives a clear error message. It works without Gomplate
 turned on. It does not require the template text to stay valid YAML. Use a Go template only for
@@ -240,6 +264,8 @@ to the correct skill:
 - **Set up CI/CD with affected-component detection.** Use [atmos-ci](../atmos-ci/SKILL.md).
 - **Share data between components through a store.** Use
   [atmos-stores](../atmos-stores/SKILL.md).
+- **Configure the toolchain**, such as `dependencies.tools`, registries, or verification. Use
+  [atmos-toolchain](../atmos-toolchain/SKILL.md).
 
 ## Anti-Patterns
 
@@ -257,36 +283,36 @@ Push back if a user or another agent proposes one of these methods during migrat
 - **"Adopt the full multi-account organization hierarchy on day one."** This is false. Start
   with one stack file.
 - **"Wrap atmos commands in a Makefile, Justfile, or Taskfile forever."** This is false. A
-  wrapper is a good bridge while the user builds trust in Atmos. But it is not the final state.
-  Change each leaf target to a custom command. An ordinary Make or Just dependency chain (for
-  example, `deploy: build test`) stays a custom command with ordered steps or
-  `dependencies.commands` -- it does not need a workflow. A Taskfile's `deps:` is different: Task
-  runs `deps:` concurrently by default, so it maps directly onto `dependencies.commands` (also
-  concurrent by default) on the custom command -- reach for ordered steps instead only when the
-  user's dependency chain actually requires serial execution. Reserve workflows for fixed,
-  multi-step orchestration across more than one component, not for an ordinary target chain.
+  wrapper is a good bridge while the user builds trust in Atmos, but it is not the final state.
+  Change each leaf target to a custom command; a target chain usually stays a custom command too
+  (ordered steps or `dependencies.commands`, per the default-order rule above) -- not a workflow.
+  Reserve workflows for fixed, multi-step orchestration across more than one component.
+- **"Copy `aqua.yaml` packages into Atmos verbatim."** This is false. Atmos supports only part of
+  the Aqua registry schema. Check the Functional Gaps table in
+  [from-aqua.md](references/from-aqua.md) first.
+- **"Replace the whole Brewfile with Atmos toolchain."** This is false. Casks, `mas` entries, and
+  source-built formulae are out of scope. See
+  [from-homebrew-brewfile.md](references/from-homebrew-brewfile.md).
 
 ## Additional Resources
 
-- [References/from-native-terraform.md](references/from-native-terraform.md): steps for a plain
-  Terraform migration, matched to each shape.
-- [References/from-terraform-workspaces.md](references/from-terraform-workspaces.md): how to map
-  workspaces to stacks without losing state.
-- [References/remote-state-bridge.md](references/remote-state-bridge.md): the dummy-component and
-  abstract-component patterns. Use them to read state from Terraform that is not yet migrated, or
-  from an external repository.
-- [References/from-terramate.md](references/from-terramate.md): construct-by-construct mapping
-  from Terramate (`stack.tm.hcl`, globals, `generate_hcl`, `script{}`, tags/labels) to Atmos,
-  including the one remaining known gap (`.tmtriggers`).
-- [references/from-terragrunt.md](references/from-terragrunt.md) -- concept mapping and migration
-  workflow for classic Terragrunt and Terragrunt Stacks.
-- [References/from-makefile.md](references/from-makefile.md): steps for a Makefile, matched to
-  each shape.
-- [References/from-justfile.md](references/from-justfile.md): steps for a Justfile, matched to
-  each shape.
-- [References/from-taskfile.md](references/from-taskfile.md): steps for a Taskfile.yml (go-task)
-  file, matched to each shape.
-- [References/from-mise.md](references/from-mise.md) -- migrating tool versions, tasks, and env
-  vars from mise to the Atmos toolchain.
-- [References/from-aqua.md](references/from-aqua.md) -- migrating tool versions from Aqua CLI's
-  `aqua.yaml` to the Atmos toolchain.
+Every reference below includes a command-mapping table and shell-integration steps where
+applicable.
+
+| Reference | Covers |
+|---|---|
+| [from-native-terraform.md](references/from-native-terraform.md) | Plain Terraform migration, matched to each shape |
+| [from-terraform-workspaces.md](references/from-terraform-workspaces.md) | Mapping workspaces to stacks without losing state |
+| [remote-state-bridge.md](references/remote-state-bridge.md) | Dummy/abstract-component patterns for un-migrated or external Terraform state |
+| [from-terramate.md](references/from-terramate.md) | Construct-by-construct Terramate mapping (`.tmtriggers` is the one known gap) |
+| [from-terragrunt.md](references/from-terragrunt.md) | Concept mapping and migration workflow for classic Terragrunt and Terragrunt Stacks |
+| [from-makefile.md](references/from-makefile.md) | Makefile migration, matched to each shape |
+| [from-justfile.md](references/from-justfile.md) | Justfile migration, matched to each shape |
+| [from-taskfile.md](references/from-taskfile.md) | Taskfile.yml (go-task) migration, matched to each shape |
+| [from-asdf.md](references/from-asdf.md) | `.tool-versions`/asdf plugins to the Atmos toolchain |
+| [from-aqua.md](references/from-aqua.md) | `aqua.yaml` packages to the Atmos toolchain, plus the schema-gap table |
+| [from-tfenv.md](references/from-tfenv.md) | `.terraform-version`/`tfenv use` pins to the Atmos toolchain |
+| [from-tofuenv.md](references/from-tofuenv.md) | `.opentofu-version`/`tofuenv use` pins to the Atmos toolchain |
+| [from-tenv.md](references/from-tenv.md) | tenv's 5 version files (Terraform, OpenTofu, Terragrunt, Terramate, Atmos) to the Atmos toolchain |
+| [from-homebrew-brewfile.md](references/from-homebrew-brewfile.md) | Brewfile CLI tools to the Atmos toolchain, plus the partial-scope rules |
+| [from-mise.md](references/from-mise.md) | mise tool versions, tasks, and env vars to the Atmos toolchain |
