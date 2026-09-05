@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 )
 
@@ -568,21 +569,145 @@ func TestShouldOfferUpdate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			offer, baseRef := shouldOfferUpdate(tt.err, tt.opts)
+			// A fresh, never-written directory: shouldOfferUpdate must resolve
+			// against the *actual* target passed in, not any stale
+			// opts.targetDir (see TestShouldOfferUpdate_UsesActualTargetDir for
+			// the regression this guards against).
+			offer, baseRef, err := shouldOfferUpdate(tt.err, tt.opts, t.TempDir())
+			require.NoError(t, err)
 			assert.Equal(t, tt.wantOffer, offer)
 			assert.Equal(t, tt.wantBaseRef, baseRef)
 		})
 	}
 }
 
-// TestDefaultBaseRef pins the fix for a real bug: `atmos init aws/app <dir>
-// --update` with no --base-ref silently set up no git storage at all
-// (ExecuteWithDelimiters only calls SetupGitStorage when baseRef is
-// non-empty), so every file failed with an opaque "three-way merge failed"
-// even on a completely unmodified, freshly re-run directory.
+// TestShouldOfferUpdate_UsesActualTargetDir reproduces the interactive
+// retry-offer half of defaultBaseRef's bug: opts.targetDir is the raw
+// positional CLI arg, which is "" when the user ran `atmos init --update`
+// with no target and the interactive flow picked the real directory itself.
+// It must resolve the retry base ref against the caller-supplied targetDir
+// parameter (the real, resolved directory), not opts.targetDir.
+func TestShouldOfferUpdate_UsesActualTargetDir(t *testing.T) {
+	dir := t.TempDir()
+	metadata := storage.NewInitMetadata("demo", "1.0.0", "embedded", "pinned-at-real-dir", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Save(metadata))
+
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	// opts.targetDir left empty on purpose: it mirrors the raw positional arg
+	// in the no-target interactive scenario, and must be ignored in favor of
+	// the targetDir parameter below.
+	opts := &initOptions{interactive: true}
+
+	offer, baseRef, err := shouldOfferUpdate(notEmptyErr, opts, dir)
+
+	require.NoError(t, err)
+	assert.True(t, offer)
+	assert.Equal(t, "pinned-at-real-dir", baseRef)
+}
+
+// TestShouldOfferUpdate_PropagatesMetadataLoadError verifies a
+// corrupt/unreadable metadata file surfaces as an error from
+// shouldOfferUpdate rather than silently resolving to "HEAD".
+func TestShouldOfferUpdate_PropagatesMetadataLoadError(t *testing.T) {
+	dir := t.TempDir()
+	metadataPath := storage.InitMetadataPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
+	require.NoError(t, os.WriteFile(metadataPath, []byte("not: valid: yaml: ["), 0o600))
+
+	notEmptyErr := errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).Err()
+	opts := &initOptions{interactive: true}
+
+	offer, baseRef, err := shouldOfferUpdate(notEmptyErr, opts, dir)
+
+	require.Error(t, err)
+	assert.False(t, offer)
+	assert.Empty(t, baseRef)
+}
+
+// TestDefaultBaseRef pins two behaviors:
+//   - An explicit --base-ref always wins, regardless of targetDir.
+//   - With no --base-ref and no pinned metadata at targetDir, it still falls
+//     back to "HEAD" -- the original fix for --update with no --base-ref
+//     silently setting up no git storage at all (ExecuteWithDelimiters only
+//     calls SetupGitStorage when baseRef is non-empty), which failed every
+//     file with an opaque "three-way merge failed" even on a completely
+//     unmodified, freshly re-run directory.
 func TestDefaultBaseRef(t *testing.T) {
-	assert.Equal(t, "HEAD", defaultBaseRef(""))
-	assert.Equal(t, "v1.2.3", defaultBaseRef("v1.2.3"))
+	headRef, err := defaultBaseRef("", t.TempDir())
+	require.NoError(t, err)
+	assert.Equal(t, "HEAD", headRef)
+
+	explicitRef, err := defaultBaseRef("v1.2.3", t.TempDir())
+	require.NoError(t, err)
+	assert.Equal(t, "v1.2.3", explicitRef)
+}
+
+// TestDefaultBaseRef_PrefersPinnedMetadata reproduces the fix for the bug
+// where `atmos init --update` with no --base-ref always diffed against live
+// HEAD, so a customization the user committed after generation became
+// indistinguishable from the unmodified base -- the merge then silently let
+// the freshly rendered template win with no conflict, discarding the user's
+// edit. When a pinned base ref exists (written once, at initial `--git`
+// generation -- see gen.PinInitialBaseRefForInit), defaultBaseRef must
+// prefer it over live HEAD.
+func TestDefaultBaseRef_PrefersPinnedMetadata(t *testing.T) {
+	dir := t.TempDir()
+	metadata := storage.NewInitMetadata("demo", "1.0.0", "embedded", "abc123pinned", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Save(metadata))
+
+	pinnedRef, err := defaultBaseRef("", dir)
+	require.NoError(t, err)
+	assert.Equal(t, "abc123pinned", pinnedRef)
+
+	// An explicit --base-ref still overrides the pin.
+	explicitRef, err := defaultBaseRef("v9.9.9", dir)
+	require.NoError(t, err)
+	assert.Equal(t, "v9.9.9", explicitRef)
+}
+
+// TestDefaultBaseRef_PropagatesUnreadableMetadataError reproduces the bug
+// where any metadata.Load() error (not just "file doesn't exist") was
+// silently swallowed and defaultBaseRef fell back to "HEAD" regardless --
+// defeating the pin fix, since a corrupt pin file would silently
+// re-introduce the original silent-overwrite bug (diffing against live HEAD)
+// instead of surfacing the problem. The storage.MetadataStorage.Load method
+// returns (nil, nil) only when the file is genuinely absent (os.IsNotExist);
+// any other failure (corrupt YAML here) must propagate as an error.
+func TestDefaultBaseRef_PropagatesUnreadableMetadataError(t *testing.T) {
+	dir := t.TempDir()
+	metadataPath := storage.InitMetadataPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
+	require.NoError(t, os.WriteFile(metadataPath, []byte("not: valid: yaml: ["), 0o600))
+
+	resolved, err := defaultBaseRef("", dir)
+
+	require.Error(t, err)
+	assert.Empty(t, resolved)
+	assert.NotEqual(t, "HEAD", resolved, "a corrupt metadata file must not silently fall back to HEAD")
+}
+
+// TestMaybeInitGeneratedProjectGit_PinsInitialBaseRef verifies the fix for
+// atmos init --update's silent-data-loss bug: --git must pin the initial
+// commit's SHA at .atmos/init/metadata.yaml, the same way cmd/scaffold's
+// maybeInitGeneratedGitRepository already does, so defaultBaseRef has a real
+// pin to prefer over live HEAD once the user commits a customization.
+func TestMaybeInitGeneratedProjectGit_PinsInitialBaseRef(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello"), 0o600))
+
+	cfg := &templates.Configuration{Name: "demo", Version: "1.0.0", Source: "embedded"}
+	err := maybeInitGeneratedProjectGit(dir, cfg, &initOptions{git: true})
+	require.NoError(t, err)
+
+	metadata, err := storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Load()
+	require.NoError(t, err)
+	require.NotNil(t, metadata)
+	assert.NotEmpty(t, metadata.BaseRef)
+	assert.Equal(t, "demo", metadata.Template.Name)
+
+	resolved, err := defaultBaseRef("", dir)
+	require.NoError(t, err)
+	assert.Equal(t, metadata.BaseRef, resolved, "defaultBaseRef must prefer the pin just written")
 }
 
 // TestRunInitExecution_NonEmptyTargetDir_NonInteractive_ReturnsError covers

@@ -255,7 +255,7 @@ func init() {
 		flags.WithBoolFlag("no-git", "", false, "Do not initialize a git repository"),
 		flags.WithStringFlag("merge-driver", "", "auto", "Merge driver for --update: auto (YAML-aware for .yaml/.yml, text otherwise, default), text (force line-oriented text merge for every file)"),
 		flags.WithValidValues("merge-driver", "auto", "text"),
-		flags.WithStringFlag("merge-strategy", "", "manual", "Conflict resolution strategy for --update: manual (surface conflicts, default), ours (keep your version), theirs (use the template's version)"),
+		flags.WithStringFlag("merge-strategy", "", "", "Conflict resolution strategy for --update: manual (surface conflicts, default; theirs if --force is set), ours (keep your version), theirs (use the template's version)"),
 		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
 		// Skip scaffold hooks at runtime, mirroring `terraform`'s --skip-hooks
 		// (see cmd/terraform/flags.go): --skip-hooks (no value) skips all
@@ -357,7 +357,7 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 		return err
 	}
 
-	conflictStrategy, err := merge.ParseConflictStrategy(opts.mergeStrategy)
+	conflictStrategy, err := merge.ResolveConflictStrategy(opts.mergeStrategy, opts.force, opts.update)
 	if err != nil {
 		return err
 	}
@@ -673,40 +673,13 @@ func shouldOfferScaffoldUpdate(err error, opts *scaffoldGenerateOptions, targetD
 	return true, resolvedBaseRef, nil
 }
 
-// defaultBaseRef fills in the 3-way-merge base ref when the caller didn't
-// supply --base-ref explicitly (which always wins when set). It prefers the
-// ref pinned at targetDir by gen.PinInitialBaseRef -- the commit that
-// actually contains this project's pristine generated content -- over live
-// HEAD. Without a pin, --update always diffs against whatever HEAD happens
-// to be by the time it runs; once a customization is committed, that makes
-// it indistinguishable from the unmodified base, and the merge silently lets
-// the freshly rendered template overwrite it. Falling back to plain "HEAD"
-// (pre-fix scaffolds with no pin, or a non-git target) still fixes the
-// original bug this guarded against: with no baseRef at all, --update
-// silently sets up no git storage (ExecuteWithDelimiters only calls
-// SetupGitStorage when baseRef is non-empty), and every file fails with an
-// opaque "three-way merge failed".
-//
-// A genuinely unreadable metadata file (corrupt YAML, permission denied --
-// anything other than the file simply not existing yet) is surfaced as an
-// error instead of silently falling back to "HEAD": swallowing it would
-// defeat the whole point of the pin, quietly re-introducing the original
-// silent-overwrite bug the very first time the pin file itself is damaged.
-// The storage.MetadataStorage.Load method returns (nil, nil) specifically
-// when the file is absent, so that case alone still falls through to the
-// HEAD/pin logic below.
+// defaultBaseRef resolves scaffold generate's --update base ref against this
+// target's own pinned metadata (.atmos/scaffold/metadata.yaml, written by
+// gen.PinInitialBaseRef). See gen.ResolveDefaultBaseRef's doc for the full
+// rationale -- that function is shared with cmd/init's equivalent so the two
+// commands' base-ref resolution can't drift apart again.
 func defaultBaseRef(baseRef, targetDir string) (string, error) {
-	if baseRef != "" {
-		return baseRef, nil
-	}
-	metadata, err := storage.NewMetadataStorage(storage.ScaffoldMetadataPath(targetDir)).Load()
-	if err != nil {
-		return "", fmt.Errorf("resolve default --base-ref from %s: %w", targetDir, err)
-	}
-	if metadata != nil && metadata.BaseRef != "" {
-		return metadata.BaseRef, nil
-	}
-	return "HEAD", nil
+	return gen.ResolveDefaultBaseRef(baseRef, targetDir, storage.ScaffoldMetadataPath(targetDir))
 }
 
 func maybeInitGeneratedGitRepository(targetDir string, selectedConfig *templates.Configuration, opts *scaffoldGenerateOptions) error {
