@@ -1195,6 +1195,121 @@ settings:
 	})
 }
 
+// TestTerraformPlanCIBeforeHandler mirrors TestTerraformPlanCIResultHandler
+// for the before-side handler: it must be safe to call on a nil/incomplete
+// handler, must run the before-aggregate CI hook wrapper for a valid
+// invocation, and must surface both config-init and RunCIHooks errors.
+func TestTerraformPlanCIBeforeHandler(t *testing.T) {
+	t.Run("nil and incomplete handlers are no-ops", func(t *testing.T) {
+		var nilHandler *terraformPlanCIBeforeHandler
+		require.NoError(t, nilHandler.HandleTerraformPlanCIBefore(schema.TerraformPlanCIPendingSet{}))
+		require.NoError(t, (&terraformPlanCIBeforeHandler{}).HandleTerraformPlanCIBefore(schema.TerraformPlanCIPendingSet{}))
+		require.NoError(t, (&terraformPlanCIBeforeHandler{cmd: newHookTestCmd()}).HandleTerraformPlanCIBefore(schema.TerraformPlanCIPendingSet{}))
+		require.NoError(t, (&terraformPlanCIBeforeHandler{info: &schema.ConfigAndStacksInfo{}}).HandleTerraformPlanCIBefore(schema.TerraformPlanCIPendingSet{}))
+	})
+
+	t.Run("runs before-aggregate CI hook wrapper", func(t *testing.T) {
+		t.Chdir("../../examples/demo-stacks")
+		resetViperCI(t)
+		cmd := newHookTestCmd()
+		require.NoError(t, cmd.Flags().Set("ci", "true"))
+		info := &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			Component:        "myapp",
+			ComponentFromArg: "myapp",
+			ComponentType:    "terraform",
+		}
+
+		handler := &terraformPlanCIBeforeHandler{
+			cmd:     cmd,
+			info:    info,
+			command: "apply",
+		}
+
+		err := handler.HandleTerraformPlanCIBefore(schema.TerraformPlanCIPendingSet{Nodes: []schema.TerraformPlanCIPendingNode{
+			{
+				NodeID:    "myapp-dev",
+				Stack:     "dev",
+				Component: "myapp",
+			},
+		}})
+		require.NoError(t, err)
+	})
+
+	t.Run("falls back to pending.Command and info.SubCommand when command is empty", func(t *testing.T) {
+		// Covers the two `if command == "" { command = ... }` fallback branches:
+		// an empty handler.command falls back to pending.Command first, and an
+		// empty pending.Command falls back to handler.info.SubCommand.
+		t.Chdir("../../examples/demo-stacks")
+		resetViperCI(t)
+		cmd := newHookTestCmd()
+		require.NoError(t, cmd.Flags().Set("ci", "true"))
+
+		info := &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			Component:        "myapp",
+			ComponentFromArg: "myapp",
+			ComponentType:    "terraform",
+			SubCommand:       "destroy",
+		}
+		handler := &terraformPlanCIBeforeHandler{cmd: cmd, info: info}
+
+		err := handler.HandleTerraformPlanCIBefore(schema.TerraformPlanCIPendingSet{})
+		require.NoError(t, err)
+	})
+
+	t.Run("returns config init errors", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		require.NoError(t, os.WriteFile("atmos.yaml", []byte("invalid: yaml: content:\n  - this is: [broken\n"), 0o644))
+		handler := &terraformPlanCIBeforeHandler{
+			cmd:  newHookTestCmd(),
+			info: &schema.ConfigAndStacksInfo{},
+		}
+
+		err := handler.HandleTerraformPlanCIBefore(schema.TerraformPlanCIPendingSet{})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInitializeCLIConfig)
+	})
+
+	t.Run("returns RunCIHooks errors", func(t *testing.T) {
+		// Same experimental-functions-disabled trick as
+		// TestTerraformPlanCIResultHandler's "returns RunCIHooks errors":
+		// a valid project (InitCliConfig succeeds) with ci.enabled=true and
+		// settings.experimental=disable makes RunCIHooks itself fail.
+		tempDir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "stacks", "test.yaml"), []byte("vars:\n  stage: test\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(`base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+schemas: {}
+ci:
+  enabled: true
+settings:
+  experimental: disable
+`), 0o644))
+		t.Chdir(tempDir)
+
+		cmd := newHookTestCmd()
+		require.NoError(t, cmd.Flags().Set("ci", "true"))
+		handler := &terraformPlanCIBeforeHandler{
+			cmd:     cmd,
+			info:    &schema.ConfigAndStacksInfo{},
+			command: "apply",
+		}
+
+		err := handler.HandleTerraformPlanCIBefore(schema.TerraformPlanCIPendingSet{})
+		require.Error(t, err)
+	})
+}
+
 // TestInteractiveStackSelection_PersistsToCobraFlag verifies that when
 // handleInteractiveComponentStackSelection fills in the stack from the
 // interactive prompt, the value is persisted to the Cobra flag set so

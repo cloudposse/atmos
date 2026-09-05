@@ -543,6 +543,63 @@ func TestOnBeforeTerraformAggregateSkipsEmptyNodes(t *testing.T) {
 	assert.Empty(t, mp.checkRunCalls)
 }
 
+// TestOnBeforeTerraformAggregateAcceptsPointerAggregate covers the
+// *schema.TerraformPlanCIPendingSet branch of normalizeTerraformPlanPending —
+// distinct from the value-type branch every other before-aggregate test uses.
+// RunCIHooksOptions.Aggregate is passed through hooks.RunCIHooks as `any`,
+// and callers are free to hand it a pointer, so both forms must be handled alike.
+func TestOnBeforeTerraformAggregateAcceptsPointerAggregate(t *testing.T) {
+	p := &Plugin{}
+	ctx := newBeforeAggregateHookContext()
+	ctx.Aggregate = &schema.TerraformPlanCIPendingSet{
+		Command: "plan",
+		Nodes: []schema.TerraformPlanCIPendingNode{
+			{NodeID: "vpc-dev", Stack: "dev", Component: "vpc"},
+		},
+	}
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onBeforeTerraformAggregate(ctx)
+	require.NoError(t, err)
+	require.Len(t, mp.checkRunCalls, 1)
+	assert.Equal(t, "atmos/plan/dev/vpc", mp.checkRunCalls[0].Name)
+}
+
+// TestNormalizeTerraformPlanPending_NilPointer covers the nil
+// *schema.TerraformPlanCIPendingSet branch directly: a nil pointer must be
+// treated as "no aggregate data" (ok=false), never dereferenced.
+func TestNormalizeTerraformPlanPending_NilPointer(t *testing.T) {
+	var nilSet *schema.TerraformPlanCIPendingSet
+
+	pending, ok := normalizeTerraformPlanPending(nilSet)
+
+	assert.False(t, ok)
+	assert.Equal(t, schema.TerraformPlanCIPendingSet{}, pending)
+}
+
+// TestCreateAggregateCheckRuns_LogsAndContinuesOnError verifies that a
+// per-component failure in createAggregateCheckRuns (here, an unresolved
+// node with no stack/component, which trips requireResolvedComponent) is
+// logged and skipped rather than aborting the remaining nodes — matching
+// updateAggregateCheckRuns' existing best-effort fan-out behavior.
+func TestCreateAggregateCheckRuns_LogsAndContinuesOnError(t *testing.T) {
+	p := &Plugin{}
+	ctx := newBeforeAggregateHookContext()
+	mp := ctx.Provider.(*mockProvider)
+
+	nodes := []schema.TerraformPlanCIPendingNode{
+		{NodeID: "broken", Stack: "", Component: ""},
+		{NodeID: "vpc-dev", Stack: "dev", Component: "vpc"},
+	}
+
+	p.createAggregateCheckRuns(ctx, nodes)
+
+	// The broken node must not produce a check run, but the valid node
+	// after it must still be processed.
+	require.Len(t, mp.checkRunCalls, 1)
+	assert.Equal(t, "atmos/plan/dev/vpc", mp.checkRunCalls[0].Name)
+}
+
 func TestOnAfterTerraformAggregateWriterErrorsAreWarnOnly(t *testing.T) {
 	p := &Plugin{}
 	ctx := newAggregateHookContext()

@@ -2319,6 +2319,32 @@ func TestStartTerraformCIBeforeGuards(t *testing.T) {
 	require.Equal(t, 1, failingHandler.calls)
 }
 
+// TestResolvedTerraformCIPendingNodesSortOrder exercises the full three-key
+// sort comparator in resolvedTerraformCIPendingNodes directly: nodes across
+// different stacks (Stack tiebreak), nodes in the same stack with different
+// components (Component tiebreak — already covered indirectly elsewhere),
+// and nodes with the same stack AND component but different NodeIDs
+// (NodeID tiebreak, e.g. a component targeted by two different workspaces).
+func TestResolvedTerraformCIPendingNodesSortOrder(t *testing.T) {
+	graph := &dependency.Graph{Nodes: map[string]*dependency.Node{
+		"vpc-zzz":  {ID: "vpc-zzz", Stack: "zzz", Component: "vpc"},
+		"vpc-aaa":  {ID: "vpc-aaa", Stack: "aaa", Component: "vpc"},
+		"vpc-aaa2": {ID: "vpc-aaa2", Stack: "aaa", Component: "vpc"},
+	}}
+
+	nodes := resolvedTerraformCIPendingNodes(graph)
+
+	require.Len(t, nodes, 3)
+	// Stack "aaa" sorts before "zzz" (Stack tiebreak, lines 1594-1596).
+	require.Equal(t, "aaa", nodes[0].Stack)
+	require.Equal(t, "aaa", nodes[1].Stack)
+	require.Equal(t, "zzz", nodes[2].Stack)
+	// Within the same stack+component, NodeID breaks the tie
+	// (lines 1600, reached only once Stack and Component are both equal).
+	require.Equal(t, "vpc-aaa", nodes[0].NodeID)
+	require.Equal(t, "vpc-aaa2", nodes[1].NodeID)
+}
+
 // TestExecuteTerraformResolvesAggregateEvenOnLateFailure proves the invariant
 // this fix depends on: once startTerraformCIBefore creates real pending
 // statuses up front, the after-aggregate handler must be guaranteed to run

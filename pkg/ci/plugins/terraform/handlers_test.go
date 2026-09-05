@@ -684,6 +684,85 @@ func TestUpdateCheckRun_SkipsWithoutComponent(t *testing.T) {
 	assert.Empty(t, mp.checkRunCalls)
 }
 
+// TestCreateCheckRun_InvalidStatusContext covers the FormatStatusContext
+// error branch added to createCheckRun: requireResolvedComponent passes
+// (Stack/ComponentFromArg are set), but an empty ctx.Command still makes
+// FormatStatusContext reject the context as incomplete, and that error must
+// be wrapped in ErrCICheckRunMissingComponent without ever calling the
+// provider.
+func TestCreateCheckRun_InvalidStatusContext(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{},
+		Provider: mp,
+		Command:  "",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+	}
+
+	err := p.createCheckRun(ctx)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCICheckRunMissingComponent)
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+// TestUpdateCheckRun_InvalidStatusContext mirrors
+// TestCreateCheckRun_InvalidStatusContext for the after-side update path.
+func TestUpdateCheckRun_InvalidStatusContext(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
+		},
+		Provider: mp,
+		Command:  "",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+	}
+
+	err := p.updateCheckRun(ctx, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCICheckRunMissingComponent)
+	assert.Empty(t, mp.updateRunCalls)
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+// TestCreatePerOperationStatuses_SkipsInvalidStatusContext covers the
+// per-operation FormatStatusContext error branch: an empty ctx.Command makes
+// the per-operation status context invalid, so that operation is skipped
+// (logged, not created) instead of calling the provider with a malformed name.
+func TestCreatePerOperationStatuses_SkipsInvalidStatusContext(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{},
+		Provider: mp,
+		Command:  "",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+	}
+	result := &plugin.OutputResult{
+		Data: &plugin.TerraformOutputData{
+			ResourceCounts: plugin.ResourceCounts{Create: 1},
+		},
+	}
+
+	p.createPerOperationStatuses(ctx, result, "atmos", schema.CIChecksStatusesConfig{})
+
+	assert.Empty(t, mp.checkRunCalls, "invalid status context must skip the per-operation check run")
+}
+
 func TestOnAfterApply_WritesOutputs(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()
