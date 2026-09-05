@@ -2148,7 +2148,7 @@ jobs:
     # endpoint, which is gated purely by this job's own id-token permission.
     permissions:
       id-token: write
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@3911c663309ecdda30d8b8fcbec7bde19d1d6ddb # main
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@4e05ff6c113efa9322288cedbc7c8950c22616cc # main
     with:
       publish: false
       format: binary
