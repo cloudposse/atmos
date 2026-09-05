@@ -93,6 +93,19 @@ func setPathsFormat(t *testing.T, format string) {
 	t.Cleanup(func() { _ = cachePathsCmd.Flags().Set("format", "github") })
 }
 
+func TestInitTestIO_ClearsAmbientGithubEnv(t *testing.T) {
+	// Simulate this package's own test binary running inside real GitHub
+	// Actions CI: GITHUB_ENV is already set, pointing at the real job's
+	// environment file, before any test-specific setup runs.
+	ambientEnvPath := filepath.Join(t.TempDir(), "real_job_github_env")
+	t.Setenv("GITHUB_ENV", ambientEnvPath)
+
+	initTestIO(t)
+
+	assert.Empty(t, os.Getenv("GITHUB_ENV"),
+		"initTestIO must clear an ambient GITHUB_ENV so a github-format test can't append its fixture data to the real job's environment file")
+}
+
 func TestRunCachePaths_GitHubWritesOutput(t *testing.T) {
 	initTestIO(t)
 	out := filepath.Join(t.TempDir(), "gh_output")
@@ -246,4 +259,52 @@ func TestRunCachePaths_ResolveError(t *testing.T) {
 func TestEmitCachePaths_UnknownFormat(t *testing.T) {
 	err := emitCachePaths("nope", &cachepkg.Config{Root: "/r", Key: "k"}, []string{"/r"}, nil)
 	require.ErrorIs(t, err, errUtils.ErrInvalidFormat)
+}
+
+func TestRunCachePaths_GitHubWritesEnvWhenSet(t *testing.T) {
+	initTestIO(t)
+	root := filepath.FromSlash("/c/root")
+	out := filepath.Join(t.TempDir(), "gh_output")
+	envOut := filepath.Join(t.TempDir(), "gh_env")
+	t.Setenv("GITHUB_OUTPUT", out)
+	t.Setenv("GITHUB_ENV", envOut)
+	stubResolveCacheConfig(t, &cachepkg.Config{
+		Root: root, Key: "atmos-k", Includes: []string{"a"}, RestoreKeys: []string{"atmos-"},
+	})
+	setPathsFormat(t, "github")
+
+	require.NoError(t, runCachePaths(cachePathsCmd, nil))
+
+	b, err := os.ReadFile(envOut)
+	require.NoError(t, err)
+	s := string(b)
+	assert.Contains(t, s, "ATMOS_CACHE_KEY=atmos-k")
+	assert.Contains(t, s, "ATMOS_CACHE_RESTORE_KEYS=atmos-")
+	assert.Contains(t, s, "ATMOS_CACHE_PATH<<")
+	assert.Contains(t, s, filepath.ToSlash(filepath.Join(root, "a", "**")))
+}
+
+func TestRunCachePaths_GitHubSkipsEnvWhenUnset(t *testing.T) {
+	initTestIO(t)
+	out := filepath.Join(t.TempDir(), "gh_output")
+	t.Setenv("GITHUB_OUTPUT", out)
+	t.Setenv("GITHUB_ENV", "")
+	stubResolveCacheConfig(t, &cachepkg.Config{
+		Root: filepath.FromSlash("/c/root"), Key: "atmos-k", RestoreKeys: []string{"atmos-"},
+	})
+	setPathsFormat(t, "github")
+
+	require.NoError(t, runCachePaths(cachePathsCmd, nil))
+	// No GITHUB_ENV path was set, so emitGitHubCachePaths must not attempt to
+	// write one -- nothing to assert on beyond "this didn't error."
+}
+
+func TestEmitGitHubCachePaths_EmptyKey(t *testing.T) {
+	err := emitGitHubCachePaths(&cachepkg.Config{Root: "/r"}, []string{"/r"}, nil)
+	require.ErrorIs(t, err, errUtils.ErrCacheKeyRequired)
+}
+
+func TestEmitGitHubCachePaths_EmptyPaths(t *testing.T) {
+	err := emitGitHubCachePaths(&cachepkg.Config{Root: "/r", Key: "k"}, nil, nil)
+	require.ErrorIs(t, err, errUtils.ErrCachePathsRequired)
 }
