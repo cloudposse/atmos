@@ -112,6 +112,10 @@ type S3API interface {
 // It's a map[string]S3API.
 var s3ClientCache sync.Map
 
+// getCachedS3Client returns the S3 client for a backend, building it on first use and
+// caching it under a key derived from the region, the assume-role ARN, the Atmos auth
+// identity, and every env overlay key that changes which credentials or endpoint the
+// client resolves, so distinct identities never alias to the same client.
 func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext, envOverlay map[string]string) (S3API, error) {
 	region := GetBackendAttribute(backend, "region")
 	roleArn := GetS3BackendAssumeRoleArn(backend)
