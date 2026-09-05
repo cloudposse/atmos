@@ -184,10 +184,6 @@ jobs:
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         run: echo "Building on ${{ matrix.os }}"
 
-      - name: Add GNU tar to PATH (significantly faster than windows tar)
-        if: matrix.target == 'windows' && ! github.event.pull_request.draft
-        shell: pwsh
-        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -205,20 +201,11 @@ jobs:
         if: matrix.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
 
+      # Pinned setup-go with caching, plus Go's caches relocated to the fast
+      # work disk on Windows (see the action for the measurements).
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          go-version-file: "go.mod"
-          # GitHub Actions cache scoping already isolates this: a pull_request
-          # run gets read/write access only to its own branch's cache scope,
-          # gets read-only access to the default branch's cache, and cannot
-          # restore caches from sibling PRs or write into the default branch's
-          # scope at all (only push/workflow_dispatch/schedule etc. can). So
-          # there's no cross-PR or PR->main poisoning path here to guard
-          # against by disabling this.
-          cache: true
+        uses: ./.github/actions/setup-go-cache
         id: go
 
       - name: Set up Atmos bootstrap
@@ -429,11 +416,6 @@ jobs:
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
 
-      - name: Add GNU tar to PATH (significantly faster than windows tar)
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        shell: pwsh
-        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
-
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/setup-atmos-install
@@ -483,12 +465,8 @@ jobs:
           atmos version
 
       - name: Set up Go
-        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        with:
-          go-version-file: "go.mod"
-          cache: true
+        uses: ./.github/actions/setup-go-cache
         id: go
 
       - name: Get dependencies
@@ -675,11 +653,6 @@ jobs:
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
 
-      - name: Add GNU tar to PATH (significantly faster than windows tar)
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        shell: pwsh
-        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
-
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/setup-atmos-install
@@ -748,12 +721,8 @@ jobs:
           atmos version
 
       - name: Set up Go
-        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        with:
-          go-version-file: "go.mod"
-          cache: true
+        uses: ./.github/actions/setup-go-cache
         id: go
 
       - name: Get dependencies
@@ -845,10 +814,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          go-version-file: "go.mod"
-          cache: true
+        uses: ./.github/actions/setup-go-cache
 
       - name: Run magefiles unit tests with coverage
         run: go test -tags=mage -race -coverprofile=magefiles-coverage.out ./magefiles/...
@@ -1383,11 +1349,7 @@ jobs:
           target: linux
 
       - name: Set up Go
-        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          go-version-file: "go.mod"
-          cache: true
+        uses: ./.github/actions/setup-go-cache
 
       - name: Install OpenTofu with Atmos toolchain
         env:
@@ -1665,11 +1627,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
-        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          cache: true
-          go-version-file: "go.mod"
+        uses: ./.github/actions/setup-go-cache
 
       - name: Download Go dependencies
         shell: bash
@@ -1818,11 +1776,6 @@ jobs:
       - name: Guard DNS against the harden-runner post-step race
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
-
-      - name: Add GNU tar to flavor.target (significantly faster than windows tar)
-        if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
-        shell: pwsh
-        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Set up Atmos (install build artifact for ${{ matrix.flavor.target }})
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -2117,9 +2070,7 @@ jobs:
           target: linux
 
       - name: Set up Go for the Buildx cache integration test
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          go-version-file: "go.mod"
+        uses: ./.github/actions/setup-go-cache
 
       - name: Verify remote Buildx registry cache
         env:

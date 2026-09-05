@@ -66,8 +66,8 @@ warmup's writer role.
 
 ## Addendum (2026-09-04): the save silently did nothing when the action was nested
 
-Calling `./actions/cache` from inside another composite action (`.github/actions/ci-toolchain`, PR
-#3041) showed the post-step save running with `Input required and not supplied: path` and storing
+Calling `./actions/cache` from inside another composite action (`.github/actions/ci-toolchain`, PR `#3041`)
+showed the post-step save running with `Input required and not supplied: path` and storing
 nothing: a post step of an action nested inside a composite cannot see the composite's
 `steps.*.outputs` (actions/runner#2800), so `path: ${{ steps.meta.outputs.path }}` evaluated
 empty at save time. Direct use from a job never hit this. The action now also exports
