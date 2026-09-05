@@ -1428,12 +1428,15 @@ jobs:
             get.helm.sh:443
             ghcr.io:443
             github.com:443
+            kubernetes.github.io:443
             livepatch.canonical.com:443
             mirror.gcr.io:443
             pkg-containers.githubusercontent.com:443
             production.cloudfront.docker.com:443
             raw.githubusercontent.com:443
             registry-1.docker.io:443
+            registry.k8s.io:443
+            *.pkg.dev:443
             rekor.sigstore.dev:443
             release-assets.githubusercontent.com:443
             repo.broadcom.com:443
