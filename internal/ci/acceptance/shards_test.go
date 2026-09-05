@@ -218,7 +218,11 @@ func TestSleepWithContext_ReturnsAfterDuration(t *testing.T) {
 }
 
 func TestShardResultsParams_Polling(t *testing.T) {
-	customWait := func(context.Context, time.Duration) error { return nil }
+	customWaitCalled := false
+	customWait := func(context.Context, time.Duration) error {
+		customWaitCalled = true
+		return nil
+	}
 
 	tests := []struct {
 		name         string
@@ -240,6 +244,20 @@ func TestShardResultsParams_Polling(t *testing.T) {
 			wantInterval: DefaultShardPollInterval,
 		},
 		{
+			// Only Polls is invalid: proves the two defaults apply
+			// independently rather than as an all-or-nothing pair.
+			name:         "invalid polls preserve explicit interval",
+			params:       ShardResultsParams{Polls: 0, Interval: time.Second},
+			wantPolls:    DefaultShardPolls,
+			wantInterval: time.Second,
+		},
+		{
+			name:         "invalid interval preserves explicit polls",
+			params:       ShardResultsParams{Polls: 3, Interval: 0},
+			wantPolls:    3,
+			wantInterval: DefaultShardPollInterval,
+		},
+		{
 			name:         "explicit values are kept as-is",
 			params:       ShardResultsParams{Polls: 3, Interval: time.Millisecond, Wait: customWait},
 			wantPolls:    3,
@@ -255,7 +273,9 @@ func TestShardResultsParams_Polling(t *testing.T) {
 			assert.Equal(t, tt.wantInterval, interval)
 			require.NotNil(t, wait)
 			if tt.wantCustom {
+				customWaitCalled = false
 				assert.NoError(t, wait(context.Background(), 0))
+				assert.True(t, customWaitCalled, "polling() must return the injected Wait function, not sleepWithContext")
 			}
 		})
 	}
