@@ -55,7 +55,7 @@
     "marked": "^15.0.4",
     "node-fetch": "^3.3.2",
     "posthog-docusaurus": "^2.0.2",
-    "posthog-js": "^1.409.5",
+    "posthog-js": "^1.414.0",
     "prism-react-renderer": "^2.4.1",
     "raw-loader": "^4.0.2",
     "react": "^18.3.1",
