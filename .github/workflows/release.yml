@@ -1,0 +1,120 @@
+name: Release
+
+# Drafts (and, once shared-auto-release.yml's `publish` gate says so, cuts)
+# the next release, then condenses its notes with an LLM. Split out of
+# test.yml so a release-drafter or summarization hiccup shows up here, not as
+# a "Tests" failure on main - the two have nothing to do with each other, and
+# conflating them made a release-notes-only incident look like a test
+# regression (see docs/fixes). Triggered by workflow_run instead of push so
+# it only ever runs after the full Tests suite has actually finished and
+# passed, without hand-maintaining a `needs: [...]` list of every job in
+# test.yml's matrix (the previous inline `release:` job had to list all
+# eleven by name).
+
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
+
+permissions: {}
+
+# The single draft release is a shared, mutable resource: summarize-notes
+# reads it, then writes it back. Two overlapping runs (two Tests runs
+# finishing close together) would race on that read-modify-write and one
+# run's rewrite could clobber the other's. A release-wide group serializes
+# runs instead; cancel-in-progress stays false so a run mid-write is never
+# torn down, it just makes the next run wait its turn.
+concurrency:
+  group: release-notes
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    name: Draft release
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push'
+    # Workflow-level default above is empty. id-token: write is needed for
+    # cosign's keyless OIDC signing (in shared-go-auto-release.yml's
+    # goreleaser job, invoked below); contents: read is needed because a
+    # job-level permissions: block replaces the workflow-level default
+    # entirely rather than merging with it, and the pinned commit below
+    # declares contents: read at its own top level - an omitted scope here
+    # means `none`, not inherited, so GitHub rejects the whole run at parse
+    # time without it (see docs/fixes).
+    permissions:
+      id-token: write
+      contents: read
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@da6de3218cc965251e38d84f6addd37e7ddde2e6 # main
+    with:
+      publish: false
+      format: binary
+      runs-on: '["runs-on=${{github.run_id}}", "runner=large", "tag=atmos","extras=s3-cache", "private=false"]'
+    # `secrets: inherit`, not an explicit map: shared-go-auto-release.yml doesn't declare a
+    # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
+    # (observed as a startup_failure -- "likely failed because of a workflow file issue" -- with
+    # zero jobs ever created, on both this workflow and feature-release.yml after an earlier
+    # attempt to narrow this to an explicit list). Same accepted pattern as build.yml,
+    # feature-release.yml and nightlybuilds.yml's calls to this same reusable workflow.
+    # nosemgrep: yaml.github-actions.security.secrets-inherit.secrets-inherit
+    secrets: inherit
+
+  summarize-notes:
+    name: Rewrite release notes with condensed PR summaries
+    needs: [draft]
+    # draft.outputs.id is empty when shared-auto-release.yml found nothing to
+    # release (has-duplicate short-circuit) - nothing to rewrite then.
+    if: needs.draft.outputs.id != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # release-drafter (via .github/auto-release.yml) only writes a skeleton:
+    # one bullet per PR. This job fetches each PR's description
+    # (pull-requests: read), condenses it - with the model when the
+    # OPENAI_API_KEY secret is configured, otherwise CodeRabbit's summary or
+    # a truncated description - and rewrites the release (contents: write)
+    # as collapsible per-PR notes. It never fails the release: any error is
+    # logged and the skeleton stays (see magefiles/ci_release_notes.go).
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          # api.github.com: read/update the release. api.openai.com: the
+          # summarization call. The rest is the module download behind
+          # `go tool mage` (same set as test.yml's build job).
+          allowed-endpoints: >
+            api.github.com:443
+            api.openai.com:443
+            github.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # Deliberately no `ref:` - workflow_run checks out the default
+          # branch, never the triggering run's head, so this step always runs
+          # trusted code regardless of what triggered Tests.
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Summarize release notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          REPO: ${{ github.repository }}
+          RELEASE_ID: ${{ needs.draft.outputs.id }}
+        run: |
+          set -euo pipefail
+          go tool mage release:summarizeNotes "$REPO" "$RELEASE_ID"
