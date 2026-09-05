@@ -1403,6 +1403,16 @@ jobs:
           - { name: demo-helmfile, path: examples/demo-helmfile }
           - { name: helm, path: examples/helm }
           - { name: helm-lifecycle, path: tests/fixtures/scenarios/helm-lifecycle }
+        # helm-lifecycle's watcher-based install/upgrade waits stall on the
+        # doubly-nested k3s of the macOS Colima runner (k3s -> Docker -> Colima
+        # VM), where Helm's status-watcher API watch is unreliable and every
+        # watcher-waited release burns its full timeout. The same fixture passes
+        # in ~4m on Linux and on local macOS Docker Desktop, so this is a Colima
+        # runner limitation, not a lifecycle bug. Run it on Linux only; the
+        # demo-helmfile and helm fixtures still exercise the macOS k3s path.
+        exclude:
+          - flavor: { os: "macos-15-intel", target: macos, artifact: macos-intel }
+            fixture: { name: helm-lifecycle, path: tests/fixtures/scenarios/helm-lifecycle }
 
     # The macOS matrix may spend up to 45 minutes starting Colima, followed by
     # two bounded 45-minute test attempts. Keep the job ceiling above those
