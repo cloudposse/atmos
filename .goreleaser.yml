@@ -134,7 +134,10 @@ nfpms:
     file_name_template: '{{ replace .ConventionalFileName "~" "-" }}'
 
 sboms:
-  - artifacts: archive
+  - id: binary
+    artifacts: binary
+  - id: package
+    artifacts: package
 
 # Keyless OIDC signing of the checksums file (which covers every archive by
 # digest) — no --key, no static key material. cosign is installed by the
@@ -150,6 +153,7 @@ signs:
     args: ["sign-blob", "--yes", "--bundle=${signature}", "${artifact}"]
     artifacts: checksum
     signature: "${artifact}.sigstore.json"
+
 
 ## Copied from https://github.com/cloudposse/.github/blob/main/.github/goreleaser.yml
 ## Required to correct working go auto release workflow
