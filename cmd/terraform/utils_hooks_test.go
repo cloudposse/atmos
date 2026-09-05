@@ -16,6 +16,7 @@ package terraform
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -324,6 +325,93 @@ func TestRunCIHooksForNode_RunCIHooksError(t *testing.T) {
 	})
 }
 
+// TestRunCIHooksForNodeBefore_RunCIHooksError mirrors
+// TestRunCIHooksForNode_RunCIHooksError for the new before-side counterpart
+// (issue #3007's deploy fix): it must fail gracefully (log.Warn), not panic.
+func TestRunCIHooksForNodeBefore_RunCIHooksError(t *testing.T) {
+	withoutCIDetection(t)
+
+	cmd := newHookTestCmd()
+	require.NoError(t, cmd.Flags().Set("ci", "true"))
+	nodeHooks := &terraformNodeHooks{cmd: cmd, beforeEvent: hooks.BeforeTerraformDeploy}
+	atmosConfig := &schema.AtmosConfiguration{
+		CI:       schema.CIConfig{Enabled: true},
+		Settings: schema.AtmosSettings{Experimental: "disable"},
+	}
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", Component: "myapp", ComponentFromArg: "myapp"}
+
+	assert.NotPanics(t, func() {
+		nodeHooks.runCIHooksForNodeBefore(atmosConfig, info)
+	})
+}
+
+// TestBeforeWithWriters_UserHookFailureSkipsCIHook regression-tests issue
+// #3007's deploy fix: BeforeWithWriters must return a failing user
+// before-hook's error directly, without ever reaching the CI hook call --
+// otherwise a component whose before-hook aborts execution (on_failure: fail)
+// would get a pending CI status that After never resolves, since After is
+// never called for an aborted node. Uses the cross-platform "exit 1" pattern
+// (running the test binary itself) per this repo's testing rules.
+func TestBeforeWithWriters_UserHookFailureSkipsCIHook(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	tempDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "components", "terraform", "app"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "components", "terraform", "app", "main.tf"), nil, 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "atmos.yaml"),
+		[]byte(`base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+schemas: {}
+logs:
+  level: Info
+`),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "test.yaml"),
+		[]byte(fmt.Sprintf(`vars:
+  stage: test
+components:
+  terraform:
+    app:
+      hooks:
+        always-fails:
+          events:
+            - before-terraform-deploy
+          kind: command
+          command: %s
+          args: ["-test.run", "^$"]
+          env:
+            _ATMOS_TEST_EXIT_ONE: "1"
+          on_failure: fail
+`, exe)),
+		0o644,
+	))
+
+	t.Chdir(tempDir)
+	withoutCIDetection(t)
+
+	nodeHooks := &terraformNodeHooks{
+		cmd:         newHookTestCmd(),
+		beforeEvent: hooks.BeforeTerraformDeploy,
+		afterEvent:  hooks.AfterTerraformDeploy,
+	}
+	info := &schema.ConfigAndStacksInfo{Stack: "test", Component: "app", ComponentFromArg: "app", ComponentType: "terraform"}
+
+	err = nodeHooks.Before(context.Background(), info)
+	require.Error(t, err, "a failing on_failure: fail before-hook must abort this node's execution")
+}
+
 // TestTerraformNodeHooksBeforeAfter_ConfigInitFailure covers the
 // config-init-failure branch in both Before and After (log.Warn; return nil)
 // — every other terraformNodeHooks test above chdirs into a valid fixture, so
@@ -363,6 +451,23 @@ func TestTerraformAggregateEvent(t *testing.T) {
 	for command, want := range cases {
 		t.Run(command, func(t *testing.T) {
 			assert.Equal(t, want, terraformAggregateEvent(command))
+		})
+	}
+}
+
+// TestTerraformBeforeAggregateEvent pins the before-aggregate CI hook event
+// mapping (issue #3007's fix) for every Terraform command
+// HandleTerraformPlanCIBefore can be invoked with.
+func TestTerraformBeforeAggregateEvent(t *testing.T) {
+	cases := map[string]hooks.HookEvent{
+		"apply":   hooks.BeforeTerraformApplyAggregate,
+		"destroy": hooks.BeforeTerraformDestroyAggregate,
+		"plan":    hooks.BeforeTerraformPlanAggregate,
+		"":        hooks.BeforeTerraformPlanAggregate,
+	}
+	for command, want := range cases {
+		t.Run(command, func(t *testing.T) {
+			assert.Equal(t, want, terraformBeforeAggregateEvent(command))
 		})
 	}
 }
@@ -749,6 +854,8 @@ func TestWirePerComponentHook(t *testing.T) {
 				wirePerComponentHook(info, sub, cmd, nil)
 
 				assert.NotNil(t, info.TerraformPlanCIResultHandler)
+				assert.NotNil(t, info.TerraformPlanCIBeforeHandler,
+					"%q subcommand must also install the before-aggregate handler (issue #3007)", sub)
 				if sub == "destroy" {
 					// destroy has no before/after user-hook events yet (a separate,
 					// pre-existing gap); NodeHooks stays nil.
@@ -776,6 +883,8 @@ func TestWirePerComponentHook(t *testing.T) {
 				wirePerComponentHook(info, sub, newHookTestCmd(), nil)
 
 				assert.NotNil(t, info.TerraformPlanCIResultHandler)
+				assert.NotNil(t, info.TerraformPlanCIBeforeHandler,
+					"%q subcommand must also install the before-aggregate handler (issue #3007)", sub)
 				if sub == "destroy" {
 					assert.Nil(t, info.NodeHooks)
 					return
@@ -797,6 +906,8 @@ func TestWirePerComponentHook(t *testing.T) {
 				wirePerComponentHook(info, sub, newHookTestCmd(), nil)
 				assert.Nil(t, info.NodeHooks,
 					"%q subcommand must NOT install per-component hooks", sub)
+				assert.Nil(t, info.TerraformPlanCIBeforeHandler,
+					"%q subcommand must NOT install the before-aggregate handler outside CI mode", sub)
 			})
 		}
 	})

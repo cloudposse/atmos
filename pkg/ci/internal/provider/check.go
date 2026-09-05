@@ -1,9 +1,11 @@
 package provider
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -135,9 +137,22 @@ func FormatCheckRunName(action, stack, component string) string {
 // Parts are joined with "/" separator.
 // Example: FormatStatusContext("atmos", "plan", "dev", "vpc") -> "atmos/plan/dev/vpc".
 // Example: FormatStatusContext("atmos", "plan", "dev", "vpc", "add") -> "atmos/plan/dev/vpc/add".
-func FormatStatusContext(prefix string, parts ...string) string {
+// A status context is always about a specific, fully-resolved target: every part
+// (including prefix) must be non-empty, or the result would silently collapse into a
+// differently-malformed but still-wrong name (e.g. "atmos/plan/dev/" or "atmos/plan")
+// that looks like a valid, coarser-grained status instead of a bug.
+func FormatStatusContext(prefix string, parts ...string) (string, error) {
 	defer perf.Track(nil, "provider.FormatStatusContext")()
 
+	if prefix == "" {
+		return "", fmt.Errorf("%w: prefix", errUtils.ErrCIStatusContextIncomplete)
+	}
+	for _, part := range parts {
+		if part == "" {
+			return "", fmt.Errorf("%w: prefix=%q parts=%v", errUtils.ErrCIStatusContextIncomplete, prefix, parts)
+		}
+	}
+
 	allParts := append([]string{prefix}, parts...)
-	return strings.Join(allParts, "/")
+	return strings.Join(allParts, "/"), nil
 }
