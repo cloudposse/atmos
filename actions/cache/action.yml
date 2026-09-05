@@ -68,30 +68,17 @@ runs:
         fi
         echo "ATMOS_XDG_CACHE_HOME=${CACHE_HOME}" >> "$GITHUB_ENV"
         echo "Atmos cache root for this job: ${CACHE_HOME}"
+    # Writes key/path/restore-keys to $GITHUB_OUTPUT (for the cache/cache-restore
+    # steps below) and, since $GITHUB_ENV is set in any real job, also as
+    # ATMOS_CACHE_* job-level env vars: a post step of a composite action
+    # nested inside another composite can't see this step's own
+    # steps.meta.outputs (actions/runner#2800), but it can see the job env.
+    # Validation (empty key/paths, CR/LF, delimiter-collision-safe multiline
+    # encoding) all happen once, in Go, in `atmos ci cache paths` itself --
+    # see cmd/ci/cache/paths.go's emitGitHubCachePaths.
     - id: meta
       shell: bash
       run: atmos ci cache paths --format=github
-    - id: validate
-      shell: bash
-      env:
-        ATMOS_CACHE_KEY: ${{ steps.meta.outputs.key }}
-        ATMOS_CACHE_PATH: ${{ steps.meta.outputs.path }}
-      run: |
-        if [ -z "${ATMOS_CACHE_KEY}" ]; then
-          echo "::error::Atmos cache metadata did not include a cache key. Check the previous 'atmos ci cache paths --format=github' step output."
-          exit 1
-        fi
-        if [ -z "${ATMOS_CACHE_PATH}" ]; then
-          echo "::error::Atmos cache metadata did not include any cache paths. Check ci.cache configuration and the previous metadata step output."
-          exit 1
-        fi
-        # Reject CR/LF: the key is written verbatim as a single-line KEY=VALUE
-        # record in the export step below, and a newline would let it inject
-        # arbitrary extra environment variables.
-        if [[ "${ATMOS_CACHE_KEY}" == *$'\n'* || "${ATMOS_CACHE_KEY}" == *$'\r'* ]]; then
-          echo "::error::Cache key must not contain CR or LF characters."
-          exit 1
-        fi
     - name: Validate cache mode
       if: inputs.mode != 'restore-only' && inputs.mode != 'restore-and-save'
       shell: bash
@@ -120,32 +107,6 @@ runs:
         }
         Write-Host "Prepending $dir to PATH so actions/cache uses GNU tar"
         echo "$dir" >> $Env:GITHUB_PATH
-    # The save happens in actions/cache's post step. When this action runs
-    # nested inside another composite action, that post step no longer sees
-    # `steps.meta.outputs` (actions/runner#2800) and would run with an empty
-    # `path`, saving nothing ("Input required and not supplied: path"). The
-    # job env is visible to post steps, so the values go through it.
-    - id: export
-      shell: bash
-      env:
-        ATMOS_CACHE_KEY: ${{ steps.meta.outputs.key }}
-        ATMOS_CACHE_PATH: ${{ steps.meta.outputs.path }}
-        ATMOS_CACHE_RESTORE_KEYS: ${{ steps.meta.outputs.restore-keys }}
-      run: |
-        # Random per-run delimiter: a fixed one could collide with a path or
-        # restore-key value that happens to contain that exact line, ending
-        # the heredoc early and letting the rest of the value inject
-        # arbitrary extra environment variables.
-        eof="ATMOS_CACHE_EOF_${RANDOM}${RANDOM}_$$"
-        {
-          echo "ATMOS_CACHE_KEY=${ATMOS_CACHE_KEY}"
-          echo "ATMOS_CACHE_PATH<<${eof}"
-          echo "${ATMOS_CACHE_PATH}"
-          echo "${eof}"
-          echo "ATMOS_CACHE_RESTORE_KEYS<<${eof}"
-          echo "${ATMOS_CACHE_RESTORE_KEYS}"
-          echo "${eof}"
-        } >> "$GITHUB_ENV"
     - id: cache
       if: inputs.mode != 'restore-only'
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
