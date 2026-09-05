@@ -1,0 +1,32 @@
+# Reproducer for GitHub issue #2343.
+# `name_template` references vars that live in parent `_defaults.yaml`.
+# Adding any `locals:` block to the leaf file used to break stack-name
+# derivation in the locals pre-pass and produce a malformed name like
+# "-prod" instead of "acme-prod".
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "../../components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "orgs/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.namespace }}-{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+templates:
+  settings:
+    enabled: true
+    # The user has this flag set; the locals/name-template path must honor it.
+    ignore_missing_template_values: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true

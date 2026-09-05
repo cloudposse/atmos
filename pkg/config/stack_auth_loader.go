@@ -308,7 +308,7 @@ func mergeImportedAuthDefaults(
 	result map[string]bool,
 ) {
 	for _, imp := range imports {
-		importedFiles := resolveAuthImportPaths(imp, importingFile, stacksBasePath)
+		importedFiles := ResolveStackImportFiles(imp, importingFile, stacksBasePath)
 		for _, impFile := range importedFiles {
 			for name, isDefault := range loadAuthWithImports(impFile, stacksBasePath, visited) {
 				if isDefault {
@@ -342,7 +342,7 @@ func applyCurrentFileAuthDefaults(parsed stackAuthFileWithImports, result map[st
 	}
 }
 
-// resolveAuthImportPaths resolves a single `import:` list entry to absolute file
+// ResolveStackImportFiles resolves a single `import:` list entry to absolute file
 // paths on disk. Handles the three Atmos import forms:
 //
 //  1. Plain string: "orgs/acme/_defaults" — resolved against `stacksBasePath`.
@@ -356,11 +356,12 @@ func applyCurrentFileAuthDefaults(parsed stackAuthFileWithImports, result map[st
 //
 // Returns nil for import forms that cannot be resolved without running Go
 // templates (e.g., `path: "{{ .something }}"`), for paths that do not exist
-// on disk, or for any other error. This is intentional graceful degradation —
-// the scanner is best-effort and never blocks the auth flow on a malformed or
-// templated import.
-func resolveAuthImportPaths(imp any, importingFile, stacksBasePath string) []string {
-	defer perf.Track(nil, "config.resolveAuthImportPaths")()
+// on disk, or for any other error. This is intentional graceful degradation:
+// it is a lite, best-effort YAML-only resolver shared by the pre-passes that
+// must read imported stack files without running the full processing pipeline
+// (auth-defaults scanning and stack-name derivation). It never errors.
+func ResolveStackImportFiles(imp any, importingFile, stacksBasePath string) []string {
+	defer perf.Track(nil, "config.ResolveStackImportFiles")()
 
 	importPath := normalizeImportPath(extractImportPathString(imp))
 	if importPath == "" {
