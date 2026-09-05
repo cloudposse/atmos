@@ -1,6 +1,7 @@
 package asciicast
 
 import (
+	"math"
 	"strings"
 	"unicode/utf8"
 
@@ -26,10 +27,21 @@ func BuildGrid(path string) (*cellbuf.Buffer, error) {
 	if err != nil {
 		return nil, err
 	}
+	return buildGridUpTo(&header, events, math.Inf(1)), nil
+}
+
+// buildGridUpTo replays only "o"/"e" events with Time <= cutoff into a styled
+// terminal cell grid, letting a caller reconstruct the terminal's visual state
+// as of a specific point in the recording (e.g. a "screenshot" marker) rather
+// than the fully-replayed final state BuildGrid produces.
+func buildGridUpTo(header *Header, events []Event, cutoff float64) *cellbuf.Buffer {
 	var sb strings.Builder
 	for _, event := range events {
 		if event.Stream != "o" && event.Stream != "e" {
 			continue
+		}
+		if event.Time > cutoff {
+			break
 		}
 		sb.WriteString(event.Data)
 	}
@@ -40,7 +52,7 @@ func BuildGrid(path string) (*cellbuf.Buffer, error) {
 	if width <= 0 {
 		width = DefaultWidth
 	}
-	return contentGrid(sb.String(), width), nil
+	return contentGrid(sb.String(), width)
 }
 
 // contentGrid lays out pre-recorded terminal output into a cell buffer sized to

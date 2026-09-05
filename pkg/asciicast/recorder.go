@@ -218,7 +218,7 @@ func (r *Recorder) Record(stream, content string) {
 	if stream == "i" && !r.recordIn {
 		return
 	}
-	if stream != "i" && stream != "o" && stream != "e" {
+	if stream != "i" && stream != "o" && stream != "e" && stream != "m" {
 		stream = "o"
 	}
 	_ = r.Event(stream, content)
