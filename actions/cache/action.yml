@@ -27,6 +27,12 @@ inputs:
       upload cost.
     required: false
     default: 'restore-and-save'
+  restore-only:
+    description: >-
+      Deprecated: use `mode: restore-only` instead. `restore-only: true`
+      still behaves exactly like `mode: restore-only`.
+    required: false
+    default: 'false'
   cache-home:
     description: >-
       Directory to use as the Atmos cache root for this job. When set, it is exported as
@@ -108,7 +114,7 @@ runs:
         Write-Host "Prepending $dir to PATH so actions/cache uses GNU tar"
         echo "$dir" >> $Env:GITHUB_PATH
     - id: cache
-      if: inputs.mode != 'restore-only'
+      if: inputs.mode != 'restore-only' && inputs.restore-only != 'true'
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         key: ${{ env.ATMOS_CACHE_KEY }}
@@ -117,7 +123,7 @@ runs:
     # actions/cache/restore ships in the same repository and tag as
     # actions/cache, so the same SHA pins both.
     - id: cache-restore
-      if: inputs.mode == 'restore-only'
+      if: inputs.mode == 'restore-only' || inputs.restore-only == 'true'
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         key: ${{ env.ATMOS_CACHE_KEY }}
