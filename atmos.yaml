@@ -104,6 +104,9 @@ validate:
     exclude:
       - "**/*.go"
       - "tests/snapshots/**/*.golden"
+      # specs/ holds Spec Kit planning docs (spec.md, plan.md, tasks.md, etc.)
+      # generated/edited outside repo formatting conventions; not shipped code.
+      - "specs/**"
     # If set to true, the default ignore patterns (like .git/*) will not be applied.
     ignore_defaults: false
     # Runs the checker without making any changes or producing output, useful for testing configuration.
