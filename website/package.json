@@ -48,7 +48,7 @@
     "docusaurus-plugin-image-zoom": "^2.0.0",
     "docusaurus-plugin-llms": "^0.5.1",
     "docusaurus-plugin-sentry": "^2.0.0",
-    "framer-motion": "^12.43.0",
+    "motion": "^12.43.0",
     "gray-matter": "^4.0.3",
     "html-loader": "^5.1.0",
     "jpeg-js": "^0.4.4",
