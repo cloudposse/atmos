@@ -27,7 +27,9 @@ without the split. Then the pinned `actions/setup-go@v5.6.0` with pass-through i
 Adopted at every `setup-go` call site that runs on Windows or was on v5.6.0: `build`,
 `terraform-registry-cache`, `test`, `magefiles`, `floci-go`, `kubernetes-e2e`, `container-step`
 in `test.yml`, plus `setup-go-cache-warmup.yml`. `terraform-registry-cache` moves from setup-go v6
-to the action's v5.6.0. The Linux-only `coverage` job and `setup-atmos-build` stay on v6.
+to the action's v5.6.0. The Linux-only `coverage` job and `setup-atmos-build` stay on v6. The
+Linux-only `race` job also stays on a direct v5.6.0 pin rather than the shared action -- it has no
+Windows disk-relocation work to do, so there's nothing the action would add.
 
 The cache *version* hashes the restore paths, so the first run after this lands is a cold start
 (miss + save) for the Windows jobs; from then on they restore from D:.
