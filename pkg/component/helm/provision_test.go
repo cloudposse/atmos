@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"helm.sh/helm/v4/pkg/kube"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -126,8 +129,80 @@ func TestDeliverApply_RoutesToExternalTarget(t *testing.T) {
 	summary, err := deliverApply(&schema.AtmosConfiguration{}, info, map[string]any{}, &chartSpec{Chart: "demo"})
 	require.NoError(t, err)
 	assert.Equal(t, "deploy-repo", summary[targetKey])
+	assert.Equal(t, map[string]any{"applied": false, "target_kind": "helm-apply-external", "reason": "external_target"}, summary["release"])
 	require.NotNil(t, ft.delivered)
 	assert.Equal(t, "deploy-repo", ft.delivered.TargetName)
+}
+
+func TestDeliverApply_RejectsLifecycleFlagsForExternalTarget(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{
+		"provision": map[string]any{
+			"default": "deploy-repo",
+			"targets": map[string]any{
+				"deploy-repo": map[string]any{"kind": "helm-apply-external"},
+			},
+		},
+	}}
+
+	summary, err := deliverApply(&schema.AtmosConfiguration{}, info, map[string]any{
+		cfg.HelmTimeoutSectionName: "10m",
+	}, &chartSpec{})
+	require.ErrorIs(t, err, errUtils.ErrHelmLifecycleExternalTarget)
+	assert.Equal(t, "deploy-repo", summary[targetKey])
+}
+
+func TestDeliverApply_PropagatesDryRunToKubernetesTarget(t *testing.T) {
+	originalApply := applyHelmRelease
+	t.Cleanup(func() { applyHelmRelease = originalApply })
+
+	var receivedDryRun bool
+	applyHelmRelease = func(_ context.Context, _ *chartSpec, dryRun bool) (releaseActionResult, error) {
+		receivedDryRun = dryRun
+		return releaseActionResult{Manifest: helmExecutorManifest, Operation: releaseOperationInstall}, nil
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		DryRun:           true,
+		ComponentSection: map[string]any{},
+	}
+	summary, err := deliverApply(&schema.AtmosConfiguration{}, info, map[string]any{}, &chartSpec{Chart: "demo"})
+	require.NoError(t, err)
+	assert.True(t, receivedDryRun)
+	assert.Equal(t, "cluster", summary[targetKey])
+}
+
+func TestLifecycleSummary(t *testing.T) {
+	policy := effectiveReleasePolicy{
+		OnFailure:        failurePolicyRollback,
+		CleanupOnFailure: true,
+		WaitStrategy:     kube.StatusWatcherStrategy,
+		WaitForJobs:      true,
+		Timeout:          5 * time.Minute,
+		MaxHistory:       7,
+		ChartHooks:       false,
+		CRDs:             crdPolicySkip,
+	}
+
+	policy.Operation = releaseOperationInstall
+	install := lifecycleSummary(releaseOperationInstall, policy)
+	assert.Equal(t, releaseOperationInstall, install["operation"])
+	assert.Equal(t, "5m0s", install["timeout"])
+	assert.Equal(t, false, install["chart_hooks"])
+	assert.Equal(t, map[string]any{"strategy": "watcher", "jobs": true}, install["wait"])
+	assert.Equal(t, "rollback", install["on_failure"])
+	assert.Equal(t, "skip", install["crds"])
+
+	policy.Operation = releaseOperationUpgrade
+	upgrade := lifecycleSummary(releaseOperationUpgrade, policy)
+	assert.Equal(t, map[string]any{"strategy": "watcher", "jobs": true}, upgrade["wait"])
+	assert.Equal(t, "rollback", upgrade["on_failure"])
+	assert.Equal(t, true, upgrade["cleanup_on_failure"])
+	assert.Equal(t, map[string]any{"max": 7}, upgrade["history"])
+
+	policy.Operation = releaseOperationDelete
+	deleted := lifecycleSummary(releaseOperationDelete, policy)
+	assert.Equal(t, map[string]any{"strategy": "watcher"}, deleted["wait"])
+	assert.NotContains(t, deleted, "on_failure")
 }
 
 func TestDeliverApply_SelectTargetError(t *testing.T) {

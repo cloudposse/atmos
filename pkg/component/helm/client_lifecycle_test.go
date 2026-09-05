@@ -3,6 +3,7 @@ package helm
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"path/filepath"
 	"testing"
@@ -58,6 +59,19 @@ type recordingKubeClient struct {
 	BuiltDocs []string
 }
 
+type failNextUpdateKubeClient struct {
+	*kubefake.FailingKubeClient
+	failNext bool
+}
+
+func (f *failNextUpdateKubeClient) Update(current, target kube.ResourceList, options ...kube.ClientUpdateOption) (*kube.Result, error) {
+	if f.failNext {
+		f.failNext = false
+		return &kube.Result{}, errors.New("forced upgrade failure")
+	}
+	return f.FailingKubeClient.Update(current, target, options...)
+}
+
 func (r *recordingKubeClient) Build(reader io.Reader, strict bool) (kube.ResourceList, error) {
 	data, err := io.ReadAll(reader)
 	if err != nil {
@@ -86,6 +100,7 @@ func testdataChartSpec(t *testing.T, releaseName string) *chartSpec {
 		ReleaseName: releaseName,
 		Namespace:   "testns",
 		Values:      map[string]any{"replicaCount": 2, "image": map[string]any{"tag": "1.0"}},
+		Release:     releasePolicyInput{},
 	}
 }
 
@@ -98,10 +113,11 @@ func TestClientReleaseLifecycleInMemory(t *testing.T) {
 	spec := testdataChartSpec(t, "lifecycle")
 
 	// No release yet -> applyRelease takes the install branch.
-	manifest, err := applyRelease(context.Background(), spec, false)
+	result, err := applyRelease(context.Background(), spec, false)
 	require.NoError(t, err)
-	assert.Contains(t, manifest, "kind: ConfigMap")
-	assert.Contains(t, manifest, "name: lifecycle")
+	assert.Equal(t, "install", result.Operation)
+	assert.Contains(t, result.Manifest, "kind: ConfigMap")
+	assert.Contains(t, result.Manifest, "name: lifecycle")
 
 	// The installed release is now the diff baseline.
 	deployed, err := getDeployedManifest("lifecycle", "testns")
@@ -111,11 +127,12 @@ func TestClientReleaseLifecycleInMemory(t *testing.T) {
 	// Release exists -> applyRelease takes the upgrade branch.
 	upgraded, err := applyRelease(context.Background(), spec, false)
 	require.NoError(t, err)
-	assert.Contains(t, upgraded, "kind: ConfigMap")
+	assert.Equal(t, "upgrade", upgraded.Operation)
+	assert.Contains(t, upgraded.Manifest, "kind: ConfigMap")
 
 	// Delete removes it; deleting an absent release is a no-op (idempotent).
-	require.NoError(t, deleteRelease("lifecycle", "testns"))
-	require.NoError(t, deleteRelease("lifecycle", "testns"))
+	require.NoError(t, deleteRelease(spec, false))
+	require.NoError(t, deleteRelease(spec, false))
 
 	// After delete the baseline is empty (release not found), not an error.
 	deployed, err = getDeployedManifest("lifecycle", "testns")
@@ -130,9 +147,9 @@ func TestApplyReleaseDryRunInstall(t *testing.T) {
 	stubActionContext(t, actx)
 	spec := testdataChartSpec(t, "preview")
 
-	manifest, err := applyRelease(context.Background(), spec, true)
+	result, err := applyRelease(context.Background(), spec, true)
 	require.NoError(t, err)
-	assert.Contains(t, manifest, "kind: ConfigMap")
+	assert.Contains(t, result.Manifest, "kind: ConfigMap")
 
 	// A dry run must not persist a release.
 	deployed, err := getDeployedManifest("preview", "testns")
@@ -151,7 +168,53 @@ func TestUpgradeReleaseDryRun(t *testing.T) {
 	stubActionContext(t, actx)
 	spec := testdataChartSpec(t, "seeded")
 
-	manifest, err := applyRelease(context.Background(), spec, true)
+	result, err := applyRelease(context.Background(), spec, true)
 	require.NoError(t, err)
-	assert.Contains(t, manifest, "kind: ConfigMap")
+	assert.Contains(t, result.Manifest, "kind: ConfigMap")
+}
+
+func TestDeleteReleaseDryRunPreservesRelease(t *testing.T) {
+	actx := memoryActionContext(t)
+	stubActionContext(t, actx)
+	spec := testdataChartSpec(t, "delete-preview")
+
+	_, err := applyRelease(context.Background(), spec, false)
+	require.NoError(t, err)
+	require.NoError(t, deleteRelease(spec, true))
+
+	deployed, err := getDeployedManifest(spec.ReleaseName, spec.Namespace)
+	require.NoError(t, err)
+	assert.Contains(t, deployed, "kind: ConfigMap")
+}
+
+func TestUpgradeRollbackPreservesHistoryLimit(t *testing.T) {
+	maxHistory := 3
+
+	actx := memoryActionContext(t)
+	kubeClient := &failNextUpdateKubeClient{
+		FailingKubeClient: actx.cfg.KubeClient.(*kubefake.FailingKubeClient),
+	}
+	actx.cfg.KubeClient = kubeClient
+	stubActionContext(t, actx)
+
+	spec := testdataChartSpec(t, "rollback-history")
+	onFailure := string(failurePolicyRollback)
+	spec.Release.History.Max = &maxHistory
+	spec.Release.Upgrade.OnFailure = &onFailure
+
+	for revision := 1; revision <= maxHistory; revision++ {
+		spec.Values["replicaCount"] = revision
+		_, err := applyRelease(context.Background(), spec, false)
+		require.NoError(t, err)
+	}
+
+	kubeClient.failNext = true
+	spec.Values["replicaCount"] = maxHistory + 1
+	_, err := applyRelease(context.Background(), spec, false)
+	require.ErrorContains(t, err, "forced upgrade failure")
+
+	history, err := actx.cfg.Releases.History(spec.ReleaseName)
+	require.NoError(t, err)
+	assert.Len(t, history, maxHistory)
+	assert.Equal(t, maxHistory, actx.cfg.Releases.MaxHistory)
 }

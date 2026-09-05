@@ -131,10 +131,10 @@ func TestApplyRelease_CreateNamespaceControlsNamespaceCreate(t *testing.T) {
 				Values:          map[string]any{"replicaCount": 1, "image": map[string]any{"tag": "1.0"}},
 			}
 
-			manifest, err := applyRelease(context.Background(), spec, false)
+			result, err := applyRelease(context.Background(), spec, false)
 			require.NoError(t, err)
-			assert.Contains(t, manifest, "kind: ConfigMap")
-			assert.Contains(t, manifest, "name: ns-toggle")
+			assert.Contains(t, result.Manifest, "kind: ConfigMap")
+			assert.Contains(t, result.Manifest, "name: ns-toggle")
 
 			namespaceBuilt := false
 			for _, doc := range rec.BuiltDocs {
