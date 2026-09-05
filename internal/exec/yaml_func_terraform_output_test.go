@@ -4,7 +4,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -221,8 +220,12 @@ func isolateTerraformTestBinary(t *testing.T, source string) {
 }
 
 // removeWithRetryForTransientLock removes path, retrying if the OS reports it as still in
-// use by another process rather than failing immediately. See isTransientRepoCopyError in
-// describe_affected_test.go for the same Windows-lock pattern.
+// use by another process rather than failing immediately. Reuses isTransientRepoCopyError
+// (describe_affected_test.go) rather than hand-rolling a narrower duplicate: Windows reports
+// this same underlying condition with either "being used by another process" or "another
+// process has locked a portion of the file" depending on the syscall involved
+// (ERROR_SHARING_VIOLATION vs ERROR_LOCK_VIOLATION), and only matching the first one left
+// the second able to fall through uncaught.
 //
 // MaxAttempts/retryDelay total ~10s. The previous budget of 10 attempts x 50ms (500ms) was
 // confirmed insufficient in practice: that budget was added in #1908 and the same
@@ -241,7 +244,7 @@ func removeWithRetryForTransientLock(t *testing.T, path string) {
 		if err == nil || os.IsNotExist(err) {
 			return
 		}
-		if !strings.Contains(strings.ToLower(err.Error()), "being used by another process") {
+		if !isTransientRepoCopyError(err) {
 			return
 		}
 		if attempt == maxAttempts {
