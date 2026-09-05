@@ -321,6 +321,17 @@ func TestExecuteListInstancesCmd_NoUploadNoProGate_NoPendingData(t *testing.T) {
 	})
 	os.Unsetenv("ATMOS_PRO_TOKEN")
 
+	// proexec.pendingAsyncData is package-level global state, read-and-cleared
+	// only by CaptureAsync itself (see proexec/async.go). Another test in this
+	// binary that exercises uploadInstancesWithDeps's success path (e.g.
+	// TestUploadInstancesWithDeps_Success) sets it as a side effect and never
+	// calls CaptureAsync to consume it -- that's fine in production, where
+	// cmd/root.go's post-run hook always calls CaptureAsync once per process,
+	// but leaves it dangling for whichever test happens to call CaptureAsync
+	// next. Reset explicitly so this test's own assertion doesn't depend on
+	// what ran before it in the same test binary.
+	proexec.SetPendingAsyncData(nil)
+
 	cmd := &cobra.Command{}
 	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
 	cmd.Flags().String("format", "table", "Output format")
