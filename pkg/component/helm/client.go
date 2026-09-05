@@ -151,6 +151,7 @@ func releaseWaitOptions(ctx context.Context) []kube.WaitOption {
 
 func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, dryRun bool) (string, error) {
 	client := newInstallClient(actx, spec, dryRun)
+	client.WaitOptions = releaseWaitOptions(ctx)
 	return runInstall(ctx, client, actx.settings, spec)
 }
 
@@ -167,7 +168,6 @@ func newInstallClient(actx *actionContext, spec *chartSpec, dryRun bool) *action
 	client.CreateNamespace = spec.CreateNamespace
 	client.Version = spec.Version
 	configureInstallLifecycle(client, spec.Lifecycle.Policy)
-	client.WaitOptions = releaseWaitOptions(ctx)
 	if dryRun {
 		client.DryRunStrategy = action.DryRunServer
 	}
