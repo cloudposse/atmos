@@ -13271,6 +13271,39 @@
               "type": "string"
             }
           ]
+        },
+        "organization": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Organization is the Azure DevOps organization name (azuredevops provider only). Together\nwith Project and Repository it addresses a repository the way GitHub's owner/repository\npair does, since Azure DevOps requires three segments: organization/project/repository."
+        },
+        "project": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Project is the Azure DevOps project name (azuredevops provider only). See Organization."
+        },
+        "repository": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Repository is the repository name (azuredevops provider only). GitHub instead derives its\nowner/repository pair from the local Git remote, so this field is a no-op for that provider."
         }
       },
       "type": "object",

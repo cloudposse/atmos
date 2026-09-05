@@ -11,8 +11,17 @@ import (
 
 // PullRequestOptions is forge-neutral data used to create or reconcile a pull request.
 // Head is the branch name without an owner qualifier.
+//
+// Owner is the single top-level account every forge has (GitHub owner, GitLab top-level
+// namespace, Bitbucket workspace, Azure DevOps organization). Namespace carries any additional
+// path segments a forge requires between Owner and Repository -- nil/empty for two-segment
+// forges like GitHub, a single project name (len == 1) for Azure DevOps' three-segment
+// organization/project/repository addressing, or an arbitrary depth of subgroups for GitLab.
+// Providers that don't need it should reject a non-empty Namespace rather than silently
+// ignoring it, so misconfiguration surfaces instead of resolving to the wrong repository.
 type PullRequestOptions struct {
 	Owner      string
+	Namespace  []string
 	Repository string
 	Base       string
 	Head       string

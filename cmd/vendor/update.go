@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	_ "github.com/cloudposse/atmos/pkg/git/providers/azuredevops"
 	_ "github.com/cloudposse/atmos/pkg/git/providers/cli"
 	_ "github.com/cloudposse/atmos/pkg/git/providers/github"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -295,6 +296,9 @@ func vendorPullRequestConfig(v *viper.Viper) schema.VendorPullRequestConfig {
 		Draft:        v.GetBool("vendor.ci.pull_request.draft"),
 		Reviewers:    v.GetStringSlice("vendor.ci.pull_request.reviewers"),
 		Assignees:    v.GetStringSlice("vendor.ci.pull_request.assignees"),
+		Organization: v.GetString("vendor.ci.pull_request.organization"),
+		Project:      v.GetString("vendor.ci.pull_request.project"),
+		Repository:   v.GetString("vendor.ci.pull_request.repository"),
 	}
 }
 
