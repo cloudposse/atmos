@@ -289,6 +289,8 @@ Negative durations are invalid. Documentation MUST explain these strategy-specif
 
 The `release.history.max` default is `10`, matching the Helm CLI rather than the Helm SDK zero value. An explicit `0` disables history pruning. Negative values are invalid. Release notes MUST call out that an omitted value now bounds upgrade history and that users who require unlimited history must explicitly configure `0`.
 
+Atmos MUST preserve this bound after a failed upgrade that Helm rolls back. Helm 4.2.3 does not propagate `Upgrade.MaxHistory` to the internal `Rollback` action, so Atmos re-applies the effective limit after the SDK action returns. If that repair fails, Atmos reports both the original upgrade error and the history-pruning error.
+
 ### Wait Strategies
 
 Atmos exposes the exact Helm 4 strategy values:
@@ -649,7 +651,7 @@ Use the existing in-memory release lifecycle tests to cover:
 
 - First install and subsequent upgrade with lifecycle mapping.
 - Dry-run install and upgrade without persisted history.
-- Default history pruning at ten revisions, a positive `release.history.max` override, and explicit unlimited `0`.
+- Default history pruning at ten revisions, a positive `release.history.max` override, explicit unlimited `0`, and a failed upgrade with rollback that remains within the effective limit.
 - Chart-hook suppression on install and upgrade.
 - CRD `create` and `skip` policies on install.
 - Upgrade cleanup with rollback both enabled and disabled.
