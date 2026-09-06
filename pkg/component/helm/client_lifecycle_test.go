@@ -274,14 +274,18 @@ func TestApplyReleaseWiresWaitContext(t *testing.T) {
 	// would still populate RecordedWaitOptions. Helm's waitOptions.ctx is
 	// unexported and the fake waiter ignores it, so observe it through the seam.
 	var waitCtx context.Context
+	var waitOptionsAt time.Time
 	originalWaitOptions := releaseWaitOptions
 	t.Cleanup(func() { releaseWaitOptions = originalWaitOptions })
 	releaseWaitOptions = func(ctx context.Context) []kube.WaitOption {
+		// Stamp the moment the operation context is wired into the waiters so
+		// the deadline can be compared against a near-exact reference; this
+		// rejects a materially wrong timeout that a looser tolerance would miss.
+		waitOptionsAt = time.Now()
 		waitCtx = ctx
 		return originalWaitOptions(ctx)
 	}
 
-	start := time.Now()
 	result, err := applyRelease(context.Background(), spec, false)
 
 	require.ErrorIs(t, err, waitErr)
@@ -291,7 +295,7 @@ func TestApplyReleaseWiresWaitContext(t *testing.T) {
 	require.NotNil(t, waitCtx, "releaseWaitOptions must receive the operation context")
 	deadline, hasDeadline := waitCtx.Deadline()
 	require.True(t, hasDeadline, "wait context must carry the 5s operation timeout, not context.Background()")
-	assert.WithinDuration(t, start.Add(5*time.Second), deadline, 2*time.Second)
+	assert.WithinDuration(t, waitOptionsAt.Add(5*time.Second), deadline, 250*time.Millisecond)
 }
 
 func TestReleaseOperationContextAppliesTimeout(t *testing.T) {
