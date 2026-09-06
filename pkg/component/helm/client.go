@@ -142,7 +142,11 @@ func releaseOperationContext(parent context.Context, timeout time.Duration) (con
 	return context.WithTimeout(parent, timeout)
 }
 
-func releaseWaitOptions(ctx context.Context) []kube.WaitOption {
+// releaseWaitOptions builds the Helm wait options bound to the operation
+// context. It is a package variable so tests can observe the context wired into
+// the waiters (Helm's waitOptions.ctx is unexported and the fake waiter ignores
+// it), mirroring the newActionContext seam above.
+var releaseWaitOptions = func(ctx context.Context) []kube.WaitOption {
 	return []kube.WaitOption{
 		kube.WithWaitContext(ctx),
 		kube.WithWaitForDeleteMethodContext(ctx),

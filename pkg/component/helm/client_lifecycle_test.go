@@ -268,11 +268,30 @@ func TestApplyReleaseWiresWaitContext(t *testing.T) {
 	timeout := "5s"
 	spec.Release.Install.Timeout = &timeout
 
+	// Capture the context handed to the Helm waiters. Asserting only that
+	// RecordedWaitOptions is non-empty proves a waiter ran, not that it received
+	// the timed operation context: a regression passing context.Background()
+	// would still populate RecordedWaitOptions. Helm's waitOptions.ctx is
+	// unexported and the fake waiter ignores it, so observe it through the seam.
+	var waitCtx context.Context
+	originalWaitOptions := releaseWaitOptions
+	t.Cleanup(func() { releaseWaitOptions = originalWaitOptions })
+	releaseWaitOptions = func(ctx context.Context) []kube.WaitOption {
+		waitCtx = ctx
+		return originalWaitOptions(ctx)
+	}
+
+	start := time.Now()
 	result, err := applyRelease(context.Background(), spec, false)
 
 	require.ErrorIs(t, err, waitErr)
 	assert.Equal(t, releaseOperationInstall, result.Operation)
 	assert.NotEmpty(t, kubeClient.RecordedWaitOptions, "Helm waiters must receive the operation context")
+
+	require.NotNil(t, waitCtx, "releaseWaitOptions must receive the operation context")
+	deadline, hasDeadline := waitCtx.Deadline()
+	require.True(t, hasDeadline, "wait context must carry the 5s operation timeout, not context.Background()")
+	assert.WithinDuration(t, start.Add(5*time.Second), deadline, 2*time.Second)
 }
 
 func TestReleaseOperationContextAppliesTimeout(t *testing.T) {
