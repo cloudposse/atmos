@@ -7,7 +7,7 @@
 Publishing `v1.228.0` fired `build.yml`'s `homebrew` job ("Bump Homebrew
 formula"), which failed:
 
-```
+```text
 action-homebrew-bump-formula/main.rb:32:in 'Homebrew.git':
   undefined method 'safe_system' for module Homebrew (NoMethodError)
 ```
@@ -57,8 +57,13 @@ under the bot and opens the version-bump PR.
   the fallback is unchanged.
 - **Immediate, release-independent fallback** (what unblocks a current version
   without waiting for CI): run the same command manually - it bypasses the action
-  entirely:
-  ```
+  entirely. Kept equivalent to the workflow step above:
+  ```bash
   HOMEBREW_GITHUB_API_TOKEN=$(gh auth token) \
-    brew bump-formula-pr --no-browse --version=<version> atmos
+  HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_FROM_API=1 \
+    brew bump-formula-pr --no-browse --no-audit --version=<version> atmos
   ```
+  `HOMEBREW_NO_INSTALL_FROM_API=1` is what matters in CI (brew there defaults to
+  the JSON API and has no editable formula file); on a workstation with the
+  homebrew-core tap already cloned it is a harmless no-op, so the command is safe
+  to run either place.

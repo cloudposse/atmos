@@ -8,7 +8,7 @@ Publishing `v1.228.0` fired `build.yml`'s `sign-and-attest-release` job
 ("Rebuild, sign, SBOM, and attest release artifacts"). GoReleaser rebuilt every
 platform and cataloged all SBOMs successfully, then failed at the very end:
 
-```
+```text
 release failed after 53m45s
   error=scm releases: failed to publish artifacts: could not release:
   PATCH https://api.github.com/repos/cloudposse/atmos/releases/383707212:
