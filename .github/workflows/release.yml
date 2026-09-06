@@ -83,12 +83,19 @@ jobs:
         with:
           egress-policy: block
           # api.github.com: read/update the release. api.openai.com: the
-          # summarization call. The rest is the module download behind
-          # `go tool mage` (same set as test.yml's build job).
+          # summarization call. golang.org/go.dev/raw.githubusercontent.com/
+          # dl.google.com: actions/setup-go resolving and downloading the Go
+          # toolchain (golang.org was missing, so setup-go failed with
+          # "getaddrinfo EAI_AGAIN golang.org" before the summarizer ran). The
+          # rest is the module download behind `go tool mage`.
           allowed-endpoints: >
             api.github.com:443
             api.openai.com:443
             github.com:443
+            raw.githubusercontent.com:443
+            golang.org:443
+            go.dev:443
+            dl.google.com:443
             proxy.golang.org:443
             sum.golang.org:443
             storage.googleapis.com:443
