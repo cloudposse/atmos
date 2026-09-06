@@ -45,6 +45,27 @@ before:
         cosign version
       fi'
 
+    # Install syft for the `sboms:` block below. Same rationale as the cosign
+    # hook above: the reusable release workflow
+    # (cloudposse/.github/.github/workflows/shared-go-auto-release.yml) sets up
+    # Go before running GoReleaser but does not install syft, so without this
+    # hook the SBOM step fails with
+    # "exec: syft: executable file not found in $PATH" and the whole release
+    # (and therefore the drafted release) fails. `go install` resolves through
+    # the Go module proxy and verifies against sum.golang.org, so this needs no
+    # separate checksum pinning. The binary is copied to /usr/local/bin because
+    # each `before.hooks` entry and the later `sboms:` step run as separate
+    # subprocesses that don't share a modified PATH or GOPATH/bin.
+    - |
+      sh -c 'if [ "$GITHUB_ACTIONS" = "true" ]; then
+        echo "Installing syft for SBOM cataloging..."
+        go install github.com/anchore/syft/cmd/syft@v1.51.1
+        syft_bin_dir="$(go env GOBIN)"
+        if [ -z "$syft_bin_dir" ]; then syft_bin_dir="$(go env GOPATH)/bin"; fi
+        sudo cp "$syft_bin_dir/syft" /usr/local/bin/syft
+        syft version
+      fi'
+
 builds:
   - env:
       # goreleaser does not work with CGO, it could also complicate
