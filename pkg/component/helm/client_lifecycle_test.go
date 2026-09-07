@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,9 +18,13 @@ import (
 	"helm.sh/helm/v4/pkg/kube"
 	kubefake "helm.sh/helm/v4/pkg/kube/fake"
 	"helm.sh/helm/v4/pkg/registry"
+	helmrelease "helm.sh/helm/v4/pkg/release"
 	release "helm.sh/helm/v4/pkg/release/v1"
 	"helm.sh/helm/v4/pkg/storage"
 	"helm.sh/helm/v4/pkg/storage/driver"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 // memoryActionContext builds an actionContext backed by Helm's in-memory storage
@@ -118,11 +124,13 @@ func TestClientReleaseLifecycleInMemory(t *testing.T) {
 	assert.Equal(t, "install", result.Operation)
 	assert.Contains(t, result.Manifest, "kind: ConfigMap")
 	assert.Contains(t, result.Manifest, "name: lifecycle")
+	assert.Contains(t, result.Manifest, `name: "lifecycle-settings"`)
 
 	// The installed release is now the diff baseline.
 	deployed, err := getDeployedManifest("lifecycle", "testns")
 	require.NoError(t, err)
 	assert.Contains(t, deployed, "kind: ConfigMap")
+	assert.Contains(t, deployed, `name: "lifecycle-settings"`)
 
 	// Release exists -> applyRelease takes the upgrade branch.
 	upgraded, err := applyRelease(context.Background(), spec, false)
@@ -131,8 +139,8 @@ func TestClientReleaseLifecycleInMemory(t *testing.T) {
 	assert.Contains(t, upgraded.Manifest, "kind: ConfigMap")
 
 	// Delete removes it; deleting an absent release is a no-op (idempotent).
-	require.NoError(t, deleteRelease(spec, false))
-	require.NoError(t, deleteRelease(spec, false))
+	require.NoError(t, deleteRelease(context.Background(), spec, false))
+	require.NoError(t, deleteRelease(context.Background(), spec, false))
 
 	// After delete the baseline is empty (release not found), not an error.
 	deployed, err = getDeployedManifest("lifecycle", "testns")
@@ -180,7 +188,7 @@ func TestDeleteReleaseDryRunPreservesRelease(t *testing.T) {
 
 	_, err := applyRelease(context.Background(), spec, false)
 	require.NoError(t, err)
-	require.NoError(t, deleteRelease(spec, true))
+	require.NoError(t, deleteRelease(context.Background(), spec, true))
 
 	deployed, err := getDeployedManifest(spec.ReleaseName, spec.Namespace)
 	require.NoError(t, err)
@@ -217,4 +225,190 @@ func TestUpgradeRollbackPreservesHistoryLimit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, history, maxHistory)
 	assert.Equal(t, maxHistory, actx.cfg.Releases.MaxHistory)
+}
+
+func TestApplyReleaseHonorsCanceledContext(t *testing.T) {
+	actx := memoryActionContext(t)
+	stubActionContext(t, actx)
+	spec := testdataChartSpec(t, "canceled")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := applyRelease(ctx, spec, false)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.NotErrorIs(t, err, errUtils.ErrHelmReleaseUpgrade)
+
+	deployed, getErr := getDeployedManifest(spec.ReleaseName, spec.Namespace)
+	require.NoError(t, getErr)
+	assert.Empty(t, deployed)
+}
+
+func TestDeleteReleaseHonorsCanceledContext(t *testing.T) {
+	actx := memoryActionContext(t)
+	stubActionContext(t, actx)
+	spec := testdataChartSpec(t, "delete-canceled")
+	_, err := applyRelease(context.Background(), spec, false)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.ErrorIs(t, deleteRelease(ctx, spec, false), context.Canceled)
+
+	deployed, getErr := getDeployedManifest(spec.ReleaseName, spec.Namespace)
+	require.NoError(t, getErr)
+	assert.NotEmpty(t, deployed)
+}
+
+func TestApplyReleaseWiresWaitContext(t *testing.T) {
+	actx := memoryActionContext(t)
+	stubActionContext(t, actx)
+	spec := testdataChartSpec(t, "wait-context")
+
+	kubeClient, ok := actx.cfg.KubeClient.(*kubefake.FailingKubeClient)
+	require.True(t, ok)
+	waitErr := errors.New("wait failed")
+	kubeClient.WaitError = waitErr
+	timeout := "5s"
+	spec.Release.Install.Timeout = &timeout
+
+	// Capture the context handed to the Helm waiters. Asserting only that
+	// RecordedWaitOptions is non-empty proves a waiter ran, not that it received
+	// the timed operation context: a regression passing context.Background()
+	// would still populate RecordedWaitOptions. Helm's waitOptions.ctx is
+	// unexported and the fake waiter ignores it, so observe it through the seam.
+	var waitCtx context.Context
+	var waitOptionsAt time.Time
+	originalWaitOptions := releaseWaitOptions
+	t.Cleanup(func() { releaseWaitOptions = originalWaitOptions })
+	releaseWaitOptions = func(ctx context.Context) []kube.WaitOption {
+		// Stamp the moment the operation context is wired into the waiters so
+		// the deadline can be compared against a near-exact reference; this
+		// rejects a materially wrong timeout that a looser tolerance would miss.
+		waitOptionsAt = time.Now()
+		waitCtx = ctx
+		return originalWaitOptions(ctx)
+	}
+
+	result, err := applyRelease(context.Background(), spec, false)
+
+	require.ErrorIs(t, err, waitErr)
+	require.ErrorIs(t, err, errUtils.ErrHelmReleaseOperation)
+	assert.Equal(t, releaseOperationInstall, result.Operation)
+	assert.NotEmpty(t, kubeClient.RecordedWaitOptions, "Helm waiters must receive the operation context")
+
+	require.NotNil(t, waitCtx, "releaseWaitOptions must receive the operation context")
+	deadline, hasDeadline := waitCtx.Deadline()
+	require.True(t, hasDeadline, "wait context must carry the 5s operation timeout, not context.Background()")
+	assert.WithinDuration(t, waitOptionsAt.Add(5*time.Second), deadline, 250*time.Millisecond)
+}
+
+func TestReleaseOperationContextAppliesTimeout(t *testing.T) {
+	const timeout = time.Minute
+	started := time.Now()
+	ctx, cancel := releaseOperationContext(context.Background(), timeout)
+	defer cancel()
+
+	deadline, hasDeadline := ctx.Deadline()
+	require.True(t, hasDeadline)
+	assert.WithinDuration(t, started.Add(timeout), deadline, time.Second)
+}
+
+func TestApplyReleasePreparesChartBeforeLifecycleTimeout(t *testing.T) {
+	chartDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(chartDir, "Chart.yaml"), []byte("apiVersion: ["), 0o600))
+
+	for _, operation := range []string{releaseOperationInstall, releaseOperationUpgrade} {
+		t.Run(operation, func(t *testing.T) {
+			actx := memoryActionContext(t)
+			stubActionContext(t, actx)
+			spec := testdataChartSpec(t, "prepare-"+operation)
+			spec.Chart = chartDir
+			timeout := "1ns"
+			spec.Release.Timeout = &timeout
+			if operation == releaseOperationUpgrade {
+				require.NoError(t, actx.cfg.Releases.Create(release.Mock(&release.MockReleaseOptions{
+					Name:      spec.ReleaseName,
+					Namespace: spec.Namespace,
+				})))
+			}
+
+			result, err := applyRelease(context.Background(), spec, true)
+			require.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
+			assert.NotErrorIs(t, err, context.DeadlineExceeded)
+			assert.Equal(t, operation, result.Operation)
+		})
+	}
+}
+
+func TestReleaseOperationContextPreservesZeroTimeout(t *testing.T) {
+	parent := context.Background()
+	ctx, cancel := releaseOperationContext(parent, 0)
+	defer cancel()
+
+	assert.Equal(t, parent, ctx)
+	_, hasDeadline := ctx.Deadline()
+	assert.False(t, hasDeadline)
+}
+
+func TestUpgradeReleaseHistoryRetention(t *testing.T) {
+	const revisions = cfg.HelmDefaultMaxHistory + 3
+	tests := []struct {
+		name          string
+		releaseName   string
+		maxHistory    int
+		override      bool
+		expectedCount int
+	}{
+		{
+			name:          "default bounded history",
+			releaseName:   "history",
+			expectedCount: cfg.HelmDefaultMaxHistory,
+		},
+		{
+			name:          "explicit unlimited history",
+			releaseName:   "unlimited-history",
+			maxHistory:    0,
+			override:      true,
+			expectedCount: revisions,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actx := memoryActionContext(t)
+			stubActionContext(t, actx)
+			spec := testdataChartSpec(t, tt.releaseName)
+			if tt.override {
+				maxHistory := tt.maxHistory
+				spec.Release.History.Max = &maxHistory
+			}
+
+			for revision := 0; revision < revisions; revision++ {
+				spec.Values["replicaCount"] = revision + 1
+				_, err := applyRelease(context.Background(), spec, false)
+				require.NoError(t, err)
+			}
+
+			history, err := actx.cfg.Releases.History(spec.ReleaseName)
+			require.NoError(t, err)
+			assert.Len(t, history, tt.expectedCount)
+			expected := make([]int, tt.expectedCount)
+			firstRevision := revisions - tt.expectedCount + 1
+			for i := range expected {
+				expected[i] = firstRevision + i
+			}
+			assert.Equal(t, expected, releaseVersions(t, history))
+		})
+	}
+}
+
+func releaseVersions(t *testing.T, history []helmrelease.Releaser) []int {
+	t.Helper()
+	versions := make([]int, len(history))
+	for i, item := range history {
+		typed, ok := item.(*release.Release)
+		require.True(t, ok)
+		versions[i] = typed.Version
+	}
+	return versions
 }
