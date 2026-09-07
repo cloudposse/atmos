@@ -1151,6 +1151,24 @@ func terraformHookEvents(subCommand string) (before, after h.HookEvent, ok bool)
 	}
 }
 
+// resolveTerraformCICommand resolves the Terraform subcommand an aggregate CI
+// hook should report as, in priority order: the handler's own configured
+// command (set once at wiring time in wirePerComponentHook), then the
+// command already carried on the payload (resultSet.Command /
+// pending.Command), then the info struct's SubCommand as a last resort.
+// Shared by terraformPlanCIResultHandler.HandleTerraformPlanCIResults and
+// terraformPlanCIBeforeHandler.HandleTerraformPlanCIBefore, which previously
+// duplicated this exact fallback chain.
+func resolveTerraformCICommand(handlerCommand, payloadCommand, infoSubCommand string) string {
+	if handlerCommand != "" {
+		return handlerCommand
+	}
+	if payloadCommand != "" {
+		return payloadCommand
+	}
+	return infoSubCommand
+}
+
 // terraformPlanCIResultHandler forwards scheduler results into the aggregate CI hook.
 type terraformPlanCIResultHandler struct {
 	cmd     *cobra.Command
@@ -1164,13 +1182,7 @@ func (handler *terraformPlanCIResultHandler) HandleTerraformPlanCIResults(result
 		return nil
 	}
 
-	command := handler.command
-	if command == "" {
-		command = resultSet.Command
-	}
-	if command == "" {
-		command = handler.info.SubCommand
-	}
+	command := resolveTerraformCICommand(handler.command, resultSet.Command, handler.info.SubCommand)
 	resultSet.Command = command
 
 	atmosConfig, err := cfg.InitCliConfig(*handler.info, true)
@@ -1218,13 +1230,7 @@ func (handler *terraformPlanCIBeforeHandler) HandleTerraformPlanCIBefore(pending
 		return nil
 	}
 
-	command := handler.command
-	if command == "" {
-		command = pending.Command
-	}
-	if command == "" {
-		command = handler.info.SubCommand
-	}
+	command := resolveTerraformCICommand(handler.command, pending.Command, handler.info.SubCommand)
 	pending.Command = command
 
 	atmosConfig, err := cfg.InitCliConfig(*handler.info, true)

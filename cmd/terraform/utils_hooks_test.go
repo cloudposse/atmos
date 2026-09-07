@@ -472,6 +472,35 @@ func TestTerraformBeforeAggregateEvent(t *testing.T) {
 	}
 }
 
+// TestResolveTerraformCICommand pins the three-tier fallback precedence
+// (handler command, then payload command, then info.SubCommand) shared by
+// HandleTerraformPlanCIResults and HandleTerraformPlanCIBefore. Regression
+// test for issue #3007 review feedback: the existing
+// "falls back to pending.Command and info.SubCommand" integration-style
+// subtest only exercised the case where both handlerCommand and
+// payloadCommand are empty, so it could not have caught a bug that ignored a
+// non-empty payloadCommand in favor of infoSubCommand.
+func TestResolveTerraformCICommand(t *testing.T) {
+	tests := []struct {
+		name           string
+		handlerCommand string
+		payloadCommand string
+		infoSubCommand string
+		want           string
+	}{
+		{name: "handler command wins over both", handlerCommand: "apply", payloadCommand: "plan", infoSubCommand: "destroy", want: "apply"},
+		{name: "payload command wins over info.SubCommand", handlerCommand: "", payloadCommand: "plan", infoSubCommand: "destroy", want: "plan"},
+		{name: "falls back to info.SubCommand when both are empty", handlerCommand: "", payloadCommand: "", infoSubCommand: "destroy", want: "destroy"},
+		{name: "all empty resolves to empty", handlerCommand: "", payloadCommand: "", infoSubCommand: "", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveTerraformCICommand(tt.handlerCommand, tt.payloadCommand, tt.infoSubCommand)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // TestDeployPostRunE_SuppressedWhenMultiComponent verifies that deployCmd.PostRunE
 // returns nil without error when wasMultiComponentExecution is true (multi-component
 // mode). Exercises the actual PostRunE closure in both suppressed and non-suppressed states.

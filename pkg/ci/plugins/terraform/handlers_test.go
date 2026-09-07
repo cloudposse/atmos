@@ -758,7 +758,10 @@ func TestCreatePerOperationStatuses_SkipsInvalidStatusContext(t *testing.T) {
 		},
 	}
 
-	p.createPerOperationStatuses(ctx, result, "atmos", schema.CIChecksStatusesConfig{})
+	// Add is explicit here (rather than relying on isStatusEnabled's nil-means-
+	// enabled default) so this test still exercises the invalid-context branch
+	// if that default ever changes.
+	p.createPerOperationStatuses(ctx, result, "atmos", schema.CIChecksStatusesConfig{Add: boolPtr(true)})
 
 	assert.Empty(t, mp.checkRunCalls, "invalid status context must skip the per-operation check run")
 }
