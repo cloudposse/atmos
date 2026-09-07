@@ -59,6 +59,7 @@ var (
 	renderChartManifest      = renderManifest
 	applyHelmRelease         = applyRelease
 	deleteHelmRelease        = deleteRelease
+	newHelmApplyProgress     = newHelmOperationProgress
 	setupRepositories        = setupHelmRepositories
 	// writeStatusLine emits human-readable apply/delete status on the UI channel (stderr) via the ui
 	// layer - not data.Write (stdout), which is reserved for pipeable command data. See
@@ -226,7 +227,7 @@ func runWithHooks(
 		if err != nil {
 			return err
 		}
-		emitLifecycleWarnings(spec.Lifecycle.Warnings)
+		reportResolvedLifecycle(spec.Lifecycle)
 	}
 	if err := ctx.GoContext().Err(); err != nil {
 		return err
@@ -238,14 +239,18 @@ func runWithHooks(
 	}
 
 	summary, opErr := runOperation(ctx, atmosConfig, info, operation, spec)
-	runHelmCIHook(helmCIHookParams{
-		ctx:         ctx,
-		atmosConfig: atmosConfig,
-		info:        info,
-		event:       after,
-		summary:     summary,
-		commandErr:  opErr,
-	})
+	if collector := helmBulkCollector(ctx); collector != nil {
+		collector.setSummary(info, summary, opErr)
+	} else {
+		runHelmCIHook(helmCIHookParams{
+			ctx:         ctx,
+			atmosConfig: atmosConfig,
+			info:        info,
+			event:       after,
+			summary:     summary,
+			commandErr:  opErr,
+		})
+	}
 	if opErr != nil {
 		return opErr
 	}
@@ -281,7 +286,11 @@ func runOperation(
 		emitOperationStatus(OperationApply, summary, err)
 		return summary, err
 	case OperationDelete:
+		progress := newHelmOperationProgress(info, spec, string(OperationDelete), info.DryRun)
+		progress.start()
+		progress.resolved(releaseOperationDelete, spec.Lifecycle)
 		err := deleteHelmRelease(ctx.GoContext(), spec, info.DryRun)
+		progress.finish(err)
 		summary["release"] = lifecycleSummary(releaseOperationDelete, spec.Lifecycle.Policy)
 		emitOperationStatus(OperationDelete, summary, err)
 		return summary, err
@@ -294,6 +303,27 @@ func emitLifecycleWarnings(warnings []lifecycleWarning) {
 	for _, warning := range warnings {
 		ui.Warningf("%s (field: %s, code: %s)", warning.Message, warning.Field, warning.Code)
 	}
+}
+
+func reportResolvedLifecycle(resolution releaseLifecycleResolution) {
+	emitLifecycleWarnings(resolution.Warnings)
+	reason := "configured"
+	for _, warning := range resolution.Warnings {
+		if warning.Code == warningWaitDerived {
+			reason = warning.Message
+			break
+		}
+	}
+	policy := resolution.Policy
+	log.Debug("Resolved Helm release lifecycle",
+		"operation", policy.Operation,
+		"wait_strategy", policy.WaitStrategy,
+		"wait_strategy_reason", reason,
+		"wait_jobs", policy.WaitForJobs,
+		"on_failure", policy.OnFailure,
+		"timeout", policy.Timeout,
+		"timeout_field", resolution.TimeoutField,
+	)
 }
 
 // runTemplate renders the chart and writes the manifests per the render options.
