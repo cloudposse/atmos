@@ -769,8 +769,32 @@ func TestYAMLMerger_KindDivergencePreservesOursAndRecordsConflict(t *testing.T) 
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, result.HasConflicts)
+	assert.True(t, result.HasMarkers, "a real ours/theirs divergence always has a node pair to splice markers from")
 	assert.Equal(t, 1, result.ConflictCount)
 	assert.Contains(t, result.Content, "nested: true")
+}
+
+// TestYAMLMerger_DroppedDocumentConflictHasNoMarkers covers
+// mergeDocumentStreams' ours==nil branch: the user's stream dropped a
+// document the template went on to change. That's recorded as a conflict
+// (via addConflict) with no ours/theirs node pair to splice inline markers
+// from, so HasConflicts is true but HasMarkers must be false -- unlike every
+// other conflict this merger records, which always comes from addNodeConflict
+// and therefore always has a marker.
+func TestYAMLMerger_DroppedDocumentConflictHasNoMarkers(t *testing.T) {
+	base := "doc: one\n---\ndoc: two\n"
+	ours := "doc: one\n"
+	theirs := "doc: one\n---\ndoc: two\ntemplate: true\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.HasConflicts)
+	assert.False(t, result.HasMarkers, "a dropped document has no node pair to splice markers from")
+	assert.Equal(t, []string{"documents[1]"}, result.ConflictPaths)
+	assert.NotContains(t, result.Content, "<<<<<<<")
+	assert.Contains(t, result.Content, "template: true")
 }
 
 func TestYAMLMerger_ComplexMappingKeyError(t *testing.T) {

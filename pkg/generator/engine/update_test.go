@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
@@ -520,6 +521,49 @@ func TestProcessorMergeFile_RejectsUnresolvedMarkers(t *testing.T) {
 	written, readErr := os.ReadFile(testRepo.configPath)
 	require.NoError(t, readErr)
 	assert.Equal(t, unresolvedContent, string(written))
+}
+
+// TestProcessorMergeFile_DocumentStreamConflictHasNoMarkers covers a
+// YAMLMerger conflict that has no ours/theirs node pair to splice inline
+// markers from: a multi-document stream where the user's stream dropped a
+// document the template went on to change.
+//
+// That case is recorded as a conflict (HasConflicts) but keeps the
+// template's version verbatim instead of inserting <<<<<<< Ours markers
+// (HasMarkers is false), so mergeFile must reflect that in its hint instead
+// of claiming markers were written when none exist in the file.
+func TestProcessorMergeFile_DocumentStreamConflictHasNoMarkers(t *testing.T) {
+	initialContent := "doc: one\n---\ndoc: two\n"
+	userContent := "doc: one\n"
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+	testRepo.processor.SetMaxChanges(100)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "doc: one\n---\ndoc: two\ntemplate: true\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+
+	hints := cockroachErrors.GetAllHints(err)
+	for _, h := range hints {
+		assert.NotContains(t, h, "have been written to the file",
+			"no inline markers exist for this conflict, so the hint must not claim they were written")
+	}
+	assert.Contains(t, hints, "The template's version was kept for the conflicting item(s); review the file to confirm it's what you want")
+
+	// The template's version of the dropped document is kept verbatim -- no
+	// conflict markers appear anywhere in the written file.
+	written, readErr := os.ReadFile(testRepo.configPath)
+	require.NoError(t, readErr)
+	writtenContent := string(written)
+	assert.NotContains(t, writtenContent, "<<<<<<<")
+	assert.Contains(t, writtenContent, "template: true")
 }
 
 // TestProcessorMergeFile_ConflictWriteFailurePropagates forces

@@ -192,6 +192,7 @@ func (m *YAMLMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	return &MergeResult{
 		Content:       content,
 		HasConflicts:  len(conflicts.conflicts) > 0,
+		HasMarkers:    len(conflicts.nodeConflicts) > 0,
 		ConflictCount: len(conflicts.conflicts),
 		ConflictPaths: conflicts.conflicts,
 	}, nil

@@ -48,6 +48,14 @@ type MergeResult struct {
 	// when the merger can identify them. TextMerger leaves this nil since
 	// diff3 hunks aren't addressable by path; YAMLMerger populates it.
 	ConflictPaths []string
+	// HasMarkers reports whether Content actually contains inline
+	// <<<<<<</=======/>>>>>>> conflict markers for a caller to point the user
+	// at. TextMerger's conflicts always come with markers, so this mirrors
+	// HasConflicts there. YAMLMerger can record a conflict with no node pair
+	// to splice markers from (e.g. a document-stream-level conflict where the
+	// user's stream dropped a document the template changed), in which case
+	// HasConflicts is true but HasMarkers is false.
+	HasMarkers bool
 }
 
 // Merge performs a 3-way merge using the diff3 algorithm.
@@ -124,6 +132,7 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	return &MergeResult{
 		Content:       mergedContent,
 		HasConflicts:  hasConflicts,
+		HasMarkers:    hasConflicts,
 		ConflictCount: conflictCount,
 	}, nil
 }

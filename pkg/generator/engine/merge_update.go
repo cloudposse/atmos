@@ -217,9 +217,19 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 		}
 
 		builder := errUtils.Build(errUtils.ErrMergeConflict).
-			WithExplanationf("Merge resulted in **%d conflict(s)** in file: `%s`", result.ConflictCount, file.Path).
-			WithHint("Conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) have been written to the file").
-			WithHint("Open it, resolve the conflicts, and remove the markers").
+			WithExplanationf("Merge resulted in **%d conflict(s)** in file: `%s`", result.ConflictCount, file.Path)
+		if result.HasMarkers {
+			builder = builder.
+				WithHint("Conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) have been written to the file").
+				WithHint("Open it, resolve the conflicts, and remove the markers")
+		} else {
+			// Some conflicts (e.g. a document the template changed that the
+			// user's stream dropped) have no ours/theirs node pair to splice
+			// inline markers from, so the template's version was kept as-is
+			// instead -- there's nothing in the file itself to point at.
+			builder = builder.WithHint("The template's version was kept for the conflicting item(s); review the file to confirm it's what you want")
+		}
+		builder = builder.
 			WithHint("Or re-run with `--force` (or `--merge-strategy=theirs`) to resolve every conflict to the template's version").
 			WithContext("file_path", file.Path).
 			WithContext("conflict_count", result.ConflictCount).
