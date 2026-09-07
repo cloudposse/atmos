@@ -18,6 +18,7 @@ import (
 
 	"github.com/cloudposse/atmos/internal/gcp"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
@@ -73,6 +74,7 @@ type GSMStore struct {
 	endpoint              string
 	endpointInsecure      bool
 	withoutAuthentication bool
+	secret                bool
 
 	// Identity-based authentication fields.
 	identityName string
@@ -102,6 +104,7 @@ var (
 	_ store.DeletableStore     = (*GSMStore)(nil)
 	_ store.StatusStore        = (*GSMStore)(nil)
 	_ store.ListableStore      = (*GSMStore)(nil)
+	_ store.SecretAwareStore   = (*GSMStore)(nil)
 )
 
 // NewGSMStore initializes a new Google Secret Manager store.Store.
@@ -374,12 +377,10 @@ func (s *GSMStore) Set(stack string, component string, key string, value any) er
 	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
 	defer cancel()
 
-	// Convert value to JSON string
-	jsonValue, err := json.Marshal(value)
+	strValue, err := marshalGSMValue(value, s.secret)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, store.ErrSerializeJSON, err)
 	}
-	strValue := string(jsonValue)
 
 	// Get the secret ID using getKey
 	secretID, err := s.getKey(stack, component, key)
@@ -399,15 +400,49 @@ func (s *GSMStore) Set(stack string, component string, key string, value any) er
 	return nil
 }
 
+// SetSecret implements SecretAwareStore. Secret string values are written verbatim so
+// `atmos secret set` round-trips through `!secret ... | raw`; structured values remain JSON.
+func (s *GSMStore) SetSecret(secret bool) {
+	s.secret = secret
+}
+
+func marshalGSMValue(value any, rawStrings bool) (string, error) {
+	if rawStrings {
+		if text, ok := value.(string); ok {
+			return text, nil
+		}
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
 // Get retrieves a value by key from Google Secret Manager. An empty stack and/or component is
 // permitted: scoped secret coordinates (stack/global scope) omit those path segments.
 func (s *GSMStore) Get(stack string, component string, key string) (any, error) {
+	payload, err := s.getRaw(stack, component, key)
+	if err != nil {
+		return nil, err
+	}
+
+	var unmarshalled interface{}
+	// Intentionally ignoring JSON unmarshal error to handle legacy or 3rd-party secrets that might not be JSON-encoded
+	if err := json.Unmarshal([]byte(payload), &unmarshalled); err != nil {
+		// If it's not valid JSON, return the raw string value
+		return payload, nil
+	}
+	return unmarshalled, nil
+}
+
+func (s *GSMStore) getRaw(stack string, component string, key string) (string, error) {
 	if key == "" {
-		return nil, store.ErrEmptyKey
+		return "", store.ErrEmptyKey
 	}
 
 	if err := s.ensureClient(); err != nil {
-		return nil, err
+		return "", err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
@@ -416,7 +451,7 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 	// Get the secret ID using getKey
 	secretID, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
+		return "", fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
 
 	// Build the resource name for the latest version
@@ -431,21 +466,25 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 		if ok {
 			switch st.Code() {
 			case codes.NotFound:
-				return nil, fmt.Errorf(errWrapFormatWithID, store.ErrResourceNotFound, secretID, err)
+				return "", fmt.Errorf(errWrapFormatWithID, store.ErrResourceNotFound, secretID, err)
 			case codes.PermissionDenied:
-				return nil, fmt.Errorf(errWrapFormatWithID, store.ErrPermissionDenied, fmt.Sprintf("secret %s", secretID), err)
+				return "", fmt.Errorf(errWrapFormatWithID, store.ErrPermissionDenied, fmt.Sprintf("secret %s", secretID), err)
 			}
 		}
-		return nil, fmt.Errorf(errWrapFormat, store.ErrAccessSecret, err)
+		return "", fmt.Errorf(errWrapFormat, store.ErrAccessSecret, err)
 	}
+	return string(result.Payload.Data), nil
+}
 
-	var unmarshalled interface{}
-	// Intentionally ignoring JSON unmarshal error to handle legacy or 3rd-party secrets that might not be JSON-encoded
-	if err := json.Unmarshal(result.Payload.Data, &unmarshalled); err != nil {
-		// If it's not valid JSON, return the raw string value
-		return string(result.Payload.Data), nil
+// GetRaw retrieves the original Secret Manager payload without JSON decoding.
+func (s *GSMStore) GetRaw(stack string, component string, key string) (string, error) {
+	defer perf.Track(nil, "providers.GSMStore.GetRaw")()
+
+	value, err := s.getRaw(stack, component, key)
+	if err != nil {
+		return "", err
 	}
-	return unmarshalled, nil
+	return value, nil
 }
 
 // Delete removes a secret (and all its versions) from Google Secret Manager for the given
