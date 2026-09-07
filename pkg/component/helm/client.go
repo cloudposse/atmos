@@ -6,14 +6,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
+	"time"
 
 	"helm.sh/helm/v4/pkg/action"
-	"helm.sh/helm/v4/pkg/chart/loader"
 	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/kube"
 	"helm.sh/helm/v4/pkg/registry"
+	helmrelease "helm.sh/helm/v4/pkg/release"
 	release "helm.sh/helm/v4/pkg/release/v1"
+	"helm.sh/helm/v4/pkg/storage"
 	"helm.sh/helm/v4/pkg/storage/driver"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -28,22 +31,25 @@ type actionContext struct {
 	settings *cli.EnvSettings
 }
 
+type releaseActionResult struct {
+	Manifest  string
+	Operation string
+	Lifecycle releaseLifecycleResolution
+}
+
+const (
+	releaseOperationInstall = "install"
+	releaseOperationUpgrade = "upgrade"
+	releaseOperationDelete  = "delete"
+)
+
 // newActionContext initializes a cluster-capable Helm action configuration.
 // The RESTClientGetter resolves credentials from the ambient KUBECONFIG, which
 // the toolchain/auth environment configures before execution.
 var newActionContext = func(namespace string) (*actionContext, error) {
-	settings := newSettings()
+	settings := newSettingsForNamespace(namespace)
 	if err := verifyExpectedKubernetesEndpoint(settings); err != nil {
 		return nil, err
-	}
-
-	// Set the namespace on the settings so Helm's RESTClientGetter installs namespace-less
-	// manifests into it. Setting only the install/upgrade action's Namespace is not enough:
-	// charts whose manifests omit metadata.namespace inherit the getter's namespace, which
-	// otherwise defaults to the kubeconfig context (usually "default") rather than the
-	// component's configured namespace. See docs/fixes/2026-08-14-native-helm-ux-fixes.md.
-	if namespace != "" {
-		settings.SetNamespace(namespace)
 	}
 
 	cfg := new(action.Configuration)
@@ -88,24 +94,68 @@ func verifyExpectedKubernetesEndpoint(settings *cli.EnvSettings) error {
 // (equivalent to `helm upgrade --install`). When dryRun is true the operation is
 // validated server-side without persisting changes and the rendered manifest is
 // returned for preview.
-func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (string, error) {
+func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (releaseActionResult, error) {
 	defer perf.Track(nil, "helm.applyRelease")()
+	if err := ctx.Err(); err != nil {
+		return releaseActionResult{}, err
+	}
 
 	actx, err := newActionContext(spec.Namespace)
 	if err != nil {
-		return "", err
+		return releaseActionResult{}, err
 	}
 
 	histClient := action.NewHistory(actx.cfg)
 	histClient.Max = 1
-	if _, err := histClient.Run(spec.ReleaseName); errors.Is(err, driver.ErrReleaseNotFound) {
-		return installRelease(ctx, actx, spec, dryRun)
+	if _, historyErr := histClient.Run(spec.ReleaseName); errors.Is(historyErr, driver.ErrReleaseNotFound) {
+		lifecycle, resolveErr := resolveReleaseLifecycleWithFlags(spec.Release, releaseOperationInstall, spec.LifecycleFlags)
+		if resolveErr != nil {
+			return releaseActionResult{Operation: releaseOperationInstall}, resolveErr
+		}
+		spec.Lifecycle = lifecycle
+		operationCtx, cancel := releaseOperationContext(ctx, lifecycle.Policy.Timeout)
+		defer cancel()
+		manifest, installErr := installRelease(operationCtx, actx, spec, dryRun)
+		return releaseActionResult{Manifest: manifest, Operation: releaseOperationInstall, Lifecycle: lifecycle}, installErr
+	} else if historyErr != nil {
+		return releaseActionResult{}, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr)
 	}
-	return upgradeRelease(ctx, actx, spec, dryRun)
+	lifecycle, resolveErr := resolveReleaseLifecycleWithFlags(spec.Release, releaseOperationUpgrade, spec.LifecycleFlags)
+	if resolveErr != nil {
+		return releaseActionResult{Operation: releaseOperationUpgrade}, resolveErr
+	}
+	spec.Lifecycle = lifecycle
+	operationCtx, cancel := releaseOperationContext(ctx, lifecycle.Policy.Timeout)
+	defer cancel()
+	manifest, upgradeErr := upgradeRelease(operationCtx, actx, spec, dryRun)
+	return releaseActionResult{Manifest: manifest, Operation: releaseOperationUpgrade, Lifecycle: lifecycle}, upgradeErr
+}
+
+// releaseOperationContext applies the effective lifecycle timeout to every
+// cluster-side Helm action. A zero timeout intentionally leaves the outer
+// action context unbounded during the migration; Helm then applies the
+// selected wait strategy's own zero-timeout behavior.
+func releaseOperationContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout <= 0 {
+		return parent, func() {}
+	}
+	return context.WithTimeout(parent, timeout)
+}
+
+// releaseWaitOptions builds the Helm wait options bound to the operation
+// context. It is a package variable so tests can observe the context wired into
+// the waiters (Helm's waitOptions.ctx is unexported and the fake waiter ignores
+// it), mirroring the newActionContext seam above.
+var releaseWaitOptions = func(ctx context.Context) []kube.WaitOption {
+	return []kube.WaitOption{
+		kube.WithWaitContext(ctx),
+		kube.WithWaitForDeleteMethodContext(ctx),
+	}
 }
 
 func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, dryRun bool) (string, error) {
 	client := newInstallClient(actx, spec, dryRun)
+	client.WaitOptions = releaseWaitOptions(ctx)
 	return runInstall(ctx, client, actx.settings, spec)
 }
 
@@ -121,7 +171,7 @@ func newInstallClient(actx *actionContext, spec *chartSpec, dryRun bool) *action
 	client.Namespace = spec.Namespace
 	client.CreateNamespace = spec.CreateNamespace
 	client.Version = spec.Version
-	client.WaitStrategy = kube.HookOnlyStrategy
+	configureInstallLifecycle(client, spec.Lifecycle.Policy)
 	if dryRun {
 		client.DryRunStrategy = action.DryRunServer
 	}
@@ -129,11 +179,15 @@ func newInstallClient(actx *actionContext, spec *chartSpec, dryRun bool) *action
 }
 
 func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, dryRun bool) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	client := action.NewUpgrade(actx.cfg)
 	client.SetRegistryClient(actx.cfg.RegistryClient)
 	client.Namespace = spec.Namespace
 	client.Version = spec.Version
-	client.WaitStrategy = kube.HookOnlyStrategy
+	configureUpgradeLifecycle(client, spec.Lifecycle.Policy)
+	client.WaitOptions = releaseWaitOptions(ctx)
 	if dryRun {
 		client.DryRunStrategy = action.DryRunServer
 	}
@@ -141,22 +195,90 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	chartRef := resolveUpgradeChartRef(client, spec)
 	chartPath, err := client.LocateChart(chartRef, actx.settings)
 	if err != nil {
-		return "", fmt.Errorf("failed to locate Helm chart %q: %w", spec.Chart, err)
+		return "", fmt.Errorf("%w: failed to locate Helm chart %q for upgrade: %w", errUtils.ErrHelmRenderFailed, spec.Chart, err)
 	}
-	loaded, err := loader.Load(chartPath)
+	loaded, err := loadChartForAction(ctx, chartPath, actx.settings, actx.cfg.RegistryClient, spec.DependencyUpdate)
 	if err != nil {
-		return "", fmt.Errorf("failed to load Helm chart %q: %w", chartPath, err)
+		return "", err
 	}
 
 	rel, err := client.RunWithContext(ctx, spec.ReleaseName, loaded, spec.Values)
+	if err != nil && !dryRun && spec.Lifecycle.Policy.OnFailure == failurePolicyRollback {
+		if historyErr := enforceReleaseHistoryLimit(actx.cfg.Releases, spec.ReleaseName, spec.Lifecycle.Policy.MaxHistory); historyErr != nil {
+			err = errors.Join(err, fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseHistory, spec.ReleaseName, historyErr))
+		}
+	}
 	if err != nil {
-		return "", err
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", ctxErr
+		}
+		if errors.Is(err, errUtils.ErrHelmRenderFailed) {
+			return "", fmt.Errorf("failed to upgrade Helm release %q: %w", spec.ReleaseName, err)
+		}
+		return "", fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseUpgrade, spec.ReleaseName, err)
 	}
 	rendered, ok := rel.(*release.Release)
 	if !ok {
 		return "", fmt.Errorf("%w: unexpected release type %T", errUtils.ErrHelmRenderFailed, rel)
 	}
-	return rendered.Manifest, nil
+	return renderReleaseManifest(rendered), nil
+}
+
+// enforceReleaseHistoryLimit repairs Helm's rollback-on-failure path, which
+// does not propagate Upgrade.MaxHistory to the internal Rollback action.
+func enforceReleaseHistoryLimit(releases *storage.Storage, name string, maxHistory int) error {
+	releases.MaxHistory = maxHistory
+	if maxHistory <= 0 {
+		return nil
+	}
+
+	history, err := releases.History(name)
+	if errors.Is(err, driver.ErrReleaseNotFound) {
+		return nil
+	}
+	if err != nil || len(history) <= maxHistory {
+		return err
+	}
+
+	revisions := make([]int, 0, len(history))
+	for _, stored := range history {
+		accessor, accessorErr := helmrelease.NewAccessor(stored)
+		if accessorErr != nil {
+			return accessorErr
+		}
+		revisions = append(revisions, accessor.Version())
+	}
+	sort.Ints(revisions)
+
+	deployedVersion := -1
+	deployed, err := releases.Deployed(name)
+	if err != nil && !errors.Is(err, driver.ErrNoDeployedReleases) {
+		return err
+	}
+	if err == nil {
+		accessor, accessorErr := helmrelease.NewAccessor(deployed)
+		if accessorErr != nil {
+			return accessorErr
+		}
+		deployedVersion = accessor.Version()
+	}
+
+	remaining := len(revisions) - maxHistory
+	var deleteErrs []error
+	for _, version := range revisions {
+		if remaining == 0 {
+			break
+		}
+		if version == deployedVersion {
+			continue
+		}
+		if _, deleteErr := releases.Delete(name, version); deleteErr != nil {
+			deleteErrs = append(deleteErrs, deleteErr)
+			continue
+		}
+		remaining--
+	}
+	return errors.Join(deleteErrs...)
 }
 
 // resolveUpgradeChartRef applies the same repo/name resolution as the install
@@ -201,25 +323,64 @@ func getDeployedManifest(releaseName, namespace string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("%w: unexpected release type %T", errUtils.ErrHelmRenderFailed, rel)
 	}
-	return deployed.Manifest, nil
+	return renderReleaseManifest(deployed), nil
 }
 
 // deleteRelease uninstalls the release.
-func deleteRelease(releaseName, namespace string) error {
+func deleteRelease(ctx context.Context, spec *chartSpec, dryRun bool) error {
 	defer perf.Track(nil, "helm.deleteRelease")()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	operationCtx, cancel := releaseOperationContext(ctx, spec.Lifecycle.Policy.Timeout)
+	defer cancel()
 
-	actx, err := newActionContext(namespace)
+	actx, err := newActionContext(spec.Namespace)
 	if err != nil {
 		return err
 	}
 
 	client := action.NewUninstall(actx.cfg)
-	client.WaitStrategy = kube.HookOnlyStrategy
-	if _, err := client.Run(releaseName); err != nil {
+	configureUninstallLifecycle(client, spec.Lifecycle.Policy, dryRun)
+	client.WaitOptions = releaseWaitOptions(operationCtx)
+	if _, err := client.Run(spec.ReleaseName); err != nil {
 		if errors.Is(err, driver.ErrReleaseNotFound) {
 			return nil
 		}
-		return fmt.Errorf("failed to uninstall Helm release %q: %w", releaseName, err)
+		uninstallErr := fmt.Errorf("%w %q: %w", errUtils.ErrHelmReleaseUninstall, spec.ReleaseName, err)
+		if ctxErr := operationCtx.Err(); ctxErr != nil {
+			return errors.Join(ctxErr, uninstallErr)
+		}
+		return uninstallErr
+	}
+	if err := operationCtx.Err(); err != nil {
+		return err
 	}
 	return nil
+}
+
+func configureInstallLifecycle(client *action.Install, policy effectiveReleasePolicy) {
+	client.RollbackOnFailure = policy.OnFailure == failurePolicyUninstall
+	client.WaitStrategy = policy.WaitStrategy
+	client.WaitForJobs = policy.WaitForJobs
+	client.Timeout = policy.Timeout
+	client.DisableHooks = !policy.ChartHooks
+	client.SkipCRDs = policy.CRDs == crdPolicySkip
+}
+
+func configureUpgradeLifecycle(client *action.Upgrade, policy effectiveReleasePolicy) {
+	client.RollbackOnFailure = policy.OnFailure == failurePolicyRollback
+	client.WaitStrategy = policy.WaitStrategy
+	client.WaitForJobs = policy.WaitForJobs
+	client.Timeout = policy.Timeout
+	client.CleanupOnFail = policy.CleanupOnFailure
+	client.MaxHistory = policy.MaxHistory
+	client.DisableHooks = !policy.ChartHooks
+}
+
+func configureUninstallLifecycle(client *action.Uninstall, policy effectiveReleasePolicy, dryRun bool) {
+	client.WaitStrategy = policy.WaitStrategy
+	client.Timeout = policy.Timeout
+	client.DisableHooks = !policy.ChartHooks
+	client.DryRun = dryRun
 }
