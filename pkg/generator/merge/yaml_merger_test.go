@@ -1032,11 +1032,11 @@ lookalike: ATMOSMERGECONFLICT000000
 // cryptoRandRead (the crypto/rand.Read indirection used by
 // randomSentinelSuffix) to fail, and asserts a real ours/theirs divergence
 // surfaces that failure as ErrThreeWayMerge instead of silently succeeding.
-// crypto/rand.Reader itself never errors on any platform Atmos supports, so
-// this branch (and everything upstream that propagates its error --
-// nextSentinel, addNodeConflict, pickConflictValue, and every mergeNodes/
-// mergeMappings/mergeSequences/mergeScalars call site above them) is
-// otherwise unreachable from a test.
+// Note: crypto/rand.Reader itself never errors on any platform Atmos
+// supports, so this branch (and everything upstream that propagates its
+// error -- nextSentinel, addNodeConflict, pickConflictValue, and every
+// mergeNodes/mergeMappings/mergeSequences/mergeScalars call site above
+// them) is otherwise unreachable from a test.
 func TestYAMLMerger_RandomSentinelSuffixFailurePropagates(t *testing.T) {
 	original := cryptoRandRead
 	injectedErr := errors.New("injected rand failure")
