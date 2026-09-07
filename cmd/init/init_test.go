@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -708,6 +710,112 @@ func TestMaybeInitGeneratedProjectGit_PinsInitialBaseRef(t *testing.T) {
 	resolved, err := defaultBaseRef("", dir)
 	require.NoError(t, err)
 	assert.Equal(t, metadata.BaseRef, resolved, "defaultBaseRef must prefer the pin just written")
+}
+
+// TestInitCmd_RunE_UpdateWithPositionalTarget_ResolvesBaseRefFromRealTargetPin
+// reproduces the RunE fix: with a positional target directory and --update,
+// RunE must pre-resolve --base-ref against that *real* target's own pinned
+// metadata (.atmos/init/metadata.yaml), not an empty path. A pinned base ref
+// that doesn't exist in the target's git history surfaces as
+// errUtils.ErrInvalidBaseRef once ExecuteWithBaseRef's git storage setup
+// tries to validate it -- proving the pin was actually read (the old,
+// unconditional single-target-agnostic resolution would have silently
+// defaulted to "HEAD", which resolves fine and would not fail this way).
+func TestInitCmd_RunE_UpdateWithPositionalTarget_ResolvesBaseRefFromRealTargetPin(t *testing.T) {
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# demo\n"), 0o600))
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+	_, err = worktree.Add("README.md")
+	require.NoError(t, err)
+	_, err = worktree.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{Name: "Test", Email: "test@example.com"},
+	})
+	require.NoError(t, err)
+
+	metadata := storage.NewInitMetadata("simple", "1.0.0", "embedded", "missing-ref", nil)
+	require.NoError(t, storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Save(metadata))
+
+	initCmd.SetArgs([]string{
+		"--update", "--interactive=false", "--force=false", "--no-git",
+		"--set", "project_name=demo", "simple", dir,
+	})
+	t.Cleanup(func() {
+		_ = initCmd.Flags().Set("update", "false")
+		_ = initCmd.Flags().Set("no-git", "false")
+	})
+
+	err = initCmd.Execute()
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidBaseRef)
+}
+
+// TestInitCmd_RunE_UpdateWithPositionalTarget_PropagatesMetadataLoadError
+// covers RunE's error branch for the same pre-resolution: a genuinely
+// unreadable pin file (corrupt YAML here) must surface as an error from the
+// command immediately, rather than being swallowed and silently falling back
+// to "HEAD".
+func TestInitCmd_RunE_UpdateWithPositionalTarget_PropagatesMetadataLoadError(t *testing.T) {
+	dir := t.TempDir()
+	metadataPath := storage.InitMetadataPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
+	require.NoError(t, os.WriteFile(metadataPath, []byte("not: valid: yaml: ["), 0o600))
+
+	initCmd.SetArgs([]string{
+		"--update", "--interactive=false", "--force=false", "--no-git", "simple", dir,
+	})
+	t.Cleanup(func() {
+		_ = initCmd.Flags().Set("update", "false")
+		_ = initCmd.Flags().Set("no-git", "false")
+	})
+
+	err := initCmd.Execute()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "resolve default --base-ref")
+}
+
+// TestResolveInteractiveInitBaseRef_NoUpdate_PassesThroughOptsUnchanged
+// covers resolveInteractiveInitBaseRef's non-update path: without --update
+// the base ref is unused (ExecuteWithDelimiters only sets up git storage when
+// update is true), so this is a no-op passthrough that must not touch
+// initUI at all -- exercised here with a nil *ui.InitUI to prove it.
+//
+// The --update branch (which resolves the target directory first via
+// initUI.ResolveTargetPath) always prompts through a real huh form when no
+// target is already known and so cannot be safely unit tested -- the same
+// limitation documented on TestRunInitExecution_WithTargetDir above.
+func TestResolveInteractiveInitBaseRef_NoUpdate_PassesThroughOptsUnchanged(t *testing.T) {
+	tests := []struct {
+		name            string
+		interactive     bool
+		wantUseDefaults bool
+	}{
+		{name: "interactive", interactive: true, wantUseDefaults: false},
+		{name: "non-interactive", interactive: false, wantUseDefaults: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := &initOptions{
+				update:       false,
+				interactive:  tt.interactive,
+				baseRef:      "v1.2.3",
+				templateVars: map[string]interface{}{"key": "value"},
+			}
+
+			resolved, err := resolveInteractiveInitBaseRef(nil, nil, opts)
+
+			require.NoError(t, err)
+			assert.Empty(t, resolved.targetDir)
+			assert.Equal(t, "v1.2.3", resolved.baseRef)
+			assert.Equal(t, opts.templateVars, resolved.templateValues)
+			assert.Equal(t, tt.wantUseDefaults, resolved.useDefaults)
+		})
+	}
 }
 
 // TestRunInitExecution_NonEmptyTargetDir_NonInteractive_ReturnsError covers
