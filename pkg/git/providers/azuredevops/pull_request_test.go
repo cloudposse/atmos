@@ -255,6 +255,32 @@ func TestSplitPathHelpers(t *testing.T) {
 	assert.Equal(t, "refs/heads/main", refName("main"))
 }
 
+// TestProviderRegistersAWorkingFactory proves the init()-registered "azuredevops" factory (invoked
+// through the shared registry, not New() directly) actually produces a functioning Provider --
+// catching, e.g., a factory that panics, returns nil, or forgets to wire up New()'s defaults --
+// by driving it through Reconcile's own validation.
+func TestProviderRegistersAWorkingFactory(t *testing.T) {
+	publisher, err := atmosgit.NewPullRequestPublisher(ProviderName)
+	require.NoError(t, err)
+	require.NotNil(t, publisher)
+	assert.IsType(t, &Provider{}, publisher)
+
+	_, err = publisher.Reconcile(context.Background(), nil)
+	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterConfig)
+}
+
+// TestTokenFromEnvReadsConfiguredToken proves tokenFromEnv's success path returns the exact value
+// AZURE_DEVOPS_EXT_PAT was set to (its error path is already covered by
+// TestReconcileMissingToken, which relies on this same function through New()'s default).
+func TestTokenFromEnvReadsConfiguredToken(t *testing.T) {
+	t.Setenv("AZURE_DEVOPS_EXT_PAT", "env-configured-pat")
+
+	token, err := tokenFromEnv()
+
+	require.NoError(t, err)
+	assert.Equal(t, "env-configured-pat", token)
+}
+
 func assertBasicAuth(t *testing.T, r *http.Request) {
 	t.Helper()
 	username, password, ok := r.BasicAuth()

@@ -112,6 +112,20 @@ func TestReconcileReturnsActionableErrors(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterConfig)
 }
 
+// TestReconcileRejectsNamespace proves a non-empty Namespace (meaningful only to a three-segment
+// forge like Azure DevOps) is rejected outright rather than silently ignored -- GitHub addresses
+// repositories with exactly two segments, so silently dropping Namespace would resolve to the
+// wrong repository instead of surfacing the misconfiguration.
+func TestReconcileRejectsNamespace(t *testing.T) {
+	p := New()
+	options := validPullRequestOptions()
+	options.Namespace = []string{"proj"}
+
+	_, err := p.Reconcile(context.Background(), options)
+
+	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterConfig)
+}
+
 func TestGitHubError(t *testing.T) {
 	tests := []struct {
 		name string
