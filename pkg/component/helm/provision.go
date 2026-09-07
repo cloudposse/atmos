@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -23,6 +24,7 @@ const targetKey = "target"
 // upgrades the Helm release directly; any other kind (e.g. "git") receives the
 // rendered manifests as a producer-agnostic ProvisionArtifact via the registry.
 func deliverApply(
+	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	flags map[string]any,
@@ -45,28 +47,63 @@ func deliverApply(
 
 	// Cluster delivery installs/upgrades the Helm release directly.
 	if selected.Kind == target.KindKubernetes {
-		rendered, err := applyHelmRelease(context.Background(), spec, false)
-		summary["manifest_bytes"] = len(rendered)
-		if objects, decodeErr := manifest.DecodeObjects([]byte(rendered)); decodeErr == nil {
+		result, err := applyHelmRelease(ctx, spec, info.DryRun)
+		spec.Lifecycle = result.Lifecycle
+		emitLifecycleWarnings(result.Lifecycle.Warnings)
+		summary["manifest_bytes"] = len(result.Manifest)
+		summary["release"] = lifecycleSummary(result.Operation, result.Lifecycle.Policy)
+		if objects, decodeErr := manifest.DecodeObjects([]byte(result.Manifest)); decodeErr == nil {
 			addObjectsToSummary(summary, objects)
 		}
 		return summary, err
 	}
+	if hasExplicitLifecycleFlags(flags) {
+		return summary, errUtils.ErrHelmLifecycleExternalTarget
+	}
+	summary["release"] = map[string]any{
+		"applied":     false,
+		"target_kind": selected.Kind,
+		"reason":      "external_target",
+	}
 
-	return deliverToExternalTarget(atmosConfig, info, selected, spec, summary)
+	return deliverToExternalTarget(ctx, atmosConfig, info, selected, spec, summary)
+}
+
+func lifecycleSummary(operation string, policy effectiveReleasePolicy) map[string]any {
+	summary := map[string]any{
+		"operation":   operation,
+		"timeout":     policy.Timeout.String(),
+		"chart_hooks": policy.ChartHooks,
+		"wait": map[string]any{
+			"strategy": string(policy.WaitStrategy),
+		},
+	}
+	switch operation {
+	case releaseOperationInstall:
+		summary["wait"].(map[string]any)["jobs"] = policy.WaitForJobs
+		summary["on_failure"] = string(policy.OnFailure)
+		summary["crds"] = string(policy.CRDs)
+	case releaseOperationUpgrade:
+		summary["wait"].(map[string]any)["jobs"] = policy.WaitForJobs
+		summary["history"] = map[string]any{"max": policy.MaxHistory}
+		summary["on_failure"] = string(policy.OnFailure)
+		summary["cleanup_on_failure"] = policy.CleanupOnFailure
+	}
+	return summary
 }
 
 // deliverToExternalTarget renders the Helm release to manifests and delivers them
 // to a non-cluster provision target (e.g. a Git deployment repository) as a
 // producer-agnostic ProvisionArtifact via the target registry.
 func deliverToExternalTarget(
+	callerCtx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	selected *target.SelectedTarget,
 	spec *chartSpec,
 	summary map[string]any,
 ) (map[string]any, error) {
-	objects, err := renderObjects(spec)
+	objects, err := renderObjects(callerCtx, spec)
 	if err != nil {
 		return summary, err
 	}
@@ -88,7 +125,7 @@ func deliverToExternalTarget(
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), deliveryTimeout)
+	ctx, cancel := context.WithTimeout(callerCtx, deliveryTimeout)
 	defer cancel()
 
 	return summary, target.Deliver(ctx, selected.Kind, &target.DeliverInput{

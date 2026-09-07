@@ -210,4 +210,12 @@ exclude = [
   # outside CI via curl. Scoped narrowly to this one page, not all of
   # docs.aws.amazon.com, since the rest of that domain's links check fine.
   "docs\\.aws\\.amazon\\.com/singlesignon/latest/PortalAPIReference/API_ListAccountRoles\\.html",
+  # This EC2 Mac instances user guide page (CloudFront-fronted) intermittently
+  # resets connections from CI runners; verified to return 200 outside CI via
+  # curl. Scoped narrowly to this one page for the same reason as the other
+  # docs.aws.amazon.com excludes above.
+  "docs\\.aws\\.amazon\\.com/AWSEC2/latest/UserGuide/ec2-mac-instances\\.html",
+  # asdf-vm.com's docs site intermittently resets connections from CI runners;
+  # verified to return 200 outside CI via curl.
+  "asdf-vm\\.com",
 ]

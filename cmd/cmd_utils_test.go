@@ -397,6 +397,11 @@ func TestEnableHeatmapIfRequested(t *testing.T) {
 		perf.EnableTracking(false)
 	})
 
+	// A prior test that also enables tracking (see cmd/root_heatmap_test.go)
+	// without resetting the registry would otherwise leave this test's own
+	// captureHeatmap() assertions sharing state with whatever ran before it.
+	perf.ResetForTesting()
+
 	captureHeatmap := func() string {
 		oldStderr := os.Stderr
 		r, w, err := os.Pipe()

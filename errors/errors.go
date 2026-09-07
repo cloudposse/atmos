@@ -672,6 +672,7 @@ var (
 	ErrClearCache                       = errors.New("failed to clear cache")
 	ErrInvalidOverridesSection          = errors.New("invalid overrides section")
 	ErrInvalidTerraformOverridesSection = errors.New("invalid terraform overrides section")
+	ErrInvalidHelmOverridesSection      = errors.New("invalid helm overrides section")
 	ErrInvalidHelmfileOverridesSection  = errors.New("invalid helmfile overrides section")
 	ErrInvalidBaseComponentConfig       = errors.New("invalid base component config")
 	ErrCircularComponentInheritance     = ErrStackCircularInheritance
@@ -774,6 +775,10 @@ var (
 	ErrTokenRefreshFailed           = errors.New("failed to refresh API token")
 	ErrFailedToUnmarshalAPIResponse = errors.New("failed to unmarshal API response")
 	ErrNilRequestDTO                = errors.New("nil request DTO")
+	ErrFailedToUploadExecMetadata   = errors.New("failed to upload execution metadata")
+	ErrFailedToUploadExecData       = errors.New("failed to upload execution data")
+	ErrExecPayloadTooLarge          = errors.New("execution metadata payload too large")
+	ErrExecSyncTimeout              = errors.New("execution metadata upload timed out")
 
 	// Pro commit errors.
 	ErrCommitMessageRequired = errors.New("commit message is required")
@@ -1431,6 +1436,7 @@ var (
 	ErrCacheBackendNotFound = errors.New("cache backend not found")
 	ErrCacheInvalidArgs     = errors.New("invalid cache arguments")
 	ErrCacheKeyRequired     = errors.New("cache key is required")
+	ErrCachePathsRequired   = errors.New("cache paths are required")
 	ErrCacheArchiveFailed   = errors.New("failed to build cache archive")
 	ErrCacheExtractFailed   = errors.New("failed to extract cache archive")
 	ErrCacheBackendRequest  = errors.New("cache backend request failed")
@@ -1621,6 +1627,17 @@ var (
 	ErrHelmReleaseNameRequired       = errors.New("helm component is missing a release name")
 	ErrHelmDiffFailed                = errors.New("failed to compute helm diff")
 	ErrHelmBaselineRead              = errors.New("failed to read helm diff baseline")
+	ErrHelmLifecycleDecode           = errors.New("failed to decode helm release lifecycle")
+	ErrHelmFailureActionInvalid      = errors.New("invalid helm on_failure action")
+	ErrHelmWaitStrategyInvalid       = errors.New("invalid helm wait strategy")
+	ErrHelmTimeoutInvalid            = errors.New("invalid helm release timeout")
+	ErrHelmMaxHistoryInvalid         = errors.New("invalid helm release history limit")
+	ErrHelmWaitForJobsRequiresWait   = errors.New("helm wait_for_jobs requires watcher or legacy wait strategy")
+	ErrHelmLifecycleFlagInapplicable = errors.New("helm release lifecycle flag does not apply to selected operation")
+	ErrHelmLifecycleExternalTarget   = errors.New("helm release lifecycle flags require a Kubernetes target")
+	ErrHelmReleaseHistory            = errors.New("failed to inspect helm release history")
+	ErrHelmReleaseUpgrade            = errors.New("failed to upgrade helm release")
+	ErrHelmReleaseUninstall          = errors.New("failed to uninstall helm release")
 )
 
 // Stack dependency (`depends_on`) resolution errors.

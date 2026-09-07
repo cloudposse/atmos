@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
@@ -74,8 +75,8 @@ func TestExecuteSingle_HappyPath(t *testing.T) {
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
 	var deleted string
-	deleteHelmRelease = func(releaseName, _ string) error {
-		deleted = releaseName
+	deleteHelmRelease = func(_ context.Context, spec *chartSpec, _ bool) error {
+		deleted = spec.ReleaseName
 		return nil
 	}
 
@@ -146,8 +147,8 @@ func TestRunWithHooks_DeleteSuccess(t *testing.T) {
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
 	var deleted string
-	deleteHelmRelease = func(releaseName, _ string) error {
-		deleted = releaseName
+	deleteHelmRelease = func(_ context.Context, spec *chartSpec, _ bool) error {
+		deleted = spec.ReleaseName
 		return nil
 	}
 	setupRepositories = func([]chartRepository) error {
@@ -181,8 +182,10 @@ func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
 		return &hooks.Hooks{}, nil
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
-	applyHelmRelease = func(context.Context, *chartSpec, bool) (string, error) {
-		return helmExecutorManifest, nil
+	var appliedSpec *chartSpec
+	applyHelmRelease = func(_ context.Context, spec *chartSpec, _ bool) (releaseActionResult, error) {
+		appliedSpec = spec
+		return releaseActionResult{Manifest: helmExecutorManifest, Operation: "install"}, nil
 	}
 	var setup []chartRepository
 	setupRepositories = func(repositories []chartRepository) error {
@@ -194,17 +197,86 @@ func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
 		ComponentFromArg: "apps/app",
 		SubCommand:       "apply",
 		ComponentSection: map[string]any{
-			"chart": "bitnami/nginx",
-			"name":  "app",
+			"chart":     "bitnami/nginx",
+			"name":      "app",
+			"namespace": "component-ns",
 			"repositories": []any{
 				map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"},
 			},
 		},
 	}
-	err := runWithHooks(&component.ExecutionContext{Flags: map[string]any{}}, &schema.AtmosConfiguration{}, info, OperationApply, "")
+	err := runWithHooks(&component.ExecutionContext{Flags: map[string]any{
+		"namespace":                         "incident-ns",
+		cfg.HelmDependencyUpdateSectionName: true,
+	}}, &schema.AtmosConfiguration{}, info, OperationApply, "")
 	require.NoError(t, err)
+	require.NotNil(t, appliedSpec)
+	assert.Equal(t, "incident-ns", appliedSpec.Namespace)
+	assert.True(t, appliedSpec.DependencyUpdate)
 	require.Len(t, setup, 1)
 	assert.Equal(t, "bitnami", setup[0].Name)
+}
+
+func TestRunWithHooks_CanceledContextSkipsHooksAndRepositories(t *testing.T) {
+	originalHooks := getHooks
+	originalSetup := setupRepositories
+	t.Cleanup(func() {
+		getHooks = originalHooks
+		setupRepositories = originalSetup
+	})
+
+	getHooks = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
+		t.Fatal("canceled operation must not discover or run hooks")
+		return nil, nil
+	}
+	setupRepositories = func([]chartRepository) error {
+		t.Fatal("canceled operation must not set up repositories")
+		return nil
+	}
+
+	goContext, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := runWithHooks(
+		&component.ExecutionContext{Context: goContext, Flags: map[string]any{}},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{},
+		OperationApply,
+		"",
+	)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestRunWithHooks_CanceledDuringPreparationSkipsRepositories(t *testing.T) {
+	originalHooks := getHooks
+	originalSetup := setupRepositories
+	t.Cleanup(func() {
+		getHooks = originalHooks
+		setupRepositories = originalSetup
+	})
+
+	goContext, cancel := context.WithCancel(context.Background())
+	getHooks = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
+		cancel()
+		return &hooks.Hooks{}, nil
+	}
+	setupRepositories = func([]chartRepository) error {
+		t.Fatal("canceled operation must not set up repositories")
+		return nil
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "apps/app",
+		SubCommand:       "apply",
+		ComponentSection: map[string]any{"chart": "bitnami/nginx", "name": "app"},
+	}
+	err := runWithHooks(
+		&component.ExecutionContext{Context: goContext, Flags: map[string]any{}},
+		&schema.AtmosConfiguration{},
+		info,
+		OperationApply,
+		"",
+	)
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestRunWithHooks_GetHooksError(t *testing.T) {
@@ -233,6 +305,7 @@ func TestResolveDiffBaseline_AgainstTarget(t *testing.T) {
 		},
 	}}
 	got, err := resolveDiffBaseline(
+		context.Background(),
 		&schema.AtmosConfiguration{},
 		info,
 		map[string]any{flagAgainst: "target"},
@@ -253,6 +326,7 @@ func TestResolveDiffBaseline_DeployedRelease(t *testing.T) {
 	stubActionContext(t, actx)
 
 	got, err := resolveDiffBaseline(
+		context.Background(),
 		&schema.AtmosConfiguration{},
 		&schema.ConfigAndStacksInfo{},
 		map[string]any{},
@@ -264,7 +338,7 @@ func TestResolveDiffBaseline_DeployedRelease(t *testing.T) {
 
 func TestFetchTargetBaseline_RejectsKubernetesTarget(t *testing.T) {
 	// No provision section + no name resolves to the implicit cluster target.
-	_, err := fetchTargetBaseline(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}, "target")
+	_, err := fetchTargetBaseline(context.Background(), &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}, "target")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrHelmDiffFailed)
 }
@@ -276,7 +350,7 @@ func TestFetchTargetBaseline_SelectTargetError(t *testing.T) {
 		},
 	}}
 	// "target:nope" requests a named target that is not configured.
-	_, err := fetchTargetBaseline(&schema.AtmosConfiguration{}, info, "target:nope")
+	_, err := fetchTargetBaseline(context.Background(), &schema.AtmosConfiguration{}, info, "target:nope")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrProvisionTargetNotFound)
 }
@@ -290,7 +364,7 @@ func TestFetchTargetBaseline_FetchError(t *testing.T) {
 			"targets": map[string]any{"repo": map[string]any{"kind": "diff-fetch-err"}},
 		},
 	}}
-	_, err := fetchTargetBaseline(&schema.AtmosConfiguration{}, info, "target")
+	_, err := fetchTargetBaseline(context.Background(), &schema.AtmosConfiguration{}, info, "target")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fetch boom")
 }
@@ -304,7 +378,7 @@ func TestResolveComponentPath(t *testing.T) {
 	}
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Components.Helm.BasePath = "components/helm"
-	path, err := resolveComponentPath(atmosConfig, &schema.ConfigAndStacksInfo{FinalComponent: "app"})
+	path, err := resolveComponentPath(context.Background(), atmosConfig, &schema.ConfigAndStacksInfo{FinalComponent: "app"})
 	require.NoError(t, err)
 	assert.Contains(t, filepath.ToSlash(path), "components/helm")
 
@@ -312,7 +386,7 @@ func TestResolveComponentPath(t *testing.T) {
 	provisionAndResolveComponentPath = func(context.Context, *schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string) (string, bool, error) {
 		return "", false, sentinel
 	}
-	_, err = resolveComponentPath(atmosConfig, &schema.ConfigAndStacksInfo{FinalComponent: "app"})
+	_, err = resolveComponentPath(context.Background(), atmosConfig, &schema.ConfigAndStacksInfo{FinalComponent: "app"})
 	require.ErrorIs(t, err, sentinel)
 }
 
@@ -342,7 +416,7 @@ func TestRenderObjects_Errors(t *testing.T) {
 	renderChartManifest = func(context.Context, *chartSpec) (string, error) {
 		return "", errors.New("render boom")
 	}
-	_, err := renderObjects(&chartSpec{Chart: "demo"})
+	_, err := renderObjects(context.Background(), &chartSpec{Chart: "demo"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "render boom")
 
@@ -350,7 +424,7 @@ func TestRenderObjects_Errors(t *testing.T) {
 	renderChartManifest = func(context.Context, *chartSpec) (string, error) {
 		return "", nil
 	}
-	_, err = renderObjects(&chartSpec{Chart: "demo"})
+	_, err = renderObjects(context.Background(), &chartSpec{Chart: "demo"})
 	require.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 }
 
