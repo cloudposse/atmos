@@ -1338,7 +1338,7 @@ MIT LICENSED DEPENDENCIES
 
   - al.essio.dev/pkg/shellescape
     License: MIT
-    URL: https://github.com/alessio/shellescape/blob/v1.6.0/LICENSE
+    URL: https://github.com/alessio/shellescape/blob/v1.6.1/LICENSE
 
   - github.com/1Password/connect-sdk-go
     License: MIT
