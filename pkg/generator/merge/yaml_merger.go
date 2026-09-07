@@ -345,12 +345,19 @@ func (c *conflictTracker) nextSentinel() (string, error) {
 	}
 }
 
+// cryptoRandRead is rand.Read, indirected through a package-level var so
+// tests can force a failure of randomSentinelSuffix without an injectable
+// dependency-injection layer -- crypto/rand.Reader itself never errors on
+// any platform Atmos supports, so this failure path is otherwise
+// unreachable from a test.
+var cryptoRandRead = rand.Read
+
 // randomSentinelSuffix returns a random hex string that makes each sentinel
 // unpredictable, so a value already present in the document being merged
 // cannot coincide with one -- neither by chance nor by construction.
 func randomSentinelSuffix() (string, error) {
 	buf := make([]byte, conflictSentinelSuffixBytes)
-	if _, err := rand.Read(buf); err != nil {
+	if _, err := cryptoRandRead(buf); err != nil {
 		return "", errUtils.Build(errUtils.ErrThreeWayMerge).
 			WithCause(err).
 			WithExplanation("Failed to generate a random conflict marker").

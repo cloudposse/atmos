@@ -1,6 +1,7 @@
 package merge
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -8,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestYAMLMerger_CleanMerges(t *testing.T) {
@@ -1022,6 +1025,87 @@ setting: user-change
 setting: template-change
 >>>>>>> Theirs
 lookalike: ATMOSMERGECONFLICT000000
+`, result.Content)
+}
+
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates forces
+// cryptoRandRead (the crypto/rand.Read indirection used by
+// randomSentinelSuffix) to fail, and asserts a real ours/theirs divergence
+// surfaces that failure as ErrThreeWayMerge instead of silently succeeding.
+// crypto/rand.Reader itself never errors on any platform Atmos supports, so
+// this branch (and everything upstream that propagates its error --
+// nextSentinel, addNodeConflict, pickConflictValue, and every mergeNodes/
+// mergeMappings/mergeSequences/mergeScalars call site above them) is
+// otherwise unreachable from a test.
+func TestYAMLMerger_RandomSentinelSuffixFailurePropagates(t *testing.T) {
+	original := cryptoRandRead
+	injectedErr := errors.New("injected rand failure")
+	cryptoRandRead = func([]byte) (int, error) { return 0, injectedErr }
+	t.Cleanup(func() { cryptoRandRead = original })
+
+	_, err := NewYAMLMerger(100).Merge("setting: original\n", "setting: user-change\n", "setting: template-change\n")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates_SequenceConflict is
+// the mergeSequences counterpart of
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates: a real ours/theirs
+// sequence divergence routes through mergeSequences' own pickConflictValue
+// call instead of mergeMappings'.
+func TestYAMLMerger_RandomSentinelSuffixFailurePropagates_SequenceConflict(t *testing.T) {
+	original := cryptoRandRead
+	injectedErr := errors.New("injected rand failure")
+	cryptoRandRead = func([]byte) (int, error) { return 0, injectedErr }
+	t.Cleanup(func() { cryptoRandRead = original })
+
+	_, err := NewYAMLMerger(100).Merge("items:\n  - a\n", "items:\n  - b\n", "items:\n  - c\n")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates_AddedKeyKindMismatch
+// covers mergeMappings' "!inBase && inTheirs" branch, where both sides add
+// the same key but with different node kinds -- a distinct pickConflictValue
+// call site from the "all three have the key" case the base
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates test exercises.
+func TestYAMLMerger_RandomSentinelSuffixFailurePropagates_AddedKeyKindMismatch(t *testing.T) {
+	original := cryptoRandRead
+	injectedErr := errors.New("injected rand failure")
+	cryptoRandRead = func([]byte) (int, error) { return 0, injectedErr }
+	t.Cleanup(func() { cryptoRandRead = original })
+
+	_, err := NewYAMLMerger(100).Merge("base: unrelated\n", "base: unrelated\nnewkey: scalar\n", "base: unrelated\nnewkey:\n  nested: true\n")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+// TestYAMLMerger_ConflictMarkers_MultilineScalar covers inlineConflictBlock's
+// loop over additional lines of a multi-line scalar (e.g. a block literal `|`
+// value): both ours and theirs are still ScalarNode, so the conflict renders
+// inline, but each side spans more than one line once re-encoded.
+func TestYAMLMerger_ConflictMarkers_MultilineScalar(t *testing.T) {
+	base := "setting: |\n  line1\n"
+	ours := "setting: |\n  ours-line1\n  ours-line2\n"
+	theirs := "setting: |\n  theirs-line1\n  theirs-line2\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	assert.Equal(t, `<<<<<<< Ours
+setting: |
+  ours-line1
+  ours-line2
+=======
+setting: |
+  theirs-line1
+  theirs-line2
+>>>>>>> Theirs
 `, result.Content)
 }
 
