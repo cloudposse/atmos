@@ -1,0 +1,5 @@
+apiVersion: v2
+name: helm-test-library
+description: Local library chart used by dependency-update tests.
+type: library
+version: 0.1.0
