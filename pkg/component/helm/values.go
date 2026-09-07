@@ -28,6 +28,11 @@ func buildChartSpec(
 
 	section := info.ComponentSection
 
+	releasePolicy, err := decodeReleasePolicy(section)
+	if err != nil {
+		return nil, err
+	}
+
 	chart, _ := section[cfg.ChartSectionName].(string)
 	chart = resolveLocalChart(chart, componentPath)
 
@@ -46,6 +51,7 @@ func buildChartSpec(
 		Values:          values,
 		IncludeCRDs:     true,
 		Repositories:    mergeRepositories(atmosConfig, section),
+		Release:         releasePolicy,
 	}, nil
 }
 
