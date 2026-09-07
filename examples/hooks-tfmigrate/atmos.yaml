@@ -1,0 +1,40 @@
+base_path: "./"
+
+settings:
+  experimental: warn
+
+# Toolchain: Atmos automatically downloads and installs OpenTofu (the `tofu`
+# binary) and `tfmigrate` before running the component, so this example needs
+# no pre-installed tools. The dependencies are declared per component (see
+# stacks/deploy/test.yaml).
+toolchain:
+  install_path: .tools
+  versions_file: .tool-versions
+  registries:
+    # Official Aqua public registry — resolves `opentofu` and `tfmigrate`.
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    command: tofu
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: true
+    workspaces_enabled: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  level: Info
+  file: "/dev/stderr"

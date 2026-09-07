@@ -1,0 +1,75 @@
+---
+slug: terraform-init-hooks-and-skip-hooks-fix
+title: "Lifecycle hooks for terraform init, and --skip-hooks now works for before-* events"
+date: 2026-06-09T12:00:00.000Z
+authors: [osterman]
+tags: [feature, bugfix]
+---
+
+Atmos now supports `before.terraform.init` and `after.terraform.init` lifecycle
+hooks, and `--skip-hooks` is finally honored for *before-* hooks across `plan`,
+`apply`, and `deploy`.
+
+<!--truncate-->
+
+## What Changed
+
+- **New init lifecycle events.** You can now run hooks around the explicit
+  `atmos terraform init` command:
+
+  ```yaml
+  terraform:
+    hooks:
+      pre-init:
+        events: [before.terraform.init]
+        kind: command
+        command: ./scripts/check-tooling.sh
+      post-init:
+        events: [after.terraform.init]
+        kind: command
+        command: ./scripts/notify-init-done.sh
+  ```
+
+  `after.terraform.init` is brand new, and `before.terraform.init` — previously
+  listed in the docs but never dispatched to user hooks — now actually fires.
+
+- **`--skip-hooks` works for before-* hooks.** Previously `--skip-hooks` only
+  skipped `after.*` hooks; `before.terraform.plan` / `before.terraform.apply` /
+  `before.terraform.deploy` hooks ran anyway. Now `--skip-hooks` (skip all) and
+  `--skip-hooks=name1,name2` (skip by name) are honored symmetrically for both
+  before and after events.
+
+## Why This Matters
+
+`--skip-hooks` is a global flag bound to Viper inside `RunE`, but before-* hooks
+run earlier in `PreRunE` — so the skip decision never saw the CLI value and
+before-hooks fired regardless. The flag is now resolved directly from the parsed
+command (with `ATMOS_SKIP_HOOKS` / config as fallback), the same way `--ci` and
+`--verbose` are read, making skipping reliable everywhere hooks run.
+
+Init hooks close a gap in the lifecycle: teams that vendor sources, validate
+tooling, or notify systems around `terraform init` can now do it declaratively
+in stack config instead of wrapping the command.
+
+## How to Use It
+
+Define hooks once at the top-level `terraform.hooks` scope (inherited by every
+component) or per-component, and skip them on demand:
+
+```shell
+# Skip every hook for this run.
+atmos terraform plan vpc -s plat-ue2-prod --skip-hooks
+
+# Skip only the named hooks.
+atmos terraform apply vpc -s plat-ue2-prod --skip-hooks=cost,policy
+```
+
+The `before.terraform.init` / `after.terraform.init` events fire around the
+explicit `atmos terraform init` command — not the implicit init that `plan` and
+`apply` run automatically. See the [Hooks documentation](/stacks/hooks) for the
+full list of supported events.
+
+## Get Involved
+
+Have a lifecycle event you wish Atmos exposed? Open an issue or join the
+discussion on [GitHub](https://github.com/cloudposse/atmos).

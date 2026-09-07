@@ -8,12 +8,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 // Stacks transforms stacksMap into structured stack data.
 // It returns []map[string]any suitable for the renderer pipeline.
 // Exposes vars from components for template access (e.g., {{ .vars.namespace }}).
-func Stacks(stacksMap map[string]any) ([]map[string]any, error) {
+// When tagsFilter/labelsFilter are non-empty, only stacks where at least one
+// component independently satisfies both filters (tags: any-match, labels:
+// all-match) are returned — union semantics across the stack's components.
+func Stacks(stacksMap map[string]any, tagsFilter []string, labelsFilter map[string]string) ([]map[string]any, error) {
 	defer perf.Track(nil, "extract.Stacks")()
 
 	if stacksMap == nil {
@@ -21,14 +25,24 @@ func Stacks(stacksMap map[string]any) ([]map[string]any, error) {
 	}
 
 	var stacks []map[string]any
+	componentTypes := getComponentTypes()
 
 	for stackName, stackData := range stacksMap {
+		stackMap, isMap := stackData.(map[string]any)
+		if isMap && !stackMatchesAnyComponent(stackMap, componentTypes, tagsFilter, labelsFilter) {
+			continue
+		}
+		if !isMap && (len(tagsFilter) > 0 || len(labelsFilter) > 0) {
+			// A stack without component data can never match an active filter.
+			continue
+		}
+
 		stack := map[string]any{
 			"stack": stackName,
 		}
 
 		// Extract vars from stack data.
-		if stackMap, ok := stackData.(map[string]any); ok {
+		if isMap {
 			extractStackVars(stack, stackMap)
 		}
 
@@ -36,6 +50,56 @@ func Stacks(stacksMap map[string]any) ([]map[string]any, error) {
 	}
 
 	return stacks, nil
+}
+
+// stackMatchesAnyComponent reports whether at least one component in stackMap
+// (across every component type in componentTypes) independently satisfies
+// both the tags (any-match) and labels (all-match) filters. Empty filters
+// always match; componentTypes is supplied by the caller (see Stacks) so it
+// is computed once per call instead of once per stack.
+func stackMatchesAnyComponent(stackMap map[string]any, componentTypes []string, tagsFilter []string, labelsFilter map[string]string) bool {
+	defer perf.Track(nil, "extract.stackMatchesAnyComponent")()
+
+	if len(tagsFilter) == 0 && len(labelsFilter) == 0 {
+		return true
+	}
+
+	componentsMap, ok := stackMap["components"].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	for _, componentType := range componentTypes {
+		typeComponents, ok := componentsMap[componentType].(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, componentData := range typeComponents {
+			if componentMatchesTagsLabels(componentData, tagsFilter, labelsFilter) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// componentMatchesTagsLabels reports whether a single component's
+// metadata.tags/metadata.labels satisfy the filters (tags: any-match, labels:
+// all-match). Empty filters always match.
+func componentMatchesTagsLabels(componentData any, tagsFilter []string, labelsFilter map[string]string) bool {
+	if len(tagsFilter) == 0 && len(labelsFilter) == 0 {
+		return true
+	}
+
+	compMap, ok := componentData.(map[string]any)
+	if !ok {
+		return false
+	}
+	metadata, _ := compMap[fieldMetadata].(map[string]any)
+	compTags := getStringSliceFromMetadata(metadata, fieldTags)
+	compLabels := getStringMapFromMetadata(metadata, fieldLabels)
+	return tags.MatchesTags(compTags, tagsFilter, tags.TagModeAny) && tags.MatchesLabels(compLabels, labelsFilter)
 }
 
 // extractStackVars extracts vars from components and exposes them for template access.
@@ -133,7 +197,12 @@ func getComponentTypes() []string {
 }
 
 // StacksForComponent extracts stacks that contain a specific component.
-func StacksForComponent(componentName string, stacksMap map[string]any) ([]map[string]any, error) {
+// When tagsFilter/labelsFilter are non-empty, only stacks where that specific
+// component's own metadata.tags/metadata.labels satisfy the filters are
+// returned. ErrNoStacksFound is reserved for "component not found in any
+// stack"; a component that exists but matches no filter yields an empty
+// result with no error.
+func StacksForComponent(componentName string, stacksMap map[string]any, tagsFilter []string, labelsFilter map[string]string) ([]map[string]any, error) {
 	defer perf.Track(nil, "extract.StacksForComponent")()
 
 	if stacksMap == nil {
@@ -144,30 +213,14 @@ func StacksForComponent(componentName string, stacksMap map[string]any) ([]map[s
 	componentTypes := getComponentTypes()
 
 	var stacks []map[string]any
+	componentFound := false
 
 	for stackName, stackData := range stacksMap {
-		stackMap, ok := stackData.(map[string]any)
-		if !ok {
-			continue // Skip invalid stacks.
-		}
-
-		componentsMap, ok := stackMap["components"].(map[string]any)
-		if !ok {
-			continue // Skip stacks without components.
-		}
-
-		// Check if component exists in any component type.
-		found := false
-		for _, componentType := range componentTypes {
-			if typeComponents, ok := componentsMap[componentType].(map[string]any); ok {
-				if _, exists := typeComponents[componentName]; exists {
-					found = true
-					break
-				}
-			}
-		}
-
+		found, matched := findComponentInStack(stackData, componentName, componentTypes, tagsFilter, labelsFilter)
 		if found {
+			componentFound = true
+		}
+		if matched {
 			stack := map[string]any{
 				"stack":     stackName,
 				"component": componentName,
@@ -176,9 +229,41 @@ func StacksForComponent(componentName string, stacksMap map[string]any) ([]map[s
 		}
 	}
 
-	if len(stacks) == 0 {
+	if !componentFound {
 		return nil, errUtils.ErrNoStacksFound
 	}
 
 	return stacks, nil
+}
+
+// findComponentInStack reports whether componentName exists in the stack
+// (found) and, when it does, whether its own metadata satisfies the
+// tags/labels filters (matched).
+func findComponentInStack(stackData any, componentName string, componentTypes []string, tagsFilter []string, labelsFilter map[string]string) (found, matched bool) {
+	stackMap, ok := stackData.(map[string]any)
+	if !ok {
+		return false, false
+	}
+
+	componentsMap, ok := stackMap["components"].(map[string]any)
+	if !ok {
+		return false, false
+	}
+
+	for _, componentType := range componentTypes {
+		typeComponents, ok := componentsMap[componentType].(map[string]any)
+		if !ok {
+			continue
+		}
+		componentData, exists := typeComponents[componentName]
+		if !exists {
+			continue
+		}
+		found = true
+		if componentMatchesTagsLabels(componentData, tagsFilter, labelsFilter) {
+			return true, true
+		}
+	}
+
+	return found, false
 }

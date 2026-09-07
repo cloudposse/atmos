@@ -889,3 +889,205 @@ func TestExecutor_ExecuteWithToolsToolError(t *testing.T) {
 	assert.False(t, result.ToolCalls[0].Success)
 	assert.Contains(t, result.ToolCalls[0].Error, "tool execution failed")
 }
+
+// TestExecutor_ExecuteWithTools_InfrastructureToolError verifies the intentional
+// behavior change for exit code 2: a tool call that fails at the infrastructure
+// level (here, the model requesting a tool name that was never registered) stops
+// the tool loop immediately with Success=false/Error.Type=="tool_error", instead
+// of being fed back to the model as text and silently consuming iterations until
+// MaxToolIterations is exhausted.
+func TestExecutor_ExecuteWithTools_InfrastructureToolError(t *testing.T) {
+	client := &mockClient{
+		responses: []*types.Response{
+			{
+				Content:    "I'll use a tool",
+				StopReason: types.StopReasonToolUse,
+				ToolCalls: []types.ToolCall{
+					{
+						ID:    "call-1",
+						Name:  "unregistered_tool", // Never registered below.
+						Input: map[string]interface{}{},
+					},
+				},
+			},
+			// A second response is provided, but the executor must never reach
+			// it: an infrastructure-level failure stops the loop on iteration 1.
+			{
+				Content:    "This should never be reached",
+				StopReason: types.StopReasonEndTurn,
+			},
+		},
+	}
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			DefaultProvider: "mock",
+		},
+	}
+
+	// Registry has a tool, but not the one the model asks for.
+	registry := tools.NewRegistry()
+	require.NoError(t, registry.Register(&mockTool{name: "some_other_tool", description: "unrelated"}))
+
+	toolExecutor := tools.NewExecutor(registry, nil, 30*time.Second)
+	exec := NewExecutor(client, toolExecutor, atmosConfig)
+
+	result := exec.Execute(context.Background(), Options{
+		Prompt:       "Test prompt with tools",
+		ToolsEnabled: true,
+	})
+
+	require.False(t, result.Success)
+	require.NotNil(t, result.Error)
+	assert.Equal(t, "tool_error", result.Error.Type)
+	assert.Contains(t, result.Error.Message, "unregistered_tool")
+	// Only the first mock response was ever consumed; the loop stopped before
+	// a second round-trip to the model.
+	assert.Equal(t, 1, client.callIndex)
+}
+
+// TestExecutor_ExecuteWithTools_ApplicationErrorStillRecovers is a companion to
+// TestExecutor_ExecuteWithToolsToolError: it asserts the negative path for the
+// infrastructure/application classification — a registered tool that itself
+// returns an error is application-level and must still be fed back to the
+// model for a chance to recover, exactly as before this change.
+func TestExecutor_ExecuteWithTools_ApplicationErrorStillRecovers(t *testing.T) {
+	client := &mockClient{
+		responses: []*types.Response{
+			{
+				Content:    "I'll use a tool",
+				StopReason: types.StopReasonToolUse,
+				ToolCalls: []types.ToolCall{
+					{ID: "call-1", Name: "flaky_tool", Input: map[string]interface{}{}},
+				},
+			},
+			{
+				Content:    "Recovered after the tool error",
+				StopReason: types.StopReasonEndTurn,
+			},
+		},
+	}
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{DefaultProvider: "mock"},
+	}
+
+	registry := tools.NewRegistry()
+	require.NoError(t, registry.Register(&mockTool{
+		name:        "flaky_tool",
+		description: "registered, but fails when invoked",
+		executeFunc: func(ctx context.Context, params map[string]interface{}) (*tools.Result, error) {
+			return nil, errors.New("downstream API returned 500")
+		},
+	}))
+
+	toolExecutor := tools.NewExecutor(registry, nil, 30*time.Second)
+	exec := NewExecutor(client, toolExecutor, atmosConfig)
+
+	result := exec.Execute(context.Background(), Options{
+		Prompt:       "Test prompt with tools",
+		ToolsEnabled: true,
+	})
+
+	require.True(t, result.Success)
+	assert.Contains(t, result.Response, "Recovered after the tool error")
+	require.Len(t, result.ToolCalls, 1)
+	assert.False(t, result.ToolCalls[0].Success)
+	assert.Contains(t, result.ToolCalls[0].Error, "downstream API returned 500")
+	// The loop continued to a second round-trip to let the model recover.
+	assert.Equal(t, 2, client.callIndex)
+}
+
+// TestExecutor_History verifies that prior session messages supplied via
+// Options.History are threaded into the conversation sent to the model, both
+// for the simple (no-tools) and tool-enabled code paths.
+func TestExecutor_History(t *testing.T) {
+	t.Run("simple execution with history uses SendMessageWithHistory", func(t *testing.T) {
+		client := &mockClient{}
+		atmosConfig := &schema.AtmosConfiguration{AI: schema.AISettings{DefaultProvider: "mock"}}
+		exec := NewExecutor(client, nil, atmosConfig)
+
+		result := exec.Execute(context.Background(), Options{
+			Prompt:       "Follow-up question",
+			ToolsEnabled: false,
+			History: []types.Message{
+				{Role: types.RoleUser, Content: "First question"},
+				{Role: types.RoleAssistant, Content: "First answer"},
+			},
+		})
+
+		require.True(t, result.Success)
+		// mockClient.SendMessageWithHistory returns a distinct canned string so
+		// this assertion proves the history-aware path was taken rather than
+		// the plain SendMessage path.
+		assert.Equal(t, "Mock response with history", result.Response)
+	})
+
+	t.Run("simple execution without history uses SendMessage", func(t *testing.T) {
+		client := &mockClient{sendMessageResponse: "Plain response"}
+		atmosConfig := &schema.AtmosConfiguration{AI: schema.AISettings{DefaultProvider: "mock"}}
+		exec := NewExecutor(client, nil, atmosConfig)
+
+		result := exec.Execute(context.Background(), Options{
+			Prompt:       "First question",
+			ToolsEnabled: false,
+		})
+
+		require.True(t, result.Success)
+		assert.Equal(t, "Plain response", result.Response)
+	})
+
+	t.Run("tool-enabled execution prepends history to the message list", func(t *testing.T) {
+		var capturedMessages []types.Message
+		client := &historyCapturingClient{
+			mockClient: mockClient{
+				responses: []*types.Response{
+					{Content: "Final response", StopReason: types.StopReasonEndTurn},
+				},
+			},
+			onSendWithTools: func(messages []types.Message) {
+				capturedMessages = messages
+			},
+		}
+		atmosConfig := &schema.AtmosConfiguration{AI: schema.AISettings{DefaultProvider: "mock"}}
+
+		registry := tools.NewRegistry()
+		require.NoError(t, registry.Register(&mockTool{name: "test_tool", description: "A test tool"}))
+		toolExecutor := tools.NewExecutor(registry, nil, 30*time.Second)
+		exec := NewExecutor(client, toolExecutor, atmosConfig)
+
+		result := exec.Execute(context.Background(), Options{
+			Prompt:       "Follow-up question",
+			ToolsEnabled: true,
+			History: []types.Message{
+				{Role: types.RoleUser, Content: "First question"},
+				{Role: types.RoleAssistant, Content: "First answer"},
+			},
+		})
+
+		require.True(t, result.Success)
+		require.Len(t, capturedMessages, 3)
+		assert.Equal(t, "First question", capturedMessages[0].Content)
+		assert.Equal(t, "First answer", capturedMessages[1].Content)
+		assert.Equal(t, "Follow-up question", capturedMessages[2].Content)
+	})
+}
+
+// historyCapturingClient wraps mockClient to capture the messages passed to
+// SendMessageWithSystemPromptAndTools, so tests can assert on exactly what was
+// sent to the model without needing a real provider.
+type historyCapturingClient struct {
+	mockClient
+	onSendWithTools func(messages []types.Message)
+}
+
+func (c *historyCapturingClient) SendMessageWithSystemPromptAndTools(
+	ctx context.Context,
+	systemPrompt string,
+	atmosMemory string,
+	messages []types.Message,
+	availableTools []tools.Tool,
+) (*types.Response, error) {
+	if c.onSendWithTools != nil {
+		c.onSendWithTools(messages)
+	}
+	return c.mockClient.SendMessageWithSystemPromptAndTools(ctx, systemPrompt, atmosMemory, messages, availableTools)
+}

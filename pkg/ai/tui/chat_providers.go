@@ -35,22 +35,7 @@ func RunChat(opts ChatOptions) error {
 
 	// Add welcome message only if this is a new session (no existing messages).
 	if len(model.messages) == 0 {
-		model.addMessage(roleAssistant, `I'm here to help you with your Atmos infrastructure management. I can:
-
-• Describe components and their configurations
-• List available components and stacks
-• Validate stack configurations
-• Generate Terraform plans (read-only)
-• Answer questions about Atmos concepts and best practices
-• Help debug configuration issues
-
-Try asking me something like:
-- "List all available components"
-- "Describe the vpc component in the dev stack"
-- "What are Atmos stacks?"
-- "How do I validate my stack configuration?"
-
-What would you like to know?`)
+		model.addWelcomeMessage()
 	} else {
 		// Resuming existing session.
 		sessionName := "session"
@@ -202,12 +187,16 @@ func (m *ChatModel) providerSelectView() string {
 	return content.String()
 }
 
-// getCurrentProvider returns the name of the currently active provider.
+// getCurrentProvider returns the name of the currently active provider: the persisted
+// session's provider when session persistence is enabled (kept stable across a resumed
+// session), the active atmosConfig default otherwise, or providerAnthropic as a last
+// resort. Session persistence (ai.sessions.enabled) is opt-in and off by default, so the
+// atmosConfig fallback is what makes the common case resolve to a real provider name.
 func (m *ChatModel) getCurrentProvider() string {
 	switch {
 	case m.sess != nil && m.sess.Provider != "":
 		return m.sess.Provider
-	case m.atmosConfig.AI.DefaultProvider != "":
+	case m.atmosConfig != nil && m.atmosConfig.AI.DefaultProvider != "":
 		return m.atmosConfig.AI.DefaultProvider
 	default:
 		return providerAnthropic

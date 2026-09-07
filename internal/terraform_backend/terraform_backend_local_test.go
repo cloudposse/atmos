@@ -309,11 +309,15 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 		}
 	}`
 
-	t.Run("state exists, no _workdir_path (describe path — provisioner not yet run)", func(t *testing.T) {
+	// assertJITStateFound places stateJSON at
+	// tempDir/.workdir/terraform/<workdirName>/terraform.tfstate.d/demo/terraform.tfstate
+	// (the BuildPath formula for stack "demo"), then asserts
+	// ReadTerraformBackendLocal finds it for a component whose
+	// atmos_component/component is componentName.
+	assertJITStateFound := func(t *testing.T, workdirName, componentName string) {
+		t.Helper()
 		tempDir := t.TempDir()
-		// BuildPath("tempDir", "terraform", "null-label", "demo", sections) → tempDir/.workdir/terraform/demo-null-label.
-		// workspace "demo" → terraform.tfstate.d/demo/terraform.tfstate.
-		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label", "terraform.tfstate.d", "demo")
+		stateDir := filepath.Join(tempDir, ".workdir", "terraform", workdirName, "terraform.tfstate.d", "demo")
 		require.NoError(t, os.MkdirAll(stateDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte(stateJSON), 0o644))
 
@@ -326,19 +330,57 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 				"workdir": map[string]any{"enabled": true},
 			},
 			"atmos_stack":     "demo",
-			"atmos_component": "null-label",
-			"component":       "null-label", // base component (metadata.component); also used by static fallback.
+			"atmos_component": componentName,
+			"component":       componentName, // base component (metadata.component); also used by static fallback.
 			"workspace":       "demo",
 		}
 
 		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
 		require.NoError(t, err)
-		require.NotNil(t, content, "expected state file to be found at JIT workdir path")
+		require.NotNil(t, content, "expected state file to be found at the JIT workdir path")
 
 		result, err := tb.ProcessTerraformStateFile(content)
 		require.NoError(t, err)
 		assert.Equal(t, "eg-test-demo", result["id"])
-	})
+	}
+
+	jitWorkdirScenarios := []struct {
+		name          string
+		workdirName   string
+		componentName string
+	}{
+		{
+			// BuildPath("tempDir", "terraform", "null-label", "demo", sections) →
+			// tempDir/.workdir/terraform/demo-null-label-6a7a8b7f ("demo"+"\x00"+"null-label"
+			// hashes, sha256 first 8 hex chars, to "6a7a8b7f" -- verified independently with
+			// `printf 'demo\x00null-label' | shasum -a 256`).
+			name:          "state exists, no _workdir_path (describe path — provisioner not yet run)",
+			workdirName:   "demo-null-label-6a7a8b7f",
+			componentName: "null-label",
+		},
+		{
+			// BuildPath must sanitize "/" in the component name to a single path
+			// segment (demo-ecs-cluster-b5adc63e), not a real subdirectory
+			// (demo-ecs/cluster) -- otherwise this nested component's workdir sits
+			// one level deeper than a flat component's at the same stack, and any
+			// path computed relative to it (e.g. a relative local backend path)
+			// silently climbs to a different ancestor. "/" sanitizes to "-" (see
+			// sanitizeComponentNameForPath), and the hash suffix -- computed from
+			// the unsanitized name, "demo"+"\x00"+"ecs/cluster" hashes to
+			// "b5adc63e", verified independently with
+			// `printf 'demo\x00ecs/cluster' | shasum -a 256` -- keeps this from
+			// colliding with a differently-named component whose sanitized prefix
+			// happens to match.
+			name:          "nested component name does not shift the workdir root",
+			workdirName:   "demo-ecs-cluster-b5adc63e",
+			componentName: "ecs/cluster",
+		},
+	}
+	for _, tt := range jitWorkdirScenarios {
+		t.Run(tt.name, func(t *testing.T) {
+			assertJITStateFound(t, tt.workdirName, tt.componentName)
+		})
+	}
 
 	t.Run("_workdir_path set (apply path — provisioner already ran)", func(t *testing.T) {
 		tempDir := t.TempDir()
@@ -463,7 +505,7 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 	t.Run("_workdir_path escaping BasePath falls through to derived path", func(t *testing.T) {
 		tempDir := t.TempDir()
 		// Create state at the DERIVED workdir path (not the escaping path).
-		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label",
+		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label-6a7a8b7f",
 			"terraform.tfstate.d", "demo")
 		require.NoError(t, os.MkdirAll(stateDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"),
@@ -503,7 +545,7 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 		require.NoError(t, os.Chdir(tempDir))
 		defer func() { _ = os.Chdir(origDir) }()
 
-		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label",
+		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label-6a7a8b7f",
 			"terraform.tfstate.d", "demo")
 		require.NoError(t, os.MkdirAll(stateDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"),
@@ -572,5 +614,45 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "eg-test-demo", result["id"], "should only read from within BasePath")
 		}
+	})
+
+	t.Run("atmos_stack with path traversal escaping BasePath falls through to static path", func(t *testing.T) {
+		// Security regression test: unlike atmos_component (whose "/" is now sanitized to "-"
+		// by workdir.sanitizeComponentNameForPath and so can no longer traverse), atmos_stack is
+		// not sanitized at all -- it is only rejected by BuildPath's containWithinBase guard.
+		// A stack value with enough "../" segments to actually escape BasePath must cause
+		// provWorkdir.BuildPath to return errUtils.ErrPathTraversal, which
+		// resolveLocalBackendComponentPath must catch and fall through to the static path
+		// rather than propagating the error or resolving outside BasePath.
+		tempDir := t.TempDir()
+
+		// Place state at the static path (fallback) -- NOT at any traversal-constructed path.
+		staticDir := filepath.Join(tempDir, "components", "terraform", "vpc", "terraform.tfstate.d", "demo")
+		require.NoError(t, os.MkdirAll(staticDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(staticDir, "terraform.tfstate"), []byte(stateJSON), 0o644))
+
+		config := &schema.AtmosConfiguration{
+			BasePath:                 tempDir,
+			TerraformDirAbsolutePath: filepath.Join(tempDir, "components", "terraform"),
+		}
+		sections := map[string]any{
+			"provision": map[string]any{
+				"workdir": map[string]any{"enabled": true},
+			},
+			// Enough "../" segments to escape any plausible t.TempDir() nesting depth,
+			// mirroring provWorkdir.TestBuildPath_RejectsStackTraversal.
+			"atmos_stack":     "../../../../../../../../evil",
+			"atmos_component": "null-label",
+			"component":       "vpc", // used by static fallback: TerraformDirAbsolutePath + component
+			"workspace":       "demo",
+		}
+
+		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
+		require.NoError(t, err)
+		require.NotNil(t, content, "expected fallthrough to the static path when the derived workdir path escapes BasePath")
+
+		result, err := tb.ProcessTerraformStateFile(content)
+		require.NoError(t, err)
+		assert.Equal(t, "eg-test-demo", result["id"], "should only read from within BasePath")
 	})
 }

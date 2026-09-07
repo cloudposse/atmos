@@ -346,3 +346,55 @@ workflows:
       # Step 5: Shell export should NOT persist - back to workflow value
       - command: test "$FOO" = "workflow"
         type: shell
+
+  # Env steps persist variables into following command steps.
+  env-step-propagates-to-shell:
+    description: |
+      Verify an env step passes variables to a following shell step.
+    steps:
+      - name: set-env
+        type: env
+        vars:
+          FOO: bar
+      - name: verify-shell-env
+        type: shell
+        command: |
+          printf 'FOO=<%s>\n' "$FOO"
+          test "$FOO" = "bar"
+
+  env-step-propagates-to-atmos:
+    description: |
+      Verify an env step passes variables to a following atmos step.
+    steps:
+      - name: set-env
+        type: env
+        vars:
+          FOO: bar
+      - name: verify-atmos-env
+        type: atmos
+        command: workflow env-step-propagation-child --file test
+
+  env-step-propagation-child:
+    description: |
+      Assert the parent atmos workflow step propagated FOO to this process.
+    steps:
+      - name: verify-child-shell-env
+        type: shell
+        command: |
+          printf 'FOO=<%s>\n' "$FOO"
+          test "$FOO" = "bar"
+
+  env-step-template-only:
+    description: |
+      Verify an env step can remain available to templates without exporting to a shell process.
+    steps:
+      - name: set-template-env
+        type: env
+        export: false
+        vars:
+          ATMOS_ENV_STEP_TEMPLATE_ONLY_CLI_TEST: bar
+      - name: verify-template-only-env
+        type: shell
+        command: |
+          printf 'TEMPLATE=<{{ .env.ATMOS_ENV_STEP_TEMPLATE_ONLY_CLI_TEST }}>\n'
+          test -z "${ATMOS_ENV_STEP_TEMPLATE_ONLY_CLI_TEST+set}"

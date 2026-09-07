@@ -79,10 +79,17 @@ func TestPackerBuildCmd(t *testing.T) {
 
 	// If packer ran and failed due to credentials, that's expected.
 	// Check that packer actually ran (output contains packer-specific content).
+	// "Failed loading manifest" is included because it can only come from packer's
+	// own manifest post-processor (declared in main.pkr.hcl), never from Atmos --
+	// on Windows CI, subprocess stdout draining across sequential packer tests in
+	// this file can occasionally split a single build's output across two tests'
+	// captures, leaving the credential-failure text in the prior test's capture
+	// and only this downstream symptom in the current one.
 	packerRan := strings.Contains(output, "amazon-ebs") ||
 		strings.Contains(output, "Build") ||
 		strings.Contains(output, "credential") ||
-		strings.Contains(output, "Packer")
+		strings.Contains(output, "Packer") ||
+		strings.Contains(output, "Failed loading manifest")
 
 	if packerRan {
 		t.Logf("Packer build executed but failed (likely due to missing credentials): %v", err)
@@ -215,10 +222,17 @@ func TestPackerBuildCmdWithDirectoryTemplate(t *testing.T) {
 		t.Skipf("Skipping test: packer plugins missing (run packer init): %v", err)
 	}
 
+	// "Failed loading manifest" is included because it can only come from packer's
+	// own manifest post-processor (declared in main.pkr.hcl), never from Atmos --
+	// on Windows CI, subprocess stdout draining across sequential packer tests in
+	// this file can occasionally split a single build's output across two tests'
+	// captures, leaving the credential-failure text in the prior test's capture
+	// and only this downstream symptom in the current one.
 	packerRan := strings.Contains(output, "amazon-ebs") ||
 		strings.Contains(output, "Build") ||
 		strings.Contains(output, "credential") ||
-		strings.Contains(output, "Packer")
+		strings.Contains(output, "Packer") ||
+		strings.Contains(output, "Failed loading manifest")
 
 	if packerRan {
 		t.Logf("Packer build with directory template executed (failed due to credentials): %v", err)

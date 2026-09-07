@@ -1,8 +1,10 @@
 name: Verify SHA Pinning
 description: >
-  Verifies that SHA-pinned GitHub Actions in workflow files match
-  the tag claimed in their version comment. Prevents supply chain
-  attacks where tags are force-pushed to malicious commits.
+  Verifies that every third-party GitHub Action reference in workflow
+  files is SHA-pinned (coverage), and that SHA-pinned references match
+  the tag claimed in their version comment (drift). Prevents supply
+  chain attacks where tags are force-pushed to malicious commits or
+  actions are left unpinned entirely.
 
 inputs:
   github-token:
@@ -12,14 +14,29 @@ inputs:
     description: 'Directory containing workflow files to scan'
     required: false
     default: '.github/workflows'
+  allowlist-file:
+    description: >
+      JSON file listing owner/repo pairs this action cannot drift-check via
+      the GitHub API for a documented, maintainer-reviewed reason (see
+      allowlist.json and the README). A resolution failure for a listed
+      repo is reported as a warning only for the documented HTTP 403
+      access-block condition; other resolution failures fail CI.
+    required: false
+    default: '.github/actions/verify-sha-pinning/allowlist.json'
 
 outputs:
   verified-count:
-    description: 'Number of SHA-pinned actions verified'
+    description: 'Number of tag-pinned actions verified against their upstream tag'
     value: ${{ steps.verify.outputs.verified_count }}
   failed-count:
-    description: 'Number of mismatches found'
+    description: 'Number of drift mismatches or resolution errors found'
     value: ${{ steps.verify.outputs.failed_count }}
+  unpinned-count:
+    description: 'Number of third-party action references that are not SHA-pinned at all'
+    value: ${{ steps.verify.outputs.unpinned_count }}
+  allowlisted-count:
+    description: 'Number of resolution failures downgraded to a warning via allowlist.json'
+    value: ${{ steps.verify.outputs.allowlisted_count }}
   status:
     description: 'Overall result: pass or fail'
     value: ${{ steps.verify.outputs.status }}
@@ -32,6 +49,7 @@ runs:
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         WORKFLOW_DIR: ${{ inputs.workflow-dir }}
+        ALLOWLIST_FILE: ${{ inputs.allowlist-file }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
@@ -41,6 +59,55 @@ runs:
           const workflowDir = process.env.WORKFLOW_DIR;
           const tagShaCache = new Map();
           const nonRetryableStatuses = new Set([400, 401, 403, 404, 422]);
+
+          // A non-empty string, trimmed.
+          function isNonEmptyString(value) {
+            return typeof value === 'string' && value.trim().length > 0;
+          }
+
+          // Reject anything that isn't a fully-specified, maintainer-reviewed
+          // allowlist entry. A malformed entry must never be able to silently
+          // suppress a real drift failure — fail loudly instead.
+          function validateAllowlistEntry(entry, seen) {
+            if (!isNonEmptyString(entry?.action)) {
+              throw new Error(`Invalid allowlist.json entry: missing or empty "action": ${JSON.stringify(entry)}`);
+            }
+            if (!isNonEmptyString(entry.description)) {
+              throw new Error(`Invalid allowlist.json entry for "${entry.action}": missing or empty "description"`);
+            }
+            if (!Array.isArray(entry.references) || entry.references.length === 0 || !entry.references.every(isNonEmptyString)) {
+              throw new Error(`Invalid allowlist.json entry for "${entry.action}": "references" must be a non-empty array of non-empty strings`);
+            }
+            if (seen.has(entry.action)) {
+              throw new Error(`Invalid allowlist.json: duplicate entry for "${entry.action}"`);
+            }
+          }
+
+          // Repos a maintainer has explicitly reviewed and confirmed cannot be
+          // drift-checked via the API (see allowlist.json for the description).
+          // This is the ONLY way a resolution failure is downgraded from a
+          // hard failure — never inferred from the error's status or text.
+          const allowlist = new Map();
+          try {
+            const entries = JSON.parse(fs.readFileSync(process.env.ALLOWLIST_FILE, 'utf8'));
+            for (const entry of entries) {
+              validateAllowlistEntry(entry, allowlist);
+              allowlist.set(entry.action, entry);
+            }
+          } catch (err) {
+            if (err.code !== 'ENOENT') throw err;
+          }
+
+          // The ONLY error condition allowlist.json is allowed to downgrade:
+          // a clean HTTP 403 from the upstream API (e.g. an org-level IP
+          // allow-list), never a 404, a ref-shape bug, or an exhausted retry.
+          class AccessBlockedError extends Error {
+            constructor(message, cause) {
+              super(message, { cause });
+              this.name = 'AccessBlockedError';
+              this.status = 403;
+            }
+          }
 
           const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -72,45 +139,66 @@ runs:
             core.info('No workflow files found');
             core.setOutput('verified_count', 0);
             core.setOutput('failed_count', 0);
+            core.setOutput('unpinned_count', 0);
+            core.setOutput('allowlisted_count', 0);
             core.setOutput('status', 'pass');
             core.setOutput('results_json', '[]');
             return;
           }
 
-          // Match: uses: owner/repo[/sub]@<40-char-sha> # <tag>
-          const pattern = /uses:\s*([^\/\s]+)\/([^@\/\s]+)(?:\/[^@\s]+)?@([a-f0-9]{40})\s*#\s*(v\S+)/g;
+          // Classify a `uses:` line into one of:
+          //   - tag-pinned:    owner/repo[/sub]@<40-char-sha> # v<tag>  (drift-checked against the tag)
+          //   - branch-pinned: owner/repo[/sub]@<40-char-sha> # <branch>  (SHA nailed down, no tag to diff)
+          //   - unpinned:      owner/repo[/sub]@<tag-or-branch>  (no SHA at all — the coverage gap)
+          // Local composite/action refs (./..., ../...) are not third-party and are skipped.
+          function parseUsesLine(line) {
+            const m = line.match(/uses:\s*(\S+)(?:\s*#\s*(\S+))?/);
+            if (!m) return null;
+            const [, refValue, comment] = m;
+            if (refValue.startsWith('./') || refValue.startsWith('../')) return null;
 
-          // Collect all pinned references
+            const atIdx = refValue.lastIndexOf('@');
+            if (atIdx === -1) return null;
+            const refPath = refValue.slice(0, atIdx);
+            const ref = refValue.slice(atIdx + 1);
+            const parts = refPath.split('/');
+            if (parts.length < 2) return null;
+            const [owner, repo] = parts;
+
+            if (/^[a-f0-9]{40}$/.test(ref)) {
+              if (comment && /^v?\d/.test(comment)) {
+                return { kind: 'tag-pinned', owner, repo, sha: ref, tag: comment };
+              }
+              return { kind: 'branch-pinned', owner, repo, sha: ref, ref: comment || null };
+            }
+
+            return { kind: 'unpinned', owner, repo, ref };
+          }
+
+          // Collect all third-party references
           const refs = [];
           for (const file of files) {
             const content = fs.readFileSync(file, 'utf8');
             const lines = content.split('\n');
             for (let i = 0; i < lines.length; i++) {
-              let match;
-              pattern.lastIndex = 0;
-              while ((match = pattern.exec(lines[i])) !== null) {
-                refs.push({
-                  file: path.basename(file),
-                  line: i + 1,
-                  owner: match[1],
-                  repo: match[2],
-                  pinnedSha: match[3],
-                  tag: match[4],
-                });
-              }
+              const parsed = parseUsesLine(lines[i]);
+              if (!parsed) continue;
+              refs.push({ file: path.basename(file), line: i + 1, ...parsed });
             }
           }
 
           if (refs.length === 0) {
-            core.info('No SHA-pinned actions found');
+            core.info('No third-party action references found');
             core.setOutput('verified_count', 0);
             core.setOutput('failed_count', 0);
+            core.setOutput('unpinned_count', 0);
+            core.setOutput('allowlisted_count', 0);
             core.setOutput('status', 'pass');
             core.setOutput('results_json', '[]');
             return;
           }
 
-          core.info(`Found ${refs.length} SHA-pinned action(s) to verify\n`);
+          core.info(`Found ${refs.length} third-party action reference(s) to check\n`);
 
           // Resolve a tag to its commit SHA, handling annotated tags
           async function resolveTagSha(owner, repo, tag) {
@@ -156,8 +244,26 @@ runs:
 
               throw new Error(`Unexpected ref object type: ${obj.type}`);
             } catch (err) {
+              if (err instanceof AccessBlockedError) throw err;
               if (err.status === 404) {
                 throw new Error(`Tag "${tag}" not found in ${owner}/${repo}`);
+              }
+              if (err.status === 403) {
+                // A rate-limit 403 isn't a per-repo access-block condition —
+                // it means this token is out of budget for every remaining
+                // lookup, allowlisted repo or not. Let it fail loudly instead
+                // of being silently absorbed by one repo's allowlist entry.
+                // Detected via the documented x-ratelimit-remaining response
+                // header (a structured API signal), never by inspecting the
+                // error's message text.
+                const rateLimitRemaining = err.response?.headers?.['x-ratelimit-remaining'];
+                if (rateLimitRemaining === '0') {
+                  throw err;
+                }
+                throw new AccessBlockedError(
+                  `API access blocked (403) resolving tag "${tag}" in ${owner}/${repo}: ${err.message}`,
+                  err
+                );
               }
               throw err;
             }
@@ -200,15 +306,42 @@ runs:
 
           let verified = 0;
           let failed = 0;
+          let unpinned = 0;
+          let allowlisted = 0;
           const errors = [];
           const results = [];
 
           for (const ref of refs) {
+            if (ref.kind === 'unpinned') {
+              const label = `${ref.owner}/${ref.repo}@${ref.ref}`;
+              const detail = `Currently uses floating ref "@${ref.ref}" — not SHA-pinned`;
+              const msg = `❌ ${label} — not SHA-pinned (${ref.file}:${ref.line})`;
+              core.error(msg);
+              errors.push(msg);
+              unpinned++;
+              results.push({
+                action: label, file: ref.file, line: ref.line,
+                status: 'unpinned', detail,
+              });
+              continue;
+            }
+
+            if (ref.kind === 'branch-pinned') {
+              const label = `${ref.owner}/${ref.repo}@${ref.ref || 'HEAD'}`;
+              core.info(`ℹ️  ${label} — SHA-pinned to branch, not tag-verified (${ref.file}:${ref.line})`);
+              results.push({
+                action: label, file: ref.file, line: ref.line,
+                status: 'pinned-branch', detail: `Tracks "${ref.ref}", not tag-verified`,
+              });
+              continue;
+            }
+
+            // kind === 'tag-pinned'
             const label = `${ref.owner}/${ref.repo}@${ref.tag}`;
             try {
               const resolvedSha = await resolveTagSha(ref.owner, ref.repo, ref.tag);
 
-              if (resolvedSha === ref.pinnedSha) {
+              if (resolvedSha === ref.sha) {
                 core.info(`✅ ${label} — SHA verified (${ref.file}:${ref.line})`);
                 verified++;
                 results.push({
@@ -216,10 +349,10 @@ runs:
                   status: 'verified',
                 });
               } else {
-                const info = await investigateMismatch(ref.owner, ref.repo, ref.pinnedSha);
+                const info = await investigateMismatch(ref.owner, ref.repo, ref.sha);
 
                 let msg = `❌ ${label} — SHA mismatch (${ref.file}:${ref.line})\n` +
-                  `   Pinned:   ${ref.pinnedSha}\n` +
+                  `   Pinned:   ${ref.sha}\n` +
                   `   Expected: ${resolvedSha}`;
 
                 let detail = '';
@@ -239,12 +372,31 @@ runs:
                 failed++;
                 results.push({
                   action: label, file: ref.file, line: ref.line,
-                  status: 'mismatch', pinnedSha: ref.pinnedSha,
+                  status: 'mismatch', pinnedSha: ref.sha,
                   expectedSha: resolvedSha, detail,
                 });
               }
             } catch (err) {
               const detail = err.message;
+
+              // Only a maintainer-reviewed entry in allowlist.json AND the
+              // explicitly verified access-block condition (a 403 from the
+              // upstream API) can downgrade a resolution failure to a
+              // warning — never any other error type, and never an inference
+              // from the error's message text. See that file for why.
+              const entry = allowlist.get(`${ref.owner}/${ref.repo}`);
+              if (entry && err instanceof AccessBlockedError) {
+                const msg = `⚠️  ${label} — tag verification unavailable (${ref.file}:${ref.line}): ${detail}\n` +
+                  `   Allowlisted: ${entry.description}`;
+                core.warning(msg);
+                allowlisted++;
+                results.push({
+                  action: label, file: ref.file, line: ref.line,
+                  status: 'allowlisted', detail: entry.description,
+                });
+                continue;
+              }
+
               const msg = `❌ ${label} — ${detail} (${ref.file}:${ref.line})`;
               core.error(msg);
               errors.push(msg);
@@ -257,16 +409,19 @@ runs:
           }
 
           core.info(`\n${'─'.repeat(60)}`);
-          core.info(`Verified: ${verified}  Failed: ${failed}  Total: ${refs.length}`);
+          core.info(`Verified: ${verified}  Failed: ${failed}  Unpinned: ${unpinned}  Allowlisted: ${allowlisted}  Total: ${refs.length}`);
 
           core.setOutput('verified_count', verified);
           core.setOutput('failed_count', failed);
-          core.setOutput('status', failed > 0 ? 'fail' : 'pass');
+          core.setOutput('unpinned_count', unpinned);
+          core.setOutput('allowlisted_count', allowlisted);
+          core.setOutput('status', (failed > 0 || unpinned > 0) ? 'fail' : 'pass');
           core.setOutput('results_json', JSON.stringify(results));
 
-          if (failed > 0) {
+          if (failed > 0 || unpinned > 0) {
             core.setFailed(
-              `${failed} SHA-pinned action(s) failed verification:\n\n` +
+              `${failed} action reference(s) failed drift verification and ${unpinned} ` +
+              `action reference(s) are not SHA-pinned at all:\n\n` +
               errors.join('\n\n')
             );
           }
@@ -278,6 +433,7 @@ runs:
         RESULTS_JSON: ${{ steps.verify.outputs.results_json }}
         VERIFIED_COUNT: ${{ steps.verify.outputs.verified_count }}
         FAILED_COUNT: ${{ steps.verify.outputs.failed_count }}
+        UNPINNED_COUNT: ${{ steps.verify.outputs.unpinned_count }}
         STATUS: ${{ steps.verify.outputs.status }}
       with:
         github-token: ${{ inputs.github-token }}
@@ -314,7 +470,10 @@ runs:
           const results = JSON.parse(process.env.RESULTS_JSON || '[]');
           const verified = parseInt(process.env.VERIFIED_COUNT || '0', 10);
           const failed = parseInt(process.env.FAILED_COUNT || '0', 10);
-          const total = verified + failed;
+          const unpinned = parseInt(process.env.UNPINNED_COUNT || '0', 10);
+          const total = results.length;
+          const branchPinned = results.filter(r => r.status === 'pinned-branch').length;
+          const allowlisted = results.filter(r => r.status === 'allowlisted').length;
           const status = process.env.STATUS || 'pass';
 
           // Find existing comment
@@ -328,41 +487,71 @@ runs:
           );
           const existing = comments.find(c => c.body?.includes(marker));
 
-          let body;
-          if (status === 'fail') {
-            // Build failure table
-            const rows = results.map(r => {
+          // Shared row renderer — used by both the failure table and the
+          // allowlisted-only warning table below, so the two stay in sync.
+          function renderRows(rs) {
+            return rs.map(r => {
               const loc = `\`${r.file}:${r.line}\``;
               if (r.status === 'verified') {
                 return `| \`${r.action}\` | ${loc} | ✅ Verified | |`;
-              } else {
-                return `| \`${r.action}\` | ${loc} | ❌ ${r.status === 'error' ? 'Error' : 'Mismatch'} | ${r.detail || ''} |`;
               }
+              if (r.status === 'pinned-branch') {
+                return `| \`${r.action}\` | ${loc} | ℹ️ Pinned (branch) | ${r.detail || ''} |`;
+              }
+              if (r.status === 'allowlisted') {
+                return `| \`${r.action}\` | ${loc} | ⚠️ Allowlisted (documented) | ${r.detail || ''} |`;
+              }
+              if (r.status === 'unpinned') {
+                return `| \`${r.action}\` | ${loc} | ❌ Unpinned | ${r.detail || ''} |`;
+              }
+              return `| \`${r.action}\` | ${loc} | ❌ ${r.status === 'error' ? 'Error' : 'Mismatch'} | ${r.detail || ''} |`;
             }).join('\n');
+          }
 
+          const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+          let body;
+          if (status === 'fail') {
             body = `${marker}
           > [!WARNING]
           > #### SHA Pin Verification Failed
           >
-          > **${failed} of ${total}** SHA-pinned action(s) failed verification.
+          > **${failed}** drift/error issue(s) and **${unpinned}** unpinned reference(s) out of **${total}** total.
 
           | Action | Location | Status | Details |
           |--------|----------|--------|---------|
-          ${rows}
+          ${renderRows(results)}
 
-          See the [action run](${'https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId}) for full details.`;
+          See the [action run](${runUrl}) for full details.`;
           } else if (total === 0) {
-            // No SHA-pinned actions found — only update if there was a previous warning
+            // No third-party action references found — only update if there was a previous warning
             if (!existing) return;
             body = `${marker}
           > [!NOTE]
-          > #### SHA Pin Verification — No Pins Found
+          > #### SHA Pin Verification — No References Found
           >
-          > No SHA-pinned actions detected in workflow files.`;
+          > No third-party action references detected in workflow files.`;
+          } else if (allowlisted > 0) {
+            // Status is 'pass' (no failed/unpinned), but at least one reference
+            // relies on a documented allowlist entry — that reliance must stay
+            // visible even though it doesn't block CI. Always post/update,
+            // regardless of whether a prior comment exists, so a resolved
+            // failure never silently flips to an unqualified "Passed ✅".
+            body = `${marker}
+          > [!WARNING]
+          > #### SHA Pin Verification Passed — with documented exceptions
+          >
+          > All **${total}** third-party action reference(s) are covered, but **${allowlisted}** rel${allowlisted === 1 ? 'ies' : 'y'} on a documented allowlist entry in \`allowlist.json\` and could not be automatically drift-checked. This does not fail CI, but should be reviewed.
+
+          | Action | Location | Status | Details |
+          |--------|----------|--------|---------|
+          ${renderRows(results.filter(r => r.status === 'allowlisted'))}
+
+          See the [action run](${runUrl}) for full details.`;
           } else {
             // All passed — only post if updating a previous warning
             if (!existing) {
-              core.info('All SHA pins verified — no previous comment to update');
+              core.info('All action references verified/covered — no previous comment to update');
               return;
             }
             // Skip update if already showing success
@@ -374,7 +563,7 @@ runs:
           > [!NOTE]
           > #### SHA Pin Verification Passed ✅
           >
-          > All **${total}** SHA-pinned action(s) verified against upstream tags.`;
+          > All **${total}** third-party action reference(s) are SHA-pinned (**${verified}** tag-verified, **${branchPinned}** branch-pinned).`;
           }
 
           if (existing) {

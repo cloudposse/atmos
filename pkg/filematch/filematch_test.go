@@ -81,6 +81,34 @@ func TestMatchFiles(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:     "literal file name in root",
+			patterns: []string{"file1.txt"},
+			want: []string{
+				filepath.Join(tempDir, "file1.txt"),
+			},
+			wantErr: false,
+		},
+		{
+			name:     "literal nested path",
+			patterns: []string{filepath.Join("subdirectory", "config.yaml")},
+			want: []string{
+				filepath.Join(tempDir, "subdirectory", "config.yaml"),
+			},
+			wantErr: false,
+		},
+		{
+			name:     "literal missing file matches nothing without error",
+			patterns: []string{"does-not-exist.yaml"},
+			want:     nil,
+			wantErr:  false,
+		},
+		{
+			name:     "literal directory is not a file match",
+			patterns: []string{"subdirectory"},
+			want:     nil,
+			wantErr:  false,
+		},
+		{
 			name:     "nested directory with wildcard",
 			patterns: []string{filepath.Join("subdirectory", "*.log")},
 			want: []string{

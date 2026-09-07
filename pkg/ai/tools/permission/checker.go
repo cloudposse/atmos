@@ -87,8 +87,8 @@ func (c *Checker) CheckPermission(ctx context.Context, tool Tool, params map[str
 
 // isAllowed checks if a tool is in the allowed list.
 func (c *Checker) isAllowed(toolName string) bool {
-	for _, pattern := range c.config.AllowedTools {
-		if matchesPattern(toolName, pattern) {
+	for _, pattern := range c.config.Allowed {
+		if MatchesPattern(toolName, pattern) {
 			return true
 		}
 	}
@@ -97,8 +97,8 @@ func (c *Checker) isAllowed(toolName string) bool {
 
 // isRestricted checks if a tool is in the restricted list.
 func (c *Checker) isRestricted(toolName string) bool {
-	for _, pattern := range c.config.RestrictedTools {
-		if matchesPattern(toolName, pattern) {
+	for _, pattern := range c.config.Restricted {
+		if MatchesPattern(toolName, pattern) {
 			return true
 		}
 	}
@@ -107,8 +107,8 @@ func (c *Checker) isRestricted(toolName string) bool {
 
 // isBlocked checks if a tool is in the blocked list.
 func (c *Checker) isBlocked(toolName string) bool {
-	for _, pattern := range c.config.BlockedTools {
-		if matchesPattern(toolName, pattern) {
+	for _, pattern := range c.config.Blocked {
+		if MatchesPattern(toolName, pattern) {
 			return true
 		}
 	}
@@ -130,8 +130,8 @@ func (c *Checker) promptUser(ctx context.Context, tool Tool, params map[string]i
 	return allowed, nil
 }
 
-// matchesPattern checks if a tool name matches a pattern (supports wildcards).
-func matchesPattern(toolName, pattern string) bool {
+// MatchesPattern checks if a tool name matches a pattern (supports wildcards).
+func MatchesPattern(toolName, pattern string) bool {
 	// Simple wildcard matching: "atmos_*" matches "atmos_describe_component".
 	if strings.HasSuffix(pattern, "*") {
 		prefix := strings.TrimSuffix(pattern, "*")

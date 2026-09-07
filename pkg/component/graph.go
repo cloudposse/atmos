@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -13,6 +14,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 // graphNodeIDFormat builds an unambiguous node ID from a component and stack name.
@@ -37,6 +39,8 @@ type GraphExecutionOptions struct {
 	Selection     *GraphSelection
 }
 
+// ExecuteGraph runs selected components in dependency order and stops before
+// starting another component when the caller context is canceled.
 func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
 	defer perf.Track(nil, "component.ExecuteGraph")()
 
@@ -63,8 +67,14 @@ func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
 		default:
 		}
 
-		if err := executeGraphNode(opts, &order[i]); err != nil {
+		if err := executeGraphNode(ctx, opts, &order[i]); err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, errors.Join(ctxErr, err))
+			}
 			return err
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, ctxErr)
 		}
 	}
 
@@ -102,7 +112,7 @@ func prepareExecutionOrder(opts *GraphExecutionOptions) (dependency.ExecutionOrd
 }
 
 // executeGraphNode executes a single graph node through the component provider.
-func executeGraphNode(opts *GraphExecutionOptions, node *dependency.Node) error {
+func executeGraphNode(ctx context.Context, opts *GraphExecutionOptions, node *dependency.Node) error {
 	nodeInfo := *opts.Info
 	nodeInfo.ComponentType = opts.ComponentType
 	nodeInfo.ComponentFromArg = node.Component
@@ -112,8 +122,25 @@ func executeGraphNode(opts *GraphExecutionOptions, node *dependency.Node) error 
 	nodeInfo.SubCommand = opts.SubCommand
 	nodeInfo.All = false
 	nodeInfo.Affected = false
+	nodeInfo.Query = ""
+	nodeInfo.Components = nil
+	nodeInfo.Tags = nil
+	nodeInfo.Labels = nil
+
+	// Selection flags belong to the outer graph dispatch. Passing them to a node
+	// can make providers treat the node as another bulk invocation and recurse.
+	nodeFlags := make(map[string]any, len(opts.Flags))
+	for key, value := range opts.Flags {
+		switch key {
+		case "all", "affected", "components", "query", "tags", "labels", "include-dependents":
+			continue
+		default:
+			nodeFlags[key] = value
+		}
+	}
 
 	if err := opts.Provider.Execute(&ExecutionContext{
+		Context:             ctx,
 		AtmosConfig:         opts.AtmosConfig,
 		ComponentType:       opts.ComponentType,
 		Component:           node.Component,
@@ -122,7 +149,7 @@ func executeGraphNode(opts *GraphExecutionOptions, node *dependency.Node) error 
 		SubCommand:          opts.SubCommand,
 		ComponentConfig:     node.Metadata,
 		ConfigAndStacksInfo: nodeInfo,
-		Flags:               opts.Flags,
+		Flags:               nodeFlags,
 	}); err != nil {
 		return fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrComponentExecutionFailed, node.Component, node.Stack, err)
 	}
@@ -179,13 +206,64 @@ func FilterGraph(graph *dependency.Graph, info *schema.ConfigAndStacksInfo, sele
 	if graph == nil {
 		return dependency.NewGraph()
 	}
-	if selection != nil {
-		return filterGraphBySelection(graph, selection)
+
+	var filtered *dependency.Graph
+	switch {
+	case selection != nil:
+		filtered = filterGraphBySelection(graph, selection)
+	case info == nil || info.Stack == "":
+		filtered = graph
+	default:
+		filtered = filterGraphByStack(graph, info.Stack)
 	}
-	if info == nil || info.Stack == "" {
+
+	// Tags/labels compose with whichever selection produced the graph above
+	// (an explicit node selection, a stack filter, or neither), rather than
+	// being an alternative selection mechanism. Because this lives in the
+	// shared component package (not per component type), any component type —
+	// built-in or custom — that calls ExecuteGraph/FilterGraph gets tag/label
+	// filtering automatically.
+	return filterGraphByTagsAndLabels(filtered, info)
+}
+
+// filterGraphByTagsAndLabels narrows graph nodes to those matching info.Tags
+// (any-match) and info.Labels (all-match), applied as an additional pass. A
+// no-op when neither is set.
+func filterGraphByTagsAndLabels(graph *dependency.Graph, info *schema.ConfigAndStacksInfo) *dependency.Graph {
+	if info == nil || (len(info.Tags) == 0 && len(info.Labels) == 0) {
 		return graph
 	}
-	return filterGraphByStack(graph, info.Stack)
+
+	nodeIDs := make([]string, 0)
+	for id, node := range graph.Nodes {
+		if matchesGraphTagsAndLabels(node, info) {
+			nodeIDs = append(nodeIDs, id)
+		}
+	}
+	return graph.Filter(dependency.Filter{NodeIDs: sortedUniqueStrings(nodeIDs)})
+}
+
+// matchesGraphTagsAndLabels reports whether a node's component metadata
+// matches the requested tags (any) and labels (all).
+func matchesGraphTagsAndLabels(node *dependency.Node, info *schema.ConfigAndStacksInfo) bool {
+	if node == nil {
+		return false
+	}
+	metadataSection, _ := node.Metadata[cfg.MetadataSectionName].(map[string]any)
+
+	if len(info.Tags) > 0 {
+		nodeTags := tags.ToStringSlice(metadataSection["tags"])
+		if !tags.MatchesTags(nodeTags, info.Tags, tags.TagModeAny) {
+			return false
+		}
+	}
+	if len(info.Labels) > 0 {
+		nodeLabels := tags.ToStringMap(metadataSection["labels"])
+		if !tags.MatchesLabels(nodeLabels, info.Labels) {
+			return false
+		}
+	}
+	return true
 }
 
 // filterGraphBySelection filters the graph to the explicitly selected node IDs.

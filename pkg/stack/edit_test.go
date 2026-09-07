@@ -64,3 +64,18 @@ func TestPickProvenanceFile_Empty(t *testing.T) {
 	_, _, ok := PickProvenanceFile(nil)
 	assert.False(t, ok)
 }
+
+func TestPickProvenanceFile_SkipsPhantomZeroLineTailEntries(t *testing.T) {
+	// A value defined only in an imported catalog file gets a real provenance
+	// entry there, followed by phantom Line:0 pass-through entries recorded by
+	// every ancestor stack file that re-merges the tree without actually
+	// setting this key. The real entry must win, not the phantom tail.
+	entries := []merge.ProvenanceEntry{
+		{File: "catalog/mock.yaml", Line: 5},
+		{File: "deploy/nonprod.yaml", Line: 0},
+	}
+	file, line, ok := PickProvenanceFile(entries)
+	assert.True(t, ok)
+	assert.Equal(t, "catalog/mock.yaml", file)
+	assert.Equal(t, 5, line)
+}

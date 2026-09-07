@@ -100,3 +100,31 @@ func TestResolveEditableConfigFile_CurrentDirectory(t *testing.T) {
 	wantResolved, _ := filepath.EvalSymlinks(file)
 	assert.Equal(t, wantResolved, gotResolved)
 }
+
+// TestResolveConfigOverride covers all three branches: zero, one, and multiple --config files.
+func TestResolveConfigOverride(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfgFiles []string
+		want     string
+		wantErr  bool
+	}{
+		{name: "no files", cfgFiles: nil, want: ""},
+		{name: "single file", cfgFiles: []string{"a.yaml"}, want: "a.yaml"},
+		{name: "multiple files are ambiguous", cfgFiles: []string{"a.yaml", "b.yaml"}, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveConfigOverride(tt.cfgFiles)
+			if tt.wantErr {
+				require.ErrorIs(t, err, ErrAmbiguousConfigFile)
+				assert.Contains(t, err.Error(), "a.yaml")
+				assert.Contains(t, err.Error(), "b.yaml")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

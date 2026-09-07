@@ -4,6 +4,7 @@ description: "Atmos global settings: settings, logs, errors, env, docs, metadata
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: core-config
 ---
 
 # Atmos Settings

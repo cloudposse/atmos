@@ -5,9 +5,11 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -330,10 +332,63 @@ func TestBuildComponentFilters(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := buildComponentFilters(tc.opts)
+			result, err := buildComponentFilters(tc.opts)
+			require.NoError(t, err)
 			assert.Equal(t, tc.expectedCount, len(result), tc.description)
 		})
 	}
+}
+
+// TestBuildComponentFilters_TagsAndLabels covers the new filter wiring,
+// including that a malformed --labels value surfaces an error.
+func TestBuildComponentFilters_TagsAndLabels(t *testing.T) {
+	t.Run("tags filter is added when set", func(t *testing.T) {
+		result, err := buildComponentFilters(&ComponentsOptions{Tags: []string{"production"}})
+		require.NoError(t, err)
+		require.Len(t, result, 2) // abstract filter + tags filter
+		tagFilter, ok := result[1].(*filter.TagFilter)
+		require.True(t, ok)
+		assert.Equal(t, []string{"production"}, tagFilter.Tags)
+	})
+
+	t.Run("labels filter is added when set", func(t *testing.T) {
+		result, err := buildComponentFilters(&ComponentsOptions{LabelsRaw: "cost-center=platform"})
+		require.NoError(t, err)
+		require.Len(t, result, 2) // abstract filter + labels filter
+		labelFilter, ok := result[1].(*filter.LabelFilter)
+		require.True(t, ok)
+		assert.Equal(t, map[string]string{"cost-center": "platform"}, labelFilter.Labels)
+	})
+
+	t.Run("malformed labels flag surfaces an error", func(t *testing.T) {
+		_, err := buildComponentFilters(&ComponentsOptions{LabelsRaw: "not-valid"})
+		require.Error(t, err)
+	})
+
+	t.Run("tags/labels row filters are skipped with the closure preview", func(t *testing.T) {
+		// With IncludeDependencies set, extractComponentsViaScopedClosure has
+		// already used opts.Tags/LabelsRaw to seed the closure roots; re-applying
+		// them here as row filters would incorrectly prune closure members
+		// (dependencies/dependents) that don't themselves carry the seed tag.
+		result, err := buildComponentFilters(&ComponentsOptions{
+			Tags:                []string{"production"},
+			LabelsRaw:           "cost-center=platform",
+			IncludeDependencies: -1,
+		})
+		require.NoError(t, err)
+		require.Len(t, result, 1, "only the abstract filter should be present, not tags/labels")
+		_, isAbstractFilter := result[0].(*filter.ColumnValueFilter)
+		assert.True(t, isAbstractFilter)
+	})
+
+	t.Run("tags/labels row filters are also skipped for IncludeDependents", func(t *testing.T) {
+		result, err := buildComponentFilters(&ComponentsOptions{
+			Tags:              []string{"production"},
+			IncludeDependents: 2,
+		})
+		require.NoError(t, err)
+		require.Len(t, result, 1, "only the abstract filter should be present, not the tags filter")
+	})
 }
 
 // TestGetComponentColumns tests column configuration logic.

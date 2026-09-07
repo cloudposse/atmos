@@ -3,12 +3,15 @@ package track
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version/managers"
 
 	// Register the built-in file managers.
 	_ "github.com/cloudposse/atmos/pkg/version/managers/githubactions"
+	_ "github.com/cloudposse/atmos/pkg/version/managers/json"
 	_ "github.com/cloudposse/atmos/pkg/version/managers/marker"
 	_ "github.com/cloudposse/atmos/pkg/version/managers/template"
 )
@@ -23,7 +26,7 @@ var trackApplyCmd = &cobra.Command{
 	Use:     "apply [track]",
 	Aliases: []string{"sync"},
 	Short:   "Rewrite version-managed files from the lock",
-	Long:    "Run the file managers (github-actions workflow refs, marker-annotated files, rendered templates) over the paths configured in version.files (or the managers' default paths) and rewrite them from the locked versions. Use --check to fail without writing when files are out of date (CI).",
+	Long:    "Run the file managers (github-actions workflow refs, marker-annotated files, rendered templates, JSON field writes) over the paths configured in version.files (or the managers' default paths) and rewrite them from the locked versions. Use --check to fail without writing when files are out of date (CI).",
 	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfig, "version.track.apply.RunE")()
@@ -64,4 +67,10 @@ func init() {
 	)...)
 	parser.RegisterFlags(trackApplyCmd)
 	trackCmd.AddCommand(trackApplyCmd)
+}
+
+// renderTemplate adapts the Atmos template engine to manager.RenderFunc, used
+// by the template file manager for apply/verify.
+func renderTemplate(atmosConfig *schema.AtmosConfiguration, name, content string, templateData map[string]any) (string, error) {
+	return exec.ProcessTmpl(atmosConfig, name, content, templateData, false)
 }

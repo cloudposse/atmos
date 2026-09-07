@@ -3,13 +3,16 @@ package toolchain
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/progress"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -23,6 +26,71 @@ func newTestSpinner() *bspinner.Model {
 func newTestProgressBar() *progress.Model {
 	m := progress.New()
 	return &m
+}
+
+func TestRightAlignInstallProgress(t *testing.T) {
+	left := "⣾ Installing owner/tool@v1.0.0"
+	tests := []struct {
+		name       string
+		downloaded int64
+		total      int64
+		width      int
+		assertLine func(t *testing.T, line string)
+	}{
+		{
+			name:       "shows downloaded and total bytes at the terminal edge",
+			downloaded: 85 * 1024 * 1024,
+			total:      100 * 1024 * 1024,
+			width:      80,
+			assertLine: func(t *testing.T, line string) {
+				assert.True(t, strings.HasSuffix(line, "85.0 MB/100.0 MB"))
+				assert.Equal(t, 80, lipgloss.Width(line))
+			},
+		},
+		{
+			name:       "does not wrap a narrow terminal",
+			downloaded: 85 * 1024 * 1024,
+			total:      100 * 1024 * 1024,
+			width:      len(left),
+			assertLine: func(t *testing.T, line string) {
+				assert.Equal(t, left, line)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.assertLine(t, rightAlignInstallProgress(left, tt.downloaded, tt.total, tt.width))
+		})
+	}
+}
+
+func TestBatchRendererMarksCompletedDownloadAsVerifying(t *testing.T) {
+	tool := toolInfo{owner: "owner", repo: "tool", version: "v1.0.0"}
+	renderer := &batchRenderer{active: []activeInstall{{toolInfo: tool, phase: "Downloading"}}}
+
+	renderer.updateProgress(tool, downloadProgress{downloaded: 100, total: 100})
+
+	assert.Equal(t, "Verifying", renderer.active[0].phase)
+}
+
+func TestCollectBatchInstallEventsFailsForMissingTerminalResults(t *testing.T) {
+	setupTestIO(t)
+	events := make(chan batchEvent, 1)
+	events <- batchEvent{
+		tool:   toolInfo{owner: "owner", repo: "installed", version: "v1.0.0"},
+		result: resultInstalled,
+	}
+	close(events)
+
+	counts := collectBatchInstallEvents(events, &batchDisplay{renderer: &batchRenderer{total: 2}}, 2)
+	err := counts.finish(2, false)
+
+	assert.Equal(t, 1, counts.installed)
+	assert.Equal(t, 1, counts.failed)
+	assert.Equal(t, 2, counts.completed)
+	assert.ErrorIs(t, err, errUtils.ErrToolInstall)
+	assert.Contains(t, err.Error(), "1 tool installation(s) failed")
 }
 
 func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
@@ -93,9 +161,19 @@ func TestRunInstallWithNoArgs(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
-	// Temporarily set the global toolVersionsFile variable
+	// Temporarily set the global toolVersionsFile variable.
+	// InstallPath MUST be isolated to a per-test temp dir: RunInstall performs a
+	// real install via NewInstaller(), and without an explicit InstallPath,
+	// GetInstallPath() falls back to the real, shared, XDG toolchain cache
+	// directory -- the exact directory CI's "atmos toolchain install --default"
+	// step populates and the whole acceptance suite depends on for the rest of
+	// the run. A test writing real downloaded binaries there races with every
+	// other concurrently-running package's test process reading from it.
 	prev := atmosConfig
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
+		VersionsFile: toolVersionsPath,
+		InstallPath:  filepath.Join(tempDir, ".atmos", "tools"),
+	}})
 	t.Cleanup(func() { SetAtmosConfig(prev) })
 
 	// Test that runInstall with no arguments doesn't error
@@ -117,20 +195,30 @@ func TestRunInstall_WithValidToolSpec(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
-	// Set Atmos config
-	originalToolVersionsFile := GetToolVersionsFilePath()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
+	// Set Atmos config. InstallPath MUST be isolated to a per-test temp dir: RunInstall
+	// performs a real install via NewInstaller(), and without an explicit InstallPath,
+	// GetInstallPath() falls back to the real, shared, XDG toolchain cache directory --
+	// the exact directory CI's "atmos toolchain install --default" step populates and
+	// the whole acceptance suite depends on for the rest of the run. A test writing real
+	// downloaded binaries there races with every other concurrently-running package's
+	// test process reading from it.
+	prevConfig := atmosConfig
+	installPath := filepath.Join(tempDir, ".atmos", "tools")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile}})
+		SetAtmosConfig(prevConfig)
 	}()
 
 	// Test installing a specific tool with version
 	err = RunInstall("terraform@1.11.4", false, false, true, false)
 	assert.NoError(t, err)
 
-	// Verify the tool was added to .tool-versions (it uses DefaultToolVersionsFilePath which is .tool-versions in HOME)
-	actualPath := DefaultToolVersionsFilePath
-	updatedToolVersions, err := LoadToolVersions(actualPath)
+	// Verify the tool was added to .tool-versions. Read back from toolVersionsPath (the
+	// path actually configured above via VersionsFile) -- NOT the bare
+	// DefaultToolVersionsFilePath constant, which is CWD-relative (the package source
+	// directory under `go test`, not this test's isolated tempDir) and can otherwise
+	// silently pick up unrelated content left behind by whatever last wrote there.
+	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
 	require.NoError(t, err)
 	assert.Contains(t, updatedToolVersions.Tools, "terraform")
 	assert.Contains(t, updatedToolVersions.Tools["terraform"], "1.11.4")
@@ -151,20 +239,28 @@ func TestRunInstall_WithSetAsDefault(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
-	// Set Atmos config
-	originalToolVersionsFile := GetToolVersionsFilePath()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
+	// Set Atmos config. InstallPath MUST be isolated to a per-test temp dir: RunInstall
+	// performs a real install via NewInstaller(), and without an explicit InstallPath,
+	// GetInstallPath() falls back to the real, shared, XDG toolchain cache directory --
+	// the exact directory CI's "atmos toolchain install --default" step populates and
+	// the whole acceptance suite depends on for the rest of the run. A test writing real
+	// downloaded binaries there races with every other concurrently-running package's
+	// test process reading from it.
+	prevConfig := atmosConfig
+	installPath := filepath.Join(tempDir, ".atmos", "tools")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile}})
+		SetAtmosConfig(prevConfig)
 	}()
 
 	// Test installing with setAsDefault=true
 	err = RunInstall("terraform@1.11.4", true, false, true, false)
 	assert.NoError(t, err)
 
-	// Verify the new version is first (default) in .tool-versions (uses DefaultToolVersionsFilePath)
-	actualPath := DefaultToolVersionsFilePath
-	updatedToolVersions, err := LoadToolVersions(actualPath)
+	// Verify the new version is first (default) in .tool-versions. Read back from
+	// toolVersionsPath (see TestRunInstall_WithValidToolSpec for why not
+	// DefaultToolVersionsFilePath).
+	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
 	require.NoError(t, err)
 	assert.Contains(t, updatedToolVersions.Tools, "terraform")
 	assert.Equal(t, "1.11.4", updatedToolVersions.Tools["terraform"][0])
@@ -183,11 +279,18 @@ func TestRunInstall_WithInvalidToolSpec(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
-	// Set Atmos config
-	originalToolVersionsFile := GetToolVersionsFilePath()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
+	// Set Atmos config. InstallPath MUST be isolated to a per-test temp dir: RunInstall
+	// performs a real install via NewInstaller(), and without an explicit InstallPath,
+	// GetInstallPath() falls back to the real, shared, XDG toolchain cache directory --
+	// the exact directory CI's "atmos toolchain install --default" step populates and
+	// the whole acceptance suite depends on for the rest of the run. A test writing real
+	// downloaded binaries there races with every other concurrently-running package's
+	// test process reading from it.
+	prevConfig := atmosConfig
+	installPath := filepath.Join(tempDir, ".atmos", "tools")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile}})
+		SetAtmosConfig(prevConfig)
 	}()
 
 	// Test with invalid tool spec (no version)
@@ -208,21 +311,28 @@ func TestRunInstall_WithCanonicalFormat(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
-	// Set Atmos config
-	originalToolVersionsFile := GetToolVersionsFilePath()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
+	// Set Atmos config. InstallPath MUST be isolated to a per-test temp dir: RunInstall
+	// performs a real install via NewInstaller(), and without an explicit InstallPath,
+	// GetInstallPath() falls back to the real, shared, XDG toolchain cache directory --
+	// the exact directory CI's "atmos toolchain install --default" step populates and
+	// the whole acceptance suite depends on for the rest of the run. A test writing real
+	// downloaded binaries there races with every other concurrently-running package's
+	// test process reading from it.
+	prevConfig := atmosConfig
+	installPath := filepath.Join(tempDir, ".atmos", "tools")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile}})
+		SetAtmosConfig(prevConfig)
 	}()
 
 	// Test installing with canonical owner/repo@version format
 	err = RunInstall("hashicorp/terraform@1.11.4", false, false, true, false)
 	assert.NoError(t, err)
 
-	// Verify the tool was added to .tool-versions (uses DefaultToolVersionsFilePath)
-	// Note: The tool may be registered as "terraform" or "hashicorp/terraform" depending on alias resolution
-	actualPath := DefaultToolVersionsFilePath
-	updatedToolVersions, err := LoadToolVersions(actualPath)
+	// Verify the tool was added to .tool-versions. Read back from toolVersionsPath (see
+	// TestRunInstall_WithValidToolSpec for why not DefaultToolVersionsFilePath).
+	// Note: The tool may be registered as "terraform" or "hashicorp/terraform" depending on alias resolution.
+	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
 	require.NoError(t, err)
 	// Check for either key - the implementation may normalize to the shorter form
 	terraformKey := ""
@@ -248,11 +358,18 @@ func TestRunInstall_WithLatestKeyword(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
-	// Set Atmos config
-	originalToolVersionsFile := GetToolVersionsFilePath()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
+	// Set Atmos config. InstallPath MUST be isolated to a per-test temp dir: RunInstall
+	// performs a real install via NewInstaller(), and without an explicit InstallPath,
+	// GetInstallPath() falls back to the real, shared, XDG toolchain cache directory --
+	// the exact directory CI's "atmos toolchain install --default" step populates and
+	// the whole acceptance suite depends on for the rest of the run. A test writing real
+	// downloaded binaries there races with every other concurrently-running package's
+	// test process reading from it.
+	prevConfig := atmosConfig
+	installPath := filepath.Join(tempDir, ".atmos", "tools")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile}})
+		SetAtmosConfig(prevConfig)
 	}()
 
 	// Test installing with "latest" version
@@ -260,9 +377,12 @@ func TestRunInstall_WithLatestKeyword(t *testing.T) {
 	err = RunInstall("terraform@latest", false, false, true, false)
 	assert.NoError(t, err)
 
-	// Verify a version was added (we can't predict the exact version, but it should be there)
-	actualPath := DefaultToolVersionsFilePath
-	updatedToolVersions, err := LoadToolVersions(actualPath)
+	// Verify a version was added (we can't predict the exact version, but it should be
+	// there). Read back from toolVersionsPath (see TestRunInstall_WithValidToolSpec for
+	// why not DefaultToolVersionsFilePath) -- this test's loose assertions (no exact
+	// version check) mean the bug that path caused elsewhere wouldn't have failed here,
+	// just silently passed against the wrong file.
+	updatedToolVersions, err := LoadToolVersions(toolVersionsPath)
 	require.NoError(t, err)
 	assert.Contains(t, updatedToolVersions.Tools, "terraform")
 	assert.NotEmpty(t, updatedToolVersions.Tools["terraform"])
@@ -283,11 +403,18 @@ func TestRunInstall_Reinstall(t *testing.T) {
 	err := SaveToolVersions(toolVersionsPath, toolVersions)
 	require.NoError(t, err)
 
-	// Set Atmos config
-	originalToolVersionsFile := GetToolVersionsFilePath()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
+	// Set Atmos config. InstallPath MUST be isolated to a per-test temp dir: RunInstall
+	// performs a real install via NewInstaller(), and without an explicit InstallPath,
+	// GetInstallPath() falls back to the real, shared, XDG toolchain cache directory --
+	// the exact directory CI's "atmos toolchain install --default" step populates and
+	// the whole acceptance suite depends on for the rest of the run. A test writing real
+	// downloaded binaries there races with every other concurrently-running package's
+	// test process reading from it.
+	prevConfig := atmosConfig
+	installPath := filepath.Join(tempDir, ".atmos", "tools")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath, InstallPath: installPath}})
 	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile}})
+		SetAtmosConfig(prevConfig)
 	}()
 
 	// Test reinstalling all tools from .tool-versions
@@ -641,6 +768,12 @@ func TestInstallMultipleTools_InvalidSpecs(t *testing.T) {
 	// Test with all invalid specs - should return nil (no valid tools to install).
 	err := installMultipleTools([]string{"invalid-spec-no-version", "another-bad-spec"}, false)
 	assert.NoError(t, err)
+}
+
+func TestRunInstallBatchWithOptionsRejectsInvalidConcurrency(t *testing.T) {
+	err := RunInstallBatchWithOptions([]string{"terraform@1.0.0", "helm@3.0.0"}, BatchInstallOptions{MaxConcurrency: -1})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "max concurrency")
 }
 
 // TestSpinnerModel tests the spinnerModel Bubble Tea model.

@@ -61,6 +61,11 @@ func newInputWithSkill(cmd, stdout, stderr string, cmdErr error, skillNames []st
 }
 
 func TestValidateAIConfig(t *testing.T) {
+	// Force PATH to an empty directory so auto-detection of claude/codex/copilot/gemini
+	// CLI binaries never fires here, regardless of what's installed on the machine running
+	// this test. Auto-detection itself is covered separately in pkg/ai/factory_test.go.
+	t.Setenv("PATH", t.TempDir())
+
 	tests := []struct {
 		name        string
 		cfg         *schema.AtmosConfiguration
@@ -133,6 +138,16 @@ func TestValidateAIConfig(t *testing.T) {
 					Providers: map[string]*schema.AIProviderConfig{
 						"anthropic": {Model: "claude-sonnet-4-5-20250514", ApiKey: "sk-test-key"},
 					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "CLI provider skips provider-config and API key requirement",
+			cfg: &schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "claude-code",
 				},
 			},
 			wantErr: false,

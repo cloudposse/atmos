@@ -1,8 +1,12 @@
 package atmos
 
 import (
+	"errors"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -12,11 +16,7 @@ import (
 func currentStackConfig(atmosConfig *schema.AtmosConfiguration) (*schema.AtmosConfiguration, error) {
 	if atmosConfig == nil {
 		clearStackProcessingCaches()
-		config, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
-		if err != nil {
-			return nil, err
-		}
-		return &config, nil
+		return refreshStackConfig()
 	}
 
 	if !atmosConfig.Initialized {
@@ -24,8 +24,27 @@ func currentStackConfig(atmosConfig *schema.AtmosConfiguration) (*schema.AtmosCo
 	}
 
 	clearStackProcessingCaches()
+	return refreshStackConfig()
+}
+
+// refreshStackConfig reprocesses stack manifests, treating "no stacks yet" as an
+// empty (but valid) config rather than an error. This is expected for brand-new
+// projects that don't have any stack manifests written yet.
+func refreshStackConfig() (*schema.AtmosConfiguration, error) {
 	config, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil {
+		if errors.Is(err, errUtils.ErrFailedToFindImport) || errors.Is(err, errUtils.ErrNoStackManifestsFound) {
+			log.Warn(
+				"No Atmos stack manifests found; treating as an empty project",
+				"hint", "This is expected for new projects that don't have any stacks written yet",
+				"error", err,
+			)
+			config, err = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+			if err != nil {
+				return nil, err
+			}
+			return &config, nil
+		}
 		return nil, err
 	}
 	return &config, nil

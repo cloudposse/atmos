@@ -38,6 +38,8 @@ settings:
     tab_width: 2          # Number of spaces for YAML indentation (default: 2)
     theme: atmos          # Terminal color theme (default: atmos)
     speed: 0              # Lines per second for paced output (0 = unlimited)
+    help:
+      filter: true        # Bare --help shows a focused view; --help=all prints everything
 ```
 
 ## Terminal Theme
@@ -237,6 +239,13 @@ settings:
   <dd>
     Pace terminal output at the configured number of lines per second. Use this for demos, tutorials, and terminal recordings where instant output is hard to read. A value of `0` disables pacing and preserves the default unlimited output behavior.
     - Environment variable: `ATMOS_TERMINAL_SPEED`
+  </dd>
+
+  <dt>`help.filter`</dt>
+  <dd>
+    Filter the bare `--help` output to a focused view that omits the GLOBAL FLAGS section (default: `true`). Use `--help=all` to print the full help output on demand. Set `settings.terminal.help.filter: false` (or `ATMOS_HELP_FILTER=false`) to always show the full output, including the GLOBAL FLAGS section.
+    - Environment variable: `ATMOS_HELP_FILTER`
+    - The default changed from `false` to `true` in the 2026-07 [edition](/cli/configuration/edition); a project pinned to an earlier edition keeps the unfiltered output.
   </dd>
 </dl>
 

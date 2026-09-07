@@ -89,6 +89,16 @@ atmos workflow apply-all-components -f networking --dry-run
 atmos workflow test-1 -f workflow1 --from-step step2
 ```
 
+### Filter Atmos Steps by Tags and Labels
+
+Pass `--tags` and `--labels` to apply the existing component selectors to every `type: atmos` workflow step:
+
+```shell
+atmos workflow deploy --tags networking --labels deployment:dev
+```
+
+For example, a step with `command: terraform apply --include-dependencies` receives both selectors and lets the Terraform command select the matching components.
+
 ### Inline Script Step
 
 Use `type: script` when the step body should be interpreted by a non-shell runtime:
@@ -163,6 +173,12 @@ Run `atmos workflow --help` to see all the available options
 
   <dt>`--stack` / `-s` <em>(optional)</em></dt>
   <dd>Atmos stack (if provided, will override stacks defined in the workflow or workflow steps).</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Component tag selector. Tags match any provided value and are forwarded to every `type: atmos` workflow step.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Component label selector. Labels match all provided key-value pairs and are forwarded to every `type: atmos` workflow step.</dd>
 
   <dt>`--from-step` <em>(optional)</em></dt>
   <dd>Start the workflow from the named step.</dd>

@@ -16,6 +16,7 @@ tests:
         - "\\bauth\\b"
         - "\\batlantis\\b"
         - "\\baws\\b"
+        - "\\bgcp\\b"
         - "\\bcompletion\\b"
         - "\\bdescribe\\b"
         - "\\bdocs\\b"
@@ -85,6 +86,9 @@ tests:
       - "docs"
       - "myapp"
     expect:
+      # Glamour pads wrapped output to the terminal width; the padding is not
+      # user-visible content and varies by platform.
+      ignore_trailing_whitespace: true
       diff: []
       stdout:
         - "Example Terraform Weather Component"

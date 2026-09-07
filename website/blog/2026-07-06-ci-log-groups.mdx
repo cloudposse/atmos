@@ -1,0 +1,81 @@
+---
+slug: ci-log-groups
+title: "Collapsible CI Log Groups for Workflows and Custom Commands"
+authors: [osterman]
+tags: [enhancement]
+date: 2026-07-06T12:00:00.000Z
+---
+
+A workflow fails in CI. You open the run and you're staring at two thousand lines of
+undifferentiated output — `terraform init`, `plan`, and `apply` from every step mashed into one
+endless scroll, with no marker for where one step ends and the next begins. Finding the step
+that actually broke means scrolling and squinting.
+
+Atmos now folds each workflow and custom-command step into its own collapsible, named log
+group. You see the list of steps up front and expand only the one you care about.
+
+<!--truncate-->
+
+## The Problem
+
+Workflows and custom commands run a sequence of steps, and in CI all of that output landed in
+one flat log. The CI provider had no idea where one step stopped and the next started, so it
+couldn't help you navigate. The usual fix is to hand-write `echo "::group::..."` around each
+`run:` step — but Atmos steps aren't `run:` steps you control line by line, so there was no
+clean place to put those markers. You scrolled.
+
+## The Fix
+
+Atmos now folds its output into the active CI provider's log groups. On GitHub Actions that's the
+`::group::` / `::endgroup::` workflow commands, so the run log renders as a list of expandable
+sections instead of a wall of text. A single `ci.groups.mode` picks the granularity — and because
+CI providers can't nest groups, the mode is the one knob you need:
+
+- **`auto`** (default) — the finest grouping per command. A **workflow** renders one group per
+  step; a direct **`atmos terraform plan`** renders one group per phase (`init`, then `plan`):
+
+  ```text
+  ▸ deploy network          ▸ terraform init
+  ▾ deploy cluster          ▾ terraform plan
+    atmos terraform apply…    ... the plan you actually want ...
+  ▸ smoke test
+  ```
+
+- **`invocation`** — one group around each whole `atmos <command>` run, including bare commands you
+  invoke directly from CI YAML.
+- **`off`** — no grouping.
+
+A step that runs `atmos terraform apply` is one group, not three — the outermost group always wins.
+You write nothing extra: no markers in your workflows, custom commands, or CI YAML.
+
+## How to Use It
+
+It rides on the existing [`ci`](/cli/configuration/ci) configuration. Turn on CI integration and
+grouping defaults to `auto`:
+
+```yaml
+ci:
+  enabled: true   # master switch
+  groups:
+    mode: auto    # auto | invocation | off  (default: auto)
+```
+
+Grouping is emitted only when **both** `ci.enabled` is `true` **and** a grouping-capable CI
+provider is detected (GitHub Actions). Outside CI it's a complete no-op, so local runs look
+exactly as before. You can also set it per-run with `ATMOS_CI_GROUPS_MODE`.
+
+A couple of details keep it unobtrusive:
+
+- **No nested groups.** When a command invokes `atmos` again (a custom command calling another, a
+  nested workflow, or a workflow step running `atmos terraform apply`), the child detects the open
+  group and stays flat — you always get one level of grouping.
+- **Secret-safe labels.** Group labels go through the same masking layer as the rest of Atmos
+  output, so a secret resolved into a step command or flag can't leak into the label.
+
+See the [`ci.groups`](/cli/configuration/ci/groups) reference for the full configuration.
+
+## Get Involved
+
+Atmos is open source and we'd love your feedback. Join the conversation in the
+[Cloud Posse community](https://cloudposse.com/slack) or open an issue on
+[GitHub](https://github.com/cloudposse/atmos).

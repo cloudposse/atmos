@@ -1,5 +1,7 @@
 package exec
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
 import (
 	"bytes"
 	"context"
@@ -17,12 +19,26 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// authManagerFactory creates an AuthManager from the given parameters.
-// Package-level variable to allow test injection.
-var authManagerFactory = func(identity string, authConfig schema.AuthConfig, flagSelectValue string, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
-	mergedAuthConfig := auth.CopyGlobalAuthConfig(&authConfig)
+// AuthManagerQueryFactory creates an AuthManager for ExecuteTerraformQuery's multi-component
+// execution path. This interface allows dependency injection and testing without performing
+// real authentication.
+type AuthManagerQueryFactory interface {
+	Create(identity string, authConfig *schema.AuthConfig, flagSelectValue string, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error)
+}
+
+// defaultAuthManagerQueryFactory implements AuthManagerQueryFactory using pkg/auth.
+type defaultAuthManagerQueryFactory struct{}
+
+func (defaultAuthManagerQueryFactory) Create(identity string, authConfig *schema.AuthConfig, flagSelectValue string, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	defer perf.Track(atmosConfig, "exec.defaultAuthManagerQueryFactory.Create")()
+
+	mergedAuthConfig := auth.CopyGlobalAuthConfig(authConfig)
 	return auth.CreateAndAuthenticateManagerWithAtmosConfig(identity, mergedAuthConfig, flagSelectValue, atmosConfig)
 }
+
+// authManagerFactory creates an AuthManager from the given parameters.
+// Package-level variable to allow test injection.
+var authManagerFactory AuthManagerQueryFactory = defaultAuthManagerQueryFactory{}
 
 // ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression --stack <stack>`.
 func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
@@ -53,19 +69,7 @@ func ExecuteTerraformQueryWithContext(ctx context.Context, info *schema.ConfigAn
 		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
 	}
 
-	stacks, err := ExecuteDescribeStacks(
-		&atmosConfig,
-		info.Stack,
-		info.Components,
-		[]string{cfg.TerraformComponentType},
-		nil,
-		false,
-		info.ProcessTemplates,
-		info.ProcessFunctions,
-		false,
-		info.Skip,
-		authManager,
-	)
+	stacks, err := describeTerraformStacksForExecution(&atmosConfig, info, authManager, info.Components)
 	if err != nil {
 		return err
 	}
@@ -85,8 +89,8 @@ func ExecuteTerraformQueryWithContext(ctx context.Context, info *schema.ConfigAn
 func createQueryAuthManager(info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
 	defer perf.Track(atmosConfig, "exec.createQueryAuthManager")()
 
-	authManager, err := authManagerFactory(
-		info.Identity, atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
+	authManager, err := authManagerFactory.Create(
+		info.Identity, &atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
 	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrUserAborted) {
@@ -105,6 +109,8 @@ func createQueryAuthManager(info *schema.ConfigAndStacksInfo, atmosConfig *schem
 }
 
 // executeTerraformQueryComponent runs one scheduled Terraform component and captures optional output.
+// Per-node lifecycle hooks (user + CI, before and after) are handled one layer up by
+// TerraformDispatcher.Dispatch via info.NodeHooks — this function stays hook-unaware.
 func executeTerraformQueryComponent(execution scheduleradapters.TerraformExecution) (scheduleradapters.TerraformExecutionResult, error) {
 	info := execution.Info
 	opts := []ShellCommandOption{WithProcessContext(execution.Context)}
@@ -117,20 +123,13 @@ func executeTerraformQueryComponent(execution scheduleradapters.TerraformExecuti
 	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	if info.PerComponentHook != nil || execution.CaptureOutput {
+	if execution.CaptureOutput {
 		opts = append(opts, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
 	}
 
 	execErr := ExecuteTerraform(info, opts...)
-	result := scheduleradapters.TerraformExecutionResult{
+	return scheduleradapters.TerraformExecutionResult{
 		Stdout: stdoutBuf.String(),
 		Stderr: stderrBuf.String(),
-	}
-	if info.PerComponentHook == nil {
-		return result, execErr
-	}
-
-	compInfo := info
-	info.PerComponentHook(&compInfo, result.CombinedOutput(), execErr)
-	return result, execErr
+	}, execErr
 }

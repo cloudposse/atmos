@@ -2,8 +2,14 @@ package io
 
 import (
 	"bytes"
+	"errors"
 	stdio "io"
+	"os"
+	"runtime"
 	"testing"
+
+	xterm "github.com/charmbracelet/x/term"
+	"github.com/creack/pty"
 )
 
 func TestStreams_Output(t *testing.T) {
@@ -253,4 +259,139 @@ func TestDynamicWriter_Write(t *testing.T) {
 			t.Fatal("Write() expected ErrShortWrite, got nil")
 		}
 	})
+}
+
+// TestMaskedWriter_TermFileCapability verifies that *maskedWriter transparently
+// exposes the file-descriptor/terminal-ness of a real *os.File it wraps (the
+// fix for Bubble Tea's TTY detection silently failing on a masked os.Stdout;
+// see internal/exec/vendor_model.go), while remaining safe/inert for
+// non-file underlying writers like a bytes.Buffer.
+func TestMaskedWriter_TermFileCapability(t *testing.T) {
+	cfg := &Config{DisableMasking: false}
+	masker := newMasker(cfg)
+
+	t.Run("wrapping a real pty file satisfies term.File and reports as a terminal", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("pty not supported on Windows")
+		}
+
+		ptmx, tty, err := pty.Open()
+		if err != nil {
+			t.Skipf("pty not available in this environment: %v", err)
+		}
+		defer ptmx.Close()
+		defer tty.Close()
+
+		mw := &maskedWriter{underlying: tty, masker: masker}
+
+		// Compile-time + runtime proof that *maskedWriter satisfies term.File
+		// (io.ReadWriteCloser + Fd() uintptr) once it wraps a real file.
+		var tf xterm.File = mw
+
+		if tf.Fd() != tty.Fd() {
+			t.Errorf("Fd() = %d, want delegated fd %d", tf.Fd(), tty.Fd())
+		}
+		if !xterm.IsTerminal(tf.Fd()) {
+			t.Error("expected masked writer wrapping a pty slave to report as a terminal")
+		}
+	})
+
+	t.Run("wrapping a bytes.Buffer never crashes and reports non-terminal", func(t *testing.T) {
+		var buf bytes.Buffer
+		mw := &maskedWriter{underlying: &buf, masker: masker}
+
+		fd := mw.Fd()
+		if fd == 0 {
+			t.Error("Fd() must never return 0 for a non-file underlying writer: 0 is stdin's real fd and would alias it")
+		}
+		if fd != invalidFd {
+			t.Errorf("Fd() = %d, want invalidFd sentinel %d", fd, invalidFd)
+		}
+		if xterm.IsTerminal(fd) {
+			t.Error("expected masked writer wrapping a bytes.Buffer to report as a non-terminal")
+		}
+
+		n, err := mw.Read(make([]byte, 10))
+		if n != 0 || !errors.Is(err, stdio.EOF) {
+			t.Errorf("Read() = (%d, %v), want (0, io.EOF)", n, err)
+		}
+
+		if err := mw.Close(); err != nil {
+			t.Errorf("Close() = %v, want nil", err)
+		}
+	})
+
+	t.Run("Close() on a masked os.Stdout does not close the real file", func(t *testing.T) {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("os.Pipe() error = %v", err)
+		}
+		defer r.Close()
+
+		origStdout := os.Stdout
+		os.Stdout = w
+		defer func() { os.Stdout = origStdout }()
+
+		mw := &maskedWriter{underlying: os.Stdout, masker: masker}
+		if err := mw.Close(); err != nil {
+			t.Fatalf("Close() = %v, want nil", err)
+		}
+
+		// If Close() had actually closed os.Stdout (the pipe's write end here),
+		// this write would fail with a "file already closed" error.
+		if _, err := os.Stdout.Write([]byte("still open")); err != nil {
+			t.Errorf("os.Stdout is no longer writable after maskedWriter.Close(): %v", err)
+		}
+	})
+
+	t.Run("Close() delegates to a real (non-stdout/stderr) underlying Closer", func(t *testing.T) {
+		f, err := os.CreateTemp(t.TempDir(), "masked-writer-close-*")
+		if err != nil {
+			t.Fatalf("os.CreateTemp() error = %v", err)
+		}
+
+		mw := &maskedWriter{underlying: f, masker: masker}
+		if err := mw.Close(); err != nil {
+			t.Fatalf("Close() = %v, want nil", err)
+		}
+
+		// The underlying file must have actually been closed this time (unlike os.Stdout/Stderr).
+		if _, err := f.Write([]byte("x")); err == nil {
+			t.Error("expected the underlying file to be closed after maskedWriter.Close()")
+		}
+	})
+
+	t.Run("Read() returns EOF for an underlying writer with no Read method at all", func(t *testing.T) {
+		mw := &maskedWriter{underlying: &errorWriter{}, masker: masker}
+
+		n, err := mw.Read(make([]byte, 10))
+		if n != 0 || !errors.Is(err, stdio.EOF) {
+			t.Errorf("Read() = (%d, %v), want (0, io.EOF)", n, err)
+		}
+	})
+
+	t.Run("Read() delegates to an underlying reader when present", func(t *testing.T) {
+		src := bytes.NewBufferString("hello")
+		mw := &maskedWriter{underlying: readWriteStub{Reader: src}, masker: masker}
+
+		buf := make([]byte, 5)
+		n, err := mw.Read(buf)
+		if err != nil {
+			t.Fatalf("Read() error = %v", err)
+		}
+		if string(buf[:n]) != "hello" {
+			t.Errorf("Read() = %q, want %q", buf[:n], "hello")
+		}
+	})
+}
+
+// readWriteStub adapts a stdio.Reader into something that also implements
+// Write (required to satisfy maskedWriter.underlying's stdio.Writer field)
+// purely for exercising maskedWriter.Read()'s delegation path in tests.
+type readWriteStub struct {
+	stdio.Reader
+}
+
+func (readWriteStub) Write(p []byte) (int, error) {
+	return len(p), nil
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/cloudposse/atmos/pkg/http/proxy"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -143,25 +144,106 @@ func (m *ProviderMirror) routeVersion(c providerCoord, version string) proxy.Rou
 				return nil, "", err
 			}
 			platforms := platformsForVersion(versions, version)
-			archives := map[string]mirrorArchive{}
-			for _, p := range platforms {
-				dlURL := fmt.Sprintf("%s%s/%s/%s/download/%s/%s", svc.providersV1, c.namespace, c.typ, version, p.OS, p.Arch)
-				dl, derr := fetchJSON[registryDownload](ctx, fetch, dlURL)
-				if derr != nil {
-					// Skip a platform that fails to resolve; the one Terraform needs surfaces in its own request.
-					log.Debug("Provider mirror: skipping platform", "provider", c.typ, "version", version, "os", p.OS, "arch", p.Arch, "error", derr)
-					continue
-				}
-				entry := mirrorArchive{URL: dl.Filename}
-				if dl.Shasum != "" {
-					entry.Hashes = []string{"zh:" + dl.Shasum}
-				}
-				archives[p.OS+"_"+p.Arch] = entry
-			}
+			archives := fetchPlatformArchives(ctx, fetch, &platformArchiveRequest{svc: svc, coord: c, version: version}, platforms)
 			b, err := json.Marshal(mirrorVersion{Archives: archives})
 			return b, contentTypeJSON, err
 		},
 	}
+}
+
+// platformArchiveRequest bundles the fields fetchPlatformArchives needs to
+// build each platform's download URL, keeping its own argument count within
+// this repo's function-argument-limit lint rule.
+type platformArchiveRequest struct {
+	svc     services
+	coord   providerCoord
+	version string
+}
+
+// platformArchiveResult pairs a resolved platform's mirror key with its
+// archive entry, or reports that the platform failed to resolve and should
+// be skipped.
+type platformArchiveResult struct {
+	key   string
+	entry mirrorArchive
+	ok    bool
+}
+
+// maxConcurrentPlatformFetches bounds how many platform archive lookups run
+// at once. The platform list comes from upstream registry metadata; without
+// a cap, a malformed or malicious registry response advertising an excessive
+// platform list could spawn unbounded goroutines and outbound requests.
+const maxConcurrentPlatformFetches = 8
+
+// fetchPlatformArchives resolves every platform's download metadata through a
+// fixed-size worker pool. A provider version can advertise a dozen or more
+// platforms; resolving them one upstream round-trip at a time on a cold cache
+// (every CI run starts cold) can add up to tens of seconds of cumulative
+// latency, risking the client's own mirror-request deadline even though the
+// client only ever needs a single platform's entry. Fetching them
+// concurrently, but through a bounded pool, keeps wall time close to one
+// round-trip without letting an oversized platform list create unbounded
+// concurrent work.
+func fetchPlatformArchives(ctx context.Context, fetch proxy.Fetcher, req *platformArchiveRequest, platforms []registryPlatform) map[string]mirrorArchive {
+	jobs := make(chan registryPlatform)
+	workers := maxConcurrentPlatformFetches
+	if workers > len(platforms) {
+		workers = len(platforms)
+	}
+	results := make(chan platformArchiveResult, workers)
+
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for p := range jobs {
+				results <- fetchPlatformArchive(ctx, fetch, req, p)
+			}
+		}()
+	}
+
+	go func() {
+		defer close(jobs)
+		for _, p := range platforms {
+			select {
+			case jobs <- p:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	archives := make(map[string]mirrorArchive, len(platforms))
+	for r := range results {
+		if r.ok {
+			archives[r.key] = r.entry
+		}
+	}
+	return archives
+}
+
+// fetchPlatformArchive resolves a single platform's download metadata, or
+// reports a skip (ok=false) when the upstream lookup fails. A platform that
+// fails to resolve is skipped; the one Terraform actually needs surfaces on
+// its own request.
+func fetchPlatformArchive(ctx context.Context, fetch proxy.Fetcher, req *platformArchiveRequest, p registryPlatform) platformArchiveResult {
+	dlURL := fmt.Sprintf("%s%s/%s/%s/download/%s/%s", req.svc.providersV1, req.coord.namespace, req.coord.typ, req.version, p.OS, p.Arch)
+	dl, err := fetchJSON[registryDownload](ctx, fetch, dlURL)
+	if err != nil {
+		log.Debug("Provider mirror: skipping platform", "provider", req.coord.typ, "version", req.version, "os", p.OS, "arch", p.Arch, "error", err)
+		return platformArchiveResult{}
+	}
+	entry := mirrorArchive{URL: dl.Filename}
+	if dl.Shasum != "" {
+		entry.Hashes = []string{"zh:" + dl.Shasum}
+	}
+	return platformArchiveResult{key: p.OS + "_" + p.Arch, entry: entry, ok: true}
 }
 
 // registryPlatform is a single os/arch a provider version supports.

@@ -1,0 +1,17 @@
+# Manual field-test stack for the terraform streaming UI (`--ui`).
+# Local-only resources (null_resource/local_file/time_sleep) - no cloud credentials required.
+
+vars:
+  environment: test
+  stage: dev
+
+components:
+  terraform:
+    tree:
+      vars:
+        enabled: true
+        instance_count: 2
+
+    slow:
+      vars:
+        sleep_duration: "20s"

@@ -1,19 +1,22 @@
 package ai
 
 import (
-	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	aiContext "github.com/cloudposse/atmos/pkg/ai/context"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 const (
@@ -168,17 +171,28 @@ func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) 
 
 // PromptForConsent asks the user for consent to send context to AI.
 func PromptForConsent() (bool, error) {
-	fmt.Fprintf(os.Stderr, "\n⚠️  This question may benefit from your stack configurations.\n")
-	fmt.Fprintf(os.Stderr, "📤 Send stack files to AI provider for analysis? (y/N): ")
-
-	reader := bufio.NewReader(os.Stdin)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return false, err
+	// Prompts require a TTY; fail loudly instead of silently defaulting to deny.
+	if !terminal.New().IsTTY(terminal.Stdin) {
+		return false, errUtils.ErrInteractiveNotAvailable
 	}
 
-	response = strings.TrimSpace(strings.ToLower(response))
-	return response == "y" || response == "yes", nil
+	var consented bool
+	confirm := uiutils.NewAtmosConfirm().
+		Title("Send stack files to AI provider for analysis?").
+		Description("This question may benefit from your stack configurations.").
+		Affirmative("Yes").
+		Negative("No").
+		Value(&consented).
+		WithTheme(uiutils.NewAtmosHuhTheme())
+
+	if err := confirm.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return false, errUtils.ErrUserAborted
+		}
+		return false, fmt.Errorf("consent prompt failed: %w", err)
+	}
+
+	return consented, nil
 }
 
 // ShouldSendContext determines if context should be sent based on configuration and environment.

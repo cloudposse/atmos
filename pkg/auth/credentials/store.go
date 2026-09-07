@@ -3,13 +3,13 @@ package credentials
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // ErrCredentialStore is the static sentinel for credential-store failures.
@@ -85,7 +85,7 @@ func NewCredentialStoreWithConfig(authConfig *schema.AuthConfig) types.Credentia
 		store, err = newSystemKeyringStore()
 	default:
 		// Log warning about unknown type and fall back to system
-		fmt.Fprintf(os.Stderr, "Warning: unknown keyring type %q, using system keyring\n", keyringType)
+		ui.Warningf("unknown keyring type %q, using system keyring", keyringType)
 		store, err = newSystemKeyringStore()
 	}
 

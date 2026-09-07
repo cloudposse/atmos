@@ -19,13 +19,21 @@ type Client struct {
 }
 
 // NewClient creates a new GitHub API client.
-// Token precedence: ATMOS_CI_GITHUB_TOKEN > GITHUB_TOKEN > GH_TOKEN.
+// Token precedence: ATMOS_CI_GITHUB_TOKEN > ATMOS_PRO_GITHUB_TOKEN > GITHUB_TOKEN > GH_TOKEN.
 // ATMOS_CI_GITHUB_TOKEN allows using a separate token for CI operations
 // (e.g., commit statuses) while GITHUB_TOKEN is used by Terraform.
+// ATMOS_PRO_GITHUB_TOKEN is a JIT GitHub App installation token brokered by
+// Atmos Pro's github/sts auth integration (see pkg/auth/integrations/github);
+// unlike GITHUB_TOKEN, pushes/PRs authenticated with it trigger downstream
+// GitHub Actions workflows, since it isn't subject to GitHub's anti-recursion
+// restriction on the default Actions token.
 func NewClient() (*Client, error) {
 	defer perf.Track(nil, "github.NewClient")()
 
 	token := os.Getenv("ATMOS_CI_GITHUB_TOKEN")
+	if token == "" {
+		token = os.Getenv("ATMOS_PRO_GITHUB_TOKEN")
+	}
 	if token == "" {
 		token = os.Getenv("GITHUB_TOKEN")
 	}

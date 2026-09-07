@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
 )
 
 // RegisterTerraformCompletions registers all completion functions for a terraform subcommand.
@@ -13,10 +15,5 @@ import (
 // registerPersistentCompletions() method in pkg/flags/standard.go.
 // Custom completion functions are configured in the flag definition.
 func RegisterTerraformCompletions(tfCmd *cobra.Command) {
-	// Component name completion for positional argument.
-	// This is command-specific, so must be registered on each subcommand.
-	tfCmd.ValidArgsFunction = componentsArgCompletion
-
-	// Identity flag completion.
-	addIdentityCompletion(tfCmd)
+	shared.RegisterCompletions(tfCmd)
 }

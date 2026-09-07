@@ -32,6 +32,16 @@ func registerGrouping(t *testing.T) *mockGroupingProvider {
 	t.Helper()
 	restore := SwapRegistryForTest()
 	t.Cleanup(restore)
+	// This test binary can itself run as a child of a CI-grouped step (this
+	// repo's own atmos.yaml sets ci.enabled: true, and CI runs `go test` via
+	// an `atmos test acceptance` custom-command step) -- in that case the
+	// sentinel this package uses to suppress nested groups is already present
+	// in the process environment, which would make every "grouping emits
+	// markers" test below see a false "parent already grouping" and silently
+	// no-op. Clear it so these tests are deterministic regardless of how the
+	// test binary itself was launched; callers that want to exercise the
+	// sentinel explicitly set it again afterward (see TestGroup_NoOpCases).
+	t.Setenv(logGroupSentinelEnvVar, "")
 	p := &mockGroupingProvider{mockProvider: &mockProvider{name: "mock-grouping", detected: true}}
 	Register(p)
 	return p

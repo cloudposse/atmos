@@ -5,13 +5,13 @@
 //
 // This intentionally does not implement a full VT100/xterm emulator. It
 // supports exactly the escape sequences that Atmos's own recordings emit:
-// SGR styling, cursor show/hide, clear-line, and cursor-up/down (the
+// SGR styling, cursor show/hide, clear-line/display, and cursor-up/down (the
 // redraw mechanism Bubbletea and huh use for in-place full-screen updates —
 // move the cursor up N lines, then walk back down re-emitting only the lines
 // that changed). Anything else (horizontal cursor movement, absolute
-// positioning, erase-display, alternate-screen-buffer) is not emitted by any
-// cast this repo currently records, so it's left in the "ignore" bucket
-// rather than adding untested column/grid-addressing handling.
+// positioning, alternate-screen-buffer) is not emitted by any cast this repo
+// currently records, so it's left in the "ignore" bucket rather than adding
+// untested column/grid-addressing handling.
 
 export const CURSOR_MARKER = "";
 
@@ -65,6 +65,23 @@ export function replayTerminal(input) {
       setCurrentLine(CURSOR_MARKER);
     }
   };
+  // Erase-display (CSI J / CSI 0J) erases everything below the cursor. Huh
+  // uses it (after CSI K) to clear a completed form, and Atmos's streaming
+  // terraform UI uses it to clear its progress block before drawing the
+  // completion summary. K has already erased the active row's suffix, so
+  // the line-level model keeps the active row (the following CR + CSI 2K
+  // redraw replaces it normally) and *drops* the rows below it.
+  //
+  // Dropping, not blanking: a real terminal has no scrollback below the
+  // cursor, so the erased rows simply cease to exist and the next output
+  // lands directly under the cursor. Blanking them instead left a tail of
+  // empty rows in the replay, and the player's scroll-to-bottom then showed
+  // nothing but that tail once a recording ended on an erase-display.
+  const clearDisplayAfterCursor = () => {
+    removeCursor();
+    lines.length = row + 1;
+    syncCursor();
+  };
   // Move the cursor `delta` rows (positive = down, negative = up). A row
   // that already exists keeps whatever content it has until something is
   // actually written to it (see `freshRow` above) — that's what lets a
@@ -105,6 +122,8 @@ export function replayTerminal(input) {
         if (!isDefault || freshRow) {
           clearLine();
         }
+      } else if (parsed.kind === "clearDisplay") {
+        clearDisplayAfterCursor();
       } else if (parsed.kind === "cursorShow") {
         cursorVisible = true;
         syncCursor();
@@ -189,6 +208,12 @@ export function parseEscape(input, start) {
   }
   if (final === "K") {
     return { kind: "clearLine", sequence, nextIndex: start + sequence.length };
+  }
+  if (final === "J") {
+    const param = sequence.slice(2, -1);
+    if (param === "" || param === "0") {
+      return { kind: "clearDisplay", sequence, nextIndex: start + sequence.length };
+    }
   }
   if (final === "A" || final === "B") {
     const param = sequence.slice(2, -1);

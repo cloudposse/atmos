@@ -503,14 +503,24 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 					return nil
 				},
 			}
-			// Register flag with shorthand (NO NoOptDefVal - we handle empty values manually).
+			// Register flag with shorthand (NO NoOptDefVal on the pflag itself - the
+			// empty-value("--identity=") resolution is driven generically by the
+			// registry's NoOptDefVal metadata, matched below).
 			cmd.Flags().StringP("identity", "i", "", "Identity selector")
 
 			// Create viper instance.
 			v := viper.New()
 
-			// Create empty registry for tests (no NoOptDefVal preprocessing needed in these tests).
+			// Register the identity flag in the registry with its NoOptDefVal so
+			// resolveNoOptDefValForEmptyFlags (which derives eligible flags generically
+			// from the registry, not a hard-coded name) knows to treat an explicit
+			// empty value ("--identity=") as the interactive-selection sentinel.
 			registry := NewFlagRegistry()
+			registry.Register(&StringFlag{
+				Name:        "identity",
+				Shorthand:   "i",
+				NoOptDefVal: "__SELECT__",
+			})
 
 			// Create parser with compatibility flags.
 			translator := compat.NewCompatibilityFlagTranslator(tt.compatibilityAlias)
@@ -530,6 +540,27 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 			assert.Equal(t, tt.expectedPositional, result.PositionalArgs)
 		})
 	}
+}
+
+// TestFlagParser_ResolveNoOptDefValForEmptyFlags_NilRegistry verifies that Parse doesn't panic
+// when the parser has a nil registry: resolveNoOptDefValForEmptyFlags must bail out early via its
+// `p.registry == nil` guard rather than dereferencing a nil registry when deriving the set of
+// NoOptDefVal-eligible flags.
+func TestFlagParser_ResolveNoOptDefValForEmptyFlags_NilRegistry(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack name")
+
+	v := viper.New()
+	translator := compat.NewCompatibilityFlagTranslator(nil)
+	parser := NewAtmosFlagParser(cmd, v, translator, nil)
+
+	var err error
+	assert.NotPanics(t, func() {
+		_, err = parser.Parse([]string{"--stack", "dev"})
+	}, "Parse must not panic with a nil registry")
+
+	require.NoError(t, err)
+	assert.Equal(t, "dev", v.GetString("stack"), "flag parsing itself must still work without a registry")
 }
 
 // TestFlagParser_Reset verifies that Reset clears registered command flag state

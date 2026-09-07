@@ -4,7 +4,13 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+
 env:
+  # Released binary used by hooks that invoke Atmos. This must not build source
+  # during pre-commit, which runs in a worktree-sensitive lifecycle event.
+  ATMOS_BOOTSTRAP_VERSION: "1.224.1"
   # Ensure pre-commit uses the right Python version
   PYTHON_VERSION: "3.11"
   # Skip hooks that are already running in other CI jobs to avoid redundant work
@@ -12,6 +18,10 @@ env:
   # golangci-lint: Already runs in codeql.yml lint-golangci job
   # lintroller: Already runs in codeql.yml lint-golangci job (via custom-gcl binary)
   SKIP: go-build-mod,golangci-lint,lintroller
+  # No `|direct` fallback: under harden-runner's block mode a direct fetch
+  # only fans out to blocked vanity-import hosts and burns minutes; see the
+  # GOPROXY comment in test.yml.
+  GOPROXY: "https://proxy.golang.org"
 
 jobs:
   pre-commit:
@@ -26,14 +36,19 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
           # Fetch full history for proper diff checking
           fetch-depth: 0
 
+      - name: Set up Atmos
+        uses: ./.github/actions/setup-atmos-bootstrap
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+
       - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
@@ -53,18 +68,20 @@ jobs:
           # Add Go bin to PATH
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
+      # Pre-download dependencies to prevent go mod tidy from trying to fetch
+      # internal packages. With retry: GOPROXY no longer falls back to direct
+      # fetches (they only hit blocked vanity hosts under harden-runner's block
+      # mode), so transient proxy errors are handled by retrying instead.
       - name: Download Go module dependencies
-        run: |
-          # Pre-download dependencies to prevent go mod tidy from trying to fetch internal packages
-          go mod download
+        uses: ./.github/actions/go-mod-download-retry
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Run CloudPosse pre-commit action
-        uses: cloudposse/github-action-pre-commit@v4.0.0
+        uses: cloudposse/github-action-pre-commit@ed9906221c8a4ee1dcb1e665da895998e0f7b396 # v4.1.0
         with:
           # Run against files changed in the PR only
           # This prevents formatting/checking unrelated files

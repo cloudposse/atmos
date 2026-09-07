@@ -40,6 +40,8 @@ const (
 	TerraformStateDir = "terraform.tfstate.d"
 	// BackendConfigFile is the auto-generated backend configuration file.
 	BackendConfigFile = "backend.tf.json"
+	// ProvidersOverrideFile is the auto-generated provider override file.
+	ProvidersOverrideFile = "providers_override.tf.json"
 )
 
 // StackProcessor defines the interface for stack operations needed by clean.
@@ -298,11 +300,11 @@ func buildRelativePath(basePath, componentPath string, baseComponent string) (st
 //nolint:gocritic // hugeParam: value type is required as info is modified within the function
 func (s *Service) initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) []string {
 	if info.ComponentFromArg == "" {
-		return []string{TerraformDir, TerraformLockFile, TerraformVarFileGlob, TerraformStateDir}
+		return []string{TerraformDir, TerraformLockFile, TerraformVarFileGlob, TerraformStateDir, ProvidersOverrideFile}
 	}
 	varFile := s.processor.ConstructTerraformComponentVarfileName(&info)
 	planFile := s.processor.ConstructTerraformComponentPlanfileName(&info)
-	files := []string{TerraformDir, varFile, planFile}
+	files := []string{TerraformDir, varFile, planFile, ProvidersOverrideFile}
 
 	if !slices.Contains(info.AdditionalArgsAndFlags, SkipTerraformLockFileFlag) {
 		files = append(files, TerraformLockFile)

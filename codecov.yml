@@ -13,7 +13,7 @@ coverage:
           - "**/*.go"
     patch:
       default:
-        target: 80% # Target at least 80% test coverage on new/changed lines
+        target: 85% # Target at least 85% test coverage on new/changed lines
         informational: true # Make patch coverage informational only
         base: auto
         paths:            # Only track Go files for coverage calculations

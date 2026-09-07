@@ -19,6 +19,7 @@ func TestFromComponentSection_FullSpec(t *testing.T) {
 		"container": map[string]any{
 			"image": "custom/img:1.5",
 			"ports": []any{map[string]any{"container": 4566}},
+			"env":   map[string]any{"FLOCI_AZ_TLS_ENABLED": "true"},
 		},
 	}
 
@@ -30,6 +31,7 @@ func TestFromComponentSection_FullSpec(t *testing.T) {
 	assert.Equal(t, []string{"s3", "sqs"}, spec.Services)
 	require.NotNil(t, spec.Container)
 	assert.Equal(t, "custom/img:1.5", spec.Container.Image)
+	assert.Equal(t, "true", spec.Container.Env["FLOCI_AZ_TLS_ENABLED"])
 	require.Len(t, spec.Container.Ports, 1)
 	assert.Equal(t, 4566, spec.Container.Ports[0].Container)
 }

@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -60,7 +62,7 @@ func TestCommandProviderMetadata(t *testing.T) {
 
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	renderCmd := newOperationCommand("render", "Render")
-	for _, name := range []string{"all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split"} {
+	for _, name := range []string{"all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels"} {
 		assert.NotNil(t, renderCmd.Flag(name), "expected render flag %q", name)
 	}
 
@@ -69,11 +71,88 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	assert.Nil(t, applyCmd.Flag("output"))
 	assert.Nil(t, applyCmd.Flag("output-dir"))
 	assert.Nil(t, applyCmd.Flag("split"))
+	assert.NotNil(t, applyCmd.ValidArgsFunction)
+	require.NoError(t, applyCmd.Args(applyCmd, nil), "the missing component must reach the interactive prompt flow")
+	require.Error(t, applyCmd.Args(applyCmd, []string{"app", "extra"}))
 
 	validateCmd := newOperationCommand("validate", "Validate")
 	assert.NotNil(t, validateCmd.Flag("server"), "expected validate to register --server")
 	assert.Nil(t, validateCmd.Flag("output"))
 	assert.Nil(t, applyCmd.Flag("server"), "--server is validate-only")
+}
+
+func TestSelectionFlagsAndComponentCompletion(t *testing.T) {
+	for _, flag := range []string{"all", "affected", "tags", "labels"} {
+		t.Run(flag, func(t *testing.T) {
+			cmd := newOperationCommand("apply", "Apply")
+			assert.False(t, hasSelectionFlags(cmd))
+			if flag == "all" || flag == "affected" {
+				require.NoError(t, cmd.Flags().Set(flag, "true"))
+			} else {
+				require.NoError(t, cmd.Flags().Set(flag, "value"))
+			}
+			assert.True(t, hasSelectionFlags(cmd))
+		})
+	}
+
+	cmd := newOperationCommand("apply", "Apply")
+	components, directive := componentArgCompletion(cmd, []string{"already-provided"}, "")
+	assert.Nil(t, components)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestComponentArgCompletionResolvesConfiguredComponents(t *testing.T) {
+	originalInit, originalDescribe, originalList := kubernetesInitCliConfig, kubernetesDescribeStacks, kubernetesListAllComponents
+	t.Cleanup(func() {
+		kubernetesInitCliConfig = originalInit
+		kubernetesDescribeStacks = originalDescribe
+		kubernetesListAllComponents = originalList
+	})
+
+	cmd := newOperationCommand("apply", "Apply")
+	kubernetesInitCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+	kubernetesDescribeStacks = func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
+		return map[string]any{"dev": map[string]any{}}, nil
+	}
+	kubernetesListAllComponents = func(context.Context, string, map[string]any) ([]string, error) {
+		return []string{"api", "worker"}, nil
+	}
+
+	components, directive := componentArgCompletion(cmd, nil, "")
+	assert.Equal(t, []string{"api", "worker"}, components)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+
+	t.Run("configuration error", func(t *testing.T) {
+		kubernetesInitCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, errors.New("config failed")
+		}
+		components, _ := componentArgCompletion(cmd, nil, "")
+		assert.Nil(t, components)
+	})
+
+	t.Run("describe error", func(t *testing.T) {
+		kubernetesInitCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		}
+		kubernetesDescribeStacks = func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
+			return nil, errors.New("describe failed")
+		}
+		components, _ := componentArgCompletion(cmd, nil, "")
+		assert.Nil(t, components)
+	})
+
+	t.Run("list error", func(t *testing.T) {
+		kubernetesDescribeStacks = func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
+			return map[string]any{}, nil
+		}
+		kubernetesListAllComponents = func(context.Context, string, map[string]any) ([]string, error) {
+			return nil, errors.New("list failed")
+		}
+		components, _ := componentArgCompletion(cmd, nil, "")
+		assert.Nil(t, components)
+	})
 }
 
 func TestGetOperationFlagsSurfacesServer(t *testing.T) {
@@ -82,6 +161,27 @@ func TestGetOperationFlagsSurfacesServer(t *testing.T) {
 	flags := getOperationFlags(cmd)
 
 	assert.Equal(t, true, flags["server"])
+}
+
+func TestBuildConfigAndStacksInfoPopulatesTagsAndLabels(t *testing.T) {
+	cmd := configuredOperationCommand(t, "apply", map[string]string{
+		"tags":   "production,tier-1",
+		"labels": "cost-center=platform, compliance = sox",
+	})
+
+	info := buildConfigAndStacksInfo(cmd)
+
+	assert.Equal(t, []string{"production", "tier-1"}, info.Tags)
+	assert.Equal(t, map[string]string{"cost-center": "platform", "compliance": "sox"}, info.Labels)
+}
+
+func TestBuildConfigAndStacksInfoWithNoTagsOrLabels(t *testing.T) {
+	cmd := newOperationCommand("apply", "Apply")
+
+	info := buildConfigAndStacksInfo(cmd)
+
+	assert.Empty(t, info.Tags)
+	assert.Empty(t, info.Labels)
 }
 
 func TestValidateOperationArgs(t *testing.T) {
@@ -113,7 +213,7 @@ func TestValidateOperationArgs(t *testing.T) {
 			name:    "component cannot be combined with all",
 			command: configuredOperationCommand(t, "apply", map[string]string{"all": "true"}),
 			args:    []string{"app"},
-			wantErr: "component argument cannot be used with --all or --affected",
+			wantErr: "component argument cannot be used with --all, --affected, --tags, or --labels",
 		},
 		{
 			name:    "render bulk cannot use output",
@@ -130,6 +230,31 @@ func TestValidateOperationArgs(t *testing.T) {
 			command: newOperationCommand("apply", "Apply"),
 			args:    []string{"app", "other"},
 			wantErr: "requires exactly one component argument unless --all or --affected is set",
+		},
+		{
+			name:    "tags with no component",
+			command: configuredOperationCommand(t, "apply", map[string]string{"tags": "production"}),
+		},
+		{
+			name:    "labels with no component",
+			command: configuredOperationCommand(t, "apply", map[string]string{"labels": "cost-center=platform"}),
+		},
+		{
+			name:    "component cannot be combined with tags",
+			command: configuredOperationCommand(t, "apply", map[string]string{"tags": "production"}),
+			args:    []string{"app"},
+			wantErr: "component argument cannot be used with --all, --affected, --tags, or --labels",
+		},
+		{
+			name:    "component cannot be combined with labels",
+			command: configuredOperationCommand(t, "apply", map[string]string{"labels": "cost-center=platform"}),
+			args:    []string{"app"},
+			wantErr: "component argument cannot be used with --all, --affected, --tags, or --labels",
+		},
+		{
+			name:    "malformed labels flag errors",
+			command: configuredOperationCommand(t, "apply", map[string]string{"labels": "not-valid"}),
+			wantErr: "invalid label",
 		},
 	}
 

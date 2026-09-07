@@ -5,23 +5,25 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/broker"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
-	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
-	"github.com/cloudposse/atmos/pkg/xdg"
-
+	"github.com/cloudposse/atmos/pkg/proexec"
 	// Import backend provisioner to register S3 provisioner.
 	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
+	"github.com/cloudposse/atmos/pkg/schema"
+	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
+	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
 )
 
 const (
-	terraformPluginCacheDirEnv              = "TF_PLUGIN_CACHE_DIR"
-	terraformPluginCacheMayBreakLockFileEnv = "TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE"
+	terraformPluginCacheDirEnv              = tfplugin.CacheDirEnv
+	terraformPluginCacheMayBreakLockFileEnv = tfplugin.CacheMayBreakLockFileEnv
 
 	// BeforeTerraformInitEvent is the hook event name for provisioners that run before terraform init.
 	// This matches the hook event registered by backend provisioners in pkg/provisioner/backend/backend.go.
@@ -46,8 +48,16 @@ const (
 	forceFlag                 = "--force"
 	everythingFlag            = "--everything"
 	detailedExitCodeFlag      = "-detailed-exitcode"
-	logFieldComponent         = "component"
-	dirPermissions            = 0o755
+	lockTimeoutFlag           = "-lock-timeout"
+	lockFlag                  = "-lock"
+	parallelismFlag           = "-parallelism"
+	refreshFlag               = "-refresh"
+	compactWarningsFlag       = "-compact-warnings"
+	// Terraform's -detailed-exitcode documents this as "succeeded, there is a
+	// diff", distinct from 0 (no changes) and 1 (error).
+	detailedExitCodeChangesDetected = 2
+	logFieldComponent               = "component"
+	dirPermissions                  = 0o755
 )
 
 // resolveAndInstallToolchainDeps resolves and installs toolchain dependencies for a terraform component.
@@ -64,38 +74,38 @@ func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info
 }
 
 // startManagedTerraformCache starts the registry cache for this execution and returns
-// the Setup whose Close the caller must defer. It returns (nil, nil) when caching is
-// disabled or when the caller owns the cache lifecycle (info.TerraformCacheExternal,
-// e.g. `cache mirror` sharing one proxy across components) — in which case the pre-set
-// info.TerraformCache is reused as-is. On a trust failure the proxy is closed before
+// its cleanup. It returns a no-op cleanup when caching is disabled or when the caller
+// owns the cache lifecycle (info.TerraformCacheExternal, e.g. a graph-backed bulk run
+// sharing one proxy across components). On a trust failure the proxy is closed before
 // returning so it does not leak.
-func startManagedTerraformCache(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*tfcache.Setup, error) {
+func startManagedTerraformCache(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*tfcache.Setup, func(), error) {
 	defer perf.Track(atmosConfig, "exec.startManagedTerraformCache")()
 
 	if info.TerraformCacheExternal {
-		return nil, nil
+		return nil, func() {}, nil
 	}
-	setup, err := tfcache.Start(context.Background(), atmosConfig)
+	setup, cleanup, err := tfcache.StartForExecution(context.Background(), atmosConfig)
 	if err != nil {
-		return nil, err
+		return nil, func() {}, err
 	}
 	if setup == nil {
-		return nil, nil
+		return nil, cleanup, nil
 	}
 	info.TerraformCache = setup
-	// Fail fast with an actionable message when the OS does not trust the cache
-	// certificate (macOS/Windows), instead of a raw x509 error from terraform.
-	if trustErr := setup.VerifyTrust(context.Background()); trustErr != nil {
-		_ = setup.Close(context.Background())
-		return nil, trustErr
-	}
-	return setup, nil
+	return setup, cleanup, nil
 }
 
 // ExecuteTerraform executes terraform commands.
 // Optional ShellCommandOption values are forwarded to the final ExecuteShellCommand call.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
+
+	// Captured before any pipeline step can rewrite info.SubCommand (e.g.
+	// handleDeploySubcommand rewrites "deploy" to "apply" in place so
+	// downstream terraform invocation logic can treat them uniformly). The
+	// exec-metadata record must report the command the user actually typed,
+	// not its internal apply-equivalent rewrite.
+	originalSubCommand := info.SubCommand
 
 	log.Debug(
 		"ExecuteTerraform entry",
@@ -155,20 +165,16 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	// Start the Terraform registry cache (no-op when disabled or caller-owned). The
 	// ephemeral proxy must outlive the whole pipeline, so its Close is deferred here.
 	// Env assembly merges its CLI-config contribution into the generated RC.
-	cacheSetup, err := startManagedTerraformCache(&atmosConfig, &info)
+	cacheSetup, closeCache, err := startManagedTerraformCache(&atmosConfig, &info)
 	if err != nil {
 		return err
 	}
 	if cacheSetup != nil {
-		defer func() {
-			if closeErr := cacheSetup.Close(context.Background()); closeErr != nil {
-				log.Debug("Failed to shut down Terraform registry cache", "error", closeErr)
-			}
-		}()
+		defer closeCache()
 	}
 
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
-	execCtx, err := prepareComponentExecution(&atmosConfig, &info, shouldProcess)
+	execCtx, err := prepareComponentExecution(shellCommandContext(opts...), shellCommandOutputWriters(opts...), &atmosConfig, &info, shouldProcess)
 	if err != nil {
 		return err
 	}
@@ -192,82 +198,138 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	// Run the full command pipeline: init, arg build, workspace, execute, cleanup.
 	// Forward caller-provided options (e.g. CI stdout/stderr capture) alongside the environment option.
 	opts = append(opts, WithEnvironment(info.SanitizedEnv))
-	return executeCommandPipeline(&atmosConfig, &info, execCtx, opts...)
+	err = executeCommandPipeline(&atmosConfig, &info, execCtx, opts...)
+	if err == nil {
+		// A successful Terraform command can create, change, or remove state. Drop
+		// any preflight snapshot so a dependent graph node reads the current outputs.
+		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
+	}
+
+	captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, execMetadataSyncParams{
+		Cmd:    invokingCommandFromOpts(opts...),
+		Parser: execMetadataParserFromOpts(opts...),
+		Err:    err,
+	})
+
+	return err
+}
+
+// captureExecMetadataSync reports an execution record to Atmos Pro for the
+// synchronous allowlist (terraform plan/apply/deploy), blocking briefly per
+// proexec.CaptureSync's own configurable timeout. No-op for every other
+// terraform subcommand. SubCommand must be the subcommand the user actually
+// invoked (captured before handleDeploySubcommand's in-place "deploy" ->
+// "apply" rewrite), so a `deploy` invocation is reported as `deploy`, not
+// misattributed to `apply`.
+//
+// Multi-component invocations (info.NodeHooks != nil, wired by
+// cmd/terraform/utils.go's wirePerComponentHook for --affected/--all/query
+// runs) are skipped here: this function fires once per graph node, but
+// FR-006a requires exactly one execution record for the whole invocation.
+// Cmd/terraform/utils.go's terraformNodeHooks accumulates each node's
+// identity/outcome instead and fires a single aggregate CaptureSync call
+// after the graph run completes (research.md Decisions 11/17).
+//
+// Structured plugin.TerraformOutputData enrichment described for User Story 3
+// is obtained via parser, a closure supplied by cmd/terraform through
+// WithExecMetadataParser (research.md Decision 18) — internal/exec never
+// imports pkg/ci/plugins/terraform directly, since pkg/ci/internal/plugin is
+// only importable from within the pkg/ci tree and, independently,
+// pkg/ci/plugins/terraform itself imports internal/exec (a confirmed import
+// cycle). Parser is nil for callers that don't wire one (e.g. tests), in
+// which case data is reported as nil, same as before this data was wired.
+// ExecMetadataSyncParams bundles the invoking Cobra command, the optional
+// structured-output parser, and the command's own error — the three values
+// captureExecMetadataSync needs beyond atmosConfig/subCommand/info, grouped
+// to stay under the linter's argument-count limit.
+type execMetadataSyncParams struct {
+	Cmd    *cobra.Command
+	Parser func(subCommand string, exitCode int, output string) any
+	Err    error
+}
+
+func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand string, info *schema.ConfigAndStacksInfo, params execMetadataSyncParams) {
+	commandPath := "atmos terraform " + subCommand
+	if !proexec.IsSyncCommand(commandPath) {
+		return
+	}
+
+	if info.NodeHooks != nil {
+		log.Debug("Skipping per-node exec-metadata sync capture: part of a multi-component run.", "component", info.ComponentFromArg)
+		return
+	}
+
+	exitCode := errUtils.GetExitCode(params.Err)
+	if params.Err != nil && exitCode == 0 {
+		exitCode = 1
+	}
+
+	// FR-006e: TerraformExecData.exit_code must report the terraform/tofu subprocess's
+	// real, pre-CI-remap exit code (info.ExecMetadataRawExitCode, set by
+	// executeMainTerraformCommand), not the post-remap/neutralized exitCode above —
+	// that value is reserved for the base envelope's own exit_code (FR-003), which
+	// is unaffected by this. Falls back to exitCode when the raw field was never
+	// populated (e.g. the pipeline failed before the main command ran at all, or a
+	// test invokes captureExecMetadataSync directly without going through
+	// executeMainTerraformCommand).
+	rawExitCode := info.ExecMetadataRawExitCode
+	if rawExitCode == 0 && exitCode != 0 {
+		rawExitCode = exitCode
+	}
+
+	var args []string
+	if info.ComponentFromArg != "" {
+		args = []string{info.ComponentFromArg}
+	}
+
+	// Flags MUST be sourced from the invoking Cobra command's own record of
+	// explicitly-set flags, not info.AdditionalArgsAndFlags — that field is a
+	// pass-through-args collection that never contains atmos-recognized flags
+	// like -s/--stack and has --upload-status stripped out of it before this
+	// call runs, so it structurally cannot represent "the flags actually
+	// passed" (research.md Decision 14).
+	flags := proexec.FlagsFromCommand(params.Cmd)
+
+	var data any
+	if params.Parser != nil {
+		data = params.Parser(subCommand, rawExitCode, info.ExecMetadataRawOutput)
+	}
+
+	in := &proexec.ExecRecordInput{Command: "terraform " + subCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data}
+	if syncErr := proexec.CaptureSync(atmosConfig, in); syncErr != nil {
+		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
+	}
 }
 
 // configurePluginCache returns environment variables for Terraform plugin caching.
 // It checks if the user has already set TF_PLUGIN_CACHE_DIR (via OS env or global env),
 // and if not, configures automatic caching based on atmosConfig.Components.Terraform.PluginCache.
 func configurePluginCache(atmosConfig *schema.AtmosConfiguration) []string {
-	// Check both OS env and global env (atmos.yaml env: section) for user override.
-	// If user has TF_PLUGIN_CACHE_DIR set to a valid path, do nothing - they manage their own cache.
-	// Invalid values (empty string or "/") are ignored with a warning, and we use our default.
-	if userCacheDir := getValidUserPluginCacheDir(atmosConfig); userCacheDir != "" {
-		log.Debug("TF_PLUGIN_CACHE_DIR already set, skipping automatic plugin cache configuration")
-		return nil
-	}
-
-	if !atmosConfig.Components.Terraform.PluginCache {
-		return nil
-	}
-
-	pluginCacheDir := atmosConfig.Components.Terraform.PluginCacheDir
-
-	// Use XDG cache directory if no custom path configured.
-	if pluginCacheDir == "" {
-		cacheDir, err := xdg.GetXDGCacheDir("terraform/plugins", xdg.DefaultCacheDirPerm)
-		if err != nil {
-			log.Warn("Failed to create plugin cache directory", "error", err)
-			return nil
+	override, overrideSet := pluginCacheOverride(atmosConfig)
+	cache := tfplugin.Resolve(atmosConfig, override, overrideSet)
+	if !cache.Automatic {
+		if cache.Directory != "" {
+			log.Debug("TF_PLUGIN_CACHE_DIR already set, skipping automatic plugin cache configuration")
 		}
-		pluginCacheDir = cacheDir
-	}
-
-	if pluginCacheDir == "" {
 		return nil
 	}
-
 	return []string{
-		fmt.Sprintf("%s=%s", terraformPluginCacheDirEnv, pluginCacheDir),
+		fmt.Sprintf("%s=%s", terraformPluginCacheDirEnv, cache.Directory),
 		fmt.Sprintf("%s=true", terraformPluginCacheMayBreakLockFileEnv),
 	}
 }
 
-// getValidUserPluginCacheDir checks if the user has set a valid TF_PLUGIN_CACHE_DIR.
-// Returns the valid path if set, or empty string if not set or invalid.
-// Invalid values (empty string or "/") are logged as warnings.
-func getValidUserPluginCacheDir(atmosConfig *schema.AtmosConfiguration) string {
-	// Check OS environment first.
-	if osEnvDir, inOsEnv := os.LookupEnv(terraformPluginCacheDirEnv); inOsEnv {
-		if isValidPluginCacheDir(osEnvDir, "environment variable") {
-			return osEnvDir
-		}
-		return ""
+// pluginCacheOverride resolves explicit user configuration with the historical
+// command-path precedence: process environment first, then atmos.yaml global env.
+func pluginCacheOverride(atmosConfig *schema.AtmosConfiguration) (string, bool) {
+	if value, ok := os.LookupEnv(terraformPluginCacheDirEnv); ok {
+		return value, true
 	}
-
-	// Check global env section in atmos.yaml.
-	if globalEnvDir, inGlobalEnv := atmosConfig.Env[terraformPluginCacheDirEnv]; inGlobalEnv {
-		if isValidPluginCacheDir(globalEnvDir, "atmos.yaml env section") {
-			return globalEnvDir
-		}
-		return ""
+	if atmosConfig != nil {
+		value, ok := atmosConfig.Env[terraformPluginCacheDirEnv]
+		return value, ok
 	}
-
-	return ""
-}
-
-// isValidPluginCacheDir checks if a plugin cache directory path is valid.
-// Invalid paths (empty string or "/") are logged as warnings and return false.
-func isValidPluginCacheDir(path, source string) bool {
-	if path == "" {
-		log.Warn("TF_PLUGIN_CACHE_DIR is empty, ignoring and using Atmos default", "source", source)
-		return false
-	}
-	if path == "/" {
-		log.Warn("TF_PLUGIN_CACHE_DIR is set to root '/', ignoring and using Atmos default", "source", source)
-		return false
-	}
-	return true
+	return "", false
 }
 
 // disableTerraformPluginCacheForExecution removes Terraform/OpenTofu plugin-cache

@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/profile"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 //go:embed markdown/atmos_auth_list_usage.md
@@ -28,6 +29,7 @@ var authListUsageMarkdown string
 const (
 	providersKey  = "providers"
 	identitiesKey = "identities"
+	tagsKey       = "tags"
 	// ListFormatFlagName is the name of the format flag for list command.
 	ListFormatFlagName = "format"
 )
@@ -62,6 +64,7 @@ func init() {
 		flags.WithStringFlag("format", "f", "tree", "Output format: tree, table, json, yaml, graphviz, mermaid, markdown"),
 		flags.WithStringFlag("providers", "", "", "Show only providers (optionally filter by name: --providers=aws-sso,okta)"),
 		flags.WithStringFlag("identities", "", "", "Show only identities (optionally filter by name: --identities=admin,dev)"),
+		flags.WithStringFlag("tags", "", "", "Filter by tags (comma-separated, matches any): --tags=production,admin"),
 		flags.WithValidValues("format", "tree", "table", "json", "yaml", "graphviz", "dot", "mermaid", "markdown", "md"),
 	)
 
@@ -84,6 +87,10 @@ func init() {
 
 	if err := authListCmd.RegisterFlagCompletionFunc("identities", listIdentitiesFlagCompletion); err != nil {
 		log.Trace("Failed to register identities flag completion", "error", err)
+	}
+
+	if err := authListCmd.RegisterFlagCompletionFunc("tags", listTagsFlagCompletion); err != nil {
+		log.Trace("Failed to register tags flag completion", "error", err)
 	}
 
 	// Add to parent command.
@@ -143,12 +150,47 @@ func listIdentitiesFlagCompletion(cmd *cobra.Command, args []string, toComplete 
 	return identities, cobra.ShellCompDirectiveNoFileComp
 }
 
+// listTagsFlagCompletion provides shell completion for the tags flag, offering
+// the union of all tags currently defined on any provider or identity.
+//
+// Honors --base-path, --config, --config-path, and --profile from the current
+// command context so completion sees the same atmos config the command would
+// actually run against.
+func listTagsFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	v := viper.GetViper()
+	atmosConfig, err := cfg.InitCliConfig(BuildConfigAndStacksInfo(cmd, v), false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	tagSet := make(map[string]struct{})
+	for name := range atmosConfig.Auth.Providers {
+		for _, tag := range atmosConfig.Auth.Providers[name].Tags {
+			tagSet[tag] = struct{}{}
+		}
+	}
+	for name := range atmosConfig.Auth.Identities {
+		for _, tag := range atmosConfig.Auth.Identities[name].Tags {
+			tagSet[tag] = struct{}{}
+		}
+	}
+
+	allTags := make([]string, 0, len(tagSet))
+	for tag := range tagSet {
+		allTags = append(allTags, tag)
+	}
+	sort.Strings(allTags)
+
+	return allTags, cobra.ShellCompDirectiveNoFileComp
+}
+
 // filterConfig holds parsed filter configuration.
 type filterConfig struct {
 	showProvidersOnly  bool
 	showIdentitiesOnly bool
 	providerNames      []string
 	identityNames      []string
+	tagNames           []string
 }
 
 // executeAuthListCommand executes the auth list command.
@@ -215,6 +257,7 @@ func parseFilterFlags(cmd *cobra.Command) (*filterConfig, error) {
 	v := viper.GetViper()
 	providersFlag := v.GetString(providersKey)
 	identitiesFlag := v.GetString(identitiesKey)
+	tagsFlag := v.GetString(tagsKey)
 
 	hasProvidersFlag := cmd.Flags().Changed(providersKey)
 	hasIdentitiesFlag := cmd.Flags().Changed(identitiesKey)
@@ -238,6 +281,10 @@ func parseFilterFlags(cmd *cobra.Command) (*filterConfig, error) {
 	if hasIdentitiesFlag {
 		config.identityNames = parseCommaSeparatedNames(identitiesFlag)
 	}
+
+	// Tags compose with --providers/--identities rather than being mutually exclusive
+	// with them — it's a cross-cutting filter dimension, not a "what to show" toggle.
+	config.tagNames = parseCommaSeparatedNames(tagsFlag)
 
 	return config, nil
 }
@@ -267,18 +314,52 @@ func applyFilters(
 ) (map[string]schema.Provider, map[string]schema.Identity, error) {
 	defer perf.Track(nil, "auth.applyFilters")()
 
-	// Show only providers.
-	if filters.showProvidersOnly {
-		return filterProviders(providers, filters.providerNames)
+	var filteredProviders map[string]schema.Provider
+	var filteredIdentities map[string]schema.Identity
+	var err error
+
+	switch {
+	case filters.showProvidersOnly:
+		filteredProviders, filteredIdentities, err = filterProviders(providers, filters.providerNames)
+	case filters.showIdentitiesOnly:
+		filteredProviders, filteredIdentities, err = filterIdentities(identities, filters.identityNames)
+	default:
+		filteredProviders, filteredIdentities, err = providers, identities, nil
+	}
+	if err != nil {
+		return nil, nil, err
 	}
 
-	// Show only identities.
-	if filters.showIdentitiesOnly {
-		return filterIdentities(identities, filters.identityNames)
+	// Tags compose with the name-based filters above (applied as an additional pass),
+	// rather than being an alternative "what to show" toggle.
+	if len(filters.tagNames) > 0 {
+		filteredProviders = filterProvidersByTags(filteredProviders, filters.tagNames)
+		filteredIdentities = filterIdentitiesByTags(filteredIdentities, filters.tagNames)
 	}
 
-	// Default: show both.
-	return providers, identities, nil
+	return filteredProviders, filteredIdentities, nil
+}
+
+// filterProvidersByTags returns the subset of providers whose Tags match any of filterTags.
+func filterProvidersByTags(providers map[string]schema.Provider, filterTags []string) map[string]schema.Provider {
+	filtered := make(map[string]schema.Provider)
+	for name := range providers {
+		if tags.MatchesTags(providers[name].Tags, filterTags, tags.TagModeAny) {
+			filtered[name] = providers[name]
+		}
+	}
+	return filtered
+}
+
+// filterIdentitiesByTags returns the subset of identities whose Tags match any of filterTags.
+func filterIdentitiesByTags(identities map[string]schema.Identity, filterTags []string) map[string]schema.Identity {
+	filtered := make(map[string]schema.Identity)
+	for name := range identities {
+		if tags.MatchesTags(identities[name].Tags, filterTags, tags.TagModeAny) {
+			filtered[name] = identities[name]
+		}
+	}
+	return filtered
 }
 
 // filterProviders filters providers by name and returns empty identities.

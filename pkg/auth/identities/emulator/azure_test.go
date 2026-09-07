@@ -44,9 +44,7 @@ func TestPostAuthenticate_AzurePopulatesAuthContext(t *testing.T) {
 	assert.Nil(t, ac.GCP)
 }
 
-// TestPostAuthenticate_AzureSkipsWhenNoStack verifies that with no resolvable stack the
-// Azure auth context is left unpopulated (best-effort) rather than failing the auth flow.
-func TestPostAuthenticate_AzureSkipsWhenNoStack(t *testing.T) {
+func TestPostAuthenticate_AzureUsesProjectScopedIdentityWithoutStack(t *testing.T) {
 	id, err := New("local-azure", &schema.Identity{Kind: types.IdentityKindAzureEmulator, Emulator: "azure"})
 	require.NoError(t, err)
 	id.SetEmulatorResolver(&fakeResolver{env: map[string]string{"AZURE_STORAGE_CONNECTION_STRING": "x"}})
@@ -55,5 +53,5 @@ func TestPostAuthenticate_AzureSkipsWhenNoStack(t *testing.T) {
 	require.NoError(t, id.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
 		AuthContext: ac, IdentityName: "local-azure",
 	}))
-	assert.Nil(t, ac.Azure, "no stack -> Azure auth context left unpopulated")
+	assert.NotNil(t, ac.Azure)
 }

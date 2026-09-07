@@ -64,7 +64,7 @@
                 },
                 "version": {
                   "type": "string",
-                  "description": "Version of the component to fetch"
+                  "description": "Version of the component to fetch. Either an exact tag/commit/branch, or a semver-range expression (e.g. ^1.0.0, ~1.2.3, >=1.0.0 <2.0.0) resolved against the source's Git tags; the first resolution is recorded in vendor.lock.yaml and reused on later pulls until the range changes or --refresh-lock is passed."
                 },
                 "targets": {
                   "type": "array",
@@ -85,7 +85,7 @@
                           },
                           "version": {
                             "type": "string",
-                            "description": "Version override for this target. Overrides the source-level version for both the source URL and target path templates."
+                            "description": "Version override for this target. Overrides the source-level version for both the source URL and target path templates. Accepts the same exact-pin or semver-range syntax as the source-level version."
                           }
                         },
                         "required": ["path"],

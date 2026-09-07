@@ -65,13 +65,22 @@ atmos toolchain search terraform --format json
 
 All flags from [`atmos toolchain registry search`](/cli/commands/toolchain/registry/registry-search) are supported:
 
-| Flag | Description |
-|------|-------------|
-| `--limit` | Maximum results to display (default: 20) |
-| `--registry` | Search only in specified registry |
-| `--format` | Output format: `table`, `json`, `yaml` |
-| `--installed-only` | Show only installed tools |
-| `--available-only` | Show only available (not installed) tools |
+<dl>
+  <dt>`--limit` (default `20`)</dt>
+  <dd>Maximum results to display.</dd>
+
+  <dt>`--registry`</dt>
+  <dd>Search only in the specified registry.</dd>
+
+  <dt>`--format`</dt>
+  <dd>Output format: `table`, `json`, or `yaml`.</dd>
+
+  <dt>`--installed-only`</dt>
+  <dd>Show only installed tools.</dd>
+
+  <dt>`--available-only`</dt>
+  <dd>Show only available (not installed) tools.</dd>
+</dl>
 
 ## Why Use This Alias?
 

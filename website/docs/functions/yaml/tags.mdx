@@ -1,0 +1,77 @@
+---
+title: "!tags"
+sidebar_position: 91
+sidebar_label: "!tags"
+sidebar_class_name: command
+description: Retrieve the current component's own metadata.tags as a list
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `!tags` YAML function returns the current component's own `metadata.tags` as a typed list
+(`[]string`), without the `!template '{{ toJson .metadata.tags }}'` boilerplate normally needed
+to get a properly-typed value out of a template expression.
+</Intro>
+
+## Usage
+
+The `!tags` function takes no parameters:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        tags: [production, networking, tier-1]
+      vars:
+        tags: !tags
+```
+
+## Arguments
+
+This function takes no arguments. It reads `metadata.tags` from the component it's used on.
+
+## How It Works
+
+When processing the `!tags` YAML function, Atmos reads the `tags` field from the component's own
+`metadata` section (the same `metadata.tags` used for `atmos list components --tags` filtering)
+and returns it as a `[]string`. If `metadata.tags` is unset, `!tags` returns an empty list rather
+than an error, consistent with tags being optional everywhere in Atmos.
+
+## Examples
+
+### Basic Usage
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        tags: [production, networking]
+      vars:
+        # tags will be ["production", "networking"]
+        tags: !tags
+```
+</File>
+
+### No Tags Set
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    rds:
+      vars:
+        # tags will be [] (empty list, not an error)
+        tags: !tags
+```
+</File>
+
+## Related Functions
+
+- [!labels](/functions/yaml/labels) - Get the current component's own `metadata.labels` as a map
+- [!labels.keys](/functions/yaml/labels.keys) - Get the current component's `metadata.labels` keys
+- [!labels.values](/functions/yaml/labels.values) - Get the current component's `metadata.labels` values

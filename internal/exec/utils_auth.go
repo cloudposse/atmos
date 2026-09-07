@@ -11,6 +11,7 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -40,6 +41,42 @@ var defaultComponentConfigFetcher componentConfigFetcher = ExecuteDescribeCompon
 // auth.CreateAndAuthenticateManagerWithAtmosConfigForStack.
 var defaultAuthManagerCreator authManagerCreator = auth.CreateAndAuthenticateManagerWithAtmosConfigForStack
 
+// resolveIdentityConfigError checks whether err signals a missing/invalid identity that a
+// profile might resolve, offering the interactive profile-selection prompt `atmos auth
+// login` already has (see auth.MaybeOfferProfileFallbackForIdentity). It always returns a
+// non-nil error: either the fallback's own outcome (a successful re-exec never returns;
+// otherwise a hint-enriched error or ErrUserAborted) or err wrapped with wrapSentinel when
+// no fallback applies.
+func resolveIdentityConfigError(atmosConfig *schema.AtmosConfiguration, err error, wrapSentinel error) error {
+	if fbErr := offerIdentityProfileFallback(atmosConfig, err); fbErr != nil {
+		return fbErr
+	}
+	return fmt.Errorf("%w: %w", wrapSentinel, err)
+}
+
+// offerIdentityProfileFallback returns the profile-fallback outcome when err names a
+// missing identity that a profile might resolve, or nil when no fallback applies (the
+// caller should proceed with its own wrap of err). A user-aborted fallback exits the
+// process with ExitCodeSIGINT rather than returning, matching the existing abort-handling
+// convention for identity-selection prompts.
+func offerIdentityProfileFallback(atmosConfig *schema.AtmosConfiguration, err error) error {
+	if !errors.Is(err, errUtils.ErrInvalidIdentityConfig) {
+		return nil
+	}
+	identityName, ok := errUtils.GetContext(err, "identity")
+	if !ok || identityName == "" {
+		return nil
+	}
+	fbErr := auth.MaybeOfferProfileFallbackForIdentity(context.Background(), atmosConfig.CliConfigPath, identityName)
+	if fbErr == nil {
+		return nil
+	}
+	if errors.Is(fbErr, errUtils.ErrUserAborted) {
+		errUtils.Exit(errUtils.ExitCodeSIGINT)
+	}
+	return fbErr
+}
+
 // createAndAuthenticateAuthManager creates an AuthManager by merging global auth config with
 // component-specific auth config, then authenticating using the identity from info.Identity.
 // If authentication succeeds and identity was auto-detected, the resolved identity is stored
@@ -65,7 +102,7 @@ func createAndAuthenticateAuthManagerWithDeps(
 		if errors.Is(err, errUtils.ErrInvalidComponent) {
 			return nil, err
 		}
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
+		return nil, resolveIdentityConfigError(atmosConfig, err, errUtils.ErrInvalidAuthConfig)
 	}
 
 	// Create and authenticate AuthManager from --identity flag if specified.
@@ -73,7 +110,7 @@ func createAndAuthenticateAuthManagerWithDeps(
 	// This enables YAML template functions like !terraform.state to use authenticated credentials.
 	authManager, err := authCreator(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, info.Stack)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
+		return nil, resolveIdentityConfigError(atmosConfig, err, errUtils.ErrFailedToInitializeAuthManager)
 	}
 
 	// If AuthManager was created and identity was auto-detected (info.Identity was empty),
@@ -183,6 +220,12 @@ func buildGlobalAuthSection(atmosConfig *schema.AtmosConfiguration) map[string]a
 	if len(atmosConfig.Auth.Identities) > 0 {
 		globalAuthSection["identities"] = atmosConfig.Auth.Identities
 	}
+	if len(atmosConfig.Auth.Integrations) > 0 {
+		globalAuthSection["integrations"] = atmosConfig.Auth.Integrations
+	}
+	if atmosConfig.Auth.Console != nil && atmosConfig.Auth.Console.Isolated != nil {
+		globalAuthSection["console"] = atmosConfig.Auth.Console
+	}
 	if atmosConfig.Auth.Logs.Level != "" || atmosConfig.Auth.Logs.File != "" {
 		globalAuthSection["logs"] = map[string]any{
 			"level": atmosConfig.Auth.Logs.Level,
@@ -224,4 +267,51 @@ func handleMergeError(componentSection, globalAuthSection, componentAuthSection 
 		return globalAuthSection
 	}
 	return map[string]any{}
+}
+
+// resolveDefaultIdentity resolves the default identity. A lookup failure is fatal
+// only when the caller explicitly requested the select-default path; for an
+// implicit empty identity the requested value is returned so execution can
+// continue without identity.
+//
+// Shared by the helmfile and packer subprocess executors (and any other
+// non-terraform command layer) so credential injection stays consistent.
+func resolveDefaultIdentity(authManager auth.AuthManager, requested string) (string, error) {
+	defaultIdentity, err := authManager.GetDefaultIdentity(false)
+	if err == nil {
+		return defaultIdentity, nil
+	}
+	if requested == cfg.IdentityFlagSelectValue {
+		return "", fmt.Errorf("%w: resolve default identity: %w", errUtils.ErrAuthenticationFailed, err)
+	}
+	return requested, nil
+}
+
+// prepareComponentAuthEnvironment augments envVars with the auth credentials for the
+// resolved identity so a component subprocess (helmfile, packer, etc.) inherits
+// file-based credentials (AWS_PROFILE/AWS_SHARED_CREDENTIALS_FILE), regions, and
+// emulator/static credentials from Atmos Auth.
+//
+// It is a no-op when there is no auth manager or when auth is explicitly disabled,
+// mirroring the terraform pre-hook's disabled-identity short-circuit. An empty or
+// "select" identity falls back to the stack's default identity.
+func prepareComponentAuthEnvironment(authManager auth.AuthManager, identity string, envVars []string) ([]string, error) {
+	if authManager == nil {
+		return envVars, nil
+	}
+	if identity == "" || identity == cfg.IdentityFlagSelectValue {
+		resolved, err := resolveDefaultIdentity(authManager, identity)
+		if err != nil {
+			return nil, err
+		}
+		identity = resolved
+	}
+	if identity == "" || identity == cfg.IdentityFlagDisabledValue {
+		return envVars, nil
+	}
+	preparedEnv, err := authManager.PrepareShellEnvironment(context.Background(), identity, envVars)
+	if err != nil {
+		return nil, fmt.Errorf("%w: prepare component environment for identity %q: %w", errUtils.ErrAuthenticationFailed, identity, err)
+	}
+	return preparedEnv, nil
 }

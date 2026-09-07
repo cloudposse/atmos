@@ -3,8 +3,7 @@
 
 [EXPERIMENTAL]
 
-Outputs environment variables for the assumed identity, suitable for use by
-external tools such as Terraform or Helm.
+Outputs environment variables for the assumed identity, suitable for use by external tools such as Terraform or Helm.
 
 USAGE
 

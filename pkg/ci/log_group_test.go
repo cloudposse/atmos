@@ -26,21 +26,36 @@ func (m *logGroupMockProvider) EndLogGroup() error {
 func TestStartLogGroup_DispatchesToCapableProvider(t *testing.T) {
 	restore := SwapRegistryForTest()
 	defer restore()
+	// See registerGrouping's comment in loggroup_test.go: this test binary can
+	// itself run as a child of a CI-grouped step, in which case the sentinel
+	// is already set and StartLogGroup would silently no-op below.
+	t.Setenv(logGroupSentinelEnvVar, "")
 
 	m := &logGroupMockProvider{mockProvider: mockProvider{name: "cap", detected: true}}
 	Register(m)
 
 	end := StartLogGroup(" hook checkov ")
+	// Cleanup, not a bare defer: guarantees end() (and its logGroupDepth
+	// decrement) runs even if the require.Len below fails and aborts the test
+	// via t.FailNow() before reaching the original inline end() call further
+	// down. A leaked logGroupDepth is process-wide -- it silently no-ops every
+	// later test's StartLogGroup/Group call for the rest of this test binary.
+	t.Cleanup(func() {
+		end()
+		assert.Equal(t, 1, m.ended)
+	})
+
 	require.Len(t, m.started, 1)
 	assert.Equal(t, "hook checkov", m.started[0])
-
-	end()
-	assert.Equal(t, 1, m.ended)
 }
 
 func TestStartLogGroup_NoopsWhenGroupAlreadyActive(t *testing.T) {
 	restore := SwapRegistryForTest()
 	defer restore()
+	// The outer Group call below must actually open a group for this test to
+	// exercise the nested no-op path; an inherited sentinel would make it
+	// no-op instead (see registerGrouping's comment in loggroup_test.go).
+	t.Setenv(logGroupSentinelEnvVar, "")
 
 	m := &logGroupMockProvider{mockProvider: mockProvider{name: "cap", detected: true}}
 	Register(m)

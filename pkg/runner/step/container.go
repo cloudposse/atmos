@@ -182,7 +182,7 @@ func (h *ContainerHandler) writeOutput(step *schema.WorkflowStep, workflow *sche
 }
 
 func isValidContainerRuntime(value string) bool {
-	return value == "" || value == string(container.TypeDocker) || value == string(container.TypePodman)
+	return value == "" || value == string(container.TypeAuto) || value == string(container.TypeDocker) || value == string(container.TypePodman)
 }
 
 func isValidContainerBuildEngine(value string) bool {
@@ -202,7 +202,7 @@ func invalidContainerField(step *schema.WorkflowStep, field, value, explanation 
 		WithContext("step", step.Name).
 		WithContext("field", field).
 		WithContext("value", value).
-		WithExplanation(explanation).
+		WithExplanationf("%s (got `%s`)", explanation, value).
 		Err()
 }
 

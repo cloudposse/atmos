@@ -1,3 +1,4 @@
+
 # Incorrect Usage
 
 **Error:** Unknown command non-existent for atmos terraform
@@ -19,9 +20,11 @@ Valid subcommands are:
   • help
   • import
   • init
+  • lint
   • login
   • logout
   • metadata
+  • migrate
   • modules
   • output
   • plan

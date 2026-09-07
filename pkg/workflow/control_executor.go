@@ -15,6 +15,7 @@ import (
 	"mvdan.cc/sh/v3/shell"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -35,14 +36,33 @@ type ControlCommandRequest struct {
 
 type ControlCommandRunner func(request *ControlCommandRequest) error
 
+// ControlShellRequest carries the inputs for a control shell child's execution.
+type ControlShellRequest struct {
+	Command string
+	Dir     string
+	Env     []string
+	Stdout  io.Writer
+	Stderr  io.Writer
+}
+
+// ControlShellRunner executes a `type: shell` child's command string. When set on
+// a ControlCommandExecutor it replaces the host `sh -c` / `RunCommand` path so
+// shell children run through the in-process mvdan/sh interpreter (cross-platform,
+// masked, cancellable). The workflow executor leaves it nil to keep its
+// auth-aware RunCommand path; the registry bridge sets it.
+type ControlShellRunner func(ctx context.Context, req *ControlShellRequest) error
+
 type ControlCommandExecutor struct {
 	WorkflowDefinition  *schema.WorkflowDefinition
 	BasePath            string
 	BaseEnv             []string
 	CommandLineStack    string
+	CommandLineTags     []string
+	CommandLineLabels   string
 	CommandLineIdentity string
 	PrepareEnv          ControlEnvironmentFunc
 	RunCommand          ControlCommandRunner
+	ShellRunner         ControlShellRunner
 
 	outputMu sync.Mutex
 }
@@ -114,6 +134,28 @@ func (executor *ControlCommandExecutor) executeScript(ctx context.Context, step 
 
 func (executor *ControlCommandExecutor) executeShell(ctx context.Context, step *schema.WorkflowStep, stepEnv []string, output ControlChildOutput) (*ControlChildResult, error) {
 	ioSpec := executor.commandStreams(output)
+
+	// When a ShellRunner is wired (registry bridge), run the command through the
+	// in-process interpreter instead of shelling out. Output is teed to the live
+	// stream (which masks via the data layer) and the capture buffer (kept raw for
+	// downstream template references, matching the RunCommand path).
+	if executor.ShellRunner != nil {
+		outW := io.MultiWriter(ioSpec.streams.Stdout, ioSpec.stdout)
+		errW := io.MultiWriter(ioSpec.streams.Stderr, ioSpec.stderr)
+		dir := executor.workingDirectory(step)
+		err := retry.Do(ctx, step.Retry, func() error {
+			return executor.ShellRunner(ctx, &ControlShellRequest{
+				Command: step.Command,
+				Dir:     dir,
+				Env:     stepEnv,
+				Stdout:  outW,
+				Stderr:  errW,
+			})
+		})
+		ioSpec.flush()
+		return controlChildExecutionResult(ioSpec.stdout, ioSpec.stderr, err), err
+	}
+
 	program, args := controlShellInvocation(step.Command)
 	dir := executor.workingDirectory(step)
 	err := retry.Do(ctx, step.Retry, func() error {
@@ -152,7 +194,11 @@ func (executor *ControlCommandExecutor) executeAtmos(ctx context.Context, step *
 	if parseErr != nil {
 		args = strings.Fields(step.Command)
 	}
-	args = appendControlStack(args, executor.finalStack(step))
+	args = AppendAtmosStepFlags(args, AtmosStepFlags{
+		Stack:  executor.finalStack(step),
+		Tags:   executor.CommandLineTags,
+		Labels: executor.CommandLineLabels,
+	})
 	dir := executor.workingDirectory(step)
 
 	ioSpec := executor.commandStreams(output)
@@ -252,14 +298,34 @@ func executeControlSleep(ctx context.Context, step *schema.WorkflowStep) (*Contr
 	}
 }
 
-func appendControlStack(args []string, stack string) []string {
-	if stack == "" {
+// AtmosStepFlags are command-line flags applied to an Atmos workflow step.
+type AtmosStepFlags struct {
+	Stack  string
+	Tags   []string
+	Labels string
+}
+
+// AppendAtmosStepFlags inserts workflow command flags before a pass-through separator.
+func AppendAtmosStepFlags(args []string, flags AtmosStepFlags) []string {
+	defer perf.Track(nil, "workflow.AppendAtmosStepFlags")()
+
+	injected := make([]string, 0, 4)
+	if flags.Stack != "" {
+		injected = append(injected, "-s", flags.Stack)
+	}
+	if len(flags.Tags) > 0 {
+		injected = append(injected, "--tags="+strings.Join(flags.Tags, ","))
+	}
+	if flags.Labels != "" {
+		injected = append(injected, "--labels="+flags.Labels)
+	}
+	if len(injected) == 0 {
 		return args
 	}
 	if idx := indexOfControlArg(args, "--"); idx != -1 {
-		return append(args[:idx], append([]string{"-s", stack}, args[idx:]...)...)
+		return append(args[:idx], append(injected, args[idx:]...)...)
 	}
-	return append(args, "-s", stack)
+	return append(args, injected...)
 }
 
 func indexOfControlArg(values []string, needle string) int {

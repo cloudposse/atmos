@@ -1706,7 +1706,8 @@ components:
         enabled: true
 `)
 	require.NoError(t, os.MkdirAll(filepath.Join(basePath, "components", "terraform", "vpc"), 0o755))
-	workdirPath := filepath.Join(provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+	workdirPath, err := provWorkdir.BuildPath("", cfg.TerraformComponentType, "vpc", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Join(basePath, workdirPath), 0o755))
 	t.Chdir(basePath)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
@@ -1760,7 +1761,8 @@ components:
 	require.NoError(t, os.MkdirAll(filepath.Join(basePath, "components", "terraform", "vpc"), 0o755))
 	// The workdir path exists as a regular file, so workdir resolution fails and
 	// resolveArtifactPath must return "" instead of a bogus planfile path.
-	workdirPath := filepath.Join(provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+	workdirPath, err := provWorkdir.BuildPath("", cfg.TerraformComponentType, "vpc", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Join(basePath, filepath.Dir(workdirPath)), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(basePath, workdirPath), []byte("not a directory"), 0o644))
 	t.Chdir(basePath)
@@ -1798,7 +1800,8 @@ func TestApplyResolvedWorkdirArtifactPath(t *testing.T) {
 
 	t.Run("enabled workdir with existing root sets workdir path", func(t *testing.T) {
 		basePath := t.TempDir()
-		workdirPath := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+		workdirPath, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, "vpc", "dev", nil)
+		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 		info := &schema.ConfigAndStacksInfo{
 			FinalComponent:   "vpc",
@@ -1814,7 +1817,9 @@ func TestApplyResolvedWorkdirArtifactPath(t *testing.T) {
 
 	t.Run("enabled workdir with component subpath sets resolved subpath", func(t *testing.T) {
 		basePath := t.TempDir()
-		workdirPath := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-null-label", "exports")
+		workdirRoot, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, "null-label", "dev", nil)
+		require.NoError(t, err)
+		workdirPath := filepath.Join(workdirRoot, "exports")
 		require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 		info := &schema.ConfigAndStacksInfo{
 			BaseComponentPath: "exports",
@@ -1845,7 +1850,8 @@ func TestApplyResolvedWorkdirArtifactPath(t *testing.T) {
 
 	t.Run("enabled workdir with regular file path fails", func(t *testing.T) {
 		basePath := t.TempDir()
-		workdirPath := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+		workdirPath, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, "vpc", "dev", nil)
+		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(filepath.Dir(workdirPath), 0o755))
 		require.NoError(t, os.WriteFile(workdirPath, []byte("not a directory"), 0o644))
 		info := &schema.ConfigAndStacksInfo{

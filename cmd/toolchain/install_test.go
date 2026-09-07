@@ -1,11 +1,17 @@
 package toolchain
 
 import (
+	"strconv"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // TestInstallCommandProvider_Extended tests additional InstallCommandProvider functionality.
@@ -40,6 +46,12 @@ func TestInstallCommand_Flags(t *testing.T) {
 		flag := installCmd.Flags().Lookup("default")
 		require.NotNil(t, flag)
 		assert.Equal(t, "false", flag.DefValue)
+	})
+
+	t.Run("install command has max-concurrency flag", func(t *testing.T) {
+		flag := installCmd.Flags().Lookup("max-concurrency")
+		require.NotNil(t, flag)
+		assert.Equal(t, "0", flag.DefValue)
 	})
 }
 
@@ -171,4 +183,67 @@ func TestInstallCommandProvider_Interface(t *testing.T) {
 		cf := provider.GetCompatibilityFlags()
 		assert.Nil(t, cf)
 	})
+}
+
+func TestResolveInstallMaxConcurrency(t *testing.T) {
+	tests := []struct {
+		name        string
+		configValue int
+		envValue    *string
+		flagValue   *int
+		want        int
+		wantErr     bool
+	}{
+		{name: "uses default", want: toolchain.DefaultInstallMaxConcurrency},
+		{name: "uses config", configValue: 3, want: 3},
+		{name: "environment overrides config", configValue: 3, envValue: stringPtr("5"), want: 5},
+		{name: "flag overrides environment and config", configValue: 3, envValue: stringPtr("5"), flagValue: intPtr(7), want: 7},
+		{name: "rejects zero from config", configValue: 0, wantErr: true},
+		{name: "rejects zero from environment", envValue: stringPtr("0"), wantErr: true},
+		{name: "rejects negative environment value", envValue: stringPtr("-2"), wantErr: true},
+		{name: "rejects zero from flag", flagValue: intPtr(0), wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			require.NoError(t, v.BindEnv("max-concurrency", maxConcurrencyEnvVar))
+			config := &schema.AtmosConfiguration{}
+			if tt.configValue != 0 || tt.name == "rejects zero from config" {
+				config.Toolchain.MaxConcurrency = tt.configValue
+				v.Set("toolchain.max_concurrency", tt.configValue)
+			}
+			if tt.envValue != nil {
+				t.Setenv(maxConcurrencyEnvVar, *tt.envValue)
+			}
+
+			cmd := newInstallMaxConcurrencyTestCmd(t, tt.flagValue)
+			got, err := resolveInstallMaxConcurrencyFromSources(cmd, v, config, tt.envValue != nil)
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func newInstallMaxConcurrencyTestCmd(t *testing.T, flagValue *int) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{Use: "install", Run: func(*cobra.Command, []string) {}}
+	cmd.Flags().Int("max-concurrency", 0, "")
+	if flagValue != nil {
+		cmd.SetArgs([]string{"--max-concurrency", strconv.Itoa(*flagValue)})
+		require.NoError(t, cmd.Execute())
+	}
+	return cmd
+}
+
+func intPtr(value int) *int {
+	return &value
+}
+
+func stringPtr(value string) *string {
+	return &value
 }

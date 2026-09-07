@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+
+	pkgFlags "github.com/cloudposse/atmos/pkg/flags"
 )
 
 // describeCmd describes configuration for stacks and components.
@@ -21,11 +23,13 @@ func init() {
 	// By default, all describe commands execute YAML functions and Go templates unless
 	// disabled with --process-functions=false or --process-templates=false flags.
 	//
-	// NOTE: NoOptDefVal is NOT used here to avoid Cobra parsing issues with commands
-	// that have positional arguments. When NoOptDefVal is set and a space-separated value
-	// is used (--identity value), Cobra misinterprets the value as a subcommand/positional arg.
-	// Users should use --identity=select or similar for interactive selection.
-	describeCmd.PersistentFlags().StringP("identity", "i", "", "Specify the identity to authenticate with before describing")
+	// Uses the shared flags.WithIdentityFlag() builder (rather than a hand-rolled
+	// PersistentFlags().StringP()) so bare --identity triggers the interactive selector like
+	// every other Atmos command. Space-separated values on subcommands with positional args
+	// (e.g. `describe component vpc --identity foo`) are normalized to `--identity=foo` by the
+	// generic NoOptDefVal preprocessor in cmd/root.go before Cobra parses, and identity
+	// retrieval already goes through GetIdentityFromFlags for extra safety.
+	pkgFlags.NewStandardParser(pkgFlags.WithIdentityFlag()).RegisterPersistentFlags(describeCmd)
 
 	// Register shell completion for identity flag.
 	AddIdentityCompletion(describeCmd)

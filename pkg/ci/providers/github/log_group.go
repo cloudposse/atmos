@@ -1,8 +1,7 @@
 package github
 
 import (
-	"fmt"
-
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -11,8 +10,7 @@ import (
 func (p *Provider) StartLogGroup(title string) error {
 	defer perf.Track(nil, "github.Provider.StartLogGroup")()
 
-	_, err := fmt.Fprintf(workflowCommandsOut, "::group::%s\n", escapeData(title))
-	return err
+	return data.Writef("::group::%s\n", escapeData(title))
 }
 
 // EndLogGroup emits a GitHub Actions workflow command that closes the current
@@ -20,6 +18,5 @@ func (p *Provider) StartLogGroup(title string) error {
 func (p *Provider) EndLogGroup() error {
 	defer perf.Track(nil, "github.Provider.EndLogGroup")()
 
-	_, err := fmt.Fprintln(workflowCommandsOut, "::endgroup::")
-	return err
+	return data.Writeln("::endgroup::")
 }

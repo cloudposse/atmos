@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -19,9 +18,11 @@ var (
 	ErrEmptyCastFile = errUtils.ErrEmptyCastFile
 	// ErrRenderOutputExists indicates that a render target already exists.
 	ErrRenderOutputExists = errUtils.ErrRenderOutputExists
-	// ErrMissingAgg indicates that the agg renderer executable was not found.
+	// ErrMissingAgg is retained for backwards compatibility. Animated rendering
+	// now installs agg through the Atmos toolchain instead of returning this error.
 	ErrMissingAgg = errUtils.ErrMissingAgg
-	// ErrMissingFFmpeg indicates that the ffmpeg executable was not found.
+	// ErrMissingFFmpeg is retained for backwards compatibility. MP4 rendering
+	// now installs FFmpeg through the Atmos toolchain instead of returning this error.
 	ErrMissingFFmpeg = errUtils.ErrMissingFFmpeg
 )
 
@@ -160,8 +161,17 @@ func Render(input string, opts *RenderOptions) error {
 			return err
 		}
 	}
+	var tools renderTools
+	requirements := renderToolRequirementsForTargets(targets)
+	if requirements.agg || requirements.ffmpeg {
+		var err error
+		tools, err = resolveRenderTools(requirements)
+		if err != nil {
+			return fmt.Errorf("resolve cast renderers: %w", err)
+		}
+	}
 	for _, target := range targets {
-		if err := target.render(input, target.output); err != nil {
+		if err := target.render(input, target.output, tools); err != nil {
 			return err
 		}
 	}
@@ -170,25 +180,38 @@ func Render(input string, opts *RenderOptions) error {
 
 type renderTarget struct {
 	output string
-	render func(input, output string) error
+	format renderFormat
+	render func(input, output string, tools renderTools) error
 }
+
+type renderFormat string
+
+const (
+	renderFormatGIF   renderFormat = "gif"
+	renderFormatMP4   renderFormat = "mp4"
+	renderFormatHTML  renderFormat = "html"
+	renderFormatASCII renderFormat = "ascii"
+	renderFormatPNG   renderFormat = "png"
+	renderFormatJPEG  renderFormat = "jpeg"
+)
 
 func renderTargets(opts *RenderOptions) []renderTarget {
 	specs := []struct {
 		output string
-		render func(input, output string) error
+		format renderFormat
+		render func(input, output string, tools renderTools) error
 	}{
-		{opts.GIF, renderWithAgg},
-		{opts.MP4, renderMP4},
-		{opts.HTML, RenderHTML},
-		{opts.ASCII, RenderASCII},
-		{opts.PNG, RenderPNG},
-		{opts.JPEG, RenderJPEG},
+		{opts.GIF, renderFormatGIF, renderWithAgg},
+		{opts.MP4, renderFormatMP4, renderMP4},
+		{opts.HTML, renderFormatHTML, renderHTML},
+		{opts.ASCII, renderFormatASCII, renderASCII},
+		{opts.PNG, renderFormatPNG, renderPNG},
+		{opts.JPEG, renderFormatJPEG, renderJPEG},
 	}
 	targets := make([]renderTarget, 0, len(specs))
 	for _, spec := range specs {
 		if spec.output != "" {
-			targets = append(targets, renderTarget{output: spec.output, render: spec.render})
+			targets = append(targets, renderTarget{output: spec.output, format: spec.format, render: spec.render})
 		}
 	}
 	return targets
@@ -205,22 +228,27 @@ func prepareRenderOutput(output string) error {
 	return os.MkdirAll(dir, castDirPerm)
 }
 
-func renderWithAgg(input, output string) error {
-	agg, err := exec.LookPath("agg")
-	if err != nil {
-		return fmt.Errorf("render %s: %w", output, ErrMissingAgg)
-	}
-	//nolint:gosec // agg is resolved via PATH and receives cast/output paths as argv, not shell input.
-	cmd := exec.Command(agg, input, output)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+func renderHTML(input, output string, _ renderTools) error {
+	return RenderHTML(input, output)
 }
 
-func renderMP4(input, output string) error {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		return fmt.Errorf("render %s: %w", output, ErrMissingFFmpeg)
-	}
+func renderASCII(input, output string, _ renderTools) error {
+	return RenderASCII(input, output)
+}
+
+func renderPNG(input, output string, _ renderTools) error {
+	return RenderPNG(input, output)
+}
+
+func renderJPEG(input, output string, _ renderTools) error {
+	return RenderJPEG(input, output)
+}
+
+func renderWithAgg(input, output string, tools renderTools) error {
+	return runRenderer(tools.agg, input, output)
+}
+
+func renderMP4(input, output string, tools renderTools) error {
 	tmp, err := os.CreateTemp("", "atmos-cast-*.gif")
 	if err != nil {
 		return err
@@ -228,13 +256,8 @@ func renderMP4(input, output string) error {
 	tmpPath := tmp.Name()
 	_ = tmp.Close()
 	defer func() { _ = os.Remove(tmpPath) }()
-	if err := renderWithAgg(input, tmpPath); err != nil {
+	if err := renderWithAgg(input, tmpPath, tools); err != nil {
 		return err
 	}
-	ffmpeg, _ := exec.LookPath("ffmpeg")
-	//nolint:gosec // ffmpeg is resolved via PATH and receives file paths as argv, not shell input.
-	cmd := exec.Command(ffmpeg, "-y", "-i", tmpPath, "-movflags", "+faststart", output)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return runRenderer(tools.ffmpeg, "-y", "-i", tmpPath, "-movflags", "+faststart", output)
 }

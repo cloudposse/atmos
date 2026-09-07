@@ -3,6 +3,8 @@
   "extends": [
     "config:recommended"
   ],
+  "labels": ["no-release"],
+  "rebaseWhen": "behind-base-branch",
   "customManagers": [
     {
       "customType": "regex",

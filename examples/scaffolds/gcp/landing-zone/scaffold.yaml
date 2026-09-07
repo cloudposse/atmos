@@ -1,0 +1,48 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: gcp-landing-zone
+  description: GCP landing zone — dev/staging/prod environments with GCS, Secret Manager, service account, and bucket IAM, provisioned on the local emulator.
+  author: Cloud Posse
+  version: 1.0.0
+spec:
+  delimiters: ["[[", "]]"]
+  fields:
+    - name: project_name
+      label: Project name
+      description: Name of the project; used in resource names.
+      type: input
+      default: my-gcp-landing-zone
+      required: true
+      validation:
+        pattern: "^[a-z][a-z0-9-]{1,30}$"
+        message: Use lowercase letters, digits, and hyphens (2-31 characters).
+    - name: gcp_project
+      label: GCP project ID
+      description: Project ID used by the local emulator and Terraform provider.
+      type: input
+      default: floci-local
+      required: true
+      validation:
+        pattern: "^[a-z][a-z0-9-]{1,30}$"
+        message: Use lowercase letters, digits, and hyphens (2-31 characters).
+    - name: region
+      label: GCP region
+      description: Region/location for regional resources.
+      type: select
+      default: us-central1
+      required: true
+      options:
+        - us-central1
+        - us-east1
+        - us-west1
+        - europe-west1
+    - name: terraform_command
+      label: Terraform binary
+      description: Which binary Atmos invokes for Terraform operations.
+      type: select
+      default: terraform
+      required: true
+      options:
+        - terraform
+        - tofu

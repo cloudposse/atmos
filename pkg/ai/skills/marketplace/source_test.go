@@ -1,6 +1,8 @@
 package marketplace
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -136,6 +138,67 @@ func TestParseSource_UnsupportedHost(t *testing.T) {
 	_, err := ParseSource("gitlab.com/user/repo")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported source format")
+}
+
+func TestParseSource_LocalPath_Exists(t *testing.T) {
+	dir := t.TempDir()
+
+	info, err := ParseSource(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "local", info.Type)
+
+	abs, err := filepath.Abs(dir)
+	require.NoError(t, err)
+	assert.Equal(t, abs, info.URL)
+	assert.Equal(t, filepath.Base(abs), info.Name)
+	assert.Equal(t, "local/"+filepath.Base(abs), info.FullPath)
+}
+
+func TestParseSource_LocalPath_RelativeResolvesAgainstCWD(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "my-skill")
+	require.NoError(t, os.MkdirAll(sub, 0o755))
+
+	t.Chdir(dir)
+
+	info, err := ParseSource("my-skill")
+	require.NoError(t, err)
+	assert.Equal(t, "local", info.Type)
+	assert.Equal(t, "my-skill", info.Name)
+}
+
+func TestParseSource_LocalPath_DoesNotExist(t *testing.T) {
+	// A plain path that doesn't exist on disk is not local -- it must fall
+	// through to the "unsupported source format" error rather than being
+	// silently accepted (that would make every typo look like a local install).
+	missing := filepath.Join(t.TempDir(), "does-not-exist-xyz")
+
+	_, err := ParseSource(missing)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported source format")
+}
+
+func TestParseSource_FileURL(t *testing.T) {
+	dir := t.TempDir()
+
+	info, err := ParseSource("file://" + dir)
+	require.NoError(t, err)
+	assert.Equal(t, "local", info.Type)
+
+	abs, err := filepath.Abs(dir)
+	require.NoError(t, err)
+	assert.Equal(t, abs, info.URL)
+	assert.Equal(t, filepath.Base(abs), info.Name)
+}
+
+func TestParseSource_FileURL_NotCheckedForExistence(t *testing.T) {
+	// The file:// URL scheme is trusted without an existence check, mirroring
+	// go-getter's behavior; a missing path only fails later, at copy time.
+	missing := filepath.Join(t.TempDir(), "definitely-does-not-exist")
+
+	info, err := ParseSource("file://" + missing)
+	require.NoError(t, err)
+	assert.Equal(t, "local", info.Type)
 }
 
 func TestIsOwnerRepoShorthand(t *testing.T) {

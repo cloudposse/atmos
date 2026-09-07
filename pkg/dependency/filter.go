@@ -17,20 +17,20 @@ func (g *Graph) Filter(filter Filter) *Graph {
 func (g *Graph) collectNodesToInclude(filter Filter) map[string]bool {
 	toInclude := make(map[string]bool)
 
+	seeds := make([]string, 0, len(filter.NodeIDs))
 	for _, id := range filter.NodeIDs {
 		if _, exists := g.Nodes[id]; !exists {
 			continue
 		}
-
 		toInclude[id] = true
+		seeds = append(seeds, id)
+	}
 
-		if filter.IncludeDependencies {
-			g.markDependencies(id, toInclude)
-		}
-
-		if filter.IncludeDependents {
-			g.markDependents(id, toInclude)
-		}
+	if filter.IncludeDependencies {
+		g.markReachable(seeds, toInclude, filter.DependencyDepth, dependencyEdges)
+	}
+	if filter.IncludeDependents {
+		g.markReachable(seeds, toInclude, filter.DependentDepth, dependentEdges)
 	}
 
 	return toInclude
@@ -108,32 +108,51 @@ func (g *Graph) FilterByComponent(component string) *Graph {
 	})
 }
 
-// markDependencies recursively marks all dependencies of a node for inclusion.
-func (g *Graph) markDependencies(nodeID string, toInclude map[string]bool) {
-	node, exists := g.Nodes[nodeID]
-	if !exists {
-		return
-	}
-
-	for _, depID := range node.Dependencies {
-		if !toInclude[depID] {
-			toInclude[depID] = true
-			g.markDependencies(depID, toInclude)
-		}
-	}
+// dependencyEdges selects a node's dependency IDs for markReachable.
+func dependencyEdges(node *Node) []string {
+	return node.Dependencies
 }
 
-// markDependents recursively marks all dependents of a node for inclusion.
-func (g *Graph) markDependents(nodeID string, toInclude map[string]bool) {
-	node, exists := g.Nodes[nodeID]
-	if !exists {
-		return
+// dependentEdges selects a node's dependent IDs for markReachable.
+func dependentEdges(node *Node) []string {
+	return node.Dependents
+}
+
+// reachEntry is one BFS frontier item in markReachable.
+type reachEntry struct {
+	id    string
+	depth int
+}
+
+// markReachable marks every node reachable from the seed set within maxDepth
+// hops (0 = unlimited) following the given edge selector. All seeds enter the
+// BFS at depth 0, so the first visit to a node is at its minimum depth from
+// the nearest seed; the visited map doubles as cycle protection.
+func (g *Graph) markReachable(seeds []string, toInclude map[string]bool, maxDepth int, edges func(*Node) []string) {
+	visited := make(map[string]struct{}, len(seeds))
+	queue := make([]reachEntry, 0, len(seeds))
+	for _, id := range seeds {
+		visited[id] = struct{}{}
+		queue = append(queue, reachEntry{id: id, depth: 0})
 	}
 
-	for _, depID := range node.Dependents {
-		if !toInclude[depID] {
-			toInclude[depID] = true
-			g.markDependents(depID, toInclude)
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		if maxDepth > 0 && current.depth >= maxDepth {
+			continue
+		}
+		node, exists := g.Nodes[current.id]
+		if !exists {
+			continue
+		}
+		for _, nextID := range edges(node) {
+			if _, seen := visited[nextID]; seen {
+				continue
+			}
+			visited[nextID] = struct{}{}
+			toInclude[nextID] = true
+			queue = append(queue, reachEntry{id: nextID, depth: current.depth + 1})
 		}
 	}
 }

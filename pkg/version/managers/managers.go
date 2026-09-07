@@ -168,13 +168,15 @@ func Plan(ctx context.Context, opts *RunOptions) ([]PlannedChange, error) {
 	refs := manager.VersionRefs(entries, lock.Tracks[track])
 
 	var planned []PlannedChange
+	var errs []error
 	for _, rule := range fileRules(opts.Config) {
 		if len(opts.Only) > 0 && !containsString(opts.Only, rule.Manager) {
 			continue
 		}
 		fileManager, ok := Get(rule.Manager)
 		if !ok {
-			return nil, fmt.Errorf("%w: %s", ErrUnknownManager, rule.Manager)
+			errs = append(errs, fmt.Errorf("%w: %s", ErrUnknownManager, rule.Manager))
+			continue
 		}
 		input := &Input{
 			Config:  opts.Config,
@@ -188,19 +190,30 @@ func Plan(ctx context.Context, opts *RunOptions) ([]PlannedChange, error) {
 		}
 		changes, err := fileManager.Plan(ctx, input)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", rule.Manager, err)
+			// Keep evaluating the remaining rules instead of stopping at the
+			// first failure: a broken rule (e.g. one malformed managed file)
+			// should not hide every other rule's planned changes from view.
+			// The joined error below still blocks the caller from applying
+			// anything, so this only widens visibility, not risk.
+			errs = append(errs, fmt.Errorf("%s: %w", rule.Manager, err))
+			continue
 		}
 		for i := range changes {
 			planned = append(planned, PlannedChange{Manager: rule.Manager, FileChange: changes[i]})
 		}
 	}
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
 	return planned, nil
 }
 
 // fileRules returns the configured version.files rules, or one default rule
-// per registered manager that declares default paths.
+// per registered manager that declares default paths. A nil Version.Files
+// means the key was omitted (fall back to manager defaults); a non-nil empty
+// slice means the user explicitly configured zero managed files.
 func fileRules(atmosConfig *schema.AtmosConfiguration) []schema.VersionFileRule {
-	if atmosConfig != nil && len(atmosConfig.Version.Files) > 0 {
+	if atmosConfig != nil && atmosConfig.Version.Files != nil {
 		return atmosConfig.Version.Files
 	}
 	var rules []schema.VersionFileRule

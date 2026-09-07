@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -489,6 +490,36 @@ func TestFormatToolParameters_Extended(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestFormatToolStepLabel(t *testing.T) {
+	t.Run("tool with params strips markdown emphasis", func(t *testing.T) {
+		result := formatToolStepLabel(types.ToolCall{
+			Name:  "execute_bash",
+			Input: map[string]interface{}{"command": "ls"},
+		})
+		assert.Equal(t, "execute_bash  Command: ls", result)
+		assert.NotContains(t, result, "**")
+		assert.NotContains(t, result, "`")
+	})
+
+	t.Run("tool with no params falls back to name only", func(t *testing.T) {
+		result := formatToolStepLabel(types.ToolCall{
+			Name:  "atmos_list_stacks",
+			Input: map[string]interface{}{},
+		})
+		assert.Equal(t, "atmos_list_stacks", result)
+	})
+
+	t.Run("long label is truncated to stepLabelMaxLen", func(t *testing.T) {
+		result := formatToolStepLabel(types.ToolCall{
+			Name:  "execute_bash",
+			Input: map[string]interface{}{"command": strings.Repeat("x", 100)},
+		})
+		assert.LessOrEqual(t, len(result), stepLabelMaxLen)
+		assert.True(t, strings.HasSuffix(result, "..."))
+		assert.True(t, strings.HasPrefix(result, "execute_bash  Command: "))
+	})
 }
 
 func TestDetectOutputFormat(t *testing.T) {
@@ -1019,6 +1050,12 @@ func TestCalculateViewportHeight(t *testing.T) {
 	model, err := NewChatModel(ChatModelParams{Client: client})
 	require.NoError(t, err)
 
+	// Derive the expected non-viewport budget the same way calculateViewportHeight does,
+	// instead of hardcoding a line count that silently drifts whenever header/footer
+	// styling changes (this test previously hardcoded stale values twice in a row).
+	nonViewportHeight := lipgloss.Height(model.headerView()) + lipgloss.Height(model.footerView()) + 2
+	thresholdHeight := nonViewportHeight + minViewportHeight
+
 	tests := []struct {
 		name        string
 		totalHeight int
@@ -1026,23 +1063,23 @@ func TestCalculateViewportHeight(t *testing.T) {
 	}{
 		{
 			name:        "normal height",
-			totalHeight: 50,
-			expected:    32, // 50 - 18 = 32
+			totalHeight: nonViewportHeight + 33,
+			expected:    33,
 		},
 		{
 			name:        "minimum height enforced",
-			totalHeight: 20,
-			expected:    minViewportHeight, // 20 - 18 = 2, but min is 10
+			totalHeight: nonViewportHeight + 3,
+			expected:    minViewportHeight,
 		},
 		{
 			name:        "exactly at threshold",
-			totalHeight: 28,
-			expected:    minViewportHeight, // 28 - 18 = 10 = min
+			totalHeight: thresholdHeight,
+			expected:    minViewportHeight,
 		},
 		{
 			name:        "large terminal",
-			totalHeight: 100,
-			expected:    82, // 100 - 18 = 82
+			totalHeight: nonViewportHeight + 83,
+			expected:    83,
 		},
 		{
 			name:        "very small terminal",
@@ -2062,10 +2099,14 @@ func TestBuildFilteredMessages(t *testing.T) {
 	t.Run("filters out system messages", func(t *testing.T) {
 		model, err := NewChatModel(ChatModelParams{Client: client})
 		require.NoError(t, err)
+		// Provider must match what getCurrentProvider() resolves to (its fallback chain
+		// always returns a real name, e.g. "anthropic", never ""), since that's what
+		// addMessage() actually stamps non-system messages with.
+		provider := model.getCurrentProvider()
 		model.messages = []ChatMessage{
-			{Role: roleUser, Content: "Hello", Provider: ""},
+			{Role: roleUser, Content: "Hello", Provider: provider},
 			{Role: roleSystem, Content: "System info", Provider: ""},
-			{Role: roleAssistant, Content: "Hi there", Provider: ""},
+			{Role: roleAssistant, Content: "Hi there", Provider: provider},
 		}
 
 		messages := model.buildFilteredMessages()
@@ -2847,6 +2888,17 @@ func TestGetCurrentProvider(t *testing.T) {
 		model.sess = nil
 
 		result := model.getCurrentProvider()
+		assert.Equal(t, "anthropic", result)
+	})
+
+	t.Run("nil atmosConfig does not panic and defaults to anthropic", func(t *testing.T) {
+		model, err := NewChatModel(ChatModelParams{Client: client})
+		require.NoError(t, err)
+		model.atmosConfig = nil
+		model.sess = nil
+
+		var result string
+		assert.NotPanics(t, func() { result = model.getCurrentProvider() })
 		assert.Equal(t, "anthropic", result)
 	})
 }

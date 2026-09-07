@@ -7,20 +7,18 @@ import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 
 :::note Optional chapter
-This is an advanced extension point, not a required step — most people add custom commands only after running Atmos for a while and noticing a command they wish existed.
+This chapter is optional. Most people add a custom command only after they use Atmos for a while and find a task they repeat.
 :::
 
-Atmos can be extended with any number of **custom CLI commands** — your own `atmos <verb>` subcommands, defined in YAML, that wrap whatever your team repeats.
+You can extend Atmos with custom CLI commands. Each command is your own `atmos <verb>` subcommand. Define it in YAML to wrap a task your team repeats.
 
 :::tip
 See [Atmos Custom Commands](/cli/configuration/commands) for the full reference.
 :::
 
-Custom commands are defined in the `commands` section of your `atmos.yaml`.
+You define custom commands in the `commands` section of `atmos.yaml`.
 
-Atmos already has built-in commands for discovery, including `atmos list stacks`, `atmos list components`, and `atmos list instances`.
-Instead of reimplementing those, the quick-start example adds an `operator` command group that combines the built-ins into the views operators
-usually need.
+This example adds an `operator` command group. It wraps `atmos list stacks`, `atmos list components`, and `atmos list instances` in the views operators use most.
 
 <File title="atmos.yaml">
 ```yaml
@@ -90,7 +88,7 @@ commands:
 ```
 </File>
 
-Run the status command to see stack inheritance, component instances, the component catalog, and the next operator commands:
+Run the status command. It shows stack inheritance, component instances, the component catalog, and the next operator commands:
 
 <Terminal title="atmos operator status -s plat-ue2-dev">
 ```console
@@ -101,7 +99,7 @@ Next operator commands
 ```
 </Terminal>
 
-Run the inspect command when you need to answer where a value came from:
+Run the inspect command to find where a value came from:
 
 ```shell
 atmos operator inspect app-config -s plat-ue2-dev
@@ -114,7 +112,7 @@ atmos describe component app-config -s plat-ue2-dev --provenance
 ```
 
 :::tip Let Atmos prompt you
-Prompting is built into single-component Terraform commands. If you forget the component or stack, omit it and Atmos will ask:
+Atmos prompts you in single-component Terraform commands. If you omit the component or stack, Atmos asks for it:
 
 ```shell
 # Explicit

@@ -1,0 +1,17 @@
+vars:
+  stage: dev
+
+components:
+  terraform:
+    comp-a:
+      metadata:
+        labels:
+          tier: foundational
+          env: test
+      vars: {}
+    comp-b:
+      metadata:
+        labels:
+          tier: edge
+          env: test
+      vars: {}

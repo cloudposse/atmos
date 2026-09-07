@@ -1,21 +1,32 @@
 package helm
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"helm.sh/helm/v4/pkg/action"
+	helmchart "helm.sh/helm/v4/pkg/chart"
 	"helm.sh/helm/v4/pkg/chart/loader"
 	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/downloader"
+	"helm.sh/helm/v4/pkg/getter"
 	"helm.sh/helm/v4/pkg/registry"
 	release "helm.sh/helm/v4/pkg/release/v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
+
+// helmXDGSubdir is the atmos-managed Helm home under the XDG config/cache dirs
+// (e.g. ~/.config/atmos/helm and ~/.cache/atmos/helm/repository).
+const helmXDGSubdir = "helm"
 
 // chartSpec is the resolved input needed to render or deploy a Helm chart.
 type chartSpec struct {
@@ -31,16 +42,62 @@ type chartSpec struct {
 	ReleaseName string
 	// Namespace is the target Kubernetes namespace.
 	Namespace string
+	// CreateNamespace tells Helm to create the target namespace during install
+	// when it does not exist. Defaults to true, preserving the existing native-helm
+	// behavior. Set `create_namespace: false` on the component to install into a
+	// pre-existing namespace instead, so an identity that lacks cluster-level
+	// namespace-create permission can run the install.
+	CreateNamespace bool
 	// Values is the merged Helm values map.
 	Values map[string]any
 	// IncludeCRDs includes CRDs from the chart's crds/ directory in the output.
 	IncludeCRDs bool
+	// DependencyUpdate fetches missing dependencies before loading the chart.
+	DependencyUpdate bool
 	// Repositories lists declarative chart repositories for "repo/name" refs.
 	Repositories []chartRepository
+	// Release is the presence-aware policy tree before an action is selected.
+	Release releasePolicyInput
+	// LifecycleFlags contains only explicitly supplied invocation overrides.
+	LifecycleFlags map[string]any
+	// Lifecycle is populated with the effective selected-operation policy.
+	Lifecycle releaseLifecycleResolution
 }
 
-// newSettings builds Helm CLI environment settings honoring ambient HELM_* env.
-var newSettings = cli.New
+// newSettings builds Helm CLI environment settings. It honors ambient HELM_* env, but when the user
+// has NOT set HELM_REPOSITORY_CONFIG / HELM_REPOSITORY_CACHE it isolates Helm's repository config and
+// cache to an atmos-managed location instead of inheriting the user's global Helm config. This keeps
+// chart resolution reproducible (an unrelated repo in the user's global repositories.yaml cannot break
+// it via Helm's scanReposForURL) and stops atmos from mutating the user's global Helm repositories.
+// It is a var so tests can override it. See docs/fixes/2026-08-14-native-helm-ux-fixes.md.
+var newSettings = defaultSettings
+
+func defaultSettings() *cli.EnvSettings {
+	settings := cli.New()
+	isolateRepositoryConfig(settings)
+	return settings
+}
+
+// isolateRepositoryConfig points Helm's repository config/cache at the atmos-managed XDG location,
+// but only for the fields the user has not explicitly overridden via the corresponding HELM_* env var.
+func isolateRepositoryConfig(settings *cli.EnvSettings) {
+	if os.Getenv("HELM_REPOSITORY_CONFIG") == "" {
+		if dir := xdg.LookupXDGConfigDir(helmXDGSubdir); dir != "" {
+			settings.RepositoryConfig = filepath.Join(dir, "repositories.yaml")
+		}
+	}
+	if os.Getenv("HELM_REPOSITORY_CACHE") == "" {
+		if dir := xdg.LookupXDGCacheDir(filepath.Join(helmXDGSubdir, "repository")); dir != "" {
+			settings.RepositoryCache = dir
+		}
+	}
+}
+
+func newSettingsForNamespace(namespace string) *cli.EnvSettings {
+	settings := newSettings()
+	settings.SetNamespace(namespace)
+	return settings
+}
 
 // renderManifest renders the chart to a multi-document manifest string without
 // contacting a cluster (client-side dry run, equivalent to `helm template`).
@@ -56,6 +113,12 @@ func renderManifest(ctx context.Context, spec *chartSpec) (string, error) {
 
 	manifest, err := runInstall(ctx, client, settings, spec)
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", ctxErr
+		}
+		if errors.Is(err, errUtils.ErrHelmRenderFailed) {
+			return "", err
+		}
 		return "", fmt.Errorf("%w: %w", errUtils.ErrHelmRenderFailed, err)
 	}
 	return manifest, nil
@@ -64,7 +127,7 @@ func renderManifest(ctx context.Context, spec *chartSpec) (string, error) {
 // newInstallAction constructs an Install action plus settings, wiring the chart
 // path options (repo URL, version) and an OCI-capable registry client.
 func newInstallAction(spec *chartSpec) (*action.Install, *cli.EnvSettings, error) {
-	settings := newSettings()
+	settings := newSettingsForNamespace(spec.Namespace)
 
 	cfg := new(action.Configuration)
 	if err := cfg.Init(settings.RESTClientGetter(), spec.Namespace, os.Getenv("HELM_DRIVER")); err != nil { //nolint:forbidigo
@@ -94,16 +157,19 @@ func newInstallAction(spec *chartSpec) (*action.Install, *cli.EnvSettings, error
 // runInstall resolves the chart reference, loads the chart, runs the action, and
 // returns the rendered manifest string.
 func runInstall(ctx context.Context, client *action.Install, settings *cli.EnvSettings, spec *chartSpec) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	chartRef := resolveChartRef(client, spec)
 
 	chartPath, err := client.LocateChart(chartRef, settings)
 	if err != nil {
-		return "", fmt.Errorf("failed to locate Helm chart %q: %w", spec.Chart, err)
+		return "", fmt.Errorf("%w: failed to locate Helm chart %q: %w", errUtils.ErrHelmRenderFailed, spec.Chart, err)
 	}
 
-	loaded, err := loader.Load(chartPath)
+	loaded, err := loadChartForAction(ctx, chartPath, settings, client.GetRegistryClient(), spec.DependencyUpdate)
 	if err != nil {
-		return "", fmt.Errorf("failed to load Helm chart %q: %w", chartPath, err)
+		return "", err
 	}
 
 	rel, err := client.RunWithContext(ctx, loaded, spec.Values)
@@ -115,7 +181,88 @@ func runInstall(ctx context.Context, client *action.Install, settings *cli.EnvSe
 	if !ok {
 		return "", fmt.Errorf("%w: unexpected release type %T", errUtils.ErrHelmRenderFailed, rel)
 	}
-	return rendered.Manifest, nil
+	return renderReleaseManifest(rendered), nil
+}
+
+// loadChart loads a chart and verifies that every declared dependency is present.
+// The Helm action package assumes its CLI caller performed this check; without it,
+// a missing library chart fails later with an unrelated template-definition error.
+func loadChart(chartPath string) (helmchart.Charter, error) {
+	return loadChartForAction(context.Background(), chartPath, nil, nil, false)
+}
+
+func loadChartForAction(
+	ctx context.Context,
+	chartPath string,
+	settings *cli.EnvSettings,
+	registryClient *registry.Client,
+	dependencyUpdate bool,
+) (helmchart.Charter, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	loaded, err := loader.Load(chartPath)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to load Helm chart %q: %w", errUtils.ErrHelmRenderFailed, chartPath, err)
+	}
+
+	accessor, err := helmchart.NewAccessor(loaded)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to inspect Helm chart %q: %w", errUtils.ErrHelmRenderFailed, chartPath, err)
+	}
+	if dependencies := accessor.MetaDependencies(); len(dependencies) > 0 {
+		if err := action.CheckDependencies(loaded, dependencies); err != nil {
+			if !dependencyUpdate {
+				return nil, fmt.Errorf("%w: an error occurred while checking Helm chart dependencies; run 'helm dependency build %s' or pass '--dependency-update' to fetch missing dependencies: %w", errUtils.ErrHelmRenderFailed, chartPath, err)
+			}
+			if settings == nil {
+				return nil, fmt.Errorf("%w: cannot update dependencies for Helm chart %q without Helm environment settings", errUtils.ErrHelmRenderFailed, chartPath)
+			}
+			manager := &downloader.Manager{
+				Out:              io.Discard,
+				ChartPath:        chartPath,
+				Getters:          getter.All(settings),
+				RepositoryConfig: settings.RepositoryConfig,
+				RepositoryCache:  settings.RepositoryCache,
+				ContentCache:     settings.ContentCache,
+				RegistryClient:   registryClient,
+				Debug:            settings.Debug,
+			}
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			if updateErr := manager.Update(); updateErr != nil {
+				return nil, fmt.Errorf("%w: failed to update dependencies for Helm chart %q: %w", errUtils.ErrHelmRenderFailed, chartPath, updateErr)
+			}
+			loaded, err = loader.Load(chartPath)
+			if err != nil {
+				return nil, fmt.Errorf("%w: failed to reload Helm chart %q after dependency update: %w", errUtils.ErrHelmRenderFailed, chartPath, err)
+			}
+			if depErr := action.CheckDependencies(loaded, dependencies); depErr != nil {
+				return nil, fmt.Errorf("%w: Helm chart %q is still missing dependencies after 'helm dependency update': %w", errUtils.ErrHelmRenderFailed, chartPath, depErr)
+			}
+		}
+	}
+
+	return loaded, nil
+}
+
+// renderReleaseManifest returns the same manifest surface as `helm template`:
+// regular resources followed by hook resources with their source annotations.
+// Helm keeps hooks outside Release.Manifest, so returning that field alone makes
+// template, plan, and diff silently omit resources such as migration Jobs.
+func renderReleaseManifest(rendered *release.Release) string {
+	var manifests bytes.Buffer
+	if manifest := strings.TrimSpace(rendered.Manifest); manifest != "" {
+		fmt.Fprintln(&manifests, manifest)
+	}
+	for _, hook := range rendered.Hooks {
+		if hook == nil || strings.TrimSpace(hook.Manifest) == "" {
+			continue
+		}
+		fmt.Fprintf(&manifests, "---\n# Source: %s\n%s\n", hook.Path, strings.TrimSpace(hook.Manifest))
+	}
+	return manifests.String()
 }
 
 // resolveChartRef maps a "repo/name" chart reference to an explicit RepoURL +

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -13,6 +14,27 @@ import (
 
 // ErrNoEditableConfig is returned when an editable atmos.yaml file cannot be located.
 var ErrNoEditableConfig = errors.New("could not locate an editable atmos.yaml; pass --config to target a specific file")
+
+// ErrAmbiguousConfigFile is returned when a config-editing command (config set/delete/format,
+// mcp config add/remove) is given more than one --config file. Unlike `config get`, which reads
+// the fully-merged effective value across every --config file, these commands mutate exactly one
+// concrete file on disk -- silently picking the first (or last) would edit a file the user may
+// not have intended, while the actual effective config (what every other atmos command uses)
+// stays unchanged whenever a later file also sets the same key (cloudposse/atmos#2867).
+var ErrAmbiguousConfigFile = errors.New("multiple --config files given; specify exactly one file to edit")
+
+// ResolveConfigOverride validates that cfgFiles names at most one file, returning it (or "" if
+// none), since config set/delete/format and mcp config add/remove edit a single concrete file
+// and cannot safely guess which of several --config files to target.
+func ResolveConfigOverride(cfgFiles []string) (string, error) {
+	if len(cfgFiles) > 1 {
+		return "", fmt.Errorf("%w: %s", ErrAmbiguousConfigFile, strings.Join(cfgFiles, ", "))
+	}
+	if len(cfgFiles) == 1 {
+		return cfgFiles[0], nil
+	}
+	return "", nil
+}
 
 // configFileCandidates lists the config file names to probe in a directory, in
 // precedence order (atmos.yaml before the dotfile variant).

@@ -1,0 +1,21 @@
+vars:
+  stage: test
+
+terraform:
+  backend_type: local
+  backend:
+    local:
+      path: "../../../state/service.tfstate"
+
+components:
+  terraform:
+    service:
+      vars:
+        environment: test
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.plan
+            - before.terraform.apply
+          kind: tfmigrate
+          mode: dynamic

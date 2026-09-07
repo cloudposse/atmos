@@ -361,3 +361,15 @@ func TestOIDCProvider_Authenticate_URLValidation(t *testing.T) {
 		assert.Contains(t, err.Error(), "must use https scheme")
 	})
 }
+
+// TestOidcProvider_IsAmbient verifies that the GitHub OIDC provider opts into the auth
+// manager's ambient handling. Its token is requested fresh from the Actions token
+// endpoint on every call, so persisting it to the keyring would replay a token the
+// Actions runtime has already rotated (issue #2695, same shape).
+func TestOidcProvider_IsAmbient(t *testing.T) {
+	p := &oidcProvider{name: "gh-oidc"}
+
+	var ambient types.AmbientProvider = p
+	assert.True(t, ambient.IsAmbient(), "github OIDC must report itself as ambient")
+	assert.True(t, types.ProviderIsAmbient(p), "the manager's helper must agree")
+}

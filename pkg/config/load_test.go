@@ -219,6 +219,65 @@ func TestLoadConfigWithInvalidPath(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestLoadConfig_AtmosDMalformedYAMLHardFails verifies that a YAML parse error in
+// a .atmos.d/ file co-located with atmos.yaml hard-fails LoadConfig instead of being
+// silently swallowed (which previously left exit code 0 with the broken configuration
+// simply missing). See https://github.com/cloudposse/atmos/issues/2836.
+func TestLoadConfig_AtmosDMalformedYAMLHardFails(t *testing.T) {
+	tempDir := t.TempDir()
+
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte("base_path: \".\"\n"), 0o644))
+
+	dotAtmosDPath := filepath.Join(tempDir, ".atmos.d")
+	require.NoError(t, os.MkdirAll(dotAtmosDPath, 0o755))
+	badFile := filepath.Join(dotAtmosDPath, "bad.yaml")
+	require.NoError(t, os.WriteFile(
+		badFile,
+		[]byte("settings:\n  test_value: has: an unquoted colon\n"),
+		0o644,
+	))
+
+	t.Chdir(tempDir)
+
+	_, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), badFile)
+	assert.Contains(t, err.Error(), "line ")
+}
+
+// TestLoadConfig_DefaultConfigWithGitRootAtmosDMalformedYAMLHardFails verifies that
+// a YAML parse error in a git-root .atmos.d/ file hard-fails LoadConfig even in the
+// no-atmos.yaml-found fallback path, matching the same hard-fail behavior as when
+// atmos.yaml is present. See https://github.com/cloudposse/atmos/issues/2836.
+func TestLoadConfig_DefaultConfigWithGitRootAtmosDMalformedYAMLHardFails(t *testing.T) {
+	tempDir := t.TempDir()
+
+	atmosDDir := filepath.Join(tempDir, ".atmos.d")
+	require.NoError(t, os.MkdirAll(atmosDDir, 0o755))
+	badFile := filepath.Join(atmosDDir, "bad.yaml")
+	require.NoError(t, os.WriteFile(
+		badFile,
+		[]byte("settings:\n  test_value: has: an unquoted colon\n"),
+		0o644,
+	))
+
+	// Create a subdirectory with NO atmos.yaml - this will force default config.
+	subDir := filepath.Join(tempDir, "no-config-subdir")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+	// Mock git root to be tempDir.
+	t.Setenv("TEST_GIT_ROOT", tempDir)
+
+	// Change to subdirectory.
+	t.Chdir(subDir)
+
+	_, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), badFile)
+	assert.Contains(t, err.Error(), "line ")
+}
+
 func TestMergeDefaultImports_ExclusionLogic(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -633,7 +692,7 @@ components: {
 			v.SetConfigFile(configPath)
 
 			// Call the function - should return error on malformed YAML
-			_, err = processConfigImportsAndReapply(configPath, v, []byte(tt.configContent))
+			_, err = processConfigImportsAndReapply(configPath, v, []byte(tt.configContent), "")
 
 			// Assert that an error was returned
 			assert.Error(t, err, tt.description)
@@ -1409,12 +1468,9 @@ func TestMergeDefaultImports_GitRoot(t *testing.T) {
 }
 
 func TestPreserveCaseSensitiveMaps(t *testing.T) {
-	// Clear any previously tracked files at start of each test.
-	resetMergedConfigFiles()
-
 	t.Run("does nothing when no config file used", func(t *testing.T) {
-		resetMergedConfigFiles()
 		v := viper.New()
+		resetMergedConfigFiles(v)
 		atmosConfig := &schema.AtmosConfiguration{}
 
 		preserveCaseSensitiveMaps(v, atmosConfig)
@@ -1422,7 +1478,6 @@ func TestPreserveCaseSensitiveMaps(t *testing.T) {
 	})
 
 	t.Run("preserves env variable case", func(t *testing.T) {
-		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 		configPath := filepath.Join(tempDir, "atmos.yaml")
 
@@ -1442,6 +1497,7 @@ components:
 		require.NoError(t, err)
 
 		v := viper.New()
+		resetMergedConfigFiles(v)
 		v.SetConfigFile(configPath)
 		err = v.ReadInConfig()
 		require.NoError(t, err)
@@ -1459,7 +1515,6 @@ components:
 	})
 
 	t.Run("preserves auth identity case", func(t *testing.T) {
-		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 		configPath := filepath.Join(tempDir, "atmos.yaml")
 
@@ -1484,6 +1539,7 @@ components:
 		require.NoError(t, err)
 
 		v := viper.New()
+		resetMergedConfigFiles(v)
 		v.SetConfigFile(configPath)
 		err = v.ReadInConfig()
 		require.NoError(t, err)
@@ -1505,7 +1561,6 @@ components:
 	})
 
 	t.Run("merges case mappings from tracked imported files", func(t *testing.T) {
-		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 
 		// Create first import file with some env vars.
@@ -1528,12 +1583,14 @@ env:
 		err = os.WriteFile(importFile2, []byte(import2Content), 0o644)
 		require.NoError(t, err)
 
-		// Track both files as if they were merged during import processing.
-		trackMergedConfigFile(importFile1)
-		trackMergedConfigFile(importFile2)
-
 		// Viper has no config file set, but we have tracked files.
 		v := viper.New()
+		resetMergedConfigFiles(v)
+
+		// Track both files as if they were merged during import processing.
+		trackMergedConfigFile(v, importFile1)
+		trackMergedConfigFile(v, importFile2)
+
 		atmosConfig := &schema.AtmosConfiguration{}
 
 		preserveCaseSensitiveMaps(v, atmosConfig)
@@ -1549,7 +1606,6 @@ env:
 	})
 
 	t.Run("later imports override earlier imports for overlapping keys", func(t *testing.T) {
-		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 
 		// Create first import file with an env var using one case.
@@ -1570,11 +1626,13 @@ env:
 		err = os.WriteFile(importFile2, []byte(import2Content), 0o644)
 		require.NoError(t, err)
 
-		// Track both files in order.
-		trackMergedConfigFile(importFile1)
-		trackMergedConfigFile(importFile2)
-
 		v := viper.New()
+		resetMergedConfigFiles(v)
+
+		// Track both files in order.
+		trackMergedConfigFile(v, importFile1)
+		trackMergedConfigFile(v, importFile2)
+
 		atmosConfig := &schema.AtmosConfiguration{}
 
 		preserveCaseSensitiveMaps(v, atmosConfig)
@@ -1586,7 +1644,6 @@ env:
 	})
 
 	t.Run("main config file is included when not tracked", func(t *testing.T) {
-		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 		configPath := filepath.Join(tempDir, "atmos.yaml")
 
@@ -1600,6 +1657,7 @@ env:
 		require.NoError(t, err)
 
 		v := viper.New()
+		resetMergedConfigFiles(v)
 		v.SetConfigFile(configPath)
 		err = v.ReadInConfig()
 		require.NoError(t, err)
@@ -1615,7 +1673,6 @@ env:
 	})
 
 	t.Run("skips unreadable files gracefully", func(t *testing.T) {
-		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 
 		// Create a valid import file.
@@ -1627,11 +1684,13 @@ env:
 		err := os.WriteFile(validFile, []byte(validContent), 0o644)
 		require.NoError(t, err)
 
-		// Track a non-existent file and the valid file.
-		trackMergedConfigFile(filepath.Join(tempDir, "nonexistent.yaml"))
-		trackMergedConfigFile(validFile)
-
 		v := viper.New()
+		resetMergedConfigFiles(v)
+
+		// Track a non-existent file and the valid file.
+		trackMergedConfigFile(v, filepath.Join(tempDir, "nonexistent.yaml"))
+		trackMergedConfigFile(v, validFile)
+
 		atmosConfig := &schema.AtmosConfiguration{}
 
 		// Should skip the unreadable file gracefully.
@@ -1644,7 +1703,6 @@ env:
 	})
 
 	t.Run("preserves auth identities from imported files", func(t *testing.T) {
-		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 
 		// Create import file with auth identities.
@@ -1662,9 +1720,10 @@ auth:
 		err := os.WriteFile(importFile, []byte(importContent), 0o644)
 		require.NoError(t, err)
 
-		trackMergedConfigFile(importFile)
-
 		v := viper.New()
+		resetMergedConfigFiles(v)
+		trackMergedConfigFile(v, importFile)
+
 		atmosConfig := &schema.AtmosConfiguration{}
 
 		preserveCaseSensitiveMaps(v, atmosConfig)
@@ -1832,7 +1891,7 @@ func TestParseViperProfilesFromEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseViperProfilesFromEnv(tt.profiles)
+			result := FixViperEnvStringSliceQuirk(tt.profiles)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

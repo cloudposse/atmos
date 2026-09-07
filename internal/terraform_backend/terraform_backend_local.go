@@ -115,39 +115,24 @@ func resolveLocalBackendComponentPath(
 		}
 	}
 	// Workdir-enabled component: derive the canonical path using the same
-	// formula the provisioner uses. Absolutize for CWD-independence (mirrors
-	// config.go:extractComponentPath lines 176-180).
+	// formula the provisioner uses.
 	if provWorkdir.IsWorkdirEnabled(*sections) {
 		stack := getAtmosStackFromSections(sections)
 		component := getAtmosComponentInstanceFromSections(sections)
 		if stack != "" && component != "" {
-			workdirPath := provWorkdir.BuildPath(
+			// BuildPath itself now rejects a derived path that escapes BasePath (component
+			// and stack names both come from user-controlled YAML; a value containing ../
+			// sequences could otherwise escape BasePath via filepath.Join's implicit
+			// Clean()), so fall through to the static path below on that error rather than
+			// surfacing it here.
+			workdirPath, err := provWorkdir.BuildPath(
 				atmosConfig.BasePath, "terraform", component, stack, *sections,
 			)
-			if !filepath.IsAbs(workdirPath) {
-				if abs, absErr := filepath.Abs(workdirPath); absErr == nil {
-					workdirPath = abs
-				}
+			if err == nil {
+				return workdirPath
 			}
-			// Containment guard: reject derived paths that escape the project directory.
-			// atmos_component and atmos_stack come from user-controlled YAML; a value
-			// containing ../ sequences (e.g. "../../../../etc/evil") could otherwise
-			// escape BasePath via filepath.Join resolution.
-			// Note: symlinks are not resolved — same best-effort scope as the fast path above.
-			absBase, errBase := filepath.Abs(atmosConfig.BasePath)
-			if errBase == nil {
-				sep := string(filepath.Separator)
-				if strings.HasPrefix(workdirPath, absBase+sep) || workdirPath == absBase {
-					return workdirPath
-				}
-				log.Debug("Derived workdir path escapes project directory; falling through to static path",
-					"derived_path", workdirPath, "base_path", atmosConfig.BasePath)
-			} else {
-				// Cannot absolutize BasePath for containment check; fall through to the
-				// static path rather than returning an unverified derived path.
-				log.Debug("Could not absolutize BasePath; falling through to static path",
-					"derived_path", workdirPath, "base_path", atmosConfig.BasePath)
-			}
+			log.Debug("Derived workdir path escapes project directory; falling through to static path",
+				"base_path", atmosConfig.BasePath, "error", err)
 		}
 	}
 	// Default: static components/terraform/<component> path.

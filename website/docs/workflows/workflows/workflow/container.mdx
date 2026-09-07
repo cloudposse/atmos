@@ -20,7 +20,7 @@ workflows:
     container:
       image: alpine:latest         # required
       shell: /bin/sh               # shell used to run each command (default /bin/sh)
-      provider: docker             # docker | podman (auto-detected when omitted)
+      provider: docker             # auto | docker | podman (auto-detected when auto/omitted)
       runtime_auto_start: true     # start the Podman machine if no runtime is running
       pull: missing                # missing (default) | always | never
       workspace: /workspace        # where working_directory is mounted (default /workspace)
@@ -66,7 +66,7 @@ This field is different from [`steps[].type: container`](/workflows/steps/type/c
   <dd>Shell used to execute commands inside the container. Defaults to `/bin/sh`.</dd>
 
   <dt>`provider`</dt>
-  <dd>Container runtime provider: `docker` or `podman`. When omitted, Atmos auto-detects Docker, then Podman.</dd>
+  <dd>Container runtime provider: `auto`, `docker`, or `podman`. `auto` (the default) detects Docker, then Podman.</dd>
 
   <dt>`runtime_auto_start`</dt>
   <dd>Allows Atmos to attempt runtime recovery, such as starting a Podman machine, instead of failing when no runtime is running.</dd>

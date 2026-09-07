@@ -13,12 +13,14 @@ import (
 	"path/filepath" // For resolving absolute paths
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/creack/pty"
@@ -37,8 +39,10 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
@@ -391,17 +395,30 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// Since actual CLI output has escape sequences already processed (they appear as actual newlines/tabs),
 	// we can safely replace backslashes that are followed by path-like characters.
 	//
-	// First, protect JSON unicode escapes like \u003e from being corrupted by filepath.ToSlash
-	// and the path normalization regex below. On Windows, filepath.ToSlash converts ALL backslashes
-	// to forward slashes, which would turn \u003e into /u003e.
+	// First, protect JSON unicode escapes like \u003e and escaped quotes like \" from
+	// being corrupted by filepath.ToSlash and the path normalization regex below. On
+	// Windows, filepath.ToSlash converts ALL backslashes to forward slashes, which would
+	// turn \u003e into /u003e and \" into /" (e.g. a quoted provenance template embedding
+	// `env \"USER\"`).
 	jsonUnicodeEscape := regexp.MustCompile(`\\u([0-9a-fA-F]{4})`)
 	const unicodePlaceholder = "\x00UNICODE_ESCAPE_"
-	protectedOutput := jsonUnicodeEscape.ReplaceAllString(output, unicodePlaceholder+"$1")
+	const shellContinuationPlaceholder = "\x00SHELL_CONTINUATION\x00"
+	const escapedQuotePlaceholder = "\x00ESCAPED_QUOTE\x00"
+	// A trailing backslash in a help example is shell continuation syntax, not
+	// a path separator. Preserve it before Windows path normalization.
+	shellContinuation := regexp.MustCompile(`\\(\r?\n)`)
+	protectedOutput := shellContinuation.ReplaceAllString(output, shellContinuationPlaceholder+"$1")
+	protectedOutput = jsonUnicodeEscape.ReplaceAllString(protectedOutput, unicodePlaceholder+"$1")
+	protectedOutput = strings.ReplaceAll(protectedOutput, `\"`, escapedQuotePlaceholder)
 	normalizedOutput := filepath.ToSlash(protectedOutput)
 	// Replace backslashes that look like path separators (followed by alphanumeric, ., -, _, *, etc.).
 	normalizedOutput = regexp.MustCompile(`\\([a-zA-Z0-9._*\-/])`).ReplaceAllString(normalizedOutput, "/$1")
-	// Restore protected unicode escapes.
+	// Restore protected unicode escapes and escaped quotes.
 	normalizedOutput = regexp.MustCompile(regexp.QuoteMeta(unicodePlaceholder)+`([0-9a-fA-F]{4})`).ReplaceAllString(normalizedOutput, `\u$1`)
+	normalizedOutput = strings.ReplaceAll(normalizedOutput, escapedQuotePlaceholder, `\"`)
+
+	// Restore shell continuations after path normalization.
+	normalizedOutput = strings.ReplaceAll(normalizedOutput, shellContinuationPlaceholder, `\`)
 
 	// 3. Build a regex that matches the repository root even if extra slashes appear.
 	//    First, escape any regex metacharacters in the normalized repository root.
@@ -558,9 +575,18 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 
 	// 16. Normalize provisioned_by_user values in component output.
 	// This field shows the current username, which varies by environment (erik, runner, etc.).
-	// Replace with a generic placeholder.
-	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
-	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
+	// When followed by a provenance comment, its rendered padding also depends on that
+	// value's display width, so normalize the padding too (to a single space) so different
+	// username lengths collapse to identical output; but don't invent a trailing space where
+	// none existed (e.g. a bare "provisioned_by_user: <value>" with no comment/padding). The
+	// first-character exclusion of quotes/apostrophes keeps this from matching a quoted value.
+	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^'"\s][^\s]*([ \t]*)`)
+	result = provisionedByUserRegex.ReplaceAllStringFunc(result, func(match string) string {
+		if provisionedByUserRegex.FindStringSubmatch(match)[1] != "" {
+			return "provisioned_by_user: user "
+		}
+		return "provisioned_by_user: user"
+	})
 
 	// 17. Join diagnostic messages where the sanitized path ended up on the next line.
 	// This must run AFTER path sanitization because it matches the sanitized path pattern.
@@ -654,9 +680,9 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 		done <- ptyError(err) // Wrap the error handling
 	}()
 
-	err = cmd.Wait()
-	if err != nil {
-		logger.Info("Command execution error", "err", err)
+	waitErr := cmd.Wait()
+	if waitErr != nil {
+		logger.Info("Command execution error", "err", waitErr)
 	}
 
 	if readErr := <-done; readErr != nil {
@@ -666,7 +692,8 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 	output := buffer.String()
 	// t.Logf("Captured Output:\n%s", output)
 
-	return output, nil
+	// Return the wait error so exit codes can be captured.
+	return output, waitErr
 }
 
 // Linux kernel return EIO when attempting to read from a master pseudo
@@ -732,6 +759,14 @@ func TestMain(m *testing.M) {
 	// Disable CI auto-detection so deploy/apply hooks don't try to
 	// download planfiles from GitHub Artifacts during tests.
 	os.Unsetenv("GITHUB_ACTIONS")
+
+	// Ensure this test-only variable used by the "env-step-template-only"
+	// workflow fixture starts unset. That test asserts the variable is absent
+	// from a subprocess's environment when an env step sets export: false; a
+	// stray pre-existing value (e.g. left over from a developer's shell)
+	// would make the assertion fail even though export: false behaves
+	// correctly. See tests/fixtures/scenarios/workflows/stacks/workflows/test.yaml.
+	os.Unsetenv("ATMOS_ENV_STEP_TEMPLATE_ONLY_CLI_TEST")
 
 	// Configure logger verbosity based on test flags
 	switch {
@@ -948,7 +983,13 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if _, exists := tc.Env["GIT_CONFIG_COUNT"]; !exists {
 		if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
 			// Disable credential helper (prevents osxkeychain hangs/popups) and inject token.
-			basicAuth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + githubToken))
+			gitBasicAuthCredential := "x-access-token:" + githubToken
+			basicAuth := base64.StdEncoding.EncodeToString([]byte(gitBasicAuthCredential))
+			// pkg/io's masker auto-registers plain GITHUB_TOKEN and base64(GITHUB_TOKEN), but
+			// GIT_CONFIG_VALUE_1 below embeds base64("x-access-token:"+GITHUB_TOKEN) -- a
+			// different byte sequence the prefix changes the encoding of, so it needs its own
+			// registration or redactAndCapDiagOutput can't catch it in captured child output.
+			iolib.RegisterSecret(gitBasicAuthCredential)
 			tc.Env["GIT_CONFIG_COUNT"] = "2"
 			tc.Env["GIT_CONFIG_KEY_0"] = "credential.helper"
 			tc.Env["GIT_CONFIG_VALUE_0"] = ""
@@ -1108,7 +1149,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["COLORTERM"] = "" // Explicitly empty to prevent truecolor (force 256-color)
 	}
 	if _, exists := tc.Env["COLUMNS"]; !exists {
-		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table and markdown rendering
+		// Do not inherit a terminal width from the host. Let Atmos use each
+		// command's documented fallback unless a test explicitly exercises
+		// COLUMNS (for example, the toolchain table tests below).
+		tc.Env["COLUMNS"] = ""
 	}
 
 	// Standardize the terraform binary on OpenTofu for the whole suite so the
@@ -1318,12 +1362,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Validate outputs
 	if !verifyExitCode(t, tc.Expect.ExitCode, exitCode) {
 		t.Errorf("Description: %s", tc.Description)
-		if stdout.Len() > 0 {
-			t.Errorf("Captured stdout:\n%s", stdout.String())
-		}
-		if stderr.Len() > 0 {
-			t.Errorf("Captured stderr:\n%s", stderr.String())
-		}
+		dumpCapturedOutput(t, &stdout, &stderr)
 	}
 
 	// Validate output based on TTY mode
@@ -1340,6 +1379,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Validate file existence
 	if !verifyFileExists(t, tc.Expect.FileExists) {
 		t.Errorf("Description: %s", tc.Description)
+		dumpCapturedOutput(t, &stdout, &stderr)
 	}
 
 	// Validate file not existence
@@ -1385,6 +1425,12 @@ func TestCLICommands(t *testing.T) {
 		t.Fatalf("Failed to load test suites: %v", err)
 	}
 
+	shard, shardCount := testShard(t)
+	var workdirShard map[string]int
+	if shardCount > 1 {
+		workdirShard = assignWorkdirsToShards(testSuite.Tests, shardCount)
+	}
+
 	for _, tc := range testSuite.Tests {
 		if !tc.Enabled {
 			logger.Warn("Skipping disabled test", "test", tc.Name)
@@ -1397,11 +1443,98 @@ func TestCLICommands(t *testing.T) {
 			continue
 		}
 
+		// Skip cases not assigned to this shard. Filtering happens outside t.Run so
+		// unselected cases don't show up as noise in per-shard CI logs/results.
+		if shardCount > 1 && workdirShard[tc.Workdir] != shard {
+			continue
+		}
+
 		// Run tests
 		t.Run(tc.Name, func(t *testing.T) {
 			runCLICommandTest(t, tc)
 		})
 	}
+}
+
+// testShard reads ATMOS_TEST_SHARD (1-based) and ATMOS_TEST_SHARD_COUNT from the
+// environment so CI can split TestCLICommands' cases across parallel jobs. Both
+// unset (the local dev default) disables sharding: every case runs, unchanged
+// from historical behavior.
+func testShard(t *testing.T) (shard, shardCount int) {
+	t.Helper()
+
+	shardCountStr := os.Getenv("ATMOS_TEST_SHARD_COUNT")
+	if shardCountStr == "" {
+		return 0, 1
+	}
+
+	shardCount, err := strconv.Atoi(shardCountStr)
+	if err != nil || shardCount < 1 {
+		t.Fatalf("invalid ATMOS_TEST_SHARD_COUNT %q: must be a positive integer", shardCountStr)
+	}
+
+	shardStr := os.Getenv("ATMOS_TEST_SHARD")
+	shard, err = strconv.Atoi(shardStr)
+	if err != nil || shard < 1 || shard > shardCount {
+		t.Fatalf("invalid ATMOS_TEST_SHARD %q: must be an integer between 1 and ATMOS_TEST_SHARD_COUNT (%d)", shardStr, shardCount)
+	}
+
+	return shard, shardCount
+}
+
+// assignWorkdirsToShards deterministically assigns every distinct test-case
+// workdir to a 1-based shard index in [1, shardCount], and returns the
+// resulting workdir -> shard map.
+//
+// Sharding by workdir (rather than by individual test name) keeps every test
+// case for a given fixture directory in the same shard: several test-case
+// YAML files rely on cases within the same workdir running together, in their
+// original relative order, within one process - e.g.
+// tests/test-cases/auth-mock.yaml's "atmos auth login --identity mock-identity-2"
+// populates an in-memory (ATMOS_KEYRING_TYPE=memory) keyring that a later
+// "atmos auth list" case in the same file reads back. Splitting cases like
+// these across separate shard processes silently breaks that dependency -
+// sharding by name alone did exactly that and produced deterministic,
+// reproducible failures on whichever shard happened to land the dependent
+// case without its prerequisite.
+//
+// Grouping by workdir alone would badly imbalance shards (some fixtures have
+// far more cases than others), so this assigns workdirs to shards via a
+// longest-processing-time-first greedy bin-pack: workdirs are sorted by case
+// count descending (ties broken alphabetically for determinism), then each is
+// assigned to whichever shard currently holds the fewest cases. Every shard
+// process computes this independently from the same (deterministically
+// ordered) input, so they agree on the assignment without coordination.
+func assignWorkdirsToShards(tests []TestCase, shardCount int) map[string]int {
+	counts := make(map[string]int)
+	for i := range tests {
+		counts[tests[i].Workdir]++
+	}
+
+	workdirs := make([]string, 0, len(counts))
+	for wd := range counts {
+		workdirs = append(workdirs, wd)
+	}
+	sort.Slice(workdirs, func(i, j int) bool {
+		if counts[workdirs[i]] != counts[workdirs[j]] {
+			return counts[workdirs[i]] > counts[workdirs[j]]
+		}
+		return workdirs[i] < workdirs[j]
+	})
+
+	load := make([]int, shardCount+1) // 1-indexed; load[0] unused.
+	assignment := make(map[string]int, len(workdirs))
+	for _, wd := range workdirs {
+		best := 1
+		for s := 2; s <= shardCount; s++ {
+			if load[s] < load[best] {
+				best = s
+			}
+		}
+		assignment[wd] = best
+		load[best] += counts[wd]
+	}
+	return assignment
 }
 
 func verifyOS(t *testing.T, osPatterns []MatchPattern) bool {
@@ -1462,6 +1595,45 @@ func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPatte
 		}
 	}
 	return success
+}
+
+// maxDiagOutputLen caps diagnostic output written to the test log. Child processes run under
+// test inherit secrets such as GITHUB_TOKEN (see the Env setup above), so uncapped output could
+// also flood CI logs if a command misbehaves and prints unbounded data.
+const maxDiagOutputLen = 8192
+
+// diagTruncationSuffix marks diagnostic output that ran over maxDiagOutputLen. Its length is
+// reserved out of maxDiagOutputLen so the combined result never exceeds the configured cap.
+const diagTruncationSuffix = "...[truncated]"
+
+// redactAndCapDiagOutput masks known secrets (e.g. GITHUB_TOKEN, forwarded to every child
+// process under test) out of diagnostic output and truncates it to maxDiagOutputLen before it's
+// written to the test log, so a failing command that prints its environment can't leak a token
+// into CI logs.
+func redactAndCapDiagOutput(s string) string {
+	masked := iolib.MaskString(s)
+	if len(masked) <= maxDiagOutputLen {
+		return masked
+	}
+	limit := maxDiagOutputLen - len(diagTruncationSuffix)
+	for limit > 0 && !utf8.RuneStart(masked[limit]) {
+		limit--
+	}
+	return masked[:limit] + diagTruncationSuffix
+}
+
+// dumpCapturedOutput prints the command's captured stdout/stderr into the test log. A
+// file_exists failure with an exit code that matched expectations (e.g. a vendor pull that
+// silently drops files for one source while reporting overall success) would otherwise leave
+// no trace of what the command itself printed, forcing a manual re-fetch of the raw CI log to
+// diagnose -- this makes that output part of the test failure itself.
+func dumpCapturedOutput(t *testing.T, stdout, stderr *bytes.Buffer) {
+	if stdout.Len() > 0 {
+		t.Errorf("Captured stdout:\n%s", redactAndCapDiagOutput(stdout.String()))
+	}
+	if stderr.Len() > 0 {
+		t.Errorf("Captured stderr:\n%s", redactAndCapDiagOutput(stderr.String()))
+	}
 }
 
 func verifyFileExists(t *testing.T, files []string) bool {
@@ -1674,6 +1846,12 @@ func normalizeLineEndings(s string) string {
 func normalizeSnapshotOutput(input string, ignoreTrailingWhitespace bool) string {
 	normalized := normalizeLineEndings(input)
 	normalized = unwrapMarkdownProseLines(normalized)
+	// Cobra help output can differ by one final blank line between platforms.
+	// Canonicalize only output that already ends in a newline, leaving progress
+	// output terminated by a standalone carriage return untouched.
+	if strings.HasSuffix(normalized, "\n") {
+		normalized = strings.TrimRight(normalized, "\n") + "\n"
+	}
 	if ignoreTrailingWhitespace {
 		return stripTrailingWhitespace(normalized)
 	}
@@ -1723,13 +1901,41 @@ func shouldUnwrapMarkdownProseLine(line, next string) bool {
 	if isSnapshotStructuralLine(trimmed) || isSnapshotStructuralLine(nextTrimmed) {
 		return false
 	}
-	if looksLikeDataLine(trimmed) {
+	if looksLikeDataLine(trimmed) || strings.HasPrefix(nextTrimmed, "export ") {
+		return false
+	}
+	// A renderer can wrap prose at the terminal width, but it must not turn
+	// explicit boundaries between completed sentences, command examples, or
+	// URL lines into spaces while normalizing snapshots.
+	if strings.HasSuffix(trimmed, ".") || strings.HasSuffix(trimmed, ")") || strings.HasSuffix(trimmed, ":") ||
+		strings.HasPrefix(nextTrimmed, "\"") || strings.HasPrefix(nextTrimmed, "http://") || strings.HasPrefix(nextTrimmed, "https://") ||
+		strings.HasPrefix(nextTrimmed, "atmos ") {
 		return false
 	}
 	if len([]rune(trimmed)) < 50 && !strings.HasPrefix(trimmed, "**Error:**") && !strings.HasPrefix(trimmed, "💡") {
 		return false
 	}
 	return true
+}
+
+// snapshotLogLevelPrefixRe matches charmbracelet/log's fixed-width, uppercase
+// level prefixes (e.g. "WARN ", "ERRO ", "INFO ", "DEBU ", "TRCE ", "FATA ")
+// as emitted at the start of a rendered log line. These must never be merged
+// into adjacent markdown prose during snapshot normalization.
+var snapshotLogLevelPrefixRe = regexp.MustCompile(`^(WARN|ERRO|INFO|DEBU|TRCE|FATA)\s`)
+
+// snapshotToastIconPrefixes lists the canonical single-line toast icons from
+// pkg/ui/theme/icons.go. A line starting with one of these icons is always an
+// independent ui.Success/Info/Warning/Error/Experimental call, never a
+// word-wrapped continuation of the previous line's markdown paragraph, so it
+// must never be merged during snapshot normalization. Sourced directly from
+// the theme package so new icons don't silently reopen this bug.
+var snapshotToastIconPrefixes = []string{
+	theme.IconCheckmark,
+	theme.IconXMark,
+	theme.IconWarning,
+	theme.IconInfo,
+	theme.IconExperimental,
 }
 
 func isSnapshotStructuralLine(line string) bool {
@@ -1740,18 +1946,33 @@ func isSnapshotStructuralLine(line string) bool {
 		return true
 	case strings.HasPrefix(line, "* "):
 		return true
+	// "• " is the glamour-rendered bullet glyph that markdown source "- "/"* "
+	// becomes after rendering; treat it the same as the raw markdown prefixes above.
+	case strings.HasPrefix(line, "• "):
+		return true
 	case strings.HasPrefix(line, "```"):
 		return true
 	case strings.HasPrefix(line, "│"):
 		return true
 	case strings.HasPrefix(line, "╷") || strings.HasPrefix(line, "╵"):
 		return true
+	// charm-log level prefixes must never be merged into adjacent markdown prose.
+	case snapshotLogLevelPrefixRe.MatchString(line):
+		return true
 	default:
+		for _, icon := range snapshotToastIconPrefixes {
+			if strings.HasPrefix(line, icon) {
+				return true
+			}
+		}
 		return false
 	}
 }
 
 func looksLikeDataLine(line string) bool {
+	if strings.HasPrefix(line, "export ") {
+		return true
+	}
 	if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "}") || strings.HasPrefix(line, "[") || strings.HasPrefix(line, "]") {
 		return true
 	}
@@ -1762,6 +1983,129 @@ func looksLikeDataLine(line string) bool {
 		return true
 	}
 	return false
+}
+
+func TestUnwrapMarkdownProseLinesPreservesSemanticBoundaries(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "shell exports",
+			input: "export FIRST=value\nexport SECOND=value\n",
+			want:  "export FIRST=value\nexport SECOND=value\n",
+		},
+		{
+			name:  "documentation URLs",
+			input: "For complete documentation, see:\nhttps://example.com/docs\n",
+			want:  "For complete documentation, see:\nhttps://example.com/docs\n",
+		},
+		{
+			name:  "separate command examples",
+			input: "Run the first command with its required component and stack values\natmos helmfile apply component -s stack\n",
+			want:  "Run the first command with its required component and stack values\natmos helmfile apply component -s stack\n",
+		},
+		{
+			name:  "terminal wrapped prose",
+			input: "This deliberately long sentence is wrapped by the terminal renderer before its final words\nare written to the output stream.\n",
+			want:  "This deliberately long sentence is wrapped by the terminal renderer before its final words are written to the output stream.\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, unwrapMarkdownProseLines(tt.input))
+		})
+	}
+}
+
+// TestRedactAndCapDiagOutput covers redactAndCapDiagOutput's secret-masking and length-capping
+// behavior in isolation from the CLI test harness that normally calls it.
+func TestRedactAndCapDiagOutput(t *testing.T) {
+	tests := []struct {
+		name           string
+		secret         string // if set, registered as GITHUB_TOKEN (via a fresh masker) before the call.
+		registerSecret string // if set, registered directly via iolib.RegisterSecret before the call.
+		input          string
+		check          func(t *testing.T, got string)
+	}{
+		{
+			name:  "empty input",
+			input: "",
+			check: func(t *testing.T, got string) {
+				assert.Empty(t, got)
+			},
+		},
+		{
+			name:  "below limit is unchanged",
+			input: "plain output\nno secrets here\n",
+			check: func(t *testing.T, got string) {
+				assert.Equal(t, "plain output\nno secrets here\n", got)
+			},
+		},
+		{
+			name:   "registered secret is redacted",
+			secret: "ghp_test-secret-token-value",
+			input:  "before ghp_test-secret-token-value after",
+			check: func(t *testing.T, got string) {
+				assert.NotContains(t, got, "ghp_test-secret-token-value")
+				assert.Contains(t, got, iolib.MaskReplacement)
+			},
+		},
+		{
+			// Regression: GIT_CONFIG_VALUE_1 embeds base64("x-access-token:"+GITHUB_TOKEN), a
+			// different byte sequence than base64(GITHUB_TOKEN) alone -- the plain GITHUB_TOKEN
+			// registration (previous case) does not catch it without registering the full
+			// composite credential too.
+			name:           "registered git basic-auth credential is redacted",
+			registerSecret: "x-access-token:ghp_test-secret-token-value",
+			input: "before " + base64.StdEncoding.EncodeToString(
+				[]byte("x-access-token:ghp_test-secret-token-value"),
+			) + " after",
+			check: func(t *testing.T, got string) {
+				assert.NotContains(t, got, "ghp_test-secret-token-value")
+				assert.Contains(t, got, iolib.MaskReplacement)
+			},
+		},
+		{
+			name:  "above limit is truncated to exactly maxDiagOutputLen",
+			input: strings.Repeat("a", maxDiagOutputLen*2),
+			check: func(t *testing.T, got string) {
+				assert.Len(t, got, maxDiagOutputLen)
+				assert.True(t, strings.HasSuffix(got, diagTruncationSuffix))
+			},
+		},
+		{
+			// A 3-byte rune repeated means the naive cut point (maxDiagOutputLen -
+			// len(diagTruncationSuffix)) does not land on a rune boundary, forcing the
+			// backup-to-a-valid-boundary logic to actually engage.
+			name:  "truncation never splits a multibyte rune",
+			input: strings.Repeat("日", maxDiagOutputLen),
+			check: func(t *testing.T, got string) {
+				assert.LessOrEqual(t, len(got), maxDiagOutputLen)
+				assert.True(t, utf8.ValidString(got), "truncated output must remain valid UTF-8")
+				assert.True(t, strings.HasSuffix(got, diagTruncationSuffix))
+				kept := strings.TrimSuffix(got, diagTruncationSuffix)
+				assert.Zero(t, len(kept)%3, "kept portion should end on a full rune boundary")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.secret != "" {
+				t.Setenv("GITHUB_TOKEN", tt.secret)
+				iolib.Reset()
+				t.Cleanup(iolib.Reset)
+			}
+			if tt.registerSecret != "" {
+				iolib.RegisterSecret(tt.registerSecret)
+				t.Cleanup(iolib.Reset)
+			}
+			tt.check(t, redactAndCapDiagOutput(tt.input))
+		})
+	}
 }
 
 // Generate a unified diff using gotextdiff.

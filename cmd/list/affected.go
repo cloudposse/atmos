@@ -40,6 +40,7 @@ type AffectedOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	Skip             []string
+	ErrorMode        string
 
 	// Auth flags.
 	IdentityName string
@@ -90,6 +91,7 @@ var affectedCmd = &cobra.Command{
 			ProcessTemplates:  v.GetBool("process-templates"),
 			ProcessFunctions:  v.GetBool("process-functions"),
 			Skip:              v.GetStringSlice("skip"),
+			ErrorMode:         v.GetString("error-mode"),
 			IdentityName:      identityName,
 		}
 
@@ -119,6 +121,7 @@ func init() {
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
 		WithAffectedSkipFlag,
+		WithErrorModeFlag,
 	)
 
 	// Register flags.
@@ -161,6 +164,7 @@ func executeListAffectedCmd(cmd *cobra.Command, args []string, opts *AffectedOpt
 		ProcessFunctions:  opts.ProcessFunctions,
 		Skip:              opts.Skip,
 		ExcludeLocked:     opts.ExcludeLocked,
+		ErrorMode:         opts.ErrorMode,
 		IdentityName:      opts.IdentityName,
 	})
 }

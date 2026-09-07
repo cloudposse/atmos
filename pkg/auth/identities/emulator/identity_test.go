@@ -27,19 +27,17 @@ type fakeResolver struct {
 	kubeconfig []byte
 	err        error
 
-	gotStack string
-	gotName  string
+	gotName string
 }
 
-func (f *fakeResolver) ResolveEmulator(_ context.Context, stack, name string) (map[string]string, []byte, error) {
-	f.gotStack = stack
+func (f *fakeResolver) ResolveEmulator(_ context.Context, name string) (map[string]string, []byte, error) {
 	f.gotName = name
 	return f.env, f.kubeconfig, f.err
 }
 
 func newAWSIdentity(t *testing.T) *Identity {
 	t.Helper()
-	id, err := New("local-aws", &schema.Identity{Kind: types.IdentityKindAWSEmulator, Emulator: "aws"})
+	id, err := New("local-aws", &schema.Identity{Kind: types.IdentityKindAWSEmulator, Emulator: "local/aws"})
 	require.NoError(t, err)
 	return id
 }
@@ -102,9 +100,8 @@ func TestAuthenticate_IsNoOp(t *testing.T) {
 	assert.Nil(t, creds)
 }
 
-func TestPrepareEnvironment_CloudMergesEnvAndScopesStack(t *testing.T) {
+func TestPrepareEnvironment_CloudMergesEnvAndUsesEmulatorReference(t *testing.T) {
 	id := newAWSIdentity(t)
-	id.SetStack("dev")
 	resolver := &fakeResolver{env: map[string]string{
 		"AWS_ENDPOINT_URL":  "http://localhost:34566",
 		"AWS_ACCESS_KEY_ID": "test",
@@ -117,8 +114,7 @@ func TestPrepareEnvironment_CloudMergesEnvAndScopesStack(t *testing.T) {
 	assert.Equal(t, "1", out["EXISTING"], "existing env preserved")
 	assert.Equal(t, "http://localhost:34566", out["AWS_ENDPOINT_URL"])
 	assert.Equal(t, "test", out["AWS_ACCESS_KEY_ID"])
-	assert.Equal(t, "dev", resolver.gotStack, "bare emulator name scoped to the injected stack")
-	assert.Equal(t, "aws", resolver.gotName)
+	assert.Equal(t, "local/aws", resolver.gotName)
 }
 
 func TestPrepareEnvironment_DoesNotMutateInput(t *testing.T) {
@@ -156,8 +152,6 @@ func TestPrepareEnvironment_KubernetesWritesKubeconfigAndAppends(t *testing.T) {
 	id, err := New("local-k8s", &schema.Identity{Kind: types.IdentityKindKubernetesEmulator, Emulator: "k3s"})
 	require.NoError(t, err)
 	id.SetRealm("repo-realm")
-	id.SetStack("dev")
-
 	const kubeconfigBody = "apiVersion: v1\nclusters: []\n"
 	id.SetEmulatorResolver(&fakeResolver{kubeconfig: []byte(kubeconfigBody)})
 

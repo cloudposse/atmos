@@ -48,6 +48,23 @@ func ResolveVersionConstraints(availableVersions []string, constraints *schema.V
 	return SelectLatestVersion(filtered)
 }
 
+// ValidateVersionRangeConstraints rejects a source that declares both a semver-range `version:`
+// and a `constraints.version` ceiling -- see ErrVersionRangeConflictsWithConstraints's doc
+// comment for why the two are mutually exclusive rather than layered. Constraints.ExcludedVersions
+// and Constraints.NoPrereleases are unaffected: both remain meaningful alongside a range version:
+// and are not rejected here.
+func ValidateVersionRangeConstraints(rawVersion string, constraints *schema.VendorConstraints) error {
+	defer perf.Track(nil, "version.ValidateVersionRangeConstraints")()
+
+	if constraints == nil || constraints.Version == "" {
+		return nil
+	}
+	if !IsSemverConstraint(rawVersion) {
+		return nil
+	}
+	return fmt.Errorf("%w: version: %q, constraints.version: %q", errUtils.ErrVersionRangeConflictsWithConstraints, rawVersion, constraints.Version)
+}
+
 // FilterBySemverConstraint keeps only versions matching the semver constraint.
 func FilterBySemverConstraint(versions []string, constraint string) ([]string, error) {
 	defer perf.Track(nil, "version.FilterBySemverConstraint")()

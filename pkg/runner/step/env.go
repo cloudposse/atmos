@@ -39,7 +39,12 @@ func (h *EnvHandler) Execute(ctx context.Context, step *schema.WorkflowStep, var
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve env var %s: %w", key, err)
 		}
-		vars.SetEnv(key, resolved)
+		// Env steps always publish values for later template resolution. Export
+		// is a separate concern: it controls only child-process environments.
+		vars.SetTemplateEnv(key, resolved)
+		if step.Export == nil || *step.Export {
+			vars.SetProcessEnv(key, resolved)
+		}
 	}
 
 	return NewStepResult(""), nil

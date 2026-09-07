@@ -38,19 +38,15 @@ func (p *ContainerComponentProvider) GetGroup() string {
 	return "Containers"
 }
 
-// GetBasePath returns the base directory path for container components.
+// GetBasePath returns the configured base path for container components, or
+// the default when unset.
 func (p *ContainerComponentProvider) GetBasePath(atmosConfig *schema.AtmosConfiguration) string {
 	defer perf.Track(atmosConfig, "container.GetBasePath")()
 
-	if atmosConfig == nil {
-		return DefaultConfig().BasePath
+	if atmosConfig == nil || atmosConfig.Components.Container.BasePath == "" {
+		return defaultBasePath
 	}
-	if raw, ok := atmosConfig.Components.GetComponentConfig(cfg.ContainerComponentType); ok {
-		if config, err := parseConfig(raw); err == nil && config.BasePath != "" {
-			return config.BasePath
-		}
-	}
-	return DefaultConfig().BasePath
+	return atmosConfig.Components.Container.BasePath
 }
 
 // ListComponents discovers all container components in a stack.

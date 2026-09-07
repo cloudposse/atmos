@@ -90,12 +90,12 @@ func (g *GoGetterAdapter) Resolve(
 
 		// Process nested imports from the remote file.
 		imports := v.GetStringSlice("import")
-		importBasePath := v.GetString("base_path")
-		if importBasePath == "" {
-			importBasePath = basePath
-		}
 
 		if len(imports) > 0 {
+			importBasePath, err := config.ResolveConfigImportBasePath(v.GetString("base_path"), tempFile, basePath)
+			if err != nil {
+				return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessNestedImports, err)
+			}
 			nestedPaths, err := config.ProcessImportsFromAdapter(atmosConfig, importBasePath, imports, tempDir, currentDepth+1, maxDepth)
 			if err != nil {
 				log.Debug("failed to process nested imports", "import", importPath, "err", err)

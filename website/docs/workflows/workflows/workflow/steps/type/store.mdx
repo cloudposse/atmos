@@ -1,0 +1,138 @@
+---
+title: store
+sidebar_label: store
+slug: /workflows/steps/type/store
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `store` step type writes a value to a configured [store](/cli/configuration/stores) backend. You can use this step in a workflow, a custom command, or a hook. For example, a workflow can build and push a Docker image, then write the resulting tag to a store. Later, a different step, a different workflow, or another component can read the tag back with the [`!store`](/functions/yaml/store) or [`!store.get`](/functions/yaml/store.get) YAML function.
+</Intro>
+
+```yaml
+workflows:
+  build-and-deploy:
+    steps:
+      - name: build
+        type: container
+        action: build
+        with:
+          context: .
+          dockerfile: Dockerfile
+          tags:
+            - myapp:{{ .env.GIT_SHA }}
+      - name: push
+        type: container
+        action: push
+        with:
+          image: myapp:{{ .env.GIT_SHA }}
+          tags:
+            - registry.example.com/myapp:{{ .env.GIT_SHA }}
+      - name: record-tag
+        type: store
+        action: write
+        with:
+          store: app-metadata
+          key: image_tag
+          value: "{{ .steps.push.metadata.digest }}"
+          stack: prod
+          component: ecs-service
+```
+
+A later, unrelated component can read the value back in its own stack configuration. This step needs no CLI command and no workflow step:
+
+```yaml
+components:
+  terraform:
+    ecs-service:
+      vars:
+        image_tag: !store app-metadata prod ecs-service image_tag
+```
+
+The `store` step has no dedicated hook kind of its own. Use the generic [`kind: step` hook bridge](/stacks/hooks) to run it after a component applies. For example:
+
+You can also bind a `type: store` step to `after.terraform.output` instead of (or alongside)
+`after.terraform.apply`. This backfills a store from infrastructure that's already deployed —
+running `atmos terraform output` populates the store without requiring an `apply`.
+
+```yaml
+hooks:
+  record-tag:
+    kind: step
+    type: store
+    events: [after.terraform.apply]
+    with:
+      store: app-metadata
+      key: last_applied_at
+      value: "{{ .atmos_component }} applied in {{ .stack }}"
+```
+
+:::note
+Atmos also has an older `kind: store` hook (see [Manage lifecycle events with hooks](/stacks/hooks)). That hook predates this step type and works only with Terraform output. The two features are unrelated. The `kind:` field selects the hook engine. The `type:` field selects a workflow step through the generic `kind: step` bridge. Atmos keeps both features available.
+:::
+
+## Fields
+
+All fields are read from `with:`.
+
+<dl>
+  <dt>`store`</dt>
+  <dd>Required. The name of the configured store backend to write to. This name is a key under `stores:` in `atmos.yaml`. This field supports Go templates.</dd>
+
+  <dt>`key`</dt>
+  <dd>Required. The key to write. This field supports Go templates.</dd>
+
+  <dt>`value`</dt>
+  <dd>Required. The value to write. This field supports Go templates. Use a template to pass a prior step's result into the store, for example `{{ .steps.push.metadata.digest }}`.</dd>
+
+  <dt>`stack`</dt>
+  <dd>Optional. The stack to scope the key to. If you omit this field, Atmos uses the workflow's `--stack` flag or the `ATMOS_STACK` variable. If neither is set, Atmos stores a global key. This field supports Go templates.</dd>
+
+  <dt>`component`</dt>
+  <dd>Optional. The component to scope the key to. If you omit this field, Atmos uses the workflow's `--component` flag or the `ATMOS_COMPONENT` variable. If neither is set, Atmos stores a global key. This field supports Go templates.</dd>
+
+  <dt>`action`</dt>
+  <dd>The action to run. The only supported action is `write`, which is also the default. You can omit this field.</dd>
+</dl>
+
+## Write to a Secret Store
+
+You can write to a store marked `secret: true`. For example, a step can generate a password and
+write it straight to a secret backend. This behavior differs from the read-side
+[`!store`](/functions/yaml/store) and [`!store.get`](/functions/yaml/store.get) functions. Those
+functions refuse to read a `secret: true` store; use [`!secret`](/functions/yaml/secret) instead.
+Atmos does not restrict a `store` step's write the same way. But this write is not risk-free.
+Atmos returns the written value as [`{{ .steps.<name>.value }}`](#result). Every later step in the
+workflow can access this value. A careless later step could echo it, log it, or pass it to a shell
+command or another output step. Treat this result as sensitive when the value is a secret. Do not
+echo, log, or forward it to an output step. Writing this way also skips
+[`atmos secret`](/cli/commands/secret/usage)'s declaration and scope tracking. When a value must be
+tracked as a secret, declare it under `secrets.vars` and use `atmos secret set` instead.
+
+## Result
+
+<dl>
+  <dt>`{{ .steps.<name>.value }}`</dt>
+  <dd>The value that was written.</dd>
+
+  <dt>`{{ .steps.<name>.metadata.store }}`</dt>
+  <dd>The store name that was written to.</dd>
+
+  <dt>`{{ .steps.<name>.metadata.key }}`</dt>
+  <dd>The key that was written.</dd>
+
+  <dt>`{{ .steps.<name>.metadata.stack }}`</dt>
+  <dd>The resolved stack (empty for a store-global key).</dd>
+
+  <dt>`{{ .steps.<name>.metadata.component }}`</dt>
+  <dd>The resolved component (empty for a store-global key).</dd>
+</dl>
+
+## See also
+
+- [Stores configuration](/cli/configuration/stores)
+- [`atmos store` CLI](/cli/commands/store/usage) — read, write, delete, and list store values from the command line
+- [`!store` YAML function](/functions/yaml/store)
+- [`!store.get` YAML function](/functions/yaml/store.get)
+- [Manage lifecycle events with hooks](/stacks/hooks)

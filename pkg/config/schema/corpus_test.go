@@ -1,0 +1,104 @@
+package configschema
+
+import (
+	"bytes"
+	"io/fs"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	stjsonschema "github.com/santhosh-tekuri/jsonschema/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/validator"
+)
+
+// TestGeneratedSchemaCompiles asserts the generated document is a valid JSON
+// Schema under a strict draft 2020-12 compiler.
+func TestGeneratedSchemaCompiles(t *testing.T) {
+	compiler := stjsonschema.NewCompiler()
+	require.NoError(t, compiler.AddResource("atmos-config.json", bytes.NewReader(generatedSchema(t))))
+
+	_, err := compiler.Compile("atmos-config.json")
+	require.NoError(t, err, "the generated atmos.yaml schema must compile as draft 2020-12")
+}
+
+// TestGeneratedSchemaAcceptsRealConfigs is the over-strictness backstop: every
+// atmos.yaml in examples/ and demo/ — plus profile and atmos.d fragments, and
+// this repository's own root atmos.yaml and .atmos.d — must validate against
+// the generated schema through the same engine `atmos validate schema` uses
+// (which stringifies YAML function tags like `!include`). The tests/fixtures
+// tree is deliberately excluded, as it contains intentionally invalid configs,
+// and so is examples/scaffolds: those atmos.yaml files are `atmos scaffold`
+// template sources using `[[ ... ]]` placeholder syntax (e.g. `command: [[
+// .Config.terraform_command ]]`), not directly valid runtime configs — the
+// placeholder is substituted before the result is ever schema-validated.
+func TestGeneratedSchemaAcceptsRealConfigs(t *testing.T) {
+	files := corpusFiles(t)
+	require.Positive(t, len(files), "no atmos.yaml corpus files found under examples/; the corpus scan is misconfigured")
+
+	schemaJSON := string(generatedSchema(t))
+	yamlValidator := validator.NewYAMLSchemaValidator(&schema.AtmosConfiguration{})
+
+	for _, file := range files {
+		validationErrors, err := yamlValidator.ValidateYAMLSchema(schemaJSON, file)
+		require.NoError(t, err, "validating %s", file)
+		for _, validationError := range validationErrors {
+			assert.Failf(t, "real config rejected by the generated schema",
+				"%s: field %q: %s", file, validationError.Field(), validationError.Description())
+		}
+	}
+}
+
+// corpusFiles returns every atmos.yaml/atmos.yml under examples/ and demo/,
+// plus profile and atmos.d fragments (which are partial atmos.yaml documents
+// and must validate standalone), plus the repository's own root atmos.yaml and
+// .atmos.d fragments. Paths are absolute so the scan is CWD-independent.
+func corpusFiles(t *testing.T) []string {
+	t.Helper()
+
+	repoRoot, err := RepoRoot()
+	require.NoError(t, err)
+
+	files := []string{filepath.Join(repoRoot, "atmos.yaml")}
+	for _, dir := range []string{"examples", "demo", ".atmos.d"} {
+		err = filepath.WalkDir(filepath.Join(repoRoot, dir), func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() {
+				if dir == "examples" && entry.Name() == "scaffolds" {
+					return fs.SkipDir
+				}
+				return nil
+			}
+			if dir == ".atmos.d" {
+				if strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml") {
+					files = append(files, path)
+				}
+				return nil
+			}
+			if isCorpusFile(path, entry.Name()) {
+				files = append(files, path)
+			}
+			return nil
+		})
+		require.NoError(t, err)
+	}
+	return files
+}
+
+// isCorpusFile reports whether a file is an atmos.yaml document or a config
+// fragment (profile or atmos.d file) that must validate against the schema.
+func isCorpusFile(path, name string) bool {
+	if name == "atmos.yaml" || name == "atmos.yml" {
+		return true
+	}
+	if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+		return false
+	}
+	slashed := filepath.ToSlash(path)
+	return strings.Contains(slashed, "/profiles/") || strings.Contains(slashed, "/atmos.d/") || strings.Contains(slashed, "/.atmos.d/")
+}

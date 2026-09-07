@@ -150,10 +150,18 @@ func TestGCPDriver_Profile(t *testing.T) {
 	assert.Equal(t, "my-project", profile.Env["CLOUDSDK_CORE_PROJECT"])
 	assert.Equal(t, "my-project", profile.Env["GOOGLE_CLOUD_PROJECT"])
 
-	// GCP target has no kubeconfig, resolver URL, or provider fragment.
+	require.NotNil(t, profile.Provider)
+	assert.Equal(t, "my-project", profile.Provider["project"])
+	assert.Equal(t, "test", profile.Provider["access_token"])
+	assert.Equal(t, false, profile.Provider["user_project_override"])
+	assert.Equal(t, "http://127.0.0.1:14588/storage/v1/", profile.Provider["storage_custom_endpoint"])
+	assert.Equal(t, "http://127.0.0.1:14588/v1/", profile.Provider["secret_manager_custom_endpoint"])
+	assert.Equal(t, "http://127.0.0.1:14588/", profile.Provider["iam_custom_endpoint"])
+	assert.Equal(t, "http://127.0.0.1:14588/", profile.Provider["iam_credentials_custom_endpoint"])
+
+	// GCP target has no kubeconfig or resolver URL.
 	assert.Nil(t, profile.Kubeconfig)
 	assert.Empty(t, profile.ResolverURL)
-	assert.Nil(t, profile.Provider)
 }
 
 // TestAzureDriver_Profile asserts the floci/az driver emits an Azurite connection
@@ -181,9 +189,17 @@ func TestAzureDriver_Profile(t *testing.T) {
 		profile.Env["AZURE_STORAGE_CONNECTION_STRING"],
 	)
 
+	require.NotNil(t, profile.Provider)
+	assert.Equal(t, []map[string]any{{}}, profile.Provider["features"])
+	assert.Equal(t, true, profile.Provider["skip_provider_registration"])
+	assert.Equal(t, "127.0.0.1:14577", profile.Provider["metadata_host"])
+	assert.Equal(t, "00000000-0000-0000-0000-000000000000", profile.Provider["subscription_id"])
+	assert.Equal(t, "00000000-0000-0000-0000-000000000000", profile.Provider["tenant_id"])
+	assert.Equal(t, "00000000-0000-0000-0000-000000000001", profile.Provider["client_id"])
+	assert.Equal(t, "test", profile.Provider["client_secret"])
+
 	assert.Nil(t, profile.Kubeconfig)
 	assert.Empty(t, profile.ResolverURL)
-	assert.Nil(t, profile.Provider)
 }
 
 // TestVaultDrivers_Profile asserts both vault-target drivers emit VAULT_ADDR (from the

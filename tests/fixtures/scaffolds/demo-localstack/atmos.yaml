@@ -1,0 +1,43 @@
+# Atmos CLI Configuration for LocalStack Demo
+
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: true
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: true
+    plan:
+      skip_planfile: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  level: Info
+  file: ""
+
+settings:
+  terminal:
+    max_width: 120
+    pager: true
+    unicode: true
+
+# LocalStack specific settings
+templates:
+  settings:
+    enabled: true
+    evaluations: 1
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+      timeout: 10
+      datasources: {}

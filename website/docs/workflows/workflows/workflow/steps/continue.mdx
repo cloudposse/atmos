@@ -1,0 +1,90 @@
+---
+title: continue
+sidebar_label: continue
+sidebar_position: 13
+slug: /workflows/steps/continue
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The step-level `continue` field forgives a step's own failure: later steps still run, and the workflow's overall exit status is unaffected — the same semantics as GitHub Actions' `continue-on-error`.
+</Intro>
+
+```yaml
+steps:
+  - name: lint
+    type: shell
+    command: golangci-lint run ./...
+    continue: always
+  - name: apply
+    type: atmos
+    command: terraform apply vpc -auto-approve
+```
+
+If `lint` fails, `apply` still runs and the workflow can still finish successfully — `lint`'s failure is logged, but it doesn't stop the workflow or fail it.
+
+`continue` reuses the exact same condition syntax as [`when`](/workflows/steps#conditional-execution) — bare predicate keywords first, any other scalar string evaluated as CEL. It is evaluated **after** the step's own execution finishes, against that step's own outcome, unlike `when`, which is evaluated **before** the step runs, against the workflow's running status so far.
+
+<dl>
+  <dt>Omitted</dt>
+  <dd>Default. A step failure stops the workflow, exactly like today's behavior with no `continue` at all.</dd>
+
+  <dt>`continue: always`</dt>
+  <dd>Forgive this step's failure unconditionally. Subsequent steps run, and the workflow's overall exit code is not affected by this step's failure.</dd>
+
+  <dt>`continue: failure`</dt>
+  <dd>Equivalent to `always` for this field (a step only reaches `continue` evaluation after it has already failed), included for symmetry with `when`'s predicate vocabulary.</dd>
+
+  <dt>CEL expression</dt>
+  <dd>Any CEL expression that evaluates to a boolean, for finer control — for example, `continue: "!cel env.CI == 'true'"` to tolerate a failure only in CI.</dd>
+</dl>
+
+## `continue` vs. `when: always`
+
+These solve different problems and are often used together:
+
+- [`when: always`](/workflows/steps#cleanup-steps) controls whether a **later** cleanup step runs after an **earlier** step already failed.
+- `continue` controls whether **this** step's own failure is forgiven at all, so it doesn't fail the workflow or block later steps in the first place.
+
+```yaml
+steps:
+  - name: start-emulator
+    type: shell
+    command: atmos emulator up aws -s dev --ephemeral
+
+  - name: smoke-test
+    type: shell
+    command: ./scripts/smoke-test.sh
+    continue: always   # a flaky smoke test shouldn't fail the whole workflow
+
+  - name: stop-emulator
+    type: shell
+    command: atmos emulator down aws -s dev
+    when: always       # tear down even if an earlier step failed
+```
+
+## A forgiven failure does not satisfy `when: failure`
+
+Because a `continue`-forgiven step leaves the workflow's running status as `success`, a later step's `when: failure` will **not** fire because of it — the failure was forgiven, not just delayed:
+
+```yaml
+steps:
+  - name: lint
+    type: shell
+    command: golangci-lint run ./...
+    continue: always
+
+  - name: notify-on-failure
+    type: shell
+    command: ./scripts/notify-failure.sh
+    when: failure   # does NOT run because of lint's failure -- it was forgiven
+```
+
+:::note Custom commands
+The same `continue` field works identically on [custom command](/cli/configuration/commands) steps.
+:::
+
+:::note Not available in standalone task lists
+`continue` is not evaluated for task lists run outside a workflow or custom command (for example, `atmos docs generate`'s internal task runner), which track a fixed `success` status rather than a real per-step lifecycle.
+:::

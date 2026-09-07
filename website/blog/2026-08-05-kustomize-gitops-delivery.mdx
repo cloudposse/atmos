@@ -1,0 +1,89 @@
+---
+slug: kustomize-gitops-delivery
+title: "Injecting Terraform Values into Kustomize Without Hand-Editing Overlays"
+authors: [osterman]
+tags: [bugfix, enhancement]
+---
+
+Kustomize expects the files it consumes to have exact, reserved names. A remote base or
+component can only be included if the location it points to contains a file with one of a
+handful of recognized names (`kustomization.yaml` is the common one) — that's not
+configurable on Kustomize's side. So when a value only Terraform knows — a security group
+ID, a Route53 zone ID, an ARN — needs to land inside a Kustomize-managed GitOps repo, teams
+are usually stuck hand-editing the overlay after every apply, or routing the value through a
+separate tool just to produce one correctly-named file.
+
+<!--truncate-->
+
+## The Problem
+
+Delivering rendered Kubernetes manifests to a Git deployment repository (the source Argo CD
+or Flux reconciles) always wrote them as a directory — one generated file per manifest, no
+way to land a single file under an exact, caller-chosen name. That's a fine default for a
+directory of standalone resources, but it can't produce `kustomization.yaml`, so it couldn't
+support this pattern at all. Separately, Kustomize's own `Kustomization` and `Component`
+config objects don't have a `metadata.name` in the real Kustomize schema — they're local
+input to the `kustomize` build tool, not Kubernetes API resources — but Atmos's manifest
+validator required one anyway, rejecting perfectly valid Kustomize files.
+
+## The Fix
+
+A git provision target's `path` can now be an exact single-file destination, not just a
+directory. Set `split: false` to merge every rendered manifest into one file written at that
+path; leave it unset and Atmos infers the right mode from whether the path looks like a
+manifest filename (`.yaml`, `.yml`, or `.json`). Every existing configuration keeps its
+current directory behavior unchanged.
+
+Atmos also now recognizes Kustomize's own `Kustomization` and `Component` kinds and no
+longer requires a `metadata.name` on them — matching Kustomize's own validation, not an
+opinion Atmos invented. For anything else, a new `validate: false` component setting opts
+out of Atmos's structural checks entirely.
+
+## How to Use It
+
+```yaml
+components:
+  kubernetes:
+    cert-manager-patch:
+      provision:
+        targets:
+          deployment-repo:
+            kind: git
+            repository: deployments
+            path: "kustomize/overlays/{{ .vars.environment }}/kustomization.yaml"
+            commit:
+              message: "Render manifests for {{ .vars.environment }}"
+      manifests:
+        - apiVersion: kustomize.config.k8s.io/v1alpha1
+          kind: Component
+          patches:
+            - target:
+                kind: ClusterIssuer
+                name: letsencrypt-dns
+              patch: |
+                - op: add
+                  path: /spec/acme/solvers
+                  value:
+                    - dns01:
+                        route53:
+                          region: "{{ .vars.aws_region }}"
+                          hostedZoneID: "{{ atmos.Resolve \"!terraform.state route53 public_zone_id\" }}"
+```
+
+```shell
+atmos kubernetes deploy cert-manager-patch -s plat-ue2-dev --target=deployment-repo
+```
+
+No `split` is set here — the path ends in `kustomization.yaml`, so Atmos writes it as a
+single file automatically. No `metadata.name` is needed on the `Component` object either.
+The real Kustomize overlay then includes the generated file as a remote component, so the
+Terraform-derived value flows through on every deploy without anyone touching the overlay by
+hand. See [Generating a Kustomize component for GitOps](/stacks/components/kubernetes#generating-a-kustomize-component-for-gitops)
+for the full walkthrough.
+
+## Get Involved
+
+Try delivering a Kustomize component or patch through a git provision target in your own
+GitOps repo. Tell us what's missing — pull-request publishing for the git target, support
+for other Kustomize-only object kinds, or something else — by opening an issue at
+[github.com/cloudposse/atmos](https://github.com/cloudposse/atmos).

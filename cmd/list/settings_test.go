@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestListSettingsFlags tests that the list settings command has the correct flags.
@@ -324,4 +325,27 @@ func TestSettingsCmd_ArgsValidation(t *testing.T) {
 
 	err = settingsCmd.Args(settingsCmd, []string{"component", "extra"})
 	assert.Error(t, err, "Should reject more than one argument")
+}
+
+// TestSettingsCmd_RunE_CoverageIntegration exercises settingsCmd.RunE
+// end-to-end against the `complete` fixture (helpers defined in
+// cmd_executor_integration_test.go), covering the full Cobra glue path —
+// checkAtmosConfig → BindFlagsToViper → listSettingsWithOptions →
+// data.Writeln(output) — including the final write that unit tests calling
+// listSettingsWithOptions directly never reach.
+func TestSettingsCmd_RunE_CoverageIntegration(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("settings", settingsParser.RegisterFlags)
+	// Other tests in this package call the package-level viper.Set("identity", ...)
+	// (e.g. instances_test.go's TestInstancesIdentityFlagLogic) without resetting
+	// it, which otherwise leaks into this test via the shared viper.GetViper()
+	// singleton. Explicitly disabling identity resolution on this fresh cmd
+	// (Changed=true takes precedence over any leaked viper value) makes this
+	// test's outcome independent of package test ordering.
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+
+	require.NoError(t, settingsCmd.RunE(cmd, []string{}),
+		"complete fixture should list settings cleanly through the full RunE path")
 }

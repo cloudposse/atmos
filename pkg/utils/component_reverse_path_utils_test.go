@@ -715,7 +715,7 @@ func TestBuildComponentBaseError(t *testing.T) {
 	}
 }
 
-// TestResolveAndCleanBasePath tests the resolveAndCleanBasePath function.
+// TestResolveAndCleanBasePath tests the ResolveAndCleanBasePath function.
 func TestResolveAndCleanBasePath(t *testing.T) {
 	tmpDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "components"), 0o755))
@@ -739,7 +739,7 @@ func TestResolveAndCleanBasePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := resolveAndCleanBasePath(tt.basePath)
+			result, err := ResolveAndCleanBasePath(tt.basePath)
 
 			if tt.wantErr {
 				require.Error(t, err)

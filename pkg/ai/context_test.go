@@ -11,7 +11,26 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
+
+// TestPromptForConsent_NoTTY verifies that PromptForConsent fails loudly with
+// ErrInteractiveNotAvailable instead of hanging or silently defaulting to "no"
+// when stdin isn't a TTY. Under `go test` there is no TTY, so the huh confirm
+// form is never actually driven here; see pkg/runner/step's
+// TestInteractiveHandlers_ExecuteWithoutTTY for the established pattern this
+// mirrors.
+func TestPromptForConsent_NoTTY(t *testing.T) {
+	if terminal.New().IsTTY(terminal.Stdin) {
+		t.Skip("stdin is a TTY; PromptForConsent would block on an interactive prompt")
+	}
+
+	result, err := PromptForConsent()
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInteractiveNotAvailable)
+	assert.False(t, result)
+}
 
 func TestFindStackFiles(t *testing.T) {
 	tests := []struct {

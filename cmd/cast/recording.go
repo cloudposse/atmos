@@ -3,7 +3,6 @@ package cast
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -240,35 +239,21 @@ func recordedCommandArgs(args []string) []string {
 	return append([]string(nil), args...)
 }
 
-// StartHelpRecording starts a cast recording for help output when an explicit
-// --cast flag requests one, and returns a writer that records what is written
-// to it as cast output events. Cobra renders help before the persistent
-// pre-run hooks fire, so the custom help function starts the recording itself
-// and tees the rendered help through the returned writer. It returns nil when
-// no recording is active or requested.
-func StartHelpRecording(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) io.Writer {
+// StartHelpRecording starts a cast recording for help output when explicitly
+// requested. Cobra renders help before the persistent pre-run hooks fire, so
+// the custom help function must start the recorder itself. Help output still
+// flows through the normal masked I/O writer, which is the sole path that
+// records it. It returns true when a recording is active.
+func StartHelpRecording(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) bool {
 	defer perf.Track(atmosConfig, "cmd.cast.StartHelpRecording")()
 
 	if activeCast == nil {
 		if err := StartRecordingIfRequested(cmd, atmosConfig, os.Args[1:]); err != nil {
 			ui.Errorf("Failed to start cast recording: %v", err)
-			return nil
+			return false
 		}
 	}
-	if activeCast == nil {
-		return nil
-	}
-	return &recorderOutputWriter{rec: activeCast.recorder}
-}
-
-// recorderOutputWriter records writes as cast output events.
-type recorderOutputWriter struct {
-	rec *asciicast.Recorder
-}
-
-func (w *recorderOutputWriter) Write(p []byte) (int, error) {
-	w.rec.Record("o", string(p))
-	return len(p), nil
+	return activeCast != nil
 }
 
 // ActiveRecordingWidth returns the terminal width (in columns) of the active

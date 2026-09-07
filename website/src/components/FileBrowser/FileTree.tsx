@@ -11,34 +11,38 @@ interface FileTreeProps {
   example: ExampleProject;
   routeBasePath: string;
   currentPath: string;
+  titleAsCode?: boolean;
 }
 
 export default function FileTree({
   example,
   routeBasePath,
   currentPath,
+  titleAsCode,
 }: FileTreeProps): JSX.Element {
   return (
     <aside className={styles.sidebar}>
-      <div className={styles.sidebarHeader}>
-        <Link
-          to={`${routeBasePath}/${example.name}`}
-          className={styles.sidebarExampleLink}
-        >
-          {example.name}
-        </Link>
+      <div className={styles.sidebarInner}>
+        <div className={styles.sidebarHeader}>
+          <Link
+            to={`${routeBasePath}/${example.name}`}
+            className={styles.sidebarExampleLink}
+          >
+            {titleAsCode ? <code>/{example.name}</code> : example.name}
+          </Link>
+        </div>
+        <ul className={styles.fileTree}>
+          {example.root.children.map((child) => (
+            <FileTreeNode
+              key={child.path}
+              node={child}
+              routeBasePath={routeBasePath}
+              currentPath={currentPath}
+              defaultOpen={currentPath.startsWith(child.path)}
+            />
+          ))}
+        </ul>
       </div>
-      <ul className={styles.fileTree}>
-        {example.root.children.map((child) => (
-          <FileTreeNode
-            key={child.path}
-            node={child}
-            routeBasePath={routeBasePath}
-            currentPath={currentPath}
-            defaultOpen={currentPath.startsWith(child.path)}
-          />
-        ))}
-      </ul>
     </aside>
   );
 }

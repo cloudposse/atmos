@@ -106,6 +106,18 @@ const (
 
 	// TagVersion resolves a locked version from the Atmos Version Tracker.
 	TagVersion = fntag.Version
+
+	// TagTags returns the current component's own metadata.tags as a list.
+	TagTags = fntag.Tags
+
+	// TagLabels returns the current component's own metadata.labels as a map.
+	TagLabels = fntag.Labels
+
+	// TagLabelsKeys returns the current component's own metadata.labels keys as a sorted list.
+	TagLabelsKeys = fntag.LabelsKeys
+
+	// TagLabelsValues returns the current component's own metadata.labels values as a list, ordered by key.
+	TagLabelsValues = fntag.LabelsValues
 )
 
 // YAMLTagPrefix is the prefix used for YAML custom tags.

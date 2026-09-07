@@ -1,0 +1,84 @@
+---
+title: atmos mcp add
+sidebar_label: add
+sidebar_class_name: command
+id: add
+description: Add an MCP server to mcp.servers in atmos.yaml
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Use this command to add an MCP server to `mcp.servers` in `atmos.yaml` without hand-editing YAML.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos mcp add --help" src="/casts/screengrabs/atmos-mcp-add--help.cast" static chrome />
+
+## Description
+
+The `atmos mcp add` command writes a new entry under `mcp.servers` in `atmos.yaml`. The target can be:
+
+- A **built-in preset** — `self` (Atmos's own MCP server) or `atmos-pro` (the Atmos Pro MCP server).
+- An **`http(s)://` URL** — added as a remote HTTP server.
+- A **stdio command** — added as a local subprocess server, optionally with arguments (e.g. `"npx -y @org/mcp-server --flag value"`).
+
+Running `atmos mcp add` with no target defaults to `atmos mcp add self`.
+
+Only `atmos.yaml` is written — `add` never touches an AI client's config file. Use `--install` to also push the new server into detected AI clients in the same step, or run [`atmos mcp install`](/cli/commands/mcp/install) separately.
+
+If the target resolves to the `self` preset and `mcp.enabled` is `false` in `atmos.yaml`, `add` prompts (when running interactively) to enable it — the `self` entry won't work at runtime until Atmos can run as an MCP server itself. Non-interactively, it errors with the exact `atmos config set` command to run instead.
+
+## Usage
+
+```shell
+atmos mcp add [preset-name|url|command] [flags]
+```
+
+<dl>
+  <dt>`preset-name|url|command`</dt>
+  <dd>Optional. A built-in preset name (`self`, `atmos-pro`), an `http(s)://` URL, or a stdio command. Defaults to `self` when omitted.</dd>
+  <dt>`--name`, `-n`</dt>
+  <dd>Server name. Auto-inferred from the URL or command if not provided (presets use their own default name, e.g. `self` → `atmos`).</dd>
+  <dt>`--transport`, `-t`</dt>
+  <dd>Transport for a URL target. Only `http` is supported today; other values (e.g. `sse`) are rejected.</dd>
+  <dt>`--env`</dt>
+  <dd>Environment variable for a stdio server, `KEY=VALUE` (repeatable).</dd>
+  <dt>`--header`, `-H`</dt>
+  <dd>HTTP header for a remote server, `"Key: Value"` (repeatable).</dd>
+  <dt>`--description`</dt>
+  <dd>Human-readable description shown in `atmos mcp list`/`status`.</dd>
+  <dt>`--identity`</dt>
+  <dd>Atmos Auth identity (from the `auth` section) for credential injection.</dd>
+  <dt>`--timeout`</dt>
+  <dd>Connection timeout, as a Go duration string (e.g. `30s`).</dd>
+  <dt>`--auto-start`</dt>
+  <dd>Start the server automatically when Atmos starts.</dd>
+  <dt>`--install`</dt>
+  <dd>Also install into detected AI clients immediately after adding.</dd>
+  <dt>`--yes`, `-y`</dt>
+  <dd>Skip confirmation prompts.</dd>
+  <dt>`--force`</dt>
+  <dd>Overwrite an existing entry without prompting.</dd>
+</dl>
+
+### Examples
+
+```shell
+# Add Atmos's own MCP server (also the default target with no argument).
+atmos mcp add self
+
+# Add the Atmos Pro MCP server.
+atmos mcp add atmos-pro
+
+# Add a remote HTTP server with an auth header.
+atmos mcp add https://mcp.example.com/mcp --header "Authorization: Bearer ${TOKEN}"
+
+# Add a local stdio server and immediately install it into detected AI clients.
+atmos mcp add "uvx awslabs.aws-documentation-mcp-server@latest" --install
+
+# Add a server with an explicit name, description, and Atmos Auth identity.
+atmos mcp add uvx --name aws-docs --description "AWS Documentation" --identity readonly
+```

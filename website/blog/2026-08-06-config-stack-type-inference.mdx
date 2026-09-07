@@ -1,0 +1,71 @@
+---
+slug: config-stack-type-inference
+title: "Smarter Type Handling for `atmos config set` and `atmos stack set`"
+authors: [osterman]
+tags: [enhancement, bugfix]
+---
+
+Editing a config value from the command line is supposed to be the easy path. Type `atmos stack set
+vars.replicas 5`, expect a `5`, move on. Except a value like that used to come back out the other side as the
+string `"5"` unless you remembered to pass `--type=int` — and for `atmos stack set` specifically, that was
+true every single time, no matter what was already there. A `true` became `"true"`. A number stayed a number
+only if you told the CLI so yourself.
+
+<!--truncate-->
+
+## The Problem
+
+`atmos config set` already tried to guess a value's type from the Atmos config schema, but only for fields
+the schema knows about — everything else, including the free-form `vars` and `settings` sections most people
+actually edit, fell back to a plain string with no warning. `atmos stack set` didn't even have that: it always
+wrote a string unless you passed `--type` explicitly, since component variables have no fixed schema to infer
+from in the first place.
+
+On top of that, editing a value that came from an imported catalog file — the normal way Atmos stacks are
+organized, defaults in one file, per-environment overrides in another — could fail outright with an error that
+pointed at the wrong manifest, leaving no clue where the real value actually lived.
+
+## The Fix
+
+`--type` now defaults to `auto` on both commands, and `auto` tries harder before it gives up. `config set`
+checks the Atmos config schema first, then the type of the value already at that path. `stack set` checks the
+component's own declared Terraform variable type for `vars.*` paths first — Atmos already parses
+`variables.tf` while resolving the component, so this costs nothing extra — then the existing value. If the
+declared type disagrees with what's already stored (a number saved as a quoted string, say), Atmos retypes it
+and tells you so, instead of leaving the mismatch in place.
+
+Only after all of that does either command fall back to the value's own shape: `5` infers as an int, `true`
+infers as a bool, `3.14` infers as a float. A value doesn't get silently downgraded to a quoted string just
+because nothing else had an opinion on it anymore — that fallback (with a warning) is now reserved for values
+that genuinely don't look like anything but a string.
+
+Editing values that live only in an imported catalog file is also fixed: `atmos stack set`, `get`, `delete`,
+and `list` now correctly resolve to the file that actually defines the value, instead of misattributing it to
+whichever stack manifest happened to import it.
+
+## How to Use It
+
+```shell
+# vars.replicas is already 1 (an int) in the manifest -- auto keeps it an int.
+atmos stack set vars.replicas 5 -s plat-ue2-prod -c vpc
+
+# If variables.tf declares vars.quota as a number, auto uses that -- and retypes an
+# existing value that disagrees, e.g. one stored as a quoted string.
+atmos stack set vars.quota 10 -s plat-ue2-prod -c vpc
+
+# A brand-new vars.new_flag with nothing existing to infer from now infers straight
+# from the value's shape: "true" is written as a bool, not the string "true".
+atmos stack set vars.new_flag true -s plat-ue2-prod -c vpc
+
+# Works even when the value is only defined in an imported catalog file.
+atmos stack set vars.region us-west-2 -s plat-ue2-prod -c vpc
+```
+
+`--type` still accepts `string`, `int`, `bool`, `float`, `null`, or `yaml` explicitly whenever you want to
+skip inference entirely.
+
+## Get Involved
+
+Run into a case where inference guesses wrong, or a value that still won't resolve? Open an issue on
+[GitHub](https://github.com/cloudposse/atmos) — this is exactly the kind of day-to-day CLI friction we want
+to keep sanding down.

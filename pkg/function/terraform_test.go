@@ -94,6 +94,7 @@ func TestParseTerraformArgs(t *testing.T) {
 
 			if tt.wantErr {
 				require.Error(t, err)
+				assert.ErrorIs(t, err, ErrInvalidArguments)
 				if tt.errContains != "" {
 					assert.Contains(t, err.Error(), tt.errContains)
 				}

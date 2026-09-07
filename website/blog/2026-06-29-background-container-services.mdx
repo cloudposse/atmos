@@ -1,0 +1,133 @@
+---
+slug: background-container-services
+title: "Background Container Services in Atmos Workflows"
+authors: [osterman]
+tags: [feature, dx]
+date: 2026-06-29T12:00:00.000Z
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+
+Atmos workflows can now start long-running container services in the background, wait for them to become healthy, and tear them down automatically. Bring up an emulator, database, or registry with `background: true`, gate the next step on its container health check, and stop it with a `cancel` step — no shell scripts, no background jobs, no orphaned containers.
+
+<!--truncate-->
+
+## The Problem
+
+Plenty of workflows need a service running *alongside* the steps, not as a step. End-to-end tests need a cloud emulator. Integration steps need a database or a local registry. Until now, standing up that dependency meant leaving the workflow and dropping into shell:
+
+```shell
+docker run -d --name emulator -p 4566:4566 localstack/localstack
+until curl -sf http://localhost:4566/_localstack/health; do sleep 2; done
+# ... run the real steps ...
+docker rm -f emulator
+```
+
+That works until it doesn't:
+
+- Readiness is a hand-rolled `until curl … sleep` loop that's different in every workflow.
+- A failed or interrupted run leaks the container — the cleanup line never runs.
+- The dependency is invisible in the workflow file; it lives in shell glue.
+- Local workflows and CI drift apart because each reinvents the same bring-up dance.
+
+A workflow runner should be able to say "start this service, wait until it's healthy, run my steps, then clean it up" as part of the workflow itself.
+
+## What's New
+
+A [`container`](/workflows/steps/type/container#background-services) step with `background: true` starts a long-running service detached and lets the workflow continue. Three pieces work together:
+
+- **`background: true`** on an `action: run` step starts the service detached.
+- **`healthcheck`** (under `with:`) gates readiness — Atmos blocks until the container is healthy before the next step runs.
+- **[`cancel`](/workflows/steps/type/cancel)** stops and removes the service; if you never cancel it, Atmos tears it down automatically when the workflow ends.
+
+There are also two readiness-gating control steps: [`wait`](/workflows/steps/type/wait) blocks on named services, and `wait-all` blocks on every background service started so far.
+
+## A Background Emulator
+
+Start an emulator, run Terraform against it, then tear it down — all in one declarative workflow:
+
+```yaml title="stacks/workflows/e2e.yaml"
+workflows:
+  e2e:
+    steps:
+      - name: emulator
+        type: container
+        action: run
+        background: true
+        with:
+          image: localstack/localstack
+          ports:
+            - host: 4566
+              container: 4566
+          healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+            interval: 5s
+            retries: 10
+            start_period: 30s
+
+      - name: apply
+        type: atmos
+        command: terraform apply vpc -s dev
+
+      - type: cancel
+        for: emulator
+```
+
+Atmos starts the emulator, blocks until its health check reports healthy, runs `apply`, then `cancel` stops and removes the container.
+
+Here it is running end to end:
+
+<CastPlayer src="/casts/examples/background-steps/service.cast" title="atmos background service" chrome controls scrubber />
+
+[View the full example](/examples/background-steps)
+
+## Readiness Reuses the Health Check
+
+The key idea is that readiness is not a new concept — it's the container's own `healthcheck`, the same shape you already use for [container components](/changelog/container-components). When a background service declares a health check, Atmos blocks until it's healthy before continuing. No `sleep` guesses, no polling scripts.
+
+For a service, "wait" means *until healthy*, never *until exit*. A long-running service never exits on its own, so its health check defines readiness. You can gate readiness implicitly (the step after a healthchecked background service waits automatically) or explicitly with a `wait` step:
+
+```yaml
+- type: wait
+  for: [emulator]
+```
+
+Start several services and wait for all of them at once with `wait-all`:
+
+```yaml
+- type: wait-all
+```
+
+The ordinary [`needs`](/workflows/steps) field is unchanged — it expresses step ordering, while `wait`/`wait-all` express service readiness.
+
+## Teardown You Don't Have to Remember
+
+The most common shell-script bug is the cleanup line that never runs. Background services fix that by default: if you never `cancel` a service explicitly, Atmos tears down all background services when the workflow ends — **including on failure**. A crashed or short-circuited workflow does not leave orphaned containers behind.
+
+Use `cancel` when you want to free a service early, before the rest of the workflow finishes, or simply to make teardown explicit in the file:
+
+```yaml
+- type: cancel
+  for: emulator
+```
+
+## Why This Matters
+
+Background services turn "stand up a dependency for these steps" into a first-class, declarative part of the workflow:
+
+- Readiness is the container health check, not a bespoke polling loop.
+- Teardown is automatic, so failed runs don't leak containers.
+- The dependency is visible in the workflow file, not hidden in shell glue.
+- The same workflow runs locally, in CI, or inside a larger runbook.
+
+This is especially useful for end-to-end tests against emulators, integration steps that need a database or registry, and any workflow where a service has to be up *while* the real work runs.
+
+Atmos's built-in emulator drivers cover AWS (`floci/aws`, `ministack/aws`, `localstack/aws`),
+GCP (`floci/gcp`), Azure (`floci/az`), Kubernetes (`k3s`), Vault/OpenBao (`openbao`,
+`vault`), OCI/Terraform registries (`registry`), and a Mockoon-backed 1Password Connect server
+(`mockoon/1password-connect`). See the [emulator component reference](/stacks/components/emulator#supported-drivers--targets)
+for the current driver and target list.
+
+## Get Involved
+
+For the full reference, see [background services](/workflows/steps/type/container#background-services) on the `container` step page, and the [`wait`](/workflows/steps/type/wait) and [`cancel`](/workflows/steps/type/cancel) step types. Try it on a real end-to-end workflow and tell us where the readiness and teardown semantics feel right — or where you want more control.

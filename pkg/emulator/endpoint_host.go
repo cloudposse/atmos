@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 
@@ -14,24 +15,55 @@ import (
 )
 
 const (
-	envEmulatorEndpointHost               = "ATMOS_EMULATOR_ENDPOINT_HOST"
-	envEmulatorUseCurrentContainerNetwork = "ATMOS_EMULATOR_USE_CURRENT_CONTAINER_NETWORK"
-	linuxRouteGatewayBytes                = 4
+	envEmulatorEndpointHost = "ATMOS_EMULATOR_ENDPOINT_HOST"
+	linuxRouteGatewayBytes  = 4
+	// Docker's documented hostname for reaching the host (and, from a sibling
+	// container's perspective, host-published ports) from inside a container.
+	// Docker Desktop (macOS/Windows) resolves it automatically; Linux Docker
+	// Engine only resolves it when the container was started with
+	// `--add-host=host.docker.internal:host-gateway`, which Atmos doesn't
+	// control after the fact for its own (already running) container -- hence
+	// resolving it defensively via lookupHost before trusting it.
+	hostDockerInternal = "host.docker.internal"
+	// Bounds hostDockerInternalResolves' DNS lookup so a slow or unreachable
+	// resolver can't delay emulator endpoint construction (Manager.Up/
+	// Manager.Resolve) -- this is a best-effort probe on the way to the
+	// gateway/localhost fallback, not a call worth blocking startup on.
+	hostDockerInternalLookupTimeout = 2 * time.Second
 )
 
 var (
-	processRunsInContainer = defaultProcessRunsInContainer
-	readProcFile           = os.ReadFile
+	readProcFile = os.ReadFile
+	// Resolves a hostname; overridable in tests so hostDockerInternal's
+	// resolvable-vs-unresolvable branches are exercisable without depending on
+	// the test host's actual DNS/hosts-file setup.
+	lookupHost = func(ctx context.Context, host string) ([]string, error) {
+		return net.DefaultResolver.LookupHost(ctx, host)
+	}
 )
 
+// reachableHostForPublishedPorts returns the host an emulator's published ports
+// are reachable at from outside its container -- unrelated to network
+// *attachment* (see container.AttachSharedNetwork/CurrentContainerNetwork for
+// that; when reuse or a join succeeds there, Manager.endpoint uses a DNS alias
+// and never reaches this function at all), this is purely a last-resort guess
+// at a reachable address for reading a published port from the caller's side,
+// tried in order: an explicit operator override, host.docker.internal (only if
+// it actually resolves -- see hostDockerInternal), the container's own default
+// gateway (Docker's classic bridge-gateway IP, correct on a native Linux Docker
+// host but not necessarily under Docker Desktop's VM-backed daemon), and
+// finally localhost.
 func reachableHostForPublishedPorts() string {
 	defer perf.Track(nil, "emulator.reachableHostForPublishedPorts")()
 
 	if host := strings.TrimSpace(envString(envEmulatorEndpointHost)); host != "" {
 		return host
 	}
-	if !processRunsInContainer() {
+	if !container.ProcessRunsInContainer() {
 		return "localhost"
+	}
+	if hostDockerInternalResolves() {
+		return hostDockerInternal
 	}
 	if gateway := linuxDefaultGateway(); gateway != "" {
 		return gateway
@@ -39,33 +71,16 @@ func reachableHostForPublishedPorts() string {
 	return "localhost"
 }
 
-func currentContainerNetwork(ctx context.Context, runtime container.Runtime) string {
-	defer perf.Track(nil, "emulator.currentContainerNetwork")()
+// hostDockerInternalResolves reports whether hostDockerInternal resolves to at
+// least one address from inside the current container -- the signal that it's
+// actually usable here, rather than assuming it based on platform alone.
+func hostDockerInternalResolves() bool {
+	defer perf.Track(nil, "emulator.hostDockerInternalResolves")()
 
-	if !useCurrentContainerNetwork() || runtime == nil {
-		return ""
-	}
-	hostname, err := os.Hostname()
-	if err != nil || hostname == "" {
-		return ""
-	}
-	info, err := runtime.Inspect(ctx, hostname)
-	if err != nil || info == nil {
-		return ""
-	}
-	return firstReachableNetwork(info.Networks)
-}
-
-func useCurrentContainerNetwork() bool {
-	defer perf.Track(nil, "emulator.useCurrentContainerNetwork")()
-
-	switch strings.ToLower(strings.TrimSpace(envString(envEmulatorUseCurrentContainerNetwork))) {
-	case "1", "true", "yes", "on":
-		return processRunsInContainer()
-	case "0", "false", "no", "off":
-		return false
-	}
-	return envString("GITHUB_ACTIONS") == "true" && processRunsInContainer()
+	ctx, cancel := context.WithTimeout(context.Background(), hostDockerInternalLookupTimeout)
+	defer cancel()
+	addrs, err := lookupHost(ctx, hostDockerInternal)
+	return err == nil && len(addrs) > 0
 }
 
 func envString(name string) string {
@@ -73,43 +88,6 @@ func envString(name string) string {
 
 	_ = viper.BindEnv(name, name)
 	return viper.GetString(name)
-}
-
-func firstReachableNetwork(networks []string) string {
-	defer perf.Track(nil, "emulator.firstReachableNetwork")()
-
-	for _, network := range networks {
-		switch network {
-		case "", "host", "none":
-			continue
-		default:
-			return network
-		}
-	}
-	return ""
-}
-
-func defaultProcessRunsInContainer() bool {
-	defer perf.Track(nil, "emulator.defaultProcessRunsInContainer")()
-
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		return true
-	}
-	if _, err := os.Stat("/run/.containerenv"); err == nil {
-		return true
-	}
-
-	data, err := readProcFile("/proc/1/cgroup")
-	if err != nil {
-		return false
-	}
-	cgroup := string(data)
-	for _, marker := range []string{"docker", "containerd", "kubepods", "libpod"} {
-		if strings.Contains(cgroup, marker) {
-			return true
-		}
-	}
-	return false
 }
 
 func linuxDefaultGateway() string {

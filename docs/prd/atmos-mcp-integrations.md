@@ -1,7 +1,7 @@
 # Atmos MCP Servers — External MCP Server Management
 
-**Version:** 1.0
-**Last Updated:** 2026-03-28
+**Version:** 1.1
+**Last Updated:** 2026-07-11
 
 ---
 
@@ -402,6 +402,123 @@ ATMOS_AI_MCP=aws-iam,aws-billing atmos ai ask "List admin roles"
   `max_tokens` reduced to 256. No extra model configuration needed.
 - **Upstream filtering:** Server selection happens before `RegisterMCPTools`.
 - **Chat mode:** Routing skipped because the question isn't known upfront. Use `--mcp`.
+
+---
+
+## Native AWS SigV4 Signing (HTTP MCP Servers)
+
+**Status:** Proposed (not yet implemented)
+
+### Problem
+
+AWS now ships hosted, HTTP-transport MCP servers (e.g. `https://aws-mcp.us-east-1.api.aws/mcp` — see the
+[AWS MCP Server GA announcement](https://aws.amazon.com/about-aws/whats-new/2026/05/aws-mcp-server/) and
+[Understanding IAM for Managed AWS MCP Servers](https://aws.amazon.com/blogs/security/understanding-iam-for-managed-aws-mcp-servers/)).
+Unlike the `stdio`-transport `awslabs.*` servers in the table above, every HTTP request to these endpoints
+must be signed with **AWS Signature Version 4 (SigV4)**. Neither Atmos's own MCP client
+(`pkg/mcp/client/session.go`, used by `atmos ai chat`/`ask`/`exec`) nor any AI coding assistant Atmos installs
+into (Claude Code, Cursor, VS Code, etc.) can sign SigV4 requests themselves.
+
+AWS's own workaround is a third-party proxy, [`mcp-proxy-for-aws`](https://pypi.org/project/mcp-proxy-for-aws/)
+(installed via `uvx`), that bridges a local stdio MCP connection to the signed-HTTP endpoint. Used with Atmos
+today:
+
+```yaml
+mcp:
+  enabled: true
+  servers:
+    aws-mcp:
+      description: "AWS Agent Toolkit MCP server"
+      identity: "core-corp/terraform"      # Atmos Auth identity
+      env:
+        ATMOS_PROFILE: devops
+      command: uvx
+      args:
+        - "mcp-proxy-for-aws@latest"
+        - "https://aws-mcp.us-east-1.api.aws/mcp"
+        - "--metadata"
+        - "AWS_REGION=us-east-2"
+```
+
+`atmos mcp export`/`install` already wraps this with `atmos auth exec -i core-corp/terraform -- uvx
+mcp-proxy-for-aws@latest ...` so the identity's credentials reach the subprocess as env vars — but the actual
+SigV4 signing is still performed by the external Python tool, not Atmos. This adds a Python/`uv` toolchain
+dependency for an otherwise pure-Go integration, and duplicates credential-resolution logic Atmos Auth
+already owns.
+
+### Goal
+
+Atmos signs SigV4 requests to AWS-hosted HTTP MCP servers natively, using credentials already resolved
+through Atmos Auth identities, eliminating the `mcp-proxy-for-aws` dependency for both directions Atmos
+already supports:
+
+1. **Atmos's own MCP client** (`atmos ai chat`/`ask`/`exec`, `atmos mcp test`/`tools`/`status`) connects
+   directly to a SigV4-protected HTTP endpoint — no proxy process at all, just a signing `http.RoundTripper`.
+2. **Exported/installed configs** for third-party clients (Claude Code, Cursor, VS Code, etc., which only
+   speak plain stdio or unsigned HTTP MCP) still need a local stdio↔HTTP bridge process — but that bridge
+   should be an Atmos-native command, not a third-party `uvx` package.
+
+### Proposed Design
+
+**Schema** (`pkg/schema/mcp.go`'s `MCPServerConfig`) — flat sibling fields, matching the existing convention
+in `pkg/store/aws_ssm_param_store.go` (flat `region`/`read_role_arn`/`write_role_arn`, not a nested block):
+
+```yaml
+mcp:
+  servers:
+    aws-mcp:
+      type: http
+      url: "https://aws-mcp.us-east-1.api.aws/mcp"
+      identity: "core-corp/terraform"
+      sigv4: true                 # new: sign requests with AWS SigV4
+      aws_service: "execute-api"  # new: SigV4 service name (default inferred from URL host if omitted)
+      # region resolved from the identity/profile by default; explicit override optional
+```
+
+**Signing implementation** — reuse `pkg/aws/identity.LoadConfigWithAuth`/`LoadConfigWithAuthAndEnv`
+(`pkg/aws/identity/identity.go:252,272`), which already returns a real `aws.Config` (credentials + region)
+built from the credential files Atmos Auth writes for a resolved identity — the same mechanism
+`!terraform.state` and S3 backend provisioning already use, so no new credential-resolution code is needed.
+Feed that `aws.Config.Credentials` into `aws-sdk-go-v2`'s `aws/signer/v4` signer (already a transitive
+dependency of the SDK modules already in `go.mod` — `aws-sdk-go-v2 v1.41.7`, `config v1.32.18`, `credentials
+v1.19.17` — needs promoting to a direct `require` via `go get`, not a new dependency).
+
+**Hook point** — `pkg/mcp/client/session.go:182-199`'s `buildTransport`/`httpClientWithHeaders` is the exact
+place: it already wraps `http.DefaultTransport` in a `headerRoundTripper` for static headers. A new
+`sigv4RoundTripper{signer, credsProvider, service, region, base http.RoundTripper}` composes the same way
+(`RoundTrip` signs the cloned request before delegating) — a transport-wrapper addition, not a rewrite. Note:
+today `session.go`'s HTTP transport construction has **no access to `identity`/auth at all** — identity
+injection currently only happens for stdio subprocess `cmd.Env` via `AuthEnvProvider`/`ScopedAuthProvider`
+(`session.go:283`, `scoped_auth.go`) — wiring identity resolution into the HTTP path is new plumbing, not
+just adding the signer.
+
+**Stdio↔HTTP bridge for third-party clients** — a new `atmos mcp` subcommand (naming TBD) wrapping the same
+signing `http.RoundTripper` behind a local stdio↔HTTP MCP bridge (read JSON-RPC from stdin, sign + forward
+over HTTP, write the response to stdout), replacing `mcp-proxy-for-aws@latest <url> --metadata ...` in
+exported/installed configs whenever `sigv4: true` is set. `atmos mcp export`/`install`
+(`pkg/mcp/install`) would need to detect `sigv4: true` HTTP servers and emit the Atmos-native bridge command
+instead of a raw `url` entry — mirroring how `identity`-tagged stdio servers are already wrapped with `atmos
+auth exec` today.
+
+### Open Questions (needs a dedicated design pass before implementation)
+
+- Exact CLI surface for the stdio↔HTTP bridge command, and whether it's a hidden/internal implementation
+  detail (only ever invoked by Atmos-generated config, not meant for users to run directly) or a documented,
+  user-facing command.
+- Whether `aws_service` should be inferred from the URL host or always required explicitly, and how region
+  is resolved when not set on the identity/profile.
+- Does every AWS-hosted MCP endpoint use plain SigV4 (`execute-api`-style), or do some require a different
+  signing scheme (Bedrock AgentCore, other services) — needs a survey of what AWS actually exposes via
+  hosted HTTP MCP beyond the one example in hand.
+- Test strategy for signing correctness without hitting real AWS endpoints (canonical-request golden tests
+  against the SDK's own signer).
+
+### Security Considerations (additive to the list above)
+
+6. **Native signing** — SigV4 signing happens in-process using credentials Atmos Auth already resolved and
+   scoped per-identity/per-realm (same isolation as stdio subprocess credentials, items 1-2 above) — no
+   additional credential exposure surface versus the current `mcp-proxy-for-aws` subprocess approach, and no
+   longer requires trusting a third-party PyPI package with live AWS credentials in its process memory.
 
 ---
 

@@ -133,11 +133,12 @@ The registry mirrors `pkg/store/registry.go` (kind → builder map). The mock is
 The emulator **component name is a free-form label** (the address is `<stack>/emulator/<name>`); it
 does **not** encode the target. The target (`aws|gcp|azure|kubernetes|vault|registry`) is
 **structural** — derived from `driver` (or explicit `cloud`). An identity's `kind: <target>/emulator`
-prefix declares which target it speaks, and `emulator: <name>` references the component; Atmos
+prefix declares which target it speaks, and `emulator: <stack>/<name>` references the listed
+emulator instance; Atmos
 **validates the identity target == the component target** (hard error on mismatch).
 
 Recommended convention: name an emulator for its role and let `driver`/`kind` carry the semantics —
-`kind: aws/emulator → emulator: aws`, `kind: kubernetes/emulator → emulator: k3s`.
+`kind: aws/emulator → emulator: local/aws`, `kind: kubernetes/emulator → emulator: local/k3s`.
 
 ### §D Lifecycle (reuses the container component kind)
 
@@ -162,6 +163,7 @@ atmos emulator up aws -s dev        # start detached (alias: start); --ephemeral
 atmos emulator down aws -s dev      # stop + remove (alias: stop); --all prunes by type=emulator
 atmos emulator reset aws -s dev     # stop + remove AND wipe persisted state (--force skips prompt)
 atmos emulator ps -s dev            # list running emulators (label discovery)
+atmos emulator list                 # inventory configured instances; copy INSTANCE into an identity
 atmos emulator logs aws -s dev
 atmos emulator exec aws -s dev -- <cmd>   # run a command inside the emulator container
 ```
@@ -220,8 +222,9 @@ An emulator advertises a profile; consumers subscribe to it. The **binding seam 
 
 #### Identity binding (the common path)
 
-A component selects an identity (`settings.identity` or `--identity`); the identity references an
-emulator by **bare name**, resolved against the stack the command runs in:
+A component selects an identity (`settings.identity` or `--identity`); the identity references the
+emulator's `INSTANCE` value from `atmos emulator list`. Identities are project-scoped, so the
+component's current stack does not alter that target:
 
 ```yaml
 # atmos.yaml
@@ -229,25 +232,25 @@ auth:
   identities:
     local-aws:
       kind: aws/emulator        # cloud emulator identity; cloud derived from prefix
-      emulator: aws             # -> dev/emulator/aws when run with -s dev
+      emulator: local/aws       # exact INSTANCE value
     local-k8s:
       kind: kubernetes/emulator # native, non-cloud-minted identity (see kubernetes-identity.md)
-      emulator: k3s
+      emulator: local/k3s
 ```
 
 Flow for `atmos terraform apply vpc -s dev` (component has `settings.identity: local-aws`):
 
-1. Auth selects `local-aws`; it has `emulator: aws`.
-2. Atmos scopes the bare name to the current stack → address `dev/emulator/aws`.
-3. Validate: identity target (`aws`) == emulator component target; emulator declared in `dev` →
-   else hard error with a hint.
+1. Auth selects `local-aws`; it has `emulator: local/aws`.
+2. Atmos resolves the exact `local/aws` runtime, regardless of the component's `dev` stack.
+3. Validate: identity target (`aws`) == emulator component target; emulator declared in `local` →
+    else hard error with a hint.
 4. The injected resolver (`pkg/emulator.Manager`) discovers the container by label, `Inspect`s the
-   live host port, builds the profile. Not running → actionable error
-   (`atmos emulator up aws -s dev`).
+    live host port, builds the profile. Not running → actionable error
+    (`atmos emulator up aws -s local`).
 5. `Profile.Env` is merged into the subprocess env (`PrepareShellEnvironment`); for AWS the live URL
-   also feeds the existing `resolver.url` → `config.WithBaseEndpoint` path so Atmos's own SDK calls
-   (`!terraform.output`, store auth) hit the emulator; `Profile.Provider` is contributed to provider
-   generation (§G).
+    also feeds the existing `resolver.url` → `config.WithBaseEndpoint` path so Atmos's own SDK calls
+    (`!terraform.output`, store auth) hit the emulator; `Profile.Provider` is contributed to provider
+    generation (§G).
 
 `atmos auth shell --identity local-aws -s dev` provides the host shell preconfigured for the
 emulator: it runs the same resolution and exports the same env an emulator identity injects.
@@ -295,7 +298,8 @@ alongside `!store`/`!terraform.output`; resolves through `Manager.Resolve`.
 - Component kind: `components.emulator.<name>` with `driver`, `cloud`/target, `region`/`project`,
   nested `container:`.
 - Identities: `aws/emulator`, `gcp/emulator`, `azure/emulator`, `kubernetes/emulator`, with
-  `emulator: <name>`.
+  `emulator: <stack>/<name>`; a bare `<name>` remains valid only while it identifies one running
+  instance globally.
 - Commands: `atmos emulator up|down|reset|ps|logs|exec` (+ `start`/`stop` aliases, `down --all`,
   `up --ephemeral`, `reset --force`). Persistence is on by default (`ephemeral: true` opts out).
 - YAML function: `!emulator <ref> <key>` (space-separated; `<ref>` may be `<name>` or

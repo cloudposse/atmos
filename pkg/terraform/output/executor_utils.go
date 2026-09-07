@@ -1,6 +1,7 @@
 package output
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 
@@ -8,6 +9,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -84,14 +86,91 @@ func checkOutputsCache(stackSlug, component, stack string) map[string]any {
 	return nil
 }
 
-// startSpinnerOrLog starts a spinner in normal mode or logs in debug mode, returns a stop function.
+// cachedOutputResult is the outcome of a cache-hit output resolution (see
+// resolveOutputFromCache). A nil *cachedOutputResult means the cache held no
+// entry for the requested stackSlug; callers must fall through to a real
+// fetch in that case.
+type cachedOutputResult struct {
+	value  any
+	exists bool
+	err    error
+}
+
+// resolveOutputFromCache resolves a single output from the cache, if present,
+// emitting the same visible success/failure notification (outputLookupSucceeded/
+// outputLookupFailed) a real fetch would via GetOutput/GetOutputWithOptions.
+//
+// Without this, a component's first output lookup (a cache miss, triggering a
+// real fetch) is visible, but every subsequent lookup for a DIFFERENT output
+// key on the SAME already-cached component+stack was silently invisible: the
+// cache is keyed per component+stack (all outputs cached together on first
+// fetch, by design, for performance), but only "Cache hit for terraform
+// output" was logged -- at Debug level only, so it never appeared outside
+// debug/trace logging. A test.vars block with nine !terraform.output lookups
+// across two components would then show only two "Fetching ..." messages.
+func resolveOutputFromCache(atmosConfig *schema.AtmosConfiguration, stackSlug, component, stack, output string) *cachedOutputResult {
+	cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
+	if !found || cachedOutputs == nil {
+		return nil
+	}
+
+	log.Debug("Cache hit for terraform output", "stack", stack, "component", component, "output", output)
+	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
+
+	value, exists, err := getOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
+	if err != nil {
+		outputLookupFailed(message)
+		return &cachedOutputResult{err: err}
+	}
+	outputLookupSucceeded(message)
+	return &cachedOutputResult{value: value, exists: exists}
+}
+
+// startSpinnerOrLog starts a spinner in normal mode or logs in debug mode.
 func startSpinnerOrLog(atmosConfig *schema.AtmosConfiguration, message, _, _ string) func() {
-	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+	if strings.EqualFold(atmosConfig.Logs.Level, string(u.LogLevelTrace)) ||
+		strings.EqualFold(atmosConfig.Logs.Level, string(u.LogLevelDebug)) {
 		log.Debug(message)
+		return func() {}
+	}
+	if spinnersSuppressed() {
 		return func() {}
 	}
 	p := NewSpinner(message)
 	spinnerDone := make(chan struct{})
 	RunSpinner(p, spinnerDone, message)
 	return func() { StopSpinner(p, spinnerDone) }
+}
+
+// clearSpinnerLine clears transient lookup output unless concurrent execution suppressed it.
+func clearSpinnerLine() {
+	writeVisibleOutput(ui.ClearLine)
+}
+
+// writeVisibleOutput renders transient lookup UI unless concurrent execution suppressed it.
+func writeVisibleOutput(write func()) {
+	spinnerSuppression.Lock()
+	defer spinnerSuppression.Unlock()
+
+	if spinnerSuppression.count == 0 {
+		write()
+	}
+}
+
+func outputLookupSucceeded(message string) {
+	writeVisibleOutput(func() {
+		ui.ClearLine()
+		ui.Success(message)
+	})
+}
+
+func outputLookupFailed(message string) {
+	writeVisibleOutput(func() {
+		ui.ClearLine()
+		ui.Error(message)
+	})
+}
+
+func outputLookupVisible() bool {
+	return !spinnersSuppressed()
 }

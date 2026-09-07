@@ -117,9 +117,9 @@ func (h *JUnitHandler) loadReport(step *schema.WorkflowStep, vars *Variables) (j
 	seen := make(map[string]struct{})
 
 	for _, pattern := range step.Files {
-		resolved, err := vars.Resolve(pattern)
+		resolved, err := h.ResolveInWorkingDirectory(step, vars, pattern, "files")
 		if err != nil {
-			return junit.Report{}, 0, fmt.Errorf("step '%s': failed to resolve files pattern %q: %w", step.Name, pattern, err)
+			return junit.Report{}, 0, err
 		}
 		matches, err := filepath.Glob(resolved)
 		if err != nil {

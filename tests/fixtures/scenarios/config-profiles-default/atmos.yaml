@@ -4,7 +4,7 @@ components:
 
 stacks:
   base_path: "stacks"
-  name_pattern: "{tenant}-{environment}-{stage}"
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
 
 logs:
   level: Info

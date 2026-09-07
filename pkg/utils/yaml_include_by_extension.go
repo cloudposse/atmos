@@ -12,6 +12,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -63,22 +64,12 @@ func processIncludeTagInternal(
 	var localFile string
 
 	// Parse the include arguments
-	parts, err := SplitStringByDelimiter(val, ' ')
+	parsed, err := parser.ParseInclude(val)
 	if err != nil {
 		return err
 	}
-
-	partsLen := len(parts)
-
-	switch partsLen {
-	case 2:
-		includeFile = strings.TrimSpace(parts[0])
-		includeQuery = strings.TrimSpace(parts[1])
-	case 1:
-		includeFile = strings.TrimSpace(parts[0])
-	default:
-		return fmt.Errorf("%w: %s, stack manifest: %s", ErrIncludeYamlFunctionInvalidArguments, val, file)
-	}
+	includeFile = parsed.Path
+	includeQuery = parsed.Query
 
 	// Try to find the file locally
 	localFile = findLocalFile(includeFile, file, atmosConfig)

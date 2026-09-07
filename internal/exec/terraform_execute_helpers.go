@@ -18,6 +18,7 @@ import (
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -34,6 +35,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/terraform/rc"
 	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 )
 
 // resolveTerraformCommand sets info.Command from atmosConfig if not already set.
@@ -107,8 +109,9 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 			return nil, err
 		}
 		// Wrap unexpected errors (e.g. MergeComponentAuthFromConfig failures) with the sentinel
-		// to match the behaviour of createAndAuthenticateAuthManagerWithDeps.
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
+		// to match the behaviour of createAndAuthenticateAuthManagerWithDeps. When the error names
+		// a missing identity, offer the same profile-selection prompt `atmos auth login` has.
+		return nil, resolveIdentityConfigError(atmosConfig, err, errUtils.ErrInvalidAuthConfig)
 	}
 
 	// Create and authenticate the AuthManager using the same injectable creator as
@@ -121,7 +124,9 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 			errUtils.Exit(errUtils.ExitCodeSIGINT)
 		}
 		// Wrap auth creation failures with the sentinel to match createAndAuthenticateAuthManagerWithDeps.
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
+		// When the error names a missing identity, offer the same profile-selection prompt
+		// `atmos auth login` has.
+		return nil, resolveIdentityConfigError(atmosConfig, err, errUtils.ErrFailedToInitializeAuthManager)
 	}
 
 	// Store manager for nested YAML functions (e.g. !terraform.state).
@@ -234,7 +239,13 @@ func SetupComponentAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *sche
 // resolveAndProvisionComponentPath resolves the filesystem path for a terraform component,
 // optionally auto-generates files, performs JIT source provisioning, and validates
 // that the resulting directory actually exists.
-func resolveAndProvisionComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
+// The provision-and-resolve component function is a seam for testing JIT provisioning context propagation.
+var provisionAndResolveTerraformComponentPath = component.ProvisionAndResolveComponentPath
+
+// The before-init provisioner function is a seam for testing context propagation.
+var executeBeforeInitProvisioners = provisioner.ExecuteProvisioners
+
+func resolveAndProvisionComponentPath(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
 	componentPath, err := u.GetComponentPath(atmosConfig, "terraform", info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve component path: %w", err)
@@ -243,10 +254,13 @@ func resolveAndProvisionComponentPath(atmosConfig *schema.AtmosConfiguration, in
 	// Provision source before generating files: when provision.workdir.enabled
 	// is true the resolved path is the workdir, and generated files must land
 	// there rather than in the base component directory.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
-		ctx, atmosConfig, info, cfg.TerraformComponentType, componentPath,
+	componentPath, componentPathExists, err := provisionAndResolveTerraformComponentPath(
+		ctx, writers, atmosConfig, info, cfg.TerraformComponentType, componentPath,
 	)
 	if err != nil {
 		return "", err
@@ -347,15 +361,87 @@ func printAndWriteVarFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 // varfile-write and env-assembly steps partition the variables identically.
 func computeTerraformSecretVarKeys(info *schema.ConfigAndStacksInfo) {
 	_, secret := tfvars.Partition(info.ComponentVarsSection, atmosio.ContainsSecret)
-	if len(secret) == 0 {
-		info.TerraformSecretVarKeys = nil
-		return
-	}
 	keys := make(map[string]bool, len(secret))
 	for k := range secret {
 		keys[k] = true
 	}
+
+	// Terraform's `sensitive = true` is an explicit declaration that an input must
+	// not be persisted in a generated tfvars file. When masking is disabled, retain
+	// the established compatibility behavior that keeps typed sensitive values in
+	// JSON rather than coercing them through TF_VAR_ environment variables.
+	if atmosio.MaskingEnabled() {
+		for k := range terraformSensitiveVarKeys(info) {
+			if _, supplied := info.ComponentVarsSection[k]; supplied {
+				keys[k] = true
+			}
+		}
+	}
+
+	if len(keys) == 0 {
+		info.TerraformSecretVarKeys = nil
+		return
+	}
 	info.TerraformSecretVarKeys = keys
+}
+
+// terraformSensitiveVarKeys returns the root-module variable names declared
+// `sensitive = true`. Component metadata is populated during stack processing
+// with terraform-config-inspect, so this adds no extra filesystem parsing on
+// the execution hot path.
+func terraformSensitiveVarKeys(info *schema.ConfigAndStacksInfo) map[string]bool {
+	if info == nil {
+		return nil
+	}
+	componentInfo, ok := info.ComponentSection[componentInfoKey].(map[string]any)
+	if !ok {
+		return nil
+	}
+	module, ok := componentInfo[terraformConfigKey].(*tfconfig.Module)
+	if !ok || module == nil {
+		return nil
+	}
+
+	keys := make(map[string]bool)
+	for name, variable := range module.Variables {
+		if variable != nil && variable.Sensitive {
+			keys[name] = true
+		}
+	}
+	return keys
+}
+
+// rejectComputedTerraformVars ensures display-only degraded values cannot cross
+// into Terraform through either tfvars JSON or TF_VAR_ environment variables.
+func rejectComputedTerraformVars(vars map[string]any) error {
+	for key, value := range vars {
+		if containsComputedTerraformValue(value) {
+			return fmt.Errorf("%w: %q", errUtils.ErrUnresolvedComputedTerraformVar, key)
+		}
+	}
+	return nil
+}
+
+func containsComputedTerraformValue(value any) bool {
+	switch v := value.(type) {
+	case degradation.AtmosComputedValue:
+		return true
+	case *degradation.AtmosComputedValue:
+		return v != nil
+	case map[string]any:
+		for _, child := range v {
+			if containsComputedTerraformValue(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range v {
+			if containsComputedTerraformValue(child) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // diskSafeVars returns ComponentVarsSection with secret-bearing top-level keys removed,
@@ -375,6 +461,21 @@ func diskSafeVars(info *schema.ConfigAndStacksInfo) map[string]any {
 			continue
 		}
 		safe[k] = v
+	}
+	return safe
+}
+
+func varsWithoutKeys(vars map[string]any, excluded map[string]bool) map[string]any {
+	if len(excluded) == 0 {
+		return vars
+	}
+	// `excluded` can include declared inputs that this stack does not supply, so
+	// use the source size as the allocation hint rather than subtracting it.
+	safe := make(map[string]any, len(vars))
+	for k, v := range vars {
+		if !excluded[k] {
+			safe[k] = v
+		}
 	}
 	return safe
 }
@@ -802,21 +903,25 @@ func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAn
 // directories (terraform.tfstate.d/) but no .terraform/environment file and interprets the
 // situation as a backend migration, producing the "Do you want to migrate all workspaces?"
 // prompt on every apply.  Skipping the cleanup for workdir components avoids this.
-func prepareInitExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
+func prepareInitExecution(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
 	_, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
 	if !isWorkdir {
 		cleanTerraformWorkspace(*atmosConfig, componentPath)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	provisionCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	if err := provisioner.ExecuteProvisioners(
-		ctx,
+	if err := executeBeforeInitProvisioners(
+		provisionCtx,
 		provisioner.HookEvent(beforeTerraformInitEvent),
 		atmosConfig,
 		info.ComponentSection,
 		info.AuthContext,
+		writers,
 	); err != nil {
 		return componentPath, fmt.Errorf("provisioner execution failed: %w", err)
 	}
@@ -839,7 +944,7 @@ func prepareInitExecution(atmosConfig *schema.AtmosConfiguration, info *schema.C
 // invocation via prepareInitExecution.  These two code paths must never both execute
 // in the same command invocation or provisioners will run twice.
 func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...ShellCommandOption) (string, error) {
-	newPath, err := prepareInitExecution(atmosConfig, info, componentPath)
+	newPath, err := prepareInitExecution(shellCommandContext(opts...), shellCommandOutputWriters(opts...), atmosConfig, info, componentPath)
 	if err != nil {
 		return componentPath, err
 	}
@@ -859,21 +964,19 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 // provisioners itself) use this directly to avoid running the provisioners twice.
 func executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...ShellCommandOption) error {
 	initArgs := buildInitArgs(atmosConfig, info, varFile)
-	err := executeShellCommandWithRetry(
+	err := ExecuteShellCommandWithRetry(
 		atmosConfig,
 		info,
 		"init",
 		func(o ...ShellCommandOption) error {
-			return ExecuteShellCommand(
-				*atmosConfig,
-				info.Command,
-				initArgs,
-				componentPath,
-				info.ComponentEnvList,
-				info.DryRun,
-				info.RedirectStdErr,
-				o...,
-			)
+			return executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
+				componentPath:  componentPath,
+				args:           initArgs,
+				gatePhase:      subcommandInit,
+				subCommand:     subcommandInit,
+				redirectStdErr: info.RedirectStdErr,
+				shellOpts:      o,
+			})
 		},
 		opts...,
 	)
@@ -881,7 +984,7 @@ func executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *s
 		return err
 	}
 
-	dispatchAfterInit(atmosConfig, info, componentPath)
+	dispatchAfterInit(atmosConfig, info, componentPath, opts...)
 
 	return nil
 }
@@ -892,7 +995,7 @@ func executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *s
 // and working directory as init, so a `providers lock` runs against the already-warm cache.
 // Lock completion is best-effort: a failure is logged, not propagated, so it never fails the
 // user's plan/apply.
-func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) {
+func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) {
 	execCtx := &provisioner.TerraformExecContext{
 		WorkingDir: componentPath,
 		Run: func(args []string) error {
@@ -904,11 +1007,12 @@ func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 				info.ComponentEnvList,
 				info.DryRun,
 				info.RedirectStdErr,
+				opts...,
 			)
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(shellCommandContext(opts...), 5*time.Minute)
 	defer cancel()
 
 	if err := provisioner.ExecuteProvisioners(
@@ -917,6 +1021,7 @@ func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		atmosConfig,
 		info.ComponentSection,
 		info.AuthContext,
+		shellCommandOutputWriters(opts...),
 		execCtx,
 	); err != nil {
 		log.Warn("Failed to complete multi-platform provider lock", "error", err)

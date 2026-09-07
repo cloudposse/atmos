@@ -28,6 +28,9 @@ atmos helm diff monitoring -s plat-ue2-dev --from-manifest=current.yaml
 
 # Diff against the GitOps deployment repository (offline, git access only).
 atmos helm diff monitoring -s plat-ue2-dev --against=target
+
+# Diff all components tagged "production" (composes with --all/--affected)
+atmos helm diff --all --tags production
 ```
 
 ## Baselines
@@ -61,8 +64,14 @@ precedence (`--from-manifest` → `--against` → deployed release):
   <dt>`--context=<n>` <em>(optional)</em></dt>
   <dd>Number of unchanged context lines shown around each change. Defaults to <code>3</code>.</dd>
 
+  <dt>`--dependency-update` <em>(optional)</em></dt>
+  <dd>Fetch declared chart dependencies when they are missing. This may access dependency repositories and update the chart's <code>charts/</code> directory and lock file.</dd>
+
   <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
   <dd>Process multiple Helm components in dependency order.</dd>
+
+  <dt>`--tags` / `--labels` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any) or labels (comma-separated `key=value` or `key:value` pairs, matches all): `--tags=production,tier-1`, `--labels=cost-center=platform`. Compose with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
 </dl>
 
 :::note

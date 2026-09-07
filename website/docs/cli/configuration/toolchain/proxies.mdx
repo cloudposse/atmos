@@ -1,0 +1,79 @@
+---
+title: Toolchain Proxies
+sidebar_position: 4
+sidebar_label: proxies
+description: Run configured toolchain commands through Aqua-style Atmos proxies
+---
+
+import Intro from '@site/src/components/Intro';
+import File from '@site/src/components/File';
+
+<Intro>
+Toolchain proxies expose a configured toolchain command under its normal command name. Atmos resolves the proxy, installs its pinned tool on first use, and forwards the command arguments.
+</Intro>
+
+## Coreutils `ls`
+
+The uutils release provides a `coreutils` multicall binary. Define an `ls` proxy to run it as `coreutils ls` while continuing to type `ls`:
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  aliases:
+    coreutils: uutils/coreutils
+  proxies:
+    ls:
+      tool: coreutils
+      args: [ls]
+```
+</File>
+
+<File title=".tool-versions">
+```
+coreutils 0.9.0
+```
+</File>
+
+Activate proxies in an interactive shell, then use the command normally:
+
+```shell
+eval "$(atmos toolchain env)"
+ls stacks/
+```
+
+Atmos creates `ls` in `${toolchain.install_path}/bin/proxy`. That link invokes Atmos again under the name `ls`; Atmos reads the proxy configuration, resolves `coreutils` through `toolchain.aliases`, installs the pinned version when absent, and runs `coreutils ls stacks/`.
+
+## Configuration
+
+`toolchain.proxies` is a map from command name to a tool and optional prefix arguments:
+
+```yaml
+toolchain:
+  proxies:
+    my-command:
+      tool: owner/repository-or-alias
+      args: [subcommand, default-flag]
+```
+
+- `tool` is required and follows normal [tool alias](/cli/configuration/toolchain/aliases) resolution.
+- `args` are optional and are inserted before arguments supplied to the proxy.
+- The first version for the alias or canonical `owner/repository` in `.tool-versions` is used.
+- Proxies run a package's primary registry binary. Use prefix arguments for multicall tools such as `coreutils`.
+
+Proxy names must be safe command basenames. Atmos will not overwrite a non-link or a link it did not create for the current executable.
+
+## Where Proxies Work
+
+Atmos prepares the proxy environment for built-in command runners, custom commands, workflows, component commands, and hooks. A shell step can therefore run `ls` without manually exporting a path when its parent command declares the proxy.
+
+For commands you run directly in your terminal, opt in with `atmos toolchain env`. The generated Bash, Fish, PowerShell, dotenv, and JSON output includes the proxy path and the private context that keeps a proxy associated with the configuration that created it after `cd` into another directory.
+
+## Platform Behavior
+
+On Unix-like systems, Atmos creates symbolic links to its executable. On Windows, it creates executable hard links so proxy activation does not require the symlink privilege; invoke the proxy by its normal command name and Windows resolves the `.exe` link.
+
+## Scope and Troubleshooting
+
+Proxies do not replace system commands globally. They are found only by Atmos child processes or shells that place the proxy directory first in `PATH`.
+
+If a proxy cannot resolve its tool, ensure its alias is valid and `.tool-versions` contains a pinned version. If a proxy link cannot be created, remove or rename the conflicting user-managed file rather than allowing Atmos to replace it.

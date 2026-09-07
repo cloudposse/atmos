@@ -1,10 +1,16 @@
 package exec
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -178,4 +184,256 @@ func TestHelmfileComponentEnvSectionConversion(t *testing.T) {
 				"ComponentEnvList should contain exactly %d variables", len(tt.expectedEnvList))
 		})
 	}
+}
+
+// testHelmfileNodeHooks is a schema.ComponentNodeHooks test double for
+// ExecuteHelmfile, mirroring testNodeHooks in
+// pkg/scheduler/adapters/terraform_test.go. It records whether Before/After
+// were invoked and can be configured to return a specific error.
+type testHelmfileNodeHooks struct {
+	beforeCalled bool
+	afterCalled  bool
+	beforeErr    error
+	afterErr     error
+	afterExecErr error // the execErr After was actually called with.
+}
+
+func (n *testHelmfileNodeHooks) Before(_ context.Context, _ *schema.ConfigAndStacksInfo) error {
+	n.beforeCalled = true
+	return n.beforeErr
+}
+
+func (n *testHelmfileNodeHooks) After(_ context.Context, _ *schema.ConfigAndStacksInfo, _ string, execErr error) error {
+	n.afterCalled = true
+	n.afterExecErr = execErr
+	return n.afterErr
+}
+
+// newHelmfileNodeHooksFixture writes a minimal atmos project with one
+// helmfile component ("myapp") that has no chart releases — no AWS/EKS auth
+// is configured, so ExecuteHelmfile reaches the real `helmfile <cmd>`
+// execution deterministically and offline, failing only because the
+// component has no matching releases. This is what lets the test reach
+// info.NodeHooks.Before/After without a real cluster.
+func newHelmfileNodeHooksFixture(t *testing.T) schema.ConfigAndStacksInfo {
+	t.Helper()
+	tests.RequireHelmfile(t)
+
+	tempDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "components", "helmfile", "myapp"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks", "deploy"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(`base_path: "./"
+components:
+  helmfile:
+    base_path: "components/helmfile"
+    use_eks: false
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+logs:
+  level: Info
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "stacks", "deploy", "dev.yaml"), []byte(`vars:
+  stage: dev
+components:
+  helmfile:
+    myapp:
+      vars:
+        foo: bar
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "components", "helmfile", "myapp", "helmfile.yaml"), []byte("releases: []\n"), 0o644))
+
+	t.Chdir(tempDir)
+
+	return schema.ConfigAndStacksInfo{
+		ComponentFromArg: "myapp",
+		Stack:            "dev",
+		SubCommand:       "diff",
+		ComponentType:    "helmfile",
+	}
+}
+
+// TestExecuteHelmfileNodeHooks_InvokedAroundExecution is a regression test
+// for the NodeHooks wiring added to ExecuteHelmfile: both Before and After
+// must fire around the real helmfile execution (which fails here because the
+// fixture component has no chart releases — that failure is incidental, not
+// the point of the test).
+func TestExecuteHelmfileNodeHooks_InvokedAroundExecution(t *testing.T) {
+	info := newHelmfileNodeHooksFixture(t)
+	nodeHooks := &testHelmfileNodeHooks{}
+	info.NodeHooks = nodeHooks
+
+	err := ExecuteHelmfile(info)
+
+	require.Error(t, err, "the fixture component has no releases, so helmfile itself fails")
+	assert.True(t, nodeHooks.beforeCalled)
+	assert.True(t, nodeHooks.afterCalled)
+	assert.Error(t, nodeHooks.afterExecErr, "After must receive the real execution error")
+}
+
+// TestExecuteHelmfileNodeHooks_BeforeErrorAbortsExecution asserts that a
+// Before-hook failure aborts execution before helmfile ever runs, and that
+// the returned error wraps ErrPerComponentHookFailed.
+func TestExecuteHelmfileNodeHooks_BeforeErrorAbortsExecution(t *testing.T) {
+	info := newHelmfileNodeHooksFixture(t)
+	sentinelErr := errors.New("before hook failed")
+	nodeHooks := &testHelmfileNodeHooks{beforeErr: sentinelErr}
+	info.NodeHooks = nodeHooks
+
+	err := ExecuteHelmfile(info)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPerComponentHookFailed)
+	assert.ErrorIs(t, err, sentinelErr)
+	assert.True(t, nodeHooks.beforeCalled)
+	assert.False(t, nodeHooks.afterCalled, "After must never run when Before aborted execution")
+}
+
+// TestExecuteHelmfileNodeHooks_AfterErrorBecomesResultWhenExecSucceeded
+// asserts that an After-hook failure becomes the returned error when the
+// underlying helmfile execution itself reported no error.
+func TestExecuteHelmfileNodeHooks_AfterErrorBecomesResultWhenExecSucceeded(t *testing.T) {
+	info := newHelmfileNodeHooksFixture(t)
+	info.DryRun = true // Skips the real helmfile execution, so execErr is nil.
+	sentinelErr := errors.New("after hook failed")
+	nodeHooks := &testHelmfileNodeHooks{afterErr: sentinelErr}
+	info.NodeHooks = nodeHooks
+
+	err := ExecuteHelmfile(info)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sentinelErr)
+	assert.NoError(t, nodeHooks.afterExecErr, "dry-run means the underlying exec reported no error")
+}
+
+// TestExecuteHelmfileNodeHooks_AfterErrorDroppedWhenExecAlreadyFailed asserts
+// that when the underlying execution already failed, an additional
+// After-hook failure is dropped (not joined) — the original execution error
+// wins. This is a real behavioral difference from
+// pkg/scheduler/adapters/terraform.go's runAfterNodeHooks, which uses
+// errors.Join instead.
+func TestExecuteHelmfileNodeHooks_AfterErrorDroppedWhenExecAlreadyFailed(t *testing.T) {
+	info := newHelmfileNodeHooksFixture(t)
+	afterErr := errors.New("after hook failed")
+	nodeHooks := &testHelmfileNodeHooks{afterErr: afterErr}
+	info.NodeHooks = nodeHooks
+
+	err := ExecuteHelmfile(info)
+
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, afterErr, "the after-hook error must be dropped when the exec error already won")
+	assert.Error(t, nodeHooks.afterExecErr, "After must have been called with the real (non-nil) exec error")
+}
+
+// TestExecuteHelmfileCommandWithRetry_MatchingError_Retries proves the retry wiring added
+// to ExecuteHelmfile actually triggers through the real call chain
+// (executeHelmfileCommandWithRetry -> ExecuteShellCommandWithRetry -> ExecuteShellCommand),
+// not just that the shared helper works in isolation. Uses the test binary itself as the
+// "helmfile" command (cross-platform, no real helmfile install needed) via the
+// _ATMOS_TEST_EXIT_ONE/_ATMOS_TEST_STDERR TestMain gate.
+func TestExecuteHelmfileCommandWithRetry_MatchingError_Retries(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	counterFile := filepath.Join(t.TempDir(), "counter")
+
+	info := &schema.ConfigAndStacksInfo{
+		Command:    exePath,
+		SubCommand: "sync",
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(3),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+	envVars := []string{
+		"_ATMOS_TEST_COUNTER_FILE=" + counterFile,
+		"_ATMOS_TEST_EXIT_ONE=1",
+		"_ATMOS_TEST_STDERR=Error: 502 Bad Gateway returned",
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	err = executeHelmfileCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
+		allArgsAndFlags: []string{"sync"},
+		componentPath:   t.TempDir(),
+		envVars:         envVars,
+	})
+	require.Error(t, err, "all 3 attempts fail in this fixture, so the final error must propagate")
+
+	counterBytes, readErr := os.ReadFile(counterFile)
+	require.NoError(t, readErr)
+	assert.Len(t, counterBytes, 3, "all 3 configured attempts must execute before the final error propagates")
+}
+
+// TestExecuteHelmfileCommandWithRetry_NonMatchingError_FailsFast proves a real helmfile
+// failure whose output does not match `conditions` is NOT retried through the real call
+// chain -- the counter file lets us assert exactly one subprocess invocation happened.
+func TestExecuteHelmfileCommandWithRetry_NonMatchingError_FailsFast(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	counterFile := filepath.Join(t.TempDir(), "counter")
+
+	info := &schema.ConfigAndStacksInfo{
+		Command:    exePath,
+		SubCommand: "sync",
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(3),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+	envVars := []string{
+		"_ATMOS_TEST_COUNTER_FILE=" + counterFile,
+		"_ATMOS_TEST_EXIT_ONE=1",
+		"_ATMOS_TEST_STDERR=permission denied",
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	err = executeHelmfileCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
+		allArgsAndFlags: []string{"sync"},
+		componentPath:   t.TempDir(),
+		envVars:         envVars,
+	})
+	require.Error(t, err)
+
+	counterBytes, readErr := os.ReadFile(counterFile)
+	require.NoError(t, readErr)
+	assert.Len(t, counterBytes, 1, "non-matching error must fail fast on the first attempt")
+}
+
+// TestExecuteHelmfileCommandWithRetry_ComposesWithNodeHooksCapture proves that
+// executeHelmfileCommandWithRetry's caller-supplied NodeHooks capture buffers (shellOpts)
+// still receive output when retry is also configured -- guards the
+// ExecuteShellCommandWithRetry MultiWriter composition fix at the actual helmfile call site,
+// not just in the shared helper's own unit tests.
+func TestExecuteHelmfileCommandWithRetry_ComposesWithNodeHooksCapture(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	info := &schema.ConfigAndStacksInfo{
+		Command:    exePath,
+		SubCommand: "sync",
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(2),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+	envVars := []string{
+		"_ATMOS_TEST_EXIT_ONE=1",
+		"_ATMOS_TEST_STDERR=502 Bad Gateway",
+	}
+
+	var nodeHooksStderr bytes.Buffer
+	shellOpts := []ShellCommandOption{WithStderrCapture(&nodeHooksStderr)}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	err = executeHelmfileCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
+		allArgsAndFlags: []string{"sync"},
+		componentPath:   t.TempDir(),
+		envVars:         envVars,
+	}, shellOpts...)
+	require.Error(t, err)
+	assert.Contains(t, nodeHooksStderr.String(), "502 Bad Gateway",
+		"the NodeHooks-style caller capture buffer must still receive output when retry is also active")
 }

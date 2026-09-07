@@ -24,6 +24,29 @@ type ProfileLocation struct {
 	Precedence int    // Lower number = higher precedence.
 }
 
+// splitCliConfigPath splits atmosConfig.CliConfigPath into its individual contributor
+// directories. CliConfigPath is normally a single directory, but connectPaths
+// (load_config_args.go) joins multiple --config/--config-path sources into "dirA;dirB;" when
+// more than one contributed. An empty CliConfigPath (no config file was used) still yields a
+// single "" entry so callers keep resolving relative to the working directory, matching prior
+// single-directory behavior.
+func splitCliConfigPath(cliConfigPath string) []string {
+	if cliConfigPath == "" {
+		return []string{""}
+	}
+	parts := strings.Split(cliConfigPath, ";")
+	dirs := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			dirs = append(dirs, p)
+		}
+	}
+	if len(dirs) == 0 {
+		return []string{""}
+	}
+	return dirs
+}
+
 // discoverProfileLocations returns all possible profile locations in precedence order.
 // Precedence (highest to lowest):
 // 1. Configurable (profiles.base_path in atmos.yaml).
@@ -33,16 +56,33 @@ type ProfileLocation struct {
 func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) ([]ProfileLocation, error) {
 	var locations []ProfileLocation
 
-	// Use CliConfigPath as base directory (it contains the directory of atmos.yaml).
-	baseDir := atmosConfig.CliConfigPath
+	// CliConfigPath is usually a single directory, but connectPaths (load_config_args.go)
+	// joins multiple --config/--config-path contributors into "dirA;dirB;" when more than one
+	// source was selected. Treating that joined string as a single directory produced a
+	// nonexistent path like "dirA;dirB;/.atmos/profiles", silently breaking profile discovery
+	// whenever --config selected more than one file. Search each contributor directory instead.
+	baseDirs := splitCliConfigPath(atmosConfig.CliConfigPath)
+	primaryDir := ""
+	if len(baseDirs) > 0 {
+		primaryDir = baseDirs[0]
+	}
 
-	// 1. Configurable base_path (highest precedence).
+	// 1. Configurable base_path (highest precedence), resolved from whichever --config file
+	// actually declared profiles.base_path (ProfilesBasePathConfigDir), falling back to the
+	// primary directory for single-file/non-CLI-arg config sources where that isn't tracked.
+	// Resolving against primaryDir unconditionally previously broke this whenever
+	// profiles.base_path was declared in a --config file OTHER than the first
+	// (cloudposse/atmos#2867).
 	if atmosConfig.Profiles.BasePath != "" {
 		basePath := atmosConfig.Profiles.BasePath
 
-		// If relative, resolve from atmos.yaml directory.
+		// If relative, resolve from the declaring file's directory.
 		if !filepath.IsAbs(basePath) {
-			basePath = filepath.Join(baseDir, basePath)
+			resolveDir := atmosConfig.ProfilesBasePathConfigDir
+			if resolveDir == "" {
+				resolveDir = primaryDir
+			}
+			basePath = filepath.Join(resolveDir, basePath)
 		}
 
 		locations = append(locations, ProfileLocation{
@@ -52,13 +92,14 @@ func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) ([]Profile
 		})
 	}
 
-	// 2. Project-local hidden profiles.
-	projectHiddenPath := filepath.Join(baseDir, ".atmos", "profiles")
-	locations = append(locations, ProfileLocation{
-		Path:       projectHiddenPath,
-		Type:       "project-hidden",
-		Precedence: 2,
-	})
+	// 2. Project-local hidden profiles -- one per contributor directory.
+	for _, baseDir := range baseDirs {
+		locations = append(locations, ProfileLocation{
+			Path:       filepath.Join(baseDir, ".atmos", "profiles"),
+			Type:       "project-hidden",
+			Precedence: 2,
+		})
+	}
 
 	// 3. XDG user profiles.
 	xdgPath, err := xdg.GetXDGConfigDir("profiles", 0o755)
@@ -70,13 +111,14 @@ func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) ([]Profile
 		})
 	}
 
-	// 4. Project-local non-hidden profiles (lowest precedence).
-	projectPath := filepath.Join(baseDir, "profiles")
-	locations = append(locations, ProfileLocation{
-		Path:       projectPath,
-		Type:       "project",
-		Precedence: 4,
-	})
+	// 4. Project-local non-hidden profiles (lowest precedence) -- one per contributor directory.
+	for _, baseDir := range baseDirs {
+		locations = append(locations, ProfileLocation{
+			Path:       filepath.Join(baseDir, "profiles"),
+			Type:       "project",
+			Precedence: 4,
+		})
+	}
 
 	return locations, nil
 }

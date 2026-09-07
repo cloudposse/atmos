@@ -19,13 +19,6 @@ func resetLine() {
 	}
 }
 
-func printStatusLine(line string) {
-	defer perf.Track(nil, "toolchain.printStatusLine")()
-
-	resetLine()
-	ui.Writeln(line)
-}
-
 func printProgressBar(line string) {
 	defer perf.Track(nil, "toolchain.printProgressBar")()
 

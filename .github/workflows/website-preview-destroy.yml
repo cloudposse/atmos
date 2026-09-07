@@ -7,11 +7,10 @@ on:
     types:
       - closed
 
-# These permissions are needed to interact with the GitHub's OIDC Token endpoint
+# Least-privilege default; the job below declares its own narrower
+# job-level permissions that override this baseline.
 permissions:
-  id-token: write
   contents: read
-  deployments: write
 
 env:
   AWS_REGION: us-east-2
@@ -26,10 +25,27 @@ jobs:
     if: ${{ !contains(github.event.*.labels.*.name, 'website-no-deploy') }}
 
     runs-on: ubuntu-latest
+    # id-token: write is needed to interact with GitHub's OIDC token endpoint
+    # (Configure AWS Credentials); deployments: write to inactivate the
+    # deployment below.
+    permissions:
+      contents: read
+      id-token: write
+      deployments: write
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            sts.us-east-2.amazonaws.com:443
+            cplive-plat-ue2-dev-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
+            api.github.com:443
+            *.actions.githubusercontent.com:443
+
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.IAM_ROLE_ARN }}
@@ -49,7 +65,7 @@ jobs:
         run: echo "branch=$(echo ${PR_HEAD#refs/heads/} | tr / -)" >> $GITHUB_OUTPUT
 
       - name: Seek deployment
-        uses: cloudposse/github-action-seek-deployment@0.1.1
+        uses: cloudposse/github-action-seek-deployment@9c18326d279eaf1683777086a61ca3c744aeb246 # 0.1.1
         id: deployment
         with:
           environment: preview
@@ -58,7 +74,7 @@ jobs:
           status: success
 
       - name: Inactivate deployment
-        uses: chrnorm/deployment-status@9a72af4586197112e0491ea843682b5dc280d806 # v2.0.3
+        uses: chrnorm/deployment-status@6df8d036fd2fee9eb82936733953da1f8382b41e # v2.0.4
         if: ${{ steps.deployment.outputs.id != '' }}
         with:
           state: inactive

@@ -1,62 +1,30 @@
 package exec
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
-	"path/filepath"
-	"strings"
-	"text/template"
-	"time"
-
-	"github.com/cloudposse/atmos/pkg/perf"
-
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/hairyhenderson/gomplate/v3"
-	"github.com/jfrog/jfrog-client-go/utils/log"
-	cp "github.com/otiai10/copy"
+	"sort"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/downloader"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendor"
+	"github.com/cloudposse/atmos/pkg/vendoring"
+	vendorcomponent "github.com/cloudposse/atmos/pkg/vendoring/component"
+	"github.com/cloudposse/atmos/pkg/vendoring/install"
 )
 
-const ociScheme = "oci://"
-
-var (
-	ErrMissingMixinURI             = errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
-	ErrMissingMixinFilename        = errors.New("'filename' must be specified for each 'mixin' in the 'component.yaml' file")
-	ErrMixinEmpty                  = errors.New("mixin URI cannot be empty")
-	ErrMixinNotImplemented         = errors.New("local mixin installation not implemented")
-	ErrStackPullNotSupported       = errors.New("command 'atmos vendor pull --stack <stack>' is not supported yet")
-	ErrComponentConfigFileNotFound = errors.New("component vendoring config file does not exist in the folder")
-	ErrFolderNotFound              = errors.New("folder does not exist")
-	ErrInvalidComponentKind        = errors.New("invalid 'kind' in the component vendoring config file. Supported kinds: 'ComponentVendorConfig'")
-	ErrUriMustSpecified            = errors.New("'uri' must be specified in 'source.uri' in the component vendoring config file")
-)
-
+// ComponentSkipFunc matches otiai10/copy's Skip function signature.
 type ComponentSkipFunc func(os.FileInfo, string, string) (bool, error)
 
-// findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`).
-func findComponentConfigFile(basePath, fileName string) (string, error) {
-	componentConfigExtensions := []string{"yaml", "yml"}
-
-	for _, ext := range componentConfigExtensions {
-		configFilePath := filepath.Join(basePath, fmt.Sprintf("%s.%s", fileName, ext))
-		if u.FileExists(configFilePath) {
-			return configFilePath, nil
-		}
-	}
-	return "", fmt.Errorf("%w:%s", ErrComponentConfigFileNotFound, basePath)
-}
-
-// ReadAndProcessComponentVendorConfigFile reads and processes the component vendoring config file `component.yaml`.
+// ReadAndProcessComponentVendorConfigFile reads and processes the component vendoring config file
+// `component.yaml`. Delegates path resolution and manifest reading to pkg/vendoring
+// (ResolveComponentPath, FindComponentManifestFile, ReadComponentManifest) -- the shared,
+// centralized-sentinel implementation also used by vendoring.DiscoverComponentManifests -- rather
+// than hand-rolling its own copy of that lookup.
 func ReadAndProcessComponentVendorConfigFile(
 	atmosConfig *schema.AtmosConfiguration,
 	component string,
@@ -64,51 +32,24 @@ func ReadAndProcessComponentVendorConfigFile(
 ) (schema.VendorComponentConfig, string, error) {
 	defer perf.Track(atmosConfig, "exec.ReadAndProcessComponentVendorConfigFile")()
 
-	var componentBasePath string
 	var componentConfig schema.VendorComponentConfig
 
-	switch componentType {
-	case cfg.TerraformComponentType:
-		componentBasePath = atmosConfig.Components.Terraform.BasePath
-	case cfg.HelmfileComponentType:
-		componentBasePath = atmosConfig.Components.Helmfile.BasePath
-	case cfg.PackerComponentType:
-		componentBasePath = atmosConfig.Components.Packer.BasePath
-	default:
-		return componentConfig, "", fmt.Errorf("%s,%w", componentType, errUtils.ErrUnsupportedComponentType)
-	}
-
-	componentPath := filepath.Join(atmosConfig.BasePath, componentBasePath, component)
-
-	dirExists, err := u.IsDirectory(componentPath)
+	componentPath, err := vendoring.ResolveComponentPath(atmosConfig, component, componentType)
 	if err != nil {
 		return componentConfig, "", err
 	}
 
-	if !dirExists {
-		return componentConfig, "", fmt.Errorf("%w:%s", ErrFolderNotFound, componentPath)
-	}
-
-	componentConfigFile, err := findComponentConfigFile(componentPath, strings.TrimSuffix(cfg.ComponentVendorConfigFileName, ".yaml"))
+	manifestFile, err := vendoring.FindComponentManifestFile(componentPath)
 	if err != nil {
 		return componentConfig, "", err
 	}
 
-	componentConfigFileContent, err := os.ReadFile(componentConfigFile)
+	manifest, err := vendoring.ReadComponentManifest(manifestFile)
 	if err != nil {
 		return componentConfig, "", err
 	}
 
-	componentConfig, err = u.UnmarshalYAML[schema.VendorComponentConfig](string(componentConfigFileContent))
-	if err != nil {
-		return componentConfig, "", err
-	}
-
-	if componentConfig.Kind != "ComponentVendorConfig" {
-		return componentConfig, "", fmt.Errorf("%w: '%s' in file '%s'", ErrInvalidComponentKind, componentConfig.Kind, cfg.ComponentVendorConfigFileName)
-	}
-
-	return componentConfig, componentPath, nil
+	return *manifest, componentPath, nil
 }
 
 // ExecuteComponentVendorInternal executes the 'atmos vendor pull' command for a component.
@@ -120,27 +61,9 @@ func ReadAndProcessComponentVendorConfigFile(
 // https://github.com/google/go-containerregistry.
 // https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html.
 
-// ExecuteStackVendorInternal executes the command to vendor an Atmos stack.
-// TODO: implement this.
-func ExecuteStackVendorInternal(
-	stack string,
-	dryRun bool,
-) error {
-	defer perf.Track(nil, "exec.ExecuteStackVendorInternal")()
-
-	return ErrStackPullNotSupported
-}
-
-func copyComponentToDestination(tempDir, componentPath string, vendorComponentSpec *schema.VendorComponentSpec) error {
-	return vendor.CopyToTarget(tempDir, componentPath, vendor.CopyOptions{
-		IncludedPaths: vendorComponentSpec.Source.IncludedPaths,
-		ExcludedPaths: vendorComponentSpec.Source.ExcludedPaths,
-	})
-}
-
 // createComponentSkipFunc creates a skip function for component vendoring.
 // Delegates to pkg/vendor for the shared implementation.
-func createComponentSkipFunc(tempDir string, vendorComponentSpec *schema.VendorComponentSpec) ComponentSkipFunc {
+func createComponentSkipFunc(tempDir string, vendorComponentSpec *schema.VendorComponentSpec) func(os.FileInfo, string, string) (bool, error) {
 	return vendor.CreateSkipFunc(tempDir, vendorComponentSpec.Source.IncludedPaths, vendorComponentSpec.Source.ExcludedPaths)
 }
 
@@ -155,356 +78,492 @@ func ExecuteComponentVendorInternal(
 	vendorComponentSpec *schema.VendorComponentSpec,
 	component string,
 	componentPath string,
-	dryRun bool,
+	opts install.InstallOptions,
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorInternal")()
 
-	if vendorComponentSpec.Source.Uri == "" {
-		return fmt.Errorf("%w:'%s'", ErrUriMustSpecified, cfg.ComponentVendorConfigFileName)
-	}
-	uri := vendorComponentSpec.Source.Uri
-	// Parse 'uri' template
-	if vendorComponentSpec.Source.Version != "" {
-		t, err := template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(getSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(vendorComponentSpec.Source.Uri)
-		if err != nil {
-			return err
-		}
-		var tpl bytes.Buffer
-		err = t.Execute(&tpl, vendorComponentSpec.Source)
-		if err != nil {
-			return err
-		}
-		uri = tpl.String()
-	}
-	var useOciScheme, useLocalFileSystem, sourceIsLocalFile bool
-
-	// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
-	if strings.HasPrefix(uri, ociScheme) {
-		useOciScheme = true
-		uri = strings.TrimPrefix(uri, ociScheme)
-	}
-
-	if !useOciScheme {
-		uri, useLocalFileSystem, sourceIsLocalFile = handleLocalFileScheme(componentPath, uri)
-	}
-	pType := determinePackageType(useOciScheme, useLocalFileSystem)
-	componentPkg := pkgComponentVendor{
-		uri:                 uri,
-		name:                component,
-		componentPath:       componentPath,
-		sourceIsLocalFile:   sourceIsLocalFile,
-		pkgType:             pType,
-		version:             vendorComponentSpec.Source.Version,
-		vendorComponentSpec: vendorComponentSpec,
-		IsComponent:         true,
-	}
-
-	var packages []pkgComponentVendor
-	packages = append(packages, componentPkg)
-	// Process mixins
-	if len(vendorComponentSpec.Mixins) > 0 {
-		mixinPkgs, err := processComponentMixins(vendorComponentSpec, componentPath)
-		if err != nil {
-			return err
-		}
-		packages = append(packages, mixinPkgs...)
-	}
-	if len(packages) > 0 {
-		return executeVendorModel(packages, dryRun, atmosConfig)
-	}
-	return nil
-}
-
-// handleLocalFileScheme processes the URI for local file system paths.
-// Check if `uri` is a file path.
-// If it's a file path, check if it's an absolute path.
-// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
-func handleLocalFileScheme(componentPath, uri string) (string, bool, bool) {
-	var useLocalFileSystem, sourceIsLocalFile bool
-
-	// Handle absolute path resolution
-	if absPath, err := u.JoinPathAndValidate(componentPath, uri); err == nil {
-		uri = absPath
-		useLocalFileSystem = true
-		sourceIsLocalFile = u.FileExists(uri)
-	}
-
-	// Handle file:// scheme
-	if parsedURL, err := url.Parse(uri); err == nil && parsedURL.Scheme != "" {
-		if parsedURL.Scheme == "file" {
-			trimmedPath := strings.TrimPrefix(filepath.ToSlash(parsedURL.Path), "/")
-			uri = filepath.Clean(trimmedPath)
-			useLocalFileSystem = true
-		}
-	}
-
-	return uri, useLocalFileSystem, sourceIsLocalFile
-}
-
-func processComponentMixins(vendorComponentSpec *schema.VendorComponentSpec, componentPath string) ([]pkgComponentVendor, error) {
-	var packages []pkgComponentVendor
-	for _, mixin := range vendorComponentSpec.Mixins {
-		if mixin.Uri == "" {
-			return nil, ErrMissingMixinURI
-		}
-
-		if mixin.Filename == "" {
-			return nil, ErrMissingMixinFilename
-		}
-
-		// Parse 'uri' template
-		uri, err := parseMixinURI(&mixin)
-		if err != nil {
-			return nil, err
-		}
-		pType := pkgTypeRemote
-		// Check if `uri` uses the `oci://` scheme (to download the sources from an OCI-compatible registry).
-		useOciScheme := false
-		if strings.HasPrefix(uri, ociScheme) {
-			useOciScheme = true
-			pType = pkgTypeOci
-			uri = strings.TrimPrefix(uri, ociScheme)
-		}
-
-		// Check if `uri` is a file path.
-		// If it's a file path, check if it's an absolute path.
-		// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
-		if !useOciScheme {
-			if absPath, err := u.JoinPathAndValidate(componentPath, uri); err == nil {
-				uri = absPath
-			}
-		}
-		// Check if it's a local file .
-		if absPath, err := u.JoinPathAndValidate(componentPath, uri); err == nil {
-			if u.FileExists(absPath) {
-				continue
-			}
-		}
-
-		pkg := pkgComponentVendor{
-			uri:                 uri,
-			pkgType:             pType,
-			name:                "mixin " + uri,
-			sourceIsLocalFile:   false,
-			IsMixins:            true,
-			vendorComponentSpec: vendorComponentSpec,
-			version:             mixin.Version,
-			componentPath:       componentPath,
-			mixinFilename:       mixin.Filename,
-		}
-
-		packages = append(packages, pkg)
-	}
-	return packages, nil
-}
-
-func parseMixinURI(mixin *schema.VendorComponentMixins) (string, error) {
-	if mixin.Version == "" {
-		return mixin.Uri, nil
-	}
-
-	tmpl, err := template.New("mixin-uri").Funcs(getSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(mixin.Uri)
-	if err != nil {
-		return "", err
-	}
-
-	var tpl bytes.Buffer
-	if err := tmpl.Execute(&tpl, mixin); err != nil {
-		return "", err
-	}
-
-	return tpl.String(), nil
-}
-
-func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
-	return func() tea.Msg {
-		if dryRun {
-			if needsCustomDetection(p.uri) {
-				log.Debug("Dry-run mode: custom detection required for component (or mixin) URI", "component", p.name, "uri", p.uri)
-				detector := downloader.NewCustomGitDetector(atmosConfig, "")
-				_, _, err := detector.Detect(p.uri, "")
-				if err != nil {
-					return installedPkgMsg{
-						err:  fmt.Errorf("dry-run: detection failed for component %s: %w", p.name, err),
-						name: p.name,
-					}
-				}
-			} else {
-				log.Debug("Dry-run mode: skipping custom detection; URI already supported by go-getter", "component", p.name, "uri", p.uri)
-			}
-			time.Sleep(100 * time.Millisecond)
-			return installedPkgMsg{
-				err:  nil,
-				name: p.name,
-			}
-		}
-
-		if p.IsComponent {
-			err := installComponent(p, atmosConfig)
-			if err != nil {
-				return installedPkgMsg{
-					err:  err,
-					name: p.name,
-				}
-			}
-			return installedPkgMsg{
-				err:  nil,
-				name: p.name,
-			}
-		}
-		if p.IsMixins {
-			err := installMixin(p, atmosConfig)
-			if err != nil {
-				return installedPkgMsg{
-					err:  err,
-					name: p.name,
-				}
-			}
-			return installedPkgMsg{
-				err:  nil,
-				name: p.name,
-			}
-		}
-		return installedPkgMsg{
-			err:  fmt.Errorf("%w %s for package %s", errUtils.ErrUnknownPackageType, p.pkgType.String(), p.name),
-			name: p.name,
-		}
-	}
-}
-
-func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration) error {
-	// Create temp folder
-	// We are using a temp folder for the following reasons:
-	// 1. 'git' does not clone into an existing folder (and we have the existing component folder with `component.yaml` in it)
-	// 2. We have the option to skip some files we don't need and include only the files we need when copying from the temp folder to the destination folder
-	tempDir, err := createTempDir()
+	packages, err := vendorcomponent.BuildVendorPackages(vendorcomponent.BuildPackagesOptions{
+		AtmosConfig:         atmosConfig,
+		VendorComponentSpec: vendorComponentSpec,
+		Component:           component,
+		ComponentPath:       componentPath,
+		RefreshLock:         opts.RefreshLock,
+		TemplateFunc:        ProcessTmpl,
+	})
 	if err != nil {
 		return err
 	}
-
-	defer removeTempDir(tempDir)
-
-	switch p.pkgType {
-	case pkgTypeRemote:
-		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
-
-		opts := []downloader.GoGetterOption{}
-		if p.vendorComponentSpec != nil && p.vendorComponentSpec.Source.Retry != nil {
-			opts = append(opts, downloader.WithRetryConfig(p.vendorComponentSpec.Source.Retry))
-		}
-		if err := downloader.NewGoGetterDownloader(atmosConfig, opts...).Fetch(p.uri, tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
-			return fmt.Errorf("failed to download package %s error %w", p.name, err)
-		}
-
-	case pkgTypeOci:
-		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		if err := processOciImage(atmosConfig, p.uri, tempDir); err != nil {
-			return fmt.Errorf("Failed to process OCI image %s error %w", p.name, err)
-		}
-
-	case pkgTypeLocal:
-		if err := handlePkgTypeLocalComponent(tempDir, p); err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("%w %s for package %s", errUtils.ErrUnknownPackageType, p.pkgType.String(), p.name)
-	}
-	if err := copyComponentToDestination(tempDir, p.componentPath, p.vendorComponentSpec); err != nil {
-		return fmt.Errorf("failed to copy package %s error %w", p.name, err)
-	}
-
-	return nil
-}
-
-func handlePkgTypeLocalComponent(tempDir string, p *pkgComponentVendor) error {
-	copyOptions := cp.Options{
-		PreserveTimes: false,
-		PreserveOwner: false,
-		// OnSymlink specifies what to do on symlink
-		// Override the destination file if it already exists
-		OnSymlink: func(src string) cp.SymlinkAction {
-			return cp.Deep
-		},
-	}
-
-	tempDir2 := tempDir
-	if p.sourceIsLocalFile {
-		tempDir2 = filepath.Join(tempDir, SanitizeFileName(p.uri))
-	}
-
-	if err := cp.Copy(p.uri, tempDir2, copyOptions); err != nil {
-		return fmt.Errorf("failed to copy package %s error %w", p.name, err)
-	}
-	return nil
-}
-
-func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration) error {
-	tempDir, err := os.MkdirTemp("", "atmos-vendor-mixin")
+	packages, err = install.FilterPending(atmosConfig, packages, opts)
 	if err != nil {
-		return fmt.Errorf("Failed to create temp directory %w", err)
+		return err
 	}
-
-	defer removeTempDir(tempDir)
-
-	switch p.pkgType {
-	case pkgTypeRemote:
-		opts := []downloader.GoGetterOption{}
-		if p.vendorComponentSpec != nil && p.vendorComponentSpec.Source.Retry != nil {
-			opts = append(opts, downloader.WithRetryConfig(p.vendorComponentSpec.Source.Retry))
-		}
-		if err = downloader.NewGoGetterDownloader(atmosConfig, opts...).Fetch(p.uri, filepath.Join(tempDir, p.mixinFilename), downloader.ClientModeFile, 10*time.Minute); err != nil {
-			return fmt.Errorf("failed to download package %s error %w", p.name, err)
-		}
-
-	case pkgTypeOci:
-		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		err = processOciImage(atmosConfig, p.uri, tempDir)
-		if err != nil {
-			return fmt.Errorf("failed to process OCI image %s error %w", p.name, err)
-		}
-
-	case pkgTypeLocal:
-		if p.uri == "" {
-			return ErrMixinEmpty
-		}
-		// Implement local mixin installation logic
-		return ErrMixinNotImplemented
-
-	default:
-		return fmt.Errorf("%w %s for package %s", errUtils.ErrUnknownPackageType, p.pkgType.String(), p.name)
+	if len(packages) > 0 {
+		return executeVendorModel(packages, opts, atmosConfig)
 	}
-
-	// Copy from the temp folder to the destination folder
-	copyOptions := cp.Options{
-		// Preserve the atime and the mtime of the entries
-		PreserveTimes: false,
-
-		// Preserve the uid and the gid of all entries
-		PreserveOwner: false,
-
-		// OnSymlink specifies what to do on symlink
-		// Override the destination file if it already exists
-		// Prevent the error:
-		// symlink components/terraform/mixins/context.tf components/terraform/infra/vpc-flow-logs-bucket/context.tf: file exists
-		OnSymlink: func(src string) cp.SymlinkAction {
-			return cp.Deep
-		},
-
-		// OnDirExists handles existing directories at the destination.
-		// If the destination already has a .git directory (from a previous vendor run),
-		// we need to leave it untouched to avoid permission errors on git packfiles
-		// which often have restrictive permissions.
-		OnDirExists: func(src, dest string) cp.DirExistsAction {
-			if filepath.Base(dest) == ".git" {
-				return cp.Untouchable
-			}
-			return cp.Merge
-		},
-	}
-
-	if err := cp.Copy(tempDir, p.componentPath, copyOptions); err != nil {
-		return fmt.Errorf("Failed to copy package %s error %w", p.name, err)
-	}
-
 	return nil
+}
+
+// ExecuteComponentVendorPullBatch resolves and pulls multiple components declared via their own
+// component.yaml manifests in a single batched run (one progress bar, one completion summary),
+// instead of one executeVendorModel call per component. Used by `atmos vendor update --pull`
+// to avoid a separate "0/1" progress block per updated component.
+//
+// Resolution errors are propagated immediately (fail-fast): silently skipping a component whose
+// component.yaml fails to parse would silently under-pull, matching the existing single-component
+// behavior in handleComponentVendor (internal/exec/vendor.go), which also fails fast.
+func ExecuteComponentVendorPullBatch(
+	atmosConfig *schema.AtmosConfiguration,
+	components []string,
+	componentType string,
+	opts install.InstallOptions,
+) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorPullBatch")()
+
+	if len(components) == 0 {
+		return nil
+	}
+
+	var allPackages []install.VendorPackage
+	for _, component := range components {
+		config, componentPath, err := ReadAndProcessComponentVendorConfigFile(atmosConfig, component, componentType)
+		if err != nil {
+			return fmt.Errorf("component %q: %w", component, err)
+		}
+		packages, err := vendorcomponent.BuildVendorPackages(vendorcomponent.BuildPackagesOptions{
+			AtmosConfig:         atmosConfig,
+			VendorComponentSpec: &config.Spec,
+			Component:           component,
+			ComponentPath:       componentPath,
+			RefreshLock:         opts.RefreshLock,
+			TemplateFunc:        ProcessTmpl,
+		})
+		if err != nil {
+			return fmt.Errorf("component %q: %w", component, err)
+		}
+		packages, err = install.FilterPending(atmosConfig, packages, opts)
+		if err != nil {
+			return fmt.Errorf("component %q: verify vendor lock: %w", component, err)
+		}
+		allPackages = append(allPackages, packages...)
+	}
+
+	if len(allPackages) == 0 {
+		return nil
+	}
+	return executeVendorModel(allPackages, opts, atmosConfig)
+}
+
+// handleVendorPullSweep implements "atmos vendor pull --everything" (and bare "atmos vendor pull",
+// which defaults --everything to true — see setDefaultEverythingFlag) for a repo with no vendor.yaml:
+// it discovers every component.yaml/component.yml manifest under the configured component-type
+// base path(s) — all of terraform/helmfile/packer by default, or just flg.ComponentType when the
+// user passed --type explicitly (flg.TypeChanged) — groups the discovered component names by their
+// own ComponentType (a repo-wide sweep with no explicit --type can mix terraform/helmfile/packer in
+// one run, and ExecuteComponentVendorPullBatch only accepts one componentType per call), and pulls
+// each type-group in its own batched call. Mirrors, for "vendor pull", what
+// cmd/vendor/update.go's runRepoWideUpdate/runVendorPull already do for "vendor update --pull" in
+// the identical repo shape.
+func handleVendorPullSweep(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags) error {
+	defer perf.Track(atmosConfig, "exec.handleVendorPullSweep")()
+
+	found, err := vendoring.DiscoverAllComponentManifests(flg.ComponentType, flg.TypeChanged)
+	if err != nil {
+		return err
+	}
+	if len(found) == 0 {
+		return ErrNoVendorSourcesFound
+	}
+
+	componentsByType := map[string][]string{}
+	for _, rs := range found {
+		if rs == nil || rs.Source == nil {
+			continue
+		}
+		componentsByType[rs.ComponentType] = append(componentsByType[rs.ComponentType], rs.Source.Component)
+	}
+
+	// Sort the type keys so pull order, progress output, and any joined error text are stable
+	// across runs (map iteration order is nondeterministic).
+	componentTypes := make([]string, 0, len(componentsByType))
+	for componentType := range componentsByType {
+		componentTypes = append(componentTypes, componentType)
+	}
+	sort.Strings(componentTypes)
+
+	opts := install.InstallOptions{DryRun: flg.DryRun, RefreshLock: flg.RefreshLock, LockEnforcement: flg.LockEnforcement}
+	var errs []error
+	for _, componentType := range componentTypes {
+		if err := ExecuteComponentVendorPullBatch(atmosConfig, componentsByType[componentType], componentType, opts); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// filterStackComponentsByTags narrows a --stack/--labels-resolved, type-grouped component set to
+// just the ones whose vendor.yaml source declares one of the given tags -- --tags is an independent
+// filter that composes with --stack/--labels (see handleStackVendor's own doc comment), not a
+// rejected combination. A component with no vendor.yaml entry at all (the common case for --stack,
+// which bypasses vendor.yaml for installation -- see handleVendorConfig) has no declared tags and is
+// naturally excluded by a non-empty tags filter, the same way any filter excludes an entity missing
+// the filtered attribute.
+func filterStackComponentsByTags(componentsByType map[string][]string, tags []string) (map[string][]string, error) {
+	filtered := make(map[string][]string, len(componentsByType))
+	for componentType, names := range componentsByType {
+		kept, err := vendoring.FilterComponentsByDeclaredTags("", names, tags)
+		if err != nil {
+			return nil, err
+		}
+		if len(kept) > 0 {
+			filtered[componentType] = kept
+		}
+	}
+	return filtered, nil
+}
+
+// resolveAndFilterStackComponents resolves --stack/--labels' type-grouped component set (via
+// resolveStackVendorComponents) and, when tags is non-empty, narrows it further via
+// filterStackComponentsByTags -- the combined "resolve then optionally filter" step
+// handleStackVendor delegates to, kept separate to stay within this repo's cyclomatic-complexity
+// budget (CLAUDE.md: extract into a named helper, keep the caller a flat pipeline). A nil, nil
+// result means there's nothing to vendor for reasons unrelated to tags (the stack's components have
+// no component.yaml at all); the caller treats that as success, not an error. A tags filter that
+// empties an otherwise non-empty set is reported as an explicit "matched nothing" error instead.
+func resolveAndFilterStackComponents(
+	atmosConfig *schema.AtmosConfiguration,
+	stacksMap map[string]any,
+	componentTypes []string,
+	tags []string,
+) (map[string][]string, error) {
+	componentsByType, err := resolveStackVendorComponents(atmosConfig, stacksMap, componentTypes)
+	if err != nil {
+		return nil, err
+	}
+	if len(componentsByType) == 0 || len(tags) == 0 {
+		return componentsByType, nil
+	}
+
+	filtered, err := filterStackComponentsByTags(componentsByType, tags)
+	if err != nil {
+		return nil, err
+	}
+	if len(filtered) == 0 {
+		return nil, errUtils.Build(errUtils.ErrInvalidArgumentError).
+			WithExplanation("No components matched the given selector.").
+			WithHint("Remove or change --tags, or select components with matching vendor.yaml tags.").
+			Err()
+	}
+	return filtered, nil
+}
+
+// handleStackVendor implements "atmos vendor pull --stack <stack>" and/or "atmos vendor pull
+// --labels <labels>": vendors every component declared in the stack (or, with --labels and no
+// --stack, across all stacks) that has its own component.yaml, regardless of whether the repo also
+// has a vendor.yaml (this path bypasses vendor.yaml entirely for installation -- see
+// handleVendorConfig). --labels composes with --stack as a further narrowing (both resolve the same
+// stack-declared component set; --labels just filters it by metadata.labels), and --tags composes
+// with either (or both) as yet another independent filter, this time against vendor.yaml's declared
+// source tags (see filterStackComponentsByTags) -- installation still happens via each component's
+// own component.yaml regardless of whether --tags is used, since --tags only narrows the candidate
+// set here, it never changes how a selected component is installed. Many repos vendor purely
+// through per-component component.yaml manifests declared under the components a stack references,
+// with no repo-wide vendor.yaml at all.
+func handleStackVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags) error {
+	defer perf.Track(atmosConfig, "exec.handleStackVendor")()
+
+	componentTypes := []string{cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType}
+	if flg.TypeChanged {
+		componentTypes = []string{flg.ComponentType}
+	}
+
+	// Labels scope the describe pass itself (the early-skip perf optimization
+	// ExecuteDescribeStacksScoped shares with `list components --labels`), so an out-of-scope
+	// stack never evaluates just to be filtered out afterward.
+	stacksMap, err := ExecuteDescribeStacksScoped(
+		atmosConfig, flg.Stack, nil, componentTypes, nil,
+		false, // ignoreMissingFiles
+		false, // processTemplates
+		false, // processYamlFunctions
+		false, // includeEmptyStacks
+		nil,   // skip
+		nil,   // authManager
+		true,  // authDisabled
+		nil,   // tagsFilter -- vendor.yaml source tags are a separate concept, resolved elsewhere.
+		flg.Labels,
+		DescribeStacksErrorOptions{},
+	)
+	if err != nil {
+		if flg.Stack == "" {
+			return fmt.Errorf("%w: failed to describe stacks for the given --labels selector: %w", errUtils.ErrExecuteDescribeStacks, err)
+		}
+		return fmt.Errorf("%w: failed to describe stack %q: %w", errUtils.ErrExecuteDescribeStacks, flg.Stack, err)
+	}
+	if len(stacksMap) == 0 {
+		// Matches cmd/vendor/update.go's identical zero-match wording: pull and update share the
+		// same stack/labels-only selector vocabulary, so both report "no match" with the same
+		// sentinel and text (unlike diff/clean/verify's shared resolver, which also covers
+		// --component/--tags and so uses its own, broader wording).
+		return errUtils.Build(errUtils.ErrInvalidArgumentError).
+			WithExplanation("No components matched the given --stack/--labels selector.").
+			Err()
+	}
+
+	componentsByType, err := resolveAndFilterStackComponents(atmosConfig, stacksMap, componentTypes, flg.Tags)
+	if err != nil {
+		return err
+	}
+	if len(componentsByType) == 0 {
+		// The stack resolved components, but none has its own component.yaml -- nothing to do here,
+		// unrelated to --tags (there's no candidate set left for it to narrow).
+		return nil
+	}
+
+	warnAboutVendorYamlShadowing(componentsByType)
+
+	return pullStackComponentsByType(atmosConfig, componentsByType, install.InstallOptions{
+		DryRun:          flg.DryRun,
+		RefreshLock:     flg.RefreshLock,
+		LockEnforcement: flg.LockEnforcement,
+	})
+}
+
+// warnAboutVendorYamlShadowing warns about every componentsByType entry that ALSO has a vendor.yaml
+// entry declared for it -- --stack/--labels always install from a resolved component's own
+// component.yaml regardless of vendor.yaml (see handleStackVendor's doc comment), so if the two ever
+// declare different sources, "atmos vendor pull -c <name>" and "atmos vendor pull --stack ..." can
+// silently install different content into the identical target directory. This never blocks the
+// pull -- --stack/--labels bypassing vendor.yaml is documented, intentional precedence, not
+// something to reject -- it only surfaces the risk so a divergence isn't entirely silent.
+//
+// Reading vendor.yaml here is best-effort: a missing or malformed vendor.yaml must never turn into a
+// hard failure for --stack/--labels, which are designed to work with no vendor.yaml at all (or an
+// unrelated/broken one) when no --tags filter is given to force reading it.
+func warnAboutVendorYamlShadowing(componentsByType map[string][]string) {
+	sources, ok, err := vendoring.ListDeclaredSources("")
+	if err != nil || !ok {
+		return
+	}
+
+	declared := make(map[string]bool, len(sources))
+	for i := range sources {
+		if sources[i].Component != "" {
+			declared[sources[i].Component] = true
+		}
+	}
+
+	var shadowed []string
+	for _, names := range componentsByType {
+		for _, name := range names {
+			if declared[name] {
+				shadowed = append(shadowed, name)
+			}
+		}
+	}
+	sort.Strings(shadowed)
+
+	for _, name := range shadowed {
+		ui.Warningf("component %q also has a vendor.yaml entry; this --stack/--labels pull installs from its own component.yaml and ignores it -- run 'atmos vendor pull -c %s' to see what vendor.yaml would install instead", name, name)
+	}
+}
+
+// pullStackComponentsByType vendors componentsByType (already resolved and, when applicable,
+// tags-filtered), one ExecuteComponentVendorPullBatch call per component type, sorted for stable
+// pull order/progress output/joined-error text across runs (map iteration order is
+// nondeterministic). Per-type failures are joined and returned together rather than aborting on
+// the first one, so every type still gets attempted.
+func pullStackComponentsByType(atmosConfig *schema.AtmosConfiguration, componentsByType map[string][]string, opts install.InstallOptions) error {
+	types := make([]string, 0, len(componentsByType))
+	for componentType := range componentsByType {
+		types = append(types, componentType)
+	}
+	sort.Strings(types)
+
+	var errs []error
+	for _, componentType := range types {
+		if err := ExecuteComponentVendorPullBatch(atmosConfig, componentsByType[componentType], componentType, opts); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// stackVendorComponent is one (componentType, resolved name) pair discovered by
+// walkStackVendorComponents, deduplicated within a single walk by componentType+name.
+type stackVendorComponent struct {
+	ComponentType string
+	Name          string
+}
+
+// walkStackVendorComponents is the single stack-walk shared by resolveStackVendorComponents (pull's
+// --stack path, which further filters to components with a component.yaml, grouped by type) and
+// ResolveVendorComponentSelector (update/diff/clean/verify's shared selector, which further
+// flattens and dedups by name alone, ignoring type). Previously each function hand-rolled its own,
+// near-identical copy of this walk; this is the one place they now diverge only in what they do with
+// each resolved (type, name) pair, not in how components/stacks are traversed.
+//
+// Walks stacksMap's terraform/helmfile/packer components (already scoped to a single stack, or all
+// stacks, by ExecuteDescribeStacks*'s filterByStack), skips abstract components
+// (FilterAbstractComponents), resolves each name's metadata.component override, and dedupes by
+// componentType+name (the same name can independently appear under two different component types).
+func walkStackVendorComponents(stacksMap map[string]any, componentTypes []string) []stackVendorComponent {
+	seen := make(map[string]bool)
+	var result []stackVendorComponent
+
+	for _, stackSection := range stacksMap {
+		componentsSection, ok := stackComponentsSection(stackSection)
+		if !ok {
+			continue
+		}
+
+		for _, componentType := range componentTypes {
+			typeComponents, ok := componentsSection[componentType].(map[string]any)
+			if !ok {
+				continue
+			}
+			for _, name := range FilterAbstractComponents(typeComponents) {
+				resolved := resolveVendorComponentName(name, typeComponents[name])
+				key := componentType + "/" + resolved
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				result = append(result, stackVendorComponent{ComponentType: componentType, Name: resolved})
+			}
+		}
+	}
+
+	return result
+}
+
+// stackComponentsSection extracts one stack's "components" map[string]any section from an
+// ExecuteDescribeStacks result entry, reporting false when the shape doesn't match.
+func stackComponentsSection(stackSection any) (map[string]any, bool) {
+	stackMap, ok := stackSection.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	componentsSection, ok := stackMap["components"].(map[string]any)
+	return componentsSection, ok
+}
+
+// resolveStackVendorComponents walks stacksMap via walkStackVendorComponents and groups the ones
+// with a component.yaml/component.yml manifest by component type, ready for
+// ExecuteComponentVendorPullBatch. A component without a manifest is silently skipped, since not
+// every stack component vendors this way -- --stack pulls whichever ones do.
+func resolveStackVendorComponents(
+	atmosConfig *schema.AtmosConfiguration,
+	stacksMap map[string]any,
+	componentTypes []string,
+) (map[string][]string, error) {
+	defer perf.Track(atmosConfig, "exec.resolveStackVendorComponents")()
+
+	result := make(map[string][]string)
+	for _, c := range walkStackVendorComponents(stacksMap, componentTypes) {
+		hasManifest, err := componentHasVendorManifest(atmosConfig, c.Name, c.ComponentType)
+		if err != nil {
+			return nil, err
+		}
+		if !hasManifest {
+			continue
+		}
+		result[c.ComponentType] = append(result[c.ComponentType], c.Name)
+	}
+
+	// Sort within each type: walkStackVendorComponents iterates a map, so append order is
+	// nondeterministic across runs, which would otherwise shift pullStackComponentsByType's
+	// progress output and joined per-component error text run to run.
+	for componentType := range result {
+		sort.Strings(result[componentType])
+	}
+
+	return result, nil
+}
+
+// resolveVendorComponentName returns the component name to vendor for a stack-declared component,
+// honoring a metadata.component override (e.g. multiple stack instances of the same underlying
+// component vendor from the same directory).
+func resolveVendorComponentName(name string, data any) string {
+	compMap, ok := data.(map[string]any)
+	if !ok {
+		return name
+	}
+	metadata, ok := compMap["metadata"].(map[string]any)
+	if !ok {
+		return name
+	}
+	if component, ok := metadata["component"].(string); ok && component != "" {
+		return component
+	}
+	return name
+}
+
+// componentHasVendorManifest reports whether component has a component.yaml/component.yml,
+// treating a missing component directory or manifest as "no" rather than an error -- --stack
+// vendors whichever of the stack's components declare one, silently skipping the rest -- and
+// propagating any other error (e.g. an unsupported componentType).
+func componentHasVendorManifest(atmosConfig *schema.AtmosConfiguration, component, componentType string) (bool, error) {
+	componentPath, err := vendoring.ResolveComponentPath(atmosConfig, component, componentType)
+	if err != nil {
+		if errors.Is(err, errUtils.ErrComponentDirNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	if _, err := vendoring.FindComponentManifestFile(componentPath); err != nil {
+		if errors.Is(err, errUtils.ErrComponentManifestNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// ResolveVendorComponentSelector resolves --stack/--labels into a flat, deduped, sorted list of
+// component names across componentTypes, via the same walkStackVendorComponents walk
+// resolveStackVendorComponents (pull's --stack path) uses. An empty stack scopes across all stacks.
+// Reuses ExecuteDescribeStacksScoped's own labelsFilter scoping (the same mechanism `list components
+// --labels` already uses) so a --labels filter never forces evaluating out-of-scope stacks.
+//
+// Unlike resolveStackVendorComponents, this flattens across component type (deduping by name alone,
+// where walkStackVendorComponents itself dedupes by type+name) and does not require a component.yaml
+// to exist -- `vendor update`, `vendor diff`, `vendor clean`, and `vendor verify` all key off
+// vendor.yaml Sources[].Component by name, not by component type or per-component manifest presence.
+func ResolveVendorComponentSelector(
+	atmosConfig *schema.AtmosConfiguration,
+	stack string,
+	labels map[string]string,
+	componentTypes []string,
+) ([]string, error) {
+	defer perf.Track(atmosConfig, "exec.ResolveVendorComponentSelector")()
+
+	stacksMap, err := ExecuteDescribeStacksScoped(
+		atmosConfig, stack, nil, componentTypes, nil,
+		false, // ignoreMissingFiles
+		false, // processTemplates
+		false, // processYamlFunctions
+		false, // includeEmptyStacks
+		nil,   // skip
+		nil,   // authManager
+		true,  // authDisabled
+		nil,   // tagsFilter -- vendor.yaml source tags are a separate concept, resolved elsewhere.
+		labels,
+		DescribeStacksErrorOptions{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to describe stacks: %w", errUtils.ErrExecuteDescribeStacks, err)
+	}
+
+	seen := make(map[string]bool)
+	var names []string
+
+	for _, c := range walkStackVendorComponents(stacksMap, componentTypes) {
+		if seen[c.Name] {
+			continue
+		}
+		seen[c.Name] = true
+		names = append(names, c.Name)
+	}
+
+	sort.Strings(names)
+	return names, nil
 }

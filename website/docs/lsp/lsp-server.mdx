@@ -32,6 +32,9 @@ The LSP server validates YAML syntax and Atmos-specific structure in real-time:
 - Component name validation
 - Variable structure validation
 - Precise error locations with line numbers
+- Deprecation warnings for fields the JSON Schema marks `deprecated: true`, surfaced as
+  warning-severity diagnostics (never errors) with migration guidance when the schema
+  provides an `x-atmos-replacement` hint
 
 ### Basic Autocomplete
 

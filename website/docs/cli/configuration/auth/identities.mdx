@@ -202,6 +202,14 @@ When neither configuration nor keyring entries provide credentials, Atmos automa
 2. Credentials stored in the system keyring (via `atmos auth user configure`)
 3. Browser-based OAuth2 PKCE flow (when `webflow_enabled` is `true`, which is the default)
 
+To explicitly use the browser flow without removing or changing configured IAM access keys, add
+`--webflow` to an `aws/user` login. This skips cached temporary sessions and configured credentials
+only for that invocation, then writes the newly issued temporary credentials to the usual session cache:
+
+```shell
+atmos auth login --profile=legacy --identity=cp-root/admin --webflow
+```
+
 Atmos does **not** consult ambient AWS credentials (environment variables, `~/.aws/credentials`, instance profiles) for `aws/user` identities — credentials must be supplied through one of the three sources above.
 
 If the keyring is reachable but the stored entry is unreadable (corrupted, missing fields, permission denied), Atmos reports the keyring read failure directly instead of silently falling back to the browser flow. This makes it possible to diagnose keyring issues rather than guessing why the browser flow opened.

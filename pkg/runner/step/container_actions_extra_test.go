@@ -2,11 +2,13 @@ package step
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -28,6 +30,8 @@ func TestValidateBuildAction(t *testing.T) {
 	}{
 		{"bad runtime", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Provider: "containerd"}}},
 		{"bad engine", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Engine: "kaniko"}}},
+		{"driver requires buildx", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Provider: "docker", Driver: &schema.ContainerDriverConfig{Provider: "docker-container"}}}},
+		{"cache requires buildx", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Provider: "docker", Cache: &schema.ContainerCacheConfig{From: []map[string]string{{"type": "registry"}}}}}},
 		{"buildx requires docker", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Engine: "buildx", Provider: "podman"}}},
 		{"bake requires docker", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Provider: "podman", Bake: &schema.ContainerBuildBakeStep{File: "x"}}}},
 	}
@@ -39,13 +43,16 @@ func TestValidateBuildAction(t *testing.T) {
 }
 
 func TestResolveBuildBake(t *testing.T) {
+	h := &ContainerHandler{}
 	vars := NewVariables()
+	workDir := t.TempDir()
+	step := &schema.WorkflowStep{Name: "step", WorkingDirectory: workDir}
 
-	got, err := resolveBuildBake(vars, nil, "step")
+	got, err := resolveBuildBake(h, step, vars, nil)
 	require.NoError(t, err)
 	assert.Nil(t, got)
 
-	got, err = resolveBuildBake(vars, &schema.ContainerBuildBakeStep{
+	got, err = resolveBuildBake(h, step, vars, &schema.ContainerBuildBakeStep{
 		File:    "docker-bake.hcl",
 		Target:  "app",
 		Targets: []string{"app", "test"},
@@ -53,10 +60,10 @@ func TestResolveBuildBake(t *testing.T) {
 		Vars:    map[string]string{"TAG": "v1"},
 		Load:    true,
 		Push:    true,
-	}, "step")
+	})
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	assert.Equal(t, "docker-bake.hcl", got.File)
+	assert.Equal(t, filepath.Join(workDir, "docker-bake.hcl"), got.File)
 	assert.Equal(t, "app", got.Target)
 	assert.Equal(t, []string{"app", "test"}, got.Targets)
 	assert.Equal(t, "v1", got.Vars["TAG"])
@@ -108,6 +115,26 @@ func TestBuildConfigResolutionErrors(t *testing.T) {
 			},
 		},
 		{
+			name: "driver name",
+			step: &schema.WorkflowStep{Name: "build", Build: &schema.ContainerBuildStep{Driver: &schema.ContainerDriverConfig{Name: "{{"}}},
+		},
+		{
+			name: "driver provider",
+			step: &schema.WorkflowStep{Name: "build", Build: &schema.ContainerBuildStep{Driver: &schema.ContainerDriverConfig{Provider: "{{"}}},
+		},
+		{
+			name: "driver options",
+			step: &schema.WorkflowStep{Name: "build", Build: &schema.ContainerBuildStep{Driver: &schema.ContainerDriverConfig{Opts: map[string]string{"image": "{{"}}}},
+		},
+		{
+			name: "cache from",
+			step: &schema.WorkflowStep{Name: "build", Build: &schema.ContainerBuildStep{Cache: &schema.ContainerCacheConfig{From: []map[string]string{{"ref": "{{"}}}}},
+		},
+		{
+			name: "cache to",
+			step: &schema.WorkflowStep{Name: "build", Build: &schema.ContainerBuildStep{Cache: &schema.ContainerCacheConfig{To: []map[string]string{{"ref": "{{"}}}}},
+		},
+		{
 			name: "bake file",
 			step: &schema.WorkflowStep{
 				Name:  "build",
@@ -128,6 +155,173 @@ func TestBuildConfigResolutionErrors(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+func TestBuildBuildConfigResolvesContextAndDockerfileAgainstWorkingDirectory(t *testing.T) {
+	h := &ContainerHandler{}
+	workDir := t.TempDir()
+
+	t.Run("relative context and dockerfile", func(t *testing.T) {
+		cfg, err := h.buildBuildConfig(&schema.WorkflowStep{
+			Name:             "build",
+			WorkingDirectory: workDir,
+			Build:            &schema.ContainerBuildStep{Context: "docker", Dockerfile: "Dockerfile.prod"},
+		}, NewVariables())
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(workDir, "docker"), cfg.Context)
+		assert.Equal(t, filepath.Join(workDir, "docker", "Dockerfile.prod"), cfg.Dockerfile)
+	})
+
+	t.Run("defaults: dockerfile lands inside context, not working directory directly", func(t *testing.T) {
+		cfg, err := h.buildBuildConfig(&schema.WorkflowStep{
+			Name:             "build",
+			WorkingDirectory: workDir,
+			Build:            &schema.ContainerBuildStep{Context: "docker"},
+		}, NewVariables())
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(workDir, "docker"), cfg.Context)
+		assert.Equal(t, filepath.Join(workDir, "docker", "Dockerfile"), cfg.Dockerfile)
+	})
+
+	t.Run("absolute dockerfile is not re-anchored to context", func(t *testing.T) {
+		absDockerfile := filepath.Join(t.TempDir(), "Dockerfile.custom")
+		cfg, err := h.buildBuildConfig(&schema.WorkflowStep{
+			Name:             "build",
+			WorkingDirectory: workDir,
+			Build:            &schema.ContainerBuildStep{Context: "docker", Dockerfile: absDockerfile},
+		}, NewVariables())
+		require.NoError(t, err)
+		assert.Equal(t, absDockerfile, cfg.Dockerfile)
+	})
+}
+
+// TestBuildBuildConfigResolvesBakeFilesAgainstWorkingDirectory reproduces a
+// bug found while field-testing the working-directory fix: build.context and
+// build.dockerfile were anchored to step.WorkingDirectory, but build.bake.file
+// and build.bake.files were not, so a relative Buildx Bake file silently
+// resolved against the Atmos process's own cwd instead of the step's
+// configured (or hook-defaulted) working directory -- reproduced live by
+// deleting the correct bake file entirely and observing the build still
+// "succeed" against a same-named file elsewhere.
+func TestBuildBuildConfigResolvesBakeFilesAgainstWorkingDirectory(t *testing.T) {
+	h := &ContainerHandler{}
+	workDir := t.TempDir()
+
+	t.Run("relative bake file and files anchor to working directory", func(t *testing.T) {
+		cfg, err := h.buildBuildConfig(&schema.WorkflowStep{
+			Name:             "build",
+			WorkingDirectory: workDir,
+			Build: &schema.ContainerBuildStep{
+				Provider: "docker",
+				Bake: &schema.ContainerBuildBakeStep{
+					File:  "docker-bake.hcl",
+					Files: []string{"docker-bake.hcl", "override.hcl"},
+				},
+			},
+		}, NewVariables())
+		require.NoError(t, err)
+		require.NotNil(t, cfg.Bake)
+		assert.Equal(t, filepath.Join(workDir, "docker-bake.hcl"), cfg.Bake.File)
+		assert.Equal(t, []string{
+			filepath.Join(workDir, "docker-bake.hcl"),
+			filepath.Join(workDir, "override.hcl"),
+		}, cfg.Bake.Files)
+	})
+
+	t.Run("absolute bake file and files are not re-anchored", func(t *testing.T) {
+		absFile := filepath.Join(t.TempDir(), "docker-bake.hcl")
+		cfg, err := h.buildBuildConfig(&schema.WorkflowStep{
+			Name:             "build",
+			WorkingDirectory: workDir,
+			Build: &schema.ContainerBuildStep{
+				Provider: "docker",
+				Bake: &schema.ContainerBuildBakeStep{
+					File:  absFile,
+					Files: []string{absFile},
+				},
+			},
+		}, NewVariables())
+		require.NoError(t, err)
+		require.NotNil(t, cfg.Bake)
+		assert.Equal(t, absFile, cfg.Bake.File)
+		assert.Equal(t, []string{absFile}, cfg.Bake.Files)
+	})
+
+	// resolveBakeFiles anchors each entry independently via
+	// ResolveInWorkingDirectory; a per-entry template failure must propagate
+	// as a wrapped ErrTemplateEvaluation instead of being swallowed or
+	// panicking, mirroring the single-File error handling covered by
+	// TestBuildConfigResolutionErrors' "bake file" case.
+	t.Run("invalid template in a bake files entry returns wrapped error", func(t *testing.T) {
+		step := &schema.WorkflowStep{Name: "build", WorkingDirectory: workDir}
+		_, err := resolveBakeFiles(h, step, NewVariables(), []string{"docker-bake.hcl", "{{"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+	})
+}
+
+// TestResolveBuildCacheAnchorsLocalPaths reproduces the same working-directory
+// anchoring gap for Buildx cache entries: `type: local` carries filesystem
+// `src`/`dest` paths (per Buildx's own cache attribute set), which must anchor
+// to step.WorkingDirectory the same way build.context does. Other cache
+// types, such as registry or gha, carry refs/URLs, not paths, and must be
+// left untouched.
+func TestResolveBuildCacheAnchorsLocalPaths(t *testing.T) {
+	h := &ContainerHandler{}
+	vars := NewVariables()
+	workDir := t.TempDir()
+	step := &schema.WorkflowStep{Name: "build", WorkingDirectory: workDir}
+
+	t.Run("type local src and dest anchor to working directory", func(t *testing.T) {
+		cache, err := resolveBuildCache(h, step, vars, &schema.ContainerCacheConfig{
+			From: []map[string]string{{"type": "local", "src": "cache-in"}},
+			To:   []map[string]string{{"type": "local", "dest": "cache-out", "mode": "max"}},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, cache)
+		require.Len(t, cache.From, 1)
+		require.Len(t, cache.To, 1)
+		assert.Equal(t, filepath.Join(workDir, "cache-in"), cache.From[0]["src"])
+		assert.Equal(t, filepath.Join(workDir, "cache-out"), cache.To[0]["dest"])
+		assert.Equal(t, "max", cache.To[0]["mode"])
+	})
+
+	t.Run("non-local types are left untouched", func(t *testing.T) {
+		cache, err := resolveBuildCache(h, step, vars, &schema.ContainerCacheConfig{
+			From: []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache"}},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, cache)
+		require.Len(t, cache.From, 1)
+		assert.Equal(t, "registry.example.com/app:buildcache", cache.From[0]["ref"])
+	})
+
+	// anchorCacheLocalPaths' doc comment notes attrs are already
+	// template-resolved by ResolveEnvMap by the time it runs, but
+	// ResolveInWorkingDirectory resolves the value a second time before
+	// anchoring it (so a template that legitimately evaluates to
+	// template-like text, e.g. a literal "{{", fails on the second pass).
+	// That failure must surface as a wrapped ErrTemplateEvaluation, not be
+	// swallowed or panic.
+	t.Run("value that is not a valid template on the second resolve pass returns wrapped error", func(t *testing.T) {
+		err := anchorCacheLocalPaths(h, step, vars, map[string]string{"type": buildxCacheTypeLocal, "src": "{{"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+	})
+
+	// End-to-end through resolveBuildCacheEntries/resolveBuildCache: a `type:
+	// local` entry whose `src` template legitimately evaluates to
+	// template-like text fails ResolveInWorkingDirectory's second resolve
+	// pass inside anchorCacheLocalPaths, and that error must propagate all
+	// the way out of resolveBuildCache, not just out of anchorCacheLocalPaths
+	// in isolation.
+	t.Run("anchoring error propagates out of resolveBuildCache", func(t *testing.T) {
+		_, err := resolveBuildCache(h, step, vars, &schema.ContainerCacheConfig{
+			From: []map[string]string{{"type": "local", "src": `{{ "{{" }}`}},
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+	})
 }
 
 func TestRunConfigResolutionErrors(t *testing.T) {

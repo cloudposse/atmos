@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -36,24 +37,14 @@ func ProcessTagEnv(
 	envVarDefault := ""
 	var envVarExists bool
 
-	parts, err := SplitStringByDelimiter(str, ' ')
+	parsed, err := parser.ParseEnv(str)
 	if err != nil {
-		e := fmt.Errorf("%w: %s", ErrInvalidAtmosYAMLFunction, input)
+		e := fmt.Errorf("%w: %w: %s", ErrInvalidAtmosYAMLFunction, err, input)
 		return "", e
 	}
 
-	partsLen := len(parts)
-
-	switch partsLen {
-	case 2:
-		envVarName = strings.TrimSpace(parts[0])
-		envVarDefault = strings.TrimSpace(parts[1])
-	case 1:
-		envVarName = strings.TrimSpace(parts[0])
-	default:
-		err = fmt.Errorf("%w: invalid number of arguments. The function accepts 1 or 2 arguments: %s", ErrInvalidAtmosYAMLFunction, input)
-		return "", err
-	}
+	envVarName = parsed.Name
+	envVarDefault = parsed.Default
 
 	// First, check the component's env section from stack manifests.
 	if envContext != nil {

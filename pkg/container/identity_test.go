@@ -68,6 +68,11 @@ func TestDiscoveryFilter(t *testing.T) {
 	assert.Equal(t, "tools.atmos.instance=dev/container/api", filter["label"])
 }
 
+func TestComponentTypeFilter(t *testing.T) {
+	filter := ComponentTypeFilter("container")
+	assert.Equal(t, "tools.atmos.component_type=container", filter["label"])
+}
+
 func TestIsContainerRunning_Exported(t *testing.T) {
 	tests := []struct {
 		status string

@@ -208,7 +208,7 @@ func TestGetProfilesFromFallbacks_EmptyEnvVar(t *testing.T) {
 		"source should be empty for empty ATMOS_PROFILE")
 }
 
-// TestParseViperProfilesFromEnv_Quirks tests the parseViperProfilesFromEnv function
+// TestParseViperProfilesFromEnv_Quirks tests the FixViperEnvStringSliceQuirk function
 // with various Viper-quirk inputs.
 func TestParseViperProfilesFromEnv_Quirks(t *testing.T) {
 	tests := []struct {
@@ -255,7 +255,7 @@ func TestParseViperProfilesFromEnv_Quirks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseViperProfilesFromEnv(tt.input)
+			result := FixViperEnvStringSliceQuirk(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

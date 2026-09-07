@@ -82,6 +82,7 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 	}
 
 	cmd := exec.CommandContext(ctx, spec.Command, spec.Args...)
+	applyWindowsCmdExeQuoting(cmd, spec.Command, spec.Args)
 	cmd.Dir = spec.Dir
 	if spec.Env != nil {
 		cmd.Env = append([]string{}, spec.Env...)

@@ -2,11 +2,14 @@ package exec
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -105,26 +108,102 @@ func cacheDetectionResult(command string, isTofu bool) {
 	detectionCache[command] = isTofu
 }
 
-// isKnownOpenTofuFeature checks if the error message matches known OpenTofu-specific features
-// that terraform-config-inspect doesn't support.
-func isKnownOpenTofuFeature(err error) bool {
+// isKnownModuleSourceInterpolationDiagnostic checks if the error message matches a known,
+// non-fatal diagnostic that terraform-config-inspect emits when a module's `source` (or
+// similar) attribute references a variable.
+//
+// Terraform-config-inspect decodes these attributes via gohcl.DecodeExpression with a nil
+// hcl.EvalContext, so ANY variable reference in that position produces the HCL diagnostic
+// "Variables not allowed" -- regardless of whether the configured tool/version actually
+// supports evaluating it. This is valid, modern syntax under both OpenTofu 1.8+ (module
+// source interpolation) and Terraform 1.15+ (via `const = true` variables); it is not a
+// tool-specific feature gate, so this check intentionally does not depend on which command
+// (terraform/tofu) is configured.
+func isKnownModuleSourceInterpolationDiagnostic(err error) bool {
 	if err == nil {
 		return false
 	}
 
-	errMsg := err.Error()
+	return matchesModuleSourceInterpolationPattern(err.Error())
+}
 
-	// List of error patterns that indicate OpenTofu-specific syntax.
-	openTofuPatterns := []string{
-		"Variables not allowed", // Module source interpolation (OpenTofu 1.8+).
-		// Add more patterns here as OpenTofu adds features that diverge from Terraform.
+// matchesModuleSourceInterpolationPattern checks whether msg matches a known,
+// non-fatal terraform-config-inspect diagnostic pattern. It takes a plain string rather than an
+// error so callers checking a diagnostic's Summary/Detail text don't need to allocate a throwaway
+// dynamic error just to satisfy an error-typed signature.
+func matchesModuleSourceInterpolationPattern(msg string) bool {
+	// List of error patterns produced by terraform-config-inspect's inability to evaluate
+	// variable references in module source/version attributes.
+	moduleSourceInterpolationPatterns := []string{
+		"Variables not allowed", // Module source interpolation (OpenTofu 1.8+, Terraform 1.15+ const vars).
+		// Add more patterns here as needed.
 	}
 
-	for _, pattern := range openTofuPatterns {
-		if strings.Contains(errMsg, pattern) {
+	for _, pattern := range moduleSourceInterpolationPatterns {
+		if strings.Contains(msg, pattern) {
 			return true
 		}
 	}
 
 	return false
+}
+
+// diagnosticPositionKey returns a grouping key for a diagnostic based on its source position.
+// A diagnostic with no position is never grouped with any other diagnostic (its key is unique to
+// its index), so it must independently match the known pattern.
+func diagnosticPositionKey(index int, diag tfconfig.Diagnostic) string {
+	if diag.Pos == nil {
+		return fmt.Sprintf("nopos:%d", index)
+	}
+	return fmt.Sprintf("%s:%d", diag.Pos.Filename, diag.Pos.Line)
+}
+
+// allDiagnosticsAreModuleSourceInterpolation reports whether every error-severity diagnostic in
+// diags belongs to a known module-source-interpolation event.
+//
+// Terraform-config-inspect emits a *companion* diagnostic at the same source position as the
+// "Variables not allowed" one -- e.g. "Unsuitable value: value must be known", produced when it
+// then tries to decode the resulting unknown value into module.source's target type. Both are
+// side effects of the same root cause (decoding with a nil hcl.EvalContext), so diagnostics are
+// grouped by position: a group is known-safe if ANY diagnostic in it matches the known pattern.
+// Diagnostics at any OTHER position must independently match, so a genuine, unrelated error is
+// never absorbed into the same group just because it happens to share the diagnostics list.
+//
+// This must inspect diags individually rather than the collapsed diags.Err() string: tfconfig's
+// Diagnostics.Error() only renders the first diagnostic's Summary/Detail, collapsing any others
+// to "(and N other messages)" with no text at all. Matching against that collapsed string means a
+// genuine, unrelated diagnostic occurring alongside the known-safe one -- and sorting before it --
+// would never surface in the matched text, yet the caller would still skip validation for the
+// whole diagnostics set, silently discarding the real error.
+func allDiagnosticsAreModuleSourceInterpolation(diags tfconfig.Diagnostics) bool {
+	groupIsKnown := make(map[string]bool)
+	var order []string
+
+	for i, diag := range diags {
+		if diag.Severity != tfconfig.DiagError {
+			continue
+		}
+
+		key := diagnosticPositionKey(i, diag)
+		if _, seen := groupIsKnown[key]; !seen {
+			order = append(order, key)
+		}
+
+		msg := fmt.Sprintf("%s: %s", diag.Summary, diag.Detail)
+		if matchesModuleSourceInterpolationPattern(msg) {
+			groupIsKnown[key] = true
+		}
+	}
+
+	if len(order) == 0 {
+		return false
+	}
+
+	for _, key := range order {
+		if !groupIsKnown[key] {
+			return false
+		}
+	}
+
+	return true
 }

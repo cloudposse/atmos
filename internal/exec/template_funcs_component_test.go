@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -148,6 +149,26 @@ func TestResolveComponentFuncAuthManager(t *testing.T) {
 		assert.Same(t, parentContext, got.GetStackInfo().AuthContext)
 	})
 
+	t.Run("target without auth inherits the enclosing component AuthContext", func(t *testing.T) {
+		t.Parallel()
+
+		resolve := func(_ *schema.AtmosConfiguration, _, _ string, parent auth.AuthManager) (auth.AuthManager, error) {
+			// This is the resolveAuthManagerForNestedComponent contract for a target
+			// with no auth section: return its parent unchanged.
+			return parent, nil
+		}
+
+		got := resolveComponentFuncAuthManager(
+			&schema.AtmosConfiguration{},
+			&schema.ConfigAndStacksInfo{AuthContext: parentContext},
+			"authless-target", "target-stack",
+			resolve,
+		)
+
+		require.NotNil(t, got)
+		assert.Same(t, parentContext, got.GetStackInfo().AuthContext)
+	})
+
 	t.Run("auth disabled skips resolution and keeps the enclosing component's AuthManager", func(t *testing.T) {
 		t.Parallel()
 
@@ -183,6 +204,65 @@ func TestResolveComponentFuncAuthManager(t *testing.T) {
 		assert.Nil(t, gotParent, "with no enclosing AuthContext, the resolver must receive a nil parent")
 		assert.Same(t, targetMgr, got)
 	})
+}
+
+func TestComponentFunc_AuthlessTargetPassesParentAuthContextToTerraformOutput(t *testing.T) {
+	fixtureDir := "../../tests/fixtures/scenarios/authmanager-nested-propagation"
+	t.Chdir(fixtureDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// componentFunc caches output by stack/component, so make this test independent
+	// of prior template-function tests.
+	componentFuncSyncMap.Range(func(key, _ any) bool {
+		componentFuncSyncMap.Delete(key)
+		return true
+	})
+	t.Cleanup(func() {
+		componentFuncSyncMap.Range(func(key, _ any) bool {
+			componentFuncSyncMap.Delete(key)
+			return true
+		})
+	})
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	parentContext := &schema.AuthContext{AWS: &schema.AWSAuthContext{
+		Profile:         "enclosing-identity",
+		CredentialsFile: "/tmp/atmos-test-credentials",
+		ConfigFile:      "/tmp/atmos-test-config",
+	}}
+
+	ctrl := gomock.NewController(t)
+	mockExecutor := NewMockComponentFuncOutputsExecutor(ctrl)
+	originalOutputExecutor := componentFuncOutputsExecutor
+	t.Cleanup(func() { componentFuncOutputsExecutor = originalOutputExecutor })
+	componentFuncOutputsExecutor = mockExecutor
+
+	var gotContext *schema.AuthContext
+	mockExecutor.EXPECT().ExecuteWithSections(
+		gomock.Any(), "mixed-inherit-component", "test", gomock.Any(), gomock.Any(),
+	).DoAndReturn(func(
+		_ *schema.AtmosConfiguration,
+		component, stack string,
+		_ map[string]any,
+		authContext *schema.AuthContext,
+	) (map[string]any, error) {
+		assert.Equal(t, "mixed-inherit-component", component)
+		assert.Equal(t, "test", stack)
+		gotContext = authContext
+		return map[string]any{"value": "from-test"}, nil
+	})
+
+	_, err = componentFunc(
+		&atmosConfig,
+		&schema.ConfigAndStacksInfo{AuthContext: parentContext},
+		"mixed-inherit-component",
+		"test",
+	)
+	require.NoError(t, err)
+	assert.Same(t, parentContext, gotContext,
+		"an auth-less nested target must pass the enclosing AuthContext to terraform output")
 }
 
 // TestWrapComponentDescribeError_BreaksErrInvalidComponentChain tests that WrapComponentDescribeError

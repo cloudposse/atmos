@@ -1,0 +1,12 @@
+.card {
+    padding: 1.5rem;
+}
+
+.card h2 {
+    margin-top: 0;
+    font-size: 1.25rem;
+}
+
+.card-body {
+    margin-top: 0.75rem;
+}

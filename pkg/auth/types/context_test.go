@@ -59,6 +59,21 @@ func TestWithAllowPrompts_Override(t *testing.T) {
 	assert.False(t, AllowPrompts(ctx), "Original context should still have prompts disabled")
 }
 
+func TestForceAWSWebflow(t *testing.T) {
+	assert.False(t, ForceAWSWebflow(context.Background()), "webflow must not be forced by default")
+
+	ctx := WithForceAWSWebflow(context.Background(), true)
+	assert.True(t, ForceAWSWebflow(ctx))
+
+	derivedCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	assert.True(t, ForceAWSWebflow(derivedCtx), "webflow flag must propagate through derived contexts")
+
+	assert.False(t, ForceAWSWebflow(WithForceAWSWebflow(ctx, false)), "child contexts may clear the flag")
+	wrongTypeCtx := context.WithValue(context.Background(), ContextKeyForceAWSWebflow, "true")
+	assert.False(t, ForceAWSWebflow(wrongTypeCtx), "unexpected context values must preserve the safe default")
+}
+
 // TestAllowPrompts_UseCaseNonInteractiveWhoami demonstrates the intended use case.
 // Whoami should use a non-interactive context to prevent credential prompts.
 func TestAllowPrompts_UseCaseNonInteractiveWhoami(t *testing.T) {

@@ -104,7 +104,7 @@ func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 // WithCause wraps the builder's error with an underlying cause error.
 // This preserves the original error message while allowing errors.Is() to match the sentinel.
 // The resulting error will match both the sentinel (passed to Build) and the cause.
-// Hints and context from the cause error are extracted and preserved in the final error.
+// Hints, explanations, and context from the cause error are extracted and preserved in the final error.
 //
 // Example:
 //
@@ -130,6 +130,7 @@ func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
 			if causeHints := errors.GetAllHints(cause); len(causeHints) > 0 {
 				b.hints = append(b.hints, causeHints...)
 			}
+			causeDetails := errors.GetAllDetails(cause)
 			// Extract context from cause before wrapping, since fmt.Errorf
 			// doesn't preserve cockroachdb safe details metadata.
 			b.extractContextFromCause(cause)
@@ -138,6 +139,9 @@ func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
 			// Note: cockroachdb/errors.Wrap() only works with cockroachdb's errors.Is(),
 			// not the standard library's, which breaks test assertions.
 			b.err = fmt.Errorf("%w: %w", b.err, cause)
+			for _, detail := range causeDetails {
+				b.err = errors.WithDetail(b.err, detail)
+			}
 		}
 	}
 	return b
@@ -181,6 +185,102 @@ func (b *ErrorBuilder) WithCausef(format string, args ...interface{}) *ErrorBuil
 	return b.WithCause(fmt.Errorf(format, args...))
 }
 
+// escapeHintAngleBrackets HTML-entity-encodes literal < and > in hint text
+// OUTSIDE backtick code spans. Hints are rendered as Markdown (see
+// errors/formatter.go), and a raw placeholder like "<file>" is otherwise
+// parsed as an inline HTML tag and silently stripped by the terminal
+// renderer's HTML sanitizer -- e.g. "pass --config <file>." would render as
+// "pass --config .", losing the placeholder entirely. Text already inside
+// backticks is left untouched: code spans already render literally, and
+// entity-encoding them would show the literal "&lt;" text instead of the
+// intended "<" (code spans aren't parsed for entities either). "EXAMPLE:" and
+// "TITLE:" sentinel-prefixed hints (see WithExampleFile, WithTitle) are also
+// left untouched -- examples are pre-formatted content, and titles aren't
+// placeholder-bearing prose.
+func escapeHintAngleBrackets(hint string) string {
+	if strings.HasPrefix(hint, "EXAMPLE:") || strings.HasPrefix(hint, "TITLE:") {
+		return hint
+	}
+
+	var b strings.Builder
+	last := 0
+	for _, span := range codeSpanRanges(hint) {
+		b.WriteString(escapeAngleBrackets(hint[last:span[0]]))
+		b.WriteString(hint[span[0]:span[1]])
+		last = span[1]
+	}
+	b.WriteString(escapeAngleBrackets(hint[last:]))
+	return b.String()
+}
+
+// codeSpanRanges finds CommonMark-style backtick code spans in s and returns
+// their [start, end) byte ranges (backticks included). Per the CommonMark
+// spec, a code span is delimited by a run of N backticks and closes at the
+// *next* run of exactly N backticks -- a run of a different length is not a
+// valid closing delimiter and is treated as literal content inside the span.
+// This is what lets a two-backtick-delimited span contain a single literal
+// backtick in its content. If an opening run never finds a matching closing
+// run, it is not a code span at all and its backticks are left as literal
+// text; scanning resumes right after that (non-delimiting) run rather than
+// from within it.
+func codeSpanRanges(s string) [][2]int {
+	var spans [][2]int
+	i := 0
+	for i < len(s) {
+		if s[i] != '`' {
+			i++
+			continue
+		}
+		start := i
+		i = skipBackticks(s, i)
+		openLen := i - start
+
+		closeEnd, found := findClosingBacktickRun(s, i, openLen)
+		if !found {
+			// No matching closing run anywhere in the rest of the string --
+			// this run of backticks isn't a code span delimiter.
+			continue
+		}
+		spans = append(spans, [2]int{start, closeEnd})
+		i = closeEnd
+	}
+	return spans
+}
+
+// skipBackticks returns the index just past the run of consecutive backticks
+// starting at i.
+func skipBackticks(s string, i int) int {
+	for i < len(s) && s[i] == '`' {
+		i++
+	}
+	return i
+}
+
+// findClosingBacktickRun scans s starting at i for the next run of backticks
+// whose length equals openLen, skipping over runs of any other length. It
+// returns the matching run's end offset, or found=false if none exists
+// before the end of s.
+func findClosingBacktickRun(s string, i, openLen int) (end int, found bool) {
+	for i < len(s) {
+		if s[i] != '`' {
+			i++
+			continue
+		}
+		runStart := i
+		i = skipBackticks(s, i)
+		if i-runStart == openLen {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+func escapeAngleBrackets(s string) string {
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
+}
+
 // Err finalizes and returns the enriched error.
 func (b *ErrorBuilder) Err() error {
 	if b.err == nil {
@@ -196,7 +296,7 @@ func (b *ErrorBuilder) Err() error {
 
 	// Add all hints.
 	for _, hint := range b.hints {
-		err = errors.WithHint(err, hint)
+		err = errors.WithHint(err, escapeHintAngleBrackets(hint))
 	}
 
 	// Add context if present.

@@ -528,6 +528,18 @@ func TestManualSpinnerModel_Update(t *testing.T) {
 		assert.Empty(t, m.finalMsg)
 	})
 
+	t.Run("updates the progress message", func(t *testing.T) {
+		model := newManualSpinnerModel("Loading configuration")
+
+		updatedModel, cmd := model.Update(manualUpdateMsg{message: "Resolving identity"})
+		assert.Nil(t, cmd)
+
+		m, ok := updatedModel.(manualSpinnerModel)
+		require.True(t, ok)
+		assert.Equal(t, "Resolving identity", m.progressMsg)
+		assert.Contains(t, m.View(), "Resolving identity")
+	})
+
 	t.Run("handles spinner tick message", func(t *testing.T) {
 		model := newManualSpinnerModel("test")
 		tickMsg := spinner.TickMsg{}

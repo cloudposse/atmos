@@ -1,0 +1,79 @@
+---
+slug: version-tracker-json-manager
+title: "Keep version fields in JSON files in sync without a template"
+date: 2026-08-20T12:00:00.000Z
+authors: [osterman]
+tags: [feature]
+---
+
+Plain JSON has no comment syntax, so there's nowhere to put an annotation telling a tool which
+field carries a managed version. Rewriting the whole file from a parsed structure works, but it
+reflows formatting, reorders keys, and turns a one-line diff into a noisy one. Neither option was
+a good fit for keeping a `version` field in a `package.json`, plugin manifest, or marketplace
+listing in sync with a locked dependency.
+
+<!--truncate-->
+
+## The Problem
+
+The [Version Tracker](/cli/configuration/version/files)'s `marker` manager rewrites version
+tokens on lines annotated with an `atmos:version` comment — but JSON has no comment syntax, so
+there's no line to annotate. The `template` manager covers formats like this by rendering a
+`*.tmpl` source to a sibling output file, but that means maintaining a template and a generated
+file as two files that have to be kept in sync by hand every time an unrelated field in the JSON
+document changes.
+
+## The Fix
+
+A new `json` file manager writes locked values directly into JSON files at configured field
+paths. It patches only the targeted field and leaves everything else in the document — key
+order, spacing, unrelated fields — exactly as it was, so `atmos version track apply` produces a
+minimal, single-field diff instead of a fully reformatted file.
+
+## How to Use It
+
+```yaml
+version:
+  dependencies:
+    atmos:
+      ecosystem: github/actions
+      datasource: github-releases
+      provider: github
+      package: cloudposse/atmos
+      desired: "~1.160"
+
+  files:
+    - manager: json
+      paths:
+        - package.json
+      options:
+        set:
+          - path: version
+            from: atmos
+```
+
+A single rule can target more than one file, and a single file can carry more than one managed
+field — each just needs its own `path`/`from` entry under `set`:
+
+```yaml
+  files:
+    - manager: json
+      paths:
+        - package.json
+      options:
+        set:
+          - path: version
+            from: cli
+          - path: engines.node
+            from: node
+```
+
+`atmos version track apply` rewrites every configured field from the lock; `--check` fails and
+lists any file that's out of date, so CI can catch drift before it merges.
+
+## Get Involved
+
+See the [Version Files](/cli/configuration/version/files#updating-json-files) docs for the full
+`path`/`from` syntax, including array indexing and escaping keys that contain literal dots. Have
+feedback on this feature? [Open an issue](https://github.com/cloudposse/atmos/issues) or join the
+conversation in the [Cloud Posse community Slack](https://cloudposse.com/slack).

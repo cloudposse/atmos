@@ -4,6 +4,7 @@ description: "Native Kubernetes components (experimental): render/plan/diff/appl
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: orchestrators
 ---
 
 # Atmos Native Kubernetes Components

@@ -1,0 +1,117 @@
+---
+slug: scaffold-matrix
+title: "Generate one file per selection with matrix"
+date: 2026-08-14T12:00:00.000Z
+authors: [jorrite]
+tags: [feature]
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+
+Every file a scaffold template declares renders at most once. `when:` can skip a file, but it
+can never multiply one. You could work around that by authoring every combination up front and
+letting `when:` prune down to what applies — but that only works if every combination is
+knowable in advance. It breaks down for environments picked interactively from a longer list, or
+names typed in by hand that no template author could have enumerated ahead of time. Until now,
+that meant hand-rolling files outside the template, or maintaining a pile of near-duplicate ones
+inside it.
+
+<!--truncate-->
+
+## The Problem
+
+The number of files a project needs often depends on what gets selected when the project is
+generated. Pick three environments out of five, and you want three stack files, not five. That
+output was already possible: declare all five stack files in the template up front, and gate each
+one with its own `when:` on whether that specific environment got picked. The real cost was
+authorship — five nearly-identical files, one per environment the template author had to
+anticipate, kept in sync by hand as the shared parts drifted. Nothing let a template say "generate
+one of these per selected value" from a single file; only "generate this specific file" or "skip
+this specific file."
+
+## The Fix
+
+Declaring `matrix:` on a file entry expands it into one generated file per combination of one or
+more axes. It reuses the same shape Atmos workflow `matrix:` steps already use, so the syntax
+should feel familiar. `when:` still prunes combinations that don't apply — the same conditional
+engine that already gates whole files, now scoped to a single combination at a time:
+
+```yaml
+spec:
+  fields:
+    - name: environments
+      type: multiselect
+      options: [dev, staging, production]
+  files:
+    - path: stacks/deploy/environment.yaml
+      target: "stacks/deploy/{{ .matrix.environment }}.yaml"
+      matrix:
+        environment: answers.environments
+```
+
+Selecting `dev` and `staging` generates exactly `stacks/deploy/dev.yaml` and
+`stacks/deploy/staging.yaml`. Declaring more than one axis expands their full combination, and
+each resolved combination is available as `.matrix.<axis>` in Go-template fields such as the
+output path and generated content, and as `matrix.<axis>` in `when:` conditions — so a file can
+name itself and branch on its own combination.
+
+### Computed axes
+
+Real answers aren't always a flat, pre-selected list. Say `environments` were a structured answer
+instead of a `multiselect` — supplied through `--set` or a preset value — shaped like this:
+
+```yaml
+environments:
+  dev:
+    regions:
+      us-east-1: {}
+  production:
+    regions:
+      us-east-1: {}
+      us-west-2: {}
+```
+
+The full list of regions actually used isn't something anyone picked directly — it has to be
+derived from every environment's own `regions`. The `collectKeys` function does that: called with
+one argument, it returns a map's keys; called with a second argument, it collects that key from
+every value in the map, flattening and deduplicating across all of them.
+
+```yaml
+files:
+  - path: deploy.yaml
+    target: "deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml"
+    matrix:
+      environment: '{{ collectKeys answers.environments }}'
+      region: '{{ collectKeys answers.environments "regions" }}'
+    when: "matrix.region in answers.environments[matrix.environment].regions"
+```
+
+`environment` resolves to `dev` and `production`; `region` resolves to every region used by any of
+them (`us-east-1` and `us-west-2`). Their combination fans a single `deploy.yaml` out into
+`deploy/dev/us-east-1.yaml`, `deploy/production/us-east-1.yaml`, and
+`deploy/production/us-west-2.yaml` — `target:` names each one from `.matrix.<axis>`, and `when:`
+prunes the combination down to each environment's actual regions, so `dev` never gets a
+`us-west-2` file.
+
+## How to Use It
+
+<CastPlayer src="/casts/examples/scaffolding-matrix/generate-example.cast" title="atmos scaffold: one file per selection via matrix" chrome controls scrubber />
+
+The [scaffolding-matrix example](/examples/scaffolding-matrix) is a minimal, runnable template —
+one `multiselect` field driving one matrix axis:
+
+```shell
+cd examples/scaffolding-matrix
+atmos scaffold generate example ./my-project
+```
+
+Answering the `environments` prompt with `dev` and `staging` generates `stacks/dev.yaml` and
+`stacks/staging.yaml` from the template's single `environment.yaml` file — or skip the prompt
+entirely with `--set environments=dev,staging` for scripted, non-interactive use. Add `matrix:` to
+any `spec.files[]` entry alongside `target:` to do the same in your own templates, using a literal
+list, a `multiselect` answer, or a computed expression for each axis.
+
+## Get Involved
+
+See the [`atmos scaffold generate`](/cli/commands/scaffold/generate) docs for the full reference,
+or [open an issue](https://github.com/cloudposse/atmos/issues) with feedback.

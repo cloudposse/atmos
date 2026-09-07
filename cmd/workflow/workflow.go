@@ -55,6 +55,8 @@ func init() {
 		flags.WithStringFlag("file", "f", "", "Specify workflow file to run (optional if workflow name is unique)"),
 		flags.WithBoolFlag("dry-run", "", false, "Simulate the workflow without making any changes"),
 		flags.WithStringFlag("stack", "s", "", "Stack name"),
+		flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
+		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
 		flags.WithStringFlag("from-step", "", "", "Resume the workflow from the specified step"),
 		flags.WithStringFlag("identity", "", "", "Identity to use for workflow steps that don't specify their own identity"),
 		flags.WithEnvVars("file", "ATMOS_WORKFLOW_FILE"),

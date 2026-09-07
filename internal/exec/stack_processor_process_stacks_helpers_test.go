@@ -620,6 +620,76 @@ func TestExtractComponentSections_Retry(t *testing.T) {
 	})
 }
 
+// TestExtractComponentSections_Flags covers the terraform-only `flags:` section
+// extraction, mirroring TestExtractComponentSections_Retry's style: a valid map
+// populates ComponentFlags, an absent section defaults to an empty map (matching the
+// analogous generate-section behavior, not retry's nil-on-absent), a non-map errors, and
+// non-terraform component types never populate ComponentFlags at all.
+func TestExtractComponentSections_Flags(t *testing.T) {
+	t.Run("valid-flags-map-populates-result", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.FlagsSectionName: map[string]any{
+					"lock_timeout": "5m",
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+		require.NotNil(t, result.ComponentFlags)
+		assert.Equal(t, "5m", result.ComponentFlags["lock_timeout"])
+	})
+
+	t.Run("absent-flags-section-defaults-to-empty-map", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap:  map[string]any{},
+			AtmosConfig:   &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+		assert.Empty(t, result.ComponentFlags)
+	})
+
+	t.Run("non-map-flags-returns-error", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.FlagsSectionName: "not a map",
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		err := extractComponentSections(&opts, result)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidComponentFlags)
+		assert.Contains(t, err.Error(), "components.terraform.vpc.flags")
+	})
+
+	t.Run("non-terraform-component-type-ignores-flags", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "app",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.FlagsSectionName: map[string]any{"lock_timeout": "5m"},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+		assert.Nil(t, result.ComponentFlags, "flags is terraform-only")
+	})
+}
+
 // TestExtractComponentSections_Plugins covers the Helm CLI plugins list extraction:
 // helm and helmfile components capture the raw list, terraform ignores it, and an
 // absent section leaves the result nil.
@@ -675,6 +745,54 @@ func TestExtractComponentSections_Plugins(t *testing.T) {
 		require.NoError(t, extractComponentSections(&opts, result))
 		assert.Nil(t, result.ComponentPlugins)
 	})
+}
+
+func TestExtractHelmLifecycleSections(t *testing.T) {
+	section := map[string]any{
+		cfg.ChartSectionName:        "charts/demo-release",
+		cfg.ValuesSectionName:       map[string]any{"cluster": "shared"},
+		cfg.RepositoriesSectionName: []any{map[string]any{"name": "internal"}},
+		cfg.HelmReleaseSectionName: map[string]any{
+			cfg.HelmTimeoutSectionName: "30m",
+			cfg.HelmWaitSectionName: map[string]any{
+				cfg.HelmWaitStrategySectionName: "watcher",
+			},
+			cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: 10},
+			cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmOnFailureSectionName: "rollback"},
+		},
+		"unrecognized": "ignored",
+	}
+
+	component := extractHelmComponentSection(section)
+	assert.Equal(t, "charts/demo-release", component[cfg.ChartSectionName])
+	assert.Equal(t, section[cfg.HelmReleaseSectionName], component[cfg.HelmReleaseSectionName])
+	assert.NotContains(t, component, "unrecognized")
+
+	defaults := extractHelmLifecycleSection(section)
+	assert.NotContains(t, defaults, cfg.ChartSectionName)
+	assert.Equal(t, map[string]any{"cluster": "shared"}, defaults[cfg.ValuesSectionName])
+	assert.Equal(t, []any{map[string]any{"name": "internal"}}, defaults[cfg.RepositoriesSectionName])
+	assert.Equal(t, section[cfg.HelmReleaseSectionName], defaults[cfg.HelmReleaseSectionName])
+
+	overrides := extractHelmOverrideSection(section)
+	assert.Equal(t, map[string]any{"cluster": "shared"}, overrides[cfg.ValuesSectionName])
+	assert.NotContains(t, overrides, cfg.ChartSectionName)
+	assert.NotContains(t, overrides, cfg.RepositoriesSectionName)
+	assert.NotContains(t, overrides, cfg.HelmReleaseSectionName)
+	assert.NotContains(t, overrides, "unrecognized")
+}
+
+func TestExtractHelmSectionsIgnoreBareNullValues(t *testing.T) {
+	section := map[string]any{
+		cfg.ChartSectionName:  ".",
+		cfg.ValuesSectionName: nil,
+	}
+
+	component := extractHelmComponentSection(section)
+	assert.Equal(t, ".", component[cfg.ChartSectionName])
+	assert.NotContains(t, component, cfg.ValuesSectionName)
+	assert.NotContains(t, extractHelmLifecycleSection(section), cfg.ValuesSectionName)
+	assert.NotContains(t, extractHelmOverrideSection(section), cfg.ValuesSectionName)
 }
 
 // Compile-time guard: a rename of the schema Plugins fields fails the build.
@@ -772,7 +890,7 @@ func TestSupportsComponentTypeHelpers(t *testing.T) {
 		{cfg.TerraformComponentType, true, true, true},
 		{cfg.KubernetesComponentType, true, true, true},
 		{cfg.HelmComponentType, true, true, true},
-		{cfg.HelmfileComponentType, false, false, true},
+		{cfg.HelmfileComponentType, true, false, true},
 		{cfg.PackerComponentType, false, false, true},
 		{"unknown-type", false, false, false},
 	}
@@ -957,6 +1075,144 @@ func TestProcessComponentOverrides_Retry(t *testing.T) {
 		err := processComponentOverrides(&opts, result)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "components.terraform.vpc.overrides.retry")
+	})
+}
+
+// TestProcessComponentOverrides_Provision covers the provision-overrides extraction.
+// `provision` is only wired up for component types that support source/provision delivery
+// (see supportsSourceProvision), so it must populate ComponentOverridesProvision for those
+// types on success and produce a precise error on a non-map type.
+func TestProcessComponentOverrides_Provision(t *testing.T) {
+	tests := []struct {
+		name               string
+		componentType      string
+		component          string
+		provisionOverride  any
+		expectedError      string
+		expectedProvision  map[string]any
+		expectNilProvision bool
+	}{
+		{
+			name:              "valid overrides.provision populates result",
+			componentType:     cfg.HelmfileComponentType,
+			component:         "app",
+			provisionOverride: map[string]any{"workdir": "/tmp/override-wd"},
+			expectedProvision: map[string]any{"workdir": "/tmp/override-wd"},
+		},
+		{
+			name:              "non-map overrides.provision returns error",
+			componentType:     cfg.HelmfileComponentType,
+			component:         "app",
+			provisionOverride: 42, // not a map.
+			expectedError:     "components.helmfile.app.overrides.provision",
+		},
+		{
+			// A component type outside supportsSourceProvision (like "ansible") must
+			// not populate ComponentOverridesProvision at all — even if the manifest
+			// happens to include a `provision:` key under `overrides:`.
+			name:               "component type without source/provision support ignores the override",
+			componentType:      cfg.AnsibleComponentType,
+			component:          "playbook",
+			provisionOverride:  map[string]any{"workdir": "/tmp/ignored"},
+			expectNilProvision: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := ComponentProcessorOptions{
+				ComponentType: tt.componentType,
+				Component:     tt.component,
+				StackName:     "test-stack",
+				ComponentMap: map[string]any{
+					cfg.OverridesSectionName: map[string]any{
+						cfg.ProvisionSectionName: tt.provisionOverride,
+					},
+				},
+				AtmosConfig: &schema.AtmosConfiguration{},
+			}
+			result := &ComponentProcessorResult{}
+			err := processComponentOverrides(&opts, result)
+
+			if tt.expectedError != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+				return
+			}
+			require.NoError(t, err)
+
+			if tt.expectNilProvision {
+				assert.Nil(t, result.ComponentOverridesProvision)
+				return
+			}
+			assert.Equal(t, tt.expectedProvision, result.ComponentOverridesProvision)
+		})
+	}
+}
+
+// TestProcessComponentOverrides_Flags covers the flags-overrides extraction added by the
+// declarative terraform flags feature, mirroring TestProcessComponentOverrides_Retry's
+// style. Overrides flags must populate ComponentOverridesFlags on success and produce a
+// precise error on a non-map type; it must also be a terraform-only extraction — other
+// component types must never populate ComponentOverridesFlags even when an
+// overrides.flags key is present.
+func TestProcessComponentOverrides_Flags(t *testing.T) {
+	t.Run("valid-overrides-flags-populates-result", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.OverridesSectionName: map[string]any{
+					cfg.FlagsSectionName: map[string]any{
+						"lock_timeout": "15m",
+					},
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, processComponentOverrides(&opts, result))
+		require.NotNil(t, result.ComponentOverridesFlags)
+		assert.Equal(t, "15m", result.ComponentOverridesFlags["lock_timeout"])
+	})
+
+	t.Run("non-map-overrides-flags-returns-error", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.OverridesSectionName: map[string]any{
+					cfg.FlagsSectionName: 42, // not a map.
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		err := processComponentOverrides(&opts, result)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidComponentOverridesFlags)
+		assert.Contains(t, err.Error(), "components.terraform.vpc.overrides.flags")
+	})
+
+	t.Run("non-terraform-component-type-ignores-flags-override", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "app",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.OverridesSectionName: map[string]any{
+					cfg.FlagsSectionName: map[string]any{
+						"lock_timeout": "15m",
+					},
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, processComponentOverrides(&opts, result))
+		assert.Nil(t, result.ComponentOverridesFlags, "flags overrides is terraform-only")
 	})
 }
 

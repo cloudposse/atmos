@@ -30,7 +30,7 @@ func ReplaceShellSession(spec *ExecSpec) error {
 	release := signals.SuspendInterruptExit()
 	defer release()
 
-	cmd := newShellCommand(context.Background(), spec.Command)
+	cmd := NewShellCommand(context.Background(), spec.Command)
 	cmd.Env = env
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

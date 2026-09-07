@@ -67,6 +67,15 @@ func (p *oidcProvider) PreAuthenticate(_ types.AuthManager) error {
 	return nil
 }
 
+// IsAmbient satisfies types.AmbientProvider. The OIDC token is requested fresh from the
+// GitHub Actions token endpoint (ACTIONS_ID_TOKEN_REQUEST_URL / _TOKEN) on every call and
+// is short-lived. Persisting it would let the auth manager replay a token that the Actions
+// runtime has already rotated, so the manager must never cache credentials for chains
+// rooted at this provider.
+func (p *oidcProvider) IsAmbient() bool {
+	return true
+}
+
 // Kind returns the provider kind.
 func (p *oidcProvider) Kind() string {
 	return "github/oidc"
@@ -262,7 +271,9 @@ func (p *oidcProvider) PrepareEnvironment(_ context.Context, environ map[string]
 // Logout removes provider-specific credential storage.
 func (p *oidcProvider) Logout(ctx context.Context) error {
 	// GitHub OIDC provider has no logout concept - tokens come from GitHub Actions environment.
-	// Credentials are only stored in keyring (handled by AuthManager).
+	// Nothing is persisted for this provider: it is ambient (see IsAmbient), so the auth
+	// manager never writes its credentials to the keyring and purges any entry left behind
+	// by an older Atmos version.
 	// Return ErrLogoutNotSupported to indicate successful no-op (exit 0).
 	log.Debug("Logout not supported for GitHub OIDC provider (no files to clean up)", "provider", p.name)
 	return errUtils.ErrLogoutNotSupported

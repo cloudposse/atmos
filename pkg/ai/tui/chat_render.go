@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
@@ -324,4 +325,92 @@ type providerSwitchedMsg struct {
 	providerConfig *schema.AIProviderConfig
 	newClient      ai.Client
 	err            error
+}
+
+// turnStepKind distinguishes an AI network round-trip from a tool execution within a turn.
+type turnStepKind int
+
+const (
+	turnStepKindAICall turnStepKind = iota
+	turnStepKindTool
+)
+
+// turnStepStatus is the lifecycle stage of a turnStep.
+type turnStepStatus int
+
+const (
+	turnStepRunning turnStepStatus = iota
+	turnStepDone
+	turnStepError
+)
+
+// turnStep is one unit of visible work within the current AI turn (one AI call or one tool
+// execution), used to render a running checklist in the footer while m.isLoading.
+type turnStep struct {
+	kind      turnStepKind
+	label     string
+	status    turnStepStatus
+	err       error
+	startedAt time.Time
+	duration  time.Duration
+}
+
+// turnStepStartedMsg signals a new step has begun. Sent via m.program.Send from the same
+// goroutine driving the (blocking) AI/tool call, exactly like statusMsg.
+type turnStepStartedMsg turnStep
+
+// turnStepFinishedMsg marks the most recently started step complete. Steps run strictly
+// sequentially within a turn (no concurrent AI calls or tool executions), so this always
+// applies to the last entry in ChatModel.turnSteps.
+type turnStepFinishedMsg struct {
+	err error
+}
+
+// maxDisplayedTurnSteps bounds the footer's step log so it stays inside the fixed footer
+// content budget (9 lines: textarea 7 + newline 1 + help 1) reserved by
+// calculateViewportHeight, since the chat TUI runs in alt-screen mode where content taller
+// than the terminal is clipped rather than scrolled.
+const maxDisplayedTurnSteps = 6
+
+// renderTurnSteps renders the turn's step log: a checkmark/xmark line per completed step
+// and the live spinner + elapsed time on the in-flight one, so tool execution history stays
+// visible for the rest of the turn instead of being silently overwritten.
+func (m *ChatModel) renderTurnSteps(usageStr, cancelHint string) string {
+	start := 0
+	var lines []string
+	if len(m.turnSteps) > maxDisplayedTurnSteps {
+		start = len(m.turnSteps) - maxDisplayedTurnSteps
+		mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true)
+		lines = append(lines, mutedStyle.Render(fmt.Sprintf("… %d earlier step(s) omitted", start)))
+	}
+	for i := start; i < len(m.turnSteps); i++ {
+		lines = append(lines, m.renderTurnStepLine(&m.turnSteps[i], usageStr, cancelHint))
+	}
+	return strings.Join(lines, newlineChar)
+}
+
+// renderTurnStepLine renders a single turn step: a checkmark/xmark for a finished step, or
+// the live spinner and elapsed time for the in-flight one.
+func (m *ChatModel) renderTurnStepLine(step *turnStep, usageStr, cancelHint string) string {
+	styles := theme.GetCurrentStyles()
+	switch step.status {
+	case turnStepDone:
+		return fmt.Sprintf("%s %s %s", styles.Checkmark, step.label, mutedElapsed(step.duration))
+	case turnStepError:
+		errSuffix := ""
+		if step.err != nil {
+			errSuffix = " — " + step.err.Error()
+		}
+		return fmt.Sprintf("%s %s%s", styles.XMark, step.label, errSuffix)
+	default: // turnStepRunning.
+		return fmt.Sprintf("%s %s %s%s %s", m.spinner.View(), step.label, mutedElapsed(time.Since(step.startedAt)), usageStr, cancelHint)
+	}
+}
+
+// mutedElapsed formats a duration as "(1.2s)" for display next to a step, or "" if under a second.
+func mutedElapsed(d time.Duration) string {
+	if d < time.Second {
+		return ""
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(fmt.Sprintf("(%.1fs)", d.Seconds()))
 }

@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -222,6 +225,31 @@ metadata:
 			expectedNames: []string{"shared"},
 			expectError:   false,
 		},
+		{
+			name: "reserved __SELECT__ directory is excluded from discovery",
+			setupProfiles: func(t *testing.T, baseDir string) string {
+				reserved := filepath.Join(baseDir, "profiles", cfg.ProfileFlagSelectValue)
+				require.NoError(t, os.MkdirAll(reserved, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(reserved, "atmos.yaml"),
+					[]byte("# Should never be discoverable"),
+					0o644,
+				))
+
+				normal := filepath.Join(baseDir, "profiles", "dev")
+				require.NoError(t, os.MkdirAll(normal, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(normal, "atmos.yaml"),
+					[]byte("base_path: /stacks"),
+					0o644,
+				))
+
+				return baseDir
+			},
+			expectedCount: 1,
+			expectedNames: []string{"dev"},
+			expectError:   false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -281,6 +309,16 @@ func TestGetProfile(t *testing.T) {
 			name:        "profile not found",
 			profileName: "nonexistent",
 			setupProfile: func(t *testing.T, baseDir string) string {
+				return baseDir
+			},
+			expectError: true,
+		},
+		{
+			name:        "reserved __SELECT__ name is rejected even if a directory exists",
+			profileName: cfg.ProfileFlagSelectValue,
+			setupProfile: func(t *testing.T, baseDir string) string {
+				reserved := filepath.Join(baseDir, "profiles", cfg.ProfileFlagSelectValue)
+				require.NoError(t, os.MkdirAll(reserved, 0o755))
 				return baseDir
 			},
 			expectError: true,
@@ -644,4 +682,22 @@ func TestListProfileFiles(t *testing.T) {
 			assert.ElementsMatch(t, tt.expectedFiles, files)
 		})
 	}
+}
+
+// TestGetProfile_ReservedNameReturnsSpecificError verifies GetProfile rejects the
+// interactive-selection sentinel with ErrProfileNameReserved specifically, not just
+// any error, and that it's rejected before any directory lookup occurs (no profiles
+// directory is created in this test).
+func TestGetProfile_ReservedNameReturnsSpecificError(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		CliConfigPath: tmpDir,
+	}
+
+	manager := NewProfileManager()
+	profile, err := manager.GetProfile(atmosConfig, cfg.ProfileFlagSelectValue)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrProfileNameReserved))
+	assert.Nil(t, profile)
 }

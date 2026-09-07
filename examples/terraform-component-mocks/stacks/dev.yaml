@@ -1,0 +1,13 @@
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      mocks:
+        vpc_id: vpc-local
+
+    app:
+      metadata:
+        component: app
+      vars:
+        vpc_id: !terraform.state vpc vpc_id

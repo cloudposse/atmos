@@ -1,16 +1,20 @@
 package toolchain
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/filelock"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const (
-	defaultFileWritePermissions = 0o644
+	defaultFileWritePermissions      = 0o644
+	toolVersionsDirectoryPermissions = 0o755
 )
 
 // ToolVersions represents the .tool-versions file format (asdf-compatible: tool -> list of versions, first is default).
@@ -22,6 +26,16 @@ type ToolVersions struct {
 func LoadToolVersions(filePath string) (*ToolVersions, error) {
 	defer perf.Track(nil, "toolchain.LoadToolVersions")()
 
+	var toolVersions *ToolVersions
+	err := withToolVersionsSharedLock(filePath, func() error {
+		var err error
+		toolVersions, err = loadToolVersionsUnlocked(filePath)
+		return err
+	})
+	return toolVersions, err
+}
+
+func loadToolVersionsUnlocked(filePath string) (*ToolVersions, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
@@ -52,7 +66,12 @@ func LoadToolVersions(filePath string) (*ToolVersions, error) {
 // SaveToolVersions saves a ToolVersions struct to a .tool-versions file (asdf-compatible).
 func SaveToolVersions(filePath string, toolVersions *ToolVersions) error {
 	defer perf.Track(nil, "toolchain.SaveToolVersions")()
+	return withToolVersionsLock(filePath, func() error {
+		return saveToolVersionsUnlocked(filePath, toolVersions)
+	})
+}
 
+func saveToolVersionsUnlocked(filePath string, toolVersions *ToolVersions) error {
 	if toolVersions == nil || toolVersions.Tools == nil {
 		return fmt.Errorf("%w: toolVersions or toolVersions.Tools is nil", ErrInvalidToolSpec)
 	}
@@ -90,22 +109,23 @@ func AddVersionToTool(toolVersions *ToolVersions, tool, version string, asDefaul
 		toolVersions.Tools = make(map[string][]string)
 	}
 
+	// asDefault mirrors asdf's own "set" convention: the whole line becomes exactly the
+	// version given, full stop -- not a merge that preserves other previously-pinned
+	// versions. asdf's docs describe `asdf set <tool> <version>` as equivalent to
+	// `echo "<tool> <version>" > .tool-versions`. This is what lets set/add --default/update
+	// keep the documented guarantee that a tool is never left pinned to two versions at once.
+	if asDefault {
+		toolVersions.Tools[tool] = []string{version}
+		return
+	}
+
 	versions := toolVersions.Tools[tool]
-	for i, v := range versions {
+	for _, v := range versions {
 		if v == version {
-			if asDefault && i != 0 {
-				// Move to front
-				versions = append([]string{version}, append(versions[:i], versions[i+1:]...)...)
-				toolVersions.Tools[tool] = versions
-			}
 			return
 		}
 	}
-	if asDefault {
-		toolVersions.Tools[tool] = append([]string{version}, versions...)
-	} else {
-		toolVersions.Tools[tool] = append(versions, version)
-	}
+	toolVersions.Tools[tool] = append(versions, version)
 }
 
 // GetDefaultVersion returns the default (first) version for a tool.
@@ -151,81 +171,101 @@ func addToolToVersionsInternal(filePath, tool, version string, asDefault bool) e
 	if version == "" {
 		return fmt.Errorf("%w: cannot add tool '%s' without a version", ErrInvalidToolSpec, tool)
 	}
-	// Load existing tool versions
-	toolVersions, err := LoadToolVersions(filePath)
-	if err != nil {
-		// If file doesn't exist, create a new one
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to load existing .tool-versions: %w", err)
+	return withToolVersionsLock(filePath, func() error {
+		// Load existing tool versions while holding the lock so separate Atmos
+		// processes cannot lose each other's additions.
+		toolVersions, err := loadToolVersionsUnlocked(filePath)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return fmt.Errorf("failed to load existing .tool-versions: %w", err)
+			}
+			toolVersions = &ToolVersions{Tools: make(map[string][]string)}
 		}
-		toolVersions = &ToolVersions{
-			Tools: make(map[string][]string),
+
+		installer := NewInstaller()
+		resolver := installer.GetResolver()
+		if duplicateKey := findDuplicateKey(toolVersions, tool, version, resolver); duplicateKey != "" {
+			// The version is already tracked under a different key (an alias vs. its
+			// canonical owner/repo form, or vice versa). Don't create a second,
+			// disconnected entry -- but when the caller wants this version to become
+			// the default, promote it within its existing key instead of silently
+			// doing nothing.
+			if asDefault {
+				AddVersionToTool(toolVersions, duplicateKey, version, true)
+				return saveToolVersionsUnlocked(filePath, toolVersions)
+			}
+			return nil
 		}
-	}
 
-	// Create an installer to use its resolver
-	installer := NewInstaller()
-	resolver := installer.GetResolver()
-
-	// Check if this would create a duplicate with an aliased version
-	if wouldCreateDuplicate(toolVersions, tool, version, resolver) {
-		// Skip adding this entry as it would create a duplicate
-		return nil
-	}
-
-	// Add or update the tool
-	AddVersionToTool(toolVersions, tool, version, asDefault)
-
-	// Save back to file
-	return SaveToolVersions(filePath, toolVersions)
+		AddVersionToTool(toolVersions, tool, version, asDefault)
+		return saveToolVersionsUnlocked(filePath, toolVersions)
+	})
 }
 
-// wouldCreateDuplicate checks if adding a tool/version combination would create a duplicate
-// with an existing aliased version. For example, if "opentofu/opentofu 1.10.3" already exists,
-// adding "opentofu 1.10.3" would create a duplicate.
-func wouldCreateDuplicate(toolVersions *ToolVersions, tool, version string, resolver ToolResolver) bool {
+func withToolVersionsLock(filePath string, fn func() error) error {
+	if err := os.MkdirAll(filepath.Dir(filePath), toolVersionsDirectoryPermissions); err != nil {
+		return fmt.Errorf("create .tool-versions directory: %w", err)
+	}
+	return filelock.New(filePath+".lock").WithExclusive(context.Background(), fn)
+}
+
+func withToolVersionsSharedLock(filePath string, fn func() error) error {
+	if err := os.MkdirAll(filepath.Dir(filePath), toolVersionsDirectoryPermissions); err != nil {
+		return fmt.Errorf("create .tool-versions directory: %w", err)
+	}
+	return filelock.New(filePath+".lock").WithShared(context.Background(), fn)
+}
+
+// findDuplicateKey checks whether adding a tool/version combination would create a duplicate
+// with an existing aliased version, and if so returns the key under which the version is
+// already tracked. For example, if "opentofu/opentofu 1.10.3" already exists, adding
+// "opentofu 1.10.3" would create a duplicate, and findDuplicateKey returns "opentofu/opentofu".
+// Returns "" when there is no duplicate.
+func findDuplicateKey(toolVersions *ToolVersions, tool, version string, resolver ToolResolver) string {
 	// Check if the tool is an alias that conflicts with an existing full name.
-	if aliasConflictsWithFullName(toolVersions, tool, version, resolver) {
-		return true
+	if key := aliasConflictsWithFullName(toolVersions, tool, version, resolver); key != "" {
+		return key
 	}
 
 	// Check if the tool is a full name that conflicts with an existing alias.
-	if fullNameConflictsWithAlias(toolVersions, tool, version, resolver) {
-		return true
+	if key := fullNameConflictsWithAlias(toolVersions, tool, version, resolver); key != "" {
+		return key
 	}
 
-	return false
+	return ""
 }
 
 // aliasConflictsWithFullName checks if an alias conflicts with an existing full name entry.
-// For example, if "opentofu/opentofu 1.10.3" already exists, adding "opentofu 1.10.3" would be a duplicate.
-func aliasConflictsWithFullName(toolVersions *ToolVersions, tool, version string, resolver ToolResolver) bool {
+// For example, if "opentofu/opentofu 1.10.3" already exists, adding "opentofu 1.10.3" would be a
+// duplicate. Returns the conflicting key ("opentofu/opentofu"), or "" if there is none.
+func aliasConflictsWithFullName(toolVersions *ToolVersions, tool, version string, resolver ToolResolver) string {
 	// Check if the tool is an alias (e.g., "opentofu").
 	owner, repo, err := resolver.Resolve(tool)
 	if err != nil || owner == "" || repo == "" {
-		return false
+		return ""
 	}
 
 	// This is an alias, check if the full name already exists.
 	aliasKey := owner + "/" + repo
 	versions, ok := toolVersions.Tools[aliasKey]
 	if !ok {
-		return false
+		return ""
 	}
 
 	// Check if any existing version matches.
 	for _, v := range versions {
 		if v == version {
-			return true // Duplicate found.
+			return aliasKey // Duplicate found.
 		}
 	}
 
-	return false
+	return ""
 }
 
 // fullNameConflictsWithAlias checks if a full name conflicts with an existing alias entry.
-// For example, if "opentofu 1.10.3" already exists, adding "opentofu/opentofu 1.10.3" would be a duplicate.
-func fullNameConflictsWithAlias(toolVersions *ToolVersions, tool, version string, resolver ToolResolver) bool {
+// For example, if "opentofu 1.10.3" already exists, adding "opentofu/opentofu 1.10.3" would be a
+// duplicate. Returns the conflicting key ("opentofu"), or "" if there is none.
+func fullNameConflictsWithAlias(toolVersions *ToolVersions, tool, version string, resolver ToolResolver) string {
 	// Check if this is a full name (e.g., "opentofu/opentofu") and if an alias exists
 	// that resolves to this full name.
 	for existingTool, versions := range toolVersions.Tools {
@@ -249,12 +289,12 @@ func fullNameConflictsWithAlias(toolVersions *ToolVersions, tool, version string
 		// Check if any version matches.
 		for _, v := range versions {
 			if v == version {
-				return true // Duplicate found.
+				return existingTool // Duplicate found.
 			}
 		}
 	}
 
-	return false
+	return ""
 }
 
 // LookupToolVersion attempts to find the version for a tool, trying both the raw name and its resolved alias.
@@ -338,15 +378,12 @@ func ParseToolVersionArg(arg string) (string, string, error) {
 func RemoveToolFromVersions(filePath, tool, version string) error {
 	defer perf.Track(nil, "toolchain.RemoveToolFromVersions")()
 
-	// Load existing tool versions
-	toolVersions, err := LoadToolVersions(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to load .tool-versions: %w", err)
-	}
-
-	// Remove the tool entirely
-	delete(toolVersions.Tools, tool)
-
-	// Save back to file
-	return SaveToolVersions(filePath, toolVersions)
+	return withToolVersionsLock(filePath, func() error {
+		toolVersions, err := loadToolVersionsUnlocked(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to load .tool-versions: %w", err)
+		}
+		delete(toolVersions.Tools, tool)
+		return saveToolVersionsUnlocked(filePath, toolVersions)
+	})
 }

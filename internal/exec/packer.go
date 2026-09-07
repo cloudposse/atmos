@@ -15,12 +15,23 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const componentTypePacker = "packer"
+
+// processStacksForPacker is a seam over ProcessStacks so tests can observe the
+// arguments the packer executor passes (notably the auth manager) without running
+// the full stack-processing pipeline.
+var processStacksForPacker = ProcessStacks
+
+// executePackerShellCommand is a seam over ExecuteShellCommand for the main packer
+// subprocess invocation so tests can observe the environment (including Atmos Auth
+// credentials) delivered to the packer process without launching a real binary.
+var executePackerShellCommand = ExecuteShellCommand
 
 // PackerFlags represents Packer command-line flags passed to ExecutePacker and ExecutePackerOutput.
 type PackerFlags struct {
@@ -77,7 +88,16 @@ func ExecutePacker(
 		)
 	}
 
-	*info, err = ProcessStacks(&atmosConfig, *info, true, true, true, nil, nil)
+	// Set up authentication (merge global + component auth, create and authenticate the
+	// AuthManager, inject the store auth resolver). Mirrors terraform (setupTerraformAuth)
+	// and helmfile (SetupComponentAuthForCLI). Without this, packer ran unauthenticated and
+	// its datasources failed with "No valid credential sources found".
+	authManager, err := SetupComponentAuthForCLI(&atmosConfig, info)
+	if err != nil {
+		return err
+	}
+
+	*info, err = processStacksForPacker(&atmosConfig, *info, true, true, true, nil, authManager)
 	if err != nil {
 		return err
 	}
@@ -120,7 +140,7 @@ func ExecutePacker(
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
-		ctx, &atmosConfig, info, cfg.PackerComponentType, componentPath,
+		ctx, provisioner.OutputWriters{}, &atmosConfig, info, cfg.PackerComponentType, componentPath,
 	)
 	if err != nil {
 		return err
@@ -263,6 +283,15 @@ func ExecutePacker(
 		return err
 	}
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
+
+	// Inject Atmos Auth credentials for the resolved identity into the subprocess
+	// environment (file-based creds, region, emulator/static creds). No-op when auth
+	// is disabled or no identity is configured. Mirrors helmfile's credential injection.
+	envVars, err = prepareComponentAuthEnvironment(authManager, info.Identity, envVars)
+	if err != nil {
+		return err
+	}
+
 	log.Debug("Using ENV", "variables", envVars)
 
 	// Resolve info.Command to the toolchain-installed binary (if any), mirroring
@@ -272,14 +301,42 @@ func ExecutePacker(
 	// "executable file not found in $PATH", because exec.Command resolves the
 	// binary via the process's real PATH at call time, not via the PATH=...
 	// entry later added to envVars.
-	return ExecuteShellCommand(
+	return executePackerCommandWithRetry(&atmosConfig, info, tenv, retryExecParams{
+		allArgsAndFlags: allArgsAndFlags,
+		componentPath:   componentPath,
+		envVars:         envVars,
+	})
+}
+
+// executePackerCommandWithRetry runs the resolved packer subcommand through
+// ExecuteShellCommandWithRetry. Extracted from ExecutePacker so the retry wiring can
+// be unit-tested directly with a fake invoke, without standing up ExecutePacker's full
+// stack-processing/toolchain preamble or requiring a real packer binary. The inner call
+// goes through the executePackerShellCommand seam (not ExecuteShellCommand directly) so
+// auth-credential-injection tests that swap that seam still intercept the real subprocess
+// invocation, retry or not.
+func executePackerCommandWithRetry(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	tenv *dependencies.ToolchainEnvironment,
+	params retryExecParams,
+) error {
+	return ExecuteShellCommandWithRetry(
 		atmosConfig,
-		tenv.Resolve(info.Command),
-		allArgsAndFlags,
-		componentPath,
-		envVars,
-		info.DryRun,
-		info.RedirectStdErr,
+		info,
+		info.SubCommand,
+		func(o ...ShellCommandOption) error {
+			return executePackerShellCommand(
+				*atmosConfig,
+				tenv.Resolve(info.Command),
+				params.allArgsAndFlags,
+				params.componentPath,
+				params.envVars,
+				info.DryRun,
+				info.RedirectStdErr,
+				o...,
+			)
+		},
 		WithEnvironment(info.SanitizedEnv),
 	)
 }

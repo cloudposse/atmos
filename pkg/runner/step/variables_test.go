@@ -62,6 +62,37 @@ func TestVariablesSetEnv(t *testing.T) {
 	assert.Equal(t, "another_value", vars.Env["ANOTHER_VAR"])
 }
 
+// TestVariablesSetEnvFamilyLazilyInitializesNilMaps proves that SetEnv,
+// SetTemplateEnv, and SetProcessEnv each lazily allocate their backing map
+// rather than panicking with a nil map write when called on a zero-value
+// Variables (i.e. constructed as `&Variables{}` instead of via NewVariables).
+func TestVariablesSetEnvFamilyLazilyInitializesNilMaps(t *testing.T) {
+	t.Run("SetEnv initializes both Env and templateEnv", func(t *testing.T) {
+		vars := &Variables{}
+		require.NotPanics(t, func() { vars.SetEnv("MY_VAR", "my_value") })
+		assert.Equal(t, "my_value", vars.Env["MY_VAR"])
+		resolved, err := vars.Resolve("{{ .env.MY_VAR }}")
+		require.NoError(t, err)
+		assert.Equal(t, "my_value", resolved)
+	})
+
+	t.Run("SetTemplateEnv initializes templateEnv only", func(t *testing.T) {
+		vars := &Variables{}
+		require.NotPanics(t, func() { vars.SetTemplateEnv("MY_VAR", "template-value") })
+		assert.Nil(t, vars.Env, "SetTemplateEnv must not allocate the process Env map")
+		resolved, err := vars.Resolve("{{ .env.MY_VAR }}")
+		require.NoError(t, err)
+		assert.Equal(t, "template-value", resolved)
+	})
+
+	t.Run("SetProcessEnv initializes Env only", func(t *testing.T) {
+		vars := &Variables{}
+		require.NotPanics(t, func() { vars.SetProcessEnv("MY_VAR", "process-value") })
+		assert.Equal(t, "process-value", vars.Env["MY_VAR"])
+		assert.Nil(t, vars.templateEnv, "SetProcessEnv must not allocate templateEnv")
+	})
+}
+
 func TestVariablesTemplateData(t *testing.T) {
 	vars := NewVariables()
 	vars.Set("step1", NewStepResult("value1").
@@ -515,5 +546,25 @@ func TestVariablesResolveWith(t *testing.T) {
 		result, err := vars.ResolveWith("{{ .steps.app.value }}", nil)
 		require.NoError(t, err)
 		assert.Equal(t, "myapp", result)
+	})
+}
+
+func TestVariablesResolveWithFallback(t *testing.T) {
+	vars := NewVariables()
+	vars.SetEnv("REGION", "template-region")
+
+	resolved, err := vars.ResolveWithFallback("{{ .env.REGION }} {{ .env.STAGE }}", map[string]string{
+		"REGION": "base-region",
+		"STAGE":  "base-stage",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "template-region base-stage", resolved)
+
+	t.Run("empty input short-circuits without touching the fallback map", func(t *testing.T) {
+		fallback := map[string]string{"REGION": "base-region"}
+		empty, err := vars.ResolveWithFallback("", fallback)
+		require.NoError(t, err)
+		assert.Empty(t, empty)
+		assert.Equal(t, map[string]string{"REGION": "base-region"}, fallback)
 	})
 }

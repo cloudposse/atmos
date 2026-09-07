@@ -48,8 +48,11 @@ This feature requires variables to be available during `tofu init`, which is why
 
 ### Terraform vs OpenTofu
 
-**Important:** This feature is **OpenTofu-specific** and is **NOT supported** in HashiCorp Terraform. Terraform's HCL
-parser explicitly rejects variable interpolation in module source blocks.
+**Important:** This feature was **OpenTofu-specific** and was **NOT supported** in HashiCorp Terraform at the time this
+PRD was written. Terraform's HCL parser explicitly rejected variable interpolation in module source blocks.
+
+> **Superseded:** Terraform 1.15 (April 2026) added the equivalent capability via `const = true` variables. See
+> [Update (2026-08-10)](#update-2026-08-10-generalized-to-terraform-115-2913) below.
 
 ## Root Cause Analysis
 
@@ -62,18 +65,17 @@ Atmos performs Terraform/OpenTofu configuration validation during the `ProcessSt
 // internal/exec/utils.go:630
 terraformConfiguration, diags := tfconfig.LoadModule(componentPath)
 if !diags.HasErrors() {
-	componentInfo["terraform_config"] = terraformConfiguration
+  componentInfo["terraform_config"] = terraformConfiguration
 } else {
-	diagErr := diags.Err()
-	// ... error handling
-	return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+  diagErr := diags.Err()
+  // ... error handling
+  return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
 }
 ```
 
 ### The Problem
 
-1. **Atmos uses `terraform-config-inspect` library** (`github.com/hashicorp/terraform-config-inspect`) to parse and
-   validate Terraform/OpenTofu configurations
+1. **Atmos uses `terraform-config-inspect` library** (`github.com/hashicorp/terraform-config-inspect`) to parse and validate Terraform/OpenTofu configurations
 2. **This library uses Terraform's HCL parser**, which does not recognize OpenTofu-specific syntax extensions
 3. **The validation happens early** in the Atmos pipeline, before any `tofu` commands are executed
 4. **The error is treated as fatal**, preventing any subsequent operations
@@ -202,11 +204,11 @@ The `ProcessStacks()` function already has lenient error handling for certain ca
 // internal/exec/utils.go:636-651
 isNotExist := errors.Is(diagErr, os.ErrNotExist) || errors.Is(diagErr, fs.ErrNotExist)
 isNotExistString := strings.Contains(errMsg, "does not exist") ||
-	strings.Contains(errMsg, "Failed to read directory")
+  strings.Contains(errMsg, "Failed to read directory")
 
 if !isNotExist && !isNotExistString {
-	// For other errors (syntax errors, permission issues, etc.), return error
-	return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+  // For other errors (syntax errors, permission issues, etc.), return error
+  return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
 }
 ```
 
@@ -243,70 +245,73 @@ internal/exec/opentofu_module_source_interpolation_test.go  # Integration tests
 internal/exec/utils.go                        # ProcessStacks() integration
 ```
 
-**Core Detection Logic:**
+**Core Detection Logic (historical — see the [2026-08-10](#update-2026-08-10-generalized-to-terraform-115-2913)
+and [2026-08-20](#update-2026-08-20-guard-against-swallowing-unrelated-errors) updates below for the
+current implementation; `IsOpenTofu()`'s signature, `isKnownOpenTofuFeature`, and the
+`validation_skipped_opentofu` flag shown here have all since been renamed/superseded):**
 
 ```go
-// internal/exec/terraform_detection.go
+// internal/exec/terraform_detection.go (as originally implemented; see updates below)
 
 func IsOpenTofu(atmosConfig *schema.AtmosConfiguration) bool {
-	command := atmosConfig.Components.Terraform.Command
-	if command == "" {
-		command = "terraform"
-	}
+  command := atmosConfig.Components.Terraform.Command
+  if command == "" {
+    command = "terraform"
+  }
 
-	// Check cache first
-	if cached, exists := detectionCache[command]; exists {
-		return cached
-	}
+  // Check cache first
+  if cached, exists := detectionCache[command]; exists {
+    return cached
+  }
 
-	// Fast path: Check basename for "tofu"
-	baseName := filepath.Base(command)
-	if strings.Contains(strings.ToLower(baseName), "tofu") {
-		cacheDetectionResult(command, true)
-		return true
-	}
+  // Fast path: Check basename for "tofu"
+  baseName := filepath.Base(command)
+  if strings.Contains(strings.ToLower(baseName), "tofu") {
+    cacheDetectionResult(command, true)
+    return true
+  }
 
-	// Slow path: Execute version command
-	isTofu := detectByVersionCommand(atmosConfig, command)
-	cacheDetectionResult(command, isTofu)
-	return isTofu
+  // Slow path: Execute version command
+  isTofu := detectByVersionCommand(atmosConfig, command)
+  cacheDetectionResult(command, isTofu)
+  return isTofu
 }
 
 func isKnownOpenTofuFeature(err error) bool {
-	if err == nil {
-		return false
-	}
+  if err == nil {
+    return false
+  }
 
-	errMsg := err.Error()
-	openTofuPatterns := []string{
-		"Variables not allowed", // Module source interpolation (OpenTofu 1.8+)
-	}
+  errMsg := err.Error()
+  openTofuPatterns := []string{
+    "Variables not allowed", // Module source interpolation (OpenTofu 1.8+)
+  }
 
-	for _, pattern := range openTofuPatterns {
-		if strings.Contains(errMsg, pattern) {
-			return true
-		}
-	}
-	return false
+  for _, pattern := range openTofuPatterns {
+    if strings.Contains(errMsg, pattern) {
+      return true
+    }
+  }
+  return false
 }
 ```
 
-**Integration in ProcessStacks():**
+**Integration in ProcessStacks() (historical — superseded; see updates below):**
 
 ```go
-// internal/exec/utils.go:650-661
+// internal/exec/utils.go:650-661 (as originally implemented; see updates below)
 
 if !isNotExist && !isNotExistString {
-	// Check if this is an OpenTofu-specific feature
-	if !IsOpenTofu(atmosConfig) || !isKnownOpenTofuFeature(diagErr) {
-		// For other errors (syntax errors, permission issues, etc.), return error
-		return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
-	}
+  // Check if this is an OpenTofu-specific feature
+  if !IsOpenTofu(atmosConfig) || !isKnownOpenTofuFeature(diagErr) {
+    // For other errors (syntax errors, permission issues, etc.), return error
+    return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+  }
 
-	// Skip validation for known OpenTofu-specific features
-	log.Debug("Skipping terraform-config-inspect validation for OpenTofu-specific feature: " + errMsg)
-	componentInfo["terraform_config"] = nil
-	componentInfo["validation_skipped_opentofu"] = true
+  // Skip validation for known OpenTofu-specific features
+  log.Debug("Skipping terraform-config-inspect validation for OpenTofu-specific feature: " + errMsg)
+  componentInfo["terraform_config"] = nil
+  componentInfo["validation_skipped_opentofu"] = true
 }
 ```
 
@@ -398,20 +403,20 @@ func BenchmarkIsKnownOpenTofuFeature(b *testing.B)
 
 ```go
 func TestOpenTofuModuleSourceInterpolation(t *testing.T) {
-	t.Run("describe component with module source interpolation", func(t *testing.T) {
-		// Verifies ExecuteDescribeComponent works with OpenTofu-specific syntax
-		componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{...})
-		require.NoError(t, err)
-		// Validates nested variable structure is preserved
-	})
+  t.Run("describe component with module source interpolation", func(t *testing.T) {
+    // Verifies ExecuteDescribeComponent works with OpenTofu-specific syntax
+    componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{...})
+    require.NoError(t, err)
+    // Validates nested variable structure is preserved
+  })
 
-	t.Run("varfile generation with nested variables", func(t *testing.T) {
-		// Confirms nested context.build.* variables are in varfile
-	})
+  t.Run("varfile generation with nested variables", func(t *testing.T) {
+    // Confirms nested context.build.* variables are in varfile
+  })
 
-	t.Run("component info validation skipped for opentofu", func(t *testing.T) {
-		// Verifies validation_skipped_opentofu flag is set
-	})
+  t.Run("component info validation skipped for opentofu", func(t *testing.T) {
+    // Verifies validation_skipped_opentofu flag is set
+  })
 }
 ```
 
@@ -568,3 +573,68 @@ Users simply need to upgrade to the version with auto-detection support. No conf
 - [Issue #1753](https://github.com/cloudposse/atmos/issues/1753)
 - [PR #1163 - Init Varfile Support](https://github.com/cloudposse/atmos/pull/1163)
 - Test Fixture: `tests/fixtures/scenarios/opentofu-module-source-interpolation/`
+
+## Update (2026-08-10): Generalized to Terraform 1.15+ (#2913)
+
+- **Issue #2913** reported the identical "Variables not allowed" failure on plain HashiCorp Terraform 1.15.2 (no
+  OpenTofu involved): `variable "org" { const = true ... }` + `module { source = "./mods/${var.org}" }`.
+- **Terraform 1.15** (released April 29, 2026) added the same capability OpenTofu 1.8+ already had: variables (and
+  locals composed entirely of them) can now be used in a module's `source`/`version` attributes, as long as the
+  variable is declared `const = true`, resolved at `terraform init` time. See
+  [HashiCorp's announcement](https://www.hashicorp.com/en/blog/new-in-terraform-115-dynamic-sources-variable-deprecation-and-more).
+- **Corrected understanding:** the "Variables not allowed" diagnostic is not an OpenTofu-specific feature gate — it's
+  an inherent limitation of `terraform-config-inspect`, which decodes `module.source` via
+  `gohcl.DecodeExpression(attr.Expr, nil, &source)` (a `nil` `hcl.EvalContext`). Any variable reference in that
+  position produces this diagnostic identically, regardless of which tool/version is actually configured, and
+  regardless of whether that tool/version would accept the expression.
+- **Fix:** decoupled the skip from `IsOpenTofu()` tool detection entirely. At this point it applied whenever the
+  diagnostic text matched, for both `terraform` and `tofu` configured commands. (This matching was later tightened
+  further — see the [2026-08-20 update](#update-2026-08-20-guard-against-swallowing-unrelated-errors) below;
+  "matches whenever the text matches" is no longer a complete description of the current behavior.)
+  - Renamed `isKnownOpenTofuFeature` → `isKnownModuleSourceInterpolationDiagnostic` (`internal/exec/terraform_detection.go`).
+  - Renamed the `component_info` flag `validation_skipped_opentofu` → `validation_skipped_module_source_interpolation`
+    (`internal/exec/utils.go`).
+  - Removed the now-unnecessary `effectiveConfig`/command-override clone in `utils.go` that existed only to feed
+    `IsOpenTofu()`.
+- **Scope decision:** `IsOpenTofu()` and its detection cache (`internal/exec/terraform_detection.go`) were
+  intentionally retained even though, after this fix, they have no remaining production call site in this path —
+  they're generically useful, well-tested infrastructure; removing them was out of scope for this bug fix.
+- **SBOM impact:** checked and confirmed not applicable. `pkg/sbom/terraform.go` gathers module evidence via
+  `terraform modules -json` against an already-initialized directory, never via `terraform-config-inspect`, so it
+  never hits this diagnostic. Verified empirically against Terraform 1.15.6 that `modules -json` (and the underlying
+  `.terraform/modules/modules.json` manifest) already reports the **resolved** module source (e.g. `./mods/acme`),
+  not the unresolved template — Atmos's SBOM pipeline was already recording the effective source correctly. Added
+  `TestAppendModulesForDirectoryRecordsResolvedDynamicModuleSource` in `pkg/sbom/terraform_test.go` to guard this.
+- **New fixture/tests:** `tests/fixtures/scenarios/terraform-module-source-interpolation/`,
+  `internal/exec/terraform_module_source_interpolation_test.go`.
+
+## Update (2026-08-20): Guard against swallowing unrelated errors
+
+- A follow-up field-test pass on the 2026-08-10 fix found that `terraform-config-inspect`'s
+  `Diagnostics.Error()` only renders the **first** diagnostic's Summary/Detail — any others
+  collapse to `"(and N other messages)"` with no text. Matching that collapsed string meant that if
+  the known-safe module-source diagnostic happened to sort first, the whole diagnostics set —
+  including any other, genuinely unrelated HCL error in the same file — was silently discarded
+  instead of failing.
+- **Fix:** `internal/exec/terraform_detection.go` now exposes
+  `allDiagnosticsAreModuleSourceInterpolation(diags tfconfig.Diagnostics) bool`, which groups
+  error-severity diagnostics by source position (`file:line`) and requires every position group to
+  contain at least one diagnostic matching the known pattern. This tolerates
+  `terraform-config-inspect`'s own companion diagnostic at the same position as the module-source
+  one (e.g. `"Unsuitable value: value must be known"`, a side effect of the same nil-`hcl.EvalContext`
+  decode failure) while still treating a genuine error at a *different* position as unsafe to skip.
+  `internal/exec/utils.go`'s `processStacks()` now calls this instead of the old
+  `isKnownModuleSourceInterpolationDiagnostic(diagErr)` single-string check.
+- Full record, including validation performed:
+  [docs/fixes/2026-08-10-module-source-interpolation-diagnostic-swallow.md](../fixes/2026-08-10-module-source-interpolation-diagnostic-swallow.md).
+- **Known, intentionally untracked limitation (not fixed here):** the match is still text-based
+  (`"Variables not allowed"`), not scoped to confirming the diagnostic's position actually falls
+  within a `module` block's `source`/`version` attribute. `terraform-config-inspect` uses the same
+  `gohcl.DecodeExpression(attr.Expr, nil, ...)` pattern for several other attributes that were never
+  a real supported variable-interpolation feature (e.g. `output.description`, `variable.sensitive`,
+  `provider.alias`) — a variable reference there produces the identical diagnostic and is still
+  silently accepted today, confirmed against a real Terraform 1.15.6 binary to be genuinely invalid
+  HCL. A correct fix would re-parse the failing file with `hclsyntax` and scope the skip to
+  diagnostics whose range falls within a module's `source`/`version` attribute specifically. Flagged
+  independently by both the field-test pass and CodeRabbit PR review; recorded here rather than
+  fixed, per explicit project-owner direction not to open a tracking issue for it.

@@ -1,5 +1,7 @@
 package exec
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
 import (
 	"fmt"
 	"sync"
@@ -17,6 +19,36 @@ import (
 )
 
 var componentFuncSyncMap = sync.Map{}
+
+// ComponentFuncOutputsExecutor executes terraform outputs for atmos.Component() targets using
+// pre-loaded describe sections. This interface allows dependency injection and testing without
+// invoking Terraform or a remote backend.
+type ComponentFuncOutputsExecutor interface {
+	ExecuteWithSections(
+		atmosConfig *schema.AtmosConfiguration,
+		component, stack string,
+		sections map[string]any,
+		authContext *schema.AuthContext,
+	) (map[string]any, error)
+}
+
+// defaultComponentFuncOutputsExecutor implements ComponentFuncOutputsExecutor using pkg/terraform/output.
+type defaultComponentFuncOutputsExecutor struct{}
+
+func (defaultComponentFuncOutputsExecutor) ExecuteWithSections(
+	atmosConfig *schema.AtmosConfiguration,
+	component, stack string,
+	sections map[string]any,
+	authContext *schema.AuthContext,
+) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.defaultComponentFuncOutputsExecutor.ExecuteWithSections")()
+
+	return tfoutput.ExecuteWithSections(atmosConfig, component, stack, sections, authContext)
+}
+
+// componentFuncOutputsExecutor is replaceable in tests so the component template path can be
+// verified without invoking Terraform or a remote backend.
+var componentFuncOutputsExecutor ComponentFuncOutputsExecutor = defaultComponentFuncOutputsExecutor{}
 
 func componentFunc(
 	atmosConfig *schema.AtmosConfiguration,
@@ -96,7 +128,7 @@ func componentFunc(
 					authContext = si.AuthContext
 				}
 			}
-			terraformOutputs, err = tfoutput.ExecuteWithSections(atmosConfig, component, stack, sections, authContext)
+			terraformOutputs, err = componentFuncOutputsExecutor.ExecuteWithSections(atmosConfig, component, stack, sections, authContext)
 			if err != nil {
 				return nil, fmt.Errorf("atmos.Component(%s, %s) failed to get terraform outputs: %w", component, stack, err)
 			}

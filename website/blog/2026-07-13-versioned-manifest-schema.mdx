@@ -1,0 +1,67 @@
+---
+slug: versioned-manifest-schema
+title: "Pin your manifest schema to an Atmos release, not a moving target"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Upgrading the `atmos` binary has always meant upgrading your schema validation too, whether you
+wanted to or not. The JSON Schema published at `atmos.tools/schemas/atmos/atmos-manifest/1.0/...`
+is a single, mutable file — every merge to `main` updates it in place. Bump the binary without
+touching your stack YAML, and the schema underneath your `atmos.yaml` pin can still change:
+fields you haven't reviewed yet suddenly validate, or a schema you were relying on to *reject*
+unreleased fields quietly starts accepting them.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos has no concept of a versioned schema. There's one URL, and it always reflects whatever
+shipped most recently to `main`. Teams that pin `schemas.atmos.manifest` to that URL for
+CI-deterministic validation get a moving target: the schema they tested against last month isn't
+the schema running today. And there was no way to ask for "the schema as of Atmos 1.219.0" — only
+"the schema right now."
+
+Compounding the problem, the published schema and the schema actually compiled into the `atmos`
+binary (the one `atmos validate stacks` uses by default) were two separately hand-maintained
+files that had quietly drifted apart — the binary's copy was missing whole sections
+(`dependencies`, `generate`, `provision`, `source`, and dozens of newer workflow step fields) that
+the website copy had, and vice versa.
+
+## The Fix
+
+Two changes land together:
+
+- **One schema, not two.** The schema embedded in the `atmos` binary
+  (`pkg/datafetcher/schema/atmos/manifest/1.0.json`) is now the single source of truth. The copy
+  published to `atmos.tools` is generated from it at build time — never hand-edited, never
+  committed separately, never able to drift again.
+- **Per-release pinned snapshots.** Every Atmos release now publishes an immutable schema snapshot
+  alongside the floating one: `atmos.tools/schemas/atmos/atmos-manifest/<version>/atmos-manifest.json`.
+  Pin to it, and upgrading the binary later won't change what your stack YAML validates against
+  until you deliberately bump the pin.
+
+## How to Use It
+
+```yaml title="atmos.yaml"
+schemas:
+  atmos:
+    # Floating — always the latest schema (the default if you don't set this).
+    # manifest: "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+
+    # Pinned — frozen to exactly what shipped with this Atmos release.
+    manifest: "https://atmos.tools/schemas/atmos/atmos-manifest/1.219.0/atmos-manifest.json"
+```
+
+Most users don't need to change anything — if you don't set `schemas.atmos.manifest` at all,
+`atmos validate stacks` already defaults to the schema embedded in whatever binary you're running,
+which is exactly what you'd expect. The pinned URL is there for teams that explicitly want to
+decouple "upgrade the binary" from "adopt new manifest fields."
+
+A pinned URL only exists for releases going forward from this change — earlier releases only have
+the floating `1.0` path.
+
+## Get Involved
+
+See [Floating vs. Pinned Schema URLs](/cli/configuration/schemas#floating-vs-pinned-schema-urls)
+for the full picture, or open an issue if you hit a validation gap this doesn't cover.

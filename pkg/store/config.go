@@ -1,10 +1,8 @@
 package store
 
-import "github.com/go-viper/mapstructure/v2"
-
 type StoreConfig struct {
 	// Type is the legacy backend selector (e.g. "aws-ssm-parameter-store").
-	Type string `yaml:"type" json:"type,omitempty" mapstructure:"type"`
+	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 	// Kind is the new cloud/thing backend selector (e.g. "aws/ssm"); when set it takes
 	// precedence over Type. The registry maps legacy Type to Kind for backward compatibility.
 	Kind string `yaml:"kind,omitempty" json:"kind,omitempty" mapstructure:"kind"`
@@ -18,7 +16,3 @@ type StoreConfig struct {
 }
 
 type StoresConfig = map[string]StoreConfig
-
-func parseOptions(options map[string]interface{}, target interface{}) error {
-	return mapstructure.Decode(options, target)
-}

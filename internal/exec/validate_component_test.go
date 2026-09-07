@@ -55,6 +55,28 @@ func TestGetBasePathToUse(t *testing.T) {
 	}
 }
 
+func TestEnableProvenanceForRichOutput(t *testing.T) {
+	tests := []struct {
+		name         string
+		outputFormat string
+		expected     bool
+	}{
+		{name: "rich enables provenance", outputFormat: "rich", expected: true},
+		{name: "rich is case-insensitive", outputFormat: "RICH", expected: true},
+		{name: "rich tolerates surrounding whitespace", outputFormat: "  rich  ", expected: true},
+		{name: "text leaves provenance disabled", outputFormat: "text", expected: false},
+		{name: "empty leaves provenance disabled", outputFormat: "", expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+			enableProvenanceForRichOutput(atmosConfig, tt.outputFormat)
+			assert.Equal(t, tt.expected, atmosConfig.TrackProvenance)
+		})
+	}
+}
+
 func TestFindValidationSection(t *testing.T) {
 	tests := []struct {
 		name             string

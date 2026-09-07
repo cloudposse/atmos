@@ -70,6 +70,36 @@ test('replayTerminal cursor-up followed by ESC[K clear-then-draw still fully rep
   assert.equal(result, 'replaced\nline1\nline2\n');
 });
 
+test('replayTerminal clears completed Huh form rows with ESC[J', () => {
+  const form = [
+    'prompt\n',
+    'Which environments do you need?\n',
+    'dev\n',
+    'staging\n',
+    'prod\n',
+    'controls\n',
+    '\x1b[6A \x1b[K\x1b[J\r\x1b[2K',
+    'Generating basic\n',
+    'CONFIGURATION SUMMARY\n',
+  ].join('');
+
+  const result = replayTerminal(form);
+  assert.match(result, /Generating basic/);
+  assert.match(result, /CONFIGURATION SUMMARY/);
+  assert.doesNotMatch(result, /Which environments|dev|staging|prod|controls/);
+});
+
+test('replayTerminal ESC[J drops the rows below the cursor instead of leaving blank scrollback', () => {
+  // A streaming-UI progress block (header + blank + 3 rows), then the model's
+  // completion frame: bubbletea moves to the top of the old frame, the model
+  // erases to end of screen and draws the summary in its place.
+  const block = 'header\n\nrow1\nrow2\nrow3\n';
+  const done = '\x1b[5A\r\x1b[J\u2713 Apply completed\n';
+  const result = replayTerminal(block + done);
+  assert.equal(result, '\u2713 Apply completed\n');
+  assert.doesNotMatch(result, /\n\n$/, 'no trailing blank rows may remain after erase-display');
+});
+
 test('replayTerminal cursor-down preserves an existing row it lands on', () => {
   const frame1 = 'line0\nline1\nline2\n';
   // Up 3 (back to line0), down 1 (lands on the existing "line1"), overwrite.
@@ -118,11 +148,46 @@ test('parseEscape parses ESC[<n>A / ESC[<n>B with an explicit count', () => {
   });
 });
 
-test('parseEscape still ignores sequences with no current handler (H, J, C, D)', () => {
+test('parseEscape parses default erase-display sequences', () => {
+  for (const sequence of ['\x1b[J', '\x1b[0J']) {
+    assert.deepEqual(parseEscape(sequence, 0), {
+      kind: 'clearDisplay',
+      sequence,
+      nextIndex: sequence.length,
+    });
+  }
+});
+
+test('parseEscape still ignores sequences with no current handler (H, 2J, C, D)', () => {
   for (const sequence of ['\x1b[H', '\x1b[2J', '\x1b[5C', '\x1b[5D', '\x1b[?1049h']) {
     const parsed = parseEscape(sequence, 0);
     assert.equal(parsed.kind, 'ignore');
   }
+});
+
+test('regression: init cast clears the interactive multiselect before its summary', () => {
+  const castPath = path.join(
+    dirname,
+    '..',
+    '..',
+    '..',
+    'static',
+    'casts',
+    'examples',
+    'init',
+    'init-basic.cast',
+  );
+  const { events } = parseCast(readFileSync(castPath, 'utf8'));
+  // The regenerated cast reaches the summary at approximately 10.07 seconds.
+  const upTo = events
+    .filter(([time]) => time <= 10.2)
+    .map(([, , data]) => data.replace(/\r\n/g, '\n'))
+    .join('');
+  const rendered = stripAnsi(replayTerminal(upTo));
+
+  assert.match(rendered, /CONFIGURATION SUMMARY/);
+  assert.doesNotMatch(rendered, /Select the stacks to generate/);
+  assert.doesNotMatch(rendered, /┃   • prod/);
 });
 
 test('regression: the recorded interactive-menu cast is not blank at the reported bug timestamp', () => {

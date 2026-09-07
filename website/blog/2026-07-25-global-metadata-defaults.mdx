@@ -1,0 +1,71 @@
+---
+slug: global-metadata-defaults
+title: "Stack-Wide Metadata Defaults: Set Labels and Tags Once"
+date: 2026-07-25T12:00:00.000Z
+authors: [osterman]
+tags: [feature]
+---
+
+Most components in a stack share the same cost center label or the same compliance-scope tag. `vars`, `env`, and `settings` can all be declared once at the stack level and inherited by every component. `metadata` couldn't — every component had to repeat the same `labels`/`tags`, and a `metadata:` block placed at the top of a stack file was silently ignored.
+
+Stack manifests can now declare stack-wide metadata defaults that every component inherits, with the component's own `metadata:` still free to override them.
+
+<!--truncate-->
+
+## The Problem
+
+- **Shared metadata meant duplicated metadata.** If every component in a stack carries the same `cost-center` label or the same compliance tag, that block had to be copy-pasted into every component definition, and kept in sync by hand as components were added.
+- **A stack-level `metadata:` block looked like it should work, and didn't.** Unlike `vars`/`env`/`settings`, a `metadata:` key at the root of a stack manifest was accepted but never applied — it silently did nothing, which is worse than a validation error.
+
+## The Fix
+
+A stack manifest can now declare a stack-wide `metadata:` default that's deep-merged into every component's own metadata:
+
+```yaml title="stacks/orgs/acme/prod/_defaults.yaml"
+metadata:
+  labels:
+    cost-center: platform
+```
+
+Only the fields that make sense as shared defaults are allowed here: `labels`, `tags`, `custom`, `enabled`, `locked`, and `terraform_workspace_pattern`. Component-identity fields — `component`, `inherits`, `type`, `name`, `terraform_workspace` — stay component-only, and setting one of these at the stack level is now a clear validation error instead of a silent no-op.
+
+Precedence runs lowest to highest: stack-wide default → the component's `metadata.inherits` base-component chain → the component's own local `metadata:` block, which always wins:
+
+```yaml title="stacks/orgs/acme/prod/network.yaml"
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          cost-center: network-team # overrides the stack-wide default for this component
+```
+
+## How to Use It
+
+Combine a stack-wide default with the `!labels`/`!tags` YAML functions (see [Tags and Labels](/changelog/tags-and-labels)) to feed a shared label set into every component's Terraform variables without repeating it:
+
+```yaml title="stacks/orgs/acme/prod/_defaults.yaml"
+metadata:
+  labels:
+    Namespace: eg
+    Environment: prod
+```
+
+```yaml title="stacks/orgs/acme/prod/network.yaml"
+components:
+  terraform:
+    vpc:
+      vars:
+        tags: !labels   # var.tags (map) <- stack-wide metadata.labels, unless this component overrides them
+```
+
+The same mechanism also covers `enabled`/`locked`/`custom`/`terraform_workspace_pattern`, for cases like decommissioning an entire legacy stack without editing every component individually:
+
+```yaml title="stacks/orgs/acme/legacy/_defaults.yaml"
+metadata:
+  enabled: false # decommission every component in this stack
+```
+
+## Get Involved
+
+Stack-wide metadata covers the fields that behave like shared defaults today. If there's another `metadata` field you'd want to set once for a whole stack, open an issue with your use case.

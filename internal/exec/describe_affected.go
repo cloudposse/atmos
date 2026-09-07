@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/go-git/go-git/v5/plumbing"
-	giturl "github.com/kubescape/go-git-url"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	flagsPkg "github.com/cloudposse/atmos/pkg/flags"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
+	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -59,6 +60,8 @@ type DescribeAffectedCmdArgs struct {
 	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
 	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
 	TargetBranch                string           // PR target branch (e.g., "main") used to auto-fetch when refs are missing locally.
+	ErrorMode                   string           // How to handle recoverable errors: "strict" (default), "warn", or "silent".
+	Cmd                         *cobra.Command   // The invoking Cobra command, used to derive Flags for the exec-metadata sync capture (proexec.FlagsFromCommand).
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -80,6 +83,7 @@ type describeAffectedExec struct {
 		excludeLocked bool,
 		authManager auth.AuthManager,
 		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefClone func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -96,6 +100,7 @@ type describeAffectedExec struct {
 		excludeLocked bool,
 		authManager auth.AuthManager,
 		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefCheckout func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -111,6 +116,7 @@ type describeAffectedExec struct {
 		excludeLocked bool,
 		authManager auth.AuthManager,
 		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	addDependentsToAffected func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -122,6 +128,7 @@ type describeAffectedExec struct {
 		onlyInStack string,
 		authManager auth.AuthManager,
 		authDisabled bool,
+		errOptions DescribeStacksErrorOptions,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -141,9 +148,9 @@ func NewDescribeAffectedExec(
 
 	return &describeAffectedExec{
 		atmosConfig: atmosConfig,
-		executeDescribeAffectedWithTargetRepoPath:    ExecuteDescribeAffectedWithTargetRepoPath,
-		executeDescribeAffectedWithTargetRefClone:    ExecuteDescribeAffectedWithTargetRefClone,
-		executeDescribeAffectedWithTargetRefCheckout: ExecuteDescribeAffectedWithTargetRefCheckout,
+		executeDescribeAffectedWithTargetRepoPath:    ExecuteDescribeAffectedWithTargetRepoPathWithOptions,
+		executeDescribeAffectedWithTargetRefClone:    ExecuteDescribeAffectedWithTargetRefCloneWithOptions,
+		executeDescribeAffectedWithTargetRefCheckout: ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions,
 		addDependentsToAffected:                      addDependentsToAffected,
 		printOrWriteToFile:                           printOrWriteToFile,
 		IsTTYSupportForStdout:                        term.IsTTYSupportForStdout,
@@ -169,14 +176,22 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 
 	result := DescribeAffectedCmdArgs{
 		CLIConfig: &atmosConfig,
+		Cmd:       cmd,
 	}
 	SetDescribeAffectedFlagValueInCliArgs(flags, &result)
+
+	// Resolve --error-mode: explicit flag/env value wins, else atmos.yaml's
+	// describe.error_mode, else "warn".
+	result.ErrorMode = ResolveErrorMode(result.ErrorMode, atmosConfig.Describe.ErrorMode)
 
 	if result.Format != "yaml" && result.Format != "json" && result.Format != "matrix" {
 		return DescribeAffectedCmdArgs{}, ErrInvalidFormat
 	}
 	if result.RepoPath != "" && (result.Base != "" || result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
 		return DescribeAffectedCmdArgs{}, ErrRepoPathConflict
+	}
+	if result.ErrorMode != "strict" && result.ErrorMode != "warn" && result.ErrorMode != "silent" {
+		return DescribeAffectedCmdArgs{}, fmt.Errorf("%w: %q", ErrInvalidErrorMode, result.ErrorMode)
 	}
 
 	return result, nil
@@ -194,7 +209,6 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"ssh-key":                        &describe.SSHKeyPath,
 		"ssh-key-password":               &describe.SSHKeyPassword,
 		"include-spacelift-admin-stacks": &describe.IncludeSpaceliftAdminStacks,
-		"include-dependents":             &describe.IncludeDependents,
 		"include-settings":               &describe.IncludeSettings,
 		"upload":                         &describe.Upload,
 		"clone-target-ref":               &describe.CloneTargetRef,
@@ -209,6 +223,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"query":                          &describe.Query,
 		"verbose":                        &describe.Verbose,
 		"exclude-locked":                 &describe.ExcludeLocked,
+		"error-mode":                     &describe.ErrorMode,
 	}
 
 	// By default, process templates and YAML functions
@@ -233,6 +248,15 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
+	// --include-dependents is a plain bool on `atmos describe affected` but a
+	// depth-carrying string flag on the terraform commands (bare = unlimited,
+	// --include-dependents=N bounds the expansion), so it cannot go through the
+	// typed map above — read it according to the flag type actually registered.
+	if flags.Changed(flagsPkg.FlagIncludeDependents) {
+		describe.IncludeDependents, err = includeDependentsFlagValue(flags)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
 	// Resolve --base flag: auto-detect ref vs SHA and populate the appropriate field.
 	if describe.Base != "" {
 		if ci.IsCommitSHA(describe.Base) {
@@ -257,6 +281,29 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 	}
 }
 
+// includeDependentsFlagValue reads the include-dependents flag as a boolean
+// regardless of how the owning command registered it: `atmos describe affected`
+// uses a bool flag, while the terraform commands use a depth-carrying string
+// flag where any enabled depth (unlimited or bounded) means "include them".
+func includeDependentsFlagValue(flags *pflag.FlagSet) (bool, error) {
+	flag := flags.Lookup(flagsPkg.FlagIncludeDependents)
+	if flag == nil {
+		return false, nil
+	}
+	if flag.Value.Type() == "bool" {
+		return flags.GetBool(flagsPkg.FlagIncludeDependents)
+	}
+	value, err := flags.GetString(flagsPkg.FlagIncludeDependents)
+	if err != nil {
+		return false, err
+	}
+	depth, err := flagsPkg.ParseClosureDepth(flagsPkg.FlagIncludeDependents, value)
+	if err != nil {
+		return false, err
+	}
+	return depth != 0, nil
+}
+
 // resolveBaseFromCI attempts to auto-detect the base commit from the CI provider.
 //
 // This function is only invoked when `ci.enabled: true` in atmos.yaml and no
@@ -264,9 +311,10 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 // has opted into CI auto-detect, it is appropriate to mutate the runner's git
 // config (via `EnsureGitSafeDirectory`) so that downstream git commands —
 // `merge-base`, the targeted `git fetch` for shallow clones, and the
-// `HEAD~1` lookup for closed PRs — do not fail with "dubious ownership in
-// repository" inside GitHub Actions container jobs. The helper is a no-op
-// outside GitHub Actions, so it does nothing when running locally.
+// checkout-classified merged-PR lookups (merge-commit parents, payload-anchor
+// fetches) — do not fail with "dubious ownership in repository" inside GitHub
+// Actions container jobs. The helper is a no-op outside GitHub Actions, so it
+// does nothing when running locally.
 func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 	defer perf.Track(nil, "exec.resolveBaseFromCI")()
 
@@ -302,25 +350,77 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 	if base == "" {
 		base = resolution.Ref
 	}
-	log.Info("Auto-detected CI base",
+	logArgs := []any{
 		"provider", p.Name(),
 		"event", resolution.EventType,
 		"base", base,
-		"source", resolution.Source)
+		"source", resolution.Source,
+	}
+	// The checkout classification tells support which strategy family was
+	// valid for this run — wrong-base incidents are diagnosable from this
+	// one line instead of run-log archaeology.
+	if resolution.Checkout != "" {
+		logArgs = append(logArgs, "checkout", resolution.Checkout)
+	}
+	log.Info("Auto-detected CI base", logArgs...)
 }
 
-// Execute executes `describe affected` command.
+// Execute executes `describe affected` command. It reports an execution
+// record to Atmos Pro synchronously (warn-and-continue on failure) before
+// returning, per the synchronous allowlist (terraform plan/apply, describe
+// affected). The record's structured Data carries the same per-stack data
+// already reported to the existing POST /api/v1/affected-stacks upload, as
+// {"version": 1, "stacks": [...]} — unconditionally, not gated on --upload,
+// since the affected list is already computed for every invocation
+// (FR-006b, research.md Decision 22).
 func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
-	defer perf.Track(nil, "exec.Execute")()
+	affected, err := d.executeInner(a)
 
-	var affected []schema.Affected
-	var headHead, baseHead *plumbing.Reference
-	var repoUrl string
-	var err error
+	// describe affected has no numeric "exit code" the way a shell command
+	// does; 0/1 mirrors the success/failure convention used elsewhere in this
+	// feature (e.g. internal/exec/terraform.go's captureExecMetadataSync).
+	exitCode := 0
+	if err != nil {
+		exitCode = 1
+	}
+	// Flags MUST be sourced from the invoking Cobra command's own record of
+	// explicitly-set flags, matching internal/exec/terraform.go's
+	// captureExecMetadataSync (research.md Decision 14).
+	flags := proexec.FlagsFromCommand(a.Cmd)
 
+	in := &proexec.ExecRecordInput{
+		Command:  "describe affected",
+		Flags:    flags,
+		ExitCode: exitCode,
+		Data:     proexec.VersionedData(1, "stacks", affected),
+	}
+	if syncErr := proexec.CaptureSync(a.CLIConfig, in); syncErr != nil {
+		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
+	}
+
+	return err
+}
+
+// affectedResolution bundles the raw result of a target-resolution strategy
+// (affected stacks plus the HEAD/BASE references and repo URL used to
+// compute them) into a single value so resolveAffectedStacks stays under the
+// linter's return-count limit.
+type affectedResolution struct {
+	Affected []schema.Affected
+	HeadHead *plumbing.Reference
+	BaseHead *plumbing.Reference
+	RepoURL  string
+}
+
+// resolveAffectedStacks dispatches to the target-resolution strategy selected
+// by a's RepoPath/CloneTargetRef fields (explicit repo path, cloned target
+// ref, or checked-out target ref, in that priority order) and returns its
+// raw result. Split out of executeInner to keep that function's line count
+// under the linter's limit.
+func (d *describeAffectedExec) resolveAffectedStacks(a *DescribeAffectedCmdArgs, errOptions DescribeStacksErrorOptions) (affectedResolution, error) {
 	switch {
 	case a.RepoPath != "":
-		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRepoPath(
+		return toAffectedResolution(d.executeDescribeAffectedWithTargetRepoPath(
 			a.CLIConfig,
 			a.RepoPath,
 			a.IncludeSpaceliftAdminStacks,
@@ -332,9 +432,10 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ExcludeLocked,
 			a.AuthManager,
 			a.AuthDisabled,
-		)
+			errOptions,
+		))
 	case a.CloneTargetRef:
-		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefClone(
+		return toAffectedResolution(d.executeDescribeAffectedWithTargetRefClone(
 			a.CLIConfig,
 			a.Ref,
 			a.SHA,
@@ -349,9 +450,10 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ExcludeLocked,
 			a.AuthManager,
 			a.AuthDisabled,
-		)
+			errOptions,
+		))
 	default:
-		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefCheckout(
+		return toAffectedResolution(d.executeDescribeAffectedWithTargetRefCheckout(
 			a.CLIConfig,
 			a.Ref,
 			a.SHA,
@@ -365,17 +467,42 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ExcludeLocked,
 			a.AuthManager,
 			a.AuthDisabled,
-		)
+			errOptions,
+		))
 	}
+}
+
+// toAffectedResolution adapts a target-resolution strategy's raw 5-value
+// return into an affectedResolution, so resolveAffectedStacks's per-case
+// return statements stay within the linter's return-count limit.
+func toAffectedResolution(affected []schema.Affected, headHead, baseHead *plumbing.Reference, repoURL string, err error) (affectedResolution, error) {
+	return affectedResolution{Affected: affected, HeadHead: headHead, BaseHead: baseHead, RepoURL: repoURL}, err
+}
+
+// executeInner contains the original `describe affected` execution logic. It
+// returns the computed affected list alongside its error so Execute can
+// attach it to the execution record's structured Data (FR-006b, research.md
+// Decision 22) — the same slice already used for rendering/upload below, no
+// second computation.
+func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
+	defer perf.Track(nil, "exec.Execute")()
+
+	// Built once and reused across every describe-stacks call this command makes (HEAD,
+	// BASE, and any dependents resolution) so the end-of-command summary reports one
+	// combined count instead of one per call site.
+	errOptions, collector := ErrorOptionsFromMode(a.ErrorMode)
+
+	resolution, err := d.resolveAffectedStacks(a, errOptions)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	affected := resolution.Affected
 
 	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager, a.AuthDisabled)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager, a.AuthDisabled, errOptions)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -385,7 +512,12 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 		affected = StripAffectedForUpload(affected)
 	}
 
-	return d.view(a, repoUrl, headHead, baseHead, affected)
+	if err := d.view(a, resolution.RepoURL, resolution.HeadHead, resolution.BaseHead, affected); err != nil {
+		return nil, err
+	}
+
+	PrintErrorModeSummary(a.ErrorMode, collector)
+	return affected, nil
 }
 
 func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
@@ -455,8 +587,7 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 			Err()
 	}
 
-	// Parse the repo URL.
-	gitURL, err := giturl.NewGitURL(repoUrl)
+	repoURLParts, err := atmosgit.ParseRepoURL(repoUrl)
 	if err != nil {
 		return err
 	}
@@ -486,9 +617,9 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		HeadSHA:   headSHA,
 		BaseSHA:   baseHead.Hash().String(),
 		RepoURL:   repoUrl,
-		RepoName:  gitURL.GetRepoName(),
-		RepoOwner: gitURL.GetOwnerName(),
-		RepoHost:  gitURL.GetHostName(),
+		RepoName:  repoURLParts.Name,
+		RepoOwner: repoURLParts.Owner,
+		RepoHost:  repoURLParts.Host,
 		Stacks:    affected,
 	}
 

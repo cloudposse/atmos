@@ -49,6 +49,9 @@ func Vendor(vendorInfos []VendorInfo) ([]map[string]any, error) {
 			"manifest":  vi.Manifest,
 			"folder":    vi.Folder,
 			"tags":      tagsStr,
+			// Raw tag slice for --tags filtering (the "tags" key above stays a
+			// comma-joined string for display columns).
+			"tags_list": vi.Tags,
 		}
 
 		vendors = append(vendors, vendor)

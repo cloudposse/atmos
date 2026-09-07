@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/store"
+	"github.com/cloudposse/atmos/pkg/store/providers"
 	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
@@ -33,7 +33,7 @@ func TestArtifactoryStoreIntegration(t *testing.T) {
 	// Create store pointing to mock server.
 	prefix := "atmos"
 	delimiter := "/"
-	artifactoryStore, err := store.NewArtifactoryStore(store.ArtifactoryStoreOptions{
+	artifactoryStore, err := providers.NewArtifactoryStore(providers.ArtifactoryStoreOptions{
 		URL:            mockServer.URL(),
 		RepoName:       "test-repo",
 		AccessToken:    strPtr("test-token"),
@@ -185,7 +185,7 @@ func TestArtifactoryStoreGetKey(t *testing.T) {
 
 	// Create store pointing to mock server.
 	prefix := "config"
-	artifactoryStore, err := store.NewArtifactoryStore(store.ArtifactoryStoreOptions{
+	artifactoryStore, err := providers.NewArtifactoryStore(providers.ArtifactoryStoreOptions{
 		URL:         mockServer.URL(),
 		RepoName:    "test-repo",
 		AccessToken: strPtr("test-token"),
@@ -239,7 +239,7 @@ func TestArtifactoryStoreWithoutPrefix(t *testing.T) {
 
 	// Create store without prefix.
 	delimiter := "/"
-	artifactoryStore, err := store.NewArtifactoryStore(store.ArtifactoryStoreOptions{
+	artifactoryStore, err := providers.NewArtifactoryStore(providers.ArtifactoryStoreOptions{
 		URL:            mockServer.URL(),
 		RepoName:       "my-repo",
 		AccessToken:    strPtr("test-token"),

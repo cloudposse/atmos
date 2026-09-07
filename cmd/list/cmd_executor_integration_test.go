@@ -1,6 +1,7 @@
 package list
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -180,6 +181,204 @@ func TestExecuteListDependenciesCmd_CoverageIntegration(t *testing.T) {
 		"dependencies fixture should list vpc dependencies cleanly")
 }
 
+// TestDependenciesCmd_RunE_CoverageIntegration exercises dependenciesCmd.RunE
+// end-to-end against the dependencies fixture, covering the full Cobra glue
+// path — checkAtmosConfig → BindFlagsToViper → parseDependenciesOptions →
+// tags.ParseLabelsFlag → executeListDependenciesCmd — including the
+// --labels parsing step that unit tests calling executeListDependenciesCmd
+// directly (with pre-built opts) never reach.
+func TestDependenciesCmd_RunE_CoverageIntegration(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToDependenciesFixture(t)
+
+	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	// See TestSettingsCmd_RunE_CoverageIntegration: other tests in this package
+	// leak a viper "identity" value via the shared viper.GetViper() singleton;
+	// explicitly disabling identity resolution here makes the outcome
+	// independent of test ordering.
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	require.NoError(t, cmd.Flags().Set("format", "json"))
+	require.NoError(t, cmd.Flags().Set("labels", "team=platform"))
+
+	require.NoError(t, dependenciesCmd.RunE(cmd, []string{"vpc"}),
+		"a valid --labels flag should parse cleanly through the full RunE path")
+}
+
+// TestDependenciesCmd_RunE_InvalidLabelsFlag proves a malformed --labels
+// value surfaces as a command error from the RunE closure's
+// tags.ParseLabelsFlag call, rather than panicking or being silently ignored.
+func TestDependenciesCmd_RunE_InvalidLabelsFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToDependenciesFixture(t)
+
+	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	require.NoError(t, cmd.Flags().Set("labels", "not-a-valid-label"))
+
+	err := dependenciesCmd.RunE(cmd, []string{"vpc"})
+	require.Error(t, err)
+}
+
+// TestExecuteListDependenciesCmd_UnboundedSuccessBuildsFullGraph exercises
+// buildDependencyGraphForCommand's unbounded branch (no --stack/--component/
+// --tags/--labels) all the way through a successful dependencies.BuildGraph
+// call. TestExecuteListDependenciesCmd_UnboundedStillEvaluatesEverything
+// (dependencies_scoped_test.go) already covers this branch's describeStacks
+// error path; this covers the success path using a fixture with no
+// always-erroring component, so BuildGraph is actually reached.
+func TestExecuteListDependenciesCmd_UnboundedSuccessBuildsFullGraph(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToDependenciesFixture(t)
+
+	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	opts := &DependenciesOptions{
+		Format:           "json",
+		Direction:        "both",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+		AuthDisabled:     true,
+	}
+
+	require.NoError(t, executeListDependenciesCmd(cmd, []string{}, opts),
+		"an unbounded request over a clean fixture should build the full graph without error")
+}
+
+// TestInstancesCmd_RunE_InvalidClosureFlag proves the RunE closure's
+// parseListClosureOptions error path surfaces as a command error: an
+// unparseable --include-dependencies value must fail before
+// executeListInstancesCmd ever runs.
+func TestInstancesCmd_RunE_InvalidClosureFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("instances", instancesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	require.NoError(t, cmd.Flags().Set(flags.FlagIncludeDependencies, "not-a-depth"))
+
+	err := instancesCmd.RunE(cmd, []string{})
+	require.Error(t, err)
+}
+
+// TestInstancesCmd_RunE_ValidClosureFlag exercises the RunE closure's
+// success path through parseListClosureOptions with a real depth-carrying
+// closure flag value, all the way to executeListInstancesCmd.
+func TestInstancesCmd_RunE_ValidClosureFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("instances", instancesParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	require.NoError(t, cmd.Flags().Set("format", "json"))
+	require.NoError(t, cmd.Flags().Set(flags.FlagIncludeDependencies, flags.ClosureDepthUnlimited))
+
+	require.NoError(t, instancesCmd.RunE(cmd, []string{}),
+		"a valid --include-dependencies value should parse cleanly through the full RunE path")
+}
+
+// TestStacksCmd_RunE_InvalidClosureFlag proves the RunE closure's
+// parseListClosureOptions error path surfaces as a command error before
+// listStacksWithOptions ever runs.
+func TestStacksCmd_RunE_InvalidClosureFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("stacks", stacksParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	require.NoError(t, cmd.Flags().Set(flags.FlagIncludeDependencies, "not-a-depth"))
+
+	err := stacksCmd.RunE(cmd, []string{})
+	require.Error(t, err)
+}
+
+// TestComponentsCmd_RunE_InvalidClosureFlag proves the RunE closure's
+// parseListClosureOptions error path surfaces as a command error before
+// listComponentsWithOptions ever runs, mirroring
+// TestInstancesCmd_RunE_InvalidClosureFlag / TestStacksCmd_RunE_InvalidClosureFlag
+// for the components command's own RunE wiring.
+func TestComponentsCmd_RunE_InvalidClosureFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("components", componentsParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	require.NoError(t, cmd.Flags().Set(flags.FlagIncludeDependencies, "not-a-depth"))
+
+	err := componentsCmd.RunE(cmd, []string{})
+	require.Error(t, err)
+}
+
+// TestInitAndExtractComponents_InvalidLabelsFlag proves a malformed --labels
+// value surfaces as an error from initAndExtractComponents' own
+// tags.ParseLabelsFlag call (as opposed to buildComponentFilters' — see
+// TestBuildComponentFilters_TagsAndLabels in components_test.go — which
+// validates the row-filter side, a distinct call site).
+func TestInitAndExtractComponents_InvalidLabelsFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("components", componentsParser.RegisterFlags)
+	opts := &ComponentsOptions{
+		Format:           "json",
+		LabelsRaw:        "not-a-valid-label",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+	}
+
+	_, err := initAndExtractComponents(cmd, []string{}, opts)
+	require.Error(t, err)
+}
+
+// TestExecuteAndExtractStacks_InvalidLabelsFlag proves a malformed --labels
+// value surfaces as an error from executeAndExtractStacks' own
+// tags.ParseLabelsFlag call, reached before the closure-vs-non-closure branch
+// splits.
+func TestExecuteAndExtractStacks_InvalidLabelsFlag(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToCompleteFixture(t)
+
+	cmd := newCmdWithListParser("stacks", stacksParser.RegisterFlags)
+	require.NoError(t, cmd.Flags().Set("identity", "false"))
+	opts := &StacksOptions{
+		Format:           "json",
+		LabelsRaw:        "not-a-valid-label",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+	}
+
+	atmosConfig, authManager, err := initStacksConfig(cmd, []string{}, opts)
+	require.NoError(t, err)
+	errOpts, _ := describeStacksErrorOptions(opts.ErrorMode)
+
+	_, _, err = executeAndExtractStacks(&atmosConfig, opts, authManager, errOpts)
+	require.Error(t, err)
+}
+
+// TestExecuteListDependenciesCmd_ProcessCommandLineArgsError proves
+// buildDependencyGraphForCommand surfaces an error from
+// newDependenciesDescribeContext's e.ProcessCommandLineArgs call (an unknown
+// flag baked into args re-parsed inside ProcessCommandLineArgs) rather than
+// panicking or silently ignoring it. This is a distinct call site from
+// TestDependenciesCmd_RunE_InvalidLabelsFlag, which fails earlier in the RunE
+// closure itself, before executeListDependenciesCmd is ever reached.
+func TestExecuteListDependenciesCmd_ProcessCommandLineArgsError(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToDependenciesFixture(t)
+
+	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	opts := &DependenciesOptions{
+		Format:           "json",
+		Direction:        "both",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+		AuthDisabled:     true,
+	}
+
+	err := executeListDependenciesCmd(cmd, []string{"vpc", "--not-a-real-flag"}, opts)
+	require.Error(t, err)
+}
+
 // TestListStacksWithOptions_CoverageIntegration exercises the cmd-layer
 // `listStacksWithOptions` + `executeAndExtractStacks` against the
 // `complete` fixture for the non-tree format path and asserts a clean
@@ -197,6 +396,38 @@ func TestListStacksWithOptions_CoverageIntegration(t *testing.T) {
 
 	require.NoError(t, listStacksWithOptions(cmd, []string{}, opts),
 		"complete fixture should list stacks cleanly")
+}
+
+// TestListStacksWithOptions_NoStacksYet exercises `listStacksWithOptions` against a
+// brand-new project with no stack manifests at all (no stacks/ directory). It must
+// report a friendly "No stacks found" message instead of the raw config error
+// ("failed to find import") that `cfg.InitCliConfig` returns for zero glob matches.
+func TestListStacksWithOptions_NoStacksYet(t *testing.T) {
+	initExecutorTestIO(t)
+
+	tmpDir := t.TempDir()
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+
+	atmosYaml := `
+base_path: "` + filepath.ToSlash(tmpDir) + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+components:
+  terraform:
+    base_path: components/terraform
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644))
+
+	t.Chdir(tmpDir)
+
+	cmd := newCmdWithListParser("stacks", stacksParser.RegisterFlags)
+	opts := &StacksOptions{Format: "json"}
+
+	require.NoError(t, listStacksWithOptions(cmd, []string{}, opts),
+		"a project with no stacks yet should report a friendly message, not an error")
 }
 
 // TestListStacksWithOptions_TreeFormat exercises the tree-format branch

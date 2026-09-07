@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -92,10 +93,26 @@ func requireSamePath(t *testing.T, expected, actual string) {
 func TestGitRepositoryPathsWrapsRevParseExitError(t *testing.T) {
 	tests.RequireExecutable(t, "git", "git rev-parse error classification")
 
-	_, _, _, err := gitRepositoryPaths(t.TempDir())
+	_, err := gitRepositoryPaths(t.TempDir())
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrGitCommandExited)
+}
+
+// TestGitRepositoryPathsWrapsMissingBinaryAsCommandFailed asserts the
+// non-ExitError branch: when the "git" binary itself can't be found (as
+// opposed to running and exiting non-zero), gitRepositoryPaths classifies the
+// failure as ErrGitCommandFailed, not ErrGitCommandExited.
+func TestGitRepositoryPathsWrapsMissingBinaryAsCommandFailed(t *testing.T) {
+	// An empty PATH means exec.Command can't locate "git" at all, which
+	// surfaces as a *exec.Error (LookPath failure), not a *exec.ExitError.
+	t.Setenv("PATH", t.TempDir())
+
+	_, err := gitRepositoryPaths(t.TempDir())
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitCommandFailed)
+	assert.False(t, errors.Is(err, errUtils.ErrGitCommandExited))
 }
 
 // Helper function to create a repository with a remote.
@@ -480,8 +497,69 @@ func TestGetRepoInfo(t *testing.T) {
 			},
 			expectError: true,
 			validate: func(t *testing.T, info RepoInfo) {
-				// Should return error due to invalid URL format.
+				// Should return error due to invalid URL format —
+				// neither the canonical parser nor the generic
+				// fallback can recognize this shape.
 				assert.Empty(t, info)
+			},
+		},
+		{
+			name: "self-hosted GitHub Enterprise Server SSH remote (kubescape rejects, fallback handles)",
+			setup: func(t *testing.T) *git.Repository {
+				return createRepoWithRemote(t, "git@ghe.example.com:acme/widgets.git")
+			},
+			expectError: false,
+			validate: func(t *testing.T, info RepoInfo) {
+				assert.Equal(t, "git@ghe.example.com:acme/widgets.git", info.RepoUrl)
+				assert.Equal(t, "ghe.example.com", info.RepoHost)
+				assert.Equal(t, "acme", info.RepoOwner)
+				assert.Equal(t, "widgets", info.RepoName)
+				assert.NotEmpty(t, info.LocalRepoPath)
+				assert.NotNil(t, info.LocalWorktree)
+			},
+		},
+		{
+			name: "self-hosted GitHub Enterprise Server HTTPS remote",
+			setup: func(t *testing.T) *git.Repository {
+				return createRepoWithRemote(t, "https://ghe.example.com/acme/widgets.git")
+			},
+			expectError: false,
+			validate: func(t *testing.T, info RepoInfo) {
+				assert.Equal(t, "https://ghe.example.com/acme/widgets.git", info.RepoUrl)
+				assert.Equal(t, "ghe.example.com", info.RepoHost)
+				assert.Equal(t, "acme", info.RepoOwner)
+				assert.Equal(t, "widgets", info.RepoName)
+			},
+		},
+		{
+			name: "self-hosted nested-path HTTPS remote (host kubescape doesn't recognize)",
+			setup: func(t *testing.T) *git.Repository {
+				// `code.example.com` doesn't contain any of kubescape's
+				// hardcoded host substrings (github / gitlab / azure),
+				// so the canonical parser rejects it and the generic
+				// fallback handles it. (Note: `gitlab.example.com`
+				// would be ACCEPTED by kubescape via substring match,
+				// so it doesn't exercise this path.)
+				return createRepoWithRemote(t, "https://code.example.com/group/sub/widgets.git")
+			},
+			expectError: false,
+			validate: func(t *testing.T, info RepoInfo) {
+				assert.Equal(t, "code.example.com", info.RepoHost)
+				assert.Equal(t, "group", info.RepoOwner)
+				// Nested paths: first segment is owner, remainder is name.
+				assert.Equal(t, "sub/widgets", info.RepoName)
+			},
+		},
+		{
+			name: "self-hosted SSH remote with port (Bitbucket-style)",
+			setup: func(t *testing.T) *git.Repository {
+				return createRepoWithRemote(t, "ssh://git@bitbucket.example.com:7999/proj/widgets.git")
+			},
+			expectError: false,
+			validate: func(t *testing.T, info RepoInfo) {
+				assert.Equal(t, "bitbucket.example.com", info.RepoHost)
+				assert.Equal(t, "proj", info.RepoOwner)
+				assert.Equal(t, "widgets", info.RepoName)
 			},
 		},
 	}

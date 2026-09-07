@@ -20,7 +20,7 @@ Display all authentication providers and identities configured in your Atmos pro
 ## Usage
 
 ```shell
-atmos auth list [--format <format>] [--providers [names]] [--identities [names]]
+atmos auth list [--format <format>] [--providers [names]] [--identities [names]] [--tags <tags>]
 ```
 
 ## Examples
@@ -40,6 +40,12 @@ atmos auth list --identities
 
 # Show specific identities
 atmos auth list --identities=admin,developer
+
+# Filter by tags (matches providers/identities tagged with any of the given tags)
+atmos auth list --tags production
+
+# Filter by multiple tags
+atmos auth list --tags production,tier-1
 
 # Display as hierarchical tree
 atmos auth list --format tree
@@ -117,6 +123,11 @@ atmos auth list --format markdown > auth.md
   <dt>`--identities [names]`</dt>
   <dd>
     Show only identities. Optionally filter by comma-separated identity names (e.g., `--identities=admin,dev`). Cannot be used with `--providers`.
+  </dd>
+
+  <dt>`--tags <tags>`</dt>
+  <dd>
+    Filter providers and identities by tags (comma-separated, matches any): `--tags=production,tier-1`. Providers and identities are tagged via an optional `tags: [...]` list on their `atmos.yaml` definitions.
   </dd>
 </dl>
 

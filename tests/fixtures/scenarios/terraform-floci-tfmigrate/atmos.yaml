@@ -1,0 +1,36 @@
+base_path: "./"
+
+settings:
+  experimental: warn
+
+# OpenTofu and tfmigrate are auto-installed into the (temp) fixture copy,
+# so the test needs no pre-installed binaries.
+toolchain:
+  install_path: .tools
+  versions_file: .tool-versions
+  registries:
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    command: tofu
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: true
+    workspaces_enabled: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  level: Info

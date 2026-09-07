@@ -26,9 +26,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
   `provider`, `paths`, `manifests`, `vars`, `env`, Auth, hooks, and
   dependencies.
   <div>
-    <PrimaryCTA to="/stacks/components/kubernetes">
-      Stack Configuration
-    </PrimaryCTA>
+    <PrimaryCTA to="/stacks/components/kubernetes">Stack Configuration</PrimaryCTA>
   </div>
 </ActionCard>
 
@@ -78,12 +76,20 @@ Validate affected Kubernetes components:
 atmos kubernetes validate --affected --base origin/main
 ```
 
+Validate components filtered by tags or labels (composes with `--all`/`--affected` to narrow the selected set further):
+
+```shell
+atmos kubernetes validate --all --tags production,tier-1
+atmos kubernetes validate --affected --labels cost-center=platform
+```
+
 ## What is validated
 
 Offline (default):
 
 - `apiVersion` and `kind` are present (also enforced during rendering).
-- `metadata.name` is present and is a valid DNS-1123 subdomain.
+- `metadata.name` is present and is a valid DNS-1123 subdomain (with a
+  [Kustomize-specific exemption](#kustomize-config-objects) for `Kustomization`/`Component` objects).
 - The object resolves to a non-empty group/version/kind.
 
 With `--server`:
@@ -92,6 +98,58 @@ With `--server`:
   apply, surfacing schema errors (unknown or mistyped fields) and missing
   Custom Resource Definitions authoritatively. Requires a reachable cluster and
   a configured kubeconfig.
+
+:::caution Bootstrapping a namespace with `--server`
+Each object's server-side dry-run is evaluated independently against the
+cluster's *currently persisted* state. If a manifest set creates its own
+namespace and also delivers objects into that namespace in the same batch —
+the common pattern for a first deploy — `--server` reports the dependent
+objects as invalid (`namespaces "my-namespace" not found`) even though the
+manifest set is entirely valid and `apply`/`deploy` (a real, non-dry-run
+apply) succeeds without issue. This is inherent to how the Kubernetes API
+server evaluates dry-run requests, not an Atmos-specific limitation. If you
+hit this, apply the namespace first (or without `--server`) and re-run
+`--server` once it exists.
+:::
+
+### Kustomize config objects
+
+Kustomize's own `Kustomization` and `Component` objects are not Kubernetes API
+resources — they are local input consumed by the `kustomize` build tool
+itself, and Kustomize does not require (or, historically, even permit) a
+`metadata.name` on them. `validate` recognizes these two exact, versioned
+pairs and does not require `metadata.name` for them:
+
+- `apiVersion: kustomize.config.k8s.io/v1beta1`, `kind: Kustomization`
+- `apiVersion: kustomize.config.k8s.io/v1alpha1`, `kind: Component`
+
+A `Kustomization`/`Component` object at a different `apiVersion` is not
+recognized and still requires `metadata.name`. Every other offline check (a
+resolvable group/version/kind, and DNS-1123 validity for a name that *is*
+given) still applies regardless. See
+[Generating a Kustomize component for GitOps](/stacks/components/kubernetes#generating-a-kustomize-component-for-gitops)
+for the pattern this supports.
+
+### Disabling validation
+
+Set `validate: false` on a component to opt out of both the offline checks
+above and the automatic pre-apply/deploy gate for that component entirely:
+
+```yaml
+components:
+  kubernetes:
+    legacy-manifests:
+      validate: false
+      manifests:
+        - apiVersion: v1
+          kind: ConfigMap
+          # ...
+```
+
+This is a manual override for manifests Atmos has no reserved-kind knowledge
+of — for example objects owned by another tool's format. It does not affect
+`--server`, which validates against the live cluster's own API rather than
+Atmos's offline opinion.
 
 ## Flags
 
@@ -124,4 +182,18 @@ With `--server`:
 
   <dt>`--include-dependents` <em>(optional)</em></dt>
   <dd>With `--affected`, include dependent Kubernetes components.</dd>
+
+<dt>
+  `--tags` <em>(optional)</em>
+</dt>
+<dd>
+  Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.
+</dd>
+
+<dt>
+  `--labels` <em>(optional)</em>
+</dt>
+<dd>
+  Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
+</dd>
 </dl>

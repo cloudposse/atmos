@@ -3,13 +3,59 @@ package helm
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
+	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	authkube "github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/kube"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
+
+// TestVerifyExpectedKubernetesEndpoint verifies all opt-in endpoint guard outcomes.
+func TestVerifyExpectedKubernetesEndpoint(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "kubeconfig")
+	config := clientcmdapi.NewConfig()
+	config.CurrentContext = "example"
+	config.Clusters["example-cluster"] = &clientcmdapi.Cluster{Server: "https://example.invalid"}
+	config.Contexts["example"] = &clientcmdapi.Context{Cluster: "example-cluster"}
+	require.NoError(t, clientcmd.WriteToFile(*config, path))
+
+	tests := []struct {
+		name           string
+		guard          string
+		expectedServer string
+		wantErr        bool
+	}{
+		{name: "no integration expectation allows ambient kubeconfig"},
+		{name: "expectation is inert without the opt-in guard", expectedServer: "https://other.invalid"},
+		{name: "matching endpoint proceeds", guard: "true", expectedServer: "https://example.invalid/"},
+		{name: "mismatched endpoint fails closed", guard: "true", expectedServer: "https://other.invalid", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("KUBECONFIG", path)
+			t.Setenv(authkube.EndpointGuardEnv, tt.guard)
+			t.Setenv(authkube.ExpectedServerEnv, tt.expectedServer)
+
+			err := verifyExpectedKubernetesEndpoint(cli.New())
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrKubernetesEndpointMismatch)
+				assert.Contains(t, err.Error(), "https://other.invalid")
+				assert.Contains(t, err.Error(), "https://example.invalid")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
 
 func TestResolveUpgradeChartRef(t *testing.T) {
 	t.Run("explicit repository url wins", func(t *testing.T) {
@@ -54,6 +100,47 @@ func TestResolveUpgradeChartRef(t *testing.T) {
 	})
 }
 
+func TestConfigureReleaseLifecycleActions(t *testing.T) {
+	policy := effectiveReleasePolicy{
+		OnFailure:        failurePolicyRollback,
+		CleanupOnFailure: true,
+		WaitStrategy:     kube.LegacyStrategy,
+		WaitForJobs:      true,
+		Timeout:          12 * time.Minute,
+		MaxHistory:       7,
+		ChartHooks:       false,
+		CRDs:             crdPolicySkip,
+	}
+
+	install := &action.Install{}
+	installPolicy := policy
+	installPolicy.OnFailure = failurePolicyUninstall
+	configureInstallLifecycle(install, installPolicy)
+	assert.True(t, install.RollbackOnFailure)
+	assert.Equal(t, kube.LegacyStrategy, install.WaitStrategy)
+	assert.True(t, install.WaitForJobs)
+	assert.Equal(t, 12*time.Minute, install.Timeout)
+	assert.True(t, install.DisableHooks)
+	assert.True(t, install.SkipCRDs)
+
+	upgrade := &action.Upgrade{}
+	configureUpgradeLifecycle(upgrade, policy)
+	assert.True(t, upgrade.RollbackOnFailure)
+	assert.Equal(t, kube.LegacyStrategy, upgrade.WaitStrategy)
+	assert.True(t, upgrade.WaitForJobs)
+	assert.Equal(t, 12*time.Minute, upgrade.Timeout)
+	assert.True(t, upgrade.CleanupOnFail)
+	assert.Equal(t, 7, upgrade.MaxHistory)
+	assert.True(t, upgrade.DisableHooks)
+
+	uninstall := &action.Uninstall{}
+	configureUninstallLifecycle(uninstall, policy, true)
+	assert.Equal(t, kube.LegacyStrategy, uninstall.WaitStrategy)
+	assert.Equal(t, 12*time.Minute, uninstall.Timeout)
+	assert.True(t, uninstall.DisableHooks)
+	assert.True(t, uninstall.DryRun)
+}
+
 func TestClusterOperationsReturnActionContextErrors(t *testing.T) {
 	original := newActionContext
 	t.Cleanup(func() { newActionContext = original })
@@ -72,7 +159,7 @@ func TestClusterOperationsReturnActionContextErrors(t *testing.T) {
 	_, err = getDeployedManifest("nginx", "apps")
 	require.ErrorIs(t, err, sentinel)
 
-	err = deleteRelease("nginx", "apps")
+	err = deleteRelease(context.Background(), spec, false)
 	require.ErrorIs(t, err, sentinel)
 }
 
@@ -86,8 +173,10 @@ func TestInstallAndUpgradeReleaseLocateChartErrors(t *testing.T) {
 	_, err := installRelease(context.Background(), actx, spec, true)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `failed to locate Helm chart "missing-chart"`)
+	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 
 	_, err = upgradeRelease(context.Background(), actx, spec, true)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `failed to locate Helm chart "missing-chart"`)
+	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 }

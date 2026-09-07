@@ -1,7 +1,5 @@
 package store
 
-import "strings"
-
 // Store defines the common interface for all store implementations.
 //
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_store.go -package=store
@@ -57,31 +55,26 @@ type SecretAwareStore interface {
 	SetSecret(secret bool)
 }
 
-// StoreFactory is a function type to initialize a new store.
-type StoreFactory func(options map[string]any) (Store, error)
+// ListableStore is implemented by stores that can enumerate the keys stored under a
+// stack/component scope (or globally when both are empty). Not every backend can enumerate keys
+// cheaply or safely (see each provider's Keys implementation for details) — 1Password never
+// implements this (its addressing is opaque op:// reference templates, not the getKey() scheme
+// every other backend shares), and the keychain store's default (system/OS) backend returns
+// ErrListNotSupported at runtime even though it implements the interface. Keys returns key names
+// only; fetch a value with Get/GetKey.
+type ListableStore interface {
+	Store
+	// Keys lists the keys under a stack/component scope (or globally when both are empty).
+	Keys(stack, component string) ([]string, error)
+}
 
-// nolint
-// getKey generates a key for the store. First it splits the stack by the stack delimiter (from atmos.yaml),
-// then it splits the component if it contains a "/",
-// then it appends the key to the parts,
-// then it joins the parts with the final delimiter.
-//
-// Empty segments are omitted entirely — independent of the final delimiter — so scoped secret
-// coordinates collapse cleanly: an empty component (a stack-scoped secret) yields
-// `prefix<delim>stack<delim>key`, and an empty stack and component (a global secret) yields
-// `prefix<delim>key`.
-func getKey(prefix string, stackDelimiter string, stack string, component string, key string, finalDelimiter string) (string, error) { //nolint
-	parts := []string{prefix}
-	if stack != "" {
-		parts = append(parts, strings.Split(stack, stackDelimiter)...)
-	}
-	if component != "" {
-		parts = append(parts, strings.Split(component, "/")...)
-	}
-	parts = append(parts, key)
-
-	joinedKey := strings.Join(parts, finalDelimiter)
-	finalKey := strings.ReplaceAll(joinedKey, "//", "/")
-
-	return finalKey, nil
+// ValueListableStore is implemented by stores whose ListableStore.Keys enumeration is only safe
+// to pair with per-key Get calls in some execution contexts. GitHubActionsStore's Get requires a
+// GitHub Actions runner; outside one it implements this to report false so ListKeyValues can
+// fail fast with ErrListNotSupported instead of aborting mid-enumeration on the first Get error.
+type ValueListableStore interface {
+	ListableStore
+	// ValueListingSupported reports whether Get can currently be called for every key Keys
+	// returns.
+	ValueListingSupported() bool
 }

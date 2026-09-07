@@ -4,6 +4,7 @@ description: "Atmos compositions: named service groupings, compositions.<name>.s
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: templating-data
 ---
 
 # Atmos Compositions

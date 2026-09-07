@@ -9,6 +9,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/filesystem"
 )
 
+// globMetaCharacters are the characters that make a pattern segment a glob
+// expression rather than a literal path component.
+const globMetaCharacters = "*?[]{}!"
+
 // matcher is the main struct for matching files with injected dependencies.
 type matcher struct {
 	fs    filesystem.FileSystem
@@ -28,6 +32,20 @@ func (m *matcher) MatchFiles(patterns []string) ([]string, error) {
 		if !filepath.IsAbs(basePath) {
 			basePath = filepath.Join(cwd, basePath)
 		}
+
+		// A literal pattern (no glob metacharacters) matches at most one path:
+		// check it directly instead of walking the whole tree. Without this, a
+		// plain file name like "atmos.yaml" walks every file under basePath
+		// (including .git and node_modules), which dominated
+		// `atmos validate schema` latency in large repositories.
+		if !strings.ContainsAny(globPattern, globMetaCharacters) {
+			candidate := filepath.Join(basePath, filepath.FromSlash(globPattern))
+			if info, err := m.fs.Stat(candidate); err == nil && !info.IsDir() {
+				matches = append(matches, candidate)
+			}
+			continue
+		}
+
 		isRecursive := strings.Contains(globPattern, "**")
 
 		if isRecursive {
@@ -82,7 +100,7 @@ func extractBasePathAndGlob(pattern string) (string, string) {
 	// Find the index where the glob pattern starts
 	var globStartIndex int
 	for i, part := range parts {
-		if strings.ContainsAny(part, "*?[]{}!") {
+		if strings.ContainsAny(part, globMetaCharacters) {
 			globStartIndex = i
 			break
 		}

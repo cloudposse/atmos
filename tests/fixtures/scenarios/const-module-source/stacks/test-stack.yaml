@@ -1,0 +1,12 @@
+vars:
+  stage: "test"
+
+components:
+  terraform:
+    testme:
+      vars:
+        enabled: true
+        name: "test-component"
+    broken-variable:
+      vars:
+        enabled: true

@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 // withViperBasePath points config discovery at an isolated directory so
@@ -23,16 +25,17 @@ func withViperBasePath(t *testing.T, path string) {
 
 // exampleProjectPath resolves the bundled emulator-aws example, a valid local
 // project (no cloud credentials required) used to exercise the completion happy
-// paths end-to-end.
+// paths end-to-end. It is a checked-in repo fixture, not an optional/generated
+// one, so a missing atmos.yaml here means the fixture moved or was deleted —
+// that must fail the test loudly, not be silently skipped as a pass.
 func exampleProjectPath(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 	path, err := filepath.Abs(filepath.Join(wd, "..", "..", "examples", "emulator-aws"))
 	require.NoError(t, err)
-	if _, statErr := os.Stat(filepath.Join(path, "atmos.yaml")); statErr != nil {
-		t.Skipf("example project not found at %s", path)
-	}
+	_, statErr := os.Stat(filepath.Join(path, "atmos.yaml"))
+	require.NoError(t, statErr, "example project not found at %s", path)
 	return path
 }
 
@@ -66,13 +69,23 @@ func TestComponentArgCompletion_NoProjectDegradesGracefully(t *testing.T) {
 }
 
 func TestStackFlagCompletion_ListsStacks(t *testing.T) {
-	// Run from the example project dir so config discovery finds its atmos.yaml.
+	// The initial stack prompt must show only stacks that actually configure an
+	// emulator, even before the user has selected a component.
 	t.Chdir(exampleProjectPath(t))
 	withViperBasePath(t, "")
 
 	stacks, directive := stackFlagCompletion(&cobra.Command{Use: "emulator"}, nil, "")
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	assert.Contains(t, stacks, "dev")
+	assert.Equal(t, []string{"local"}, stacks)
+}
+
+func TestStackFlagCompletion_FiltersForEmulatorComponent(t *testing.T) {
+	t.Chdir(exampleProjectPath(t))
+	withViperBasePath(t, "")
+
+	stacks, directive := stackFlagCompletion(&cobra.Command{Use: "up"}, []string{"aws"}, "")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.Equal(t, []string{"local"}, stacks)
 }
 
 func TestComponentArgCompletion_ResolvesProjectPipeline(t *testing.T) {
@@ -95,12 +108,31 @@ func TestComponentArgCompletion_ResolvesProjectPipeline(t *testing.T) {
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
 
+func TestStackNamesForCompletion_ListsAllStacks(t *testing.T) {
+	// Unlike stackFlagCompletion/emulatorStackNames (which restrict results to stacks
+	// configuring an emulator component), stackNamesForCompletion lists every stack name in
+	// the project via the shared FindStacksMap cache.
+	t.Chdir(exampleProjectPath(t))
+	withViperBasePath(t, "")
+
+	atmosConfig, err := cfg.InitCliConfig(globalInfoForCompletion(&cobra.Command{Use: "emulator"}), true)
+	require.NoError(t, err)
+
+	stacks, err := stackNamesForCompletion(&atmosConfig)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"dev", "local", "prod", "staging"}, stacks)
+}
+
 func TestRegisterEmulatorCompletions(t *testing.T) {
-	// Every subcommand gets the component-arg completion function attached.
+	// Lifecycle subcommands get component-arg completion; inspection verbs do not.
 	parent := &cobra.Command{Use: "emulator"}
 	child := &cobra.Command{Use: "up"}
-	parent.AddCommand(child)
+	list := &cobra.Command{Use: "list"}
+	ps := &cobra.Command{Use: "ps"}
+	parent.AddCommand(child, list, ps)
 
 	RegisterEmulatorCompletions(parent)
 	require.NotNil(t, child.ValidArgsFunction)
+	assert.Nil(t, list.ValidArgsFunction)
+	assert.Nil(t, ps.ValidArgsFunction)
 }

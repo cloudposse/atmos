@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -91,6 +92,82 @@ func TestWorkflowContainerUnmarshalRejectsInvalidMapping(t *testing.T) {
 func TestWorkflowContainerUnmarshalRejectsSequence(t *testing.T) {
 	var c WorkflowContainer
 	err := yaml.Unmarshal([]byte("- a\n- b\n"), &c)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
+}
+
+// TestWorkflowContainerUnmarshalRejectsUnknownField verifies a typo'd/nonexistent
+// field in a `container:` mapping (e.g. `imgae` instead of `image`) is rejected
+// rather than silently discarded. Before this fix, the mapping branch used plain
+// yaml.Node.Decode, which has no KnownFields/strict mode.
+func TestWorkflowContainerUnmarshalRejectsUnknownField(t *testing.T) {
+	var c WorkflowContainer
+	err := yaml.Unmarshal([]byte("imgae: alpine\n"), &c)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
+	assert.Contains(t, err.Error(), "imgae")
+}
+
+// TestWorkflowContainerJSONRoundTripPreservesEnabled reproduces the third leg
+// of a field-test finding sibling to https://github.com/cloudposse/atmos/issues/2876:
+// cmd/cmd_utils.go's cloneCommand deep-copies a schema.Command (including any
+// step's Container) via json.Marshal/json.Unmarshal to give each custom
+// command's Cobra closure an independent copy. Before MarshalJSON/UnmarshalJSON
+// were added, WorkflowContainer's `Enabled *bool` field carried `json:"-"`
+// (deliberately, since it's normally populated only by UnmarshalYAML's
+// polymorphic bool-or-mapping decode) and was silently dropped by that
+// generic JSON round-trip: a step's `container: false` opt-out came back as
+// Enabled == nil, which IsEnabled() treats as *enabled*, inverting the
+// opt-out and sending the step into a container it explicitly opted out of.
+func TestWorkflowContainerJSONRoundTripPreservesEnabled(t *testing.T) {
+	disabled := false
+	original := &WorkflowContainer{
+		Enabled:  &disabled,
+		Image:    "alpine",
+		Provider: "docker",
+		Env:      map[string]string{"FOO": "bar"},
+	}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var round WorkflowContainer
+	require.NoError(t, json.Unmarshal(data, &round))
+
+	require.NotNil(t, round.Enabled, "Enabled must survive a JSON round-trip, not come back nil")
+	assert.False(t, round.IsEnabled(), "container: false opt-out must survive a JSON round-trip")
+	assert.Equal(t, original, &round)
+}
+
+// TestWorkflowContainerJSONRoundTripEnabledOmittedWhenNil confirms the
+// "enabled" key is entirely absent (not just omitted-as-false) when Enabled
+// is unset, matching `omitempty` on a *bool.
+func TestWorkflowContainerJSONRoundTripEnabledOmittedWhenNil(t *testing.T) {
+	original := &WorkflowContainer{Image: "alpine"}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"enabled"`)
+
+	var round WorkflowContainer
+	require.NoError(t, json.Unmarshal(data, &round))
+	assert.Nil(t, round.Enabled)
+	assert.True(t, round.IsEnabled())
+}
+
+// TestWorkflowContainerUnmarshalJSONWrapsDecodeError verifies a
+// type-mismatched field (syntactically valid JSON that still fails to
+// decode into workflowContainerJSON) is wrapped in the static
+// ErrInvalidWorkflowContainer sentinel (per this repo's error-handling
+// conventions) rather than returned as a raw, unclassifiable
+// json.Unmarshal error. A JSON syntax error (e.g. malformed input) never
+// reaches UnmarshalJSON at all -- encoding/json rejects it during its own
+// tokenizing pass before dispatching to any custom Unmarshaler -- so this
+// must exercise the type-mismatch path specifically to reach the code
+// under test.
+func TestWorkflowContainerUnmarshalJSONWrapsDecodeError(t *testing.T) {
+	var c WorkflowContainer
+	err := json.Unmarshal([]byte(`{"image": 123}`), &c)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
 }

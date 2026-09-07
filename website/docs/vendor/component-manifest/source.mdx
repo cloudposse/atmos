@@ -103,6 +103,20 @@ spec:
       <dd>Maximum total time for all retry attempts. Default: `5m`</dd>
     </dl>
   </dd>
+
+  <dt>`constraints`</dt>
+  <dd>
+    Optional. Controls which upstream versions <a href="/cli/commands/vendor/vendor-update">`atmos vendor update`</a> may select for this component, mirroring the `constraints` key supported on `vendor.yaml` sources. See <a href="/cli/commands/vendor/vendor-update#version-constraints">Version constraints</a> for the full `version` / `excluded_versions` / `no_prereleases` schema.
+
+    ```yaml
+    spec:
+      source:
+        uri: github.com/cloudposse/terraform-aws-vpc?ref={{.Version}}
+        version: 1.2.3
+        constraints:
+          version: "^1.0.0"
+    ```
+  </dd>
 </dl>
 
 ## Vendoring Components from a Monorepo

@@ -1,13 +1,13 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -140,17 +140,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 				return err
 			}
 
-			if len(GetStackNamePattern(&atmosConfig)) < 1 {
-				return errors.New("stack name pattern must be provided in `stacks.name_pattern` CLI config or `ATMOS_STACKS_NAME_PATTERN` ENV variable")
-			}
-
-			stack, err := cfg.GetStackNameFromContextAndStackNamePattern(
-				kubeconfigContext.Namespace,
-				kubeconfigContext.Tenant,
-				kubeconfigContext.Environment,
-				kubeconfigContext.Stage,
-				GetStackNamePattern(&atmosConfig),
-			)
+			stack, err := resolveStackFromContext(&atmosConfig, &kubeconfigContext)
 			if err != nil {
 				return err
 			}
@@ -264,4 +254,34 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 	}
 
 	return nil
+}
+
+// resolveStackFromContext calculates the logical stack name from the namespace/tenant/environment/stage
+// context when no `--stack` was provided on the command line.
+// Precedence: stacks.name_template (Go template) > stacks.name_pattern (deprecated, token-based) > error.
+func resolveStackFromContext(atmosConfig *schema.AtmosConfiguration, kubeconfigContext *schema.AwsEksUpdateKubeconfigContext) (string, error) {
+	switch {
+	case GetStackNameTemplate(atmosConfig) != "":
+		ctx := map[string]any{
+			"vars": map[string]any{
+				"namespace":   kubeconfigContext.Namespace,
+				"tenant":      kubeconfigContext.Tenant,
+				"environment": kubeconfigContext.Environment,
+				"stage":       kubeconfigContext.Stage,
+			},
+		}
+		return ProcessTmpl(atmosConfig, "name-template-from-context", GetStackNameTemplate(atmosConfig), ctx, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
+
+	case GetStackNamePattern(atmosConfig) != "":
+		return cfg.GetStackNameFromContextAndStackNamePattern(
+			kubeconfigContext.Namespace,
+			kubeconfigContext.Tenant,
+			kubeconfigContext.Environment,
+			kubeconfigContext.Stage,
+			GetStackNamePattern(atmosConfig),
+		)
+
+	default:
+		return "", errUtils.ErrMissingStackNameTemplateAndPattern
+	}
 }

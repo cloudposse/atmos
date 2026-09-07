@@ -15,25 +15,9 @@ import (
 )
 
 const (
-	// Table dimensions.
-	providerNameWidth    = 15
-	providerKindWidth    = 30
-	providerRegionWidth  = 12
-	providerURLWidth     = 35
-	providerDefaultWidth = 7
-
-	identityNameWidth        = 18
-	identityKindWidth        = 22
-	identityViaProviderWidth = 18
-	identityViaIdentityWidth = 18
-	identityDefaultWidth     = 7
-	identityAliasWidth       = 15
-	identityExpiresWidth     = 10
-
 	// Formatting.
 	defaultMarker = "✓"
 	emptyMarker   = "-"
-	maxURLDisplay = 32
 	newline       = "\n"
 
 	// Tree colors.
@@ -76,19 +60,6 @@ func getSortedIdentityNames(identities map[string]schema.Identity) []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// truncateString truncates a string to the specified length with ellipsis.
-func truncateString(s string, maxLen int) string {
-	defer perf.Track(nil, "list.truncateString")()
-
-	if len(s) <= maxLen {
-		return s
-	}
-	if maxLen < 3 {
-		return s[:maxLen]
-	}
-	return s[:maxLen-3] + "..."
 }
 
 // getIdentityAuthStatus checks if an identity is authenticated and returns its status.

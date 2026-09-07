@@ -2,6 +2,7 @@ package provenance
 
 import (
 	"fmt"
+	"strings"
 
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -79,30 +80,31 @@ func filterEmptySections(data any, ctx *m.MergeContext) any {
 	filtered := make(map[string]any)
 
 	for key, value := range dataMap {
-		// Check if this key or any of its array elements have provenance.
-		// When ctx is nil (provenance tracking disabled), keep all keys.
-		hasProvenance := ctx == nil
-		if ctx != nil {
-			hasProvenance = ctx.HasProvenance(key)
-
-			// If no direct provenance, check for array element provenance.
-			if !hasProvenance {
-				// Check up to maxArrayCheckLimit array elements (reasonable limit).
-				for i := 0; i < maxArrayCheckLimit; i++ {
-					arrayPath := fmt.Sprintf("%s[%d]", key, i)
-					if ctx.HasProvenance(arrayPath) {
-						hasProvenance = true
-						break
-					}
-				}
-			}
-		}
-
-		// Keep if has provenance.
-		if hasProvenance {
+		if hasSectionProvenance(ctx, key) {
 			filtered[key] = value
 		}
 	}
 
 	return filtered
+}
+
+// hasSectionProvenance reports whether any recorded provenance path belongs to
+// the given top-level section key, once normalized the same way findProvenance
+// does (stripping the "components.<type>.<component>." prefix). Recorded paths
+// are always prefixed that way (e.g. "components.terraform.app.vars.vpc_id"),
+// so a raw, unnormalized key like "vars" would never match without this.
+// When ctx is nil (provenance tracking disabled), every key is kept.
+func hasSectionProvenance(ctx *m.MergeContext, key string) bool {
+	if ctx == nil {
+		return true
+	}
+
+	for _, storedPath := range ctx.GetProvenancePaths() {
+		normalized := normalizeProvenancePath(storedPath)
+		if normalized == key || strings.HasPrefix(normalized, key+pathSeparator) || strings.HasPrefix(normalized, key+"[") {
+			return true
+		}
+	}
+
+	return false
 }

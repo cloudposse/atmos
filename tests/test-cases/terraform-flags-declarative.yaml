@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=schema.json
+# Integration tests for the declarative `flags:` block (lock_timeout, lock, parallelism,
+# refresh, compact_warnings). See website/docs/cli/configuration/components/terraform.mdx#flags.
+#
+# These use --dry-run: it still runs the full config-resolution and terraform argv-build
+# pipeline (including flags merge and validation) but skips the actual terraform
+# subprocess, so no terraform/tofu binary or network access is required.
+tests:
+  - name: "terraform plan --dry-run with a typo'd flags key fails loudly"
+    enabled: true
+    tty: false
+    snapshot: false
+    clean: true
+    description: >
+      A typo'd flags key (e.g. lock_timout instead of lock_timeout) must error at
+      argv-build time, not be silently ignored — discovered via field-testing PR #2992.
+    workdir: "fixtures/scenarios/invalid-terraform-flags/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "vpc"
+      - "-s"
+      - "test"
+      - "--dry-run"
+    expect:
+      exit_code: 1
+      stderr:
+        - "invalid terraform flags configuration"
+        - "lock_timout"

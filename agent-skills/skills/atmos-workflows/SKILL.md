@@ -4,6 +4,7 @@ description: "Workflow automation: native step types, multi-step workflows, para
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: ci-automation
 references:
   - references/workflow-syntax.md
 ---

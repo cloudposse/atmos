@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/degradation"
 )
 
 func TestNewSelector(t *testing.T) {
@@ -264,6 +265,37 @@ func TestSelector_Extract(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSelector_Extract_AtmosComputedValue locks in that a present-but-degraded value
+// (degradation.AtmosComputedValue, substituted by graceful-degradation processing for a
+// value that couldn't be resolved) renders as "(computed)" through the same Go-template
+// column pipeline used by `list stacks`/`list components` — not the literal "<nil>" a bare
+// Go nil would produce via fmt.Fprint, and not a template error. This is automatic: text/
+// template calls String() for any fmt.Stringer, so no column/renderer code change is
+// needed for this to work, only the substituted value needs to implement fmt.Stringer.
+func TestSelector_Extract_AtmosComputedValue(t *testing.T) {
+	configs := []Config{
+		{Name: "Component", Value: "{{ .atmos_component }}"},
+		{Name: "Bucket", Value: "{{ .bucket }}"},
+	}
+
+	selector, err := NewSelector(configs, BuildColumnFuncMap())
+	require.NoError(t, err)
+	require.NoError(t, selector.Select(nil))
+
+	data := []map[string]any{
+		{
+			"atmos_component": "vpc",
+			"bucket":          degradation.AtmosComputedValue{},
+		},
+	}
+
+	headers, rows, err := selector.Extract(data)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Component", "Bucket"}, headers)
+	assert.Equal(t, [][]string{{"vpc", "(computed)"}}, rows)
 }
 
 func TestSelector_Extract_NestedFields(t *testing.T) {

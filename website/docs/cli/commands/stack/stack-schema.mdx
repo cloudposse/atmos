@@ -1,0 +1,39 @@
+---
+title: atmos stack schema
+sidebar_label: schema
+sidebar_class_name: command
+id: stack-schema
+description: Print the JSON Schema Atmos uses to validate stack manifests.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Print the embedded atmos-manifest JSON Schema — the same schema `atmos validate stacks`
+uses by default to validate stack manifests — to stdout, or write it to a file.
+</Intro>
+
+<CastPlayer title="atmos stack schema --help" src="/casts/screengrabs/atmos-stack-schema--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos stack schema [output-path]
+```
+
+## Examples
+
+```shell
+# Print the schema to stdout.
+atmos stack schema
+
+# Write the schema to a file, creating parent directories as needed.
+atmos stack schema website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+```
+
+## Arguments
+
+<dl>
+  <dt>`[output-path]` (optional)</dt>
+  <dd>Write the schema to this file instead of stdout. Parent directories are created as needed.</dd>
+</dl>

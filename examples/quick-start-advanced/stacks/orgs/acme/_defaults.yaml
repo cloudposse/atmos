@@ -45,7 +45,9 @@ terraform:
       terraform_component: "{{ .component }}"
       # Examples of using the Sprig and Gomplate functions
       # https://masterminds.github.io/sprig/os.html
-      provisioned_by_user: '{{ env "USER" }}'
+      # USER is unset on Windows (which sets USERNAME instead); fall back so this
+      # resolves on every platform.
+      provisioned_by_user: '{{ env "USER" | default (env "USERNAME") }}'
       # https://docs.gomplate.ca/functions/strings
       atmos_component_description: "{{ strings.Title .atmos_component }} component {{ .vars.name | strings.Quote }} provisioned in the stack {{ .atmos_stack | strings.Quote }}"
 

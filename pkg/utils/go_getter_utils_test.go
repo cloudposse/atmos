@@ -7,6 +7,9 @@ import (
 	"github.com/hashicorp/go-getter"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 var originalDetectors = getter.Detectors
@@ -60,6 +63,13 @@ func TestValidateURI_ErrorPaths(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		panic("pkg/utils: failed to create IO context: " + err.Error())
+	}
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+
 	code := m.Run()
 	getter.Detectors = originalDetectors
 	errUtils.Exit(code)

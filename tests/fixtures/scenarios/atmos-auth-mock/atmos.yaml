@@ -6,7 +6,7 @@ stacks:
   base_path: "stacks"
   included_paths:
     - "**/*"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
 
 # Mock AWS authentication provider for testing purposes only.
 # This provider simulates AWS authentication without requiring real cloud credentials.

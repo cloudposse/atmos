@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
@@ -38,6 +39,10 @@ func TestExecuteSingle_HappyPath(t *testing.T) {
 	originalHooks := getHooks
 	originalCI := runCIHooks
 	originalDelete := deleteHelmRelease
+	originalWriteStatus := writeStatusLine
+	// The delete operation now emits a status line; stub the writer so the test does not depend on
+	// the data package writer being initialized.
+	writeStatusLine = func(string) {}
 	t.Cleanup(func() {
 		initCliConfig = originalInit
 		processStacks = originalProcess
@@ -46,6 +51,7 @@ func TestExecuteSingle_HappyPath(t *testing.T) {
 		getHooks = originalHooks
 		runCIHooks = originalCI
 		deleteHelmRelease = originalDelete
+		writeStatusLine = originalWriteStatus
 	})
 
 	initCliConfig = func(info schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
@@ -69,8 +75,8 @@ func TestExecuteSingle_HappyPath(t *testing.T) {
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
 	var deleted string
-	deleteHelmRelease = func(releaseName, _ string) error {
-		deleted = releaseName
+	deleteHelmRelease = func(_ context.Context, spec *chartSpec, _ bool) error {
+		deleted = spec.ReleaseName
 		return nil
 	}
 
@@ -141,8 +147,8 @@ func TestRunWithHooks_DeleteSuccess(t *testing.T) {
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
 	var deleted string
-	deleteHelmRelease = func(releaseName, _ string) error {
-		deleted = releaseName
+	deleteHelmRelease = func(_ context.Context, spec *chartSpec, _ bool) error {
+		deleted = spec.ReleaseName
 		return nil
 	}
 	setupRepositories = func([]chartRepository) error {
@@ -176,8 +182,10 @@ func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
 		return &hooks.Hooks{}, nil
 	}
 	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
-	applyHelmRelease = func(context.Context, *chartSpec, bool) (string, error) {
-		return helmExecutorManifest, nil
+	var appliedSpec *chartSpec
+	applyHelmRelease = func(_ context.Context, spec *chartSpec, _ bool) (releaseActionResult, error) {
+		appliedSpec = spec
+		return releaseActionResult{Manifest: helmExecutorManifest, Operation: "install"}, nil
 	}
 	var setup []chartRepository
 	setupRepositories = func(repositories []chartRepository) error {
@@ -189,17 +197,86 @@ func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
 		ComponentFromArg: "apps/app",
 		SubCommand:       "apply",
 		ComponentSection: map[string]any{
-			"chart": "bitnami/nginx",
-			"name":  "app",
+			"chart":     "bitnami/nginx",
+			"name":      "app",
+			"namespace": "component-ns",
 			"repositories": []any{
 				map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"},
 			},
 		},
 	}
-	err := runWithHooks(&component.ExecutionContext{Flags: map[string]any{}}, &schema.AtmosConfiguration{}, info, OperationApply, "")
+	err := runWithHooks(&component.ExecutionContext{Flags: map[string]any{
+		"namespace":                         "incident-ns",
+		cfg.HelmDependencyUpdateSectionName: true,
+	}}, &schema.AtmosConfiguration{}, info, OperationApply, "")
 	require.NoError(t, err)
+	require.NotNil(t, appliedSpec)
+	assert.Equal(t, "incident-ns", appliedSpec.Namespace)
+	assert.True(t, appliedSpec.DependencyUpdate)
 	require.Len(t, setup, 1)
 	assert.Equal(t, "bitnami", setup[0].Name)
+}
+
+func TestRunWithHooks_CanceledContextSkipsHooksAndRepositories(t *testing.T) {
+	originalHooks := getHooks
+	originalSetup := setupRepositories
+	t.Cleanup(func() {
+		getHooks = originalHooks
+		setupRepositories = originalSetup
+	})
+
+	getHooks = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
+		t.Fatal("canceled operation must not discover or run hooks")
+		return nil, nil
+	}
+	setupRepositories = func([]chartRepository) error {
+		t.Fatal("canceled operation must not set up repositories")
+		return nil
+	}
+
+	goContext, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := runWithHooks(
+		&component.ExecutionContext{Context: goContext, Flags: map[string]any{}},
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{},
+		OperationApply,
+		"",
+	)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestRunWithHooks_CanceledDuringPreparationSkipsRepositories(t *testing.T) {
+	originalHooks := getHooks
+	originalSetup := setupRepositories
+	t.Cleanup(func() {
+		getHooks = originalHooks
+		setupRepositories = originalSetup
+	})
+
+	goContext, cancel := context.WithCancel(context.Background())
+	getHooks = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
+		cancel()
+		return &hooks.Hooks{}, nil
+	}
+	setupRepositories = func([]chartRepository) error {
+		t.Fatal("canceled operation must not set up repositories")
+		return nil
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "apps/app",
+		SubCommand:       "apply",
+		ComponentSection: map[string]any{"chart": "bitnami/nginx", "name": "app"},
+	}
+	err := runWithHooks(
+		&component.ExecutionContext{Context: goContext, Flags: map[string]any{}},
+		&schema.AtmosConfiguration{},
+		info,
+		OperationApply,
+		"",
+	)
+	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestRunWithHooks_GetHooksError(t *testing.T) {
@@ -228,6 +305,7 @@ func TestResolveDiffBaseline_AgainstTarget(t *testing.T) {
 		},
 	}}
 	got, err := resolveDiffBaseline(
+		context.Background(),
 		&schema.AtmosConfiguration{},
 		info,
 		map[string]any{flagAgainst: "target"},
@@ -248,6 +326,7 @@ func TestResolveDiffBaseline_DeployedRelease(t *testing.T) {
 	stubActionContext(t, actx)
 
 	got, err := resolveDiffBaseline(
+		context.Background(),
 		&schema.AtmosConfiguration{},
 		&schema.ConfigAndStacksInfo{},
 		map[string]any{},
@@ -259,7 +338,7 @@ func TestResolveDiffBaseline_DeployedRelease(t *testing.T) {
 
 func TestFetchTargetBaseline_RejectsKubernetesTarget(t *testing.T) {
 	// No provision section + no name resolves to the implicit cluster target.
-	_, err := fetchTargetBaseline(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}, "target")
+	_, err := fetchTargetBaseline(context.Background(), &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}, "target")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrHelmDiffFailed)
 }
@@ -271,7 +350,7 @@ func TestFetchTargetBaseline_SelectTargetError(t *testing.T) {
 		},
 	}}
 	// "target:nope" requests a named target that is not configured.
-	_, err := fetchTargetBaseline(&schema.AtmosConfiguration{}, info, "target:nope")
+	_, err := fetchTargetBaseline(context.Background(), &schema.AtmosConfiguration{}, info, "target:nope")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrProvisionTargetNotFound)
 }
@@ -285,7 +364,7 @@ func TestFetchTargetBaseline_FetchError(t *testing.T) {
 			"targets": map[string]any{"repo": map[string]any{"kind": "diff-fetch-err"}},
 		},
 	}}
-	_, err := fetchTargetBaseline(&schema.AtmosConfiguration{}, info, "target")
+	_, err := fetchTargetBaseline(context.Background(), &schema.AtmosConfiguration{}, info, "target")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fetch boom")
 }
@@ -299,7 +378,7 @@ func TestResolveComponentPath(t *testing.T) {
 	}
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Components.Helm.BasePath = "components/helm"
-	path, err := resolveComponentPath(atmosConfig, &schema.ConfigAndStacksInfo{FinalComponent: "app"})
+	path, err := resolveComponentPath(context.Background(), atmosConfig, &schema.ConfigAndStacksInfo{FinalComponent: "app"})
 	require.NoError(t, err)
 	assert.Contains(t, filepath.ToSlash(path), "components/helm")
 
@@ -307,7 +386,7 @@ func TestResolveComponentPath(t *testing.T) {
 	provisionAndResolveComponentPath = func(context.Context, *schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string) (string, bool, error) {
 		return "", false, sentinel
 	}
-	_, err = resolveComponentPath(atmosConfig, &schema.ConfigAndStacksInfo{FinalComponent: "app"})
+	_, err = resolveComponentPath(context.Background(), atmosConfig, &schema.ConfigAndStacksInfo{FinalComponent: "app"})
 	require.ErrorIs(t, err, sentinel)
 }
 
@@ -337,7 +416,7 @@ func TestRenderObjects_Errors(t *testing.T) {
 	renderChartManifest = func(context.Context, *chartSpec) (string, error) {
 		return "", errors.New("render boom")
 	}
-	_, err := renderObjects(&chartSpec{Chart: "demo"})
+	_, err := renderObjects(context.Background(), &chartSpec{Chart: "demo"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "render boom")
 
@@ -345,7 +424,7 @@ func TestRenderObjects_Errors(t *testing.T) {
 	renderChartManifest = func(context.Context, *chartSpec) (string, error) {
 		return "", nil
 	}
-	_, err = renderObjects(&chartSpec{Chart: "demo"})
+	_, err = renderObjects(context.Background(), &chartSpec{Chart: "demo"})
 	require.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 }
 
@@ -357,23 +436,137 @@ func TestProcessStacksWithAuth(t *testing.T) {
 		setupComponentAuthForCLI = originalAuth
 	})
 
-	// Without an identity, no auth manager is created and processStacks runs.
+	// Without an identity, an offline template render creates no auth manager and processStacks runs.
 	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 		assert.Nil(t, authManager)
 		info.ComponentIsEnabled = true
 		return info, nil
 	}
 	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "app"}
-	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info))
+	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info, OperationTemplate, nil))
 	assert.True(t, info.ComponentIsEnabled)
+
+	// Issue #3: a cluster operation resolves component auth even without an explicit identity, so the
+	// stack's default-identity binding is honored (like `atmos terraform`).
+	authSetupCalled := false
+	setupComponentAuthForCLI = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+		authSetupCalled = true
+		return nil, nil
+	}
+	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{ComponentFromArg: "app"}, OperationApply, nil))
+	assert.True(t, authSetupCalled, "cluster ops must resolve component auth even without --identity")
 
 	// With an identity, a setup failure propagates before processStacks runs.
 	sentinel := errors.New("auth failed")
 	setupComponentAuthForCLI = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 		return nil, sentinel
 	}
-	err := processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{Identity: "admin"})
+	err := processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{Identity: "example-admin"}, OperationTemplate, nil)
 	require.ErrorIs(t, err, sentinel)
+
+	// The opt-in guard resolves a component default even when no CLI identity was supplied.
+	setupComponentAuthForCLI = func(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+		info.Identity = "example-deployer"
+		manager := fakeHelmAuthManager{}
+		info.AuthManager = manager
+		return manager, nil
+	}
+	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+		info.ComponentAuthSection = schema.AtmosSectionMapType{"require_identity": true}
+		info.ComponentIsEnabled = true
+		if authManager != nil {
+			assert.Equal(t, "example-deployer", info.Identity, "component identity must resolve before the full processing pass")
+		}
+		return info, nil
+	}
+	for _, operation := range []Operation{OperationDiff, OperationApply, OperationDelete} {
+		info = &schema.ConfigAndStacksInfo{ComponentFromArg: "example-component"}
+		require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info, operation, nil))
+		assert.Equal(t, "example-deployer", info.Identity)
+		assert.NotNil(t, info.AuthManager)
+	}
+
+	// Without a resolvable component default, the opt-in guard fails closed.
+	setupComponentAuthForCLI = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+		return nil, nil
+	}
+	for _, operation := range []Operation{OperationDiff, OperationApply, OperationDelete} {
+		err = processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, operation, nil)
+		require.ErrorIs(t, err, errUtils.ErrKubernetesIdentityRequired)
+	}
+
+	// Disabled components skip identity setup even when they declare the guard.
+	setupComponentAuthForCLI = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+		t.Fatal("disabled components must not resolve identity")
+		return nil, nil
+	}
+	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+		info.ComponentAuthSection = schema.AtmosSectionMapType{"require_identity": true}
+		info.ComponentIsEnabled = false
+		return info, nil
+	}
+	info = &schema.ConfigAndStacksInfo{ComponentFromArg: "disabled-component"}
+	require.NoError(t, processStacksWithAuth(&schema.AtmosConfiguration{}, info, OperationApply, nil))
+	assert.False(t, info.ComponentIsEnabled)
+
+	// Invalid guard types fail closed for enabled cluster operations.
+	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+		info.ComponentAuthSection = schema.AtmosSectionMapType{"require_identity": "true"}
+		info.ComponentIsEnabled = true
+		return info, nil
+	}
+	err = processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, OperationApply, nil)
+	require.ErrorIs(t, err, errUtils.ErrInvalidComponentAuth)
+}
+
+// TestRequireIdentityForOperation verifies the GKE guard applies to every path
+// that contacts a cluster while offline rendering and diff baselines remain offline.
+func TestRequireIdentityForOperation(t *testing.T) {
+	guarded := &schema.ConfigAndStacksInfo{
+		ComponentIsEnabled:   true,
+		ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": true},
+	}
+	unguarded := &schema.ConfigAndStacksInfo{
+		ComponentIsEnabled:   true,
+		ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": false},
+	}
+	invalid := &schema.ConfigAndStacksInfo{
+		ComponentIsEnabled:   true,
+		ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": "true"},
+	}
+
+	tests := []struct {
+		name      string
+		info      *schema.ConfigAndStacksInfo
+		operation Operation
+		flags     map[string]any
+		want      bool
+		wantErr   error
+	}{
+		{name: "template stays offline", info: guarded, operation: OperationTemplate, want: false},
+		{name: "live diff requires identity", info: guarded, operation: OperationDiff, want: true},
+		{name: "explicit release diff requires identity", info: guarded, operation: OperationDiff, flags: map[string]any{flagAgainst: againstRelease}, want: true},
+		{name: "manifest diff stays offline", info: guarded, operation: OperationDiff, flags: map[string]any{flagFromManifest: "baseline.yaml"}, want: false},
+		{name: "target diff stays offline", info: guarded, operation: OperationDiff, flags: map[string]any{flagAgainst: "target"}, want: false},
+		{name: "apply requires identity", info: guarded, operation: OperationApply, want: true},
+		{name: "delete requires identity", info: guarded, operation: OperationDelete, want: true},
+		{name: "disabled guard preserves ambient apply", info: unguarded, operation: OperationApply, want: false},
+		{name: "missing guard preserves ambient apply", info: &schema.ConfigAndStacksInfo{ComponentIsEnabled: true}, operation: OperationApply, want: false},
+		{name: "disabled component skips guard", info: &schema.ConfigAndStacksInfo{ComponentAuthSection: schema.AtmosSectionMapType{"require_identity": true}}, operation: OperationApply, want: false},
+		{name: "non-boolean guard fails closed", info: invalid, operation: OperationApply, wantErr: errUtils.ErrInvalidComponentAuth},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := requireIdentityForOperation(tt.info, tt.operation, tt.flags)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 func TestApplyAuthEnvironment(t *testing.T) {

@@ -69,6 +69,18 @@ func TestRunGrouped_ActiveGroupingUsesStepLabel(t *testing.T) {
 	provider := &recordingGitHubProvider{Provider: githubprovider.NewProvider()}
 	ci.Register(provider)
 	t.Setenv("GITHUB_ACTIONS", "true")
+	// This test binary can itself run as a child of a CI-grouped step (this
+	// repo's own atmos.yaml sets ci.enabled: true, and CI runs `go test` via
+	// an `atmos test acceptance` custom-command step that calls RunGrouped
+	// itself), in which case the ci package's nesting sentinel is already
+	// present in the process environment. That would make ci.Group see a
+	// false "parent already grouping" and silently no-op, so this assertion
+	// on emitted markers would never actually exercise the grouped path.
+	// Clear it so the test is deterministic regardless of how the test
+	// binary itself was launched. The sentinel's key=value form is minted by
+	// ci.LogGroupSentinelEnv(); the key alone is unexported, so it's
+	// hardcoded here rather than imported.
+	t.Setenv("ATMOS_CI_LOG_GROUP_ACTIVE", "")
 
 	cfg := &schema.AtmosConfiguration{}
 	cfg.CI.Enabled = true

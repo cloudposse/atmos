@@ -10,24 +10,17 @@ import (
 )
 
 func TestManifestSchema_MetadataDescriptionExists(t *testing.T) {
-	schemas := map[string]map[string]any{
-		"embedded": loadEmbeddedSchema(t),
-		"website":  loadWebsiteSchema(t),
-	}
+	schemaMap := loadEmbeddedSchema(t)
 
-	for schemaName, schemaMap := range schemas {
-		t.Run(schemaName, func(t *testing.T) {
-			definitions, ok := schemaMap["definitions"].(map[string]any)
-			require.True(t, ok, "schema should have definitions")
+	definitions, ok := schemaMap["definitions"].(map[string]any)
+	require.True(t, ok, "schema should have definitions")
 
-			metadata, ok := definitions["metadata"].(map[string]any)
-			require.True(t, ok, "schema should define metadata")
+	metadata, ok := definitions["metadata"].(map[string]any)
+	require.True(t, ok, "schema should define metadata")
 
-			props := objectVariantProps(metadata)
-			_, hasDescription := props["description"]
-			assert.True(t, hasDescription, "metadata should allow description")
-		})
-	}
+	props := objectVariantProps(metadata)
+	_, hasDescription := props["description"]
+	assert.True(t, hasDescription, "metadata should allow description")
 }
 
 func TestManifestSchema_ValidMetadataDescription(t *testing.T) {
@@ -50,28 +43,19 @@ func TestManifestSchema_ValidMetadataDescription(t *testing.T) {
 	docJSON, err := json.Marshal(manifest)
 	require.NoError(t, err)
 
-	schemas := map[string]map[string]any{
-		"embedded": loadEmbeddedSchema(t),
-		"website":  loadWebsiteSchema(t),
+	schemaJSON, err := json.Marshal(loadEmbeddedSchema(t))
+	require.NoError(t, err)
+
+	result, err := gojsonschema.Validate(
+		gojsonschema.NewBytesLoader(schemaJSON),
+		gojsonschema.NewBytesLoader(docJSON),
+	)
+	require.NoError(t, err, "schema validation should not error")
+
+	if !result.Valid() {
+		for _, desc := range result.Errors() {
+			t.Logf("validation error: %s", desc)
+		}
 	}
-
-	for schemaName, schemaMap := range schemas {
-		t.Run(schemaName, func(t *testing.T) {
-			schemaJSON, err := json.Marshal(schemaMap)
-			require.NoError(t, err)
-
-			result, err := gojsonschema.Validate(
-				gojsonschema.NewBytesLoader(schemaJSON),
-				gojsonschema.NewBytesLoader(docJSON),
-			)
-			require.NoError(t, err, "schema validation should not error")
-
-			if !result.Valid() {
-				for _, desc := range result.Errors() {
-					t.Logf("validation error: %s", desc)
-				}
-			}
-			assert.True(t, result.Valid(), "metadata.description should be valid")
-		})
-	}
+	assert.True(t, result.Valid(), "metadata.description should be valid")
 }

@@ -138,8 +138,6 @@ func FormatCheckRunName(action, stack, component string) string {
 func FormatStatusContext(prefix string, parts ...string) string {
 	defer perf.Track(nil, "provider.FormatStatusContext")()
 
-	allParts := make([]string, 0, 1+len(parts))
-	allParts = append(allParts, prefix)
-	allParts = append(allParts, parts...)
+	allParts := append([]string{prefix}, parts...)
 	return strings.Join(allParts, "/")
 }

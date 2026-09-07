@@ -2,12 +2,15 @@ package output
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filelock"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
 )
 
 // defaultRunnerFactory creates a real terraform runner using tfexec.
@@ -18,26 +21,50 @@ func defaultRunnerFactory(workdir, executable string) (TerraformRunner, error) {
 // runInit executes terraform init with appropriate options.
 //
 //nolint:revive // argument-limit: internal function passing through execution context.
-func (e *Executor) runInit(ctx context.Context, runner TerraformRunner, config *ComponentConfig, component, stack string, stderrCapture *quietModeWriter) error {
+func (e *Executor) runInit(
+	ctx context.Context,
+	runner TerraformRunner,
+	config *ComponentConfig,
+	component, stack string,
+	stderrCapture *quietModeWriter,
+	pluginCache tfplugin.Cache,
+) error {
 	defer perf.Track(nil, "output.Executor.runInit")()
 
-	log.Debug("Executing terraform init", "component", component, "stack", stack)
+	run := func() error {
+		log.Debug("Executing terraform init", "component", component, "stack", stack)
 
-	var initOptions []tfexec.InitOption
-	initOptions = append(initOptions, tfexec.Upgrade(false))
-	if config.InitRunReconfigure {
-		initOptions = append(initOptions, tfexec.Reconfigure(true))
+		var initOptions []tfexec.InitOption
+		initOptions = append(initOptions, tfexec.Upgrade(false))
+		if config.InitRunReconfigure {
+			initOptions = append(initOptions, tfexec.Reconfigure(true))
+		}
+
+		if err := runner.Init(ctx, initOptions...); err != nil {
+			return wrapErrorWithStderr(
+				errUtils.Build(errUtils.ErrTerraformInit).WithCause(err).Err(),
+				stderrCapture,
+			)
+		}
+
+		log.Debug("Completed terraform init", "component", component, "stack", stack)
+		return nil
 	}
 
-	if err := runner.Init(ctx, initOptions...); err != nil {
-		return wrapErrorWithStderr(
-			errUtils.Build(errUtils.ErrTerraformInit).WithCause(err).Err(),
-			stderrCapture,
-		)
+	if pluginCache.Directory == "" {
+		return run()
 	}
 
-	log.Debug("Completed terraform init", "component", component, "stack", stack)
-	return nil
+	var initErr error
+	if err := filelock.New(pluginCache.InitLockPathForWorkdir(config.ComponentPath)).WithExclusive(ctx, func() error {
+		initErr = run()
+		return nil
+	}); err != nil {
+		return errUtils.Build(errUtils.ErrTerraformInit).
+			WithCause(fmt.Errorf("lock provider plugin cache: %w", err)).
+			Err()
+	}
+	return initErr
 }
 
 // runOutput executes terraform output with retry logic.

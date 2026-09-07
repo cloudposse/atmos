@@ -1,0 +1,17 @@
+# app-b is unrelated to app-a — no dependency edge in either direction.
+# `broken`'s vars unconditionally fail template rendering (Sprig `fail`) the
+# moment this component is evaluated at all — standing in for "an unrelated
+# stack whose backend/credentials cannot be reached" (the reported cross-account
+# customer scenario) without depending on YAML-function skip-list nuances or
+# real cloud credentials in CI. A describe pass scoped to app-a's closure must
+# never touch app-b, and so must never trigger this error.
+vars:
+  stage: app-b
+
+components:
+  terraform:
+    broken:
+      metadata:
+        component: mock
+      vars:
+        upstream_value: '{{ fail "app-b must never be evaluated by a bounded app-a request" }}'

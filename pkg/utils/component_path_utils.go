@@ -234,6 +234,10 @@ func getBasePathForComponentType(atmosConfig *schema.AtmosConfiguration, compone
 		envVarName = "ATMOS_COMPONENTS_HELM_BASE_PATH"
 		resolvedPath = atmosConfig.HelmDirAbsolutePath
 		configBasePath = atmosConfig.Components.Helm.BasePath
+	case "container":
+		envVarName = "ATMOS_COMPONENTS_CONTAINER_BASE_PATH"
+		resolvedPath = atmosConfig.ContainerDirAbsolutePath
+		configBasePath = atmosConfig.Components.Container.BasePath
 	default:
 		return "", "", fmt.Errorf("%w: %s", ErrUnknownComponentType, componentType)
 	}

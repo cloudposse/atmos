@@ -25,6 +25,12 @@ const testJSONMaxLine = 4 * 1024 * 1024
 // `test -json` stream) to the seconds used by JUnit `time` attributes.
 const millisecondsPerSecond = 1000.0
 
+// sensitiveOutputPlaceholder is the literal text Terraform/OpenTofu prints in
+// place of a sensitive-flagged output's real value in apply console output
+// (e.g. `secret_key = <sensitive>`), used by extractApplyOutputs to detect
+// sensitivity directly from console text, since the real value never appears.
+const sensitiveOutputPlaceholder = "<sensitive>"
+
 const (
 	testEventDiagnostic = "diagnostic"
 	testEventFile       = "test_file"
@@ -100,6 +106,11 @@ var (
 	//   Failure! 2 passed, 1 failed.
 	// Used as a fallback when per-run lines were not captured.
 	testSummaryRe = regexp.MustCompile(`(?m)^(?:Success|Failure)!\s*(\d+)\s+passed,\s*(\d+)\s+failed`)
+
+	// Matches the file/line locator inside a terraform "Error:" diagnostic block, e.g.:
+	//   on tests/app.tftest.hcl line 30:
+	// Used to recover assertion location for the summary-line fallback.
+	errorLocationRe = regexp.MustCompile(`(?m)^\s*on\s+(\S+)\s+line\s+(\d+):`)
 )
 
 // ParsePlanJSON parses terraform plan JSON from `terraform show -json <planfile>`.
@@ -481,6 +492,14 @@ func ParseApplyOutput(output string) *plugin.OutputResult {
 		}
 	}
 
+	// A replacement prints as a destroy followed by a create of the same
+	// address (there is no single "Replacing..." progress line), so without
+	// this step a replaced resource would double-report as both created and
+	// deleted instead of matching the single "replaced" action the plan phase
+	// reports for the same address. Reconcile before ResourceCounts/summary
+	// parsing so downstream consumers see one action per address, same as plan.
+	reconcileApplyReplacements(data)
+
 	// Extract outputs from apply stdout (e.g., 'key = "value"' lines after "Outputs:").
 	// This avoids needing to run `terraform output` separately, which would require
 	// backend credentials that may not be available in PostRunE context.
@@ -490,6 +509,52 @@ func ParseApplyOutput(output string) *plugin.OutputResult {
 	data.Warnings = ExtractWarningBlocks(output)
 
 	return result
+}
+
+// reconcileApplyReplacements moves any resource address present in both
+// CreatedResources and DeletedResources into ReplacedResources, removing it
+// from the other two lists. Terraform/OpenTofu apply progress output has no
+// distinct "replaced" verb — a replacement is always logged as a destroy of
+// the old instance followed by a create of the new one — so without this
+// step the same address would appear under two separate actions instead of
+// the single "replaced" action the plan phase reports for it.
+func reconcileApplyReplacements(data *plugin.TerraformOutputData) {
+	deleted := make(map[string]bool, len(data.DeletedResources))
+	for _, addr := range data.DeletedResources {
+		deleted[addr] = true
+	}
+
+	replaced := make(map[string]bool)
+	createdOnly := make([]string, 0, len(data.CreatedResources))
+	for _, addr := range data.CreatedResources {
+		if deleted[addr] {
+			if !replaced[addr] {
+				data.ReplacedResources = append(data.ReplacedResources, addr)
+				replaced[addr] = true
+			}
+			continue
+		}
+		createdOnly = append(createdOnly, addr)
+	}
+	data.CreatedResources = createdOnly
+
+	deletedOnly := make([]string, 0, len(data.DeletedResources))
+	for _, addr := range data.DeletedResources {
+		if replaced[addr] {
+			continue
+		}
+		deletedOnly = append(deletedOnly, addr)
+	}
+	data.DeletedResources = deletedOnly
+
+	// Keep ResourceCounts consistent with the reconciled resource lists: each
+	// reconciled pair was originally counted as one create and one delete, but
+	// now represents a single replace action.
+	for range replaced {
+		data.ResourceCounts.Create--
+		data.ResourceCounts.Destroy--
+		data.ResourceCounts.Replace++
+	}
 }
 
 // ParseDestroyOutput parses terraform destroy stdout.
@@ -597,8 +662,17 @@ func extractApplyOutputs(output string) map[string]plugin.TerraformOutput {
 			value = value[1 : len(value)-1]
 		}
 
+		// Terraform prints the literal placeholder <sensitive> (unquoted, no
+		// real value ever reaches this text) in place of a sensitive-flagged
+		// output's value, so that literal is itself a reliable signal to flag
+		// Sensitive: true here — unlike most fields in this regex-based
+		// parser, this one doesn't need the real value to detect sensitivity.
+		// Compare the raw (unquoted-stripped) value so a real string output
+		// whose value happens to be the quoted literal "<sensitive>" isn't
+		// misflagged as sensitive.
 		outputs[key] = plugin.TerraformOutput{
-			Value: value,
+			Value:     value,
+			Sensitive: rawValue == sensitiveOutputPlaceholder,
 		}
 	}
 
@@ -632,12 +706,17 @@ func ParseTestOutput(output string) *plugin.OutputResult {
 
 	// Fall back to the summary line when per-run lines were not captured (e.g.
 	// output buffering differences); per-run lines are preferred since they also
-	// surface skips.
+	// surface skips. The summary line carries no per-run detail, so synthesize a
+	// single aggregate row into Runs -- otherwise the CI summary's results table
+	// (gated on len(Runs) > 0) silently disappears even though badges still render.
 	if data.Total == 0 {
 		if match := testSummaryRe.FindStringSubmatch(output); len(match) == 3 {
 			data.Pass = parseIntOrZero(match[1])
 			data.Fail = parseIntOrZero(match[2])
 			data.Total = data.Pass + data.Fail
+			if data.Total > 0 {
+				data.Runs = append(data.Runs, synthesizeFallbackRun(data.Pass, data.Fail, output))
+			}
 		}
 	}
 
@@ -651,6 +730,37 @@ func ParseTestOutput(output string) *plugin.OutputResult {
 	}
 
 	return result
+}
+
+// synthesizeFallbackRun builds a single aggregate run entry standing in for the
+// per-run detail ParseTestOutput could not capture, so the CI summary's results
+// table still renders one row instead of none. If exactly one terraform error
+// diagnostic block survived even though the per-run status lines did not, its
+// file/line are attached to the row so the summary still points at a location.
+// The block's raw message text is deliberately NOT copied into the row: it is
+// multi-line and can contain "|", which would break the markdown table cell,
+// and it is already rendered safely in the fenced code block ParseTestOutput
+// populates via result.Errors. With more than one block, attributing a single
+// location to the aggregate row would misrepresent which failure it belongs
+// to, so File/Line are left unset in that case.
+func synthesizeFallbackRun(pass, fail int, output string) plugin.TerraformTestRun {
+	status := testStatusPass
+	if fail > 0 {
+		status = testStatusFail
+	}
+	run := plugin.TerraformTestRun{
+		Name:   fmt.Sprintf("test summary (per-run detail unavailable): %d passed, %d failed", pass, fail),
+		Status: status,
+	}
+	if fail > 0 {
+		if blocks := ExtractErrorBlocks(output); len(blocks) == 1 {
+			if loc := errorLocationRe.FindStringSubmatch(blocks[0]); len(loc) == 3 {
+				run.File = loc[1]
+				run.Line = parseIntOrZero(loc[2])
+			}
+		}
+	}
+	return run
 }
 
 // isJSONStream reports whether output contains Terraform/OpenTofu `test -json`

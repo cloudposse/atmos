@@ -1,0 +1,134 @@
+---
+title: atmos sbom
+sidebar_label: sbom
+sidebar_class_name: command
+id: usage
+description: Generate provenance and software bills of materials for Terraform dependency evidence managed by Atmos.
+---
+
+import Experimental from '@site/src/components/Experimental'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Generate a provenance/build-input SBOM from Atmos source receipts and Terraform dependency evidence.
+</Intro>
+
+<Experimental />
+
+# SBOM Generation
+
+The `atmos sbom generate` command builds one provenance graph and renders it as CycloneDX JSON or SPDX JSON. Atmos always includes Atmos-managed sources (including OCI source artifacts), regardless of `--scope`. The default scope, `terraform`, additionally includes Terraform providers and Terraform modules. Pass `--scope dependencies` instead to additionally inventory Atmos's own toolchain and version-track lock evidence (`.tools/toolchain.lock.yaml` and `versions.lock.yaml`) rather than Terraform.
+
+This is not a claim that every deployed workload appears in the SBOM. Atmos reports Helm, Helmfile, discovered container images, image package contents, and OpenTofu module graphs as outside the initial scope instead of silently omitting them.
+
+## Quick Start
+
+Generate a CycloneDX provenance SBOM to stdout:
+
+```shell
+atmos sbom generate --format cyclonedx-json
+```
+
+Write an SPDX document to a file:
+
+```shell
+atmos sbom generate \
+  --format spdx-json \
+  --output sbom.spdx.json
+```
+
+Include the individual files recorded in `vendor.lock.yaml` when you need installation-manifest detail:
+
+```shell
+atmos sbom generate --include-files --output sbom.cdx.json
+```
+
+## Native CI Upload
+
+Use `--upload` to publish the rendered document through the detected CI provider. On GitHub Actions, Atmos uploads the document as a workflow artifact named after its format. This preserves the exact generated SBOM with the run. It does **not** submit dependencies to GitHub's dependency graph. GitHub's SBOM REST API only exports or requests GitHub-generated reports; it has no endpoint for submitting an arbitrary SBOM.
+
+Ordinary `run:` steps cannot access the runtime credentials for GitHub artifacts. Surface them first with the [`github-runtime` action](/ci/planfile-storage#using-github-artifacts-in-github-actions):
+
+```yaml
+permissions:
+  contents: read
+
+steps:
+  - uses: actions/checkout@v6
+  - uses: cloudposse/atmos/actions/github-runtime@v1
+    with:
+      mode: env
+  - run: atmos sbom generate --format spdx-json --output sbom.spdx.json --upload
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+```
+
+Atmos still writes the generated document to stdout or `--output`; `--upload` adds the CI publication.
+
+## NTIA Validation Mode
+
+Use `--mode ntia` when the selected Terraform scope must meet Atmos's NTIA-baseline validation rules. It requires an explicit subject and refuses to emit a document if required evidence is incomplete.
+
+```shell
+atmos sbom generate \
+  --mode ntia \
+  --subject-name infra-live \
+  --subject-version "$(git rev-parse --short HEAD)" \
+  --subject-supplier "Example, Inc." \
+  --format cyclonedx-json \
+  --output infra-live.sbom.json
+```
+
+The command fails instead of producing an NTIA-mode document when any of the following are true:
+
+- A required adapter is unavailable.
+- A provider lock lacks an archive SHA-256 checksum.
+- A module has no immutable resolution evidence.
+- The required subject data is absent.
+
+Use the default `provenance` mode to inspect the available graph and its coverage diagnostics while resolving those issues.
+
+## Terraform Evidence
+
+Provider inventory comes from each initialized component's `.terraform.lock.hcl`. Module inventory comes only from the configured Terraform command's structured interface:
+
+```shell
+<components.terraform.command> modules -json
+```
+
+Atmos runs that command in each Terraform component directory. It uses `components.terraform.command` when configured and otherwise uses `terraform`. Module inventory therefore requires Terraform 1.10 or later and initialized component directories. Atmos honors a configured `tofu` command, but reports it as unavailable if it does not implement the same stable JSON interface.
+
+## Source Evidence
+
+The `vendor.lock.yaml` file supplies immutable source identities and exact installed-file manifests for `vendor.yaml`, `component.yaml`, and mixin installs. Just-in-time (JIT) workdirs contribute their local provenance receipts. Atmos uses a Git commit, OCI manifest digest, or content-tree SHA-256 fallback as integrity evidence. Atmos never uses cache metadata as an integrity guarantee. Atmos removes credentials and query strings before source references enter locks or SBOM output.
+
+## Dependencies Evidence
+
+Passing `--scope dependencies` inventories `.tools/toolchain.lock.yaml` (installed toolchain binaries, one component per platform) and `versions.lock.yaml` (version-tracked ecosystem dependencies) instead of Terraform evidence. Atmos still includes vendor-lock source evidence, unaffected by `--scope`.
+
+## Output and Scope
+
+<dl>
+  <dt>`--format` (string, default `cyclonedx-json`)</dt>
+  <dd>`cyclonedx-json` or `spdx-json`.</dd>
+
+  <dt>`--output` (string, default stdout)</dt>
+  <dd>File to receive the rendered document.</dd>
+
+  <dt>`--upload` (default `false`)</dt>
+  <dd>Publish the rendered document through the detected native CI provider. GitHub Actions publishes a workflow artifact.</dd>
+
+  <dt>`--scope` (string, default `terraform`)</dt>
+  <dd>`terraform` (provider and module evidence) or `dependencies` (toolchain and version-track evidence).</dd>
+
+  <dt>`--mode` (string, default `provenance`)</dt>
+  <dd>`provenance` includes coverage diagnostics; `ntia` validates complete selected-scope evidence.</dd>
+
+  <dt>`--include-files` (default `false`)</dt>
+  <dd>Include lock-owned vendor files and containment relationships.</dd>
+
+  <dt>`--subject-name` / `--subject-version` / `--subject-supplier` (string)</dt>
+  <dd>Required together by `--mode ntia`.</dd>
+</dl>
+
+See the [SBOM provenance PRD](https://github.com/cloudposse/atmos/blob/main/docs/prd/sbom-provenance.md) for the evidence model and adapter roadmap.

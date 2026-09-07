@@ -1,11 +1,8 @@
-logs:
-  # Can also be set using 'ATMOS_LOGS_FILE' ENV var, or '--logs-file' command-line argument
-  # File or standard file descriptor to write logs to
-  # Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`
-  file: "/dev/stderr"
-  # Supported log levels: Trace, Debug, Info, Warning, Off
-  # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
-  level: Info
+# NOTE: logging defaults (logs.file, logs.level) intentionally do NOT live here.
+# This file merges into Viper's CONFIG layer, which outranks the defaults layer —
+# a key set here can never be rolled back by an edition pin (see pkg/edition) and
+# silently shadows setDefaultConfiguration in pkg/config/load.go. Journaled keys
+# must stay out of this file (enforced by TestJournalKeysNotInEmbeddedConfig).
 
 diagnostics:
   # Machine-readable JSONL diagnostic events. Disabled by default.

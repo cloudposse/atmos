@@ -165,6 +165,7 @@ type envConfig struct {
 	ensureTools    func(deps map[string]string) error
 	resolveFunc    func(tool string) (owner, repo string, err error)
 	findBinaryPath func(owner, repo, version string, binaryName ...string) (string, error)
+	entrypointDirs func(owner, repo, version string) []string
 	buildPATH      func(atmosConfig *schema.AtmosConfiguration, deps map[string]string) (string, error)
 }
 
@@ -189,6 +190,15 @@ func withResolveFunc(fn func(tool string) (owner, repo string, err error)) envOp
 func withFindBinaryPath(fn func(owner, repo, version string, binaryName ...string) (string, error)) envOption {
 	return func(c *envConfig) {
 		c.findBinaryPath = fn
+	}
+}
+
+// withEntrypointDirs overrides onedir-aware entrypoint directory resolution.
+// Returning nil for a tool makes newEnvironment fall back to the primary
+// binary's directory.
+func withEntrypointDirs(fn func(owner, repo, version string) []string) envOption {
+	return func(c *envConfig) {
+		c.entrypointDirs = fn
 	}
 }
 
@@ -221,6 +231,10 @@ func withProvisioner(p ToolProvisioner) envOption {
 		c.resolveFunc = p.ResolveToolName
 		c.findBinaryPath = p.FindBinaryPath
 		c.buildPATH = p.BuildPATH
+		// ToolProvisioner does not enumerate onedir entrypoints; return nil so
+		// env.dirs falls back to each resolved primary's directory. This keeps
+		// mock-driven environments hermetic (no real installer is constructed).
+		c.entrypointDirs = func(_, _, _ string) []string { return nil }
 	}
 }
 
@@ -259,7 +273,8 @@ func newEnvironment(atmosConfig *schema.AtmosConfiguration, deps map[string]stri
 	// Resolve every dependency to an absolute binary path.
 	resolveBinaryPaths(env, cfg, deps)
 
-	// Build augmented PATH.
+	// Build the legacy augmented PATH as a fallback and retain its error
+	// contract for callers/tests that inject a builder.
 	buildPATH := cfg.buildPATH
 	if buildPATH == nil {
 		buildPATH = BuildToolchainPATH
@@ -272,25 +287,16 @@ func newEnvironment(atmosConfig *schema.AtmosConfiguration, deps map[string]stri
 		env.path = toolchainPATH
 	}
 
-	// Extract unique toolchain bin dirs from resolved paths for PrependToPath().
-	seen := make(map[string]bool)
-	for _, p := range env.resolved {
-		dir := filepath.Dir(p)
-		if !seen[dir] {
-			seen[dir] = true
-			env.dirs = append(env.dirs, dir)
-		}
-	}
-
 	return env, nil
 }
 
 // resolveBinaryPaths resolves each dependency to an absolute binary path
-// and populates env.resolved. Errors are logged and skipped.
+// and populates env.resolved and env.dirs. Errors are logged and skipped.
 func resolveBinaryPaths(env *ToolchainEnvironment, cfg *envConfig, deps map[string]string) {
 	resolveFunc := cfg.resolveFunc
 	findBinaryPath := cfg.findBinaryPath
-	if resolveFunc == nil || findBinaryPath == nil {
+	entrypointDirsFunc := cfg.entrypointDirs
+	if resolveFunc == nil || findBinaryPath == nil || entrypointDirsFunc == nil {
 		tcInstaller := toolchain.NewInstaller()
 		if resolveFunc == nil {
 			resolver := tcInstaller.GetResolver()
@@ -299,8 +305,17 @@ func resolveBinaryPaths(env *ToolchainEnvironment, cfg *envConfig, deps map[stri
 		if findBinaryPath == nil {
 			findBinaryPath = tcInstaller.FindBinaryPath
 		}
+		if entrypointDirsFunc == nil {
+			// Onedir-aware directory resolution — the same source of truth as
+			// `atmos toolchain env` — so multi-file packages expose every
+			// entrypoint directory, not just the primary binary's.
+			entrypointDirsFunc = func(owner, repo, version string) []string {
+				return toolchain.EntrypointDirsForVersion(tcInstaller, owner, repo, version, false)
+			}
+		}
 	}
 
+	seenDir := make(map[string]struct{})
 	for tool, version := range deps {
 		owner, repo, err := resolveFunc(tool)
 		if err != nil {
@@ -328,5 +343,33 @@ func resolveBinaryPaths(env *ToolchainEnvironment, cfg *envConfig, deps map[stri
 		base := filepath.Base(binaryPath)
 		key := strings.TrimSuffix(base, filepath.Ext(base))
 		env.resolved[key] = binaryPath
+
+		// Record every entrypoint directory for PrependToPath()/ToolchainDirs().
+		// A onedir (multi-file) package exposes commands that may live in more than
+		// one directory; a flat install (or a not-installed fallback) contributes
+		// only the primary binary's directory.
+		addEntrypointDirs(env, seenDir, entrypointDirsFunc(owner, repo, version), binaryPath)
+	}
+}
+
+// addEntrypointDirs appends the unique, absolute entrypoint directories for a
+// resolved dependency to env.dirs. When dirs is empty (a flat install, or a
+// locator that could not enumerate entrypoints) it falls back to the primary
+// binary's directory.
+func addEntrypointDirs(env *ToolchainEnvironment, seen map[string]struct{}, dirs []string, primaryBinaryPath string) {
+	if len(dirs) == 0 {
+		dirs = []string{filepath.Dir(primaryBinaryPath)}
+	}
+	for _, dir := range dirs {
+		if !filepath.IsAbs(dir) {
+			if abs, err := filepath.Abs(dir); err == nil {
+				dir = abs
+			}
+		}
+		if _, ok := seen[dir]; ok {
+			continue
+		}
+		seen[dir] = struct{}{}
+		env.dirs = append(env.dirs, dir)
 	}
 }

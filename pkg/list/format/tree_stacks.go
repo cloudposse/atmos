@@ -3,6 +3,7 @@ package format
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss/tree"
 
@@ -24,7 +25,9 @@ func RenderStacksTree(stacksWithImports map[string][]*listtree.ImportNode, showI
 	treeOutput := root.String()
 	cleanedOutput := cleanupSpacerMarkers(treeOutput, []string{spacerMarker})
 
-	return header + cleanedOutput + treeNewline
+	// Keep one trailing newline here; callers use data.Writeln, which adds a
+	// second newline and leaves a deliberate blank line before the shell prompt.
+	return header + strings.TrimRight(cleanedOutput, treeNewline) + treeNewline
 }
 
 // buildStacksRootTree builds the root tree structure for stacks.

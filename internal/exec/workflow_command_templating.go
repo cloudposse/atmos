@@ -71,7 +71,7 @@ func resolveWorkflowStepEnv(envMap map[string]string, baseEnv []string) (map[str
 	vars := stepExecutorState.Variables()
 	resolved := make(map[string]string, len(envMap))
 	for key, value := range envMap {
-		rendered, err := vars.ResolveWith(value, overlay)
+		rendered, err := vars.ResolveWithFallback(value, overlay)
 		if err != nil {
 			return nil, err
 		}

@@ -47,7 +47,8 @@ The `emulator` command also has the alias `emu`.
 
 Emulators run inside a container runtime. Atmos selects the runtime via the global
 `container.runtime.provider` configuration and the `ATMOS_CONTAINER_RUNTIME`
-environment variable; Docker and Podman are auto-detected. There is no per-command
+environment variable; `auto` (or an omitted provider) detects Docker, then Podman.
+There is no per-command
 runtime flag.
 
 ```shell

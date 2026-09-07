@@ -2,6 +2,8 @@ package marketplace
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -27,6 +29,8 @@ type SourceInfo struct {
 //   - github.com/user/repo@v1.2.3
 //   - https://github.com/user/repo.git
 //   - git@github.com:user/repo.git
+//   - file:///absolute/path/to/skill (local filesystem)
+//   - /absolute/or/relative/path/to/skill (local filesystem, if it exists on disk)
 func ParseSource(source string) (*SourceInfo, error) {
 	defer perf.Track(nil, "marketplace.ParseSource")()
 
@@ -60,7 +64,50 @@ func ParseSource(source string) (*SourceInfo, error) {
 		return parseGitHubSSH(source, ref)
 	}
 
+	// Format 4: Local filesystem path (file:// URL, or a plain path that exists on
+	// disk). Checked last so a typo'd GitHub shorthand still surfaces the
+	// "unsupported source format" error below instead of a confusing
+	// "no such file or directory" one.
+	if info := parseLocalSource(source); info != nil {
+		return info, nil
+	}
+
 	return nil, fmt.Errorf("%w: unsupported source format: %s", ErrInvalidSource, source)
+}
+
+// parseLocalSource recognizes a local filesystem source: an explicit file:// URL
+// (whose path is trusted without an existence check, mirroring go-getter's file://
+// scheme), or a plain path that exists on disk. Returns nil when source isn't a
+// local path at all, so ParseSource can fall through to its "unsupported source
+// format" error.
+//
+// FullPath is deliberately NOT the raw absolute path: on Windows that starts with a
+// drive letter (e.g. "C:\Users\..."), and filepath.Join'ing it onto the skills
+// install directory (see Installer.getInstallPath) would try to create a literal
+// "C:" path segment, which is invalid. "local/<dir-name>" keeps the same
+// owner/repo-style one-level nesting Git sources get, without embedding the host's
+// filesystem layout.
+func parseLocalSource(source string) *SourceInfo {
+	raw := source
+	isFileURL := strings.HasPrefix(source, "file://")
+	if isFileURL {
+		raw = strings.TrimPrefix(source, "file://")
+	} else if _, err := os.Stat(raw); err != nil {
+		return nil
+	}
+
+	abs, err := filepath.Abs(raw)
+	if err != nil {
+		return nil
+	}
+
+	name := filepath.Base(abs)
+	return &SourceInfo{
+		Type:     "local",
+		URL:      abs,
+		FullPath: fmt.Sprintf("local/%s", name), // Same "namespace/name" shape as github.com/owner/repo.
+		Name:     name,
+	}
 }
 
 // isOwnerRepoShorthand returns true for bare "owner/repo" format

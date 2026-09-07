@@ -4,6 +4,7 @@ description: "Atmos AI and MCP integrations: connect external AI assistants to A
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: ai
 ---
 
 # Atmos AI and MCP
@@ -100,7 +101,37 @@ through MCP **and** applies Atmos-native patterns (`!terraform.state`, abstract 
 inheritance, [remote-state-bridge](../atmos-migration/references/remote-state-bridge.md))
 from the relevant skill.
 
-Install the Atmos skills plugin into Claude Code:
+### Installing Skills: `atmos ai skill` (canonical, cross-client)
+
+`atmos ai skill install`/`list`/`update`/`uninstall` is the canonical, cross-client way to manage
+skills -- it works for every supported client (Claude Code, VS Code/Copilot, Gemini), not just
+Claude Code.
+
+```bash
+atmos ai skill list                          # Browse the bundled catalog + what's installed
+atmos ai skill install atmos-terraform       # Bundled skill, offline, no network/Git needed
+atmos ai skill install github.com/user/repo  # Community skill from GitHub
+atmos ai skill install                       # Install every bundled skill at once
+atmos ai skill update                        # Refresh installed bundled skills to the latest catalog version
+atmos ai skill uninstall atmos-terraform
+```
+
+Installing a bundled skill copies its content at that point in time -- upgrading the `atmos`
+binary alone doesn't refresh a skill you already installed. Run `atmos ai skill update` after
+upgrading Atmos to pick up any bundled skill content that shipped since you installed it. Skills
+installed from GitHub aren't covered by `update` yet; re-run `install <source> --force` for those.
+
+By default the skill is copied into every detected client's project-local skill directory
+(`.claude/skills/`, `.github/skills/` for VS Code/Copilot, `.gemini/skills/`) with zero extra
+flags. Use `--client`/`--all-clients` to target specific clients, `--scope user`/`--global` to
+install into each client's user-level directory instead of the project one, or `--path` to take
+full manual control of the install location (this skips auto-distribution to clients). See
+[`atmos ai skill`](https://atmos.tools/cli/commands/ai/skill) for the full flag reference.
+
+### Installing Skills: Claude Code Plugin (Claude Code only)
+
+For Claude Code specifically, the skills plugin is a lighter-weight alternative that also
+wires up marketplace updates:
 
 ```bash
 /plugin marketplace add cloudposse/atmos
@@ -109,7 +140,7 @@ Install the Atmos skills plugin into Claude Code:
 
 For Codex, Gemini, Cursor, Windsurf, GitHub Copilot, JetBrains Junie, and Amazon Q, see the
 [AI Agent Skills announcement](https://atmos.tools/changelog/ai-agent-skills) for tool-specific
-install paths.
+install paths, or use `atmos ai skill install` above, which works for all of them.
 
 ## The Three Layers
 

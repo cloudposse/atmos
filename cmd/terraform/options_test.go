@@ -515,3 +515,59 @@ func TestApplyOptionsToInfo(t *testing.T) {
 		})
 	}
 }
+
+// TestParseTerraformRunOptionsClosureFlags covers the depth-carrying
+// --include-dependencies/--include-dependents values: bare (NoOptDefVal "all")
+// means unlimited (-1), =N bounds the depth, boolean spellings stay
+// backward compatible, and invalid values error.
+func TestParseTerraformRunOptionsClosureFlags(t *testing.T) {
+	tests := []struct {
+		name             string
+		dependencies     string
+		dependents       string
+		wantDependencies int
+		wantDependents   int
+		wantErr          bool
+	}{
+		{name: "absent means off"},
+		{name: "bare flags mean unlimited", dependencies: "all", dependents: "all", wantDependencies: -1, wantDependents: -1},
+		{name: "numeric depth", dependencies: "2", dependents: "1", wantDependencies: 2, wantDependents: 1},
+		{name: "boolean compat", dependencies: "true", dependents: "false", wantDependencies: -1, wantDependents: 0},
+		{name: "invalid dependencies value", dependencies: "banana", wantErr: true},
+		{name: "invalid dependents value", dependents: "-3", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			if tt.dependencies != "" {
+				v.Set("include-dependencies", tt.dependencies)
+			}
+			if tt.dependents != "" {
+				v.Set("include-dependents", tt.dependents)
+			}
+
+			result, err := ParseTerraformRunOptions(v)
+			if tt.wantErr {
+				assert.Nil(t, result)
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantDependencies, result.IncludeDependencies)
+			assert.Equal(t, tt.wantDependents, result.IncludeDependents)
+		})
+	}
+}
+
+// TestApplyOptionsToInfoClosureFlags asserts the closure depths reach
+// schema.ConfigAndStacksInfo for the scheduler adapter to consume.
+func TestApplyOptionsToInfoClosureFlags(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{}
+	applyOptionsToInfo(info, &TerraformRunOptions{
+		IncludeDependencies: -1,
+		IncludeDependents:   2,
+	})
+	assert.Equal(t, -1, info.IncludeDependencies)
+	assert.Equal(t, 2, info.IncludeDependents)
+}

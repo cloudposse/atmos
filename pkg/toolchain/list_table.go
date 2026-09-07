@@ -8,6 +8,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 	"golang.org/x/term"
+
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 )
 
 // columnWidths holds the calculated widths for each table column.
@@ -320,5 +322,8 @@ func renderTableWithConditionalStyling(t *table.Model, rows []toolRow) string {
 		}
 	}
 
-	return strings.Join(lines, "\n")
+	// The bubbles/table view right-pads every column, including the last, to a fixed
+	// width; trim that trailing padding so plain-text/piped output and snapshots don't
+	// carry invisible trailing whitespace.
+	return atmosansi.TrimLinesRightSpaces(strings.Join(lines, "\n"))
 }

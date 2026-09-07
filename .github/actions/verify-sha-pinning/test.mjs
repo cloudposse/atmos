@@ -2,8 +2,9 @@
 /**
  * Local smoke test for verify-sha-pinning.
  *
- * Tests both positive (valid pins) and negative (bad SHA) cases
- * against the real GitHub API, including forensic metadata.
+ * Tests both the drift check (positive/negative tag-vs-SHA cases against the
+ * real GitHub API, including forensic metadata) and the coverage check
+ * (classifying unpinned, tag-pinned, and branch-pinned references).
  *
  * Usage: GITHUB_TOKEN=$(gh auth token) node .github/actions/verify-sha-pinning/test.mjs
  */
@@ -21,6 +22,44 @@ if (!token) {
 const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' };
 
 const pattern = /uses:\s*([^\/\s]+)\/([^@\/\s]+)(?:\/[^@\s]+)?@([a-f0-9]{40})\s*#\s*(v\S+)/g;
+
+// Coverage classifier — mirrors action.yml's parseUsesLine. Kept as a separate,
+// deliberately duplicated implementation (same convention as the drift-check
+// logic above) so this script exercises the real API without the Actions runtime.
+function classifyUsesLine(line) {
+  const m = line.match(/uses:\s*(\S+)(?:\s*#\s*(\S+))?/);
+  if (!m) return null;
+  const [, refValue, comment] = m;
+  if (refValue.startsWith('./') || refValue.startsWith('../')) return null;
+
+  const atIdx = refValue.lastIndexOf('@');
+  if (atIdx === -1) return null;
+  const refPath = refValue.slice(0, atIdx);
+  const ref = refValue.slice(atIdx + 1);
+  const parts = refPath.split('/');
+  if (parts.length < 2) return null;
+  const [owner, repo] = parts;
+
+  if (/^[a-f0-9]{40}$/.test(ref)) {
+    if (comment && /^v?\d/.test(comment)) {
+      return { kind: 'tag-pinned', owner, repo, sha: ref, tag: comment };
+    }
+    return { kind: 'branch-pinned', owner, repo, sha: ref, ref: comment || null };
+  }
+
+  return { kind: 'unpinned', owner, repo, ref };
+}
+
+function scanCoverage(content) {
+  const lines = content.split('\n');
+  const refs = [];
+  for (let i = 0; i < lines.length; i++) {
+    const parsed = classifyUsesLine(lines[i]);
+    if (!parsed) continue;
+    refs.push({ line: i + 1, ...parsed });
+  }
+  return refs;
+}
 
 async function resolveTagSha(owner, repo, tag) {
   const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/ref/tags/${tag}`, { headers });
@@ -101,6 +140,39 @@ function formatForensics(r) {
     return `     ℹ️  Pinned SHA corresponds to: ${r.forensics.matchingTags.join(', ')}`;
   }
   return `     ℹ️  Pinned SHA exists in repo but has no matching tags`;
+}
+
+// allowlist.json entry validation — mirrors action.yml's
+// validateAllowlistEntry (same deliberate-duplication convention as above).
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function validateAllowlistEntry(entry, seen) {
+  if (!isNonEmptyString(entry?.action)) {
+    throw new Error(`Invalid allowlist.json entry: missing or empty "action": ${JSON.stringify(entry)}`);
+  }
+  if (!isNonEmptyString(entry.description)) {
+    throw new Error(`Invalid allowlist.json entry for "${entry.action}": missing or empty "description"`);
+  }
+  if (!Array.isArray(entry.references) || entry.references.length === 0 || !entry.references.every(isNonEmptyString)) {
+    throw new Error(`Invalid allowlist.json entry for "${entry.action}": "references" must be a non-empty array of non-empty strings`);
+  }
+  if (seen.has(entry.action)) {
+    throw new Error(`Invalid allowlist.json: duplicate entry for "${entry.action}"`);
+  }
+}
+
+// Downgrade eligibility — mirrors action.yml's outer catch: only a listed
+// repo AND the explicitly verified access-block condition (HTTP 403) may
+// ever be downgraded from a hard failure to 'allowlisted'. A rate-limit 403
+// (detected via the x-ratelimit-remaining response header, never by
+// inspecting error message text) is excluded even for a listed repo — it
+// means the token is out of budget for every remaining lookup, not that
+// this one repo is access-blocked.
+function shouldDowngrade(err, hasAllowlistEntry) {
+  if (!hasAllowlistEntry || err?.status !== 403) return false;
+  return err?.response?.headers?.['x-ratelimit-remaining'] !== '0';
 }
 
 // ── Test cases ──────────────────────────────────────────────────
@@ -231,6 +303,145 @@ assert(forensics !== undefined, 'Forensics object is populated');
 assert(forensics?.existsInRepo === true, 'existsInRepo is true (SHA is valid in actions/checkout)');
 assert(forensics?.matchingTags?.length > 0, `matchingTags has entries: [${forensics?.matchingTags?.join(', ')}]`);
 assert(forensics?.matchingTags?.[0] === 'v4.2.2', `First matching tag is v4.2.2`);
+
+// Test 8: Coverage check — bare tag (no SHA) is flagged unpinned
+console.log('\n🧪 Test 8: Coverage — bare tag flagged as unpinned');
+const bareTagWorkflow = `
+name: test
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/verify-sha-pinning
+`;
+const bareTagRefs = scanCoverage(bareTagWorkflow);
+assert(bareTagRefs.length === 1, 'Local ref (./...) is skipped, only the bare tag is classified');
+assert(bareTagRefs[0]?.kind === 'unpinned', 'actions/checkout@v6 classified as unpinned');
+assert(bareTagRefs[0]?.owner === 'actions' && bareTagRefs[0]?.repo === 'checkout', 'owner/repo parsed correctly');
+
+// Test 9: Coverage — branch-pinned SHA (# main) is covered but not tag-verified
+console.log('\n🧪 Test 9: Coverage — branch-pinned ref classified separately from tag-pinned');
+const branchPinWorkflow = `
+name: test
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # main
+`;
+const branchPinRefs = scanCoverage(branchPinWorkflow);
+assert(branchPinRefs.length === 1, 'Found 1 reference');
+assert(branchPinRefs[0]?.kind === 'branch-pinned', 'Classified as branch-pinned, not tag-pinned or unpinned');
+assert(branchPinRefs[0]?.ref === 'main', 'Branch name captured from comment');
+
+// Test 10: Coverage — tag comment without a leading "v" is still tag-like
+console.log('\n🧪 Test 10: Coverage — no-"v"-prefix tag comment classified as tag-pinned');
+const noVPrefixWorkflow = `
+name: test
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: cloudposse/github-action-seek-deployment@1234567890abcdef1234567890abcdef12345678 # 0.1.1
+`;
+const noVPrefixRefs = scanCoverage(noVPrefixWorkflow);
+assert(noVPrefixRefs.length === 1, 'Found 1 reference');
+assert(noVPrefixRefs[0]?.kind === 'tag-pinned', 'Classified as tag-pinned despite missing "v" prefix');
+assert(noVPrefixRefs[0]?.tag === '0.1.1', 'Tag captured as "0.1.1"');
+
+// Test 11: Coverage regression — real workflow directory has zero unpinned refs
+console.log('\n🧪 Test 11: Coverage regression over real workflow files');
+const workflowFiles = fs.readdirSync('.github/workflows')
+  .filter(f => f.endsWith('.yml') || f.endsWith('.yaml'));
+let realUnpinned = [];
+for (const file of workflowFiles) {
+  const content = fs.readFileSync(path.join('.github/workflows', file), 'utf8');
+  for (const ref of scanCoverage(content)) {
+    if (ref.kind === 'unpinned') {
+      realUnpinned.push(`${file}:${ref.line} ${ref.owner}/${ref.repo}@${ref.ref}`);
+    }
+  }
+}
+if (realUnpinned.length > 0) {
+  console.log('  Unpinned references found:');
+  for (const u of realUnpinned) console.log(`    - ${u}`);
+}
+assert(realUnpinned.length === 0, `No unpinned third-party action references remain (found ${realUnpinned.length})`);
+
+// Test 12: allowlist.json — malformed entries are rejected
+console.log('\n🧪 Test 12: allowlist.json — malformed entries are rejected');
+function throwsWith(fn, pattern) {
+  try {
+    fn();
+    return false;
+  } catch (err) {
+    return pattern.test(err.message);
+  }
+}
+assert(
+  throwsWith(() => validateAllowlistEntry({ action: 'foo/bar', references: ['https://example.com'] }, new Map()), /missing or empty "description"/),
+  'Entry missing "description" is rejected'
+);
+assert(
+  throwsWith(() => validateAllowlistEntry({ action: 'foo/bar', description: 'because' }, new Map()), /"references" must be/),
+  'Entry missing "references" is rejected'
+);
+assert(
+  throwsWith(() => validateAllowlistEntry({ action: 'foo/bar', description: 'because', references: [] }, new Map()), /"references" must be/),
+  'Entry with empty "references" array is rejected'
+);
+assert(
+  throwsWith(() => validateAllowlistEntry({ description: 'because', references: ['https://example.com'] }, new Map()), /missing or empty "action"/),
+  'Entry missing "action" is rejected'
+);
+
+// Test 13: allowlist.json — duplicate action entries are rejected
+console.log('\n🧪 Test 13: allowlist.json — duplicate action entries are rejected');
+const seenDup = new Map();
+const validEntry = { action: 'foo/bar', description: 'because', references: ['https://example.com'] };
+validateAllowlistEntry(validEntry, seenDup);
+seenDup.set(validEntry.action, validEntry);
+assert(
+  throwsWith(() => validateAllowlistEntry({ action: 'foo/bar', description: 'a different reason', references: ['https://example.com'] }, seenDup), /duplicate entry/),
+  'Duplicate "action" key is rejected'
+);
+
+// Test 14: exception downgrade — only a 403 (access-blocked) error is eligible
+console.log('\n🧪 Test 14: exception downgrade — only a 403 (access-blocked) error is eligible');
+assert(shouldDowngrade({ status: 403 }, true) === true, '403 + listed repo → downgrade eligible');
+assert(shouldDowngrade({ status: 404 }, true) === false, '404 (tag not found) + listed repo → NOT downgrade eligible, stays a failure');
+assert(shouldDowngrade(new Error('boom'), true) === false, 'status-less error + listed repo → NOT downgrade eligible');
+assert(shouldDowngrade({ status: 403 }, false) === false, '403 + unlisted repo → NOT downgrade eligible');
+assert(
+  shouldDowngrade({ status: 403, response: { headers: { 'x-ratelimit-remaining': '0' } } }, true) === false,
+  'Rate-limited 403 (x-ratelimit-remaining: 0) + listed repo → NOT downgrade eligible, stays a failure'
+);
+assert(
+  shouldDowngrade({ status: 403, response: { headers: { 'x-ratelimit-remaining': '42' } } }, true) === true,
+  'Non-rate-limited 403 (budget remaining) + listed repo → downgrade eligible'
+);
+assert(
+  shouldDowngrade({ status: 403, response: { headers: {} } }, true) === true,
+  '403 with no rate-limit header at all (e.g. an IP allow-list block) + listed repo → downgrade eligible'
+);
+
+// Test 15: regression — a listed repository with a nonexistent tag must not
+// be downgrade-eligible (only the documented 403 access-block condition is).
+console.log('\n🧪 Test 15: regression — listed repo with a nonexistent tag stays a failure');
+const bogusTagRes = await fetch('https://api.github.com/repos/aquasecurity/trivy-action/git/ref/tags/v0.0.0-does-not-exist', { headers });
+if (bogusTagRes.status === 403) {
+  console.log('  ⚠️  Skipped: this environment is itself IP-blocked by the aquasecurity org allow-list (403), so a missing tag can\'t be distinguished from the access-block here. Re-run from a non-blocked IP (e.g. not a GitHub-hosted Actions runner) to exercise this case.');
+} else {
+  assert(bogusTagRes.status !== 403, `Nonexistent-tag lookup returned ${bogusTagRes.status}, not 403`);
+  assert(
+    shouldDowngrade({ status: bogusTagRes.status }, true) === false,
+    'Nonexistent tag on a listed repo is not downgrade-eligible — would remain failed_count=1, status=fail'
+  );
+}
 
 // ── Summary ─────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);

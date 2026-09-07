@@ -1,0 +1,81 @@
+---
+slug: container-buildx-cache-and-driver
+title: "Remote Build Caching for Container Builds"
+authors: [osterman]
+tags: [feature]
+date: 2026-07-20T12:00:00.000Z
+---
+
+Container image builds get slower as a Dockerfile grows, and CI runners rarely keep a warm
+local cache between runs. Teams work around this with a handful of `docker/setup-buildx-action`
+and `docker/build-push-action` steps that provision a builder and wire up a remote cache — glue
+that lives outside the rest of the pipeline and has to be reproduced in every workflow that builds
+an image.
+
+The native `container` build step can now provision that builder and cache directly, so a build's
+caching strategy lives next to the rest of its configuration instead of in separate Actions.
+
+<!--truncate-->
+
+## The Problem
+
+A `docker buildx build` that starts cold rebuilds every layer, even when nothing meaningful
+changed. Reusing a remote cache and a purpose-built builder solves this, but doing it by hand
+means composing several pieces: creating a builder with the right driver, pointing it at a
+registry-backed cache, and keeping all of that in sync with the rest of the build step.
+
+## The Fix
+
+`action: build` now accepts `driver` and `cache`:
+
+```yaml
+- name: build
+  type: container
+  action: build
+  provider: docker
+  with:
+    engine: buildx
+    context: .
+    dockerfile: Dockerfile
+    tags:
+      - registry.example.com/app:latest
+
+    driver: docker-container   # shorthand — just the driver
+
+    cache:
+      from:
+        - type: registry
+          ref: registry.example.com/app:buildcache
+      to:
+        - type: registry
+          ref: registry.example.com/app:buildcache
+          mode: max
+```
+
+Atmos creates the named builder if it doesn't already exist and reuses it on later runs, so the
+builder's own cache persists across builds on the same host instead of starting cold every time.
+`driver` also accepts a full form when you need driver-specific options, such as pointing Buildx
+at a mirrored BuildKit image to avoid Docker Hub rate limits:
+
+```yaml
+with:
+  driver:
+    name: atmos
+    provider: docker-container
+    opts:
+      image: mirror.gcr.io/moby/buildkit:buildx-stable-1
+```
+
+## How to Use It
+
+Add `driver` and `cache` under an existing `action: build` step wherever you use
+`engine: buildx`. If you build with `bake` instead, keep `cache-from`/`cache-to` in the bake file
+itself — Bake already supports them natively — and use `driver` for builder selection either way.
+
+See the [`container` step documentation](/workflows/steps/type/container#driver) for the full
+field reference, including the three ways to avoid Docker Hub rate limits.
+
+## Get Involved
+
+Try `driver` and `cache` in a build step and share feedback through
+[GitHub issues](https://github.com/cloudposse/atmos/issues).

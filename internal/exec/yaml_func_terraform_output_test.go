@@ -3,15 +3,19 @@ package exec
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
+	"time"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestYamlFuncTerraformOutput(t *testing.T) {
@@ -21,9 +25,12 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		tfoutput.ResetOutputsCache()
 	})
 
-	if _, err := exec.LookPath("tofu"); err != nil {
-		t.Skip("skipping: 'tofu' binary not found in PATH (required because the fixture components use command: tofu)")
-	}
+	// Resolve and isolate the tofu binary in one step (via RequireTofuPath)
+	// rather than a separate exec.LookPath call -- see requireExecutablePath's
+	// doc comment in tests/preconditions.go for why two independent lookups
+	// against the shared toolchain cache are unsafe on the Windows acceptance job.
+	tofuPath := tests.RequireTofuPath(t)
+	isolateTerraformTestBinary(t, tofuPath)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
 	t.Setenv("ATMOS_BASE_PATH", "")
 
@@ -174,4 +181,90 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		assert.Contains(t, y, "client_id_arn_bare: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
 		assert.Contains(t, y, "client_id_arn_with_stack: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
 	})
+}
+
+// isolateTerraformTestBinary copies a Terraform-compatible executable into a
+// per-test directory and prepends it to PATH. The Windows acceptance job runs
+// packages concurrently and other package tests can uninstall the shared
+// Atmos toolchain cache after LookPath succeeds. Keeping a private copy
+// prevents that race from turning later Terraform calls into a spurious
+// missing-executable failure.
+func isolateTerraformTestBinary(t *testing.T, source string) {
+	t.Helper()
+
+	contents, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatalf("read Terraform-compatible executable %q: %v", source, err)
+	}
+
+	info, err := os.Stat(source)
+	if err != nil {
+		t.Fatalf("stat Terraform-compatible executable %q: %v", source, err)
+	}
+
+	dir := t.TempDir()
+	destination := filepath.Join(dir, filepath.Base(source))
+	if err := os.WriteFile(destination, contents, info.Mode()); err != nil {
+		t.Fatalf("copy Terraform-compatible executable to test directory: %v", err)
+	}
+
+	// Registered after t.TempDir()'s own cleanup, so it runs first (t.Cleanup is LIFO): on
+	// Windows, a tofu/terraform subprocess launched from this copy can still hold its exe
+	// file handle open for a brief window after the test body returns, which makes
+	// t.TempDir()'s single-shot RemoveAll fail with "process cannot access the file".
+	// Retrying with a short backoff lets that lock clear before TempDir's own cleanup runs,
+	// matching the copyRepoWithRetry pattern in describe_affected_test.go.
+	t.Cleanup(func() { removeWithRetryForTransientLock(t, destination) })
+
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// removeWithRetryForTransientLock removes path, retrying if the OS reports it as still in
+// use by another process rather than failing immediately. Reuses isTransientRepoCopyError
+// (describe_affected_test.go) rather than hand-rolling a narrower duplicate: Windows reports
+// this same underlying condition with either "being used by another process" or "another
+// process has locked a portion of the file" depending on the syscall involved
+// (ERROR_SHARING_VIOLATION vs ERROR_LOCK_VIOLATION), and only matching the first one left
+// the second able to fall through uncaught.
+//
+// MaxAttempts/retryDelay total ~10s. The previous budget of 10 attempts x 50ms (500ms) was
+// confirmed insufficient in practice: that budget was added in #1908 and the same
+// "being used by another process" failure recurred in CI within hours, so real-world
+// Windows Defender / AV real-time-scan delays on a freshly executed binary can run well
+// past half a second, especially on a loaded shared runner.
+func removeWithRetryForTransientLock(t *testing.T, path string) {
+	t.Helper()
+
+	const (
+		maxAttempts = 40
+		retryDelay  = 250 * time.Millisecond
+	)
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err := os.Remove(path)
+		if err == nil || os.IsNotExist(err) {
+			return
+		}
+		if !isTransientRepoCopyError(err) {
+			return
+		}
+		if attempt == maxAttempts {
+			t.Logf("cleanup: %q still locked after %d retries (%v total), leaving it for TempDir's own cleanup: %v",
+				path, maxAttempts, time.Duration(maxAttempts)*retryDelay, err)
+			return
+		}
+		time.Sleep(retryDelay)
+	}
+}
+
+func TestIsolateTerraformTestBinary(t *testing.T) {
+	source, err := os.Executable()
+	require.NoError(t, err)
+
+	isolateTerraformTestBinary(t, source)
+
+	resolved, err := exec.LookPath(filepath.Base(source))
+	require.NoError(t, err)
+	assert.FileExists(t, resolved)
+	assert.NotEqual(t, filepath.Dir(source), filepath.Dir(resolved))
+	assert.Equal(t, filepath.Base(source), filepath.Base(resolved))
 }

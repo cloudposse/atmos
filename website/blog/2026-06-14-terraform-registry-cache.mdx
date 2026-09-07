@@ -1,0 +1,103 @@
+---
+slug: terraform-registry-cache
+title: "Terraform Registry Cache: Reproducible Infrastructure Builds"
+authors: [osterman]
+tags: [feature, experimental]
+date: 2026-06-14T12:00:00.000Z
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+
+Atmos can now transparently **cache Terraform and OpenTofu providers and modules** behind a single feature flag. Turn it on and repeated runs — local or CI — stop re-downloading the same artifacts, keep working when upstream registries are slow or down, and capture the exact versions a deployment used so builds stay reproducible. No changes to your Terraform code, provider declarations, or module sources.
+
+<!--truncate-->
+
+See it in action:
+
+<CastPlayer src="/casts/examples/caching/registry-cache.cast" title="atmos terraform registry cache" chrome controls scrubber />
+
+[View the full example](/examples/caching)
+
+## Your dependencies are artifacts — treat them that way
+
+Mature software projects treat their dependencies as **versioned, cached, reproducible artifacts**: pulled once, stored close by, and replayed for builds you can reproduce months or years later. Infrastructure code has had no equivalent. Providers and modules are re-fetched from upstream on every run, on every machine, in every CI job — and if a version moves or a registry has a bad day, your "reproducible" infrastructure isn't.
+
+This release brings that artifact model to your infrastructure. **You own your infrastructure and its dependencies** — Atmos just facilitates capturing, storing, and reproducing them. Caching is simply the mechanism that makes **reproducible infrastructure** practical, and it's built on a shared artifact-store + caching foundation that Atmos also uses for CI artifacts and (soon) bundles.
+
+## Terraform has no caching story for modules
+
+Terraform ships a shared **provider** plugin cache (`TF_PLUGIN_CACHE_DIR`), and providers are individually large, so that helps. But there is **no equivalent for modules** — and there's a structural reason why. Terraform vendors modules into each root module's own data directory (`.terraform/modules/`), and **two root modules can't share a `.terraform` data directory without conflict**. So there's nowhere to put a shared module cache: every root module downloads its own private copy.
+
+Across a real infrastructure that adds up fast. Any one component might pull only a handful of modules, but multiply that by **many instances of the same root modules**, modules **reused across many roots**, and every run on every machine, and the same sources get re-resolved and re-cloned **hundreds of times in aggregate**. There is no sharing across roots, no sharing across runs, and no sharing across machines.
+
+Atmos sidesteps the data-directory problem by caching one layer up — at the **registry and download** layer, before modules ever land in `.terraform/` — so every root module still gets its own private copy, but the bytes come from a shared local cache instead of the network.
+
+The cost isn't just bytes — it's **sheer request volume**. Every module is a registry round-trip (version listing, download resolution) before anything is fetched. The more modules your infrastructure pulls, the longer `init` takes and the more chances there are for a **transient error** — a slow registry, a rate limit, a flaky network — to fail the whole run. Terraform's answer to that is to make you re-run.
+
+What Atmos implements is an elegant, reusable cache that fills this gap for **both providers and modules**, and does so safely under **concurrent access across multiple Atmos and Terraform processes** — many readers, one downloader per artifact — so parallel components and CI jobs share one warm cache instead of stampeding the registry.
+
+Caching is one move under a larger umbrella: making Terraform runs **reproducible, fast, resilient, and secure by depth**. Capturing the exact artifacts a deployment used (reproducibility), cutting redundant downloads and request volume (performance), surviving registry outages and transient errors (resiliency), and funneling provider/module fetches through a single auditable egress you can restrict (defense in depth) are not separate features — they're incremental improvements that compound into stable infrastructure. The registry cache advances all of them at once.
+
+## What you get
+
+That framing is where the concrete wins come from:
+
+- **Speed & bandwidth** — repeated and CI runs reuse previously downloaded providers and modules instead of pulling them again.
+- **Reliability** — runs keep working during registry outages, and when a version disappears upstream you still have it.
+- **Reproducibility** — the exact providers and modules a deployment used are preserved, so it can be replayed later.
+- **Toward air-gapped** — a warm cache is the on-disk closure a future "atmos bundle" is built from.
+
+## Turn it on
+
+```yaml
+components:
+  terraform:
+    cache:
+      enabled: true
+```
+
+That's it. Atmos resolves a cache location, starts an ephemeral local network-mirror proxy on `127.0.0.1`, generates the Terraform CLI config that routes through it, populates the cache on demand, and tears the proxy down on exit. The cache persists on disk for the next run. When bytes are served from cache, Atmos prints a one-line **savings report** before exiting.
+
+You can tune the location and freshness:
+
+```yaml
+components:
+  terraform:
+    cache:
+      enabled: true
+      location: ~/.cache/atmos        # defaults to the XDG cache dir
+      metadata_ttl: 24h               # how long registry metadata stays fresh
+      stale_while_revalidate: 168h    # serve stale metadata while revalidating
+```
+
+## How it works
+
+Behind the scenes, Atmos starts a small HTTP proxy on localhost that acts as both a **provider network mirror** and a **module registry**. It manages Terraform's CLI configuration (the RC file) for you and points the tool at that local proxy — so every provider and module request quietly flows through it and checks the cache first. There's no daemon and nothing to run: the proxy spins up when a run starts and goes away when it ends, leaving the warm cache on disk.
+
+Hits are served straight from disk; misses are fetched once and stored. Registry metadata honors **TTLs and stale-while-revalidate**, so listings stay fresh without paying the round-trip every time, and responses stay snappy. And because parallel components and CI jobs hit the same cache, Atmos handles **file locking across processes and operating systems** — one downloader, many readers, no corrupted half-downloads.
+
+Because it speaks Terraform's own mirror protocols and stores providers in the standard mirror layout, the cache plays nicely with `terraform providers mirror` and offline `filesystem_mirror` too.
+
+## What's cached
+
+- **Providers** — fully cached via the Provider Network Mirror Protocol, stored in the canonical `filesystem_mirror` layout so `terraform providers mirror` and offline `filesystem_mirror` interchange with the proxy.
+- **Modules** — registry version listings and download resolution are cached, and HTTP-archive modules are cached in full. Module sources that resolve to `git::` (the common case for the public registry and mono-repos) pass through unchanged today — a dedicated **git mirror** will complete that picture in a follow-up.
+
+## Works with Terraform and OpenTofu — including private registries
+
+Both tools speak the same protocols and headers, and the mirrors are host-keyed, so `registry.terraform.io`, `registry.opentofu.org`, and private registry hosts all just work. The proxy forwards your request headers and credentials to upstream (honoring `TF_TOKEN_<host>` and `TOFU_TOKEN_<host>`), and forwards Terraform's own `User-Agent` verbatim so registries still see exactly who's calling.
+
+## Manage the cache
+
+```shell
+atmos terraform cache list      # list cached providers and modules
+atmos terraform cache stats     # size, object count, provider/module breakdown
+atmos terraform cache prune     # drop stale metadata (keeps immutable artifacts)
+atmos terraform cache delete <key>
+```
+
+`stats` reports what the filesystem can tell us — size, counts, breakdown — and intentionally not a hit rate: a hit is a per-run event, surfaced by the savings report, not stored state.
+
+## Get involved
+
+This feature is **experimental** while we expand it (object-storage backends for shared CI/team caches, `cache warm`/`export`/`import`, and the git mirror are next). Try `components.terraform.cache.enabled: true` on a repo with a warm cache and watch the savings report. Feedback and issues are very welcome.

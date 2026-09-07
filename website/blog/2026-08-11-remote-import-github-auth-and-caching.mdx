@@ -1,0 +1,85 @@
+---
+slug: remote-import-github-auth-and-caching
+title: "Remote Imports: Automatic GitHub Auth, Failure Warnings, and Caching"
+date: 2026-08-11T12:00:00.000Z
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+Centralizing shared configuration in one private Git repository, and reusing it across projects, is not a
+new idea. Mergify and Dependabot both support extending a project's configuration from a shared repository.
+Doing the same for a general-purpose tool usually means a git submodule or subtree, and both are
+cumbersome. Atmos supports this natively: a project's `atmos.yaml` or stack manifest adds a remote import,
+a `git::` URL that points at the centralized repository, with no submodule or subtree involved.
+
+Resolving that import still had rough edges. Git fetch authentication was separate from a developer's
+GitHub CLI session, so `gh auth login` alone was not enough for a private import. A broken import failed
+silently: a tag name with a typo, an unreachable host, or a token without read access all added nothing to
+the configuration, with no warning. And a `git::` import with a subdirectory re-cloned on every single
+command, even when nothing had changed.
+
+Atmos already reused a developer's GitHub CLI session for other GitHub operations, such as toolchain
+installs. Atmos now reuses that same session for private `git::` imports too. This applies to both stack
+configuration imports and `atmos.yaml` configuration imports. Atmos also warns you when an import fails.
+Atmos also lets you cache imports to avoid unnecessary re-fetching.
+
+<!--truncate-->
+
+## The Problem
+
+- **Git fetch authentication was separate from GitHub CLI authentication.** A private `git::` import used
+  its own credential chain. This chain did not include the GitHub CLI. A developer who ran only
+  `gh auth login` still needed a separate token for private imports to work.
+- **A broken import failed with no warning.** A typo in a `?ref=` value, an unreachable host, or an
+  unreadable private repository all produced the same result. The import added nothing to the
+  configuration. No error appeared. The command exited successfully.
+- **Every command re-cloned a `git::` import.** A root `atmos.yaml` import that pointed at a subdirectory
+  in a Git repository had no cache. A command as simple as checking the current identity re-cloned the
+  remote repository first.
+
+## The Fix
+
+- Private `git::` imports now fall back to a developer's GitHub CLI session automatically. This covers
+  config imports, vendoring, and private Terraform module fetches. Atmos already used this fallback for
+  other GitHub operations. If `gh auth login` is already done, no other setup is needed.
+- A remote `import:` entry that fails to resolve now prints a warning by default. The warning names the
+  import path and the underlying error. The command no longer continues silently with an empty or partial
+  configuration.
+- Set `imports: { ttl: ... }` once in `atmos.yaml` to apply the same expiry policy to every remote import
+  form. A `git::` import with a subdirectory then reuses its clone across commands instead of re-cloning
+  every time. A plain remote URL, or a `git::` import without a subdirectory, then expires after `ttl`
+  instead of being cached forever. The two forms track freshness differently under the hood (a marker
+  file in the cloned directory for the first, a cache entry for the second), but `ttl` now governs both.
+
+## How to Use It
+
+Sign in once. Private imports then work automatically:
+
+```bash
+gh auth login
+```
+
+If an import breaks, Atmos reports it immediately:
+
+```text
+WARN  failed to resolve import path="git::https://github.com/acme/config.git//auth.yaml?ref=v1.2.3" error="..."
+```
+
+Set a cache TTL to stop re-fetching a stable, pinned `git::` import on every command:
+
+```yaml title="atmos.yaml"
+imports:
+  ttl: 5m
+
+import:
+  - "git::https://github.com/acme/config.git//auth.yaml?ref=v1.2.3"
+```
+
+Leave `ttl` unset to keep each import form's default: a `git::` subdirectory import refreshes on every
+command, and a plain remote URL is cached forever. Set `ttl` once to apply the same expiry to every
+remote import in the file, of either form.
+
+## Get Involved
+
+Did you find another case where a remote import fails silently? Did you find an operation where GitHub
+CLI auth does not reach, but should? Open an issue. Include the command and the result you saw.

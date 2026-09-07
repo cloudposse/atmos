@@ -116,6 +116,8 @@ func TestExecuteDescribeStacksForInstances_AuthDisabledDispatchesToAuthDisabledM
 		true, // processYamlFunctions
 		nil,  // skip
 		true, // authDisabled — the bit under test.
+		nil,  // tagsFilter
+		nil,  // labelsFilter
 	)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -145,6 +147,8 @@ func TestExecuteDescribeStacksForInstances_AuthDisabledFalseUsesRegularPath(t *t
 		false, // processYamlFunctions
 		nil,   // skip
 		false, // authDisabled=false — regular path expected.
+		nil,   // tagsFilter
+		nil,   // labelsFilter
 	)
 	require.NoError(t, err)
 	assert.True(t, fake.executeDescribeStacksCalled,
@@ -169,10 +173,37 @@ func TestExecuteDescribeStacksForInstances_FallsBackWhenInterfaceNotImplemented(
 		false, // processYamlFunctions
 		nil,   // skip
 		true,  // authDisabled=true but processor doesn't implement the optional interface.
+		nil,   // tagsFilter
+		nil,   // labelsFilter
 	)
 	require.NoError(t, err)
 	assert.True(t, fake.called,
 		"a processor that doesn't implement authDisabledStacksProcessor must still be called via the regular path")
+}
+
+// TestExecuteDescribeStacksForInstances_ScopedFiltersFallBackWhenUnsupported
+// covers the fail-open contract of the scoped dispatch branch: tags/labels
+// filters must not break dispatch for a processor without the optional
+// scopedStacksProcessor interface — the run falls through to the
+// auth-disabled path and simply describes unscoped.
+func TestExecuteDescribeStacksForInstances_ScopedFiltersFallBackWhenUnsupported(t *testing.T) {
+	fake := &authDisabledFakeProcessor{}
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	_, err := executeDescribeStacksForInstances(
+		atmosConfig,
+		fake,
+		nil,                              // authManager
+		true,                             // processTemplates
+		true,                             // processYamlFunctions
+		nil,                              // skip
+		true,                             // authDisabled
+		[]string{"production"},           // tagsFilter
+		map[string]string{"env": "prod"}, // labelsFilter
+	)
+	require.NoError(t, err)
+	assert.True(t, fake.executeDescribeStacksAuthDisabled,
+		"a processor without the scoped interface must fall back to the auth-disabled path")
 }
 
 // TestProcessInstancesWithDeps_AuthDisabledPropagatesAuthDisabledFlag verifies
@@ -199,7 +230,7 @@ func TestProcessInstancesWithDeps_AuthDisabledPropagatesAuthDisabledFlag(t *test
 	}
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	instances, err := processInstancesWithDeps(
+	instances, _, err := processInstancesWithDeps(
 		atmosConfig,
 		fake,
 		nil,   // authManager
@@ -208,6 +239,8 @@ func TestProcessInstancesWithDeps_AuthDisabledPropagatesAuthDisabledFlag(t *test
 		nil,   // skip
 		"",    // stackPattern
 		true,  // authDisabled
+		nil,   // tagsFilter
+		nil,   // labelsFilter
 	)
 	require.NoError(t, err)
 	require.Len(t, instances, 1)
@@ -243,7 +276,7 @@ func TestProcessInstances_AuthDisabledConstructsDefaultProcessor(t *testing.T) {
 		},
 	}
 
-	instances, err := processInstances(
+	instances, _, err := processInstances(
 		atmosConfig,
 		nil,   // authManager
 		false, // processTemplates
@@ -251,6 +284,8 @@ func TestProcessInstances_AuthDisabledConstructsDefaultProcessor(t *testing.T) {
 		nil,   // skip
 		"",    // stackPattern
 		true,  // authDisabled
+		nil,   // tagsFilter
+		nil,   // labelsFilter
 	)
 	// With no stacks configured, ExecuteDescribeStacksWithAuthDisabled returns
 	// an empty map; the upstream collector then returns an empty slice. The

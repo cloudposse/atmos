@@ -78,6 +78,17 @@ func setupOutputModeCapture(t *testing.T) (*bytes.Buffer, *bytes.Buffer, func())
 		iolib.Reset()
 		ui.Reset()
 		data.Reset()
+
+		// Re-initialize against the now-restored os.Stdout/os.Stderr, mirroring
+		// TestMain's own setup: pkg/data's globals are shared package-level
+		// state for the whole test binary, and leaving them reset would panic
+		// ("data.InitWriter() must be called before using data package
+		// functions") in any test that runs after this one and doesn't set up
+		// its own I/O context first -- exactly what -shuffle=on can surface.
+		require.NoError(t, iolib.Initialize())
+		ioCtx = iolib.GetContext()
+		ui.InitFormatter(ioCtx)
+		data.InitWriter(ioCtx)
 	}
 
 	return stdout, stderr, cleanup

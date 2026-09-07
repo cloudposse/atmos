@@ -87,6 +87,43 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 	return nil
 }
 
+// FetchWithMetadata fetches like Fetch, additionally returning best-effort HTTP cache metadata
+// (ETag/Last-Modified) captured from the response when the underlying client exposes any -- empty
+// for non-HTTP sources (git, OCI, local) or when the fetch itself fails.
+func (fd *fileDownloader) FetchWithMetadata(src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Pre-check GitHub rate limits for GitHub HTTP URLs.
+	if isGitHubHTTPURL(src) {
+		if err := github.WaitForRateLimit(ctx, MinRateLimitRemaining); err != nil {
+			log.Warn("Rate limit wait interrupted", "error", err)
+			// Continue anyway - don't block on rate limit check failures.
+		}
+	}
+
+	client, err := fd.clientFactory.NewClient(ctx, src, dest, mode)
+	if err != nil {
+		return FetchMetadata{}, errUtils.Build(errUtils.ErrCreateDownloadClient).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Check that the URL format is valid").
+			Err()
+	}
+
+	if err := client.Get(); err != nil {
+		return FetchMetadata{}, fmt.Errorf(errWrapFormat, errUtils.ErrDownloadFile, err)
+	}
+
+	// DownloadClient implementations that don't do HTTP (git, OCI, local copy, test mocks/fakes)
+	// simply don't implement Metadata() and get a zero-value result here -- deliberately not part
+	// of the DownloadClient interface itself, see FetchWithMetadata's doc comment.
+	if provider, ok := client.(interface{ Metadata() FetchMetadata }); ok {
+		return provider.Metadata(), nil
+	}
+	return FetchMetadata{}, nil
+}
+
 // FetchAutoParse downloads a remote file, detects its format, and parses it.
 func (fd *fileDownloader) FetchAndAutoParse(src string) (any, error) {
 	filePath := fd.tempPathGenerator()

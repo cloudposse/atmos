@@ -11,6 +11,7 @@ import (
 	listtree "github.com/cloudposse/atmos/pkg/list/tree"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	uitree "github.com/cloudposse/atmos/pkg/ui/tree"
 )
 
 const (
@@ -37,7 +38,9 @@ func RenderInstancesTree(stacksWithComponents map[string]map[string][]*listtree.
 	treeOutput := root.String()
 	cleanedOutput := cleanupSpacerMarkers(treeOutput, []string{spacerMarker, componentSpacerMarker})
 
-	return header + cleanedOutput + treeNewline
+	// Keep one trailing newline here; callers use data.Writeln, which adds a
+	// second newline and leaves a deliberate blank line before the shell prompt.
+	return header + strings.TrimRight(cleanedOutput, treeNewline) + treeNewline
 }
 
 // renderTreeHeader creates and renders a styled header for tree output.
@@ -48,7 +51,11 @@ func renderTreeHeader(title string) string {
 		Bold(true).
 		Padding(0, 1)
 
-	return h1Style.Render(title) + treeNewline
+	// Lipgloss padding is useful in a terminal, but its right-hand space leaks
+	// into plain-text output and makes snapshots and pipelines carry trailing
+	// whitespace. Keep the visual left padding while trimming the data-channel
+	// suffix.
+	return strings.TrimRight(h1Style.Render(title), " ") + treeNewline
 }
 
 // buildInstancesRootTree builds the root tree structure for instances.
@@ -88,10 +95,17 @@ func getSortedStackNames(stacksWithComponents map[string]map[string][]*listtree.
 	return stackNames
 }
 
-// cleanupSpacerMarkers removes spacer markers from tree output and replaces with styled vertical bars.
+// cleanupSpacerMarkers replaces the spacer placeholder rows lipgloss rendered with the
+// spacer rows that belong there. Spacers are added to the tree as marker-titled child
+// nodes so lipgloss positions them; pkg/ui/tree then derives each spacer's gutter from
+// the rendered row, keeping every ancestor rail and turning the node's own connector into
+// a rail, so nested spacers stay connected to the rows around them (an earlier version
+// counted leading spaces and emitted a single bar, which dropped the ancestor rails of any
+// nested spacer).
 func cleanupSpacerMarkers(treeOutput string, markers []string) string {
 	lines := strings.Split(treeOutput, treeNewline)
 	cleaned := make([]string, 0, len(lines))
+	style := getBranchStyle()
 
 	for _, line := range lines {
 		plainLine := stripANSI(line)
@@ -101,10 +115,7 @@ func cleanupSpacerMarkers(treeOutput string, markers []string) string {
 			continue
 		}
 
-		// Replace spacer line with styled vertical bar.
-		indent := getIndentLevel(plainLine)
-		style := getBranchStyle()
-		cleaned = append(cleaned, strings.Repeat(" ", indent)+style.Render("│"))
+		cleaned = append(cleaned, style.Render(uitree.SpacerFromConnectorRow(plainLine)))
 	}
 
 	return strings.Join(cleaned, treeNewline)
@@ -118,18 +129,6 @@ func containsAnyMarker(s string, markers []string) bool {
 		}
 	}
 	return false
-}
-
-// getIndentLevel returns the number of leading spaces in a string.
-func getIndentLevel(s string) int {
-	indent := 0
-	for _, ch := range s {
-		if ch != ' ' {
-			break
-		}
-		indent++
-	}
-	return indent
 }
 
 // buildStackNodeWithComponents creates a tree node for a stack with its components.

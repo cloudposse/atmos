@@ -10,22 +10,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestDefaultConfig(t *testing.T) {
-	assert.Equal(t, "components/container", DefaultConfig().BasePath)
-}
-
-func TestParseConfig(t *testing.T) {
-	config, err := parseConfig(map[string]any{"base_path": "custom/container"})
-	require.NoError(t, err)
-	assert.Equal(t, "custom/container", config.BasePath)
-}
-
-func TestParseConfig_DecodeError(t *testing.T) {
-	// A non-map raw value cannot decode into the Config struct.
-	_, err := parseConfig([]any{1, 2, 3})
-	require.Error(t, err)
-}
-
 func TestDecodeSection(t *testing.T) {
 	var build schema.ContainerBuildStep
 	require.NoError(t, decodeSection(map[string]any{"context": "app", "dockerfile": "Dockerfile"}, &build))
@@ -109,8 +93,39 @@ func TestContainerSpec_ToBuildConfig(t *testing.T) {
 	assert.Equal(t, []string{"img:1"}, bc.Tags)
 	assert.Equal(t, "prod", bc.Target)
 	assert.True(t, bc.NoCache)
+	assert.Nil(t, bc.Driver)
+	assert.Nil(t, bc.Cache)
 
 	assert.Nil(t, (&ContainerSpec{}).ToBuildConfig())
+}
+
+func TestContainerSpec_ToBuildConfig_DriverAndCache(t *testing.T) {
+	spec := ContainerSpec{Build: &schema.ContainerBuildStep{
+		Context:    "app",
+		Dockerfile: "Dockerfile",
+		Driver: &schema.ContainerDriverConfig{
+			Name:     "atmos",
+			Provider: "docker-container",
+			Opts:     map[string]string{"image": "mirror.gcr.io/moby/buildkit:buildx-stable-1"},
+		},
+		Cache: &schema.ContainerCacheConfig{
+			From: []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache"}},
+			To:   []map[string]string{{"type": "registry", "ref": "registry.example.com/app:buildcache", "mode": "max"}},
+		},
+	}}
+	bc := spec.ToBuildConfig()
+	require.NotNil(t, bc)
+
+	require.NotNil(t, bc.Driver)
+	assert.Equal(t, "atmos", bc.Driver.Name)
+	assert.Equal(t, "docker-container", bc.Driver.Provider)
+	assert.Equal(t, "mirror.gcr.io/moby/buildkit:buildx-stable-1", bc.Driver.Opts["image"])
+
+	require.NotNil(t, bc.Cache)
+	require.Len(t, bc.Cache.From, 1)
+	assert.Equal(t, "registry.example.com/app:buildcache", bc.Cache.From[0]["ref"])
+	require.Len(t, bc.Cache.To, 1)
+	assert.Equal(t, "max", bc.Cache.To[0]["mode"])
 }
 
 func TestContainerSpec_CommandArgs(t *testing.T) {

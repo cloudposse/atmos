@@ -4,6 +4,7 @@ description: "AWS EKS commands in Atmos: atmos aws eks update-kubeconfig, atmos 
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: aws
 ---
 
 # Atmos AWS EKS

@@ -45,18 +45,18 @@ Infrastructure automation should not force a choice between "simple but slow" an
 4. Make failure behavior part of the workflow contract, not buried in scripts. *(Shipped)*
 5. Fan a single step template across a matrix of axes. *(Shipped)*
 6. Start a step in the background, continue the workflow, and later synchronize on it (`wait`) or
-   tear it down (`cancel`) — enabling long-running local services (emulators, registries, k3s,
-   devcontainers) inside a workflow. *(Proposed)*
+    tear it down (`cancel`) — enabling long-running local services (emulators, registries, k3s,
+    devcontainers) inside a workflow. *(Proposed)*
 
 ## Non-Goals
 
 1. **GitHub Actions `parallel`-as-sugar.** Atmos `parallel` is a structured DAG block, not syntactic
-   sugar for "background a group + wait-all." See [Relationship to GitHub Actions](#relationship-to-github-actions).
+    sugar for "background a group + wait-all." See [Relationship to GitHub Actions](#relationship-to-github-actions).
 2. **A new readiness mechanism.** Container readiness reuses the existing `healthcheck:` +
-   `container.WaitHealthy`; v1 adds no `ready:` field. A non-Docker readiness probe (tcp/http/log) is
-   deferred until the non-container (shell/atmos) background `Runner` lands.
+    `container.WaitHealthy`; v1 adds no `ready:` field. A non-Docker readiness probe (tcp/http/log) is
+    deferred until the non-container (shell/atmos) background `Runner` lands.
 3. **Interactive child steps inside concurrent groups.** Prompts, pagers, spinners, editors, and
-   terminal-owning renderers stay outside concurrent groups for now.
+    terminal-owning renderers stay outside concurrent groups for now.
 4. **Conditional branching.** No if/else in workflows (use `when` / shell).
 
 ---

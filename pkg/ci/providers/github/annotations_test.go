@@ -3,6 +3,7 @@ package github
 import (
 	"bytes"
 	"errors"
+	stdio "io"
 	"strings"
 	"testing"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
 func TestFormatAnnotation(t *testing.T) {
@@ -61,39 +64,55 @@ func TestFormatAnnotation(t *testing.T) {
 	}
 }
 
+// testStreams is a minimal Streams implementation for capturing data-channel
+// output in tests, mirroring pkg/data/data_test.go's testStreams helper.
+type testStreams struct {
+	stdin  stdio.Reader
+	stdout stdio.Writer
+	stderr stdio.Writer
+}
+
+func (ts *testStreams) Input() stdio.Reader     { return ts.stdin }
+func (ts *testStreams) Output() stdio.Writer    { return ts.stdout }
+func (ts *testStreams) Error() stdio.Writer     { return ts.stderr }
+func (ts *testStreams) RawOutput() stdio.Writer { return ts.stdout }
+func (ts *testStreams) RawError() stdio.Writer  { return ts.stderr }
+
+// errWriter fails every write, standing in for a broken output stream.
+type errWriter struct{}
+
+func (errWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
+
 func TestProvider_Annotate_WritesOneLinePerFinding(t *testing.T) {
-	var buf bytes.Buffer
-	prev := workflowCommandsOut
-	workflowCommandsOut = &buf
-	defer func() { workflowCommandsOut = prev }()
+	stdout := &bytes.Buffer{}
+	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: stdout, stderr: &bytes.Buffer{}}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
 
 	p := NewProvider()
-	err := p.Annotate([]provider.Annotation{
+	err = p.Annotate([]provider.Annotation{
 		{Path: "a.tf", StartLine: 1, Level: provider.AnnotationError, Title: "R1", Message: "first"},
 		{Path: "b.tf", StartLine: 2, Level: provider.AnnotationWarning, Title: "R2", Message: "second"},
 	})
 	require.NoError(t, err)
 
-	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	lines := strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n")
 	require.Len(t, lines, 2)
 	assert.Equal(t, "::error file=a.tf,line=1,title=R1::first", lines[0])
 	assert.Equal(t, "::warning file=b.tf,line=2,title=R2::second", lines[1])
 }
 
-// failWriter fails every write, standing in for a broken log stream.
-type failWriter struct{}
-
-func (failWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
-
 // A write failure on the annotation stream surfaces as an error rather than
 // being silently dropped.
 func TestProvider_Annotate_WriteErrorPropagates(t *testing.T) {
-	prev := workflowCommandsOut
-	workflowCommandsOut = failWriter{}
-	defer func() { workflowCommandsOut = prev }()
+	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: errWriter{}, stderr: &bytes.Buffer{}}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
 
 	p := NewProvider()
-	err := p.Annotate([]provider.Annotation{
+	err = p.Annotate([]provider.Annotation{
 		{Path: "a.tf", StartLine: 1, Level: provider.AnnotationError, Title: "R1", Message: "first"},
 	})
 	require.Error(t, err)
