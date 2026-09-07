@@ -42,16 +42,45 @@ func executeBulk(
 		return err
 	}
 
-	return executeGraph(ctx.GoContext(), &component.GraphExecutionOptions{
-		Provider:      &ComponentProvider{},
+	command := info.SubCommand
+	if command == "" {
+		command = string(operation)
+	}
+	provider, collector, cleanup := setupHelmBulkAggregateCollector(ctx, command)
+	defer cleanup()
+
+	graphErr := executeGraph(ctx.GoContext(), &component.GraphExecutionOptions{
+		Provider:      provider,
 		AtmosConfig:   atmosConfig,
 		Info:          info,
 		Stacks:        stacks,
 		ComponentType: cfg.HelmComponentType,
-		SubCommand:    string(operation),
+		SubCommand:    command,
 		Flags:         ctx.Flags,
 		Selection:     selection,
+		ReverseOrder:  operation == OperationDelete,
 	})
+	if collector != nil {
+		runHelmAggregateCIHook(ctx, atmosConfig, info, collector.resultSet(), graphErr)
+	}
+	return graphErr
+}
+
+func setupHelmBulkAggregateCollector(
+	ctx *component.ExecutionContext,
+	command string,
+) (component.ComponentProvider, *helmBulkCICollector, func()) {
+	if !supportsHelmAggregateCI(command) {
+		return &ComponentProvider{}, nil, func() {}
+	}
+
+	collector := newHelmBulkCICollector(command)
+	if ctx.Flags == nil {
+		ctx.Flags = make(map[string]any)
+	}
+	ctx.Flags[helmBulkCICollectorFlag] = collector
+	provider := &bulkCollectingProvider{ComponentProvider: &ComponentProvider{}, collector: collector}
+	return provider, collector, func() { delete(ctx.Flags, helmBulkCICollectorFlag) }
 }
 
 func authManagerForBulk(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
