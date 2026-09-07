@@ -1,6 +1,7 @@
 package ansible
 
 import (
+	"context"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -10,10 +11,31 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestRunVersionFallbackPreservesCommandContext(t *testing.T) {
+	originalGet, originalExecute := getComponentProvider, executeVersionDirect
+	t.Cleanup(func() {
+		getComponentProvider, executeVersionDirect = originalGet, originalExecute
+	})
+	getComponentProvider = func(string) (component.ComponentProvider, bool) { return nil, false }
+
+	type contextKey struct{}
+	want := context.WithValue(context.Background(), contextKey{}, "ansible-version")
+	executeVersionDirect = func(got context.Context, _ *schema.ConfigAndStacksInfo) error {
+		assert.Same(t, want, got)
+		assert.Equal(t, "ansible-version", got.Value(contextKey{}))
+		return nil
+	}
+
+	command := &cobra.Command{Use: "version"}
+	command.SetContext(want)
+	require.NoError(t, runVersion(command, nil))
+}
 
 func initAnsibleCommandTest(t *testing.T) {
 	t.Helper()

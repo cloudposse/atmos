@@ -24,6 +24,7 @@ const targetKey = "target"
 // upgrades the Helm release directly; any other kind (e.g. "git") receives the
 // rendered manifests as a producer-agnostic ProvisionArtifact via the registry.
 func deliverApply(
+	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	flags map[string]any,
@@ -46,9 +47,13 @@ func deliverApply(
 
 	// Cluster delivery installs/upgrades the Helm release directly.
 	if selected.Kind == target.KindKubernetes {
-		result, err := applyHelmRelease(context.Background(), spec, info.DryRun)
+		progress := newHelmApplyProgress(info, spec, string(OperationApply), info.DryRun)
+		spec.Progress = progress
+		progress.start()
+		result, err := applyHelmRelease(ctx, spec, info.DryRun)
+		progress.finish(err)
+		spec.Progress = nil
 		spec.Lifecycle = result.Lifecycle
-		emitLifecycleWarnings(result.Lifecycle.Warnings)
 		summary["manifest_bytes"] = len(result.Manifest)
 		summary["release"] = lifecycleSummary(result.Operation, result.Lifecycle.Policy)
 		if objects, decodeErr := manifest.DecodeObjects([]byte(result.Manifest)); decodeErr == nil {
@@ -65,7 +70,7 @@ func deliverApply(
 		"reason":      "external_target",
 	}
 
-	return deliverToExternalTarget(atmosConfig, info, selected, spec, summary)
+	return deliverToExternalTarget(ctx, atmosConfig, info, selected, spec, summary)
 }
 
 func lifecycleSummary(operation string, policy effectiveReleasePolicy) map[string]any {
@@ -95,13 +100,14 @@ func lifecycleSummary(operation string, policy effectiveReleasePolicy) map[strin
 // to a non-cluster provision target (e.g. a Git deployment repository) as a
 // producer-agnostic ProvisionArtifact via the target registry.
 func deliverToExternalTarget(
+	callerCtx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	selected *target.SelectedTarget,
 	spec *chartSpec,
 	summary map[string]any,
 ) (map[string]any, error) {
-	objects, err := renderObjects(spec)
+	objects, err := renderObjects(callerCtx, spec)
 	if err != nil {
 		return summary, err
 	}
@@ -123,7 +129,7 @@ func deliverToExternalTarget(
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), deliveryTimeout)
+	ctx, cancel := context.WithTimeout(callerCtx, deliveryTimeout)
 	defer cancel()
 
 	return summary, target.Deliver(ctx, selected.Kind, &target.DeliverInput{
