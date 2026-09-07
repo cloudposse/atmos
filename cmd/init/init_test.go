@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -738,16 +739,27 @@ func TestInitCmd_RunE_UpdateWithPositionalTarget_ResolvesBaseRefFromRealTargetPi
 	metadata := storage.NewInitMetadata("simple", "1.0.0", "embedded", "missing-ref", nil)
 	require.NoError(t, storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Save(metadata))
 
-	initCmd.SetArgs([]string{
-		"--update", "--interactive=false", "--force=false", "--no-git",
-		"--set", "project_name=demo", "simple", dir,
-	})
-	t.Cleanup(func() {
-		_ = initCmd.Flags().Set("update", "false")
-		_ = initCmd.Flags().Set("no-git", "false")
-	})
+	// RunE binds this test's flags to the global viper.GetViper() singleton
+	// (BindFlagsToViper), which outlives the test unless reset. Registering a
+	// fresh *cobra.Command with initCmd's flags (rather than calling
+	// initCmd.SetArgs/Execute on the shared package-level initCmd) also keeps
+	// this test from mutating initCmd's own FlagSet -- see the identical
+	// pattern and rationale in
+	// cmd/scaffold/scaffold_coverage_test.go's
+	// TestScaffoldGenerateRunE_UpdateFlagWithPositionalTarget_ResolvesBaseRef
+	// (cmd.NewTestKit only restores RootCmd state and isn't available to this
+	// package: it would create an import cycle back into cmd).
+	t.Cleanup(func() { viper.Reset() })
 
-	err = initCmd.Execute()
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("force", "false"))
+	require.NoError(t, cmd.Flags().Set("no-git", "true"))
+	require.NoError(t, cmd.Flags().Set("set", "project_name=demo"))
+
+	err = initCmd.RunE(cmd, []string{"simple", dir})
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidBaseRef)
@@ -764,15 +776,20 @@ func TestInitCmd_RunE_UpdateWithPositionalTarget_PropagatesMetadataLoadError(t *
 	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
 	require.NoError(t, os.WriteFile(metadataPath, []byte("not: valid: yaml: ["), 0o600))
 
-	initCmd.SetArgs([]string{
-		"--update", "--interactive=false", "--force=false", "--no-git", "simple", dir,
-	})
-	t.Cleanup(func() {
-		_ = initCmd.Flags().Set("update", "false")
-		_ = initCmd.Flags().Set("no-git", "false")
-	})
+	// See the comment in
+	// TestInitCmd_RunE_UpdateWithPositionalTarget_ResolvesBaseRefFromRealTargetPin
+	// above for why this uses a fresh *cobra.Command plus a viper.Reset
+	// cleanup instead of calling initCmd.SetArgs/Execute directly.
+	t.Cleanup(func() { viper.Reset() })
 
-	err := initCmd.Execute()
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("force", "false"))
+	require.NoError(t, cmd.Flags().Set("no-git", "true"))
+
+	err := initCmd.RunE(cmd, []string{"simple", dir})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resolve default --base-ref")
