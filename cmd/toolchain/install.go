@@ -27,13 +27,10 @@ var installCmd = &cobra.Command{
 	Short: "Install CLI binaries from the registry",
 	Long: `Install one or more CLI binaries using metadata from the registry.
 
-The tool(s) should be specified in the format: owner/repo@version
-
-Examples:
-  atmos toolchain install hashicorp/terraform@1.5.0
-  atmos toolchain install opentofu@1.6.0 tflint@0.50.0 kubectl@1.29.0
-`,
-	Args:          cobra.ArbitraryArgs,
+The tool(s) should be specified in the format: owner/repo@version`,
+	Args: cobra.ArbitraryArgs,
+	Example: `  atmos toolchain install hashicorp/terraform@1.5.0
+  atmos toolchain install opentofu@1.6.0 tflint@0.50.0 kubectl@1.29.0`,
 	RunE:          runInstall,
 	SilenceUsage:  true, // Don't show usage on error.
 	SilenceErrors: true, // Don't show errors twice.

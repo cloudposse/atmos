@@ -15,6 +15,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/templatefuncs"
 )
 
 // FuncMap creates and returns a map of template functions.
@@ -28,9 +29,10 @@ func FuncMap(
 
 	atmosFuncs := &AtmosFuncs{atmosConfig, configAndStacksInfo, ctx, gomplateData}
 
-	return map[string]any{
-		"atmos": func() any { return atmosFuncs },
-	}
+	funcs := templatefuncs.FuncMap()
+	funcs["atmos"] = func() any { return atmosFuncs }
+
+	return funcs
 }
 
 // AtmosFuncs exposes functions available in templates via the "atmos" namespace.

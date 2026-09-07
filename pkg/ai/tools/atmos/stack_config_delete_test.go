@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
@@ -142,8 +141,13 @@ func TestStackConfigDeleteTool_Execute_NothingToDelete(t *testing.T) {
 	assert.False(t, result.Data["deleted"].(bool))
 }
 
-func TestStackConfigDeleteTool_Execute_InheritedValueRequiresFile(t *testing.T) {
-	atmosConfig, _ := stackConfigLiveFixture(t)
+// TestStackConfigDeleteTool_Execute_ImportOnlyValue covers a value that's
+// only ever declared in the imported catalog manifest (vars.region), never
+// re-declared by the importing stack -- resolveStackEditTarget now resolves
+// this to the catalog file (a concrete editable node), so it succeeds without
+// needing an explicit "file" param.
+func TestStackConfigDeleteTool_Execute_ImportOnlyValue(t *testing.T) {
+	atmosConfig, stacksDir := stackConfigLiveFixture(t)
 	tool := NewStackConfigDeleteTool(atmosConfig)
 
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
@@ -151,7 +155,9 @@ func TestStackConfigDeleteTool_Execute_InheritedValueRequiresFile(t *testing.T) 
 		paramComponent: "vpc",
 		"path":         "vars.region",
 	})
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+
+	_, err = atmosyaml.GetFile(filepath.Join(stacksDir, "catalog", "vpc.yaml"), "components.terraform.vpc.vars.region")
 	require.Error(t, err)
-	assert.False(t, result.Success)
-	require.ErrorIs(t, err, errUtils.ErrAIStackConfigPathNotEditable)
 }

@@ -134,6 +134,8 @@ func TestIsLocalOrOCI(t *testing.T) {
 	assert.True(t, isLocalOrOCI("oci://ghcr.io/acme/chart"))
 	assert.True(t, isLocalOrOCI("./charts/foo"))
 	assert.True(t, isLocalOrOCI("/abs/charts/foo"))
+	// A bare reference that resolves on disk (relative to the working dir) is local.
+	assert.True(t, isLocalOrOCI("testdata"))
 	assert.False(t, isLocalOrOCI("bitnami/nginx"))
 }
 

@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=schema.json
+# Regression coverage for the checkRemoteStateBackendTypeMatch/checkTerraformBackendTypeMatch
+# error message. Reproduces the exact shape found in cloudposse/infra-live: an org-level
+# manifest sets a global s3 remote_state_backend default (no remote_state_backend_type set
+# anywhere), and one component in a stack UNRELATED to the one being queried overrides
+# backend_type: local with a valid backend.local section but no matching remote-state override.
+# See tests/fixtures/scenarios/remote-state-backend-type-mismatch/stacks/sandbox.yaml.
+#
+# This is intentionally correct-but-surprising behavior, not a bug to remove: Atmos merges the
+# whole stacks map before filtering to the requested stack, so a genuine misconfiguration
+# anywhere blocks `describe stacks`/`terraform plan` for every stack, including totally
+# unrelated ones. The two things this guards are (1) that the mismatch keeps erroring rather
+# than silently resolving to an empty remote-state config (the pre-1.226.0 bug this check was
+# added to catch), and (2) that the error names the actual offending component and stack
+# directly in the printed hint -- previously that only existed as WithContext, which the CLI's
+# default (non---verbose) renderer drops, making the failure effectively unsleuthable in a
+# large repo (see internal/exec/stack_processor_backend_test.go's
+# TestProcessTerraformRemoteStateBackend_InheritedLocalTypeMismatch for the underlying unit).
+tests:
+  - name: "remote-state-backend-type-mismatch: unrelated stack's local backend_type blocks an unrelated describe stacks query"
+    enabled: true
+    tty: false
+    snapshot: false
+    clean: true
+    description: "describe stacks -s dev fails because of the sandbox stack's bootstrap component, and names it in the error"
+    workdir: "fixtures/scenarios/remote-state-backend-type-mismatch/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "stacks"
+      - "-s"
+      - "dev"
+    expect:
+      exit_code: 1
+      stderr:
+        - "component \"bootstrap\""
+        - "stack \"sandbox\""
+        - "remote_state_backend_type is \"local\""

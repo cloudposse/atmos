@@ -389,6 +389,40 @@ func TestGetBasePathForComponentType(t *testing.T) {
 			expectedPath: "/workspace/components/packer",
 		},
 		{
+			name:          "container_with_env_override",
+			componentType: "container",
+			setupConfig: func() *schema.AtmosConfiguration {
+				return &schema.AtmosConfiguration{
+					BasePath: "/workspace",
+					Components: schema.Components{
+						Container: schema.ContainerComponentsConfig{
+							BasePath: "components/container",
+						},
+					},
+				}
+			},
+			setupEnv: map[string]string{
+				"ATMOS_COMPONENTS_CONTAINER_BASE_PATH": "/custom/container",
+			},
+			expectedPath: "/custom/container",
+		},
+		{
+			name:          "container_with_resolved_path",
+			componentType: "container",
+			setupConfig: func() *schema.AtmosConfiguration {
+				return &schema.AtmosConfiguration{
+					BasePath: "/workspace",
+					Components: schema.Components{
+						Container: schema.ContainerComponentsConfig{
+							BasePath: "components/container",
+						},
+					},
+					ContainerDirAbsolutePath: "/resolved/container/path",
+				}
+			},
+			expectedPath: "/resolved/container/path",
+		},
+		{
 			name:          "unknown_component_type",
 			componentType: "unknown",
 			setupConfig: func() *schema.AtmosConfiguration {

@@ -165,7 +165,7 @@ Three groups separated by blank lines, sorted alphabetically:
 Maintain aliases: `cfg`, `log`, `u`, `errUtils`
 
 ### Go Formatting (MANDATORY)
-Use `gofumpt`, not `gofmt`, when formatting Go files. The repository enables `gofumpt` and `goimports` in `.golangci.yml`; using plain `gofmt` can leave files inconsistent with CI.
+Use `gofumpt`, not `gofmt`, when formatting Go files. The repository enables `gofumpt` and `gci` in `.golangci.yml`; using plain `gofmt` can leave files inconsistent with CI.
 
 ### Performance Tracking (MANDATORY)
 Add `defer perf.Track(atmosConfig, "pkg.FuncName")()` + blank line to all public functions. Use `nil` if no atmosConfig param.
@@ -448,5 +448,5 @@ NEVER use `--no-verify`. Run `atmos lint --changed` before committing. Hooks run
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at `specs/001-pact-consumer-contracts/plan.md`
+at `specs/002-pro-exec-metadata/plan.md`
 <!-- SPECKIT END -->

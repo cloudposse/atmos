@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"crypto/fips140"
 	_ "embed"
 	"fmt"
 	"runtime"
@@ -85,7 +86,20 @@ type Version struct {
 	Version       string `json:"version" yaml:"version"`
 	OS            string `json:"os" yaml:"os"`
 	Arch          string `json:"arch" yaml:"arch"`
+	FIPS          bool   `json:"fips" yaml:"fips"`
 	UpdateVersion string `json:"update_version,omitempty" yaml:"update_version,omitempty"`
+}
+
+// isFIPSBuild reports whether FIPS 140-3 mode is actively enforced in this
+// running process right now (see docs/prd/fips-140-mode.md). It delegates to
+// crypto/fips140.Enabled(). GOFIPS140 at build time (linking Go's native
+// FIPS 140-3 crypto module) sets the default, but GODEBUG=fips140=on can
+// enable FIPS mode at runtime even on a binary built without GOFIPS140, and
+// GODEBUG=fips140=off can disable a GOFIPS140-enabled binary's default — this
+// function reflects whichever wins. This reflects FIPS 140-3 mode being
+// active, not a CMVP compliance certification.
+func isFIPSBuild() bool {
+	return fips140.Enabled()
 }
 
 func (v versionExec) isCheckVersionEnabled(forceCheck bool) bool {
@@ -162,6 +176,7 @@ func (v versionExec) displayVersionInFormat(forceCheck bool, format string) erro
 		Version: version.Version,
 		OS:      runtime.GOOS,
 		Arch:    runtime.GOARCH,
+		FIPS:    isFIPSBuild(),
 	}
 	if v, ok := v.GetLatestVersion(forceCheck); ok {
 		version.UpdateVersion = strings.TrimPrefix(v, "v")

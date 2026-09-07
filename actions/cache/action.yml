@@ -14,10 +14,40 @@ branding:
   icon: 'archive'
   color: 'blue'
 
+inputs:
+  mode:
+    description: >-
+      `restore-and-save` (default): restore the cache and save it in the post
+      step, via actions/cache. `restore-only`: restore but never save, via
+      actions/cache/restore (no post step). Use `restore-only` on jobs that
+      fan out into many parallel consumers of one key (for example test
+      shards) and leave a single writer job on `restore-and-save`. Saves
+      otherwise race for the same key ("Unable to reserve cache ... another
+      job may be creating this cache") and each one still pays the tar+zstd
+      upload cost.
+    required: false
+    default: 'restore-and-save'
+  restore-only:
+    description: >-
+      Deprecated: use `mode: restore-only` instead. `restore-only: true`
+      still behaves exactly like `mode: restore-only`.
+    required: false
+    default: 'false'
+  cache-home:
+    description: >-
+      Directory to use as the Atmos cache root for this job. When set, it is exported as
+      ATMOS_XDG_CACHE_HOME for every later step (toolchain installs, the cache save at job end),
+      and the cached paths are derived under it. Point it under `runner.temp` on Windows runners
+      to put the cache on the fast work disk (D:), see README. Leave unset to keep Atmos's default
+      (~/.cache/atmos, or ATMOS_XDG_CACHE_HOME / XDG_CACHE_HOME from the environment).
+    required: false
+    default: ""
+
 outputs:
   cache-hit:
-    description: 'Whether an exact key match was found (from actions/cache).'
-    value: ${{ steps.cache.outputs.cache-hit }}
+    description: 'Whether an exact key match was found (from actions/cache or actions/cache/restore).'
+    # Exactly one of the two cache steps runs; a skipped step's output is empty.
+    value: ${{ steps.cache.outputs.cache-hit || steps.cache-restore.outputs.cache-hit }}
   key:
     description: 'The resolved cache key.'
     value: ${{ steps.meta.outputs.key }}
@@ -25,26 +55,77 @@ outputs:
 runs:
   using: composite
   steps:
+    # Must precede the paths step and any step that installs into the cache:
+    # GITHUB_ENV applies to every later step of the job, so the runtime and
+    # this cache see the same root. Changing the root changes the cached
+    # paths, and so the cache version: the first run after setting it is a
+    # cold start.
+    - name: Use a custom Atmos cache root
+      if: inputs.cache-home != ''
+      shell: bash
+      env:
+        CACHE_HOME: ${{ inputs.cache-home }}
+      run: |
+        # Reject CR/LF: the value is written verbatim to GITHUB_ENV below, and a
+        # newline would let it inject arbitrary extra environment variables.
+        if [[ "${CACHE_HOME}" == *$'\n'* || "${CACHE_HOME}" == *$'\r'* ]]; then
+          echo "::error::cache-home must not contain CR or LF characters."
+          exit 1
+        fi
+        echo "ATMOS_XDG_CACHE_HOME=${CACHE_HOME}" >> "$GITHUB_ENV"
+        echo "Atmos cache root for this job: ${CACHE_HOME}"
+    # Writes key/path/restore-keys to $GITHUB_OUTPUT (for the cache/cache-restore
+    # steps below) and, since $GITHUB_ENV is set in any real job, also as
+    # ATMOS_CACHE_* job-level env vars: a post step of a composite action
+    # nested inside another composite can't see this step's own
+    # steps.meta.outputs (actions/runner#2800), but it can see the job env.
+    # Validation (empty key/paths, CR/LF, delimiter-collision-safe multiline
+    # encoding) all happen once, in Go, in `atmos ci cache paths` itself --
+    # see cmd/ci/cache/paths.go's emitGitHubCachePaths.
     - id: meta
       shell: bash
       run: atmos ci cache paths --format=github
-    - id: validate
+    - name: Validate cache mode
+      if: inputs.mode != 'restore-only' && inputs.mode != 'restore-and-save'
       shell: bash
-      env:
-        ATMOS_CACHE_KEY: ${{ steps.meta.outputs.key }}
-        ATMOS_CACHE_PATH: ${{ steps.meta.outputs.path }}
       run: |
-        if [ -z "${ATMOS_CACHE_KEY}" ]; then
-          echo "::error::Atmos cache metadata did not include a cache key. Check the previous 'atmos ci cache paths --format=github' step output."
-          exit 1
-        fi
-        if [ -z "${ATMOS_CACHE_PATH}" ]; then
-          echo "::error::Atmos cache metadata did not include any cache paths. Check ci.cache configuration and the previous metadata step output."
-          exit 1
-        fi
+        echo "::error::mode must be restore-only or restore-and-save."
+        exit 1
+    # On Windows runners, actions/cache extracts and creates its archives with
+    # whichever tar it finds: Git for Windows' GNU tar if it is first on PATH,
+    # else Windows' own bsdtar, whose @actions/cache code path decompresses the
+    # whole archive to a .tar on disk before extracting it. Measured on a
+    # 1.7 GB archive: GNU tar 264 s vs bsdtar 353 s. Inline (not a reference to
+    # a local action) because this action is published and consumed from other
+    # repositories. Idempotent; no-op off Windows.
+    - name: Use GNU tar for cache archives (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $dir = Join-Path $env:ProgramFiles 'Git\usr\bin'
+        if (-not (Test-Path (Join-Path $dir 'tar.exe'))) {
+          Write-Host "Git's GNU tar not found at $dir; leaving PATH alone"
+          exit 0
+        }
+        if (($env:PATH -split ';')[0] -eq $dir) {
+          Write-Host "GNU tar already first on PATH ($dir)"
+          exit 0
+        }
+        Write-Host "Prepending $dir to PATH so actions/cache uses GNU tar"
+        echo "$dir" >> $Env:GITHUB_PATH
     - id: cache
+      if: inputs.mode != 'restore-only' && inputs.restore-only != 'true'
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
-        key: ${{ steps.meta.outputs.key }}
-        path: ${{ steps.meta.outputs.path }}
-        restore-keys: ${{ steps.meta.outputs.restore-keys }}
+        key: ${{ env.ATMOS_CACHE_KEY }}
+        path: ${{ env.ATMOS_CACHE_PATH }}
+        restore-keys: ${{ env.ATMOS_CACHE_RESTORE_KEYS }}
+    # actions/cache/restore ships in the same repository and tag as
+    # actions/cache, so the same SHA pins both.
+    - id: cache-restore
+      if: inputs.mode == 'restore-only' || inputs.restore-only == 'true'
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        key: ${{ env.ATMOS_CACHE_KEY }}
+        path: ${{ env.ATMOS_CACHE_PATH }}
+        restore-keys: ${{ env.ATMOS_CACHE_RESTORE_KEYS }}

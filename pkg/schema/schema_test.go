@@ -274,3 +274,43 @@ func TestGetCaseSensitiveMap(t *testing.T) {
 		})
 	}
 }
+
+func TestComponents_GetComponentConfig(t *testing.T) {
+	components := Components{
+		Terraform:  Terraform{BasePath: "components/terraform"},
+		Helmfile:   Helmfile{BasePath: "components/helmfile"},
+		Packer:     Packer{BasePath: "components/packer"},
+		Ansible:    Ansible{BasePath: "components/ansible"},
+		Kubernetes: Kubernetes{BasePath: "components/kubernetes"},
+		Helm:       Helm{BasePath: "components/helm"},
+		Container:  ContainerComponentsConfig{BasePath: "components/container"},
+		Plugins: map[string]any{
+			"custom-plugin": map[string]any{"base_path": "components/custom-plugin"},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		componentType string
+		expected      any
+		expectedOk    bool
+	}{
+		{"terraform", "terraform", components.Terraform, true},
+		{"helmfile", "helmfile", components.Helmfile, true},
+		{"packer", "packer", components.Packer, true},
+		{"ansible", "ansible", components.Ansible, true},
+		{"kubernetes", "kubernetes", components.Kubernetes, true},
+		{"helm", "helm", components.Helm, true},
+		{"container", "container", components.Container, true},
+		{"plugin type", "custom-plugin", components.Plugins["custom-plugin"], true},
+		{"unknown type", "does-not-exist", nil, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, ok := components.GetComponentConfig(tt.componentType)
+			assert.Equal(t, tt.expectedOk, ok)
+			assert.Equal(t, tt.expected, config)
+		})
+	}
+}

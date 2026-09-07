@@ -181,6 +181,27 @@ func TestLoadConfigEditionRollsBackJulyDefaults(t *testing.T) {
 	})
 }
 
+// TestLoadConfigNoAtmosYamlDefaults exercises the fallback path taken when no
+// atmos.yaml is discoverable at all (mergeDefaultConfig / defaultCliConfig),
+// as opposed to writeEditionTestConfig's tests, which always provide one and
+// so never touch this path. This is the exact path that let --help regress to
+// showing everything by default: defaultCliConfig didn't state Help.Filter, so
+// its zero value (false) silently overrode the true SetDefault ships.
+func TestLoadConfigNoAtmosYamlDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+	for _, envVar := range []string{"PAGER", "ATMOS_PAGER", "ATMOS_EDITION", "ATMOS_LOGS_LEVEL", "ATMOS_LOGS_FILE", "ATMOS_HELP_FILTER"} {
+		t.Setenv(envVar, "")
+		require.NoError(t, os.Unsetenv(envVar))
+	}
+
+	atmosConfig, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+
+	assert.True(t, atmosConfig.Settings.Terminal.Help.Filter,
+		"bare --help must default to the focused view even with no atmos.yaml discoverable")
+}
+
 func TestLoadConfigEditionFromEnv(t *testing.T) {
 	writeEditionTestConfig(t, "base_path: ./\n")
 	t.Setenv("ATMOS_EDITION", "2026-01")

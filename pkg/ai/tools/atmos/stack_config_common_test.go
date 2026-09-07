@@ -67,29 +67,25 @@ func TestResolveStackEditTarget_ProvenanceWinner(t *testing.T) {
 	assert.Equal(t, filepath.Join(stacksDir, "dev.yaml"), tgt.file)
 }
 
-// TestResolveStackEditTarget_InheritedValueDegradesGracefully covers a
+// TestResolveStackEditTarget_ImportOnlyValueResolvesToCatalogFile covers a
 // component-relative value that is only ever declared in the imported
 // catalog manifest (vars.region), never re-declared by the importing stack.
-// Provenance for any path under an import always records a final entry for
-// the importing manifest (to track "this file pulled the value in"), so
-// PickProvenanceFile's last-entry-wins heuristic reports the importing
-// manifest -- but that manifest doesn't literally contain the key, so the
-// GetFile verification step in resolveStackTargetByProvenance catches this
-// and falls back: get still reports the (unresolvable) location, while
-// set/delete require an explicit file. This mirrors the documented caveat in
-// cmd/stack/operations.go's resolveTargetByProvenance ("likely inherited or
-// imported").
-func TestResolveStackEditTarget_InheritedValueDegradesGracefully(t *testing.T) {
-	atmosConfig, _ := stackConfigLiveFixture(t)
+// Provenance for any path under an import also records a pass-through entry
+// for the importing manifest (Line: 0, since that manifest never literally
+// sets the key) as the LAST entry in merge order -- PickProvenanceFile skips
+// that phantom trailing entry and returns the last one with a concrete
+// position, so this resolves to the catalog file, a real editable node.
+func TestResolveStackEditTarget_ImportOnlyValueResolvesToCatalogFile(t *testing.T) {
+	atmosConfig, stacksDir := stackConfigLiveFixture(t)
 
 	tgt, err := resolveStackEditTarget(&stackEditRequest{atmosConfig: atmosConfig, stack: "dev", component: "vpc", dotPath: "vars.region"})
 	require.NoError(t, err)
-	assert.Equal(t, "us-east-1", tgt.value, "the best-effort merged value is still reported")
-	assert.Empty(t, tgt.file, "no concrete editable node was found")
-	assert.Equal(t, "dev.yaml", tgt.provFile, "the importing manifest is still reported as the (unresolvable) location")
+	assert.Equal(t, "us-east-1", tgt.value)
+	assert.Equal(t, filepath.Join(stacksDir, "catalog", "vpc.yaml"), tgt.file)
 
-	_, err = resolveStackEditTarget(&stackEditRequest{atmosConfig: atmosConfig, stack: "dev", component: "vpc", dotPath: "vars.region", requireEditable: true})
-	require.ErrorIs(t, err, errUtils.ErrAIStackConfigPathNotEditable)
+	tgt, err = resolveStackEditTarget(&stackEditRequest{atmosConfig: atmosConfig, stack: "dev", component: "vpc", dotPath: "vars.region", requireEditable: true})
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(stacksDir, "catalog", "vpc.yaml"), tgt.file)
 }
 
 func TestResolveStackEditTarget_RequireEditable_SetsCorrectFile(t *testing.T) {

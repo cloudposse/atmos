@@ -81,12 +81,14 @@ func (v *Verifier) verifyCosign(ctx context.Context, req *Request, cfg *registry
 }
 
 // runCosignWithRetry invokes cosign with bounded exponential backoff,
-// retrying only on transient Sigstore Rekor failures. All other cosign
-// failures (tampering, expired cert, identity mismatch, missing signature)
-// surface immediately on the first attempt.
+// retrying only on transient upstream failures (Sigstore Rekor, cosign's own
+// direct asset fetches, its TUF trust-root CDN refresh, or the network
+// transport itself). All other cosign failures (tampering, expired cert,
+// identity mismatch, missing signature) surface immediately on the first
+// attempt.
 func runCosignWithRetry(ctx context.Context, req *Request, args []string) error {
 	return runVerificationCommandWithRetry(ctx, req, "cosign", args,
-		"cosign verification hit transient Sigstore Rekor error; retrying")
+		"cosign verification hit a transient error; retrying")
 }
 
 // runVerificationCommandWithRetry invokes a verification command (cosign,

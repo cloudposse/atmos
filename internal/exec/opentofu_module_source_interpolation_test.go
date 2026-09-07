@@ -108,24 +108,11 @@ func TestOpenTofuModuleSourceInterpolation(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// Verify component_info is present even though validation was skipped.
+		// Verify component_info is present even though validation may have been skipped.
 		componentInfo, ok := componentSection["component_info"].(map[string]any)
 		require.True(t, ok, "component_info should be present")
 
-		// Check if validation was skipped due to OpenTofu detection.
-		if skipped, exists := componentInfo["validation_skipped_opentofu"]; exists {
-			assert.True(t, skipped.(bool), "validation_skipped_opentofu should be true when OpenTofu-specific syntax is detected")
-		}
-
-		// Terraform config may be nil (validation skipped) or contain partial info.
-		// Either is acceptable - the important part is that the error didn't fail the operation.
-		if terraformConfig, exists := componentInfo["terraform_config"]; exists {
-			// If it exists, it should either be nil or a valid config object.
-			if terraformConfig != nil {
-				_, ok := terraformConfig.(map[string]any)
-				assert.True(t, ok, "If terraform_config is not nil, it should be a valid config object")
-			}
-		}
+		assertModuleSourceInterpolationHandledCorrectly(t, componentInfo)
 
 		// Component path should still be resolved correctly.
 		componentPath, ok := componentInfo["component_path"].(string)

@@ -1,0 +1,31 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{.vars.stage}}"
+
+# Intentionally left at Info here. atmos.d/extra.yaml also sets logs.level (to
+# Debug), but root's explicit value always wins over atmos.d fragments (same
+# precedence the mcp.enabled fix relies on) -- so both `atmos config get
+# logs.level` (root-file-scoped) and the merged `atmos describe config` view
+# agree on Info here. The real root-vs-merged-visibility test is
+# settings.list_merge_strategy (in atmos.d/extra.yaml), which exists ONLY
+# there and is therefore invisible to `config get`/`set` while still showing
+# up in `atmos describe config`.
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Empty auth configuration (no identities configured).
+# This allows commands to run without authentication.
+auth:

@@ -255,6 +255,21 @@ ATMOS_PROFILE=developer,debug atmos describe stacks
 - Users can still override with `--identity` flag or `ATMOS_IDENTITY` environment variable
 - Identity selection precedence: `--identity` flag > `ATMOS_IDENTITY` env > default identity from active profile > default identity from base config
 
+**FR2.7**: `--profile` used with no value MUST open an interactive multi-select of every
+discovered profile (mirroring how bare `--identity` opens an interactive identity selector)
+```bash
+atmos auth login -i core-auto/terraform --profile
+```
+- No profile is pre-checked by default; a bare `--profile` with no explicit names MUST open the
+  picker with nothing selected. Profile names already given explicitly alongside the bare flag
+  (e.g. `--profile ci --profile`) MUST start pre-checked, but the user's final choice in the form
+  (including deliberately unchecking an explicitly-given name) MUST be respected
+- In a non-interactive context (no TTY, CI), bare `--profile` MUST return a clear error rather than
+  attempting to load a literal profile named after the internal sentinel value or hanging
+- The sentinel value (`__SELECT__`) MUST be reserved: a profile directory with that name is excluded
+  from discovery, and an explicit request for it MUST return a clear "reserved name" error rather
+  than silently being unreachable
+
 #### FR3: Configuration Merging and Precedence
 
 **FR3.1**: Configuration loading order MUST be (see

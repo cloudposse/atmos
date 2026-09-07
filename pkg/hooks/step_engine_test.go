@@ -2,8 +2,10 @@ package hooks
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,6 +15,8 @@ import (
 	yaml "gopkg.in/yaml.v2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	runnerstep "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -44,6 +48,22 @@ func (h *flakyHandler) Execute(context.Context, *schema.WorkflowStep, *runnerste
 type envCaptureHandler struct {
 	runnerstep.BaseHandler
 	captured *map[string]string
+}
+
+type outputSuppressionCaptureHandler struct {
+	runnerstep.BaseHandler
+	suppressed *bool
+	writers    *runnerstep.OutputWriters
+}
+
+func (h *outputSuppressionCaptureHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *outputSuppressionCaptureHandler) Execute(ctx context.Context, _ *schema.WorkflowStep, vars *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	*h.suppressed = runnerstep.OutputSuppressed(ctx)
+	if h.writers != nil {
+		*h.writers = vars.OutputWriters
+	}
+	return runnerstep.NewStepResult("ok"), nil
 }
 
 type hookEnvState struct {
@@ -281,6 +301,95 @@ func TestStepFromHookDecodesNestedConfig(t *testing.T) {
 	assert.Equal(t, 80, ws.Viewport.Width)
 }
 
+// TestStepFromHookPreservesGenericWithForStoreType confirms a `kind: step` /
+// `type: store` hook (documented at /workflows/steps/type/store) actually
+// carries its `store`/`key`/`value` config through to the decoded step. Those
+// fields have no flat WorkflowStep field to land in -- store.go decodes them
+// from the generic With map -- and StepFromHook's marshal/unmarshal round
+// trip treats the hook's `with:` block as the step's own top-level YAML, so
+// without preserveGenericWith backfilling With, they were silently dropped
+// and StoreHandler.Validate failed with a generic "store is required" error
+// that never mentioned the store name the user actually configured.
+func TestStepFromHookPreservesGenericWithForStoreType(t *testing.T) {
+	hook := &Hook{
+		Kind: stepKindName,
+		Type: "store",
+		With: map[string]any{
+			"action":    "write",
+			"store":     "image-metadata",
+			"key":       "image-dev",
+			"value":     "sha-test",
+			"stack":     "dev",
+			"component": "app",
+		},
+	}
+
+	ws, err := StepFromHook(hook)
+	require.NoError(t, err)
+
+	// action/stack/component have flat WorkflowStep fields and already survived.
+	assert.Equal(t, "write", ws.Action)
+	assert.Equal(t, "dev", ws.Stack)
+	assert.Equal(t, "app", ws.Component)
+
+	// store/key/value only exist in the generic With map.
+	require.NotNil(t, ws.With)
+	assert.Equal(t, "image-metadata", ws.With["store"])
+	assert.Equal(t, "image-dev", ws.With["key"])
+	assert.Equal(t, "sha-test", ws.With["value"])
+}
+
+// TestStepFromHookWithVariablesPreservesGenericWithForStoreType is the
+// runtime counterpart: stepFromHookWithVariables (used by stepEngine.Run, and
+// via workflowStepFromHookPayload by stepsEngine.Run for each `kind: steps`
+// item) must backfill With the same way the static StepFromHook decoder does.
+func TestStepFromHookWithVariablesPreservesGenericWithForStoreType(t *testing.T) {
+	hook := &Hook{
+		Kind: stepKindName,
+		Type: "store",
+		With: map[string]any{
+			"store": "image-metadata",
+			"key":   "image-dev",
+			"value": "sha-test",
+		},
+	}
+	ctx := stepExecContext(hook)
+
+	ws, err := stepFromHookWithVariables(ctx, stepVariables(ctx))
+	require.NoError(t, err)
+
+	require.NotNil(t, ws.With)
+	assert.Equal(t, "image-metadata", ws.With["store"])
+	assert.Equal(t, "image-dev", ws.With["key"])
+	assert.Equal(t, "sha-test", ws.With["value"])
+}
+
+// TestPreserveGenericWith unit-tests the helper directly, covering both the
+// backfill path (StepFromHook/workflowStepFromHookPayload's normal decode
+// left With nil) and the leave-alone path (a step type -- e.g. a step with a
+// genuinely nested `with:` key of its own -- whose With the normal decode
+// already populated must not be clobbered by the hook payload).
+func TestPreserveGenericWith(t *testing.T) {
+	t.Run("backfills when With is nil and payload is a map", func(t *testing.T) {
+		ws := &schema.WorkflowStep{}
+		preserveGenericWith(ws, map[string]any{"key": "value"})
+		assert.Equal(t, map[string]any{"key": "value"}, ws.With)
+	})
+
+	t.Run("leaves an already-decoded With untouched", func(t *testing.T) {
+		existing := map[string]any{"already": "decoded"}
+		ws := &schema.WorkflowStep{With: existing}
+		preserveGenericWith(ws, map[string]any{"should": "not apply"})
+		assert.Equal(t, existing, ws.With)
+	})
+
+	t.Run("no-op when payload is not a map", func(t *testing.T) {
+		ws := &schema.WorkflowStep{}
+		preserveGenericWith(ws, "not-a-map")
+		assert.Nil(t, ws.With)
+	})
+}
+
 func TestVerifyStepHookType(t *testing.T) {
 	require.NoError(t, verifyStepHookType("announce", "log"))
 
@@ -353,6 +462,103 @@ func TestStepEngineSeedsAtmosEnv(t *testing.T) {
 	assert.Equal(t, "test-stack", captured["ATMOS_STACK"])
 	assert.Equal(t, "test-component", captured["ATMOS_COMPONENT"])
 	assert.Equal(t, "from-hook", captured["CUSTOM_HOOK_VAR"])
+}
+
+func TestStepEngineSuppressesTransientOutputWhenWritersAreSet(t *testing.T) {
+	var suppressed bool
+	runnerstep.Register(&outputSuppressionCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("output-suppression-capture-test", runnerstep.CategoryCommand, false),
+		suppressed:  &suppressed,
+	})
+
+	tests := []struct {
+		name       string
+		context    *ExecContext
+		run        func(*ExecContext) (*Output, error)
+		setWriter  func(*ExecContext)
+		suppressed bool
+	}{
+		{
+			name:       "step stdout",
+			context:    stepExecContext(&Hook{Kind: stepKindName, Type: "output-suppression-capture-test"}),
+			run:        stepEngine{}.Run,
+			setWriter:  func(ctx *ExecContext) { ctx.Stdout = io.Discard },
+			suppressed: true,
+		},
+		{
+			name: "steps stderr",
+			context: stepsExecContext(&Hook{Kind: stepsKindName, With: []any{
+				map[string]any{"type": "output-suppression-capture-test"},
+			}}),
+			run:        stepsEngine{}.Run,
+			setWriter:  func(ctx *ExecContext) { ctx.Stderr = io.Discard },
+			suppressed: true,
+		},
+		{
+			name:       "step without writers",
+			context:    stepExecContext(&Hook{Kind: stepKindName, Type: "output-suppression-capture-test"}),
+			run:        stepEngine{}.Run,
+			suppressed: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suppressed = false
+			if tt.setWriter != nil {
+				tt.setWriter(tt.context)
+			}
+
+			_, err := tt.run(tt.context)
+			require.NoError(t, err)
+			assert.Equal(t, tt.suppressed, suppressed)
+		})
+	}
+}
+
+func TestStepEnginesForwardOutputWriters(t *testing.T) {
+	var suppressed bool
+	var writers runnerstep.OutputWriters
+	runnerstep.Register(&outputSuppressionCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("output-writer-capture-test", runnerstep.CategoryCommand, false),
+		suppressed:  &suppressed,
+		writers:     &writers,
+	})
+	tests := []struct {
+		name string
+		ctx  *ExecContext
+		run  func(*ExecContext) (*Output, error)
+	}{
+		{
+			name: "step",
+			ctx:  stepExecContext(&Hook{Kind: stepKindName, Type: "output-writer-capture-test"}),
+			run:  stepEngine{}.Run,
+		},
+		{
+			name: "steps",
+			ctx: stepsExecContext(&Hook{Kind: stepsKindName, With: []any{
+				map[string]any{"type": "output-writer-capture-test"},
+			}}),
+			run: stepsEngine{}.Run,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			tt.ctx.Stdout = &stdout
+			tt.ctx.Stderr = &stderr
+			suppressed = false
+			writers = runnerstep.OutputWriters{}
+
+			_, err := tt.run(tt.ctx)
+
+			require.NoError(t, err)
+			assert.True(t, suppressed)
+			assert.Same(t, &stdout, writers.Stdout)
+			assert.Same(t, &stderr, writers.Stderr)
+		})
+	}
 }
 
 func TestStepHooksDefaultToComponentWorkingDirectory(t *testing.T) {
@@ -1212,7 +1418,8 @@ func TestStepEngineRunsArchiveTypeWithBareRelativeWorkingDirectoryUsesProvisione
 	t.Chdir(wd)
 	terraformBasePath := filepath.Join(wd, "repo", "components", "terraform")
 
-	provisionedWorkdirPath := filepath.Join(wd, ".workdir", "terraform", "dev-vpc")
+	provisionedWorkdirPath, err := provWorkdir.BuildPath(wd, cfg.TerraformComponentType, "vpc", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Join(provisionedWorkdirPath, "artifacts", "src"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(provisionedWorkdirPath, "artifacts", "src", "handler.js"), []byte("exports.handler = 1;"), 0o644))
 

@@ -227,3 +227,39 @@ func TestManifestSchema_WorkflowStepTypedFieldsStillValidated(t *testing.T) {
 		"code": "not-a-number",
 	}))
 }
+
+// TestManifestSchema_ParallelStepOutputMode guards output.mode against drifting wider than
+// pkg/schema/task_validate.go's validateParallelOutput, which only accepts "", "grouped",
+// "prefixed", and "none". A schema-accepted-but-Go-rejected mode (e.g. a stale "raw" value) passes
+// validation and then fails at workflow-execution time with a much less actionable error.
+func TestManifestSchema_ParallelStepOutputMode(t *testing.T) {
+	// loadWebsiteSchemaBytes omitted: byte-identical to loadEmbeddedSchemaBytes.
+	schemas := map[string][]byte{
+		"embedded": loadEmbeddedSchemaBytes(t),
+		"fixture":  loadFixtureSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		for _, mode := range []string{"", "grouped", "prefixed", "none"} {
+			label := mode
+			if label == "" {
+				label = `""`
+			}
+			t.Run(schemaName+"/accepts "+label, func(t *testing.T) {
+				assertSchemaValid(t, schemaData, workflowManifestWithStep(map[string]any{
+					"type":   "parallel",
+					"output": map[string]any{"mode": mode},
+					"steps":  []any{map[string]any{"command": "echo ok"}},
+				}))
+			})
+		}
+
+		t.Run(schemaName+"/rejects raw", func(t *testing.T) {
+			assertSchemaInvalid(t, schemaData, workflowManifestWithStep(map[string]any{
+				"type":   "parallel",
+				"output": map[string]any{"mode": "raw"},
+				"steps":  []any{map[string]any{"command": "echo ok"}},
+			}))
+		})
+	}
+}

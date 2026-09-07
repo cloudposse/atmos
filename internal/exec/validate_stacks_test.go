@@ -71,6 +71,74 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 	})
 }
 
+// nativeTerraformExampleDir returns the absolute path to examples/native-terraform
+// using runtime.Caller(0) so the path is source-file-relative (CWD-independent).
+func nativeTerraformExampleDir(t *testing.T) string {
+	t.Helper()
+	_, callerFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller(0) must succeed")
+	dir := filepath.Join(filepath.Dir(callerFile), "..", "..", "examples", "native-terraform")
+	absDir, err := filepath.Abs(dir)
+	require.NoError(t, err, "cannot resolve fixture path")
+	return absDir
+}
+
+// TestValidateStacksWithoutNameTemplateOrPattern is a regression test: `atmos
+// validate stacks` used to hard-fail with ErrMissingStackNameTemplateAndPattern
+// whenever `stacks.name_template`/`stacks.name_pattern` was unset, even though
+// `terraform plan`, `list stacks`, and `describe component` all resolve stack
+// names fine via filename/`name:`-based zero-config fallback (#1934) in that
+// case. The createComponentStackMap function's stack-name derivation now
+// mirrors that same precedence (resolveStackName) instead of requiring
+// name_template/name_pattern itself. The examples/native-terraform directory
+// is the real repro: its atmos.yaml sets neither field on purpose (see its
+// own comment) and is the example this repo's atmos-migration skill points
+// users at.
+func TestValidateStacksWithoutNameTemplateOrPattern(t *testing.T) {
+	absPath := nativeTerraformExampleDir(t)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:               absPath,
+		StacksBaseAbsolutePath: filepath.Join(absPath, "stacks"),
+		Stacks: schema.Stacks{
+			BasePath:      "stacks",
+			IncludedPaths: []string{"**/*"},
+			ExcludedPaths: []string{"**/_defaults.yaml"},
+		},
+		Logs: schema.Logs{
+			Level: u.LogLevelDebug,
+		},
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "replace",
+		},
+	}
+	atmosConfig.TerraformDirAbsolutePath = filepath.Join(absPath, "components", "terraform")
+	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(absPath, "components", "helmfile")
+	atmosConfig.PackerDirAbsolutePath = filepath.Join(absPath, "components", "packer")
+
+	// Populate StackConfigFilesAbsolutePaths the same way cfg.InitCliConfig does for a
+	// real CLI run -- without it, FindStacksMap has no files to process and
+	// createComponentStackMap's loop body (where the bug lives) never runs, letting
+	// the test pass vacuously regardless of the fix.
+	includeStackAbsPaths, err := u.JoinPaths(atmosConfig.StacksBaseAbsolutePath, atmosConfig.Stacks.IncludedPaths)
+	require.NoError(t, err)
+	stackConfigFilesAbsolutePaths, _, err := cfg.FindAllStackConfigsInPaths(atmosConfig, includeStackAbsPaths, atmosConfig.Stacks.ExcludedPaths)
+	require.NoError(t, err)
+	require.NotEmpty(t, stackConfigFilesAbsolutePaths, "fixture must have discoverable stack manifests for this test to exercise the bug")
+	atmosConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
+
+	require.Empty(t, atmosConfig.Stacks.NameTemplate, "fixture must exercise the no-name_template case")
+	require.Empty(t, atmosConfig.Stacks.NamePattern, "fixture must exercise the no-name_pattern case")
+
+	err = ValidateStacks(atmosConfig)
+	assert.NoError(t, err, "validate stacks must succeed via filename/name:-based stack naming, same as terraform plan/list stacks/describe component")
+}
+
 func TestMergeContextInProcessYAMLConfigFile(t *testing.T) {
 	// Test that ProcessYAMLConfigFileWithContext properly tracks import chain
 	absPath := validateStacksTestDataDir(t)
@@ -234,6 +302,74 @@ func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
 	// Positive control: a valid manifest must pass — proving the failure above is the
 	// manifest, not a broken harness.
 	require.NoError(t, validate(validManifest), "valid manifest must pass validation")
+}
+
+// TestValidateStacksAcceptsRequiredProvidersRetryAndKubernetesGenerate is the regression guard
+// for github.com/cloudposse/atmos/issues/2948: `required_version`/`required_providers`/`retry`
+// (stack-level `terraform:`, the shared `overrides` definition, and component-level) plus
+// stack-level `kubernetes.generate` were fully supported by the stack processor but rejected by
+// the embedded atmos-manifest JSON Schema's `additionalProperties: false`.
+//
+// This intentionally validates schema-acceptance only (via ValidateStacks, never
+// ExecuteTerraform) instead of reusing a shared fixture that also runs real `terraform
+// plan`/`apply` (like tests/fixtures/scenarios/atmos-stacks-validation, exercised by
+// TestExecuteTerraform_OpaValidation). Declaring `required_providers` on any component that
+// real terraform runs against makes Atmos auto-generate a `terraform_override.tf.json` file
+// *into that component's actual source directory* (internal/exec/terraform_utils.go's
+// generateRequiredProviders, invoked from the plan/apply pipeline) — for a shared, checked-in
+// fixture component that pollutes every other test reusing it for the rest of the CI run. This
+// test's manifest is schema-validated only, in an isolated t.TempDir(), so it carries none of
+// that risk.
+func TestValidateStacksAcceptsRequiredProvidersRetryAndKubernetesGenerate(t *testing.T) {
+	const manifest = "vars:\n  stage: dev\n" +
+		"terraform:\n" +
+		"  required_version: \">= 1.9.0\"\n" +
+		"  required_providers:\n" +
+		"    time:\n" +
+		"      source: hashicorp/time\n" +
+		"      version: \"~> 0.13\"\n" +
+		"  retry:\n" +
+		"    max_attempts: 2\n" +
+		"    backoff_strategy: constant\n" +
+		"  overrides:\n" +
+		"    required_version: \">= 1.9.0\"\n" +
+		"    required_providers:\n" +
+		"      time:\n" +
+		"        source: hashicorp/time\n" +
+		"        version: \"~> 0.13\"\n" +
+		"    retry:\n" +
+		"      max_attempts: 2\n" +
+		"kubernetes:\n" +
+		"  generate:\n" +
+		"    \"manifest.yaml\":\n" +
+		"      replicas: 1\n" +
+		"components:\n" +
+		"  terraform:\n" +
+		"    vpc:\n" +
+		"      vars:\n" +
+		"        name: vpc\n" +
+		"      required_version: \">= 1.9.0\"\n" +
+		"      required_providers:\n" +
+		"        azurerm:\n" +
+		"          source: hashicorp/azurerm\n" +
+		"          version: \"~> 4.12.0\"\n" +
+		"      retry:\n" +
+		"        max_attempts: 3\n" +
+		"        conditions:\n" +
+		"          - \"connection reset\"\n"
+
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks", "deploy"), 0o755))
+	atmosYAML := "base_path: \".\"\n" +
+		"stacks:\n  base_path: \"stacks\"\n  included_paths: [\"deploy/**/*\"]\n  name_pattern: \"{stage}\"\n" +
+		"logs:\n  level: \"Warning\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "stack.yaml"), []byte(manifest), 0o644))
+
+	t.Chdir(dir)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	require.NoError(t, ValidateStacks(&atmosConfig), "required_version/required_providers/retry/overrides/kubernetes.generate must pass schema validation")
 }
 
 func TestValidateStacksRejectsUnsupportedYamlFunction(t *testing.T) {

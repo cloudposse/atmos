@@ -12,7 +12,7 @@
 #
 # `source` intentionally has no `?ref=`: CatalogEntry.ResolvedSource appends one
 # at runtime, pinned to `version.Commit` (the exact commit this atmos binary was
-# built from — see scripts/build-atmos.sh and .goreleaser*.yml). That makes
+# built from — see magefiles/build.go and .goreleaser*.yml). That makes
 # every build, not just tagged releases, resolve against content that actually
 # exists at that commit, including on unmerged branches. Binaries built without
 # ldflags (`go run`, `go install`) fall back to `main`.

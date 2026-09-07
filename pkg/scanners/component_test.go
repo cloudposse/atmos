@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -24,7 +25,8 @@ func TestComponentPathNilInputsFallBackToWorkingDirectory(t *testing.T) {
 
 func TestComponentPathUsesProvisionedWorkdirWhenItExists(t *testing.T) {
 	base := t.TempDir()
-	workdirRoot := filepath.Join(base, ".workdir", cfg.TerraformComponentType, "dev-vpc")
+	workdirRoot, err := provWorkdir.BuildPath(base, cfg.TerraformComponentType, "vpc", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(workdirRoot, 0o755))
 
 	ctx := &Context{

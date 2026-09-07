@@ -3,12 +3,16 @@ package aqua
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -522,6 +526,179 @@ func TestAquaRegistry_GetLatestVersion_RetriesUnauthenticatedAfterForbidden(t *t
 	require.NoError(t, err)
 	assert.Equal(t, "v1.5.0", version)
 	assert.Equal(t, 2, calls)
+}
+
+// flakyThenOKClient implements httpClient.Client, failing the first call with
+// a transient network error (a connection reset by peer, the same class of
+// failure a CI runner hit and turned into a flaky golden-snapshot mismatch —
+// see docs/fixes/2026-08-11-coderabbit-toolchain-retry-static-errors-and-rate-limits.md)
+// and succeeding on every call after.
+type flakyThenOKClient struct {
+	calls int
+	body  string
+}
+
+func (f *flakyThenOKClient) Do(_ *http.Request) (*http.Response, error) {
+	f.calls++
+	if f.calls == 1 {
+		return nil, &net.OpError{Op: "read", Net: "tcp", Err: os.NewSyscallError("read", syscall.ECONNRESET)}
+	}
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(f.body)),
+		Header:     make(http.Header),
+	}, nil
+}
+
+// TestAquaRegistry_FetchVersionFromPage_RecoversFromTransientNetworkError is
+// the regression guard for the CI failure this fix addresses: GetLatestVersion
+// (via fetchVersionFromPage) previously made a single, un-retried request, so
+// a transient connection reset on the CI runner silently produced an
+// unresolved "latest" version instead of the expected concrete one.
+func TestAquaRegistry_FetchVersionFromPage_RecoversFromTransientNetworkError(t *testing.T) {
+	mock := &flakyThenOKClient{body: `[{"tag_name":"v1.5.0","prerelease":false,"draft":false}]`}
+	ar := NewAquaRegistry(WithGitHubBaseURL("https://api.github.com"))
+	ar.client = mock
+
+	version, nextURL, err := ar.fetchVersionFromPage("https://api.github.com/repos/test/tool/releases?per_page=100", "", false)
+	require.NoError(t, err)
+	assert.Equal(t, "1.5.0", version)
+	assert.Empty(t, nextURL)
+	assert.Equal(t, 2, mock.calls, "expected exactly one retry after the transient connection reset")
+}
+
+// TestAquaRegistry_FetchVersionsFromPage_RecoversFromTransientNetworkError
+// mirrors the above for the context-aware, paginated variant used by
+// GetAvailableVersionsContext.
+func TestAquaRegistry_FetchVersionsFromPage_RecoversFromTransientNetworkError(t *testing.T) {
+	mock := &flakyThenOKClient{body: `[{"tag_name":"v1.5.0","prerelease":false,"draft":false}]`}
+	ar := NewAquaRegistry(WithGitHubBaseURL("https://api.github.com"))
+	ar.client = mock
+
+	versions, nextURL, err := ar.fetchVersionsFromPage(context.Background(), "https://api.github.com/repos/test/tool/releases?per_page=100", "", false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"1.5.0"}, versions)
+	assert.Empty(t, nextURL)
+	assert.Equal(t, 2, mock.calls, "expected exactly one retry after the transient connection reset")
+}
+
+// rateLimitedHeader builds an http.Header signaling a genuine GitHub rate
+// limit via Set, which canonicalizes the key — a raw map literal keyed by
+// "X-RateLimit-Remaining" silently fails to match on Get (its canonical form
+// is "X-Ratelimit-Remaining").
+func rateLimitedHeader() http.Header {
+	h := http.Header{}
+	h.Set("X-RateLimit-Remaining", "0")
+	return h
+}
+
+// TestIsRetryableAquaFetchError is a table-driven regression guard for the
+// gap CodeRabbit caught: getBytes/getBytesWithLinkHeader previously only
+// retried registry.IsTransientNetworkError, so a 429, a rate-limited 403, or
+// a 5xx response — all of which GitHub's own API documents as transient —
+// were returned after a single attempt.
+func TestIsRetryableAquaFetchError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "transient network error is retryable",
+			err:  &net.OpError{Op: "read", Net: "tcp", Err: os.NewSyscallError("read", syscall.ECONNRESET)},
+			want: true,
+		},
+		{
+			name: "429 is retryable",
+			err:  &registry.HTTPStatusError{StatusCode: http.StatusTooManyRequests, Header: http.Header{}},
+			want: true,
+		},
+		{
+			name: "rate-limited 403 is retryable",
+			err:  &registry.HTTPStatusError{StatusCode: http.StatusForbidden, Header: rateLimitedHeader()},
+			want: true,
+		},
+		{
+			name: "5xx is retryable",
+			err:  &registry.HTTPStatusError{StatusCode: http.StatusServiceUnavailable, Header: http.Header{}},
+			want: true,
+		},
+		{
+			name: "terminal 403 with no rate-limit signal is not retryable",
+			err:  &registry.HTTPStatusError{StatusCode: http.StatusForbidden, Header: http.Header{}},
+			want: false,
+		},
+		{
+			name: "terminal 404 is not retryable",
+			err:  &registry.HTTPStatusError{StatusCode: http.StatusNotFound, Header: http.Header{}},
+			want: false,
+		},
+		{
+			name: "unrelated error is not retryable",
+			err:  errors.New("checksum mismatch"),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isRetryableAquaFetchError(tt.err))
+		})
+	}
+}
+
+// TestAquaRegistry_GetBytes_RetriesTransientHTTPStatuses is the end-to-end
+// counterpart: verifies getBytes actually retries the request (not just that
+// the predicate classifies it correctly) for each transient status, and
+// leaves terminal statuses alone.
+func TestAquaRegistry_GetBytes_RetriesTransientHTTPStatuses(t *testing.T) {
+	tests := []struct {
+		name         string
+		firstStatus  int
+		firstHeaders map[string]string
+		wantCalls    int
+		wantErr      bool
+	}{
+		{name: "429 is retried", firstStatus: http.StatusTooManyRequests, wantCalls: 2},
+		{
+			name:         "rate-limited 403 is retried",
+			firstStatus:  http.StatusForbidden,
+			firstHeaders: map[string]string{"X-RateLimit-Remaining": "0"},
+			wantCalls:    2,
+		},
+		{name: "503 is retried", firstStatus: http.StatusServiceUnavailable, wantCalls: 2},
+		{name: "terminal 404 is not retried", firstStatus: http.StatusNotFound, wantCalls: 1, wantErr: true},
+		{name: "terminal 403 with no rate-limit signal is not retried", firstStatus: http.StatusForbidden, wantCalls: 1, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if calls == 1 {
+					for k, v := range tt.firstHeaders {
+						w.Header().Set(k, v)
+					}
+					w.WriteHeader(tt.firstStatus)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte("{}"))
+			}))
+			defer ts.Close()
+
+			ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
+			_, err := ar.getBytes(ts.URL)
+
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.wantCalls, calls)
+		})
+	}
 }
 
 func TestAquaRegistry_GetLatestVersion_NoVersionPrefixPreservesTag(t *testing.T) {

@@ -373,12 +373,15 @@ func isNewer(current, latest string) bool {
 	return latest != "" && latest != current
 }
 
-// sourceMatchesFilter applies the component, tags, and type filters.
-func sourceMatchesFilter(src *schema.AtmosVendorSource, component string, tags []string, componentType string) bool {
+// MatchesComponentTags reports whether src matches an explicit --component name (exact) and/or
+// --tags filter (any), the AND-of-both-when-both-given semantics `vendor update` and `vendor pull`
+// both apply against a vendor.yaml source. Exported so internal/exec's shouldSkipSource (pull) can
+// share this instead of hand-maintaining its own copy -- previously the two were independently
+// implemented, near-identical functions.
+func MatchesComponentTags(src *schema.AtmosVendorSource, component string, tags []string) bool {
+	defer perf.Track(nil, "vendoring.MatchesComponentTags")()
+
 	if component != "" && src.Component != component {
-		return false
-	}
-	if componentType != "" && !sourceTargetsType(src, componentType) {
 		return false
 	}
 	if len(tags) == 0 {
@@ -392,6 +395,14 @@ func sourceMatchesFilter(src *schema.AtmosVendorSource, component string, tags [
 		}
 	}
 	return false
+}
+
+// sourceMatchesFilter applies the component, tags, and type filters.
+func sourceMatchesFilter(src *schema.AtmosVendorSource, component string, tags []string, componentType string) bool {
+	if !MatchesComponentTags(src, component, tags) {
+		return false
+	}
+	return componentType == "" || sourceTargetsType(src, componentType)
 }
 
 func sourceTargetsType(src *schema.AtmosVendorSource, componentType string) bool {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
@@ -27,6 +28,10 @@ const errNotFoundFmt = "%w: %s"
 // defaultFileMode is the permission used for newly written files when the
 // destination does not already exist.
 const defaultFileMode os.FileMode = 0o644
+
+// trailingNewline is the terminator yqlib appends to evaluate() output, which
+// callers throughout this file trim before comparing or returning a value.
+const trailingNewline = "\n"
 
 // editPreferences are the yqlib YAML preferences used for all edit operations.
 // They favor faithful round-tripping: the document's own indent width, no
@@ -124,7 +129,7 @@ func Query(content []byte, expr string) (string, error) {
 	if result == "" {
 		return "", fmt.Errorf(errNotFoundFmt, ErrYAMLPathNotFound, expr)
 	}
-	trimmed := strings.TrimRight(result, "\n")
+	trimmed := strings.TrimRight(result, trailingNewline)
 	if trimmed == "null" && !resultIsStringScalar(content, expr) {
 		return "", fmt.Errorf(errNotFoundFmt, ErrYAMLPathNotFound, expr)
 	}
@@ -139,7 +144,7 @@ func resultIsStringScalar(content []byte, expr string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.TrimRight(tag, "\n") == "!!str"
+	return strings.TrimRight(tag, trailingNewline) == "!!str"
 }
 
 // EvalFile evaluates a yq expression against a file and writes the result back
@@ -180,7 +185,7 @@ func Get(content []byte, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	trimmed := strings.TrimRight(result, "\n")
+	trimmed := strings.TrimRight(result, trailingNewline)
 
 	// yq emits "null" both for a missing key and for an explicit null value.
 	// For addressing purposes the editor treats both as "not present"; callers
@@ -190,6 +195,124 @@ func Get(content []byte, path string) (string, error) {
 		return "", fmt.Errorf(errNotFoundFmt, ErrYAMLPathNotFound, path)
 	}
 	return trimmed, nil
+}
+
+// GetType reads the YAML tag of the value already at path and maps it to a
+// SetFileWithType type name (TypeBool, TypeInt, TypeFloat, TypeString,
+// TypeNull, or TypeYAML). Returns ok=false when the path doesn't currently
+// resolve to a value at all (missing, or an unaddressable structural node),
+// which callers treat as "nothing to infer from". An explicit YAML null is a
+// real, present value -- it returns (TypeNull, true), not ok=false.
+//
+// A !!seq or !!map tag returns (TypeYAML, true), not (TypeString, true):
+// a plain CLI string argument can never be a faithful auto-inferred
+// replacement for an existing list or map, so callers must treat TypeYAML
+// here as "auto-inference found something, but it isn't a scalar coercion
+// it can safely perform" rather than as a resolved string type -- silently
+// collapsing a list/map to TypeString would destroy the existing structure
+// with no warning.
+func GetType(content []byte, path string) (string, bool) {
+	defer perf.Track(nil, "yaml.GetType")()
+
+	yqPath, err := DotPathToYqPath(path)
+	if err != nil {
+		return "", false
+	}
+	// Confirm the path resolves to a real, present value before trusting its
+	// tag. Unlike Get() -- which intentionally collapses "missing" and
+	// "explicit null" to the same not-found result for its own read
+	// semantics -- GetType must tell them apart, since only the former means
+	// "nothing to infer from".
+	if !pathIsExplicitlyPresent(content, path) {
+		return "", false
+	}
+	tag, err := evaluate(content, "("+yqPath+") | tag")
+	if err != nil {
+		return "", false
+	}
+	switch strings.TrimRight(tag, trailingNewline) {
+	case "!!bool":
+		return TypeBool, true
+	case "!!int":
+		return TypeInt, true
+	case "!!float":
+		return TypeFloat, true
+	case "!!null":
+		return TypeNull, true
+	case "!!str":
+		return TypeString, true
+	default:
+		// !!seq, !!map, or any other non-scalar tag.
+		return TypeYAML, true
+	}
+}
+
+// pathIsExplicitlyPresent reports whether path resolves to a value that
+// genuinely exists in content, correctly distinguishing an explicit YAML
+// null from a missing key/index. It checks has() on the immediate parent for
+// the path's final segment: has() on a null parent (the case when an
+// ancestor segment is itself missing, e.g. "a.b.c" when "a" doesn't exist)
+// safely returns false rather than erroring, so no recursive presence check
+// up the chain is needed.
+//
+// Raw yq expressions (paths starting with ".", the DotPathToYqPath
+// passthrough for power users) are usually just an ordinary dot-path with a
+// redundant leading dot (e.g. ".vars.explicit_null"), so the leading dot is
+// stripped and the same segment decomposition is attempted first -- this is
+// what lets a raw explicit-null path report present rather than folding into
+// "missing" the way Get's collapsed null/missing check would. Only a
+// genuinely non-decomposable expression (filters, unions, anything
+// splitDotPath can't tokenize) falls back to that collapsed check; the
+// fallback never regresses past the pre-existing behavior for those.
+func pathIsExplicitlyPresent(content []byte, path string) bool {
+	trimmed := strings.TrimSpace(path)
+	if strings.HasPrefix(trimmed, ".") {
+		if segments, err := splitDotPath(strings.TrimPrefix(trimmed, ".")); err == nil {
+			return segmentsArePresent(content, segments)
+		}
+		_, err := Get(content, path)
+		return err == nil
+	}
+
+	segments, err := splitDotPath(trimmed)
+	if err != nil {
+		return false
+	}
+	return segmentsArePresent(content, segments)
+}
+
+// segmentsArePresent runs the has()-on-parent presence check described in
+// pathIsExplicitlyPresent's doc comment for an already-decomposed path.
+func segmentsArePresent(content []byte, segments []pathSegment) bool {
+	last := segments[len(segments)-1]
+	parentExpr := yqPathFromSegments(segments[:len(segments)-1])
+
+	expr := "(" + parentExpr + ") | has(" + hasKeyArg(last) + ")"
+	result, err := evaluate(content, expr)
+	if err != nil {
+		return false
+	}
+	return strings.TrimRight(result, trailingNewline) == "true"
+}
+
+// hasKeyArg renders a path segment as the argument to yq's has(): a bare
+// integer for array indices, a quoted string for map keys.
+func hasKeyArg(seg pathSegment) string {
+	if seg.isIndex {
+		return strconv.Itoa(seg.index)
+	}
+	return encodeStringValue(seg.key)
+}
+
+// GetFileType is the file-based form of GetType.
+func GetFileType(filePath, path string) (string, bool) {
+	defer perf.Track(nil, "yaml.GetFileType")()
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", false
+	}
+	return GetType(content, path)
 }
 
 // GetTyped reads the value at a path and decodes it into T.

@@ -74,6 +74,28 @@ func TestClassifySignatureVerificationError(t *testing.T) {
 		"Error: loading verifier from key opts: loading cert: loading URL " +
 		"https://example.com/missing.pem: server returned HTTP 404"
 
+	// Verbatim (trimmed) cosign output captured from cloudposse/atmos#2974 CI:
+	// cosign's TUF trust-root refresh (distinct from both the Rekor tlog
+	// endpoint and a direct --certificate/--signature fetch) got a transient
+	// 403 from Sigstore's TUF CDN while fetching the root manifest.
+	tufRootFetch403 := "cosign [verify-blob ...]: exit status 1\n" +
+		"WARNING: Could not fetch trusted_root.json from the TUF repository. Continuing with individual targets. " +
+		"Error from TUF: error getting live trusted root: failed to create TUF client failed to load metadata: " +
+		"tuf refresh failed: failed to download https://tuf-repo-cdn.sigstore.dev/16.root.json, http status code: 403"
+
+	// Same outage, surfaced instead while fetching timestamp.json (the other
+	// phrasing cosign's TUF client uses for a non-2xx CDN response).
+	tufTimestampFetch403 := "cosign [verify-blob ...]: exit status 1\n" +
+		"Error: getting Rekor public keys: updating local metadata and targets: error updating to TUF remote mirror: " +
+		"tuf: failed to download timestamp.json: GET \"https://tuf-repo-cdn.sigstore.dev/timestamp.json\": unexpected HTTP status 403"
+
+	// A 403 anywhere else in cosign output (i.e. not scoped to the TUF CDN
+	// host) must NOT be retried — 403 is a terminal authorization failure on
+	// most endpoints, and only the TUF-CDN-scoped phrasings above qualify.
+	unscoped403 := "cosign [verify-blob --certificate https://example.com/tool.pem ...]: exit status 1\n" +
+		"Error: loading verifier from key opts: loading cert: loading URL " +
+		"https://example.com/tool.pem: server returned HTTP 403"
+
 	cases := []struct {
 		name        string
 		err         error
@@ -92,6 +114,9 @@ func TestClassifySignatureVerificationError(t *testing.T) {
 		{name: "macOS certificate-sidecar TLS failure is retryable", err: errors.New(macOSCertificateFetchTLSFailure), wantWrapped: true},
 		{name: "macOS terminated cosign process is retryable", err: errors.New("cosign [verify-blob ...]: signal: killed"), wantWrapped: true},
 		{name: "cosign --certificate fetch 404 is NOT retryable", err: errors.New(certFetch404), wantWrapped: false},
+		{name: "TUF CDN root.json fetch 403 is retryable", err: errors.New(tufRootFetch403), wantWrapped: true},
+		{name: "TUF CDN timestamp.json fetch 403 is retryable", err: errors.New(tufTimestampFetch403), wantWrapped: true},
+		{name: "403 outside the TUF CDN host is NOT retryable", err: errors.New(unscoped403), wantWrapped: false},
 		{name: "connection reset is retryable", err: transportErr("read tcp 10.0.0.1:443: connection reset by peer"), wantWrapped: true},
 		{name: "TLS handshake timeout is retryable", err: transportErr("net/http: TLS handshake timeout"), wantWrapped: true},
 		{name: "i/o timeout is retryable", err: transportErr("dial tcp 10.0.0.1:443: i/o timeout"), wantWrapped: true},
@@ -194,6 +219,26 @@ func TestRunCosignWithRetry_RecoversFromCertificateFetch504(t *testing.T) {
 		ErrSignatureFailed)
 
 	runner := &flakyRunner{retryableErr: certFetchErr, failAttempts: 2}
+	req := &Request{Runner: runner}
+
+	err := runCosignWithRetry(context.Background(), req, []string{"verify-blob", "asset.tar.gz"})
+	require.NoError(t, err)
+	assert.Equal(t, 3, runner.calls, "expected 2 retried failures + 1 success")
+	assert.Equal(t, []string{"verify-blob", "asset.tar.gz"}, runner.finalCallArgs)
+}
+
+// TestRunCosignWithRetry_RecoversFromTUFCDNFetch403 reproduces the CI failure
+// in cloudposse/atmos#2974: cosign's TUF trust-root refresh got a transient
+// 403 from Sigstore's TUF CDN before it reached any verification verdict.
+func TestRunCosignWithRetry_RecoversFromTUFCDNFetch403(t *testing.T) {
+	t.Parallel()
+
+	tufFetchErr := fmt.Errorf("%w: cosign [verify-blob ...]: exit status 1\n"+
+		"Error from TUF: error getting live trusted root: failed to create TUF client failed to load metadata: "+
+		"tuf refresh failed: failed to download https://tuf-repo-cdn.sigstore.dev/16.root.json, http status code: 403",
+		ErrSignatureFailed)
+
+	runner := &flakyRunner{retryableErr: tufFetchErr, failAttempts: 2}
 	req := &Request{Runner: runner}
 
 	err := runCosignWithRetry(context.Background(), req, []string{"verify-blob", "asset.tar.gz"})

@@ -22,6 +22,10 @@ atmos --profile developer terraform plan vpc -s dev
 ATMOS_PROFILE=ci atmos terraform deploy vpc -s prod
 ```
 
+Use `--profile` with no value in an interactive terminal to open a multi-select picker of every
+discovered profile. Non-interactive contexts (CI, scripts) must pass `--profile=<name>` or
+`ATMOS_PROFILE` explicitly.
+
 ## Profile Layout
 
 Keep profile files focused and aligned with the sections they override:

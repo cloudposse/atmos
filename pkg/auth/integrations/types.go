@@ -12,6 +12,9 @@ const (
 	KindAWSECR       = "aws/ecr"
 	KindAWSECRPublic = "aws/ecr-public"
 	KindAWSEKS       = "aws/eks"
+	KindAzureACR     = "azure/acr"
+	KindAzureAKS     = "azure/aks"
+	KindGCPGKE       = "gcp/gke"
 	KindGitHubSTS    = "github/sts"
 )
 

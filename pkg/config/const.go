@@ -118,6 +118,7 @@ const (
 	EmulatorSectionName               = "emulator"
 	AnsibleInventorySectionName       = "inventory"
 	WorkspaceSectionName              = "workspace"
+	FlagsSectionName                  = "flags"
 	AuthSectionName                   = "auth"
 	RequiredVersionSectionName        = "required_version"
 	RequiredProvidersSectionName      = "required_providers"
@@ -169,14 +170,15 @@ const (
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 
 	// Atmos Pro.
-	AtmosProBaseUrlEnvVarName     = "ATMOS_PRO_BASE_URL"
-	AtmosProEndpointEnvVarName    = "ATMOS_PRO_ENDPOINT"
-	AtmosProTokenEnvVarName       = "ATMOS_PRO_TOKEN"
-	AtmosProWorkspaceIDEnvVarName = "ATMOS_PRO_WORKSPACE_ID"
-	AtmosProRunIDEnvVarName       = "ATMOS_PRO_RUN_ID"
-	AtmosProDefaultBaseUrl        = "https://atmos-pro.com"
-	AtmosProDefaultEndpoint       = "api/v1"
-	UploadStatusFlag              = "upload-status"
+	AtmosProBaseUrlEnvVarName         = "ATMOS_PRO_BASE_URL"
+	AtmosProEndpointEnvVarName        = "ATMOS_PRO_ENDPOINT"
+	AtmosProTokenEnvVarName           = "ATMOS_PRO_TOKEN"
+	AtmosProWorkspaceIDEnvVarName     = "ATMOS_PRO_WORKSPACE_ID"
+	AtmosProRunIDEnvVarName           = "ATMOS_PRO_RUN_ID"
+	AtmosProExecSyncTimeoutEnvVarName = "ATMOS_PRO_EXEC_SYNC_TIMEOUT"
+	AtmosProDefaultBaseUrl            = "https://atmos-pro.com"
+	AtmosProDefaultEndpoint           = "api/v1"
+	UploadStatusFlag                  = "upload-status"
 
 	TerraformDefaultWorkspace = "default"
 
@@ -190,6 +192,9 @@ const (
 	IdentityFlagShort         = "-i"
 	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
 	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).
+
+	// Profile flags.
+	ProfileFlagSelectValue = "__SELECT__" // Special value when --profile is used without argument (interactive picker).
 
 	// Cast recording flag.
 	CastFlagName      = "cast"

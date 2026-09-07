@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 )
 
@@ -262,6 +263,33 @@ func TestProcessorSetMaxChangesAndDirectMerge(t *testing.T) {
 	require.NotNil(t, result)
 	assert.True(t, result.HasConflicts)
 	assert.Contains(t, result.Content, "name: user")
+}
+
+func TestProcessorSetMergeDriverForcesTextMerge(t *testing.T) {
+	processor := NewProcessor()
+	processor.SetMaxChanges(100)
+	processor.SetMergeDriver(merge.DriverText)
+
+	t.Run("identical inputs are returned unchanged", func(t *testing.T) {
+		base := "key: value\n\nother: 1\n"
+		result, err := processor.Merge(base, base, base, "config.yaml")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.False(t, result.HasConflicts)
+		assert.Equal(t, base, result.Content)
+	})
+
+	t.Run("diverging theirs merges cleanly and preserves blank lines", func(t *testing.T) {
+		base := "servers:\n- name: web\n\nsettings:\n  timeout: 30\n"
+		ours := base
+		theirs := "servers:\n- name: web\n\nsettings:\n  timeout: 30\n\ntasks:\n- name: setup\n"
+
+		result, err := processor.Merge(base, ours, theirs, "config.yaml")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.False(t, result.HasConflicts)
+		assert.Equal(t, theirs, result.Content, "text driver should merge cleanly and preserve blank lines")
+	})
 }
 
 func TestProcessorSetupGitStorageInvalidBaseRef(t *testing.T) {

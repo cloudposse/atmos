@@ -20,6 +20,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
@@ -75,6 +76,7 @@ func TestExecuteTerraformSuppressesSpinnersDuringConcurrentRun(t *testing.T) {
 	}
 
 	var observedActive atomic.Bool
+	var observedOutputSuppression atomic.Bool
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info: &schema.ConfigAndStacksInfo{
@@ -83,16 +85,58 @@ func TestExecuteTerraformSuppressesSpinnersDuringConcurrentRun(t *testing.T) {
 			MaxConcurrency: 2,
 		},
 		Stacks: terraformAdapterTestStacks(),
-		Executor: func(TerraformExecution) (TerraformExecutionResult, error) {
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
 			observedActive.Store(active.Load())
+			observedOutputSuppression.Store(provWorkdir.OutputSuppressed(execution.Context))
 			return TerraformExecutionResult{}, nil
 		},
 	})
 
 	require.NoError(t, err)
 	require.True(t, observedActive.Load())
+	require.True(t, observedOutputSuppression.Load())
 	require.True(t, restored.Load())
 	require.False(t, active.Load())
+}
+
+func TestExecuteTerraformKeepsProvisioningOutputForSequentialRun(t *testing.T) {
+	var observedOutputSuppression atomic.Bool
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:            true,
+			SubCommand:     terraformSubCommandPlan,
+			MaxConcurrency: 1,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			observedOutputSuppression.Store(provWorkdir.OutputSuppressed(execution.Context))
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.False(t, observedOutputSuppression.Load())
+}
+
+func TestExecuteTerraformNormalizesNilContext(t *testing.T) {
+	var executorContext context.Context
+	var nilContext context.Context
+	err := ExecuteTerraform(nilContext, TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: terraformSubCommandPlan,
+		},
+		Stacks: terraformAdapterTestStacks(),
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executorContext = execution.Context
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, executorContext)
 }
 
 func TestStartSharedTerraformCache(t *testing.T) {
@@ -1738,6 +1782,24 @@ func TestHasTerraformAutoApproveEnvChecksGlobalAndSubcommandArgs(t *testing.T) {
 	t.Run("explicit false", func(t *testing.T) {
 		t.Setenv(terraformCLIArgsEnvPrefix+"apply", "-auto-approve=false")
 		require.False(t, hasTerraformAutoApproveEnv("apply"))
+	})
+}
+
+// TestValidateTerraformUIConcurrency covers the --ui + --max-concurrency>1 rejection.
+// The wouldAttemptStreamingUI value is injected rather than derived from a real TTY/CI
+// check here (tfui.WouldAttemptStreamingUI always returns false under go test's
+// non-interactive stdout, per terraform_streaming_ui_test.go's documented TTY-gating
+// limitation), which is exactly why validateTerraformConcurrentExecution takes the
+// decision as a parameter.
+func TestValidateTerraformUIConcurrency(t *testing.T) {
+	t.Run("streaming UI would be attempted", func(t *testing.T) {
+		err := validateTerraformUIConcurrency(true)
+		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		require.ErrorContains(t, err, "streaming UI is not supported with --max-concurrency > 1")
+	})
+
+	t.Run("streaming UI would not be attempted", func(t *testing.T) {
+		require.NoError(t, validateTerraformUIConcurrency(false))
 	})
 }
 

@@ -1,10 +1,13 @@
 package exec
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -279,4 +282,37 @@ func TestCheckRelease_WithVersionTrimming(t *testing.T) {
 			v.checkRelease()
 		})
 	}
+}
+
+// TestIsFIPSBuild exercises the crypto/fips140.Enabled() integration itself;
+// it can only assert that it runs without panicking and returns a bool,
+// since whether FIPS 140-3 mode is actually active depends on how the test
+// binary was built (GOFIPS140) and any GODEBUG=fips140 override in effect
+// when the suite runs (see .atmos.d/test.yaml vs a bare `go test`).
+func TestIsFIPSBuild(t *testing.T) {
+	assert.IsType(t, false, isFIPSBuild())
+}
+
+// TestDisplayVersionInFormat_FIPSField verifies the JSON/YAML output's fips
+// field reflects isFIPSBuild(), rather than silently carrying the zero value.
+func TestDisplayVersionInFormat_FIPSField(t *testing.T) {
+	var stdout bytes.Buffer
+	streams := &vendorModelTestStreams{stdout: &stdout, stderr: &bytes.Buffer{}}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+
+	v := versionExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		getLatestGitHubRepoRelease: func() (string, error) {
+			return "", errors.New("no update check in this test")
+		},
+	}
+
+	require.NoError(t, v.displayVersionInFormat(false, "json"))
+
+	var decoded Version
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &decoded))
+	assert.Equal(t, isFIPSBuild(), decoded.FIPS)
 }

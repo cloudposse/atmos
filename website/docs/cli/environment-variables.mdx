@@ -213,6 +213,44 @@ These environment variables configure Atmos behavior and can override settings i
     - **Default:** `true`
   </dd>
 
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT`</dt>
+  <dd>
+    Default value for terraform's `-lock-timeout` flag (e.g. `5m`). Overrides the
+    `atmos.yaml` value; overridden by stack-level, component-level, and CLI-typed flags.
+    See [Flags](/cli/configuration/components/terraform#flags).
+
+    - **YAML Path:** `components.terraform.flags.lock_timeout`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK`</dt>
+  <dd>
+    Default value for terraform's `-lock` flag.
+
+    - **YAML Path:** `components.terraform.flags.lock`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM`</dt>
+  <dd>
+    Default value for terraform's `-parallelism` flag.
+
+    - **YAML Path:** `components.terraform.flags.parallelism`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH`</dt>
+  <dd>
+    Default value for terraform's `-refresh` flag.
+
+    - **YAML Path:** `components.terraform.flags.refresh`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS`</dt>
+  <dd>
+    Default value for terraform's `-compact-warnings` flag.
+
+    - **YAML Path:** `components.terraform.flags.compact_warnings`
+    - **Default:** `false`
+  </dd>
+
   <dt>`ATMOS_COMPONENTS_HELMFILE_COMMAND`</dt>
   <dd>
     The executable to be called by `atmos` when running Helmfile commands.

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/manifest"
 )
 
@@ -64,6 +65,45 @@ func TestSaveAndLoadProjectRecordWithBaseRef(t *testing.T) {
 	require.Len(t, record.Spec.Fields, 2)
 	assert.Equal(t, "project_name", record.Spec.Fields[0].Name)
 	assert.Equal(t, "aws_region", record.Spec.Fields[1].Name)
+}
+
+// TestSaveAndLoadProjectRecord_FieldWhenSurvivesRoundTrip verifies a
+// field-level `when:` CEL condition survives a full save/load round trip
+// through the project record (.atmos/scaffold.yaml), evaluating correctly
+// after reload. Fields mirror examples/scaffolding/scaffold.yaml's
+// enable_vendoring/vendor_version pair, the repo's existing example of a
+// field-level `when:`.
+func TestSaveAndLoadProjectRecord_FieldWhenSurvivesRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	template := &ScaffoldConfig{
+		APIVersion: manifest.DefaultAPIVersion,
+		Kind:       ScaffoldKind,
+		Metadata:   manifest.Metadata{Name: "whencheck"},
+		Spec: ScaffoldSpec{
+			Fields: []FieldDefinition{
+				{Name: "enable_vendoring", Type: "confirm", Default: true},
+				{
+					Name:    "vendor_version",
+					Type:    "input",
+					Default: "1.536.0",
+					When:    mustCondition(t, "answers.enable_vendoring == true"),
+				},
+			},
+		},
+	}
+
+	values := map[string]interface{}{"enable_vendoring": true}
+	require.NoError(t, SaveProjectRecord(tmpDir, template, "", "", values))
+
+	record, err := LoadProjectRecord(tmpDir)
+	require.NoError(t, err)
+	require.NotNil(t, record)
+	require.Len(t, record.Spec.Fields, 2)
+
+	loadedWhen := record.Spec.Fields[1].When
+	assert.True(t, loadedWhen.Evaluate(condition.Context{Answers: map[string]any{"enable_vendoring": true}}))
+	assert.False(t, loadedWhen.Evaluate(condition.Context{Answers: map[string]any{"enable_vendoring": false}}))
 }
 
 func TestSaveProjectRecord_EmptyBaseRef(t *testing.T) {

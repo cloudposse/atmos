@@ -64,10 +64,13 @@ func TestToolchainSetTool_Execute(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, result.Success)
 
+		// Written under the raw "terraform" key (what was passed), not the resolved
+		// canonical "hashicorp/terraform" form -- see pkg/toolchain/set_test.go's
+		// TestSetToolVersion_WithValidVersion for the underlying contract.
 		toolVersions, err := toolchain.LoadToolVersions(toolVersionsFile)
 		require.NoError(t, err)
-		assert.Contains(t, toolVersions.Tools, "hashicorp/terraform")
-		assert.Contains(t, toolVersions.Tools["hashicorp/terraform"], "1.11.4")
+		assert.Contains(t, toolVersions.Tools, "terraform")
+		assert.Contains(t, toolVersions.Tools["terraform"], "1.11.4")
 	})
 
 	t.Run("fails with missing version", func(t *testing.T) {

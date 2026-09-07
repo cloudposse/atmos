@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=schema.json
+# Regression coverage for the stack-manifest JSON Schema fields fixed alongside issue #2919
+# (backend_type: http rejected) and its field-test follow-ups: overrides.hooks/generate/retry/
+# required_version/required_providers, component-level retry, required_version/required_providers,
+# source.ttl, and the root schema oneOf fix that let `vars`/`settings` coexist with `workflows` in
+# one manifest. See tests/fixtures/scenarios/manifest-schema-coverage/stacks/dev.yaml for the fixture.
+#
+# container_runtime.provider: "auto" (also fixed in the same pass) is covered at the schema-unit
+# level only (pkg/datafetcher TestManifestSchema_ContainerRuntimeProviderAuto), not here, since
+# exercising it end to end needs a container component fixture, which is a heavier, separate setup.
+tests:
+  - name: "manifest-schema-coverage: atmos validate stacks succeeds"
+    enabled: true
+    tty: false
+    snapshot: false
+    clean: true
+    description: "The full-coverage fixture manifest passes JSON Schema validation end to end"
+    workdir: "fixtures/scenarios/manifest-schema-coverage/"
+    command: "atmos"
+    args:
+      - "validate"
+      - "stacks"
+    expect:
+      exit_code: 0
+      stderr:
+        - "All stacks validated successfully"
+
+  - name: "manifest-schema-coverage: atmos describe stacks resolves every new field"
+    enabled: true
+    tty: false
+    snapshot: false
+    clean: true
+    description: "describe stacks processes backend_type: http, overrides.*, component retry, required_version/required_providers, and source.ttl without error"
+    workdir: "fixtures/scenarios/manifest-schema-coverage/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "stacks"
+      - "-s"
+      - "dev"
+      - "--format"
+      - "json"
+    expect:
+      valid:
+        - "json"
+      exit_code: 0
+      stdout:
+        - "\"backend_type\": \"http\""
+        - "\"remote_state_backend_type\": \"http\""
+        - "\"max_attempts\": 3"
+        - "\"required_version\": \">= 1.0\""
+        - "\"ttl\": \"24h\""
+        - "\"after-apply\""

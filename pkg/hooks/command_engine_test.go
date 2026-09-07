@@ -14,7 +14,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -640,7 +642,8 @@ func TestComponentPathFor_Fallbacks(t *testing.T) {
 	// Pre-create a provisioned workdir directory so a test case below can
 	// exercise resolveProvisionedWorkdir's "exists on disk" true branch,
 	// which the fallback-only cases above never reach.
-	provisionedWorkdirPath := filepath.Join(wd, ".workdir", "terraform", "dev-vpc")
+	provisionedWorkdirPath, err := provWorkdir.BuildPath(wd, cfg.TerraformComponentType, "vpc", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(provisionedWorkdirPath, 0o755))
 
 	tests := []struct {

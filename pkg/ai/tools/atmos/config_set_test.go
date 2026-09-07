@@ -183,7 +183,7 @@ func TestConfigSetTool_Execute(t *testing.T) {
 
 		require.Error(t, err)
 		assert.False(t, result.Success)
-		assert.ErrorIs(t, err, atmosyaml.ErrInvalidYAMLExpression)
+		assert.ErrorIs(t, err, atmosyaml.ErrInvalidTypedValue)
 	})
 }
 

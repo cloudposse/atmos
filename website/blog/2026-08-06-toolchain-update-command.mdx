@@ -1,0 +1,55 @@
+---
+slug: toolchain-update-command
+title: "atmos toolchain update: Move a Pinned Tool Forward Safely"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Pinning a CLI tool to an exact version is good practice — until it's time to move forward. Then it means
+opening `.tool-versions` by hand, going to check the tool's release page, picking a version, and editing the
+line yourself. Get it wrong and you're stuck rerunning install commands to find out.
+
+<!--truncate-->
+
+## The Problem
+
+A tool declared in `.tool-versions` stays exactly where you pinned it, on purpose — that's what makes it
+reproducible. But "pinned" shouldn't mean "stuck." When a new release ships, moving a tool forward has always
+meant editing the file by hand: look up the tool's latest release yourself, write the new version string
+into `.tool-versions`, then reinstall and hope you copied it correctly. There was no single command that
+answered "what's newer, and can I have it?"
+
+## The Fix
+
+`atmos toolchain update` resolves each tool's newest available version and moves the pin forward for you,
+then installs it. Run it with no arguments to update everything in `.tool-versions`, or name specific tools
+to update just those. Tools pinned to a PR, commit SHA, or git ref are left alone — those pins are meant to
+stay exact, so `update` skips them with an explanation instead of silently doing nothing.
+
+## How to Use It
+
+Update everything:
+
+```shell
+$ atmos toolchain update
+✓ terraform: 1.9.8 -> 1.11.4
+✓ jq: up to date (1.8.2)
+Updated 1 tool(s), 1 up to date
+```
+
+Update one tool, or preview first:
+
+```shell
+$ atmos toolchain update terraform --dry-run
+terraform: 1.9.8 -> 1.11.4 (dry-run)
+Would update 1 tool(s)
+```
+
+Tools are updated concurrently, with the same `--max-concurrency` control `atmos toolchain install` already
+supports.
+
+## Get Involved
+
+Try `atmos toolchain update` the next time a pinned tool falls behind. If you run into a tool whose update
+doesn't behave the way you'd expect, please
+[open an issue](https://github.com/cloudposse/atmos/issues).

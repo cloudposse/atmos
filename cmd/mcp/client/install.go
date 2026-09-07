@@ -146,7 +146,7 @@ func handleNoServersToInstall(cmd *cobra.Command, atmosConfig *schema.AtmosConfi
 			return nil
 		}
 	}
-	ui.Info(noServersConfiguredMessage(atmosConfig.MCP.Enabled))
+	ui.Info(noServersConfiguredMessage(atmosConfig.MCP.IsEnabled()))
 	return nil
 }
 

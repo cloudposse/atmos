@@ -1,12 +1,12 @@
-FROM golang:1.26.2 AS confetty
+FROM golang:1.27.0@sha256:4013ae0f9e7994f8535c58c811f8f863fbed38b72e0d51e6592156f758d66146 AS confetty
 
 # Set the working directory
 WORKDIR /app
 
 # Install the confetty application
-RUN go install github.com/maaslalani/confetty@latest
+RUN go install github.com/maaslalani/confetty@6c6f1b5b605f78c3ed3bab2d2a1357c0dd794221
 
-FROM mcr.microsoft.com/vscode/devcontainers/base:debian
+FROM mcr.microsoft.com/vscode/devcontainers/base:debian@sha256:b8c3669fb4cc652621b3386517c40ab3e151e827de958d6fe75528798ffb5727
 
 # Copy the binary from the builder stage
 COPY --from=confetty /go/bin/confetty /usr/local/bin/confetty
@@ -27,19 +27,40 @@ RUN apt-get update && \
 RUN usermod -aG docker vscode && \
     chsh -s /bin/zsh vscode
 
-# Install the starship prompt
-RUN curl -sS https://starship.rs/install.sh | sh -s -- -y
+# Install the starship prompt. install.sh has no version-pin flag (it always
+# fetches the latest GitHub release), so download a pinned release binary
+# directly instead, for reproducible builds.
+RUN STARSHIP_VERSION=1.26.0 && \
+    case "$(uname -m)" in \
+        x86_64) STARSHIP_TARGET=x86_64-unknown-linux-gnu ;; \
+        aarch64|arm64) STARSHIP_TARGET=aarch64-unknown-linux-musl ;; \
+        *) echo "Unsupported architecture: $(uname -m)" && exit 1 ;; \
+    esac && \
+    curl -fsSL "https://github.com/starship/starship/releases/download/v${STARSHIP_VERSION}/starship-${STARSHIP_TARGET}.tar.gz" | tar xz -C /usr/local/bin && \
+    chmod +x /usr/local/bin/starship
 
-# Install OpenTofu
-RUN curl -1sSLf 'https://get.opentofu.org/install-opentofu.sh' | bash -s -- --root-method none --install-method deb
+# Install OpenTofu. install-opentofu.sh's --install-method deb always runs an
+# unversioned `apt-get install tofu` (--opentofu-version only takes effect for
+# the standalone install method), so pin the package version explicitly after.
+RUN curl -1sSLf 'https://raw.githubusercontent.com/opentofu/get.opentofu.org/3d354dfa62d9a36f33df16cdd6bb506ace1e6e2e/static/install-opentofu.sh' | bash -s -- --root-method none --install-method deb && \
+    apt-get install -y --allow-downgrades tofu=1.12.6
 
-# Install Kustomize binary (required by Helmfile)
-RUN curl -1sSLf "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"  | bash -s -- /usr/local/bin
+# Install Kustomize binary (required by Helmfile), pinned to a specific version.
+RUN curl -1sSLf "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/c44f66d54fed65f1fa47e3adc4b8001aebff825f/hack/install_kustomize.sh"  | bash -s -- 5.8.1 /usr/local/bin
 
-# Install the cloudposse Debian repository
-RUN curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
+# Install the cloudposse Debian repository (inlined from cfg/setup/bash.deb.sh
+# instead of piping a downloaded script into bash, per Scorecard Pinned-Dependencies).
+RUN curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/gpg.7333C6FDEFA717CC.key' | gpg --dearmor -o /usr/share/keyrings/cloudposse-packages-archive-keyring.gpg && \
+    chmod 644 /usr/share/keyrings/cloudposse-packages-archive-keyring.gpg && \
+    . /etc/os-release && \
+    curl -1sLf "https://dl.cloudsmith.io/public/cloudposse/packages/config.deb.txt?distro=debian&codename=${VERSION_CODENAME}" -o /etc/apt/sources.list.d/cloudposse-packages.list && \
+    chmod 644 /etc/apt/sources.list.d/cloudposse-packages.list
 
-RUN apt-get -y install atmos terraform kubectl helmfile helm k9s stern && \
+# apt-get update is required here: the earlier apt-get update (Docker CLI
+# install step above) ran before this source list existed, and its package
+# lists were cleared by rm -rf /var/lib/apt/lists/* right after.
+RUN apt-get update && \
+    apt-get -y install atmos terraform kubectl helmfile helm k9s stern && \
     su - vscode -c "helm plugin install --verify=false https://github.com/databus23/helm-diff"
 
 # Install the rootfs/ configurations

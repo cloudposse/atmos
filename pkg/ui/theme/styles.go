@@ -4,7 +4,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 // DefaultThemeName is the default theme used when no theme is configured.
@@ -425,25 +426,29 @@ func InvalidateStyleCache() {
 
 // getActiveThemeName determines the active theme name from configuration or environment.
 func getActiveThemeName() string {
-	// Bind environment variables on demand to ensure they're available
-	// This handles both ATMOS_THEME and THEME as fallbacks
-	_ = viper.BindEnv("settings.terminal.theme", "ATMOS_THEME", "THEME")
+	// Bind environment variables on demand to ensure they're available.
+	// This handles both ATMOS_THEME and THEME as fallbacks. Routed through
+	// pkg/viperguard (not viper.BindEnv directly): this runs on every styled
+	// render, including from the toolchain's concurrent batch installer, and
+	// spf13/viper has no locking of its own -- a bare viper.BindEnv here can
+	// data-race against any other goroutine's concurrent global-viper access.
+	_ = viperguard.BindEnv("settings.terminal.theme", "ATMOS_THEME", "THEME")
 
-	// Check Viper configuration which now includes bound environment variables
-	if viper.IsSet("settings.terminal.theme") {
-		theme := viper.GetString("settings.terminal.theme")
+	// Check Viper configuration which now includes bound environment variables.
+	if viperguard.IsSet("settings.terminal.theme") {
+		theme := viperguard.GetString("settings.terminal.theme")
 		if theme != "" {
 			return theme
 		}
 	}
 
-	// Check for ATMOS_THEME environment variable directly as fallback
-	if theme := viper.GetString("ATMOS_THEME"); theme != "" {
+	// Check for ATMOS_THEME environment variable directly as fallback.
+	if theme := viperguard.GetString("ATMOS_THEME"); theme != "" {
 		return theme
 	}
 
-	// Check for THEME environment variable directly as second fallback
-	if theme := viper.GetString("THEME"); theme != "" {
+	// Check for THEME environment variable directly as second fallback.
+	if theme := viperguard.GetString("THEME"); theme != "" {
 		return theme
 	}
 

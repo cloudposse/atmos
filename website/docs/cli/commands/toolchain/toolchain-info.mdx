@@ -118,12 +118,6 @@ atmos toolchain info kubernetes-sigs/kubectl
         Environment variable: `ATMOS_TOOLCHAIN_FORMAT`
     </dd>
 
-    <dt>`--show-versions` <em>(optional)</em></dt>
-    <dd>
-        Number of latest versions to display. Default: `5`
-
-        Environment variable: `ATMOS_TOOLCHAIN_SHOW_VERSIONS`
-    </dd>
 </dl>
 
 ## Information Displayed
@@ -157,11 +151,12 @@ atmos toolchain info kubectl --format json | jq '.url_template'
 
 ### Check Available Versions
 
-See what versions are available:
+`atmos toolchain info` always includes an "Available Versions" section in its output, so there's no
+flag needed to see what versions exist:
 
 ```shell
-# Show more versions
-atmos toolchain info terraform --show-versions 20
+# View available versions alongside the rest of the tool info
+atmos toolchain info terraform
 
 # Get latest version programmatically
 atmos toolchain info terraform --format json | jq -r '.latest_version'
@@ -214,10 +209,10 @@ atmos toolchain info kubectl --format json > kubectl-metadata.json
 
 ## Related Commands
 
-- [`atmos toolchain versions`](/cli/commands/toolchain/versions) - List all available versions
+- [`atmos toolchain get`](/cli/commands/toolchain/get) - Browse available versions with `--all --limit`
 - [`atmos toolchain list`](/cli/commands/toolchain/list) - View installed tools
 - [`atmos toolchain registry search`](/cli/commands/toolchain/registry/registry-search) - Search for tools
-- [`atmos toolchain aliases`](/cli/commands/toolchain/aliases) - View configured aliases
+- [Tool Aliases](/cli/configuration/toolchain/aliases) - Configure convenient tool name aliases
 
 ## Related Documentation
 

@@ -188,7 +188,7 @@ func confirmAddOverwrite(file, name string, yes, force bool) (bool, error) {
 // moment a client tries to launch `atmos mcp start`.
 func ensureMCPEnabledForPreset(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, target string, yes bool) error {
 	preset, ok := mcpconfig.ResolvePreset(target)
-	if !ok || !preset.RequiresMCPEnabled || atmosConfig.MCP.Enabled {
+	if !ok || !preset.RequiresMCPEnabled || atmosConfig.MCP.IsEnabled() {
 		return nil
 	}
 
@@ -220,7 +220,8 @@ func enableMCPInteractively(cmd *cobra.Command, atmosConfig *schema.AtmosConfigu
 	if _, err := atmosyaml.SetFileWithType(file, "mcp.enabled", "true", atmosyaml.TypeBool); err != nil {
 		return err
 	}
-	atmosConfig.MCP.Enabled = true
+	enabled := true
+	atmosConfig.MCP.Enabled = &enabled
 	ui.Successf("Enabled `mcp.enabled` in %s", file)
 	return nil
 }

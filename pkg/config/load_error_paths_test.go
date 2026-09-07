@@ -755,3 +755,63 @@ func TestMergeImports_ProcessImportsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mkdir failed")
 }
+
+// TestLoadConfig_GlobalTerraformFlagsUnknownKey_Errors asserts that a typo in atmos.yaml's
+// fleet-wide `components.terraform.flags:` (e.g. `lock_timout` instead of `lock_timeout`) is
+// rejected at config-load time. Unrecognized keys are silently dropped by
+// schema.DecodeTerraformFlags during the typed unmarshal, so without an explicit raw-map
+// check here, a global-level typo would never surface — unlike stack-level and
+// component-level `flags:` typos, which are already caught later by validateFlagsKeys in
+// internal/exec/terraform_execute_helpers_args.go once a component is resolved.
+func TestLoadConfig_GlobalTerraformFlagsUnknownKey_Errors(t *testing.T) {
+	tempDir := t.TempDir()
+
+	configContent := `
+base_path: ./
+components:
+  terraform:
+    base_path: components/terraform
+    flags:
+      lock_timout: 5m
+`
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
+
+	configInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configPath},
+	}
+
+	_, err := LoadConfig(configInfo)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, schema.ErrInvalidTerraformFlagsConfig)
+	assert.Contains(t, err.Error(), "lock_timout")
+}
+
+// TestLoadConfig_GlobalTerraformFlagsKnownKeys_NoError is the negative-path companion to
+// TestLoadConfig_GlobalTerraformFlagsUnknownKey_Errors: valid global flags keys must not
+// trigger the new validation.
+func TestLoadConfig_GlobalTerraformFlagsKnownKeys_NoError(t *testing.T) {
+	tempDir := t.TempDir()
+
+	configContent := `
+base_path: ./
+components:
+  terraform:
+    base_path: components/terraform
+    flags:
+      lock_timeout: 5m
+      parallelism: 4
+`
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
+
+	configInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configPath},
+	}
+
+	config, err := LoadConfig(configInfo)
+	require.NoError(t, err)
+	assert.Equal(t, "5m", config.Components.Terraform.Flags.LockTimeout)
+	require.NotNil(t, config.Components.Terraform.Flags.Parallelism)
+	assert.Equal(t, 4, *config.Components.Terraform.Flags.Parallelism)
+}

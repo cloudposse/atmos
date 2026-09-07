@@ -38,6 +38,36 @@ const (
 	eventMergeGroup = "merge_group"
 	// RefsHeadsPrefix is the prefix on fully-qualified branch refs in event payloads.
 	refsHeadsPrefix = "refs/heads/"
+	// ActionClosed is the pull_request action fired when a PR is closed or merged.
+	actionClosed = "closed"
+
+	// Checkout classifications: what commit the workflow actually checked out,
+	// determined by comparing the local HEAD against the event payload. Each
+	// base-resolution strategy is only correct for specific checkouts, so the
+	// classification drives strategy selection and is surfaced in logs.
+	checkoutPRHead         = "head.sha"
+	checkoutMergeCommit    = "merge-commit"
+	checkoutSyntheticMerge = "synthetic-merge"
+	checkoutUnknown        = "unknown"
+
+	// SourceSyntheticMergeParent labels resolution from the first parent of a
+	// synthetic refs/pull/<n>/merge test-merge checkout.
+	sourceSyntheticMergeParent = "first-parent (synthetic-merge checkout)"
+	// SourceMergeCommitParent labels resolution from the first parent of the
+	// real merge commit when the workflow checked it out.
+	sourceMergeCommitParent = "HEAD^1 (merge-commit checkout)"
+	// SourceMergedForkPoint labels resolution via the merge-commit-anchored
+	// fork point for merged PRs with the PR head checked out.
+	sourceMergedForkPoint = "merge-base(HEAD, merge_commit_sha^1)"
+	// SourceFFMergedForkPoint labels resolution via the payload-base-anchored
+	// fork point for fast-forward-merged PRs (merge_commit_sha == head.sha).
+	sourceFFMergedForkPoint = "merge-base(HEAD, base.sha) (fast-forward merge)"
+
+	// CwdRepoDir scopes git operations to the repository containing the
+	// current working directory (the CI checkout).
+	cwdRepoDir = "."
+	// RevisionHead is the git revision name for the checked-out commit.
+	revisionHead = "HEAD"
 )
 
 // ErrEventPathNotSet is returned when $GITHUB_EVENT_PATH is not set.
@@ -45,6 +75,14 @@ var ErrEventPathNotSet = fmt.Errorf("GITHUB_EVENT_PATH is not set")
 
 // ErrNoParentCommit is returned when HEAD has no parents (initial commit).
 var ErrNoParentCommit = fmt.Errorf("HEAD has no parents (initial commit)")
+
+// ErrNoMergeCommitSHA is returned when a merged PR's event payload lacks
+// pull_request.merge_commit_sha, so no merge-commit-anchored base can be computed.
+var ErrNoMergeCommitSHA = fmt.Errorf("event payload has no pull_request.merge_commit_sha")
+
+// ErrNoPayloadBaseSHA is returned when a fast-forward-merged PR's event payload
+// lacks pull_request.base.sha, so no payload-base-anchored base can be computed.
+var ErrNoPayloadBaseSHA = fmt.Errorf("event payload has no pull_request.base.sha")
 
 // ResolveBase returns the base commit for affected detection in GitHub Actions.
 // It reads GitHub Actions environment variables and event payloads to determine
@@ -79,20 +117,26 @@ func (p *Provider) ResolveBase() (*provider.BaseResolution, error) {
 
 // resolvePRBase resolves the base commit for pull request events.
 //
-// Strategy chain (first success wins):
+// The checked-out commit is classified against the event payload first
+// (classifyPRCheckout), because every strategy below is only correct for
+// specific checkouts — trusting HEAD blind is how merged multi-commit PRs
+// used to resolve a wrong base and mark the wrong components affected.
+//
+// Strategy chain for open (and closed-unmerged) PRs, first success wins:
 //  1. merge-base(HEAD, origin/<target>) — gold standard. Self-heals from
 //     shallow CI checkouts via MergeBaseWithAutoFetch (fetches the target
 //     branch and deepens history when needed).
-//  2. HEAD~1 — only for closed/merged PRs when merge-base is unavailable.
-//     Correct when the merge commit is checked out with merge/squash
-//     strategy.
-//  3. event.pull_request.base.sha — payload SHA. Slightly stale (frozen at
+//  2. event.pull_request.base.sha — payload SHA. Slightly stale (frozen at
 //     last sync event) but never compares to the current tip of main, so it
 //     can never produce the "PR is out of date with main" false positives
 //     that returning the origin/<target> ref directly does.
-//  4. refs/remotes/origin/<target> ref — last resort, with a Warn log.
+//  3. refs/remotes/origin/<target> ref — last resort, with a Warn log.
 //     Compares to current tip of target; will produce false positives for
 //     out-of-date PRs.
+//
+// Merged PRs are routed to resolveMergedPRBase instead: after the merge,
+// origin/<target> contains this PR, so merge-base against its moving tip
+// degenerates to HEAD, and a payload-anchored strategy is required.
 //
 // Also extracts the PR head SHA for Atmos Pro upload correlation.
 func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
@@ -104,40 +148,39 @@ func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 	headSHA := extractPRHeadSHA(payload)
 	targetBranch := extractTargetBranch(payload)
 	action, _ := payload["action"].(string)
+	checkout, parents := classifyPRCheckout(headSHA, extractPRMergeCommitSHA(payload))
 
-	// 1) merge-base — the gold standard. Works regardless of what's
-	// checked out, merge strategy, or number of commits on the PR.
+	if action == actionClosed && extractPRMerged(payload) {
+		return resolveMergedPRBase(eventName, payload, checkout, parents), nil
+	}
+
+	// 1) merge-base — the gold standard for open PRs. Works regardless of
+	// what's checked out, merge strategy, or number of commits on the PR.
 	if targetBranch != "" {
-		if sha, mbErr := git.MergeBaseWithAutoFetch(".", targetBranch); mbErr == nil {
+		if sha, mbErr := git.MergeBaseWithAutoFetch(cwdRepoDir, targetBranch); mbErr == nil {
 			return &provider.BaseResolution{
 				SHA:          sha,
 				HeadSHA:      headSHA,
 				TargetBranch: targetBranch,
 				Source:       "merge-base(HEAD, origin/" + targetBranch + ")",
 				EventType:    eventName,
+				Checkout:     checkout,
 			}, nil
 		} else {
 			log.Debug("merge-base failed, trying fallbacks", "target", targetBranch, "error", mbErr)
 		}
 	}
 
-	// 2) Closed/merged PRs: HEAD~1.
-	// Correct when the merge commit is checked out (merge/squash strategies).
-	if action == "closed" {
-		if sha, parentErr := resolveParentCommit(); parentErr == nil {
-			return &provider.BaseResolution{
-				SHA:          sha,
-				HeadSHA:      headSHA,
-				TargetBranch: targetBranch,
-				Source:       "HEAD~1 (merged PR, merge-base unavailable)",
-				EventType:    eventName,
-			}, nil
-		} else {
-			log.Debug("HEAD~1 failed for merged PR", "error", parentErr)
-		}
-	}
+	return resolvePRBaseFallback(eventName, payload, checkout), nil
+}
 
-	// 3) event.pull_request.base.sha — payload SHA fallback.
+// resolvePRBaseFallback is the shared tail of the PR fallback chain:
+// payload base.sha first, then the last-resort target-branch ref.
+func resolvePRBaseFallback(eventName string, payload map[string]any, checkout string) *provider.BaseResolution {
+	headSHA := extractPRHeadSHA(payload)
+	targetBranch := extractTargetBranch(payload)
+
+	// event.pull_request.base.sha — payload SHA fallback.
 	// This SHA is at worst stale by however many main commits have landed
 	// since the PR was last synced. Crucially, it is not the *current tip*
 	// of main, so it will not silently turn a stale-but-untouched PR into
@@ -149,22 +192,208 @@ func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 			TargetBranch: targetBranch,
 			Source:       sourcePayloadBaseSHA,
 			EventType:    eventName,
-		}, nil
+			Checkout:     checkout,
+		}
 	}
 
-	// 4) Last-resort: ref to current tip of target branch. Logs Warn
+	// Last-resort: ref to current tip of target branch. Logs Warn
 	// because this is the path that produces false positives for
 	// out-of-date PRs (every commit on main since the fork point shows
 	// up as a tree difference).
 	res := resolveFromBaseRef(eventName)
 	res.HeadSHA = headSHA
 	res.TargetBranch = targetBranch
+	res.Checkout = checkout
 	log.Warn(
 		"Falling back to current tip of target branch for PR base — affected detection may include unrelated commits from the target branch.",
 		"target", targetBranch,
 		"hint", "ensure the workflow checks out enough history (fetch-depth >= 2 or fetch-depth: 0) and that origin/"+targetBranch+" is fetchable",
 	)
-	return res, nil
+	return res
+}
+
+// resolveMergedPRBase resolves the diff base for a merged PR from the event
+// payload's merge commit, independent of which commit the workflow checked out.
+//
+// The pre-fix behavior — merge-base against origin/<target>, then HEAD~1 —
+// is only correct for specific checkouts: after the merge, origin/<target>
+// contains this PR (so merge-base collapses to HEAD for merge-commit
+// strategy), and HEAD~1 with the PR head checked out diffs only the PR's
+// FINAL commit, not its net change. A multi-commit PR whose last commit
+// reverts an earlier one then reports the reverted files (e.g., an org-wide
+// backend change) as affected — the "wall of post-merge dispatches" incident.
+//
+// Per-checkout strategy (mirrors merge_group.base_sha semantics):
+//   - synthetic-merge: first parent of HEAD (the target tip the test merge
+//     was built on) — exact net-diff base.
+//   - merge-commit: HEAD^1 — the pre-merge tip of the target branch.
+//   - head.sha: merge-base(HEAD, merge_commit_sha^1) — the true fork point,
+//     correct for merge, squash, and rebase strategies alike.
+//   - unknown: Warn and fall back to the payload base.sha tier.
+func resolveMergedPRBase(eventName string, payload map[string]any, checkout string, parents []string) *provider.BaseResolution {
+	res := &provider.BaseResolution{
+		HeadSHA:      extractPRHeadSHA(payload),
+		TargetBranch: extractTargetBranch(payload),
+		EventType:    eventName,
+		Checkout:     checkout,
+	}
+
+	switch checkout {
+	case checkoutSyntheticMerge:
+		// classifyPRCheckout guarantees two parents for this class.
+		res.SHA = parents[0]
+		res.Source = sourceSyntheticMergeParent
+		return res
+	case checkoutMergeCommit:
+		if len(parents) > 0 {
+			res.SHA = parents[0]
+			res.Source = sourceMergeCommitParent
+			return res
+		}
+		// A parentless merge commit is degenerate (orphan/rewritten
+		// history) — fall through to the payload fallback below.
+	case checkoutPRHead:
+		if base, source, err := mergedPRHeadAnchoredBase(payload); err == nil {
+			res.SHA = base
+			res.Source = source
+			return res
+		} else {
+			log.Warn(
+				"Could not anchor the merged PR base on the merge commit — falling back to the payload base SHA. Affected detection may be less precise.",
+				"error", err,
+			)
+		}
+	default:
+		log.Warn(
+			"Cannot classify the checked-out commit for a merged PR — falling back to the payload base SHA. Affected detection may be less precise.",
+			"hint", "check out either the PR head SHA or the merge commit in the workflow",
+		)
+	}
+
+	return resolvePRBaseFallback(eventName, payload, checkout)
+}
+
+// classifyPRCheckout inspects the local HEAD and classifies which commit the
+// workflow actually checked out, relative to the PR facts in the event
+// payload. Returns the classification and HEAD's parent SHAs (empty for an
+// initial commit — a valid commit, not an error; callers check length).
+func classifyPRCheckout(headSHA, mergeCommitSHA string) (string, []string) {
+	localHead, parents, err := git.CommitParents(cwdRepoDir, revisionHead)
+	if err != nil {
+		log.Debug("classifying checkout: cannot read local HEAD", "error", err)
+		return checkoutUnknown, nil
+	}
+	switch {
+	case headSHA != "" && localHead == headSHA:
+		return checkoutPRHead, parents
+	case mergeCommitSHA != "" && localHead == mergeCommitSHA:
+		return checkoutMergeCommit, parents
+	case headSHA != "" && len(parents) == 2 && parents[1] == headSHA:
+		// GitHub's synthetic refs/pull/<n>/merge test-merge commit: second
+		// parent is the PR head, first parent is the target-branch tip the
+		// merge was built on.
+		return checkoutSyntheticMerge, parents
+	default:
+		return checkoutUnknown, parents
+	}
+}
+
+// mergedPRHeadAnchoredBase resolves the base for a merged PR whose head SHA
+// is checked out, returning (base, source label, error).
+//
+// Normal merges anchor on the merge commit's first parent (mergedPRForkPoint).
+// Fast-forward merges (branch pushed directly to the target; GitHub reports
+// the PR merged with merge_commit_sha == head.sha) are special-cased: there
+// the merge commit IS the PR head, so its first parent is the PR's own
+// previous commit — anchoring on it would silently drop every commit but the
+// last from the diff. Anchor on the payload's base.sha instead: a pre-merge
+// target-branch commit, so merge-base(HEAD, base.sha) is the fork point even
+// when base.sha is stale (staleness only moves the anchor along the target
+// branch, never onto the PR branch).
+func mergedPRHeadAnchoredBase(payload map[string]any) (string, string, error) {
+	mergeCommitSHA := extractPRMergeCommitSHA(payload)
+	if mergeCommitSHA != "" && mergeCommitSHA == extractPRHeadSHA(payload) {
+		baseSHA := extractBaseSHA(payload)
+		if baseSHA == "" {
+			return "", "", ErrNoPayloadBaseSHA
+		}
+		base, err := forkPointFromAnchor(baseSHA)
+		if err != nil {
+			return "", "", err
+		}
+		return base, sourceFFMergedForkPoint, nil
+	}
+
+	base, err := mergedPRForkPoint(mergeCommitSHA)
+	if err != nil {
+		return "", "", err
+	}
+	return base, sourceMergedForkPoint, nil
+}
+
+// mergedPRForkPoint computes the true fork point of a merged PR whose head
+// SHA is checked out, by anchoring on the merge commit recorded in the event
+// payload: merge-base(HEAD, merge_commit_sha^1). The first parent of the
+// merge commit is the pre-merge tip of the target branch, so the merge-base
+// against it is the fork point — for merge, squash, and rebase strategies
+// alike — and can never degenerate to HEAD the way merge-base against the
+// post-merge origin/<target> tip does.
+func mergedPRForkPoint(mergeCommitSHA string) (string, error) {
+	if mergeCommitSHA == "" {
+		return "", ErrNoMergeCommitSHA
+	}
+
+	_, parents, err := git.CommitParents(cwdRepoDir, mergeCommitSHA)
+	if err != nil {
+		// A narrow head-SHA checkout may not have fetched the merge commit.
+		if fetchErr := git.FetchCommit(cwdRepoDir, mergeCommitSHA); fetchErr != nil {
+			return "", err
+		}
+		_, parents, err = git.CommitParents(cwdRepoDir, mergeCommitSHA)
+		if err != nil {
+			return "", err
+		}
+	}
+	if len(parents) == 0 {
+		return "", git.ErrCommitHasNoParents
+	}
+
+	return git.MergeBaseSHAs(cwdRepoDir, revisionHead, parents[0])
+}
+
+// forkPointFromAnchor computes merge-base(HEAD, anchorSHA), fetching the
+// anchor commit by SHA first when a narrow checkout did not bring it in.
+func forkPointFromAnchor(anchorSHA string) (string, error) {
+	if _, _, err := git.CommitParents(cwdRepoDir, anchorSHA); err != nil {
+		if fetchErr := git.FetchCommit(cwdRepoDir, anchorSHA); fetchErr != nil {
+			return "", err
+		}
+	}
+	return git.MergeBaseSHAs(cwdRepoDir, revisionHead, anchorSHA)
+}
+
+// extractPRMerged reports whether the PR event payload marks the PR as merged
+// (pull_request.merged). Closed-without-merge PRs return false and are treated
+// like open PRs for base resolution.
+func extractPRMerged(payload map[string]any) bool {
+	pr, _ := payload[payloadKeyPullRequest].(map[string]any)
+	if pr == nil {
+		return false
+	}
+	merged, _ := pr["merged"].(bool)
+	return merged
+}
+
+// extractPRMergeCommitSHA extracts pull_request.merge_commit_sha from the
+// event payload. For merged PRs this is the commit that landed on the target
+// branch (merge commit, squash commit, or rebased tip). Empty when absent.
+func extractPRMergeCommitSHA(payload map[string]any) string {
+	pr, _ := payload[payloadKeyPullRequest].(map[string]any)
+	if pr == nil {
+		return ""
+	}
+	sha, _ := pr["merge_commit_sha"].(string)
+	return sha
 }
 
 // extractTargetBranch extracts the target branch name from the PR event payload.

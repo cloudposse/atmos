@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfmigrate "github.com/cloudposse/atmos/pkg/terraform/tfmigrate"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -164,10 +165,13 @@ func executeTfmigrateSingle(info *schema.ConfigAndStacksInfo, opts tfmigrate.Opt
 		return err
 	}
 
-	if err := selectTfmigrateWorkspace(execCtx); err != nil {
-		return err
-	}
-
+	// Resolve the zero-config default (and its "nothing to migrate yet" Skip
+	// verdict) before touching the workspace: when there is no migration to
+	// run, tfmigrate must be skipped entirely, without ever invoking the
+	// terraform/tofu binary for a workspace select that has no purpose.
+	// resolveTfmigrateDefaultConfig only reads execCtx state ProcessStacks
+	// already resolved (component dir, backend, TerraformWorkspace), so it
+	// does not depend on the workspace having been selected.
 	resolved, err := resolveTfmigrateDefaultConfig(execCtx, opts)
 	if resolved.Cleanup != nil {
 		defer resolved.Cleanup()
@@ -179,6 +183,10 @@ func executeTfmigrateSingle(info *schema.ConfigAndStacksInfo, opts tfmigrate.Opt
 		return nil
 	}
 	opts = resolved.Options
+
+	if err := selectTfmigrateWorkspace(execCtx); err != nil {
+		return err
+	}
 
 	args, err := tfmigrate.BuildArgs(opts)
 	if err != nil {
@@ -398,7 +406,7 @@ func resolveTfmigrateComponentPath(atmosConfig *schema.AtmosConfiguration, info 
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	path, _, err := component.ProvisionAndResolveComponentPath(ctx, atmosConfig, info, cfg.TerraformComponentType, basePath)
+	path, _, err := component.ProvisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, basePath)
 	if err != nil {
 		return "", err
 	}

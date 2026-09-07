@@ -101,6 +101,12 @@ func TestInitCmd_FlagDefinitions(t *testing.T) {
 			shorthand:    "",
 			defaultValue: "false",
 		},
+		{
+			name:         "merge-driver flag",
+			flagName:     "merge-driver",
+			shorthand:    "",
+			defaultValue: "auto",
+		},
 	}
 
 	for _, tt := range tests {
@@ -407,6 +413,17 @@ func TestExecuteInit_TemplateValuesConversion(t *testing.T) {
 }
 
 func TestInitCmd_Integration_Help(t *testing.T) {
+	// cobra checks the "help" flag's current value on every Execute() call, not
+	// just whether --help was in this invocation's args -- so leaving it "true"
+	// leaks into every later test that calls initCmd.Execute() for the rest of
+	// this package's test binary: Execute() returns nil having printed help
+	// instead of ever calling RunE, regardless of that later test's own args.
+	// -shuffle=on can put this test before any of those, so it must restore the
+	// flag itself; see docs/fixes for the incident.
+	t.Cleanup(func() {
+		_ = initCmd.Flags().Set("help", "false")
+	})
+
 	// Test help output.
 	initCmd.SetArgs([]string{"--help"})
 	err := initCmd.Execute()
@@ -454,6 +471,18 @@ func TestExecuteInit_WithTemplateDirectory(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.FileExists(t, filepath.Join(tmpDir, "README.md"))
+}
+
+func TestExecuteInit_InvalidMergeDriver(t *testing.T) {
+	err := executeInit(context.Background(), &initOptions{
+		templateName: "simple",
+		targetDir:    t.TempDir(),
+		interactive:  false,
+		mergeDriver:  "bogus",
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnknownMergeDriver)
 }
 
 func TestMaybeInitGeneratedProjectGit_GitEnabled(t *testing.T) {

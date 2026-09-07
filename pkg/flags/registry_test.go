@@ -227,6 +227,26 @@ func TestFlagRegistry_RegisterFlags_WithNoOptDefVal(t *testing.T) {
 	assert.Equal(t, cfg.IdentityFlagSelectValue, flag.NoOptDefVal)
 }
 
+// TestFlagRegistry_RegisterFlags_StringSliceFlag_WithNoOptDefVal proves the *StringSliceFlag
+// branch in registerFlagToSet applies NoOptDefVal the same way as the *StringFlag branch
+// exercised by TestFlagRegistry_RegisterFlags_WithNoOptDefVal above -- required for flags like
+// --profile that support both `--profile foo` and a bare `--profile` (interactive picker).
+func TestFlagRegistry_RegisterFlags_StringSliceFlag_WithNoOptDefVal(t *testing.T) {
+	registry := NewFlagRegistry()
+	registry.Register(&StringSliceFlag{
+		Name:        "profile",
+		NoOptDefVal: cfg.IdentityFlagSelectValue,
+		Description: "Configuration profile(s)",
+	})
+
+	cmd := &cobra.Command{Use: "test"}
+	registry.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("profile")
+	require.NotNil(t, flag)
+	assert.Equal(t, cfg.IdentityFlagSelectValue, flag.NoOptDefVal)
+}
+
 func TestFlagRegistry_RegisterPersistentFlags(t *testing.T) {
 	registry := NewFlagRegistry()
 	registry.Register(&StringFlag{Name: "logs-level", Description: "Log level"})

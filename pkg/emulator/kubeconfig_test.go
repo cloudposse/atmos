@@ -101,7 +101,15 @@ func shrinkKubernetesReadyTimers(t *testing.T) {
 	t.Helper()
 	oldTimeout := kubernetesReadyTimeout
 	oldInterval := kubernetesReadyPollInterval
-	kubernetesReadyTimeout = 50 * time.Millisecond
+	// The deadline must survive multiple real gomock-backed attempts, not just one.
+	// A tight deadline (previously 50ms) races against gomock call-matching overhead
+	// and CI scheduler jitter: on a loaded Windows runner a single mocked attempt has
+	// been observed to take 300ms+, blowing the deadline after only one attempt and
+	// failing before the retry loop's second Exec call ever happens. 2s gives ample
+	// headroom while still keeping the happy path fast (the loop only sleeps
+	// kubernetesReadyPollInterval between attempts, so a passing run still finishes
+	// in low single-digit milliseconds).
+	kubernetesReadyTimeout = 2 * time.Second
 	kubernetesReadyPollInterval = time.Millisecond
 	t.Cleanup(func() {
 		kubernetesReadyTimeout = oldTimeout

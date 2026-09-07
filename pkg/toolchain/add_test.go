@@ -19,7 +19,7 @@ func TestAddCommand_ValidTool(t *testing.T) {
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
-	err := AddToolVersion("terraform", "1.11.4")
+	err := AddToolVersion("terraform", "1.11.4", false)
 	require.NoError(t, err, "Should successfully add valid tool")
 
 	// Verify the tool was added to the file
@@ -37,7 +37,7 @@ func TestAddCommand_ValidToolWithAlias(t *testing.T) {
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
-	err := AddToolVersion("helm", "3.12.0")
+	err := AddToolVersion("helm", "3.12.0", false)
 	require.NoError(t, err, "Should successfully add valid tool using alias")
 
 	// Verify the tool was added to the file
@@ -56,7 +56,7 @@ func TestAddCommand_ValidToolWithCanonicalName(t *testing.T) {
 		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
 	// Test adding a valid tool using canonical name
-	err := AddToolVersion("hashicorp/terraform", "1.11.4")
+	err := AddToolVersion("hashicorp/terraform", "1.11.4", false)
 	require.NoError(t, err, "Should successfully add valid tool using canonical name")
 
 	// Verify the tool was added to the file
@@ -73,7 +73,7 @@ func TestAddCommand_InvalidTool(t *testing.T) {
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
-	err := AddToolVersion("nonexistent-tool", "1.0.0")
+	err := AddToolVersion("nonexistent-tool", "1.0.0", false)
 	require.Error(t, err, "Should fail when adding invalid tool")
 	assert.ErrorIs(t, err, errUtils.ErrToolNotInRegistry)
 
@@ -92,7 +92,7 @@ func TestAddCommand_InvalidToolWithCanonicalName(t *testing.T) {
 		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
 	// Test adding an invalid tool using canonical name
-	err := AddToolVersion("nonexistent/package", "1.0.0")
+	err := AddToolVersion("nonexistent/package", "1.0.0", false)
 	require.Error(t, err, "Should fail when adding invalid tool with canonical name")
 	assert.ErrorIs(t, err, errUtils.ErrToolNotInRegistry)
 
@@ -120,7 +120,7 @@ func TestAddCommand_UpdateExistingTool(t *testing.T) {
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
-	err = AddToolVersion("terraform", "1.11.4")
+	err = AddToolVersion("terraform", "1.11.4", false)
 	require.NoError(t, err, "Should successfully update existing tool")
 
 	// Verify the tool was updated in the file
@@ -143,7 +143,7 @@ func TestAddCommand_InvalidVersion(t *testing.T) {
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
-	err := AddToolVersion("terraform", "999.999.999")
+	err := AddToolVersion("terraform", "999.999.999", false)
 	require.NoError(t, err, "Should pass since we only validate tool existence, not specific version")
 
 	// Verify the tool was added to the file (even with invalid version)
@@ -163,7 +163,7 @@ func TestAddCommand_CustomToolVersionsFile(t *testing.T) {
 	})
 
 	// Test adding a tool to a custom file
-	err := AddToolVersion("terraform", "1.11.4")
+	err := AddToolVersion("terraform", "1.11.4", false)
 	require.NoError(t, err, "Should successfully add tool to custom file")
 
 	// Verify the tool was added to the custom file
@@ -185,7 +185,7 @@ func TestAddCommand_AquaRegistryTool(t *testing.T) {
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
-	err := AddToolVersion("kubectl", "v1.2.7")
+	err := AddToolVersion("kubectl", "v1.2.7", false)
 	require.NoError(t, err, "Should succeed when adding tool from Aqua registry")
 
 	// Verify the tool was added to the file
@@ -193,6 +193,62 @@ func TestAddCommand_AquaRegistryTool(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, toolVersions.Tools, "kubectl")
 	assert.Contains(t, toolVersions.Tools["kubectl"], "v1.2.7")
+}
+
+// TestAddCommand_RejectsRangeSyntax reproduces a bug where `add` accepted
+// SemVer range/constraint syntax with zero validation, silently writing it to
+// .tool-versions and only failing later at `install` time with a raw,
+// confusing HTTP 404 (the range was treated as a literal release tag).
+func TestAddCommand_RejectsRangeSyntax(t *testing.T) {
+	setupTestIO(t)
+
+	for _, version := range []string{"^1.7.0", "~>1.7.0", ">=1.7.0", ">=1.0.0,<2.0.0"} {
+		t.Run(version, func(t *testing.T) {
+			tempDir := t.TempDir()
+			toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+			SetAtmosConfig(&schema.AtmosConfiguration{
+				Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
+			})
+
+			err := AddToolVersion("terraform", version, false)
+			require.Error(t, err, "should reject range/constraint syntax before any network call")
+			assert.ErrorIs(t, err, errUtils.ErrVersionFormatInvalid)
+
+			// Must not have been written to .tool-versions.
+			toolVersions, loadErr := LoadToolVersions(toolVersionsFile)
+			if loadErr == nil {
+				assert.NotContains(t, toolVersions.Tools, "terraform")
+			}
+		})
+	}
+}
+
+// TestAddCommand_DefaultFlagReplacesExisting verifies `add --default`
+// (setAsDefault=true) replaces the tool's default version instead of
+// appending, unlike plain `add`.
+func TestAddCommand_DefaultFlagReplacesExisting(t *testing.T) {
+	setupTestIO(t)
+
+	tempDir := t.TempDir()
+	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
+	})
+
+	err := AddToolVersion("terraform", "1.9.8", false)
+	require.NoError(t, err)
+
+	err = AddToolVersion("terraform", "1.11.4", true)
+	require.NoError(t, err, "add --default should succeed")
+
+	toolVersions, err := LoadToolVersions(toolVersionsFile)
+	require.NoError(t, err)
+	versions := toolVersions.Tools["terraform"]
+	require.NotEmpty(t, versions)
+	assert.Equal(t, "1.11.4", versions[0], "add --default should replace the default (first) version")
+	// Checking versions[0] alone (as this test previously did) passes even when the old
+	// default is silently retained as a stale second entry -- assert the exact full shape.
+	assert.Equal(t, []string{"1.11.4"}, versions, "add --default on a single-version tool must not leave 1.9.8 pinned as a stale second entry")
 }
 
 func TestAddCommand_EdgeCases(t *testing.T) {
@@ -211,11 +267,14 @@ func TestAddCommand_EdgeCases(t *testing.T) {
 			expectedError: ErrInvalidToolSpec,
 		},
 		{
+			// ValidateVersionSpec now catches this before any registry lookup,
+			// reporting it as a version-format problem rather than a generic
+			// invalid-tool-spec error.
 			name:          "empty version",
 			tool:          "terraform",
 			version:       "",
 			expectError:   true,
-			expectedError: ErrInvalidToolSpec,
+			expectedError: errUtils.ErrVersionFormatInvalid,
 		},
 		{
 			name:          "malformed tool name",
@@ -236,7 +295,7 @@ func TestAddCommand_EdgeCases(t *testing.T) {
 				Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 			})
 			// Test the edge case
-			err := AddToolVersion(tt.tool, tt.version)
+			err := AddToolVersion(tt.tool, tt.version, false)
 			if tt.expectError {
 				require.Error(t, err, "Should fail for edge case")
 				require.True(t, errors.Is(err, tt.expectedError))

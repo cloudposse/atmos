@@ -32,7 +32,7 @@ func withShortExecutablePathRetry(t *testing.T, timeout, interval time.Duration)
 // directly (no separate follow-up LookPath call, per the TOCTOU-closing
 // contract described in the function's doc comment).
 func TestRequireExecutablePath_ResolvesOnFirstLookup(t *testing.T) {
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 
 	binDir := t.TempDir()
 	binName := cachedTestToolBinaryName("atmos-require-path-fake")
@@ -49,7 +49,7 @@ func TestRequireExecutablePath_ResolvesOnFirstLookup(t *testing.T) {
 // simulating CI's "PATH updated a step earlier, not yet visible" race that
 // this retry loop exists to absorb.
 func TestRequireExecutablePath_RetriesUntilResolved(t *testing.T) {
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 	withShortExecutablePathRetry(t, 2*time.Second, 10*time.Millisecond)
 
 	binDir := t.TempDir()
@@ -86,7 +86,7 @@ func TestRequireExecutablePath_RetriesUntilResolved(t *testing.T) {
 // forensics generation, ShouldCheckPreconditions branch selection) is
 // otherwise identical to, and already covered by, the skip path below.
 func TestRequireExecutablePath_ExhaustedRetriesSkip(t *testing.T) {
-	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+	enablePreconditionChecks(t)
 	withShortExecutablePathRetry(t, 20*time.Millisecond, 5*time.Millisecond)
 
 	t.Setenv("PATH", t.TempDir())

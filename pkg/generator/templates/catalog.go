@@ -12,7 +12,7 @@ import (
 )
 
 // defaultCatalogRef returns the ref to pin unqualified catalog sources to:
-// the exact commit this binary was built from (see scripts/build-atmos.sh and
+// the exact commit this binary was built from (see magefiles/build.go and
 // .goreleaser*.yml), so a distributable scaffold resolves against content
 // that actually exists at that commit on any pushed branch, not just tagged
 // releases. Binaries built without ldflags (`go run`, `go install`) fall back

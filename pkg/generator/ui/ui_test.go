@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
+	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	runnerstep "github.com/cloudposse/atmos/pkg/runner/step"
@@ -113,6 +114,28 @@ func createTestUI(t *testing.T) *InitUI {
 	return NewInitUI(ioCtx, term)
 }
 
+// TestResolveTargetPath_NonEmptyTargetPathIsPassthrough exercises the
+// exported ResolveTargetPath wrapper (added so cmd/scaffold can resolve the
+// real target directory before defaultBaseRef needs it -- see
+// resolveInteractiveBaseRef in cmd/scaffold). When targetPath is already
+// non-empty, resolveTargetPath's own doc comment guarantees it is a no-op:
+// no prompt runs and the caller-supplied targetPath/cmdTemplateValues/
+// useDefaults come back unchanged. This is the one branch ResolveTargetPath
+// can exercise without a real TTY (the empty-targetPath branch always
+// prompts interactively).
+func TestResolveTargetPath_NonEmptyTargetPathIsPassthrough(t *testing.T) {
+	ui := createTestUI(t)
+	dir := t.TempDir()
+	values := map[string]interface{}{"project_name": "demo"}
+
+	gotPath, gotValues, gotUseDefaults, err := ui.ResolveTargetPath(&templates.Configuration{Name: "demo"}, dir, true, true, values)
+
+	require.NoError(t, err)
+	assert.Equal(t, dir, gotPath)
+	assert.Equal(t, values, gotValues)
+	assert.True(t, gotUseDefaults)
+}
+
 func TestNewInitUI(t *testing.T) {
 	ui := createTestUI(t)
 
@@ -125,6 +148,33 @@ func TestNewInitUI(t *testing.T) {
 	}
 
 	// maxChanges field has been removed - threshold is now handled by the templating processor
+}
+
+func TestSetMergeDriver_ForcesTextMerge(t *testing.T) {
+	ui := createTestUI(t)
+	ui.processor.SetMaxChanges(100)
+	ui.SetMergeDriver(merge.DriverText)
+
+	t.Run("identical inputs are returned unchanged", func(t *testing.T) {
+		base := "key: value\n\nother: 1\n"
+		result, err := ui.processor.Merge(base, base, base, "config.yaml")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.False(t, result.HasConflicts)
+		assert.Equal(t, base, result.Content)
+	})
+
+	t.Run("diverging theirs merges cleanly and preserves blank lines", func(t *testing.T) {
+		base := "servers:\n- name: web\n\nsettings:\n  timeout: 30\n"
+		ours := base
+		theirs := "servers:\n- name: web\n\nsettings:\n  timeout: 30\n\ntasks:\n- name: setup\n"
+
+		result, err := ui.processor.Merge(base, ours, theirs, "config.yaml")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.False(t, result.HasConflicts)
+		assert.Equal(t, theirs, result.Content, "text driver should merge cleanly and preserve blank lines")
+	})
 }
 
 func TestProcessFile_NewFile(t *testing.T) {
@@ -460,6 +510,70 @@ spec:
 			t.Errorf("expected the post-generate hook to be skipped, got: %v", got)
 		}
 	})
+}
+
+// TestExecuteWithSetup_DryRunHasNoPersistentSideEffects reproduces a bug
+// where `--dry-run` (routed through executeWithSetup with DryRun set, same
+// as a real run) suppressed only individual file writes -- it still created
+// the target directory via os.MkdirAll, ran both before- and after-generate
+// hooks (arbitrary user-configured commands), and wrote the
+// .atmos/scaffold.yaml project record. A later real --update against that
+// same directory would then wrongly treat a merely-previewed target as an
+// already-generated project. None of those persistent effects may happen
+// during a preview.
+func TestExecuteWithSetup_DryRunHasNoPersistentSideEffects(t *testing.T) {
+	beforeCalls := &[]string{}
+	runnerstep.Register(&hookMarkerHandler{
+		BaseHandler: runnerstep.NewBaseHandler("dry-run-before-hook", runnerstep.CategoryOutput, false),
+		calls:       beforeCalls,
+	})
+	afterCalls := &[]string{}
+	runnerstep.Register(&hookMarkerHandler{
+		BaseHandler: runnerstep.NewBaseHandler("dry-run-after-hook", runnerstep.CategoryOutput, false),
+		calls:       afterCalls,
+	})
+
+	scaffoldYAML := `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: dry-run-side-effects
+spec:
+  hooks:
+    before:
+      events: [before.scaffold.generate]
+      kind: step
+      type: dry-run-before-hook
+      with:
+        content: "before ran"
+    after:
+      events: [after.scaffold.generate]
+      kind: step
+      type: dry-run-after-hook
+      with:
+        content: "after ran"
+`
+	configuration := &templates.Configuration{
+		Name: "dry-run-side-effects",
+		Files: []templates.File{
+			{Path: "scaffold.yaml", Content: scaffoldYAML, Permissions: 0o644},
+			{Path: "generated.txt", Content: "generated", Permissions: 0o644},
+		},
+	}
+
+	ui := createTestUI(t)
+	ui.SetDryRun(true)
+	// A path that does not exist yet -- the primary preview-before-creating
+	// use case -- so a MkdirAll regression is directly observable, not just
+	// masked by t.TempDir() having already created the directory itself.
+	targetDir := filepath.Join(t.TempDir(), "not-yet-created")
+
+	err := ui.executeWithSetup(configuration, targetDir, false, false, true, "", map[string]interface{}{}, []string{"{{", "}}"})
+	require.NoError(t, err)
+
+	_, dirErr := os.Stat(targetDir)
+	assert.True(t, os.IsNotExist(dirErr), "dry-run must not create the target directory")
+	assert.Empty(t, *beforeCalls, "dry-run must not run before-generate hooks")
+	assert.Empty(t, *afterCalls, "dry-run must not run after-generate hooks")
 }
 
 // TestExecuteWithSetup_BasicTemplate_EnvironmentsGating exercises the real,

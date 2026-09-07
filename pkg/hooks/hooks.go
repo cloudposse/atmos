@@ -88,6 +88,7 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 	// here would fail. The hooks section itself is static config (event names,
 	// commands, store names) and does not use YAML functions.
 	sections, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		AtmosConfig:   atmosConfig,
 		Component:     info.ComponentFromArg,
 		Stack:         info.Stack,
 		ComponentType: info.ComponentType,

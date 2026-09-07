@@ -2,17 +2,52 @@ package exec
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	mockTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// setupExecProfileFallbackFixture resets the global state that
+// auth.MaybeOfferProfileFallbackForIdentity gates on (explicit --profile/ATMOS_PROFILE,
+// re-exec loop guard) and creates a single profile, "alpha", that defines the identity
+// "root-admin". Returns the CliConfigPath (temp dir root) to set on AtmosConfiguration.
+// Mirrors pkg/auth's profileFallbackFixture/resetGlobalProfileState test helpers.
+func setupExecProfileFallbackFixture(t *testing.T) string {
+	t.Helper()
+
+	origArgs := os.Args
+	os.Args = []string{"atmos", "terraform", "plan"}
+	t.Cleanup(func() { os.Args = origArgs })
+
+	t.Setenv("ATMOS_PROFILE", "")
+	t.Setenv(reexec.DepthEnvVar, "")
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	viper.Set("profiles.base_path", "profiles")
+
+	tmpDir := t.TempDir()
+	alphaDir := filepath.Join(tmpDir, "profiles", "alpha")
+	require.NoError(t, os.MkdirAll(alphaDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(alphaDir, "atmos.yaml"), []byte(`auth:
+  identities:
+    root-admin:
+      kind: aws/user
+`), 0o644))
+
+	return tmpDir
+}
 
 func TestHandleMergeError(t *testing.T) {
 	tests := []struct {
@@ -93,6 +128,32 @@ func TestBuildGlobalAuthSection(t *testing.T) {
 				"identities": map[string]schema.Identity{
 					"dev": {Kind: "aws"},
 				},
+			},
+		},
+		{
+			name: "integrations only",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Integrations: map[string]schema.Integration{
+						"example-gke": {Kind: "gcp/gke"},
+					},
+				},
+			},
+			expected: map[string]any{
+				"integrations": map[string]schema.Integration{
+					"example-gke": {Kind: "gcp/gke"},
+				},
+			},
+		},
+		{
+			name: "console only",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Console: &schema.AuthConsoleConfig{Isolated: boolPtr(true)},
+				},
+			},
+			expected: map[string]any{
+				"console": &schema.AuthConsoleConfig{Isolated: boolPtr(true)},
 			},
 		},
 		{
@@ -236,8 +297,10 @@ func TestBuildGlobalAuthSection(t *testing.T) {
 			name: "empty maps are excluded",
 			config: &schema.AtmosConfiguration{
 				Auth: schema.AuthConfig{
-					Providers:  map[string]schema.Provider{},
-					Identities: map[string]schema.Identity{},
+					Providers:    map[string]schema.Provider{},
+					Identities:   map[string]schema.Identity{},
+					Integrations: map[string]schema.Integration{},
+					Console:      &schema.AuthConsoleConfig{},
 				},
 			},
 			expected: map[string]any{},
@@ -697,6 +760,58 @@ func TestGetMergedAuthConfigWithFetcher_ComponentConfigSuccess(t *testing.T) {
 	assert.NotNil(t, result)
 }
 
+func TestGetMergedAuthConfigWithFetcher_PreservesGlobalGKEIntegration(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"example-provider": {Kind: "gcp/adc"},
+			},
+			Identities: map[string]schema.Identity{
+				"example-deployer": {
+					Kind:     "gcp/project",
+					Provider: "example-provider",
+				},
+			},
+			Integrations: map[string]schema.Integration{
+				"example-gke": {
+					Kind: "gcp/gke",
+					Via:  &schema.IntegrationVia{Identity: "example-deployer"},
+					Spec: &schema.IntegrationSpec{Cluster: &schema.Cluster{
+						Name:      "example-cluster",
+						ProjectID: "example-project",
+						Location:  "us-central1",
+					}},
+				},
+			},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "example-stack",
+		ComponentFromArg: "example-release",
+		ComponentType:    cfg.HelmComponentType,
+	}
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			cfg.AuthSectionName: map[string]any{
+				"require_identity": true,
+				"identities": map[string]any{
+					"example-deployer": map[string]any{"default": true},
+				},
+			},
+		}, nil
+	}
+
+	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)
+	require.NoError(t, err)
+	assert.Equal(t, "gcp/adc", result.Providers["example-provider"].Kind)
+	require.Contains(t, result.Identities, "example-deployer")
+	assert.True(t, result.Identities["example-deployer"].Default)
+	assert.Equal(t, "gcp/project", result.Identities["example-deployer"].Kind)
+	assert.Equal(t, "example-provider", result.Identities["example-deployer"].Provider)
+	require.Contains(t, result.Integrations, "example-gke")
+	assert.Equal(t, "example-project", result.Integrations["example-gke"].Spec.Cluster.ProjectID)
+}
+
 func TestGetMergedAuthConfigWithFetcher_PassesComponentType(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	info := &schema.ConfigAndStacksInfo{
@@ -1107,4 +1222,91 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_PreservesExistingIdentity(t *t
 	assert.Equal(t, mockManager, result)
 	// Identity should remain unchanged.
 	assert.Equal(t, "pre-existing-identity", info.Identity)
+}
+
+// Tests for resolveIdentityConfigError — the shared seam that offers the interactive
+// profile-selection prompt (`atmos auth login` already has one) when merge-time or
+// construction-time auth setup fails with an identity the currently loaded config
+// doesn't define, but an available profile does.
+
+func TestResolveIdentityConfigError_NonIdentityConfigErrorWrapsUnchanged(t *testing.T) {
+	tmpDir := setupExecProfileFallbackFixture(t)
+	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: tmpDir}
+
+	err := resolveIdentityConfigError(atmosConfig, errors.New("boom"), errUtils.ErrInvalidAuthConfig)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
+}
+
+func TestResolveIdentityConfigError_NoIdentityContextWrapsUnchanged(t *testing.T) {
+	tmpDir := setupExecProfileFallbackFixture(t)
+	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: tmpDir}
+
+	err := resolveIdentityConfigError(atmosConfig, errUtils.ErrInvalidIdentityConfig, errUtils.ErrInvalidAuthConfig)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
+}
+
+func TestResolveIdentityConfigError_NoCandidateProfileWrapsUnchanged(t *testing.T) {
+	tmpDir := setupExecProfileFallbackFixture(t)
+	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: tmpDir}
+
+	tagged := errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+		WithContext("identity", "totally-unknown-identity").
+		Err()
+
+	err := resolveIdentityConfigError(atmosConfig, tagged, errUtils.ErrInvalidAuthConfig)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig),
+		"no profile defines the identity, so the original wrap must be preserved")
+}
+
+func TestResolveIdentityConfigError_CandidateProfileOffersFallback(t *testing.T) {
+	tmpDir := setupExecProfileFallbackFixture(t)
+	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: tmpDir}
+
+	tagged := errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+		WithContext("identity", "root-admin").
+		Err()
+
+	err := resolveIdentityConfigError(atmosConfig, tagged, errUtils.ErrInvalidAuthConfig)
+	require.Error(t, err)
+	// Non-interactive test environment: the flat wrap is replaced by the fallback's
+	// hint-enriched ErrIdentityNotFound naming the "alpha" profile.
+	assert.True(t, errors.Is(err, errUtils.ErrIdentityNotFound),
+		"expected the profile-fallback's ErrIdentityNotFound, got: %v", err)
+	assert.False(t, errors.Is(err, errUtils.ErrInvalidAuthConfig),
+		"profile fallback must replace the flat wrap when a candidate profile exists")
+}
+
+// TestCreateAndAuthenticateAuthManagerWithDeps_AuthCreatorError_IdentityConfigOffersFallback
+// is the exact bug from the report: a component references an identity that isn't in the
+// loaded config, but a profile defines it. Before this fix, the caller only ever saw the
+// flat "invalid auth config: invalid identity config" — never the interactive/hint-enriched
+// profile suggestion `atmos auth login` already provides for the same underlying condition.
+func TestCreateAndAuthenticateAuthManagerWithDeps_AuthCreatorError_IdentityConfigOffersFallback(t *testing.T) {
+	tmpDir := setupExecProfileFallbackFixture(t)
+
+	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: tmpDir}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "",
+		ComponentFromArg: "",
+	}
+
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return nil, nil
+	}
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
+		return nil, errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+			WithContext("identity", "root-admin").
+			Err()
+	}
+
+	result, err := createAndAuthenticateAuthManagerWithDeps(atmosConfig, info, mockFetcher, mockCreator)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, errors.Is(err, errUtils.ErrIdentityNotFound),
+		"expected the profile-fallback's ErrIdentityNotFound, got: %v", err)
+	assert.False(t, errors.Is(err, errUtils.ErrFailedToInitializeAuthManager),
+		"profile fallback must replace the flat ErrFailedToInitializeAuthManager wrap")
 }

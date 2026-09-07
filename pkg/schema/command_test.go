@@ -94,3 +94,63 @@ func TestDecodeCommandEnvMapValue_UnexpectedKind(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrTaskUnexpectedNodeKind))
 	assert.Contains(t, err.Error(), "BAD_KEY")
 }
+
+func TestCommandArgument_EffectiveProvides(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  CommandArgument
+		want string
+	}{
+		{
+			name: "Provides set wins",
+			arg:  CommandArgument{Provides: "component", Type: "stack"},
+			want: "component",
+		},
+		{
+			name: "falls back to deprecated Type when Provides unset",
+			arg:  CommandArgument{Type: "stack"},
+			want: "stack",
+		},
+		{
+			name: "empty when neither set",
+			arg:  CommandArgument{},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.arg.EffectiveProvides())
+		})
+	}
+}
+
+func TestCommandFlag_EffectiveProvides(t *testing.T) {
+	tests := []struct {
+		name string
+		flag CommandFlag
+		want string
+	}{
+		{
+			name: "Provides set wins",
+			flag: CommandFlag{Provides: "component", SemanticType: "stack"},
+			want: "component",
+		},
+		{
+			name: "falls back to deprecated SemanticType when Provides unset",
+			flag: CommandFlag{SemanticType: "stack"},
+			want: "stack",
+		},
+		{
+			name: "empty when neither set",
+			flag: CommandFlag{},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.flag.EffectiveProvides())
+		})
+	}
+}

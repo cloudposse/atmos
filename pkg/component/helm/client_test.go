@@ -3,13 +3,57 @@ package helm
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	authkube "github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/cli"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
+
+// TestVerifyExpectedKubernetesEndpoint verifies all opt-in endpoint guard outcomes.
+func TestVerifyExpectedKubernetesEndpoint(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "kubeconfig")
+	config := clientcmdapi.NewConfig()
+	config.CurrentContext = "example"
+	config.Clusters["example-cluster"] = &clientcmdapi.Cluster{Server: "https://example.invalid"}
+	config.Contexts["example"] = &clientcmdapi.Context{Cluster: "example-cluster"}
+	require.NoError(t, clientcmd.WriteToFile(*config, path))
+
+	tests := []struct {
+		name           string
+		guard          string
+		expectedServer string
+		wantErr        bool
+	}{
+		{name: "no integration expectation allows ambient kubeconfig"},
+		{name: "expectation is inert without the opt-in guard", expectedServer: "https://other.invalid"},
+		{name: "matching endpoint proceeds", guard: "true", expectedServer: "https://example.invalid/"},
+		{name: "mismatched endpoint fails closed", guard: "true", expectedServer: "https://other.invalid", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("KUBECONFIG", path)
+			t.Setenv(authkube.EndpointGuardEnv, tt.guard)
+			t.Setenv(authkube.ExpectedServerEnv, tt.expectedServer)
+
+			err := verifyExpectedKubernetesEndpoint(cli.New())
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrKubernetesEndpointMismatch)
+				assert.Contains(t, err.Error(), "https://other.invalid")
+				assert.Contains(t, err.Error(), "https://example.invalid")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
 
 func TestResolveUpgradeChartRef(t *testing.T) {
 	t.Run("explicit repository url wins", func(t *testing.T) {

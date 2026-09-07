@@ -1,0 +1,11 @@
+vars:
+  stage: test
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: mock
+      flags:
+        lock_timeout: "5m"
+        lock_timout: "77m" # typo: should be "lock_timeout" — must error, not silently no-op

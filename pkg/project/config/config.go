@@ -21,6 +21,8 @@ package config
 import (
 	"errors"
 
+	invopop "github.com/invopop/jsonschema"
+	orderedmap "github.com/wk8/go-ordered-map/v2"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -55,14 +57,17 @@ const filePermissions = 0o644
 const fieldNameErrorFormat = "%w: %q"
 
 var (
-	errInvalidBooleanFieldValue = errors.New("invalid boolean field value")
-	errFieldMustBeText          = errors.New("field must be text")
-	errFieldMustBeStringOption  = errors.New("field must be a string option")
-	errFieldUnsupportedOption   = errors.New("field has unsupported option")
-	errFieldMustBeStringOptions = errors.New("field must be a list of string options")
-	errFieldMustBeBoolean       = errors.New("field must be true or false")
-	errFieldValidationFailed    = errors.New("field validation failed")
-	errInvalidFieldPattern      = errors.New("invalid field validation pattern")
+	errInvalidBooleanFieldValue   = errors.New("invalid boolean field value")
+	errFieldMustBeText            = errors.New("field must be text")
+	errFieldMustBeStringOption    = errors.New("field must be a string option")
+	errFieldUnsupportedOption     = errors.New("field has unsupported option")
+	errFieldMustBeStringOptions   = errors.New("field must be a list of string options")
+	errFieldMustBeBoolean         = errors.New("field must be true or false")
+	errFieldValidationFailed      = errors.New("field validation failed")
+	errInvalidFieldPattern        = errors.New("invalid field validation pattern")
+	errFieldOptionsSourceInvalid  = errors.New("field options source is invalid")
+	errFieldOptionsSourceNotFound = errors.New("field options source not found in answers")
+	errFieldOptionsSourceNotList  = errors.New("field options source did not resolve to a list")
 )
 
 // ScaffoldConfigDir is the directory name for user scaffold configuration.
@@ -151,19 +156,92 @@ func DecodeHooks(raw map[string]any) (map[string]hooks.Hook, error) {
 }
 
 // FileSpec optionally gates whether an auto-discovered template file is
-// generated, based on the collected field answers.
+// generated, based on the collected field answers, and can expand a single
+// discovered file into multiple generated files via Matrix.
 type FileSpec struct {
 	// Path is the file's path as discovered in the template's file tree
 	// (matched against the file's original, pre-template-rendering path).
 	Path string `yaml:"path" json:"path" jsonschema:"description=File path as discovered in the template's file tree"`
 	// When gates generation of this file. Evaluated against the collected
-	// answers (as the `answers` CEL variable); a false result skips the
-	// file entirely. Empty always generates the file. Schema-restricted to
-	// a predicate/CEL string or a list (implicit all) -- the {all:/any:/not:}
+	// answers (as the `answers` CEL variable) and, when Matrix is set, once
+	// per resolved combination (as the `matrix` CEL variable) to prune
+	// combinations that don't apply; a false result skips the file (or that
+	// combination) entirely. Empty always generates the file. Schema-restricted
+	// to a predicate/CEL string or a list (implicit all) -- the {all:/any:/not:}
 	// map form is deliberately excluded here (see the comment on
 	// FieldDefinition.When for why) even though pkg/condition itself parses
 	// it; use CEL's &&/||/! instead.
-	When condition.Condition `yaml:"when,omitempty" json:"when,omitempty" jsonschema:"description=Condition (predicate/CEL string or a list treated as 'all'; use CEL &&/||/! instead of the all/any/not map form) gating whether this file is generated,oneof_type=string;array"`
+	When condition.Condition `yaml:"when,omitempty" json:"when,omitempty" jsonschema:"description=Condition (predicate/CEL string or a list treated as 'all'; use CEL &&/||/! instead of the all/any/not map form) gating whether this file (or with matrix a specific combination) is generated,oneof_type=string;array"`
+	// Matrix declares axes to expand this file into one generated file per
+	// resolved combination -- the Cartesian product of every axis's values,
+	// the same map[axis][]values shape the workflow `matrix:` step uses.
+	// Each axis's value is a literal list of strings, a dot-path into
+	// answers.* referencing an already list-shaped answer (e.g.
+	// answers.environments), or a Go-template expression computing the
+	// list from nested/structured answer data (e.g.
+	// '{{ collectKeys answers.environments }}'). Requires Target, since
+	// Path alone can't serve as the output path for more than one file.
+	Matrix MatrixAxes `yaml:"matrix,omitempty" json:"matrix,omitempty" jsonschema:"description=Axes to expand this file into one output per resolved combination; each axis's value is a literal list of strings; a dot-path string into answers.*; or a Go-template expression computing the list"`
+	// Target overrides the rendered output path for this file. Without
+	// Matrix it's optional, rendered once like Path -- letting authors keep
+	// Path a plain on-disk name while controlling dynamic naming from a
+	// normal YAML string. With Matrix it's required and rendered once per
+	// resolved combination, available as .matrix.<axis> in both Target and
+	// the file's own content.
+	Target string `yaml:"target,omitempty" json:"target,omitempty" jsonschema:"description=Output path template overriding Path; required when matrix is set; optional otherwise"`
+}
+
+// JSONSchemaExtend adds an if/then rule requiring a non-empty target:
+// whenever matrix: is set, mirroring the runtime enforcement in
+// validateFileMatrix (pkg/project/config/validation.go), which rejects a
+// matrix without a target at scaffold-load time. "required" alone only
+// checks that target is present, not that it's non-empty, so the then
+// branch also constrains target's own schema with minLength: 1 -- without
+// it, target: "" would satisfy the schema even though validateFileMatrix
+// rejects it at the Go level.
+func (FileSpec) JSONSchemaExtend(schema *invopop.Schema) {
+	defer perf.Track(nil, "config.FileSpec.JSONSchemaExtend")()
+
+	one := uint64(1)
+	targetProperties := orderedmap.New[string, *invopop.Schema]()
+	targetProperties.Set("target", &invopop.Schema{Type: "string", MinLength: &one})
+
+	schema.If = &invopop.Schema{Required: []string{"matrix"}}
+	schema.Then = &invopop.Schema{Required: []string{"target"}, Properties: targetProperties}
+}
+
+// MatrixAxes is FileSpec.Matrix's map type, named (rather than a bare
+// map[string]any) so its own JSON Schema constraints can be attached via
+// JSONSchemaExtend below -- invopop/jsonschema only calls JSONSchemaExtend
+// on a named type's reflected schema, never on an anonymous map type.
+type MatrixAxes map[string]any
+
+// JSONSchemaExtend constrains matrix: to a non-empty object (at least one
+// axis) whose axis values are each either a string (a dot-path into
+// answers.* or a Go-template expression) or a non-empty array of strings (a
+// literal axis), mirroring the runtime validation in
+// pkg/project/config/validation.go's validateMatrixAxisValue.
+func (MatrixAxes) JSONSchemaExtend(schema *invopop.Schema) {
+	defer perf.Track(nil, "config.MatrixAxes.JSONSchemaExtend")()
+
+	one := uint64(1)
+	schema.MinProperties = &one
+	schema.AdditionalProperties = &invopop.Schema{
+		OneOf: []*invopop.Schema{
+			{Type: "string"},
+			{Type: "array", Items: &invopop.Schema{Type: "string"}, MinItems: &one},
+		},
+	}
+}
+
+// FieldOption is one static choice for a select or multiselect field's
+// Options, pairing a display Label with the underlying Value that actually
+// flows into answers/templates/When -- mirrors huh.NewOption(label, value)
+// exactly. Value is required; Label defaults to Value when omitted, so a
+// plain string list (no labels) keeps working unchanged.
+type FieldOption struct {
+	Label string `yaml:"label,omitempty" json:"label,omitempty" jsonschema:"description=Display text shown in the prompt (defaults to value)"`
+	Value string `yaml:"value" json:"value" jsonschema:"description=Underlying value stored in answers and passed to templates"`
 }
 
 // FieldValidation constrains the allowed values for a FieldDefinition.
@@ -183,7 +261,7 @@ type FieldDefinition struct {
 	Description string           `yaml:"description,omitempty" json:"description,omitempty" jsonschema:"description=Longer help text shown with the prompt"`
 	Required    bool             `yaml:"required,omitempty" json:"required,omitempty" jsonschema:"description=Whether a value must be provided"`
 	Default     any              `yaml:"default,omitempty" json:"default,omitempty" jsonschema:"description=Default value"`
-	Options     []string         `yaml:"options,omitempty" json:"options,omitempty" jsonschema:"description=Choices for select and multiselect fields"`
+	Options     any              `yaml:"options,omitempty" json:"options,omitempty" jsonschema:"description=Static list of choices (plain strings or {label: value} objects); a dot-path string into answers.* (e.g. answers.environments); or a Go-template expression computing the list,oneof_type=string;array"`
 	Placeholder string           `yaml:"placeholder,omitempty" json:"placeholder,omitempty" jsonschema:"description=Placeholder text for input fields"`
 	Validation  *FieldValidation `yaml:"validation,omitempty" json:"validation,omitempty" jsonschema:"description=Optional validation constraints for this field"`
 	// When gates whether this field is prompted for, evaluated against

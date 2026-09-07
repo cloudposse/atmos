@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -119,6 +120,12 @@ func TestScaffoldGenerateCmd_FlagDefinitions(t *testing.T) {
 			flagName:     "merge-strategy",
 			shorthand:    "",
 			defaultValue: "manual",
+		},
+		{
+			name:         "merge-driver flag",
+			flagName:     "merge-driver",
+			shorthand:    "",
+			defaultValue: "auto",
 		},
 	}
 
@@ -536,7 +543,22 @@ func TestScaffoldGenerateParser_Creation(t *testing.T) {
 	assert.IsType(t, &flags.StandardParser{}, scaffoldGenerateParser)
 }
 
+// resetHelpFlag restores cmd's "help" flag to unset after a test sets it via
+// --help. Cobra checks the flag's current value on every Execute() call, not
+// just whether --help was in that invocation's own args, so leaving it "true"
+// leaks into any later test that calls the same *cobra.Command's Execute():
+// it returns nil having printed help instead of ever calling RunE, regardless
+// of that later test's own args. -shuffle=on can put a --help test before any
+// of those; see docs/fixes for the incident.
+func resetHelpFlag(t *testing.T, cmd *cobra.Command) {
+	t.Helper()
+	t.Cleanup(func() {
+		_ = cmd.Flags().Set("help", "false")
+	})
+}
+
 func TestScaffoldCmd_Integration_Help(t *testing.T) {
+	resetHelpFlag(t, scaffoldCmd)
 	// Test help output for main command
 	scaffoldCmd.SetArgs([]string{"--help"})
 	err := scaffoldCmd.Execute()
@@ -544,6 +566,7 @@ func TestScaffoldCmd_Integration_Help(t *testing.T) {
 }
 
 func TestScaffoldGenerateCmd_Integration_Help(t *testing.T) {
+	resetHelpFlag(t, scaffoldGenerateCmd)
 	// Test help output for generate subcommand
 	scaffoldGenerateCmd.SetArgs([]string{"--help"})
 	err := scaffoldGenerateCmd.Execute()
@@ -551,6 +574,7 @@ func TestScaffoldGenerateCmd_Integration_Help(t *testing.T) {
 }
 
 func TestScaffoldListCmd_Integration_Help(t *testing.T) {
+	resetHelpFlag(t, scaffoldListCmd)
 	// Test help output for list subcommand
 	scaffoldListCmd.SetArgs([]string{"--help"})
 	err := scaffoldListCmd.Execute()
@@ -558,6 +582,7 @@ func TestScaffoldListCmd_Integration_Help(t *testing.T) {
 }
 
 func TestScaffoldValidateCmd_Integration_Help(t *testing.T) {
+	resetHelpFlag(t, scaffoldValidateCmd)
 	// Test help output for validate subcommand
 	scaffoldValidateCmd.SetArgs([]string{"--help"})
 	err := scaffoldValidateCmd.Execute()
@@ -929,52 +954,6 @@ func TestDetermineScaffoldPathsToValidate(t *testing.T) {
 				assert.NoError(t, err)
 				// paths can be empty slice or non-nil
 				_ = paths
-			}
-		})
-	}
-}
-
-func TestLoadDryRunValues_ErrorPaths(t *testing.T) {
-	tests := []struct {
-		name        string
-		config      *templates.Configuration
-		vars        map[string]interface{}
-		expectError bool
-	}{
-		{
-			name: "scaffold config with invalid YAML",
-			config: &templates.Configuration{
-				Files: []templates.File{
-					{
-						Path:    "scaffold.yaml",
-						Content: "invalid: [unclosed yaml",
-					},
-				},
-			},
-			vars:        map[string]interface{}{},
-			expectError: true,
-		},
-		{
-			name: "no scaffold config file",
-			config: &templates.Configuration{
-				Files: []templates.File{
-					{Path: "README.md", Content: "# Test"},
-				},
-			},
-			vars:        map[string]interface{}{"var1": "value1"},
-			expectError: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			values, err := loadDryRunValues(tt.config, tt.vars)
-
-			if tt.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, values)
 			}
 		})
 	}

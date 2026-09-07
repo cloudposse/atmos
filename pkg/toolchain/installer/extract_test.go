@@ -296,41 +296,6 @@ func TestValidatePath(t *testing.T) {
 	}
 }
 
-func TestIsSafePath(t *testing.T) {
-	tests := []struct {
-		name     string
-		path     string
-		dest     string
-		expected bool
-	}{
-		{
-			name:     "safe path within dest",
-			path:     "/tmp/extract/subdir/file",
-			dest:     "/tmp/extract",
-			expected: true,
-		},
-		{
-			name:     "path outside dest",
-			path:     "/etc/passwd",
-			dest:     "/tmp/extract",
-			expected: false,
-		},
-		{
-			name:     "path traversal",
-			path:     "/tmp/extract/../../../etc/passwd",
-			dest:     "/tmp/extract",
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isSafePath(tt.path, tt.dest)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestFindBinaryInDir(t *testing.T) {
 	t.Run("finds binary in root", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -507,24 +472,28 @@ func TestCopyWithLimit(t *testing.T) {
 func TestExtractDir(t *testing.T) {
 	t.Run("creates directory with valid mode", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		targetPath := filepath.Join(tmpDir, "newdir")
+		root, err := os.OpenRoot(tmpDir)
+		require.NoError(t, err)
+		defer root.Close()
 
 		header := &tar.Header{Mode: 0o755}
-		err := extractDir(targetPath, header)
+		err = extractDir(root, "newdir", header)
 		assert.NoError(t, err)
 
-		info, err := os.Stat(targetPath)
+		info, err := os.Stat(filepath.Join(tmpDir, "newdir"))
 		assert.NoError(t, err)
 		assert.True(t, info.IsDir())
 	})
 
 	t.Run("rejects invalid mode", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		targetPath := filepath.Join(tmpDir, "newdir")
+		root, err := os.OpenRoot(tmpDir)
+		require.NoError(t, err)
+		defer root.Close()
 
 		// Mode -1 is invalid as file mode bits must be non-negative.
 		header := &tar.Header{Mode: -1}
-		err := extractDir(targetPath, header)
+		err = extractDir(root, "newdir", header)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -669,6 +638,68 @@ func TestUnpackTarGz_ErrorPaths(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
+
+	// TestUnpackTarGz_RejectsWriteThroughPreExistingSymlink is a regression
+	// test for CWE-59 (symlink-following): SafeJoin only validates an entry
+	// name lexically, so before extraction switched to os.Root, a
+	// pre-existing symlink inside dest pointing outside it let a
+	// plain-looking entry name like "link/evil.txt" escape dest via
+	// os.MkdirAll/os.OpenFile following the symlink. os.Root refuses to
+	// resolve a path through a symlink that would leave the root.
+	t.Run("rejects write through pre-existing symlink", func(t *testing.T) {
+		tmp := t.TempDir()
+		dest := filepath.Join(tmp, "out")
+		require.NoError(t, os.MkdirAll(dest, 0o755))
+		outside := t.TempDir()
+		require.NoError(t, os.Symlink(outside, filepath.Join(dest, "link")))
+
+		archive := filepath.Join(tmp, "evil.tar.gz")
+		writeTarGzTree(t, archive, []tarEntry{{name: "link/evil.txt", content: "escaped"}})
+
+		_, _, err := unpackTarGz(archive, dest)
+		require.Error(t, err)
+
+		_, statErr := os.Stat(filepath.Join(outside, "evil.txt"))
+		assert.True(t, os.IsNotExist(statErr), "entry must not be written through the symlink to outside")
+	})
+
+	// TestUnpackTarGz_FailsWhenExtractPathBlocked exercises unpackTarGz's
+	// os.MkdirAll(dest, ...) error branch: a regular file sitting where dest
+	// itself needs to be created makes MkdirAll fail.
+	t.Run("fails when the extraction directory is blocked", func(t *testing.T) {
+		tmp := t.TempDir()
+		blocked := filepath.Join(tmp, "blocked")
+		require.NoError(t, os.WriteFile(blocked, []byte("x"), 0o644))
+		archive := filepath.Join(tmp, "test.tar.gz")
+		writeTarGzTree(t, archive, []tarEntry{{name: "file.txt", content: "x"}})
+
+		_, _, err := unpackTarGz(archive, filepath.Join(blocked, "nested"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	// TestUnpackTarGz_FailsWhenExtractPathUnreadable exercises unpackTarGz's
+	// os.OpenRoot(dest) error branch: MkdirAll succeeds (the directory
+	// already exists), but a directory with no permissions cannot be opened.
+	t.Run("fails when the extraction directory is unreadable", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("POSIX permission bits don't apply the same way on Windows")
+		}
+		if os.Geteuid() == 0 {
+			t.Skip("running as root ignores directory permission bits")
+		}
+		tmp := t.TempDir()
+		dest := filepath.Join(tmp, "out")
+		require.NoError(t, os.MkdirAll(dest, 0o755))
+		require.NoError(t, os.Chmod(dest, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
+		archive := filepath.Join(tmp, "test.tar.gz")
+		writeTarGzTree(t, archive, []tarEntry{{name: "file.txt", content: "x"}})
+
+		_, _, err := unpackTarGz(archive, dest)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
 }
 
 // TestUnpackZip_ErrorPaths covers unpackZip's entry-error propagation (a name
@@ -715,6 +746,68 @@ func TestUnpackZip_ErrorPaths(t *testing.T) {
 		})
 
 		_, err := unpackZip(archive, filepath.Join(tmp, "out"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	// TestUnpackZip_RejectsWriteThroughPreExistingSymlink is a regression
+	// test for CWE-59 (symlink-following): SafeJoin only validates an entry
+	// name lexically, so before extraction switched to os.Root, a
+	// pre-existing symlink inside dest pointing outside it let a
+	// plain-looking entry name like "link/evil.txt" escape dest via
+	// os.MkdirAll/os.OpenFile following the symlink. os.Root refuses to
+	// resolve a path through a symlink that would leave the root.
+	t.Run("rejects write through pre-existing symlink", func(t *testing.T) {
+		tmp := t.TempDir()
+		dest := filepath.Join(tmp, "out")
+		require.NoError(t, os.MkdirAll(dest, 0o755))
+		outside := t.TempDir()
+		require.NoError(t, os.Symlink(outside, filepath.Join(dest, "link")))
+
+		archive := filepath.Join(tmp, "evil.zip")
+		writeZipTree(t, archive, []zipEntry{{name: "link/evil.txt", content: "escaped"}})
+
+		_, err := unpackZip(archive, dest)
+		require.Error(t, err)
+
+		_, statErr := os.Stat(filepath.Join(outside, "evil.txt"))
+		assert.True(t, os.IsNotExist(statErr), "entry must not be written through the symlink to outside")
+	})
+
+	// TestUnpackZip_FailsWhenExtractPathBlocked exercises unpackZip's
+	// os.MkdirAll(dest, ...) error branch: a regular file sitting where dest
+	// itself needs to be created makes MkdirAll fail.
+	t.Run("fails when the extraction directory is blocked", func(t *testing.T) {
+		tmp := t.TempDir()
+		blocked := filepath.Join(tmp, "blocked")
+		require.NoError(t, os.WriteFile(blocked, []byte("x"), 0o644))
+		archive := filepath.Join(tmp, "test.zip")
+		writeZipTree(t, archive, []zipEntry{{name: "file.txt", content: "x"}})
+
+		_, err := unpackZip(archive, filepath.Join(blocked, "nested"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	// TestUnpackZip_FailsWhenExtractPathUnreadable exercises unpackZip's
+	// os.OpenRoot(dest) error branch: MkdirAll succeeds (the directory
+	// already exists), but a directory with no permissions cannot be opened.
+	t.Run("fails when the extraction directory is unreadable", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("POSIX permission bits don't apply the same way on Windows")
+		}
+		if os.Geteuid() == 0 {
+			t.Skip("running as root ignores directory permission bits")
+		}
+		tmp := t.TempDir()
+		dest := filepath.Join(tmp, "out")
+		require.NoError(t, os.MkdirAll(dest, 0o755))
+		require.NoError(t, os.Chmod(dest, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
+		archive := filepath.Join(tmp, "test.zip")
+		writeZipTree(t, archive, []zipEntry{{name: "file.txt", content: "x"}})
+
+		_, err := unpackZip(archive, dest)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -1144,6 +1237,9 @@ func TestExtractEntry(t *testing.T) {
 		tmpDir := t.TempDir()
 		destDir := filepath.Join(tmpDir, "dest")
 		require.NoError(t, os.MkdirAll(destDir, 0o755))
+		root, err := os.OpenRoot(destDir)
+		require.NoError(t, err)
+		defer root.Close()
 
 		header := &tar.Header{
 			Name:     "subdir/",
@@ -1151,9 +1247,8 @@ func TestExtractEntry(t *testing.T) {
 			Mode:     0o755,
 		}
 
-		var symlinks []pendingSymlink
-		var hardLinks []pendingHardLink
-		err := extractEntry(nil, header, destDir, &symlinks, &hardLinks)
+		var deferred deferredEntries
+		err = extractEntry(root, nil, header, destDir, &deferred)
 		assert.NoError(t, err)
 
 		// Verify directory was created.
@@ -1166,6 +1261,9 @@ func TestExtractEntry(t *testing.T) {
 		tmpDir := t.TempDir()
 		destDir := filepath.Join(tmpDir, "dest")
 		require.NoError(t, os.MkdirAll(destDir, 0o755))
+		root, err := os.OpenRoot(destDir)
+		require.NoError(t, err)
+		defer root.Close()
 
 		header := &tar.Header{
 			Name:     "../../../etc/passwd",
@@ -1173,9 +1271,8 @@ func TestExtractEntry(t *testing.T) {
 			Mode:     0o644,
 		}
 
-		var symlinks []pendingSymlink
-		var hardLinks []pendingHardLink
-		err := extractEntry(nil, header, destDir, &symlinks, &hardLinks)
+		var deferred deferredEntries
+		err = extractEntry(root, nil, header, destDir, &deferred)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -1188,6 +1285,9 @@ func TestExtractEntry(t *testing.T) {
 		tmpDir := t.TempDir()
 		destDir := filepath.Join(tmpDir, "dest")
 		require.NoError(t, os.MkdirAll(destDir, 0o755))
+		root, err := os.OpenRoot(destDir)
+		require.NoError(t, err)
+		defer root.Close()
 
 		header := &tar.Header{
 			Name:     "bin/npm",
@@ -1196,14 +1296,13 @@ func TestExtractEntry(t *testing.T) {
 			Mode:     0o755,
 		}
 
-		var symlinks []pendingSymlink
-		var hardLinks []pendingHardLink
-		require.NoError(t, extractEntry(nil, header, destDir, &symlinks, &hardLinks))
+		var deferred deferredEntries
+		require.NoError(t, extractEntry(root, nil, header, destDir, &deferred))
 
 		// The entry is collected verbatim, not written to disk.
-		require.Len(t, symlinks, 1)
-		assert.Equal(t, "bin/npm", symlinks[0].rel)
-		assert.Equal(t, "../lib/npm-cli.js", symlinks[0].target)
+		require.Len(t, deferred.symlinks, 1)
+		assert.Equal(t, "bin/npm", deferred.symlinks[0].rel)
+		assert.Equal(t, "../lib/npm-cli.js", deferred.symlinks[0].target)
 		_, statErr := os.Lstat(filepath.Join(destDir, "bin", "npm"))
 		assert.True(t, os.IsNotExist(statErr), "extraction must not create the symlink; that is deferred to materialization")
 	})
@@ -1217,6 +1316,9 @@ func TestExtractEntry(t *testing.T) {
 		tmpDir := t.TempDir()
 		destDir := filepath.Join(tmpDir, "dest")
 		require.NoError(t, os.MkdirAll(destDir, 0o755))
+		root, err := os.OpenRoot(destDir)
+		require.NoError(t, err)
+		defer root.Close()
 
 		header := &tar.Header{
 			Name:     "evil",
@@ -1225,11 +1327,10 @@ func TestExtractEntry(t *testing.T) {
 			Mode:     0o755,
 		}
 
-		var symlinks []pendingSymlink
-		var hardLinks []pendingHardLink
-		require.NoError(t, extractEntry(nil, header, destDir, &symlinks, &hardLinks))
-		require.Len(t, symlinks, 1)
-		assert.Equal(t, "../../../../etc/passwd", symlinks[0].target)
+		var deferred deferredEntries
+		require.NoError(t, extractEntry(root, nil, header, destDir, &deferred))
+		require.Len(t, deferred.symlinks, 1)
+		assert.Equal(t, "../../../../etc/passwd", deferred.symlinks[0].target)
 		_, statErr := os.Lstat(filepath.Join(destDir, "evil"))
 		assert.True(t, os.IsNotExist(statErr), "nothing may be written for a symlink entry during extraction")
 	})
@@ -1238,6 +1339,9 @@ func TestExtractEntry(t *testing.T) {
 		tmpDir := t.TempDir()
 		destDir := filepath.Join(tmpDir, "dest")
 		require.NoError(t, os.MkdirAll(destDir, 0o755))
+		root, err := os.OpenRoot(destDir)
+		require.NoError(t, err)
+		defer root.Close()
 
 		header := &tar.Header{
 			Name:     "fifo",
@@ -1246,9 +1350,8 @@ func TestExtractEntry(t *testing.T) {
 		}
 
 		// Should not return an error for unknown types (just skip them).
-		var symlinks []pendingSymlink
-		var hardLinks []pendingHardLink
-		err := extractEntry(nil, header, destDir, &symlinks, &hardLinks)
+		var deferred deferredEntries
+		err = extractEntry(root, nil, header, destDir, &deferred)
 		assert.NoError(t, err)
 		_, statErr := os.Lstat(filepath.Join(destDir, "fifo"))
 		assert.True(t, os.IsNotExist(statErr), "unknown type must not be materialized")
@@ -1259,7 +1362,9 @@ func TestExtractEntry(t *testing.T) {
 func TestExtractFile(t *testing.T) {
 	t.Run("handles mode out of range", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		path := filepath.Join(tmpDir, "file")
+		root, err := os.OpenRoot(tmpDir)
+		require.NoError(t, err)
+		defer root.Close()
 
 		// Create a tar reader with test data.
 		header := &tar.Header{
@@ -1267,7 +1372,7 @@ func TestExtractFile(t *testing.T) {
 			Mode: -1, // Invalid mode.
 		}
 
-		err := extractFile(nil, path, header)
+		err = extractFile(root, nil, "file", header)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})

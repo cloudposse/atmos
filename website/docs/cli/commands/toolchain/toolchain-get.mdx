@@ -230,15 +230,6 @@ atmos toolchain list
 # Output: Table with installation status, size, date
 ```
 
-### `atmos toolchain get` vs `atmos toolchain versions`
-
-| Command | Purpose | Output |
-|---------|---------|--------|
-| `get [tool]` | Version info for specific tool or all tools | Simple version display |
-| `versions` | All tools from `.tool-versions` | Formatted list of all configured versions |
-
-Both commands provide similar information but with different formatting and focus.
-
 ### `atmos toolchain get` vs `atmos toolchain which`
 
 | Command | Purpose | Shows |
@@ -311,7 +302,6 @@ plain format. Use `--format=json` instead.
 
 ## Related Commands
 
-- [`atmos toolchain versions`](/cli/commands/toolchain/versions) - Display all configured tool versions
 - [`atmos toolchain list`](/cli/commands/toolchain/list) - List installed tools with details
 - [`atmos toolchain which`](/cli/commands/toolchain/which) - Show path to tool binary
 - [`atmos toolchain add`](/cli/commands/toolchain/add) - Add tool to `.tool-versions`

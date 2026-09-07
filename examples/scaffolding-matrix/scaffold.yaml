@@ -1,0 +1,30 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: example
+  description: Generate one file per selected environment via spec.files[].matrix
+spec:
+  fields:
+    - name: environments
+      label: Environments
+      description: >-
+        One stacks/<env>.yaml file is generated per selected environment, via
+        spec.files[].matrix. Leave unselected to generate none.
+      type: multiselect
+      options:
+        - dev
+        - staging
+        - production
+      default: []
+
+  files:
+    # environment.yaml is a single discovered template file; matrix expands it
+    # into one generated file per selected environment (e.g. selecting dev
+    # and staging -> stacks/dev.yaml, stacks/staging.yaml). Leaving
+    # `environments` unselected (the default) resolves the axis to zero
+    # values, so zero files are generated here -- matrix mirrors when:'s
+    # existing silent-skip semantics rather than erroring.
+    - path: environment.yaml
+      target: "stacks/{{ .matrix.environment }}.yaml"
+      matrix:
+        environment: answers.environments

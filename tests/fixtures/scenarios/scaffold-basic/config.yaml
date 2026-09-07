@@ -1,0 +1,2 @@
+# atmos:template
+project_name: "{{ .Config.project_name }}"

@@ -9,14 +9,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/oci/ocitest"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -116,10 +121,83 @@ func TestResolve_LocalPathMissingScaffoldConfig(t *testing.T) {
 	cleanup()
 }
 
-func TestResolve_OCIUnsupported(t *testing.T) {
-	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "x", "oci://ghcr.io/cloudposse/x:latest", time.Minute)
+// TestResolve_OCISuccess exercises the OCI branch of Resolve against an
+// in-process fake registry (pkg/oci/ocitest), proving a scaffold template
+// can be pulled from oci:// the same way atmos vendor pull already does.
+func TestResolve_OCISuccess(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "sample:v1", map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+	src := "oci://" + imageRef
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", src, time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.True(t, hasSampleFile(cfg.Files), "OCI template files must be loaded")
+	assert.Equal(t, src, cfg.Source, "OCI sources must record the original oci:// source string, not the ephemeral fetch tempdir")
+}
+
+// TestResolve_OCIEmptyRegistryFails proves a manifest with zero layers (a
+// real, legitimate registry response, distinct from a network/auth failure)
+// surfaces as a fetch failure rather than succeeding with an empty template.
+func TestResolve_OCIEmptyRegistryFails(t *testing.T) {
+	imageRef := ocitest.NewEmptyRegistry(t, "empty:v1")
+
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "empty", "oci://"+imageRef, time.Minute)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrScaffoldSourceUnsupported)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldFetchSource)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
+// TestResolve_OCIBrokenLayerFails proves a corrupt layer (malformed gzip)
+// surfaces as a fetch failure, not a panic or a silently empty template.
+func TestResolve_OCIBrokenLayerFails(t *testing.T) {
+	imageRef := ocitest.NewBrokenLayerRegistry(t, "broken:v1")
+
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "broken", "oci://"+imageRef, time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldFetchSource)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
+// TestResolve_OCIMissingScaffoldConfig proves an OCI artifact that pulls
+// successfully but has no scaffold.yaml at its root fails the same way a
+// local/remote source without one already does (requireScaffoldConfig).
+func TestResolve_OCIMissingScaffoldConfig(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "not-a-scaffold:v1", map[string]string{
+		"README.md": "not a scaffold",
+	})
+
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "not-a-scaffold", "oci://"+imageRef, time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldConfigMissing)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
+// TestResolve_OCIMkdirTempFails proves the OCI branch's os.MkdirTemp failure surfaces as
+// errUtils.ErrCreateTempDirectory. Poisoning TMPDIR/TEMP/TMP makes MkdirTemp fail
+// deterministically before any registry call is attempted, so no fake registry is needed.
+func TestResolve_OCIMkdirTempFails(t *testing.T) {
+	// Pre-compute a real temp dir path so t.TempDir()/require.NoError machinery still
+	// works, then poison the env for the call under test.
+	bogusTmp := filepath.Join(t.TempDir(), "this-subdir-does-not-exist")
+	// Sanity: this directory must NOT exist for MkdirTemp to fail.
+	_, statErr := os.Stat(bogusTmp)
+	require.True(t, os.IsNotExist(statErr), "test setup: bogusTmp must not exist")
+
+	t.Setenv("TMPDIR", bogusTmp)
+	t.Setenv("TEMP", bogusTmp)
+	t.Setenv("TMP", bogusTmp)
+
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", "oci://ghcr.io/cloudposse/does-not-matter:v1", time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCreateTempDirectory)
 	require.NotNil(t, cleanup)
 	cleanup()
 }
@@ -160,6 +238,25 @@ func TestHydrate_LocalStub(t *testing.T) {
 	assert.Equal(t, dir, stub.Source, "hydrate's *stub = *resolved copy must preserve the original source")
 }
 
+// TestHydrate_OCIStub proves the CLI's actual entry point (Hydrate, not just
+// Resolve directly) also works end-to-end for an OCI stub -- this is the
+// path cmd/scaffold and cmd/init actually call (see selectGenerateTemplate's
+// stub-then-Hydrate flow in cmd/scaffold/scaffold.go).
+func TestHydrate_OCIStub(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "sample:v1", map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+	src := "oci://" + imageRef
+
+	stub := &templates.Configuration{Name: "sample", Source: src}
+	cleanup, err := Hydrate(stub, "")
+	require.NoError(t, err)
+	defer cleanup()
+	assert.True(t, hasSampleFile(stub.Files), "OCI stub must be hydrated from its source")
+	assert.Equal(t, src, stub.Source, "hydrate's *stub = *resolved copy must preserve the original oci:// source")
+}
+
 func TestHydrate_LocalStubError(t *testing.T) {
 	stub := &templates.Configuration{Name: "missing", Source: filepath.Join(t.TempDir(), "missing")}
 
@@ -169,26 +266,34 @@ func TestHydrate_LocalStubError(t *testing.T) {
 	cleanup()
 }
 
-// requireGit skips the test when the git binary is unavailable, matching the
-// inline-skip convention used elsewhere in the codebase for git-backed tests.
-func requireGit(t *testing.T) {
+// requireGitBinary skips the test when the git binary is unavailable. This guards
+// only the actual remote-fetch call: Resolve's `git::` remote path (resolver.go's
+// resolveRemote/fetchRemoteSource) goes through go-getter's git client
+// (pkg/downloader/get_git.go's CustomGitGetter.GetCustom), which explicitly requires
+// and shells out to a real git binary to clone via exec.LookPath and
+// exec.CommandContext. That is go-getter's own mechanism and orthogonal to how the
+// test fixture below is built, so it cannot be replaced with go-git here. Fixture
+// construction itself no longer needs the CLI at all -- see initSourceTestGitRepo.
+func requireGitBinary(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git binary not found on PATH")
+		t.Skip("git binary not found on PATH; required by go-getter's git clone, not by fixture setup")
 	}
 }
 
 // initSourceTestGitRepo creates a local git repository on branch "main" with the given
-// files committed, mirroring the local-git-fixture pattern used by
-// tests/cli_remote_imports_test.go and pkg/stack/imports/remote_test.go.
+// files committed, using go-git (no external git binary) instead of shelling out --
+// mirroring the idiom in pkg/generator/gitinit.go's InitGitRepository. Setup failures
+// fail the test loudly via require.NoError rather than skipping, since go-git has no
+// external binary dependency that can be "unavailable".
 func initSourceTestGitRepo(t *testing.T, files map[string]string) string {
 	t.Helper()
 
 	repoDir := t.TempDir()
-	runSourceTestGit(t, repoDir, "init")
-	runSourceTestGit(t, repoDir, "checkout", "-b", "main")
-	runSourceTestGit(t, repoDir, "config", "user.email", "test@example.com")
-	runSourceTestGit(t, repoDir, "config", "user.name", "Test User")
+	repo, err := git.PlainInitWithOptions(repoDir, &git.PlainInitOptions{
+		InitOptions: git.InitOptions{DefaultBranch: plumbing.NewBranchReferenceName("main")},
+	})
+	require.NoError(t, err)
 
 	for name, content := range files {
 		path := filepath.Join(repoDir, filepath.FromSlash(name))
@@ -196,17 +301,18 @@ func initSourceTestGitRepo(t *testing.T, files map[string]string) string {
 		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	}
 
-	runSourceTestGit(t, repoDir, "add", ".")
-	runSourceTestGit(t, repoDir, "commit", "-m", "initial")
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+	require.NoError(t, wt.AddGlob("."))
+	_, err = wt.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test User",
+			Email: "test@example.com",
+			When:  time.Now(),
+		},
+	})
+	require.NoError(t, err)
 	return repoDir
-}
-
-func runSourceTestGit(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "git %v failed: %s", args, string(out))
 }
 
 func sourceTestGitFileURI(path string) string {
@@ -223,20 +329,45 @@ func sourceTestGitFileURI(path string) string {
 // test drove a successful fetch through this path; every other scaffold test sets
 // ATMOS_SCAFFOLD_SOURCE_OVERRIDE and bypasses it entirely.
 func TestResolve_RemoteGitSubdirSuccess(t *testing.T) {
-	requireGit(t)
-
 	repoDir := initSourceTestGitRepo(t, map[string]string{
 		"aws/app/scaffold.yaml": sampleScaffold,
 		"aws/app/file.txt":      "hello",
 	})
 	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/app?ref=main"
 
+	requireGitBinary(t)
 	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, time.Minute)
 	require.NoError(t, err)
 	require.NotNil(t, cleanup)
 	defer cleanup()
 	require.NotNil(t, cfg)
 	assert.True(t, hasSampleFile(cfg.Files), "remote git subdir template files must be loaded")
+}
+
+// TestResolve_RemoteGitExcludesGitDirectory reproduces a client-reported bug: fetching a
+// `git::` scaffold source (no subdir, mirroring the client's exact repro) must not copy
+// the fetched clone's own `.git` directory (objects, refs, hooks, and a `config` pointing
+// at the template's source repo) into the loaded template's file list -- it isn't part of
+// the template's content.
+func TestResolve_RemoteGitExcludesGitDirectory(t *testing.T) {
+	repoDir := initSourceTestGitRepo(t, map[string]string{
+		"scaffold.yaml": sampleScaffold,
+		"file.txt":      "hello",
+	})
+	src := "git::" + sourceTestGitFileURI(repoDir) + "?ref=main"
+
+	requireGitBinary(t)
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", src, time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.True(t, hasSampleFile(cfg.Files), "remote git template files must still be loaded")
+
+	for _, f := range cfg.Files {
+		assert.NotEqual(t, ".git", f.Path, "loaded configuration must not include the .git directory itself")
+		assert.False(t, strings.HasPrefix(f.Path, ".git/"), "loaded configuration must not include files under .git/, got %q", f.Path)
+	}
 }
 
 // zipArchive builds an in-memory ZIP archive containing the given files.
@@ -297,14 +428,13 @@ func TestResolve_RemoteRecordsOriginalSource(t *testing.T) {
 // TestResolve_RemoteGitSubdirMissing pins the exact failure mode reported for
 // `atmos init aws/app`: a valid git remote whose requested //subdir does not exist.
 func TestResolve_RemoteGitSubdirMissing(t *testing.T) {
-	requireGit(t)
-
 	repoDir := initSourceTestGitRepo(t, map[string]string{
 		"aws/app/scaffold.yaml": sampleScaffold,
 		"aws/app/file.txt":      "hello",
 	})
 	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/missing?ref=main"
 
+	requireGitBinary(t)
 	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/missing", src, time.Minute)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldFetchSource)

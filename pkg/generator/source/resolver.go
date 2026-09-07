@@ -1,10 +1,11 @@
 // Package source resolves scaffold templates from local paths or remote
-// sources (git, https, s3) into a templates.Configuration ready for generation.
-// It is the seam that lets `atmos init`/`atmos scaffold` distribute templates
-// remotely while reusing the existing generator engine.
+// sources (git, https, s3, oci) into a templates.Configuration ready for
+// generation. It is the seam that lets `atmos init`/`atmos scaffold`
+// distribute templates remotely while reusing the existing generator engine.
 package source
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
@@ -56,10 +58,11 @@ func WithRef(src, ref string) string {
 	return src + sep + "ref=" + ref
 }
 
-// Resolve fetches a scaffold template from src (a local path, file://, or a
-// go-getter remote such as git/https/s3) into a usable templates.Configuration.
-// The returned cleanup function removes any temporary download directory; it is
-// never nil and is always safe to call.
+// Resolve fetches a scaffold template from src (a local path, file://, an
+// oci:// registry reference, or a go-getter remote such as git/https/s3)
+// into a usable templates.Configuration. The returned cleanup function
+// removes any temporary download directory; it is never nil and is always
+// safe to call.
 func Resolve(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration) (*templates.Configuration, func(), error) {
 	defer perf.Track(nil, "source.Resolve")()
 
@@ -68,24 +71,73 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, name, src string, timeout t
 		timeout = DefaultFetchTimeout
 	}
 
-	// OCI distribution is not wired up yet; fail clearly rather than silently.
-	if vendor.IsOCIURI(src) {
-		return nil, noop, errUtils.Build(errUtils.ErrScaffoldSourceUnsupported).
-			WithExplanationf("OCI scaffold sources are not supported yet: `%s`", src).
-			WithHint("Use a git, https, or local source for now").
-			WithContext("source", src).
-			WithExitCode(2).
-			Err()
-	}
-
 	// Local sources (relative/absolute path or file://) load directly, no fetch.
 	if vendor.IsFileURI(src) || vendor.IsLocalPath(src) {
 		conf, err := resolveLocal(name, src)
 		return conf, noop, err
 	}
 
+	// OCI sources pull directly via pkg/oci -- OCI isn't a go-getter scheme
+	// (see pkg/provisioner/source/vendor.go's downloadOCISource, which this
+	// mirrors), so it's handled before the go-getter branch below.
+	if vendor.IsOCIURI(src) {
+		return resolveOCI(atmosConfig, name, src, timeout)
+	}
+
 	// Remote sources: download into a temp dir via go-getter, then load.
 	return resolveRemote(atmosConfig, name, src, timeout)
+}
+
+// resolveOCI pulls a scaffold template from an oci:// registry reference
+// into a temporary directory and loads its configuration. Mirrors
+// resolveRemote's temp-dir/cleanup/provenance shape, but fetches via
+// pkg/oci.ProcessImage (the same primitive atmos vendor pull and JIT
+// component-source provisioning already use) instead of go-getter, since
+// OCI registries aren't a go-getter scheme. The returned cleanup function
+// removes the temporary directory.
+func resolveOCI(atmosConfig *schema.AtmosConfiguration, name, src string, timeout time.Duration) (*templates.Configuration, func(), error) {
+	noop := func() {}
+
+	tempDir, err := os.MkdirTemp("", "atmos-scaffold-")
+	if err != nil {
+		return nil, noop, errUtils.Build(errUtils.ErrCreateTempDirectory).
+			WithCause(err).
+			WithExplanation("Failed to create a temporary directory for the scaffold download").
+			WithExitCode(1).
+			Err()
+	}
+	cleanup := func() { _ = os.RemoveAll(tempDir) }
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	imageRef := strings.TrimPrefix(src, "oci://")
+	if err := oci.ProcessImage(ctx, atmosConfig, imageRef, tempDir); err != nil {
+		cleanup()
+		return nil, noop, errUtils.Build(errUtils.ErrScaffoldFetchSource).
+			WithCause(err).
+			WithExplanationf("Failed to fetch scaffold template from `%s`", src).
+			WithHint("Verify the OCI reference is correct and accessible").
+			WithHint("For private registries, run `docker login`, or set `ATMOS_GITHUB_TOKEN` for ghcr.io").
+			WithContext("source", src).
+			WithExitCode(1).
+			Err()
+	}
+
+	conf, err := templates.LoadConfigurationFromDir(name, tempDir)
+	if err != nil {
+		cleanup()
+		return nil, noop, err
+	}
+	if err := requireScaffoldConfig(conf, src); err != nil {
+		cleanup()
+		return nil, noop, err
+	}
+	// tempDir only exists to read files off disk and is removed by cleanup()
+	// once generation finishes; the recorded provenance must be the original
+	// source the caller passed in, not that ephemeral fetch destination.
+	conf.Source = src
+	return conf, cleanup, nil
 }
 
 // resolveRemote fetches a remote scaffold source (git/https/s3, via

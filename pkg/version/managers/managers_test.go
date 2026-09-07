@@ -191,6 +191,25 @@ func TestPlanDefaultsAndErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("explicit empty files rule manages zero files", func(t *testing.T) {
+		resetRegistryForTest(t)
+		cfg := testConfig(t)
+		cfg.Version.Files = []schema.VersionFileRule{}
+		withDefault := &fakeManager{name: "with-default", defaults: []string{"*.txt"}}
+		Register(withDefault)
+
+		changes, err := Plan(context.Background(), &RunOptions{Config: cfg})
+		if err != nil {
+			t.Fatalf("Plan returned error: %v", err)
+		}
+		if len(changes) != 0 {
+			t.Fatalf("Plan changes = %#v, want none", changes)
+		}
+		if len(withDefault.inputs) != 0 {
+			t.Fatalf("with-default calls = %d, want 0", len(withDefault.inputs))
+		}
+	})
+
 	t.Run("unknown manager", func(t *testing.T) {
 		resetRegistryForTest(t)
 		cfg := testConfig(t)
@@ -215,6 +234,53 @@ func TestPlanDefaultsAndErrors(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "broken:") {
 			t.Fatalf("Plan error = %v, want manager name", err)
+		}
+	})
+
+	// Guards against a regression to the field-test finding that one broken
+	// rule aborted the whole Plan() call, hiding every other rule's errors
+	// (and, previously, even its successfully planned changes) behind
+	// whichever rule happened to fail first.
+	t.Run("collects errors from every broken rule instead of stopping at the first", func(t *testing.T) {
+		resetRegistryForTest(t)
+		cfg := testConfig(t)
+		sentinelA := errors.New("boom-a")
+		sentinelB := errors.New("boom-b")
+		Register(&fakeManager{name: "broken-a", err: sentinelA})
+		Register(&fakeManager{name: "broken-b", err: sentinelB})
+		cfg.Version.Files = []schema.VersionFileRule{
+			{Manager: "broken-a"},
+			{Manager: "broken-b"},
+		}
+
+		_, err := Plan(context.Background(), &RunOptions{Config: cfg})
+		if !errors.Is(err, sentinelA) {
+			t.Fatalf("Plan error = %v, want to include sentinelA", err)
+		}
+		if !errors.Is(err, sentinelB) {
+			t.Fatalf("Plan error = %v, want to include sentinelB", err)
+		}
+	})
+
+	t.Run("continues planning remaining rules after one rule errors", func(t *testing.T) {
+		resetRegistryForTest(t)
+		cfg := testConfig(t)
+		sentinel := errors.New("boom")
+		broken := &fakeManager{name: "broken", err: sentinel}
+		clean := &fakeManager{name: "clean"}
+		Register(broken)
+		Register(clean)
+		cfg.Version.Files = []schema.VersionFileRule{
+			{Manager: "broken"},
+			{Manager: "clean"},
+		}
+
+		_, err := Plan(context.Background(), &RunOptions{Config: cfg})
+		if !errors.Is(err, sentinel) {
+			t.Fatalf("Plan error = %v, want sentinel", err)
+		}
+		if len(clean.inputs) != 1 {
+			t.Fatalf("expected the rule after the broken one to still be planned, got %d calls", len(clean.inputs))
 		}
 	})
 }

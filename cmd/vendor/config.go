@@ -1,6 +1,8 @@
 package vendor
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	listpkg "github.com/cloudposse/atmos/pkg/list"
@@ -59,9 +62,42 @@ var vendorConfigGetCmd = &cobra.Command{
 func runVendorConfigGet(file, path string) error {
 	value, err := atmosyaml.GetFile(file, path)
 	if err != nil {
-		return err
+		return wrapVendorConfigError(file, err)
 	}
 	return data.Writeln(value)
+}
+
+// wrapVendorConfigError adds an actionable hint to the two error shapes
+// vendor config get/set/delete return unwrapped today (a field-test finding):
+// a missing/unreadable file surfaced the engine's raw "failed to read file:
+// open ...: no such file or directory" with no guidance, and a not-found path
+// gave no indication that the manifest imports other files that might declare
+// it (unlike `vendor config list`, which is already import-aware). It leaves
+// every other error (e.g. malformed path syntax, anchor-guard violations)
+// untouched. The wrapped error still satisfies errors.Is against the
+// original sentinel (atmosyaml.ErrReadFile / atmosyaml.ErrYAMLPathNotFound).
+func wrapVendorConfigError(file string, err error) error {
+	switch {
+	case errors.Is(err, atmosyaml.ErrReadFile):
+		return errUtils.Build(err).
+			WithHintf("Check that %s exists, or pass --file to point at a different manifest.", atmosyaml.DisplayPath(file)).
+			Err()
+	case errors.Is(err, atmosyaml.ErrYAMLPathNotFound):
+		files, collectErr := vendoring.CollectManifestFiles(file)
+		if collectErr != nil || len(files) <= 1 {
+			return err
+		}
+		imported := make([]string, 0, len(files)-1)
+		for _, f := range files[1:] {
+			imported = append(imported, atmosyaml.DisplayPath(f))
+		}
+		return errUtils.Build(err).
+			WithHintf("%s also imports %s — run `atmos vendor config list` to see every path across the import chain, or pass --file to edit one of them directly.",
+				atmosyaml.DisplayPath(file), strings.Join(imported, ", ")).
+			Err()
+	default:
+		return err
+	}
 }
 
 var vendorConfigSetCmd = &cobra.Command{
@@ -82,16 +118,56 @@ strings; use --type for int, bool, float, null, or raw YAML literals.`,
 		if err != nil {
 			return err
 		}
-		return runVendorConfigSet(file, args[0], args[1], valueType)
+		if valueType == atmosyaml.TypeAuto {
+			return errUtils.Build(fmt.Errorf("%w: %q", atmosyaml.ErrInvalidTypedValue, atmosyaml.TypeAuto)).
+				WithHintf("vendor config set has no schema or existing-value inference to draw on, so --type defaults to %q and doesn't support %q. "+
+					"Pass an explicit --type (string, int, bool, float, null, or yaml), or omit --type entirely.",
+					atmosyaml.TypeString, atmosyaml.TypeAuto).
+				Err()
+		}
+		// warnIfNonString is gated on this cobra command's own --type flag: the
+		// `vendor set` alias (cmd/vendor/edit.go) always passes false here,
+		// since it has no --type flag of its own and always writes TypeString
+		// deliberately, not by default.
+		warnIfNonString := !cmd.Flags().Changed("type") && valueType == atmosyaml.TypeString
+		if err := runVendorConfigSet(file, args[0], args[1], valueType, warnIfNonString); err != nil {
+			return err
+		}
+		return nil
 	},
 }
 
+// warnIfVendorValueLooksNonString warns when a value that looks like a bool
+// or number is about to be written as a literal string because --type wasn't
+// passed -- otherwise `atmos vendor config set spec.sources[0].tags.0 42`
+// silently stores the string "42" with no indication it happened. Unlike
+// `config set`/`stack set`, vendor has no type-inference story (no schema, no
+// existing-value fallback) to explain in the message: --type simply defaulted
+// to string. Firing is skipped when the user passed --type explicitly (even
+// --type=string), since that's a deliberate choice, not an accident.
+func warnIfVendorValueLooksNonString(value string) {
+	if !atmosyaml.LooksNonString(value) {
+		return
+	}
+	ui.Warningf("%q looks like it could be a bool/int/float, but it's being stored as a literal string because --type wasn't passed. Pass --type to store it as bool, int, float, or yaml.", value)
+}
+
 // runVendorConfigSet writes value at path in a vendor manifest file. Shared by
-// vendor config set and its vendor set alias.
-func runVendorConfigSet(file, path, value, valueType string) error {
+// vendor config set and its vendor set alias. The warnIfNonString parameter
+// controls whether a LooksNonString warning is considered at all (the vendor
+// set alias always passes false; see the call site in cmd/vendor/edit.go). The warning,
+// when considered, is printed after the write succeeds (so a failed write
+// never claims a value "is being stored") but before the success message --
+// matching `config set`/`stack set`'s warn-then-succeed order, unlike this
+// function's previous behavior of leaving the warning to be printed by the
+// caller after this function had already printed success.
+func runVendorConfigSet(file, path, value, valueType string, warnIfNonString bool) error {
 	created, err := atmosyaml.SetFileWithType(file, path, value, valueType)
 	if err != nil {
-		return err
+		return wrapVendorConfigError(file, err)
+	}
+	if warnIfNonString {
+		warnIfVendorValueLooksNonString(value)
 	}
 	if created {
 		ui.Successf("Created `%s` = `%s` in `%s`", path, value, atmosyaml.DisplayPath(file))
@@ -116,7 +192,7 @@ var vendorConfigDeleteCmd = &cobra.Command{
 		}
 		existed, err := atmosyaml.DeleteFile(file, args[0])
 		if err != nil {
-			return err
+			return wrapVendorConfigError(file, err)
 		}
 		if !existed {
 			ui.Successf("Nothing to delete — `%s` is not set in `%s`", args[0], atmosyaml.DisplayPath(file))
@@ -201,7 +277,9 @@ func init() {
 
 	vendorConfigSetParser = flags.NewStandardParser(
 		flags.WithStringFlag("file", "", "", vendorFileFlagHelp),
-		flags.WithStringFlag("type", "", atmosyaml.TypeString, "Value type: string, int, bool, float, null, or yaml (raw literal)"),
+		flags.WithStringFlag("type", "", atmosyaml.TypeString,
+			"Value type: string, int, bool, float, null, or yaml (raw literal). auto is recognized but rejected -- "+
+				"vendor manifests have no schema or existing-value signal to infer from."),
 	)
 	vendorConfigSetParser.RegisterFlags(vendorConfigSetCmd)
 	if err := vendorConfigSetParser.BindToViper(viper.GetViper()); err != nil {

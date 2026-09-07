@@ -22,6 +22,36 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// sessionReadyWaitTimeout bounds every session test's "write a command, wait
+// for its echo" round trip below. It self-execs the test binary as a fake
+// shell over a real PTY (see sessionShellHelperEnv) -- Windows process
+// creation and ConPTY setup are well-documented to be markedly slower than
+// POSIX fork/exec, and a CI runner already busy running the rest of this
+// suite adds further scheduling latency on top of that. 2s was observed to
+// intermittently time out under exactly that combination even though the
+// handshake itself is near-instant once the subprocess is actually
+// scheduled; 5s gives real headroom without materially slowing the suite
+// (each of these tests only pays the cost once, on its own success path).
+const sessionReadyWaitTimeout = "5s"
+
+// sessionReadyWaitTimeoutDuration is sessionReadyWaitTimeout pre-parsed, so a
+// test that must bound a *parent* context around a session wait action (as
+// opposed to the action's own Timeout field, which takes the string form
+// directly) can derive its deadline from the same value instead of
+// hardcoding a second literal that can silently drift out of sync -- see
+// waitForOutput in pkg/asciicast/session.go, which returns the parent
+// context's own error the moment it expires, even if the wait action's own,
+// longer Timeout hasn't elapsed yet.
+var sessionReadyWaitTimeoutDuration = mustParseDuration(sessionReadyWaitTimeout)
+
+func mustParseDuration(s string) time.Duration {
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+
 func TestCastValidateSessionWaitRequiresTextOrRegex(t *testing.T) {
 	h := &CastHandler{}
 	err := h.Validate(&schema.WorkflowStep{
@@ -1754,7 +1784,7 @@ func TestRunCastSessionModeInterleavesSimulateNarration(t *testing.T) {
 			{Type: schema.TaskTypeSimulate, Text: "# narration line", Rate: "0"},
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: "2s"},
+			{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
 		},
 	}, NewVariables())
 	if err != nil {
@@ -2122,7 +2152,11 @@ func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// Must outlive the wait action's own sessionReadyWaitTimeout below: this
+	// parent context's deadline firing first would return ctx.Err() instead
+	// of ever giving the wait action its own, longer budget to succeed (see
+	// sessionReadyWaitTimeoutDuration's doc comment).
+	ctx, cancel := context.WithTimeout(context.Background(), sessionReadyWaitTimeoutDuration+2*time.Second)
 	defer cancel()
 
 	err = runCastSessionMode(ctx, &schema.WorkflowStep{
@@ -2131,7 +2165,7 @@ func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: "2s"},
+			{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
 		},
 	}, NewVariables(), nil)
 	if err != nil {
@@ -2161,7 +2195,7 @@ func TestCastHandlerExecutesSessionModeEndToEnd(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: "2s"},
+			{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
 		},
 	}, NewVariables())
 	if err != nil {
@@ -2194,7 +2228,7 @@ func TestCastHandlerSessionModeFallsThroughToRealExecution(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: "2s"},
+			{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
 			{
 				Name:    "plan",
 				Type:    schema.TaskTypeAtmos,
@@ -2250,7 +2284,7 @@ func TestCastHandlerNestedSessionStepFallsThroughToRealExecution(t *testing.T) {
 				Steps: []schema.WorkflowStep{
 					{Type: "write", Text: "printf ready", Rate: "0"},
 					{Type: "key", Key: "enter"},
-					{Type: "wait", Text: "ready", Timeout: "2s"},
+					{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
 				},
 			},
 			{
@@ -2302,7 +2336,7 @@ func TestCastHandlerNestedSessionExecInheritsWorkflowOutput(t *testing.T) {
 			Steps: []schema.WorkflowStep{
 				{Type: "write", Text: "printf ready", Rate: "0"},
 				{Type: "key", Key: "enter"},
-				{Type: "wait", Text: "ready", Timeout: "2s"},
+				{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
 				{Name: "workflow-child", Type: schema.TaskTypeShell, Command: "printf workflow-child"},
 			},
 		}},
@@ -2402,7 +2436,7 @@ func TestRunCastStepModeSkipsPromptForSimulateAfterSessionBlock(t *testing.T) {
 				Steps: []schema.WorkflowStep{
 					{Type: "write", Text: "printf ready", Rate: "0"},
 					{Type: "key", Key: "enter"},
-					{Type: "wait", Text: "ready", Timeout: "2s"},
+					{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
 				},
 			},
 			{Type: schema.TaskTypeSimulate, Text: "# narration after the session", Rate: "0"},

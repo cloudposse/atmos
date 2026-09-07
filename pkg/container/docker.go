@@ -70,6 +70,7 @@ func (d *DockerRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	args := buildBuildArgs(config)
 
 	cmd := d.command(ctx, args...)
+	applyCommandEnv(cmd, bakeCommandEnv(d.env, config))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: docker build failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
@@ -149,6 +150,18 @@ func (d *DockerRuntime) EnsureNetwork(ctx context.Context, name string) error {
 	cmd := d.command(ctx, "network", "create", name)
 	output, err := cmd.CombinedOutput()
 	return networkCreateResult(err, string(output))
+}
+
+// ConnectNetwork attaches an already running container to a user-defined docker
+// network, registering aliases as its DNS names on that network. It implements
+// NetworkConnector so Atmos's own container can join a dedicated stack network
+// it didn't start on.
+func (d *DockerRuntime) ConnectNetwork(ctx context.Context, network, containerID string, aliases []string) error {
+	defer perf.Track(nil, "container.DockerRuntime.ConnectNetwork")()
+
+	cmd := d.command(ctx, buildNetworkConnectArgs(network, containerID, aliases)...)
+	output, err := cmd.CombinedOutput()
+	return networkConnectResult(err, string(output))
 }
 
 // Start starts a container.

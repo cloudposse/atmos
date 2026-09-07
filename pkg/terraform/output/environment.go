@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
@@ -87,6 +88,10 @@ func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, auth
 			"count", len(config.Env),
 		)
 		for k, v := range config.Env {
+			// Terraform-exec owns CLI arguments for its internal output command.
+			if k == "TF_CLI_ARGS" || strings.HasPrefix(k, "TF_CLI_ARGS_") {
+				continue
+			}
 			environMap[k] = fmt.Sprintf("%v", v)
 		}
 	}

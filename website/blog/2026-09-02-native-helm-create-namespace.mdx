@@ -1,0 +1,80 @@
+---
+slug: native-helm-create-namespace
+title: "Automatically Create the Configured Namespace for Helm Releases"
+authors: [aknysh]
+tags: [enhancement]
+date: 2026-09-02T12:00:00.000Z
+---
+
+Atmos lets you configure the Kubernetes namespace where a Helm release should be installed. This
+prevents charts that do not specify a namespace from being installed into `default`.
+
+That namespace may not exist. Native Helm creates it for you automatically, so a release
+deploys in a single operation instead of requiring a separate command, component, or workflow to
+create the namespace first.
+
+Sometimes, though, the deployment should not be creating namespaces at all.
+
+<!--truncate-->
+
+## The Problem
+
+A Helm chart does not always specify the namespace where its resources should be installed. Atmos
+solves this by installing the release into the namespace configured for the component:
+
+```yaml
+components:
+  helm:
+    backend-api:
+      chart: "backend-api"
+      namespace: backend-api
+```
+
+This keeps the release out of the `default` namespace, and native Helm creates the namespace
+automatically when it is missing, so the deployment is self-contained.
+
+Automatic creation is not always wanted. When a platform team owns the namespace along with its
+labels, quotas, and NetworkPolicies, the release should not create it. And when the deploy identity
+is scoped to a single namespace and cannot create namespaces, the forced creation fails with a `403`,
+even when the namespace already exists.
+
+## The Fix
+
+Native Helm components now support `create_namespace`. It defaults to `true`, so the namespace is
+created automatically as before. Set it to `false` to install into a pre-existing namespace instead:
+
+```yaml
+components:
+  helm:
+    backend-api:
+      chart: "backend-api"
+      namespace: backend-api
+      create_namespace: false
+      values:
+        replicaCount: 1
+```
+
+The release then deploys into the namespace that already exists, with no cluster-level permission to
+create namespaces:
+
+```shell
+atmos helm apply backend-api -s plat-ue2-dev
+```
+
+Left at its default, Helm creates the namespace when it is missing. Set to `false`, Helm installs
+into the namespace that is already there.
+
+## When to Use It
+
+Keep `create_namespace` enabled (the default) when the Helm deployment should manage its own namespace
+and the deploying identity has permission to create namespaces.
+
+Set it to `false` when namespaces are managed separately, for example when a platform component is
+responsible for namespace labels, quotas, NetworkPolicies, or other guardrails, or when the deploy
+identity is scoped to a single namespace.
+
+## Get Involved
+
+Atmos is open source and we'd love your feedback. Join the conversation in the
+[Atmos community Slack](https://cloudposse.com/slack) or open an issue on
+[GitHub](https://github.com/cloudposse/atmos).

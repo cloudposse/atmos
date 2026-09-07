@@ -56,6 +56,18 @@ func TestRunEphemeralContainer_SuccessCleanupAlways(t *testing.T) {
 	assert.Equal(t, 0, result.ExitCode)
 }
 
+func TestBuildEphemeralCreateConfig_PassesThroughNetworks(t *testing.T) {
+	networks := []NetworkAttachment{{Name: "atmos-dev", Aliases: []string{"dev-api"}}}
+
+	got := buildEphemeralCreateConfig(&EphemeralConfig{
+		Name:     "test",
+		Image:    "alpine:latest",
+		Networks: networks,
+	})
+
+	assert.Equal(t, networks, got.Networks)
+}
+
 func TestRunEphemeralContainer_PullMissingRetriesCreate(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

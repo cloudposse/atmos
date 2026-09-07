@@ -41,17 +41,17 @@ func (m *MockWorkdirManager) EXPECT() *MockWorkdirManagerMockRecorder {
 }
 
 // CleanAllWorkdirs mocks base method.
-func (m *MockWorkdirManager) CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error {
+func (m *MockWorkdirManager) CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration, dryRun bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CleanAllWorkdirs", atmosConfig)
+	ret := m.ctrl.Call(m, "CleanAllWorkdirs", atmosConfig, dryRun)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CleanAllWorkdirs indicates an expected call of CleanAllWorkdirs.
-func (mr *MockWorkdirManagerMockRecorder) CleanAllWorkdirs(atmosConfig any) *gomock.Call {
+func (mr *MockWorkdirManagerMockRecorder) CleanAllWorkdirs(atmosConfig, dryRun any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanAllWorkdirs", reflect.TypeOf((*MockWorkdirManager)(nil).CleanAllWorkdirs), atmosConfig)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanAllWorkdirs", reflect.TypeOf((*MockWorkdirManager)(nil).CleanAllWorkdirs), atmosConfig, dryRun)
 }
 
 // CleanExpiredWorkdirs mocks base method.
@@ -69,47 +69,47 @@ func (mr *MockWorkdirManagerMockRecorder) CleanExpiredWorkdirs(atmosConfig, ttl,
 }
 
 // CleanWorkdir mocks base method.
-func (m *MockWorkdirManager) CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack string) error {
+func (m *MockWorkdirManager) CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack string, componentConfig map[string]any) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CleanWorkdir", atmosConfig, component, stack)
+	ret := m.ctrl.Call(m, "CleanWorkdir", atmosConfig, component, stack, componentConfig)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CleanWorkdir indicates an expected call of CleanWorkdir.
-func (mr *MockWorkdirManagerMockRecorder) CleanWorkdir(atmosConfig, component, stack any) *gomock.Call {
+func (mr *MockWorkdirManagerMockRecorder) CleanWorkdir(atmosConfig, component, stack, componentConfig any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanWorkdir", reflect.TypeOf((*MockWorkdirManager)(nil).CleanWorkdir), atmosConfig, component, stack)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanWorkdir", reflect.TypeOf((*MockWorkdirManager)(nil).CleanWorkdir), atmosConfig, component, stack, componentConfig)
 }
 
 // DescribeWorkdir mocks base method.
-func (m *MockWorkdirManager) DescribeWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack string) (string, error) {
+func (m *MockWorkdirManager) DescribeWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack string, componentConfig map[string]any) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeWorkdir", atmosConfig, component, stack)
+	ret := m.ctrl.Call(m, "DescribeWorkdir", atmosConfig, component, stack, componentConfig)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeWorkdir indicates an expected call of DescribeWorkdir.
-func (mr *MockWorkdirManagerMockRecorder) DescribeWorkdir(atmosConfig, component, stack any) *gomock.Call {
+func (mr *MockWorkdirManagerMockRecorder) DescribeWorkdir(atmosConfig, component, stack, componentConfig any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkdir", reflect.TypeOf((*MockWorkdirManager)(nil).DescribeWorkdir), atmosConfig, component, stack)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkdir", reflect.TypeOf((*MockWorkdirManager)(nil).DescribeWorkdir), atmosConfig, component, stack, componentConfig)
 }
 
 // GetWorkdirInfo mocks base method.
-func (m *MockWorkdirManager) GetWorkdirInfo(atmosConfig *schema.AtmosConfiguration, component, stack string) (*WorkdirInfo, error) {
+func (m *MockWorkdirManager) GetWorkdirInfo(atmosConfig *schema.AtmosConfiguration, component, stack string, componentConfig map[string]any) (*WorkdirInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetWorkdirInfo", atmosConfig, component, stack)
+	ret := m.ctrl.Call(m, "GetWorkdirInfo", atmosConfig, component, stack, componentConfig)
 	ret0, _ := ret[0].(*WorkdirInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetWorkdirInfo indicates an expected call of GetWorkdirInfo.
-func (mr *MockWorkdirManagerMockRecorder) GetWorkdirInfo(atmosConfig, component, stack any) *gomock.Call {
+func (mr *MockWorkdirManagerMockRecorder) GetWorkdirInfo(atmosConfig, component, stack, componentConfig any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkdirInfo", reflect.TypeOf((*MockWorkdirManager)(nil).GetWorkdirInfo), atmosConfig, component, stack)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkdirInfo", reflect.TypeOf((*MockWorkdirManager)(nil).GetWorkdirInfo), atmosConfig, component, stack, componentConfig)
 }
 
 // ListWorkdirs mocks base method.

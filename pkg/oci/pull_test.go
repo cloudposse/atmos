@@ -473,6 +473,22 @@ func installPullImageShim(t *testing.T, shim *pullImageShim) {
 	original := remoteGet
 	remoteGet = shim.get
 	t.Cleanup(func() { remoteGet = original })
+
+	originalRetryConfig := ociManifestRetryConfig
+	ociManifestRetryConfig = testOCIManifestRetryConfig()
+	t.Cleanup(func() { ociManifestRetryConfig = originalRetryConfig })
+}
+
+// testOCIManifestRetryConfig mirrors testOCILayerRetryConfig: same bounded
+// attempt count as production, zero delay so retry-exercising tests run fast.
+func testOCIManifestRetryConfig() *schema.RetryConfig {
+	maxAttempts := ociManifestRetryMaxAttempts
+	initialDelay := time.Duration(0)
+	return &schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+	}
 }
 
 // ghcrConfigWithCreds returns a config that causes GHCRAuth to resolve a
@@ -577,8 +593,15 @@ func TestPullImage_NoFallback_500(t *testing.T) {
 }
 
 func TestPullImage_NoFallback_NetOpError(t *testing.T) {
+	// A persistent (not just transiently flaky) connection failure: retried
+	// ociManifestRetryMaxAttempts times on the *same* auth, then reported --
+	// never switches to the separate anonymous-auth fallback path, which only
+	// triggers on registry-level auth rejections (401/403/DENIED), not
+	// connection-level failures.
 	shim := &pullImageShim{
 		results: []pullImageResult{
+			{err: &net.OpError{Op: "dial", Err: errors.New("no such host")}},
+			{err: &net.OpError{Op: "dial", Err: errors.New("no such host")}},
 			{err: &net.OpError{Op: "dial", Err: errors.New("no such host")}},
 		},
 	}
@@ -587,8 +610,29 @@ func TestPullImage_NoFallback_NetOpError(t *testing.T) {
 	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
 	_, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
 	require.Error(t, err)
-	assert.Equal(t, 1, shim.calls, "DNS-style errors must not trigger anonymous retry")
+	assert.Equal(t, ociManifestRetryMaxAttempts, shim.calls, "DNS-style errors must retry on the same auth, not trigger anonymous fallback")
 	assert.True(t, errors.Is(err, errUtils.ErrPullImage))
+}
+
+// TestPullImage_RetriesTransientConnectError_EventuallySucceeds is the
+// regression test for the production incident this retry was added for:
+// Harden-Runner block-mode Windows runners can lose a race between their own
+// egress-firewall rule propagation and the registry connection attempt,
+// producing one transient dial failure that clears on retry.
+func TestPullImage_RetriesTransientConnectError_EventuallySucceeds(t *testing.T) {
+	shim := &pullImageShim{
+		results: []pullImageResult{
+			{err: &net.OpError{Op: "dial", Err: errors.New("connectex: forbidden by its access permissions")}},
+			{descriptor: &remote.Descriptor{}},
+		},
+	}
+	installPullImageShim(t, shim)
+
+	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
+	desc, err := pullImage(context.Background(), ghcrConfigWithCreds(), ref)
+	require.NoError(t, err)
+	assert.NotNil(t, desc)
+	assert.Equal(t, 2, shim.calls, "expected one failed attempt followed by one successful retry on the same auth")
 }
 
 func TestPullImage_NoRetry_WhenAlreadyAnonymous(t *testing.T) {

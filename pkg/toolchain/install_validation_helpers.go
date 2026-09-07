@@ -46,7 +46,8 @@ func resolveVersionFromToolVersions(tool, toolSpec string) (versionLookupResult,
 	}, nil
 }
 
-// validateToolAndVersion validates that both tool and version are non-empty.
+// validateToolAndVersion validates that both tool and version are non-empty and that
+// version is a format ParseVersionSpec recognizes, before any network call is made.
 func validateToolAndVersion(tool, version, toolSpec string) error {
 	if tool == "" || version == "" {
 		return errUtils.Build(errUtils.ErrInvalidToolSpec).
@@ -57,17 +58,21 @@ func validateToolAndVersion(tool, version, toolSpec string) error {
 			WithExitCode(2).
 			Err()
 	}
-	return nil
+	return ValidateVersionSpec(version)
 }
 
 // updateToolVersionsFile updates the .tool-versions file with the installed tool.
+// Uses GetToolVersionsFilePath(), not the DefaultToolVersionsFilePath constant, so
+// a configured --tool-versions / toolchain.versions_file path is respected instead
+// of always writing to the relative ".tool-versions" in the current directory.
 func updateToolVersionsFile(tool, version string, setAsDefault bool) error {
+	filePath := GetToolVersionsFilePath()
 	if setAsDefault {
-		if err := AddToolToVersionsAsDefault(DefaultToolVersionsFilePath, tool, version); err != nil {
+		if err := AddToolToVersionsAsDefault(filePath, tool, version); err != nil {
 			return fmt.Errorf("failed to update .tool-versions: %w", err)
 		}
 	} else {
-		if err := AddToolToVersions(DefaultToolVersionsFilePath, tool, version); err != nil {
+		if err := AddToolToVersions(filePath, tool, version); err != nil {
 			return fmt.Errorf("failed to update .tool-versions: %w", err)
 		}
 	}

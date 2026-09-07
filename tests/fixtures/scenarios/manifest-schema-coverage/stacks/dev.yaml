@@ -1,0 +1,69 @@
+# Regression fixture for the class of stack-manifest JSON Schema bugs found while fixing
+# GitHub issue #2919 (backend_type: http rejected) and its follow-up field test: fields that are
+# real, documented, and read by Go, but were rejected outright by the embedded schema. Exercises
+# them together, through the real CLI (atmos describe stacks / validate stacks), not just the
+# pkg/datafetcher unit-level schema tests that also cover each field individually.
+#
+# Combining `vars`/`settings` with `workflows` in one manifest also regression-guards the root
+# schema oneOf fix: these two used to be mutually exclusive due to an ambiguous oneOf match.
+vars:
+  stage: dev
+
+settings:
+  demo: true
+
+terraform:
+  overrides:
+    hooks:
+      after-apply:
+        kind: command
+        command: echo after-apply
+    generate:
+      backend:
+        enabled: true
+    retry:
+      max_attempts: 3
+      conditions:
+        - "rate limit"
+    required_version: ">= 1.0"
+    required_providers:
+      aws:
+        source: hashicorp/aws
+        version: "~> 5.0"
+
+components:
+  terraform:
+    vpc:
+      vars: {}
+      backend_type: http
+      backend:
+        http:
+          address: "https://example.com/state"
+      remote_state_backend_type: http
+      remote_state_backend:
+        http:
+          address: "https://example.com/state"
+      retry:
+        max_attempts: 3
+        conditions:
+          - "rate limit exceeded"
+      required_version: ">= 1.0"
+      required_providers:
+        aws:
+          source: hashicorp/aws
+          version: "~> 5.0"
+      source:
+        type: git
+        uri: "github.com/org/repo//path"
+        ttl: "24h"
+
+workflows:
+  smoke-test:
+    steps:
+      - command: echo ok
+      - type: parallel
+        output:
+          mode: grouped
+        steps:
+          - command: echo one
+          - command: echo two

@@ -32,9 +32,6 @@ atmos terraform workdir describe <component> --stack <stack> [flags]
 <dl>
     <dt>`-s, --stack`</dt>
     <dd>**Required.** The stack name for the component.</dd>
-
-    <dt>`--format`</dt>
-    <dd>Output format: `yaml` or `json`. Defaults to `yaml`.</dd>
 </dl>
 
 ## Examples
@@ -42,7 +39,7 @@ atmos terraform workdir describe <component> --stack <stack> [flags]
 ### Describe Workdir Configuration
 
 ```shell
-# Output workdir config as YAML stack manifest
+# Output workdir config as a YAML stack manifest snippet
 atmos terraform workdir describe vpc --stack dev
 ```
 
@@ -50,50 +47,16 @@ Example output:
 
 ```yaml
 components:
-  terraform:
-    vpc:
-      provision:
-        workdir:
-          enabled: true
-      metadata:
-        workdir:
-          path: .workdir/terraform/dev-vpc
-          source_type: local
-          source: components/terraform/vpc
-          content_hash: abc123def456
-```
-
-### Output as JSON
-
-```shell
-# Output workdir config as JSON
-atmos terraform workdir describe vpc --stack dev --format json
-```
-
-Example output:
-
-```json
-{
-  "components": {
-    "terraform": {
-      "vpc": {
-        "provision": {
-          "workdir": {
-            "enabled": true
-          }
-        },
-        "metadata": {
-          "workdir": {
-            "path": ".workdir/terraform/dev-vpc",
-            "source_type": "local",
-            "source": "components/terraform/vpc",
-            "content_hash": "abc123def456"
-          }
-        }
-      }
-    }
-  }
-}
+    terraform:
+        vpc:
+            metadata:
+                workdir:
+                    content_hash: a60bbfad57c32f1d7acd08defd9f0bb7
+                    created_at: "2026-01-15T10:30:00-05:00"
+                    name: dev-vpc-bb03116d
+                    path: .workdir/terraform/dev-vpc-bb03116d
+                    source: components/terraform/vpc
+                    updated_at: "2026-01-15T10:30:00-05:00"
 ```
 
 ## Use Cases
@@ -125,8 +88,8 @@ atmos terraform workdir describe vpc --stack dev > vpc-workdir-config.yaml
 Verify the workdir configuration matches expectations:
 
 ```shell
-# Check if workdir is properly configured
-atmos terraform workdir describe vpc --stack dev | grep "enabled: true"
+# Check the resolved workdir path
+atmos terraform workdir describe vpc --stack dev | grep "path:"
 ```
 
 ## Related Commands

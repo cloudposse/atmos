@@ -3,6 +3,7 @@ package updater
 import (
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
@@ -53,6 +54,14 @@ func ResolveGroupSelection(p *SelectionParams) (finalReport *vendoring.UpdateRep
 
 // UpdateSelectedComponents runs the update for each of components individually, resolving each
 // component's declared source before updating it.
+//
+// When components is non-empty (an explicit --component list, or a --group discovery result) and
+// --tags is set, but every named component's declared source gets filtered out by the tags
+// mismatch, this returns an explicit error instead of succeeding with a silently empty report --
+// vendoring.MatchesComponentTags lets --component and --tags compose (both operate on the same
+// vendor.yaml Sources[] domain), but "you asked for N things and --tags left literally nothing"
+// deserves the same "matched nothing is an error" treatment this package already applies to
+// --stack/--labels selectors elsewhere in this feature.
 func UpdateSelectedComponents(p *SelectionParams, components []string) (*vendoring.UpdateReport, error) {
 	defer perf.Track(nil, "updater.UpdateSelectedComponents")()
 
@@ -69,6 +78,12 @@ func UpdateSelectedComponents(p *SelectionParams, components []string) (*vendori
 			return &vendoring.UpdateReport{Results: results}, err
 		}
 		results = append(results, report.Results...)
+	}
+	if len(components) > 0 && len(p.Tags) > 0 && len(results) == 0 {
+		return nil, errUtils.Build(errUtils.ErrInvalidArgumentError).
+			WithExplanation("No selected component matched the given --tags filter.").
+			WithHint("Remove --tags to update the named component(s) regardless of their declared tags.").
+			Err()
 	}
 	return &vendoring.UpdateReport{Results: results}, nil
 }

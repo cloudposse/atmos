@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/templatefuncs"
 )
 
 // DefaultLeftDelim and DefaultRightDelim are the standard Go template
@@ -509,6 +510,7 @@ func resolveSelectorString(value string, data map[string]any, leftDelim, rightDe
 	tmpl, err := template.New("selector").
 		Delims(leftDelim, rightDelim).
 		Funcs(sprig.TxtFuncMap()).
+		Funcs(templatefuncs.FuncMap()).
 		Option("missingkey=error").
 		Parse(value)
 	if err != nil {

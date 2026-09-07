@@ -48,6 +48,10 @@ var (
 	// ErrLockfileParse indicates the lockfile contents could not be parsed.
 	ErrLockfileParse = errors.New("toolchain lockfile parse failed")
 
+	// ErrLockfileChecksumMismatch indicates a freshly downloaded artifact's checksum doesn't
+	// match the one already recorded in toolchain.lock.yaml for this tool/version/platform.
+	ErrLockfileChecksumMismatch = errors.New("toolchain lockfile checksum mismatch")
+
 	// ErrVerifierVersionUnavailable indicates a verifier bootstrap version could not be resolved.
 	ErrVerifierVersionUnavailable = errors.New("verifier version unavailable")
 

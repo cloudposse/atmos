@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	goyaml "go.yaml.in/yaml/v3"
 
@@ -59,11 +60,15 @@ func ReadComponentManifest(file string) (*schema.VendorComponentConfig, error) {
 // ResolveComponentPath resolves the absolute base directory for component of componentType,
 // joining atmosConfig's global BasePath with the component type's own configured BasePath and the
 // component name -- the layout every component.yaml source has always assumed
-// ("components/terraform/<name>", etc.). The returned path is always absolute so the vendor
-// lock's target-containment check (pkg/vendoring/lockfile) can compare it against BasePath; a
-// relative atmosConfig.BasePath would otherwise make it relative to CWD instead, which the lock
+// ("components/terraform/<name>", etc.). The returned path is always absolute (though not
+// symlink-resolved -- see the comment above its own EvalSymlinks containment re-check) so the
+// vendor lock's target-containment check (pkg/vendoring/lockfile) can compare it against BasePath;
+// a relative atmosConfig.BasePath would otherwise make it relative to CWD instead, which the lock
 // validation cannot reliably relate back to BasePath. Returns an error when componentType isn't
-// one of terraform/helmfile/packer, or when the resolved directory does not exist.
+// one of terraform/helmfile/packer, when component escapes the component-type base directory (e.g.
+// an absolute path, a "../"-laden value, or a symlink that resolves outside it -- component can
+// originate from stack-declared metadata.component, not just operator-typed CLI flags, so it isn't
+// implicitly trusted), or when the resolved directory does not exist.
 func ResolveComponentPath(atmosConfig *schema.AtmosConfiguration, component, componentType string) (string, error) {
 	defer perf.Track(atmosConfig, "vendoring.ResolveComponentPath")()
 
@@ -79,9 +84,18 @@ func ResolveComponentPath(atmosConfig *schema.AtmosConfiguration, component, com
 		return "", fmt.Errorf("%s: %w", componentType, errUtils.ErrUnsupportedComponentType)
 	}
 
-	componentPath, err := filepath.Abs(filepath.Join(atmosConfig.BasePath, componentBasePath, component))
+	componentTypeBase, err := filepath.Abs(filepath.Join(atmosConfig.BasePath, componentBasePath))
 	if err != nil {
-		return "", fmt.Errorf("resolve component path: %w", err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrResolveComponentPath, err)
+	}
+
+	componentPath, err := filepath.Abs(filepath.Join(componentTypeBase, component))
+	if err != nil {
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrResolveComponentPath, err)
+	}
+
+	if err := requireContainedPath(componentTypeBase, componentPath, component); err != nil {
+		return "", err
 	}
 
 	dirExists, err := u.IsDirectory(componentPath)
@@ -92,13 +106,55 @@ func ResolveComponentPath(atmosConfig *schema.AtmosConfiguration, component, com
 		if os.IsNotExist(err) {
 			return "", fmt.Errorf("%w: %s", errUtils.ErrComponentDirNotFound, componentPath)
 		}
-		return "", err
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrResolveComponentPath, err)
 	}
 	if !dirExists {
 		return "", fmt.Errorf("%w: %s", errUtils.ErrComponentDirNotFound, componentPath)
 	}
 
+	// requireContainedPath above only checked the LEXICAL path. A component directory that is
+	// lexically inside componentTypeBase can still be (or contain, via an intermediate segment) a
+	// symlink that actually resolves outside componentTypeBase; u.IsDirectory above and the
+	// manifest reads callers perform afterwards (FindComponentManifestFile/ReadComponentManifest)
+	// follow symlinks, so re-check containment against the symlink-resolved paths now that we know
+	// componentPath exists. The LEXICAL componentPath is still what's returned (not the resolved
+	// one): the vendor lock's target-containment check (pkg/vendoring/lockfile) compares this
+	// return value against the unresolved config.BasePath, so substituting a resolved path here
+	// would make that comparison spuriously fail on any platform where the project root itself
+	// sits behind a symlink (e.g. macOS's /var -> /private/var); once containment against the
+	// resolved paths is confirmed, following the same symlink via the lexical path is safe.
+	resolvedBase, err := filepath.EvalSymlinks(componentTypeBase)
+	if err != nil {
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrResolveComponentPath, err)
+	}
+	resolvedPath, err := filepath.EvalSymlinks(componentPath)
+	if err != nil {
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrResolveComponentPath, err)
+	}
+	if err := requireContainedPath(resolvedBase, resolvedPath, component); err != nil {
+		return "", err
+	}
+
 	return componentPath, nil
+}
+
+// requireContainedPath rejects a component name that resolves outside componentTypeBase (an
+// absolute component, or one laden with "../" segments), so a value sourced from stack-declared
+// metadata.component can't make ResolveComponentPath escape the component-type base directory.
+func requireContainedPath(componentTypeBase, componentPath, component string) error {
+	if filepath.IsAbs(component) {
+		return fmt.Errorf("%w: component %q must not be an absolute path", errUtils.ErrPathTraversal, component)
+	}
+
+	rel, err := filepath.Rel(componentTypeBase, componentPath)
+	if err != nil {
+		return fmt.Errorf("%w: component %q: %w", errUtils.ErrPathTraversal, component, err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("%w: component %q resolves outside %s", errUtils.ErrPathTraversal, component, componentTypeBase)
+	}
+
+	return nil
 }
 
 // ComponentManifestSource converts a decoded component.yaml into the same schema.AtmosVendorSource

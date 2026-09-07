@@ -1,0 +1,10 @@
+import:
+  - _defaults
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    vpc:
+      vars: {}

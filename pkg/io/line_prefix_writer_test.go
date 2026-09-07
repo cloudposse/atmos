@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	stdio "io"
 	"strings"
 	"sync"
 	"testing"
@@ -226,6 +227,31 @@ func TestLinePrefixWriterKeepsBufferedOutputAfterWriteErrors(t *testing.T) {
 	require.Equal(t, "[node] partial", target.out.String())
 }
 
+func TestLinePrefixWriterRetriesNilErrorShortWriteWithoutDuplicating(t *testing.T) {
+	target := &linePrefixPartialWriter{acceptOnFirst: 6}
+	writer := NewLinePrefixWriter("node", target, nil)
+
+	_, err := writer.Write([]byte("line\n"))
+	require.ErrorIs(t, err, stdio.ErrShortWrite)
+	require.Equal(t, "[node]", target.out.String())
+
+	require.NoError(t, writer.Flush())
+	require.Equal(t, "[node] line\n", target.out.String())
+}
+
+func TestLinePrefixWriterRetriesPartialFailedWriteWithoutDuplicating(t *testing.T) {
+	expectedErr := errors.New("write failed")
+	target := &linePrefixPartialWriter{acceptOnFirst: 6, errOnFirst: expectedErr}
+	writer := NewLinePrefixWriter("node", target, nil)
+
+	_, err := writer.Write([]byte("line\n"))
+	require.ErrorIs(t, err, expectedErr)
+	require.Equal(t, "[node]", target.out.String())
+
+	require.NoError(t, writer.Flush())
+	require.Equal(t, "[node] line\n", target.out.String())
+}
+
 type linePrefixErrorWriter struct {
 	err error
 }
@@ -244,6 +270,30 @@ func (w *linePrefixFailOnceWriter) Write(p []byte) (int, error) {
 	if !w.failed {
 		w.failed = true
 		return 0, w.err
+	}
+	return w.out.Write(p)
+}
+
+// linePrefixPartialWriter accepts only acceptOnFirst bytes of the first Write
+// call (optionally paired with errOnFirst), then accepts everything on later
+// calls. It simulates a real io.Writer's short-write and partial-failure
+// behavior, where n > 0 bytes reach the underlying sink before an error.
+type linePrefixPartialWriter struct {
+	acceptOnFirst int
+	errOnFirst    error
+	failed        bool
+	out           bytes.Buffer
+}
+
+func (w *linePrefixPartialWriter) Write(p []byte) (int, error) {
+	if !w.failed {
+		w.failed = true
+		n := w.acceptOnFirst
+		if n > len(p) {
+			n = len(p)
+		}
+		w.out.Write(p[:n])
+		return n, w.errOnFirst
 	}
 	return w.out.Write(p)
 }

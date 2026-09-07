@@ -131,12 +131,14 @@ func init() {
 	toolchainCmd.AddCommand(infoCmd)
 	toolchainCmd.AddCommand(installCmd)
 	toolchainCmd.AddCommand(listCmd)
+	toolchainCmd.AddCommand(lockCmd)
 	toolchainCmd.AddCommand(pathCmd)
 	toolchainCmd.AddCommand(registrycmd.GetRegistryCommand())
 	toolchainCmd.AddCommand(removeCmd)
 	toolchainCmd.AddCommand(searchAliasCmd)
 	toolchainCmd.AddCommand(setCmd)
 	toolchainCmd.AddCommand(uninstallCmd)
+	toolchainCmd.AddCommand(updateCmd)
 	toolchainCmd.AddCommand(whichCmd)
 
 	// Register this command with the registry.

@@ -23,10 +23,32 @@ Some upstream repos don't tag the thing being referenced (e.g. a reusable workfl
 
 ```yaml
 uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # main
-uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
+uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@49ac8cd5c4cf74abdbf24a80027cd3bde811133a # main
 ```
 
 This satisfies the coverage check (a specific commit is nailed down — it can't be silently swapped by a force-push) but is intentionally excluded from drift-checking, since there's no tag to diff against. It's reported as an informational `pinned-branch` status, not a failure. Bumping a branch-pinned reference to a newer commit on that branch is a manual, deliberate action — there's no automated staleness check for it today.
+
+### Allowlist (`allowlist.json`)
+
+Some upstream orgs block the GitHub API calls this action needs to resolve a tag — most commonly an org-level [IP allow list](https://docs.github.com/en/organizations/keeping-your-organization-secure/managing-security-settings-for-your-organization/restricting-network-traffic-to-your-organization) that hasn't been opened up for GitHub Actions runner IPs. That's an access failure, not a drift signal, but the two are indistinguishable to CI unless someone says so explicitly.
+
+`allowlist.json` is that explicit, human-reviewed record. Each entry names an `owner/repo`, a `description` a maintainer has personally verified (not inferred from whatever error text the API happened to return), and `references` to corroborating reports:
+
+```json
+[
+  {
+    "action": "aquasecurity/trivy-action",
+    "description": "...",
+    "references": ["https://github.com/aquasecurity/tfsec-action/issues/24"]
+  }
+]
+```
+
+**This is the only mechanism that downgrades a resolution failure to a warning, and only for the specific access-block condition (an HTTP 403) the entry documents.** A listed repo's tag lookup can still fail hard: a 404 (deleted/renamed tag), a malformed API response, or an exhausted retry on a transient error is never downgraded, even for a listed repo — only a 403 is. Not every 403 counts, either: a rate-limit 403 (`x-ratelimit-remaining: 0` on the response) means *this token* is out of budget for every remaining lookup, not that this one repo is access-blocked, so it's excluded and stays a hard failure even for a listed repo — detected via that response header, never by inspecting the error's message text. A listed repo still goes through the normal tag-resolution attempt on every run; if the API call ever succeeds, normal drift-checking applies and can still fail on a genuine mismatch. Adding or removing an entry requires a reviewed PR to this file, and every entry must have a non-empty `action`, `description`, and at least one `references` entry — a malformed entry fails the whole check rather than silently suppressing a real failure.
+
+### Trust boundary
+
+This action's own code and `allowlist.json` are read from the PR's own head, the same way gitleaks/git-secrets read their allowlist config from the diff being scanned — an allowlist you can't extend from the PR that needs the extension isn't useful. Protection against a self-serving allowlist entry (or a patched verifier that always passes) comes from required review before merge, not from hiding the policy behind a base-branch checkout: `main` requires at least one approval, requires a code-owner review, and dismisses stale approvals whenever new commits are pushed, so a reviewer always sees the actual diff — including any change to this action or `allowlist.json` — before it can merge.
 
 ## Usage
 
@@ -50,6 +72,7 @@ steps:
 |-------|----------|---------|-------------|
 | `github-token` | Yes | — | GitHub token for API calls and PR comments |
 | `workflow-dir` | No | `.github/workflows` | Directory to scan |
+| `allowlist-file` | No | `.github/actions/verify-sha-pinning/allowlist.json` | Allowlist file (see above) |
 
 ## Outputs
 
@@ -58,6 +81,7 @@ steps:
 | `verified-count` | Number of tag-pinned actions verified against their upstream tag |
 | `failed-count` | Number of drift mismatches or resolution errors found |
 | `unpinned-count` | Number of third-party action references that are not SHA-pinned at all |
+| `allowlisted-count` | Number of resolution failures downgraded to a warning via `allowlist.json` |
 | `status` | `pass` or `fail` |
 
 ## PR Comments

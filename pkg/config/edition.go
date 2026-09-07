@@ -63,7 +63,7 @@ func resolveEditionPin(v *viper.Viper) string {
 // DisableFlagParsing=true (terraform, helmfile, packer, auth exec), where
 // Cobra never populates the global flag binding.
 func editionPinFromFlag() string {
-	if flagValue := strings.TrimSpace(viper.GetViper().GetString(editionKey)); flagValue != "" {
+	if flagValue := strings.TrimSpace(GlobalViper().GetString(editionKey)); flagValue != "" {
 		return flagValue
 	}
 	return parseEditionFromOsArgs(os.Args)

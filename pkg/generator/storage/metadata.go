@@ -54,6 +54,14 @@ type MetadataStorage struct {
 	metadataPath string // Path to metadata.yaml file
 }
 
+// ScaffoldMetadataPath returns the path to a scaffold-generated target
+// directory's persisted generation metadata (.atmos/scaffold/metadata.yaml).
+func ScaffoldMetadataPath(targetDir string) string {
+	defer perf.Track(nil, "storage.ScaffoldMetadataPath")()
+
+	return filepath.Join(targetDir, ".atmos", "scaffold", "metadata.yaml")
+}
+
 // NewMetadataStorage creates a new metadata storage for the given metadata file path.
 // For init: .atmos/init/metadata.yaml
 // For scaffold: .atmos/scaffold/metadata.yaml.

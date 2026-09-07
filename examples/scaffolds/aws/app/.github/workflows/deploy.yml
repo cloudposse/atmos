@@ -28,6 +28,7 @@ jobs:
       ATMOS_CI: "true"
       ATMOS_CI_PROVIDER: github-actions
       ATMOS_INIT_INTERACTIVE: "false"
+      STAGE: ${{ github.event.inputs.stage || 'dev' }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
@@ -38,4 +39,4 @@ jobs:
       - name: Validate
         run: atmos validate stacks
       - name: Deploy
-        run: atmos terraform deploy app -s "${{ github.event.inputs.stage || 'dev' }}"
+        run: atmos terraform deploy app -s "$STAGE"

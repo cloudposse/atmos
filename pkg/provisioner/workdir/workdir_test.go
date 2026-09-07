@@ -15,10 +15,42 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// testBasePath is a placeholder basePath for mock-based tests that never touch a real
+// filesystem (BuildPath/filepath.Join only manipulate strings), used instead of a literal so
+// gocritic's filepathJoin check doesn't flag a `/`-containing string literal passed to
+// filepath.Join.
+const testBasePath = "/tmp"
+
+// expectNoLegacyOrReuseMatch sets up mock Exists expectations for the sequence
+// createWorkdirDirectory now always runs before MkdirAll for a fresh (never-provisioned)
+// component/stack: an Exists=false check for each distinct legacy-workdir migration candidate
+// (deduped exactly like migrateLegacyWorkdir itself dedupes them -- see its doc comment), plus
+// an Exists=false check for the reuse-identity check on the new, hash-suffixed workdirPath. Most
+// component names used in this package's tests contain no "-", "/", or "\\", so the two legacy
+// formulas collapse to a single candidate/Exists call; a handful (e.g. "vpc-logs",
+// "vpc-fallback") deliberately contain a "-" to exercise both. The stack is always "dev"
+// across this file's call sites -- not parameterized, since a hardcoded "dev" keeps every
+// call site terser and there's no case in this package's tests that needs a different one.
+func expectNoLegacyOrReuseMatch(mockFS *MockFileSystem, basePath, component, workdirPath string) {
+	const stack = "dev"
+	tried := make(map[string]bool, 2)
+	for _, legacyName := range []string{legacyWorkdirName(stack, component), legacyHyphenEncodedWorkdirName(stack, component)} {
+		if tried[legacyName] {
+			continue
+		}
+		tried[legacyName] = true
+		legacyPath := filepath.Join(basePath, WorkdirPath, "terraform", legacyName)
+		mockFS.EXPECT().Exists(legacyPath).Return(false)
+	}
+	mockFS.EXPECT().Exists(workdirPath).Return(false)
+}
 
 func TestIsWorkdirEnabled(t *testing.T) {
 	tests := []struct {
@@ -264,7 +296,7 @@ func TestServiceProvision_WorkdirDisabled(t *testing.T) {
 		// No provision.workdir.enabled
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
 	// No FS calls should have been made.
 }
@@ -288,7 +320,7 @@ func TestServiceProvision_MissingComponentName(t *testing.T) {
 		// No component field
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
 }
@@ -300,7 +332,10 @@ func TestServiceProvision_MkdirFails(t *testing.T) {
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
-	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(errors.New("mkdir failed"))
+	workdirPath, err := BuildPath("/tmp", "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
+	expectNoLegacyOrReuseMatch(mockFS, "/tmp", "vpc", workdirPath)
+	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(errors.New("mkdir failed"))
 
 	service := NewServiceWithDeps(mockFS, mockHasher)
 
@@ -315,9 +350,66 @@ func TestServiceProvision_MkdirFails(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirCreation)
+}
+
+// TestServiceProvision_MigrateLegacyWorkdirRenameFails_DoesNotCreateFreshWorkdir is a
+// regression test for the data-loss bug where a genuine legacy-workdir Rename failure (e.g. a
+// permissions error) was swallowed, and createWorkdirDirectory fell through to MkdirAll anyway
+// -- silently creating a fresh, empty workdir at the new path and orphaning the legacy
+// directory, which may hold real Terraform state (e.g. a local-backend component's
+// terraform.tfstate). No MkdirAll expectation is set: an unexpected call would fail the test via
+// the strict mock controller, proving the caller now stops before ever reaching MkdirAll.
+func TestServiceProvision_MigrateLegacyWorkdirRenameFails_DoesNotCreateFreshWorkdir(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+
+	// A real temp dir (not a hardcoded "/tmp") is required here: verifyLegacyWorkdirIdentity
+	// reads real metadata via ReadMetadata (bypassing the mocked FileSystem, same as
+	// WriteMetadata elsewhere in this package), so the legacy directory's identity must be
+	// provable on disk before migrateLegacyWorkdir ever reaches the mocked Rename call below.
+	base := t.TempDir()
+	// "vpc-logs" contains a literal "-", so its escaped (new) path differs from the legacy
+	// (unescaped) path -- required for migrateLegacyWorkdir to attempt a Rename at all.
+	newPath, err := BuildPath(base, "terraform", "vpc-logs", "dev", nil)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(base, WorkdirPath, "terraform", legacyWorkdirName("dev", "vpc-logs"))
+	require.NotEqual(t, legacyPath, newPath)
+
+	// Seed matching metadata so verifyLegacyWorkdirIdentity confirms this legacy directory
+	// really belongs to this component/stack and lets the flow reach Rename.
+	require.NoError(t, os.MkdirAll(legacyPath, DirPermissions))
+	require.NoError(t, WriteMetadata(legacyPath, &WorkdirMetadata{
+		Component:  "vpc-logs",
+		Stack:      "dev",
+		SourceType: SourceTypeLocal,
+	}))
+
+	mockFS.EXPECT().Exists(legacyPath).Return(true)
+	mockFS.EXPECT().Exists(newPath).Return(false)
+	mockFS.EXPECT().Rename(legacyPath, newPath).Return(errors.New("permission denied"))
+
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: base}
+	componentConfig := map[string]any{
+		"component":   "vpc-logs",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	provisionErr := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
+	require.Error(t, provisionErr)
+	assert.ErrorIs(t, provisionErr, errUtils.ErrWorkdirCreation)
 }
 
 func TestServiceProvision_SourceNotExists(t *testing.T) {
@@ -327,12 +419,17 @@ func TestServiceProvision_SourceNotExists(t *testing.T) {
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
-	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
-	mockFS.EXPECT().Exists(gomock.Any()).Return(false)
+	workdirPath, err := BuildPath(testBasePath, "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
+	componentPath := filepath.Join(testBasePath, "components", "terraform", "vpc")
+
+	expectNoLegacyOrReuseMatch(mockFS, testBasePath, "vpc", workdirPath)
+	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
+	mockFS.EXPECT().Exists(componentPath).Return(false)
 
 	service := NewServiceWithDeps(mockFS, mockHasher)
 
-	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
+	atmosConfig := &schema.AtmosConfiguration{BasePath: testBasePath}
 	componentConfig := map[string]any{
 		"component":   "vpc",
 		"atmos_stack": "dev",
@@ -343,7 +440,7 @@ func TestServiceProvision_SourceNotExists(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
 }
@@ -355,13 +452,18 @@ func TestServiceProvision_SyncDirFails(t *testing.T) {
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
-	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
-	mockFS.EXPECT().Exists(gomock.Any()).Return(true)
-	mockFS.EXPECT().SyncDir(gomock.Any(), gomock.Any(), mockHasher).Return(false, errors.New("sync failed"))
+	workdirPath, err := BuildPath(testBasePath, "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
+	componentPath := filepath.Join(testBasePath, "components", "terraform", "vpc")
+
+	expectNoLegacyOrReuseMatch(mockFS, testBasePath, "vpc", workdirPath)
+	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
+	mockFS.EXPECT().Exists(componentPath).Return(true)
+	mockFS.EXPECT().SyncDir(componentPath, workdirPath, mockHasher).Return(false, errors.New("sync failed"))
 
 	service := NewServiceWithDeps(mockFS, mockHasher)
 
-	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
+	atmosConfig := &schema.AtmosConfiguration{BasePath: testBasePath}
 	componentConfig := map[string]any{
 		"component":   "vpc",
 		"atmos_stack": "dev",
@@ -372,7 +474,7 @@ func TestServiceProvision_SyncDirFails(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirSync)
 }
@@ -380,8 +482,9 @@ func TestServiceProvision_SyncDirFails(t *testing.T) {
 func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 	// Create a temp dir so WriteMetadata can write the file.
 	tempDir := t.TempDir()
-	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
-	err := os.MkdirAll(workdirPath, 0o755)
+	workdirPath, err := BuildPath(tempDir, "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
+	err = os.MkdirAll(workdirPath, 0o755)
 	require.NoError(t, err)
 
 	ctrl := gomock.NewController(t)
@@ -390,9 +493,11 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
+	componentPath := filepath.Join(tempDir, "components", "terraform", "vpc")
+	expectNoLegacyOrReuseMatch(mockFS, tempDir, "vpc", workdirPath)
 	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
-	mockFS.EXPECT().Exists(gomock.Any()).Return(true)
-	mockFS.EXPECT().SyncDir(gomock.Any(), workdirPath, mockHasher).Return(true, nil)
+	mockFS.EXPECT().Exists(componentPath).Return(true)
+	mockFS.EXPECT().SyncDir(componentPath, workdirPath, mockHasher).Return(true, nil)
 	mockHasher.EXPECT().HashDir(workdirPath).Return("", errors.New("hash failed"))
 	// Note: WriteMetadata uses real filesystem with atomic write, not mocked FileSystem.
 
@@ -404,6 +509,7 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 	var uiOutput bytes.Buffer
 	restoreUI := iolib.PushUIWriter(&uiOutput)
 	t.Cleanup(restoreUI)
+	var componentOutput bytes.Buffer
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 	componentConfig := map[string]any{
@@ -417,11 +523,35 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 	}
 
 	// Hash failure is a warning, not an error.
-	err = service.Provision(WithOutputSuppressed(context.Background()), atmosConfig, componentConfig)
+	ctx := WithOutputSuppressed(context.Background())
+	err = service.Provision(ctx, atmosConfig, componentConfig, provisioner.OutputWriters{Stderr: &componentOutput})
 	require.NoError(t, err)
 	// Verify workdir path was set.
 	assert.NotEmpty(t, componentConfig[WorkdirPathKey])
 	assert.Empty(t, uiOutput.String())
+	plainOutput := atmosansi.Strip(componentOutput.String())
+	assert.Contains(t, plainOutput, "Provisioning workdir for component 'vpc'")
+	assert.Contains(t, plainOutput, "Local component files synced")
+	assert.Contains(t, plainOutput, "Failed to compute content hash: hash failed")
+}
+
+func TestServiceComputeContentHash_WarnsWithoutOutputWriter(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockHasher := NewMockHasher(ctrl)
+	mockHasher.EXPECT().HashDir("workdir").Return("", errors.New("hash failed"))
+	service := NewServiceWithDeps(nil, mockHasher)
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	var output bytes.Buffer
+	restoreUI := iolib.PushUIWriter(&output)
+	t.Cleanup(restoreUI)
+
+	contentHash := service.computeContentHash(WithOutputSuppressed(t.Context()), "workdir", provisioner.OutputWriters{})
+
+	assert.Empty(t, contentHash)
+	assert.Contains(t, atmosansi.Strip(output.String()), "Failed to compute content hash: hash failed")
 }
 
 func TestServiceProvision_WriteMetadataFails(t *testing.T) {
@@ -430,8 +560,9 @@ func TestServiceProvision_WriteMetadataFails(t *testing.T) {
 	}
 	// Create a temp dir with a read-only .atmos subdirectory to force WriteMetadata to fail.
 	tempDir := t.TempDir()
-	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
-	err := os.MkdirAll(workdirPath, 0o755)
+	workdirPath, err := BuildPath(tempDir, "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
+	err = os.MkdirAll(workdirPath, 0o755)
 	require.NoError(t, err)
 	// Create .atmos directory as read-only to prevent writing metadata.
 	atmosDir := filepath.Join(workdirPath, AtmosDir)
@@ -448,9 +579,11 @@ func TestServiceProvision_WriteMetadataFails(t *testing.T) {
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
+	componentPath := filepath.Join(tempDir, "components", "terraform", "vpc")
+	expectNoLegacyOrReuseMatch(mockFS, tempDir, "vpc", workdirPath)
 	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
-	mockFS.EXPECT().Exists(gomock.Any()).Return(true)
-	mockFS.EXPECT().SyncDir(gomock.Any(), workdirPath, mockHasher).Return(true, nil)
+	mockFS.EXPECT().Exists(componentPath).Return(true)
+	mockFS.EXPECT().SyncDir(componentPath, workdirPath, mockHasher).Return(true, nil)
 	mockHasher.EXPECT().HashDir(workdirPath).Return("abc123", nil)
 	// Note: WriteMetadata uses real filesystem with atomic write, not mocked FileSystem.
 	// The read-only .atmos dir will cause the write to fail.
@@ -468,7 +601,7 @@ func TestServiceProvision_WriteMetadataFails(t *testing.T) {
 		},
 	}
 
-	err = service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirMetadata)
 }
@@ -476,8 +609,9 @@ func TestServiceProvision_WriteMetadataFails(t *testing.T) {
 func TestServiceProvision_Success(t *testing.T) {
 	// Create a temp dir so WriteMetadata can write the file.
 	tempDir := t.TempDir()
-	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
-	err := os.MkdirAll(workdirPath, 0o755)
+	workdirPath, err := BuildPath(tempDir, "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
+	err = os.MkdirAll(workdirPath, 0o755)
 	require.NoError(t, err)
 
 	ctrl := gomock.NewController(t)
@@ -486,9 +620,11 @@ func TestServiceProvision_Success(t *testing.T) {
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
+	componentPath := filepath.Join(tempDir, "components", "terraform", "vpc")
+	expectNoLegacyOrReuseMatch(mockFS, tempDir, "vpc", workdirPath)
 	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
-	mockFS.EXPECT().Exists(gomock.Any()).Return(true)
-	mockFS.EXPECT().SyncDir(gomock.Any(), workdirPath, mockHasher).Return(true, nil)
+	mockFS.EXPECT().Exists(componentPath).Return(true)
+	mockFS.EXPECT().SyncDir(componentPath, workdirPath, mockHasher).Return(true, nil)
 	mockHasher.EXPECT().HashDir(workdirPath).Return("abc123def456", nil)
 	// Note: WriteMetadata uses real filesystem with atomic write, not mocked FileSystem.
 
@@ -505,7 +641,7 @@ func TestServiceProvision_Success(t *testing.T) {
 		},
 	}
 
-	err = service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
 	assert.NotEmpty(t, componentConfig[WorkdirPathKey])
 }
@@ -513,8 +649,9 @@ func TestServiceProvision_Success(t *testing.T) {
 func TestServiceProvision_ComponentPathFromConfig(t *testing.T) {
 	// Create a temp dir so WriteMetadata can write the file.
 	tempDir := t.TempDir()
-	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
-	err := os.MkdirAll(workdirPath, 0o755)
+	workdirPath, err := BuildPath(tempDir, "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
+	err = os.MkdirAll(workdirPath, 0o755)
 	require.NoError(t, err)
 
 	ctrl := gomock.NewController(t)
@@ -523,6 +660,7 @@ func TestServiceProvision_ComponentPathFromConfig(t *testing.T) {
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
+	expectNoLegacyOrReuseMatch(mockFS, tempDir, "vpc", workdirPath)
 	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
 	mockFS.EXPECT().Exists("/custom/path/to/component").Return(true)
 	mockFS.EXPECT().SyncDir("/custom/path/to/component", workdirPath, mockHasher).Return(true, nil)
@@ -543,8 +681,349 @@ func TestServiceProvision_ComponentPathFromConfig(t *testing.T) {
 		},
 	}
 
-	err = service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
+}
+
+// TestServiceProvision_NestedComponentName_SanitizesLikeBuildPath is a regression test for
+// createWorkdirDirectory independently re-deriving the pre-fix, unsanitized "%s-%s" workdir
+// name formula that workdir.BuildPath's doc comment explicitly warns every caller must share.
+// A nested component name (e.g. "app/local-nested", used by LOCAL non-source components with
+// provision.workdir.enabled: true) must collapse "/" to "-" exactly like BuildPath does, so the
+// workdir lands as a sibling of flat components at the same stack rather than one directory
+// level deeper. See docs/fixes/2026-08-05-workdir-nested-component-path-depth.md (the original
+// BuildPath fix) and the matching createWorkdirDirectory fix doc.
+func TestServiceProvision_NestedComponentName_SanitizesLikeBuildPath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+
+	// Path args are asserted after Provision returns (against the real, sanitized workdir
+	// path), not pinned here, so this test fails cleanly on a clear diff rather than an
+	// opaque "unexpected call" mock error when the pre-fix, unsanitized path is used instead.
+	workdirPath, err := BuildPath(tempDir, "terraform", "app/local-nested", "dev", nil)
+	require.NoError(t, err)
+	expectNoLegacyOrReuseMatch(mockFS, tempDir, "app/local-nested", workdirPath)
+	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
+	mockFS.EXPECT().Exists("/custom/path/to/component").Return(true)
+	mockFS.EXPECT().SyncDir("/custom/path/to/component", workdirPath, mockHasher).Return(true, nil)
+	mockHasher.EXPECT().HashDir(workdirPath).Return("abc123", nil)
+
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
+	componentConfig := map[string]any{
+		"atmos_component": "app/local-nested",
+		"component":       "mock",
+		"atmos_stack":     "dev",
+		"component_path":  "/custom/path/to/component",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
+	require.NoError(t, err)
+
+	gotPath, ok := componentConfig[WorkdirPathKey].(string)
+	require.True(t, ok, "WorkdirPathKey must be set to a string")
+
+	// The single canonical formula every workdir caller must share.
+	expectedPath, err := BuildPath(tempDir, "terraform", "app/local-nested", "dev", componentConfig)
+	require.NoError(t, err)
+	assert.Equal(t, expectedPath, gotPath, "createWorkdirDirectory must sanitize nested component names identically to BuildPath")
+
+	// Guard against a nested directory ("app/local-nested" -> real subdirectories) being
+	// created instead of the sanitized sibling directory.
+	unsanitizedPath := filepath.Join(tempDir, WorkdirPath, "terraform", "dev-app", "local-nested")
+	_, statErr := os.Stat(unsanitizedPath)
+	assert.True(t, os.IsNotExist(statErr), "workdir must not be created as a nested directory: %s", unsanitizedPath)
+}
+
+// TestMigrateLegacyWorkdir_SkipsWhenNewPathAlreadyExists verifies migrateLegacyWorkdir never
+// overwrites a workdir that already exists at the new (encoded) path -- e.g. because it was
+// already migrated, or already (re)provisioned there -- even when a legacy-path directory is
+// also still present. No Rename call is expected: an unexpected call would fail the test via
+// the mock controller.
+func TestMigrateLegacyWorkdir_SkipsWhenNewPathAlreadyExists(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	base := t.TempDir()
+
+	// "vpc-logs" contains a literal "-", so its escaped (new) path differs from the legacy
+	// (unescaped) path -- required for this test to exercise anything.
+	newPath, err := BuildPath(base, "terraform", "vpc-logs", "dev", nil)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(base, WorkdirPath, "terraform", legacyWorkdirName("dev", "vpc-logs"))
+	legacyHyphenPath := filepath.Join(base, WorkdirPath, "terraform", legacyHyphenEncodedWorkdirName("dev", "vpc-logs"))
+	require.NotEqual(t, legacyPath, newPath)
+	require.NotEqual(t, legacyPath, legacyHyphenPath, "the two legacy formulas must differ for this test to exercise both candidates")
+
+	mockFS.EXPECT().Exists(legacyPath).Return(true)
+	mockFS.EXPECT().Exists(newPath).Return(true)
+	// The pre-escaping candidate found newPath already occupied (migrated=false, no error), so
+	// migrateLegacyWorkdir moves on to the second (hyphen-encoded) candidate; it isn't present,
+	// so the loop stops there via the `!Exists(legacyPath)` short-circuit -- no second
+	// Exists(newPath) call.
+	mockFS.EXPECT().Exists(legacyHyphenPath).Return(false)
+
+	require.NoError(t, service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath))
+}
+
+// TestMigrateLegacyWorkdir_SkipsWhenLegacyPathMissing verifies migrateLegacyWorkdir does
+// nothing when no directory exists at the legacy (pre-escaping) path -- the overwhelmingly
+// common case for a fresh provision. No Exists(newPath) or Rename call is expected: only the
+// legacy-path check should run once the two formulas differ.
+func TestMigrateLegacyWorkdir_SkipsWhenLegacyPathMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	base := t.TempDir()
+
+	newPath, err := BuildPath(base, "terraform", "vpc-logs", "dev", nil)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(base, WorkdirPath, "terraform", legacyWorkdirName("dev", "vpc-logs"))
+	legacyHyphenPath := filepath.Join(base, WorkdirPath, "terraform", legacyHyphenEncodedWorkdirName("dev", "vpc-logs"))
+	require.NotEqual(t, legacyPath, newPath)
+	require.NotEqual(t, legacyPath, legacyHyphenPath, "the two legacy formulas must differ for this test to exercise both candidates")
+
+	mockFS.EXPECT().Exists(legacyPath).Return(false)
+	mockFS.EXPECT().Exists(legacyHyphenPath).Return(false)
+
+	require.NoError(t, service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath))
+}
+
+// TestMigrateLegacyWorkdir_ReturnsErrorOnRenameFailure verifies a genuine Rename failure
+// (permissions, filesystem error, etc.) is returned as an error rather than swallowed --
+// migrateLegacyWorkdir is fail-closed on a real migration failure, so the caller
+// (createWorkdirDirectory) does not fall through to MkdirAll and orphan the legacy directory
+// (which may hold real Terraform state) behind a fresh, empty workdir.
+func TestMigrateLegacyWorkdir_ReturnsErrorOnRenameFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	base := t.TempDir()
+
+	newPath, err := BuildPath(base, "terraform", "vpc-logs", "dev", nil)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(base, WorkdirPath, "terraform", legacyWorkdirName("dev", "vpc-logs"))
+	require.NotEqual(t, legacyPath, newPath)
+
+	// Seed matching metadata so verifyLegacyWorkdirIdentity confirms this legacy directory
+	// really belongs to this component/stack and lets the flow reach Rename.
+	require.NoError(t, os.MkdirAll(legacyPath, DirPermissions))
+	require.NoError(t, WriteMetadata(legacyPath, &WorkdirMetadata{
+		Component:  "vpc-logs",
+		Stack:      "dev",
+		SourceType: SourceTypeLocal,
+	}))
+
+	mockFS.EXPECT().Exists(legacyPath).Return(true)
+	mockFS.EXPECT().Exists(newPath).Return(false)
+	mockFS.EXPECT().Rename(legacyPath, newPath).Return(errors.New("permission denied"))
+
+	migrateErr := service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath)
+	require.Error(t, migrateErr)
+	assert.Contains(t, migrateErr.Error(), "permission denied")
+}
+
+// TestMigrateLegacyWorkdir_RefusesWhenMetadataBelongsToDifferentIdentity is a regression test
+// for the legacyWorkdirName collision: legacyWorkdirName(stack, component) is plain "%s-%s"
+// concatenation, so it is not injective -- stack "dev-a" + component "b" and stack "dev" +
+// component "a-b" both produce the identical legacy name "dev-a-b". If a legacy workdir under
+// that shared name actually belongs to one of those pairs and the other pair is provisioned
+// under the new encoding, migrateLegacyWorkdir must NOT blindly rename it onto the second
+// pair's new path -- that would silently move the first identity's workdir (and any real
+// Terraform state inside it) out from under it. It also must not treat the mismatch as fatal:
+// it moves on to the hyphen-encoded candidate, which doesn't exist here either, so the call
+// ends in "nothing to migrate" (nil), not an error. No Rename call is expected for either
+// candidate: an unexpected call would fail the test via the strict mock controller, proving the
+// caller never reaches Rename for the mismatched candidate.
+func TestMigrateLegacyWorkdir_RefusesWhenMetadataBelongsToDifferentIdentity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	base := t.TempDir()
+
+	// The legacy name "dev-a-b" is shared by two distinct, individually legitimate
+	// component/stack pairs: stack "dev-a" + component "b" (the identity actually recorded in
+	// the legacy directory's metadata below) and stack "dev" + component "a-b" (the identity
+	// this migrateLegacyWorkdir call is made for).
+	const sharedLegacyName = "dev-a-b"
+
+	newPath, err := BuildPath(base, "terraform", "a-b", "dev", nil)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(base, WorkdirPath, "terraform", sharedLegacyName)
+	legacyHyphenPath := filepath.Join(base, WorkdirPath, "terraform", legacyHyphenEncodedWorkdirName("dev", "a-b"))
+	require.Equal(t, sharedLegacyName, legacyWorkdirName("dev", "a-b"), "legacy name for the caller's own identity must match the shared legacy name")
+	require.Equal(t, sharedLegacyName, legacyWorkdirName("dev-a", "b"), "legacy name for the other identity must also match the shared legacy name")
+	require.NotEqual(t, legacyPath, newPath)
+	require.NotEqual(t, legacyPath, legacyHyphenPath, "the two legacy formulas must differ for this test to exercise both candidates")
+
+	// Seed metadata recording the OTHER identity ("dev-a" + "b"), simulating a legacy workdir
+	// that was actually provisioned for that pair, not for "dev" + "a-b".
+	require.NoError(t, os.MkdirAll(legacyPath, DirPermissions))
+	require.NoError(t, WriteMetadata(legacyPath, &WorkdirMetadata{
+		Component:  "b",
+		Stack:      "dev-a",
+		SourceType: SourceTypeLocal,
+	}))
+
+	mockFS.EXPECT().Exists(legacyPath).Return(true)
+	mockFS.EXPECT().Exists(newPath).Return(false)
+	// The mismatched first candidate is skipped, not fatal, so the loop checks the second
+	// (hyphen-encoded) candidate; it isn't present, so migrateLegacyWorkdir ends with nothing
+	// to migrate.
+	mockFS.EXPECT().Exists(legacyHyphenPath).Return(false)
+	// No Rename expectation: migrateLegacyWorkdir must refuse before ever calling it.
+
+	require.NoError(t, service.migrateLegacyWorkdir(base, "a-b", "dev", newPath))
+}
+
+// TestMigrateLegacyWorkdir_MigratesSecondCandidateAfterFirstCandidateMismatch is a regression
+// test for the fix to the collision case above: a confirmed identity mismatch on the first
+// (pre-escaping) legacy candidate must not abort the whole migration -- it must let
+// migrateLegacyWorkdir fall through and migrate a genuine match found under the second
+// (hyphen-encoded) candidate. Both candidates exist on disk here: the first belongs to a
+// different identity (must be left untouched), the second genuinely belongs to the caller's
+// identity (must be renamed onto newPath).
+func TestMigrateLegacyWorkdir_MigratesSecondCandidateAfterFirstCandidateMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	base := t.TempDir()
+
+	newPath, err := BuildPath(base, "terraform", "a-b", "dev", nil)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(base, WorkdirPath, "terraform", legacyWorkdirName("dev", "a-b"))
+	legacyHyphenPath := filepath.Join(base, WorkdirPath, "terraform", legacyHyphenEncodedWorkdirName("dev", "a-b"))
+	require.NotEqual(t, legacyPath, legacyHyphenPath, "the two legacy formulas must differ for this test to exercise both candidates")
+
+	// First candidate: exists, but belongs to a different identity ("dev-a" + "b").
+	require.NoError(t, os.MkdirAll(legacyPath, DirPermissions))
+	require.NoError(t, WriteMetadata(legacyPath, &WorkdirMetadata{
+		Component:  "b",
+		Stack:      "dev-a",
+		SourceType: SourceTypeLocal,
+	}))
+
+	// Second candidate: exists, and genuinely belongs to the identity being provisioned.
+	require.NoError(t, os.MkdirAll(legacyHyphenPath, DirPermissions))
+	require.NoError(t, WriteMetadata(legacyHyphenPath, &WorkdirMetadata{
+		Component:  "a-b",
+		Stack:      "dev",
+		SourceType: SourceTypeLocal,
+	}))
+
+	mockFS.EXPECT().Exists(legacyPath).Return(true)
+	mockFS.EXPECT().Exists(newPath).Return(false)
+	mockFS.EXPECT().Exists(legacyHyphenPath).Return(true)
+	mockFS.EXPECT().Exists(newPath).Return(false)
+	mockFS.EXPECT().Rename(legacyHyphenPath, newPath).Return(nil)
+
+	require.NoError(t, service.migrateLegacyWorkdir(base, "a-b", "dev", newPath))
+}
+
+// TestMigrateLegacyWorkdir_RefusesWhenLegacyDirectoryHasNoMetadata is a regression test for the
+// fail-closed decision on an unverifiable legacy workdir: a directory found at the legacy path
+// with no Atmos metadata at all (e.g. one predating the metadata feature) cannot prove which
+// component/stack it was created for. This is exactly the case migrateLegacyWorkdir must refuse
+// to rename rather than assume it belongs to the caller -- that assumption is the blind-rename
+// risk the identity check exists to close. No Rename call is expected: an unexpected call would
+// fail the test via the strict mock controller.
+func TestMigrateLegacyWorkdir_RefusesWhenLegacyDirectoryHasNoMetadata(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	base := t.TempDir()
+
+	newPath, err := BuildPath(base, "terraform", "vpc-logs", "dev", nil)
+	require.NoError(t, err)
+	legacyPath := filepath.Join(base, WorkdirPath, "terraform", legacyWorkdirName("dev", "vpc-logs"))
+	require.NotEqual(t, legacyPath, newPath)
+
+	// Create the legacy directory on disk, but deliberately write no metadata into it --
+	// simulating a workdir created before Atmos started writing .atmos/metadata.json.
+	require.NoError(t, os.MkdirAll(legacyPath, DirPermissions))
+
+	mockFS.EXPECT().Exists(legacyPath).Return(true)
+	mockFS.EXPECT().Exists(newPath).Return(false)
+	// No Rename expectation: migrateLegacyWorkdir must refuse before ever calling it.
+
+	migrateErr := service.migrateLegacyWorkdir(base, "vpc-logs", "dev", newPath)
+	require.Error(t, migrateErr)
+	assert.ErrorIs(t, migrateErr, errUtils.ErrWorkdirCreation)
+	// The explanation/hint text lives in cockroachdb error details, not the top-level
+	// Error() string (which is just the sentinel message) -- use errUtils's helper.
+	assert.True(t, errUtils.HasHint(migrateErr, "no Atmos metadata"), "error should hint that manual investigation is needed")
+}
+
+// TestServiceProvision_RejectsStackTraversal is a regression test proving Service.Provision
+// rejects a stack name crafted to escape BasePath (e.g. "../../../../evil") instead of
+// creating a directory outside it. The atmos_stack value, like atmos_component, comes from
+// user-controlled YAML. No FileSystem mock expectations are set, so an unexpected MkdirAll
+// call (i.e. the guard failing to fire) would fail the test on its own.
+func TestServiceProvision_RejectsStackTraversal(t *testing.T) {
+	tempDir := t.TempDir()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
+	componentConfig := map[string]any{
+		"atmos_component": "vpc",
+		"component":       "vpc",
+		"atmos_stack":     "../../../../../../evil",
+		"component_path":  "/custom/path/to/component",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+
+	_, ok := componentConfig[WorkdirPathKey]
+	assert.False(t, ok, "WorkdirPathKey must not be set when the derived path escapes BasePath")
 }
 
 func TestServiceProvision_EmptyBasePath(t *testing.T) {
@@ -554,7 +1033,7 @@ func TestServiceProvision_EmptyBasePath(t *testing.T) {
 	t.Chdir(tempDir)
 
 	// Create the workdir path since WriteMetadata needs it.
-	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
+	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", expectedWorkdirName("dev", "vpc"))
 	err := os.MkdirAll(workdirPath, 0o755)
 	require.NoError(t, err)
 
@@ -565,7 +1044,8 @@ func TestServiceProvision_EmptyBasePath(t *testing.T) {
 	mockHasher := NewMockHasher(ctrl)
 
 	// The workdir path will be relative since BasePath is empty (defaults to ".").
-	relativeWorkdirPath := filepath.Join(".workdir", "terraform", "dev-vpc")
+	relativeWorkdirPath := filepath.Join(".workdir", "terraform", expectedWorkdirName("dev", "vpc"))
+	expectNoLegacyOrReuseMatch(mockFS, ".", "vpc", relativeWorkdirPath)
 	mockFS.EXPECT().MkdirAll(relativeWorkdirPath, gomock.Any()).Return(nil)
 	mockFS.EXPECT().Exists(gomock.Any()).Return(true)
 	mockFS.EXPECT().SyncDir(gomock.Any(), relativeWorkdirPath, mockHasher).Return(true, nil)
@@ -585,7 +1065,7 @@ func TestServiceProvision_EmptyBasePath(t *testing.T) {
 		},
 	}
 
-	err = service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
 }
 
@@ -727,7 +1207,7 @@ func TestProvisionWorkdir_DisabledReturnsNil(t *testing.T) {
 		// No provision.workdir.enabled
 	}
 
-	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
 	require.NoError(t, err)
 }
 
@@ -979,11 +1459,12 @@ func TestDefaultHasher_HashDir_Deterministic(t *testing.T) {
 func TestServiceProvision_ComponentNameSources(t *testing.T) {
 	tests := []struct {
 		name            string
+		component       string
 		componentConfig map[string]any
-		expectedInPath  string
 	}{
 		{
-			name: "component from metadata",
+			name:      "component from metadata",
+			component: "vpc-from-metadata",
 			componentConfig: map[string]any{
 				"metadata": map[string]any{
 					"component": "vpc-from-metadata",
@@ -995,10 +1476,10 @@ func TestServiceProvision_ComponentNameSources(t *testing.T) {
 					},
 				},
 			},
-			expectedInPath: "dev-vpc-from-metadata",
 		},
 		{
-			name: "component from vars fallback",
+			name:      "component from vars fallback",
+			component: "vpc-from-vars",
 			componentConfig: map[string]any{
 				"vars": map[string]any{
 					"component": "vpc-from-vars",
@@ -1010,7 +1491,6 @@ func TestServiceProvision_ComponentNameSources(t *testing.T) {
 					},
 				},
 			},
-			expectedInPath: "dev-vpc-from-vars",
 		},
 	}
 
@@ -1018,7 +1498,8 @@ func TestServiceProvision_ComponentNameSources(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a temp dir so WriteMetadata can write the file.
 			tempDir := t.TempDir()
-			workdirPath := filepath.Join(tempDir, ".workdir", "terraform", tt.expectedInPath)
+			workdirName := expectedWorkdirName("dev", tt.component)
+			workdirPath := filepath.Join(tempDir, ".workdir", "terraform", workdirName)
 			err := os.MkdirAll(workdirPath, 0o755)
 			require.NoError(t, err)
 
@@ -1028,6 +1509,7 @@ func TestServiceProvision_ComponentNameSources(t *testing.T) {
 			mockFS := NewMockFileSystem(ctrl)
 			mockHasher := NewMockHasher(ctrl)
 
+			expectNoLegacyOrReuseMatch(mockFS, tempDir, tt.component, workdirPath)
 			mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
 			mockFS.EXPECT().Exists(gomock.Any()).Return(true)
 			mockFS.EXPECT().SyncDir(gomock.Any(), workdirPath, mockHasher).Return(true, nil)
@@ -1037,9 +1519,9 @@ func TestServiceProvision_ComponentNameSources(t *testing.T) {
 			service := NewServiceWithDeps(mockFS, mockHasher)
 			atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 
-			err = service.Provision(context.Background(), atmosConfig, tt.componentConfig)
+			err = service.Provision(context.Background(), atmosConfig, tt.componentConfig, provisioner.OutputWriters{})
 			require.NoError(t, err)
-			assert.Contains(t, tt.componentConfig[WorkdirPathKey], tt.expectedInPath)
+			assert.Contains(t, tt.componentConfig[WorkdirPathKey], workdirName)
 		})
 	}
 }
@@ -1065,7 +1547,7 @@ func TestServiceProvision_MissingStackName(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err := service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
 }
@@ -1074,7 +1556,8 @@ func TestServiceProvision_MissingStackName(t *testing.T) {
 func TestServiceProvision_ComponentKeyNotString(t *testing.T) {
 	// Create a temp dir so WriteMetadata can write the file.
 	tempDir := t.TempDir()
-	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc-fallback")
+	workdirName := expectedWorkdirName("dev", "vpc-fallback")
+	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", workdirName)
 	err := os.MkdirAll(workdirPath, 0o755)
 	require.NoError(t, err)
 
@@ -1084,6 +1567,7 @@ func TestServiceProvision_ComponentKeyNotString(t *testing.T) {
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
+	expectNoLegacyOrReuseMatch(mockFS, tempDir, "vpc-fallback", workdirPath)
 	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
 	mockFS.EXPECT().Exists(gomock.Any()).Return(true)
 	mockFS.EXPECT().SyncDir(gomock.Any(), workdirPath, mockHasher).Return(true, nil)
@@ -1107,9 +1591,9 @@ func TestServiceProvision_ComponentKeyNotString(t *testing.T) {
 		},
 	}
 
-	err = service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig, provisioner.OutputWriters{})
 	require.NoError(t, err)
-	assert.Contains(t, componentConfig[WorkdirPathKey], "dev-vpc-fallback")
+	assert.Contains(t, componentConfig[WorkdirPathKey], workdirName)
 }
 
 // TestDefaultHasher_HashDir_WithSubdirectories tests hashing with nested directories.
@@ -1492,7 +1976,7 @@ func TestServiceProvision_SkipsWhenSourceConfigured(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// The provisioner should skip without calling any filesystem operations.
 			// No mock expectations needed because it should return early.
-			err := service.Provision(ctx, atmosConfig, tt.config)
+			err := service.Provision(ctx, atmosConfig, tt.config, provisioner.OutputWriters{})
 			assert.NoError(t, err)
 		})
 	}
@@ -1530,7 +2014,7 @@ func TestServiceProvision_SkipsWhenWorkdirPathKeySet(t *testing.T) {
 	}
 
 	// The provisioner should skip without calling any filesystem operations.
-	err := service.Provision(ctx, atmosConfig, config)
+	err := service.Provision(ctx, atmosConfig, config, provisioner.OutputWriters{})
 	assert.NoError(t, err)
 }
 
@@ -1542,7 +2026,7 @@ func TestServiceProvision_ProceedsWhenNoSourceAndWorkdirEnabled(t *testing.T) {
 	// Create a temp dir so WriteMetadata can write the file.
 	tempDir := t.TempDir()
 	componentPath := filepath.Join(tempDir, "components", "terraform", "vpc")
-	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
+	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", expectedWorkdirName("dev", "vpc"))
 
 	// Create component directory structure
 	err := os.MkdirAll(componentPath, 0o755)
@@ -1577,14 +2061,139 @@ func TestServiceProvision_ProceedsWhenNoSourceAndWorkdirEnabled(t *testing.T) {
 	}
 
 	// Expect filesystem operations since workdir provisioning should proceed.
+	expectNoLegacyOrReuseMatch(mockFS, tempDir, "vpc", workdirPath)
 	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
 	mockFS.EXPECT().Exists(componentPath).Return(true)
 	mockFS.EXPECT().SyncDir(componentPath, workdirPath, mockHasher).Return(false, nil)
 	mockHasher.EXPECT().HashDir(workdirPath).Return("hash123", nil)
 
-	err = service.Provision(ctx, atmosConfig, config)
+	err = service.Provision(ctx, atmosConfig, config, provisioner.OutputWriters{})
 	assert.NoError(t, err)
 
 	// Verify WorkdirPathKey was set
 	assert.Equal(t, workdirPath, config[WorkdirPathKey])
+}
+
+// TestServiceProvision_MigratesPreExistingLegacyWorkdir (integration_test.go) covers migration
+// end-to-end for both retired formulas, including this package's hyphen-encoded one
+// (legacyHyphenEncodedWorkdirName) -- kept there rather than duplicated here since the two
+// subtests differ only in which legacy-name function they use.
+
+// TestServiceProvision_ReusesExistingWorkdirWithMatchingIdentity is a regression test for the
+// happy path of checkWorkdirIdentityOnReuse: a workdir already exists on real disk at the exact
+// new, hash-suffixed path BuildPath computes for this component/stack, with real metadata
+// (written via WriteMetadata) recording that SAME identity. Provision must succeed and reuse the
+// existing workdir rather than erroring, since the identity matches -- checkWorkdirIdentityOnReuse
+// only fails closed when metadata positively identifies a *different* component/stack.
+func TestServiceProvision_ReusesExistingWorkdirWithMatchingIdentity(t *testing.T) {
+	tempDir := t.TempDir()
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# test"), 0o644))
+
+	// Pre-create the workdir at the exact path Provision will compute, with metadata recording
+	// the SAME identity it's about to provision.
+	workdirPath, err := BuildPath(tempDir, "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+	require.NoError(t, WriteMetadata(workdirPath, &WorkdirMetadata{
+		Component:  "vpc",
+		Stack:      "dev",
+		SourceType: SourceTypeLocal,
+	}))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+	componentConfig := map[string]any{
+		"component":   "vpc",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	require.NoError(t, ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{}))
+
+	provisionedPath, ok := componentConfig[WorkdirPathKey].(string)
+	require.True(t, ok, "workdir path should be set")
+	assert.Equal(t, workdirPath, provisionedPath, "must reuse the existing workdir at the same identity's path")
+
+	_, err = os.Stat(filepath.Join(provisionedPath, "main.tf"))
+	assert.NoError(t, err, "main.tf should be synced into the reused workdir")
+}
+
+// TestServiceProvision_FailsClosedWhenExistingWorkdirBelongsToDifferentIdentity is a regression
+// test for checkWorkdirIdentityOnReuse's collision-detection path: a workdir already exists on
+// real disk at the exact new, hash-suffixed path BuildPath computes for the component/stack
+// about to be provisioned, but its real metadata.json (written via WriteMetadata) records a
+// DIFFERENT component/stack. Since workdirPathHash is a short hash rather than a mathematically
+// injective encoding, a collision -- while vanishingly unlikely in practice (see
+// workdirPathHash's doc comment) -- is not impossible, and Provision must fail rather than
+// silently reuse/corrupt the mismatched workdir. A genuine hash collision can't be manufactured
+// with real inputs, so this test uses the same trick
+// TestServiceProvision_DoesNotMigrateLegacyWorkdirBelongingToDifferentIdentity (see
+// integration_test.go) uses for the analogous legacy-migration collision case: compute the real
+// target path via BuildPath, then pre-seed it with a different identity's metadata before
+// provisioning the real one -- this simulates what a true collision would look like without
+// needing to actually find one.
+func TestServiceProvision_FailsClosedWhenExistingWorkdirBelongsToDifferentIdentity(t *testing.T) {
+	tempDir := t.TempDir()
+
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# test"), 0o644))
+
+	// Compute the real target path for the component/stack about to be provisioned, and
+	// pre-seed it with metadata for a DIFFERENT identity -- simulating a hash collision without
+	// needing to find a real one.
+	workdirPath, err := BuildPath(tempDir, "terraform", "vpc", "dev", nil)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+	require.NoError(t, WriteMetadata(workdirPath, &WorkdirMetadata{
+		Component:  "some-other-component",
+		Stack:      "some-other-stack",
+		SourceType: SourceTypeLocal,
+	}))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+	componentConfig := map[string]any{
+		"component":   "vpc",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err = ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil, provisioner.OutputWriters{})
+	require.Error(t, err, "Provision must refuse to reuse a workdir belonging to a different identity")
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirCreation)
+
+	// The other identity's workdir must be untouched: metadata still records the original
+	// (different) identity, not overwritten by the new provision.
+	metadata, readErr := ReadMetadata(workdirPath)
+	require.NoError(t, readErr)
+	require.NotNil(t, metadata)
+	assert.Equal(t, "some-other-component", metadata.Component)
+	assert.Equal(t, "some-other-stack", metadata.Stack)
+
+	_, ok := componentConfig[WorkdirPathKey]
+	assert.False(t, ok, "WorkdirPathKey must not be set when the existing workdir fails identity verification")
 }

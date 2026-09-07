@@ -67,6 +67,7 @@ type BuildConfig struct {
 	Target     string
 	NoCache    bool
 	Pull       bool
+	Load       bool
 	Bake       *BakeConfig
 	Driver     *DriverConfig
 	Cache      *CacheConfig

@@ -102,7 +102,7 @@ func executeMCPList(cmd *cobra.Command, _ []string) error {
 	}
 
 	if len(atmosConfig.MCP.Servers) == 0 {
-		ui.Info(noServersConfiguredMessage(atmosConfig.MCP.Enabled))
+		ui.Info(noServersConfiguredMessage(atmosConfig.MCP.IsEnabled()))
 		return nil
 	}
 

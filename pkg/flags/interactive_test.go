@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 // TestIsInteractive tests the isInteractive function.
@@ -72,6 +74,40 @@ func TestPromptForMultipleValues(t *testing.T) {
 		viper.Set("interactive", false)
 		_, err := PromptForMultipleValues("components", "Choose components", nil)
 		assert.Error(t, err)
+	})
+}
+
+func TestPromptForMultipleValuesWithPreselection(t *testing.T) {
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	t.Run("returns error when not interactive", func(t *testing.T) {
+		viper.Set("interactive", false)
+		_, err := PromptForMultipleValuesWithPreselection("profile", "Choose profiles", []string{"dev", "ci"}, nil)
+		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
+	})
+
+	t.Run("returns error when no options available", func(t *testing.T) {
+		// isInteractive() is checked first, so reaching the empty-options branch requires
+		// forcing it true: interactive=true, ATMOS_FORCE_TTY=true (no real TTY in tests), and
+		// CI env vars cleared (telemetry.IsCI() would otherwise force isInteractive() false).
+		preservedEnv := telemetry.PreserveCIEnvVars()
+		defer telemetry.RestoreCIEnvVars(preservedEnv)
+		t.Setenv("ATMOS_FORCE_TTY", "true")
+		viper.Set("interactive", true)
+
+		require.True(t, isInteractive(), "test setup must actually reach the interactive branch")
+
+		_, err := PromptForMultipleValuesWithPreselection("profile", "Choose profiles", nil, nil)
+		assert.ErrorIs(t, err, errUtils.ErrNoOptionsAvailable)
+	})
+
+	t.Run("non-interactive gate is checked before preselection is used", func(t *testing.T) {
+		viper.Set("interactive", false)
+		_, err := PromptForMultipleValuesWithPreselection("profile", "Choose profiles", []string{"dev"}, []string{"dev"})
+		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
 	})
 }
 
@@ -419,6 +455,31 @@ func TestWithOptionalValuePrompt(t *testing.T) {
 	require.NotNil(t, config, "prompt config should not be nil")
 	assert.Equal(t, "Choose identity", config.PromptTitle, "should set correct prompt title")
 	assert.NotNil(t, config.CompletionFunc, "should set completion function")
+}
+
+// TestWithOptionalValuePrompt_StringSliceFlag tests the WithOptionalValuePrompt option applied
+// to a *StringSliceFlag (e.g. --profile), which sets NoOptDefVal via a distinct switch case from
+// the *StringFlag case covered by TestWithOptionalValuePrompt above.
+func TestWithOptionalValuePrompt_StringSliceFlag(t *testing.T) {
+	completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"dev", "prod"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	parser := NewStandardFlagParser(
+		WithStringSliceFlag("profile", "", nil, "Configuration profile(s)"),
+		WithOptionalValuePrompt("profile", "Choose profiles", completionFunc),
+	)
+
+	flag := parser.Registry().Get("profile")
+	require.NotNil(t, flag, "profile flag should be registered")
+
+	sliceFlag, ok := flag.(*StringSliceFlag)
+	require.True(t, ok, "profile flag should be a *StringSliceFlag")
+	assert.Equal(t, cfg.IdentityFlagSelectValue, sliceFlag.NoOptDefVal,
+		"WithOptionalValuePrompt should set NoOptDefVal on a *StringSliceFlag the same way it does for *StringFlag")
+
+	require.NotNil(t, parser.optionalValuePrompts, "optionalValuePrompts map should be initialized")
+	assert.Contains(t, parser.optionalValuePrompts, "profile", "should contain prompt config for profile")
 }
 
 // TestWithPositionalArgPrompt tests the WithPositionalArgPrompt option.

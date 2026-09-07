@@ -37,6 +37,13 @@ func (p *Processor) SetConflictStrategy(strategy merge.ConflictStrategy) {
 	p.merger.SetConflictStrategy(strategy)
 }
 
+// SetMergeDriver sets which merger handles every file during a 3-way merge.
+func (p *Processor) SetMergeDriver(driver merge.Driver) {
+	defer perf.Track(nil, "engine.Processor.SetMergeDriver")()
+
+	p.merger.SetDriver(driver)
+}
+
 // SetDryRun toggles dry-run mode. When enabled, ProcessFile still renders
 // templates, loads the git merge base, performs the 3-way merge, and runs
 // conflict/threshold checks — every step that can fail — but skips the final

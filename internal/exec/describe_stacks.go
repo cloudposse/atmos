@@ -402,7 +402,7 @@ func executeDescribeStacks(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
 
-	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
+	stacksMap, _, deferredContexts, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -420,6 +420,9 @@ func executeDescribeStacks(
 	processor.resolveSecrets = resolveSecrets
 	processor.tagsFilter = tagsFilter
 	processor.labelsFilter = labelsFilter
+	// Recover per-component deferred-merge contexts from the FindStacksMap cache so Stage 3
+	// (resolveDeferredYamlFunctions) can run below — see processComponentEntry.
+	processor.deferredContexts = deferredContexts
 	if errOptions.OnError == OnErrorWarn {
 		processor.withDegradation(errOptions.OnWarning)
 	}
@@ -466,10 +469,7 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentKind 
 	case cfg.AnsibleSectionName:
 		return atmosConfig.Components.Ansible.BasePath
 	case cfg.ContainerSectionName:
-		// The typed `components.container` config (ContainerConfig) exposes no
-		// base_path field, so container components always use the conventional
-		// base path.
-		return "components/container"
+		return atmosConfig.Components.Container.BasePath
 	case cfg.EmulatorSectionName:
 		// Emulator components are stack-defined services, not filesystem-backed
 		// component source trees. Leave component_path unset until a real source

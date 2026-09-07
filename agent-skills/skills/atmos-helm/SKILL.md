@@ -87,6 +87,7 @@ fields:
 | `repository` | Explicit HTTP chart repository URL for a bare `chart` name. |
 | `repositories` | List of chart repositories used to resolve `repo/name` references (`name`, `url`, basic auth, TLS files, `pass_credentials_all`, `insecure_skip_tls_verify`). Merges with global `atmos.yaml` `components.helm.repositories`; component-level entries with the same `name` win. |
 | `namespace` | Target Kubernetes namespace. Defaults to `default`. |
+| `create_namespace` | Whether Helm creates the target `namespace` during install when missing. Defaults to `true` (existing behavior). Set `false` to install into a pre-existing namespace, e.g. when a platform owns the namespace or a namespace-scoped identity (CI) cannot create namespaces. |
 | `name` | Release name. Defaults to the component's last path segment. |
 | `values` | The chart's values, merged through Atmos inheritance. This map **is** the values passed to the chart. |
 | `values_files` | Value files layered *underneath* inline `values` (templated, in listed order). |

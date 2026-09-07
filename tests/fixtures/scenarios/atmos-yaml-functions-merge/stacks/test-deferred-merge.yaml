@@ -64,12 +64,101 @@ components:
           # Override existing keys
           enabled: false
 
+    # Test Case 5b: Mirror of Test Case 5 — the !template function is the HIGHER-precedence layer
+    # (component-level override) and the concrete map is the LOWER-precedence layer (abstract
+    # base), the reverse of test-deep-merge above. Proves the deep-merge is symmetric: it
+    # shouldn't matter which side of the merge is the deferred function.
+    test-mirror-precedence:
+      component: base-component-mirror
+      vars:
+        mirror_config: !template '{{ toJson (dict "new_key" "new_value") }}'
+
     # Test Case 6: Multiple YAML functions of same type
     # Tests precedence handling when multiple YAML functions merge
     test-multiple-yaml-functions:
-      metadata:
-        component: yaml-function-test
+      component: base-component
       vars:
-        # Multiple !env functions in import chain
-        stage: !env ATMOS_STAGE
+        # Multiple !env functions in import chain. Deliberately does NOT override `stage`: this
+        # fixture's name_template ("{{ .vars.stage }}") resolves the stack's own name from
+        # top-level vars.stage before any component is processed, so a component overriding that
+        # same field with a deferred function is a different (and separately worth investigating)
+        # concern from what this test exercises — precedence among multiple deferred functions.
+        env_stage: !env ATMOS_STAGE
         region: "us-west-2"
+
+    # Test Case 7: Deep merge with !labels/!tags (regression fixture for
+    # https://github.com/cloudposse/atmos/issues/2888 — !labels/!tags silently lose data
+    # when another layer sets a conflicting value at the same path instead of deep-merging).
+    test-labels-override:
+      component: base-component-labels
+      # Maps always deep-merge regardless of list_merge_strategy (tested by the tags field below),
+      # but tag_list is a *list*, whose merge behavior is governed by list_merge_strategy — this
+      # component opts into "append" (overriding the fixture-wide "replace" default in atmos.yaml)
+      # so the !tags-produced list and the component's own override list combine instead of the
+      # override replacing the function's contribution outright.
+      settings:
+        list_merge_strategy: append
+      vars:
+        # This must deep-merge with the !labels-produced map {X: "1", Y: "2"}, not replace it.
+        tags:
+          Z: "override-value"
+        # This must merge (append) with the !tags-produced list ["X", "Y"], not replace it.
+        tag_list:
+          - "Z"
+
+    # Field-test fixture (2026-08-07): overrides one field of the "web" list item, whose sibling
+    # field ("stage") is a deferred !env function. With list_merge_strategy: merge, the item at
+    # index 0 should deep-merge {name: "web", stage: <resolved>} with {name: "web", region: ...}.
+    test-list-nested-function:
+      component: base-component-list-nested
+      vars:
+        servers:
+          - name: "web"
+            region: "us-east-1"
+
+    test-typeflip-3layer:
+      component: base-component-typeflip
+      metadata:
+        inherits:
+          - base-component-typeflip-mixin
+      vars:
+        flip_config:
+          c: "3"
+          highest: "wins"
+
+    # Field-test fixture (2026-08-07): a plain scalar overrides the deferred function's OWN leaf
+    # path directly (not an ancestor path), where the function produces a map. Untested by the
+    # existing suite, which only overrides map-producing functions with other maps.
+    test-scalar-overrides-map-function:
+      component: base-component
+      vars:
+        template_config: "just-a-plain-string"
+
+    # Field-test fixture (2026-08-07): same !tags list-producing function as test-labels-override,
+    # but under the fixture-WIDE DEFAULT list_merge_strategy ("replace") rather than an explicit
+    # "append" opt-in. Confirms replace semantics are honored (not silently merged) — the mirror
+    # check to test-labels-override's append case.
+    test-labels-override-default-strategy:
+      component: base-component-labels
+      vars:
+        tag_list:
+          - "Z"
+
+    test-nested-function-collision:
+      component: base-component-nested-collision
+      vars:
+        combo:
+          nested: !template '{{ "nested-value" }}'
+          plain: "concrete"
+
+    test-untracked-function-override:
+      component: base-component-untracked-func
+      vars:
+        git_info:
+          extra: "value"
+
+    test-backend-override:
+      component: base-component-backend
+      backend:
+        s3:
+          region: "us-east-1"

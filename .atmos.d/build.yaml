@@ -25,7 +25,7 @@ commands:
         type: shell
         command: |
           set -eu
-          sh scripts/build-atmos.sh "${ATMOS_BUILD_TARGET:-default}" "${ATMOS_BUILD_VERSION:-test}"
+          go tool mage build:binary "${ATMOS_BUILD_TARGET:-default}" "${ATMOS_BUILD_VERSION:-test}"
       - &build_success_step
         type: toast
         level: success

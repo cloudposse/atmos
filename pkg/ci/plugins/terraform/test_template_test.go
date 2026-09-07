@@ -111,3 +111,243 @@ func TestTestTemplate_WithFailure(t *testing.T) {
 		assert.Contains(t, rendered, want)
 	}
 }
+
+// TestTestTemplate_SummaryFallback_AllPass covers the shape ParseTestOutput
+// produces when per-run lines weren't captured and it falls back to a single
+// synthesized row -- the table must still render, not just badges.
+func TestTestTemplate_SummaryFallback_AllPass(t *testing.T) {
+	ctx := &TerraformTemplateContext{
+		TemplateContext: &plugin.TemplateContext{
+			Component: "app",
+			Stack:     "local",
+			Command:   "test",
+			Result:    &plugin.OutputResult{HasErrors: false},
+		},
+		TestResult: &plugin.TerraformTestOutputData{
+			Total: 2,
+			Pass:  2,
+			Runs: []plugin.TerraformTestRun{
+				{Name: "test summary (per-run detail unavailable): 2 passed, 0 failed", Status: "pass"},
+			},
+		},
+	}
+
+	rendered := renderTestTemplate(t, ctx)
+
+	for _, want := range []string{
+		"Tests Passed for `app` in `local`",
+		"TESTS-2",
+		"PASSED-2",
+		"| Result | File | Run | Duration | Details |",
+		"| :white_check_mark: pass |  | `test summary (per-run detail unavailable): 2 passed, 0 failed` |  | |",
+	} {
+		assert.Contains(t, rendered, want)
+	}
+	assert.NotContains(t, rendered, "Tests Failed")
+}
+
+// TestTestTemplate_SummaryFallback_LosesRunDetail documents the residual, irreducible
+// case: when NOTHING but the trailing summary line survived -- not even terraform's
+// "Error:" diagnostic block -- there is no assertion detail left in the captured text
+// to recover, so the rendered CI summary can only show aggregate counts and the repro
+// command. Contrast with TestTestTemplate_SummaryFallback_RecoversErrorDetail, where
+// the "Error:" block did survive and per-run detail is now recovered.
+func TestTestTemplate_SummaryFallback_LosesRunDetail(t *testing.T) {
+	// Only the trailing summary line survives -- simulates the per-run lines AND the
+	// "Error:" diagnostic block being dropped (e.g. output buffering), even though the
+	// run that failed had rich detail in reality (name
+	// "provisions_resources_against_emulator", file tests/app.tftest.hcl, line 30,
+	// assertion "The S3 bucket was not created...").
+	const bufferedOutput = "Failure! 1 passed, 1 failed.\n"
+
+	result := ParseTestOutput(bufferedOutput)
+	data := testData(t, result)
+
+	ctx := &TerraformTemplateContext{
+		TemplateContext: &plugin.TemplateContext{
+			Component: "app",
+			Stack:     "local",
+			Command:   "test",
+			Result:    result,
+		},
+		TestResult: data,
+	}
+	rendered := renderTestTemplate(t, ctx)
+
+	// What the summary *does* show: aggregate counts and the repro command.
+	for _, want := range []string{
+		"FAILED-1",
+		"PASSED-1",
+		"atmos terraform test app -s local",
+	} {
+		assert.Contains(t, rendered, want)
+	}
+
+	// What's missing: the specific run's name, file, line, and assertion message that
+	// a fully-detailed (JSON-parsed) run would have surfaced -- this is the reported gap.
+	for _, missing := range []string{
+		"provisions_resources_against_emulator",
+		"tests/app.tftest.hcl",
+		":30",
+		"The S3 bucket was not created",
+	} {
+		assert.NotContains(t, rendered, missing)
+	}
+
+	// Only the single synthesized aggregate row exists -- no per-run breakdown.
+	require.Len(t, data.Runs, 1)
+	assert.Contains(t, data.Runs[0].Name, "per-run detail unavailable")
+}
+
+// tableRowLine returns the single results-table line containing marker, failing
+// the test if there isn't exactly one -- used to assert a row stayed a
+// well-formed single markdown line instead of leaking multi-line content.
+func tableRowLine(t *testing.T, rendered, marker string) string {
+	t.Helper()
+	var matches []string
+	for _, line := range strings.Split(rendered, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "|") && strings.Contains(line, marker) {
+			matches = append(matches, line)
+		}
+	}
+	require.Len(t, matches, 1, "expected exactly one table row line containing %q, got: %v", marker, matches)
+	return matches[0]
+}
+
+// TestTestTemplate_SummaryFallback_RecoversErrorDetail is the fix for the gap
+// TestTestTemplate_SummaryFallback_LosesRunDetail reproduces: when the per-run
+// lines are dropped but a single terraform "Error:" diagnostic block survived,
+// the CI summary recovers the file/line for the row -- but does NOT duplicate
+// the raw multi-line message into the table cell, since that would break the
+// markdown table (and the message is already rendered safely in the fenced
+// code block below via result.Errors).
+func TestTestTemplate_SummaryFallback_RecoversErrorDetail(t *testing.T) {
+	const output = `Error: Test assertion failed
+
+  on tests/app.tftest.hcl line 30:
+  30:     condition = output.bucket_id == "atmos-demo-test" || output.bucket_id == "fallback-id"
+
+The S3 bucket was not created against the emulator
+╵
+
+Failure! 1 passed, 1 failed.
+`
+	result := ParseTestOutput(output)
+	data := testData(t, result)
+
+	ctx := &TerraformTemplateContext{
+		TemplateContext: &plugin.TemplateContext{
+			Component: "app",
+			Stack:     "local",
+			Command:   "test",
+			Result:    result,
+		},
+		TestResult: data,
+	}
+	rendered := renderTestTemplate(t, ctx)
+
+	for _, want := range []string{
+		"FAILED-1",
+		"PASSED-1",
+		"`tests/app.tftest.hcl:30`",
+		"Test assertion failed",
+		"The S3 bucket was not created against the emulator",
+		"atmos terraform test app -s local",
+	} {
+		assert.Contains(t, rendered, want)
+	}
+
+	// The results-table row must stay a single, well-formed markdown line --
+	// the raw diagnostic text (multi-line, with a literal "||" in the HCL
+	// condition) must never be spliced into it.
+	row := tableRowLine(t, rendered, ":x: fail")
+	assert.Equal(t, 6, strings.Count(row, "|"), "row must have exactly 5 columns, got: %q", row)
+	assert.NotContains(t, row, "||", "the HCL condition text must not leak into the table row")
+
+	// The full message appears exactly once -- in the fenced code block, not
+	// duplicated into the table row.
+	assert.Equal(t, 1, strings.Count(rendered, "Test assertion failed"))
+}
+
+// TestTestTemplate_SummaryFallback_MultipleErrorBlocks_NoLocationAttributed
+// covers two failing assertions in two different files: attributing the
+// aggregate row's File/Line to just the first block would misrepresent which
+// failure it belongs to, so neither is set -- both failures' full detail
+// remain available via the fenced code block below the table.
+func TestTestTemplate_SummaryFallback_MultipleErrorBlocks_NoLocationAttributed(t *testing.T) {
+	const output = `Error: Test assertion failed
+
+  on tests/app.tftest.hcl line 12:
+  12:     condition = output.first == "expected"
+
+first assertion message
+╵
+
+Error: Test assertion failed
+
+  on tests/extra.tftest.hcl line 44:
+  44:     condition = output.second == "expected"
+
+second assertion message
+╵
+
+Failure! 0 passed, 2 failed.
+`
+	result := ParseTestOutput(output)
+	data := testData(t, result)
+
+	ctx := &TerraformTemplateContext{
+		TemplateContext: &plugin.TemplateContext{
+			Component: "app",
+			Stack:     "local",
+			Command:   "test",
+			Result:    result,
+		},
+		TestResult: data,
+	}
+	rendered := renderTestTemplate(t, ctx)
+
+	row := tableRowLine(t, rendered, ":x: fail")
+	assert.Equal(t, 6, strings.Count(row, "|"), "row must have exactly 5 columns, got: %q", row)
+	assert.NotContains(t, row, "tests/app.tftest.hcl")
+	assert.NotContains(t, row, "tests/extra.tftest.hcl")
+
+	for _, want := range []string{
+		"first assertion message",
+		"second assertion message",
+	} {
+		assert.Contains(t, rendered, want)
+	}
+}
+
+// TestTestTemplate_SummaryFallback_WithFailure covers the failing counterpart
+// of the summary-only fallback.
+func TestTestTemplate_SummaryFallback_WithFailure(t *testing.T) {
+	ctx := &TerraformTemplateContext{
+		TemplateContext: &plugin.TemplateContext{
+			Component: "app",
+			Stack:     "local",
+			Command:   "test",
+			Result:    &plugin.OutputResult{HasErrors: true},
+		},
+		TestResult: &plugin.TerraformTestOutputData{
+			Total: 3,
+			Pass:  1,
+			Fail:  2,
+			Runs: []plugin.TerraformTestRun{
+				{Name: "test summary (per-run detail unavailable): 1 passed, 2 failed", Status: "fail"},
+			},
+		},
+	}
+
+	rendered := renderTestTemplate(t, ctx)
+
+	for _, want := range []string{
+		"Tests Failed for `app` in `local`",
+		"FAILED-2",
+		"| Result | File | Run | Duration | Details |",
+		"| :x: fail |  | `test summary (per-run detail unavailable): 1 passed, 2 failed` |  |  |",
+	} {
+		assert.Contains(t, rendered, want)
+	}
+}

@@ -16,7 +16,7 @@ FLAGS
 
   -h, --help             help for provision
 
-      --identity string  Identity to use for authentication (overrides identity in command config)
+  -i, --identity string  Identity to use for authentication (use without value to select interactively)
 
 
 GLOBAL FLAGS
@@ -144,6 +144,8 @@ GLOBAL FLAGS
   -s, --stack string                         Stack name
 
       --tags strings                         Filter by tags (comma-separated, matches any): --tags=production,tier-1
+
+      --ui                                   Enable streaming UI mode for real-time resource status display
 
       --upload-status                        Upload plan status to Atmos Pro
 

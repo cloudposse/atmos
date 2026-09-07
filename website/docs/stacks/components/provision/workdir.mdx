@@ -13,7 +13,7 @@ import Experimental from '@site/src/components/Experimental'
 import Note from '@site/src/components/Note'
 
 <Intro>
-`provision.workdir` creates an isolated working directory for each component instance under `.workdir/<componentType>/<stack>-<componentName>/`. The component source is staged into this directory and all toolchain commands execute there, enabling concurrent execution and just-in-time source provisioning without `.terraform/`, lockfile, or generated-varfile collisions.
+`provision.workdir` creates an isolated working directory for each component instance under `.workdir/<componentType>/<stack>-<componentName>-<hash>/`. The component source is staged into this directory and all toolchain commands execute there, enabling concurrent execution and just-in-time source provisioning without `.terraform/`, lockfile, or generated-varfile collisions.
 </Intro>
 
 <Experimental />
@@ -58,17 +58,17 @@ components:
 
 ## Directory Layout
 
-When workdir provisioning is enabled, Atmos creates a per-component-instance directory under `.workdir/` and runs all toolchain commands there. Each instance gets its own `.terraform/`, varfiles, and state cache.
+When workdir provisioning is enabled, Atmos creates a per-component-instance directory under `.workdir/` and runs all toolchain commands there. Each instance gets its own `.terraform/`, varfiles, and state cache. The directory name ends with a short hash suffix (derived from the stack and component name) that keeps two component instances from colliding even when their `<stack>-<componentName>` prefixes happen to look the same.
 
 ```
 .workdir/
 ├── terraform/
-│   └── prod-ue1-vpc/        # <stack>-<componentName>
+│   └── prod-ue1-vpc-b52c4d0a/        # <stack>-<componentName>-<hash>
 │       ├── .terraform/
 │       ├── .atmos/metadata.json
 │       └── ... (component source)
 └── helmfile/
-    └── prod-ue1-nginx/
+    └── prod-ue1-nginx-27ff63ad/
         └── ...
 ```
 

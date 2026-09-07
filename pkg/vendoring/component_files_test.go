@@ -156,4 +156,42 @@ func TestResolveComponentPath(t *testing.T) {
 		_, err := ResolveComponentPath(config, "vpc", "ansible2")
 		require.ErrorIs(t, err, errUtils.ErrUnsupportedComponentType)
 	})
+
+	t.Run("absolute component path is rejected", func(t *testing.T) {
+		_, err := ResolveComponentPath(config, filepath.Join(base, "components", "terraform", "vpc"), "terraform")
+		require.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	})
+
+	t.Run("parent-directory traversal is rejected", func(t *testing.T) {
+		_, err := ResolveComponentPath(config, filepath.Join("..", "..", "..", "outside"), "terraform")
+		require.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	})
+
+	t.Run("in-base symlink to an outside directory is rejected", func(t *testing.T) {
+		outside := t.TempDir()
+		require.NoError(t, os.MkdirAll(outside, 0o755))
+
+		linkPath := filepath.Join(base, "components", "terraform", "linked")
+		if err := os.Symlink(outside, linkPath); err != nil {
+			t.Skipf("Skipping: os.Symlink not available on this platform (%v)", err)
+		}
+		t.Cleanup(func() { _ = os.Remove(linkPath) })
+
+		_, err := ResolveComponentPath(config, "linked", "terraform")
+		require.ErrorIs(t, err, errUtils.ErrPathTraversal)
+	})
+
+	t.Run("a path-stat failure other than not-exist wraps ErrResolveComponentPath", func(t *testing.T) {
+		// A self-referential symlink makes os.Stat (via u.IsDirectory) fail with "too many
+		// links" (not os.IsNotExist), exercising the resolve-failure branch distinct from
+		// ErrComponentDirNotFound -- proves callers can identify it with errors.Is.
+		loopPath := filepath.Join(base, "components", "terraform", "loop")
+		if err := os.Symlink(loopPath, loopPath); err != nil {
+			t.Skipf("Skipping: os.Symlink not available on this platform (%v)", err)
+		}
+		t.Cleanup(func() { _ = os.Remove(loopPath) })
+
+		_, err := ResolveComponentPath(config, "loop", "terraform")
+		require.ErrorIs(t, err, errUtils.ErrResolveComponentPath)
+	})
 }

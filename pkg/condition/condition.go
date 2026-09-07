@@ -47,6 +47,18 @@ type Context struct {
 	// answers) available to CEL expressions as the `answers` map. Unlike Env,
 	// values may be any type (string, bool, list, ...), not just strings.
 	Answers map[string]any
+	// Matrix carries one resolved matrix combination (e.g. a scaffold
+	// spec.files[].matrix row), available to CEL expressions as the `matrix`
+	// map, keyed by axis name. Empty outside a matrix context.
+	Matrix map[string]string
+	// Flags carries a custom command's declared --flag values (both string and bool
+	// typed), available to CEL expressions as the `flags` map, e.g.
+	// `when: "flags.dry_run == true"`. Empty outside a custom-command context.
+	Flags map[string]any
+	// Arguments carries a custom command's declared positional argument values,
+	// available to CEL expressions as the `arguments` map, e.g.
+	// `when: "arguments.environment == 'prod'"`. Empty outside a custom-command context.
+	Arguments map[string]string
 	// OS is runtime.GOOS (e.g. "darwin", "linux", "windows"), letting `when:` replace a
 	// dedicated `platforms:` field, e.g. `when: "os == 'darwin'"`.
 	OS string
@@ -157,6 +169,19 @@ func (c Condition) MarshalJSON() ([]byte, error) {
 		return []byte("null"), nil
 	}
 	return json.Marshal(c.node.value())
+}
+
+// MarshalYAML preserves conditions when manifests (e.g. scaffold project
+// records) are marshaled back to YAML, reconstructing the original
+// string/list/map form. Condition's only field (`node`) is unexported, so
+// yaml.v3 has nothing to reflect without this method.
+//
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func (c Condition) MarshalYAML() (any, error) {
+	if c.node == nil {
+		return nil, nil
+	}
+	return c.node.value(), nil
 }
 
 // UnmarshalJSON supports JSON config files and internal command cloning.

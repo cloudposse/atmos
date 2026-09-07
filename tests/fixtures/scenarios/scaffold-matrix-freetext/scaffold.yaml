@@ -1,0 +1,29 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: example
+  description: Test fixture exercising a free-text matrix axis split via Sprig's splitList.
+spec:
+  fields:
+    - name: extra_regions_csv
+      label: Extra AWS regions (optional, comma-separated)
+      description: >-
+        Free text, not a multiselect with an author-enumerated options list --
+        split into a matrix axis by Sprig's splitList (spec.files[].matrix).
+        One regions/<region>.yaml file is generated per region entered, e.g.
+        "us-east-1,us-west-2". Leave blank to generate none.
+      type: input
+      default: ""
+
+  files:
+    # region.yaml demonstrates a *free-text* matrix axis: extra_regions_csv is
+    # a plain `type: input` field, not constrained to an author-enumerated
+    # `options:` list, split into the axis by Sprig's splitList. Leaving it
+    # blank (the default) renders an empty-bracket expression that already
+    # resolves to zero values -- the `when:` guard here makes that explicit
+    # rather than relying on how an empty string happens to render.
+    - path: region.yaml
+      target: "regions/{{ .matrix.region }}.yaml"
+      matrix:
+        region: '{{ splitList "," answers.extra_regions_csv }}'
+      when: 'matrix.region != ""'

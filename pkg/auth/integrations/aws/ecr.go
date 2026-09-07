@@ -32,7 +32,7 @@ var ecrDockerConfigFactory = func() (*docker.ConfigManager, error) {
 type ECRIntegration struct {
 	name     string
 	identity string
-	registry *schema.ECRRegistry
+	registry *schema.Registry
 }
 
 // NewECRIntegration creates an ECR integration from config.
@@ -50,7 +50,7 @@ func NewECRIntegration(config *integrations.IntegrationConfig) (integrations.Int
 	}
 
 	// Extract registry from spec.registry - required for aws/ecr integrations.
-	var registry *schema.ECRRegistry
+	var registry *schema.Registry
 	if config.Config.Spec != nil && config.Config.Spec.Registry != nil {
 		registry = config.Config.Spec.Registry
 	}
@@ -153,6 +153,6 @@ func (e *ECRIntegration) GetIdentity() string {
 }
 
 // GetRegistry returns the configured registry.
-func (e *ECRIntegration) GetRegistry() *schema.ECRRegistry {
+func (e *ECRIntegration) GetRegistry() *schema.Registry {
 	return e.registry
 }

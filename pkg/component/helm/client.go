@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/chart/loader"
@@ -16,6 +17,7 @@ import (
 	"helm.sh/helm/v4/pkg/storage/driver"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authkube "github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -31,6 +33,18 @@ type actionContext struct {
 // the toolchain/auth environment configures before execution.
 var newActionContext = func(namespace string) (*actionContext, error) {
 	settings := newSettings()
+	if err := verifyExpectedKubernetesEndpoint(settings); err != nil {
+		return nil, err
+	}
+
+	// Set the namespace on the settings so Helm's RESTClientGetter installs namespace-less
+	// manifests into it. Setting only the install/upgrade action's Namespace is not enough:
+	// charts whose manifests omit metadata.namespace inherit the getter's namespace, which
+	// otherwise defaults to the kubeconfig context (usually "default") rather than the
+	// component's configured namespace. See docs/fixes/2026-08-14-native-helm-ux-fixes.md.
+	if namespace != "" {
+		settings.SetNamespace(namespace)
+	}
 
 	cfg := new(action.Configuration)
 	if err := cfg.Init(settings.RESTClientGetter(), namespace, os.Getenv("HELM_DRIVER")); err != nil { //nolint:forbidigo
@@ -48,6 +62,26 @@ var newActionContext = func(namespace string) (*actionContext, error) {
 	cfg.RegistryClient = registryClient
 
 	return &actionContext{cfg: cfg, settings: settings}, nil
+}
+
+// verifyExpectedKubernetesEndpoint enforces the opt-in GKE endpoint guard.
+func verifyExpectedKubernetesEndpoint(settings *cli.EnvSettings) error {
+	if os.Getenv(authkube.EndpointGuardEnv) != "true" { //nolint:forbidigo // Internal guard set only for opt-in protected operations.
+		return nil
+	}
+	expected := os.Getenv(authkube.ExpectedServerEnv) //nolint:forbidigo // Set by the selected Atmos Auth cluster integration.
+	if expected == "" {
+		return nil
+	}
+	restConfig, err := settings.RESTClientGetter().ToRESTConfig()
+	if err != nil {
+		return fmt.Errorf("%w: resolve effective kubeconfig: %w", errUtils.ErrKubernetesClientInit, err)
+	}
+	actual := restConfig.Host
+	if strings.TrimRight(actual, "/") != strings.TrimRight(expected, "/") {
+		return fmt.Errorf("%w: expected %q, got %q", errUtils.ErrKubernetesEndpointMismatch, expected, actual)
+	}
+	return nil
 }
 
 // applyRelease installs the release if it does not exist, otherwise upgrades it
@@ -71,17 +105,27 @@ func applyRelease(ctx context.Context, spec *chartSpec, dryRun bool) (string, er
 }
 
 func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, dryRun bool) (string, error) {
+	client := newInstallClient(actx, spec, dryRun)
+	return runInstall(ctx, client, actx.settings, spec)
+}
+
+// newInstallClient builds the Helm Install action for a release install, wiring
+// the release name, namespace, namespace-creation policy, and chart version.
+// CreateNamespace comes from the component config (default true); setting it to
+// false installs into a pre-existing namespace and needs no cluster-level
+// permission to create the namespace.
+func newInstallClient(actx *actionContext, spec *chartSpec, dryRun bool) *action.Install {
 	client := action.NewInstall(actx.cfg)
 	client.SetRegistryClient(actx.cfg.RegistryClient)
 	client.ReleaseName = spec.ReleaseName
 	client.Namespace = spec.Namespace
-	client.CreateNamespace = true
+	client.CreateNamespace = spec.CreateNamespace
 	client.Version = spec.Version
 	client.WaitStrategy = kube.HookOnlyStrategy
 	if dryRun {
 		client.DryRunStrategy = action.DryRunServer
 	}
-	return runInstall(ctx, client, actx.settings, spec)
+	return client
 }
 
 func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, dryRun bool) (string, error) {

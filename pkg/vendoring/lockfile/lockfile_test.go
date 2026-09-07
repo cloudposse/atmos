@@ -124,6 +124,13 @@ func TestSaveRedactsSourcesAndIsDeterministic(t *testing.T) {
 	require.Contains(t, string(first), "target: vendor")
 	require.NotContains(t, string(first), filepath.ToSlash(target))
 
+	// Verify the repo's 2-space YAML indent standard, not yaml.v3's bare-Marshal 4-space
+	// default: "artifacts:" -> "  b:" -> "    kind:" is 2-space-per-level.
+	require.Contains(t, string(first), "\n  b:\n")
+	require.Contains(t, string(first), "\n    kind:")
+	require.NotContains(t, string(first), "\n    b:\n")
+	require.NotContains(t, string(first), "\n        kind:")
+
 	require.NoError(t, Save(config, lock))
 	second, err := os.ReadFile(Path(config))
 	require.NoError(t, err)

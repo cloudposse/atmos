@@ -133,7 +133,7 @@ func TestValidateFieldValuesReportsAllInvalidFieldsInFieldOrder(t *testing.T) {
 	err := ValidateFieldValues(config, map[string]interface{}{"first": "two", "second": "not-a-bool"})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGeneratorValidation), err)
-	assert.Equal(t, "generator validation failed: field has unsupported option: field \"first\" option \"two\"; field must be true or false: \"second\"", err.Error())
+	assert.Equal(t, "generator validation failed: field has unsupported option: field \"first\" option \"two\" (valid values: one); field must be true or false: \"second\"", err.Error())
 }
 
 func TestValidateFieldValuesReportsMissingFieldsInFieldOrder(t *testing.T) {
@@ -278,4 +278,203 @@ func TestLoadScaffoldConfigRejectsInvalidFieldValidation(t *testing.T) {
 			assert.ErrorContains(t, err, tt.contains)
 		})
 	}
+}
+
+// TestLoadScaffoldConfigRejectsInvalidFileMatrix covers matrix
+// configurations LoadScaffoldConfigFromContent rejects. Most are caught by
+// the generated JSON Schema inside manifest.Load before validateFileMatrix's
+// own checks run, so their expected error is ErrManifestValidation rather
+// than a more specific matrix sentinel. The one exception: a dynamic axis's
+// "answers." prefix requirement, which the schema can't express, so
+// validateFileMatrix (via ErrScaffoldMatrixAxisInvalid) still rejects that
+// one directly.
+func TestLoadScaffoldConfigRejectsInvalidFileMatrix(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		wantErr  error
+		contains string
+	}{
+		{
+			name: "matrix without target",
+			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+				"    - path: deploy.yaml\n      matrix:\n        region: [us-east-1]\n",
+			wantErr:  errUtils.ErrManifestValidation,
+			contains: "target",
+		},
+		{
+			// The schema's if/then rule only checked that target is present
+			// (required), not that it's non-empty -- FileSpec.JSONSchemaExtend
+			// in config.go now also constrains the then branch's target with
+			// minLength: 1, so an empty target is rejected here too, matching
+			// validateFileMatrix's own file.Target == "" check.
+			name: "matrix with empty target",
+			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+				"    - path: deploy.yaml\n      target: \"\"\n      matrix:\n        region: [us-east-1]\n",
+			wantErr:  errUtils.ErrManifestValidation,
+			contains: "target",
+		},
+		{
+			name: "empty literal axis",
+			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+				"    - path: deploy.yaml\n      target: out.yaml\n      matrix:\n        region: []\n",
+			wantErr:  errUtils.ErrManifestValidation,
+			contains: "region",
+		},
+		{
+			name: "dynamic axis missing answers prefix",
+			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+				"    - path: deploy.yaml\n      target: out.yaml\n      matrix:\n        region: regions\n",
+			wantErr:  errUtils.ErrScaffoldMatrixAxisInvalid,
+			contains: "region",
+		},
+		{
+			name: "axis of unsupported type",
+			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+				"    - path: deploy.yaml\n      target: out.yaml\n      matrix:\n        region: 5\n",
+			wantErr:  errUtils.ErrManifestValidation,
+			contains: "region",
+		},
+		{
+			// A literal axis list with a non-string element (as opposed to
+			// "axis of unsupported type" above, where the axis itself isn't
+			// a list at all) exercises the schema's array/items branch
+			// (MatrixAxes.JSONSchemaExtend in config.go) rather than its
+			// oneOf/type branch.
+			name: "literal axis list with non-string element",
+			content: "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+				"    - path: deploy.yaml\n      target: out.yaml\n      matrix:\n        region: [5]\n",
+			wantErr:  errUtils.ErrManifestValidation,
+			contains: "region",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := LoadScaffoldConfigFromContent(tt.content)
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, tt.wantErr), err)
+			assert.ErrorContains(t, err, tt.contains)
+		})
+	}
+}
+
+// TestValidateMatrixAxisValueRejectsNonStringElement is a direct unit test
+// of validateMatrixAxisValue's []any branch, bypassing
+// LoadScaffoldConfigFromContent: the same region: [5] input is already
+// rejected by JSON Schema first (see "literal axis list with non-string
+// element" above), so this exercises the function as a defense-in-depth
+// backstop instead.
+func TestValidateMatrixAxisValueRejectsNonStringElement(t *testing.T) {
+	err := validateMatrixAxisValue("deploy.yaml", "region", []any{5}, defaultDelimiters(nil))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
+	assert.ErrorContains(t, err, "region")
+}
+
+// TestValidateMatrixAxisValueRejectsEmptyStringSlice and
+// TestValidateMatrixAxisValueRejectsEmptyAnySlice are direct unit tests of
+// validateMatrixAxisValue's two empty-list branches, same defense-in-depth
+// rationale as the non-string-element test above (see "empty literal
+// axis" in TestLoadScaffoldConfigRejectsInvalidFileMatrix). []string and
+// []any take separate branches -- a decoded YAML list is []any, but
+// []string exists for a caller that already has a typed slice -- so both
+// need their own case.
+func TestValidateMatrixAxisValueRejectsEmptyStringSlice(t *testing.T) {
+	err := validateMatrixAxisValue("deploy.yaml", "region", []string{}, defaultDelimiters(nil))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
+	assert.ErrorContains(t, err, "region")
+}
+
+func TestValidateMatrixAxisValueRejectsEmptyAnySlice(t *testing.T) {
+	err := validateMatrixAxisValue("deploy.yaml", "region", []any{}, defaultDelimiters(nil))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
+	assert.ErrorContains(t, err, "region")
+}
+
+// TestValidateMatrixAxisValueRejectsUnsupportedType is a direct unit test
+// of validateMatrixAxisValue's default branch (a value that's neither a
+// string nor a list, e.g. a bool) -- same defense-in-depth rationale as
+// the tests above (see "axis of unsupported type" in
+// TestLoadScaffoldConfigRejectsInvalidFileMatrix).
+func TestValidateMatrixAxisValueRejectsUnsupportedType(t *testing.T) {
+	err := validateMatrixAxisValue("deploy.yaml", "region", true, defaultDelimiters(nil))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixAxisInvalid)
+	assert.ErrorContains(t, err, "region")
+}
+
+// TestValidateFileMatrixRejectsMissingTarget is a direct unit test of
+// validateFileMatrix's own file.Target == "" check, bypassing
+// LoadScaffoldConfigFromContent: a missing target is already rejected by
+// JSON Schema's required-property rule first (see "matrix without target"
+// in TestLoadScaffoldConfigRejectsInvalidFileMatrix).
+func TestValidateFileMatrixRejectsMissingTarget(t *testing.T) {
+	scaffoldConfig := &ScaffoldConfig{Spec: ScaffoldSpec{Files: []FileSpec{
+		{Path: "deploy.yaml", Matrix: MatrixAxes{"region": []any{"us-east-1"}}},
+	}}}
+
+	err := validateFileMatrix(scaffoldConfig)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixTargetRequired)
+	assert.ErrorContains(t, err, "deploy.yaml")
+}
+
+// TestValidateFileMatrixSkipsFilesWithoutMatrix proves a file entry with
+// no matrix: at all (the common case) is left alone by validateFileMatrix:
+// a template mixing a plain file alongside a matrixed one must load
+// without error.
+func TestValidateFileMatrixSkipsFilesWithoutMatrix(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+		"    - path: vendor.yaml\n" +
+		"    - path: deploy.yaml\n      target: \"deploy/{{ .matrix.region }}.yaml\"\n" +
+		"      matrix:\n        region: [us-east-1]\n"
+
+	scaffoldConfig, err := LoadScaffoldConfigFromContent(content)
+	require.NoError(t, err)
+	require.Len(t, scaffoldConfig.Spec.Files, 2)
+	assert.Empty(t, scaffoldConfig.Spec.Files[0].Matrix)
+	assert.NotEmpty(t, scaffoldConfig.Spec.Files[1].Matrix)
+}
+
+func TestLoadScaffoldConfigAcceptsValidFileMatrix(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+		"    - path: deploy.yaml\n      target: \"deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml\"\n" +
+		"      matrix:\n        environment: [dev, staging, production]\n        region: answers.regions\n"
+
+	scaffoldConfig, err := LoadScaffoldConfigFromContent(content)
+	require.NoError(t, err)
+	require.Len(t, scaffoldConfig.Spec.Files, 1)
+	assert.Equal(t, "deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml", scaffoldConfig.Spec.Files[0].Target)
+}
+
+func TestLoadScaffoldConfigAcceptsTemplateExpressionAxis(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  files:\n" +
+		"    - path: deploy.yaml\n      target: \"deploy/{{ .matrix.environment }}/{{ .matrix.region }}.yaml\"\n" +
+		"      matrix:\n        environment: '{{ collectKeys answers.environments }}'\n" +
+		"        region: '{{ collectKeys answers.environments \"regions\" }}'\n"
+
+	scaffoldConfig, err := LoadScaffoldConfigFromContent(content)
+	require.NoError(t, err)
+	require.Len(t, scaffoldConfig.Spec.Files, 1)
+	assert.Equal(t, "{{ collectKeys answers.environments }}", scaffoldConfig.Spec.Files[0].Matrix["environment"])
+}
+
+// TestLoadScaffoldConfigAcceptsTemplateExpressionAxisWithCustomDelimiters
+// guards against validateMatrixAxisStringValue hardcoding the default "{{"
+// delimiter: a scaffold that overrides spec.delimiters must recognize a
+// matrix axis expression written in its own delimiters, not just the
+// default Go template ones.
+func TestLoadScaffoldConfigAcceptsTemplateExpressionAxisWithCustomDelimiters(t *testing.T) {
+	content := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n" +
+		"  delimiters: [\"[[\", \"]]\"]\n  files:\n" +
+		"    - path: deploy.yaml\n      target: \"deploy/[[ .matrix.environment ]].yaml\"\n" +
+		"      matrix:\n        environment: '[[ collectKeys answers.environments ]]'\n"
+
+	scaffoldConfig, err := LoadScaffoldConfigFromContent(content)
+	require.NoError(t, err)
+	require.Len(t, scaffoldConfig.Spec.Files, 1)
+	assert.Equal(t, "[[ collectKeys answers.environments ]]", scaffoldConfig.Spec.Files[0].Matrix["environment"])
 }

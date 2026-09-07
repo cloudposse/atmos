@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -947,6 +948,197 @@ func TestProcessTerraformRemoteStateBackend_PropagatesExtractError(t *testing.T)
 			assert.Contains(t, err.Error(), component, "error must reference the component name")
 		})
 	}
+}
+
+// TestProcessTerraformBackend_TypeKeyMismatch guards against issue #2919's field-test finding:
+// backend_type not matching any key under backend: previously validated fine and silently
+// resolved to an empty backend config (e.g. backend_type: http with backend: {s3: {...}}), instead
+// of erroring. Reproduces both the mismatch case and the still-legitimate "backend not configured
+// at all" case (an empty backend section is not a mismatch -- it just means no defaults apply yet).
+func TestProcessTerraformBackend_TypeKeyMismatch(t *testing.T) {
+	t.Run("mismatch errors", func(t *testing.T) {
+		cfg := &terraformBackendConfig{
+			atmosConfig:       &schema.AtmosConfiguration{},
+			component:         "vpc",
+			globalBackendType: "http",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{"bucket": "wrong-key-for-http"},
+			},
+		}
+		gotType, gotBackend, err := processTerraformBackend(cfg)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrBackendTypeMismatch)
+		assert.Empty(t, gotType)
+		assert.Nil(t, gotBackend)
+		assert.True(t, errUtils.HasContext(err, "component", "vpc"))
+		assert.True(t, errUtils.HasContext(err, "backend_type", "http"))
+		assert.True(t, errUtils.HasHint(err, "backend_type is"))
+	})
+
+	// This check runs during whole-repo stack processing (mergeComponentConfigurations
+	// processes every stack, not just the one requested via -s/--stack), so a mismatch
+	// in one component blocks describe/plan for every other stack too. Prior to this
+	// test, the component/stack causing the failure were attached only via WithContext,
+	// which the CLI's default (non---verbose) error renderer drops entirely -- the printed
+	// error gave no way to find which of potentially hundreds of components was at fault.
+	t.Run("mismatch names the offending component and stack directly in the hint", func(t *testing.T) {
+		cfg := &terraformBackendConfig{
+			atmosConfig:       &schema.AtmosConfiguration{},
+			component:         "vpc-no-provider",
+			stackName:         "orgs/cplive/plat/sandbox/us-east-2",
+			globalBackendType: "http",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{"bucket": "wrong-key-for-http"},
+			},
+		}
+		_, _, err := processTerraformBackend(cfg)
+		require.Error(t, err)
+		assert.True(t, errUtils.HasContext(err, "stack", "orgs/cplive/plat/sandbox/us-east-2"))
+		assert.True(t, errUtils.HasHint(err, "vpc-no-provider"),
+			"hint text must name the offending component directly, not just as hidden verbose-only context")
+		assert.True(t, errUtils.HasHint(err, "orgs/cplive/plat/sandbox/us-east-2"),
+			"hint text must name the offending stack directly, not just as hidden verbose-only context")
+	})
+
+	t.Run("no backend section configured at all is not a mismatch", func(t *testing.T) {
+		cfg := &terraformBackendConfig{
+			atmosConfig:       &schema.AtmosConfiguration{},
+			component:         "vpc",
+			globalBackendType: "http",
+		}
+		gotType, gotBackend, err := processTerraformBackend(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, "http", gotType)
+		assert.Empty(t, gotBackend)
+	})
+
+	t.Run("matching key across layers is not a mismatch", func(t *testing.T) {
+		cfg := &terraformBackendConfig{
+			atmosConfig:       &schema.AtmosConfiguration{},
+			component:         "vpc",
+			globalBackendType: "s3",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{"bucket": "test-bucket"},
+			},
+		}
+		_, gotBackend, err := processTerraformBackend(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, "test-bucket", gotBackend["bucket"])
+	})
+}
+
+// TestProcessTerraformRemoteStateBackend_TypeKeyMismatch mirrors
+// TestProcessTerraformBackend_TypeKeyMismatch for remote_state_backend_type /
+// remote_state_backend.
+func TestProcessTerraformRemoteStateBackend_TypeKeyMismatch(t *testing.T) {
+	t.Run("mismatch errors", func(t *testing.T) {
+		cfg := &remoteStateBackendConfig{
+			atmosConfig:                  &schema.AtmosConfiguration{},
+			component:                    "vpc",
+			finalComponentBackendType:    "s3",
+			finalComponentBackendSection: map[string]any{"s3": map[string]any{"bucket": "b"}},
+			globalRemoteStateBackendType: "http",
+			globalRemoteStateBackendSection: map[string]any{
+				"s3": map[string]any{"bucket": "wrong-key-for-http"},
+			},
+		}
+		gotType, gotBackend, err := processTerraformRemoteStateBackend(cfg)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrBackendTypeMismatch)
+		assert.Empty(t, gotType)
+		assert.Nil(t, gotBackend)
+		assert.True(t, errUtils.HasContext(err, "component", "vpc"))
+		assert.True(t, errUtils.HasContext(err, "remote_state_backend_type", "http"))
+	})
+
+	t.Run("no remote_state_backend section configured is not a mismatch", func(t *testing.T) {
+		cfg := &remoteStateBackendConfig{
+			atmosConfig:                  &schema.AtmosConfiguration{},
+			component:                    "vpc",
+			finalComponentBackendType:    "s3",
+			finalComponentBackendSection: map[string]any{"s3": map[string]any{"bucket": "b"}},
+			globalRemoteStateBackendType: "http",
+		}
+		gotType, _, err := processTerraformRemoteStateBackend(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, "http", gotType)
+	})
+
+	// Same rationale as TestProcessTerraformBackend_TypeKeyMismatch's equivalent case:
+	// the hint text is the only thing the CLI prints by default, so it must name the
+	// offending component/stack directly rather than relying on hidden verbose-only context.
+	t.Run("mismatch names the offending component and stack directly in the hint", func(t *testing.T) {
+		cfg := &remoteStateBackendConfig{
+			atmosConfig:                  &schema.AtmosConfiguration{},
+			component:                    "vpc-no-provider",
+			stackName:                    "orgs/cplive/plat/sandbox/us-east-2",
+			finalComponentBackendType:    "s3",
+			finalComponentBackendSection: map[string]any{"s3": map[string]any{"bucket": "b"}},
+			globalRemoteStateBackendType: "http",
+			globalRemoteStateBackendSection: map[string]any{
+				"s3": map[string]any{"bucket": "wrong-key-for-http"},
+			},
+		}
+		_, _, err := processTerraformRemoteStateBackend(cfg)
+		require.Error(t, err)
+		assert.True(t, errUtils.HasContext(err, "stack", "orgs/cplive/plat/sandbox/us-east-2"))
+		assert.True(t, errUtils.HasHint(err, "vpc-no-provider"),
+			"hint text must name the offending component directly, not just as hidden verbose-only context")
+		assert.True(t, errUtils.HasHint(err, "orgs/cplive/plat/sandbox/us-east-2"),
+			"hint text must name the offending stack directly, not just as hidden verbose-only context")
+	})
+}
+
+// TestProcessTerraformRemoteStateBackend_InheritedLocalTypeMismatch reproduces the exact
+// real-world shape found in cloudposse/infra-live: an org-level stack manifest sets a global
+// s3 remote_state_backend default, and one unrelated component overrides backend_type: local
+// (with a valid backend.local section, so the backend/backend_type check passes cleanly) but
+// never sets remote_state_backend_type or remote_state_backend to match. The type then
+// legitimately inherits "local" from the component's own backend_type (per
+// processTerraformRemoteStateBackend's documented precedence), but the only configured
+// remote_state_backend key anywhere in scope is the inherited global "s3" -- a genuine
+// mismatch, not a defaulting bug. This is intended behavior (the component's remote-state
+// config silently resolved to nothing under the pre-1.226.0 code, which is the exact silent-
+// misconfiguration class this check was added to catch) -- this test guards it staying an
+// error, and that the error names the component/stack.
+func TestProcessTerraformRemoteStateBackend_InheritedLocalTypeMismatch(t *testing.T) {
+	backendCfg := &terraformBackendConfig{
+		atmosConfig: &schema.AtmosConfiguration{},
+		component:   "vpc-no-provider",
+		stackName:   "orgs/cplive/plat/sandbox/us-east-2",
+		// Global backend_type is s3 (org default); the component overrides it to local.
+		globalBackendType: "s3",
+		globalBackendSection: map[string]any{
+			"s3": map[string]any{"bucket": "org-tfstate"},
+		},
+		componentBackendType: "local",
+		componentBackendSection: map[string]any{
+			"local": map[string]any{"path": "terraform.tfstate"},
+		},
+	}
+	finalBackendType, finalBackend, err := processTerraformBackend(backendCfg)
+	require.NoError(t, err, "backend_type/backend must resolve cleanly -- local is validly configured")
+	assert.Equal(t, "local", finalBackendType)
+
+	remoteCfg := &remoteStateBackendConfig{
+		atmosConfig:                  &schema.AtmosConfiguration{},
+		component:                    "vpc-no-provider",
+		stackName:                    "orgs/cplive/plat/sandbox/us-east-2",
+		finalComponentBackendType:    finalBackendType,
+		finalComponentBackendSection: map[string]any{finalBackendType: finalBackend},
+		// Global remote_state_backend only configures s3 (org default); nothing at any
+		// scope sets remote_state_backend_type or a "local" key under remote_state_backend.
+		globalRemoteStateBackendSection: map[string]any{
+			"s3": map[string]any{"role_arn": "arn:aws:iam::123456789012:role/readonly"},
+		},
+	}
+	_, _, err = processTerraformRemoteStateBackend(remoteCfg)
+	require.Error(t, err, "local backend_type with only an s3 remote_state_backend default is a genuine mismatch")
+	assert.ErrorIs(t, err, errUtils.ErrBackendTypeMismatch)
+	assert.True(t, errUtils.HasHint(err, "vpc-no-provider"))
+	assert.True(t, errUtils.HasHint(err, "orgs/cplive/plat/sandbox/us-east-2"))
+	assert.True(t, errUtils.HasHint(err, `"local"`))
+	assert.True(t, errUtils.HasHint(err, "s3"))
 }
 
 // TestShouldPreserveAuthoredKey covers the three decision paths of the

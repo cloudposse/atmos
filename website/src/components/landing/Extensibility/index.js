@@ -4,7 +4,7 @@ import Link from '@docusaurus/Link';
 import DemoVideo from '@site/src/components/landing/DemoVideo';
 
 const EXTENSIONS = [
-  { title: 'Custom commands', desc: 'Wrap any script as a first-class atmos command, with flags, args, and identity.', to: '/quick-start/advanced/add-custom-commands' },
+  { title: 'Custom commands', desc: 'Your task runner, built in — wrap any script as a first-class atmos command, with flags, args, and identity.', to: '/cli/configuration/commands' },
   { title: 'Component types', desc: 'Register your own component kinds via the same registry the built-ins use.', to: '/components' },
   { title: 'YAML functions', desc: 'Resolve state, outputs, secrets, and Git metadata right inside your config.', to: '/functions/yaml' },
   { title: 'Hooks & stores', desc: 'Run infracost, checkov, trivy, or any command on lifecycle events, and plug in SSM, Secrets Manager, Key Vault, Vault, Redis, and more for cross-component data.', to: '/stacks/hooks' },

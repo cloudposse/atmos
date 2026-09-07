@@ -143,3 +143,108 @@ func TestCICloneBootstrapRequested_WrongCommand(t *testing.T) {
 	assert.False(t, CICloneBootstrapRequested(plan, nil))
 	assert.False(t, CICloneBootstrapRequested(nil, nil))
 }
+
+// TestCIGitCloneBootstrapRequestedFromRawArgs covers the pre-Cobra entry
+// point cmd/root.go uses (via isCIGitCloneBootstrapArgs), where flags haven't
+// been parsed by the real command tree yet. The critical case is a
+// value-taking flag given in space-separated form (--depth 0): a naive
+// "-"-prefix heuristic misreads the bare "0" token as a positional repo
+// name/URI and wrongly disqualifies the bootstrap. Parsing rawArgs against
+// the real clone flag set must get this right.
+func TestCIGitCloneBootstrapRequestedFromRawArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		rawArgs     []string
+		ciDetected  bool
+		wantRequest bool
+	}{
+		{
+			name:        "no args, CI detected",
+			rawArgs:     nil,
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			name:        "--ci --depth 0 (space-separated value flag)",
+			rawArgs:     []string{"--ci", "--depth", "0"},
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			name:        "--ci --depth=0 (equals-form value flag)",
+			rawArgs:     []string{"--ci", "--depth=0"},
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			name:        "--branch main (space-separated string value flag)",
+			rawArgs:     []string{"--branch", "main"},
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			name:        "explicit positional repo URI disqualifies bootstrap",
+			rawArgs:     []string{"flux-deploy", "--depth", "0"},
+			ciDetected:  true,
+			wantRequest: false,
+		},
+		{
+			name:        "--all disqualifies bootstrap",
+			rawArgs:     []string{"--all"},
+			ciDetected:  true,
+			wantRequest: false,
+		},
+		{
+			name:        "no CI provider detected",
+			rawArgs:     []string{"--ci", "--depth", "0"},
+			ciDetected:  false,
+			wantRequest: false,
+		},
+		{
+			// Regression: this must be true, not false. A false result here
+			// makes handleConfigInitErrorWithArgs (cmd/root.go) return an
+			// unrelated config/profile error immediately, never reaching
+			// RootCmd.Execute() -- so Cobra's own clean "invalid argument for
+			// --depth" error is never shown. Reporting true lets that error
+			// surface as intended, whether or not CI is actually detected:
+			// see "malformed flag value returns true regardless of CI"
+			// below for the non-CI case.
+			name:        "malformed flag value returns true, deferring to RunE",
+			rawArgs:     []string{"--depth", "not-a-number"},
+			ciDetected:  true,
+			wantRequest: true,
+		},
+		{
+			// A malformed clone flag must defer to Cobra's own error even
+			// outside CI -- no config/profile error should ever preempt it.
+			name:        "malformed flag value returns true regardless of CI",
+			rawArgs:     []string{"--depth", "not-a-number"},
+			ciDetected:  false,
+			wantRequest: true,
+		},
+		{
+			// Regression: --config is a real global persistent flag (not a
+			// clone-specific flag), so the throwaway command tree must
+			// inherit it or clone.ParseFlags rejects it as unknown, wrongly
+			// disqualifying the bootstrap. The referenced file need not
+			// exist -- this only exercises flag parsing, not config loading.
+			name:        "--config inherited root flag is accepted",
+			rawArgs:     []string{"--config", "missing.yaml"},
+			ciDetected:  true,
+			wantRequest: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.ciDetected {
+				t.Setenv("GITHUB_ACTIONS", "true")
+			} else {
+				t.Setenv("GITHUB_ACTIONS", "false")
+			}
+			withCleanATMOSCIEnv(t, "")
+
+			assert.Equal(t, tt.wantRequest, CIGitCloneBootstrapRequestedFromRawArgs(tt.rawArgs))
+		})
+	}
+}
