@@ -76,6 +76,23 @@ func (p *storeProvider) Get(coord Coordinate) (any, error) {
 	return p.store.Get(coord.Stack, coord.Component, coord.Key)
 }
 
+func (p *storeProvider) GetRaw(coord Coordinate) (string, error) {
+	defer perf.Track(nil, "providers.storeProvider.GetRaw")()
+
+	if rawStore, ok := p.store.(store.RawStore); ok {
+		return rawStore.GetRaw(coord.Stack, coord.Component, coord.Key)
+	}
+	value, err := p.store.Get(coord.Stack, coord.Component, coord.Key)
+	if err != nil {
+		return "", err
+	}
+	text, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("%w: store %q (%s)", ErrRawNotSupported, p.name, p.kind)
+	}
+	return text, nil
+}
+
 func (p *storeProvider) Delete(coord Coordinate) error {
 	defer perf.Track(nil, "providers.storeProvider.Delete")()
 
