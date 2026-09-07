@@ -275,7 +275,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/databus23/helm-diff/v3
     License: Apache-2.0
-    URL: https://github.com/databus23/helm-diff/blob/v3.15.10/LICENSE
+    URL: https://github.com/databus23/helm-diff/blob/v3.15.12/LICENSE
 
   - github.com/dimchansky/utfbom
     License: Apache-2.0
@@ -731,35 +731,35 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - helm.sh/helm/v4
     License: Apache-2.0
-    URL: https://github.com/helm/helm/blob/v4.2.1/LICENSE
+    URL: https://github.com/helm/helm/blob/v4.2.4/LICENSE
 
   - k8s.io/api
     License: Apache-2.0
-    URL: https://github.com/kubernetes/api/blob/v0.36.3/LICENSE
+    URL: https://github.com/kubernetes/api/blob/v0.36.4/LICENSE
 
   - k8s.io/apiextensions-apiserver/pkg/apis/apiextensions
     License: Apache-2.0
-    URL: https://github.com/kubernetes/apiextensions-apiserver/blob/v0.36.1/LICENSE
+    URL: https://github.com/kubernetes/apiextensions-apiserver/blob/v0.36.4/LICENSE
 
   - k8s.io/apimachinery/pkg
     License: Apache-2.0
-    URL: https://github.com/kubernetes/apimachinery/blob/v0.36.3/LICENSE
+    URL: https://github.com/kubernetes/apimachinery/blob/v0.36.4/LICENSE
 
   - k8s.io/apiserver/pkg/endpoints/deprecation
     License: Apache-2.0
-    URL: https://github.com/kubernetes/apiserver/blob/v0.36.1/LICENSE
+    URL: https://github.com/kubernetes/apiserver/blob/v0.36.4/LICENSE
 
   - k8s.io/cli-runtime/pkg
     License: Apache-2.0
-    URL: https://github.com/kubernetes/cli-runtime/blob/v0.36.2/LICENSE
+    URL: https://github.com/kubernetes/cli-runtime/blob/v0.36.4/LICENSE
 
   - k8s.io/client-go
     License: Apache-2.0
-    URL: https://github.com/kubernetes/client-go/blob/v0.36.3/LICENSE
+    URL: https://github.com/kubernetes/client-go/blob/v0.36.4/LICENSE
 
   - k8s.io/component-base/version
     License: Apache-2.0
-    URL: https://github.com/kubernetes/component-base/blob/v0.36.1/LICENSE
+    URL: https://github.com/kubernetes/component-base/blob/v0.36.4/LICENSE
 
   - k8s.io/klog/v2
     License: Apache-2.0
@@ -1172,11 +1172,11 @@ BSD LICENSED DEPENDENCIES
 
   - k8s.io/apimachinery/third_party/forked/golang
     License: BSD-3-Clause
-    URL: https://github.com/kubernetes/apimachinery/blob/v0.36.3/third_party/forked/golang/LICENSE
+    URL: https://github.com/kubernetes/apimachinery/blob/v0.36.4/third_party/forked/golang/LICENSE
 
   - k8s.io/client-go/third_party/forked/golang/template
     License: BSD-3-Clause
-    URL: https://github.com/kubernetes/client-go/blob/v0.36.3/third_party/forked/golang/LICENSE
+    URL: https://github.com/kubernetes/client-go/blob/v0.36.4/third_party/forked/golang/LICENSE
 
   - k8s.io/kube-openapi/pkg/internal/third_party/go-json-experiment/json
     License: BSD-3-Clause
@@ -2266,7 +2266,7 @@ MIT LICENSED DEPENDENCIES
 
   - k8s.io/client-go/third_party/forked/httpcache
     License: MIT
-    URL: https://github.com/kubernetes/client-go/blob/v0.36.3/third_party/forked/httpcache/LICENSE
+    URL: https://github.com/kubernetes/client-go/blob/v0.36.4/third_party/forked/httpcache/LICENSE
 
   - modernc.org/libc
     License: MIT
