@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,8 +11,10 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 )
@@ -519,16 +522,70 @@ func TestProcessorMergeFile_RejectsUnresolvedMarkers(t *testing.T) {
 	assert.Equal(t, unresolvedContent, string(written))
 }
 
-// Note: mergeFile's os.WriteFile failure branches (writing merged content, or
-// writing conflict markers, back to existingPath) are not covered here.
-// Reaching either requires existingPath to remain a valid, readable regular
-// file through os.ReadFile at the top of mergeFile, then fail specifically at
-// the write step — the "directory already exists at this path" trick used
-// elsewhere (e.g. templating_coverage_test.go's TestWriteFileErrors) does not
-// apply here, since that trick fails at the read step instead for a path
-// mergeFile requires to already be a regular file. Forcing this branch
-// portably would need either a chmod-based permission trick (root/Windows-unsafe,
-// per repo convention) or a new injectable write seam, both out of scope here.
+// TestProcessorMergeFile_ConflictWriteFailurePropagates forces
+// newAtomicWriteFS's underlying WriteFileAtomic to fail via a mock
+// filesystem.FileSystem, and asserts the conflict-markers write failure
+// (mergeFile's first writeFileSecure call) surfaces as ErrFileWrite instead
+// of the conflict succeeding silently. Reaching a real disk write failure at
+// this exact step is impractical to trigger portably (existingPath must
+// remain a valid, readable regular file through the earlier os.ReadFile, then
+// fail specifically at the write) -- see newAtomicWriteFS's doc comment.
+func TestProcessorMergeFile_ConflictWriteFailurePropagates(t *testing.T) {
+	initialContent := "setting: original\n"
+	userContent := "setting: user-change\n"
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+	testRepo.processor.SetMaxChanges(100)
+
+	original := newAtomicWriteFS
+	injectedErr := errors.New("injected write failure")
+	ctrl := gomock.NewController(t)
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().WriteFileAtomic(gomock.Any(), gomock.Any(), gomock.Any()).Return(injectedErr)
+	newAtomicWriteFS = func() filesystem.FileSystem { return mockFS }
+	t.Cleanup(func() { newAtomicWriteFS = original })
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: template-change\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFileWrite)
+}
+
+// TestProcessorMergeFile_CleanWriteFailurePropagates is the clean-merge
+// counterpart of TestProcessorMergeFile_ConflictWriteFailurePropagates: no
+// conflicts, so mergeFile takes its second writeFileSecure call instead.
+func TestProcessorMergeFile_CleanWriteFailurePropagates(t *testing.T) {
+	initialContent := "setting: original\nkey1: v1\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+
+	original := newAtomicWriteFS
+	injectedErr := errors.New("injected write failure")
+	ctrl := gomock.NewController(t)
+	mockFS := filesystem.NewMockFileSystem(ctrl)
+	mockFS.EXPECT().WriteFileAtomic(gomock.Any(), gomock.Any(), gomock.Any()).Return(injectedErr)
+	newAtomicWriteFS = func() filesystem.FileSystem { return mockFS }
+	t.Cleanup(func() { newAtomicWriteFS = original })
+
+	// Template changes a different key: no conflict, so the merge takes the
+	// clean-write path (mergeFile's second writeFileSecure call).
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: original\nkey1: v2\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFileWrite)
+}
 
 // TestProcessorDetermineBaseContent_LoadBaseError covers LoadBase returning a
 // non-nil error (as opposed to the found=true and gitStorage==nil cases
