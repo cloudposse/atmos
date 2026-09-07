@@ -23,6 +23,7 @@ const (
 	flagOutput   = "output"
 	flagAll      = "all"
 	flagAffected = "affected"
+	flagWait     = "wait"
 	// The valueTrue const is the string representation of a set boolean flag.
 	valueTrue = "true"
 )
@@ -125,6 +126,7 @@ func newOperationCommand(name, short string) *cobra.Command {
 // command: the shared selection/affected flags plus operation-specific output and target flags.
 func operationFlagOptions(name string) []flags.Option {
 	options := []flags.Option{
+		flags.WithStringFlag("namespace", "n", "", "Override the component's target Kubernetes namespace."),
 		flags.WithBoolFlag("all", "", false, "Process all Helm components in dependency order."),
 		flags.WithBoolFlag("affected", "", false, "Process affected Helm components in dependency order."),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary)."),
@@ -153,6 +155,24 @@ func operationFlagOptions(name string) []flags.Option {
 		options = append(
 			options,
 			flags.WithStringFlag("target", "", "", "Provision target to deliver to (e.g. a git deployment repository). Defaults to provision.default, otherwise the cluster."),
+			flags.WithStringFlag("on-failure", "", "", "Failure action for the selected operation: uninstall or keep for install; rollback or keep for upgrade."),
+			flags.WithBoolFlag("cleanup-on-failure", "", false, "Remove resources newly created during a failed upgrade."),
+			flags.WithStringFlag(flagWait, "", "", "Wait strategy: watcher, hookOnly, or legacy. A bare --wait selects watcher; deprecated true/false map to watcher/hookOnly."),
+			flags.WithNoOptDefVal(flagWait, "watcher"),
+			flags.WithBoolFlag("wait-for-jobs", "", false, "Wait for Jobs in the release manifest."),
+			flags.WithStringFlag("timeout", "", "", "Helm release-operation timeout (for example, 10m)."),
+			flags.WithIntFlag("history-max", "", cfg.HelmDefaultMaxHistory, "Maximum release revisions to retain; 0 means unlimited."),
+			flags.WithBoolFlag("no-hooks", "", false, "Disable Helm chart hooks."),
+			flags.WithBoolFlag("skip-crds", "", false, "Do not install chart CRDs on first install."),
+		)
+	}
+	if name == "delete" {
+		options = append(
+			options,
+			flags.WithStringFlag(flagWait, "", "", "Wait strategy: watcher, hookOnly, or legacy. A bare --wait selects watcher; deprecated true/false map to watcher/hookOnly."),
+			flags.WithNoOptDefVal(flagWait, "watcher"),
+			flags.WithStringFlag("timeout", "", "", "Helm uninstall timeout (for example, 10m)."),
+			flags.WithBoolFlag("no-hooks", "", false, "Disable Helm chart hooks."),
 		)
 	}
 
@@ -278,7 +298,50 @@ func getOperationFlags(cmd *cobra.Command) map[string]any {
 	if splitFlag := cmd.Flag("split"); splitFlag != nil {
 		result["split"] = splitFlag.Value.String() == valueTrue
 	}
+	if flag := cmd.Flag("namespace"); flag != nil && flag.Changed {
+		result["namespace"] = flag.Value.String()
+	}
+	addLifecycleOperationFlags(cmd, result)
 	return result
+}
+
+func addLifecycleOperationFlags(cmd *cobra.Command, result map[string]any) {
+	boolFlags := map[string]string{
+		"wait-for-jobs":      cfg.HelmWaitJobsSectionName,
+		"cleanup-on-failure": cfg.HelmCleanupOnFailureSectionName,
+	}
+	if flag := cmd.Flag("on-failure"); flag != nil && flag.Changed {
+		result[cfg.HelmOnFailureSectionName] = flag.Value.String()
+	}
+	for flagName, fieldName := range boolFlags {
+		if flag := cmd.Flag(flagName); flag != nil && flag.Changed {
+			result[fieldName] = flag.Value.String() == valueTrue
+		}
+	}
+	if flag := cmd.Flag("no-hooks"); flag != nil && flag.Changed {
+		result[cfg.HelmChartHooksSectionName] = flag.Value.String() != valueTrue
+	}
+	if flag := cmd.Flag("skip-crds"); flag != nil && flag.Changed {
+		if flag.Value.String() == valueTrue {
+			result[cfg.HelmCRDsSectionName] = "skip"
+		} else {
+			result[cfg.HelmCRDsSectionName] = "create"
+		}
+	}
+	stringFlags := map[string]string{
+		flagWait:  cfg.HelmWaitStrategySectionName,
+		"timeout": cfg.HelmTimeoutSectionName,
+	}
+	for flagName, fieldName := range stringFlags {
+		if flag := cmd.Flag(flagName); flag != nil && flag.Changed {
+			result[fieldName] = flag.Value.String()
+		}
+	}
+	if flag := cmd.Flag("history-max"); flag != nil && flag.Changed {
+		if value, err := strconv.Atoi(flag.Value.String()); err == nil {
+			result[cfg.HelmHistoryMaxSectionName] = value
+		}
+	}
 }
 
 func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {

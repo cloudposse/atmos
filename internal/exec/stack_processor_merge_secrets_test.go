@@ -181,6 +181,8 @@ func TestMergeComponentConfigurations_Secrets(t *testing.T) {
 			cfg.HelmfileComponentType,
 			cfg.PackerComponentType,
 			cfg.AnsibleComponentType,
+			cfg.KubernetesComponentType,
+			cfg.HelmComponentType,
 			"script",
 		} {
 			opts := ComponentProcessorOptions{
