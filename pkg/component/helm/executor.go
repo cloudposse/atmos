@@ -115,7 +115,7 @@ func executeSingle(
 		return err
 	}
 
-	componentPath, err := resolveComponentPath(atmosConfig, info)
+	componentPath, err := resolveComponentPath(ctx.GoContext(), atmosConfig, info)
 	if err != nil {
 		return err
 	}
@@ -193,6 +193,9 @@ func runWithHooks(
 	operation Operation,
 	componentPath string,
 ) error {
+	if err := ctx.GoContext().Err(); err != nil {
+		return err
+	}
 	hookSet, err := getHooks(atmosConfig, info)
 	if err != nil {
 		return err
@@ -212,6 +215,9 @@ func runWithHooks(
 	if namespace, ok := ctx.Flags["namespace"].(string); ok && namespace != "" {
 		spec.Namespace = namespace
 	}
+	if dependencyUpdate, ok := ctx.Flags[cfg.HelmDependencyUpdateSectionName].(bool); ok {
+		spec.DependencyUpdate = dependencyUpdate
+	}
 	if operation == OperationApply {
 		spec.LifecycleFlags = ctx.Flags
 	}
@@ -221,6 +227,9 @@ func runWithHooks(
 			return err
 		}
 		emitLifecycleWarnings(spec.Lifecycle.Warnings)
+	}
+	if err := ctx.GoContext().Err(); err != nil {
+		return err
 	}
 	if operation != OperationDelete {
 		if err := setupRepositories(spec.Repositories); err != nil {
@@ -263,16 +272,16 @@ func runOperation(
 		addObjectsToSummary(summary, objects)
 		return summary, err
 	case OperationDiff:
-		diffText, err := runDiff(atmosConfig, info, ctx.Flags, spec)
+		diffText, err := runDiff(ctx.GoContext(), atmosConfig, info, ctx.Flags, spec)
 		summary["diff"] = diffText
 		return summary, err
 	case OperationApply:
-		applySummary, err := deliverApply(atmosConfig, info, ctx.Flags, spec)
+		applySummary, err := deliverApply(ctx.GoContext(), atmosConfig, info, ctx.Flags, spec)
 		mergeSummary(summary, applySummary)
 		emitOperationStatus(OperationApply, summary, err)
 		return summary, err
 	case OperationDelete:
-		err := deleteHelmRelease(spec, info.DryRun)
+		err := deleteHelmRelease(ctx.GoContext(), spec, info.DryRun)
 		summary["release"] = lifecycleSummary(releaseOperationDelete, spec.Lifecycle.Policy)
 		emitOperationStatus(OperationDelete, summary, err)
 		return summary, err
@@ -289,7 +298,7 @@ func emitLifecycleWarnings(warnings []lifecycleWarning) {
 
 // runTemplate renders the chart and writes the manifests per the render options.
 func runTemplate(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, spec *chartSpec) ([]*unstructured.Unstructured, error) {
-	objects, err := renderObjects(spec)
+	objects, err := renderObjects(ctx.GoContext(), spec)
 	if err != nil {
 		return nil, err
 	}
@@ -308,12 +317,13 @@ func runTemplate(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfi
 // The diff is written to the data channel (secrets are redacted) and returned for
 // the CI job summary.
 func runDiff(
+	callerCtx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	flags map[string]any,
 	spec *chartSpec,
 ) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), renderTimeout)
+	ctx, cancel := context.WithTimeout(callerCtx, renderTimeout)
 	defer cancel()
 
 	desired, err := renderChartManifest(ctx, spec)
@@ -321,7 +331,7 @@ func runDiff(
 		return "", err
 	}
 
-	baseline, err := resolveDiffBaseline(atmosConfig, info, flags, spec)
+	baseline, err := resolveDiffBaseline(callerCtx, atmosConfig, info, flags, spec)
 	if err != nil {
 		return "", err
 	}
@@ -343,11 +353,16 @@ func runDiff(
 // flags, in precedence order: --from-manifest (file), --against=target (GitOps),
 // otherwise the deployed release.
 func resolveDiffBaseline(
+	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	flags map[string]any,
 	spec *chartSpec,
 ) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	if path := flagString(flags, flagFromManifest); path != "" {
 		content, err := os.ReadFile(path)
 		if err != nil {
@@ -358,7 +373,7 @@ func resolveDiffBaseline(
 
 	against := flagString(flags, flagAgainst)
 	if against != "" && against != againstRelease {
-		return fetchTargetBaseline(atmosConfig, info, against)
+		return fetchTargetBaseline(ctx, atmosConfig, info, against)
 	}
 
 	return getDeployedManifest(spec.ReleaseName, spec.Namespace)
@@ -368,7 +383,7 @@ func resolveDiffBaseline(
 // target (e.g. the git deployment repository) so a render can be diffed against
 // the live GitOps state offline. The value is "target" (the default/selected
 // target) or "target:<name>".
-func fetchTargetBaseline(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, against string) (string, error) {
+func fetchTargetBaseline(callerCtx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, against string) (string, error) {
 	targetName := ""
 	if _, name, ok := strings.Cut(against, ":"); ok {
 		targetName = name
@@ -383,7 +398,7 @@ func fetchTargetBaseline(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 		return "", fmt.Errorf("%w: --against=target requires a non-cluster provision target such as a git deployment repository", errUtils.ErrHelmDiffFailed)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), deliveryTimeout)
+	ctx, cancel := context.WithTimeout(callerCtx, deliveryTimeout)
 	defer cancel()
 
 	artifact, err := target.Fetch(ctx, selected.Kind, &target.FetchInput{
@@ -434,8 +449,8 @@ func diffContextFromFlags(flags map[string]any) int {
 }
 
 // renderObjects renders the chart to manifest objects (client-side, no cluster).
-func renderObjects(spec *chartSpec) ([]*unstructured.Unstructured, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), renderTimeout)
+func renderObjects(callerCtx context.Context, spec *chartSpec) ([]*unstructured.Unstructured, error) {
+	ctx, cancel := context.WithTimeout(callerCtx, renderTimeout)
 	defer cancel()
 
 	rendered, err := renderChartManifest(ctx, spec)
@@ -582,13 +597,13 @@ func operationContactsCluster(operation Operation, flags map[string]any) bool {
 	}
 }
 
-func resolveComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
+func resolveComponentPath(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
 	initialPath, err := u.GetComponentPath(atmosConfig, cfg.HelmComponentType, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return "", errors.Join(errUtils.ErrPathResolution, fmt.Errorf("component path: %w", err))
 	}
 
-	provisionCtx, cancel := context.WithTimeout(context.Background(), renderTimeout)
+	provisionCtx, cancel := context.WithTimeout(ctx, renderTimeout)
 	defer cancel()
 	path, _, err := provisionAndResolveComponentPath(provisionCtx, atmosConfig, info, cfg.HelmComponentType, initialPath)
 	return path, err
@@ -701,13 +716,14 @@ func helmSummary(info *schema.ConfigAndStacksInfo, spec *chartSpec, flags map[st
 		target = value
 	}
 	return map[string]any{
-		"component":    info.ComponentFromArg,
-		"stack":        info.Stack,
-		"command":      info.SubCommand,
-		"chart":        spec.Chart,
-		"release_name": spec.ReleaseName,
-		"namespace":    spec.Namespace,
-		"target":       target,
+		"component":         info.ComponentFromArg,
+		"stack":             info.Stack,
+		"command":           info.SubCommand,
+		"chart":             spec.Chart,
+		"release_name":      spec.ReleaseName,
+		"namespace":         spec.Namespace,
+		"target":            target,
+		"dependency_update": spec.DependencyUpdate,
 	}
 }
 
