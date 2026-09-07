@@ -367,7 +367,7 @@ func createInitUI() (*ui.InitUI, error) {
 }
 
 // selectTemplate handles template selection, either from argument or interactively.
-func selectTemplate(templateName string, interactive bool, initUI *ui.InitUI, configs map[string]templates.Configuration, ref string) (templates.Configuration, error) {
+func selectTemplate(templateName string, interactive bool, initUI InitUI, configs map[string]templates.Configuration, ref string) (templates.Configuration, error) {
 	// If template name is provided, use it directly.
 	if templateName != "" {
 		config, exists := configs[templateName]
@@ -397,7 +397,7 @@ func selectTemplate(templateName string, interactive bool, initUI *ui.InitUI, co
 }
 
 // runInitExecution executes the init with the selected template and target directory.
-func runInitExecution(initUI *ui.InitUI, selectedConfig *templates.Configuration, opts *initOptions) (string, error) {
+func runInitExecution(initUI InitUI, selectedConfig *templates.Configuration, opts *initOptions) (string, error) {
 	// If target directory is empty, use interactive flow; otherwise use normal Execute.
 	if opts.targetDir == "" {
 		return runInitInteractiveFlow(initUI, selectedConfig, opts)
@@ -408,7 +408,7 @@ func runInitExecution(initUI *ui.InitUI, selectedConfig *templates.Configuration
 // runInitInteractiveFlow handles init when no target directory was provided,
 // prompting the user for one (and optionally offering a 3-way-merge update
 // instead of failing when it already exists and is non-empty).
-func runInitInteractiveFlow(initUI *ui.InitUI, selectedConfig *templates.Configuration, opts *initOptions) (string, error) {
+func runInitInteractiveFlow(initUI InitUI, selectedConfig *templates.Configuration, opts *initOptions) (string, error) {
 	if !opts.interactive {
 		return "", fmt.Errorf("%w: target directory is required in non-interactive mode", errUtils.ErrInitialization)
 	}
@@ -463,7 +463,7 @@ type interactiveInitBaseRef struct {
 // up git storage when update is true), so this is a no-op passthrough that
 // still lets the interactive flow prompt for the target itself.
 func resolveInteractiveInitBaseRef(
-	initUI *ui.InitUI,
+	initUI InitUI,
 	selectedConfig *templates.Configuration,
 	opts *initOptions,
 ) (interactiveInitBaseRef, error) {
@@ -485,7 +485,7 @@ func resolveInteractiveInitBaseRef(
 
 // runInitTargetedFlow handles init when a target directory was provided
 // (offering the same 3-way-merge update fallback as the interactive flow).
-func runInitTargetedFlow(initUI *ui.InitUI, selectedConfig *templates.Configuration, opts *initOptions) (string, error) {
+func runInitTargetedFlow(initUI InitUI, selectedConfig *templates.Configuration, opts *initOptions) (string, error) {
 	err := initUI.ExecuteWithBaseRef(selectedConfig, opts.targetDir, opts.force, opts.update, !opts.interactive, opts.baseRef, opts.templateVars)
 	offer, retryBaseRef, offerErr := shouldOfferUpdate(err, opts, opts.targetDir)
 	if offerErr != nil {
