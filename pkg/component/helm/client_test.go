@@ -141,6 +141,27 @@ func TestConfigureReleaseLifecycleActions(t *testing.T) {
 	assert.True(t, uninstall.DryRun)
 }
 
+func TestReleaseOperationErrorIncludesEffectivePolicy(t *testing.T) {
+	cause := context.DeadlineExceeded
+	err := releaseOperationError("upgrade", &chartSpec{
+		ReleaseName: "demo",
+		Namespace:   "apps",
+		Lifecycle: releaseLifecycleResolution{Policy: effectiveReleasePolicy{
+			WaitStrategy: kube.StatusWatcherStrategy,
+			Timeout:      7 * time.Minute,
+		}, TimeoutField: "release.upgrade.timeout"},
+	}, cause)
+
+	require.ErrorIs(t, err, errUtils.ErrHelmReleaseOperation)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.True(t, errUtils.HasContext(err, "operation", "upgrade"))
+	assert.True(t, errUtils.HasContext(err, "release", "demo"))
+	assert.True(t, errUtils.HasContext(err, "namespace", "apps"))
+	assert.True(t, errUtils.HasContext(err, "wait_strategy", "watcher"))
+	assert.True(t, errUtils.HasContext(err, "timeout", "7m0s"))
+	assert.True(t, errUtils.HasContext(err, "timeout_field", "release.upgrade.timeout"))
+}
+
 func TestClusterOperationsReturnActionContextErrors(t *testing.T) {
 	original := newActionContext
 	t.Cleanup(func() { newActionContext = original })
@@ -159,7 +180,7 @@ func TestClusterOperationsReturnActionContextErrors(t *testing.T) {
 	_, err = getDeployedManifest("nginx", "apps")
 	require.ErrorIs(t, err, sentinel)
 
-	err = deleteRelease(spec, false)
+	err = deleteRelease(context.Background(), spec, false)
 	require.ErrorIs(t, err, sentinel)
 }
 
@@ -173,8 +194,10 @@ func TestInstallAndUpgradeReleaseLocateChartErrors(t *testing.T) {
 	_, err := installRelease(context.Background(), actx, spec, true)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `failed to locate Helm chart "missing-chart"`)
+	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 
 	_, err = upgradeRelease(context.Background(), actx, spec, true)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `failed to locate Helm chart "missing-chart"`)
+	assert.ErrorIs(t, err, errUtils.ErrHelmRenderFailed)
 }

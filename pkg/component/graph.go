@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -36,8 +37,17 @@ type GraphExecutionOptions struct {
 	SubCommand    string
 	Flags         map[string]any
 	Selection     *GraphSelection
+	ReverseOrder  bool
 }
 
+// GraphNodeSkipObserver is implemented by providers that need to record graph
+// nodes skipped after execution stops before reaching them.
+type GraphNodeSkipObserver interface {
+	OnGraphNodeSkipped(node *dependency.Node)
+}
+
+// ExecuteGraph runs selected components in dependency order and stops before
+// starting another component when the caller context is canceled.
 func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
 	defer perf.Track(nil, "component.ExecuteGraph")()
 
@@ -56,20 +66,43 @@ func ExecuteGraph(ctx context.Context, opts *GraphExecutionOptions) error {
 		return nil
 	}
 
-	log.Info("Processing components in dependency order", "component_type", opts.ComponentType, "count", len(order))
+	orderName := "dependency"
+	if opts.ReverseOrder {
+		orderName = "reverse_dependency"
+	}
+	log.Info("Processing components", "component_type", opts.ComponentType, "order", orderName, "count", len(order))
 	for i := range order {
 		select {
 		case <-ctx.Done():
+			notifyGraphNodeSkips(opts.Provider, order[i:])
 			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, ctx.Err())
 		default:
 		}
 
-		if err := executeGraphNode(opts, &order[i]); err != nil {
+		if err := executeGraphNode(ctx, opts, &order[i]); err != nil {
+			notifyGraphNodeSkips(opts.Provider, order[i+1:])
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, errors.Join(ctxErr, err))
+			}
 			return err
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			notifyGraphNodeSkips(opts.Provider, order[i+1:])
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGraphExecutionCanceled, ctxErr)
 		}
 	}
 
 	return nil
+}
+
+func notifyGraphNodeSkips(provider ComponentProvider, nodes dependency.ExecutionOrder) {
+	observer, ok := provider.(GraphNodeSkipObserver)
+	if !ok {
+		return
+	}
+	for i := range nodes {
+		observer.OnGraphNodeSkipped(&nodes[i])
+	}
 }
 
 // prepareExecutionOrder validates options, builds and filters the graph, and returns
@@ -99,11 +132,20 @@ func prepareExecutionOrder(opts *GraphExecutionOptions) (dependency.ExecutionOrd
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrTopologicalOrder, err)
 	}
+	if opts.ReverseOrder {
+		reverseExecutionOrder(order)
+	}
 	return order, nil
 }
 
+func reverseExecutionOrder(order dependency.ExecutionOrder) {
+	for left, right := 0, len(order)-1; left < right; left, right = left+1, right-1 {
+		order[left], order[right] = order[right], order[left]
+	}
+}
+
 // executeGraphNode executes a single graph node through the component provider.
-func executeGraphNode(opts *GraphExecutionOptions, node *dependency.Node) error {
+func executeGraphNode(ctx context.Context, opts *GraphExecutionOptions, node *dependency.Node) error {
 	nodeInfo := *opts.Info
 	nodeInfo.ComponentType = opts.ComponentType
 	nodeInfo.ComponentFromArg = node.Component
@@ -113,8 +155,25 @@ func executeGraphNode(opts *GraphExecutionOptions, node *dependency.Node) error 
 	nodeInfo.SubCommand = opts.SubCommand
 	nodeInfo.All = false
 	nodeInfo.Affected = false
+	nodeInfo.Query = ""
+	nodeInfo.Components = nil
+	nodeInfo.Tags = nil
+	nodeInfo.Labels = nil
+
+	// Selection flags belong to the outer graph dispatch. Passing them to a node
+	// can make providers treat the node as another bulk invocation and recurse.
+	nodeFlags := make(map[string]any, len(opts.Flags))
+	for key, value := range opts.Flags {
+		switch key {
+		case "all", "affected", "components", "query", "tags", "labels", "include-dependents":
+			continue
+		default:
+			nodeFlags[key] = value
+		}
+	}
 
 	if err := opts.Provider.Execute(&ExecutionContext{
+		Context:             ctx,
 		AtmosConfig:         opts.AtmosConfig,
 		ComponentType:       opts.ComponentType,
 		Component:           node.Component,
@@ -123,7 +182,7 @@ func executeGraphNode(opts *GraphExecutionOptions, node *dependency.Node) error 
 		SubCommand:          opts.SubCommand,
 		ComponentConfig:     node.Metadata,
 		ConfigAndStacksInfo: nodeInfo,
-		Flags:               opts.Flags,
+		Flags:               nodeFlags,
 	}); err != nil {
 		return fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrComponentExecutionFailed, node.Component, node.Stack, err)
 	}

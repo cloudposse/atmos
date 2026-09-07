@@ -19,6 +19,7 @@ import (
 // fakeTarget is a registrable provision target that records what it received and
 // can be told to fail. It implements both Provisioner and Fetcher.
 type fakeTarget struct {
+	deliverCtx    context.Context
 	delivered     *target.DeliverInput
 	fetched       *target.FetchInput
 	deliverErr    error
@@ -26,9 +27,31 @@ type fakeTarget struct {
 	fetchErr      error
 }
 
-func (f *fakeTarget) Deliver(_ context.Context, in *target.DeliverInput) error {
+func (f *fakeTarget) Deliver(ctx context.Context, in *target.DeliverInput) error {
+	f.deliverCtx = ctx
 	f.delivered = in
 	return f.deliverErr
+}
+
+func TestDeliverApplyPropagatesCallerContextToExternalTarget(t *testing.T) {
+	ft := &fakeTarget{}
+	registerFakeTarget(t, "helm-context-external", ft)
+	stubRenderChartManifest(t, helmExecutorManifest, nil)
+	type contextKey struct{}
+	ctx := context.WithValue(context.Background(), contextKey{}, "caller")
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{
+		"provision": map[string]any{
+			"default": "deploy-repo",
+			"targets": map[string]any{
+				"deploy-repo": map[string]any{"kind": "helm-context-external"},
+			},
+		},
+	}}
+
+	_, err := deliverApply(ctx, &schema.AtmosConfiguration{}, info, map[string]any{}, &chartSpec{})
+	require.NoError(t, err)
+	require.NotNil(t, ft.deliverCtx)
+	assert.Equal(t, "caller", ft.deliverCtx.Value(contextKey{}))
 }
 
 func (f *fakeTarget) Fetch(_ context.Context, in *target.FetchInput) (target.ProvisionArtifact, error) {
@@ -40,6 +63,21 @@ func (f *fakeTarget) Fetch(_ context.Context, in *target.FetchInput) (target.Pro
 func registerFakeTarget(t *testing.T, kind string, ft *fakeTarget) {
 	t.Helper()
 	target.Register(kind, ft)
+}
+
+func rejectHelmApplyProgressCreation(t *testing.T) {
+	t.Helper()
+	original := newHelmApplyProgress
+	newHelmApplyProgress = func(
+		_ *schema.ConfigAndStacksInfo,
+		_ *chartSpec,
+		_ string,
+		_ bool,
+	) *helmOperationProgress {
+		t.Error("native Helm progress must not be created before Kubernetes target selection")
+		return nil
+	}
+	t.Cleanup(func() { newHelmApplyProgress = original })
 }
 
 func stubRenderChartManifest(t *testing.T, manifest string, err error) {
@@ -59,7 +97,7 @@ func TestDeliverToExternalTarget_DeliversRenderedManifests(t *testing.T) {
 	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "apps/app", Stack: "dev"}
 	selected := &target.SelectedTarget{Name: "deploy-repo", Kind: "helm-external-test", Config: map[string]any{}}
 
-	summary, err := deliverToExternalTarget(&schema.AtmosConfiguration{}, info, selected, &chartSpec{Chart: "demo"}, map[string]any{})
+	summary, err := deliverToExternalTarget(context.Background(), &schema.AtmosConfiguration{}, info, selected, &chartSpec{Chart: "demo"}, map[string]any{})
 	require.NoError(t, err)
 
 	require.NotNil(t, ft.delivered)
@@ -79,6 +117,7 @@ func TestDeliverToExternalTarget_RenderError(t *testing.T) {
 	stubRenderChartManifest(t, "", errors.New("render boom"))
 
 	_, err := deliverToExternalTarget(
+		context.Background(),
 		&schema.AtmosConfiguration{},
 		&schema.ConfigAndStacksInfo{},
 		&target.SelectedTarget{Name: "deploy-repo", Kind: "helm-external-test"},
@@ -95,6 +134,7 @@ func TestDeliverToExternalTarget_DeliverError(t *testing.T) {
 	stubRenderChartManifest(t, helmExecutorManifest, nil)
 
 	_, err := deliverToExternalTarget(
+		context.Background(),
 		&schema.AtmosConfiguration{},
 		&schema.ConfigAndStacksInfo{ComponentFromArg: "apps/app"},
 		&target.SelectedTarget{Name: "deploy-repo", Kind: "helm-external-err"},
@@ -109,6 +149,7 @@ func TestDeliverToExternalTarget_DeliverError(t *testing.T) {
 // SelectTarget resolves the configured default to a non-Kubernetes kind, which
 // is delivered via deliverToExternalTarget.
 func TestDeliverApply_RoutesToExternalTarget(t *testing.T) {
+	rejectHelmApplyProgressCreation(t)
 	ft := &fakeTarget{}
 	registerFakeTarget(t, "helm-apply-external", ft)
 	stubRenderChartManifest(t, helmExecutorManifest, nil)
@@ -126,7 +167,7 @@ func TestDeliverApply_RoutesToExternalTarget(t *testing.T) {
 		},
 	}
 
-	summary, err := deliverApply(&schema.AtmosConfiguration{}, info, map[string]any{}, &chartSpec{Chart: "demo"})
+	summary, err := deliverApply(context.Background(), &schema.AtmosConfiguration{}, info, map[string]any{}, &chartSpec{Chart: "demo"})
 	require.NoError(t, err)
 	assert.Equal(t, "deploy-repo", summary[targetKey])
 	assert.Equal(t, map[string]any{"applied": false, "target_kind": "helm-apply-external", "reason": "external_target"}, summary["release"])
@@ -144,7 +185,7 @@ func TestDeliverApply_RejectsLifecycleFlagsForExternalTarget(t *testing.T) {
 		},
 	}}
 
-	summary, err := deliverApply(&schema.AtmosConfiguration{}, info, map[string]any{
+	summary, err := deliverApply(context.Background(), &schema.AtmosConfiguration{}, info, map[string]any{
 		cfg.HelmTimeoutSectionName: "10m",
 	}, &chartSpec{})
 	require.ErrorIs(t, err, errUtils.ErrHelmLifecycleExternalTarget)
@@ -156,7 +197,11 @@ func TestDeliverApply_PropagatesDryRunToKubernetesTarget(t *testing.T) {
 	t.Cleanup(func() { applyHelmRelease = originalApply })
 
 	var receivedDryRun bool
-	applyHelmRelease = func(_ context.Context, _ *chartSpec, dryRun bool) (releaseActionResult, error) {
+	type contextKey struct{}
+	callerCtx := context.WithValue(context.Background(), contextKey{}, "caller")
+	var receivedCtx context.Context
+	applyHelmRelease = func(ctx context.Context, _ *chartSpec, dryRun bool) (releaseActionResult, error) {
+		receivedCtx = ctx
 		receivedDryRun = dryRun
 		return releaseActionResult{Manifest: helmExecutorManifest, Operation: releaseOperationInstall}, nil
 	}
@@ -165,9 +210,10 @@ func TestDeliverApply_PropagatesDryRunToKubernetesTarget(t *testing.T) {
 		DryRun:           true,
 		ComponentSection: map[string]any{},
 	}
-	summary, err := deliverApply(&schema.AtmosConfiguration{}, info, map[string]any{}, &chartSpec{Chart: "demo"})
+	summary, err := deliverApply(callerCtx, &schema.AtmosConfiguration{}, info, map[string]any{}, &chartSpec{Chart: "demo"})
 	require.NoError(t, err)
 	assert.True(t, receivedDryRun)
+	assert.Equal(t, "caller", receivedCtx.Value(contextKey{}))
 	assert.Equal(t, "cluster", summary[targetKey])
 }
 
@@ -206,8 +252,10 @@ func TestLifecycleSummary(t *testing.T) {
 }
 
 func TestDeliverApply_SelectTargetError(t *testing.T) {
+	rejectHelmApplyProgressCreation(t)
 	// An explicitly requested target that is not configured fails to resolve.
 	_, err := deliverApply(
+		context.Background(),
 		&schema.AtmosConfiguration{},
 		&schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
 		map[string]any{"target": "does-not-exist"},
