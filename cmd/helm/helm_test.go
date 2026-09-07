@@ -37,12 +37,15 @@ func TestCommandProviderMetadata(t *testing.T) {
 
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	templateCmd := newOperationCommand("template", "Render")
-	for _, name := range []string{"all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels"} {
+	for _, name := range []string{"namespace", "all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels"} {
 		assert.NotNil(t, templateCmd.Flag(name), "expected template flag %q", name)
 	}
 
 	applyCmd := newOperationCommand("apply", "Apply")
-	assert.NotNil(t, applyCmd.Flag("target"))
+	for _, name := range []string{"namespace", "target", "on-failure", "cleanup-on-failure", "wait", "wait-for-jobs", "timeout", "history-max", "no-hooks", "skip-crds"} {
+		assert.NotNil(t, applyCmd.Flag(name), "expected apply flag %q", name)
+	}
+	assert.Equal(t, "watcher", applyCmd.Flag("wait").NoOptDefVal)
 	assert.Nil(t, applyCmd.Flag("output"))
 	assert.Nil(t, applyCmd.Flag("split"))
 	assert.NotNil(t, applyCmd.ValidArgsFunction)
@@ -51,6 +54,13 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 
 	// template does not get --target; apply/deploy do.
 	assert.Nil(t, templateCmd.Flag("target"))
+	assert.Nil(t, templateCmd.Flag("wait"))
+
+	deleteCmd := newOperationCommand("delete", "Delete")
+	for _, name := range []string{"namespace", "wait", "timeout", "no-hooks"} {
+		assert.NotNil(t, deleteCmd.Flag(name), "expected delete flag %q", name)
+	}
+	assert.Nil(t, deleteCmd.Flag("on-failure"))
 
 	// diff/plan get the baseline-selection flags; other operations do not.
 	for _, opName := range []string{"diff", "plan"} {
@@ -61,6 +71,67 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	}
 	assert.Nil(t, applyCmd.Flag("against"))
 	assert.Nil(t, templateCmd.Flag("from-manifest"))
+}
+
+func TestBareWaitDoesNotConsumeComponentArgument(t *testing.T) {
+	for _, operation := range []string{"apply", "deploy", "delete"} {
+		t.Run(operation, func(t *testing.T) {
+			cmd := newOperationCommand(operation, operation)
+			require.NoError(t, cmd.ParseFlags([]string{"--wait", "app"}))
+			assert.Equal(t, "watcher", cmd.Flag("wait").Value.String())
+			assert.Equal(t, []string{"app"}, cmd.Flags().Args())
+		})
+	}
+}
+
+func TestGetOperationFlagsIncludesOnlyExplicitLifecycleFlags(t *testing.T) {
+	cmd := configuredOperationCommand(t, "apply", map[string]string{
+		"namespace":          "incident-ns",
+		"on-failure":         "rollback",
+		"cleanup-on-failure": "true",
+		"wait":               "legacy",
+		"wait-for-jobs":      "true",
+		"timeout":            "15m",
+		"history-max":        "0",
+		"no-hooks":           "true",
+		"skip-crds":          "true",
+	})
+
+	actual := getOperationFlags(cmd)
+	assert.Equal(t, "incident-ns", actual["namespace"])
+	assert.Equal(t, "rollback", actual[cfg.HelmOnFailureSectionName])
+	assert.Equal(t, true, actual[cfg.HelmCleanupOnFailureSectionName])
+	assert.Equal(t, "legacy", actual[cfg.HelmWaitStrategySectionName])
+	assert.Equal(t, true, actual[cfg.HelmWaitJobsSectionName])
+	assert.Equal(t, "15m", actual[cfg.HelmTimeoutSectionName])
+	assert.Equal(t, 0, actual[cfg.HelmHistoryMaxSectionName])
+	assert.Equal(t, false, actual[cfg.HelmChartHooksSectionName])
+	assert.Equal(t, "skip", actual[cfg.HelmCRDsSectionName])
+
+	defaults := getOperationFlags(newOperationCommand("apply", "Apply"))
+	assert.NotContains(t, defaults, "namespace")
+	for _, key := range []string{
+		cfg.HelmOnFailureSectionName,
+		cfg.HelmCleanupOnFailureSectionName,
+		cfg.HelmWaitStrategySectionName,
+		cfg.HelmWaitJobsSectionName,
+		cfg.HelmTimeoutSectionName,
+		cfg.HelmHistoryMaxSectionName,
+		cfg.HelmChartHooksSectionName,
+		cfg.HelmCRDsSectionName,
+	} {
+		assert.NotContains(t, defaults, key)
+	}
+}
+
+func TestOnFailureFlagUsesSingleActionAndCanClear(t *testing.T) {
+	cmd := newOperationCommand("apply", "Apply")
+	require.NoError(t, cmd.ParseFlags([]string{"--on-failure=rollback"}))
+	assert.Equal(t, "rollback", getOperationFlags(cmd)[cfg.HelmOnFailureSectionName])
+
+	cleared := newOperationCommand("apply", "Apply")
+	require.NoError(t, cleared.ParseFlags([]string{"--on-failure="}))
+	assert.Empty(t, getOperationFlags(cleared)[cfg.HelmOnFailureSectionName])
 }
 
 func TestSelectionFlagsAndComponentCompletion(t *testing.T) {
@@ -245,6 +316,31 @@ func TestRunOperationBuildsExecutionContext(t *testing.T) {
 	assert.Equal(t, []string{"app"}, provider.ctx.Args)
 	assert.Equal(t, "target", provider.ctx.Flags["against"])
 	assert.Equal(t, 5, provider.ctx.Flags["context"])
+}
+
+func TestRunOperationBuildsApplyDryRunExecutionContext(t *testing.T) {
+	provider := &capturingHelmProvider{}
+	originalProviders := component.ListProviders()
+	require.NoError(t, component.Register(provider))
+	t.Cleanup(func() {
+		component.Reset()
+		for _, providers := range originalProviders {
+			for _, original := range providers {
+				require.NoError(t, component.Register(original))
+			}
+		}
+	})
+
+	cmd := newOperationCommand("apply", "Apply")
+	cmd.Flags().Bool("dry-run", false, "")
+	cmd.Flags().String("stack", "", "")
+	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+
+	require.NoError(t, runOperation(cmd, "apply", []string{"app"}))
+	require.NotNil(t, provider.ctx)
+	assert.Equal(t, "apply", provider.ctx.SubCommand)
+	assert.True(t, provider.ctx.ConfigAndStacksInfo.DryRun)
 }
 
 type capturingHelmProvider struct {
