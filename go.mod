@@ -145,8 +145,8 @@ require (
 	gopkg.in/ini.v1 v1.67.3
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	helm.sh/helm/v4 v4.2.1
-	k8s.io/client-go v0.36.3
+	helm.sh/helm/v4 v4.2.4
+	k8s.io/client-go v0.36.4
 	modernc.org/sqlite v1.50.1
 	mvdan.cc/sh/v3 v3.13.1
 	sigs.k8s.io/kustomize/api v0.21.1
@@ -457,7 +457,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	inet.af/netaddr v0.0.0-20230525184311-b8eac61e914a // indirect
-	k8s.io/apimachinery v0.36.3
+	k8s.io/apimachinery v0.36.4
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af // indirect
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
@@ -483,7 +483,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources v1.2.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage/v4 v4.1.0
 	github.com/cli/go-gh/v2 v2.16.0
-	github.com/databus23/helm-diff/v3 v3.15.10
+	github.com/databus23/helm-diff/v3 v3.15.12
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/magefile/mage v1.17.2
 	github.com/minamijoyo/hcledit v0.2.18
@@ -603,11 +603,11 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
-	k8s.io/api v0.36.3 // indirect
-	k8s.io/apiextensions-apiserver v0.36.1 // indirect
-	k8s.io/apiserver v0.36.1 // indirect
-	k8s.io/cli-runtime v0.36.2 // indirect
-	k8s.io/component-base v0.36.1 // indirect
+	k8s.io/api v0.36.4 // indirect
+	k8s.io/apiextensions-apiserver v0.36.4 // indirect
+	k8s.io/apiserver v0.36.4 // indirect
+	k8s.io/cli-runtime v0.36.4 // indirect
+	k8s.io/component-base v0.36.4 // indirect
 	k8s.io/kubectl v0.36.1 // indirect
 )
 
