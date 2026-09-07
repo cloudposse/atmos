@@ -1,8 +1,6 @@
 package helm
 
 import (
-	"context"
-
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
@@ -44,7 +42,7 @@ func executeBulk(
 		return err
 	}
 
-	return executeGraph(context.Background(), &component.GraphExecutionOptions{
+	return executeGraph(ctx.GoContext(), &component.GraphExecutionOptions{
 		Provider:      &ComponentProvider{},
 		AtmosConfig:   atmosConfig,
 		Info:          info,
