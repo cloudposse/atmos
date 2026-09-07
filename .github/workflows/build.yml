@@ -54,13 +54,24 @@ jobs:
           # not zero egress. Stays audit until a real run can be sampled.
           egress-policy: audit
 
-      # mislav/bump-homebrew-formula-action is broken: GitHub now returns HTTP 303
-      # instead of 302 for tarball redirects and the action only accepts 302.
-      # See https://github.com/mislav/bump-homebrew-formula-action/issues/340
-      - uses: dawidd6/action-homebrew-bump-formula@1446dca236b0440c6f02723a3f14f13be2c04ab0 # v7
-        with:
-          token: ${{ secrets.GH_BOT_TOKEN }}
-          formula: atmos
+      # dawidd6/action-homebrew-bump-formula wraps `brew bump-formula-pr`, but its
+      # Ruby git helper calls Homebrew's `safe_system`, which the Homebrew 5.x now
+      # on GitHub runners no longer exposes to the module scope, so the action dies
+      # with "undefined method 'safe_system' for module Homebrew". Upstream reverted
+      # their Homebrew-5 fix, so bumping the pin to v8 does not help (identical
+      # code). Call the wrapped command directly instead - it is unaffected by the
+      # wrapper bug. atmos lives in Homebrew/homebrew-core; bump-formula-pr forks it
+      # under the bot and opens the version-bump PR. HOMEBREW_NO_INSTALL_FROM_API
+      # forces brew to use the cloned core tap so the formula file is editable.
+      - name: "Bump Homebrew formula"
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GH_BOT_TOKEN }}
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_FROM_API: "1"
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          brew bump-formula-pr --no-browse --no-audit --version="${TAG#v}" atmos
 
   docker:
     name: "Build and push Docker image for Atmos CLI"
@@ -210,7 +221,12 @@ jobs:
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
-          args: release --clean
+          # This job runs on `release: published`, so the GitHub Release already
+          # exists with its assets from the draft build. `--skip=publish` rebuilds
+          # dist/* locally for provenance attestation without re-PATCHing the
+          # release; without it GoReleaser tries to update target_commitish, which
+          # GitHub rejects on a published release (422 Validation Failed).
+          args: release --clean --skip=publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
