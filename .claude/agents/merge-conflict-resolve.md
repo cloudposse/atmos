@@ -73,6 +73,43 @@ safe, reversible), then report clearly for human attention: which file(s), what 
 trying to do, and why you didn't attempt a resolution. The calling skill will invoke the `say`
 skill for you.
 
+## Step 3: a pre-commit hook can still block a clean merge
+
+Conflicts resolving cleanly doesn't mean `git commit` succeeds — a merge commit's diff spans both
+parents, so a pre-commit hook scoped to "affected"/changed files can flag content neither side of
+*this* merge actually introduced (it was already sitting on one parent, just never a diff before).
+Never reach for `--no-verify` to get past this — CLAUDE.md's hard ban still applies to a merge
+commit. Handle each hook on its own terms instead:
+
+- **`Detect hardcoded secrets` (gitleaks) false positive:** confirm it's a false positive first —
+  find the flagged file's content on both `HEAD` (pre-merge) and the merge target with `git show
+  <ref>:<path>`; if it's identical on a side that already has this content committed, it's
+  pre-existing, not something this merge added. Gitleaks prints a `Fingerprint:
+  <file>:<rule-id>:<line>` for every finding — add that exact string as a new line in a
+  `.gitleaksignore` file at the repo root (create it if missing, one fingerprint per line, `#`
+  comments allowed) with a one-line comment explaining why it's a false positive. This file is
+  read directly off disk by the `gitleaks` CLI, not from the git index, so it takes effect
+  immediately even before it's staged — commit it once the merge itself is unblocked (a small
+  separate commit is fine; it doesn't need to ride in the merge commit itself).
+- **`golangci-lint` says the `custom-gcl` binary is missing or stale:** this is a tooling
+  precondition, not a lint finding — build it yourself first with `go tool mage lint:customGCL`
+  ([`lint` skill](../skills/lint/SKILL.md) has the full context), then retry the commit. The
+  pre-commit hook must only *run* the prebuilt binary, never build it in-hook — building it
+  yourself beforehand, out-of-band, is the correct fix.
+- **`atmos-validate-editorconfig` (or any other affected-file hook) fails on content that is
+  byte-identical to what's already committed on one side (check with `git show <ref>:<path>` the
+  same way as the gitleaks case):** this is CLAUDE.md's "pre-commit hooks fail due to files you
+  didn't touch" case verbatim — don't silently fix it and don't bypass it. Ask the user how they
+  want it handled (fix the pre-existing issue as part of finishing the merge, or leave the merge
+  staged for them). Only make the edit yourself once they've said so.
+- **A transient `Unable to create '.../index.lock': File exists` on `git commit` or
+  `git write-tree`, where the lock file is gone by the time you check (`ls` the path immediately
+  after the failure) and no process holds it (`lsof <path>`):** this is a race with another process
+  briefly touching the index (an editor, a file watcher, another session), not a stale lock left
+  behind by a crash. Simply retry the commit; don't `rm` a lock file that still exists when you
+  check, and don't retry more than a few times in a tight loop before treating it as a real stuck
+  lock worth reporting.
+
 ## Guardrails (CLAUDE.md, mandatory)
 
 - Never touch `.github/workflows/**`, `Makefile`, `go.mod`, `go.sum` — if a conflict is in one of
