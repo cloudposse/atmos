@@ -29,6 +29,7 @@ var (
 	ErrInvalidErrorMode                      = errors.New("invalid error mode")
 	ErrParseFile                             = errors.New("failed to parse file")
 	ErrParseURL                              = errors.New("failed to parse URL")
+	ErrParseHexColor                         = errors.New("failed to parse hex color")
 	ErrInvalidURL                            = errors.New("invalid URL")
 	ErrCreateDownloadClient                  = errors.New("failed to create download client")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
@@ -46,6 +47,9 @@ var (
 	ErrValidPackage                          = errors.New("no valid installer package provided for")
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
 	ErrTUIRun                                = errors.New("failed to run TUI")
+	ErrStdoutPipe                            = errors.New("failed to get stdout pipe")
+	ErrStderrPipe                            = errors.New("failed to get stderr pipe")
+	ErrCommandStart                          = errors.New("failed to start command")
 	ErrUIFormatterNotInitialized             = errors.New("ui formatter not initialized")
 	ErrMarkdownRendererInit                  = errors.New("failed to initialize markdown renderer")
 	ErrMarkdownRender                        = errors.New("failed to render markdown content")
@@ -114,6 +118,7 @@ var (
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
+	ErrUnexpectedModelType                   = errors.New("unexpected model type")
 	ErrSpinnerOperationInterrupted           = errors.New("operation was interrupted")
 
 	// Version Tracker errors.
@@ -160,6 +165,7 @@ var (
 	ErrUnknownHelpTopic       = errors.New("unknown help topic")
 	ErrTTYRequired            = errors.New("requires a TTY")
 	ErrInvalidAuthManagerType = errors.New("invalid authManager type")
+	ErrStreamingNotSupported  = errors.New("streaming UI not supported in this environment")
 
 	// Component and positional argument errors.
 	ErrComponentRequired          = errors.New("component is required")
@@ -204,6 +210,7 @@ var (
 	ErrTerraformStateNotProvisioned = errors.New("terraform state not provisioned")
 	ErrTerraformOutputNotFound      = errors.New("terraform output not found")
 	ErrTerraformOutputFailed        = errors.New("failed to retrieve terraform outputs")
+	ErrParseTerraformOutput         = errors.New("failed to parse terraform output")
 
 	// Terraform output component configuration errors.
 	ErrMissingExecutable      = errors.New("component does not have 'command' (executable) defined")
@@ -665,6 +672,7 @@ var (
 	ErrClearCache                       = errors.New("failed to clear cache")
 	ErrInvalidOverridesSection          = errors.New("invalid overrides section")
 	ErrInvalidTerraformOverridesSection = errors.New("invalid terraform overrides section")
+	ErrInvalidHelmOverridesSection      = errors.New("invalid helm overrides section")
 	ErrInvalidHelmfileOverridesSection  = errors.New("invalid helmfile overrides section")
 	ErrInvalidBaseComponentConfig       = errors.New("invalid base component config")
 	ErrCircularComponentInheritance     = ErrStackCircularInheritance
@@ -767,6 +775,10 @@ var (
 	ErrTokenRefreshFailed           = errors.New("failed to refresh API token")
 	ErrFailedToUnmarshalAPIResponse = errors.New("failed to unmarshal API response")
 	ErrNilRequestDTO                = errors.New("nil request DTO")
+	ErrFailedToUploadExecMetadata   = errors.New("failed to upload execution metadata")
+	ErrFailedToUploadExecData       = errors.New("failed to upload execution data")
+	ErrExecPayloadTooLarge          = errors.New("execution metadata payload too large")
+	ErrExecSyncTimeout              = errors.New("execution metadata upload timed out")
 
 	// Pro commit errors.
 	ErrCommitMessageRequired = errors.New("commit message is required")
@@ -1424,6 +1436,7 @@ var (
 	ErrCacheBackendNotFound = errors.New("cache backend not found")
 	ErrCacheInvalidArgs     = errors.New("invalid cache arguments")
 	ErrCacheKeyRequired     = errors.New("cache key is required")
+	ErrCachePathsRequired   = errors.New("cache paths are required")
 	ErrCacheArchiveFailed   = errors.New("failed to build cache archive")
 	ErrCacheExtractFailed   = errors.New("failed to extract cache archive")
 	ErrCacheBackendRequest  = errors.New("cache backend request failed")
@@ -1614,6 +1627,17 @@ var (
 	ErrHelmReleaseNameRequired       = errors.New("helm component is missing a release name")
 	ErrHelmDiffFailed                = errors.New("failed to compute helm diff")
 	ErrHelmBaselineRead              = errors.New("failed to read helm diff baseline")
+	ErrHelmLifecycleDecode           = errors.New("failed to decode helm release lifecycle")
+	ErrHelmFailureActionInvalid      = errors.New("invalid helm on_failure action")
+	ErrHelmWaitStrategyInvalid       = errors.New("invalid helm wait strategy")
+	ErrHelmTimeoutInvalid            = errors.New("invalid helm release timeout")
+	ErrHelmMaxHistoryInvalid         = errors.New("invalid helm release history limit")
+	ErrHelmWaitForJobsRequiresWait   = errors.New("helm wait_for_jobs requires watcher or legacy wait strategy")
+	ErrHelmLifecycleFlagInapplicable = errors.New("helm release lifecycle flag does not apply to selected operation")
+	ErrHelmLifecycleExternalTarget   = errors.New("helm release lifecycle flags require a Kubernetes target")
+	ErrHelmReleaseHistory            = errors.New("failed to inspect helm release history")
+	ErrHelmReleaseUpgrade            = errors.New("failed to upgrade helm release")
+	ErrHelmReleaseUninstall          = errors.New("failed to uninstall helm release")
 )
 
 // Stack dependency (`depends_on`) resolution errors.

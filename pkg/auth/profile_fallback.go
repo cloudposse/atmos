@@ -329,6 +329,23 @@ func (m *manager) MaybeOfferAnyProfileFallback(ctx context.Context) error {
 	return m.maybeOfferAnyProfileFallback(ctx)
 }
 
+// MaybeOfferProfileFallbackForIdentity is the manager-independent entry point to the
+// profile-fallback flow, for exec-layer callers that hit an invalid/missing identity
+// before any AuthManager could be constructed (a stack's `default: true` identity marker
+// undefined in the loaded global config, or an identity whose Kind was never filled in
+// because the profile defining it wasn't loaded). Both failures happen before
+// NewAuthManager returns a usable *manager, so Authenticate()'s existing prompt is
+// unreachable — this gives exec-layer auth setup (terraform/helmfile/packer/native
+// components) the same entry point `atmos auth login` already has.
+//
+// The maybeOfferProfileFallback method only touches the manager's cliConfigPath field
+// (via buildFallbackAtmosConfig), so a throwaway manager scoped to just that field is
+// sufficient to reuse the existing, already-tested flow unchanged.
+func MaybeOfferProfileFallbackForIdentity(ctx context.Context, cliConfigPath string, identityName string) error {
+	fallbackManager := &manager{cliConfigPath: cliConfigPath}
+	return fallbackManager.maybeOfferProfileFallback(ctx, identityName)
+}
+
 // buildAnyProfileSuggestionError wraps ErrNoIdentitiesAvailable with actionable
 // hints naming the profiles that define auth config. Used on the non-interactive
 // path where we cannot prompt.

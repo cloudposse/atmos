@@ -1,0 +1,78 @@
+commands:
+  - name: casts generate demo fixtures streaming-ui terraform-ui
+    description: Regenerate the terraform streaming UI (--ui) plan/apply/destroy cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: terraform-ui
+        working_directory: &streaming_ui_fixture "../../.context/cast-fixtures/streaming-ui"
+        title: "atmos terraform --ui: plan, apply, destroy"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/demo/fixtures/streaming-ui/terraform-ui.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# --ui works the same way across plan, apply, and destroy"
+          - type: simulate
+            text: &plan_cmd atmos terraform plan vpc -s dev --ui
+          - type: shell
+            name: plan
+            interval: 900ms
+            command: *plan_cmd
+          - type: simulate
+            text: "# apply creates the VPC, its subnets, and their route table associations"
+          - type: simulate
+            text: &deploy_cmd atmos terraform deploy vpc -s dev -auto-approve --ui
+          - type: shell
+            name: deploy
+            interval: 900ms
+            command: *deploy_cmd
+          - type: simulate
+            text: "# destroy tears the same dependency tree down in reverse order"
+          - type: simulate
+            text: &destroy_cmd atmos terraform destroy vpc -s dev -auto-approve --ui
+          - type: shell
+            name: destroy
+            command: *destroy_cmd
+      - type: shell
+        name: teardown
+        working_directory: *streaming_ui_fixture
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        when: always
+        command: atmos --logs-level=Off terraform destroy vpc -s dev -auto-approve || true
+      - type: shell
+        name: validate
+        command: atmos casts validate demo fixtures streaming-ui terraform-ui
+  - name: casts validate demo fixtures streaming-ui terraform-ui
+    description: Validate the terraform streaming UI (--ui) plan/apply/destroy cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/demo/fixtures/streaming-ui/terraform-ui.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in ["plan vpc -s dev", "deploy vpc -s dev", "destroy vpc -s dev", "dev/vpc"]:
+              if needle not in plain:
+                  raise SystemExit(f"terraform streaming UI cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found"]:
+              if bad in plain:
+                  raise SystemExit(f"terraform streaming UI cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

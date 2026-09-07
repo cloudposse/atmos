@@ -772,6 +772,33 @@ func SkipOnDarwinARM64(t *testing.T, reason string) {
 	}
 }
 
+// SkipIfGomonkeyUnsafe skips the test on darwin/arm64 (SIGBUS from memory
+// protection, see SkipOnDarwinARM64) and under -race (a separate, equally
+// fatal incompatibility: gomonkey overwrites a target function's machine
+// code with a jump instruction, sized for that function's normal compiled
+// layout, but the race detector's instrumentation changes that layout,
+// making the patch corrupt the function -- observed in CI as the patched
+// call hanging indefinitely rather than erroring, taking the whole package's
+// `go test -race` run down with it once the package-level -timeout fires).
+// Use this instead of an inline runtime.GOARCH check for any test calling
+// gomonkey.ApplyFunc/NewPatches. Accepts testing.TB so it also works from
+// Benchmark functions, not just Test functions.
+func SkipIfGomonkeyUnsafe(t testing.TB, reason string) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	if RaceEnabled {
+		t.Skipf("Skipping under -race: %s (gomonkey's runtime code patching is incompatible with the race detector's instrumented binary layout). Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to override", reason)
+	}
+
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		t.Skipf("Skipping on darwin/arm64: %s. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to override", reason)
+	}
+}
+
 const (
 	// Container runtime names.
 	containerRuntimeDocker = "docker"

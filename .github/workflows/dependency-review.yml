@@ -114,6 +114,12 @@ jobs:
           comment-summary-in-pr: always
 
       - name: Generate NOTICE file
+        # Deliberately no GH_TOKEN here: this `pull_request`-triggered job
+        # checks out and executes PR-controlled code (this step runs
+        # tools/noticegen via `go tool mage notice:generate`). Handing a
+        # token to code built from untrusted PR content risks exfiltration.
+        # The description fetch (tools/noticegen/repo.go) works fine
+        # unauthenticated for this job's low call volume (once per push).
         run: go tool mage notice:generate
 
       - name: Check if NOTICE is up to date

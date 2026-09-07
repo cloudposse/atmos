@@ -41,6 +41,42 @@ var defaultComponentConfigFetcher componentConfigFetcher = ExecuteDescribeCompon
 // auth.CreateAndAuthenticateManagerWithAtmosConfigForStack.
 var defaultAuthManagerCreator authManagerCreator = auth.CreateAndAuthenticateManagerWithAtmosConfigForStack
 
+// resolveIdentityConfigError checks whether err signals a missing/invalid identity that a
+// profile might resolve, offering the interactive profile-selection prompt `atmos auth
+// login` already has (see auth.MaybeOfferProfileFallbackForIdentity). It always returns a
+// non-nil error: either the fallback's own outcome (a successful re-exec never returns;
+// otherwise a hint-enriched error or ErrUserAborted) or err wrapped with wrapSentinel when
+// no fallback applies.
+func resolveIdentityConfigError(atmosConfig *schema.AtmosConfiguration, err error, wrapSentinel error) error {
+	if fbErr := offerIdentityProfileFallback(atmosConfig, err); fbErr != nil {
+		return fbErr
+	}
+	return fmt.Errorf("%w: %w", wrapSentinel, err)
+}
+
+// offerIdentityProfileFallback returns the profile-fallback outcome when err names a
+// missing identity that a profile might resolve, or nil when no fallback applies (the
+// caller should proceed with its own wrap of err). A user-aborted fallback exits the
+// process with ExitCodeSIGINT rather than returning, matching the existing abort-handling
+// convention for identity-selection prompts.
+func offerIdentityProfileFallback(atmosConfig *schema.AtmosConfiguration, err error) error {
+	if !errors.Is(err, errUtils.ErrInvalidIdentityConfig) {
+		return nil
+	}
+	identityName, ok := errUtils.GetContext(err, "identity")
+	if !ok || identityName == "" {
+		return nil
+	}
+	fbErr := auth.MaybeOfferProfileFallbackForIdentity(context.Background(), atmosConfig.CliConfigPath, identityName)
+	if fbErr == nil {
+		return nil
+	}
+	if errors.Is(fbErr, errUtils.ErrUserAborted) {
+		errUtils.Exit(errUtils.ExitCodeSIGINT)
+	}
+	return fbErr
+}
+
 // createAndAuthenticateAuthManager creates an AuthManager by merging global auth config with
 // component-specific auth config, then authenticating using the identity from info.Identity.
 // If authentication succeeds and identity was auto-detected, the resolved identity is stored
@@ -66,7 +102,7 @@ func createAndAuthenticateAuthManagerWithDeps(
 		if errors.Is(err, errUtils.ErrInvalidComponent) {
 			return nil, err
 		}
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
+		return nil, resolveIdentityConfigError(atmosConfig, err, errUtils.ErrInvalidAuthConfig)
 	}
 
 	// Create and authenticate AuthManager from --identity flag if specified.
@@ -74,7 +110,7 @@ func createAndAuthenticateAuthManagerWithDeps(
 	// This enables YAML template functions like !terraform.state to use authenticated credentials.
 	authManager, err := authCreator(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, info.Stack)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
+		return nil, resolveIdentityConfigError(atmosConfig, err, errUtils.ErrFailedToInitializeAuthManager)
 	}
 
 	// If AuthManager was created and identity was auto-detected (info.Identity was empty),

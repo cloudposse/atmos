@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -87,8 +88,16 @@ type CommandNode struct {
 // descendants) to atmos_list_commands / atmos_command_help.
 type CommandTreeProvider func() []*CommandNode
 
-// commandTreeProvider is injected via SetCommandTreeProvider.
-var commandTreeProvider CommandTreeProvider
+// commandTreeProvider is injected via SetCommandTreeProvider. Guarded by
+// commandTreeProviderMu: it's process-global, and cmd/mcp/server's own tests
+// call SetCommandTreeProvider from more than one goroutine (e.g. one test
+// setting it up directly, another reaching it indirectly through
+// setupMCPServer's own config-loading path) -- a plain unsynchronized
+// package var raced under go test -race.
+var (
+	commandTreeProvider   CommandTreeProvider
+	commandTreeProviderMu sync.RWMutex
+)
 
 // SetCommandTreeProvider registers the function these tools use to obtain
 // the live Atmos CLI command tree. It must be called once during host
@@ -99,6 +108,8 @@ var commandTreeProvider CommandTreeProvider
 // restore the previous provider (e.g. via t.Cleanup) to avoid cross-test
 // pollution, since the provider is process-global.
 func SetCommandTreeProvider(provider CommandTreeProvider) {
+	commandTreeProviderMu.Lock()
+	defer commandTreeProviderMu.Unlock()
 	commandTreeProvider = provider
 }
 
@@ -252,10 +263,13 @@ type commandEntry struct {
 // commandTreeRoots returns the injected command tree's top-level nodes, or
 // errUtils.ErrAICommandTreeNotConfigured if SetCommandTreeProvider hasn't been called yet.
 func commandTreeRoots() ([]*CommandNode, error) {
-	if commandTreeProvider == nil {
+	commandTreeProviderMu.RLock()
+	provider := commandTreeProvider
+	commandTreeProviderMu.RUnlock()
+	if provider == nil {
 		return nil, errUtils.ErrAICommandTreeNotConfigured
 	}
-	return commandTreeProvider(), nil
+	return provider(), nil
 }
 
 // resolveListingScope determines the set of nodes to start listing from and

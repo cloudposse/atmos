@@ -18,7 +18,9 @@ import (
 func setTestCommandTree(t *testing.T, roots []*CommandNode) {
 	t.Helper()
 
+	commandTreeProviderMu.RLock()
 	previous := commandTreeProvider
+	commandTreeProviderMu.RUnlock()
 	SetCommandTreeProvider(func() []*CommandNode { return roots })
 	t.Cleanup(func() { SetCommandTreeProvider(previous) })
 }
@@ -120,7 +122,9 @@ func TestListCommandsTool_IsRestricted(t *testing.T) {
 }
 
 func TestListCommandsTool_Execute_NoProviderConfigured(t *testing.T) {
+	commandTreeProviderMu.RLock()
 	previous := commandTreeProvider
+	commandTreeProviderMu.RUnlock()
 	SetCommandTreeProvider(nil)
 	t.Cleanup(func() { SetCommandTreeProvider(previous) })
 

@@ -40,6 +40,10 @@ func buildStubGoLicenses(t *testing.T, csv string) string {
 	return binDir
 }
 
+// stubDescription is a fetchDescription stand-in used by every generate()
+// test below, so none of them make a real network call to the GitHub API.
+func stubDescription() (string, error) { return "A test tagline.", nil }
+
 func TestGenerateEndToEnd(t *testing.T) {
 	stubDir := buildStubGoLicenses(t, "example.com/dep,https://example.com/dep/LICENSE,MIT\n")
 	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -48,7 +52,7 @@ func TestGenerateEndToEnd(t *testing.T) {
 	writeTestModule(t, root)
 	outPath := filepath.Join(root, "NOTICE")
 
-	summary, err := Generate(root, outPath)
+	summary, err := generate(root, outPath, stubDescription)
 
 	require.NoError(t, err)
 	assert.Equal(t, Summary{Total: 1, MIT: 1}, summary)
@@ -68,7 +72,7 @@ func TestGenerateNoDependencies(t *testing.T) {
 	writeTestModule(t, root)
 	outPath := filepath.Join(root, "NOTICE")
 
-	summary, err := Generate(root, outPath)
+	summary, err := generate(root, outPath, stubDescription)
 
 	require.NoError(t, err)
 	assert.Equal(t, Summary{}, summary)
@@ -86,6 +90,50 @@ func TestGeneratePropagatesGoLicensesInstallFailure(t *testing.T) {
 	root := t.TempDir()
 	writeTestModule(t, root)
 
-	_, err := Generate(root, filepath.Join(root, "NOTICE"))
+	_, err := generate(root, filepath.Join(root, "NOTICE"), stubDescription)
 	require.Error(t, err)
+}
+
+func TestGeneratePropagatesGoogleCloudGoOverridesError(t *testing.T) {
+	stubDir := buildStubGoLicenses(t, "cloud.google.com/go,https://example.com/LICENSE,Apache-2.0\n")
+	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	root := t.TempDir()
+	// A malformed go.mod makes `go list -m ... all` (used by
+	// goListAllGoogleCloudGoModules) fail, without affecting the earlier
+	// go-licenses stub invocation, which ignores its arguments entirely.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("not a valid go.mod"), 0o644))
+
+	_, err := generate(root, filepath.Join(root, "NOTICE"), stubDescription)
+	require.Error(t, err)
+}
+
+func TestGeneratePropagatesFetchDescriptionError(t *testing.T) {
+	stubDir := buildStubGoLicenses(t, "example.com/dep,https://example.com/dep/LICENSE,MIT\n")
+	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	root := t.TempDir()
+	writeTestModule(t, root)
+
+	failingDescription := func() (string, error) { return "", assert.AnError }
+
+	_, err := generate(root, filepath.Join(root, "NOTICE"), failingDescription)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fetch repo description")
+}
+
+func TestGeneratePropagatesWriteFileError(t *testing.T) {
+	stubDir := buildStubGoLicenses(t, "example.com/dep,https://example.com/dep/LICENSE,MIT\n")
+	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	root := t.TempDir()
+	writeTestModule(t, root)
+	// The parent directory doesn't exist, so os.WriteFile fails.
+	outPath := filepath.Join(root, "no-such-dir", "NOTICE")
+
+	_, err := generate(root, outPath, stubDescription)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), outPath)
 }

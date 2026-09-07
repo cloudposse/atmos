@@ -680,7 +680,8 @@ type Terraform struct {
 	PluginCache bool `yaml:"plugin_cache" json:"plugin_cache" mapstructure:"plugin_cache"`
 	// PluginCacheDir is an optional custom path for the plugin cache.
 	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
-	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	PluginCacheDir string      `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	UI             TerraformUI `yaml:"ui" json:"ui" mapstructure:"ui"`
 	// AutoProvisionWorkdirForOutputs controls whether Atmos automatically provisions
 	// JIT working directories before running terraform output.
 	// When true (default), output fetching transparently provisions the workdir
@@ -742,6 +743,25 @@ type TerraformFlags struct {
 	Refresh *bool `yaml:"refresh,omitempty" json:"refresh,omitempty" mapstructure:"refresh"`
 	// CompactWarnings is the default value for terraform's -compact-warnings flag.
 	CompactWarnings bool `yaml:"compact_warnings,omitempty" json:"compact_warnings,omitempty" mapstructure:"compact_warnings"`
+}
+
+// TerraformUI contains streaming UI configuration.
+type TerraformUI struct {
+	// Enabled enables the streaming TUI mode for plan/apply/destroy/init/refresh commands.
+	// When enabled, terraform output is streamed in real-time with a progress display.
+	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+
+	// Compact controls line padding between resource branches.
+	// true (default) = no blank lines, false = add blank lines for readability.
+	Compact *bool `yaml:"compact" json:"compact" mapstructure:"compact"`
+
+	// ShowAttributeBar controls the vertical "quote" line for attribute content.
+	// true = show ┃ bar alongside attributes, false (default) = clean indentation only.
+	ShowAttributeBar *bool `yaml:"show_attribute_bar" json:"show_attribute_bar" mapstructure:"show_attribute_bar"`
+
+	// MaxLines controls collapsing large JSON values in attribute rendering.
+	// 0 (default) = show all lines like Terraform, >0 = collapse after N lines.
+	MaxLines int `yaml:"max_lines" json:"max_lines" mapstructure:"max_lines" jsonschema:"minimum=0"`
 }
 
 // TerraformLint configures TFLint for Terraform components. Config may be an
@@ -1785,6 +1805,8 @@ type ConfigAndStacksInfo struct {
 	Identity                   string
 	ClusterName                string // EKS cluster name from --cluster-name flag.
 	NeedsPathResolution        bool   // True if ComponentFromArg is a path that needs resolution.
+	UIEnabled                  bool   // Enable streaming UI mode for terraform commands.
+	UIFlagExplicitlySet        bool   // Whether --ui flag was explicitly set (vs. config/default).
 
 	// NodeHooks fires per-component lifecycle hooks (user hooks + CI hooks,
 	// before and after) for each component in a multi-component/bulk
@@ -1819,6 +1841,35 @@ type ConfigAndStacksInfo struct {
 	// pre-set TerraformCache and does not start, verify, or close its own. Used by
 	// `atmos terraform cache mirror` to share one proxy across components.
 	TerraformCacheExternal bool `yaml:"-" json:"-" mapstructure:"-"`
+
+	// ExecMetadataDetailedExitCodeAdded is set by buildPlanSubcommandArgs when
+	// -detailed-exitcode was added to a `plan` invocation specifically because
+	// exec-metadata capture required it (FR-006e), not because the user
+	// explicitly passed --upload-status. executeMainTerraformCommand consults
+	// this to decide whether to locally neutralize a resulting exit code 2
+	// ("changes detected") for Atmos's own returned status, without touching
+	// atmosConfig.CI.Enabled or mapCIExitCode's own gate (research.md Decision
+	// 36). Transient runtime state — not serialized.
+	ExecMetadataDetailedExitCodeAdded bool `yaml:"-" json:"-" mapstructure:"-"`
+
+	// ExecMetadataRawExitCode is the terraform/tofu subprocess's own exit code
+	// for the main plan/apply/deploy invocation, captured by
+	// executeMainTerraformCommand before CI-mode's mapCIExitCode remapping (and
+	// before this feature's own local exit-2 neutralization) is applied.
+	// Threaded up to captureExecMetadataSync so TerraformExecData.exit_code
+	// (FR-006e) reports the real, unmasked subprocess outcome even when
+	// Atmos's own returned error is remapped/neutralized. Transient runtime
+	// state — not serialized.
+	ExecMetadataRawExitCode int `yaml:"-" json:"-" mapstructure:"-"`
+
+	// ExecMetadataRawOutput is the main plan/apply/deploy subprocess's own
+	// combined stdout+stderr, captured by executeCommandPipeline scoped to
+	// only that invocation — not the combined init+workspace-select+main
+	// buffer other consumers (e.g. CI job-summary hooks) use. Threaded up to
+	// captureExecMetadataSync so the exec-metadata parser sees only the real
+	// plan/apply's own output (FR-006f, research.md Decision 32). Transient
+	// runtime state — not serialized.
+	ExecMetadataRawOutput string `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // GetComponentEnvSection returns the component's env section map.

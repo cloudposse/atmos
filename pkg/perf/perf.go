@@ -43,10 +43,21 @@ type Metric struct {
 }
 
 // StackFrame represents a single frame in the call stack for tracking nested calls.
+//
+// The childTime field is atomic (nanoseconds), not a plain time.Duration: simple-stack mode
+// (trackWithSimpleStack) deliberately trusts goroutine ownership without verifying
+// it for every nested call, for speed -- so when a second goroutine's calls do slip
+// onto the shared simpleStack undetected (its documented "known limitation"), one
+// goroutine's finish reading its own frame's childTime can race with a concurrently
+// finishing call elsewhere in the (logically, at that point, shared) stack writing
+// to what it resolves as its parent's childTime -- the same field on the same
+// frame. That cross-goroutine mixing can still produce logically confused metrics
+// (an accepted, pre-existing tradeoff -- see trackWithSimpleStack), but the field
+// access itself must not be a data race regardless.
 type StackFrame struct {
 	functionName string
 	startTime    time.Time
-	childTime    time.Duration // Accumulated time spent in child function calls
+	childTime    atomic.Int64 // Accumulated time (ns) spent in child function calls.
 }
 
 // CallStack tracks nested function calls for a single goroutine.
@@ -90,6 +101,22 @@ func EnableTracking(enabled bool) {
 		// This avoids expensive runtime.Stack() calls on every tracked function.
 		useSimpleStack.Store(true)
 	}
+}
+
+// ResetForTesting clears the metrics registry. Intended for use in tests to
+// ensure test isolation: this is process-wide state with no other reset path,
+// so a test that enables tracking (and any real Track() calls it triggers, or
+// that any other code in the same process makes while tracking happens to be
+// on) permanently accumulates into the shared registry for the rest of the
+// binary's run otherwise -- e.g. a heatmap-display test's own few tracked
+// calls getting crowded out of the top-N display by hundreds of unrelated
+// calls from whatever ran before it. Call this alongside EnableTracking, not
+// as a replacement for disabling tracking when the test is done.
+func ResetForTesting() {
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	reg.data = make(map[string]*Metric)
+	reg.start = time.Now()
 }
 
 // UseSimpleTracking enables or disables simple tracking mode.
@@ -171,7 +198,6 @@ func trackWithSimpleStack(name string, start time.Time) func() {
 	frame := &StackFrame{
 		functionName: name,
 		startTime:    start,
-		childTime:    0,
 	}
 	simpleStack.push(frame)
 
@@ -201,7 +227,7 @@ func claimSimpleStackOwnership(owner uint64) uint64 {
 // finishSimpleStackTracking completes tracking for a simple stack frame.
 func finishSimpleStackTracking(frame *StackFrame, start time.Time, name string) {
 	totalTime := time.Since(start)
-	selfTime := totalTime - frame.childTime
+	selfTime := totalTime - time.Duration(frame.childTime.Load())
 	if selfTime < 0 {
 		selfTime = 0
 	}
@@ -211,7 +237,7 @@ func finishSimpleStackTracking(frame *StackFrame, start time.Time, name string) 
 
 	// If there's a parent frame, add our total time to its child time accumulator.
 	if parent := simpleStack.peek(); parent != nil {
-		parent.childTime += totalTime
+		parent.childTime.Add(int64(totalTime))
 	}
 
 	// Clear ownership when stack becomes empty.
@@ -234,7 +260,6 @@ func trackWithGoroutineLocalStack(name string, start time.Time) func() {
 	frame := &StackFrame{
 		functionName: name,
 		startTime:    start,
-		childTime:    0,
 	}
 	stack.push(frame)
 
@@ -246,7 +271,7 @@ func trackWithGoroutineLocalStack(name string, start time.Time) func() {
 // finishGoroutineLocalTracking completes tracking for a goroutine-local stack frame.
 func finishGoroutineLocalTracking(frame *StackFrame, start time.Time, name string, gid uint64, stack *CallStack) {
 	totalTime := time.Since(start)
-	selfTime := totalTime - frame.childTime
+	selfTime := totalTime - time.Duration(frame.childTime.Load())
 	if selfTime < 0 {
 		selfTime = 0
 	}
@@ -256,7 +281,7 @@ func finishGoroutineLocalTracking(frame *StackFrame, start time.Time, name strin
 
 	// If there's a parent frame, add our total time to its child time accumulator.
 	if parent := stack.peek(); parent != nil {
-		parent.childTime += totalTime
+		parent.childTime.Add(int64(totalTime))
 	}
 
 	// Clean up call stack if empty to prevent memory leaks.

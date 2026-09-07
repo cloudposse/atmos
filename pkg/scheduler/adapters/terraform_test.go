@@ -1785,6 +1785,24 @@ func TestHasTerraformAutoApproveEnvChecksGlobalAndSubcommandArgs(t *testing.T) {
 	})
 }
 
+// TestValidateTerraformUIConcurrency covers the --ui + --max-concurrency>1 rejection.
+// The wouldAttemptStreamingUI value is injected rather than derived from a real TTY/CI
+// check here (tfui.WouldAttemptStreamingUI always returns false under go test's
+// non-interactive stdout, per terraform_streaming_ui_test.go's documented TTY-gating
+// limitation), which is exactly why validateTerraformConcurrentExecution takes the
+// decision as a parameter.
+func TestValidateTerraformUIConcurrency(t *testing.T) {
+	t.Run("streaming UI would be attempted", func(t *testing.T) {
+		err := validateTerraformUIConcurrency(true)
+		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		require.ErrorContains(t, err, "streaming UI is not supported with --max-concurrency > 1")
+	})
+
+	t.Run("streaming UI would not be attempted", func(t *testing.T) {
+		require.NoError(t, validateTerraformUIConcurrency(false))
+	})
+}
+
 func TestExecuteTerraformAllowsConcurrentApplyWithConfiguredAutoApprove(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{

@@ -69,6 +69,10 @@ type RunOptions struct {
 	// Status upload flag.
 	UploadStatus bool
 
+	// UI flags.
+	UI        bool // Enable streaming UI mode.
+	UIFlagSet bool // Whether --ui flag was explicitly set.
+
 	// AppendArgs are extra terraform pass-through flags injected by the caller
 	// (e.g. `-json` for `terraform test` in CI). They are appended to
 	// info.AdditionalArgsAndFlags so they reach the terraform command directly,
@@ -105,6 +109,7 @@ func ParseRunOptions(v *viper.Viper) (*RunOptions, error) {
 		PlanHideNoChanges:       TerraformPlanHideContains(v.GetStringSlice("hide"), "no-changes"),
 		PlanSummaryFile:         v.GetString("execution-summary-file"),
 		UploadStatus:            v.GetBool("upload-status"),
+		UI:                      v.GetBool("ui"),
 	}
 
 	labels, err := tags.ParseLabelsFlag(v.GetString("labels"))

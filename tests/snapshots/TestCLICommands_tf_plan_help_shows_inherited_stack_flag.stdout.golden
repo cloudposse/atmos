@@ -189,6 +189,8 @@ GLOBAL FLAGS
 
       --tags strings                         Filter by tags (comma-separated, matches any): --tags=production,tier-1
 
+      --ui                                   Enable streaming UI mode for real-time resource status display
+
       --use-mocks                            Resolve Terraform state/output YAML functions from component mocks
                                              instead of remote state. Supported only by plan and describe commands
 

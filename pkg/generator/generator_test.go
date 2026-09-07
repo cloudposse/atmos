@@ -12,6 +12,23 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// init settles registryOnce before any test in this file runs. GetRegistry()
+// lazily initializes the package-level registry var via sync.Once on its
+// first-ever call in the whole test binary process. Several tests below,
+// including TestGeneratorRegistry, TestGenerateAll, and TestGenerate, assign
+// registry directly and then call a function that reaches GetRegistry()
+// internally (Register, Generate, GenerateAll). Under -shuffle=on, if one of
+// those is the first GetRegistry() call in the process, the Once fires there
+// and silently overwrites that test's manually-assigned registry with a
+// fresh empty one, discarding the generators it just registered. Calling
+// GetRegistry() here, before any test runs, guarantees the Once has already
+// fired, so every later GetRegistry() call in these tests just returns
+// whatever registry currently holds. See docs/fixes for the incident this
+// closes.
+func init() {
+	GetRegistry()
+}
+
 // testGenerator is a mock generator for testing.
 type testGenerator struct {
 	name           string

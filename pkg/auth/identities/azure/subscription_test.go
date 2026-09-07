@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -226,10 +227,20 @@ func TestSubscriptionIdentity_GetProviderName(t *testing.T) {
 }
 
 func TestSubscriptionIdentity_PostAuthenticate(t *testing.T) {
-	// Sandbox HOME so credential files land under a temp dir.
+	// Sandbox HOME so credential files land under a temp dir. pkg/config/homedir
+	// caches the resolved home directory across calls; without resetting it and
+	// disabling the cache, a prior test's cached (real) HOME can outlive this
+	// t.Setenv, so SetupFiles writes credentials.json somewhere other than
+	// tmpHome and the os.Stat check below finds nothing there. See docs/fixes.
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 	t.Setenv("USERPROFILE", tmpHome)
+	homedir.Reset()
+	homedir.DisableCache = true
+	t.Cleanup(func() {
+		homedir.Reset()
+		homedir.DisableCache = false
+	})
 
 	identity := &subscriptionIdentity{
 		name:           "azure-test",

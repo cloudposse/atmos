@@ -11,6 +11,7 @@ import (
 	listtree "github.com/cloudposse/atmos/pkg/list/tree"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	uitree "github.com/cloudposse/atmos/pkg/ui/tree"
 )
 
 const (
@@ -94,10 +95,17 @@ func getSortedStackNames(stacksWithComponents map[string]map[string][]*listtree.
 	return stackNames
 }
 
-// cleanupSpacerMarkers removes spacer markers from tree output and replaces with styled vertical bars.
+// cleanupSpacerMarkers replaces the spacer placeholder rows lipgloss rendered with the
+// spacer rows that belong there. Spacers are added to the tree as marker-titled child
+// nodes so lipgloss positions them; pkg/ui/tree then derives each spacer's gutter from
+// the rendered row, keeping every ancestor rail and turning the node's own connector into
+// a rail, so nested spacers stay connected to the rows around them (an earlier version
+// counted leading spaces and emitted a single bar, which dropped the ancestor rails of any
+// nested spacer).
 func cleanupSpacerMarkers(treeOutput string, markers []string) string {
 	lines := strings.Split(treeOutput, treeNewline)
 	cleaned := make([]string, 0, len(lines))
+	style := getBranchStyle()
 
 	for _, line := range lines {
 		plainLine := stripANSI(line)
@@ -107,10 +115,7 @@ func cleanupSpacerMarkers(treeOutput string, markers []string) string {
 			continue
 		}
 
-		// Replace spacer line with styled vertical bar.
-		indent := getIndentLevel(plainLine)
-		style := getBranchStyle()
-		cleaned = append(cleaned, strings.Repeat(" ", indent)+style.Render("│"))
+		cleaned = append(cleaned, style.Render(uitree.SpacerFromConnectorRow(plainLine)))
 	}
 
 	return strings.Join(cleaned, treeNewline)
@@ -124,18 +129,6 @@ func containsAnyMarker(s string, markers []string) bool {
 		}
 	}
 	return false
-}
-
-// getIndentLevel returns the number of leading spaces in a string.
-func getIndentLevel(s string) int {
-	indent := 0
-	for _, ch := range s {
-		if ch != ' ' {
-			break
-		}
-		indent++
-	}
-	return indent
 }
 
 // buildStackNodeWithComponents creates a tree node for a stack with its components.

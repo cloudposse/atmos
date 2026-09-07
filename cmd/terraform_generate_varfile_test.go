@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/muesli/termenv"
@@ -126,13 +127,31 @@ func TestTerraformGenerateVarfileCmdNoColor(t *testing.T) {
 
 	outputStr := output.String()
 
+	// A stray write from an unrelated, already-completed test's background
+	// goroutine (e.g. mvdan.cc/sh/v3's DefaultExecHandler kill-timeout
+	// goroutine, which outlives cmd.Wait() by design -- see its own "TODO:
+	// don't sleep in this goroutine" comment) can land in this test's pipe if
+	// it fires in the narrow window between os.Stderr = w above and this
+	// test's own Execute() producing its first line. That race is upstream of
+	// this test and unrelated to NO_COLOR handling, so scope the ANSI check
+	// to what this invocation's own Execute() actually produced: everything
+	// from its first log line (always emitted, unconditionally, right after
+	// config resolves -- see cmd/root.go's `log.Debug("Set", "logs-level", ...)`)
+	// onward. Content is only reported/rejected if that marker isn't found
+	// (which would mean this test's own command never even ran).
+	const ownOutputMarker = "logs-level=debug"
+	checkStr := outputStr
+	if idx := strings.Index(outputStr, ownOutputMarker); idx >= 0 {
+		checkStr = outputStr[idx:]
+	}
+
 	// Verify NO ANSI codes are present when NO_COLOR is set.
 	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
-	if ansiRegex.MatchString(outputStr) {
-		t.Logf("Raw output with ANSI codes:\n%q", outputStr)
-		t.Logf("Output length: %d bytes", len(outputStr))
+	if ansiRegex.MatchString(checkStr) {
+		t.Logf("Raw output with ANSI codes:\n%q", checkStr)
+		t.Logf("Output length: %d bytes", len(checkStr))
 	}
-	assert.False(t, ansiRegex.MatchString(outputStr), "Output should not contain ANSI codes when NO_COLOR=1")
+	assert.False(t, ansiRegex.MatchString(checkStr), "Output should not contain ANSI codes when NO_COLOR=1")
 
 	// Check if the output contains the expected output (plain text).
 	assert.Contains(t, outputStr, "Generating varfile for variables component=component-1 stack=nonprod", "'TestTerraformGenerateVarfileCmdNoColor' output should contain plain text message")

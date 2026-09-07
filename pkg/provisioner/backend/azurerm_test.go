@@ -625,7 +625,18 @@ func TestNewAzureBackendClient(t *testing.T) {
 
 func TestAzurermBackendRegisteredInRegistry(t *testing.T) {
 	// The init() registrations must wire azurerm into the shared backend registry so the
-	// auto-provision hook and `atmos terraform backend` commands can find it.
+	// auto-provision hook and `atmos terraform backend` commands can find it. init() only
+	// runs once for the whole test binary, but many sibling tests in this package call
+	// ResetRegistryForTesting()/resetBackendRegistry() to get an empty registry for their
+	// own isolated fixtures -- with -shuffle=on, one of those can run before this test and
+	// leave the registry empty for the rest of the process. Re-run the same registrations
+	// init() makes so this test verifies its own claim instead of depending on execution
+	// order; RegisterBackend* are plain map assignments, safe to call again.
+	RegisterBackendCreate(backendTypeAzurerm, CreateAzurermBackend)
+	RegisterBackendDelete(backendTypeAzurerm, DeleteAzurermBackend)
+	RegisterBackendExists(backendTypeAzurerm, AzurermBackendExists)
+	RegisterBackendName(backendTypeAzurerm, AzurermBackendName)
+
 	assert.NotNil(t, GetBackendCreate(backendTypeAzurerm), "create func registered")
 	assert.NotNil(t, GetBackendDelete(backendTypeAzurerm), "delete func registered")
 	assert.NotNil(t, GetBackendExists(backendTypeAzurerm), "exists func registered")

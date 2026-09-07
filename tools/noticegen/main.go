@@ -14,6 +14,12 @@ func main() {
 }
 
 func run() error {
+	return runNotice(func() (string, error) { return fetchRepoDescription(repoAPIURL) })
+}
+
+// runNotice is run()'s testable core. fetchDescription is injected so tests
+// can supply a stub instead of making a real GitHub API call.
+func runNotice(fetchDescription func() (string, error)) error {
 	root := "."
 	if len(os.Args) > 1 {
 		root = os.Args[1]
@@ -23,7 +29,7 @@ func run() error {
 		outputPath = os.Args[2]
 	}
 
-	summary, err := Generate(root, outputPath)
+	summary, err := generate(root, outputPath, fetchDescription)
 	if err != nil {
 		return err
 	}

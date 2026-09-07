@@ -151,12 +151,16 @@ func containsAllValidationErrors(text string, validationErrors []string) bool {
 }
 
 // AtmosProAPIClientInterface defines the interface for the AtmosProAPIClient.
+//
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_api_client.go -package=$GOPACKAGE
 type AtmosProAPIClientInterface interface {
 	UploadInstances(req *dtos.InstancesUploadRequest) error
 	UploadInstanceStatus(dto *dtos.InstanceStatusUploadRequest) error
 	UploadAffectedStacks(dto *dtos.UploadAffectedStacksRequest) error
 	LockStack(dto *dtos.LockStackRequest) (dtos.LockStackResponse, error)
 	UnlockStack(dto *dtos.UnlockStackRequest) (dtos.UnlockStackResponse, error)
+	UploadExecMetadata(dto *dtos.ExecUploadRequest) error
+	UploadExecData(dto *dtos.ExecDataUploadRequest) (*dtos.ExecDataUploadResponse, error)
 }
 
 // AtmosProAPIClient represents the client to interact with the AtmosPro API.

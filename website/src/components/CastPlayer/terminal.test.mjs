@@ -89,6 +89,17 @@ test('replayTerminal clears completed Huh form rows with ESC[J', () => {
   assert.doesNotMatch(result, /Which environments|dev|staging|prod|controls/);
 });
 
+test('replayTerminal ESC[J drops the rows below the cursor instead of leaving blank scrollback', () => {
+  // A streaming-UI progress block (header + blank + 3 rows), then the model's
+  // completion frame: bubbletea moves to the top of the old frame, the model
+  // erases to end of screen and draws the summary in its place.
+  const block = 'header\n\nrow1\nrow2\nrow3\n';
+  const done = '\x1b[5A\r\x1b[J\u2713 Apply completed\n';
+  const result = replayTerminal(block + done);
+  assert.equal(result, '\u2713 Apply completed\n');
+  assert.doesNotMatch(result, /\n\n$/, 'no trailing blank rows may remain after erase-display');
+});
+
 test('replayTerminal cursor-down preserves an existing row it lands on', () => {
   const frame1 = 'line0\nline1\nline2\n';
   // Up 3 (back to line0), down 1 (lands on the existing "line1"), overwrite.

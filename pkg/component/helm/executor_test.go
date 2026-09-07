@@ -6,10 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"helm.sh/helm/v4/pkg/kube"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -20,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const helmExecutorManifest = `apiVersion: v1
@@ -46,14 +49,16 @@ func TestRunOperationDispatchesWithSummaries(t *testing.T) {
 	renderChartManifest = func(_ context.Context, _ *chartSpec) (string, error) {
 		return helmExecutorManifest, nil
 	}
-	applyHelmRelease = func(_ context.Context, _ *chartSpec, dryRun bool) (string, error) {
+	applyHelmRelease = func(_ context.Context, _ *chartSpec, dryRun bool) (releaseActionResult, error) {
 		require.False(t, dryRun)
-		return helmExecutorManifest, nil
+		return releaseActionResult{Manifest: helmExecutorManifest, Operation: "install"}, nil
 	}
 	var deletedRelease, deletedNamespace string
-	deleteHelmRelease = func(releaseName, namespace string) error {
-		deletedRelease = releaseName
-		deletedNamespace = namespace
+	var deleteDryRun bool
+	deleteHelmRelease = func(_ context.Context, spec *chartSpec, dryRun bool) error {
+		deletedRelease = spec.ReleaseName
+		deletedNamespace = spec.Namespace
+		deleteDryRun = dryRun
 		return nil
 	}
 
@@ -99,10 +104,12 @@ func TestRunOperationDispatchesWithSummaries(t *testing.T) {
 	assert.Equal(t, 1, summary["object_count"])
 
 	info.SubCommand = "delete"
+	info.DryRun = true
 	summary, err = runOperation(ctx, &schema.AtmosConfiguration{}, info, OperationDelete, spec)
 	require.NoError(t, err)
 	assert.Equal(t, "app", deletedRelease)
 	assert.Equal(t, "demo", deletedNamespace)
+	assert.True(t, deleteDryRun)
 	assert.Equal(t, "app", summary["release_name"])
 }
 
@@ -275,9 +282,12 @@ func TestSummaryHelpers(t *testing.T) {
 	summary := helmSummary(info, spec, map[string]any{})
 	assert.Equal(t, "kubernetes", summary["target"])
 	assert.Equal(t, "release", summary["release_name"])
+	assert.Equal(t, false, summary["dependency_update"])
 
+	spec.DependencyUpdate = true
 	summary = helmSummary(info, spec, map[string]any{"target": "git"})
 	assert.Equal(t, "git", summary["target"])
+	assert.Equal(t, true, summary["dependency_update"])
 
 	mergeSummary(summary, map[string]any{"target": "gitops", "extra": true})
 	assert.Equal(t, "gitops", summary["target"])
@@ -351,6 +361,14 @@ func TestBuildChartSpecAndValueHelpers(t *testing.T) {
 			"version":    "1.2.3",
 			"name":       "demo",
 			"namespace":  "apps",
+			cfg.HelmReleaseSectionName: map[string]any{
+				cfg.HelmWaitSectionName: map[string]any{
+					cfg.HelmWaitStrategySectionName: "watcher",
+					cfg.HelmWaitJobsSectionName:     true,
+				},
+				cfg.HelmTimeoutSectionName: "15m",
+				cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: 0},
+			},
 		},
 	}
 
@@ -361,7 +379,15 @@ func TestBuildChartSpecAndValueHelpers(t *testing.T) {
 	assert.Equal(t, "1.2.3", spec.Version)
 	assert.Equal(t, "demo", spec.ReleaseName)
 	assert.Equal(t, "apps", spec.Namespace)
+	assert.True(t, spec.CreateNamespace, "create_namespace defaults to true when the key is absent")
 	assert.True(t, spec.IncludeCRDs)
+	resolved, err := resolveReleaseLifecycle(spec.Release, releaseOperationUpgrade, false)
+	require.NoError(t, err)
+	assert.Equal(t, kube.StatusWatcherStrategy, resolved.Policy.WaitStrategy)
+	assert.True(t, resolved.Policy.WaitForJobs)
+	assert.Equal(t, 15*time.Minute, resolved.Policy.Timeout)
+	assert.Zero(t, resolved.Policy.MaxHistory)
+	assert.True(t, resolved.TimeoutExplicit)
 	repo, found := findRepository(spec.Repositories, "bitnami")
 	require.True(t, found)
 	assert.Equal(t, "https://charts.bitnami.com/bitnami", repo.URL)
@@ -383,7 +409,7 @@ func TestRenderInputTemplates(t *testing.T) {
 		cfg.ChartSectionName:       "./{{ .name }}",
 		cfg.ValuesFilesSectionName: []string{"{{ .name }}.yaml"},
 		cfg.ValuesSectionName: map[string]any{
-			"image": "{{ .name }}:1.0",
+			"password": "{{ .Values.kafka.password }}",
 		},
 		cfg.RepositoriesSectionName: []any{
 			map[string]any{"name": "{{ .name }}", "url": "https://example.com/{{ .name }}"},
@@ -404,9 +430,23 @@ func TestRenderInputTemplates(t *testing.T) {
 	assert.Equal(t, "1.2.3", section["version"])
 	assert.Equal(t, "https://repo.example.com/demo", section["repository"])
 	assert.Equal(t, []any{"demo.yaml"}, section[cfg.ValuesFilesSectionName])
-	assert.Equal(t, "demo:1.0", section[cfg.ValuesSectionName].(map[string]any)["image"])
+	assert.Equal(t, "{{ .Values.kafka.password }}", section[cfg.ValuesSectionName].(map[string]any)["password"])
 	assert.Equal(t, "demo.rendered.yaml", section[cfg.RenderSectionName].(map[string]any)["output"].(map[string]any)["path"])
 	assert.Equal(t, "demo", section[cfg.RepositoriesSectionName].([]any)[0].(map[string]any)["name"])
+}
+
+func TestRenderInputTemplatesPreservesLiteralHelmValues(t *testing.T) {
+	section, err := u.UnmarshalYAML[map[string]any](`
+name: demo
+values:
+  password: !literal "{{ .Values.kafka.password }}"
+`)
+	require.NoError(t, err)
+
+	require.NoError(t, renderInputTemplates(&schema.AtmosConfiguration{}, section))
+	values, ok := section[cfg.ValuesSectionName].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "{{ .Values.kafka.password }}", values["password"])
 }
 
 func TestBulkAffectedFlagsAndSelection(t *testing.T) {

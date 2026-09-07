@@ -28,6 +28,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/tags"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	tfui "github.com/cloudposse/atmos/pkg/terraform/ui"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -557,6 +558,25 @@ func validateTerraformConcurrentExecution(atmosConfig *schema.AtmosConfiguration
 	}
 	if requiresTerraformAutoApprove(info) && !hasTerraformAutoApprove(atmosConfig, info) {
 		return fmt.Errorf("%w: concurrent Terraform %s requires -auto-approve", errUtils.ErrInvalidConfig, info.SubCommand)
+	}
+	wouldAttemptStreamingUI := tfui.WouldAttemptStreamingUI(info.UIFlagExplicitlySet, info.UIEnabled, atmosConfig.Components.Terraform.UI.Enabled)
+	return validateTerraformUIConcurrency(wouldAttemptStreamingUI)
+}
+
+// validateTerraformUIConcurrency rejects --ui combined with concurrent multi-component
+// execution: every concurrently-scheduled component would launch its own full-screen
+// streaming TUI session against the same real terminal (the streaming executor has no
+// output-writer redirection, unlike the plain-output concurrent path, which suppresses
+// spinners and redirects workdir output for exactly this reason). Reject the combination
+// outright rather than letting it silently corrupt terminal output.
+//
+// The wouldAttemptStreamingUI value is passed in (rather than computed here from
+// atmosConfig/info) so this decision is testable without a real TTY -- tfui.
+// WouldAttemptStreamingUI itself always returns false under go test's non-interactive
+// stdout, the same TTY-gating limitation documented in terraform_streaming_ui_test.go.
+func validateTerraformUIConcurrency(wouldAttemptStreamingUI bool) error {
+	if wouldAttemptStreamingUI {
+		return fmt.Errorf("%w: streaming UI is not supported with --max-concurrency > 1", errUtils.ErrInvalidConfig)
 	}
 	return nil
 }

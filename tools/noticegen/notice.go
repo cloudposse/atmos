@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 // bsdLicenseRe matches any BSD family identifier go-licenses emits
@@ -16,14 +17,19 @@ func isBSD(e LicenseEntry) bool    { return bsdLicenseRe.MatchString(e.License) 
 func isMPL(e LicenseEntry) bool    { return e.License == "MPL-2.0" }
 func isMIT(e LicenseEntry) bool    { return e.License == "MIT" }
 
-// header is everything in NOTICE that precedes the first rendered section.
-// It intentionally stops short of the separator before "APACHE 2.0 LICENSED
-// DEPENDENCIES" -- writeSection supplies that separator so every section
-// (including the first) is generated the same way.
-const header = `NOTICE
+// buildHeader renders everything in NOTICE that precedes the first rendered
+// section, given description (the repository's live GitHub description --
+// see fetchRepoDescription). It intentionally stops short of the separator
+// before "APACHE 2.0 LICENSED DEPENDENCIES" -- writeSection supplies that
+// separator so every section (including the first) is generated the same
+// way. The copyright end year is today's year: 2021 is the repo's real
+// founding year and stays a literal, but a hardcoded end year goes stale
+// the moment the calendar turns.
+func buildHeader(description string) string {
+	return fmt.Sprintf(`NOTICE
 
-Atmos - Universal Tool for DevOps and Cloud Automation
-Copyright 2021-2025 Cloud Posse, LLC
+%s
+Copyright 2021-%d Cloud Posse, LLC
 
 This product includes software developed by Cloud Posse, LLC and the Atmos community.
 
@@ -34,7 +40,8 @@ The license information for each dependency can be found below.
 
 For the full license texts, see the LICENSE file in each dependency or visit
 the URLs listed below.
-`
+`, description, time.Now().Year())
+}
 
 // footer is appended after the last rendered section. Its leading blank
 // line plays the same role as writeSection's leading separator.
@@ -57,9 +64,9 @@ For more information about Atmos licensing, see:
 // previous shell script's behavior. Entries in license families other than
 // these four (e.g. ISC, ...) are scanned for Summary's Total count but are
 // not rendered in any section -- also matching prior behavior.
-func Render(entries []LicenseEntry) string {
+func Render(entries []LicenseEntry, description string) string {
 	var b strings.Builder
-	b.WriteString(header)
+	b.WriteString(buildHeader(description))
 
 	writeSection(&b, "APACHE 2.0 LICENSED DEPENDENCIES", filterSorted(entries, isApache), apacheLabel)
 	writeSection(&b, "BSD LICENSED DEPENDENCIES", filterSorted(entries, isBSD), bsdLabel)
