@@ -38,6 +38,12 @@ function isValidScorecard(data) {
   return !!data && typeof data.score === 'number' && Array.isArray(data.checks);
 }
 
+// Same guard for the Best Practices response: BestPracticesBadge reads badge_level
+// after only a falsy check, so a truthy error object or partial 2xx must not slip through.
+function isValidBestPractices(data) {
+  return !!data && typeof data.badge_level === 'string' && data.badge_level !== '';
+}
+
 module.exports = function(context, options) {
   return {
     name: 'fetch-security-posture',
@@ -49,7 +55,7 @@ module.exports = function(context, options) {
 
       return {
         scorecard: isValidScorecard(scorecard) ? scorecard : null,
-        bestPractices,
+        bestPractices: isValidBestPractices(bestPractices) ? bestPractices : null,
         fetchedAt: new Date().toISOString(),
       };
     },
