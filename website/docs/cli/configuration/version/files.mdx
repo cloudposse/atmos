@@ -214,9 +214,39 @@ version:
     ```
     </File>
   </TabItem>
+  <TabItem value="format" label="Reshaping the Value">
+    A dependency sourced from `github-releases`/`github-tags` locks the raw git tag (e.g. `v2.5.0`). When a target field needs a different shape, add `format` to the `set` entry: a Go template (Sprig plus Atmos's template functions) rendered against the resolved version, whose output replaces the verbatim value:
+
+    <File title="atmos.yaml">
+    ```yaml
+      files:
+        - manager: json
+          paths:
+            - package.json
+          options:
+            set:
+              - path: version
+                from: cli
+                format: '{{ trimPrefix "v" .Version }}'
+    ```
+    </File>
+
+    <File title="package.json">
+    ```json
+    {
+      "name": "example",
+      "version": "2.5.0"
+    }
+    ```
+    </File>
+
+    Without `format`, the same rule would write `"version": "v2.5.0"` verbatim.
+  </TabItem>
 </Tabs>
 
 `path` follows sjson/gjson dot syntax: dots nest into objects, a bare number indexes into an array, and a literal dot inside a key name is escaped as `\.`. `path` is always a YAML string — quote numeric segments (`path: "0"`), or the value decodes as a YAML integer and fails validation.
+
+`format` is optional. When omitted, the resolved value is written verbatim (today's default behavior). When set, it's a Go template rendered against the resolved version — `.Version` (the human-readable version), `.Digest`, and `.Pin` are all available in the template context — and the rendered string is written instead. Any string function from [Sprig](https://masterminds.github.io/sprig/) works, e.g. `trimPrefix`, `trimSuffix`, `replace`, or `regexReplaceAll`.
 
 A simple `path` (no wildcards) that doesn't exist yet in the file is created rather than rejected, so double-check `path` for typos — a misspelled path silently adds a new field instead of updating the intended one. Wildcard/query paths (`items.#.version`, `*`, `?`, `@`) update every matching location when the path resolves against the current document, but error instead of silently doing nothing when it resolves to nothing — for example, an empty array or a missing parent key.
 
@@ -225,6 +255,7 @@ A few configurations are rejected outright rather than risking silent data loss:
 - **Array-append paths** (any `-1` segment) — there's no way to tell "already applied" from "not yet applied" by reading the array back, so every `apply` would append another element forever.
 - **A `path` whose current value is an object or array** — writing a scalar there would silently discard the whole subtree. Target the specific field inside it instead (`engines.node`, not `engines`).
 - **Two `set` entries targeting the same `path`** — the second write would otherwise silently discard the first.
+- **A `format` template that fails to parse or execute** (a syntax error, or a reference to a field that doesn't exist) — rejected outright rather than writing garbage or an empty string.
 
 ## Updating GitHub Action Workflows
 

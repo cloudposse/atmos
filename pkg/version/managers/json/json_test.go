@@ -25,7 +25,7 @@ var testRefs = map[string]manager.VersionRef{
 func setOptions(entries ...setEntry) map[string]any {
 	raw := make([]map[string]any, 0, len(entries))
 	for _, e := range entries {
-		raw = append(raw, map[string]any{"path": e.Path, "from": e.From})
+		raw = append(raw, map[string]any{"path": e.Path, "from": e.From, "format": e.Format})
 	}
 	return map[string]any{"set": raw}
 }
@@ -48,6 +48,25 @@ func planFixture(t *testing.T, name, content string, options map[string]any) (st
 		t.Fatalf("Plan returned error: %v", err)
 	}
 	return path, changes
+}
+
+// planFixtureErr is planFixture's error-path counterpart: it returns Plan's
+// error instead of failing the test, for cases that assert Plan fails.
+func planFixtureErr(t *testing.T, name, content string, options map[string]any) error {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	var m Manager
+	_, err := m.Plan(context.Background(), &managers.Input{
+		Dir:     dir,
+		Paths:   []string{name},
+		Refs:    testRefs,
+		Options: options,
+	})
+	return err
 }
 
 func TestJSONSetsValueAtPath(t *testing.T) {
@@ -222,6 +241,70 @@ func TestJSONDigestPinnedEntryUsesDigest(t *testing.T) {
 	}
 	if bytes.Contains(changes[0].New, []byte(testRefs["nginx"].Version)) {
 		t.Fatalf("expected plain version not to appear for a digest-pinned entry, got:\n%s", changes[0].New)
+	}
+}
+
+// TestJSONFormatUnsetIsVerbatim guards against a regression where adding the
+// Format field changes behavior for entries that don't set it: an empty
+// Format must still write ref.String() verbatim, not an empty string or a
+// no-op render.
+func TestJSONFormatUnsetIsVerbatim(t *testing.T) {
+	_, changes := planFixture(t, "plugin.json",
+		`{"version": "1.0.0"}`,
+		setOptions(setEntry{Path: "version", From: "opentofu"}))
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(changes))
+	}
+	if !bytes.Contains(changes[0].New, []byte(`"version": "1.10.6"`)) {
+		t.Fatalf("expected verbatim version rewrite, got:\n%s", changes[0].New)
+	}
+}
+
+// TestJSONFormatTrimsVersionPrefix exercises the primary use case: reshaping
+// a "v"-prefixed tag (e.g. from github-releases/github-tags) into bare
+// semver for a target field that doesn't use the "v" convention.
+func TestJSONFormatTrimsVersionPrefix(t *testing.T) {
+	_, changes := planFixture(t, "plugin.json",
+		`{"version": "1.0.0"}`,
+		setOptions(setEntry{Path: "version", From: "cli", Format: `{{ trimPrefix "v" .Version }}`}))
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(changes))
+	}
+	if !bytes.Contains(changes[0].New, []byte(`"version": "2.5.0"`)) {
+		t.Fatalf("expected formatted version rewrite, got:\n%s", changes[0].New)
+	}
+	if bytes.Contains(changes[0].New, []byte(testRefs["cli"].Version)) {
+		t.Fatalf("expected unformatted %q not to appear, got:\n%s", testRefs["cli"].Version, changes[0].New)
+	}
+}
+
+// TestJSONFormatInvalidSyntaxErrors guards against a bad Format template
+// silently writing garbage or an empty string: a syntax error must surface
+// as a clear, wrapped error instead.
+func TestJSONFormatInvalidSyntaxErrors(t *testing.T) {
+	err := planFixtureErr(t, "plugin.json",
+		`{"version": "1.0.0"}`,
+		setOptions(setEntry{Path: "version", From: "opentofu", Format: `{{ .Version`}))
+	if err == nil {
+		t.Fatal("expected an error for a malformed format template")
+	}
+	if !errors.Is(err, errUtils.ErrVersionJSONFormatInvalid) {
+		t.Fatalf("expected error to wrap ErrVersionJSONFormatInvalid, got: %v", err)
+	}
+}
+
+// TestJSONFormatUndefinedFieldErrors guards against a Format template
+// referencing a field that doesn't exist on manager.VersionRef silently
+// rendering "<no value>" or an empty string into the target file.
+func TestJSONFormatUndefinedFieldErrors(t *testing.T) {
+	err := planFixtureErr(t, "plugin.json",
+		`{"version": "1.0.0"}`,
+		setOptions(setEntry{Path: "version", From: "opentofu", Format: `{{ .Bogus }}`}))
+	if err == nil {
+		t.Fatal("expected an error for a format template referencing an undefined field")
+	}
+	if !errors.Is(err, errUtils.ErrVersionJSONFormatInvalid) {
+		t.Fatalf("expected error to wrap ErrVersionJSONFormatInvalid, got: %v", err)
 	}
 }
 

@@ -1,6 +1,6 @@
 // Package json implements the json file manager: sjson/gjson-based in-place
 // field writes on plain JSON files (package manifests, plugin listings, and
-// similar), configured via `options.set: [{path, from}]`. Unlike
+// similar), configured via `options.set: [{path, from, format}]`. Unlike
 // marker (comment-annotated) or template (a *.tmpl source rendered to a
 // sibling file), sjson.Set patches only the targeted path and leaves the
 // rest of the document's bytes -- formatting, key order, whitespace --
@@ -14,13 +14,16 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"text/template"
 
+	sprig "github.com/Masterminds/sprig/v3"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/templatefuncs"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 	"github.com/cloudposse/atmos/pkg/version/managers"
 )
@@ -36,10 +39,15 @@ const complexPathChars = "#*?@"
 const appendPathSegment = "-1"
 
 // setEntry is one options.set rule: write the resolved value for the
-// dependency named From at the sjson/gjson dot-path Path.
+// dependency named From at the sjson/gjson dot-path Path. Format, when set,
+// is a Go template (Sprig + Atmos template functions) rendered against the
+// resolved manager.VersionRef whose output replaces the verbatim value --
+// e.g. a github-releases tag like "v1.228.0" reshaped to bare semver for a
+// target that doesn't use the "v" convention.
 type setEntry struct {
-	Path string `mapstructure:"path"`
-	From string `mapstructure:"from"`
+	Path   string `mapstructure:"path"`
+	From   string `mapstructure:"from"`
+	Format string `mapstructure:"format"`
 }
 
 // jsonOptions is the parsed shape of a json file rule's Options.
@@ -197,13 +205,46 @@ func applySets(content []byte, entries []setEntry, refs map[string]manager.Versi
 		if !ok || ref.Version == "" {
 			continue
 		}
-		updated, err := applySet(current, entry, ref.String())
+		value := ref.String()
+		if entry.Format != "" {
+			formatted, err := renderSetFormat(entry.Format, ref)
+			if err != nil {
+				return nil, fmt.Errorf("%w: path %q: %w", errUtils.ErrVersionJSONFormatInvalid, entry.Path, err)
+			}
+			value = formatted
+		}
+		updated, err := applySet(current, entry, value)
 		if err != nil {
 			return nil, err
 		}
 		current = updated
 	}
 	return current, nil
+}
+
+// renderSetFormat renders a set entry's Format template against the resolved
+// version ref, exposing .Version, .Digest, and .Pin. It uses the same
+// Sprig-plus-Atmos-func-map composition as the sibling toolchain template
+// renderers (see pkg/toolchain/verification/template.go) rather than a
+// bespoke transform-type enum, so trimPrefix/trimSuffix/replace/
+// regexReplaceAll etc. are all available out of the box.
+func renderSetFormat(formatStr string, ref manager.VersionRef) (string, error) {
+	funcs := sprig.TxtFuncMap()
+	delete(funcs, "env")
+	delete(funcs, "expandenv")
+	delete(funcs, "getHostByName")
+	for name, fn := range templatefuncs.FuncMap() {
+		funcs[name] = fn
+	}
+	tmpl, err := template.New("json-set-format").Funcs(funcs).Parse(formatStr)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, ref); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 // applySet writes one set entry's value into content, or returns content

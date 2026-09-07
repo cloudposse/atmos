@@ -146,6 +146,7 @@ var (
 	ErrVersionJSONDuplicatePath         = errors.New("json manager has more than one set entry targeting the same path")
 	ErrVersionJSONExpandPathsFailed     = errors.New("json manager failed to expand configured paths")
 	ErrVersionJSONReadFailed            = errors.New("json manager failed to read target file")
+	ErrVersionJSONFormatInvalid         = errors.New("json manager set entry format template is invalid")
 	ErrVersionLockWriteFailed           = errors.New("failed to write version lock file")
 
 	// Theme-related errors.
