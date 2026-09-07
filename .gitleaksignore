@@ -1,0 +1,7 @@
+# Fingerprints of gitleaks findings that are confirmed false positives.
+# Format: <file>:<rule-id>:<line> (or <commit>:<file>:<rule-id>:<line> for a historical commit).
+# See the gitleaks docs for `.gitleaksignore`: https://github.com/gitleaks/gitleaks#gitleaksignore
+
+# Example ExecCredential token in the `atmos azure aks token` docs page -- a truncated,
+# non-functional placeholder ("eyJ0eXAiOiJKV1Qi..."), not a real credential.
+website/docs/cli/commands/azure/azure-aks-token.mdx:generic-api-key:84
