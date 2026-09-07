@@ -1578,7 +1578,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/charmbracelet/x/ansi
     License: MIT
-    URL: https://github.com/charmbracelet/x/blob/ansi/v0.11.7/ansi/LICENSE
+    URL: https://github.com/charmbracelet/x/blob/ansi/v0.11.8/ansi/LICENSE
 
   - github.com/charmbracelet/x/cellbuf
     License: MIT
@@ -1982,7 +1982,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/mattn/go-runewidth
     License: MIT
-    URL: https://github.com/mattn/go-runewidth/blob/v0.0.23/LICENSE
+    URL: https://github.com/mattn/go-runewidth/blob/v0.0.24/LICENSE
 
   - github.com/mattn/go-shellwords
     License: MIT
