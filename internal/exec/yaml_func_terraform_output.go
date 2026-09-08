@@ -24,11 +24,18 @@ func processTagTerraformOutput(
 
 // trackOutputDependency records the dependency in the resolution context and returns a cleanup function.
 // It returns an error if cycle detection fails.
+//
+// functionType identifies the calling YAML function (e.g. "terraform.output",
+// "aws.cloudformation.output") for the pushed DependencyNode — shared by every
+// output-fetching YAML function that reuses this "component [stack] output"
+// grammar, so it must be threaded through rather than hardcoded, or cycle
+// diagnostics for non-terraform.output callers would misreport their origin.
 func trackOutputDependency(
 	atmosConfig *schema.AtmosConfiguration,
 	resolutionCtx *ResolutionContext,
 	component string,
 	stack string,
+	functionType string,
 	input string,
 ) (func(), error) {
 	if resolutionCtx == nil {
@@ -38,7 +45,7 @@ func trackOutputDependency(
 	node := DependencyNode{
 		Component:    component,
 		Stack:        stack,
-		FunctionType: "terraform.output",
+		FunctionType: functionType,
 		FunctionCall: input,
 	}
 
@@ -89,7 +96,7 @@ func processTagTerraformOutputWithContext(
 	}
 
 	// Track dependency and get cleanup function.
-	cleanup, err := trackOutputDependency(atmosConfig, resolutionCtx, component, stack, input)
+	cleanup, err := trackOutputDependency(atmosConfig, resolutionCtx, component, stack, "terraform.output", input)
 	if err != nil {
 		return nil, err
 	}
