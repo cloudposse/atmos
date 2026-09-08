@@ -236,6 +236,22 @@ func TestFindComponentSectionInCachedStacks_AllTypesWithPrecedence(t *testing.T)
 	assert.Equal(t, "terraform", section["vars"].(map[string]any)["source"])
 }
 
+func TestFindComponentSectionInCachedStacks_PackerOnly(t *testing.T) {
+	stacks := map[string]any{
+		"dev-use1": map[string]any{
+			"components": map[string]any{
+				"packer": map[string]any{
+					"image": map[string]any{"vars": map[string]any{"source": "packer"}},
+				},
+			},
+		},
+	}
+
+	section := findComponentSectionInCachedStacks(stacks, "dev-use1", "image")
+	require.NotNil(t, section)
+	assert.Equal(t, "packer", section["vars"].(map[string]any)["source"])
+}
+
 func TestFindComponentSectionInCachedStacks_InvalidStackSection(t *testing.T) {
 	// Stack section is not a map.
 	stacks := map[string]any{"bad": "not-a-map"}
@@ -298,6 +314,20 @@ func TestFindDependentsByScan_SkipsAbstractAndSelf(t *testing.T) {
 				"invalid-type": "not-a-map",
 			},
 		},
+		"prod-use1": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{"tenant": "dev"},
+						"dependencies": map[string]any{
+							"components": []any{
+								map[string]any{"component": "vpc", "stack": "dev-use1"},
+							},
+						},
+					},
+				},
+			},
+		},
 		// Invalid stack section — should be skipped.
 		"bad-stack": "not-a-map",
 		// Missing components — should be skipped.
@@ -312,9 +342,12 @@ func TestFindDependentsByScan_SkipsAbstractAndSelf(t *testing.T) {
 
 	deps, err := findDependentsByScan(nil, args, stacks, providedVars, false)
 	require.NoError(t, err)
-	require.Len(t, deps, 1, "only 'app' should be a valid dependent")
-	assert.Equal(t, "app", deps[0].Component)
-	assert.Equal(t, "dev-use1", deps[0].Stack)
+	require.Len(t, deps, 2, "only the valid same-stack and cross-stack dependents should be returned")
+	actual := []string{
+		deps[0].Component + "@" + deps[0].Stack,
+		deps[1].Component + "@" + deps[1].Stack,
+	}
+	assert.ElementsMatch(t, []string{"app@dev-use1", "vpc@prod-use1"}, actual)
 }
 
 func TestFindDependentsFromIndex_SkipsSelfReference(t *testing.T) {
