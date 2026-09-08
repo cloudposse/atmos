@@ -174,7 +174,8 @@ func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
 	stubInitCLIConfig(t)
 
 	originalGraph := buildTerraformGraph
-	buildTerraformGraph = func(map[string]any, ...string) (*dependency.Graph, error) {
+	buildTerraformGraph = func(_ map[string]any, leftDelims ...string) (*dependency.Graph, error) {
+		assert.Len(t, leftDelims, 1)
 		return &dependency.Graph{Nodes: map[string]*dependency.Node{
 			"vpc-prod": {Component: "vpc", Stack: "prod"},
 			"vpc-dev":  {Component: "vpc", Stack: "dev"},

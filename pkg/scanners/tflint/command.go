@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/scanners"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
@@ -233,8 +234,8 @@ func execute(ctx context.Context, runtime *Runtime, info *schema.ConfigAndStacks
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
-
-	graph, err := buildTerraformGraph(stacks)
+	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	graph, err := buildTerraformGraph(stacks, leftDelim)
 	if err != nil {
 		return fmt.Errorf(terraformLintWrappedErrorFormat, errUtils.ErrBuildTerraformLintTargets, err)
 	}
