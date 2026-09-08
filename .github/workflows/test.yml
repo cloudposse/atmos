@@ -97,7 +97,13 @@ jobs:
           # ubuntu-latest acceptance shards and the other hosted Linux jobs.
           # With the s3-cache extra, its caches went to RunsOn's S3 where no
           # hosted job could ever see them.
-          - os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/private=false"
+          #
+          # "large" (4 cores/~32GB), not "terraform": the latter resolves to
+          # a 2-core i4i.large, and this leg is the critical path every
+          # acceptance shard waits on. Measured cold (run 34228937998): the
+          # `atmos build binary` step took 721s on "terraform" against ~350s
+          # on the 4-core hosted macOS/Windows legs compiling the same tree.
+          - os: "runs-on=${{github.run_id}}/runner=large/tag=atmos/private=false"
             target: linux
           - os: "windows-latest"
             target: windows

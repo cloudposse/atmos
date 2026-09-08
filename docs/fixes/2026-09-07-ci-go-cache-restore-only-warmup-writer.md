@@ -81,6 +81,14 @@ move without moving every consumer.
   --format=github` renders the new toolchain key
   (`atmos-toolchain-darwin-arm64-v2-5f174099f5f046d3`) with both restore-keys.
 - `atmos test` (short suite) run locally.
+- Dispatching the warmup on the PR branch (`gh workflow run ... --ref <branch>`) proved the
+  workflow end-to-end (all four legs saved 1.7-2.5 GB entries) but does NOT warm that PR's own
+  runs: a `pull_request` run reads only its merge ref and the base branch's scope, never the head
+  branch's, so the PR's Tests run still logged "Cache not found" on every platform. The design is
+  unaffected (main's scope is readable by every PR); it just cannot be measured pre-merge.
+- The same cold run also showed the Build linux leg's compile at 721 s on the 2-core RunsOn
+  `terraform` runner versus ~350 s on the 4-core hosted legs; that leg is the critical path every
+  acceptance shard waits on, so it now runs on `large` (4 cores).
 - Post-merge verification (requires main's cache scope, cannot be validated from a PR):
   dispatch `setup-go-cache-warmup.yml` and confirm multi-GB `go-cache-*` entries on
   `refs/heads/main` via the caches API, then compare Build(linux) `go build` time (expect
