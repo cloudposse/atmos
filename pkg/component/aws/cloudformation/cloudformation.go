@@ -113,5 +113,5 @@ func (p *ComponentProvider) GenerateArtifacts(_ *component.ExecutionContext) err
 // GetAvailableCommands returns the subcommands aws/cloudformation components support.
 func (p *ComponentProvider) GetAvailableCommands() []string {
 	defer perf.Track(nil, "cloudformation.GetAvailableCommands")()
-	return []string{"render", "diff", "plan", "apply", "deploy", "delete", "validate", "output"}
+	return []string{"render", "diff", "plan", "apply", "deploy", "delete", "destroy", "validate", "output", "outputs"}
 }

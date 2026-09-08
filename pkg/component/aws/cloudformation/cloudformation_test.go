@@ -76,6 +76,19 @@ func TestComponentProvider_GetAvailableCommands(t *testing.T) {
 	assert.Contains(t, commands, "validate")
 }
 
+// TestComponentProvider_GetAvailableCommands_MatchesExecuteAliases guards parity
+// between GetAvailableCommands and Execute's actual subcommand dispatch: "destroy"
+// (alias of delete) and "outputs" (alias of output) are handled by Execute but were
+// previously missing from GetAvailableCommands, so consumers that gate on the
+// returned list (e.g. pkg/composition/executor.go's verb-support check) rejected
+// those two valid aliases even though Execute itself accepts them.
+func TestComponentProvider_GetAvailableCommands_MatchesExecuteAliases(t *testing.T) {
+	p := &ComponentProvider{}
+	commands := p.GetAvailableCommands()
+	assert.Contains(t, commands, "destroy", "destroy is an Execute-handled alias of delete")
+	assert.Contains(t, commands, "outputs", "outputs is an Execute-handled alias of output")
+}
+
 func TestComponentProvider_GenerateArtifacts_NoOp(t *testing.T) {
 	p := &ComponentProvider{}
 	require.NoError(t, p.GenerateArtifacts(nil))
