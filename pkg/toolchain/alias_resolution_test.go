@@ -12,8 +12,6 @@ import (
 )
 
 func TestDefaultToolResolver_AliasResolution(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name       string
 		aliases    map[string]string
@@ -92,8 +90,6 @@ func TestDefaultToolResolver_AliasResolution(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			// Create a resolver with the test aliases.
 			resolver := &installer.DefaultToolResolver{
 				AtmosConfig: &schema.AtmosConfiguration{
@@ -119,8 +115,6 @@ func TestDefaultToolResolver_AliasResolution(t *testing.T) {
 }
 
 func TestDefaultToolResolver_AliasResolution_NoConfig(t *testing.T) {
-	t.Parallel()
-
 	// Test that resolver works when atmosConfig is nil.
 	resolver := &installer.DefaultToolResolver{
 		AtmosConfig: nil,
@@ -134,8 +128,6 @@ func TestDefaultToolResolver_AliasResolution_NoConfig(t *testing.T) {
 }
 
 func TestDefaultToolResolver_AliasChaining(t *testing.T) {
-	t.Parallel()
-
 	// Test that aliases are resolved in a single step (no chaining).
 	// If "myshort" -> "mymedium" and "mymedium" -> "owner/repo",
 	// "myshort" should resolve to "mymedium" (the first alias value), not "owner/repo".
@@ -165,8 +157,6 @@ func TestDefaultToolResolver_AliasChaining(t *testing.T) {
 }
 
 func TestDefaultToolResolver_AliasWithSlash(t *testing.T) {
-	t.Parallel()
-
 	// Test that if an alias value contains a slash, it's treated as owner/repo.
 	resolver := &installer.DefaultToolResolver{
 		AtmosConfig: &schema.AtmosConfiguration{

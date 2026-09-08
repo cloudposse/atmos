@@ -10,8 +10,6 @@ import (
 )
 
 func TestParseToolVersionArg(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name          string
 		input         string
@@ -69,8 +67,6 @@ func TestParseToolVersionArg(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			tool, ver, err := ParseToolVersionArg(tt.input)
 
 			if tt.expectError {
@@ -88,8 +84,6 @@ func TestParseToolVersionArg(t *testing.T) {
 }
 
 func TestIsSpecialVersion(t *testing.T) {
-	t.Parallel()
-
 	testCases := []struct {
 		version  string
 		expected bool
@@ -103,8 +97,6 @@ func TestIsSpecialVersion(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.version, func(t *testing.T) {
-			t.Parallel()
-
 			result := isSpecialVersion(tc.version)
 			assert.Equal(t, tc.expected, result)
 		})
@@ -112,8 +104,6 @@ func TestIsSpecialVersion(t *testing.T) {
 }
 
 func TestSortVersionsSemver(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name     string
 		input    []string
@@ -138,8 +128,6 @@ func TestSortVersionsSemver(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			result := sortVersionsSemver(tt.input)
 
 			// Handle the case where we might get nil instead of empty slice
@@ -153,8 +141,6 @@ func TestSortVersionsSemver(t *testing.T) {
 }
 
 func TestBasicFileOperations(t *testing.T) {
-	t.Parallel()
-
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test.txt")
 	testContent := []byte("test content")
@@ -179,8 +165,6 @@ func TestBasicFileOperations(t *testing.T) {
 }
 
 func TestBasicDirectoryOperations(t *testing.T) {
-	t.Parallel()
-
 	tempDir := t.TempDir()
 	newDir := filepath.Join(tempDir, "newdir")
 
