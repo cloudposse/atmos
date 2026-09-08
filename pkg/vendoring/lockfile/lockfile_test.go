@@ -55,6 +55,61 @@ func TestArtifactID_StableAcrossAbsoluteCheckoutPaths(t *testing.T) {
 	require.Equal(t, id1, id2, "the same logical artifact must hash to the same ID regardless of the checkout's absolute path")
 }
 
+// TestLocalSourceStableAcrossAbsoluteCheckoutPaths proves a local (filesystem) source is recorded
+// in vendor.lock.yaml relative to the project base -- never as one checkout's absolute path -- and
+// that IsMaterialized then matches the same logical source from a different checkout's absolute
+// path. The source deliberately lives OUTSIDE the project base ("../shared/mock"), exactly like the
+// tests/fixtures/scenarios/vendor-stack-labels fixture whose committed lock once embedded one
+// developer's absolute /Users path and so reported "declared source changed" on every other checkout.
+func TestLocalSourceStableAcrossAbsoluteCheckoutPaths(t *testing.T) {
+	t.Parallel()
+	checkout := func(t *testing.T) (config *schema.AtmosConfiguration, base, source, target string) {
+		t.Helper()
+		root := t.TempDir()
+		base = filepath.Join(root, "project")
+		source = filepath.Join(root, "shared", "mock") // Outside the project base on purpose.
+		target = filepath.Join(base, "components", "terraform", "comp-a")
+		require.NoError(t, os.MkdirAll(source, 0o755))
+		require.NoError(t, os.MkdirAll(target, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(target, "main.tf"), []byte("# mock"), 0o644))
+		return &schema.AtmosConfiguration{BasePath: base}, base, source, target
+	}
+	config1, base1, source1, target1 := checkout(t)
+	config2, base2, source2, target2 := checkout(t)
+	require.NotEqual(t, source1, source2, "test setup: the two absolute source paths must differ")
+
+	files, err := Inventory(target1)
+	require.NoError(t, err)
+	artifact := Artifact{Kind: "local", Target: target1, Source: Source{Declared: source1, Resolved: source1}, Files: files}
+	id := mustArtifactID(t, config1, artifact.Kind, artifact.Target)
+	require.NoError(t, Replace(config1, id, artifact))
+
+	// The committed lock must carry the project-relative form, not checkout 1's absolute path.
+	lock, err := Load(config1)
+	require.NoError(t, err)
+	require.Equal(t, "../shared/mock", lock.Artifacts[id].Source.Declared)
+	require.Equal(t, "../shared/mock", lock.Artifacts[id].Source.Resolved)
+	require.NotContains(t, lock.Artifacts[id].Source.Declared, base1)
+
+	// Simulate cloning on another machine: the same lock file and vendored files at a different
+	// absolute location. The same logical source must still be materialized there.
+	raw, err := os.ReadFile(Path(config1))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(Path(config2), raw, 0o644))
+	id2 := mustArtifactID(t, config2, "local", target2)
+	require.Equal(t, id, id2, "the same logical artifact must hash identically on both checkouts")
+
+	check, err := IsMaterialized(config2, MaterializationParams{ID: id2, Declared: source2, Target: target2})
+	require.NoError(t, err)
+	require.True(t, check.Materialized, "reason: %s", check.Reason)
+
+	// A genuinely different local source must still be detected as drift.
+	check, err = IsMaterialized(config2, MaterializationParams{ID: id2, Declared: filepath.Join(base2, "..", "other"), Target: target2})
+	require.NoError(t, err)
+	require.False(t, check.Materialized)
+	require.Equal(t, "declared source changed", check.Reason)
+}
+
 // TestArtifactID_RejectsTargetOutsideProjectBase proves a target that can't be expressed relative
 // to the project base (escapes it, e.g. via "..") is rejected with an error rather than silently
 // hashing something unexpected.
