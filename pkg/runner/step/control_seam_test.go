@@ -10,7 +10,10 @@ import (
 )
 
 func TestValidateControlChildrenNonInteractive(t *testing.T) {
+	t.Parallel()
+
 	t.Run("empty child type defaults to shell and is accepted", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "fanout",
 			Type: schema.TaskTypeParallel,
@@ -22,6 +25,7 @@ func TestValidateControlChildrenNonInteractive(t *testing.T) {
 	})
 
 	t.Run("unregistered child type is accepted (no handler to check RequiresTTY)", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "fanout",
 			Type: schema.TaskTypeParallel,
@@ -33,6 +37,7 @@ func TestValidateControlChildrenNonInteractive(t *testing.T) {
 	})
 
 	t.Run("interactive child type is rejected", func(t *testing.T) {
+		t.Parallel()
 		handler, ok := Get("input")
 		require.True(t, ok, "input step type must be registered")
 		require.True(t, handler.RequiresTTY(), "input step type must require TTY")
@@ -50,6 +55,7 @@ func TestValidateControlChildrenNonInteractive(t *testing.T) {
 	})
 
 	t.Run("no children is accepted", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{Name: "fanout", Type: schema.TaskTypeParallel}
 		require.NoError(t, validateControlChildrenNonInteractive(step))
 	})

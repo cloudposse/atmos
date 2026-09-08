@@ -15,6 +15,8 @@ import (
 )
 
 func TestResolveRenderConfig_NilUsesDefaults(t *testing.T) {
+	t.Parallel()
+
 	resolved := resolveRenderConfig(nil)
 	assert.NotEqual(t, lipgloss.Style{}, resolved.CreateStyle, "default CreateStyle should be non-zero")
 	assert.NotEqual(t, lipgloss.Style{}, resolved.DeleteStyle, "default DeleteStyle should be non-zero")
@@ -22,6 +24,8 @@ func TestResolveRenderConfig_NilUsesDefaults(t *testing.T) {
 
 // TestResolveRenderConfig_HonorsCallerStyles is a regression test for resolveRenderConfig, which previously discarded any style the caller set on RenderConfig, contradicting its own documented contract that styles are populated with defaults when not explicitly set.
 func TestResolveRenderConfig_HonorsCallerStyles(t *testing.T) {
+	t.Parallel()
+
 	customCreate := lipgloss.NewStyle().Bold(true)
 	resolved := resolveRenderConfig(&RenderConfig{CreateStyle: customCreate})
 
@@ -38,6 +42,8 @@ func TestResolveRenderConfig_HonorsCallerStyles(t *testing.T) {
 // read at render time. BuildRenderConfig is what wires them up; this locks in the documented
 // defaults (compact=true, show_attribute_bar=false) when the config fields are left unset.
 func TestBuildRenderConfig_DefaultsWhenUnset(t *testing.T) {
+	t.Parallel()
+
 	result := BuildRenderConfig(schema.TerraformUI{})
 
 	assert.True(t, result.Compact, "compact must default to true per the documented contract")
@@ -46,6 +52,8 @@ func TestBuildRenderConfig_DefaultsWhenUnset(t *testing.T) {
 }
 
 func TestBuildRenderConfig_HonorsExplicitValues(t *testing.T) {
+	t.Parallel()
+
 	compactFalse := false
 	showBarTrue := true
 
@@ -61,6 +69,8 @@ func TestBuildRenderConfig_HonorsExplicitValues(t *testing.T) {
 }
 
 func TestColorizedActionSymbol(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		action   string
 		expected string
@@ -76,6 +86,7 @@ func TestColorizedActionSymbol(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.action, func(t *testing.T) {
+			t.Parallel()
 			result := colorizedActionSymbol(tt.action)
 			// The result includes ANSI codes, but should contain the expected symbol.
 			assert.Contains(t, result, tt.expected)
@@ -84,6 +95,8 @@ func TestColorizedActionSymbol(t *testing.T) {
 }
 
 func TestDependencyTree_RenderTree_Simple(t *testing.T) {
+	t.Parallel()
+
 	tree := &DependencyTree{
 		Root: &TreeNode{
 			Address: "root",
@@ -106,6 +119,8 @@ func TestDependencyTree_RenderTree_Simple(t *testing.T) {
 }
 
 func TestDependencyTree_RenderTree_MultipleResources(t *testing.T) {
+	t.Parallel()
+
 	tree := &DependencyTree{
 		Root: &TreeNode{
 			Address: "root",
@@ -140,6 +155,8 @@ func TestDependencyTree_RenderTree_MultipleResources(t *testing.T) {
 }
 
 func TestDependencyTree_GetChangeSummary(t *testing.T) {
+	t.Parallel()
+
 	tree := &DependencyTree{
 		Root: &TreeNode{
 			Address: "root",
@@ -165,6 +182,8 @@ func TestDependencyTree_GetChangeSummary(t *testing.T) {
 }
 
 func TestDependencyTree_GetChangeSummary_WithReplace(t *testing.T) {
+	t.Parallel()
+
 	tree := &DependencyTree{
 		Root: &TreeNode{
 			Address: "root",
@@ -184,6 +203,8 @@ func TestDependencyTree_GetChangeSummary_WithReplace(t *testing.T) {
 }
 
 func TestSortChildren(t *testing.T) {
+	t.Parallel()
+
 	root := &TreeNode{
 		Address: "root",
 		Children: []*TreeNode{
@@ -201,6 +222,8 @@ func TestSortChildren(t *testing.T) {
 }
 
 func TestRenderChildren_Empty(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	// No styling in test for simplicity.
 	renderChildren(&b, nil, nil, nil)
@@ -209,6 +232,8 @@ func TestRenderChildren_Empty(t *testing.T) {
 }
 
 func TestRenderChildren_SingleNode(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	nodes := []*TreeNode{
 		{Address: "aws_vpc.main", Action: "create"},
@@ -222,6 +247,8 @@ func TestRenderChildren_SingleNode(t *testing.T) {
 }
 
 func TestRenderChildren_MultipleNodes(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	nodes := []*TreeNode{
 		{Address: "aws_vpc.main", Action: "create"},
@@ -242,6 +269,8 @@ func TestRenderChildren_MultipleNodes(t *testing.T) {
 // carry the tree's "│" continuation bar on every line, so the gutter stays visually connected
 // down to the next sibling's connector instead of breaking for the height of the diff block.
 func TestRenderChildren_AttributeChangesPreserveGutterForNonLastSibling(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	nodes := []*TreeNode{
 		{
@@ -275,6 +304,8 @@ func TestRenderChildren_AttributeChangesPreserveGutterForNonLastSibling(t *testi
 // rows must carry a "│" at the children's column. Otherwise the first child's "├"/"└"
 // floats below the diff block with nothing above it.
 func TestRenderChildren_AttributeRowsCarryRailToChildren(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	nodes := []*TreeNode{
 		{
@@ -323,6 +354,8 @@ func TestRenderChildren_AttributeRowsCarryRailToChildren(t *testing.T) {
 // attribute changes but no children has nothing to connect to below its diff block, so
 // its attribute rows must not draw a rail at the (would-be) child column.
 func TestRenderChildren_AttributeRowsNoRailWithoutChildren(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	nodes := []*TreeNode{
 		{
@@ -347,6 +380,8 @@ func TestRenderChildren_AttributeRowsNoRailWithoutChildren(t *testing.T) {
 // sibling resource blocks in non-compact mode keeps this level's rail, so the gutter
 // doesn't break at the gap before the next sibling.
 func TestRenderChildren_NonCompactSpacerCarriesRail(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	nodes := []*TreeNode{
 		{Address: "aws_vpc.main", Action: "create"},
@@ -367,6 +402,8 @@ func TestRenderChildren_NonCompactSpacerCarriesRail(t *testing.T) {
 // connector and rail has something above it in the same column (see uitree.Violations),
 // in both compact and non-compact modes.
 func TestRenderTree_IsConnected(t *testing.T) {
+	t.Parallel()
+
 	change := []*AttributeChange{{Key: "k", Before: nil, After: "v"}, {Key: "k2", Before: "a", After: "b"}}
 	tree := &DependencyTree{
 		Stack: "dev", Component: "vpc",
@@ -393,6 +430,8 @@ func TestRenderTree_IsConnected(t *testing.T) {
 }
 
 func TestExtractReferences(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		refs     []string
@@ -464,6 +503,7 @@ func TestExtractReferences(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create a mock expression with the references.
 			// tfjson.Expression embeds ExpressionData which contains References.
 			expr := &tfjson.Expression{
@@ -478,12 +518,16 @@ func TestExtractReferences(t *testing.T) {
 }
 
 func TestExtractReferences_NilExpression(t *testing.T) {
+	t.Parallel()
+
 	result := extractReferences(nil, "")
 	assert.Nil(t, result)
 }
 
 // Tests for renderMultilineDiffSimple - verifies line-by-line diff behavior.
 func TestRenderMultilineDiffSimple_IdenticalLines(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	before := "line1\nline2\nline3"
 	after := "line1\nline2\nline3"
@@ -503,6 +547,8 @@ func TestRenderMultilineDiffSimple_IdenticalLines(t *testing.T) {
 }
 
 func TestRenderMultilineDiffSimple_SingleLineChange(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	before := "line1\nold-line\nline3"
 	after := "line1\nnew-line\nline3"
@@ -521,6 +567,8 @@ func TestRenderMultilineDiffSimple_SingleLineChange(t *testing.T) {
 }
 
 func TestRenderMultilineDiffSimple_ConsecutiveChangesGrouped(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	before := "unchanged\nold1\nold2\nold3\nfinal"
 	after := "unchanged\nnew1\nnew2\nfinal"
@@ -555,6 +603,8 @@ func TestRenderMultilineDiffSimple_ConsecutiveChangesGrouped(t *testing.T) {
 }
 
 func TestRenderMultilineDiffSimple_MixedUnchangedAndChanged(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	before := "header\nold-section1\nmiddle\nold-section2\nfooter"
 	after := "header\nnew-section1\nmiddle\nnew-section2\nfooter"
@@ -578,6 +628,8 @@ func TestRenderMultilineDiffSimple_MixedUnchangedAndChanged(t *testing.T) {
 }
 
 func TestRenderMultilineDiffSimple_LinesAdded(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	before := "line1\nline3"
 	after := "line1\nline2\nline3"
@@ -595,6 +647,8 @@ func TestRenderMultilineDiffSimple_LinesAdded(t *testing.T) {
 }
 
 func TestRenderMultilineDiffSimple_LinesDeleted(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	before := "line1\nline2\nline3"
 	after := "line1\nline3"
@@ -612,6 +666,8 @@ func TestRenderMultilineDiffSimple_LinesDeleted(t *testing.T) {
 }
 
 func TestRenderMultilineDiffSimple_DifferentLengths(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	before := "a\nb"
 	after := "a\nb\nc\nd\ne"
@@ -631,6 +687,8 @@ func TestRenderMultilineDiffSimple_DifferentLengths(t *testing.T) {
 }
 
 func TestRenderMultilineDiffSimple_EmptyBefore(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	before := ""
 	after := "new-line"
@@ -645,6 +703,8 @@ func TestRenderMultilineDiffSimple_EmptyBefore(t *testing.T) {
 }
 
 func TestRenderMultilineDiffSimple_EmptyAfter(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	before := "old-line"
 	after := ""
@@ -660,6 +720,8 @@ func TestRenderMultilineDiffSimple_EmptyAfter(t *testing.T) {
 
 // Tests for attribute change rendering and color coding.
 func TestRenderAttributeChanges_NewAttribute(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "new_attr", Before: nil, After: "value", Unknown: false},
@@ -675,6 +737,8 @@ func TestRenderAttributeChanges_NewAttribute(t *testing.T) {
 }
 
 func TestRenderAttributeChanges_DeletedAttribute(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "deleted_attr", Before: "old_value", After: nil, Unknown: false},
@@ -690,6 +754,8 @@ func TestRenderAttributeChanges_DeletedAttribute(t *testing.T) {
 }
 
 func TestRenderAttributeChanges_UpdatedAttribute(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "updated_attr", Before: "old", After: "new", Unknown: false},
@@ -708,6 +774,8 @@ func TestRenderAttributeChanges_UpdatedAttribute(t *testing.T) {
 }
 
 func TestRenderAttributeChanges_ComputedUnknown(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "computed_attr", Before: "old_hash", After: nil, Unknown: true},
@@ -723,6 +791,8 @@ func TestRenderAttributeChanges_ComputedUnknown(t *testing.T) {
 }
 
 func TestRenderAttributeChanges_SensitiveValue(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "secret", Before: nil, After: "super-secret", Unknown: false, Sensitive: true},
@@ -740,6 +810,8 @@ func TestRenderAttributeChanges_SensitiveValue(t *testing.T) {
 }
 
 func TestRenderAttributeChanges_MultipleAttributesAligned(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "short", Before: nil, After: "a", Unknown: false},
@@ -757,6 +829,8 @@ func TestRenderAttributeChanges_MultipleAttributesAligned(t *testing.T) {
 }
 
 func TestRenderAttributeChanges_BooleanValues(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "enabled", Before: false, After: true, Unknown: false},
@@ -771,6 +845,8 @@ func TestRenderAttributeChanges_BooleanValues(t *testing.T) {
 }
 
 func TestRenderAttributeChanges_NumericValues(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "count", Before: float64(5), After: float64(10), Unknown: false},
@@ -785,6 +861,8 @@ func TestRenderAttributeChanges_NumericValues(t *testing.T) {
 }
 
 func TestRenderAttributeChanges_ForcesReplacement(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "content", Before: "old", After: "new", Unknown: false, ForcesReplacement: true},
@@ -800,6 +878,8 @@ func TestRenderAttributeChanges_ForcesReplacement(t *testing.T) {
 }
 
 func TestRenderAttributeChanges_ForcesReplacementMultiline(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "content", Before: "line1\nline2", After: "line1\nline3", Unknown: false, ForcesReplacement: true},
@@ -815,6 +895,8 @@ func TestRenderAttributeChanges_ForcesReplacementMultiline(t *testing.T) {
 }
 
 func TestRenderAttributeChanges_NoForcesReplacement(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "tags", Before: "old", After: "new", Unknown: false, ForcesReplacement: false},
@@ -830,6 +912,8 @@ func TestRenderAttributeChanges_NoForcesReplacement(t *testing.T) {
 }
 
 func TestExtractAttributeChanges_WithReplacePaths(t *testing.T) {
+	t.Parallel()
+
 	// Create a mock ResourceChange with ReplacePaths.
 	rc := &tfjson.ResourceChange{
 		Address: "local_file.example",
@@ -862,6 +946,8 @@ func TestExtractAttributeChanges_WithReplacePaths(t *testing.T) {
 }
 
 func TestExtractAttributeChanges_WithNestedReplacePaths(t *testing.T) {
+	t.Parallel()
+
 	// Create a mock ResourceChange with nested ReplacePaths (e.g., list element).
 	rc := &tfjson.ResourceChange{
 		Address: "aws_instance.example",
@@ -894,6 +980,8 @@ func TestExtractAttributeChanges_WithNestedReplacePaths(t *testing.T) {
 }
 
 func TestExtractAttributeChanges_NoReplacePaths(t *testing.T) {
+	t.Parallel()
+
 	// Create a mock ResourceChange without ReplacePaths (normal update).
 	rc := &tfjson.ResourceChange{
 		Address: "aws_instance.example",
@@ -922,6 +1010,8 @@ func TestExtractAttributeChanges_NoReplacePaths(t *testing.T) {
 
 // Tests for valuesEqual helper function.
 func TestValuesEqual(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		a        interface{}
@@ -945,6 +1035,7 @@ func TestValuesEqual(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := valuesEqual(tt.a, tt.b)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -953,6 +1044,8 @@ func TestValuesEqual(t *testing.T) {
 
 // Tests for formatSimpleValue helper function.
 func TestFormatSimpleValue(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		value     interface{}
@@ -972,6 +1065,7 @@ func TestFormatSimpleValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := formatSimpleValue(tt.value, tt.sensitive)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -979,6 +1073,8 @@ func TestFormatSimpleValue(t *testing.T) {
 }
 
 func TestFormatSimpleValue_LongStringTruncation(t *testing.T) {
+	t.Parallel()
+
 	longString := strings.Repeat("a", 100)
 	result := formatSimpleValue(longString, false)
 
@@ -990,6 +1086,8 @@ func TestFormatSimpleValue_LongStringTruncation(t *testing.T) {
 
 // Tests for getRawStringValue helper function.
 func TestGetRawStringValue(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		value         interface{}
@@ -1006,6 +1104,7 @@ func TestGetRawStringValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			str, isMulti := getRawStringValue(tt.value, tt.sensitive)
 			assert.Equal(t, tt.expectedStr, str)
 			assert.Equal(t, tt.expectedMulti, isMulti)
@@ -1015,6 +1114,8 @@ func TestGetRawStringValue(t *testing.T) {
 
 // Tests for getContrastTextColor helper function.
 func TestGetContrastTextColor(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		bgColor  string
@@ -1032,6 +1133,7 @@ func TestGetContrastTextColor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := getContrastTextColor(tt.bgColor)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -1039,6 +1141,8 @@ func TestGetContrastTextColor(t *testing.T) {
 }
 
 func TestGetContrastTextColor_InvalidInput(t *testing.T) {
+	t.Parallel()
+
 	// Invalid inputs should default to white.
 	assert.Equal(t, "#FFFFFF", getContrastTextColor("invalid"))
 	assert.Equal(t, "#FFFFFF", getContrastTextColor("#ZZZ"))
@@ -1046,6 +1150,8 @@ func TestGetContrastTextColor_InvalidInput(t *testing.T) {
 }
 
 func TestRenderChangeSummaryBadges_NoChanges(t *testing.T) {
+	t.Parallel()
+
 	result := RenderChangeSummaryBadges(0, 0, 0)
 	assert.Contains(t, result, "NO CHANGES")
 	// Use patterns with numbers to avoid matching within "NO CHANGES".
@@ -1055,6 +1161,8 @@ func TestRenderChangeSummaryBadges_NoChanges(t *testing.T) {
 }
 
 func TestRenderChangeSummaryBadges_OnlyAdd(t *testing.T) {
+	t.Parallel()
+
 	result := RenderChangeSummaryBadges(3, 0, 0)
 	assert.Contains(t, result, "3 ADD")
 	assert.NotContains(t, result, "CHANGE")
@@ -1063,6 +1171,8 @@ func TestRenderChangeSummaryBadges_OnlyAdd(t *testing.T) {
 }
 
 func TestRenderChangeSummaryBadges_OnlyChange(t *testing.T) {
+	t.Parallel()
+
 	result := RenderChangeSummaryBadges(0, 2, 0)
 	assert.Contains(t, result, "2 CHANGE")
 	assert.NotContains(t, result, "ADD")
@@ -1071,6 +1181,8 @@ func TestRenderChangeSummaryBadges_OnlyChange(t *testing.T) {
 }
 
 func TestRenderChangeSummaryBadges_OnlyRemove(t *testing.T) {
+	t.Parallel()
+
 	result := RenderChangeSummaryBadges(0, 0, 5)
 	assert.Contains(t, result, "5 DELETE")
 	assert.NotContains(t, result, "ADD")
@@ -1079,6 +1191,8 @@ func TestRenderChangeSummaryBadges_OnlyRemove(t *testing.T) {
 }
 
 func TestRenderChangeSummaryBadges_AllTypes(t *testing.T) {
+	t.Parallel()
+
 	result := RenderChangeSummaryBadges(1, 2, 3)
 	assert.Contains(t, result, "1 ADD")
 	assert.Contains(t, result, "2 CHANGE")
@@ -1087,6 +1201,8 @@ func TestRenderChangeSummaryBadges_AllTypes(t *testing.T) {
 }
 
 func TestCountActions_Nil(t *testing.T) {
+	t.Parallel()
+
 	var add, change, remove int
 	countActions(nil, &add, &change, &remove)
 	assert.Equal(t, 0, add)
@@ -1095,6 +1211,8 @@ func TestCountActions_Nil(t *testing.T) {
 }
 
 func TestCountActions_SingleNode(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		action       string
@@ -1112,6 +1230,7 @@ func TestCountActions_SingleNode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var add, change, remove int
 			node := &TreeNode{Address: "test", Action: tt.action}
 			countActions(node, &add, &change, &remove)
@@ -1125,6 +1244,8 @@ func TestCountActions_SingleNode(t *testing.T) {
 // TestRenderChildren_CompactMode_NoBlankLines verifies Compact: true suppresses the blank
 // line that would otherwise separate non-last resource blocks.
 func TestRenderChildren_CompactMode_NoBlankLines(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	nodes := []*TreeNode{
 		{Address: "aws_vpc.main", Action: "create"},
@@ -1140,6 +1261,8 @@ func TestRenderChildren_CompactMode_NoBlankLines(t *testing.T) {
 // TestRenderAttributeChanges_WithAttributeBar verifies ShowAttributeBar renders the "┃" bar
 // alongside each attribute row.
 func TestRenderAttributeChanges_WithAttributeBar(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "name", Before: "old", After: "new"},
@@ -1156,6 +1279,8 @@ func TestRenderAttributeChanges_WithAttributeBar(t *testing.T) {
 // (Before nil, After multi-line) renders every line with a "+" marker via
 // renderMultilineValueSimple, including truncation of lines exceeding the max width.
 func TestRenderAttributeChanges_MultilineOnlyAddition(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	longLine := strings.Repeat("a", 150)
 	changes := []*AttributeChange{
@@ -1178,6 +1303,8 @@ func TestRenderAttributeChanges_MultilineOnlyAddition(t *testing.T) {
 // TestRenderAttributeChanges_MultilineOnlyDeletion verifies a purely-removed multi-line value
 // (Before multi-line, After nil) renders every line with a "-" marker.
 func TestRenderAttributeChanges_MultilineOnlyDeletion(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "script", Before: "line1\nline2", After: nil, Unknown: false},
@@ -1196,6 +1323,8 @@ func TestRenderAttributeChanges_MultilineOnlyDeletion(t *testing.T) {
 // TestRenderAttributeChanges_ComplexValue_Create verifies a map/array attribute that's newly
 // added (Before nil) is rendered as pretty-printed JSON lines, each prefixed with "+".
 func TestRenderAttributeChanges_ComplexValue_Create(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "tags", Before: nil, After: map[string]interface{}{"Name": "main", "Env": "dev"}},
@@ -1212,6 +1341,8 @@ func TestRenderAttributeChanges_ComplexValue_Create(t *testing.T) {
 // TestRenderAttributeChanges_ComplexValue_Delete verifies a map/array attribute that's
 // removed (After nil) is rendered as pretty-printed JSON lines, each prefixed with "-".
 func TestRenderAttributeChanges_ComplexValue_Delete(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "tags", Before: map[string]interface{}{"Name": "main"}, After: nil},
@@ -1229,6 +1360,8 @@ func TestRenderAttributeChanges_ComplexValue_Delete(t *testing.T) {
 // both sides is rendered as a line-by-line JSON diff (renderJSONDiff), also exercising the
 // attribute-bar content-indent branch (ShowAttributeBar: true).
 func TestRenderAttributeChanges_ComplexValue_Update(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{
@@ -1251,6 +1384,8 @@ func TestRenderAttributeChanges_ComplexValue_Update(t *testing.T) {
 // TestRenderMultilineDiffSimple_LongLineTruncated verifies makeTruncator's truncation branch:
 // a line exceeding the max content width is cut short and suffixed with "...".
 func TestRenderMultilineDiffSimple_LongLineTruncated(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	longBefore := strings.Repeat("x", 150)
 	longAfter := strings.Repeat("y", 150)
@@ -1271,6 +1406,8 @@ func TestRenderMultilineDiffSimple_LongLineTruncated(t *testing.T) {
 // so a multi-byte UTF-8 character (e.g. in a tag/description/template attribute value) is never
 // split into an invalid partial sequence.
 func TestMakeTruncator_RuneSafe(t *testing.T) {
+	t.Parallel()
+
 	truncate := makeTruncator(10)
 
 	// Each "é" is 2 bytes in UTF-8; a byte-index slice at width-3=7 would land mid-rune.
@@ -1285,6 +1422,8 @@ func TestMakeTruncator_RuneSafe(t *testing.T) {
 
 // TestMakeTruncator_ShortLineUnchanged verifies lines at or under maxWidth pass through untouched.
 func TestMakeTruncator_ShortLineUnchanged(t *testing.T) {
+	t.Parallel()
+
 	truncate := makeTruncator(10)
 	assert.Equal(t, "short", truncate("short"))
 }
@@ -1296,6 +1435,8 @@ func TestMakeTruncator_ShortLineUnchanged(t *testing.T) {
 // implementation) indexes past the end of a short-enough rune slice and panics. 6 "界"
 // characters have a rune length of 6 but a display width of 12.
 func TestMakeTruncator_WideCharacterSafe(t *testing.T) {
+	t.Parallel()
+
 	truncate := makeTruncator(10)
 
 	line := strings.Repeat("界", 6)
@@ -1314,6 +1455,8 @@ func TestMakeTruncator_WideCharacterSafe(t *testing.T) {
 // when no transform function is supplied (the identity path used defensively but never
 // actually reached by the current call site, which always passes a non-nil truncator).
 func TestTransformLines_NilTransform(t *testing.T) {
+	t.Parallel()
+
 	lines := []string{"a", "b", "c"}
 	result := transformLines(lines, nil)
 	assert.Equal(t, lines, result)
@@ -1321,6 +1464,8 @@ func TestTransformLines_NilTransform(t *testing.T) {
 
 // TestTransformLines_WithTransform verifies transformLines applies the transform to every line.
 func TestTransformLines_WithTransform(t *testing.T) {
+	t.Parallel()
+
 	lines := []string{"a", "bb"}
 	result := transformLines(lines, strings.ToUpper)
 	assert.Equal(t, []string{"A", "BB"}, result)
@@ -1330,6 +1475,8 @@ func TestTransformLines_WithTransform(t *testing.T) {
 // renderAttributeChanges when a node carries attribute-level changes (rather than only
 // exercising renderAttributeChanges directly, bypassing the tree-rendering call site).
 func TestRenderChildren_WithAttributeChanges(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	nodes := []*TreeNode{
 		{
@@ -1352,6 +1499,8 @@ func TestRenderChildren_WithAttributeChanges(t *testing.T) {
 // Unknown: true (After computed at apply time) renders "(known after apply)" as the after side
 // of the diff rather than leaving it blank.
 func TestRenderAttributeChanges_MultilineUnknown(t *testing.T) {
+	t.Parallel()
+
 	var b strings.Builder
 	changes := []*AttributeChange{
 		{Key: "cert", Before: "line1\nline2", After: nil, Unknown: true},
@@ -1365,6 +1514,8 @@ func TestRenderAttributeChanges_MultilineUnknown(t *testing.T) {
 }
 
 func TestCountActions_Recursive(t *testing.T) {
+	t.Parallel()
+
 	root := &TreeNode{
 		Address: "root",
 		Action:  "", // Root typically has no action.

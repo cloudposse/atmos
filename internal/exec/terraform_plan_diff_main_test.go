@@ -10,6 +10,8 @@ import (
 )
 
 func TestParsePlanDiffFlags(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		args         []string
@@ -70,6 +72,7 @@ func TestParsePlanDiffFlags(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			origPlan, newPlan, err := parsePlanDiffFlags(tc.args)
 
 			if tc.expectError {
@@ -87,6 +90,8 @@ func TestParsePlanDiffFlags(t *testing.T) {
 }
 
 func TestValidateOriginalPlanFile(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory for test files
 	tmpDir := t.TempDir()
 
@@ -140,6 +145,7 @@ func TestValidateOriginalPlanFile(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := validateOriginalPlanFile(tc.origPlanFile, tc.componentPath)
 
 			if tc.expectError {
@@ -154,6 +160,8 @@ func TestValidateOriginalPlanFile(t *testing.T) {
 }
 
 func TestExtractJSONFromOutput(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		showOutput     string
@@ -210,6 +218,7 @@ Terraform show output
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := extractJSONFromOutput(tc.showOutput)
 
 			if tc.expectError {

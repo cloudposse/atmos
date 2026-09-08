@@ -14,6 +14,8 @@ import (
 )
 
 func TestNewConfigSetTool(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	tool := NewConfigSetTool(atmosConfig)
 
@@ -22,16 +24,22 @@ func TestNewConfigSetTool(t *testing.T) {
 }
 
 func TestConfigSetTool_Name(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigSetTool(&schema.AtmosConfiguration{})
 	assert.Equal(t, "atmos_config_set", tool.Name())
 }
 
 func TestConfigSetTool_Description(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigSetTool(&schema.AtmosConfiguration{})
 	assert.Contains(t, tool.Description(), "Set a value")
 }
 
 func TestConfigSetTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigSetTool(&schema.AtmosConfiguration{})
 	params := tool.Parameters()
 
@@ -47,20 +55,27 @@ func TestConfigSetTool_Parameters(t *testing.T) {
 }
 
 func TestConfigSetTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigSetTool(&schema.AtmosConfiguration{})
 	assert.True(t, tool.RequiresPermission())
 }
 
 func TestConfigSetTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigSetTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.IsRestricted())
 }
 
 func TestConfigSetTool_Execute(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigSetTool(&schema.AtmosConfiguration{})
 	ctx := context.Background()
 
 	t.Run("creates a new value and infers bool type from schema", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "logs:\n  level: info\n")
 
@@ -82,6 +97,7 @@ func TestConfigSetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("updates an existing value", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "logs:\n  level: info\n")
 
@@ -102,6 +118,7 @@ func TestConfigSetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("falls back to string type for unmodeled paths", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "vars:\n  region: us-east-1\n")
 
@@ -117,6 +134,7 @@ func TestConfigSetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("honors explicit type override", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "settings:\n  count: 1\n")
 
@@ -137,6 +155,7 @@ func TestConfigSetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with missing path parameter", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"value": "true",
 			"file":  filepath.Join(t.TempDir(), "atmos.yaml"),
@@ -148,6 +167,7 @@ func TestConfigSetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with missing value parameter", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"path": "mcp.enabled",
 			"file": filepath.Join(t.TempDir(), "atmos.yaml"),
@@ -159,6 +179,7 @@ func TestConfigSetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails when the explicit file override does not exist", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"path":  "mcp.enabled",
 			"value": "true",
@@ -171,6 +192,7 @@ func TestConfigSetTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails when the explicit type does not validate the value", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "settings:\n  count: 1\n")
 
@@ -188,17 +210,22 @@ func TestConfigSetTool_Execute(t *testing.T) {
 }
 
 func TestResolveConfigSetValueType(t *testing.T) {
+	t.Parallel()
+
 	t.Run("explicit type wins over inference", func(t *testing.T) {
+		t.Parallel()
 		got := resolveConfigSetValueType(map[string]interface{}{"type": atmosyaml.TypeYAML}, "mcp.enabled")
 		assert.Equal(t, atmosyaml.TypeYAML, got)
 	})
 
 	t.Run("infers bool from schema when type omitted", func(t *testing.T) {
+		t.Parallel()
 		got := resolveConfigSetValueType(map[string]interface{}{}, "mcp.enabled")
 		assert.Equal(t, atmosyaml.TypeBool, got)
 	})
 
 	t.Run("falls back to string for unmodeled paths", func(t *testing.T) {
+		t.Parallel()
 		got := resolveConfigSetValueType(map[string]interface{}{}, "vars.custom_key")
 		assert.Equal(t, atmosyaml.TypeString, got)
 	})
