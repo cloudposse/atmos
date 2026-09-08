@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	gen "github.com/cloudposse/atmos/pkg/generator"
+	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/source"
@@ -111,6 +112,20 @@ If no target directory is specified, you will be prompted for one.`,
 		force := v.GetBool("force")
 		update := v.GetBool("update")
 		baseRef := v.GetString("base-ref")
+		updateStrategy := v.GetString("update-strategy")
+		// --base-ref only means anything for the default tracked strategy
+		// (the target's own git history); rendered's base ref instead comes
+		// from the target's own recorded scaffold.yaml, so an explicit
+		// --base-ref alongside --update-strategy=rendered is a contradiction
+		// rather than a value to silently ignore.
+		if baseRef != "" && updateStrategy == "rendered" {
+			return errUtils.Build(errUtils.ErrMutuallyExclusiveFlags).
+				WithExplanation("`--base-ref` and `--update-strategy=rendered` conflict").
+				WithHint("`--update-strategy=rendered`'s base ref comes from the target's own recorded scaffold.yaml, not `--base-ref`").
+				WithHint("Drop `--base-ref`, or use `--update-strategy=tracked` (the default) instead").
+				WithExitCode(2).
+				Err()
+		}
 		// Only pre-resolve here when target is already the real, final
 		// target directory (i.e. it was given positionally). When target is
 		// "" the interactive flow still has to prompt for one -- see
@@ -182,6 +197,7 @@ If no target directory is specified, you will be prompted for one.`,
 			git:            gitEnabled,
 			mergeStrategy:  mergeStrategy,
 			mergeDriver:    mergeDriver,
+			updateStrategy: updateStrategy,
 			skipHooks:      skipHooks,
 		})
 	},
@@ -203,6 +219,7 @@ type scaffoldGenerateOptions struct {
 	git            bool
 	mergeStrategy  string
 	mergeDriver    string
+	updateStrategy string
 	skipHooks      func(string) bool
 }
 
@@ -257,6 +274,8 @@ func init() {
 		flags.WithValidValues("merge-driver", "auto", "text"),
 		flags.WithStringFlag("merge-strategy", "", "", "Conflict resolution strategy for --update: manual (surface conflicts, default; theirs if --force is set), ours (keep your version), theirs (use the template's version)"),
 		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
+		flags.WithStringFlag("update-strategy", "", "tracked", "Where --update's 3-way merge base comes from: tracked (the target's own git history at --base-ref, default), rendered (a pristine re-render of the template at the ref that produced what's currently on disk, using its recorded answers; requires a prior generation's scaffold.yaml record, no git dependency)"),
+		flags.WithValidValues("update-strategy", "tracked", "rendered"),
 		// Skip scaffold hooks at runtime, mirroring `terraform`'s --skip-hooks
 		// (see cmd/terraform/flags.go): --skip-hooks (no value) skips all
 		// hooks for this invocation; --skip-hooks=name1,name2 skips only the
@@ -276,6 +295,7 @@ func init() {
 		flags.WithEnvVars("no-git", "ATMOS_SCAFFOLD_NO_GIT"),
 		flags.WithEnvVars("merge-driver", "ATMOS_SCAFFOLD_MERGE_DRIVER"),
 		flags.WithEnvVars("merge-strategy", "ATMOS_SCAFFOLD_MERGE_STRATEGY"),
+		flags.WithEnvVars("update-strategy", "ATMOS_SCAFFOLD_UPDATE_STRATEGY"),
 		flags.WithEnvVars("skip-hooks", "ATMOS_SCAFFOLD_SKIP_HOOKS"),
 	)
 
@@ -368,6 +388,26 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 		return err
 	}
 	scaffoldUI.SetMergeDriver(mergeDriver)
+
+	updateStrategy, err := engine.ParseUpdateStrategy(opts.updateStrategy)
+	if err != nil {
+		return err
+	}
+	scaffoldUI.SetUpdateStrategy(updateStrategy)
+
+	// Only resolve here when target is already the real, final target
+	// directory (positional). The no-target interactive flow resolves this
+	// itself once the real directory is known -- see
+	// resolveInteractiveBaseRef, mirroring --base-ref's own split
+	// resolution above.
+	if opts.update && updateStrategy == engine.UpdateStrategyRendered && absTargetDir != "" {
+		oldConfig, oldValues, cleanupOldSource, err := source.ResolveRenderedBase(absTargetDir, opts.sourceOverride)
+		if err != nil {
+			return err
+		}
+		defer cleanupOldSource()
+		scaffoldUI.SetRenderedBaseSource(oldConfig, oldValues)
+	}
 
 	// Select template (interactive or by name)
 	selectedConfig, err := selectGenerateTemplate(opts, configs, scaffoldUI)
@@ -714,7 +754,10 @@ func executeTemplateWithoutTargetDir(
 		// Interactive mode: use ExecuteWithInteractiveFlow which will prompt for target directory.
 		scaffoldUI.SetSkipHooks(opts.skipHooks)
 
-		targetDir, baseRef, templateValues, useDefaults, err := resolveInteractiveBaseRef(selectedConfig, opts, scaffoldUI)
+		targetDir, baseRef, templateValues, useDefaults, cleanup, err := resolveInteractiveBaseRef(selectedConfig, opts, scaffoldUI)
+		if cleanup != nil {
+			defer cleanup()
+		}
 		if err != nil {
 			return targetDir, err
 		}
@@ -761,21 +804,41 @@ func resolveInteractiveBaseRef(
 	selectedConfig *templates.Configuration,
 	opts *scaffoldGenerateOptions,
 	scaffoldUI ScaffoldUI,
-) (targetDir, baseRef string, templateValues map[string]interface{}, useDefaults bool, err error) {
+) (targetDir, baseRef string, templateValues map[string]interface{}, useDefaults bool, cleanup func(), err error) {
 	if !opts.update {
-		return "", opts.baseRef, opts.templateValues, opts.useDefaults, nil
+		return "", opts.baseRef, opts.templateValues, opts.useDefaults, nil, nil
 	}
 
 	targetDir, templateValues, useDefaults, err = scaffoldUI.ResolveTargetPath(selectedConfig, "", opts.update, opts.useDefaults, opts.templateValues)
 	if err != nil {
-		return targetDir, "", nil, false, err
+		return targetDir, "", nil, false, nil, err
+	}
+
+	// engine.UpdateStrategyRendered's base ref comes from the target's own
+	// recorded scaffold.yaml (see source.ResolveRenderedBase), not
+	// --base-ref -- mirrored here for the no-positional-target flow the same
+	// way executeScaffoldGenerate already handles it for the
+	// positional-target flow, since targetDir only becomes known at this
+	// point in this flow.
+	updateStrategy, err := engine.ParseUpdateStrategy(opts.updateStrategy)
+	if err != nil {
+		return targetDir, "", nil, false, nil, err
+	}
+	if updateStrategy == engine.UpdateStrategyRendered {
+		var oldConfig *templates.Configuration
+		var oldValues map[string]interface{}
+		oldConfig, oldValues, cleanup, err = source.ResolveRenderedBase(targetDir, opts.sourceOverride)
+		if err != nil {
+			return targetDir, "", nil, false, nil, err
+		}
+		scaffoldUI.SetRenderedBaseSource(oldConfig, oldValues)
 	}
 
 	baseRef, err = defaultBaseRef(opts.baseRef, targetDir)
 	if err != nil {
-		return targetDir, "", nil, false, err
+		return targetDir, "", nil, false, cleanup, err
 	}
-	return targetDir, baseRef, templateValues, useDefaults, nil
+	return targetDir, baseRef, templateValues, useDefaults, cleanup, nil
 }
 
 // executeScaffoldList lists all available scaffold templates (embedded and configured).

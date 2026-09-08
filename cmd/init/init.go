@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	gen "github.com/cloudposse/atmos/pkg/generator"
+	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
@@ -70,6 +71,20 @@ If no target directory is specified, you will be prompted for one.`,
 		force := v.GetBool("force")
 		update := v.GetBool("update")
 		baseRef := v.GetString("base-ref")
+		updateStrategy := v.GetString("update-strategy")
+		// --base-ref only means anything for the default tracked strategy
+		// (the target's own git history); rendered's base ref instead comes
+		// from the target's own recorded scaffold.yaml, so an explicit
+		// --base-ref alongside --update-strategy=rendered is a contradiction
+		// rather than a value to silently ignore.
+		if baseRef != "" && updateStrategy == "rendered" {
+			return errUtils.Build(errUtils.ErrMutuallyExclusiveFlags).
+				WithExplanation("`--base-ref` and `--update-strategy=rendered` conflict").
+				WithHint("`--update-strategy=rendered`'s base ref comes from the target's own recorded scaffold.yaml, not `--base-ref`").
+				WithHint("Drop `--base-ref`, or use `--update-strategy=tracked` (the default) instead").
+				WithExitCode(2).
+				Err()
+		}
 		// Only pre-resolve here when target is already the real, final
 		// target directory (i.e. it was given positionally). When target is
 		// "" the interactive flow still has to prompt for one -- see
@@ -123,6 +138,7 @@ If no target directory is specified, you will be prompted for one.`,
 			git:            gitEnabled,
 			mergeStrategy:  mergeStrategy,
 			mergeDriver:    mergeDriver,
+			updateStrategy: updateStrategy,
 			skipHooks:      skipHooks,
 		})
 	},
@@ -146,6 +162,8 @@ func init() {
 		flags.WithValidValues("merge-driver", "auto", "text"),
 		flags.WithStringFlag("merge-strategy", "", "", "Conflict resolution strategy for --update: manual (surface conflicts, default; theirs if --force is set), ours (keep your version), theirs (use the template's version)"),
 		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
+		flags.WithStringFlag("update-strategy", "", "tracked", "Where --update's 3-way merge base comes from: tracked (the target's own git history at --base-ref, default), rendered (a pristine re-render of the template at the ref that produced what's currently on disk, using its recorded answers; requires a prior generation's scaffold.yaml record, no git dependency)"),
+		flags.WithValidValues("update-strategy", "tracked", "rendered"),
 		// Skip scaffold hooks at runtime, mirroring `terraform`'s --skip-hooks
 		// (see cmd/terraform/flags.go): --skip-hooks (no value) skips all
 		// hooks for this invocation; --skip-hooks=name1,name2 skips only the
@@ -163,6 +181,7 @@ func init() {
 		flags.WithEnvVars("no-git", "ATMOS_INIT_NO_GIT"),
 		flags.WithEnvVars("merge-driver", "ATMOS_INIT_MERGE_DRIVER"),
 		flags.WithEnvVars("merge-strategy", "ATMOS_INIT_MERGE_STRATEGY"),
+		flags.WithEnvVars("update-strategy", "ATMOS_INIT_UPDATE_STRATEGY"),
 		flags.WithEnvVars("skip-hooks", "ATMOS_INIT_SKIP_HOOKS"),
 	)
 
@@ -254,6 +273,7 @@ type initOptions struct {
 	git            bool
 	mergeStrategy  string
 	mergeDriver    string
+	updateStrategy string
 	skipHooks      func(string) bool
 }
 
@@ -281,6 +301,26 @@ func executeInit(_ context.Context, opts *initOptions) error {
 	}
 	initUI.SetMergeDriver(mergeDriver)
 	initUI.SetSkipHooks(opts.skipHooks)
+
+	updateStrategy, err := engine.ParseUpdateStrategy(opts.updateStrategy)
+	if err != nil {
+		return err
+	}
+	initUI.SetUpdateStrategy(updateStrategy)
+
+	// Only resolve here when target is already the real, final target
+	// directory (positional). The no-target interactive flow resolves this
+	// itself once the real directory is known -- see
+	// resolveInteractiveInitBaseRef, mirroring --base-ref's own split
+	// resolution above.
+	if opts.update && updateStrategy == engine.UpdateStrategyRendered && opts.targetDir != "" {
+		oldConfig, oldValues, cleanupOldSource, err := source.ResolveRenderedBase(opts.targetDir, opts.sourceOverride)
+		if err != nil {
+			return err
+		}
+		defer cleanupOldSource()
+		initUI.SetRenderedBaseSource(oldConfig, oldValues)
+	}
 
 	// Get available template configurations.
 	configs, err := templates.GetAvailableConfigurations()
@@ -414,6 +454,9 @@ func runInitInteractiveFlow(initUI InitUI, selectedConfig *templates.Configurati
 	}
 
 	resolved, err := resolveInteractiveInitBaseRef(initUI, selectedConfig, opts)
+	if resolved.cleanup != nil {
+		defer resolved.cleanup()
+	}
 	if err != nil {
 		return resolved.targetDir, err
 	}
@@ -443,6 +486,10 @@ type interactiveInitBaseRef struct {
 	baseRef        string
 	templateValues map[string]interface{}
 	useDefaults    bool
+	// cleanup releases the update-strategy=rendered old-ref source fetch
+	// (see source.ResolveRenderedBase), if one was made. nil otherwise --
+	// callers must nil-check before invoking it.
+	cleanup func()
 }
 
 // resolveInteractiveInitBaseRef resolves the --update merge base ref for the
@@ -476,11 +523,30 @@ func resolveInteractiveInitBaseRef(
 		return interactiveInitBaseRef{targetDir: targetDir}, err
 	}
 
-	baseRef, err := defaultBaseRef(opts.baseRef, targetDir)
+	// engine.UpdateStrategyRendered's base ref comes from the target's own
+	// recorded scaffold.yaml (see source.ResolveRenderedBase), not --base-ref
+	// -- mirrored here for the no-positional-target flow the same way
+	// executeInit already handles it for the positional-target flow, since
+	// targetDir only becomes known at this point in this flow.
+	updateStrategy, err := engine.ParseUpdateStrategy(opts.updateStrategy)
 	if err != nil {
 		return interactiveInitBaseRef{targetDir: targetDir}, err
 	}
-	return interactiveInitBaseRef{targetDir: targetDir, baseRef: baseRef, templateValues: templateValues, useDefaults: useDefaults}, nil
+	var cleanup func()
+	if updateStrategy == engine.UpdateStrategyRendered {
+		oldConfig, oldValues, srcCleanup, srcErr := source.ResolveRenderedBase(targetDir, opts.sourceOverride)
+		if srcErr != nil {
+			return interactiveInitBaseRef{targetDir: targetDir}, srcErr
+		}
+		cleanup = srcCleanup
+		initUI.SetRenderedBaseSource(oldConfig, oldValues)
+	}
+
+	baseRef, err := defaultBaseRef(opts.baseRef, targetDir)
+	if err != nil {
+		return interactiveInitBaseRef{targetDir: targetDir, cleanup: cleanup}, err
+	}
+	return interactiveInitBaseRef{targetDir: targetDir, baseRef: baseRef, templateValues: templateValues, useDefaults: useDefaults, cleanup: cleanup}, nil
 }
 
 // runInitTargetedFlow handles init when a target directory was provided
