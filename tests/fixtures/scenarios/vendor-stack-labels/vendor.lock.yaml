@@ -1,0 +1,44 @@
+version: 1
+artifacts:
+  6e4b5698deb03432f96b95bf841ac6eebbf9ca72ee5c837a617c055e8c6a0568:
+    name: comp-b
+    kind: local
+    target: components/terraform/comp-b
+    source:
+      declared: ../../components/terraform/mock
+      resolved: ../../components/terraform/mock
+      digest: sha256:3e6ad337a182893c7e05c9bc91890aa40b801cc2043e2225fa4616e40e21c6da
+    files:
+      - path: README.md
+        type: file
+        mode: 420
+        sha256: 3d2a9df7f4bc5199f6d75affc19f1af62f8a5b88747dbabd65034152a250b884
+      - path: main.tf
+        type: file
+        mode: 420
+        sha256: 2ec9ab1464dc01baa6a2792204a4cdf31351cc2b70eae03e17e61e4507ef1b9b
+    order: 2
+    included_paths:
+      - '**/*.tf'
+      - '**/*.md'
+  dce366c055e0385c4f2393e987c045b5f758a8bc9151460f9b7c2ab9a6ff185c:
+    name: comp-a
+    kind: local
+    target: components/terraform/comp-a
+    source:
+      declared: ../../components/terraform/mock
+      resolved: ../../components/terraform/mock
+      digest: sha256:3e6ad337a182893c7e05c9bc91890aa40b801cc2043e2225fa4616e40e21c6da
+    files:
+      - path: README.md
+        type: file
+        mode: 420
+        sha256: 3d2a9df7f4bc5199f6d75affc19f1af62f8a5b88747dbabd65034152a250b884
+      - path: main.tf
+        type: file
+        mode: 420
+        sha256: 2ec9ab1464dc01baa6a2792204a4cdf31351cc2b70eae03e17e61e4507ef1b9b
+    order: 1
+    included_paths:
+      - '**/*.tf'
+      - '**/*.md'

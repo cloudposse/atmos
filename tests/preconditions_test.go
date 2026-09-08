@@ -3,6 +3,7 @@ package tests
 import (
 	"os"
 	"os/exec"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -570,6 +571,41 @@ func TestSkipOnDarwinARM64(t *testing.T) {
 	// If we're not on darwin/arm64, we'll continue
 	// If we are on darwin/arm64, the test will skip
 	t.Log("Not on darwin/arm64 or preconditions disabled")
+}
+
+// TestSkipOnDarwinARM64_NotOverridableByPreconditionChecks regression-tests a
+// real CI incident: .github/workflows/test.yml sets
+// ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true for the macOS acceptance-test job
+// (to force tests with a merely-missing local dependency to run), which used
+// to also disable this check -- letting gomonkey-based tests run on
+// darwin/arm64 CI runners and crash the whole test binary with SIGBUS. This
+// check must always skip on darwin/arm64 regardless of that env var.
+func TestSkipOnDarwinARM64_NotOverridableByPreconditionChecks(t *testing.T) {
+	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
+		t.Skip("this regression only reproduces on darwin/arm64")
+	}
+
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+
+	SkipOnDarwinARM64(t, "test reason for skipping")
+
+	t.Fatal("expected SkipOnDarwinARM64 to skip on darwin/arm64 even with precondition checks disabled")
+}
+
+// TestSkipIfGomonkeyUnsafe_NotOverridableByPreconditionChecks mirrors
+// TestSkipOnDarwinARM64_NotOverridableByPreconditionChecks for
+// SkipIfGomonkeyUnsafe, which has the same darwin/arm64 guard plus a
+// -race guard.
+func TestSkipIfGomonkeyUnsafe_NotOverridableByPreconditionChecks(t *testing.T) {
+	if !RaceEnabled && (runtime.GOOS != "darwin" || runtime.GOARCH != "arm64") {
+		t.Skip("this regression only reproduces on darwin/arm64 or under -race")
+	}
+
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+
+	SkipIfGomonkeyUnsafe(t, "test reason for skipping")
+
+	t.Fatal("expected SkipIfGomonkeyUnsafe to skip even with precondition checks disabled")
 }
 
 // TestRequireAzureCredentials tests the Azure credentials check.
