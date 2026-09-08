@@ -208,6 +208,16 @@ func TestComponentCompletionForStack(t *testing.T) {
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
 
+// TestComponentCompletionForStack_EnumerateError covers componentCompletionForStack's error path:
+// a failed enumeration yields no completions rather than propagating the error.
+func TestComponentCompletionForStack_EnumerateError(t *testing.T) {
+	overrideEnumerateScopes(t, nil, errors.New("boom"))
+
+	got, directive := componentCompletionForStack("prod")(&cobra.Command{}, nil, "")
+	assert.Nil(t, got)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
 // TestCheckStackSopsCollisions covers the write-time SOPS collision guard: the no-collision path,
 // a real instance-level collision (two components sharing one non-discriminating file), and the
 // error pass-through from enumeration.

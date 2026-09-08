@@ -16,11 +16,24 @@ func TestParseScope_MissingComponent(t *testing.T) {
 	svc := newFakeSecretService()
 	installService(t, svc, nil)
 
-	// --stack present but --component absent → parseScope rejects on the component check (the
-	// existing MissingScope tests omit both flags and stop at the stack check).
+	// --stack present but --component absent → "set" resolves a component-less name via
+	// findGlobalSetContext (not requireScopeComponent; see TestParseScope_MissingComponentViaGet
+	// for that path), and fails here because no global declaration is enumerable in this fake
+	// setup (the existing MissingScope tests omit both flags and stop at the stack check).
 	err := runSecretSubcommand(t, "set", "API_KEY=v1", "--stack", "dev")
 	require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
 	assert.Empty(t, svc.setCalls)
+}
+
+// TestParseScope_MissingComponentViaGet exercises parseScope → requireScopeComponent directly:
+// unlike "set" above, "get" always requires an explicit --component, so --stack present but
+// --component absent reaches requireScopeComponent's own "component is required" error.
+func TestParseScope_MissingComponentViaGet(t *testing.T) {
+	svc := newFakeSecretService()
+	installService(t, svc, nil)
+
+	err := runSecretSubcommand(t, "get", "API_KEY", "--stack", "dev")
+	require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
 }
 
 // TestParseScopeStack_DoesNotLeakAcrossInvocations pins a regression: parseScopeStack used to call
