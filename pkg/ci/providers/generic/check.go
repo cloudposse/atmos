@@ -12,13 +12,15 @@ import (
 // CreateCheckRun writes check run status to stderr and returns a synthetic CheckRun.
 func (p *Provider) CreateCheckRun(_ context.Context, opts *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
 	defer perf.Track(nil, "generic.Provider.CreateCheckRun")()
+	title := provider.MaskPublishedContent(opts.Title)
+	summary := provider.MaskPublishedContent(opts.Summary)
 
 	ui.Infof("Check run created: %s [%s]", opts.Name, opts.Status)
-	if opts.Title != "" {
-		ui.Infof("  Title: %s", opts.Title)
+	if title != "" {
+		ui.Infof("  Title: %s", title)
 	}
-	if opts.Summary != "" {
-		ui.Infof("  Summary: %s", opts.Summary)
+	if summary != "" {
+		ui.Infof("  Summary: %s", summary)
 	}
 
 	id := p.nextCheckRunID.Add(1)
@@ -27,8 +29,8 @@ func (p *Provider) CreateCheckRun(_ context.Context, opts *provider.CreateCheckR
 		ID:        id,
 		Name:      opts.Name,
 		Status:    opts.Status,
-		Title:     opts.Title,
-		Summary:   opts.Summary,
+		Title:     title,
+		Summary:   summary,
 		StartedAt: time.Now(),
 	}, nil
 }
@@ -36,6 +38,8 @@ func (p *Provider) CreateCheckRun(_ context.Context, opts *provider.CreateCheckR
 // UpdateCheckRun writes check run status to stderr and returns an updated CheckRun.
 func (p *Provider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	defer perf.Track(nil, "generic.Provider.UpdateCheckRun")()
+	title := provider.MaskPublishedContent(opts.Title)
+	summary := provider.MaskPublishedContent(opts.Summary)
 	var uiMethod func(format string, a ...interface{})
 	var verb string
 	switch opts.Status {
@@ -55,11 +59,11 @@ func (p *Provider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckR
 
 	uiMethod("Check run %s: %s [%s]", verb, opts.Name, opts.Status)
 
-	if opts.Title != "" {
-		uiMethod("  Title: %s", opts.Title)
+	if title != "" {
+		uiMethod("  Title: %s", title)
 	}
-	if opts.Summary != "" {
-		uiMethod("  Summary: %s", opts.Summary)
+	if summary != "" {
+		uiMethod("  Summary: %s", summary)
 	}
 
 	return &provider.CheckRun{
@@ -67,7 +71,7 @@ func (p *Provider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckR
 		Name:       opts.Name,
 		Status:     opts.Status,
 		Conclusion: opts.Conclusion,
-		Title:      opts.Title,
-		Summary:    opts.Summary,
+		Title:      title,
+		Summary:    summary,
 	}, nil
 }
