@@ -169,6 +169,113 @@ func TestToJUnit_BackfillsMissingRuns(t *testing.T) {
 	assert.True(t, report.Passed())
 }
 
+// sampleOpenTofuPassJSON is a verbatim `tofu test -json` stream (OpenTofu
+// 1.12.5): OpenTofu emits exactly one test_run/test_file event per run/file,
+// carrying only `status` -- there is no `progress` field at all.
+const sampleOpenTofuPassJSON = `{"@level":"info","@message":"OpenTofu 1.12.5","@module":"tofu.ui","@timestamp":"2026-09-08T09:25:28.566974-05:00","tofu":"1.12.5","type":"version","ui":"1.2"}
+{"@level":"info","@message":"Found 1 file and 2 run blocks","@module":"tofu.ui","@timestamp":"2026-09-08T09:25:28.567828-05:00","test_abstract":{"tests/min.tftest.hcl":["plan_case","apply_case"]},"type":"test_abstract"}
+{"@level":"info","@message":"tests/min.tftest.hcl... pass","@module":"tofu.ui","@testfile":"tests/min.tftest.hcl","@timestamp":"2026-09-08T09:25:28.581280-05:00","test_file":{"path":"tests/min.tftest.hcl","status":"pass"},"type":"test_file"}
+{"@level":"info","@message":"  \"plan_case\"... pass","@module":"tofu.ui","@testfile":"tests/min.tftest.hcl","@testrun":"plan_case","@timestamp":"2026-09-08T09:25:28.581312-05:00","test_run":{"path":"tests/min.tftest.hcl","run":"plan_case","status":"pass"},"type":"test_run"}
+{"@level":"info","@message":"  \"apply_case\"... pass","@module":"tofu.ui","@testfile":"tests/min.tftest.hcl","@testrun":"apply_case","@timestamp":"2026-09-08T09:25:28.581323-05:00","test_run":{"path":"tests/min.tftest.hcl","run":"apply_case","status":"pass"},"type":"test_run"}
+{"@level":"info","@message":"Success! 2 passed, 0 failed.","@module":"tofu.ui","@timestamp":"2026-09-08T09:25:28.582628-05:00","test_summary":{"status":"pass","passed":2,"failed":0,"errored":0,"skipped":0},"type":"test_summary"}
+`
+
+// sampleOpenTofuFailJSON is a verbatim failing `tofu test -json` stream. Note
+// the assertion diagnostic arrives AFTER the run's test_run event.
+const sampleOpenTofuFailJSON = `{"@level":"info","@message":"OpenTofu 1.12.5","@module":"tofu.ui","@timestamp":"2026-09-08T09:26:17.462022-05:00","tofu":"1.12.5","type":"version","ui":"1.2"}
+{"@level":"info","@message":"Found 1 file and 2 run blocks","@module":"tofu.ui","@timestamp":"2026-09-08T09:26:17.464956-05:00","test_abstract":{"tests/min.tftest.hcl":["passing_case","failing_case"]},"type":"test_abstract"}
+{"@level":"info","@message":"tests/min.tftest.hcl... fail","@module":"tofu.ui","@testfile":"tests/min.tftest.hcl","@timestamp":"2026-09-08T09:26:17.478520-05:00","test_file":{"path":"tests/min.tftest.hcl","status":"fail"},"type":"test_file"}
+{"@level":"info","@message":"  \"passing_case\"... pass","@module":"tofu.ui","@testfile":"tests/min.tftest.hcl","@testrun":"passing_case","@timestamp":"2026-09-08T09:26:17.478559-05:00","test_run":{"path":"tests/min.tftest.hcl","run":"passing_case","status":"pass"},"type":"test_run"}
+{"@level":"info","@message":"  \"failing_case\"... fail","@module":"tofu.ui","@testfile":"tests/min.tftest.hcl","@testrun":"failing_case","@timestamp":"2026-09-08T09:26:17.478570-05:00","test_run":{"path":"tests/min.tftest.hcl","run":"failing_case","status":"fail"},"type":"test_run"}
+{"@level":"error","@message":"Error: Test assertion failed","@module":"tofu.ui","@testfile":"tests/min.tftest.hcl","@testrun":"failing_case","@timestamp":"2026-09-08T09:26:17.478795-05:00","diagnostic":{"severity":"error","summary":"Test assertion failed","detail":"name should be b","range":{"filename":"tests/min.tftest.hcl","start":{"line":12,"column":21,"byte":203},"end":{"line":12,"column":39,"byte":221}},"snippet":{"context":"run \"failing_case\"","code":"    condition     = output.name == \"b\"","start_line":12,"highlight_start_offset":20,"highlight_end_offset":38,"values":[{"traversal":"output.name","statement":"is \"a\""}]},"difference":{"before":"a","after":"b","after_unknown":false,"before_sensitive":false,"after_sensitive":false}},"type":"diagnostic"}
+{"@level":"info","@message":"Failure! 1 passed, 1 failed.","@module":"tofu.ui","@timestamp":"2026-09-08T09:26:17.481079-05:00","test_summary":{"status":"fail","passed":1,"failed":1,"errored":0,"skipped":0},"type":"test_summary"}
+`
+
+func TestParseTestJSON_OpenTofu_AllPass(t *testing.T) {
+	// OpenTofu's test_run/test_file events carry no `progress` field, so a
+	// "progress == complete" gate silently discards every run: badges show the
+	// summary counts while the results table and JUnit report come out empty.
+	result := ParseTestJSON([]byte(sampleOpenTofuPassJSON))
+	data := testJSONData(t, result)
+
+	assert.False(t, result.HasErrors)
+	assert.Equal(t, 2, data.Total)
+	assert.Equal(t, 2, data.Pass)
+	require.Len(t, data.Runs, 2)
+	assert.Equal(t, plugin.TerraformTestRun{Name: "plan_case", File: "tests/min.tftest.hcl", Status: testStatusPass}, data.Runs[0])
+	assert.Equal(t, plugin.TerraformTestRun{Name: "apply_case", File: "tests/min.tftest.hcl", Status: testStatusPass}, data.Runs[1])
+	require.Len(t, data.Files, 1)
+	assert.Equal(t, plugin.TerraformTestFile{Path: "tests/min.tftest.hcl", Status: testStatusPass, Pass: 2}, data.Files[0])
+}
+
+func TestParseTestJSON_OpenTofu_Failure(t *testing.T) {
+	result := ParseTestJSON([]byte(sampleOpenTofuFailJSON))
+	data := testJSONData(t, result)
+
+	assert.True(t, result.HasErrors)
+	assert.Equal(t, 2, data.Total)
+	assert.Equal(t, 1, data.Pass)
+	assert.Equal(t, 1, data.Fail)
+	require.Len(t, data.Runs, 2)
+	assert.Equal(t, "passing_case", data.Runs[0].Name)
+	assert.Equal(t, testStatusPass, data.Runs[0].Status)
+
+	// The assertion diagnostic arrived after the run event; it must still be
+	// attached so the results table, annotations, and JUnit carry file:line.
+	failing := data.Runs[1]
+	assert.Equal(t, "failing_case", failing.Name)
+	assert.Equal(t, testStatusFail, failing.Status)
+	assert.Equal(t, "tests/min.tftest.hcl", failing.File)
+	assert.Equal(t, 12, failing.Line)
+	assert.Equal(t, "Test assertion failed: name should be b", failing.Error)
+	assert.Contains(t, result.Errors, "Test assertion failed: name should be b")
+
+	require.Len(t, data.Files, 1)
+	assert.Equal(t, plugin.TerraformTestFile{Path: "tests/min.tftest.hcl", Status: testStatusFail, Pass: 1, Fail: 1}, data.Files[0])
+}
+
+func TestParseTestJSON_DiagnosticAfterCompleteEvent(t *testing.T) {
+	// Terraform emits assertion-failure diagnostics after the run's `complete`
+	// event too (only mid-apply provider errors precede it), so attachment must
+	// work in either order.
+	stream := `{"@level":"info","type":"test_run","@testfile":"tests/app.tftest.hcl","@testrun":"broken","test_run":{"path":"tests/app.tftest.hcl","run":"broken","progress":"complete","status":"fail","elapsed":50}}
+{"@level":"error","type":"diagnostic","@testfile":"tests/app.tftest.hcl","@testrun":"broken","diagnostic":{"severity":"error","summary":"Test assertion failed","detail":"bucket not created","range":{"filename":"tests/app.tftest.hcl","start":{"line":30,"column":5}}}}
+{"@level":"info","type":"test_summary","test_summary":{"status":"fail","passed":0,"failed":1,"errored":0,"skipped":0}}
+`
+	result := ParseTestJSON([]byte(stream))
+	data := testJSONData(t, result)
+
+	require.Len(t, data.Runs, 1)
+	assert.Equal(t, "broken", data.Runs[0].Name)
+	assert.Equal(t, 30, data.Runs[0].Line)
+	assert.Equal(t, "Test assertion failed: bucket not created", data.Runs[0].Error)
+	assert.Contains(t, result.Errors, "Test assertion failed: bucket not created")
+}
+
+func TestToJUnit_OpenTofu(t *testing.T) {
+	data := testJSONData(t, ParseTestJSON([]byte(sampleOpenTofuFailJSON)))
+	report := toJUnit(data, "app")
+
+	assert.Equal(t, 2, report.Tests)
+	assert.Equal(t, 1, report.Failures)
+	require.Len(t, report.Suites, 1)
+	require.Len(t, report.Suites[0].Cases, 2)
+	assert.Equal(t, "passing_case", report.Suites[0].Cases[0].Name)
+	failing := report.Suites[0].Cases[1]
+	assert.Equal(t, "failing_case", failing.Name)
+	assert.Equal(t, 12, failing.Line)
+	require.NotNil(t, failing.Failure)
+	assert.Equal(t, "Test assertion failed: name should be b", failing.Failure.Message)
+}
+
+func TestRenderTestText_OpenTofu(t *testing.T) {
+	text := RenderTestText([]byte(sampleOpenTofuFailJSON))
+	assert.Contains(t, text, `✓ run "passing_case"... pass`)
+	assert.Contains(t, text, `✗ run "failing_case"... fail`)
+	assert.Contains(t, text, "Test assertion failed: name should be b")
+	assert.Contains(t, text, "Failure! 1 passed, 1 failed, 0 skipped.")
+}
+
 func TestParseOutput_RoutesTestJSON(t *testing.T) {
 	// Leading `{` → JSON path; the text path would not populate File/Line.
 	data := testJSONData(t, ParseOutput(sampleTestJSON, "test"))
