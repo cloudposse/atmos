@@ -13,6 +13,8 @@ import (
 )
 
 func TestVariablesEnvSlice(t *testing.T) {
+	t.Parallel()
+
 	v := &Variables{Env: map[string]string{
 		"B":             "2",
 		"A":             "1",
@@ -24,6 +26,8 @@ func TestVariablesEnvSlice(t *testing.T) {
 }
 
 func TestVariablesEnvSliceEmpty(t *testing.T) {
+	t.Parallel()
+
 	v := &Variables{Env: map[string]string{}}
 	assert.Empty(t, v.EnvSlice())
 }
@@ -42,6 +46,8 @@ func (r *envCapturingRuntime) SetEnv(env []string) {
 }
 
 func TestApplyRuntimeEnvForwardsResolvedEnv(t *testing.T) {
+	t.Parallel()
+
 	vars := &Variables{Env: map[string]string{
 		"DOCKER_CONFIG":         "/tmp/atmos-docker",
 		"AWS_ACCESS_KEY_ID":     "AKIA",
@@ -67,6 +73,8 @@ type runtimeWithoutEnvSetter struct {
 }
 
 func TestApplyRuntimeEnvNoOpWhenUnsupported(t *testing.T) {
+	t.Parallel()
+
 	vars := &Variables{Env: map[string]string{"DOCKER_CONFIG": "/tmp/atmos-docker"}}
 
 	// Must not panic or attempt to set env on a runtime that can't accept it.
@@ -76,10 +84,13 @@ func TestApplyRuntimeEnvNoOpWhenUnsupported(t *testing.T) {
 }
 
 func TestVariablesEnsureBinaryInPath(t *testing.T) {
+	t.Parallel()
+
 	binary := filepath.Join(string(filepath.Separator), "repo", "build", "atmos")
 	binDir := filepath.Dir(binary)
 
 	t.Run("prepends binary dir after PATH override", func(t *testing.T) {
+		t.Parallel()
 		vars := NewVariables()
 		vars.SetEnv("PATH", filepath.Join(string(filepath.Separator), "usr", "bin"))
 
@@ -92,6 +103,7 @@ func TestVariablesEnsureBinaryInPath(t *testing.T) {
 	})
 
 	t.Run("no duplicate when already present", func(t *testing.T) {
+		t.Parallel()
 		vars := NewVariables()
 		vars.SetEnv("PATH", binDir)
 
@@ -101,6 +113,7 @@ func TestVariablesEnsureBinaryInPath(t *testing.T) {
 	})
 
 	t.Run("matches existing key casing", func(t *testing.T) {
+		t.Parallel()
 		vars := NewVariables()
 		delete(vars.Env, "PATH")
 		vars.SetEnv("Path", filepath.Join(string(filepath.Separator), "usr", "bin"))

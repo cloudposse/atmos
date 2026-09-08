@@ -14,6 +14,8 @@ import (
 )
 
 func TestNewConfigDeleteTool(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	tool := NewConfigDeleteTool(atmosConfig)
 
@@ -22,16 +24,22 @@ func TestNewConfigDeleteTool(t *testing.T) {
 }
 
 func TestConfigDeleteTool_Name(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigDeleteTool(&schema.AtmosConfiguration{})
 	assert.Equal(t, "atmos_config_delete", tool.Name())
 }
 
 func TestConfigDeleteTool_Description(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigDeleteTool(&schema.AtmosConfiguration{})
 	assert.Contains(t, tool.Description(), "Delete a value")
 }
 
 func TestConfigDeleteTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigDeleteTool(&schema.AtmosConfiguration{})
 	params := tool.Parameters()
 
@@ -43,20 +51,27 @@ func TestConfigDeleteTool_Parameters(t *testing.T) {
 }
 
 func TestConfigDeleteTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigDeleteTool(&schema.AtmosConfiguration{})
 	assert.True(t, tool.RequiresPermission())
 }
 
 func TestConfigDeleteTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigDeleteTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.IsRestricted())
 }
 
 func TestConfigDeleteTool_Execute(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigDeleteTool(&schema.AtmosConfiguration{})
 	ctx := context.Background()
 
 	t.Run("deletes an existing value", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "settings:\n  enabled: false\n  stale: yes\n")
 
@@ -80,6 +95,7 @@ func TestConfigDeleteTool_Execute(t *testing.T) {
 	})
 
 	t.Run("no-op when path is already absent", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "settings:\n  enabled: false\n")
 
@@ -95,6 +111,7 @@ func TestConfigDeleteTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with missing path parameter", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"file": filepath.Join(t.TempDir(), "atmos.yaml"),
 		})
@@ -105,6 +122,7 @@ func TestConfigDeleteTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails when the explicit file override does not exist", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"path": "settings.enabled",
 			"file": filepath.Join(t.TempDir(), "does-not-exist.yaml"),
@@ -116,6 +134,7 @@ func TestConfigDeleteTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with malformed path expression", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "settings:\n  enabled: false\n")
 

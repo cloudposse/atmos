@@ -14,6 +14,8 @@ import (
 )
 
 func TestStripQuarantineAttributesNoAttributesSet(t *testing.T) {
+	t.Parallel()
+
 	path := filepath.Join(t.TempDir(), "plain-file")
 	require.NoError(t, os.WriteFile(path, []byte("not a binary"), 0o600))
 
@@ -21,6 +23,8 @@ func TestStripQuarantineAttributesNoAttributesSet(t *testing.T) {
 }
 
 func TestStripQuarantineAttributesRemovesSetAttribute(t *testing.T) {
+	t.Parallel()
+
 	path := filepath.Join(t.TempDir(), "quarantined-file")
 	require.NoError(t, os.WriteFile(path, []byte("not a binary"), 0o600))
 
@@ -33,12 +37,16 @@ func TestStripQuarantineAttributesRemovesSetAttribute(t *testing.T) {
 }
 
 func TestAdHocResignBinary(t *testing.T) {
+	t.Parallel()
+
 	dstPath := copyOfTestBinary(t)
 
 	require.NoError(t, adHocResignBinary(dstPath))
 }
 
 func TestAdHocResignBinaryNonexistentPath(t *testing.T) {
+	t.Parallel()
+
 	err := adHocResignBinary(filepath.Join(t.TempDir(), "does-not-exist"))
 
 	require.Error(t, err)
@@ -46,6 +54,8 @@ func TestAdHocResignBinaryNonexistentPath(t *testing.T) {
 }
 
 func TestTrustVerifierBinaryEndToEnd(t *testing.T) {
+	t.Parallel()
+
 	dstPath := copyOfTestBinary(t)
 
 	require.NoError(t, trustVerifierBinary(dstPath))

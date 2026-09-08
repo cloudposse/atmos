@@ -12,11 +12,15 @@ import (
 )
 
 func TestErrInvalidFormat_Error(t *testing.T) {
+	t.Parallel()
+
 	err := DescribeConfigFormatError{format: "invalid"}
 	assert.Equal(t, "invalid 'format': invalid", err.Error())
 }
 
 func TestDescribeConfig(t *testing.T) {
+	t.Parallel()
+
 	// Setup test data
 	config := &schema.AtmosConfiguration{
 		Components: schema.Components{
@@ -32,6 +36,7 @@ func TestDescribeConfig(t *testing.T) {
 	}
 
 	t.Run("NewDescribeConfig", func(t *testing.T) {
+		t.Parallel()
 		dc := NewDescribeConfig(config)
 		assert.Equal(t, config, dc.atmosConfig)
 		assert.NotNil(t, dc.pageCreator)
@@ -39,6 +44,7 @@ func TestDescribeConfig(t *testing.T) {
 	})
 
 	t.Run("ExecuteDescribeConfigCmd_NoQuery_YAML_TTY", func(t *testing.T) {
+		t.Parallel()
 		// Mock dependencies
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -56,6 +62,7 @@ func TestDescribeConfig(t *testing.T) {
 	})
 
 	t.Run("ExecuteDescribeConfigCmd_NoQuery_JSON_TTY", func(t *testing.T) {
+		t.Parallel()
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		mockPager := pager.NewMockPageCreator(ctrl)
@@ -72,6 +79,7 @@ func TestDescribeConfig(t *testing.T) {
 	})
 
 	t.Run("ExecuteDescribeConfigCmd_NoQuery_InvalidFormat_TTY", func(t *testing.T) {
+		t.Parallel()
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
@@ -86,6 +94,7 @@ func TestDescribeConfig(t *testing.T) {
 	})
 
 	t.Run("ExecuteDescribeConfigCmd_NoQuery_NoTTY", func(t *testing.T) {
+		t.Parallel()
 		dc := &describeConfigExec{
 			atmosConfig:           config,
 			IsTTYSupportForStdout: func() bool { return false },
@@ -102,6 +111,7 @@ func TestDescribeConfig(t *testing.T) {
 	})
 
 	t.Run("ExecuteDescribeConfigCmd_WithQuery", func(t *testing.T) {
+		t.Parallel()
 		dc := &describeConfigExec{
 			atmosConfig:           config,
 			IsTTYSupportForStdout: func() bool { return false },
@@ -118,6 +128,7 @@ func TestDescribeConfig(t *testing.T) {
 	})
 
 	t.Run("ExecuteDescribeConfigCmd_WithQuery_EvalError", func(t *testing.T) {
+		t.Parallel()
 		printCalled := false
 		dc := &describeConfigExec{
 			atmosConfig:           config,
@@ -139,6 +150,8 @@ func TestDescribeConfig(t *testing.T) {
 // subtree (map, scalar, or list) instead of coercing the result back into a full
 // AtmosConfiguration struct.
 func TestDescribeConfigQueryResults(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "./",
 		Stacks: schema.Stacks{
@@ -200,6 +213,7 @@ func TestDescribeConfigQueryResults(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var captured any
 			dc := &describeConfigExec{
 				atmosConfig:           config,
@@ -221,6 +235,8 @@ func TestDescribeConfigQueryResults(t *testing.T) {
 // TestDescribeConfigQueryPager verifies that query results (including scalars)
 // render through the pager path without being coerced into the config struct.
 func TestDescribeConfigQueryPager(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		Stacks: schema.Stacks{
 			NameTemplate: "{{ .vars.stage }}",
@@ -244,6 +260,7 @@ func TestDescribeConfigQueryPager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
