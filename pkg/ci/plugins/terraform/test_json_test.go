@@ -106,6 +106,20 @@ func TestParseTestJSON_SummaryExceedsRuns(t *testing.T) {
 	assert.Equal(t, testStatusPass, data.Runs[0].Status)
 }
 
+func TestParseTestJSON_OversizedSummaryCountIsBounded(t *testing.T) {
+	// An oversized test_summary count (e.g. a corrupted or hostile stream) must not make
+	// ParseTestJSON hang or exhaust memory synthesizing placeholder runs; it must complete
+	// quickly with a capped Runs slice and report the result as incomplete.
+	stream := `{"@level":"info","type":"test_summary","test_summary":{"status":"pass","passed":1000000000,"failed":0,"errored":0,"skipped":0}}
+`
+	result := ParseTestJSON([]byte(stream))
+	data := testJSONData(t, result)
+
+	assert.True(t, result.HasErrors)
+	require.Len(t, data.Runs, maxBackfillRunsPerStatus)
+	assert.Equal(t, maxBackfillRunsPerStatus, data.Total)
+}
+
 func TestBackfillMissingTestJSONRuns(t *testing.T) {
 	tests := []struct {
 		name string
@@ -155,8 +169,24 @@ func TestBackfillMissingTestJSONRuns(t *testing.T) {
 			for i, status := range tt.want {
 				assert.Equal(t, status, data.Runs[i].Status)
 			}
+			assert.False(t, data.BackfillTruncated)
 		})
 	}
+}
+
+// TestBackfillMissingTestJSONRuns_CapsOversizedCount is the regression test for a summary count
+// that is untrusted input from the tool's -json stream: an oversized passed/failed/errored/skipped
+// count must not make the backfill loop append unbounded placeholder rows (memory exhaustion / CI
+// hang). The loop must cap synthesized rows per status and flag the result as incomplete.
+func TestBackfillMissingTestJSONRuns_CapsOversizedCount(t *testing.T) {
+	data := plugin.TerraformTestOutputData{Pass: 1_000_000_000}
+	backfillMissingTestJSONRuns(&data)
+
+	require.Len(t, data.Runs, maxBackfillRunsPerStatus)
+	assert.Equal(t, testStatusPass, data.Runs[0].Status)
+	assert.Equal(t, testStatusPass, data.Runs[len(data.Runs)-1].Status)
+	assert.True(t, data.BackfillTruncated)
+	assert.Equal(t, maxBackfillRunsPerStatus, data.Total)
 }
 
 func TestToJUnit_BackfillsMissingRuns(t *testing.T) {

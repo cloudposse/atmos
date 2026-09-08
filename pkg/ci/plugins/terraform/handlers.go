@@ -996,6 +996,9 @@ func buildTerraformTestStatusDescription(testData *plugin.TerraformTestOutputDat
 	if len(testData.CleanupFailures) > 0 {
 		parts = append(parts, fmt.Sprintf("%d cleanup failed", len(testData.CleanupFailures)))
 	}
+	if testData.BackfillTruncated {
+		parts = append(parts, "parser output incomplete")
+	}
 	return strings.Join(parts, ", ")
 }
 

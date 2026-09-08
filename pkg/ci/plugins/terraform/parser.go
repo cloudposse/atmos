@@ -22,6 +22,12 @@ import (
 // diagnostic with a long detail can be large).
 const testJSONMaxLine = 4 * 1024 * 1024
 
+// maxBackfillRunsPerStatus caps synthetic placeholder rows backfillMissingTestJSONRuns can
+// create for a single status. A test_summary count is untrusted input (from the tool's -json
+// stream); without a cap, a single oversized count (e.g. passed: 1000000000) would make the
+// backfill loop append unbounded rows and exhaust memory / hang the CI command.
+const maxBackfillRunsPerStatus = 10_000
+
 // millisecondsPerSecond converts the `elapsed` field (milliseconds in the
 // `test -json` stream) to the seconds used by JUnit `time` attributes.
 const millisecondsPerSecond = 1000.0
@@ -1067,6 +1073,13 @@ func finalizeTestJSON(
 // report, and the step-summary table can never disagree. It never removes or
 // mutates real captured rows, and it warns loudly when it fires, because that
 // means the parser has a schema gap to fix rather than a condition to tolerate.
+//
+// The summary counts are untrusted input from the tool's -json stream, so the
+// number of rows synthesized per status is capped at maxBackfillRunsPerStatus:
+// without a cap, a single oversized count could make this loop append unbounded
+// rows and exhaust memory or hang the CI command. When a count is truncated,
+// data.BackfillTruncated is set so callers can report the parser output as
+// incomplete rather than silently under-representing the truncated status.
 func backfillMissingTestJSONRuns(data *plugin.TerraformTestOutputData) {
 	remaining := map[string]int{
 		testStatusPass:  data.Pass,
@@ -1080,11 +1093,21 @@ func backfillMissingTestJSONRuns(data *plugin.TerraformTestOutputData) {
 		}
 	}
 	for _, status := range []string{testStatusPass, testStatusFail, testStatusError, testStatusSkip} {
-		if remaining[status] > 0 {
-			log.Warn("terraform test JSON stream under-reported runs; synthesizing placeholder rows",
-				"status", status, "missing", remaining[status], "captured_runs", len(data.Runs))
+		missing := remaining[status]
+		if missing <= 0 {
+			continue
 		}
-		for i := 0; i < remaining[status]; i++ {
+		toCreate := missing
+		if toCreate > maxBackfillRunsPerStatus {
+			log.Error("terraform test JSON stream under-reported runs; capping synthesized placeholder rows",
+				"status", status, "missing", missing, "cap", maxBackfillRunsPerStatus, "captured_runs", len(data.Runs))
+			toCreate = maxBackfillRunsPerStatus
+			data.BackfillTruncated = true
+		} else {
+			log.Warn("terraform test JSON stream under-reported runs; synthesizing placeholder rows",
+				"status", status, "missing", missing, "captured_runs", len(data.Runs))
+		}
+		for i := 0; i < toCreate; i++ {
 			data.Runs = append(data.Runs, plugin.TerraformTestRun{
 				Name:   fmt.Sprintf("run detail unavailable (%s)", status),
 				Status: status,
@@ -1125,7 +1148,8 @@ func applyTestJSONSummary(data *plugin.TerraformTestOutputData, summary *testJSO
 }
 
 func testJSONHasErrors(data *plugin.TerraformTestOutputData, result *plugin.OutputResult) bool {
-	return data.Fail > 0 || data.Error > 0 || len(result.Errors) > 0 || len(data.CleanupFailures) > 0
+	return data.Fail > 0 || data.Error > 0 || len(result.Errors) > 0 || len(data.CleanupFailures) > 0 ||
+		data.BackfillTruncated
 }
 
 // populateTestFileCounts derives file-level counts from completed run events.
@@ -1232,14 +1256,17 @@ func renderTestRunLine(b *strings.Builder, run *plugin.TerraformTestRun) {
 
 func renderTestSummaryLine(b *strings.Builder, data *plugin.TerraformTestOutputData) {
 	headline := "Success!"
-	if data.Fail > 0 || data.Error > 0 || len(data.CleanupFailures) > 0 {
+	if data.Fail > 0 || data.Error > 0 || len(data.CleanupFailures) > 0 || data.BackfillTruncated {
 		headline = "Failure!"
 	}
 	if data.Error > 0 {
 		fmt.Fprintf(b, "%s %d passed, %d failed, %d errored, %d skipped.\n", headline, data.Pass, data.Fail, data.Error, data.Skip)
-		return
+	} else {
+		fmt.Fprintf(b, "%s %d passed, %d failed, %d skipped.\n", headline, data.Pass, data.Fail, data.Skip)
 	}
-	fmt.Fprintf(b, "%s %d passed, %d failed, %d skipped.\n", headline, data.Pass, data.Fail, data.Skip)
+	if data.BackfillTruncated {
+		fmt.Fprintf(b, "  parser output incomplete: summary counts exceeded the synthesized-run cap\n")
+	}
 }
 
 // ParseOutput parses terraform output for a given command (fallback when JSON not available).
