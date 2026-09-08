@@ -11,6 +11,8 @@ import (
 )
 
 func TestIsPlatformMatch(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		env         string
@@ -49,6 +51,7 @@ func TestIsPlatformMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := isPlatformMatch(tt.env, tt.currentOS, tt.currentArch)
 			assert.Equal(t, tt.want, got)
 		})
@@ -56,6 +59,8 @@ func TestIsPlatformMatch(t *testing.T) {
 }
 
 func TestContainsEnv(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		supportedEnvs []string
@@ -71,6 +76,7 @@ func TestContainsEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := containsEnv(tt.supportedEnvs, tt.target)
 			assert.Equal(t, tt.want, got)
 		})
@@ -78,6 +84,8 @@ func TestContainsEnv(t *testing.T) {
 }
 
 func TestCheckPlatformSupport(t *testing.T) {
+	t.Parallel()
+
 	currentOS := runtime.GOOS
 	currentArch := runtime.GOARCH
 
@@ -99,6 +107,7 @@ func TestCheckPlatformSupport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			tool := &registry.Tool{
 				RepoOwner:     "test",
 				RepoName:      "tool",
@@ -116,6 +125,8 @@ func TestCheckPlatformSupport(t *testing.T) {
 }
 
 func TestCheckPlatformSupport_Rosetta2(t *testing.T) {
+	t.Parallel()
+
 	// Rosetta2 support can only be tested on darwin/arm64.
 	// On other platforms, verify rosetta2 flag doesn't break anything.
 	tool := &registry.Tool{
@@ -139,6 +150,8 @@ func TestCheckPlatformSupport_Rosetta2(t *testing.T) {
 }
 
 func TestBuildPlatformHints_Windows(t *testing.T) {
+	t.Parallel()
+
 	hints := buildPlatformHints("windows", "amd64", []string{"darwin", "linux"})
 
 	assert.Contains(t, hints[0], "darwin, linux")
@@ -152,6 +165,8 @@ func TestBuildPlatformHints_Windows(t *testing.T) {
 }
 
 func TestBuildPlatformHints_DarwinArm64(t *testing.T) {
+	t.Parallel()
+
 	hints := buildPlatformHints("darwin", "arm64", []string{"darwin/amd64", "linux"})
 
 	foundRosetta := false
@@ -164,6 +179,8 @@ func TestBuildPlatformHints_DarwinArm64(t *testing.T) {
 }
 
 func TestBuildPlatformHints_LinuxOnlyOnDarwin(t *testing.T) {
+	t.Parallel()
+
 	hints := buildPlatformHints("darwin", "arm64", []string{"linux"})
 
 	foundDocker := false
@@ -176,6 +193,8 @@ func TestBuildPlatformHints_LinuxOnlyOnDarwin(t *testing.T) {
 }
 
 func TestBuildPlatformHints_LinuxArm64(t *testing.T) {
+	t.Parallel()
+
 	hints := buildPlatformHints("linux", "arm64", []string{"linux/amd64"})
 
 	foundQEMU := false
@@ -188,6 +207,8 @@ func TestBuildPlatformHints_LinuxArm64(t *testing.T) {
 }
 
 func TestBuildPlatformHints_NoPlatformSpecificHints(t *testing.T) {
+	t.Parallel()
+
 	// Test when no platform-specific hints apply.
 	hints := buildPlatformHints("freebsd", "amd64", []string{"darwin", "linux"})
 
@@ -202,6 +223,8 @@ func TestBuildPlatformHints_NoPlatformSpecificHints(t *testing.T) {
 }
 
 func TestFormatPlatformError(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		platformErr *PlatformError
@@ -240,6 +263,7 @@ func TestFormatPlatformError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			formatted := FormatPlatformError(tt.platformErr)
 
 			assert.Contains(t, formatted, tt.expectTool)
@@ -252,6 +276,8 @@ func TestFormatPlatformError(t *testing.T) {
 }
 
 func TestIsKnownArch(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		arch string
 		want bool
@@ -278,6 +304,7 @@ func TestIsKnownArch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.arch, func(t *testing.T) {
+			t.Parallel()
 			got := isKnownArch(tt.arch)
 			assert.Equal(t, tt.want, got, "isKnownArch(%q)", tt.arch)
 		})
@@ -285,6 +312,8 @@ func TestIsKnownArch(t *testing.T) {
 }
 
 func TestPlatformError_Error(t *testing.T) {
+	t.Parallel()
+
 	err := &PlatformError{
 		Tool:          "owner/repo",
 		CurrentEnv:    "windows/arm64",
@@ -299,6 +328,8 @@ func TestPlatformError_Error(t *testing.T) {
 }
 
 func TestAppendWindowsHints_NotWindows(t *testing.T) {
+	t.Parallel()
+
 	// When not on Windows, should return hints unchanged.
 	initialHints := []string{"initial hint"}
 	result := appendWindowsHints(initialHints, "darwin", []string{"linux"})
@@ -306,6 +337,8 @@ func TestAppendWindowsHints_NotWindows(t *testing.T) {
 }
 
 func TestAppendWindowsHints_WindowsNoLinuxSupport(t *testing.T) {
+	t.Parallel()
+
 	// When on Windows but Linux is not in supported envs, should not add WSL hint.
 	initialHints := []string{"initial hint"}
 	result := appendWindowsHints(initialHints, "windows", []string{"darwin"})
@@ -313,6 +346,8 @@ func TestAppendWindowsHints_WindowsNoLinuxSupport(t *testing.T) {
 }
 
 func TestAppendDarwinArm64Hints_NotDarwinArm64(t *testing.T) {
+	t.Parallel()
+
 	// When not on darwin/arm64, should return hints unchanged.
 	initialHints := []string{"initial hint"}
 	// Test linux.
@@ -324,6 +359,8 @@ func TestAppendDarwinArm64Hints_NotDarwinArm64(t *testing.T) {
 }
 
 func TestAppendLinuxArm64Hints_NotLinuxArm64(t *testing.T) {
+	t.Parallel()
+
 	// When not on linux/arm64, should return hints unchanged.
 	initialHints := []string{"initial hint"}
 	result := appendLinuxArm64Hints(initialHints, "darwin", "arm64", []string{"linux/amd64"})
@@ -331,6 +368,8 @@ func TestAppendLinuxArm64Hints_NotLinuxArm64(t *testing.T) {
 }
 
 func TestAppendLinuxArm64Hints_NoAmd64Support(t *testing.T) {
+	t.Parallel()
+
 	// When on linux/arm64 but linux/amd64 is not supported, should not add QEMU hint.
 	initialHints := []string{"initial hint"}
 	result := appendLinuxArm64Hints(initialHints, "linux", "arm64", []string{"darwin/amd64"})
@@ -341,6 +380,8 @@ func TestAppendLinuxArm64Hints_NoAmd64Support(t *testing.T) {
 // by explicitly passing OS/arch parameters, including cross-platform scenarios that
 // cannot be reached via CheckPlatformSupport on a single host.
 func TestCheckPlatformSupportForEnv(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		tool        *registry.Tool
@@ -497,6 +538,7 @@ func TestCheckPlatformSupportForEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := checkPlatformSupportForEnv(tt.tool, tt.currentOS, tt.currentArch)
 			if tt.wantNil {
 				assert.Nil(t, err, "expected no error")

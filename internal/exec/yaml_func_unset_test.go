@@ -11,6 +11,8 @@ import (
 )
 
 func TestProcessUnsetTag(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		input    map[string]any
@@ -138,6 +140,7 @@ func TestProcessUnsetTag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := processNodes(atmosConfig, tt.input, "", []string{}, nil)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -146,6 +149,8 @@ func TestProcessUnsetTag(t *testing.T) {
 }
 
 func TestProcessUnsetWithSkip(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	input := map[string]any{
@@ -173,6 +178,8 @@ func TestProcessUnsetWithSkip(t *testing.T) {
 // `*.terraform.tfvars.json`, which breaks consumers such as Terraform's `concat()` that reject
 // null where a list is expected. Empty lists must remain empty (non-nil) slices.
 func TestProcessNodesPreservesEmptyLists(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	input := map[string]any{
@@ -216,6 +223,8 @@ func TestProcessNodesPreservesEmptyLists(t *testing.T) {
 }
 
 func TestUnsetMarker(t *testing.T) {
+	t.Parallel()
+
 	// Test the UnsetMarker type.
 	marker := UnsetMarker{IsUnset: true}
 	assert.True(t, marker.IsUnset)
@@ -225,6 +234,8 @@ func TestUnsetMarker(t *testing.T) {
 }
 
 func TestProcessCustomTagsWithUnset(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Test that processCustomTags returns UnsetMarker for !unset tag.
@@ -242,6 +253,8 @@ func TestProcessCustomTagsWithUnset(t *testing.T) {
 }
 
 func TestProcessCustomYamlTagsWithUnset(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	input := schema.AtmosSectionMapType{
@@ -270,6 +283,8 @@ func TestProcessCustomYamlTagsWithUnset(t *testing.T) {
 }
 
 func TestUnsetInheritanceScenario(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Simulate a parent configuration.
@@ -313,6 +328,8 @@ func TestUnsetInheritanceScenario(t *testing.T) {
 }
 
 func TestUnsetWithComplexArray(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	input := map[string]any{
@@ -339,6 +356,8 @@ func TestUnsetWithComplexArray(t *testing.T) {
 }
 
 func TestUnsetEmptyString(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Test that empty string with !unset still works.
