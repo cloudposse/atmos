@@ -73,8 +73,14 @@ jobs:
           # Operating-system background services on the hosted Windows and
           # macOS images are listed after the job-specific endpoints; see the
           # `test` job's allowed-endpoints comment in test.yml for the
-          # rationale and keep the two lists in sync. The Ubuntu apt mirrors
-          # are for the linux leg's libudev-dev install (race-namespace warm).
+          # rationale and keep the two lists in sync. The apt hosts are for
+          # the linux leg's libudev-dev install (race-namespace warm):
+          # `apt-get update` refreshes every source the hosted image ships,
+          # including its Microsoft and Google Chrome repos, not just Ubuntu's
+          # (StepSecurity flagged both on the first run). The Windows Delivery
+          # Optimization (*.prod.do.dsp.mp.microsoft.com) and Windows Update
+          # download hosts were flagged on the same run and belong with the
+          # other Windows background services.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
@@ -90,6 +96,10 @@ jobs:
             esm.ubuntu.com:443
             motd.ubuntu.com:443
             packages.microsoft.com:443
+            dl.google.com:443
+            *.prod.do.dsp.mp.microsoft.com:443
+            au.download.windowsupdate.com:80
+            au.download.windowsupdate.com:443
             www.msftconnecttest.com:443
             ipv6.msftconnecttest.com:443
             www.msftncsi.com:443
@@ -170,9 +180,13 @@ jobs:
       - name: Install Linux build dependencies (libudev-dev for the race-namespace warm)
         if: matrix.target == 'linux'
         run: |
+          # Acquire::EnableSrvRecords=false: apt otherwise resolves
+          # _http._tcp.<mirror> SRV records before every fetch, which
+          # harden-runner reports as outbound attempts to hosts that are not
+          # (and cannot usefully be) on the allowlist.
           sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
+          sudo apt-get -o Acquire::EnableSrvRecords=false -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::EnableSrvRecords=false -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
       - name: Warm the race-instrumented build cache
         if: matrix.target == 'linux'
