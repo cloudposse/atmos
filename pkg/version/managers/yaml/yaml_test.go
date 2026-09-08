@@ -451,3 +451,41 @@ func TestYAMLBareNumericVersionStaysString(t *testing.T) {
 		t.Fatalf("expected version to stay a YAML string, got type %q for:\n%s", tag, changes[0].New)
 	}
 }
+
+// TestYAMLMultiDocumentRejected guards against a multi-document stream being
+// silently edited: the underlying editor applies an expression to every
+// document, so it refuses such files, and the manager must surface that as a
+// clear error rather than rewriting every document.
+func TestYAMLMultiDocumentRejected(t *testing.T) {
+	err := planFixtureErr(t, "values.yaml",
+		"version: 1.0.0\n---\nversion: 2.0.0\n",
+		setOptions(setEntry{Path: "version", From: "opentofu"}))
+	if err == nil {
+		t.Fatal("expected an error for a multi-document YAML file")
+	}
+	if !errors.Is(err, errUtils.ErrVersionYAMLSetFailed) {
+		t.Fatalf("expected error to wrap ErrVersionYAMLSetFailed, got: %v", err)
+	}
+	if !errors.Is(err, atmosyaml.ErrYAMLMultiDocUnsupported) {
+		t.Fatalf("expected error to wrap ErrYAMLMultiDocUnsupported, got: %v", err)
+	}
+}
+
+// TestYAMLAnchoredValueRejected guards against a write silently changing a
+// value that other parts of the document alias: the editor's strict anchor
+// guard refuses the edit, and the manager must propagate that instead of
+// altering every alias at once.
+func TestYAMLAnchoredValueRejected(t *testing.T) {
+	err := planFixtureErr(t, "values.yaml",
+		"version: &ver 1.0.0\nother: *ver\n",
+		setOptions(setEntry{Path: "version", From: "opentofu"}))
+	if err == nil {
+		t.Fatal("expected an error for a path targeting an anchored value")
+	}
+	if !errors.Is(err, errUtils.ErrVersionYAMLSetFailed) {
+		t.Fatalf("expected error to wrap ErrVersionYAMLSetFailed, got: %v", err)
+	}
+	if !errors.Is(err, atmosyaml.ErrYAMLAnchorAltered) {
+		t.Fatalf("expected error to wrap ErrYAMLAnchorAltered, got: %v", err)
+	}
+}
