@@ -15,7 +15,7 @@ import (
 type DependencyNode struct {
 	Component    string
 	Stack        string
-	FunctionType string // "terraform.state", "terraform.output", "atmos.Component"
+	FunctionType string // "terraform.state", "terraform.output", "aws.cloudformation.output", "atmos.Component"
 	FunctionCall string // Full function call for error reporting
 }
 

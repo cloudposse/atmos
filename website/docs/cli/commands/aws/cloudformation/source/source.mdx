@@ -54,7 +54,7 @@ This means you can simply configure your component's source and run `atmos aws c
 ## CLI Commands
 
 The explicit CLI commands are useful for fine-grained control:
-- Force re-vendor to get the latest version
+- Force re-vendor the already-configured source (re-downloads the same `source.uri`/`source.version`; to pick up a newer revision, update `source.version` or the URI in stack configuration first)
 - Describe source configuration
 - Delete vendored sources
 - List components with sources
