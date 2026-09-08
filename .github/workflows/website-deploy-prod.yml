@@ -9,6 +9,17 @@ on:
     types:
       - released
 
+# Serialize deploys. The merge queue can land several PRs on main minutes apart, and
+# each push triggers a deploy that runs `aws s3 sync --delete` against the ONE shared
+# origin prefix. Two runs in flight at once race: run A uploads its hashed bundles and
+# index.html, then run B's --delete removes A's bundles (they are not in B's build)
+# while A's index.html still references them -- the site goes blank until the next
+# deploy. Only the newest pending run is kept per group; the in-flight run is never
+# cancelled because aborting mid-sync would leave a half-uploaded site.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 env:
   AWS_REGION: us-east-2
   IAM_ROLE_ARN: arn:aws:iam::557075604627:role/cplive-plat-ue2-prod-atmos-docs-gha
@@ -46,6 +57,8 @@ jobs:
             storage.googleapis.com:443
             us.i.posthog.com:443
             cplive-plat-ue2-prod-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
+            api.scorecard.dev:443
+            www.bestpractices.dev:443
 
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials

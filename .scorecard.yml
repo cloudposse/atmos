@@ -1,0 +1,5 @@
+annotations:
+  - checks:
+      - branch-protection
+    reasons:
+      - reason: not-supported # We use a GitHub merge queue instead of requiring branches to be up to date before merging on main. The queue re-validates every change against the latest main at merge time, giving the same guarantee without forcing contributors to manually rebase. Scorecard doesn't yet detect merge-queue usage as a substitute for this setting -- see https://github.com/ossf/scorecard/issues/3678.
