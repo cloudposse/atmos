@@ -1437,6 +1437,7 @@ func ProcessStackConfig(
 					GlobalAuth:               globalAndCloudFormationAuth,
 					GlobalDependencies:       globalAndCloudFormationDependencies,
 					GlobalMetadata:           globalMetadataSection,
+					GlobalComponentRetry:     globalRetrySection,
 					GlobalCommand:            cloudFormationCommand,
 					GlobalSecrets:            globalSecretsSection,
 					AtmosGlobalAuthMap:       atmosAuthConfig,

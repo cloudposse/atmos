@@ -2027,6 +2027,61 @@ func TestProcessStackConfig_CloudFormationReceivesGlobalSecrets(t *testing.T) {
 	require.True(t, ok, "DB_PASSWORD must have flowed from stack-global secrets into the aws/cloudformation component")
 }
 
+// TestProcessStackConfig_CloudFormationReceivesGlobalRetry guards the
+// buildCloudFormationOpts closure's ComponentProcessorOptions.GlobalComponentRetry
+// wiring — terraform/helmfile/helm's equivalent builders already set it, but
+// aws/cloudformation's builder omitted it, so stack-root `retry:` silently
+// never reached aws/cloudformation components at all.
+func TestProcessStackConfig_CloudFormationReceivesGlobalRetry(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.RetrySectionName: map[string]any{
+			"max_attempts": 5,
+			"conditions":   []any{"/Bad Gateway/"},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.TemplateSectionName:  "template.yaml",
+					cfg.StackNameSectionName: "acme-plat-ue2-dev-vpc",
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	cloudformation, ok := components[cfg.CloudFormationComponentType].(map[string]any)
+	require.True(t, ok, "result must contain aws/cloudformation components")
+	vpc, ok := cloudformation["vpc"].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must exist")
+
+	retry, ok := vpc[cfg.RetrySectionName].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must have a merged retry section from stack-root retry, got: %v", vpc[cfg.RetrySectionName])
+	assert.EqualValues(t, 5, retry["max_attempts"])
+	assert.Equal(t, []any{"/Bad Gateway/"}, retry["conditions"])
+}
+
 // TestProcessStackConfig_CloudFormationAllSectionsSurvive guards all of the
 // section-whitelist plumbing sites at once (stack_processor_process_stacks.go,
 // _helpers.go, _helpers_extraction.go, _helpers_inheritance.go, _utils.go,
