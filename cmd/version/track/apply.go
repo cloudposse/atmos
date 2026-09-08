@@ -14,6 +14,7 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/version/managers/json"
 	_ "github.com/cloudposse/atmos/pkg/version/managers/marker"
 	_ "github.com/cloudposse/atmos/pkg/version/managers/template"
+	_ "github.com/cloudposse/atmos/pkg/version/managers/yaml"
 )
 
 // appliedFile is one row of apply output.

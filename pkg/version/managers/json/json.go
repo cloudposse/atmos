@@ -14,16 +14,13 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"text/template"
 
-	sprig "github.com/Masterminds/sprig/v3"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/templatefuncs"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 	"github.com/cloudposse/atmos/pkg/version/managers"
 )
@@ -137,14 +134,11 @@ func parseOptions(raw map[string]any) (jsonOptions, error) {
 // otherwise silently last-win with no indication the first write was
 // discarded.
 func duplicatePath(entries []setEntry) string {
-	seen := make(map[string]bool, len(entries))
-	for _, entry := range entries {
-		if seen[entry.Path] {
-			return entry.Path
-		}
-		seen[entry.Path] = true
+	paths := make([]string, len(entries))
+	for i, entry := range entries {
+		paths[i] = entry.Path
 	}
-	return ""
+	return managers.DuplicatePath(paths)
 }
 
 // isAppendPath reports whether path targets sjson's array-append marker (a
@@ -207,7 +201,7 @@ func applySets(content []byte, entries []setEntry, refs map[string]manager.Versi
 		}
 		value := ref.String()
 		if entry.Format != "" {
-			formatted, err := renderSetFormat(entry.Format, ref)
+			formatted, err := managers.RenderValueFormat(entry.Format, ref)
 			if err != nil {
 				return nil, fmt.Errorf("%w: path %q: %w", errUtils.ErrVersionJSONFormatInvalid, entry.Path, err)
 			}
@@ -220,31 +214,6 @@ func applySets(content []byte, entries []setEntry, refs map[string]manager.Versi
 		current = updated
 	}
 	return current, nil
-}
-
-// renderSetFormat renders a set entry's Format template against the resolved
-// version ref, exposing .Version, .Digest, and .Pin. It uses the same
-// Sprig-plus-Atmos-func-map composition as the sibling toolchain template
-// renderers (see pkg/toolchain/verification/template.go) rather than a
-// bespoke transform-type enum, so trimPrefix/trimSuffix/replace/
-// regexReplaceAll etc. are all available out of the box.
-func renderSetFormat(formatStr string, ref manager.VersionRef) (string, error) {
-	funcs := sprig.TxtFuncMap()
-	delete(funcs, "env")
-	delete(funcs, "expandenv")
-	delete(funcs, "getHostByName")
-	for name, fn := range templatefuncs.FuncMap() {
-		funcs[name] = fn
-	}
-	tmpl, err := template.New("json-set-format").Funcs(funcs).Parse(formatStr)
-	if err != nil {
-		return "", err
-	}
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, ref); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
 }
 
 // applySet writes one set entry's value into content, or returns content
