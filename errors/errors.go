@@ -1271,6 +1271,8 @@ var (
 	ErrNoCommonAncestor                 = errors.New("no common ancestor found")
 	ErrUnknownMergeStrategy             = errors.New("unknown merge strategy")
 	ErrUnknownMergeDriver               = errors.New("unknown merge driver")
+	ErrUnknownUpdateStrategy            = errors.New("unknown update strategy")
+	ErrRenderedStrategyRequiresConfig   = errors.New("--update-strategy=rendered requires a recorded scaffold configuration")
 	ErrGeneratorFieldRequired           = errors.New("field is required")
 	ErrDuplicateScaffoldFieldName       = errors.New("duplicate scaffold field name")
 	ErrScaffoldConfigMissing            = errors.New("scaffold configuration not found")

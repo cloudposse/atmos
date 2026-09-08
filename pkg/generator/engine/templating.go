@@ -15,7 +15,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
-	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
 	"github.com/cloudposse/atmos/pkg/templatefuncs"
@@ -56,14 +55,23 @@ func (e *FileSkippedError) Error() string {
 	return fmt.Sprintf("file skipped: %s (rendered as: %s)", e.Path, e.RenderedPath)
 }
 
+// baseContentLoader is the "read this file's content at the merge base"
+// contract a 3-way merge needs, independent of where that base actually
+// comes from. *storage.GitBaseStorage (base tracked via the target's own git
+// history) and *storage.RenderedBaseStorage (base from a pristine template
+// re-render, see SetupRenderedBaseStorage) both satisfy it.
+type baseContentLoader interface {
+	LoadBase(filePath string) (string, bool, error)
+}
+
 // Processor handles template processing for scaffold and init commands.
 // It provides template rendering with Gomplate and Sprig functions,
 // file path templating, and intelligent file merging capabilities.
 type Processor struct {
-	merger     *merge.ThreeWayMerger
-	gitStorage *storage.GitBaseStorage
-	targetPath string // Target directory for file generation
-	DryRun     bool   // When true, compute rendering/merge but skip writing to disk
+	merger      *merge.ThreeWayMerger
+	baseStorage baseContentLoader
+	targetPath  string // Target directory for file generation
+	DryRun      bool   // When true, compute rendering/merge but skip writing to disk
 }
 
 // NewProcessor creates a new template processor with default settings.
@@ -555,9 +563,10 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 
 	// Handle update mode (3-way merge)
 	if update {
-		// Require git storage for meaningful 3-way merge.
-		// Without git, we would use template content as base, making merge a no-op.
-		if p.gitStorage == nil {
+		// Require base storage for a meaningful 3-way merge (either git
+		// history or a pristine template re-render). Without it, we would use
+		// template content as base, making merge a no-op.
+		if p.baseStorage == nil {
 			return errUtils.Build(errUtils.ErrThreeWayMerge).
 				WithExplanation("`--update` requires a git repository to compute a 3-way merge base").
 				WithHint("Run inside a git repository and/or pass `--base-ref`").
