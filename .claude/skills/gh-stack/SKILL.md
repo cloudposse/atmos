@@ -50,9 +50,19 @@ those still-staged branch-1 files rode along and got swept into the parent's com
 **Rule: before switching stack layers, get to a genuinely clean state first** — commit what you have.
 `git restore --staged .` alone is not enough: it unstages, but leaves any working-tree modifications
 in place, which still ride along the same way staged changes do. If some changes truly aren't ready
-to commit, they need to be fully removed from the working tree (discarded, or moved out of the repo)
-before switching — never switch layers mid-edit with dirty state for work you haven't finished
-placing.
+to commit, they still need to be fully out of the working tree before switching — but getting there
+must never mean silently discarding uncommitted work. **Never discard changes (`git checkout -- .`,
+`git clean -fd`, `git reset --hard`, etc.) without the user's explicit, per-change approval** — this
+matches this repo's Git Safety Protocol. Preserve the work first, then switch:
+
+- Commit it, even as a throwaway WIP commit on the current branch (`git commit -m 'WIP: <tag>'`) —
+  you can `git reset --soft HEAD~1` to restore it as unstaged changes once you're back on this layer.
+- Or copy the dirty files out to a temporary worktree or a patch file (`git diff > /tmp/<tag>.patch`)
+  outside the repo tree, and reapply after switching back.
+
+Only if neither is viable and the changes are genuinely disposable, ask the user for explicit approval
+before discarding — never remove uncommitted work by default. Never switch layers mid-edit with dirty
+state for work you haven't finished placing.
 
 **After every stack checkout, verify before you commit:**
 ```bash
