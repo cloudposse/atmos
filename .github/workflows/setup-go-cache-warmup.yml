@@ -183,10 +183,13 @@ jobs:
           # Acquire::EnableSrvRecords=false: apt otherwise resolves
           # _http._tcp.<mirror> SRV records before every fetch, which
           # harden-runner reports as outbound attempts to hosts that are not
-          # (and cannot usefully be) on the allowlist.
+          # (and cannot usefully be) on the allowlist. It goes in apt.conf.d
+          # rather than on the command line because apt's post-update hooks
+          # (ESM, motd) spawn their own apt runs that would not inherit a -o.
+          echo 'Acquire::EnableSrvRecords "false";' | sudo tee /etc/apt/apt.conf.d/99-atmos-no-srv >/dev/null
           sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
-          sudo apt-get -o Acquire::EnableSrvRecords=false -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
-          sudo apt-get -o Acquire::EnableSrvRecords=false -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
       - name: Warm the race-instrumented build cache
         if: matrix.target == 'linux'
