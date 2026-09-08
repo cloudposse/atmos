@@ -415,7 +415,12 @@ func scanComponentForDependents(p *scanComponentParams) ([]schema.Dependent, err
 
 	result, err := getComponentDependenciesWithError(stackComponentMap)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(
+			"parse dependencies for component %q in stack %q: %w",
+			p.StackComponentName,
+			p.StackName,
+			err,
+		)
 	}
 	componentDeps, settingsSection, depSource := result.dependencies, result.settingsSection, result.source
 	if len(componentDeps) == 0 {
@@ -744,15 +749,12 @@ func findComponentSectionInCachedStacks(stacks map[string]any, stackName, compon
 	if !ok {
 		return nil
 	}
-	// Check terraform components (the common case).
-	if tfSection, ok := componentsSection["terraform"].(map[string]any); ok {
-		if comp, ok := tfSection[componentName].(map[string]any); ok {
-			return comp
+	for _, componentTypeSection := range componentsSection {
+		componentTypeMap, ok := componentTypeSection.(map[string]any)
+		if !ok {
+			continue
 		}
-	}
-	// Check helmfile components.
-	if hfSection, ok := componentsSection["helmfile"].(map[string]any); ok {
-		if comp, ok := hfSection[componentName].(map[string]any); ok {
+		if comp, ok := componentTypeMap[componentName].(map[string]any); ok {
 			return comp
 		}
 	}
