@@ -15,8 +15,6 @@ import (
 
 // TestCollectComponentsDirectoryObjectsForClean tests that the function delegates correctly.
 func TestCollectComponentsDirectoryObjectsForClean(t *testing.T) {
-	t.Parallel()
-
 	tempDir := t.TempDir()
 
 	// Create a test component directory.
@@ -39,16 +37,12 @@ func TestCollectComponentsDirectoryObjectsForClean(t *testing.T) {
 
 // TestCollectComponentsDirectoryObjectsForClean_EmptyPath tests error handling.
 func TestCollectComponentsDirectoryObjectsForClean_EmptyPath(t *testing.T) {
-	t.Parallel()
-
 	_, err := CollectComponentsDirectoryObjectsForClean("", []string{"vpc"}, []string{".terraform"})
 	require.Error(t, err)
 }
 
 // TestGetAllStacksComponentsPathsForClean tests that the function delegates correctly.
 func TestGetAllStacksComponentsPathsForClean(t *testing.T) {
-	t.Parallel()
-
 	stacksMap := map[string]any{
 		"dev": map[string]any{
 			"components": map[string]any{
@@ -83,16 +77,12 @@ func TestGetAllStacksComponentsPathsForClean(t *testing.T) {
 
 // TestGetAllStacksComponentsPathsForClean_EmptyMap tests with empty input.
 func TestGetAllStacksComponentsPathsForClean_EmptyMap(t *testing.T) {
-	t.Parallel()
-
 	paths := GetAllStacksComponentsPathsForClean(map[string]any{})
 	assert.Nil(t, paths)
 }
 
 // TestConstructTerraformComponentVarfileNameForClean tests varfile name construction.
 func TestConstructTerraformComponentVarfileNameForClean(t *testing.T) {
-	t.Parallel()
-
 	info := &schema.ConfigAndStacksInfo{
 		Component:     "vpc",
 		ContextPrefix: "ue1-dev",
@@ -106,8 +96,6 @@ func TestConstructTerraformComponentVarfileNameForClean(t *testing.T) {
 
 // TestConstructTerraformComponentVarfileNameForClean_WithFolderPrefix tests with folder prefix.
 func TestConstructTerraformComponentVarfileNameForClean_WithFolderPrefix(t *testing.T) {
-	t.Parallel()
-
 	info := &schema.ConfigAndStacksInfo{
 		Component:                     "vpc",
 		ContextPrefix:                 "ue1-dev",
@@ -122,8 +110,6 @@ func TestConstructTerraformComponentVarfileNameForClean_WithFolderPrefix(t *test
 
 // TestConstructTerraformComponentPlanfileNameForClean tests planfile name construction.
 func TestConstructTerraformComponentPlanfileNameForClean(t *testing.T) {
-	t.Parallel()
-
 	info := &schema.ConfigAndStacksInfo{
 		Component:     "vpc",
 		ContextPrefix: "ue1-dev",
@@ -137,8 +123,6 @@ func TestConstructTerraformComponentPlanfileNameForClean(t *testing.T) {
 
 // TestConstructTerraformComponentPlanfileNameForClean_WithFolderPrefix tests with folder prefix.
 func TestConstructTerraformComponentPlanfileNameForClean_WithFolderPrefix(t *testing.T) {
-	t.Parallel()
-
 	info := &schema.ConfigAndStacksInfo{
 		Component:                     "vpc",
 		ContextPrefix:                 "ue1-dev",
@@ -155,8 +139,6 @@ func TestConstructTerraformComponentPlanfileNameForClean_WithFolderPrefix(t *tes
 // name export used by other packages (e.g. tfmigrate's buildTfmigrateEnv), which
 // must produce the same name as the terraform execution path itself.
 func TestConstructTerraformComponentVarfileName(t *testing.T) {
-	t.Parallel()
-
 	info := &schema.ConfigAndStacksInfo{
 		Component:     "vpc",
 		ContextPrefix: "ue1-dev",
@@ -176,8 +158,6 @@ func TestConstructTerraformComponentVarfileName(t *testing.T) {
 // the component's own (multi_state migrations' from_dir) - a relative/bare path
 // would silently resolve to the wrong (or a nonexistent) file there.
 func TestConstructTerraformComponentVarfilePath(t *testing.T) {
-	t.Parallel()
-
 	atmosConfig := &schema.AtmosConfiguration{}
 	info := &schema.ConfigAndStacksInfo{
 		Component:     "vpc",
@@ -197,8 +177,6 @@ func TestConstructTerraformComponentVarfilePath(t *testing.T) {
 // entries, so callers that only have access to the exported wrapper (outside this
 // package) still get real secret partitioning behavior.
 func TestComputeTerraformSecretVarEnv(t *testing.T) {
-	t.Parallel()
-
 	const secret = "tf-adapter-SECRET-xyz789"
 	atmosio.RegisterSecret(secret)
 
@@ -224,8 +202,6 @@ func TestComputeTerraformSecretVarEnv(t *testing.T) {
 // TestComputeTerraformSecretVarEnv_NoSecrets confirms the wrapper returns an empty
 // env slice (not an error) when nothing in the component vars is secret.
 func TestComputeTerraformSecretVarEnv_NoSecrets(t *testing.T) {
-	t.Parallel()
-
 	info := &schema.ConfigAndStacksInfo{
 		ComponentVarsSection: map[string]any{"region": "us-west-2-adapter-nosecret"},
 	}
