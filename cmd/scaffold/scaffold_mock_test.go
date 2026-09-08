@@ -231,7 +231,7 @@ func TestResolveInteractiveBaseRef_ResolveTargetPathErrorPropagates(t *testing.T
 		ResolveTargetPath(selectedConfig, "", true, true, opts.templateValues).
 		Return("", nil, false, wantErr)
 
-	_, baseRef, templateValues, useDefaults, err := resolveInteractiveBaseRef(selectedConfig, opts, mockUI)
+	_, baseRef, templateValues, useDefaults, _, err := resolveInteractiveBaseRef(selectedConfig, opts, mockUI)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, wantErr)
@@ -264,7 +264,7 @@ func TestResolveInteractiveBaseRef_DefaultBaseRefErrorPropagates(t *testing.T) {
 		ResolveTargetPath(selectedConfig, "", true, true, opts.templateValues).
 		Return(dir, opts.templateValues, true, nil)
 
-	targetDir, baseRef, templateValues, useDefaults, err := resolveInteractiveBaseRef(selectedConfig, opts, mockUI)
+	targetDir, baseRef, templateValues, useDefaults, _, err := resolveInteractiveBaseRef(selectedConfig, opts, mockUI)
 
 	require.Error(t, err)
 	assert.Equal(t, dir, targetDir, "the resolved target dir must still be returned so the caller can report it")
