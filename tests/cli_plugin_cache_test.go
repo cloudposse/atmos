@@ -18,6 +18,12 @@ const (
 	terraformInitTimeout       = 4 * time.Minute
 	terraformCacheTrustTimeout = 1 * time.Minute
 	terraformCleanTimeout      = 1 * time.Minute
+	// TerraformInitRetryBudget bounds retries of a failed terraform init: it resolves provider
+	// versions against registry.terraform.io, which occasionally has a transient DNS/TLS blip on
+	// CI runners (see docs/fixes/2026-09-09-terraform-plugin-cache-windows-registry-flake.md).
+	// Real failures (bad config, missing provider) fail identically on every attempt and still
+	// fail the test once the budget is spent; this only absorbs one-off network hiccups.
+	terraformInitRetryBudget = 90 * time.Second
 )
 
 // TestTerraformPluginCache verifies that Terraform provider caching works correctly.
@@ -305,12 +311,20 @@ func TestTerraformPluginCacheUserOverride(t *testing.T) {
 }
 
 // runTerraformInitWithEnv runs terraform init for a component with custom env vars.
-// Uses the "test" stack from the plugin-cache fixture.
+// Uses the "test" stack from the plugin-cache fixture. Retries within terraformInitRetryBudget to
+// absorb a transient registry.terraform.io connectivity blip rather than failing the whole
+// acceptance suite on a one-off network hiccup.
 func runTerraformInitWithEnv(t *testing.T, component string, envVars map[string]string) {
 	t.Helper()
-	_, _, err := runTerraformInitCommandWithEnv(t, component, envVars)
+
+	var stdout, stderr string
+	err := pollUntil(terraformInitRetryBudget, func() error {
+		var initErr error
+		stdout, stderr, initErr = runTerraformInitCommandWithEnv(t, component, envVars)
+		return initErr
+	})
 	if err != nil {
-		t.Fatalf("Failed to run terraform init %s -s test: %v", component, err)
+		t.Fatalf("Failed to run terraform init %s -s test: %v\nstdout:\n%s\nstderr:\n%s", component, err, stdout, stderr)
 	}
 }
 
