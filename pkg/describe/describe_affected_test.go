@@ -45,7 +45,7 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 
 	var affected []schema.Affected
 	deadline := time.Now().Add(describeAffectedCloneRetryBudget)
-	for {
+	for time.Now().Before(deadline) {
 		affected, _, _, _, err = e.ExecuteDescribeAffectedWithTargetRefClone(
 			&atmosConfig,
 			ref,
@@ -62,11 +62,19 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 			nil,   // authManager
 			false, // authDisabled
 		)
-		if err == nil || time.Now().After(deadline) {
+		if err == nil {
 			break
 		}
 		t.Logf("ExecuteDescribeAffectedWithTargetRefClone failed, retrying: %v", err)
-		time.Sleep(500 * time.Millisecond)
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			break
+		}
+		sleep := 500 * time.Millisecond
+		if remaining < sleep {
+			sleep = remaining
+		}
+		time.Sleep(sleep)
 	}
 	assert.Nil(t, err)
 

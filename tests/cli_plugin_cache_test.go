@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errTerraformInitRetryBudgetExhausted is returned instead of starting another terraform init once
+// the retry budget's deadline has passed, rather than launching one with a near-zero context
+// timeout that's certain to fail immediately anyway.
+var errTerraformInitRetryBudgetExhausted = errors.New("terraform init retry budget exhausted")
+
 const (
 	terraformInitTimeout       = 4 * time.Minute
 	terraformCacheTrustTimeout = 1 * time.Minute
@@ -24,7 +30,7 @@ const (
 	// Real failures (bad config, missing provider) fail identically on every attempt and still
 	// fail the test once the budget is spent; this only absorbs one-off network hiccups.
 	// RunTerraformInitWithEnv caps each attempt's own context to the time remaining in this
-	// budget, so a single blocked attempt can't run past it on terraformInitTimeout instead.
+	// budget, so each attempt uses the remaining budget instead of the full terraformInitTimeout.
 	terraformInitRetryBudget = 90 * time.Second
 )
 
@@ -328,7 +334,7 @@ func runTerraformInitWithEnv(t *testing.T, component string, envVars map[string]
 	err := pollUntil(terraformInitRetryBudget, func() error {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
-			remaining = time.Millisecond
+			return errTerraformInitRetryBudgetExhausted
 		}
 		var initErr error
 		stdout, stderr, initErr = runTerraformInitCommandWithEnv(t, component, envVars, remaining)
