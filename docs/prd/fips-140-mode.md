@@ -95,6 +95,15 @@ Every distinct Go-toolchain build invocation in the repo sets `GOFIPS140`:
 | `internal/ci/acceptance/command.go` (`goCommandEnvironment()`) | Sharded acceptance-test binaries built via `mage acceptance:*` |
 | `.github/workflows/website-deploy-prod.yml` / `website-preview-build.yml` | Throwaway `go run .` invocations that generate the website's schema JSON files (not a distributed artifact); set for consistency with every other build here, not because these processes make TLS calls |
 
+This table covers every build invocation *in this repo*. It does not cover the Homebrew
+distribution path: the `atmos` formula lives entirely in the external `Homebrew/homebrew-core`
+repo (this repo's only involvement is a version-bump PR via `brew bump-formula-pr` in
+`.github/workflows/build.yml`), and that formula's `install` block did a plain `go build`
+with no `GOFIPS140` set — so `brew install atmos` produced a binary reporting `"fips": false`
+while GitHub Release binaries correctly reported `"fips": true`. A fix is proposed upstream:
+[Homebrew/homebrew-core#302847](https://github.com/Homebrew/homebrew-core/pull/302847) (draft,
+pending review/merge by Homebrew maintainers, outside this repo's control).
+
 Go does support a `godebug (fips140=on)` block in `go.mod` (see go.dev/doc/godebug), but
 that only sets the *runtime default* for `GODEBUG=fips140`, not the build-time FIPS module
 selection — it's the equivalent of what `GOFIPS140=latest` already gives every atmos binary
