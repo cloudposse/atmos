@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 )
 
@@ -89,4 +90,60 @@ func TestRenderPristineBase_CleanupRemovesTempDir(t *testing.T) {
 
 	_, statErr := os.Stat(tempDir)
 	assert.True(t, os.IsNotExist(statErr), "cleanup must remove the temp directory")
+}
+
+func TestSetupUpdateBase_TrackedWithEmptyBaseRef_IsNoOp(t *testing.T) {
+	ui := createTestUI(t)
+	// UpdateStrategyTracked is the zero value; no SetUpdateStrategy call needed.
+
+	cleanup, err := ui.setupUpdateBase(t.TempDir(), "")
+
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	cleanup() // Must not panic even though tracked mode never set anything up.
+}
+
+// TestSetupUpdateBase_Rendered_WiresRenderedBaseIntoProcessor proves
+// setupUpdateBase's rendered branch really does point the Processor's 3-way
+// merge base at the pristine old-ref render, rather than just checking that
+// it returns no error.
+//
+// The test file static.txt's on-disk content below is left identical to the
+// pristine render's own static.txt (the "base"), so the merge is a clean
+// base==ours case that only succeeds -- taking the template's new content --
+// if the base storage was actually wired up; without it, update-mode
+// ProcessFile fails outright with ErrThreeWayMerge before ever reaching the
+// merge itself (see Processor.baseStorage == nil in handleExistingFile).
+func TestSetupUpdateBase_Rendered_WiresRenderedBaseIntoProcessor(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetUpdateStrategy(engine.UpdateStrategyRendered)
+	ui.SetRenderedBaseSource(renderedBaseConfig(), map[string]interface{}{"project_name": "base-project"})
+
+	targetDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "static.txt"), []byte("static content\n"), 0o644))
+
+	cleanup, err := ui.setupUpdateBase(targetDir, "")
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	t.Cleanup(cleanup)
+
+	err = ui.processor.ProcessFile(engine.File{Path: "static.txt", Content: "template content\n", Permissions: 0o644}, targetDir, false, true, nil, nil)
+	require.NoError(t, err)
+
+	merged, err := os.ReadFile(filepath.Join(targetDir, "static.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "template content\n", string(merged))
+}
+
+func TestSetupUpdateBase_Rendered_PropagatesRenderFailure(t *testing.T) {
+	ui := createTestUI(t)
+	ui.SetUpdateStrategy(engine.UpdateStrategyRendered)
+	ui.SetRenderedBaseSource(&templates.Configuration{
+		Name:  "no-scaffold-yaml",
+		Files: []templates.File{{Path: "README.md", Content: "static\n", Permissions: 0o644}},
+	}, map[string]interface{}{})
+
+	_, err := ui.setupUpdateBase(t.TempDir(), "")
+
+	require.Error(t, err)
 }
