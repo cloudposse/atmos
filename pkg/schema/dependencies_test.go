@@ -303,6 +303,17 @@ func TestComponentDependency_IsRequiredDefaultsToTrue(t *testing.T) {
 	assert.False(t, optionalDependency.IsRequired())
 }
 
+func TestParseComponentDependenciesRejectsInvalidRenderedRequiredValue(t *testing.T) {
+	_, err := ParseComponentDependencies(map[string]any{
+		"components": []any{
+			map[string]any{"name": "monitoring", "required": "sometimes"},
+		},
+	}, "terraform", "dev")
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, "required must be a boolean")
+}
+
 func TestDependencies_Normalize_NameAlias(t *testing.T) {
 	t.Run("name alone is promoted to component", func(t *testing.T) {
 		d := &Dependencies{

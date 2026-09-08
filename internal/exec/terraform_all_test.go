@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -19,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 func TestBuildTerraformDependencyGraph(t *testing.T) {
@@ -254,6 +256,59 @@ func TestBuildTerraformDependencyGraphModernDependencies(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildTerraformDependencyGraphModernDependencyCustomDelimiter(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled:    true,
+				Delimiters: []string{"[[", "]]"},
+			},
+		},
+	}
+	componentSection := map[string]any{
+		"dependencies": map[string]any{
+			"components": []any{
+				map[string]any{"name": "monitoring", "required": "[[ .required ]]"},
+			},
+		},
+	}
+	componentSectionYAML, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
+		componentSection,
+		atmosConfig.Templates.Settings.Delimiters,
+	)
+	require.NoError(t, err)
+	rendered, err := ProcessTmplWithDatasources(
+		atmosConfig,
+		&schema.ConfigAndStacksInfo{},
+		schema.Settings{},
+		"component.yaml",
+		componentSectionYAML,
+		map[string]any{"required": false},
+		false,
+	)
+	require.NoError(t, err)
+
+	var app map[string]any
+	require.NoError(t, yaml.Unmarshal([]byte(rendered), &app))
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"app":        app,
+					"monitoring": map[string]any{},
+				},
+			},
+		},
+	}
+
+	graph, err := buildTerraformDependencyGraph(atmosConfig, stacks, &schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+	node, exists := graph.GetNode("app-dev")
+	require.True(t, exists)
+	require.Equal(t, []string{"monitoring-dev"}, node.Dependencies)
+	require.True(t, node.OptionalDependencies["monitoring-dev"])
 }
 
 func TestBuildTerraformDependencyGraphModernCrossStackDependency(t *testing.T) {

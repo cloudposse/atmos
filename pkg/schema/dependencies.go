@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
+	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
 	"gopkg.in/yaml.v3"
@@ -323,11 +325,36 @@ func (d *Dependencies) normalizeComponentEntries() error {
 	return nil
 }
 
+var dependencyBoolType = reflect.TypeOf(false)
+
+func dependencyDecodeHook(from, to reflect.Type, data any) (any, error) {
+	if to != dependencyBoolType {
+		return data, nil
+	}
+	value, ok := data.(string)
+	if !ok {
+		return data, nil
+	}
+	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+	if err != nil {
+		return nil, fmt.Errorf("required must be a boolean: %w", err)
+	}
+	return parsed, nil
+}
+
 // ParseComponentDependencies decodes and normalizes modern component dependencies.
 // It applies last-wins semantics using effective kind and stack identity.
 func ParseComponentDependencies(section map[string]any, defaultKind, defaultStack string) ([]ComponentDependency, error) {
 	var dependencies Dependencies
-	if err := mapstructure.Decode(section, &dependencies); err != nil {
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:     &dependencies,
+		TagName:    "mapstructure",
+		DecodeHook: dependencyDecodeHook,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create component dependency decoder: %w", err)
+	}
+	if err := decoder.Decode(section); err != nil {
 		return nil, fmt.Errorf("decode component dependencies: %w", err)
 	}
 	if err := dependencies.Normalize(); err != nil {
