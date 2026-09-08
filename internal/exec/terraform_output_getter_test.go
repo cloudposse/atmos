@@ -186,8 +186,6 @@ func TestResolveNestedOutputAuth(t *testing.T) {
 }
 
 func TestGetAllTerraformOutputs_PanicWhenNoExecutor(t *testing.T) {
-	t.Parallel()
-
 	// Save and restore original executor.
 	originalExecutor := tfoutput.GetDefaultExecutor()
 	defer tfoutput.SetDefaultExecutor(originalExecutor)
@@ -206,8 +204,6 @@ func TestGetAllTerraformOutputs_PanicWhenNoExecutor(t *testing.T) {
 }
 
 func TestGetTerraformOutput_PanicWhenNoExecutor(t *testing.T) {
-	t.Parallel()
-
 	// Save and restore original executor.
 	originalExecutor := tfoutput.GetDefaultExecutor()
 	defer tfoutput.SetDefaultExecutor(originalExecutor)

@@ -13,8 +13,6 @@ import (
 
 // TestSetAndGetMergeContextForStack tests storing and retrieving merge contexts.
 func TestSetAndGetMergeContextForStack(t *testing.T) {
-	t.Parallel()
-
 	// Clear to start fresh.
 	ClearMergeContexts()
 
@@ -38,8 +36,6 @@ func TestSetAndGetMergeContextForStack(t *testing.T) {
 
 // TestGetMergeContextForStackNotFound tests retrieving a non-existent context.
 func TestGetMergeContextForStackNotFound(t *testing.T) {
-	t.Parallel()
-
 	ClearMergeContexts()
 
 	retrieved := GetMergeContextForStack("nonexistent-stack")
@@ -48,8 +44,6 @@ func TestGetMergeContextForStackNotFound(t *testing.T) {
 
 // TestClearMergeContexts tests clearing all stored merge contexts.
 func TestClearMergeContexts(t *testing.T) {
-	t.Parallel()
-
 	// Store multiple contexts.
 	ctx1 := m.NewMergeContext()
 	ctx2 := m.NewMergeContext()
@@ -71,8 +65,6 @@ func TestClearMergeContexts(t *testing.T) {
 
 // TestGetAllMergeContexts tests retrieving all stored merge contexts.
 func TestGetAllMergeContexts(t *testing.T) {
-	t.Parallel()
-
 	ClearMergeContexts()
 
 	// Store multiple contexts.
@@ -105,8 +97,6 @@ func TestGetAllMergeContexts(t *testing.T) {
 
 // TestGetAllMergeContextsEmpty tests retrieving when no contexts exist.
 func TestGetAllMergeContextsEmpty(t *testing.T) {
-	t.Parallel()
-
 	ClearMergeContexts()
 
 	allContexts := GetAllMergeContexts()
@@ -116,8 +106,6 @@ func TestGetAllMergeContextsEmpty(t *testing.T) {
 
 // TestSetAndGetLastMergeContext tests the deprecated last merge context functions.
 func TestSetAndGetLastMergeContext(t *testing.T) {
-	t.Parallel()
-
 	ClearLastMergeContext()
 
 	// Initially should be nil.
@@ -141,8 +129,6 @@ func TestSetAndGetLastMergeContext(t *testing.T) {
 
 // TestConcurrentMergeContextAccess tests thread-safety of merge context operations.
 func TestConcurrentMergeContextAccess(t *testing.T) {
-	t.Parallel()
-
 	ClearMergeContexts()
 	ClearLastMergeContext()
 
@@ -198,12 +184,9 @@ func TestConcurrentMergeContextAccess(t *testing.T) {
 
 // TestProcessImportProvenanceTracking tests the provenance tracking helper function.
 func TestProcessImportProvenanceTracking(t *testing.T) {
-	t.Parallel()
-
 	ClearMergeContexts()
 
 	t.Run("nil atmosConfig returns early", func(t *testing.T) {
-		t.Parallel()
 		result := &importFileResult{
 			importRelativePathWithoutExt: "test-import",
 		}
@@ -212,7 +195,6 @@ func TestProcessImportProvenanceTracking(t *testing.T) {
 	})
 
 	t.Run("provenance disabled returns early", func(t *testing.T) {
-		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{
 			TrackProvenance: false,
 		}
@@ -225,7 +207,6 @@ func TestProcessImportProvenanceTracking(t *testing.T) {
 	})
 
 	t.Run("nil result merge context returns early", func(t *testing.T) {
-		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{
 			TrackProvenance: true,
 		}
@@ -238,7 +219,6 @@ func TestProcessImportProvenanceTracking(t *testing.T) {
 	})
 
 	t.Run("provenance not enabled on context returns early", func(t *testing.T) {
-		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{
 			TrackProvenance: true,
 		}
@@ -253,7 +233,6 @@ func TestProcessImportProvenanceTracking(t *testing.T) {
 	})
 
 	t.Run("stores merge context when provenance enabled", func(t *testing.T) {
-		t.Parallel()
 		ClearMergeContexts()
 
 		atmosConfig := &schema.AtmosConfiguration{
@@ -279,7 +258,6 @@ func TestProcessImportProvenanceTracking(t *testing.T) {
 	})
 
 	t.Run("updates parent import chain", func(t *testing.T) {
-		t.Parallel()
 		ClearMergeContexts()
 
 		atmosConfig := &schema.AtmosConfiguration{
@@ -312,10 +290,7 @@ func TestProcessImportProvenanceTracking(t *testing.T) {
 
 // TestUpdateParentImportChain tests the import chain update helper function.
 func TestUpdateParentImportChain(t *testing.T) {
-	t.Parallel()
-
 	t.Run("nil parent context does nothing", func(t *testing.T) {
-		t.Parallel()
 		childCtx := m.NewMergeContext()
 		childCtx.ImportChain = []string{"file1.yaml"}
 
@@ -324,7 +299,6 @@ func TestUpdateParentImportChain(t *testing.T) {
 	})
 
 	t.Run("adds child imports to parent", func(t *testing.T) {
-		t.Parallel()
 		childCtx := m.NewMergeContext()
 		childCtx.ImportChain = []string{"child1.yaml", "child2.yaml"}
 
@@ -337,7 +311,6 @@ func TestUpdateParentImportChain(t *testing.T) {
 	})
 
 	t.Run("avoids duplicates", func(t *testing.T) {
-		t.Parallel()
 		childCtx := m.NewMergeContext()
 		childCtx.ImportChain = []string{"shared.yaml", "child.yaml"}
 
@@ -358,7 +331,6 @@ func TestUpdateParentImportChain(t *testing.T) {
 	})
 
 	t.Run("empty child chain does nothing", func(t *testing.T) {
-		t.Parallel()
 		childCtx := m.NewMergeContext()
 		childCtx.ImportChain = []string{}
 
@@ -373,8 +345,6 @@ func TestUpdateParentImportChain(t *testing.T) {
 
 // TestMergeContextOverwrite tests that setting a context overwrites the previous one.
 func TestMergeContextOverwrite(t *testing.T) {
-	t.Parallel()
-
 	ClearMergeContexts()
 
 	// Set first context.

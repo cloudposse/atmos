@@ -43,8 +43,6 @@ import (
 //
 // Must NOT run in parallel — modifies os.Stdin to nil (global state).
 func TestExecuteCommandPipeline_SingleInvocation(t *testing.T) {
-	t.Parallel()
-
 	// Set os.Stdin = nil so checkTTYRequirement does not block waiting for a terminal.
 	// Using SkipInit + HTTP backend means we reach executeMainTerraformCommand directly.
 	origStdin := os.Stdin

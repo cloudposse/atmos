@@ -10,8 +10,6 @@ import (
 )
 
 func TestSetLastAuthContext_RoundTrips(t *testing.T) {
-	t.Parallel()
-
 	t.Cleanup(ClearLastAuthContext)
 
 	authCtx := &schema.AuthContext{
@@ -33,8 +31,6 @@ func TestSetLastAuthContext_RoundTrips(t *testing.T) {
 }
 
 func TestGetLastAuthContext_ReturnsNilWhenUnset(t *testing.T) {
-	t.Parallel()
-
 	t.Cleanup(ClearLastAuthContext)
 	ClearLastAuthContext()
 
@@ -44,8 +40,6 @@ func TestGetLastAuthContext_ReturnsNilWhenUnset(t *testing.T) {
 }
 
 func TestClearLastAuthContext_ResetsState(t *testing.T) {
-	t.Parallel()
-
 	authCtx := &schema.AuthContext{
 		AWS: &schema.AWSAuthContext{Profile: "before-clear"},
 	}
@@ -59,8 +53,6 @@ func TestClearLastAuthContext_ResetsState(t *testing.T) {
 }
 
 func TestSetLastAuthContext_OverwritesPrevious(t *testing.T) {
-	t.Parallel()
-
 	t.Cleanup(ClearLastAuthContext)
 
 	first := &schema.AuthContext{

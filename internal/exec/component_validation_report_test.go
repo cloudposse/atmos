@@ -11,8 +11,6 @@ import (
 )
 
 func TestComponentValidationReport(t *testing.T) {
-	t.Parallel()
-
 	t.Cleanup(ClearLastMergeContext)
 
 	assert.Empty(t, ComponentValidationReport("api", nil).Diagnostics)
@@ -36,8 +34,6 @@ func TestComponentValidationReport(t *testing.T) {
 }
 
 func TestComponentPointerPathAndProvenance(t *testing.T) {
-	t.Parallel()
-
 	assert.Equal(t, "", componentPointerPath("/"))
 	assert.Equal(t, "vars.a/b.~name", componentPointerPath("/vars/a~1b/~0name"))
 	assert.Nil(t, componentProvenance(nil, "api", "vars.image"))

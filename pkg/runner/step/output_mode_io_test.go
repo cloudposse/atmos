@@ -15,8 +15,6 @@ import (
 // non-TTY test environment viewport falls back to log, and an unknown mode falls
 // back to log via the default branch.
 func TestExecuteWithIO_AllModesCaptureOutput(t *testing.T) {
-	t.Parallel()
-
 	runner := func(stdout, stderr io.Writer) error {
 		_, _ = io.WriteString(stdout, "hello-out")
 		_, _ = io.WriteString(stderr, "hello-err")
@@ -32,7 +30,6 @@ func TestExecuteWithIO_AllModesCaptureOutput(t *testing.T) {
 	}
 	for _, mode := range modes {
 		t.Run(string(mode), func(t *testing.T) {
-			t.Parallel()
 			w := NewOutputModeWriter(mode, "step", nil)
 			out, errOut, err := w.ExecuteWithIO(runner)
 			require.NoError(t, err)
@@ -43,8 +40,6 @@ func TestExecuteWithIO_AllModesCaptureOutput(t *testing.T) {
 }
 
 func TestExecuteWithIO_PropagatesRunnerError(t *testing.T) {
-	t.Parallel()
-
 	wantErr := errors.New("boom")
 	runner := func(stdout, _ io.Writer) error {
 		_, _ = io.WriteString(stdout, "partial")
@@ -53,7 +48,6 @@ func TestExecuteWithIO_PropagatesRunnerError(t *testing.T) {
 
 	for _, mode := range []OutputMode{OutputModeNone, OutputModeRaw, OutputModeLog, OutputModeViewport} {
 		t.Run(string(mode), func(t *testing.T) {
-			t.Parallel()
 			w := NewOutputModeWriter(mode, "step", nil)
 			out, _, err := w.ExecuteWithIO(runner)
 			require.ErrorIs(t, err, wantErr)
