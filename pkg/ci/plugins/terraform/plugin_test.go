@@ -21,22 +21,25 @@ func TestPlugin_GetHookBindings(t *testing.T) {
 	p := &Plugin{}
 	bindings := p.GetHookBindings()
 
-	// Should have 11 bindings: before/after for plan/apply/test/deploy plus
-	// aggregate hooks for graph-backed plan/apply/destroy runs.
-	require.Len(t, bindings, 11)
+	// Should have 14 bindings: before/after for plan/apply/test/deploy plus
+	// before/after aggregate hooks for graph-backed plan/apply/destroy runs.
+	require.Len(t, bindings, 14)
 
 	// Verify all bindings have handlers.
 	expectedEvents := []string{
 		"before.terraform.plan",
 		"after.terraform.plan",
+		"before.terraform.plan.aggregate",
 		"after.terraform.plan.aggregate",
 		"before.terraform.apply",
 		"after.terraform.apply",
+		"before.terraform.apply.aggregate",
 		"after.terraform.apply.aggregate",
 		"before.terraform.test",
 		"after.terraform.test",
 		"before.terraform.deploy",
 		"after.terraform.deploy",
+		"before.terraform.destroy.aggregate",
 		"after.terraform.destroy.aggregate",
 	}
 
