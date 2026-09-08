@@ -51,8 +51,9 @@ adding real confidence, which is closer to coverage theater than a meaningful re
 
 ## Validation
 
-- `go test ./pkg/component/graph_test.go ./pkg/component/...` — new test fails on pre-fix code
-  (confirmed), passes after the fix; no regressions in existing graph/bulk-dispatch tests.
+- `go test ./pkg/component -run '^TestExecuteGraphNodeDispatchClearsTagsAndLabels$'` — new test
+  fails on pre-fix code (confirmed), passes after the fix; no regressions in existing
+  graph/bulk-dispatch tests.
 - `go test ./pkg/component/aws/cloudformation/... ./cmd/aws/cloudformation/... ./pkg/component/kubernetes/... ./pkg/component/helm/...`
   — all pass.
 - Live, against a real local Floci AWS emulator (`examples/cloudformation/`, extended with a second
