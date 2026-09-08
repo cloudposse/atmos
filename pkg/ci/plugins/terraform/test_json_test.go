@@ -89,6 +89,86 @@ func TestParseTestJSON_AllPass(t *testing.T) {
 	assert.Equal(t, 0, data.Error)
 }
 
+func TestParseTestJSON_SummaryExceedsRuns(t *testing.T) {
+	// Only the authoritative test_summary event arrives; no test_run "complete"
+	// events were captured into data.Runs (e.g. one was dropped upstream). Runs
+	// must be backfilled so Total/JUnit/the results table never under-report a
+	// passing run as tests="0".
+	stream := `{"@level":"info","type":"test_summary","test_summary":{"status":"pass","passed":1,"failed":0,"errored":0,"skipped":0}}
+`
+	result := ParseTestJSON([]byte(stream))
+	data := testJSONData(t, result)
+
+	assert.False(t, result.HasErrors)
+	assert.Equal(t, 1, data.Total)
+	assert.Equal(t, 1, data.Pass)
+	require.Len(t, data.Runs, 1)
+	assert.Equal(t, testStatusPass, data.Runs[0].Status)
+}
+
+func TestBackfillMissingTestJSONRuns(t *testing.T) {
+	tests := []struct {
+		name string
+		data plugin.TerraformTestOutputData
+		want []string // expected Status of each run in data.Runs after backfill
+	}{
+		{
+			name: "no mismatch leaves runs untouched",
+			data: plugin.TerraformTestOutputData{
+				Pass: 1,
+				Runs: []plugin.TerraformTestRun{{Name: "a", Status: testStatusPass}},
+			},
+			want: []string{testStatusPass},
+		},
+		{
+			name: "summary exceeds runs — fully missing",
+			data: plugin.TerraformTestOutputData{Pass: 1},
+			want: []string{testStatusPass},
+		},
+		{
+			name: "summary exceeds runs — partial, mixed statuses",
+			data: plugin.TerraformTestOutputData{
+				Pass: 2,
+				Fail: 1,
+				Runs: []plugin.TerraformTestRun{{Name: "a", Status: testStatusPass}},
+			},
+			want: []string{testStatusPass, testStatusPass, testStatusFail},
+		},
+		{
+			name: "runs exceed summary — never deletes real data",
+			data: plugin.TerraformTestOutputData{
+				Pass: 1,
+				Runs: []plugin.TerraformTestRun{
+					{Name: "a", Status: testStatusPass},
+					{Name: "b", Status: testStatusPass},
+				},
+			},
+			want: []string{testStatusPass, testStatusPass},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := tt.data
+			backfillMissingTestJSONRuns(&data)
+			require.Len(t, data.Runs, len(tt.want))
+			for i, status := range tt.want {
+				assert.Equal(t, status, data.Runs[i].Status)
+			}
+		})
+	}
+}
+
+func TestToJUnit_BackfillsMissingRuns(t *testing.T) {
+	stream := `{"@level":"info","type":"test_summary","test_summary":{"status":"pass","passed":1,"failed":0,"errored":0,"skipped":0}}
+`
+	data := testJSONData(t, ParseTestJSON([]byte(stream)))
+	report := toJUnit(data, "app")
+
+	assert.Equal(t, 1, report.Tests)
+	assert.True(t, report.Passed())
+}
+
 func TestParseOutput_RoutesTestJSON(t *testing.T) {
 	// Leading `{` → JSON path; the text path would not populate File/Line.
 	data := testJSONData(t, ParseOutput(sampleTestJSON, "test"))

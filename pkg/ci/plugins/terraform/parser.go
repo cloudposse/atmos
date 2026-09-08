@@ -1016,8 +1016,39 @@ func finalizeTestJSON(data *plugin.TerraformTestOutputData, result *plugin.Outpu
 	data.Total = len(data.Runs)
 	collectTestJSONRunResults(data, result)
 	applyTestJSONSummary(data, summary)
+	backfillMissingTestJSONRuns(data)
 	populateTestFileCounts(data)
 	result.HasErrors = testJSONHasErrors(data, result)
+}
+
+// backfillMissingTestJSONRuns synthesizes placeholder run entries when the
+// authoritative test_summary counts exceed what was actually captured into
+// data.Runs (e.g. a test_run "complete" event was dropped upstream while the
+// simpler test_summary event still decoded fine). Without this, data.Total/
+// Pass/Fail/Error/Skip report a passing/failing run that data.Runs, the JUnit
+// report, and the step-summary table all silently omit. Never removes or
+// mutates real captured rows.
+func backfillMissingTestJSONRuns(data *plugin.TerraformTestOutputData) {
+	remaining := map[string]int{
+		testStatusPass:  data.Pass,
+		testStatusFail:  data.Fail,
+		testStatusError: data.Error,
+		testStatusSkip:  data.Skip,
+	}
+	for _, r := range data.Runs {
+		if _, ok := remaining[r.Status]; ok {
+			remaining[r.Status]--
+		}
+	}
+	for _, status := range []string{testStatusPass, testStatusFail, testStatusError, testStatusSkip} {
+		for i := 0; i < remaining[status]; i++ {
+			data.Runs = append(data.Runs, plugin.TerraformTestRun{
+				Name:   fmt.Sprintf("run detail unavailable (%s)", status),
+				Status: status,
+			})
+		}
+	}
+	data.Total = len(data.Runs)
 }
 
 func collectTestJSONRunResults(data *plugin.TerraformTestOutputData, result *plugin.OutputResult) {
