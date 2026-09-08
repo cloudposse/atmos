@@ -453,6 +453,9 @@ const config = {
             path.resolve(__dirname, 'plugins', 'doc-release-data'), {}
         ],
         [
+            path.resolve(__dirname, 'plugins', 'fetch-security-posture'), {}
+        ],
+        [
             path.resolve(__dirname, 'plugins', 'docusaurus-plugin-llms-txt'),
             {
                 generateLlmsTxt: true,
