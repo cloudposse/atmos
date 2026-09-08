@@ -28,6 +28,11 @@ type dependencyIndex map[string][]dependencyIndexEntry
 // dependency index: for each component name X, the index contains all entries where some
 // component in some stack declares a dependency on X.
 func buildDependencyIndex(stacks map[string]any) dependencyIndex {
+	idx, _ := buildDependencyIndexWithError(stacks)
+	return idx
+}
+
+func buildDependencyIndexWithError(stacks map[string]any) (dependencyIndex, error) {
 	idx := make(dependencyIndex)
 
 	for stackName, stackSection := range stacks {
@@ -47,14 +52,16 @@ func buildDependencyIndex(stacks map[string]any) dependencyIndex {
 			}
 
 			for stackComponentName, stackComponent := range stackComponentTypeSectionMap {
-				indexComponentDependencies(
+				if err := indexComponentDependencies(
 					idx, stackName, stackComponentType, stackComponentName, stackComponent,
-				)
+				); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
 
-	return idx
+	return idx, nil
 }
 
 // indexComponentDependencies parses a single component and adds its dependencies to the index.
@@ -62,33 +69,31 @@ func indexComponentDependencies(
 	idx dependencyIndex,
 	stackName, stackComponentType, stackComponentName string,
 	stackComponent any,
-) {
+) error {
 	stackComponentMap, ok := stackComponent.(map[string]any)
 	if !ok {
-		return
+		return nil
 	}
 
 	if isAbstractOrDisabled(stackComponentMap, stackComponentName) {
-		return
+		return nil
 	}
 
 	stackComponentVarsSection, ok := stackComponentMap["vars"].(map[string]any)
 	if !ok {
-		return
+		return nil
 	}
 
 	var stackComponentVars schema.Context
 	if err := mapstructure.Decode(stackComponentVarsSection, &stackComponentVars); err != nil {
 		log.Debug("Failed to decode component vars during index build",
 			"component", stackComponentName, "stack", stackName, "error", err)
-		return
+		return err
 	}
 
 	result, err := getComponentDependenciesWithError(stackComponentMap)
 	if err != nil {
-		log.Debug("Failed to decode component dependencies during index build",
-			"component", stackComponentName, "stack", stackName, "error", err)
-		return
+		return err
 	}
 	componentDeps, settingsSection, depSource := result.dependencies, result.settingsSection, result.source
 	for i := range componentDeps {
@@ -109,6 +114,7 @@ func indexComponentDependencies(
 		}
 		idx[dep.Component] = append(idx[dep.Component], entry)
 	}
+	return nil
 }
 
 // isAbstractOrDisabled checks if a component should be skipped during indexing.

@@ -639,7 +639,10 @@ func addDependentsToAffected(
 	}
 
 	// Build the reverse dependency index once from the cached stacks.
-	depIdx := buildDependencyIndex(stacks)
+	depIdx, err := buildDependencyIndexWithError(stacks)
+	if err != nil {
+		return err
+	}
 
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]
