@@ -228,13 +228,13 @@ func TestValidateOperationArgs(t *testing.T) {
 		{
 			name:    "missing component",
 			command: newOperationCommand("apply", "Apply"),
-			wantErr: "requires exactly one component argument unless --all or --affected is set",
+			wantErr: "requires exactly one component argument unless --all, --affected, --tags, or --labels is set",
 		},
 		{
 			name:    "too many components",
 			command: newOperationCommand("apply", "Apply"),
 			args:    []string{"app", "other"},
-			wantErr: "requires exactly one component argument unless --all or --affected is set",
+			wantErr: "requires exactly one component argument unless --all, --affected, --tags, or --labels is set",
 		},
 		{
 			name:    "tags with no component",
