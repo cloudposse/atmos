@@ -99,7 +99,7 @@ func ReconcileComponentUpdatePullRequest(ctx context.Context, workdir, remote st
 	if err != nil {
 		return nil, err
 	}
-	title, body, err := RenderPRTemplates(PRTemplates{Title: prConfig.Title, Body: prConfig.Body}, publication.Scope, publication.Report)
+	title, body, err := RenderPRTemplates(PRTemplates{Title: prConfig.Title, Body: prConfig.Body}, publication.Scope, publication.Report, prConfig.Provider)
 	if err != nil {
 		return nil, err
 	}
