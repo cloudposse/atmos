@@ -374,10 +374,13 @@ func randomSentinelSuffix() (string, error) {
 // reconstruct both sides of the conflict, rendered independently as their own
 // YAML fragments.
 //
-// Known limitation: flow-style YAML (`{a: 1, b: 2}`) can place more than one
-// sentinel on the same line; the reconstructed markers then wrap only the
-// first match on that line. This is an accepted edge case — scaffold
-// templates use block style.
+// Flow-style YAML (`{a: 1, b: 2}`) can place more than one sentinel on the
+// same line; renderConflictBlock/appendTailToLastLine drain every sentinel
+// on the line into nested marker blocks instead of leaving the extra one as
+// literal placeholder text. This is genuinely rare in practice -- scaffold
+// templates use block style -- and the nested-marker output it produces is
+// harder to hand-resolve than a single-conflict line, but it never silently
+// drops or corrupts content.
 //
 // Trailing syntax after the sentinel on that line (e.g. a flow-style closing
 // `}`/`]`, or an inline comment) is appended to *both* alternatives' own
@@ -399,7 +402,7 @@ func spliceConflictMarkers(yamlText string, conflicts []nodeConflict) (string, e
 			continue
 		}
 
-		block, err := renderConflictBlock(line, idx, sentinel, conflict)
+		block, err := renderConflictBlock(line, idx, sentinel, conflict, bySentinel)
 		if err != nil {
 			return "", err
 		}
@@ -433,12 +436,24 @@ func findSentinel(line string, bySentinel map[string]nodeConflict) (nodeConflict
 // conflict fits on the same line as the key/list-item marker) or block
 // markers (either side is a mapping/sequence, so the conflict needs its own
 // indented block beneath the key).
-func renderConflictBlock(line string, idx int, sentinel string, c nodeConflict) ([]string, error) {
+//
+// Note: bySentinel lets appendTailToLastLine drain any further sentinel
+// still embedded in suffix (two conflicts landed on the same original line)
+// into its own nested block, rather than leaving it as literal sentinel
+// text.
+func renderConflictBlock(line string, idx int, sentinel string, c nodeConflict, bySentinel map[string]nodeConflict) ([]string, error) {
 	prefix := line[:idx]
 	suffix := line[idx+len(sentinel):]
 	trimmed := strings.TrimLeft(line, " ")
 	indent := line[:len(line)-len(trimmed)]
 
+	return renderConflictBlockWithIndent(indent, prefix, suffix, c, bySentinel)
+}
+
+// renderConflictBlockWithIndent is renderConflictBlock's core, factored out
+// so appendTailToLastLine can render a nested conflict's markers at an
+// already-known indent without a real source line to recompute one from.
+func renderConflictBlockWithIndent(indent, prefix, suffix string, c nodeConflict, bySentinel map[string]nodeConflict) ([]string, error) {
 	oursText, err := encodeNodeFragment(c.ours)
 	if err != nil {
 		return nil, err
@@ -448,10 +463,23 @@ func renderConflictBlock(line string, idx int, sentinel string, c nodeConflict) 
 		return nil, err
 	}
 
+	parts := conflictBlockParts{indent: indent, prefix: prefix, suffix: suffix, oursText: oursText, theirsText: theirsText}
 	if c.ours.Kind == yaml.ScalarNode && c.theirs.Kind == yaml.ScalarNode {
-		return inlineConflictBlock(indent, prefix, suffix, oursText, theirsText), nil
+		return inlineConflictBlock(&parts, bySentinel)
 	}
-	return blockConflictBlock(indent, prefix, suffix, oursText, theirsText), nil
+	return blockConflictBlock(&parts, bySentinel)
+}
+
+// conflictBlockParts bundles inlineConflictBlock/blockConflictBlock's
+// rendering inputs (grouped into a struct, rather than five separate
+// parameters, to stay under revive's argument-limit alongside the
+// bySentinel map appendTailToLastLine needs for draining).
+type conflictBlockParts struct {
+	indent     string
+	prefix     string
+	suffix     string
+	oursText   string
+	theirsText string
 }
 
 // inlineConflictBlock reconstructs a conflict where both sides are scalars,
@@ -463,47 +491,73 @@ func renderConflictBlock(line string, idx int, sentinel string, c nodeConflict) 
 //	=======
 //	setting: template-change
 //	>>>>>>> Theirs
-func inlineConflictBlock(indent, prefix, suffix, oursText, theirsText string) []string {
-	oursLines := strings.Split(strings.TrimRight(oursText, newlineSeparator), newlineSeparator)
-	theirsLines := strings.Split(strings.TrimRight(theirsText, newlineSeparator), newlineSeparator)
+func inlineConflictBlock(p *conflictBlockParts, bySentinel map[string]nodeConflict) ([]string, error) {
+	oursLines := strings.Split(strings.TrimRight(p.oursText, newlineSeparator), newlineSeparator)
+	theirsLines := strings.Split(strings.TrimRight(p.theirsText, newlineSeparator), newlineSeparator)
 
-	block := []string{indent + "<<<<<<< Ours", prefix + oursLines[0]}
+	block := []string{p.indent + "<<<<<<< Ours", p.prefix + oursLines[0]}
 	for _, l := range oursLines[1:] {
-		block = append(block, indent+l)
+		block = append(block, p.indent+l)
 	}
-	appendSuffixToLastLine(block, suffix)
+	block, err := appendTailToLastLine(block, p.indent, p.suffix, bySentinel)
+	if err != nil {
+		return nil, err
+	}
 
-	block = append(block, indent+"=======", prefix+theirsLines[0])
+	block = append(block, p.indent+"=======", p.prefix+theirsLines[0])
 	for _, l := range theirsLines[1:] {
-		block = append(block, indent+l)
+		block = append(block, p.indent+l)
 	}
-	appendSuffixToLastLine(block, suffix)
+	block, err = appendTailToLastLine(block, p.indent, p.suffix, bySentinel)
+	if err != nil {
+		return nil, err
+	}
 
-	return append(block, indent+">>>>>>> Theirs")
+	return append(block, p.indent+">>>>>>> Theirs"), nil
 }
 
-// appendSuffixToLastLine appends suffix -- whatever trailing syntax followed
-// the sentinel on the original line (e.g. a flow-style closing `}`/`]`, or an
+// appendTailToLastLine appends tail -- whatever trailing syntax followed the
+// sentinel on the original line (e.g. a flow-style closing `}`/`]`, or an
 // inline comment) -- to block's last line in place, so it survives on
 // whichever alternative a manual resolution ends up keeping, instead of only
 // being tacked onto a marker line that a resolution deletes along with the
 // alternative it didn't choose.
 //
-// Skipped when that line already ends with suffix: addNodeConflict's sentinel
-// carries ours' own LineComment, so when suffix is that same comment,
+// Skipped when that line already ends with tail: addNodeConflict's sentinel
+// carries ours' own LineComment, so when tail is that same comment,
 // encodeNodeFragment(c.ours) already rendered it as part of ours' own text.
 //
 // Appending it again would duplicate it. By contrast, theirs never has
 // ours' comment, so this guard is a no-op there and the append always
 // applies.
-func appendSuffixToLastLine(block []string, suffix string) {
-	if suffix == "" {
-		return
+//
+// When tail itself still holds another sentinel -- two conflicts landed on
+// the same original line -- the text before it is appended as usual, then
+// that conflict's own markers are spliced in as a nested block at indent,
+// and whatever trails it is processed the same way recursively, so every
+// sentinel on the line is drained instead of the extra one reaching the
+// output as literal text.
+func appendTailToLastLine(block []string, indent, tail string, bySentinel map[string]nodeConflict) ([]string, error) {
+	if tail == "" {
+		return block, nil
 	}
 	last := len(block) - 1
-	if !strings.HasSuffix(block[last], suffix) {
-		block[last] += suffix
+	if strings.HasSuffix(block[last], tail) {
+		return block, nil
 	}
+
+	conflict, sentinel, idx := findSentinel(tail, bySentinel)
+	if idx == -1 {
+		block[last] += tail
+		return block, nil
+	}
+
+	block[last] += tail[:idx]
+	nested, err := renderConflictBlockWithIndent(indent, "", tail[idx+len(sentinel):], conflict, bySentinel)
+	if err != nil {
+		return nil, err
+	}
+	return append(block, nested...), nil
 }
 
 // blockConflictBlock reconstructs a conflict where either side is a
@@ -517,26 +571,37 @@ func appendSuffixToLastLine(block []string, suffix string) {
 //	  a: 2
 //	  b: 3
 //	  >>>>>>> Theirs
-func blockConflictBlock(indent, prefix, suffix, oursText, theirsText string) []string {
-	keyLine := strings.TrimRight(prefix, " ")
-	nested := indent + "  "
+func blockConflictBlock(p *conflictBlockParts, bySentinel map[string]nodeConflict) ([]string, error) {
+	nested := p.indent + "  "
 
-	oursLines := strings.Split(strings.TrimRight(oursText, newlineSeparator), newlineSeparator)
-	theirsLines := strings.Split(strings.TrimRight(theirsText, newlineSeparator), newlineSeparator)
+	oursLines := strings.Split(strings.TrimRight(p.oursText, newlineSeparator), newlineSeparator)
+	theirsLines := strings.Split(strings.TrimRight(p.theirsText, newlineSeparator), newlineSeparator)
 
-	block := []string{keyLine, nested + "<<<<<<< Ours"}
+	// A nested block (see appendTailToLastLine) has no key of its own -- the
+	// key already appeared on the outer conflict's line -- so prefix is "".
+	var block []string
+	if keyLine := strings.TrimRight(p.prefix, " "); keyLine != "" {
+		block = append(block, keyLine)
+	}
+	block = append(block, nested+"<<<<<<< Ours")
 	for _, l := range oursLines {
 		block = append(block, nested+l)
 	}
-	appendSuffixToLastLine(block, suffix)
+	block, err := appendTailToLastLine(block, nested, p.suffix, bySentinel)
+	if err != nil {
+		return nil, err
+	}
 
 	block = append(block, nested+"=======")
 	for _, l := range theirsLines {
 		block = append(block, nested+l)
 	}
-	appendSuffixToLastLine(block, suffix)
+	block, err = appendTailToLastLine(block, nested, p.suffix, bySentinel)
+	if err != nil {
+		return nil, err
+	}
 
-	return append(block, nested+">>>>>>> Theirs")
+	return append(block, nested+">>>>>>> Theirs"), nil
 }
 
 // encodeNodeFragment encodes a single YAML node (not necessarily a document)

@@ -1209,6 +1209,54 @@ func TestFindSentinel_DeterministicEarliestByteIndex(t *testing.T) {
 	}
 }
 
+// TestYAMLMerger_ConflictMarkers_DrainsMultipleSentinelsOnOneLine covers two
+// independent conflicts (keys "a" and "b") landing on the same flow-style
+// line. Both must be drained into real, nested diff3 markers.
+//
+// The second sentinel must never reach the output as literal placeholder
+// text (see appendTailToLastLine). "b"'s conflict is nested once under each
+// of "a"'s two alternatives (three <<<<<<< Ours/>>>>>>> Theirs pairs total,
+// not two): resolving "a" one way or the other still leaves "b" to resolve
+// independently, so each of "a"'s alternatives needs its own copy of "b"'s
+// markers rather than sharing one.
+func TestYAMLMerger_ConflictMarkers_DrainsMultipleSentinelsOnOneLine(t *testing.T) {
+	base := "obj: {a: 1, b: 2}\n"
+	ours := "obj: {a: user-a, b: user-b}\n"
+	theirs := "obj: {a: template-a, b: template-b}\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 2, result.ConflictCount)
+
+	assert.NotContains(t, result.Content, "ATMOSMERGECONFLICT",
+		"every sentinel must be drained into real markers, none left as literal placeholder text")
+	// Built line-by-line (rather than a raw string literal) since "obj: {a:
+	// user-a, b: " genuinely ends in a trailing space -- the original ": "
+	// key-value separator, immediately followed by the nested block on its
+	// own line -- and a literal trailing space in a backtick string is easy
+	// to lose to editor/linter whitespace trimming.
+	wantLines := []string{
+		"<<<<<<< Ours",
+		"obj: {a: user-a, b: ",
+		"<<<<<<< Ours",
+		"user-b}",
+		"=======",
+		"template-b}",
+		">>>>>>> Theirs",
+		"=======",
+		"obj: {a: template-a, b: ",
+		"<<<<<<< Ours",
+		"user-b}",
+		"=======",
+		"template-b}",
+		">>>>>>> Theirs",
+		">>>>>>> Theirs",
+		"",
+	}
+	assert.Equal(t, strings.Join(wantLines, "\n"), result.Content)
+}
+
 func TestYAMLMerger_PreservesLineComments(t *testing.T) {
 	tests := []struct {
 		name           string
