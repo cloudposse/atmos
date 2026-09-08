@@ -2064,11 +2064,10 @@
               "type": "null"
             },
             {
-              "type": "string",
-              "pattern": "^(?:!git\\.repository|!include\\.raw|!git\\.branch|!git\\.owner|!repo-root|!git\\.host|!git\\.name|!git\\.root|!git\\.ref|!git\\.sha|!git\\.url|!include|!append|!random|!unset|!exec|!cwd|!env)(?:\\s|$)"
+              "type": "string"
             }
           ],
-          "description": "Whether the target component must be available. Defaults to true."
+          "description": "Required controls whether an available target must be present. Nil defaults to true."
         }
       },
       "anyOf": [

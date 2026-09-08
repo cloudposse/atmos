@@ -460,7 +460,8 @@ func TestManifestSchema_ComponentDependencyRequiredForms(t *testing.T) {
 		{name: "false", value: false, wantValid: true},
 		{name: "null", value: nil, wantValid: true},
 		{name: "yaml function", value: "!env REQUIRED", wantValid: true},
-		{name: "invalid string", value: "sometimes", wantValid: false},
+		{name: "custom delimiter template", value: "[[ .dependencyRequired ]]", wantValid: true},
+		{name: "plain string deferred to template parsing", value: "sometimes", wantValid: true},
 	}
 
 	for _, test := range tests {

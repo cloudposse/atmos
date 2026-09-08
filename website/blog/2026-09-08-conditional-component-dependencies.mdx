@@ -25,7 +25,13 @@ dependencies:
 
 Required dependencies remain the default, preserving existing behavior. Optional dependencies are included normally when their target is present and enabled. Missing or disabled targets simply omit that edge. Invalid dependency configuration and unresolved template values still fail instead of being hidden by optionality.
 
-The behavior works across same-stack and cross-stack dependencies, preserves dependency ordering and cycle detection, and is reflected in dependency listings and diagnostics.
+The `required` value can also be rendered from a template. Atmos applies the configured template delimiters before parsing the result as a boolean:
+
+```yaml
+required: "[[ .vars.enable_monitoring ]]"
+```
+
+This allows one manifest to use environment-specific optionality without assuming the default `{{` and `}}` delimiters.
 
 ## How to Use It
 
