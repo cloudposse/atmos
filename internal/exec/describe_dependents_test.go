@@ -43,6 +43,35 @@ func TestGetComponentDependencies(t *testing.T) {
 		assert.Equal(t, dependencySourceDependenciesComponents, source)
 	})
 
+	t.Run("decodes rendered optional required values", func(t *testing.T) {
+		componentMap := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "monitoring", "required": "false"},
+				},
+			},
+		}
+
+		deps, _, source := getComponentDependencies(componentMap)
+
+		require.Equal(t, dependencySourceDependenciesComponents, source)
+		require.Len(t, deps, 1)
+		require.NotNil(t, deps[0].Required)
+		assert.False(t, *deps[0].Required)
+	})
+
+	t.Run("returns invalid rendered required errors", func(t *testing.T) {
+		_, err := getComponentDependenciesWithError(map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "monitoring", "required": "sometimes"},
+				},
+			},
+		})
+
+		require.ErrorIs(t, err, schema.ErrComponentDependencyInvalidRequired)
+	})
+
 	t.Run("falls back to settings.depends_on when dependencies.components is empty", func(t *testing.T) {
 		componentMap := map[string]any{
 			"dependencies": map[string]any{

@@ -84,11 +84,13 @@ func indexComponentDependencies(
 		return
 	}
 
-	componentDeps, settingsSection, depSource := getComponentDependencies(stackComponentMap)
-	if len(componentDeps) == 0 {
+	result, err := getComponentDependenciesWithError(stackComponentMap)
+	if err != nil {
+		log.Debug("Failed to decode component dependencies during index build",
+			"component", stackComponentName, "stack", stackName, "error", err)
 		return
 	}
-
+	componentDeps, settingsSection, depSource := result.dependencies, result.settingsSection, result.source
 	for i := range componentDeps {
 		dep := &componentDeps[i]
 		if dep.Component == "" {

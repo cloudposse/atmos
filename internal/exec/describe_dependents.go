@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 
@@ -357,7 +356,11 @@ func scanComponentForDependents(p *scanComponentParams) ([]schema.Dependent, err
 		return nil, err
 	}
 
-	componentDeps, settingsSection, depSource := getComponentDependencies(stackComponentMap)
+	result, err := getComponentDependenciesWithError(stackComponentMap)
+	if err != nil {
+		return nil, err
+	}
+	componentDeps, settingsSection, depSource := result.dependencies, result.settingsSection, result.source
 	if len(componentDeps) == 0 {
 		return nil, nil
 	}
@@ -478,48 +481,68 @@ const (
 	dependencySourceSettingsDependsOn
 )
 
-// getComponentDependencies extracts component dependencies from a component section.
-// It checks dependencies.components first (preferred), then falls back to settings.depends_on (legacy).
-// Returns the list of dependencies, the settings section, and the source of the dependencies.
+type componentDependenciesResult struct {
+	dependencies    []schema.ComponentDependency
+	settingsSection map[string]any
+	source          dependencySource
+}
+
+// getComponentDependencies keeps the historical test-facing shape.
 func getComponentDependencies(componentMap map[string]any) ([]schema.ComponentDependency, map[string]any, dependencySource) {
+	result, _ := getComponentDependenciesWithError(componentMap)
+	return result.dependencies, result.settingsSection, result.source
+}
+
+// getComponentDependenciesWithError extracts component dependencies and returns parse failures.
+func getComponentDependenciesWithError(componentMap map[string]any) (componentDependenciesResult, error) {
 	// Get settings section for later use (Spacelift/Atlantis config and IncludeSettings).
 	settingsSection, _ := componentMap["settings"].(map[string]any)
 
-	// Check dependencies.components first (preferred location).
 	if depsSection, ok := componentMap[cfg.DependenciesSectionName].(map[string]any); ok {
 		if _, hasComponents := depsSection["components"]; hasComponents {
-			var deps schema.Dependencies
-			if err := mapstructure.Decode(depsSection, &deps); err == nil {
-				if normErr := deps.Normalize(); normErr != nil {
-					log.Warn("invalid dependencies section; entries may be silently ignored", "error", normErr)
-				}
-				componentDeps := filterComponentDependencies(deps.Components)
-				if len(componentDeps) > 0 {
-					return componentDeps, settingsSection, dependencySourceDependenciesComponents
-				}
+			componentDeps, err := schema.ParseComponentDependencies(depsSection, "", "")
+			if err != nil {
+				return componentDependenciesResult{
+					settingsSection: settingsSection,
+					source:          dependencySourceDependenciesComponents,
+				}, err
+			}
+			componentDeps = filterComponentDependencies(componentDeps)
+			if len(componentDeps) > 0 {
+				return componentDependenciesResult{
+					dependencies:    componentDeps,
+					settingsSection: settingsSection,
+					source:          dependencySourceDependenciesComponents,
+				}, nil
 			}
 		}
 	}
 
-	// Fall back to settings.depends_on (legacy location).
+	if deps, source, found := getLegacyComponentDependencies(componentMap, settingsSection); found {
+		return componentDependenciesResult{
+			dependencies:    deps,
+			settingsSection: settingsSection,
+			source:          source,
+		}, nil
+	}
+
+	return componentDependenciesResult{settingsSection: settingsSection}, nil
+}
+
+func getLegacyComponentDependencies(componentMap, settingsSection map[string]any) ([]schema.ComponentDependency, dependencySource, bool) {
 	if settingsSection != nil {
 		var settings schema.Settings
-		if err := mapstructure.Decode(settingsSection, &settings); err == nil {
-			if !reflect.ValueOf(settings.DependsOn).IsZero() && len(settings.DependsOn) > 0 {
-				log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
-				// Convert legacy Context to ComponentDependency.
-				deps := make([]schema.ComponentDependency, 0, len(settings.DependsOn))
-				for key := range settings.DependsOn {
-					ctx := settings.DependsOn[key]
-					deps = append(deps, contextToComponentDependency(&ctx))
-				}
-				return deps, settingsSection, dependencySourceSettingsDependsOn
+		if err := mapstructure.Decode(settingsSection, &settings); err == nil && len(settings.DependsOn) > 0 {
+			log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
+			deps := make([]schema.ComponentDependency, 0, len(settings.DependsOn))
+			for key := range settings.DependsOn {
+				ctx := settings.DependsOn[key]
+				deps = append(deps, contextToComponentDependency(&ctx))
 			}
+			return deps, dependencySourceSettingsDependsOn, true
 		}
 	}
 
-	// Older component manifests placed the same legacy dependency mapping directly
-	// on the component. Keep it functional after accepting it in the schema.
 	if directDependsOn, ok := componentMap["depends_on"]; ok {
 		var settings schema.Settings
 		if err := mapstructure.Decode(map[string]any{"depends_on": directDependsOn}, &settings); err == nil && len(settings.DependsOn) > 0 {
@@ -529,11 +552,11 @@ func getComponentDependencies(componentMap map[string]any) ([]schema.ComponentDe
 				ctx := settings.DependsOn[key]
 				deps = append(deps, contextToComponentDependency(&ctx))
 			}
-			return deps, settingsSection, dependencySourceSettingsDependsOn
+			return deps, dependencySourceSettingsDependsOn, true
 		}
 	}
 
-	return nil, settingsSection, dependencySourceNone
+	return nil, dependencySourceNone, false
 }
 
 // filterComponentDependencies removes file/folder path dependencies from the

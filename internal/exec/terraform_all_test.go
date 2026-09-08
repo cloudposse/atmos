@@ -297,7 +297,7 @@ components:
 	rendered, err := ProcessTmplWithDatasources(
 		atmosConfig,
 		&schema.ConfigAndStacksInfo{},
-		schema.Settings{},
+		settings,
 		"component.yaml",
 		componentSectionYAML,
 		map[string]any{"dependencyRequired": false},
