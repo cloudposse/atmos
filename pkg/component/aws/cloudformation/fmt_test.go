@@ -150,7 +150,7 @@ func TestRunFmt_FormatTemplateError(t *testing.T) {
 }
 
 // runFmt must propagate a write failure (e.g. the resolved path's parent
-// directory does not exist) wrapped in ErrAwsCloudFormationFmtNotClean.
+// directory does not exist) wrapped in ErrAwsCloudFormationFmtWriteFailed.
 func TestRunFmt_WriteFailure(t *testing.T) {
 	tempDir := t.TempDir()
 	// A path whose parent directory does not exist: os.WriteFile fails the
@@ -162,5 +162,5 @@ func TestRunFmt_WriteFailure(t *testing.T) {
 	spec := &stackSpec{TemplateBody: dirty, TemplateAbsPath: unwritablePath}
 	_, err := runFmt(spec, map[string]any{}, map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationFmtNotClean)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationFmtWriteFailed)
 }

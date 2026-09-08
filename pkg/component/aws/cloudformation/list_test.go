@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -72,7 +75,7 @@ func TestListDeployedStacks_Pagination(t *testing.T) {
 }
 
 // listDeployedStacks must wrap a ListStacks API error with
-// ErrAwsCloudFormationChangeSetFailed.
+// ErrAwsCloudFormationAPICallFailed.
 func TestListDeployedStacks_APIError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
@@ -82,7 +85,7 @@ func TestListDeployedStacks_APIError(t *testing.T) {
 
 	_, err := listDeployedStacks(context.Background(), client, nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 	assert.ErrorIs(t, err, sentinel)
 }
 
@@ -138,19 +141,37 @@ func TestListDeployedStacks_AuthConfigError(t *testing.T) {
 }
 
 // ListDeployedStacks must propagate the underlying ListStacks failure once
-// auth/config resolution succeeds — exercised via an endpoint that refuses
-// connections, mirroring executor_test.go's TestRunOperation_DispatchesToHandler.
+// auth/config resolution succeeds. Static test credentials are configured so
+// the SDK never falls back to (slow, ultimately-failing) IMDS credential
+// resolution — without them, the call fails during credential resolution and
+// never actually reaches the test server, so the test would not exercise the
+// ListStacks failure path it claims to.
 func TestListDeployedStacks_ClientError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	unreachable := srv.URL
-	srv.Close()
+	var requests int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&requests, 1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	tmpDir := t.TempDir()
+	credsFile := filepath.Join(tmpDir, "credentials")
+	configFile := filepath.Join(tmpDir, "config")
+	require.NoError(t, os.WriteFile(credsFile, []byte("[test]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI\n"), 0o600))
+	require.NoError(t, os.WriteFile(configFile, []byte("[profile test]\nregion = us-east-1\n"), 0o600))
 
 	info := &schema.ConfigAndStacksInfo{
-		AuthContext: &schema.AuthContext{AWS: &schema.AWSAuthContext{EndpointURL: unreachable}},
+		AuthContext: &schema.AuthContext{AWS: &schema.AWSAuthContext{
+			CredentialsFile: credsFile,
+			ConfigFile:      configFile,
+			Profile:         "test",
+			EndpointURL:     srv.URL,
+		}},
 	}
 
 	_, err := ListDeployedStacks(context.Background(), info, "us-east-1", nil, map[string]bool{})
-	require.Error(t, err, "the dispatched call must have actually hit the (unreachable) endpoint")
+	require.Error(t, err)
+	assert.GreaterOrEqual(t, atomic.LoadInt32(&requests), int32(1), "the dispatched call must have actually hit the test endpoint")
 }
 
 // RenderDeployedStacksList must print a "no stacks" message for an empty
