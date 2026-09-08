@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/secrets"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -20,6 +21,35 @@ func TestParseScope_MissingComponent(t *testing.T) {
 	err := runSecretSubcommand(t, "set", "API_KEY=v1", "--stack", "dev")
 	require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
 	assert.Empty(t, svc.setCalls)
+}
+
+// TestParseScopeStack_DoesNotLeakAcrossInvocations pins a regression: parseScopeStack used to call
+// viper.Set unconditionally after resolving --stack, which installs a permanent override that
+// outranks the bound flag for the rest of the process. Once any invocation resolved one stack that
+// way, every later invocation in the same process silently ignored its own --stack flag and kept
+// resolving the first one — exactly what made this package's tests order-dependent under
+// `-shuffle=on` (a "prod"-stack test running before a "dev"-stack test poisoned the latter).
+func TestParseScopeStack_DoesNotLeakAcrossInvocations(t *testing.T) {
+	svc := newFakeSecretService()
+	svc.scopes = map[string]secrets.Scope{"SHARED_TOKEN": secrets.ScopeGlobal}
+	installService(t, svc, nil)
+	overrideEnumerateScopes(t, []scopeEntry{
+		{
+			Stack: "prod", Component: "example-service", ComponentType: "helm",
+			Section: secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"}),
+		},
+		{
+			Stack: "dev", Component: "example-service", ComponentType: "helm",
+			Section: secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"}),
+		},
+	}, nil)
+
+	require.NoError(t, runSecretSubcommand(t, "set", "SHARED_TOKEN=v1", "--stack", "prod"))
+	require.NoError(t, runSecretSubcommand(t, "set", "SHARED_TOKEN=v2", "--stack", "dev"))
+
+	require.Len(t, svc.setCalls, 2)
+	assert.Equal(t, "v1", svc.setCalls[0].value)
+	assert.Equal(t, "v2", svc.setCalls[1].value)
 }
 
 // TestCredentialFreeSkip pins the set of YAML functions that credential-free secret listing must
