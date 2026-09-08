@@ -4,10 +4,12 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -71,4 +73,68 @@ func TestDecodeResponseDecodeError(t *testing.T) {
 	err := decodeResponse(resp, &pullRequest{})
 
 	assert.ErrorIs(t, err, errUtils.ErrPullRequestReconciliation)
+}
+
+// TestResolveReviewerID proves resolveReviewerID resolves a principal to the individual identity
+// GUID addReviewer needs, ignores group matches (isContainer) rather than treating them as valid
+// or counting them toward ambiguity, and fails loudly -- rather than guessing -- on zero or more
+// than one remaining individual match.
+func TestResolveReviewerID(t *testing.T) {
+	tests := []struct {
+		name         string
+		listResponse string
+		wantID       string
+		wantErr      error
+	}{
+		{
+			name:         "resolves a single individual match",
+			listResponse: `{"value":[{"id":"user-guid","isContainer":false}]}`,
+			wantID:       "user-guid",
+		},
+		{
+			name:         "ignores group matches, resolving the remaining individual",
+			listResponse: `{"value":[{"id":"group-guid","isContainer":true},{"id":"user-guid","isContainer":false}]}`,
+			wantID:       "user-guid",
+		},
+		{
+			name:         "no match at all",
+			listResponse: `{"value":[]}`,
+			wantErr:      errUtils.ErrAzureDevOpsReviewerNotFound,
+		},
+		{
+			name:         "matches only a group, no individual",
+			listResponse: `{"value":[{"id":"group-guid","isContainer":true}]}`,
+			wantErr:      errUtils.ErrAzureDevOpsReviewerNotFound,
+		},
+		{
+			name:         "matches more than one individual",
+			listResponse: `{"value":[{"id":"user-guid-1","isContainer":false},{"id":"user-guid-2","isContainer":false}]}`,
+			wantErr:      errUtils.ErrAzureDevOpsReviewerAmbiguous,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotPath string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tt.listResponse))
+			}))
+			defer server.Close()
+
+			p := New(WithHTTPClient(server.Client()), WithBaseURL(server.URL), WithToken("s3cr3t-pat"))
+			repo := repositoryEndpoint{baseURL: server.URL, organization: "acme", project: "proj", repository: "repo"}
+
+			id, err := p.resolveReviewerID(context.Background(), repo, "s3cr3t-pat", "jane")
+
+			assert.Equal(t, "/acme/_apis/identities", gotPath, "must query the organization-level Identities API, not a project-scoped one")
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantID, id)
+		})
+	}
 }

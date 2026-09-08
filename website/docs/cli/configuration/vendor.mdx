@@ -212,7 +212,9 @@ vendor:
     Atmos applies these additively on every reconciliation. **Default label:** `[component-update]`.
     Azure DevOps pull requests have no assignee concept — setting `assignees` with
     `provider: azuredevops` fails with an error instead of silently dropping it; use `reviewers`
-    there instead.
+    there instead. With `provider: azuredevops`, each `reviewers` entry is a display name, account
+    name, or email — Atmos resolves it to the individual it identifies. Only individuals are
+    supported today, not groups.
   </dd>
   <dt>`ci.pull_request.draft`</dt>
   <dd>Create the pull request as a draft. **Default:** `false`.</dd>

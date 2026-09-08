@@ -61,6 +61,7 @@ func TestReconcilePullRequest(t *testing.T) {
 				"GET /acme/proj/_apis/git/repositories/repo/pullrequests",
 				"POST /acme/proj/_apis/git/repositories/repo/pullrequests",
 				"POST /acme/proj/_apis/git/repositories/repo/pullrequests/8/labels",
+				"GET /acme/_apis/identities",
 				"PUT /acme/proj/_apis/git/repositories/repo/pullrequests/8/reviewers/reviewer-guid",
 			},
 		},
@@ -75,6 +76,8 @@ func TestReconcilePullRequest(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 
 				switch {
+				case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/_apis/identities"):
+					_, _ = w.Write([]byte(`{"value":[{"id":"reviewer-guid","isContainer":false}]}`))
 				case r.Method == http.MethodGet:
 					_, _ = w.Write([]byte(tt.listResponse))
 				case r.Method == http.MethodPost && r.URL.Path == "/acme/proj/_apis/git/repositories/repo/pullrequests":
@@ -160,6 +163,41 @@ func TestReconcileRejectsAssignees(t *testing.T) {
 	// updated on invalid configuration -- the server must not see any request at all.
 	assert.Nil(t, result, "invalid configuration must not report a pull request")
 	assert.Empty(t, requests, "invalid configuration must not reach the Azure DevOps API")
+}
+
+// TestReconcileRejectsUnresolvableReviewer proves an unresolvable reviewer surfaces
+// resolveReviewerID's error instead of being silently dropped or sent to the reviewers endpoint as
+// a raw string Azure DevOps would reject anyway. Unlike assignees (rejected before any request),
+// this happens after the pull request itself is already created, so the created pull request is
+// still reported (see Reconcile's own comment on returning a partially-populated result) -- but
+// the reviewers endpoint must never be called with an unresolved value.
+func TestReconcileRejectsUnresolvableReviewer(t *testing.T) {
+	var requests []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.Contains(r.URL.Path, "/_apis/identities"):
+			_, _ = w.Write([]byte(`{"value":[]}`))
+		case r.Method == http.MethodGet:
+			_, _ = w.Write([]byte(`{"value":[]}`))
+		default:
+			_, _ = w.Write([]byte(`{"pullRequestId":9,"title":"title"}`))
+		}
+	}))
+	defer server.Close()
+
+	p := newTestProvider(server)
+	options := validOptions()
+	options.Reviewers = []string{"nobody@example.com"}
+	result, err := p.Reconcile(context.Background(), options)
+
+	assert.ErrorIs(t, err, errUtils.ErrAzureDevOpsReviewerNotFound)
+	require.NotNil(t, result, "the already-created pull request must still be reported")
+	assert.Equal(t, 9, result.Number)
+	for _, req := range requests {
+		assert.NotContains(t, req, "/reviewers/", "an unresolved reviewer must never reach the reviewers endpoint")
+	}
 }
 
 func TestReconcileReturnsAuthorizationErrorOnUnauthorized(t *testing.T) {
@@ -253,6 +291,15 @@ func TestSplitPathHelpers(t *testing.T) {
 	assert.Equal(t, "https://dev.azure.com/acme/proj/_apis/git/repositories/repo", repo.apiBase())
 	assert.Equal(t, "https://dev.azure.com/acme/proj/_git/repo/pullrequest/42", repo.pullRequestWebURL(42))
 	assert.Equal(t, "refs/heads/main", refName("main"))
+}
+
+// TestIdentitiesAPIBase proves the Identities API's host swap only applies to the cloud default:
+// a cloud caller's Git REST calls (dev.azure.com) and Identities calls (vssps.dev.azure.com)
+// genuinely live on different hosts, but a non-default baseURL (Azure DevOps Server) keeps both
+// APIs on the same host it was given.
+func TestIdentitiesAPIBase(t *testing.T) {
+	assert.Equal(t, "https://vssps.dev.azure.com/acme/_apis/identities", identitiesAPIBase(defaultBaseURL, "acme"))
+	assert.Equal(t, "https://ado.example.com/acme/_apis/identities", identitiesAPIBase("https://ado.example.com", "acme"))
 }
 
 // TestProviderRegistersAWorkingFactory proves the init()-registered "azuredevops" factory (invoked

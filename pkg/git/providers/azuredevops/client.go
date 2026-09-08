@@ -73,6 +73,32 @@ type reviewerBody struct {
 	ID string `json:"id"`
 }
 
+// identity is the subset of Azure DevOps' Identity resource resolveReviewerID reads.
+type identity struct {
+	ID          string `json:"id"`
+	IsContainer bool   `json:"isContainer"`
+}
+
+// identityListResponse wraps the Identities API's collection response envelope.
+type identityListResponse struct {
+	Value []identity `json:"value"`
+}
+
+// identitiesAPIHost is the Identities API's cloud host, a different subdomain than the Git REST
+// API's dev.azure.com, used only when baseURL is left at its cloud default.
+const identitiesAPIHost = "https://vssps.dev.azure.com"
+
+// identitiesAPIBase returns organization's `_apis/identities` REST root: the Identities API's own
+// host on Azure DevOps Services (a different subdomain than baseURL's Git REST calls), or baseURL
+// itself for a non-default (Azure DevOps Server) deployment.
+func identitiesAPIBase(baseURL, organization string) string {
+	host := identitiesAPIHost
+	if baseURL != defaultBaseURL {
+		host = baseURL
+	}
+	return fmt.Sprintf("%s/%s/_apis/identities", host, url.PathEscape(organization))
+}
+
 // repositoryEndpoint addresses one Azure DevOps Git repository and builds the REST/web URLs for
 // it.
 type repositoryEndpoint struct {
@@ -161,14 +187,54 @@ func (p *Provider) addLabel(ctx context.Context, repo repositoryEndpoint, token 
 	return p.doRequest(ctx, restRequest{method: http.MethodPost, url: requestURL, token: token, body: labelBody{Name: label}}, nil)
 }
 
-// addReviewer requests reviewerID (an Azure DevOps identity descriptor or GUID -- Azure DevOps'
-// reviewers API, unlike GitHub's, does not accept a plain username) as a reviewer on pull request
-// id.
-func (p *Provider) addReviewer(ctx context.Context, repo repositoryEndpoint, token string, id int, reviewerID string) error {
+// addReviewer resolves reviewer (a display name, account name, or email -- Azure DevOps' reviewers
+// API, unlike GitHub's, has no concept of a plain username) to an individual identity and requests
+// them as a reviewer on pull request id. Group reviewers aren't supported yet: a project-scoped
+// group's own display name (`[ProjectName]\Group Name`) would need qualifying to resolve
+// unambiguously, since the same group name is reused across every project in the organization.
+func (p *Provider) addReviewer(ctx context.Context, repo repositoryEndpoint, token string, id int, reviewer string) error {
 	defer perf.Track(nil, "azuredevops.Provider.addReviewer")()
 
+	reviewerID, err := p.resolveReviewerID(ctx, repo, token, reviewer)
+	if err != nil {
+		return err
+	}
 	requestURL := fmt.Sprintf("%s/pullrequests/%d/reviewers/%s?api-version=%s", repo.apiBase(), id, url.PathEscape(reviewerID), apiVersion)
 	return p.doRequest(ctx, restRequest{method: http.MethodPut, url: requestURL, token: token, body: reviewerBody{ID: reviewerID}}, nil)
+}
+
+// resolveReviewerID resolves principal (a display name, account name, or email) to the individual
+// identity GUID addReviewer's request needs, rejecting a group match (see addReviewer) and an
+// ambiguous match (more than one individual) rather than guessing which one was meant.
+func (p *Provider) resolveReviewerID(ctx context.Context, repo repositoryEndpoint, token, principal string) (string, error) {
+	defer perf.Track(nil, "azuredevops.Provider.resolveReviewerID")()
+
+	query := url.Values{}
+	query.Set("searchFilter", "General")
+	query.Set("filterValue", principal)
+	query.Set("queryMembership", "None")
+	query.Set("api-version", apiVersion)
+
+	var list identityListResponse
+	requestURL := identitiesAPIBase(repo.baseURL, repo.organization) + "?" + query.Encode()
+	if err := p.doRequest(ctx, restRequest{method: http.MethodGet, url: requestURL, token: token}, &list); err != nil {
+		return "", err
+	}
+
+	var individuals []identity
+	for _, candidate := range list.Value {
+		if !candidate.IsContainer {
+			individuals = append(individuals, candidate)
+		}
+	}
+	switch len(individuals) {
+	case 0:
+		return "", fmt.Errorf("%w: %q", errUtils.ErrAzureDevOpsReviewerNotFound, principal)
+	case 1:
+		return individuals[0].ID, nil
+	default:
+		return "", fmt.Errorf("%w: %q matched %d identities", errUtils.ErrAzureDevOpsReviewerAmbiguous, principal, len(individuals))
+	}
 }
 
 // doRequest issues an authenticated REST call and decodes a JSON response into out (when

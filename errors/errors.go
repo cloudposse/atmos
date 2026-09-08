@@ -1674,6 +1674,12 @@ var (
 	// ErrAzureDevOpsNamespaceInvalid indicates PullRequestOptions.Namespace was not exactly the
 	// single project segment Azure DevOps' organization/project/repository addressing requires.
 	ErrAzureDevOpsNamespaceInvalid = errors.New("azure DevOps pull request namespace must be exactly one project segment")
+	// ErrAzureDevOpsReviewerNotFound indicates a configured reviewer's display name, account name,
+	// or email matched no Azure DevOps identity.
+	ErrAzureDevOpsReviewerNotFound = errors.New("azure DevOps reviewer identity not found")
+	// ErrAzureDevOpsReviewerAmbiguous indicates a configured reviewer's display name, account name,
+	// or email matched more than one Azure DevOps identity.
+	ErrAzureDevOpsReviewerAmbiguous = errors.New("azure DevOps reviewer identity is ambiguous")
 	// ErrGitFetchFailed indicates `git fetch` of a base or feature branch failed.
 	ErrGitFetchFailed = errors.New("git fetch failed")
 	// ErrGitCheckoutFailed indicates `git checkout` of a feature branch failed.
