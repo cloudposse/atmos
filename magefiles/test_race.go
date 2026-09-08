@@ -41,12 +41,14 @@ const raceParallelEnv = "ATMOS_TEST_RACE_PARALLEL"
 
 // raceParallelDefault caps intra-package test parallelism in the race sweep.
 // `go test` already runs up to GOMAXPROCS package binaries concurrently
-// (-p), which saturates the runner on this ~400-package suite; leaving
-// -parallel at its GOMAXPROCS default too, once the largest packages'
-// tests call t.Parallel, multiplied the concurrent race-instrumented work
-// per core and made the sweep slower, not faster: 1093-1447s before those
-// tests went parallel versus 1715-1830s after, on the same xlarge runner
-// (runs 34241747386/34246305177 vs 34239965198/34246073780/34251221340).
+// (-p), and with -parallel also defaulting to GOMAXPROCS the worst case is
+// GOMAXPROCS² race-instrumented tests in flight once the largest packages'
+// tests call t.Parallel. The cap bounds that to 4 per package binary, which
+// keeps package-level concurrency (the dominant win on this ~400-package
+// sweep) as the thing that scales with the runner. Tune with
+// ATMOS_TEST_RACE_PARALLEL; note that the RunsOn "xlarge"/"large" families
+// resolve to 4- to 8-vCPU spot instances, so compare timings only across
+// runs on the same instance type.
 const raceParallelDefault = "4"
 
 // Race runs the full test suite (excluding ./tests/..., the CLI acceptance
