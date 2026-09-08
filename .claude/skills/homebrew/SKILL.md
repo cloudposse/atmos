@@ -37,7 +37,7 @@ gh pr list --repo Homebrew/homebrew-core --search "atmos in:title" --state open 
 Fetch it fresh rather than assuming — it changes:
 
 ```bash
-gh api repos/Homebrew/homebrew-core/contents/.github/PULL_REQUEST_TEMPLATE.md --jq '.content' | base64 -d
+gh api repos/Homebrew/homebrew-core/contents/.github/PULL_REQUEST_TEMPLATE.md --jq '.content' | openssl base64 -d -A
 ```
 
 The template body is **just the checklist** — unlike atmos's own PR template,
@@ -68,7 +68,7 @@ Full source of truth: `CONTRIBUTING.md`'s "Artificial intelligence" section
 and https://docs.brew.sh/Responsible-AI-Usage. Fetch both fresh:
 
 ```bash
-gh api repos/Homebrew/homebrew-core/contents/CONTRIBUTING.md --jq '.content' | base64 -d
+gh api repos/Homebrew/homebrew-core/contents/CONTRIBUTING.md --jq '.content' | openssl base64 -d -A
 ```
 
 Key rules, and how the first attempt violated them:
@@ -134,14 +134,15 @@ cloning the full `homebrew-core` tap (large, slow):
 
 ```bash
 brew tap-new local/atmos-pr-test
-cp "$(brew formula atmos)" /opt/homebrew/Library/Taps/local/homebrew-atmos-pr-test/Formula/atmos.rb
+tap_dir="$(brew --repository local/atmos-pr-test)"
+cp "$(brew formula atmos)" "$tap_dir/Formula/atmos.rb"
 # Apply the same edit the real PR makes, e.g.:
 #   ENV["GOFIPS140"] = "latest"
-$EDITOR /opt/homebrew/Library/Taps/local/homebrew-atmos-pr-test/Formula/atmos.rb
+$EDITOR "$tap_dir/Formula/atmos.rb"
 
 # `no_autobump!` (and some other directives) are only valid in official taps —
 # strip them for local-tap testing only; they stay untouched in the real PR.
-perl -pi -e 's/^\s*no_autobump!.*\n//' /opt/homebrew/Library/Taps/local/homebrew-atmos-pr-test/Formula/atmos.rb
+perl -pi -e 's/^\s*no_autobump!.*\n//' "$tap_dir/Formula/atmos.rb"
 
 # atmos is likely already installed from homebrew/core; a same-name formula
 # from a different tap can't coexist. Uninstall first, restore after.
@@ -156,7 +157,7 @@ brew style local/atmos-pr-test/atmos
 # Restore the real install and clean up — do not leave the test tap installed.
 brew uninstall local/atmos-pr-test/atmos
 brew install atmos   # reinstalls the official bottle from homebrew/core
-rm -rf /opt/homebrew/Library/Taps/local/homebrew-atmos-pr-test
+rm -rf "$tap_dir"
 ```
 
 **Gotcha: false positives from the test-tap scaffolding itself.** Removing
@@ -167,7 +168,8 @@ against the untouched original and confirm the flagged line isn't just your
 own scaffolding:
 
 ```bash
-diff "$(brew formula atmos)" /opt/homebrew/Library/Taps/local/homebrew-atmos-pr-test/Formula/atmos.rb
+tap_dir="$(brew --repository local/atmos-pr-test)"
+diff "$(brew formula atmos)" "$tap_dir/Formula/atmos.rb"
 ```
 
 `brew style` run against a bare file path (not through a tap) produces

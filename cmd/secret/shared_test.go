@@ -33,6 +33,18 @@ func TestParseScopeStack_DoesNotLeakAcrossInvocations(t *testing.T) {
 	svc := newFakeSecretService()
 	svc.scopes = map[string]secrets.Scope{"SHARED_TOKEN": secrets.ScopeGlobal}
 	installService(t, svc, nil)
+
+	// Record the secretScope passed to loadServiceFn on each call. Asserting only the set values
+	// below would pass even if a bug resolved both invocations to the same (wrong) stack, since
+	// the fake service ignores scope entirely — the stack itself must be asserted too.
+	originalLoadService := loadServiceFn
+	var scopes []secretScope
+	loadServiceFn = func(scope secretScope) (secretService, error) {
+		scopes = append(scopes, scope)
+		return originalLoadService(scope)
+	}
+	t.Cleanup(func() { loadServiceFn = originalLoadService })
+
 	overrideEnumerateScopes(t, []scopeEntry{
 		{
 			Stack: "prod", Component: "example-service", ComponentType: "helm",
@@ -50,6 +62,10 @@ func TestParseScopeStack_DoesNotLeakAcrossInvocations(t *testing.T) {
 	require.Len(t, svc.setCalls, 2)
 	assert.Equal(t, "v1", svc.setCalls[0].value)
 	assert.Equal(t, "v2", svc.setCalls[1].value)
+
+	require.Len(t, scopes, 2)
+	assert.Equal(t, "prod", scopes[0].Stack, "first invocation must resolve its own --stack, not leak into the second")
+	assert.Equal(t, "dev", scopes[1].Stack, "second invocation must resolve its own --stack, not the first invocation's")
 }
 
 // TestCredentialFreeSkip pins the set of YAML functions that credential-free secret listing must

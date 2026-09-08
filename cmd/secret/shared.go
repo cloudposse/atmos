@@ -102,17 +102,6 @@ func parseScopeStack(cmd *cobra.Command, args []string) (secretScope, error) {
 			return scope, err
 		}
 		scope.Stack = chosen
-		// Make the interactively-chosen stack visible to the component completion (it filters by
-		// --stack). A flag/env/config-sourced stack is already visible to viper via the bound
-		// flag, so don't override it here: viper.Set installs a permanent override that outranks
-		// the bound flag for the rest of the process, which would make every later call ignore
-		// its own --stack flag once any command resolved a stack this way. Only set it when a
-		// stack was actually chosen: PromptForMissingRequired gracefully returns "" with no error
-		// in a non-interactive context, and setting an empty override would be even worse — it
-		// would permanently blank out every later call's --stack flag too.
-		if scope.Stack != "" {
-			v.Set(cfg.StackStr, scope.Stack)
-		}
 	}
 	if scope.Stack == "" {
 		return scope, errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
@@ -125,7 +114,7 @@ func parseScopeStack(cmd *cobra.Command, args []string) (secretScope, error) {
 
 func requireScopeComponent(scope secretScope, cmd *cobra.Command, args []string) (secretScope, error) {
 	if scope.Component == "" {
-		chosen, err := flags.PromptForMissingRequired("component", "Choose a component", componentCompletion, cmd, args)
+		chosen, err := flags.PromptForMissingRequired("component", "Choose a component", componentCompletionForStack(scope.Stack), cmd, args)
 		if err != nil {
 			return scope, err
 		}
