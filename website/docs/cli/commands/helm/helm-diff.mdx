@@ -64,6 +64,9 @@ precedence (`--from-manifest` → `--against` → deployed release):
   <dt>`--context=<n>` <em>(optional)</em></dt>
   <dd>Number of unchanged context lines shown around each change. Defaults to <code>3</code>.</dd>
 
+  <dt>`--dependency-update` <em>(optional)</em></dt>
+  <dd>Fetch declared chart dependencies when they are missing. This may access dependency repositories and update the chart's <code>charts/</code> directory and lock file.</dd>
+
   <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
   <dd>Process multiple Helm components in dependency order.</dd>
 

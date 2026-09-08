@@ -18,7 +18,9 @@ import (
 )
 
 // formatGitHub is the default output format: append key/path/restore-keys to
-// $GITHUB_OUTPUT for a following actions/cache step.
+// $GITHUB_OUTPUT for a following actions/cache step, and — when $GITHUB_ENV
+// is set — also as ATMOS_CACHE_* job-level env vars for a nested composite's
+// post step (see emitGitHubCachePaths).
 const formatGitHub = "github"
 
 var cachePathsParser *flags.StandardParser
@@ -37,7 +39,10 @@ provider or runtime token, so it works on any OS/CI.
 
 With --format=github the values are written to $GITHUB_OUTPUT (key, path,
 restore-keys) so a following actions/cache step can reference them as step
-outputs.`,
+outputs. When $GITHUB_ENV is also set, the same values are written there as
+ATMOS_CACHE_KEY/ATMOS_CACHE_PATH/ATMOS_CACHE_RESTORE_KEYS, for a consumer
+that can't see this step's outputs directly (e.g. a nested composite
+action's own post step).`,
 	Args: cobra.NoArgs,
 	RunE: runCachePaths,
 }
@@ -120,17 +125,59 @@ func githubGlobLines(paths, excludes []string) []string {
 	return lines
 }
 
+// emitGitHubCachePaths writes key/path/restore-keys as $GITHUB_OUTPUT step
+// outputs (for a same-job actions/cache step to reference), and — whenever
+// $GITHUB_ENV is set — also as ATMOS_CACHE_* job-level env vars. Both are
+// needed when this command runs inside actions/cache: a post step of a
+// composite action nested inside another composite can't see the outer
+// step's steps.*.outputs (actions/runner#2800), but it can see the job env,
+// so actions/cache's own save/restore steps read the env vars instead.
+// Both destinations use pkg/env's GitHub Actions formatter, which already
+// picks a collision-safe delimiter for multiline values — callers don't
+// hand-roll that themselves.
+func emitGitHubCachePaths(cfg *cachepkg.Config, paths, excludes []string) error {
+	if cfg.Key == "" {
+		return errUtils.Build(errUtils.ErrCacheKeyRequired).
+			WithExplanation("Atmos cache metadata did not include a cache key").
+			WithHint("Check your ci.cache configuration and the toolchain lockfile it derives the key from").
+			Err()
+	}
+	pathValue := strings.Join(githubGlobLines(paths, excludes), "\n")
+	if pathValue == "" {
+		return errUtils.Build(errUtils.ErrCachePathsRequired).
+			WithExplanation("Atmos cache metadata did not include any cache paths").
+			WithHint("Check your ci.cache configuration").
+			Err()
+	}
+	restoreKeysValue := strings.Join(cfg.RestoreKeys, "\n")
+
+	// key, path (multiline), restore-keys (multiline) → $GITHUB_OUTPUT
+	// (heredoc handled by pkg/env); falls back to stdout when not in CI.
+	if err := env.Output(map[string]string{
+		"key":          cfg.Key,
+		"path":         pathValue,
+		"restore-keys": restoreKeysValue,
+	}, formatGitHub, ghactions.GetOutputPath()); err != nil {
+		return err
+	}
+
+	if envPath := ghactions.GetEnvPath(); envPath != "" {
+		if err := env.Output(map[string]string{
+			"ATMOS_CACHE_KEY":          cfg.Key,
+			"ATMOS_CACHE_PATH":         pathValue,
+			"ATMOS_CACHE_RESTORE_KEYS": restoreKeysValue,
+		}, formatGitHub, envPath); err != nil {
+			return fmt.Errorf("write cache metadata to GITHUB_ENV: %w", err)
+		}
+	}
+	return nil
+}
+
 // emitCachePaths renders the key/paths/restore-keys in the requested format.
 func emitCachePaths(formatStr string, cfg *cachepkg.Config, paths []string, excludes []string) error {
 	switch formatStr {
 	case formatGitHub:
-		// key, path (multiline), restore-keys (multiline) → $GITHUB_OUTPUT
-		// (heredoc handled by pkg/env); falls back to stdout when not in CI.
-		return env.Output(map[string]string{
-			"key":          cfg.Key,
-			"path":         strings.Join(githubGlobLines(paths, excludes), "\n"),
-			"restore-keys": strings.Join(cfg.RestoreKeys, "\n"),
-		}, formatGitHub, ghactions.GetOutputPath())
+		return emitGitHubCachePaths(cfg, paths, excludes)
 	case "env":
 		return env.Output(map[string]string{
 			"ATMOS_CI_CACHE_KEY":           cfg.Key,
