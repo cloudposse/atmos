@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
 
@@ -110,7 +111,7 @@ func parseOptions(raw map[string]any) (yamlOptions, error) {
 	if err := mapstructure.Decode(raw, &opts); err != nil {
 		return yamlOptions{}, errUtils.Build(errUtils.ErrVersionYAMLOptionsInvalid).
 			WithCause(err).
-			WithHint(`Quote a bare numeric path, e.g. path: "0", so YAML doesn't parse it as an integer`).
+			WithHint(`Quote a path that looks like a number, e.g. path: "0", so YAML doesn't parse it as an integer -- to index an array use bracket notation instead, e.g. path: sources[0].version`).
 			Err()
 	}
 	if dup := duplicatePath(opts.Set); dup != "" {
@@ -169,16 +170,38 @@ func applySet(content []byte, entry setEntry, value string) ([]byte, error) {
 	case err == nil && existing == value:
 		return content, nil
 	case err != nil && !errors.Is(err, atmosyaml.ErrYAMLPathNotFound):
-		return nil, fmt.Errorf("%w: path %q: %w", errUtils.ErrVersionYAMLSetFailed, entry.Path, err)
+		return nil, wrapSetFailed(entry.Path, err)
 	}
 	if t, ok := atmosyaml.GetType(content, entry.Path); ok && t == atmosyaml.TypeYAML {
 		return nil, fmt.Errorf("%w: path %q", errUtils.ErrVersionYAMLPathTypeMismatch, entry.Path)
 	}
 	updated, err := atmosyaml.Set(content, entry.Path, value)
 	if err != nil {
-		return nil, fmt.Errorf("%w: path %q: %w", errUtils.ErrVersionYAMLSetFailed, entry.Path, err)
+		return nil, wrapSetFailed(entry.Path, err)
 	}
 	return updated, nil
+}
+
+// gjsonWildcardChars are characters valid in the json manager's gjson/sjson
+// dot-path dialect (wildcards, queries) but never valid in this manager's
+// yq-style dot-notation, which has no wildcard syntax at all. A path
+// containing one is almost always a copy-paste mistake from a json manager
+// rule, and the underlying yq evaluator's raw error (e.g. "cannot index
+// array with '#' (strconv.ParseInt: parsing \"#\": invalid syntax)") leaks a
+// Go stdlib detail without explaining that mismatch.
+const gjsonWildcardChars = "#*?@"
+
+// wrapSetFailed wraps a pkg/yaml editor error as ErrVersionYAMLSetFailed,
+// adding a hint when the path looks like a json manager gjson/sjson wildcard
+// path mistakenly used here.
+func wrapSetFailed(path string, cause error) error {
+	wrapped := fmt.Errorf("%w: path %q: %w", errUtils.ErrVersionYAMLSetFailed, path, cause)
+	if !strings.ContainsAny(path, gjsonWildcardChars) {
+		return wrapped
+	}
+	return errUtils.Build(wrapped).
+		WithHintf("path %q looks like the json manager's gjson wildcard syntax (e.g. items.#.version) -- the yaml manager's dot-notation has no wildcard syntax; use an explicit bracket index instead, e.g. items[0].version", path).
+		Err()
 }
 
 func init() {

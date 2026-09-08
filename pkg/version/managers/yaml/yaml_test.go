@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -326,6 +327,41 @@ func TestYAMLInvalidOptionsErrors(t *testing.T) {
 	}
 }
 
+// TestYAMLBareNumericPathHintMatchesYAMLDialect guards against a regression
+// to the field-test finding that this hint was copy-pasted from the json
+// manager's identical error and described json's dialect (bare numeric path
+// segments), not yaml's (bracket-index notation like sources[0].version,
+// which never uses a bare numeric segment).
+func TestYAMLBareNumericPathHintMatchesYAMLDialect(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "values.yaml"), []byte("version: 1.0.0\n"), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	var m Manager
+	_, err := m.Plan(context.Background(), &managers.Input{
+		Dir:     dir,
+		Paths:   []string{"values.yaml"},
+		Refs:    testRefs,
+		Options: map[string]any{"set": []map[string]any{{"path": 0, "from": "opentofu"}}},
+	})
+	if err == nil {
+		t.Fatal("expected an error for a bare numeric path")
+	}
+	hints := errors.GetAllHints(err)
+	found := false
+	for _, hint := range hints {
+		if strings.Contains(hint, "sources[0].version") {
+			found = true
+		}
+		if strings.Contains(hint, "so YAML doesn't parse it as an integer") && !strings.Contains(hint, "bracket notation") {
+			t.Fatalf("hint %q describes the json manager's bare-numeric-segment dialect, not yaml's bracket-index dialect", hint)
+		}
+	}
+	if !found {
+		t.Fatalf("hints = %#v, want a hint pointing at yaml's bracket-index syntax", hints)
+	}
+}
+
 func TestYAMLBadGlobPatternErrors(t *testing.T) {
 	var m Manager
 	_, err := m.Plan(context.Background(), &managers.Input{
@@ -369,6 +405,43 @@ func TestYAMLContainerPathRejected(t *testing.T) {
 	}
 	if string(content) != original {
 		t.Fatalf("expected file untouched, got:\n%s", content)
+	}
+}
+
+// TestYAMLGJSONWildcardPathHints guards against the field-test finding that
+// a copy-paste mistake -- reusing the json manager's gjson wildcard syntax
+// (items.#.version) in a yaml manager rule -- errors correctly (no silent
+// garbage key) but with a raw yq error leaking a Go stdlib detail
+// (strconv.ParseInt) and no explanation of the actual mismatch. It must
+// still error, but now with an explanatory hint instead.
+func TestYAMLGJSONWildcardPathHints(t *testing.T) {
+	dir := t.TempDir()
+	original := "items:\n  - version: 1.0.0\n  - version: 1.0.0\n"
+	if err := os.WriteFile(filepath.Join(dir, "values.yaml"), []byte(original), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	var m Manager
+	_, err := m.Plan(context.Background(), &managers.Input{
+		Dir:     dir,
+		Paths:   []string{"values.yaml"},
+		Refs:    testRefs,
+		Options: setOptions(setEntry{Path: "items.#.version", From: "opentofu"}),
+	})
+	if err == nil {
+		t.Fatal("expected an error for a gjson wildcard path")
+	}
+	if !errors.Is(err, errUtils.ErrVersionYAMLSetFailed) {
+		t.Fatalf("expected error to wrap ErrVersionYAMLSetFailed, got: %v", err)
+	}
+	hints := errors.GetAllHints(err)
+	found := false
+	for _, hint := range hints {
+		if strings.Contains(hint, "items[0].version") && strings.Contains(hint, "gjson") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("hints = %#v, want a hint explaining the gjson-vs-dot-notation mismatch", hints)
 	}
 }
 
