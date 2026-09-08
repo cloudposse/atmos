@@ -16,6 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/reexec"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // stubRunForm replaces runForm for a single test with a function that returns
@@ -346,6 +347,139 @@ func TestReExecWithProfile_DoesNotInjectUnpromptedValues(t *testing.T) {
 
 	// New argv: [atmos, --profile, managers, terraform, plan, vpc, --stack, core-ue2-auto].
 	require.Len(t, gotArgs, 8, "component/stack must not be duplicated: %v", gotArgs)
+}
+
+// reExecWithProfile treats ComponentPrompted and StackPrompted independently:
+// a mixed state (only one of the two prompted) must inject exactly the
+// prompted value, never the other, and never duplicate or drop either one.
+// This is the regression guard for the case the prior two tests didn't
+// cover — "both prompted" and "both unprompted" could both pass even if a
+// bug always injected/omitted the two fields together instead of tracking
+// them independently.
+func TestReExecWithProfile_MixedPromptedStates(t *testing.T) {
+	tests := []struct {
+		name              string
+		componentPrompted bool
+		stackPrompted     bool
+		wantArgs          []string
+	}{
+		{
+			name:              "neither prompted",
+			componentPrompted: false,
+			stackPrompted:     false,
+			wantArgs:          []string{"atmos", "--profile", "managers", "terraform", "plan"},
+		},
+		{
+			name:              "component only prompted",
+			componentPrompted: true,
+			stackPrompted:     false,
+			wantArgs:          []string{"atmos", "--profile", "managers", "terraform", "plan", "vpc"},
+		},
+		{
+			name:              "stack only prompted",
+			componentPrompted: false,
+			stackPrompted:     true,
+			wantArgs:          []string{"atmos", "--profile", "managers", "terraform", "plan", "--stack", "core-ue2-auto"},
+		},
+		{
+			name:              "both prompted",
+			componentPrompted: true,
+			stackPrompted:     true,
+			wantArgs:          []string{"atmos", "--profile", "managers", "terraform", "plan", "--stack", "core-ue2-auto", "vpc"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Cleanup(func() { reexec.Exec = originalExecFunc })
+
+			var gotArgs []string
+			reexec.Exec = func(_ string, argv []string, _ []string) error {
+				gotArgs = argv
+				return errExecMockCalled
+			}
+
+			origArgs := os.Args
+			os.Args = []string{"atmos", "terraform", "plan"}
+			t.Cleanup(func() { os.Args = origArgs })
+
+			reExecCtx := ReExecContext{
+				Component:         "vpc",
+				ComponentPrompted: tt.componentPrompted,
+				Stack:             "core-ue2-auto",
+				StackPrompted:     tt.stackPrompted,
+			}
+			err := reExecWithProfile("managers", reExecCtx)
+			require.ErrorIs(t, err, errExecMockCalled)
+
+			assert.Equal(t, tt.wantArgs, gotArgs, "complete child argv must match exactly")
+		})
+	}
+}
+
+// countOccurrences returns how many elements of argv equal val.
+func countOccurrences(argv []string, val string) int {
+	count := 0
+	for _, a := range argv {
+		if a == val {
+			count++
+		}
+	}
+	return count
+}
+
+// Authenticate builds its ReExecContext from the manager's own stackInfo, so a
+// component/stack resolved via an interactive prompt survives an
+// identity-not-found profile-fallback re-exec. This is the regression guard
+// for the manager.go bug where an empty ReExecContext{} was passed
+// unconditionally, silently dropping any prompted values before they ever
+// reached reExecWithProfile.
+func TestAuthenticate_PassesPromptedComponentAndStackToProfileFallback(t *testing.T) {
+	resetGlobalProfileState(t)
+	stubInteractiveTrue(t)
+	stubRunForm(t, nil) // huh.Select defaults the bound value to the first sorted option.
+
+	// Two profiles defining the same identity so promptForProfileSelection
+	// takes the multi-candidate huh.Select branch — the single-candidate
+	// confirm branch can't have its bound bool flipped from a stub (see
+	// TestConfirmSingleProfileSelection_DefaultNoIsAbort).
+	tmpDir := t.TempDir()
+	for _, name := range []string{"alpha", "beta"} {
+		dir := filepath.Join(tmpDir, "profiles", name)
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		yaml := `auth:
+  identities:
+    shared-admin:
+      kind: aws/user
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(yaml), 0o644))
+	}
+
+	t.Cleanup(func() { reexec.Exec = originalExecFunc })
+	var gotArgs []string
+	reexec.Exec = func(_ string, argv []string, _ []string) error {
+		gotArgs = argv
+		return errExecMockCalled
+	}
+
+	m := &manager{
+		cliConfigPath: tmpDir,
+		config:        &schema.AuthConfig{},
+		stackInfo: &schema.ConfigAndStacksInfo{
+			ComponentFromArg:  "vpc",
+			ComponentPrompted: true,
+			Stack:             "core-ue2-auto",
+			StackPrompted:     true,
+		},
+	}
+
+	_, err := m.Authenticate(context.Background(), "shared-admin")
+	require.ErrorIs(t, err, errExecMockCalled,
+		"the identity-not-found path must reach reExecWithProfile via the manager's own stackInfo")
+
+	assert.Equal(t, 1, countOccurrences(gotArgs, "vpc"), "prompted component must appear exactly once: %v", gotArgs)
+	assert.Equal(t, 1, countOccurrences(gotArgs, "--stack"), "prompted --stack flag must appear exactly once: %v", gotArgs)
+	assert.Equal(t, 1, countOccurrences(gotArgs, "core-ue2-auto"), "prompted stack value must appear exactly once: %v", gotArgs)
 }
 
 // anyProfileFallbackFixture creates profiles that exercise the identity-

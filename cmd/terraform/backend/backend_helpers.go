@@ -157,7 +157,7 @@ func InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfigur
 	// live endpoint (e.g. the emulator container started for this specific stack) into
 	// AuthContext.AWS. Without the stack, that resolution silently no-ops and callers fall back
 	// to the standard AWS SDK credential chain instead of the emulator/local sandbox.
-	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfigForStack(identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, &atmosConfig, stack)
+	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfigForStack(identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, &atmosConfig, auth.ReExecContext{Component: component, Stack: stack})
 	if err != nil {
 		return nil, nil, err
 	}

@@ -29,10 +29,12 @@ import (
 type componentConfigFetcher func(params *ExecuteDescribeComponentParams) (map[string]any, error)
 
 // authManagerCreator is a function type for creating and authenticating an AuthManager.
-// The trailing stack is threaded into manager construction so stack-scoped identities
-// (e.g. kind: <target>/emulator) receive it before authentication and can populate the
-// in-process auth context. This allows dependency injection for testing.
-type authManagerCreator func(identity string, authConfig *schema.AuthConfig, selectValue string, atmosConfig *schema.AtmosConfiguration, stack string) (auth.AuthManager, error)
+// The trailing ReExecContext is threaded into manager construction so stack-scoped
+// identities (e.g. kind: <target>/emulator) receive the target stack before authentication
+// and can populate the in-process auth context, and so a later identity-not-found fallback
+// can re-inject prompted component/stack values into a profile-fallback re-exec. This allows
+// dependency injection for testing.
+type authManagerCreator func(identity string, authConfig *schema.AuthConfig, selectValue string, atmosConfig *schema.AtmosConfiguration, reExecCtx auth.ReExecContext) (auth.AuthManager, error)
 
 // defaultComponentConfigFetcher is the default implementation that calls ExecuteDescribeComponent.
 var defaultComponentConfigFetcher componentConfigFetcher = ExecuteDescribeComponent
@@ -114,7 +116,14 @@ func createAndAuthenticateAuthManagerWithDeps(
 	// Create and authenticate AuthManager from --identity flag if specified.
 	// Uses merged auth config that includes both global and component-specific identities/defaults.
 	// This enables YAML template functions like !terraform.state to use authenticated credentials.
-	authManager, err := authCreator(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, info.Stack)
+	// Carry forward prompted component/stack so a later identity-not-found fallback inside
+	// Authenticate can re-inject them into a profile-fallback re-exec instead of dropping them.
+	authManager, err := authCreator(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, auth.ReExecContext{
+		Component:         info.ComponentFromArg,
+		ComponentPrompted: info.ComponentPrompted,
+		Stack:             info.Stack,
+		StackPrompted:     info.StackPrompted,
+	})
 	if err != nil {
 		return nil, resolveIdentityConfigError(atmosConfig, info, err, errUtils.ErrFailedToInitializeAuthManager)
 	}

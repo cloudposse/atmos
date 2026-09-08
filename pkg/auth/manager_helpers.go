@@ -105,14 +105,20 @@ func resolveIdentityName(identityName string, authConfig *schema.AuthConfig, cli
 // createAuthManagerInstance creates a new AuthManager instance with the given configuration.
 // Note: This function is used internally for temporary managers during identity resolution.
 // For persistent auth managers, use NewAuthManager directly with the proper cliConfigPath.
-func createAuthManagerInstance(authConfig *schema.AuthConfig, cliConfigPath string, stack string) (AuthManager, error) {
+func createAuthManagerInstance(authConfig *schema.AuthConfig, cliConfigPath string, reExecCtx ReExecContext) (AuthManager, error) {
 	authStackInfo := &schema.ConfigAndStacksInfo{
 		// Seed the target stack so stack-scoped identities (e.g. kind: <target>/emulator)
 		// receive it via SetStack at construction, before Authenticate/PostAuthenticate run.
 		// Without this the emulator identity cannot resolve its endpoint and leaves
 		// AuthContext.AWS nil for in-process consumers (`!terraform.state`, stores).
-		Stack:       stack,
-		AuthContext: &schema.AuthContext{},
+		Stack: reExecCtx.Stack,
+		// Carry forward component/stack values resolved via an interactive prompt so a
+		// later identity-not-found fallback (manager.Authenticate) can re-inject them into
+		// a profile-fallback re-exec instead of dropping them.
+		ComponentFromArg:  reExecCtx.Component,
+		ComponentPrompted: reExecCtx.ComponentPrompted,
+		StackPrompted:     reExecCtx.StackPrompted,
+		AuthContext:       &schema.AuthContext{},
 	}
 
 	credStore := credentials.NewCredentialStoreWithConfig(authConfig)
@@ -246,9 +252,9 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 	selectValue string,
 	atmosConfig *schema.AtmosConfiguration,
 ) (AuthManager, error) {
-	// Delegate to the stack-aware variant with an empty stack to preserve the
+	// Delegate to the stack-aware variant with an empty context to preserve the
 	// existing (no-stack) behavior for callers that don't have a target stack.
-	return CreateAndAuthenticateManagerWithAtmosConfigForStack(identityName, authConfig, selectValue, atmosConfig, "")
+	return CreateAndAuthenticateManagerWithAtmosConfigForStack(identityName, authConfig, selectValue, atmosConfig, ReExecContext{})
 }
 
 // CreateAndAuthenticateManagerWithAtmosConfigForStack is the stack-aware variant of
@@ -263,11 +269,11 @@ func CreateAndAuthenticateManagerWithAtmosConfigForStack(
 	authConfig *schema.AuthConfig,
 	selectValue string,
 	atmosConfig *schema.AtmosConfiguration,
-	stack string,
+	reExecCtx ReExecContext,
 ) (AuthManager, error) {
 	defer perf.Track(atmosConfig, "auth.CreateAndAuthenticateManagerWithAtmosConfigForStack")()
 
-	log.Debug("CreateAndAuthenticateManager called", "identityName", identityName, "hasAuthConfig", authConfig != nil, "stack", stack)
+	log.Debug("CreateAndAuthenticateManager called", "identityName", identityName, "hasAuthConfig", authConfig != nil, "stack", reExecCtx.Stack)
 
 	// Check if authentication is explicitly disabled.
 	if shouldDisableAuth(identityName) {
@@ -300,7 +306,7 @@ func CreateAndAuthenticateManagerWithAtmosConfigForStack(
 
 	// Create AuthManager instance, seeding the target stack so stack-scoped identities
 	// receive it via SetStack before authentication.
-	authManager, err := createAuthManagerInstance(authConfig, cliConfigPath, stack)
+	authManager, err := createAuthManagerInstance(authConfig, cliConfigPath, reExecCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -336,7 +342,7 @@ func CreateManagerWithAtmosConfigForStack(
 		cliConfigPath = atmosConfig.CliConfigPath
 	}
 
-	return createAuthManagerInstance(authConfig, cliConfigPath, stack)
+	return createAuthManagerInstance(authConfig, cliConfigPath, ReExecContext{Stack: stack})
 }
 
 // CreateAndAuthenticateManagerWithStackScan creates and authenticates an AuthManager, first running

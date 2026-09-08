@@ -269,7 +269,20 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		// surface a hint naming the profile (non-interactive). Explicit
 		// --profile / ATMOS_PROFILE selections are never overridden.
 		// See PRD: interactive-profile-suggestion.
-		if fbErr := m.maybeOfferProfileFallback(ctx, identityName, ReExecContext{}); fbErr != nil {
+		//
+		// Carry forward any component/stack values already resolved via an
+		// interactive prompt on this process's stackInfo, so the re-exec'd
+		// child doesn't re-prompt for values the user just supplied.
+		reExecCtx := ReExecContext{}
+		if m.stackInfo != nil {
+			reExecCtx = ReExecContext{
+				Component:         m.stackInfo.ComponentFromArg,
+				ComponentPrompted: m.stackInfo.ComponentPrompted,
+				Stack:             m.stackInfo.Stack,
+				StackPrompted:     m.stackInfo.StackPrompted,
+			}
+		}
+		if fbErr := m.maybeOfferProfileFallback(ctx, identityName, reExecCtx); fbErr != nil {
 			return nil, fbErr
 		}
 		// Return a single rich error carrying the explanation and hint.

@@ -275,7 +275,10 @@ func createComponentAuthManager(
 		mergedAuthConfig, // Merged component + global auth
 		cfg.IdentityFlagSelectValue,
 		atmosConfig, // Enable stack-level auth default loading
-		stack,       // Target component's stack, for stack-scoped (emulator) identities
+		// Target component's stack, for stack-scoped (emulator) identities. This is the
+		// nested component's own target, not the top-level prompted component/stack, so
+		// prompted flags are intentionally not threaded here.
+		auth.ReExecContext{Stack: stack},
 	)
 	if err != nil {
 		log.Debug(

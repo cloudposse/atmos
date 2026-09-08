@@ -115,9 +115,16 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	}
 
 	// Create and authenticate the AuthManager using the same injectable creator as
-	// createAndAuthenticateAuthManagerWithDeps to keep injection points unified.
+	// createAndAuthenticateAuthManagerWithDeps to keep injection points unified. Carry
+	// forward prompted component/stack so a later identity-not-found fallback inside
+	// Authenticate can re-inject them into a profile-fallback re-exec.
 	authManager, err := defaultAuthManagerCreator(
-		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, info.Stack,
+		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, auth.ReExecContext{
+			Component:         info.ComponentFromArg,
+			ComponentPrompted: info.ComponentPrompted,
+			Stack:             info.Stack,
+			StackPrompted:     info.StackPrompted,
+		},
 	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrUserAborted) {
