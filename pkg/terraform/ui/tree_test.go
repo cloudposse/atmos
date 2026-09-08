@@ -392,6 +392,57 @@ func TestRenderTree_IsConnected(t *testing.T) {
 	}
 }
 
+// TestRenderTree_ShowsUnchangedAttributesFooter verifies a node with UnchangedAttrCount > 0
+// renders a "# (N unchanged attributes hidden)" row, mirroring Terraform's own plan-output
+// convention, so the diff-only Changes list doesn't read as the resource's entire content.
+func TestRenderTree_ShowsUnchangedAttributesFooter(t *testing.T) {
+	change := []*AttributeChange{{Key: "cidr_block", Before: "10.0.0.0/16", After: "10.0.0.0/8"}}
+	tree := &DependencyTree{
+		Stack: "dev", Component: "vpc",
+		Root: &TreeNode{Address: "root", Children: []*TreeNode{
+			{Address: "aws_vpc.main", Action: "update", Changes: change, UnchangedAttrCount: 3},
+		}},
+	}
+
+	out := ansi.Strip(tree.RenderTreeWithConfig(&RenderConfig{Compact: true}))
+
+	assert.Contains(t, out, "# (3 unchanged attributes hidden)")
+}
+
+// TestRenderTree_SingularUnchangedAttribute verifies the footer uses singular "attribute"
+// wording for a count of exactly one, matching natural English (and Terraform's own output).
+func TestRenderTree_SingularUnchangedAttribute(t *testing.T) {
+	change := []*AttributeChange{{Key: "cidr_block", Before: "10.0.0.0/16", After: "10.0.0.0/8"}}
+	tree := &DependencyTree{
+		Stack: "dev", Component: "vpc",
+		Root: &TreeNode{Address: "root", Children: []*TreeNode{
+			{Address: "aws_vpc.main", Action: "update", Changes: change, UnchangedAttrCount: 1},
+		}},
+	}
+
+	out := ansi.Strip(tree.RenderTreeWithConfig(&RenderConfig{Compact: true}))
+
+	assert.Contains(t, out, "# (1 unchanged attribute hidden)")
+	assert.NotContains(t, out, "1 unchanged attributes")
+}
+
+// TestRenderTree_NoFooterWhenNoUnchangedAttributes verifies a node with no unchanged
+// attributes (UnchangedAttrCount == 0, e.g. every attribute changed, or a create/delete
+// with no prior/no-longer-existing state) renders no footer row at all.
+func TestRenderTree_NoFooterWhenNoUnchangedAttributes(t *testing.T) {
+	change := []*AttributeChange{{Key: "cidr_block", Before: nil, After: "10.0.0.0/8"}}
+	tree := &DependencyTree{
+		Stack: "dev", Component: "vpc",
+		Root: &TreeNode{Address: "root", Children: []*TreeNode{
+			{Address: "aws_vpc.main", Action: "create", Changes: change, UnchangedAttrCount: 0},
+		}},
+	}
+
+	out := ansi.Strip(tree.RenderTreeWithConfig(&RenderConfig{Compact: true}))
+
+	assert.NotContains(t, out, "unchanged")
+}
+
 func TestExtractReferences(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -850,7 +901,7 @@ func TestExtractAttributeChanges_WithReplacePaths(t *testing.T) {
 		},
 	}
 
-	changes := extractAttributeChanges(rc)
+	changes, _ := extractAttributeChanges(rc)
 
 	// Should have one change (content changed, filename stayed the same).
 	assert.Len(t, changes, 1)
@@ -882,7 +933,7 @@ func TestExtractAttributeChanges_WithNestedReplacePaths(t *testing.T) {
 		},
 	}
 
-	changes := extractAttributeChanges(rc)
+	changes, _ := extractAttributeChanges(rc)
 
 	// Should have one change (ami changed).
 	assert.Len(t, changes, 1)
@@ -909,7 +960,7 @@ func TestExtractAttributeChanges_NoReplacePaths(t *testing.T) {
 		},
 	}
 
-	changes := extractAttributeChanges(rc)
+	changes, _ := extractAttributeChanges(rc)
 
 	// Should have one change (tags changed).
 	assert.Len(t, changes, 1)

@@ -1301,3 +1301,33 @@ func TestExecuteDestroy_AutoApprove_PropagatesExecuteError(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrStreamingNotSupported)
 }
+
+// TestShowPlanTree_LogsWarnOnTreeBuildFailure is a regression test for a silent-failure gap:
+// showPlanTree used to swallow a BuildDependencyTree error entirely, so when `terraform show
+// -json <planfile>` failed for any reason, the whole plan summary (tree + change badges) just
+// vanished with zero indication anything went wrong. This forces that failure (an unresolvable
+// "terraform" binary) and asserts it's now surfaced as a WARN log line instead of silence.
+func TestShowPlanTree_LogsWarnOnTreeBuildFailure(t *testing.T) {
+	origLevel := log.GetLevel()
+	t.Cleanup(func() {
+		log.SetOutput(os.Stderr)
+		log.SetLevel(origLevel)
+	})
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	log.SetLevel(log.InfoLevel)
+
+	opts := &ExecuteOptions{
+		Command:    filepath.Join(t.TempDir(), "no-such-terraform-binary"),
+		WorkingDir: t.TempDir(),
+		Component:  "comp",
+		Stack:      "stack",
+	}
+
+	showPlanTree(context.Background(), opts, "plan.tfplan")
+
+	out := buf.String()
+	assert.Contains(t, out, "WARN")
+	assert.Contains(t, out, "plan summary")
+}

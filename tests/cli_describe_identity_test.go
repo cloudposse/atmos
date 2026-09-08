@@ -2,10 +2,38 @@ package tests
 
 import (
 	"bytes"
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// describeIdentityCommandTimeout bounds each subprocess run in this file. These commands
+// are local-only (no terraform/network work), so a generous-but-finite timeout turns a
+// subprocess hang - e.g. an unexpected outbound call blocking on IMDS/network in an
+// environment with no route to it - into a clear, attributable test failure instead of
+// hanging the entire test binary until go test's global -timeout kills it and dumps every
+// goroutine (see TestDescribeCommandsWithoutAuthWork's "list components" hang).
+const describeIdentityCommandTimeout = 30 * time.Second
+
+// runDescribeIdentityCommand runs an atmos command bounded by describeIdentityCommandTimeout
+// and returns its combined stdout/stderr and error.
+func runDescribeIdentityCommand(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), describeIdentityCommandTimeout)
+	defer cancel()
+
+	cmd := atmosRunner.CommandContext(ctx, args...)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+
+	return stdout.String() + stderr.String(), err
+}
 
 // TestDescribeCommandsWithIdentityFlag verifies that describe commands handle the --identity flag correctly.
 // These tests cover the code paths where identity flag is parsed and CreateAuthManagerFromIdentity is called.
@@ -38,17 +66,10 @@ func TestDescribeCommandsWithIdentityFlag(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Chdir("fixtures/scenarios/basic")
 
-			cmd := atmosRunner.Command(tt.args...)
-
-			var stdout, stderr bytes.Buffer
-			cmd.Stdout = &stdout
-			cmd.Stderr = &stderr
-			err := cmd.Run()
+			combinedOutput, err := runDescribeIdentityCommand(t, tt.args...)
 
 			// Should fail when given non-existent identity.
 			assert.Error(t, err, "Command should fail with non-existent identity")
-
-			combinedOutput := stdout.String() + stderr.String()
 
 			// Should not show interactive selector when explicit identity is provided.
 			assert.NotContains(t, combinedOutput, "Select an identity",
@@ -59,12 +80,7 @@ func TestDescribeCommandsWithIdentityFlag(t *testing.T) {
 	t.Run("describe component without identity flag should work normally", func(t *testing.T) {
 		t.Chdir("fixtures/scenarios/atmos-include-yaml-function")
 
-		cmd := atmosRunner.Command("describe", "component", "component-1", "--stack", "nonprod")
-
-		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		err := cmd.Run()
+		_, err := runDescribeIdentityCommand(t, "describe", "component", "component-1", "--stack", "nonprod")
 
 		// Should succeed (component exists in test fixtures).
 		assert.NoError(t, err, "describe component without identity should succeed")
@@ -78,12 +94,7 @@ func TestDescribeCommandsWithoutAuthWork(t *testing.T) {
 	t.Run("describe stacks without auth should work", func(t *testing.T) {
 		t.Chdir("fixtures/scenarios/basic")
 
-		cmd := atmosRunner.Command("describe", "stacks")
-
-		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		err := cmd.Run()
+		_, err := runDescribeIdentityCommand(t, "describe", "stacks")
 
 		// Should succeed when no identity flag is provided.
 		assert.NoError(t, err, "describe stacks without identity flag should succeed")
@@ -92,12 +103,7 @@ func TestDescribeCommandsWithoutAuthWork(t *testing.T) {
 	t.Run("list components without auth should work", func(t *testing.T) {
 		t.Chdir("fixtures/scenarios/basic")
 
-		cmd := atmosRunner.Command("list", "components")
-
-		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		err := cmd.Run()
+		_, err := runDescribeIdentityCommand(t, "list", "components")
 
 		// Should succeed when no identity flag is provided.
 		assert.NoError(t, err, "list components without identity flag should succeed")

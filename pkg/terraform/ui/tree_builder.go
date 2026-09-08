@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"sort"
@@ -25,8 +26,15 @@ type TreeBuildOptions struct {
 	PlanfilePath  string
 	TerraformPath string
 	WorkingDir    string
-	Stack         string
-	Component     string
+	// Env is the component's effective environment (credentials, TF_DATA_DIR, backend
+	// config) assembled by the caller for the original plan/apply run - mirrors
+	// fetchAndDisplayOutputs. Without it this subprocess falls back to the Atmos process's
+	// own ambient environment, which can point at the wrong TF_DATA_DIR (so providers
+	// Terraform already installed for this component become invisible to `terraform show`)
+	// or lack credentials the provider schema lookup needs.
+	Env       []string
+	Stack     string
+	Component string
 }
 
 // BuildDependencyTree parses a planfile and builds the dependency tree.
@@ -37,9 +45,13 @@ func BuildDependencyTree(ctx context.Context, opts *TreeBuildOptions) (*Dependen
 	terraformPath, planfilePath := opts.TerraformPath, opts.PlanfilePath
 	cmd := exec.CommandContext(ctx, terraformPath, "show", "-json", planfilePath)
 	cmd.Dir = opts.WorkingDir
+	if len(opts.Env) > 0 {
+		cmd.Env = opts.Env
+	}
+
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("%w: terraform show: %w", errUtils.ErrCommandStart, err)
+		return nil, wrapShowCommandError(err)
 	}
 
 	var plan tfjson.Plan
@@ -48,6 +60,23 @@ func BuildDependencyTree(ctx context.Context, opts *TreeBuildOptions) (*Dependen
 	}
 
 	return buildTreeFromPlan(&plan, opts.Stack, opts.Component), nil
+}
+
+// wrapShowCommandError wraps a `terraform show` failure, distinguishing a process that never
+// started (ErrCommandStart) from one that ran and exited non-zero (ErrCommandFailed), and
+// including the subprocess's stderr - if any - so the real cause isn't reduced to an opaque
+// "exit status 1".
+func wrapShowCommandError(err error) error {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return fmt.Errorf("%w: terraform show: %w", errUtils.ErrCommandStart, err)
+	}
+
+	stderr := strings.TrimSpace(string(exitErr.Stderr))
+	if stderr == "" {
+		return fmt.Errorf("%w: terraform show: %w", errUtils.ErrCommandFailed, err)
+	}
+	return fmt.Errorf("%w: terraform show: %w: %s", errUtils.ErrCommandFailed, err, stderr)
 }
 
 // buildTreeFromPlan builds a dependency tree from an already-parsed plan. It never fails:
@@ -89,11 +118,13 @@ func populateTreeNodes(tree *DependencyTree, plan *tfjson.Plan) {
 			continue
 		}
 
+		changes, unchangedCount := extractAttributeChanges(rc)
 		node := &TreeNode{
-			Address:  rc.Address,
-			Action:   action,
-			IsModule: isModuleAddress(rc.Address),
-			Changes:  extractAttributeChanges(rc),
+			Address:            rc.Address,
+			Action:             action,
+			IsModule:           isModuleAddress(rc.Address),
+			Changes:            changes,
+			UnchangedAttrCount: unchangedCount,
 		}
 		tree.nodes[rc.Address] = node
 	}
@@ -398,10 +429,13 @@ func sortChildren(node *TreeNode) {
 	}
 }
 
-// extractAttributeChanges extracts attribute-level changes from a resource change.
-func extractAttributeChanges(rc *tfjson.ResourceChange) []*AttributeChange {
+// extractAttributeChanges returns the changed top-level attributes for a resource, along
+// with a count of how many of its top-level attributes were present but unchanged (so
+// callers can render Terraform's own "# (N unchanged attributes hidden)" convention instead
+// of a diff-only view that gives no sense of how much of the resource stayed the same).
+func extractAttributeChanges(rc *tfjson.ResourceChange) (changes []*AttributeChange, unchangedCount int) {
 	if rc.Change == nil {
-		return nil
+		return nil, 0
 	}
 
 	// Parse before/after as maps.
@@ -414,14 +448,13 @@ func extractAttributeChanges(rc *tfjson.ResourceChange) []*AttributeChange {
 	sortedKeys := sortedAttributeKeys(beforeMap, afterMap)
 	maps := attributeMaps{Before: beforeMap, After: afterMap, Unknown: unknownMap, Sensitive: sensitiveMap}
 
-	var changes []*AttributeChange
 	for _, key := range sortedKeys {
 		if change := buildAttributeChange(key, maps, forcesReplacement); change != nil {
 			changes = append(changes, change)
 		}
 	}
 
-	return changes
+	return changes, len(sortedKeys) - len(changes)
 }
 
 // extractForcesReplacement builds the set of top-level attribute names that force resource

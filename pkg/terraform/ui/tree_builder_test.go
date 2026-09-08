@@ -217,7 +217,9 @@ func TestBuildDependencyTree_Success(t *testing.T) {
 }
 
 // TestBuildDependencyTree_CommandFailure verifies a non-zero exit from `terraform show` is
-// wrapped in errUtils.ErrCommandStart rather than silently ignored.
+// wrapped in errUtils.ErrCommandFailed (the command ran; it just failed) rather than
+// errUtils.ErrCommandStart (which means the process never started at all) or silently
+// ignored.
 func TestBuildDependencyTree_CommandFailure(t *testing.T) {
 	exePath, err := os.Executable()
 	require.NoError(t, err)
@@ -236,7 +238,66 @@ func TestBuildDependencyTree_CommandFailure(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Nil(t, tree)
-	assert.ErrorIs(t, err, errUtils.ErrCommandStart)
+	assert.ErrorIs(t, err, errUtils.ErrCommandFailed)
+}
+
+// TestBuildDependencyTree_CommandFailureIncludesStderr is a regression test: BuildDependencyTree
+// used to discard `terraform show`'s stderr entirely, so a failure was reported only as
+// "exit status 1" with no indication of the actual problem. It must now surface the
+// subprocess's stderr text in the wrapped error.
+func TestBuildDependencyTree_CommandFailureIncludesStderr(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	t.Setenv("_ATMOS_TEST_TF_SHOW_STDERR", "Error: no valid credential sources found")
+
+	opts := &TreeBuildOptions{
+		PlanfilePath:  "plan.tfplan",
+		TerraformPath: exePath,
+		WorkingDir:    t.TempDir(),
+		Stack:         "dev",
+		Component:     "vpc",
+	}
+
+	_, err = BuildDependencyTree(context.Background(), opts)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCommandFailed)
+	assert.Contains(t, err.Error(), "Error: no valid credential sources found")
+}
+
+// TestBuildDependencyTree_UsesProvidedEnv is a regression test: BuildDependencyTree used to
+// never set cmd.Env, so the `terraform show -json` subprocess fell back to the Atmos
+// process's own ambient environment instead of the component's effective environment
+// (TF_DATA_DIR, credentials, backend config) assembled for the original plan/apply run -
+// mirroring the same bug already fixed once for fetchAndDisplayOutputs. This proves
+// opts.Env fully replaces (not merges with) the ambient environment, matching cmd.Env
+// semantics used elsewhere in this package.
+func TestBuildDependencyTree_UsesProvidedEnv(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	staleJSON := `{"format_version":"1.2","resource_changes":[{"address":"aws_vpc.stale","mode":"managed","change":{"actions":["create"]}}]}`
+	freshJSON := `{"format_version":"1.2","resource_changes":[{"address":"aws_vpc.fresh","mode":"managed","change":{"actions":["create"]}}]}`
+
+	// Ambient env (what the Atmos process itself sees) is deliberately "stale" - it must
+	// not be the one the subprocess ends up using.
+	t.Setenv("_ATMOS_TEST_TF_SHOW_JSON", staleJSON)
+
+	opts := &TreeBuildOptions{
+		PlanfilePath:  "plan.tfplan",
+		TerraformPath: exePath,
+		WorkingDir:    t.TempDir(),
+		Env:           []string{"_ATMOS_TEST_TF_SHOW_JSON=" + freshJSON},
+		Stack:         "dev",
+		Component:     "vpc",
+	}
+
+	tree, err := BuildDependencyTree(context.Background(), opts)
+
+	require.NoError(t, err)
+	require.Len(t, tree.Root.Children, 1)
+	assert.Equal(t, "aws_vpc.fresh", tree.Root.Children[0].Address)
 }
 
 // TestBuildDependencyTree_InvalidJSON verifies malformed `terraform show -json` output is
@@ -739,8 +800,9 @@ func TestExtractAttributeChanges_NoChange(t *testing.T) {
 		Change:  nil,
 	}
 
-	changes := extractAttributeChanges(rc)
+	changes, unchangedCount := extractAttributeChanges(rc)
 	assert.Nil(t, changes)
+	assert.Zero(t, unchangedCount)
 }
 
 func TestExtractAttributeChanges_Create(t *testing.T) {
@@ -756,7 +818,7 @@ func TestExtractAttributeChanges_Create(t *testing.T) {
 		},
 	}
 
-	changes := extractAttributeChanges(rc)
+	changes, _ := extractAttributeChanges(rc)
 	require.Len(t, changes, 2)
 
 	// Find cidr_block change.
@@ -787,7 +849,7 @@ func TestExtractAttributeChanges_Update(t *testing.T) {
 		},
 	}
 
-	changes := extractAttributeChanges(rc)
+	changes, _ := extractAttributeChanges(rc)
 	require.Len(t, changes, 1)
 	assert.Equal(t, "cidr_block", changes[0].Key)
 	assert.Equal(t, "10.0.0.0/16", changes[0].Before)
@@ -806,7 +868,7 @@ func TestExtractAttributeChanges_Delete(t *testing.T) {
 		},
 	}
 
-	changes := extractAttributeChanges(rc)
+	changes, _ := extractAttributeChanges(rc)
 	require.Len(t, changes, 1)
 	assert.Equal(t, "cidr_block", changes[0].Key)
 	assert.Equal(t, "10.0.0.0/16", changes[0].Before)
@@ -828,7 +890,7 @@ func TestExtractAttributeChanges_UnknownValue(t *testing.T) {
 		},
 	}
 
-	changes := extractAttributeChanges(rc)
+	changes, _ := extractAttributeChanges(rc)
 	require.Len(t, changes, 1)
 	assert.Equal(t, "id", changes[0].Key)
 	assert.True(t, changes[0].Unknown)
@@ -849,7 +911,7 @@ func TestExtractAttributeChanges_SensitiveValue(t *testing.T) {
 		},
 	}
 
-	changes := extractAttributeChanges(rc)
+	changes, _ := extractAttributeChanges(rc)
 	require.Len(t, changes, 1)
 	assert.Equal(t, "password", changes[0].Key)
 	assert.True(t, changes[0].Sensitive)
@@ -871,10 +933,38 @@ func TestExtractAttributeChanges_UnchangedNotIncluded(t *testing.T) {
 		},
 	}
 
-	changes := extractAttributeChanges(rc)
+	changes, unchangedCount := extractAttributeChanges(rc)
 	// Only cidr_block changed, name should not be included.
 	require.Len(t, changes, 1)
 	assert.Equal(t, "cidr_block", changes[0].Key)
+	// name is the one unchanged attribute; it must still be counted even though it's
+	// excluded from changes, so callers can report "# (1 unchanged attribute hidden)".
+	assert.Equal(t, 1, unchangedCount)
+}
+
+// TestExtractAttributeChanges_UnchangedCountWithMultipleUnchanged verifies the unchanged
+// count reflects every unchanged top-level attribute, not just whether any exist.
+func TestExtractAttributeChanges_UnchangedCountWithMultipleUnchanged(t *testing.T) {
+	rc := &tfjson.ResourceChange{
+		Address: "aws_vpc.main",
+		Change: &tfjson.Change{
+			Actions: []tfjson.Action{tfjson.ActionUpdate},
+			Before: map[string]interface{}{
+				"cidr_block": "10.0.0.0/16",
+				"name":       "unchanged",
+				"region":     "us-east-2",
+			},
+			After: map[string]interface{}{
+				"cidr_block": "10.0.0.0/8",
+				"name":       "unchanged",
+				"region":     "us-east-2",
+			},
+		},
+	}
+
+	changes, unchangedCount := extractAttributeChanges(rc)
+	require.Len(t, changes, 1)
+	assert.Equal(t, 2, unchangedCount)
 }
 
 func TestExtractAttributeChanges_SortedKeys(t *testing.T) {
@@ -891,7 +981,7 @@ func TestExtractAttributeChanges_SortedKeys(t *testing.T) {
 		},
 	}
 
-	changes := extractAttributeChanges(rc)
+	changes, _ := extractAttributeChanges(rc)
 	require.Len(t, changes, 3)
 	// Should be sorted alphabetically.
 	assert.Equal(t, "a_attribute", changes[0].Key)
