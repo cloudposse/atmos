@@ -197,7 +197,7 @@ func TestProcessTagAwsCloudFormationOutputWithContext_CycleDetection(t *testing.
 	require.NoError(t, resolutionCtx.Push(&atmosConfig, DependencyNode{
 		Component:    "vpc",
 		Stack:        "test",
-		FunctionType: "terraform.output",
+		FunctionType: "aws.cloudformation.output",
 		FunctionCall: "!aws.cloudformation.output vpc test VpcId",
 	}))
 	t.Cleanup(func() { resolutionCtx.Pop(&atmosConfig) })

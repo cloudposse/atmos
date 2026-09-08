@@ -15,7 +15,7 @@ import (
 type DependencyNode struct {
 	Component    string
 	Stack        string
-	FunctionType string // "terraform.state", "terraform.output", "atmos.Component"
+	FunctionType string // "terraform.state", "terraform.output", "aws.cloudformation.output", "atmos.Component"
 	FunctionCall string // Full function call for error reporting
 }
 
@@ -120,7 +120,8 @@ func (ctx *ResolutionContext) Push(atmosConfig *schema.AtmosConfiguration, node 
 	// that a future re-entry path that bypasses the cycle detector fails with a
 	// clean error instead of crashing the Go runtime stack (see #2457).
 	if len(ctx.CallStack) >= MaxResolutionDepth {
-		return fmt.Errorf("%w: depth=%d, current node: component=%q stack=%q call=%q",
+		return fmt.Errorf(
+			"%w: depth=%d, current node: component=%q stack=%q call=%q",
 			errUtils.ErrYamlFuncMaxResolutionDepth,
 			len(ctx.CallStack),
 			node.Component,
