@@ -68,6 +68,13 @@ timings from run 34179823625. Root causes, in order of impact:
 - `atmos.yaml`: the `ci.cache` toolchain key now includes `hashFiles ".tool-versions"` so tool-pin
   bumps roll the key automatically instead of requiring a manual `-v2` → `-v3` bump.
 
+- `internal/ci/rerun/fetch.go`, `internal/ci/acceptance/shards.go`: the per-OS "Acceptance Tests
+  (<os>)" aggregate check failed a run whose shards had all passed because one jobs-API request
+  answered HTTP 502 (observed on the rerun of run 34234932427). `rerun.IsTransient` classifies 5xx
+  and transport errors, and `CheckShardResults` now treats a transient listing failure like an
+  unsettled poll (report, wait, retry) instead of failing the attempt; 4xx and cancelled contexts
+  still fail at once, and a transient error on the final poll fails with `errShardListingFails`.
+
 Deliberately not done: relocating atmos's own cache root (the toolchain directory) to the Windows
 work disk. The acceptance shards assert XDG-default paths (see the comment on the shards'
 toolchain step), and the cache's saver and restorers must agree on the root, so the writer can't

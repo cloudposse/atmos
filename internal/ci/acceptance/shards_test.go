@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -178,14 +179,47 @@ func TestCheckShardResults_ShardCountMismatchFailsAtOnce(t *testing.T) {
 }
 
 func TestCheckShardResults_Errors(t *testing.T) {
-	t.Run("fetch error propagates", func(t *testing.T) {
+	t.Run("definitive fetch error propagates at once", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		client := rerun.NewMockRESTClient(ctrl)
-		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, gomock.Any(), nil).Return(nil, assert.AnError)
+		notFound := &api.HTTPError{StatusCode: http.StatusNotFound, Message: "Not Found"}
+		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, gomock.Any(), nil).Return(nil, notFound)
 
-		err := CheckShardResults(context.Background(), client, io.Discard, params("linux", 5, (&recordingWait{}).wait))
+		rw := &recordingWait{}
+		err := CheckShardResults(context.Background(), client, io.Discard, params("linux", 5, rw.wait))
 		require.Error(t, err)
+		assert.ErrorIs(t, err, notFound)
+		assert.Empty(t, rw.waits, "a 4xx is not something waiting fixes")
+	})
+	t.Run("transient fetch error is retried on the next poll", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		client := rerun.NewMockRESTClient(ctrl)
+		badGateway := &api.HTTPError{StatusCode: http.StatusBadGateway, Message: "Server Error"}
+		gomock.InOrder(
+			client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, gomock.Any(), nil).Return(nil, badGateway),
+			client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, gomock.Any(), nil).
+				Return(jobsPage(t, shard("linux", 1, "success"), shard("linux", 2, "success"), shard("linux", 3, "success")), nil), //nolint:bodyclose // closed by the code under test, not this fixture.
+		)
+
+		rw := &recordingWait{}
+		var out bytes.Buffer
+		err := CheckShardResults(context.Background(), client, &out, params("linux", 5, rw.wait))
+		require.NoError(t, err)
+		assert.Len(t, rw.waits, 1, "one poll spent on the 502")
+		assert.Contains(t, out.String(), `poll 1/5: listing "linux" shard jobs failed (`)
+		assert.Contains(t, out.String(), "HTTP 502")
+	})
+	t.Run("transient fetch error that never clears fails after the last poll", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		client := rerun.NewMockRESTClient(ctrl)
+		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, gomock.Any(), nil).Times(3).Return(nil, assert.AnError)
+
+		rw := &recordingWait{}
+		err := CheckShardResults(context.Background(), client, io.Discard, params("linux", 3, rw.wait))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errShardListingFails)
 		assert.ErrorIs(t, err, assert.AnError)
+		assert.Len(t, rw.waits, 2, "no wait after the final poll")
 	})
 	t.Run("invalid shard count", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
