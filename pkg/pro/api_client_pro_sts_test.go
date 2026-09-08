@@ -14,6 +14,8 @@ import (
 
 // TestExchangeOIDCToken covers the exported wrapper reused by the atmos/pro auth provider.
 func TestExchangeOIDCToken(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "/api/auth/github-oidc", r.URL.Path)
@@ -30,6 +32,8 @@ func TestExchangeOIDCToken(t *testing.T) {
 // TestMintGitHubOIDCToken_NotInActions covers the exported wrapper when the GitHub Actions
 // OIDC request environment is absent.
 func TestMintGitHubOIDCToken_NotInActions(t *testing.T) {
+	t.Parallel()
+
 	_, err := MintGitHubOIDCToken(schema.GithubOIDCSettings{}, "custom-aud")
 	require.ErrorIs(t, err, errUtils.ErrNotInGitHubActions)
 }
@@ -37,6 +41,8 @@ func TestMintGitHubOIDCToken_NotInActions(t *testing.T) {
 // TestGetGitHubOIDCTokenWithAudience_DefaultAudience covers the empty-audience default branch,
 // asserting the request carries the default Atmos Pro audience.
 func TestGetGitHubOIDCTokenWithAudience_DefaultAudience(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.URL.RawQuery, "audience="+DefaultProAudience)
 		w.WriteHeader(http.StatusOK)

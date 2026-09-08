@@ -19,6 +19,8 @@ import (
 )
 
 func TestTerraformLintCommandSetup(t *testing.T) {
+	t.Parallel()
+
 	require.NotNil(t, lintParser)
 	assert.True(t, lintParser.Registry().Has("affected"))
 	assert.True(t, lintParser.Registry().Has("all"))
@@ -35,11 +37,15 @@ func TestTerraformLintCommandSetup(t *testing.T) {
 }
 
 func TestTerraformLintRuntimeCarriesOutputFormat(t *testing.T) {
+	t.Parallel()
+
 	runtime := terraformLintRuntime("warn", outputFormatRich)
 	assert.Equal(t, tflint.OutputFormatRich, runtime.OutputFormat)
 }
 
 func TestCheckTerraformLintFlags(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		info    *schema.ConfigAndStacksInfo
@@ -54,6 +60,7 @@ func TestCheckTerraformLintFlags(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := checkTerraformLintFlags(tt.info)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -65,6 +72,8 @@ func TestCheckTerraformLintFlags(t *testing.T) {
 }
 
 func TestTerraformLintAffectedArgsCopiesFlagsAndExecutionInfo(t *testing.T) {
+	t.Parallel()
+
 	cmd := &cobra.Command{Use: "lint"}
 	cmd.Flags().String("repo-path", "", "")
 	cmd.Flags().String("ref", "", "")
@@ -92,6 +101,8 @@ func TestTerraformLintAffectedArgsCopiesFlagsAndExecutionInfo(t *testing.T) {
 }
 
 func TestRunTerraformLintDispatchesDirectAndAffectedModes(t *testing.T) {
+	t.Parallel()
+
 	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.NewPatches to mock lint dependencies")
 
 	newCommand := func() *cobra.Command {
@@ -107,6 +118,7 @@ func TestRunTerraformLintDispatchesDirectAndAffectedModes(t *testing.T) {
 	}
 
 	t.Run("direct", func(t *testing.T) {
+		t.Parallel()
 		patches := gomonkey.NewPatches()
 		defer patches.Reset()
 		patches.ApplyFunc(internal.ValidateAtmosConfig, func(...internal.ValidateOption) error { return nil })
@@ -128,6 +140,7 @@ func TestRunTerraformLintDispatchesDirectAndAffectedModes(t *testing.T) {
 	})
 
 	t.Run("affected", func(t *testing.T) {
+		t.Parallel()
 		patches := gomonkey.NewPatches()
 		defer patches.Reset()
 		patches.ApplyFunc(internal.ValidateAtmosConfig, func(...internal.ValidateOption) error { return nil })
@@ -152,9 +165,12 @@ func TestRunTerraformLintDispatchesDirectAndAffectedModes(t *testing.T) {
 }
 
 func TestRunTerraformLintReturnsPreparationErrors(t *testing.T) {
+	t.Parallel()
+
 	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.NewPatches to mock lint dependencies")
 
 	t.Run("validation", func(t *testing.T) {
+		t.Parallel()
 		want := errors.New("invalid config")
 		patches := gomonkey.NewPatches()
 		defer patches.Reset()
@@ -163,6 +179,7 @@ func TestRunTerraformLintReturnsPreparationErrors(t *testing.T) {
 	})
 
 	t.Run("information", func(t *testing.T) {
+		t.Parallel()
 		want := errors.New("invalid flags")
 		patches := gomonkey.NewPatches()
 		defer patches.Reset()
@@ -178,6 +195,8 @@ func TestRunTerraformLintReturnsPreparationErrors(t *testing.T) {
 // unlimited" convention into sarifUnlimitedFindings, the sentinel
 // pkg/scanners/sarif's RenderMarkdownOptions recognizes.
 func TestResolveMaxFindings(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		flagSet   bool // simulate cmd.Flags().Changed("max-findings")
@@ -218,16 +237,19 @@ func TestResolveMaxFindings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cmd := newMaxFindingsTestCmd(t, tt.flagSet, tt.flagValue)
 			assert.Equal(t, tt.want, resolveMaxFindings(cmd, tt.flagValue))
 		})
 	}
 
 	t.Run("nil cmd does not panic and falls back to flag value when not sentinel", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, 42, resolveMaxFindings(nil, 42))
 	})
 
 	t.Run("nil cmd with sentinel falls back to default", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, defaultMaxFindings, resolveMaxFindings(nil, defaultMaxFindings))
 	})
 }

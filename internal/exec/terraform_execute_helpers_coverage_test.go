@@ -35,6 +35,8 @@ import (
 // TestPrintAndWriteVarFiles_WorkspaceSubcommand verifies the early-return path
 // when the subcommand is "workspace" (varfiles are not used for workspace ops).
 func TestPrintAndWriteVarFiles_WorkspaceSubcommand(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{SubCommand: "workspace"}
 	err := printAndWriteVarFiles(&atmosConfig, &info)
@@ -44,6 +46,8 @@ func TestPrintAndWriteVarFiles_WorkspaceSubcommand(t *testing.T) {
 // TestPrintAndWriteVarFiles_DryRun_SkipsFileWrite verifies that with DryRun=true
 // the function logs but does NOT attempt to write the varfile to disk.
 func TestPrintAndWriteVarFiles_DryRun_SkipsFileWrite(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
 		SubCommand:       "apply",
@@ -59,6 +63,8 @@ func TestPrintAndWriteVarFiles_DryRun_SkipsFileWrite(t *testing.T) {
 // UseTerraformPlan=true the function skips the varfile entirely (we are
 // applying a pre-built plan that already baked in the vars).
 func TestPrintAndWriteVarFiles_UseTerraformPlan_SkipsVarFile(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
 		SubCommand:       "apply",
@@ -71,6 +77,8 @@ func TestPrintAndWriteVarFiles_UseTerraformPlan_SkipsVarFile(t *testing.T) {
 // TestPrintAndWriteVarFiles_WithCliVarsSection verifies that a populated
 // tf_cli_vars section in ComponentSection does not cause an error.
 func TestPrintAndWriteVarFiles_WithCliVarsSection(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
 		SubCommand:       "plan",
@@ -90,6 +98,8 @@ func TestPrintAndWriteVarFiles_WithCliVarsSection(t *testing.T) {
 // TestPrintAndWriteVarFiles_DebugLogLevel_Success verifies the LogLevelDebug branch
 // triggers PrintAsYAMLToFileDescriptor without error for valid data.
 func TestPrintAndWriteVarFiles_DebugLogLevel_Success(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := schema.AtmosConfiguration{}
 	atmosConfig.Logs.Level = u.LogLevelDebug
 
@@ -110,6 +120,8 @@ func TestPrintAndWriteVarFiles_DebugLogLevel_Success(t *testing.T) {
 // TestPrintAndWriteVarFiles_DebugLogLevel_CliVarsSection exercises the second
 // LogLevelDebug branch inside logCliVarsOverrides.
 func TestPrintAndWriteVarFiles_DebugLogLevel_CliVarsSection(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := schema.AtmosConfiguration{}
 	atmosConfig.Logs.Level = u.LogLevelDebug
 
@@ -133,6 +145,8 @@ func TestPrintAndWriteVarFiles_DebugLogLevel_CliVarsSection(t *testing.T) {
 
 // TestPrintAndWriteVarFiles_TraceLogLevel exercises the LogLevelTrace path.
 func TestPrintAndWriteVarFiles_TraceLogLevel(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := schema.AtmosConfiguration{}
 	atmosConfig.Logs.Level = u.LogLevelTrace
 
@@ -152,6 +166,8 @@ func TestPrintAndWriteVarFiles_TraceLogLevel(t *testing.T) {
 // TestPrintAndWriteVarFiles_WriteActualFile verifies that with DryRun=false the
 // function writes a JSON varfile to disk at the path constructed from atmosConfig+info.
 func TestPrintAndWriteVarFiles_WriteActualFile(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	atmosConfig := schema.AtmosConfiguration{}
@@ -177,6 +193,8 @@ func TestPrintAndWriteVarFiles_WriteActualFile(t *testing.T) {
 }
 
 func TestPrintAndWriteVarFiles_WritesTerraformTestVarfile(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	atmosConfig := schema.AtmosConfiguration{}
@@ -209,6 +227,8 @@ func TestPrintAndWriteVarFiles_WritesTerraformTestVarfile(t *testing.T) {
 }
 
 func TestDiskSafeVars_RemovesComponentVarCollidingWithSecretTestVar(t *testing.T) {
+	t.Parallel()
+
 	secret := "terraform-test-secret-collision-7f1d"
 	atmosio.RegisterSecret(secret)
 	info := &schema.ConfigAndStacksInfo{
@@ -238,6 +258,8 @@ func TestDiskSafeVars_RemovesComponentVarCollidingWithSecretTestVar(t *testing.T
 }
 
 func TestPrintAndWriteVarFiles_IgnoresTerraformTestVarsForNonTestCommand(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	atmosConfig := schema.AtmosConfiguration{}
@@ -267,6 +289,8 @@ func TestPrintAndWriteVarFiles_IgnoresTerraformTestVarsForNonTestCommand(t *test
 }
 
 func TestTerraformTestVarsDefaults(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		info *schema.ConfigAndStacksInfo
@@ -317,6 +341,7 @@ func TestTerraformTestVarsDefaults(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Nil(t, terraformTestVars(tt.info))
 			assert.False(t, hasTerraformTestVars(tt.info))
 			assert.Nil(t, diskSafeTerraformTestVars(tt.info))
@@ -334,6 +359,8 @@ func TestTerraformTestVarsDefaults(t *testing.T) {
 // TestValidateTerraformComponent_EmptySection_Valid verifies that a component
 // with no validation section passes validation (empty validations → valid).
 func TestValidateTerraformComponent_EmptySection_Valid(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
 		ComponentFromArg: "my-component",
@@ -346,6 +373,8 @@ func TestValidateTerraformComponent_EmptySection_Valid(t *testing.T) {
 // TestValidateTerraformComponent_NilSection_Valid verifies that a nil
 // ComponentSection also passes (FindValidationSection handles nil).
 func TestValidateTerraformComponent_NilSection_Valid(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
 		ComponentFromArg: "my-component",
@@ -363,6 +392,8 @@ func TestValidateTerraformComponent_NilSection_Valid(t *testing.T) {
 // component section contains a workdir path key the function returns that path
 // instead of the default componentPath.
 func TestPrepareInitExecution_WorkdirPath_ReturnsWorkdir(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	customWorkdir := filepath.Join(tmpDir, "custom-workdir")
 
@@ -381,6 +412,8 @@ func TestPrepareInitExecution_WorkdirPath_ReturnsWorkdir(t *testing.T) {
 // TestPrepareInitExecution_NoWorkdirPath_ReturnsOriginalPath verifies that when
 // no workdir path is set the original componentPath is returned unchanged.
 func TestPrepareInitExecution_NoWorkdirPath_ReturnsOriginalPath(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
@@ -395,6 +428,8 @@ func TestPrepareInitExecution_NoWorkdirPath_ReturnsOriginalPath(t *testing.T) {
 // TestPrepareInitExecution_EmptyWorkdirPath_ReturnsOriginalPath verifies that an
 // empty string for the workdir key is treated as "not set".
 func TestPrepareInitExecution_EmptyWorkdirPath_ReturnsOriginalPath(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
@@ -415,6 +450,8 @@ func TestPrepareInitExecution_EmptyWorkdirPath_ReturnsOriginalPath(t *testing.T)
 // TestBuildInitSubcommandArgs_BasicInit verifies the default case: no flags, no
 // workdir override — just returns ["init"].
 func TestBuildInitSubcommandArgs_BasicInit(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
@@ -430,6 +467,8 @@ func TestBuildInitSubcommandArgs_BasicInit(t *testing.T) {
 
 // TestBuildInitSubcommandArgs_ReconfigureEnabled verifies -reconfigure is added.
 func TestBuildInitSubcommandArgs_ReconfigureEnabled(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	atmosConfig := schema.AtmosConfiguration{}
 	atmosConfig.Components.Terraform.InitRunReconfigure = true
@@ -445,6 +484,8 @@ func TestBuildInitSubcommandArgs_ReconfigureEnabled(t *testing.T) {
 
 // TestBuildInitSubcommandArgs_PassVarsEnabled verifies varfile flag is added.
 func TestBuildInitSubcommandArgs_PassVarsEnabled(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	atmosConfig := schema.AtmosConfiguration{}
 	atmosConfig.Components.Terraform.Init.PassVars = true
@@ -462,6 +503,8 @@ func TestBuildInitSubcommandArgs_PassVarsEnabled(t *testing.T) {
 // TestBuildInitSubcommandArgs_WorkdirPathUpdatesComponentPath verifies that when
 // the component section carries a workdir path key, *componentPath is updated.
 func TestBuildInitSubcommandArgs_WorkdirPathUpdatesComponentPath(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	customWorkdir := filepath.Join(tmpDir, "custom-workdir")
 	atmosConfig := schema.AtmosConfiguration{}
@@ -489,6 +532,8 @@ func TestBuildInitSubcommandArgs_WorkdirPathUpdatesComponentPath(t *testing.T) {
 // TestCleanupTerraformFiles_ApplyRemovesVarfileForReal creates an actual varfile
 // and verifies it is deleted after cleanupTerraformFiles for apply.
 func TestCleanupTerraformFiles_ApplyRemovesVarfileForReal(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	atmosConfig := schema.AtmosConfiguration{}
@@ -513,6 +558,8 @@ func TestCleanupTerraformFiles_ApplyRemovesVarfileForReal(t *testing.T) {
 // TestCleanupTerraformFiles_NonPlanShow_RemovesPlanfile creates an actual planfile
 // and verifies it is removed after cleanupTerraformFiles for a destroy command.
 func TestCleanupTerraformFiles_NonPlanShow_RemovesPlanfile(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	atmosConfig := schema.AtmosConfiguration{}
@@ -537,6 +584,8 @@ func TestCleanupTerraformFiles_NonPlanShow_RemovesPlanfile(t *testing.T) {
 // TestCleanupTerraformFiles_ShowSubcommand_KeepsPlanfile verifies that "show"
 // does NOT remove the planfile (it is a read-only operation over the plan).
 func TestCleanupTerraformFiles_ShowSubcommand_KeepsPlanfile(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	atmosConfig := schema.AtmosConfiguration{}
@@ -560,6 +609,8 @@ func TestCleanupTerraformFiles_ShowSubcommand_KeepsPlanfile(t *testing.T) {
 // TestCleanupTerraformFiles_PlanSubcommand_KeepsPlanfile verifies that "plan"
 // itself does NOT remove the planfile it just generated.
 func TestCleanupTerraformFiles_PlanSubcommand_KeepsPlanfile(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	atmosConfig := schema.AtmosConfiguration{}
@@ -584,6 +635,8 @@ func TestCleanupTerraformFiles_PlanSubcommand_KeepsPlanfile(t *testing.T) {
 // verifies that when PlanFile is non-empty (consuming a pre-existing plan) the
 // planfile is NOT deleted by cleanup — only the varfile is.
 func TestCleanupTerraformFiles_ApplyWithCustomPlanFile_SkipsPlanfileRemoval(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	atmosConfig := schema.AtmosConfiguration{}
@@ -607,6 +660,8 @@ func TestCleanupTerraformFiles_ApplyWithCustomPlanFile_SkipsPlanfileRemoval(t *t
 // TestCleanupTerraformFiles_MissingFiles_NoError verifies that cleanup is
 // graceful when neither planfile nor varfile exists (already cleaned up).
 func TestCleanupTerraformFiles_MissingFiles_NoError(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := schema.AtmosConfiguration{}
 	atmosConfig.BasePath = t.TempDir()
 	info := schema.ConfigAndStacksInfo{

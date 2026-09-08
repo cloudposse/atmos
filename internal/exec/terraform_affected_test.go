@@ -14,12 +14,16 @@ import (
 )
 
 func TestExtractAffectedNodeIDs(t *testing.T) {
+	t.Parallel()
+
 	t.Run("empty list", func(t *testing.T) {
+		t.Parallel()
 		ids := extractAffectedNodeIDs(nil)
 		assert.Empty(t, ids)
 	})
 
 	t.Run("single affected", func(t *testing.T) {
+		t.Parallel()
 		affected := []schema.Affected{
 			{Component: "vpc", Stack: "dev"},
 		}
@@ -28,6 +32,7 @@ func TestExtractAffectedNodeIDs(t *testing.T) {
 	})
 
 	t.Run("multiple affected", func(t *testing.T) {
+		t.Parallel()
 		affected := []schema.Affected{
 			{Component: "vpc", Stack: "dev"},
 			{Component: "rds", Stack: "prod"},
@@ -42,6 +47,8 @@ func TestExtractAffectedNodeIDs(t *testing.T) {
 }
 
 func TestGetAffectedComponents(t *testing.T) {
+	t.Parallel()
+
 	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.ApplyFunc to mock ExecuteDescribeAffected*")
 
 	tests := []struct {
@@ -262,6 +269,7 @@ func TestGetAffectedComponents(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			patch := tt.mockFunc()
 			defer patch.Reset()
 
@@ -308,6 +316,8 @@ func TestGetAffectedComponents(t *testing.T) {
 }
 
 func TestExecuteTerraformAffected(t *testing.T) {
+	t.Parallel()
+
 	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.ApplyFunc to mock ExecuteDescribeAffectedWithTargetRepoPath")
 
 	tests := []struct {
@@ -453,6 +463,7 @@ func TestExecuteTerraformAffected(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			patches := tt.mockFunc()
 			defer func() {
 				for _, p := range patches {
@@ -520,6 +531,8 @@ func BenchmarkGetAffectedComponents(b *testing.B) {
 // depth bound on the --affected path (the closure spec keeps the most
 // permissive depth when merging selection and info).
 func TestAffectedTerraformSelection(t *testing.T) {
+	t.Parallel()
+
 	affected := []schema.Affected{{Component: "vpc", Stack: "dev"}}
 
 	tests := []struct {
@@ -561,6 +574,7 @@ func TestAffectedTerraformSelection(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			args := &DescribeAffectedCmdArgs{IncludeDependents: tc.argsIncludeDependents}
 			info := &schema.ConfigAndStacksInfo{IncludeDependents: tc.infoIncludeDependents}
 
@@ -573,6 +587,7 @@ func TestAffectedTerraformSelection(t *testing.T) {
 	}
 
 	t.Run("nil info leaves depth unlimited", func(t *testing.T) {
+		t.Parallel()
 		args := &DescribeAffectedCmdArgs{IncludeDependents: true}
 		selection := affectedTerraformSelection(affected, args, nil)
 		assert.True(t, selection.IncludeDependents)

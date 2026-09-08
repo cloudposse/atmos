@@ -14,6 +14,8 @@ import (
 )
 
 func TestDeliverHelmfileToTarget(t *testing.T) {
+	t.Parallel()
+
 	original := renderAndDeliver
 	t.Cleanup(func() { renderAndDeliver = original })
 
@@ -58,6 +60,8 @@ func TestDeliverHelmfileToTarget(t *testing.T) {
 }
 
 func TestDeliverHelmfileToTarget_PropagatesError(t *testing.T) {
+	t.Parallel()
+
 	original := renderAndDeliver
 	t.Cleanup(func() { renderAndDeliver = original })
 

@@ -13,6 +13,8 @@ import (
 
 // TestIsOpenTofu_FastPath tests detection by executable basename.
 func TestIsOpenTofu_FastPath(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		command  string
@@ -57,6 +59,7 @@ func TestIsOpenTofu_FastPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Clear cache before each test.
 			detectionCacheMux.Lock()
 			detectionCache = make(map[string]bool)
@@ -78,6 +81,8 @@ func TestIsOpenTofu_FastPath(t *testing.T) {
 
 // TestIsOpenTofu_Caching tests that detection results are cached.
 func TestIsOpenTofu_Caching(t *testing.T) {
+	t.Parallel()
+
 	// Clear cache before test.
 	detectionCacheMux.Lock()
 	detectionCache = make(map[string]bool)
@@ -111,6 +116,8 @@ func TestIsOpenTofu_Caching(t *testing.T) {
 
 // TestIsOpenTofu_DefaultCommand tests behavior when command is empty.
 func TestIsOpenTofu_DefaultCommand(t *testing.T) {
+	t.Parallel()
+
 	// Clear cache before test.
 	detectionCacheMux.Lock()
 	detectionCache = make(map[string]bool)
@@ -135,12 +142,15 @@ func TestIsOpenTofu_DefaultCommand(t *testing.T) {
 // TestIsOpenTofu_SlowPath tests detection by version command.
 // This test requires actual terraform/tofu binaries to be available.
 func TestIsOpenTofu_SlowPath(t *testing.T) {
+	t.Parallel()
+
 	// Clear cache before test.
 	detectionCacheMux.Lock()
 	detectionCache = make(map[string]bool)
 	detectionCacheMux.Unlock()
 
 	t.Run("detects OpenTofu from version command", func(t *testing.T) {
+		t.Parallel()
 		// Skip if tofu is not available.
 		atmosConfig := &schema.AtmosConfiguration{
 			Components: schema.Components{
@@ -157,6 +167,7 @@ func TestIsOpenTofu_SlowPath(t *testing.T) {
 	})
 
 	t.Run("detects Terraform from version command", func(t *testing.T) {
+		t.Parallel()
 		// Skip if terraform is not available.
 		atmosConfig := &schema.AtmosConfiguration{
 			Components: schema.Components{
@@ -178,14 +189,18 @@ func TestIsOpenTofu_SlowPath(t *testing.T) {
 
 // TestDetectByVersionCommand tests the version command detection directly.
 func TestDetectByVersionCommand(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	t.Run("returns false for non-existent command", func(t *testing.T) {
+		t.Parallel()
 		result := detectByVersionCommand(atmosConfig, "/non/existent/command")
 		assert.False(t, result, "Should return false for non-existent command")
 	})
 
 	t.Run("returns false for command that times out", func(t *testing.T) {
+		t.Parallel()
 		// Using a command that will hang would test timeout, but that's hard to do
 		// in a unit test. The timeout logic is covered by the implementation.
 		// We'll just verify the function signature works.
@@ -196,12 +211,15 @@ func TestDetectByVersionCommand(t *testing.T) {
 
 // TestCacheDetectionResult tests the caching mechanism.
 func TestCacheDetectionResult(t *testing.T) {
+	t.Parallel()
+
 	// Clear cache before test.
 	detectionCacheMux.Lock()
 	detectionCache = make(map[string]bool)
 	detectionCacheMux.Unlock()
 
 	t.Run("caches OpenTofu detection", func(t *testing.T) {
+		t.Parallel()
 		cacheDetectionResult("tofu", true)
 
 		detectionCacheMux.RLock()
@@ -213,6 +231,7 @@ func TestCacheDetectionResult(t *testing.T) {
 	})
 
 	t.Run("caches Terraform detection", func(t *testing.T) {
+		t.Parallel()
 		cacheDetectionResult("terraform", false)
 
 		detectionCacheMux.RLock()
@@ -224,6 +243,7 @@ func TestCacheDetectionResult(t *testing.T) {
 	})
 
 	t.Run("caches multiple commands", func(t *testing.T) {
+		t.Parallel()
 		// Clear cache.
 		detectionCacheMux.Lock()
 		detectionCache = make(map[string]bool)
@@ -242,6 +262,7 @@ func TestCacheDetectionResult(t *testing.T) {
 	})
 
 	t.Run("overwrites existing cache entry", func(t *testing.T) {
+		t.Parallel()
 		// Clear cache.
 		detectionCacheMux.Lock()
 		detectionCache = make(map[string]bool)
@@ -262,6 +283,8 @@ func TestCacheDetectionResult(t *testing.T) {
 // TestIsKnownModuleSourceInterpolationDiagnostic tests the pattern matching for the
 // module-source-interpolation diagnostic, which applies regardless of tool (terraform/tofu).
 func TestIsKnownModuleSourceInterpolationDiagnostic(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		err      error
@@ -311,6 +334,7 @@ func TestIsKnownModuleSourceInterpolationDiagnostic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := isKnownModuleSourceInterpolationDiagnostic(tt.err)
 			assert.Equal(t, tt.expected, result, "Pattern matching result should match expected for: %s", tt.name)
 		})
@@ -319,6 +343,8 @@ func TestIsKnownModuleSourceInterpolationDiagnostic(t *testing.T) {
 
 // TestIsKnownModuleSourceInterpolationDiagnostic_Patterns tests that all known patterns are detected.
 func TestIsKnownModuleSourceInterpolationDiagnostic_Patterns(t *testing.T) {
+	t.Parallel()
+
 	// List of known error patterns that should be skipped, regardless of tool.
 	knownPatterns := []string{
 		"Variables not allowed", // Module source interpolation (OpenTofu 1.8+, Terraform 1.15+ const vars).
@@ -326,6 +352,7 @@ func TestIsKnownModuleSourceInterpolationDiagnostic_Patterns(t *testing.T) {
 
 	for _, pattern := range knownPatterns {
 		t.Run("detects pattern: "+pattern, func(t *testing.T) {
+			t.Parallel()
 			err := errors.New("Error in configuration: " + pattern + " - please check your syntax")
 			result := isKnownModuleSourceInterpolationDiagnostic(err)
 			assert.True(t, result, "Should detect known pattern: %s", pattern)
@@ -336,6 +363,8 @@ func TestIsKnownModuleSourceInterpolationDiagnostic_Patterns(t *testing.T) {
 // TestAllDiagnosticsAreModuleSourceInterpolation tests the position-grouped diagnostics check
 // used to decide whether the whole diagnostics set is safe to skip.
 func TestAllDiagnosticsAreModuleSourceInterpolation(t *testing.T) {
+	t.Parallel()
+
 	knownDiag := tfconfig.Diagnostic{
 		Severity: tfconfig.DiagError,
 		Summary:  "Variables not allowed",
@@ -418,6 +447,7 @@ func TestAllDiagnosticsAreModuleSourceInterpolation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := allDiagnosticsAreModuleSourceInterpolation(tt.diags)
 			assert.Equal(t, tt.expected, result, "result should match expected for: %s", tt.name)
 		})
@@ -426,6 +456,8 @@ func TestAllDiagnosticsAreModuleSourceInterpolation(t *testing.T) {
 
 // TestIsOpenTofu_ConcurrentAccess tests that caching is thread-safe.
 func TestIsOpenTofu_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
 	// Clear cache before test.
 	detectionCacheMux.Lock()
 	detectionCache = make(map[string]bool)
@@ -467,13 +499,17 @@ func TestIsOpenTofu_ConcurrentAccess(t *testing.T) {
 
 // TestIsKnownModuleSourceInterpolationDiagnostic_EdgeCases tests edge cases for pattern matching.
 func TestIsKnownModuleSourceInterpolationDiagnostic_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	t.Run("empty error message", func(t *testing.T) {
+		t.Parallel()
 		err := errors.New("")
 		result := isKnownModuleSourceInterpolationDiagnostic(err)
 		assert.False(t, result, "Empty error message should not match")
 	})
 
 	t.Run("very long error message with pattern", func(t *testing.T) {
+		t.Parallel()
 		longPrefix := strings.Repeat("error context ", 100)
 		err := errors.New(longPrefix + "Variables not allowed in this context")
 		result := isKnownModuleSourceInterpolationDiagnostic(err)
@@ -481,12 +517,14 @@ func TestIsKnownModuleSourceInterpolationDiagnostic_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("error message with only whitespace", func(t *testing.T) {
+		t.Parallel()
 		err := errors.New("   \n\t   ")
 		result := isKnownModuleSourceInterpolationDiagnostic(err)
 		assert.False(t, result, "Whitespace-only error should not match")
 	})
 
 	t.Run("multiple patterns in one error", func(t *testing.T) {
+		t.Parallel()
 		// If we add more patterns in the future, this test ensures
 		// that we detect if ANY pattern matches.
 		err := errors.New("Variables not allowed and some other error")
@@ -497,6 +535,8 @@ func TestIsKnownModuleSourceInterpolationDiagnostic_EdgeCases(t *testing.T) {
 
 // TestIsOpenTofu_Integration tests the full integration with different scenarios.
 func TestIsOpenTofu_Integration(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name         string
 		command      string
@@ -549,6 +589,7 @@ func TestIsOpenTofu_Integration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Clear cache for each test.
 			detectionCacheMux.Lock()
 			detectionCache = make(map[string]bool)

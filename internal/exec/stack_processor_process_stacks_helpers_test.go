@@ -12,6 +12,8 @@ import (
 )
 
 func TestProcessComponent(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		opts              ComponentProcessorOptions
@@ -334,6 +336,7 @@ func TestProcessComponent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := processComponent(&tt.opts)
 
 			if tt.expectedError != "" {
@@ -385,6 +388,8 @@ func TestProcessComponent(t *testing.T) {
 }
 
 func TestExtractComponentSections(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		opts              ComponentProcessorOptions
@@ -519,6 +524,7 @@ func TestExtractComponentSections(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := &ComponentProcessorResult{
 				ComponentVars:     make(map[string]any),
 				ComponentSettings: make(map[string]any),
@@ -571,7 +577,10 @@ func TestExtractComponentSections(t *testing.T) {
 // happens later, after deep-merge), and a non-map value produces a precise per-component
 // error so misconfiguration is caught at extraction time rather than at execution.
 func TestExtractComponentSections_Retry(t *testing.T) {
+	t.Parallel()
+
 	t.Run("valid-retry-map-populates-result", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -591,6 +600,7 @@ func TestExtractComponentSections_Retry(t *testing.T) {
 	})
 
 	t.Run("absent-retry-leaves-result-nil", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -604,6 +614,7 @@ func TestExtractComponentSections_Retry(t *testing.T) {
 	})
 
 	t.Run("non-map-retry-returns-error", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -626,7 +637,10 @@ func TestExtractComponentSections_Retry(t *testing.T) {
 // analogous generate-section behavior, not retry's nil-on-absent), a non-map errors, and
 // non-terraform component types never populate ComponentFlags at all.
 func TestExtractComponentSections_Flags(t *testing.T) {
+	t.Parallel()
+
 	t.Run("valid-flags-map-populates-result", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -645,6 +659,7 @@ func TestExtractComponentSections_Flags(t *testing.T) {
 	})
 
 	t.Run("absent-flags-section-defaults-to-empty-map", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -658,6 +673,7 @@ func TestExtractComponentSections_Flags(t *testing.T) {
 	})
 
 	t.Run("non-map-flags-returns-error", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -675,6 +691,7 @@ func TestExtractComponentSections_Flags(t *testing.T) {
 	})
 
 	t.Run("non-terraform-component-type-ignores-flags", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.KubernetesComponentType,
 			Component:     "app",
@@ -694,10 +711,13 @@ func TestExtractComponentSections_Flags(t *testing.T) {
 // helm and helmfile components capture the raw list, terraform ignores it, and an
 // absent section leaves the result nil.
 func TestExtractComponentSections_Plugins(t *testing.T) {
+	t.Parallel()
+
 	plugins := []any{"diff@v3.9.4", "secrets"}
 
 	for _, componentType := range []string{cfg.HelmfileComponentType, cfg.HelmComponentType} {
 		t.Run(componentType+"-captures-plugins", func(t *testing.T) {
+			t.Parallel()
 			opts := ComponentProcessorOptions{
 				ComponentType: componentType,
 				Component:     "app",
@@ -719,6 +739,7 @@ func TestExtractComponentSections_Plugins(t *testing.T) {
 	}
 
 	t.Run("terraform-ignores-plugins", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -734,6 +755,7 @@ func TestExtractComponentSections_Plugins(t *testing.T) {
 	})
 
 	t.Run("absent-plugins-leaves-result-nil", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.HelmfileComponentType,
 			Component:     "app",
@@ -748,6 +770,8 @@ func TestExtractComponentSections_Plugins(t *testing.T) {
 }
 
 func TestExtractHelmLifecycleSections(t *testing.T) {
+	t.Parallel()
+
 	section := map[string]any{
 		cfg.ChartSectionName:        "charts/demo-release",
 		cfg.ValuesSectionName:       map[string]any{"cluster": "shared"},
@@ -783,6 +807,8 @@ func TestExtractHelmLifecycleSections(t *testing.T) {
 }
 
 func TestExtractHelmSectionsIgnoreBareNullValues(t *testing.T) {
+	t.Parallel()
+
 	section := map[string]any{
 		cfg.ChartSectionName:  ".",
 		cfg.ValuesSectionName: nil,
@@ -805,7 +831,10 @@ var (
 // branch: provider (scalar), paths/manifests (passed through verbatim as `any`), render
 // (map), plus the hooks/generate/source/provision sections that kubernetes supports.
 func TestExtractComponentSections_Kubernetes(t *testing.T) {
+	t.Parallel()
+
 	t.Run("all-kubernetes-sections-extracted", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.KubernetesComponentType,
 			Component:     "app",
@@ -844,6 +873,7 @@ func TestExtractComponentSections_Kubernetes(t *testing.T) {
 	})
 
 	t.Run("invalid-provider-type-returns-error", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.KubernetesComponentType,
 			Component:     "app",
@@ -861,6 +891,7 @@ func TestExtractComponentSections_Kubernetes(t *testing.T) {
 	})
 
 	t.Run("invalid-render-type-returns-error", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.KubernetesComponentType,
 			Component:     "app",
@@ -881,6 +912,8 @@ func TestExtractComponentSections_Kubernetes(t *testing.T) {
 // TestSupportsComponentTypeHelpers is a truth-table for the supports* capability helpers
 // that gate which sections each component type extracts and merges.
 func TestSupportsComponentTypeHelpers(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		componentType   string
 		hooks           bool
@@ -897,6 +930,7 @@ func TestSupportsComponentTypeHelpers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.componentType, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.hooks, supportsComponentHooks(tt.componentType), "supportsComponentHooks")
 			assert.Equal(t, tt.generate, supportsGenerate(tt.componentType), "supportsGenerate")
 			assert.Equal(t, tt.sourceProvision, supportsSourceProvision(tt.componentType), "supportsSourceProvision")
@@ -905,6 +939,8 @@ func TestSupportsComponentTypeHelpers(t *testing.T) {
 }
 
 func TestProcessComponentOverrides(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                    string
 		opts                    ComponentProcessorOptions
@@ -996,6 +1032,7 @@ func TestProcessComponentOverrides(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := &ComponentProcessorResult{}
 
 			err := processComponentOverrides(&tt.opts, result)
@@ -1039,7 +1076,10 @@ func TestProcessComponentOverrides(t *testing.T) {
 // success and produce a precise error on a non-map type (the value still goes through
 // merge later, so a wrong type here would only surface as a confusing downstream error).
 func TestProcessComponentOverrides_Retry(t *testing.T) {
+	t.Parallel()
+
 	t.Run("valid-overrides-retry-populates-result", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -1060,6 +1100,7 @@ func TestProcessComponentOverrides_Retry(t *testing.T) {
 	})
 
 	t.Run("non-map-overrides-retry-returns-error", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -1083,6 +1124,8 @@ func TestProcessComponentOverrides_Retry(t *testing.T) {
 // (see supportsSourceProvision), so it must populate ComponentOverridesProvision for those
 // types on success and produce a precise error on a non-map type.
 func TestProcessComponentOverrides_Provision(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name               string
 		componentType      string
@@ -1120,6 +1163,7 @@ func TestProcessComponentOverrides_Provision(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			opts := ComponentProcessorOptions{
 				ComponentType: tt.componentType,
 				Component:     tt.component,
@@ -1157,7 +1201,10 @@ func TestProcessComponentOverrides_Provision(t *testing.T) {
 // component types must never populate ComponentOverridesFlags even when an
 // overrides.flags key is present.
 func TestProcessComponentOverrides_Flags(t *testing.T) {
+	t.Parallel()
+
 	t.Run("valid-overrides-flags-populates-result", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -1178,6 +1225,7 @@ func TestProcessComponentOverrides_Flags(t *testing.T) {
 	})
 
 	t.Run("non-map-overrides-flags-returns-error", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.TerraformComponentType,
 			Component:     "vpc",
@@ -1197,6 +1245,7 @@ func TestProcessComponentOverrides_Flags(t *testing.T) {
 	})
 
 	t.Run("non-terraform-component-type-ignores-flags-override", func(t *testing.T) {
+		t.Parallel()
 		opts := ComponentProcessorOptions{
 			ComponentType: cfg.KubernetesComponentType,
 			Component:     "app",
@@ -1217,6 +1266,8 @@ func TestProcessComponentOverrides_Flags(t *testing.T) {
 }
 
 func TestProcessComponentInheritance(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                 string
 		opts                 ComponentProcessorOptions
@@ -1311,6 +1362,7 @@ func TestProcessComponentInheritance(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := &ComponentProcessorResult{
 				ComponentMetadata: make(map[string]any),
 			}
@@ -1342,6 +1394,8 @@ func TestProcessComponentInheritance(t *testing.T) {
 }
 
 func TestProcessTopLevelComponentInheritance(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		opts              ComponentProcessorOptions
@@ -1388,6 +1442,7 @@ func TestProcessTopLevelComponentInheritance(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := &ComponentProcessorResult{
 				BaseComponents: []string{},
 			}
@@ -1412,6 +1467,8 @@ func TestProcessTopLevelComponentInheritance(t *testing.T) {
 }
 
 func TestProcessMetadataInheritance(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		componentMetadata map[string]any
@@ -1471,6 +1528,7 @@ func TestProcessMetadataInheritance(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := &ComponentProcessorResult{
 				ComponentMetadata: tt.componentMetadata,
 				BaseComponents:    []string{},
@@ -1498,6 +1556,8 @@ func TestProcessMetadataInheritance(t *testing.T) {
 }
 
 func TestApplyBaseComponentConfig(t *testing.T) {
+	t.Parallel()
+
 	baseComponentConfig := &schema.BaseComponentConfig{
 		FinalBaseComponentName: "base-vpc",
 		BaseComponentVars: map[string]any{
@@ -1556,6 +1616,8 @@ func TestApplyBaseComponentConfig(t *testing.T) {
 }
 
 func TestProcessInheritedComponent(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		opts              ComponentProcessorOptions
@@ -1667,6 +1729,7 @@ func TestProcessInheritedComponent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Clear cache before each test case to ensure isolation.
 			ClearBaseComponentConfigCache()
 
