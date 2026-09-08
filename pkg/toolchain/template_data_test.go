@@ -13,6 +13,8 @@ import (
 
 // TestAssetTemplateWithFormat ensures the Format field is available in asset templates.
 func TestAssetTemplateWithFormat(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		assetTemplate  string
@@ -79,6 +81,8 @@ func TestAssetTemplateWithFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			// Create template data structure matching installer.go.
 			data := struct {
 				Version   string
@@ -126,6 +130,8 @@ func TestAssetTemplateWithFormat(t *testing.T) {
 
 // TestAssetTemplateWithoutFormat ensures templates work when Format is empty.
 func TestAssetTemplateWithoutFormat(t *testing.T) {
+	t.Parallel()
+
 	assetTemplate := "{{.RepoName}}_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
 
 	data := struct {
@@ -156,6 +162,8 @@ func TestAssetTemplateWithoutFormat(t *testing.T) {
 
 // TestAssetTemplateFormatFieldMissing ensures we get a clear error when Format is used but not in data.
 func TestAssetTemplateFormatFieldMissing(t *testing.T) {
+	t.Parallel()
+
 	assetTemplate := "tool_{{.Version}}.{{.Format}}"
 
 	// Data structure WITHOUT Format field.

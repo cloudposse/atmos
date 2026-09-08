@@ -9,6 +9,8 @@ import (
 )
 
 func TestParseVersionSpec(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		input     string
@@ -347,6 +349,8 @@ func TestParseVersionSpec(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			gotType, gotValue, err := ParseVersionSpec(tt.input)
 			if tt.wantErr {
 				require.Error(t, err, "expected error but got none")
@@ -362,6 +366,8 @@ func TestParseVersionSpec(t *testing.T) {
 }
 
 func TestIsPRVersion(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		version  string
@@ -453,6 +459,8 @@ func TestIsPRVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			gotPR, gotIsPR := IsPRVersion(tt.version)
 			assert.Equal(t, tt.wantPR, gotPR, "PR number mismatch")
 			assert.Equal(t, tt.wantIsPR, gotIsPR, "isPR mismatch")
@@ -461,6 +469,8 @@ func TestIsPRVersion(t *testing.T) {
 }
 
 func TestIsSHAVersion(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		version   string
@@ -534,6 +544,8 @@ func TestIsSHAVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			gotSHA, gotIsSHA := IsSHAVersion(tt.version)
 			assert.Equal(t, tt.wantSHA, gotSHA, "SHA mismatch")
 			assert.Equal(t, tt.wantIsSHA, gotIsSHA, "isSHA mismatch")
@@ -543,6 +555,8 @@ func TestIsSHAVersion(t *testing.T) {
 
 // TestIsRefVersion verifies IsRefVersion detects ref: specifiers and rejects non-ref inputs.
 func TestIsRefVersion(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		version   string
@@ -610,6 +624,8 @@ func TestIsRefVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			gotRef, gotIsRef := IsRefVersion(tt.version)
 			assert.Equal(t, tt.wantRef, gotRef, "ref mismatch")
 			assert.Equal(t, tt.wantIsRef, gotIsRef, "isRef mismatch")
@@ -618,6 +634,8 @@ func TestIsRefVersion(t *testing.T) {
 }
 
 func TestIsAllDigits(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		input string
 		want  bool
@@ -636,6 +654,8 @@ func TestIsAllDigits(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+
 			got := isAllDigits(tt.input)
 			assert.Equal(t, tt.want, got)
 		})
@@ -643,6 +663,8 @@ func TestIsAllDigits(t *testing.T) {
 }
 
 func TestIsValidSemver(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		input string
 		want  bool
@@ -685,6 +707,8 @@ func TestIsValidSemver(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+
 			got := isValidSemver(tt.input)
 			assert.Equal(t, tt.want, got)
 		})
@@ -692,6 +716,8 @@ func TestIsValidSemver(t *testing.T) {
 }
 
 func TestIsValidSHA(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		input string
 		want  bool
@@ -720,6 +746,8 @@ func TestIsValidSHA(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+
 			got := isValidSHA(tt.input)
 			assert.Equal(t, tt.want, got)
 		})
@@ -730,6 +758,8 @@ func TestIsValidSHA(t *testing.T) {
 // draws between literal release tags (accepted, however vendor-specific their
 // shape) and SemVer range/constraint syntax (rejected).
 func TestValidateVersionSpec(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		version string
@@ -769,6 +799,8 @@ func TestValidateVersionSpec(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			err := ValidateVersionSpec(tt.version)
 			if tt.wantErr {
 				require.Error(t, err)

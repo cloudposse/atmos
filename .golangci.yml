@@ -55,6 +55,7 @@ linters:
     - nestif
     - nilerr
     - nolintlint
+    - paralleltest
     - revive
     - rowserrcheck
     - tparallel
@@ -323,6 +324,14 @@ linters:
       - linters:
           - cyclop
         path: (.+)_test\.go
+      # The paralleltest linter is enforced only where tests have been audited for
+      # parallel safety: all of pkg/describe, plus the pkg/toolchain test files with
+      # no global state mutation (the rest of pkg/toolchain uses t.Setenv/t.Chdir or
+      # mutates package-level variables and must stay serial). This keeps the race
+      # job's two slowest packages from regressing to serial execution.
+      - linters:
+          - paralleltest
+        path-except: ^pkg/describe/[^/]+_test\.go$|^pkg/toolchain/(alias_resolution|install_helpers|ref_artifact|remove|template_data|utils|version_spec)_test\.go$
       # Allow fmt.Errorf when wrapping static errors from errUtils package
       - linters:
           - err113

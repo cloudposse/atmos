@@ -9,6 +9,8 @@ import (
 )
 
 func TestRemoveCommand_ValidTool(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -35,6 +37,8 @@ func TestRemoveCommand_ValidTool(t *testing.T) {
 }
 
 func TestRemoveCommand_NonExistentTool(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -60,6 +64,8 @@ func TestRemoveCommand_NonExistentTool(t *testing.T) {
 }
 
 func TestRemoveCommand_EmptyFile(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -82,6 +88,8 @@ func TestRemoveCommand_EmptyFile(t *testing.T) {
 }
 
 func TestRemoveCommand_CustomFilePath(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	customFile := filepath.Join(tempDir, "custom-versions")
 
@@ -107,6 +115,8 @@ func TestRemoveCommand_CustomFilePath(t *testing.T) {
 }
 
 func TestRemoveCommand_CanonicalName(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -130,6 +140,8 @@ func TestRemoveCommand_CanonicalName(t *testing.T) {
 }
 
 func TestRemoveCommand_MultipleVersions(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -155,11 +167,15 @@ func TestRemoveCommand_MultipleVersions(t *testing.T) {
 }
 
 func TestRemoveCommand_NoArgs(t *testing.T) {
+	t.Parallel()
+
 	err := RemoveToolVersion("", "", "")
 	require.Error(t, err, "Should fail with no arguments")
 }
 
 func TestRemoveCommand_EmptyToolName(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -184,6 +200,8 @@ func TestRemoveCommand_EmptyToolName(t *testing.T) {
 }
 
 func TestRemoveCommand_FileDoesNotExist(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	nonExistentFile := filepath.Join(tempDir, "non-existent")
 
@@ -192,6 +210,8 @@ func TestRemoveCommand_FileDoesNotExist(t *testing.T) {
 }
 
 func TestRemoveCommand_PreservesOtherTools(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -221,6 +241,8 @@ func TestRemoveCommand_PreservesOtherTools(t *testing.T) {
 }
 
 func TestRemoveCommand_RemoveSpecificVersion(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -242,6 +264,8 @@ func TestRemoveCommand_RemoveSpecificVersion(t *testing.T) {
 }
 
 func TestRemoveCommand_RemoveLastVersion_RemovesTool(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -262,6 +286,8 @@ func TestRemoveCommand_RemoveLastVersion_RemovesTool(t *testing.T) {
 }
 
 func TestRemoveCommand_RemoveNonExistentVersion(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -283,6 +309,8 @@ func TestRemoveCommand_RemoveNonExistentVersion(t *testing.T) {
 }
 
 func TestRemoveCommand_RemoveAllVersions(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -304,6 +332,8 @@ func TestRemoveCommand_RemoveAllVersions(t *testing.T) {
 }
 
 func TestRemoveCommand_CanonicalNameWithVersion(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -324,6 +354,8 @@ func TestRemoveCommand_CanonicalNameWithVersion(t *testing.T) {
 }
 
 func TestRemoveCommand_CanonicalNameAllVersions(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -344,6 +376,8 @@ func TestRemoveCommand_CanonicalNameAllVersions(t *testing.T) {
 }
 
 func TestRemoveCommand_RemoveVersionFromToolWithOneVersion(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -364,6 +398,8 @@ func TestRemoveCommand_RemoveVersionFromToolWithOneVersion(t *testing.T) {
 }
 
 func TestRemoveCommand_RemoveNonExistentTool(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 
@@ -384,6 +420,8 @@ func TestRemoveCommand_RemoveNonExistentTool(t *testing.T) {
 }
 
 func TestRemoveCommand_RemoveNonExistentToolWithVersion(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
 

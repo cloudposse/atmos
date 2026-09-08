@@ -11,6 +11,8 @@ import (
 
 // TestSpinnerControl_StartStop tests the spinner control start/stop methods.
 func TestSpinnerControl_StartStop(t *testing.T) {
+	t.Parallel()
+
 	// Test with showingSpinner = false - should not panic.
 	sc := &spinnerControl{
 		showingSpinner: false,
@@ -28,6 +30,8 @@ func TestSpinnerControl_StartStop(t *testing.T) {
 
 // TestSpinnerControl_Restart tests the spinner control restart method.
 func TestSpinnerControl_Restart(t *testing.T) {
+	t.Parallel()
+
 	// Test with showingSpinner = false - should not panic.
 	sc := &spinnerControl{
 		showingSpinner: false,
@@ -41,6 +45,8 @@ func TestSpinnerControl_Restart(t *testing.T) {
 
 // TestResolveLatestVersionWithSpinner tests the resolveLatestVersionWithSpinner function.
 func TestResolveLatestVersionWithSpinner(t *testing.T) {
+	t.Parallel()
+
 	// Test with non-latest version - should return the version as-is.
 	spinner := &spinnerControl{
 		showingSpinner: false,
@@ -74,6 +80,8 @@ func TestResolveLatestVersionWithSpinner(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			resolved, err := resolveLatestVersionWithSpinner(tt.owner, tt.repo, tt.version, tt.isLatest, spinner)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -90,6 +98,8 @@ func TestResolveLatestVersionWithSpinner(t *testing.T) {
 
 // TestHandleInstallSuccess tests the handleInstallSuccess function.
 func TestHandleInstallSuccess(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	binDir := filepath.Join(tempDir, ".atmos", "tools", "bin")
 
@@ -169,6 +179,8 @@ func TestHandleInstallSuccess(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			// handleInstallSuccess should not panic with various input combinations.
 			assert.NotPanics(t, func() {
 				handleInstallSuccess(tt.result, installer)
@@ -179,6 +191,8 @@ func TestHandleInstallSuccess(t *testing.T) {
 
 // TestInstallResult_Fields tests that installResult struct fields work correctly.
 func TestInstallResult_Fields(t *testing.T) {
+	t.Parallel()
+
 	result := installResult{
 		owner:                  "hashicorp",
 		repo:                   "terraform",
@@ -202,6 +216,8 @@ func TestInstallResult_Fields(t *testing.T) {
 
 // TestSpinnerControl_Fields tests that spinnerControl struct fields work correctly.
 func TestSpinnerControl_Fields(t *testing.T) {
+	t.Parallel()
+
 	sc := &spinnerControl{
 		showingSpinner: true,
 		program:        nil,
@@ -213,6 +229,8 @@ func TestSpinnerControl_Fields(t *testing.T) {
 
 // TestGetPlatformPathHint tests that getPlatformPathHint returns the correct hint for the current platform.
 func TestGetPlatformPathHint(t *testing.T) {
+	t.Parallel()
+
 	hint := getPlatformPathHint()
 
 	// Verify the hint is not empty.
