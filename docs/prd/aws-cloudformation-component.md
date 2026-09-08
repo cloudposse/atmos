@@ -438,11 +438,17 @@ scaffolding logic belongs in `pkg/component/aws/cloudformation/`.
 
 `plan`/`diff` implicitly create a changeset (`CreateChangeSet` + `DescribeChangeSet`) and render the
 predicted resource changes without executing them, mirroring how `terraform plan` and `helm diff`
-behave. `apply`/`deploy` execute the changeset (`ExecuteChangeSet`) rather than calling `UpdateStack`
-directly, giving every apply the same "review before mutate" semantics as changesets provide, without
-requiring users to manage changesets by hand. The explicit `changeset create/execute/list/delete`
-verbs exist for users who want manual control (e.g. a two-phase deploy pipeline: create + review in
-one job, execute in another).
+behave. Because that preview changeset is never executed, `plan`/`diff` deletes it (`DeleteChangeSet`)
+after rendering the summary — regardless of whether the diff was a no-op or showed real changes — so a
+read-only preview never leaks an AWS changeset object against the account's changeset quota. Cleanup
+runs best-effort: a `DeleteChangeSet` failure is surfaced as a warning, not a command error, since the
+diff itself already succeeded and was rendered, and a stray leftover changeset never blocks a
+subsequent `plan`/`diff`/`apply` (each run generates its own uniquely-named changeset and doesn't
+depend on the previous one being gone). `apply`/`deploy` execute the changeset (`ExecuteChangeSet`)
+rather than calling `UpdateStack` directly, giving every apply the same "review before mutate"
+semantics as changesets provide, without requiring users to manage changesets by hand. The explicit
+`changeset create/execute/list/delete` verbs exist for users who want manual control (e.g. a two-phase
+deploy pipeline: create + review in one job, execute in another).
 
 Templates using macros/transforms (`Fn::Transform`, `AWS::Serverless` a.k.a. SAM) work through this
 same changeset flow with no special-cased handling: `CreateChangeSet` expands the macro as part of
@@ -610,7 +616,11 @@ or `ExecuteChangeSet`'s `DisableRollback` (stack update) applies to the changese
 the two are mutually exclusive on a single changeset, so only one is ever set. `stack_policy` has no
 `CreateChangeSet`/`ExecuteChangeSet` parameter at all; it's applied via a follow-up `SetStackPolicy`
 call after a successful apply, the same "no changeset parameter, so it's a follow-up call" shape
-[termination_protection](#delete-semantics) uses.
+[termination_protection](#delete-semantics) uses. This ordering means a configured `stack_policy`
+does **not** govern the update that just executed — CloudFormation has no API to set a stack policy
+before or during a changeset execution — it only takes effect for the *next* update onward. Operators
+relying on `stack_policy` to protect specific resources from a given deploy must set it in a prior,
+separate apply.
 
 ### Validate Semantics
 
@@ -725,14 +735,27 @@ Full `atmos auth` integration, at three layers, all through existing seams:
   its identity exactly like a Terraform component does.
 - **Per-target identity overrides**: `ProvisionTarget.Auth` (`pkg/schema/schema.go:571-572`)
   already exists; the `aws/cloudformation` and `aws/s3` target kinds honor it. This is what makes
-  the cross-account packaging pattern work declaratively: the deploy target assumes the workload
+  the cross-account packaging *upload* work declaratively: the deploy target assumes the workload
   account's identity while the artifact-bucket target uses a shared-services account's identity,
-  each declared on its own target.
+  each declared on its own target. This covers only the atmos-side upload step, though — it does
+  not provision or verify the S3 bucket policy or target-account IAM permissions CloudFormation
+  itself needs at deploy time. When CloudFormation later fetches a packaged template/nested-stack
+  asset from the shared-services bucket (during `CreateChangeSet`/`ExecuteChangeSet` in the
+  workload account), the principal it uses — `role_arn` if set, otherwise the workload account's
+  deploy identity — needs `s3:GetObject` on that bucket/prefix, and the shared-services bucket's
+  policy needs to allow that target-account principal. Neither this component type nor `atmos` sets
+  up that bucket policy or the target-account IAM permissions automatically; declaring them (e.g.
+  via a Terraform component that owns the shared-services bucket) is a deployment prerequisite the
+  operator must satisfy out of band.
 
 Distinct from all of the above: the component's `role_arn` field is the **CloudFormation service
-role** (passed to the API in `CreateStack`/`UpdateStack`; CloudFormation itself assumes it to
-manipulate resources) — it is not caller credentials and does not interact with `atmos auth` beyond
-the caller needing `iam:PassRole` on it. The docs must keep these two roles clearly separated.
+role** — it is not caller credentials and does not interact with `atmos auth` beyond the caller
+needing `iam:PassRole` on it. Since every deploy goes through `CreateChangeSet` + `ExecuteChangeSet`
+(never a direct `CreateStack`/`UpdateStack`, see [Changesets](#changesets)), `role_arn` is passed as
+`CreateChangeSet`'s `RoleARN` parameter rather than to `CreateStack`/`UpdateStack` directly;
+`ExecuteChangeSet` takes no `RoleARN` parameter of its own — CloudFormation associates the role with
+the changeset at creation time and reuses it for that changeset's `ExecuteChangeSet` call
+automatically. The docs must keep these two roles clearly separated.
 
 ## Registry & Whitelist Wiring
 
