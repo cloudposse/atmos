@@ -156,6 +156,8 @@ source:
   ```
 
   All fields are optional. Recommended: `max_attempts`, `initial_delay`, `max_delay`, `backoff_strategy` (`exponential`, `linear`, `constant`). Additional options: `multiplier`, `random_jitter`, `max_elapsed_time`.
+
+  When `retry` is omitted, git downloads still retry transient transport failures — a DNS lookup that fails, a connection refused or reset, a timeout, or a TLS handshake error — up to 3 times with exponential backoff (1s initial, 8s maximum). Authentication failures and missing refs are never retried. Set `max_attempts: 1` to disable retrying entirely.
   </dd>
 </dl>
 

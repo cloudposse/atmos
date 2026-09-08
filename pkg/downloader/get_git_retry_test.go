@@ -48,6 +48,33 @@ func TestIsRetryableGitError(t *testing.T) {
 			expected: true,
 		},
 
+		// Resolver and connect failures as git reports them (should retry).
+		{
+			name:     "could not resolve host",
+			err:      errors.New("fatal: unable to access 'https://github.com/org/repo/': Could not resolve host: github.com"),
+			expected: true,
+		},
+		{
+			name:     "could not connect to server",
+			err:      errors.New("fatal: unable to access 'https://github.com/org/repo/': Failed to connect to github.com:443 after 61 ms: Could not connect to server"),
+			expected: true,
+		},
+		{
+			name:     "no such host",
+			err:      errors.New("dial tcp: lookup github.com: no such host"),
+			expected: true,
+		},
+		{
+			name:     "network is unreachable",
+			err:      errors.New("connect: network is unreachable"),
+			expected: true,
+		},
+		{
+			name:     "temporary failure in name resolution",
+			err:      errors.New("ssh: Could not resolve hostname github.com: Temporary failure in name resolution"),
+			expected: true,
+		},
+
 		// Timeout errors (should retry).
 		{
 			name:     "timeout",
@@ -154,6 +181,13 @@ func TestIsRetryableGitError(t *testing.T) {
 		{
 			name:     "not a git repository",
 			err:      errors.New("fatal: not a git repository"),
+			expected: false,
+		},
+		{
+			// The remote answered; "unable to access" alone must not be treated
+			// as a transport failure or a real 403/404 would be retried.
+			name:     "http 403 from remote",
+			err:      errors.New("fatal: unable to access 'https://github.com/org/repo/': The requested URL returned error: 403"),
 			expected: false,
 		},
 		{
