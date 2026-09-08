@@ -91,7 +91,7 @@ func TestResolveAuthImportPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := resolveAuthImportPaths(tt.imp, tt.importingFile, tt.stacksBase)
+			result := ResolveStackImportFiles(tt.imp, tt.importingFile, tt.stacksBase)
 			if tt.wantLen == 0 {
 				assert.Nil(t, result)
 			} else {

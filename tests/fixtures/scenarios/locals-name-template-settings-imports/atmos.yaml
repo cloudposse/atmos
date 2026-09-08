@@ -1,0 +1,33 @@
+# Reproducer for GitHub issue #2374.
+# Mirrors #2343 but with `name_template` referencing `.settings.*`
+# instead of `.vars.*`. Same root cause (locals pre-pass renders
+# name_template against the un-merged single file), different
+# selector. Reporter saw {{ .locals.* }} render as "<no value>"
+# in component vars and `describe locals -s <name>` return
+# "stack not found".
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "../../components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "orgs/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .settings.namespace }}-{{ .settings.tenant }}-{{ .settings.environment }}-{{ .settings.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+templates:
+  settings:
+    enabled: true
+    ignore_missing_template_values: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
