@@ -101,6 +101,69 @@ func TestNormalizeParameters_NilAndNonMap(t *testing.T) {
 	assert.Nil(t, params)
 }
 
+// TestBuildStackSpec_PropagatesParameterError verifies buildStackSpec's own
+// error-propagation branch for normalizeParameters failing, not just
+// normalizeParameters itself (TestNormalizeParameters_RejectsNestedMap).
+func TestBuildStackSpec_PropagatesParameterError(t *testing.T) {
+	_, err := buildStackSpec(map[string]any{
+		"stack_name": "vpc",
+		"template":   "template.yaml",
+		"parameters": map[string]any{
+			"Bad": map[string]any{"nested": "value"},
+		},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+}
+
+// TestStringifyParameterValue covers every branch of stringifyParameterValue:
+// string passthrough, list join, nested-list error propagation, nil, and the
+// default scalar (%v) fallback for types like bool/int that aren't string.
+func TestStringifyParameterValue(t *testing.T) {
+	t.Run("string", func(t *testing.T) {
+		v, err := stringifyParameterValue("hello")
+		require.NoError(t, err)
+		assert.Equal(t, "hello", v)
+	})
+
+	t.Run("list is comma-joined", func(t *testing.T) {
+		v, err := stringifyParameterValue([]any{"a", "b", "c"})
+		require.NoError(t, err)
+		assert.Equal(t, "a,b,c", v)
+	})
+
+	t.Run("list propagates a nested item's error", func(t *testing.T) {
+		_, err := stringifyParameterValue([]any{"ok", map[string]any{"nested": "value"}})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+	})
+
+	t.Run("nil becomes empty string", func(t *testing.T) {
+		v, err := stringifyParameterValue(nil)
+		require.NoError(t, err)
+		assert.Equal(t, "", v)
+	})
+
+	t.Run("bool falls back to default %v formatting", func(t *testing.T) {
+		v, err := stringifyParameterValue(true)
+		require.NoError(t, err)
+		assert.Equal(t, "true", v)
+	})
+
+	t.Run("map is rejected", func(t *testing.T) {
+		_, err := stringifyParameterValue(map[string]any{"x": "y"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+	})
+}
+
+// TestNormalizeStringSlice_AlreadyStringSlice covers the []string passthrough
+// branch (as opposed to the []any conversion branch already exercised by
+// TestBuildStackSpec_FullConfig/TestNormalizeCapabilities_Empty).
+func TestNormalizeStringSlice_AlreadyStringSlice(t *testing.T) {
+	assert.Equal(t, []string{"a", "b"}, normalizeStringSlice([]string{"a", "b"}))
+}
+
 func TestNormalizeCapabilities_Empty(t *testing.T) {
 	assert.Nil(t, normalizeCapabilities(nil))
 	assert.Nil(t, normalizeCapabilities([]any{}))
@@ -112,9 +175,11 @@ func TestNormalizeTags_NonMap(t *testing.T) {
 
 func TestToInt32_ClampsOverflow(t *testing.T) {
 	assert.Equal(t, int32(30), toInt32(30))
+	assert.Equal(t, int32(30), toInt32(int32(30)))
 	assert.Equal(t, int32(30), toInt32(int64(30)))
 	assert.Equal(t, int32(30), toInt32(float64(30)))
 	assert.Equal(t, int32(2147483647), toInt32(int64(9999999999)))
+	assert.Equal(t, int32(-2147483648), toInt32(int64(-9999999999)))
 	assert.Equal(t, int32(0), toInt32("not-a-number"))
 }
 

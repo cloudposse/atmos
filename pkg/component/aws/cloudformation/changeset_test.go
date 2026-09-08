@@ -179,6 +179,51 @@ func TestCreateChangeSet_DetectsCreateVsUpdate(t *testing.T) {
 	}
 }
 
+// createChangeSet must propagate a stackExists failure (an API error other
+// than "does not exist") without attempting to create a changeset.
+func TestCreateChangeSet_StackExistsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
+
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+	_, err := createChangeSet(context.Background(), client, spec)
+	require.Error(t, err)
+}
+
+// createChangeSet must thread RoleArn into RoleARN and set OnStackFailure
+// (only) for a CREATE changeset with DisableRollback.
+func TestCreateChangeSet_SetsRoleArnAndOnStackFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+
+	var gotInput *cloudformation.CreateChangeSetInput
+	client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, input *cloudformation.CreateChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error) {
+			gotInput = input
+			return &cloudformation.CreateChangeSetOutput{}, nil
+		},
+	)
+	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+		Status: cfntypes.ChangeSetStatusCreateComplete,
+	}, nil)
+
+	spec := &stackSpec{
+		StackName:       "vpc",
+		TemplateBody:    "AWSTemplateFormatVersion: '2010-09-09'",
+		RoleArn:         "arn:aws:iam::123456789012:role/cfn-deploy",
+		DisableRollback: true,
+	}
+	_, err := createChangeSet(context.Background(), client, spec)
+	require.NoError(t, err)
+
+	require.NotNil(t, gotInput.RoleARN)
+	assert.Equal(t, spec.RoleArn, *gotInput.RoleARN)
+	assert.Equal(t, cfntypes.OnStackFailureDoNothing, gotInput.OnStackFailure)
+}
+
 func TestExecuteChangeSet(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
@@ -296,6 +341,49 @@ func TestWaitForChangeSet_FollowsPagination(t *testing.T) {
 	result, err := waitForChangeSet(context.Background(), client, "vpc", "atmos-vpc-123", cfntypes.ChangeSetTypeCreate)
 	require.NoError(t, err)
 	assert.Equal(t, []cfntypes.Change{page1Change, page2Change}, result.Changes)
+}
+
+// waitForChangeSet must propagate a pagination (NextToken-follow) failure,
+// still returning the partial result gathered before the failing page.
+func TestWaitForChangeSet_PaginationError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	page1Change := cfntypes.Change{Type: cfntypes.ChangeTypeResource}
+	nextToken := "page-2-token"
+
+	gomock.InOrder(
+		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+			Status:    cfntypes.ChangeSetStatusCreateComplete,
+			Changes:   []cfntypes.Change{page1Change},
+			NextToken: &nextToken,
+		}, nil),
+		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled")),
+	)
+
+	result, err := waitForChangeSet(context.Background(), client, "vpc", "atmos-vpc-123", cfntypes.ChangeSetTypeCreate)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	require.NotNil(t, result, "partial result must still be returned alongside the pagination error")
+	assert.Equal(t, []cfntypes.Change{page1Change}, result.Changes)
+}
+
+// waitForChangeSet must return promptly with the context's error when the
+// context is cancelled while still polling (status stuck in-progress).
+func TestWaitForChangeSet_ContextCancelled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+		Status: cfntypes.ChangeSetStatusCreateInProgress,
+	}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel up front so the select's <-ctx.Done() case fires immediately.
+
+	_, err := waitForChangeSet(ctx, client, "vpc", "atmos-vpc-123", cfntypes.ChangeSetTypeCreate)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
 }
 
 func TestSanitizeChangeSetSuffix(t *testing.T) {

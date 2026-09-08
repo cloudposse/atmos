@@ -2336,3 +2336,233 @@ func TestProcessStackConfig_ComponentValueNotAMap(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidComponentMapType)
 }
+
+// TestProcessStackConfig_CloudFormationErrorPaths covers the stack-global
+// aws/cloudformation section type-validation branches: command/vars/hooks/
+// settings/env/auth/dependencies/source/provision must each be the expected
+// type or ProcessStackConfig returns a precise error. Mirrors
+// TestProcessStackConfig_HelmErrorPaths for the aws/cloudformation section.
+func TestProcessStackConfig_CloudFormationErrorPaths(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tests := []struct {
+		name              string
+		cloudFormationCfg map[string]any
+		expectedError     error
+	}{
+		{"invalid aws/cloudformation section type", nil, errUtils.ErrInvalidConfig},
+		{"invalid command type", map[string]any{cfg.CommandSectionName: 123}, errUtils.ErrInvalidComponentCommand},
+		{"invalid vars type", map[string]any{cfg.VarsSectionName: "x"}, errUtils.ErrInvalidVarsSection},
+		{"invalid hooks type", map[string]any{cfg.HooksSectionName: "x"}, errUtils.ErrInvalidHooksSection},
+		{"invalid settings type", map[string]any{cfg.SettingsSectionName: "x"}, errUtils.ErrInvalidSettingsSection},
+		{"invalid env type", map[string]any{cfg.EnvSectionName: "x"}, errUtils.ErrInvalidEnvSection},
+		{"invalid auth type", map[string]any{cfg.AuthSectionName: "x"}, errUtils.ErrInvalidAuthSection},
+		{"invalid dependencies type", map[string]any{cfg.DependenciesSectionName: "x"}, errUtils.ErrInvalidDependenciesSection},
+		{"invalid source type", map[string]any{cfg.SourceSectionName: "x"}, errUtils.ErrInvalidComponentSource},
+		{"invalid provision type", map[string]any{cfg.ProvisionSectionName: "x"}, errUtils.ErrInvalidComponentProvision},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config map[string]any
+			if tt.cloudFormationCfg == nil {
+				config = map[string]any{cfg.CloudFormationSectionName: "invalid-not-a-map"}
+			} else {
+				config = map[string]any{cfg.CloudFormationSectionName: tt.cloudFormationCfg}
+			}
+
+			_, _, err := ProcessStackConfig(
+				atmosConfig,
+				"/test/stacks",
+				"/test/terraform",
+				"/test/helmfile",
+				"/test/packer",
+				"/test/ansible",
+				"test-stack.yaml",
+				config,
+				false,
+				false,
+				"",
+				map[string]map[string][]string{},
+				map[string]map[string]any{},
+				false,
+			)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, tt.expectedError)
+		})
+	}
+}
+
+// TestProcessStackConfig_CloudFormationGlobalSectionMerges verifies that a
+// stack-global `aws/cloudformation:` section (vars/settings/env/auth/
+// dependencies/hooks/command) actually merges into an aws/cloudformation
+// component's own sections, not just that ProcessStackConfig avoids erroring.
+// This is the happy-path counterpart to TestProcessStackConfig_CloudFormationErrorPaths:
+// together they cover every branch of the stack-global aws/cloudformation
+// section (stack_processor_process_stacks.go's "aws/cloudformation section" block).
+func TestProcessStackConfig_CloudFormationGlobalSectionMerges(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.CloudFormationSectionName: map[string]any{
+			cfg.CommandSectionName: "custom-cfn-runner",
+			cfg.VarsSectionName: map[string]any{
+				"region": "us-east-2",
+			},
+			cfg.HooksSectionName: map[string]any{
+				"before": []any{"cfn-global-hook"},
+			},
+			cfg.SettingsSectionName: map[string]any{
+				"some_setting": true,
+			},
+			cfg.EnvSectionName: map[string]any{
+				"CFN_GLOBAL_ENV": "1",
+			},
+			cfg.AuthSectionName: map[string]any{
+				"role": "cfn-global-role",
+			},
+			cfg.DependenciesSectionName: map[string]any{
+				"depends_on": []any{"vpc"},
+			},
+			cfg.SourceSectionName: map[string]any{
+				"uri": "github.com/example/templates",
+			},
+			cfg.ProvisionSectionName: map[string]any{
+				"kind": "cli",
+			},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.TemplateSectionName:  "template.yaml",
+					cfg.StackNameSectionName: "acme-plat-ue2-dev-vpc",
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	cloudformation, ok := components[cfg.CloudFormationComponentType].(map[string]any)
+	require.True(t, ok, "result must contain aws/cloudformation components")
+	vpc, ok := cloudformation["vpc"].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must exist")
+
+	// Command flows straight through (not merged, just carried).
+	assert.Equal(t, "custom-cfn-runner", vpc[cfg.CommandSectionName])
+
+	vars, ok := vpc[cfg.VarsSectionName].(map[string]any)
+	require.True(t, ok, "vars section must be a merged map")
+	assert.Equal(t, "us-east-2", vars["region"])
+
+	hooks, ok := vpc[cfg.HooksSectionName].(map[string]any)
+	require.True(t, ok, "hooks section must be a merged map")
+	assert.Equal(t, []any{"cfn-global-hook"}, hooks["before"])
+
+	settings, ok := vpc[cfg.SettingsSectionName].(map[string]any)
+	require.True(t, ok, "settings section must be a merged map")
+	assert.Equal(t, true, settings["some_setting"])
+
+	env, ok := vpc[cfg.EnvSectionName].(map[string]any)
+	require.True(t, ok, "env section must be a merged map")
+	assert.Equal(t, "1", env["CFN_GLOBAL_ENV"])
+
+	auth, ok := vpc[cfg.AuthSectionName].(map[string]any)
+	require.True(t, ok, "auth section must be a merged map")
+	assert.Equal(t, "cfn-global-role", auth["role"])
+
+	dependencies, ok := vpc[cfg.DependenciesSectionName].(map[string]any)
+	require.True(t, ok, "dependencies section must be a merged map")
+	assert.Equal(t, []any{"vpc"}, dependencies["depends_on"])
+}
+
+// TestProcessStackConfig_CloudFormationComponentsSectionNotAMap verifies that
+// a malformed `components."aws/cloudformation"` section (not a map) is caught
+// by the aws/cloudformation parallel-processing block itself, mirroring the
+// same guard already covered for terraform/helm/etc.
+func TestProcessStackConfig_CloudFormationComponentsSectionNotAMap(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.CloudFormationComponentType: "not-a-map",
+		},
+	}
+
+	_, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+// TestProcessStackConfig_CloudFormationComponentValueNotAMap verifies that a
+// single malformed component entry inside an otherwise-valid
+// components."aws/cloudformation" section propagates the
+// processComponentsInParallel error out of ProcessStackConfig, mirroring
+// TestProcessStackConfig_ComponentValueNotAMap for the terraform type.
+func TestProcessStackConfig_CloudFormationComponentValueNotAMap(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.TemplateSectionName: "template.yaml",
+				},
+				"bad-component": "not-a-map",
+			},
+		},
+	}
+
+	_, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidComponentMapType)
+}

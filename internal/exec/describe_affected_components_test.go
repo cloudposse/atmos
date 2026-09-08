@@ -669,6 +669,187 @@ func TestAddCloudFormationSectionAffected_NoFalsePositives(t *testing.T) {
 	assert.Empty(t, affected)
 }
 
+// TestProcessCloudFormationComponentsIndexed mirrors TestProcessHelmComponentsIndexed:
+// a metadata change, a first-class section change (stack_name), and a settings
+// change must all surface as distinct affected reasons for the same component.
+func TestProcessCloudFormationComponentsIndexed(t *testing.T) {
+	atmosConfig := cfnAtmosConfig()
+	cloudFormationSection := map[string]any{
+		cfnTestComponent: map[string]any{
+			sectionNameMetadata:     map[string]any{"component": "vpc-v1"},
+			sectionNameStackName:    "vpc-prod",
+			cfg.SettingsSectionName: map[string]any{"s": "1"},
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameMetadata:     map[string]any{"component": "vpc-v2"},
+		sectionNameStackName:    "vpc-staging",
+		cfg.SettingsSectionName: map[string]any{"s": "2"},
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, true, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Equal(t, cfg.CloudFormationComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackMetadata)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackStackName)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+}
+
+func TestProcessCloudFormationComponentsIndexed_NotAffected(t *testing.T) {
+	atmosConfig := cfnAtmosConfig()
+	identical := map[string]any{
+		sectionNameMetadata:  map[string]any{"component": "vpc-v1"},
+		sectionNameStackName: "vpc-prod",
+	}
+	cloudFormationSection := map[string]any{cfnTestComponent: identical}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameMetadata:  map[string]any{"component": "vpc-v1"},
+		sectionNameStackName: "vpc-prod",
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, false,
+	)
+	require.NoError(t, err)
+	assert.Empty(t, affected)
+}
+
+func TestProcessCloudFormationComponentsIndexed_FolderChanged(t *testing.T) {
+	atmosConfig := cfnAtmosConfig()
+	cloudFormationSection := map[string]any{
+		cfnTestComponent: map[string]any{
+			sectionNameStackName: "vpc-prod",
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameStackName: "vpc-prod",
+	})
+
+	changedFile, err := filepath.Abs(filepath.Join("components", "cloudformation", cfnTestComponent, "template.yaml"))
+	require.NoError(t, err)
+
+	filesIndex := newChangedFilesIndex(atmosConfig, []string{changedFile}, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Equal(t, cfg.CloudFormationComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonComponent)
+}
+
+func TestProcessCloudFormationComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *testing.T) {
+	atmosConfig := cfnAtmosConfig()
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameStackName: "vpc-staging",
+	})
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	t.Run("abstract skipped", func(t *testing.T) {
+		cloudFormationSection := map[string]any{
+			cfnTestComponent: map[string]any{
+				sectionNameMetadata:  map[string]any{"type": "abstract"},
+				sectionNameStackName: "vpc-prod",
+			},
+		}
+
+		affected, err := processCloudFormationComponentsIndexed(
+			cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("locked skipped when excluded", func(t *testing.T) {
+		cloudFormationSection := map[string]any{
+			cfnTestComponent: map[string]any{
+				sectionNameMetadata:  map[string]any{"locked": true},
+				sectionNameStackName: "vpc-prod",
+			},
+		}
+
+		affected, err := processCloudFormationComponentsIndexed(
+			cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, true,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("non-map component section skipped", func(t *testing.T) {
+		affected, err := processCloudFormationComponentsIndexed(
+			cfnTestStack, map[string]any{cfnTestComponent: "invalid"}, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+}
+
+// TestProcessStackAffected_CloudFormationSection covers processStackAffected's
+// aws/cloudformation dispatch branch (describe_affected_utils_parallel.go),
+// which routes a stack's `components."aws/cloudformation"` section into
+// processCloudFormationComponentsIndexed alongside terraform/helmfile/packer/
+// ansible/kubernetes/helm.
+func TestProcessStackAffected_CloudFormationSection(t *testing.T) {
+	atmosConfig := cfnAtmosConfig()
+
+	stackSection := map[string]any{
+		"components": map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				cfnTestComponent: map[string]any{
+					sectionNameStackName: "vpc-prod",
+				},
+			},
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameStackName: "vpc-staging",
+	})
+	currentStacks := map[string]any{cfnTestStack: stackSection}
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processStackAffected(
+		cfnTestStack, stackSection, &remoteStacks, &currentStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Equal(t, cfg.CloudFormationComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackStackName)
+}
+
 func TestIsComponentSectionEqual(t *testing.T) {
 	t.Parallel()
 

@@ -96,6 +96,21 @@ func TestRunDiff(t *testing.T) {
 	assert.Len(t, summary["changes"].([]cfntypes.Change), 1)
 }
 
+// runDiff must propagate a createChangeSet failure without rendering a summary.
+func TestRunDiff_CreateChangeSetError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	sentinel := errors.New("create changeset failed")
+
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+	client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(nil, sentinel)
+
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+	_, err := runDiff(context.Background(), client, spec, map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+}
+
 func TestRunDelete(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
@@ -290,6 +305,172 @@ func TestRunApply_DeliverError(t *testing.T) {
 	_, err := runApply(octx, client, spec, map[string]any{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrProvisionTargetNotFound)
+}
+
+// runApply must propagate a setStackPolicy failure after a successful deploy.
+func TestRunApply_SetStackPolicyError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	sentinel := errors.New("set stack policy failed")
+
+	gomock.InOrder(
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
+		client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil),
+		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+			Status: cfntypes.ChangeSetStatusCreateComplete,
+		}, nil),
+		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+		}, nil),
+		client.EXPECT().SetStackPolicy(gomock.Any(), gomock.Any()).Return(nil, sentinel),
+	)
+
+	octx := &opContext{
+		Ctx:         context.Background(),
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info:        &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
+		Flags:       map[string]any{},
+	}
+	spec := &stackSpec{
+		StackName:       "vpc",
+		TemplateBody:    "AWSTemplateFormatVersion: '2010-09-09'",
+		StackPolicyBody: `{"Statement": []}`,
+	}
+
+	_, err := runApply(octx, client, spec, map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+}
+
+// runApply must propagate an applyTerminationProtection failure.
+func TestRunApply_TerminationProtectionError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	sentinel := errors.New("update termination protection failed")
+
+	gomock.InOrder(
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
+		client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil),
+		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+			Status: cfntypes.ChangeSetStatusCreateComplete,
+		}, nil),
+		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+		}, nil),
+		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(nil, sentinel),
+	)
+
+	octx := &opContext{
+		Ctx:         context.Background(),
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info:        &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
+		Flags:       map[string]any{},
+	}
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+
+	_, err := runApply(octx, client, spec, map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+}
+
+// runApply must propagate a describeStackOutputs failure at the very end of a
+// successful deploy (after stack policy and termination protection succeed).
+func TestRunApply_DescribeOutputsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	sentinel := errors.New("describe stacks failed")
+
+	gomock.InOrder(
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
+		client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil),
+		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+			Status: cfntypes.ChangeSetStatusCreateComplete,
+		}, nil),
+		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+		}, nil),
+		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, sentinel),
+	)
+
+	octx := &opContext{
+		Ctx:         context.Background(),
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info:        &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
+		Flags:       map[string]any{},
+	}
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+
+	_, err := runApply(octx, client, spec, map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+}
+
+// runDelete must propagate a deleteStack failure without attempting to stream events.
+func TestRunDelete_DeleteStackError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	sentinel := errors.New("delete stack failed")
+
+	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(nil, sentinel)
+
+	spec := &stackSpec{StackName: "vpc"}
+	_, err := runDelete(context.Background(), client, map[string]any{}, spec, map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+}
+
+// runDelete must propagate a streamStackEvents failure.
+func TestRunDelete_StreamEventsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	sentinel := errors.New("describe stack events failed")
+
+	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, sentinel)
+
+	spec := &stackSpec{StackName: "vpc"}
+	_, err := runDelete(context.Background(), client, map[string]any{}, spec, map[string]any{})
+	require.Error(t, err)
+}
+
+// runOutput must propagate a describeStackOutputs failure.
+func TestRunOutput_DescribeStacksError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	sentinel := errors.New("describe stacks failed")
+
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, sentinel)
+
+	_, err := runOutput(context.Background(), client, "vpc", map[string]any{}, map[string]any{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+}
+
+// renderOutputsSummary must honor the flatten and uppercase flags, and must
+// report (not panic on) a formatting error for an unsupported format.
+func TestRenderOutputsSummary_FlattenUppercaseAndFormatError(t *testing.T) {
+	outputs := map[string]any{"nested": map[string]any{"id": "vpc-123"}}
+
+	out := captureStdout(t, func() {
+		renderOutputsSummary(outputs, map[string]any{
+			"format":    "json",
+			"flatten":   true,
+			"uppercase": true,
+		})
+	})
+	assert.Contains(t, out, "NESTED")
+
+	errOut := captureStderr(t, func() {
+		renderOutputsSummary(map[string]any{"id": "vpc-123"}, map[string]any{"format": "not-a-real-format"})
+	})
+	assert.Contains(t, errOut, "failed to format outputs")
 }
 
 // stubProvisionAndResolveComponentPath overrides the provisionAndResolveComponentPath
@@ -587,6 +768,41 @@ func TestExecuteSingle_AuthSetupError(t *testing.T) {
 	err := executeSingle(&component.ExecutionContext{}, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, OperationApply)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, sentinel)
+}
+
+// executeSingle must call propagateAuth after a successful auth setup for a
+// mutating operation, then propagate a resolveSpecAndTemplate failure (here,
+// from provisionAndResolveComponentPath) -- covering both the
+// operation != Render auth-propagation branch and the "resolveSpecAndTemplate
+// error" return, which TestExecuteSingle_AuthSetupError (auth setup itself
+// failing) and TestExecute_Single_Render_Success (which skips auth entirely
+// for render) don't reach.
+func TestExecuteSingle_PropagatesAuthThenResolveSpecError(t *testing.T) {
+	sentinel := errors.New("provision failed")
+	var propagateAuthCalled bool
+
+	installExecutorSeamStubs(t, executorSeamStubs{
+		processStacks: func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+			info.ComponentIsEnabled = true
+			info.ComponentSection = map[string]any{"stack_name": "vpc", "template": "template.yaml"}
+			return info, nil
+		},
+		setupComponentAuthForCLI: func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+			return nil, nil
+		},
+		propagateAuth: func(_ *schema.ConfigAndStacksInfo, authManager auth.AuthManager) {
+			propagateAuthCalled = true
+			assert.Nil(t, authManager)
+		},
+		provisionAndResolveComponentPath: func(context.Context, provisioner.OutputWriters, *schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string) (string, bool, error) {
+			return "", false, sentinel
+		},
+	})
+
+	err := executeSingle(&component.ExecutionContext{}, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, OperationApply)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sentinel)
+	assert.True(t, propagateAuthCalled, "propagateAuth must be called for a non-render operation after successful auth setup")
 }
 
 // runWithHooks must propagate a getHooks failure without attempting to

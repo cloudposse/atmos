@@ -2,6 +2,7 @@ package output
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1301,4 +1302,141 @@ func TestHighlightValue_NilConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestDispatchSingleValueFormat_UnsupportedFormat verifies the unsupported-format
+// error branch, listing the supported formats in the hint.
+func TestDispatchSingleValueFormat_UnsupportedFormat(t *testing.T) {
+	_, err := dispatchSingleValueFormat("key", "value", Format("not-a-real-format"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+// failingYAMLMarshaler implements yaml.Marshaler to deterministically return
+// an error from yaml.Marshal without panicking. Unlike encoding/json (which
+// returns a normal *UnsupportedTypeError for e.g. a channel), gopkg.in/yaml.v3
+// panics on genuinely unsupported reflect kinds -- a custom Marshaler is the
+// only safe, non-panicking way to exercise yaml.Marshal's error return.
+type failingYAMLMarshaler struct{}
+
+func (failingYAMLMarshaler) MarshalYAML() (any, error) {
+	return nil, errors.New("boom")
+}
+
+// TestFormatSingleValue_MarshalErrors covers the JSON/YAML/HCL marshal-failure
+// branches of formatSingleJSON/formatSingleYAML/formatSingleHCL.
+func TestFormatSingleValue_MarshalErrors(t *testing.T) {
+	unmarshalable := make(chan int)
+
+	t.Run("JSON", func(t *testing.T) {
+		_, err := FormatSingleValue("key", unmarshalable, FormatJSON)
+		require.Error(t, err)
+	})
+
+	t.Run("YAML", func(t *testing.T) {
+		_, err := FormatSingleValue("key", failingYAMLMarshaler{}, FormatYAML)
+		require.Error(t, err)
+	})
+
+	t.Run("HCL", func(t *testing.T) {
+		_, err := FormatSingleValue("key", unmarshalable, FormatHCL)
+		require.Error(t, err)
+	})
+
+	t.Run("delimited (CSV)", func(t *testing.T) {
+		_, err := FormatSingleValue("key", unmarshalable, FormatCSV)
+		require.Error(t, err)
+	})
+}
+
+// TestFormatOutputs_WholeMapMarshalErrors covers the whole-map marshal-failure
+// branches of formatJSON/formatYAML/formatHCL/formatDelimited.
+func TestFormatOutputs_WholeMapMarshalErrors(t *testing.T) {
+	outputs := map[string]any{"bad": make(chan int)}
+
+	t.Run("JSON", func(t *testing.T) {
+		_, err := FormatOutputs(outputs, FormatJSON)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to marshal outputs to JSON")
+	})
+
+	t.Run("YAML", func(t *testing.T) {
+		_, err := FormatOutputs(map[string]any{"bad": failingYAMLMarshaler{}}, FormatYAML)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to marshal outputs to YAML")
+	})
+
+	t.Run("HCL", func(t *testing.T) {
+		_, err := FormatOutputs(outputs, FormatHCL)
+		require.Error(t, err)
+	})
+
+	t.Run("CSV", func(t *testing.T) {
+		_, err := FormatOutputs(outputs, FormatCSV)
+		require.Error(t, err)
+	})
+}
+
+// TestFormatDelimited_SkipsNilValues verifies that a nil-valued key is
+// omitted from delimited (CSV/TSV) output entirely, matching formatHCL's
+// documented null-skipping behavior.
+func TestFormatDelimited_SkipsNilValues(t *testing.T) {
+	outputs := map[string]any{
+		"present": "value",
+		"absent":  nil,
+	}
+
+	result, err := FormatOutputs(outputs, FormatCSV)
+	require.NoError(t, err)
+	assert.Contains(t, result, "present,value")
+	assert.NotContains(t, result, "absent")
+}
+
+// TestValueToString_MarshalError covers valueToString's default-case JSON
+// marshal failure (a channel value has no scalar representation).
+func TestValueToString_MarshalError(t *testing.T) {
+	_, err := valueToString(make(chan int))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to marshal value")
+}
+
+// TestValueToHCL_FallbackForUnknownType covers valueToHCL's default case
+// (formatHCLFallback), both success (a marshalable-but-unlisted type, e.g.
+// a plain Go int) and failure (a channel, which json.Marshal rejects).
+func TestValueToHCL_FallbackForUnknownType(t *testing.T) {
+	t.Run("marshalable unknown type succeeds via JSON fallback", func(t *testing.T) {
+		result, err := valueToHCL(42) // plain int, not float64 -- not one of valueToHCL's typed cases.
+		require.NoError(t, err)
+		assert.Equal(t, "42", result)
+	})
+
+	t.Run("unmarshalable unknown type errors", func(t *testing.T) {
+		_, err := valueToHCL(make(chan int))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to marshal value to HCL")
+	})
+}
+
+// TestFormatHCLList_PropagatesItemError verifies that a single unformattable
+// list item fails the whole list, rather than being silently skipped.
+func TestFormatHCLList_PropagatesItemError(t *testing.T) {
+	_, err := formatHCLList([]any{"ok", make(chan int)})
+	require.Error(t, err)
+}
+
+// TestFormatHCLObject_PropagatesValueError verifies that a single
+// unformattable map value fails the whole object.
+func TestFormatHCLObject_PropagatesValueError(t *testing.T) {
+	_, err := formatHCLObject(map[string]any{"bad": make(chan int)})
+	require.Error(t, err)
+}
+
+// TestFormatValueForTable_MarshalErrorFallsBackToDefaultFormat verifies that
+// when the complex-type JSON marshal fails, formatValueForTable falls back to
+// Go's default %v formatting instead of propagating an error (the table
+// formatter has no error return, so it must degrade gracefully).
+func TestFormatValueForTable_MarshalErrorFallsBackToDefaultFormat(t *testing.T) {
+	ch := make(chan int)
+	result := formatValueForTable(ch, nil)
+	assert.Equal(t, fmt.Sprintf("%v", ch), result)
 }

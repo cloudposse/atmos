@@ -1188,6 +1188,167 @@ func TestCopyToTarget_WithDoublestarExcludedPaths(t *testing.T) {
 }
 
 // TestCopyToTarget_WithCombinedPatterns tests copying with both include and exclude patterns.
+// TestSingleFileInDir covers all three branches directly: a genuine
+// single-file directory (ok=true), a directory with more than one entry or
+// whose sole entry is itself a directory (ok=false, no error), and a
+// nonexistent directory (ReadDir error wrapped in ErrSourceCopyFailed).
+func TestSingleFileInDir(t *testing.T) {
+	t.Run("single file", func(t *testing.T) {
+		dir := t.TempDir()
+		filePath := filepath.Join(dir, "only.txt")
+		require.NoError(t, os.WriteFile(filePath, []byte("content"), 0o644))
+
+		got, ok, err := singleFileInDir(dir)
+		require.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, filePath, got)
+	})
+
+	t.Run("multiple entries", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b"), 0o644))
+
+		_, ok, err := singleFileInDir(dir)
+		require.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("sole entry is a directory", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(dir, "subdir"), 0o755))
+
+		_, ok, err := singleFileInDir(dir)
+		require.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("nonexistent directory returns wrapped error", func(t *testing.T) {
+		_, ok, err := singleFileInDir(filepath.Join(t.TempDir(), "does-not-exist"))
+		require.Error(t, err)
+		assert.False(t, ok)
+		assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+	})
+}
+
+// TestCopySingleFile covers the direct byte-copy helper: a successful copy
+// preserves content, a missing source file errors, and the destination file's
+// content is fully overwritten (not appended) when it already exists.
+func TestCopySingleFile(t *testing.T) {
+	t.Run("copies content", func(t *testing.T) {
+		dir := t.TempDir()
+		src := filepath.Join(dir, "src.txt")
+		dst := filepath.Join(dir, "dst.txt")
+		require.NoError(t, os.WriteFile(src, []byte("hello world"), 0o644))
+
+		require.NoError(t, copySingleFile(src, dst))
+
+		content, err := os.ReadFile(dst)
+		require.NoError(t, err)
+		assert.Equal(t, "hello world", string(content))
+	})
+
+	t.Run("missing source errors", func(t *testing.T) {
+		dir := t.TempDir()
+		err := copySingleFile(filepath.Join(dir, "missing.txt"), filepath.Join(dir, "dst.txt"))
+		require.Error(t, err)
+	})
+
+	t.Run("overwrites existing destination content", func(t *testing.T) {
+		dir := t.TempDir()
+		src := filepath.Join(dir, "src.txt")
+		dst := filepath.Join(dir, "dst.txt")
+		require.NoError(t, os.WriteFile(src, []byte("new"), 0o644))
+		require.NoError(t, os.WriteFile(dst, []byte("much longer old content"), 0o644))
+
+		require.NoError(t, copySingleFile(src, dst))
+
+		content, err := os.ReadFile(dst)
+		require.NoError(t, err)
+		assert.Equal(t, "new", string(content), "destination must be truncated, not appended to")
+	})
+}
+
+// TestCopySingleFileToTarget_ReplacesExistingDirectoryTarget verifies that
+// when the target already exists as a directory and replacement is enabled,
+// copySingleFileToTarget removes the whole directory before writing the file
+// -- the branch TestVendorSourcePostDownloadReplacesExistingFileTarget doesn't
+// reach because that test starts from a file target, not a directory one.
+func TestCopySingleFileToTarget_ReplacesExistingDirectoryTarget(t *testing.T) {
+	srcDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "dns.yaml")
+	require.NoError(t, os.WriteFile(srcFile, []byte("Resources: {}\n"), 0o644))
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	require.NoError(t, os.MkdirAll(filepath.Join(targetDir, "nested"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "nested", "leftover.txt"), []byte("x"), 0o644))
+
+	err := copySingleFileToTarget(srcFile, targetDir, vendorSourceOptions{replaceTarget: true})
+	require.NoError(t, err)
+
+	info, statErr := os.Stat(targetDir)
+	require.NoError(t, statErr)
+	assert.False(t, info.IsDir(), "target must now be the copied file, not the old directory")
+
+	content, err := os.ReadFile(targetDir)
+	require.NoError(t, err)
+	assert.Equal(t, "Resources: {}\n", string(content))
+}
+
+// TestCopySingleFileToTarget_ReplaceFalseFailsWhenTargetExists verifies the
+// "target already exists" branch directly (VendorSource's own pre-check
+// short-circuits before reaching this code on the end-to-end path exercised by
+// TestVendorSourceSingleFileURIReplaceTargetFalseFailsWhenTargetExists, so
+// this branch needs a direct call to actually execute).
+func TestCopySingleFileToTarget_ReplaceFalseFailsWhenTargetExists(t *testing.T) {
+	dir := t.TempDir()
+	srcFile := filepath.Join(dir, "src.txt")
+	require.NoError(t, os.WriteFile(srcFile, []byte("data"), 0o644))
+
+	targetDir := filepath.Join(dir, "target.txt")
+	require.NoError(t, os.WriteFile(targetDir, []byte("existing"), 0o644))
+
+	err := copySingleFileToTarget(srcFile, targetDir, vendorSourceOptions{replaceTarget: false})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+
+	content, readErr := os.ReadFile(targetDir)
+	require.NoError(t, readErr)
+	assert.Equal(t, "existing", string(content), "target must be untouched when replacement is disabled")
+}
+
+// TestCopySingleFileToTarget_CopyFailureWrapsError verifies that a failure in
+// the underlying copySingleFile call (missing source file) is wrapped in
+// ErrSourceCopyFailed with source/target context, not returned raw.
+func TestCopySingleFileToTarget_CopyFailureWrapsError(t *testing.T) {
+	dir := t.TempDir()
+	missingSrc := filepath.Join(dir, "does-not-exist.txt")
+	targetDir := filepath.Join(dir, "target.txt")
+
+	err := copySingleFileToTarget(missingSrc, targetDir, vendorSourceOptions{replaceTarget: true})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+}
+
+// TestCopySingleFileToTarget_MkdirAllFailureWrapsError verifies the parent
+// directory creation failure path returns ErrSourceCopyFailed. Using a target
+// path whose parent already exists as a *file* forces os.MkdirAll to fail
+// (cross-platform: MkdirAll under a file path errors on every OS).
+func TestCopySingleFileToTarget_MkdirAllFailureWrapsError(t *testing.T) {
+	dir := t.TempDir()
+	blockingFile := filepath.Join(dir, "blocking-file")
+	require.NoError(t, os.WriteFile(blockingFile, []byte("x"), 0o644))
+
+	srcFile := filepath.Join(dir, "src.txt")
+	require.NoError(t, os.WriteFile(srcFile, []byte("data"), 0o644))
+
+	targetDir := filepath.Join(blockingFile, "target")
+
+	err := copySingleFileToTarget(srcFile, targetDir, vendorSourceOptions{replaceTarget: true})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+}
+
 func TestCopyToTarget_WithCombinedPatterns(t *testing.T) {
 	// Create source directory with files.
 	srcDir := t.TempDir()

@@ -38,6 +38,22 @@ func TestFindS3Targets_NoTargets(t *testing.T) {
 	assert.Empty(t, findS3Targets(map[string]any{}))
 }
 
+// TestFindS3Targets_SkipsNonMapEntries covers the `!ok { continue }` branch:
+// a target entry that isn't itself a map (a malformed manifest) must be
+// skipped rather than panicking on the type assertion.
+func TestFindS3Targets_SkipsNonMapEntries(t *testing.T) {
+	provisionSection := map[string]any{
+		"targets": map[string]any{
+			"broken":    "not-a-map",
+			"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket"},
+		},
+	}
+
+	s3Targets := findS3Targets(provisionSection)
+	require.Len(t, s3Targets, 1)
+	assert.Equal(t, "my-bucket", s3Targets["artifacts"]["bucket"])
+}
+
 func TestS3ConfigFromTarget(t *testing.T) {
 	cfg, err := s3ConfigFromTarget("artifacts", map[string]any{
 		"bucket": "my-bucket",
@@ -209,6 +225,63 @@ func TestDeployDirect_FailedFinalStatus(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
 }
 
+// deployDirect must propagate a createChangeSet failure without attempting to
+// execute the changeset or stream events.
+func TestDeployDirect_CreateChangeSetError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	sentinel := errUtils.ErrAwsCloudFormationAPICallFailed
+
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+	client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(nil, sentinel)
+
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+	_, err := deployDirect(context.Background(), client, spec)
+	require.Error(t, err)
+}
+
+// deployDirect must propagate an executeChangeSet failure without attempting
+// to stream events.
+func TestDeployDirect_ExecuteChangeSetError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	sentinel := errUtils.ErrAwsCloudFormationAPICallFailed
+
+	gomock.InOrder(
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
+		client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil),
+		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+			Status: cfntypes.ChangeSetStatusCreateComplete,
+		}, nil),
+		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(nil, sentinel),
+	)
+
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+	_, err := deployDirect(context.Background(), client, spec)
+	require.Error(t, err)
+}
+
+// deployDirect must propagate a streamStackEvents failure.
+func TestDeployDirect_StreamEventsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	sentinel := errUtils.ErrAwsCloudFormationAPICallFailed
+
+	gomock.InOrder(
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
+		client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil),
+		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+			Status: cfntypes.ChangeSetStatusCreateComplete,
+		}, nil),
+		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, sentinel),
+	)
+
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+	_, err := deployDirect(context.Background(), client, spec)
+	require.Error(t, err)
+}
+
 // deliverApply must route to deployDirect (the implicit default target) when
 // the component declares no provision section.
 func TestDeliverApply_DirectDeployKind(t *testing.T) {
@@ -265,6 +338,40 @@ func TestDeliverApply_DirectS3Selection_PublishOnly(t *testing.T) {
 	assert.Equal(t, "artifacts", summary[targetKey])
 	assert.Equal(t, "s3://my-bucket/dev/vpc/template-", summary["package_url"].(string)[:len("s3://my-bucket/dev/vpc/template-")])
 	assert.NotEmpty(t, summary["package_sha256"])
+}
+
+// deliverApply must propagate an uploadPackage failure (e.g. the backend
+// can't be constructed) rather than proceeding to deliver a broken package
+// reference.
+func TestDeliverApply_UploadPackageError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl) // no expectations: upload fails before any CloudFormation call.
+
+	sentinel := errUtils.ErrInvalidAwsCloudFormationSettings
+	stubNewS3Backend(t, nil, sentinel)
+
+	octx := &opContext{
+		Ctx:         context.Background(),
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+			ComponentSection: map[string]any{
+				cfg.ProvisionSectionName: map[string]any{
+					"targets": map[string]any{
+						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket"},
+					},
+				},
+			},
+		},
+		Flags: map[string]any{targetKey: "artifacts"},
+	}
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+
+	_, result, err := deliverApply(octx, client, spec)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sentinel)
+	assert.Nil(t, result)
 }
 
 // deliverApply must package a large template through the resolved aws/s3
@@ -414,4 +521,22 @@ func TestResolvePackagingTarget_DisambiguatedWithPackagingField(t *testing.T) {
 	cfg, err := resolvePackagingTarget(provisionSection, selected)
 	require.NoError(t, err)
 	assert.Equal(t, "bucket-b", cfg.Bucket)
+}
+
+// TestResolvePackagingTarget_NamedPackagingTargetNotFound verifies that a
+// `packaging:` field naming a target that doesn't exist among the declared
+// aws/s3 targets is a precise error, not a silent fallback.
+func TestResolvePackagingTarget_NamedPackagingTargetNotFound(t *testing.T) {
+	provisionSection := map[string]any{
+		"targets": map[string]any{
+			"bucket-a": map[string]any{"kind": "aws/s3", "bucket": "bucket-a"},
+			"bucket-b": map[string]any{"kind": "aws/s3", "bucket": "bucket-b"},
+			"gitops":   map[string]any{"kind": "git", "packaging": "does-not-exist"},
+		},
+	}
+	selected := &target.SelectedTarget{Kind: "git", Name: "gitops", Config: map[string]any{"kind": "git", "packaging": "does-not-exist"}}
+	_, err := resolvePackagingTarget(provisionSection, selected)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+	assert.Contains(t, err.Error(), "does-not-exist")
 }
