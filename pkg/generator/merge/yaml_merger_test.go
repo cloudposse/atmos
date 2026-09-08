@@ -1133,6 +1133,57 @@ setting: |
 `, result.Content)
 }
 
+// TestYAMLMerger_ConflictMarkers_SuffixPreservedForBothAlternatives covers a
+// real ours/theirs divergence where the sentinel's line has trailing content
+// after it -- here, an inline comment addNodeConflict carries over from
+// ours' own LineComment (see addNodeConflict). That trailing text must
+// survive on *both* reconstructed alternatives, not just be tacked onto the
+// closing >>>>>>> Theirs marker line: only one alternative survives manual
+// resolution, and a resolution that deletes the theirs block (or just the
+// marker lines) must not silently drop it.
+func TestYAMLMerger_ConflictMarkers_SuffixPreservedForBothAlternatives(t *testing.T) {
+	base := "key: original\n"
+	ours := "key: user-change # user note\n"
+	theirs := "key: template-change\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	assert.Equal(t, `<<<<<<< Ours
+key: user-change # user note
+=======
+key: template-change # user note
+>>>>>>> Theirs
+`, result.Content)
+}
+
+// TestYAMLMerger_ConflictMarkers_FlowStyleSuffixPreserved covers a
+// divergence inside a flow-style mapping: the sentinel replaces only key
+// "a"'s value, so the rest of the flow mapping (", b: 2}") trails the
+// sentinel on the same encoded line. That trailing text must close out
+// *both* reconstructed alternatives so each remains a syntactically valid,
+// self-contained flow mapping on its own -- not just close out whichever one
+// happens to sit next to the >>>>>>> Theirs marker.
+func TestYAMLMerger_ConflictMarkers_FlowStyleSuffixPreserved(t *testing.T) {
+	base := "obj: {a: 1, b: 2}\n"
+	ours := "obj: {a: user, b: 2}\n"
+	theirs := "obj: {a: template, b: 2}\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	assert.Equal(t, `<<<<<<< Ours
+obj: {a: user, b: 2}
+=======
+obj: {a: template, b: 2}
+>>>>>>> Theirs
+`, result.Content)
+}
+
 func TestYAMLMerger_PreservesLineComments(t *testing.T) {
 	tests := []struct {
 		name           string

@@ -376,9 +376,14 @@ func randomSentinelSuffix() (string, error) {
 //
 // Known limitation: flow-style YAML (`{a: 1, b: 2}`) can place more than one
 // sentinel on the same line; the reconstructed markers then wrap only the
-// first match on that line and any trailing flow-syntax after the sentinel
-// (e.g. a closing `}`) is preserved but left outside the marker block. This
-// is an accepted edge case — scaffold templates use block style.
+// first match on that line. This is an accepted edge case — scaffold
+// templates use block style.
+//
+// Trailing syntax after the sentinel on that line (e.g. a flow-style closing
+// `}`/`]`, or an inline comment) is appended to *both* alternatives' own
+// content, not just tacked onto a marker line -- see renderConflictBlock --
+// so it survives regardless of which alternative (or which marker lines) a
+// manual resolution ends up deleting.
 func spliceConflictMarkers(yamlText string, conflicts []nodeConflict) (string, error) {
 	bySentinel := make(map[string]nodeConflict, len(conflicts))
 	for _, c := range conflicts {
@@ -457,11 +462,39 @@ func inlineConflictBlock(indent, prefix, suffix, oursText, theirsText string) []
 	for _, l := range oursLines[1:] {
 		block = append(block, indent+l)
 	}
+	appendSuffixToLastLine(block, suffix)
+
 	block = append(block, indent+"=======", prefix+theirsLines[0])
 	for _, l := range theirsLines[1:] {
 		block = append(block, indent+l)
 	}
-	return append(block, indent+">>>>>>> Theirs"+suffix)
+	appendSuffixToLastLine(block, suffix)
+
+	return append(block, indent+">>>>>>> Theirs")
+}
+
+// appendSuffixToLastLine appends suffix -- whatever trailing syntax followed
+// the sentinel on the original line (e.g. a flow-style closing `}`/`]`, or an
+// inline comment) -- to block's last line in place, so it survives on
+// whichever alternative a manual resolution ends up keeping, instead of only
+// being tacked onto a marker line that a resolution deletes along with the
+// alternative it didn't choose.
+//
+// Skipped when that line already ends with suffix: addNodeConflict's sentinel
+// carries ours' own LineComment, so when suffix is that same comment,
+// encodeNodeFragment(c.ours) already rendered it as part of ours' own text.
+//
+// Appending it again would duplicate it. By contrast, theirs never has
+// ours' comment, so this guard is a no-op there and the append always
+// applies.
+func appendSuffixToLastLine(block []string, suffix string) {
+	if suffix == "" {
+		return
+	}
+	last := len(block) - 1
+	if !strings.HasSuffix(block[last], suffix) {
+		block[last] += suffix
+	}
 }
 
 // blockConflictBlock reconstructs a conflict where either side is a
@@ -486,11 +519,15 @@ func blockConflictBlock(indent, prefix, suffix, oursText, theirsText string) []s
 	for _, l := range oursLines {
 		block = append(block, nested+l)
 	}
+	appendSuffixToLastLine(block, suffix)
+
 	block = append(block, nested+"=======")
 	for _, l := range theirsLines {
 		block = append(block, nested+l)
 	}
-	return append(block, nested+">>>>>>> Theirs"+suffix)
+	appendSuffixToLastLine(block, suffix)
+
+	return append(block, nested+">>>>>>> Theirs")
 }
 
 // encodeNodeFragment encodes a single YAML node (not necessarily a document)
