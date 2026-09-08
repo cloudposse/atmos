@@ -1,4 +1,10 @@
 name: Setup Go Cache Warmup
+# The only writer of the go-cache-* Actions cache entries that
+# .github/actions/setup-go-cache restores everywhere (see that action's
+# description for the full design). Runs on main's cache scope only
+# (schedule / push-to-main / manual dispatch), performs the same compiles the
+# real jobs do so the saved GOCACHE is genuinely warm, and saves under a
+# run-unique key that the composite's restore-keys prefix-match by recency.
 on:
   workflow_dispatch:
   schedule:
@@ -8,6 +14,18 @@ on:
   # • Central Time (CT): 6:35 PM (previous day)
   # • Eastern Time (ET): 7:35 PM (previous day)
     - cron: "35 0 * * *"
+  # Re-warm immediately when a merge changes the module graph (dependency
+  # bumps): without this, every PR running between the merge and the nightly
+  # warmup restores a stale-graph cache and recompiles the delta.
+  push:
+    branches:
+      - main
+    paths:
+      - "go.mod"
+      - "go.sum"
+      - "tools/**/go.sum"
+      - ".github/workflows/setup-go-cache-warmup.yml"
+      - ".github/actions/setup-go-cache/**"
 
 permissions:
   contents: read
@@ -22,19 +40,28 @@ env:
 jobs:
   cache-warmup:
     name: Cache warmup (${{ matrix.target }})
-    timeout-minutes: 15
+    # Real compiles now (see the build steps below), not just a module
+    # download: a genuinely cold day (Go version bump) rebuilds everything.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         include:
+          # The hosted ubuntu image (not RunsOn) so the saved key's
+          # Linux-X64 lineage is the one the 10 hosted acceptance shards,
+          # coverage, floci, kubernetes-e2e etc. restore. The RunsOn legs
+          # (build linux, race) share the same lineage on purpose: the
+          # composite's key excludes ImageOS (see its description).
+          - os: ubuntu-latest
+            target: linux
           - os: windows-latest
             target: windows
           - os: macos-latest
             target: macos
-          # Build (macos-intel) uses this Intel runner and has no self-hosted
-          # s3-cache like Linux, so without a nightly warmup here its Go build
-          # cache is always cold — risking the 30m build timeout that a warm
-          # ARM `macos` cache comfortably avoids.
+          # Build (macos-intel) uses this Intel runner and has no other warm
+          # source, so without a nightly warmup here its Go build cache is
+          # always cold — risking the 30m build timeout that a warm ARM
+          # `macos` cache comfortably avoids.
           - os: macos-15-intel
             target: macos-intel
     runs-on: ${{ matrix.os }}
@@ -46,7 +73,8 @@ jobs:
           # Operating-system background services on the hosted Windows and
           # macOS images are listed after the job-specific endpoints; see the
           # `test` job's allowed-endpoints comment in test.yml for the
-          # rationale and keep the two lists in sync.
+          # rationale and keep the two lists in sync. The Ubuntu apt mirrors
+          # are for the linux leg's libudev-dev install (race-namespace warm).
           allowed-endpoints: >
             github.com:443
             api.github.com:443
@@ -56,6 +84,12 @@ jobs:
             storage.googleapis.com:443
             google.golang.org:443
             modernc.org:443
+            azure.archive.ubuntu.com:80
+            archive.ubuntu.com:80
+            security.ubuntu.com:80
+            esm.ubuntu.com:443
+            motd.ubuntu.com:443
+            packages.microsoft.com:443
             www.msftconnecttest.com:443
             ipv6.msftconnecttest.com:443
             www.msftncsi.com:443
@@ -94,6 +128,9 @@ jobs:
         if: matrix.target == 'windows'
         uses: ./.github/actions/windows-dns-guard
 
+      # Restores yesterday's entry (making today's compiles incremental) and
+      # pins GOCACHE/GOMODCACHE so the save step below archives the same
+      # paths the restore populated.
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
         id: go
@@ -105,4 +142,53 @@ jobs:
           install-wrapper: false
 
       - name: Get deps
-        run: go mod download
+        uses: ./.github/actions/go-mod-download-retry
+
+      # Warm the same cache namespaces the real jobs compile in. Flags must
+      # match the real invocations or Go's action IDs differ and the warm
+      # entries go unused: atmos builds with CGO_ENABLED=0 + GOFIPS140=latest
+      # (see .goreleaser.yml, magefiles/build.go, docs/prd/fips-140-mode.md).
+      - name: Warm the build cache (go build ./...)
+        env:
+          CGO_ENABLED: "0"
+          GOFIPS140: latest
+        run: go build ./...
+
+      # The same precompile the Build job runs, so the large test binaries'
+      # compilation (coverage-instrumented on their own action-ID namespace)
+      # is warm too. macos-intel skips it exactly like the Build job does
+      # (its only consumer, the k3s macOS job, runs no acceptance shards).
+      - name: Warm the acceptance test binaries
+        if: matrix.target != 'macos-intel'
+        run: go tool mage acceptance:precompile "${{ matrix.target }}"
+
+      # The race job compiles ~400 packages with -race and CGO_ENABLED=1
+      # (its checks need cgo; see the race job in test.yml), a third distinct
+      # cache namespace, and is the slowest single job in the Tests workflow.
+      # Warm it on the linux leg only — that is the only OS the race job runs
+      # on. libudev-dev mirrors the race job's own build-deps step.
+      - name: Install Linux build dependencies (libudev-dev for the race-namespace warm)
+        if: matrix.target == 'linux'
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
+
+      - name: Warm the race-instrumented build cache
+        if: matrix.target == 'linux'
+        env:
+          CGO_ENABLED: "1"
+          GOFIPS140: latest
+        run: go build -race ./...
+
+      # The one and only save of the go-cache-* lineage. The run id makes the
+      # key unique so every warmup lands a fresh entry (GitHub cache keys are
+      # immutable); consumers pick the newest via restore-keys. Old entries
+      # age out through GitHub's 7-day-unused eviction.
+      - name: Save the Go build and module caches
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+          key: ${{ steps.go.outputs.cache-primary-key }}-${{ github.run_id }}
