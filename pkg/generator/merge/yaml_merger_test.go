@@ -1184,6 +1184,31 @@ obj: {a: template, b: 2}
 `, result.Content)
 }
 
+// TestFindSentinel_DeterministicEarliestByteIndex guards against
+// findSentinel silently depending on Go's randomized map iteration order:
+// when a line holds more than one sentinel (the documented flow-style case
+// in spliceConflictMarkers' doc comment), it must always pick the one with
+// the smallest byte index, not whichever the map happens to yield first.
+// Ranging over the same two-entry map many times exercises different
+// iteration orders, so the old implementation (return on first map hit)
+// would have failed this near-certainly before it ever reached run 50.
+func TestFindSentinel_DeterministicEarliestByteIndex(t *testing.T) {
+	first := nodeConflict{sentinel: "ATMOSMERGECONFLICT000000-aaaaaaaa"}
+	second := nodeConflict{sentinel: "ATMOSMERGECONFLICT000001-bbbbbbbb"}
+	line := "obj: {a: " + first.sentinel + ", b: " + second.sentinel + "}"
+	bySentinel := map[string]nodeConflict{
+		first.sentinel:  first,
+		second.sentinel: second,
+	}
+
+	for i := 0; i < 50; i++ {
+		conflict, sentinel, idx := findSentinel(line, bySentinel)
+		assert.Equal(t, first.sentinel, sentinel, "must always pick the earliest sentinel by byte index")
+		assert.Equal(t, first, conflict)
+		assert.Equal(t, strings.Index(line, first.sentinel), idx)
+	}
+}
+
 func TestYAMLMerger_PreservesLineComments(t *testing.T) {
 	tests := []struct {
 		name           string

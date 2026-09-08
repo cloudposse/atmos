@@ -409,14 +409,23 @@ func spliceConflictMarkers(yamlText string, conflicts []nodeConflict) (string, e
 }
 
 // findSentinel returns the conflict, sentinel string, and byte index of the
-// first sentinel found in line, or idx == -1 if none is present.
+// earliest sentinel found in line, or idx == -1 if none is present.
+//
+// Note: bySentinel is a Go map, so ranging over it in iteration order (as an
+// earlier version of this function did) picks a different sentinel on every
+// call when a line holds more than one -- the documented flow-style case
+// below. Comparing byte indices instead makes the choice deterministic
+// regardless of map iteration order.
 func findSentinel(line string, bySentinel map[string]nodeConflict) (nodeConflict, string, int) {
+	best := -1
+	var bestSentinel string
+	var bestConflict nodeConflict
 	for sentinel, c := range bySentinel {
-		if idx := strings.Index(line, sentinel); idx != -1 {
-			return c, sentinel, idx
+		if idx := strings.Index(line, sentinel); idx != -1 && (best == -1 || idx < best) {
+			best, bestSentinel, bestConflict = idx, sentinel, c
 		}
 	}
-	return nodeConflict{}, "", -1
+	return bestConflict, bestSentinel, best
 }
 
 // renderConflictBlock builds the replacement lines for a single sentinel
