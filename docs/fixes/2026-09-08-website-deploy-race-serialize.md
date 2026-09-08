@@ -58,7 +58,9 @@ URL that 404s. This did not cause the blank page; it just meant Sentry never loa
 - `.github/workflows/website-preview-deploy.yml`: same guard keyed per PR
   (`${{ github.workflow }}-pr-<number>`), since each preview deploys with
   `sync --delete` into its own `pr-<N>/` prefix and two builds of one PR can race
-  the same way.
+  the same way. The job now also requires an associated PR number (a manually
+  dispatched build or a fork PR has none, and would otherwise deploy to `pr-/`), and
+  the group falls back to the run id for such runs.
 - `website/docusaurus.config.js`: pass the Sentry Loader public key
   (`b022344b0e7cc96f803033fff3b377ee`) instead of the full DSN, with a comment
   explaining why the plugin needs the key.
