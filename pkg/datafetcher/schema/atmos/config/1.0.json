@@ -2375,6 +2375,20 @@
             }
           ],
           "description": "TimeoutInMinutes bounds how long stack creation may run before CloudFormation rolls back."
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Source holds global source configuration defaults for JIT-vendored components."
         }
       },
       "type": "object",

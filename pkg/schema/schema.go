@@ -1381,6 +1381,8 @@ type AwsCloudFormation struct {
 	TerminationProtection bool `yaml:"termination_protection,omitempty" json:"termination_protection,omitempty" mapstructure:"termination_protection"`
 	// TimeoutInMinutes bounds how long stack creation may run before CloudFormation rolls back.
 	TimeoutInMinutes int `yaml:"timeout_in_minutes,omitempty" json:"timeout_in_minutes,omitempty" mapstructure:"timeout_in_minutes"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 }
 
 type Components struct {
