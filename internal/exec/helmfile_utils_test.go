@@ -15,6 +15,8 @@ import (
 )
 
 func TestCheckHelmfileConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		atmosConfig   schema.AtmosConfiguration
@@ -162,6 +164,7 @@ func TestCheckHelmfileConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := checkHelmfileConfig(&tt.atmosConfig)
 
 			if tt.expectedError == nil {
@@ -194,15 +197,19 @@ func BenchmarkCheckHelmfileConfig(b *testing.B) {
 }
 
 func TestPrepareComponentAuthEnvironment(t *testing.T) {
+	t.Parallel()
+
 	baseEnv := []string{"PATH=/bin"}
 
 	t.Run("nil manager returns original env", func(t *testing.T) {
+		t.Parallel()
 		got, err := prepareComponentAuthEnvironment(nil, "dev", baseEnv)
 		require.NoError(t, err)
 		assert.Equal(t, baseEnv, got)
 	})
 
 	t.Run("disabled identity returns original env", func(t *testing.T) {
+		t.Parallel()
 		ctrl := gomock.NewController(t)
 		manager := mockTypes.NewMockAuthManager(ctrl)
 
@@ -212,6 +219,7 @@ func TestPrepareComponentAuthEnvironment(t *testing.T) {
 	})
 
 	t.Run("explicit identity prepares env", func(t *testing.T) {
+		t.Parallel()
 		ctrl := gomock.NewController(t)
 		manager := mockTypes.NewMockAuthManager(ctrl)
 		prepared := []string{"PATH=/bin", "AWS_PROFILE=dev"}
@@ -225,6 +233,7 @@ func TestPrepareComponentAuthEnvironment(t *testing.T) {
 	})
 
 	t.Run("empty identity uses default identity", func(t *testing.T) {
+		t.Parallel()
 		ctrl := gomock.NewController(t)
 		manager := mockTypes.NewMockAuthManager(ctrl)
 		prepared := []string{"PATH=/bin", "AWS_PROFILE=default"}
@@ -239,6 +248,7 @@ func TestPrepareComponentAuthEnvironment(t *testing.T) {
 	})
 
 	t.Run("empty identity without default keeps original env", func(t *testing.T) {
+		t.Parallel()
 		ctrl := gomock.NewController(t)
 		manager := mockTypes.NewMockAuthManager(ctrl)
 		manager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
@@ -249,6 +259,7 @@ func TestPrepareComponentAuthEnvironment(t *testing.T) {
 	})
 
 	t.Run("select identity requires default identity", func(t *testing.T) {
+		t.Parallel()
 		ctrl := gomock.NewController(t)
 		manager := mockTypes.NewMockAuthManager(ctrl)
 		manager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
@@ -260,6 +271,7 @@ func TestPrepareComponentAuthEnvironment(t *testing.T) {
 	})
 
 	t.Run("prepare failure is wrapped", func(t *testing.T) {
+		t.Parallel()
 		ctrl := gomock.NewController(t)
 		manager := mockTypes.NewMockAuthManager(ctrl)
 		prepareErr := errors.New("prepare failed")

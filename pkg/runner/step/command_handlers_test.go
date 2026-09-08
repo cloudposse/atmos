@@ -10,6 +10,8 @@ import (
 )
 
 func TestCommandHandlersRegistration(t *testing.T) {
+	t.Parallel()
+
 	// Verify all command handlers are registered.
 	tests := []struct {
 		name        string
@@ -24,6 +26,7 @@ func TestCommandHandlersRegistration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			handler, ok := Get(tt.name)
 			require.True(t, ok, "handler %s should be registered", tt.name)
 			assert.Equal(t, tt.name, handler.GetName())
@@ -34,6 +37,8 @@ func TestCommandHandlersRegistration(t *testing.T) {
 }
 
 func TestAtmosHandlerValidation(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("atmos")
 	require.True(t, ok)
 
@@ -83,6 +88,7 @@ func TestAtmosHandlerValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := handler.Validate(tt.step)
 			if tt.expectErr {
 				assert.Error(t, err)
@@ -94,6 +100,8 @@ func TestAtmosHandlerValidation(t *testing.T) {
 }
 
 func TestShellHandlerValidation(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("shell")
 	require.True(t, ok)
 
@@ -155,6 +163,7 @@ func TestShellHandlerValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := handler.Validate(tt.step)
 			if tt.expectErr {
 				assert.Error(t, err)
@@ -166,6 +175,8 @@ func TestShellHandlerValidation(t *testing.T) {
 }
 
 func TestScriptHandlerValidation(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("script")
 	require.True(t, ok)
 
@@ -216,6 +227,7 @@ func TestScriptHandlerValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := handler.Validate(tt.step)
 			if tt.expectErr {
 				assert.Error(t, err)
@@ -227,6 +239,8 @@ func TestScriptHandlerValidation(t *testing.T) {
 }
 
 func TestContainerHandlerValidation(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("container")
 	require.True(t, ok)
 
@@ -312,6 +326,7 @@ func TestContainerHandlerValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := handler.Validate(tt.step)
 			if tt.expectErr {
 				assert.Error(t, err)
@@ -323,6 +338,8 @@ func TestContainerHandlerValidation(t *testing.T) {
 }
 
 func TestOutputModeTypes(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		mode     OutputMode
 		expected string
@@ -335,12 +352,15 @@ func TestOutputModeTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.expected, string(tt.mode))
 		})
 	}
 }
 
 func TestGetOutputMode(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		stepOutput     string
@@ -369,6 +389,7 @@ func TestGetOutputMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			step := &schema.WorkflowStep{Output: tt.stepOutput}
 			workflow := &schema.WorkflowDefinition{Output: tt.workflowOutput}
 
@@ -379,7 +400,10 @@ func TestGetOutputMode(t *testing.T) {
 }
 
 func TestGetViewportConfig(t *testing.T) {
+	t.Parallel()
+
 	t.Run("step overrides workflow", func(t *testing.T) {
+		t.Parallel()
 		stepViewport := &schema.ViewportConfig{Height: 30, Width: 100}
 		workflowViewport := &schema.ViewportConfig{Height: 20, Width: 80}
 
@@ -391,6 +415,7 @@ func TestGetViewportConfig(t *testing.T) {
 	})
 
 	t.Run("workflow default when step nil", func(t *testing.T) {
+		t.Parallel()
 		workflowViewport := &schema.ViewportConfig{Height: 20, Width: 80}
 
 		step := &schema.WorkflowStep{}
@@ -401,6 +426,7 @@ func TestGetViewportConfig(t *testing.T) {
 	})
 
 	t.Run("nil when both empty", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{}
 		workflow := &schema.WorkflowDefinition{}
 
@@ -410,6 +436,8 @@ func TestGetViewportConfig(t *testing.T) {
 }
 
 func TestContainsStackFlag(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		args     []string
@@ -449,6 +477,7 @@ func TestContainsStackFlag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := containsStackFlag(tt.args)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -456,6 +485,8 @@ func TestContainsStackFlag(t *testing.T) {
 }
 
 func TestCommandHandlersByCategory(t *testing.T) {
+	t.Parallel()
+
 	byCategory := ListByCategory()
 	commandHandlers := byCategory[CategoryCommand]
 

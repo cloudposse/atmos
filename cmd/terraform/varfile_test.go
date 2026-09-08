@@ -10,6 +10,8 @@ import (
 )
 
 func TestParseVarfileFlags(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		setup    func(*viper.Viper)
@@ -62,6 +64,7 @@ func TestParseVarfileFlags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			v := viper.New()
 			tt.setup(v)
 
@@ -77,6 +80,8 @@ func TestParseVarfileFlags(t *testing.T) {
 }
 
 func TestValidateVarfileConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		config      *VarfileConfig
@@ -122,6 +127,7 @@ func TestValidateVarfileConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateVarfileConfig(tt.config)
 
 			if tt.expectedErr != nil {
@@ -134,6 +140,8 @@ func TestValidateVarfileConfig(t *testing.T) {
 }
 
 func TestCreateVarfileParser(t *testing.T) {
+	t.Parallel()
+
 	parser := createVarfileParser()
 
 	assert.NotNil(t, parser, "Parser should not be nil")

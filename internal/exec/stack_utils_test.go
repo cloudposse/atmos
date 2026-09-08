@@ -12,6 +12,8 @@ import (
 )
 
 func TestBuildTerraformWorkspace(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		backendType       string
@@ -72,6 +74,7 @@ func TestBuildTerraformWorkspace(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Setup test config.
 			atmosConfig := schema.AtmosConfiguration{
 				Components: schema.Components{
@@ -109,6 +112,8 @@ func TestBuildTerraformWorkspace(t *testing.T) {
 // hardcoded `ignoreMissingTemplateValues=false`, so a `name_template` that referenced
 // a missing key always errored even when the user set the global flag to `true`.
 func TestBuildTerraformWorkspace_IgnoreMissingTemplateValues(t *testing.T) {
+	t.Parallel()
+
 	// The template references `.vars.missing_key`, which is absent from the component section.
 	const nameTemplate = "{{ .vars.tenant }}-{{ .vars.missing_key }}"
 
@@ -134,11 +139,13 @@ func TestBuildTerraformWorkspace_IgnoreMissingTemplateValues(t *testing.T) {
 	}
 
 	t.Run("flag disabled: missing template key errors", func(t *testing.T) {
+		t.Parallel()
 		_, err := BuildTerraformWorkspace(newConfig(false), info)
 		assert.Error(t, err, "with ignore_missing_template_values=false, a missing name_template key must error")
 	})
 
 	t.Run("flag enabled: missing template key tolerated", func(t *testing.T) {
+		t.Parallel()
 		workspace, err := BuildTerraformWorkspace(newConfig(true), info)
 		assert.NoError(t, err, "with ignore_missing_template_values=true, a missing name_template key must not error")
 		// `tenant` resolves; the missing key renders as `<no value>` (missingkey=default).
@@ -149,22 +156,27 @@ func TestBuildTerraformWorkspace_IgnoreMissingTemplateValues(t *testing.T) {
 // TestBuildDependentStackNameFromDependsOnLegacy covers both resolution branches and the
 // unresolved path, which now returns a wrapped static error (errUtils.ErrInvalidDependsOn).
 func TestBuildDependentStackNameFromDependsOnLegacy(t *testing.T) {
+	t.Parallel()
+
 	allStacks := []string{"prod-ue1", "dev-ue1"}
 	componentsInStack := []string{"vpc", "eks"}
 
 	t.Run("resolves to a stack", func(t *testing.T) {
+		t.Parallel()
 		got, err := BuildDependentStackNameFromDependsOnLegacy("prod-ue1", allStacks, "dev-ue1", componentsInStack, "app")
 		assert.NoError(t, err)
 		assert.Equal(t, "prod-ue1", got)
 	})
 
 	t.Run("resolves to a component in the current stack", func(t *testing.T) {
+		t.Parallel()
 		got, err := BuildDependentStackNameFromDependsOnLegacy("vpc", allStacks, "dev-ue1", componentsInStack, "app")
 		assert.NoError(t, err)
 		assert.Equal(t, "dev-ue1-vpc", got)
 	})
 
 	t.Run("unresolved dependency returns ErrInvalidDependsOn", func(t *testing.T) {
+		t.Parallel()
 		_, err := BuildDependentStackNameFromDependsOnLegacy("nope", allStacks, "dev-ue1", componentsInStack, "app")
 		assert.ErrorIs(t, err, errUtils.ErrInvalidDependsOn)
 	})
@@ -173,21 +185,27 @@ func TestBuildDependentStackNameFromDependsOnLegacy(t *testing.T) {
 // TestBuildDependentStackNameFromDependsOn covers the resolution and unresolved paths; the
 // unresolved path now returns a wrapped static error (errUtils.ErrInvalidSettingsDependsOn).
 func TestBuildDependentStackNameFromDependsOn(t *testing.T) {
+	t.Parallel()
+
 	allStacks := []string{"prod-ue1-vpc", "dev-ue1-eks"}
 
 	t.Run("resolves component in stack", func(t *testing.T) {
+		t.Parallel()
 		got, err := BuildDependentStackNameFromDependsOn("app", "dev-ue1", "vpc", "prod-ue1", allStacks)
 		assert.NoError(t, err)
 		assert.Equal(t, "prod-ue1-vpc", got)
 	})
 
 	t.Run("unresolved dependency returns ErrInvalidSettingsDependsOn", func(t *testing.T) {
+		t.Parallel()
 		_, err := BuildDependentStackNameFromDependsOn("app", "dev-ue1", "missing", "prod-ue1", allStacks)
 		assert.ErrorIs(t, err, errUtils.ErrInvalidSettingsDependsOn)
 	})
 }
 
 func TestBuildComponentPath(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                string
 		atmosConfig         schema.AtmosConfiguration
@@ -267,6 +285,7 @@ func TestBuildComponentPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := BuildComponentPath(&tt.atmosConfig, &tt.componentSectionMap, tt.componentType)
 			assert.Equal(t, tt.expectedPath, result)
 		})
@@ -274,6 +293,8 @@ func TestBuildComponentPath(t *testing.T) {
 }
 
 func TestBuildComponentPathWithFallback(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := schema.AtmosConfiguration{
 		BasePath: string(filepath.Separator) + "base",
 		Components: schema.Components{
@@ -319,6 +340,7 @@ func TestBuildComponentPathWithFallback(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := BuildComponentPath(&atmosConfig, &tt.componentSection, cfg.TerraformComponentType, tt.fallback...)
 			assert.Equal(t, tt.expected, result)
 		})

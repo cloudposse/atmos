@@ -9,6 +9,8 @@ import (
 )
 
 func TestGetTemplateContextTool_Interface(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -29,6 +31,8 @@ func TestGetTemplateContextTool_Interface(t *testing.T) {
 }
 
 func TestGetTemplateContextTool_Execute_MissingComponent(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -47,6 +51,8 @@ func TestGetTemplateContextTool_Execute_MissingComponent(t *testing.T) {
 }
 
 func TestGetTemplateContextTool_Execute_MissingStack(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -65,6 +71,8 @@ func TestGetTemplateContextTool_Execute_MissingStack(t *testing.T) {
 }
 
 func TestGetTemplateContextTool_Execute_InvalidComponent(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "../../../../../../examples/quick-start-advanced", // Use real example.
 	}

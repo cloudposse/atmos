@@ -9,6 +9,8 @@ import (
 )
 
 func TestFormatOutputChange_AllScenarios(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		key       string
@@ -75,6 +77,7 @@ func TestFormatOutputChange_AllScenarios(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := formatOutputChange(tc.key, tc.origValue, tc.newValue)
 			assert.Equal(t, tc.expected, result)
 		})
@@ -82,6 +85,8 @@ func TestFormatOutputChange_AllScenarios(t *testing.T) {
 }
 
 func TestPrintAttributeDiff_Complex(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		attrK    string
@@ -149,6 +154,7 @@ func TestPrintAttributeDiff_Complex(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var diff strings.Builder
 			printAttributeDiff(&diff, tc.attrK, tc.origAttr, tc.newAttr)
 			assert.Contains(t, diff.String(), tc.expected)
@@ -157,6 +163,8 @@ func TestPrintAttributeDiff_Complex(t *testing.T) {
 }
 
 func TestFormatMapDiff_AllScenarios(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		origMap          map[string]interface{}
@@ -219,6 +227,7 @@ func TestFormatMapDiff_AllScenarios(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := formatMapDiff(tc.origMap, tc.newMap)
 			for _, expected := range tc.expectedContains {
 				assert.Contains(t, result, expected)
