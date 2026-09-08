@@ -111,7 +111,7 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 		// Wrap unexpected errors (e.g. MergeComponentAuthFromConfig failures) with the sentinel
 		// to match the behaviour of createAndAuthenticateAuthManagerWithDeps. When the error names
 		// a missing identity, offer the same profile-selection prompt `atmos auth login` has.
-		return nil, resolveIdentityConfigError(atmosConfig, err, errUtils.ErrInvalidAuthConfig)
+		return nil, resolveIdentityConfigError(atmosConfig, info, err, errUtils.ErrInvalidAuthConfig)
 	}
 
 	// Create and authenticate the AuthManager using the same injectable creator as
@@ -126,7 +126,7 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 		// Wrap auth creation failures with the sentinel to match createAndAuthenticateAuthManagerWithDeps.
 		// When the error names a missing identity, offer the same profile-selection prompt
 		// `atmos auth login` has.
-		return nil, resolveIdentityConfigError(atmosConfig, err, errUtils.ErrFailedToInitializeAuthManager)
+		return nil, resolveIdentityConfigError(atmosConfig, info, err, errUtils.ErrFailedToInitializeAuthManager)
 	}
 
 	// Store manager for nested YAML functions (e.g. !terraform.state).

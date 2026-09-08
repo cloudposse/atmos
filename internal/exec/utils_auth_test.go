@@ -1233,7 +1233,7 @@ func TestResolveIdentityConfigError_NonIdentityConfigErrorWrapsUnchanged(t *test
 	tmpDir := setupExecProfileFallbackFixture(t)
 	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: tmpDir}
 
-	err := resolveIdentityConfigError(atmosConfig, errors.New("boom"), errUtils.ErrInvalidAuthConfig)
+	err := resolveIdentityConfigError(atmosConfig, &schema.ConfigAndStacksInfo{}, errors.New("boom"), errUtils.ErrInvalidAuthConfig)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
 }
@@ -1242,7 +1242,7 @@ func TestResolveIdentityConfigError_NoIdentityContextWrapsUnchanged(t *testing.T
 	tmpDir := setupExecProfileFallbackFixture(t)
 	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: tmpDir}
 
-	err := resolveIdentityConfigError(atmosConfig, errUtils.ErrInvalidIdentityConfig, errUtils.ErrInvalidAuthConfig)
+	err := resolveIdentityConfigError(atmosConfig, &schema.ConfigAndStacksInfo{}, errUtils.ErrInvalidIdentityConfig, errUtils.ErrInvalidAuthConfig)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
 }
@@ -1255,7 +1255,7 @@ func TestResolveIdentityConfigError_NoCandidateProfileWrapsUnchanged(t *testing.
 		WithContext("identity", "totally-unknown-identity").
 		Err()
 
-	err := resolveIdentityConfigError(atmosConfig, tagged, errUtils.ErrInvalidAuthConfig)
+	err := resolveIdentityConfigError(atmosConfig, &schema.ConfigAndStacksInfo{}, tagged, errUtils.ErrInvalidAuthConfig)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig),
 		"no profile defines the identity, so the original wrap must be preserved")
@@ -1269,7 +1269,7 @@ func TestResolveIdentityConfigError_CandidateProfileOffersFallback(t *testing.T)
 		WithContext("identity", "root-admin").
 		Err()
 
-	err := resolveIdentityConfigError(atmosConfig, tagged, errUtils.ErrInvalidAuthConfig)
+	err := resolveIdentityConfigError(atmosConfig, &schema.ConfigAndStacksInfo{}, tagged, errUtils.ErrInvalidAuthConfig)
 	require.Error(t, err)
 	// Non-interactive test environment: the flat wrap is replaced by the fallback's
 	// hint-enriched ErrIdentityNotFound naming the "alpha" profile.

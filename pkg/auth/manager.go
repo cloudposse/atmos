@@ -269,7 +269,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		// surface a hint naming the profile (non-interactive). Explicit
 		// --profile / ATMOS_PROFILE selections are never overridden.
 		// See PRD: interactive-profile-suggestion.
-		if fbErr := m.maybeOfferProfileFallback(ctx, identityName); fbErr != nil {
+		if fbErr := m.maybeOfferProfileFallback(ctx, identityName, ReExecContext{}); fbErr != nil {
 			return nil, fbErr
 		}
 		// Return a single rich error carrying the explanation and hint.
