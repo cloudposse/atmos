@@ -76,7 +76,7 @@ func runFmt(spec *stackSpec, flags map[string]any, summary map[string]any) (map[
 		return summary, nil
 	}
 	if err := os.WriteFile(spec.TemplateAbsPath, []byte(formatted), templateFilePermissions); err != nil {
-		return summary, fmt.Errorf("%w: %s: %w", errUtils.ErrAwsCloudFormationFmtNotClean, spec.TemplateAbsPath, err)
+		return summary, fmt.Errorf("%w: %s: %w", errUtils.ErrAwsCloudFormationFmtWriteFailed, spec.TemplateAbsPath, err)
 	}
 	_ = data.Writeln(fmt.Sprintf("%s: formatted", spec.TemplateAbsPath))
 	return summary, nil

@@ -1724,6 +1724,7 @@ var (
 	ErrAwsCloudFormationIdentityResolutionFailed  = errors.New("aws/cloudformation component requested an identity, but the auth manager could not resolve it")
 	ErrAwsCloudFormationAPICallFailed             = errors.New("aws/cloudformation API call failed")
 	ErrAwsCloudFormationFmtNotClean               = errors.New("aws/cloudformation template is not formatted")
+	ErrAwsCloudFormationFmtWriteFailed            = errors.New("aws/cloudformation failed to write formatted template")
 	ErrAwsCloudFormationStackNotFound             = errors.New("aws/cloudformation stack not found")
 )
 
