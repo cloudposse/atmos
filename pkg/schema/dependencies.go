@@ -32,6 +32,8 @@ var (
 	ErrComponentDependencyMissingPath = errors.New("path-based component dependency is missing 'path'")
 	// ErrComponentDependencyMissingComponent is returned when a component dependency has no target.
 	ErrComponentDependencyMissingComponent = errors.New("component dependency is missing 'component' or 'name'")
+	// ErrComponentDependencyInvalidRequired is returned when a rendered required value is not boolean.
+	ErrComponentDependencyInvalidRequired = errors.New("component dependency required value is not boolean")
 )
 
 // ComponentDependency represents a single dependency entry. It supports two
@@ -337,7 +339,7 @@ func dependencyDecodeHook(from, to reflect.Type, data any) (any, error) {
 	}
 	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
 	if err != nil {
-		return nil, fmt.Errorf("required must be a boolean: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrComponentDependencyInvalidRequired, err)
 	}
 	return parsed, nil
 }

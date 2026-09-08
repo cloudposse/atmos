@@ -259,21 +259,36 @@ func TestBuildTerraformDependencyGraphModernDependencies(t *testing.T) {
 }
 
 func TestBuildTerraformDependencyGraphModernDependencyCustomDelimiter(t *testing.T) {
+	manifest := map[string]any{}
+	require.NoError(t, yaml.Unmarshal([]byte(`
+settings:
+  templates:
+    settings:
+      enabled: true
+      delimiters: ["[[", "]]"]
+components:
+  terraform:
+    app:
+      dependencies:
+        components:
+          - name: monitoring
+            required: "[[ .dependencyRequired ]]"
+`), &manifest))
+
+	settingsYAML, err := yaml.Marshal(manifest["settings"])
+	require.NoError(t, err)
+	var settings schema.Settings
+	require.NoError(t, yaml.Unmarshal(settingsYAML, &settings))
+
 	atmosConfig := &schema.AtmosConfiguration{
-		Templates: schema.Templates{
-			Settings: schema.TemplatesSettings{
-				Enabled:    true,
-				Delimiters: []string{"[[", "]]"},
-			},
-		},
+		Templates: settings.Templates,
 	}
-	componentSection := map[string]any{
-		"dependencies": map[string]any{
-			"components": []any{
-				map[string]any{"name": "monitoring", "required": "[[ .required ]]"},
-			},
-		},
-	}
+	components, ok := manifest["components"].(map[string]any)
+	require.True(t, ok)
+	terraformComponents, ok := components["terraform"].(map[string]any)
+	require.True(t, ok)
+	componentSection, ok := terraformComponents["app"].(map[string]any)
+	require.True(t, ok)
 	componentSectionYAML, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
 		componentSection,
 		atmosConfig.Templates.Settings.Delimiters,
@@ -285,7 +300,7 @@ func TestBuildTerraformDependencyGraphModernDependencyCustomDelimiter(t *testing
 		schema.Settings{},
 		"component.yaml",
 		componentSectionYAML,
-		map[string]any{"required": false},
+		map[string]any{"dependencyRequired": false},
 		false,
 	)
 	require.NoError(t, err)

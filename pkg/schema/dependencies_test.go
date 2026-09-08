@@ -310,8 +310,7 @@ func TestParseComponentDependenciesRejectsInvalidRenderedRequiredValue(t *testin
 		},
 	}, "terraform", "dev")
 
-	require.Error(t, err)
-	require.ErrorContains(t, err, "required must be a boolean")
+	require.ErrorIs(t, err, ErrComponentDependencyInvalidRequired)
 }
 
 func TestDependencies_Normalize_NameAlias(t *testing.T) {
