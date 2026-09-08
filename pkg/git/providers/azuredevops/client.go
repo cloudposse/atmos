@@ -272,12 +272,12 @@ func (p *Provider) doRequest(ctx context.Context, r restRequest, out any) error 
 // decodeResponse validates resp's status code and decodes its JSON body into out when non-nil.
 func decodeResponse(resp *http.Response, out any) error {
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return fmt.Errorf("%w: azure DevOps returned HTTP %d; verify AZURE_DEVOPS_EXT_PAT has Code (read & write) and Pull Request Contribute scopes",
+		return fmt.Errorf("%w: Azure DevOps returned HTTP %d; verify AZURE_DEVOPS_EXT_PAT has Code (read & write) and Pull Request Contribute scopes",
 			errUtils.ErrAzureDevOpsAuthorization, resp.StatusCode)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		payload, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("%w: azure DevOps returned HTTP %d: %s", errUtils.ErrPullRequestReconciliation, resp.StatusCode, string(payload))
+		return fmt.Errorf("%w: Azure DevOps returned HTTP %d: %s", errUtils.ErrPullRequestReconciliation, resp.StatusCode, string(payload))
 	}
 	if out == nil {
 		return nil
