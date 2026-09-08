@@ -111,13 +111,17 @@ func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
 
 // SetupRenderedBaseStorage points the 3-way merge base at a pristine
 // re-render of the template (UpdateStrategyRendered) instead of the target's
-// own git history. oldRenderRoot is the root of an already-fully-rendered
-// copy of the template at the ref that produced what's currently on disk
-// (see pkg/generator/ui's renderPristineBase) -- unlike SetupGitStorage,
-// there is no repository to open or ref to validate here, since the caller
-// already did the rendering. targetPath is still required: determineBaseContent
-// uses it (via p.targetPath) to compute each file's base-storage-relative
-// path regardless of which base storage backs it.
+// own git history.
+//
+// Note: oldRenderRoot is the root of an already-fully-rendered copy of the
+// template at the ref that produced what's currently on disk (see
+// pkg/generator/ui's renderPristineBase) -- unlike SetupGitStorage, there is
+// no repository to open or ref to validate here, since the caller already
+// did the rendering.
+//
+// Note: targetPath is still required: determineBaseContent uses it (via
+// p.targetPath) to compute each file's base-storage-relative path
+// regardless of which base storage backs it.
 func (p *Processor) SetupRenderedBaseStorage(targetPath, oldRenderRoot string) {
 	defer perf.Track(nil, "engine.Processor.SetupRenderedBaseStorage")()
 
