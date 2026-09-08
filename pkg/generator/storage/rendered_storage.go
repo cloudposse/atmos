@@ -27,7 +27,8 @@ func NewRenderedBaseStorage(root string) *RenderedBaseStorage {
 }
 
 // LoadBase retrieves the content of a file from the pristine render.
-// filePath should be relative to the render root, matching
+//
+// Note: filePath should be relative to the render root, matching
 // GitBaseStorage.LoadBase's contract:
 //   - File content as string if the file exists in the render
 //   - Empty string and (false, nil) if the file doesn't exist in the render

@@ -401,12 +401,12 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 	// resolveInteractiveBaseRef, mirroring --base-ref's own split
 	// resolution above.
 	if opts.update && updateStrategy == engine.UpdateStrategyRendered && absTargetDir != "" {
-		oldConfig, oldValues, cleanupOldSource, err := source.ResolveRenderedBase(absTargetDir, opts.sourceOverride)
+		renderedBase, err := source.ResolveRenderedBase(absTargetDir, opts.sourceOverride)
 		if err != nil {
 			return err
 		}
-		defer cleanupOldSource()
-		scaffoldUI.SetRenderedBaseSource(oldConfig, oldValues)
+		defer renderedBase.Cleanup()
+		scaffoldUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
 	}
 
 	// Select template (interactive or by name)
@@ -825,13 +825,13 @@ func resolveInteractiveBaseRef(
 		return targetDir, "", nil, false, nil, err
 	}
 	if updateStrategy == engine.UpdateStrategyRendered {
-		var oldConfig *templates.Configuration
-		var oldValues map[string]interface{}
-		oldConfig, oldValues, cleanup, err = source.ResolveRenderedBase(targetDir, opts.sourceOverride)
+		var renderedBase *source.RenderedBase
+		renderedBase, err = source.ResolveRenderedBase(targetDir, opts.sourceOverride)
 		if err != nil {
 			return targetDir, "", nil, false, nil, err
 		}
-		scaffoldUI.SetRenderedBaseSource(oldConfig, oldValues)
+		cleanup = renderedBase.Cleanup
+		scaffoldUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
 	}
 
 	baseRef, err = defaultBaseRef(opts.baseRef, targetDir)

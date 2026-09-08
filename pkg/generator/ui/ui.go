@@ -539,6 +539,30 @@ func (ui *InitUI) ExecuteWithBaseRef(embedsConfig *tmpl.Configuration, targetPat
 	return ui.ExecuteWithDelimiters(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues, []string{"{{", "}}"})
 }
 
+// setupUpdateBase configures the Processor's 3-way merge base for --update,
+// per ui.updateStrategy: UpdateStrategyRendered renders a pristine old-ref
+// copy of the template (see renderPristineBase) and points the merge base at
+// it; UpdateStrategyTracked (the default) sets up git-history-backed storage
+// when baseRef is known. The returned cleanup is always safe to call (a
+// no-op under UpdateStrategyTracked) and must be deferred by the caller.
+func (ui *InitUI) setupUpdateBase(targetPath, baseRef string) (cleanup func(), err error) {
+	if ui.updateStrategy == engine.UpdateStrategyRendered {
+		renderedTempDir, cleanupRenderedBase, err := ui.renderPristineBase(ui.renderedBaseConfig, ui.renderedBaseValues)
+		if err != nil {
+			return func() {}, fmt.Errorf("failed to render the update-strategy=rendered base: %w", err)
+		}
+		ui.processor.SetupRenderedBaseStorage(targetPath, renderedTempDir)
+		return cleanupRenderedBase, nil
+	}
+
+	if baseRef != "" {
+		if err := ui.processor.SetupGitStorage(targetPath, baseRef); err != nil {
+			return func() {}, fmt.Errorf("failed to setup git storage: %w", err)
+		}
+	}
+	return func() {}, nil
+}
+
 // ExecuteWithDelimiters runs the initialization process with UI and custom delimiters.
 //
 //nolint:revive // argument-limit: public API maintains compatibility
@@ -561,21 +585,11 @@ func (ui *InitUI) ExecuteWithDelimiters(embedsConfig *tmpl.Configuration, target
 	// dependency, see renderPristineBase); UpdateStrategyTracked (the
 	// default) is today's existing git-history-backed behavior.
 	if update {
-		switch ui.updateStrategy {
-		case engine.UpdateStrategyRendered:
-			renderedTempDir, cleanupRenderedBase, err := ui.renderPristineBase(ui.renderedBaseConfig, ui.renderedBaseValues)
-			if err != nil {
-				return fmt.Errorf("failed to render the update-strategy=rendered base: %w", err)
-			}
-			defer cleanupRenderedBase()
-			ui.processor.SetupRenderedBaseStorage(targetPath, renderedTempDir)
-		default: // engine.UpdateStrategyTracked
-			if baseRef != "" {
-				if err := ui.processor.SetupGitStorage(targetPath, baseRef); err != nil {
-					return fmt.Errorf("failed to setup git storage: %w", err)
-				}
-			}
+		cleanupUpdateBase, err := ui.setupUpdateBase(targetPath, baseRef)
+		if err != nil {
+			return err
 		}
+		defer cleanupUpdateBase()
 	}
 
 	ui.writeOutput("Generating %s in %s\n\n", embedsConfig.Name, targetPath)

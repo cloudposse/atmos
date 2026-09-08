@@ -32,6 +32,31 @@ func (ui *InitUI) SetRenderedBaseSource(cfg *tmpl.Configuration, values map[stri
 	ui.renderedBaseValues = values
 }
 
+// loadOldScaffoldConfig finds and loads oldConfig's own scaffold.yaml, so
+// renderPristineBase can render it against the old ref's own schema rather
+// than the current run's.
+func loadOldScaffoldConfig(oldConfig *tmpl.Configuration) (*config.ScaffoldConfig, error) {
+	var oldScaffoldConfigFile *tmpl.File
+	for i := range oldConfig.Files {
+		if oldConfig.Files[i].Path == config.ScaffoldConfigFileName {
+			oldScaffoldConfigFile = &oldConfig.Files[i]
+			break
+		}
+	}
+	if oldScaffoldConfigFile == nil {
+		return nil, errUtils.Build(errUtils.ErrScaffoldConfigMissing).
+			WithExplanationf("%s not found in the old ref's rendered configuration", config.ScaffoldConfigFileName).
+			WithHint("--update-strategy=rendered requires the template to carry a scaffold.yaml at every ref it's updated across").
+			Err()
+	}
+
+	oldScaffoldConfig, err := config.LoadScaffoldConfigFromContent(oldScaffoldConfigFile.Content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load the old ref's scaffold configuration: %w", err)
+	}
+	return oldScaffoldConfig, nil
+}
+
 // renderPristineBase renders oldConfig -- a template Configuration fetched at
 // the ref that produced what's currently on disk -- into a fresh temp
 // directory using oldValues (that generation's own recorded answers), with
@@ -45,25 +70,10 @@ func (ui *InitUI) SetRenderedBaseSource(cfg *tmpl.Configuration, values map[stri
 // force=true, update=false so every file is a plain overwrite into an
 // otherwise-empty directory, never touching merge/hooks itself.
 func (ui *InitUI) renderPristineBase(oldConfig *tmpl.Configuration, oldValues map[string]interface{}) (tempDir string, cleanup func(), err error) {
-	var oldScaffoldConfigFile *tmpl.File
-	for i := range oldConfig.Files {
-		if oldConfig.Files[i].Path == config.ScaffoldConfigFileName {
-			oldScaffoldConfigFile = &oldConfig.Files[i]
-			break
-		}
-	}
-	if oldScaffoldConfigFile == nil {
-		return "", nil, errUtils.Build(errUtils.ErrScaffoldConfigMissing).
-			WithExplanationf("%s not found in the old ref's rendered configuration", config.ScaffoldConfigFileName).
-			WithHint("--update-strategy=rendered requires the template to carry a scaffold.yaml at every ref it's updated across").
-			Err()
-	}
-
-	oldScaffoldConfig, err := config.LoadScaffoldConfigFromContent(oldScaffoldConfigFile.Content)
+	oldScaffoldConfig, err := loadOldScaffoldConfig(oldConfig)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to load the old ref's scaffold configuration: %w", err)
+		return "", nil, err
 	}
-
 	mergedOldValues := config.DeepMerge(oldScaffoldConfig, oldValues)
 
 	tempDir, err = os.MkdirTemp("", "atmos-rendered-base-")
@@ -79,6 +89,18 @@ func (ui *InitUI) renderPristineBase(oldConfig *tmpl.Configuration, oldValues ma
 	ui.output = strings.Builder{}
 	defer func() { ui.output = savedOutput }()
 
+	if err := ui.renderPristineBaseFiles(oldConfig, oldScaffoldConfig, mergedOldValues, tempDir); err != nil {
+		cleanup()
+		return "", nil, err
+	}
+
+	return tempDir, cleanup, nil
+}
+
+// renderPristineBaseFiles loops oldConfig's files (skipping scaffold.yaml
+// and directory entries) and renders each into tempDir via
+// ui.processFileEntry, joining any per-file failures into a single error.
+func (ui *InitUI) renderPristineBaseFiles(oldConfig *tmpl.Configuration, oldScaffoldConfig *config.ScaffoldConfig, mergedOldValues map[string]interface{}, tempDir string) error {
 	activeDelimiters := ResolveDelimiters(nil, oldScaffoldConfig)
 	fileSpecs := FileSpecByPath(oldScaffoldConfig)
 	seenRenderedPaths := make(map[string]string)
@@ -97,12 +119,10 @@ func (ui *InitUI) renderPristineBase(oldConfig *tmpl.Configuration, oldValues ma
 	}
 
 	if len(failureErrs) > 0 {
-		cleanup()
-		return "", nil, errUtils.Build(errUtils.ErrScaffoldGeneration).
+		return errUtils.Build(errUtils.ErrScaffoldGeneration).
 			WithCause(errors.Join(failureErrs...)).
 			WithExplanation("Failed to render the old ref's template for the rendered update-strategy base").
 			Err()
 	}
-
-	return tempDir, cleanup, nil
+	return nil
 }

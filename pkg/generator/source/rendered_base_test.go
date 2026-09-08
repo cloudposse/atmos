@@ -36,20 +36,20 @@ func TestResolveRenderedBase_LoadsOldRefAndValues(t *testing.T) {
 	targetDir := t.TempDir()
 	writeProjectRecord(t, targetDir, templateDir, "HEAD")
 
-	oldConfig, oldValues, cleanup, err := ResolveRenderedBase(targetDir, "")
+	renderedBase, err := ResolveRenderedBase(targetDir, "")
 	require.NoError(t, err)
-	require.NotNil(t, cleanup)
-	t.Cleanup(cleanup)
+	require.NotNil(t, renderedBase.Cleanup)
+	t.Cleanup(renderedBase.Cleanup)
 
-	require.NotNil(t, oldConfig)
-	assert.NotEmpty(t, oldConfig.Files, "the old ref's template must be fully hydrated")
-	assert.Equal(t, map[string]interface{}{"project_name": "old-project"}, oldValues)
+	require.NotNil(t, renderedBase.Config)
+	assert.NotEmpty(t, renderedBase.Config.Files, "the old ref's template must be fully hydrated")
+	assert.Equal(t, map[string]interface{}{"project_name": "old-project"}, renderedBase.Values)
 }
 
 func TestResolveRenderedBase_NoProjectRecordErrors(t *testing.T) {
 	targetDir := t.TempDir()
 
-	_, _, _, err := ResolveRenderedBase(targetDir, "")
+	_, err := ResolveRenderedBase(targetDir, "")
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrRenderedStrategyRequiresConfig)
@@ -61,7 +61,7 @@ func TestResolveRenderedBase_CorruptProjectRecordPropagatesError(t *testing.T) {
 	require.NoError(t, os.MkdirAll(recordDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(recordDir, "scaffold.yaml"), []byte("not: valid: yaml: ["), 0o644))
 
-	_, _, _, err := ResolveRenderedBase(targetDir, "")
+	_, err := ResolveRenderedBase(targetDir, "")
 
 	require.Error(t, err)
 }
@@ -70,7 +70,7 @@ func TestResolveRenderedBase_UnfetchableSourcePropagatesError(t *testing.T) {
 	targetDir := t.TempDir()
 	writeProjectRecord(t, targetDir, filepath.Join(t.TempDir(), "does-not-exist"), "")
 
-	_, _, _, err := ResolveRenderedBase(targetDir, "")
+	_, err := ResolveRenderedBase(targetDir, "")
 
 	require.Error(t, err)
 }

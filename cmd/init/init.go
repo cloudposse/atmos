@@ -314,12 +314,12 @@ func executeInit(_ context.Context, opts *initOptions) error {
 	// resolveInteractiveInitBaseRef, mirroring --base-ref's own split
 	// resolution above.
 	if opts.update && updateStrategy == engine.UpdateStrategyRendered && opts.targetDir != "" {
-		oldConfig, oldValues, cleanupOldSource, err := source.ResolveRenderedBase(opts.targetDir, opts.sourceOverride)
+		renderedBase, err := source.ResolveRenderedBase(opts.targetDir, opts.sourceOverride)
 		if err != nil {
 			return err
 		}
-		defer cleanupOldSource()
-		initUI.SetRenderedBaseSource(oldConfig, oldValues)
+		defer renderedBase.Cleanup()
+		initUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
 	}
 
 	// Get available template configurations.
@@ -534,12 +534,12 @@ func resolveInteractiveInitBaseRef(
 	}
 	var cleanup func()
 	if updateStrategy == engine.UpdateStrategyRendered {
-		oldConfig, oldValues, srcCleanup, srcErr := source.ResolveRenderedBase(targetDir, opts.sourceOverride)
+		renderedBase, srcErr := source.ResolveRenderedBase(targetDir, opts.sourceOverride)
 		if srcErr != nil {
 			return interactiveInitBaseRef{targetDir: targetDir}, srcErr
 		}
-		cleanup = srcCleanup
-		initUI.SetRenderedBaseSource(oldConfig, oldValues)
+		cleanup = renderedBase.Cleanup
+		initUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
 	}
 
 	baseRef, err := defaultBaseRef(opts.baseRef, targetDir)
