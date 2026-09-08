@@ -111,14 +111,7 @@ func TestSourceWorkdir_DeleteMissingForce(t *testing.T) {
 // workdir root. Reverting the fix in tryJITProvision moves the varfile to
 // the wrong location and fails this test.
 func TestJITSource_MetadataComponentSubpath(t *testing.T) {
-	RequireExecutable(t, "git", "JIT source provisioning clones a remote repo")
-	RequireGitHubAccess(t)
-
-	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
-
-	t.Cleanup(func() {
-		_ = os.RemoveAll(".workdir")
-	})
+	setupJITSourceWorkdirFixture(t)
 
 	resetViperState()
 	cmd.RootCmd.SetArgs([]string{
@@ -160,14 +153,7 @@ func TestJITSource_MetadataComponentSubpath(t *testing.T) {
 // path printed by printShellDryRunInfo include the metadata.component
 // subpath. Reverting the fix in terraform_shell.go fails these assertions.
 func TestJITSource_MetadataComponentSubpath_TerraformShell(t *testing.T) {
-	RequireExecutable(t, "git", "JIT source provisioning clones a remote repo")
-	RequireGitHubAccess(t)
-
-	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
-
-	t.Cleanup(func() {
-		_ = os.RemoveAll(".workdir")
-	})
+	setupJITSourceWorkdirFixture(t)
 
 	// Capture stderr (where ui.Writeln output goes) for the dry-run banner.
 	// Drain the pipe in a goroutine that starts BEFORE cmd.Execute so the OS
