@@ -66,7 +66,7 @@ require (
 	github.com/epiclabs-io/diff3 v0.0.0-20260520111523-3b1669897fb1
 	github.com/expr-lang/expr v1.17.8
 	github.com/fatih/color v1.19.0
-	github.com/gabriel-vasile/mimetype v1.4.13
+	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/getsentry/sentry-go v0.48.0
 	github.com/getsops/sops/v3 v3.13.1
 	github.com/go-git/go-git/v5 v5.19.2
