@@ -35,6 +35,20 @@ const racePackagePrefix = "github.com/cloudposse/atmos/tests"
 // wasn't enough headroom in CI.
 const raceTestTimeout = "20m"
 
+// raceParallelEnv overrides the -parallel value the race sweep passes to
+// `go test` (how many t.Parallel tests one package's binary runs at once).
+const raceParallelEnv = "ATMOS_TEST_RACE_PARALLEL"
+
+// raceParallelDefault caps intra-package test parallelism in the race sweep.
+// `go test` already runs up to GOMAXPROCS package binaries concurrently
+// (-p), which saturates the runner on this ~400-package suite; leaving
+// -parallel at its GOMAXPROCS default too, once the largest packages'
+// tests call t.Parallel, multiplied the concurrent race-instrumented work
+// per core and made the sweep slower, not faster: 1093-1447s before those
+// tests went parallel versus 1715-1830s after, on the same xlarge runner
+// (runs 34241747386/34246305177 vs 34239965198/34246073780/34251221340).
+const raceParallelDefault = "4"
+
 // Race runs the full test suite (excluding ./tests/..., the CLI acceptance
 // suite) with the race detector and shuffled test order. This is the Go
 // implementation backing the `atmos test race` custom command
@@ -56,8 +70,13 @@ func (Test) Race() error {
 		return err
 	}
 
-	args := make([]string, 0, len(packages)+len(testArgs)+5)
-	args = append(args, "test", "-race", "-shuffle=on")
+	parallel := os.Getenv(raceParallelEnv)
+	if parallel == "" {
+		parallel = raceParallelDefault
+	}
+
+	args := make([]string, 0, len(packages)+len(testArgs)+6)
+	args = append(args, "test", "-race", "-shuffle=on", "-parallel="+parallel)
 	args = append(args, packages...)
 	args = append(args, testArgs...)
 	args = append(args, "-timeout", raceTestTimeout)
