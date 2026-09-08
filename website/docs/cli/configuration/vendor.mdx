@@ -241,12 +241,13 @@ The `azuredevops` provider authenticates with a personal access token in the
 token needs Code (Read & Write) permission on the target project.
 
 ```yaml
-ci:
-  pull_request:
-    provider: azuredevops
-    organization: my-org
-    project: my-project
-    repository: my-repo
+vendor:
+  ci:
+    pull_request:
+      provider: azuredevops
+      organization: my-org
+      project: my-project
+      repository: my-repo
 ```
 :::
 
