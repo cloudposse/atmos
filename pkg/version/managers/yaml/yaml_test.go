@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 	"github.com/cloudposse/atmos/pkg/version/managers"
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
@@ -193,33 +194,56 @@ func TestYAMLFormatTrimsVersionPrefix(t *testing.T) {
 	}
 }
 
-// TestYAMLFormatInvalidSyntaxErrors guards against a bad Format template
-// silently writing garbage: a syntax error must surface as a clear, wrapped
-// error instead.
-func TestYAMLFormatInvalidSyntaxErrors(t *testing.T) {
-	err := planFixtureErr(t, "values.yaml",
-		"version: 1.0.0\n",
-		setOptions(setEntry{Path: "version", From: "opentofu", Format: `{{ .Version`}))
-	if err == nil {
-		t.Fatal("expected an error for a malformed format template")
-	}
-	if !errors.Is(err, errUtils.ErrVersionYAMLFormatInvalid) {
-		t.Fatalf("expected error to wrap ErrVersionYAMLFormatInvalid, got: %v", err)
+// TestYAMLFormatInvalidTemplateErrors guards against a bad Format template
+// silently writing garbage: both a syntax error and a reference to a field
+// that doesn't exist on manager.VersionRef (which would otherwise render
+// "<no value>") must surface as a clear, wrapped error.
+func TestYAMLFormatInvalidTemplateErrors(t *testing.T) {
+	for name, format := range map[string]string{
+		"malformed syntax": `{{ .Version`,
+		"undefined field":  `{{ .Bogus }}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := planFixtureErr(t, "values.yaml",
+				"version: 1.0.0\n",
+				setOptions(setEntry{Path: "version", From: "opentofu", Format: format}))
+			if err == nil {
+				t.Fatalf("expected an error for format %q", format)
+			}
+			if !errors.Is(err, errUtils.ErrVersionYAMLFormatInvalid) {
+				t.Fatalf("expected error to wrap ErrVersionYAMLFormatInvalid, got: %v", err)
+			}
+		})
 	}
 }
 
-// TestYAMLFormatUndefinedFieldErrors guards against a Format template
-// referencing a field that doesn't exist on manager.VersionRef silently
-// rendering "<no value>" into the target file.
-func TestYAMLFormatUndefinedFieldErrors(t *testing.T) {
-	err := planFixtureErr(t, "values.yaml",
-		"version: 1.0.0\n",
-		setOptions(setEntry{Path: "version", From: "opentofu", Format: `{{ .Bogus }}`}))
-	if err == nil {
-		t.Fatal("expected an error for a format template referencing an undefined field")
+// TestYAMLFormatHonorsConfiguredDelimiters guards against the Format path
+// ignoring a project's `templates.settings.delimiters`: with custom
+// delimiters configured, a Format written in them must render rather than
+// being copied into the file as a literal string.
+func TestYAMLFormatHonorsConfiguredDelimiters(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "values.yaml"), []byte("version: 1.0.0\n"), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
 	}
-	if !errors.Is(err, errUtils.ErrVersionYAMLFormatInvalid) {
-		t.Fatalf("expected error to wrap ErrVersionYAMLFormatInvalid, got: %v", err)
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Templates.Settings.Delimiters = []string{"<<", ">>"}
+	var m Manager
+	changes, err := m.Plan(context.Background(), &managers.Input{
+		Config:  atmosConfig,
+		Dir:     dir,
+		Paths:   []string{"values.yaml"},
+		Refs:    testRefs,
+		Options: setOptions(setEntry{Path: "version", From: "cli", Format: `<< trimPrefix "v" .Version >>`}),
+	})
+	if err != nil {
+		t.Fatalf("Plan returned error: %v", err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(changes))
+	}
+	if !bytes.Contains(changes[0].New, []byte(`version: 2.5.0`)) {
+		t.Fatalf("expected custom-delimiter format to render, got:\n%s", changes[0].New)
 	}
 }
 

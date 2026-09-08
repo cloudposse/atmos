@@ -99,7 +99,7 @@ func (Manager) Plan(ctx context.Context, in *managers.Input) ([]managers.FileCha
 		if !gjson.ValidBytes(content) {
 			return nil, fmt.Errorf("%w: %s", errUtils.ErrVersionJSONInvalidContent, file)
 		}
-		updated, err := applySets(content, opts.Set, in.Refs)
+		updated, err := applySets(content, opts.Set, in.Refs, managers.TemplateDelimiters(in.Config))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", file, err)
 		}
@@ -192,7 +192,7 @@ func isComplexPath(path string) bool {
 // applySets writes every configured set entry into content, skipping entries
 // whose dependency is not locked (same skip-silently idiom as the marker and
 // github-actions managers).
-func applySets(content []byte, entries []setEntry, refs map[string]manager.VersionRef) ([]byte, error) {
+func applySets(content []byte, entries []setEntry, refs map[string]manager.VersionRef, delims []string) ([]byte, error) {
 	current := content
 	for _, entry := range entries {
 		ref, ok := refs[entry.From]
@@ -201,7 +201,7 @@ func applySets(content []byte, entries []setEntry, refs map[string]manager.Versi
 		}
 		value := ref.String()
 		if entry.Format != "" {
-			formatted, err := managers.RenderValueFormat(entry.Format, ref)
+			formatted, err := managers.RenderValueFormat(entry.Format, ref, delims)
 			if err != nil {
 				return nil, fmt.Errorf("%w: path %q: %w", errUtils.ErrVersionJSONFormatInvalid, entry.Path, err)
 			}

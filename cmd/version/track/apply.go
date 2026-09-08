@@ -27,7 +27,7 @@ var trackApplyCmd = &cobra.Command{
 	Use:     "apply [track]",
 	Aliases: []string{"sync"},
 	Short:   "Rewrite version-managed files from the lock",
-	Long:    "Run the file managers (github-actions workflow refs, marker-annotated files, rendered templates, JSON field writes) over the paths configured in version.files (or the managers' default paths) and rewrite them from the locked versions. Use --check to fail without writing when files are out of date (CI).",
+	Long:    "Run the file managers (github-actions workflow refs, marker-annotated files, rendered templates, JSON and YAML field writes) over the paths configured in version.files (or the managers' default paths) and rewrite them from the locked versions. Use --check to fail without writing when files are out of date (CI).",
 	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfig, "version.track.apply.RunE")()
