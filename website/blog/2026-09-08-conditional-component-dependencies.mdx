@@ -1,0 +1,50 @@
+---
+slug: conditional-component-dependencies
+title: "Conditional Component Dependencies"
+authors: [zack-is-cool]
+tags: [feature, enhancement]
+---
+Infrastructure graphs often include dependencies that are useful when present but should not block an environment when a component is intentionally absent or disabled. Treating every dependency as mandatory forces stack-specific workarounds and makes reusable manifests harder to share.
+
+<!--truncate-->
+
+## The Problem
+
+A component dependency previously meant that the target had to exist and be available. That is correct for core infrastructure, but too strict for optional integrations such as observability, auxiliary services, or environment-specific components. Teams had to duplicate manifests or maintain separate dependency lists just to handle those differences.
+
+## The Fix
+
+Component dependencies can now declare `required: false`:
+
+```yaml
+dependencies:
+  components:
+    - name: observability
+      required: false
+```
+
+Required dependencies remain the default, preserving existing behavior. Optional dependencies are included normally when their target is present and enabled. Missing or disabled targets simply omit that edge. Invalid dependency configuration and unresolved template values still fail instead of being hidden by optionality.
+
+The behavior works across same-stack and cross-stack dependencies, preserves dependency ordering and cycle detection, and is reflected in dependency listings and diagnostics.
+
+## How to Use It
+
+Use `required: false` for a dependency that should participate in ordering when available but should not prevent the declaring component from running when unavailable:
+
+```yaml
+components:
+  terraform:
+    application:
+      dependencies:
+        components:
+          - name: network
+          - name: monitoring
+            stack: "{{ .vars.environment }}-observability"
+            required: false
+```
+
+Omit `required` when the target must be available. Optionality only suppresses genuine target absence or disabled state; malformed entries and unresolved templates remain errors.
+
+## Get Involved
+
+Try conditional dependencies in your stack manifests and share feedback through [GitHub](https://github.com/cloudposse/atmos/issues).
