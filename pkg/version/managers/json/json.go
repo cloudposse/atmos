@@ -1,6 +1,6 @@
 // Package json implements the json file manager: sjson/gjson-based in-place
 // field writes on plain JSON files (package manifests, plugin listings, and
-// similar), configured via `options.set: [{path, from}]`. Unlike
+// similar), configured via `options.set: [{path, from, format}]`. Unlike
 // marker (comment-annotated) or template (a *.tmpl source rendered to a
 // sibling file), sjson.Set patches only the targeted path and leaves the
 // rest of the document's bytes -- formatting, key order, whitespace --
@@ -36,10 +36,15 @@ const complexPathChars = "#*?@"
 const appendPathSegment = "-1"
 
 // setEntry is one options.set rule: write the resolved value for the
-// dependency named From at the sjson/gjson dot-path Path.
+// dependency named From at the sjson/gjson dot-path Path. Format, when set,
+// is a Go template (Sprig + Atmos template functions) rendered against the
+// resolved manager.VersionRef whose output replaces the verbatim value --
+// e.g. a github-releases tag like "v1.228.0" reshaped to bare semver for a
+// target that doesn't use the "v" convention.
 type setEntry struct {
-	Path string `mapstructure:"path"`
-	From string `mapstructure:"from"`
+	Path   string `mapstructure:"path"`
+	From   string `mapstructure:"from"`
+	Format string `mapstructure:"format"`
 }
 
 // jsonOptions is the parsed shape of a json file rule's Options.
@@ -94,7 +99,7 @@ func (Manager) Plan(ctx context.Context, in *managers.Input) ([]managers.FileCha
 		if !gjson.ValidBytes(content) {
 			return nil, fmt.Errorf("%w: %s", errUtils.ErrVersionJSONInvalidContent, file)
 		}
-		updated, err := applySets(content, opts.Set, in.Refs)
+		updated, err := applySets(content, opts.Set, in.Refs, managers.TemplateDelimiters(in.Config))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", file, err)
 		}
@@ -129,14 +134,11 @@ func parseOptions(raw map[string]any) (jsonOptions, error) {
 // otherwise silently last-win with no indication the first write was
 // discarded.
 func duplicatePath(entries []setEntry) string {
-	seen := make(map[string]bool, len(entries))
-	for _, entry := range entries {
-		if seen[entry.Path] {
-			return entry.Path
-		}
-		seen[entry.Path] = true
+	paths := make([]string, len(entries))
+	for i, entry := range entries {
+		paths[i] = entry.Path
 	}
-	return ""
+	return managers.DuplicatePath(paths)
 }
 
 // isAppendPath reports whether path targets sjson's array-append marker (a
@@ -190,14 +192,22 @@ func isComplexPath(path string) bool {
 // applySets writes every configured set entry into content, skipping entries
 // whose dependency is not locked (same skip-silently idiom as the marker and
 // github-actions managers).
-func applySets(content []byte, entries []setEntry, refs map[string]manager.VersionRef) ([]byte, error) {
+func applySets(content []byte, entries []setEntry, refs map[string]manager.VersionRef, delims []string) ([]byte, error) {
 	current := content
 	for _, entry := range entries {
 		ref, ok := refs[entry.From]
 		if !ok || ref.Version == "" {
 			continue
 		}
-		updated, err := applySet(current, entry, ref.String())
+		value := ref.String()
+		if entry.Format != "" {
+			formatted, err := managers.RenderValueFormat(entry.Format, ref, delims)
+			if err != nil {
+				return nil, fmt.Errorf("%w: path %q: %w", errUtils.ErrVersionJSONFormatInvalid, entry.Path, err)
+			}
+			value = formatted
+		}
+		updated, err := applySet(current, entry, value)
 		if err != nil {
 			return nil, err
 		}
