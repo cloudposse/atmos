@@ -47,7 +47,6 @@
       "Bash(git commit -c commit.gpgsign=false:*)",
       "Bash(golangci-lint:*)",
       "Bash(gh pr merge:*)",
-      "Bash(gh workflow:*)",
       "Bash(gh secret:*)",
       "Bash(gh api repos/cloudposse/atmos/pulls/* -X PATCH*)",
       "Bash(gh api repos/cloudposse/atmos/pulls/* -X POST*)",
