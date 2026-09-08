@@ -46,6 +46,17 @@ type PullRequestPublisher interface {
 	Reconcile(ctx context.Context, options *PullRequestOptions) (*PullRequestResult, error)
 }
 
+// PullRequestBodyBadger is an optional interface a PullRequestPublisher can implement to supply
+// its own branding for the default `vendor.ci.pull_request.body` template (see
+// updater.RenderPRTemplates). It's optional, not part of PullRequestPublisher itself, because a
+// forge's pull request markdown has its own quirks and capabilities -- raw HTML support, external
+// image hosting requirements, light/dark switching, and so on -- that only the provider that
+// speaks to it can know; a publisher that doesn't implement this gets a static, dependency-free
+// default instead of being forced to declare one.
+type PullRequestBodyBadger interface {
+	PullRequestBodyBadge() string
+}
+
 // PullRequestPublisherFactory creates a pull request publisher.
 type PullRequestPublisherFactory func() (PullRequestPublisher, error)
 

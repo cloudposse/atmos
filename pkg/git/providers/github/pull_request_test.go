@@ -16,6 +16,18 @@ import (
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 )
 
+// TestPullRequestBodyBadge proves *Provider implements atmosgit.PullRequestBodyBadger (so
+// updater.RenderPRTemplates picks up GitHub's own badge instead of the static fallback) and that
+// the badge it returns actually carries the raw HTML light/dark <picture> markup this provider's
+// pull request rendering relies on.
+func TestPullRequestBodyBadge(t *testing.T) {
+	var badger atmosgit.PullRequestBodyBadger = New()
+	badge := badger.PullRequestBodyBadge()
+	assert.Contains(t, badge, "<picture>")
+	assert.Contains(t, badge, `prefers-color-scheme: dark`)
+	assert.Contains(t, badge, "https://atmos.tools/ci")
+}
+
 func TestReconcilePullRequest(t *testing.T) {
 	tests := []struct {
 		name            string

@@ -24,6 +24,18 @@ func newTestProvider(server *httptest.Server) *Provider {
 	return New(WithHTTPClient(server.Client()), WithBaseURL(server.URL), WithToken("s3cr3t-pat"))
 }
 
+// TestPullRequestBodyBadge proves *Provider implements atmosgit.PullRequestBodyBadger (so
+// updater.RenderPRTemplates picks up this provider's own badge instead of the static fallback)
+// and that the badge it returns is a plain, sized markdown image -- not the raw HTML this
+// provider's pull request markdown doesn't render.
+func TestPullRequestBodyBadge(t *testing.T) {
+	var badger atmosgit.PullRequestBodyBadger = New()
+	badge := badger.PullRequestBodyBadge()
+	assert.Contains(t, badge, "![Atmos CI](https://atmos.tools/img/atmos-ci-gradient-on-light.svg =160x32)")
+	assert.Contains(t, badge, "https://atmos.tools/ci")
+	assert.NotContains(t, badge, "<picture>", "must not carry markup this provider doesn't render")
+}
+
 func TestReconcilePullRequest(t *testing.T) {
 	tests := []struct {
 		name            string

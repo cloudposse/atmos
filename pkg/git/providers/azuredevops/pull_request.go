@@ -24,6 +24,16 @@ const ProviderName = "azuredevops"
 // defaultBaseURL is Azure DevOps' cloud (dev.azure.com) organization host.
 const defaultBaseURL = "https://dev.azure.com"
 
+// prBodyBadge is the "Atmos CI" badge PullRequestBodyBadge supplies for the default PR body: a
+// plain, sized, linked image rather than GitHub's raw HTML <picture> block, since Azure DevOps'
+// pull request markdown doesn't render raw HTML tags at all (confirmed against a real pull
+// request). Uses Azure DevOps' own documented image-sizing syntax (`![alt](src =WIDTHxHEIGHT)`)
+// to reproduce the GitHub provider's height="32" sizing -- the source SVG is natively 220x44, so
+// 160x32 keeps its aspect ratio. Only the light asset is used: there's no markup-based dark/light
+// switching to fall back to on a forge that doesn't render <picture>/<source> either way.
+const prBodyBadge = `[![Atmos CI](https://atmos.tools/img/atmos-ci-gradient-on-light.svg =160x32)](https://atmos.tools/ci)
+`
+
 func init() {
 	atmosgit.RegisterPullRequestPublisher(ProviderName, func() (atmosgit.PullRequestPublisher, error) {
 		return New(), nil
@@ -85,6 +95,11 @@ func tokenFromEnv() (string, error) {
 		return "", errUtils.ErrAzureDevOpsTokenNotFound
 	}
 	return token, nil
+}
+
+// PullRequestBodyBadge implements atmosgit.PullRequestBodyBadger.
+func (p *Provider) PullRequestBodyBadge() string {
+	return prBodyBadge
 }
 
 // Reconcile creates or updates a pull request and applies configured metadata.
