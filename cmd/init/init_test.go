@@ -795,6 +795,69 @@ func TestInitCmd_RunE_UpdateWithPositionalTarget_PropagatesMetadataLoadError(t *
 	assert.Contains(t, err.Error(), "resolve default --base-ref")
 }
 
+// TestInitCmd_RunE_UpdateStrategyInvalidValueRejected covers --update-strategy's
+// own validation: a value outside tracked/rendered must fail before any
+// generation work starts. See the isolated-*cobra.Command rationale on
+// TestInitCmd_RunE_UpdateWithPositionalTarget_ResolvesBaseRefFromRealTargetPin
+// above.
+func TestInitCmd_RunE_UpdateStrategyInvalidValueRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "bogus"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+}
+
+// TestInitCmd_RunE_BaseRefWithRenderedStrategyRejected covers the explicit
+// --base-ref + --update-strategy=rendered mutual-exclusion check: rendered's
+// base ref comes from the target's own recorded scaffold.yaml, not
+// --base-ref, so combining them is a contradiction rather than a value to
+// silently ignore.
+func TestInitCmd_RunE_BaseRefWithRenderedStrategyRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, cmd.Flags().Set("base-ref", "some-ref"))
+
+	err := initCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+}
+
+// TestInitCmd_RunE_RenderedStrategyRequiresScaffoldConfig covers
+// --update-strategy=rendered against a target with no recorded
+// .atmos/scaffold.yaml project record: unlike tracked (which falls back to
+// literal "HEAD" against the target's own git history), rendered has no
+// fallback -- there is nothing to reconstruct the old ref/answers from.
+func TestInitCmd_RunE_RenderedStrategyRequiresScaffoldConfig(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	dir := t.TempDir()
+
+	cmd := &cobra.Command{}
+	initParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd.Flags().Set("force", "false"))
+	require.NoError(t, cmd.Flags().Set("no-git", "true"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "rendered"))
+
+	err := initCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrRenderedStrategyRequiresConfig)
+}
+
 // TestResolveInteractiveInitBaseRef_NoUpdate_PassesThroughOptsUnchanged
 // covers resolveInteractiveInitBaseRef's non-update path: without --update
 // the base ref is unused (ExecuteWithDelimiters only sets up git storage when
