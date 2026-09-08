@@ -185,9 +185,16 @@ func ExecuteDescribeDependents(
 
 	// Get the provided component section.
 	// When stacks are cached, extract directly from the cache to avoid redundant stack resolution.
-	var providedComponentSection map[string]any
-	if args.Stacks != nil {
-		providedComponentSection = findComponentSectionInCachedStacks(stacks, args.Stack, args.Component)
+	providedComponentSection := findComponentSectionInCachedStacks(stacks, args.Stack, args.Component)
+	targetUnavailable := providedComponentSection == nil
+	if targetUnavailable {
+		skip, err := skipUnavailableOptionalTarget(stacks, args)
+		if err != nil {
+			return nil, err
+		}
+		if skip {
+			return dependents, nil
+		}
 	}
 	if providedComponentSection == nil {
 		var err error
@@ -205,6 +212,7 @@ func ExecuteDescribeDependents(
 			return nil, err
 		}
 	}
+	targetUnavailable = isAbstractOrDisabled(providedComponentSection, args.Component)
 
 	// Get the provided component `vars`.
 	var providedComponentVarsSection map[string]any
@@ -222,10 +230,10 @@ func ExecuteDescribeDependents(
 	// When a pre-computed dependency index is available, use O(1) lookup.
 	// Otherwise, fall back to the full O(stacks × components) scan.
 	if args.DepIndex != nil {
-		dependents = findDependentsFromIndex(atmosConfig, args, &providedComponentVars)
+		dependents = findDependentsFromIndex(atmosConfig, args, &providedComponentVars, targetUnavailable)
 	} else {
 		var err error
-		dependents, err = findDependentsByScan(atmosConfig, args, stacks, &providedComponentVars)
+		dependents, err = findDependentsByScan(atmosConfig, args, stacks, &providedComponentVars, targetUnavailable)
 		if err != nil {
 			return nil, err
 		}
@@ -238,11 +246,37 @@ func ExecuteDescribeDependents(
 	return dependents, nil
 }
 
+func skipUnavailableOptionalTarget(stacks map[string]any, args *DescribeDependentsArgs) (bool, error) {
+	depIndex := args.DepIndex
+	if depIndex == nil {
+		var err error
+		depIndex, err = buildDependencyIndexWithError(stacks)
+		if err != nil {
+			return false, err
+		}
+	}
+	return onlyOptionalTargetDependencies(depIndex[args.Component]), nil
+}
+
+func onlyOptionalTargetDependencies(entries []dependencyIndexEntry) bool {
+	if len(entries) == 0 {
+		return false
+	}
+	for i := range entries {
+		if entries[i].DependsOn.IsRequired() {
+			return false
+		}
+	}
+	return true
+}
+
 // findDependentsFromIndex uses the pre-computed dependency index for O(1) lookup.
 func findDependentsFromIndex(
 	atmosConfig *schema.AtmosConfiguration,
+
 	args *DescribeDependentsArgs,
 	providedComponentVars *schema.Context,
+	targetUnavailable bool,
 ) []schema.Dependent {
 	var dependents []schema.Dependent
 
@@ -256,6 +290,9 @@ func findDependentsFromIndex(
 		}
 
 		dep := e.DependsOn
+		if targetUnavailable && !dep.IsRequired() {
+			continue
+		}
 		if !isDependencyMatch(&dependencyMatchParams{
 			depSource:             e.DepSource,
 			dependsOn:             &dep,
@@ -280,6 +317,7 @@ func findDependentsByScan(
 	args *DescribeDependentsArgs,
 	stacks map[string]any,
 	providedComponentVars *schema.Context,
+	targetUnavailable bool,
 ) ([]schema.Dependent, error) {
 	var dependents []schema.Dependent
 
@@ -308,6 +346,7 @@ func findDependentsByScan(
 					StackComponentName:    stackComponentName,
 					StackComponent:        stackComponent,
 					ProvidedComponentVars: providedComponentVars,
+					TargetUnavailable:     targetUnavailable,
 				})
 				if err != nil {
 					return nil, err
@@ -329,6 +368,7 @@ type scanComponentParams struct {
 	StackComponentName    string
 	StackComponent        any
 	ProvidedComponentVars *schema.Context
+	TargetUnavailable     bool
 }
 
 // scanComponentForDependents checks a single component for dependencies on the provided component.
@@ -369,6 +409,9 @@ func scanComponentForDependents(p *scanComponentParams) ([]schema.Dependent, err
 	for depIdx := range componentDeps {
 		dependsOn := &componentDeps[depIdx]
 		if dependsOn.Component != p.Args.Component {
+			continue
+		}
+		if p.TargetUnavailable && !dependsOn.IsRequired() {
 			continue
 		}
 
