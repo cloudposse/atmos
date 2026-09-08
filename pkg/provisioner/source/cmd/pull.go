@@ -32,10 +32,10 @@ compatible URI (git, s3, http, oci, etc.).
 If the component is already vendored, it will be skipped unless --force is specified.
 
 If component is not specified, prompts interactively for selection.`, cfg.TypeLabel),
-		Example: fmt.Sprintf(`  # Vendor component source (downloads if missing or outdated)
+		Example: fmt.Sprintf(`  # Vendor component source (skipped if the target directory already exists)
   atmos %s source pull vpc --stack dev
 
-  # Force re-vendor even if up-to-date
+  # Force re-vendor even if already vendored
   atmos %s source pull vpc --stack dev --force
 
   # Interactive: prompts for component and stack
