@@ -184,9 +184,9 @@ func Save(config *schema.AtmosConfiguration, lock *LockFile) error {
 	return writeLockFileAtomically(Path(config), data)
 }
 
-// normalizeSaveArtifacts relativizes each artifact's target and redacts credentials from its
-// declared/resolved source before Save marshals the lock, and keeps each artifact's Files sorted
-// for deterministic YAML output.
+// normalizeSaveArtifacts relativizes each artifact's target and local source paths, redacts
+// credentials from its declared/resolved source before Save marshals the lock, and keeps each
+// artifact's Files sorted for deterministic YAML output.
 func normalizeSaveArtifacts(config *schema.AtmosConfiguration, lock *LockFile) error {
 	for id, artifact := range lock.Artifacts {
 		target, targetErr := projectRelativeTarget(config, artifact.Target)
@@ -194,8 +194,8 @@ func normalizeSaveArtifacts(config *schema.AtmosConfiguration, lock *LockFile) e
 			return fmt.Errorf("%w: artifact %q: %w", ErrNormalizeLockTarget, id, targetErr)
 		}
 		artifact.Target = target
-		artifact.Source.Declared = downloader.RedactSource(artifact.Source.Declared)
-		artifact.Source.Resolved = downloader.RedactSource(artifact.Source.Resolved)
+		artifact.Source.Declared = downloader.RedactSource(projectRelativeSource(config, artifact.Source.Declared))
+		artifact.Source.Resolved = downloader.RedactSource(projectRelativeSource(config, artifact.Source.Resolved))
 		sort.Slice(artifact.Files, func(i, j int) bool { return artifact.Files[i].Path < artifact.Files[j].Path })
 		lock.Artifacts[id] = artifact
 	}
@@ -550,8 +550,9 @@ func recordSource(declaredSource, resolvedSource, identity string, opts RecordOp
 type MaterializationParams struct {
 	// ID is the lock artifact key -- see ArtifactID.
 	ID string
-	// Declared is the source's currently-declared URI (pre-redaction; IsMaterialized redacts it
-	// itself before comparing against the receipt's already-redacted Source.Declared).
+	// Declared is the source's currently-declared URI (pre-redaction and, for a local path,
+	// pre-relativization; IsMaterialized normalizes it itself before comparing against the
+	// receipt's already-normalized Source.Declared).
 	Declared string
 	// Target is the source's currently-declared destination path.
 	Target string
@@ -596,7 +597,7 @@ func IsMaterialized(config *schema.AtmosConfiguration, params MaterializationPar
 	if artifact.Target != lockTarget {
 		return notMaterialized("target path changed")
 	}
-	if artifact.Source.Declared != downloader.RedactSource(params.Declared) {
+	if artifact.Source.Declared != downloader.RedactSource(projectRelativeSource(config, params.Declared)) {
 		return notMaterialized("declared source changed")
 	}
 	if !slices.Equal(artifact.IncludedPaths, params.IncludedPaths) || !slices.Equal(artifact.ExcludedPaths, params.ExcludedPaths) {
@@ -929,6 +930,38 @@ func lockedPath(config *schema.AtmosConfiguration, target, relative string) (str
 		return "", fmt.Errorf(errWrapQuotedFormat, ErrInvalidLockOwnedFilePath, relative)
 	}
 	return filepath.Join(root, cleaned), nil
+}
+
+// projectRelativeSource relativizes a local filesystem source against the project base so a
+// committed vendor.lock.yaml never embeds one checkout's absolute path. An absolute path would make
+// every other checkout -- another developer's clone, a CI runner -- report the artifact as
+// "declared source changed" and re-fetch it, or refuse outright under strict lock enforcement.
+//
+// It is the source-side sibling of projectRelativeTarget with one deliberate difference: a source
+// may live outside the project (e.g. "../../shared/mock"), so ".." is permitted here. A source is
+// read-only input, whereas a target is a write destination that must never escape the project.
+//
+// Only a plain absolute filesystem path is rewritten. URL-form sources (any scheme, go-getter
+// "forcing::" prefixes, oci://) and already-relative paths are returned verbatim, so this is a
+// no-op for every remote source. A path that cannot be expressed relative to the base (e.g. a
+// different Windows volume) keeps its absolute form rather than failing the whole lock operation.
+func projectRelativeSource(config *schema.AtmosConfiguration, source string) string {
+	if source == "" || strings.Contains(source, "://") || strings.Contains(source, "::") {
+		return source
+	}
+	cleaned := filepath.Clean(filepath.FromSlash(source))
+	if !filepath.IsAbs(cleaned) {
+		return source
+	}
+	base, err := projectBase(config)
+	if err != nil {
+		return source
+	}
+	rel, err := filepath.Rel(base, cleaned)
+	if err != nil {
+		return filepath.ToSlash(cleaned)
+	}
+	return filepath.ToSlash(rel)
 }
 
 // projectRelativeTarget canonicalizes a runtime target before it is persisted.
