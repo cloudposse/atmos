@@ -127,7 +127,10 @@ func adoptPromptedStack(cmd *cobra.Command, chosen string) error {
 	if chosen == "" {
 		return nil
 	}
-	return cmd.Flags().Set(cfg.StackStr, chosen)
+	if err := cmd.Flags().Set(cfg.StackStr, chosen); err != nil {
+		return fmt.Errorf("%w: adopting the prompted --%s on %s: %w", errUtils.ErrInvalidFlag, cfg.StackStr, cmd.Name(), err)
+	}
+	return nil
 }
 
 func requireScopeComponent(scope secretScope, cmd *cobra.Command, args []string) (secretScope, error) {

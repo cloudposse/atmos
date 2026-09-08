@@ -87,7 +87,9 @@ func TestAdoptPromptedStack_EmptyChoiceIsNoOp(t *testing.T) {
 // guard, not a user-facing path).
 func TestAdoptPromptedStack_MissingFlagErrors(t *testing.T) {
 	bare := &cobra.Command{Use: "bare"}
-	require.Error(t, adoptPromptedStack(bare, "staging"))
+	err := adoptPromptedStack(bare, "staging")
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "bare")
 }
 
 // TestRunSecretInit_MissingStackNonInteractive guards the non-interactive fallback on the init
