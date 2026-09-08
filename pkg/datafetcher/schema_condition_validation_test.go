@@ -281,6 +281,11 @@ func cloudFormationComponentManifest() map[string]any {
 					"disable_rollback":       false,
 					"termination_protection": true,
 					"timeout_in_minutes":     30,
+					"secrets": map[string]any{
+						"vars": map[string]any{
+							"DB_PASSWORD": map[string]any{"sops": "vault"},
+						},
+					},
 				},
 			},
 		},
