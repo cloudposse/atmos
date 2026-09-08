@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -36,10 +37,15 @@ func BuildGraph(stacks map[string]any) (*dependency.Graph, error) {
 	defer perf.Track(nil, "dependencies.BuildGraph")()
 
 	graph := dependency.NewGraph()
+	targetReasons := make(map[string]string)
 
-	// First pass: add all concrete component nodes.
-	walkComponents(stacks, func(stackName, componentName string, componentSection map[string]any) {
+	// First pass: record all concrete component targets, including unavailable ones.
+	walkAllComponents(stacks, func(stackName, componentName string, componentSection map[string]any) {
 		nodeID := NodeID(componentName, stackName)
+		if reason := componentAvailabilityReason(componentSection); reason != "" {
+			targetReasons[nodeID] = reason
+			return
+		}
 		node := &dependency.Node{
 			ID:        nodeID,
 			Component: componentName,
@@ -53,9 +59,18 @@ func BuildGraph(stacks map[string]any) (*dependency.Graph, error) {
 	})
 
 	// Second pass: add dependency edges now that all nodes exist.
+	var buildErr error
 	walkComponents(stacks, func(stackName, componentName string, componentSection map[string]any) {
+		if buildErr != nil {
+			return
+		}
 		fromID := NodeID(componentName, stackName)
-		deps := extractComponentDependencies(componentSection)
+		deps, modern, err := extractComponentDependenciesWithStack(componentSection, stackName)
+		if err != nil {
+			buildErr = fmt.Errorf("parsing dependencies for %q in stack %q: %w", componentName, stackName, err)
+			return
+		}
+		deps = normalizeListDependencies(deps, stackName)
 		for i := range deps {
 			dep := &deps[i]
 			targetStack := stackName
@@ -63,17 +78,43 @@ func BuildGraph(stacks map[string]any) (*dependency.Graph, error) {
 				targetStack = dep.Stack
 			}
 			toID := NodeID(dep.Component, targetStack)
-			if _, exists := graph.GetNode(toID); !exists {
-				log.Debug("dependency target not in graph", "from", fromID, "to", toID)
+			//nolint:nestif // Required, optional, legacy, and unavailable states have distinct contracts.
+			if reason, unavailable := targetReasons[toID]; unavailable {
+				if modern && dep.IsRequired() {
+					targetErr := errUtils.ErrDependencyTargetNotFound
+					if reason == "target_disabled" {
+						targetErr = errUtils.ErrDependencyTargetUnavailable
+					}
+					buildErr = fmt.Errorf("%w: from=%s to=%s reason=%s", targetErr, fromID, toID, reason)
+					return
+				}
+				if modern && !dep.IsRequired() {
+					log.Debug("optional dependency skipped", "event", "optional_dependency_skipped", "from", fromID, "to", toID,
+						"from_component", componentName, "from_stack", stackName, "to_component", dep.Component,
+						"to_stack", targetStack, "kind", dep.Kind, "reason", reason)
+				}
 				continue
 			}
-			// AddDependency on the Graph (not the validating Builder) tolerates
-			// cycles so they can be visualized rather than rejected.
-			if err := graph.AddDependency(fromID, toID); err != nil {
+			if _, exists := graph.GetNode(toID); !exists {
+				if modern && dep.IsRequired() {
+					buildErr = fmt.Errorf("%w: from=%s to=%s reason=target_missing", errUtils.ErrDependencyTargetNotFound, fromID, toID)
+					return
+				}
+				if modern && !dep.IsRequired() {
+					log.Debug("optional dependency skipped", "event", "optional_dependency_skipped", "from", fromID, "to", toID,
+						"from_component", componentName, "from_stack", stackName, "to_component", dep.Component,
+						"to_stack", targetStack, "kind", dep.Kind, "reason", "target_missing")
+				}
+				continue
+			}
+			if err := graph.AddDependencyWithOptional(fromID, toID, !dep.IsRequired()); err != nil {
 				log.Debug("skipping dependency", "from", fromID, "to", toID, "error", err)
 			}
 		}
 	})
+	if buildErr != nil {
+		return nil, buildErr
+	}
 
 	graph.IdentifyRoots()
 	return graph, nil
@@ -107,9 +148,16 @@ func UnresolvedDependencySources(stacks map[string]any, leftDelim string) map[st
 }
 
 // walkComponents iterates over every concrete terraform component in the stacks
-// map, skipping abstract and disabled components. It mirrors the traversal used
-// by the execution graph builder (internal/exec.walkTerraformComponents).
+// map, skipping abstract and disabled components.
 func walkComponents(stacks map[string]any, fn func(stackName, componentName string, componentSection map[string]any)) {
+	walkComponentsWithUnavailable(stacks, fn, false)
+}
+
+func walkAllComponents(stacks map[string]any, fn func(stackName, componentName string, componentSection map[string]any)) {
+	walkComponentsWithUnavailable(stacks, fn, true)
+}
+
+func walkComponentsWithUnavailable(stacks map[string]any, fn func(stackName, componentName string, componentSection map[string]any), includeUnavailable bool) {
 	for stackName, stackSection := range stacks {
 		stackSectionMap, ok := stackSection.(map[string]any)
 		if !ok {
@@ -128,12 +176,26 @@ func walkComponents(stacks map[string]any, fn func(stackName, componentName stri
 			if !ok {
 				continue
 			}
-			if shouldSkipComponent(componentSection) {
+			if !includeUnavailable && shouldSkipComponent(componentSection) {
 				continue
 			}
 			fn(stackName, componentName, componentSection)
 		}
 	}
+}
+
+func componentAvailabilityReason(componentSection map[string]any) string {
+	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
+		return "target_abstract"
+	}
+	if enabled, ok := metadataSection["enabled"].(bool); ok && !enabled {
+		return "target_disabled"
+	}
+	return ""
 }
 
 // shouldSkipComponent reports whether a component is abstract or disabled and
@@ -152,45 +214,42 @@ func shouldSkipComponent(componentSection map[string]any) bool {
 	return false
 }
 
-// extractComponentDependencies returns the component-to-component dependencies
-// declared by a component, reading from `dependencies.components` first
-// (preferred) and falling back to legacy `settings.depends_on` only when the
-// `dependencies.components` key is entirely absent. An explicitly empty
-// `dependencies.components: []` is treated as authoritative and clears all
-// edges (no fallback to settings). File and folder dependencies are
-// intentionally excluded — they are not component edges. This mirrors
-// getComponentDependencies in internal/exec/describe_dependents.go so
-// `list dependencies` and `describe dependents` agree on the relationships.
 func extractComponentDependencies(componentSection map[string]any) []schema.ComponentDependency {
-	if deps, found := dependenciesFromComponentsSection(componentSection); found {
-		return deps
+	deps, _, err := extractComponentDependenciesWithStack(componentSection, "")
+	if err != nil {
+		return nil
 	}
-	return dependenciesFromSettings(componentSection)
+	return deps
+}
+
+func extractComponentDependenciesWithStack(componentSection map[string]any, stackName string) ([]schema.ComponentDependency, bool, error) {
+	deps, found, err := dependenciesFromComponentsSection(componentSection, stackName)
+	if err != nil || found {
+		return filterComponentDependencies(deps), found, err
+	}
+	return dependenciesFromSettings(componentSection), false, nil
 }
 
 // dependenciesFromComponentsSection reads the preferred `dependencies.components`
 // surface and returns its component-to-component entries plus a boolean
-// indicating whether the `components` key was present at all. When found is
-// false the caller may fall back to legacy settings. When found is true but the
-// returned slice is empty, the explicit empty list is the authoritative answer.
-func dependenciesFromComponentsSection(componentSection map[string]any) ([]schema.ComponentDependency, bool) {
-	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
+// indicating whether the `components` key was present at all.
+func dependenciesFromComponentsSection(componentSection map[string]any, stackName string) ([]schema.ComponentDependency, bool, error) {
+	dependenciesValue, exists := componentSection[cfg.DependenciesSectionName]
+	if !exists {
+		return nil, false, nil
+	}
+	depsSection, ok := dependenciesValue.(map[string]any)
 	if !ok {
-		return nil, false
+		return nil, true, fmt.Errorf("%w: dependencies must be a map", errUtils.ErrUnsupportedDependencyType)
 	}
 	if _, hasComponents := depsSection["components"]; !hasComponents {
-		return nil, false
+		return nil, false, nil
 	}
-	var deps schema.Dependencies
-	if err := mapstructure.Decode(depsSection, &deps); err != nil {
-		// Decode error with the key present: treat as found (authoritative)
-		// so we do not silently fall back to stale settings.
-		return nil, true
+	deps, err := schema.ParseComponentDependencies(depsSection, cfg.TerraformComponentType, stackName)
+	if err != nil {
+		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
 	}
-	if normErr := deps.Normalize(); normErr != nil {
-		log.Warn("invalid dependencies section; entries may be silently ignored", "error", normErr)
-	}
-	return filterComponentDependencies(deps.Components), true
+	return deps, true, nil
 }
 
 // dependenciesFromSettings reads the legacy `settings.depends_on` surface.
@@ -234,4 +293,31 @@ func filterComponentDependencies(deps []schema.ComponentDependency) []schema.Com
 		return nil
 	}
 	return result
+}
+
+func normalizeListDependencies(deps []schema.ComponentDependency, stackName string) []schema.ComponentDependency {
+	normalized := make([]schema.ComponentDependency, 0, len(deps))
+	indices := make(map[string]int, len(deps))
+	for i := range deps {
+		dep := &deps[i]
+		if !dep.IsComponentDependency() || dep.Component == "" || (dep.Kind != "" && dep.Kind != cfg.TerraformComponentType) {
+			continue
+		}
+		kind := dep.Kind
+		if kind == "" {
+			kind = cfg.TerraformComponentType
+		}
+		stack := dep.Stack
+		if stack == "" {
+			stack = stackName
+		}
+		key := dep.Component + "\x00" + kind + "\x00" + stack
+		if index, exists := indices[key]; exists {
+			normalized[index] = *dep
+			continue
+		}
+		indices[key] = len(normalized)
+		normalized = append(normalized, *dep)
+	}
+	return normalized
 }

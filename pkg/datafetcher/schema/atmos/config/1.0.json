@@ -3814,6 +3814,20 @@
           ],
           "description": "Kind specifies the dependency type: terraform, helmfile, packer, plugin\ntype, or — in the legacy inline shape — file/folder. Defaults to the\ndeclaring component's type for component dependencies."
         },
+        "required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Required controls whether an available target must be present. Nil defaults to true."
+        },
         "path": {
           "anyOf": [
             {

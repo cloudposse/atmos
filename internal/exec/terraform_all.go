@@ -203,7 +203,7 @@ func terraformPreflightDescribeError(cause error) error {
 
 // buildTerraformDependencyGraph builds the complete dependency graph from stacks.
 func buildTerraformDependencyGraph(
-	_ *schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	stacks map[string]any,
 	_ *schema.ConfigAndStacksInfo,
 ) (*dependency.Graph, error) {
@@ -216,7 +216,7 @@ func buildTerraformDependencyGraph(
 	}
 
 	// Second pass: build dependencies using settings.depends_on.
-	if err := buildGraphDependencies(stacks, builder, nodeMap); err != nil {
+	if err := buildGraphDependencies(atmosConfig, stacks, builder, nodeMap); err != nil {
 		return nil, fmt.Errorf("%w: building dependencies: %w", errUtils.ErrBuildDepGraph, err)
 	}
 
@@ -257,17 +257,32 @@ func addNodesToGraph(
 
 // buildGraphDependencies builds dependencies between nodes in the graph.
 func buildGraphDependencies(
+	atmosConfig *schema.AtmosConfiguration,
 	stacks map[string]any,
 	builder *dependency.GraphBuilder,
 	nodeMap map[string]string,
 ) error {
-	parser := NewDependencyParser(builder, nodeMap)
+	targetStates := make(map[string]string)
+	if err := walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
+		nodeID := fmt.Sprintf("%s-%s", componentName, stackName)
+		if metadata, ok := componentSection[cfg.MetadataSectionName].(map[string]any); ok {
+			if metadataType, ok := metadata["type"].(string); ok && metadataType == "abstract" {
+				targetStates[nodeID] = "target_missing"
+			} else if enabled, ok := metadata["enabled"].(bool); ok && !enabled {
+				targetStates[nodeID] = "target_disabled"
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	parser := NewDependencyParserWithDelimiter(builder, nodeMap, targetStates, leftDelim)
 
 	return walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
 		if shouldSkipComponentForGraph(componentSection, componentName) {
 			return nil
 		}
-
 		return parser.ParseComponentDependencies(stackName, componentName, componentSection)
 	})
 }

@@ -290,6 +290,19 @@ func TestComponentDependency_IsComponentDependency(t *testing.T) {
 	}
 }
 
+func TestComponentDependency_IsRequiredDefaultsToTrue(t *testing.T) {
+	defaultDependency := ComponentDependency{}
+	assert.True(t, defaultDependency.IsRequired())
+
+	required := true
+	requiredDependency := ComponentDependency{Required: &required}
+	assert.True(t, requiredDependency.IsRequired())
+
+	optional := false
+	optionalDependency := ComponentDependency{Required: &optional}
+	assert.False(t, optionalDependency.IsRequired())
+}
+
 func TestDependencies_Normalize_NameAlias(t *testing.T) {
 	t.Run("name alone is promoted to component", func(t *testing.T) {
 		d := &Dependencies{
@@ -455,6 +468,16 @@ func TestDependencies_Normalize_FilesFoldersSiblings(t *testing.T) {
 		require.NoError(t, d.Normalize())
 		assert.Equal(t, first, d.Components, "second Normalize must not append duplicates")
 	})
+}
+
+func TestDependencies_Normalize_MissingComponentReturnsSentinel(t *testing.T) {
+	required := false
+	d := &Dependencies{
+		Components: []ComponentDependency{{Required: &required}},
+	}
+
+	err := d.Normalize()
+	require.ErrorIs(t, err, ErrComponentDependencyMissingComponent)
 }
 
 // Helpers for the equivalence assertion.

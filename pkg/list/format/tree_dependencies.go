@@ -29,6 +29,7 @@ type DepTreeNode struct {
 	Component string
 	Stack     string
 	Type      string
+	Optional  bool
 	Circular  bool
 	Children  []*DepTreeNode
 }
@@ -72,7 +73,7 @@ func renderDependencyEntryTrees(entries []*DepTreeEntry) string {
 // buildDependencyEntryNode builds the tree node for one top-level component.
 func buildDependencyEntryNode(entry *DepTreeEntry) *tree.Tree {
 	node := tree.New().
-		Root(styleDependencyRef(entry.Component, entry.Stack, entry.Type, "")).
+		Root(styleDependencyRef(entry.Component, entry.Stack, entry.Type, "", false)).
 		EnumeratorStyle(getBranchStyle())
 
 	if entry.ShowBoth {
@@ -120,9 +121,9 @@ func buildDirectionBranch(label string, children []*DepTreeNode, glyph string, r
 func buildDependencyChildNode(n *DepTreeNode, glyph string, rootStack string, rootType string) *tree.Tree {
 	var label string
 	if n.Circular {
-		label = styleCircularDependencyRef(n.Component, displayStack(n.Stack, rootStack), displayType(n.Type, rootType), glyph)
+		label = styleCircularDependencyRef(n.Component, displayStack(n.Stack, rootStack), displayType(n.Type, rootType), glyph, n.Optional)
 	} else {
-		label = styleDependencyRef(n.Component, displayStack(n.Stack, rootStack), displayType(n.Type, rootType), glyph)
+		label = styleDependencyRef(n.Component, displayStack(n.Stack, rootStack), displayType(n.Type, rootType), glyph, n.Optional)
 	}
 
 	node := tree.New().Root(label).EnumeratorStyle(getBranchStyle())
@@ -153,13 +154,18 @@ func displayType(componentType, rootType string) string {
 // stack and type after temporary markers. After tree rendering, the markers let
 // us move metadata into separate context columns while keeping branch glyphs
 // attached to the component names they describe. The optional glyph marks the
-// direction of the edge that led to this node.
-func styleDependencyRef(component, stack, componentType, glyph string) string {
+func styleDependencyRef(component, stack, componentType, glyph string, optional bool) string {
+	if optional {
+		component += " [optional]"
+	}
 	return styleDependencyComponent(component, glyph, getComponentStyle().Render) + dependencyColumnMarker + styleDependencyMetadata(stack, componentType)
 }
 
-func styleCircularDependencyRef(component, stack, componentType, glyph string) string {
+func styleCircularDependencyRef(component, stack, componentType, glyph string, optional bool) string {
 	componentLabel := fmt.Sprintf("%s (circular reference)", component)
+	if optional {
+		componentLabel += " [optional]"
+	}
 	return styleDependencyComponent(componentLabel, glyph, getCircularStyle().Render) + dependencyColumnMarker + styleDependencyMetadata(stack, componentType)
 }
 

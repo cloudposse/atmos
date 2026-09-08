@@ -450,6 +450,40 @@ func TestManifestSchema_OverridesFieldCoverage(t *testing.T) {
 	}
 }
 
+func TestManifestSchema_ComponentDependencyRequiredForms(t *testing.T) {
+	schemaData := loadEmbeddedSchemaBytes(t)
+	tests := []struct {
+		name      string
+		value     any
+		wantValid bool
+	}{
+		{name: "false", value: false, wantValid: true},
+		{name: "null", value: nil, wantValid: true},
+		{name: "yaml function", value: "!env REQUIRED", wantValid: true},
+		{name: "invalid string", value: "sometimes", wantValid: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"app": map[string]any{
+							"dependencies": map[string]any{
+								"components": []any{
+									map[string]any{"name": "vpc", "required": test.value},
+								},
+							},
+						},
+					},
+				},
+			}
+			result := validateManifestAgainstSchema(t, schemaData, manifest)
+			assert.Equal(t, test.wantValid, result.Valid(), "%s", result.Errors())
+		})
+	}
+}
+
 // TestManifestSchema_ComponentLevelRetry guards against the component-level retry: block being
 // entirely unsupported (issue found during the #2919 field test: retry is documented at
 // website/docs/stacks/components/terraform/retry.mdx and extracted for every component type by

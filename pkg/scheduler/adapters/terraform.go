@@ -151,7 +151,8 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		return fmt.Errorf("%w: terraform executor is nil", errUtils.ErrInvalidConfig)
 	}
 
-	graph, err := BuildTerraformGraph(opts.Stacks)
+	leftDelim, _ := tags.TemplateDelims(opts.AtmosConfig.Templates.Settings.Delimiters)
+	graph, err := BuildTerraformGraph(opts.Stacks, leftDelim)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrBuildDepGraph, err)
 	}
@@ -276,19 +277,23 @@ func skippedResultCount(result *scheduler.AggregateResult) int {
 }
 
 // BuildTerraformGraph builds a Terraform component graph from described stacks.
-func BuildTerraformGraph(stacks map[string]any) (*dependency.Graph, error) {
+func BuildTerraformGraph(stacks map[string]any, leftDelims ...string) (*dependency.Graph, error) {
 	defer perf.Track(nil, "scheduler.adapters.BuildTerraformGraph")()
 
+	leftDelim := ""
+	if len(leftDelims) > 0 {
+		leftDelim = leftDelims[0]
+	}
 	builder := dependency.NewBuilder()
-	nodeIDs := make(map[string]struct{})
+	targets := make(map[string]terraformTargetState)
 
 	if err := walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
+		nodeID := terraformNodeID(componentName, stackName)
+		targets[nodeID] = terraformTargetStateFor(componentSection)
 		if shouldSkipComponent(componentSection) {
 			return nil
 		}
 
-		nodeID := terraformNodeID(componentName, stackName)
-		nodeIDs[nodeID] = struct{}{}
 		return builder.AddNode(&dependency.Node{
 			ID:        nodeID,
 			Component: componentName,
@@ -304,7 +309,7 @@ func BuildTerraformGraph(stacks map[string]any) (*dependency.Graph, error) {
 		if shouldSkipComponent(componentSection) {
 			return nil
 		}
-		return addTerraformDependencies(builder, nodeIDs, stackName, componentName, componentSection)
+		return addTerraformDependencies(builder, targets, leftDelim, stackName, componentName, componentSection)
 	}); err != nil {
 		return nil, fmt.Errorf("adding dependencies: %w", err)
 	}
@@ -901,41 +906,84 @@ func evaluateTerraformQuery(atmosConfig *schema.AtmosConfiguration, metadata map
 	return ok && queryPassed, nil
 }
 
+type terraformTargetState struct {
+	available bool
+	reason    string
+}
+
+func terraformTargetStateFor(componentSection map[string]any) terraformTargetState {
+	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
+	if !ok {
+		return terraformTargetState{available: true}
+	}
+	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
+		return terraformTargetState{reason: "target_missing"}
+	}
+	if enabled, ok := metadataSection["enabled"].(bool); ok && !enabled {
+		return terraformTargetState{reason: "target_disabled"}
+	}
+	return terraformTargetState{available: true}
+}
+
 // addTerraformDependencies adds component dependency edges for one graph node.
 func addTerraformDependencies(
 	builder *dependency.GraphBuilder,
-	nodeIDs map[string]struct{},
+	targets map[string]terraformTargetState,
+	leftDelim string,
 	stackName string,
 	componentName string,
 	componentSection map[string]any,
 ) error {
 	fromID := terraformNodeID(componentName, stackName)
-	dependencies, err := terraformDependencies(componentSection)
+	dependencies, modern, err := terraformDependenciesWithSource(componentSection, stackName)
 	if err != nil {
 		return fmt.Errorf("parsing dependencies for %q in stack %q: %w", componentName, stackName, err)
 	}
 	for dependencyIndex := range dependencies {
 		dep := &dependencies[dependencyIndex]
-		if !dep.IsComponentDependency() {
+		if !dep.IsComponentDependency() || dep.Component == "" {
 			continue
 		}
 		if dep.Kind != "" && dep.Kind != cfg.TerraformComponentType {
 			continue
 		}
-		if dep.Component == "" {
-			continue
+		if modern && (tags.SelectorUnresolved(dep.Component, leftDelim) || tags.SelectorUnresolved(dep.Stack, leftDelim)) {
+			return fmt.Errorf("%w: from=%s component=%s stack=%s", errUtils.ErrDependencyResolution, fromID, dep.Component, dep.Stack)
 		}
 		depStack := dep.Stack
 		if depStack == "" {
 			depStack = stackName
 		}
 		toID := terraformNodeID(dep.Component, depStack)
-		if _, ok := nodeIDs[toID]; !ok {
-			log.Warn("Dependency target not found", "from", fromID, "to", toID)
+		target, exists := targets[toID]
+		if !exists {
+			target.reason = "target_missing"
+		}
+		//nolint:nestif // Required, optional, legacy, and disabled states have distinct contracts.
+		if !target.available {
+			if !modern {
+				log.Warn("Dependency target not found", "from", fromID, "to", toID)
+				continue
+			}
+			if dep.IsRequired() {
+				targetErr := errUtils.ErrDependencyTargetNotFound
+				if target.reason == "target_disabled" {
+					targetErr = errUtils.ErrDependencyTargetUnavailable
+				}
+				return fmt.Errorf("%w: from=%s to=%s reason=%s", targetErr, fromID, toID, target.reason)
+			}
+			log.Info("optional dependency skipped", "event", "optional_dependency_skipped",
+				"from", fromID, "to", toID, "from_component", componentName, "from_stack", stackName,
+				"to_component", dep.Component, "to_stack", depStack, "kind", dep.Kind, "reason", target.reason)
 			continue
 		}
-		if err := builder.AddDependency(fromID, toID); err != nil {
+		if err := builder.AddDependencyWithOptional(fromID, toID, modern && !dep.IsRequired()); err != nil {
 			return err
+		}
+		if modern && !dep.IsRequired() {
+			log.Debug("optional dependency included", "event", "optional_dependency_included",
+				"from", fromID, "to", toID, "from_component", componentName, "from_stack", stackName,
+				"to_component", dep.Component, "to_stack", depStack, "kind", dep.Kind)
 		}
 	}
 	return nil
@@ -943,34 +991,38 @@ func addTerraformDependencies(
 
 // terraformDependencies extracts modern or legacy dependency declarations from a component.
 func terraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, error) {
-	dependencies, found, err := modernTerraformDependencies(componentSection)
-	if err != nil || found {
-		return dependencies, err
-	}
-
-	return legacyTerraformDependencies(componentSection)
+	deps, _, err := terraformDependenciesWithSource(componentSection, "")
+	return deps, err
 }
 
-func modernTerraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, bool, error) {
-	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
-	if !ok {
+func terraformDependenciesWithSource(componentSection map[string]any, stackName string) ([]schema.ComponentDependency, bool, error) {
+	dependencies, found, err := modernTerraformDependencies(componentSection, stackName)
+	if err != nil || found {
+		return dependencies, found, err
+	}
+
+	legacy, err := legacyTerraformDependencies(componentSection)
+	return legacy, false, err
+}
+
+func modernTerraformDependencies(componentSection map[string]any, stackName string) ([]schema.ComponentDependency, bool, error) {
+	dependenciesValue, exists := componentSection[cfg.DependenciesSectionName]
+	if !exists {
 		return nil, false, nil
+	}
+	depsSection, ok := dependenciesValue.(map[string]any)
+	if !ok {
+		return nil, true, fmt.Errorf("%w: dependencies must be a map", errUtils.ErrUnsupportedDependencyType)
 	}
 	if _, hasComponents := depsSection["components"]; !hasComponents {
 		return nil, false, nil
 	}
 
-	var deps schema.Dependencies
-	if err := mapstructure.Decode(depsSection, &deps); err != nil {
-		return nil, false, err
+	deps, err := schema.ParseComponentDependencies(depsSection, cfg.TerraformComponentType, stackName)
+	if err != nil {
+		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
 	}
-	if len(deps.Components) == 0 {
-		return nil, false, nil
-	}
-	if err := deps.Normalize(); err != nil {
-		return nil, true, err
-	}
-	return deps.Components, true, nil
+	return deps, true, nil
 }
 
 func legacyTerraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, error) {

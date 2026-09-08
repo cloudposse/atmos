@@ -2016,7 +2016,7 @@
     },
     "dependencies_components": {
       "title": "dependencies_components",
-      "description": "List of component-to-component dependencies. Each entry declares a dependency on another component using `name` (preferred) or `component` (legacy alias), with optional `stack` and `kind`. Path-based dependencies should use the sibling `files` / `folders` keys; the legacy `kind: file` / `kind: folder` entries inside this list still parse but are discouraged.",
+      "description": "List of component-to-component dependencies. Each entry declares a dependency on another component using `name` (preferred) or `component` (legacy alias), with optional `stack`, `kind`, and `required`. Path-based dependencies should use the sibling `files` / `folders` keys; the legacy `kind: file` / `kind: folder` entries inside this list still parse but are discouraged.",
       "oneOf": [
         {
           "type": "string",
@@ -2054,6 +2054,21 @@
         "path": {
           "type": "string",
           "description": "File or folder path for legacy inline path-based dependencies. Required when `kind` is `file` or `folder`. New configurations should use the sibling `dependencies.files` / `dependencies.folders` keys instead."
+        },
+        "required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:!git\\.repository|!include\\.raw|!git\\.branch|!git\\.owner|!repo-root|!git\\.host|!git\\.name|!git\\.root|!git\\.ref|!git\\.sha|!git\\.url|!include|!append|!random|!unset|!exec|!cwd|!env)(?:\\s|$)"
+            }
+          ],
+          "description": "Whether the target component must be available. Defaults to true."
         }
       },
       "anyOf": [

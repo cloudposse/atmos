@@ -15,6 +15,7 @@ import (
 type componentRef struct {
 	Component string `json:"component" yaml:"component"`
 	Stack     string `json:"stack" yaml:"stack"`
+	Optional  bool   `json:"optional,omitempty" yaml:"optional,omitempty"`
 }
 
 // dependencyEntry is the structured (JSON/YAML) representation of one component
@@ -39,11 +40,11 @@ func renderStructured(graph *dependency.Graph, tops []*dependency.Node, opts Opt
 	for _, node := range tops {
 		entry := dependencyEntry{Component: node.Component, Stack: node.Stack}
 		if opts.Direction == DirectionForward || opts.Direction == DirectionBoth {
-			refs := refsFor(graph, node.Dependencies)
+			refs := refsForOutgoing(graph, node, node.Dependencies)
 			entry.DependsOn = &refs
 		}
 		if opts.Direction == DirectionReverse || opts.Direction == DirectionBoth {
-			refs := refsFor(graph, node.Dependents)
+			refs := refsForIncoming(graph, node, node.Dependents)
 			entry.RequiredBy = &refs
 		}
 		entries = append(entries, entry)
@@ -64,19 +65,45 @@ func renderStructured(graph *dependency.Graph, tops []*dependency.Node, opts Opt
 // empty result serialises as [] rather than null, allowing callers to distinguish
 // a leaf/root node (empty array) from an excluded direction (nil pointer field).
 func refsFor(graph *dependency.Graph, ids []string) []componentRef {
+	return refsForOutgoing(graph, nil, ids)
+}
+
+func refsForOutgoing(graph *dependency.Graph, source *dependency.Node, ids []string) []componentRef {
 	refs := make([]componentRef, 0, len(ids))
 	for _, id := range ids {
 		node, exists := graph.GetNode(id)
 		if !exists {
 			continue
 		}
-		refs = append(refs, componentRef{Component: node.Component, Stack: node.Stack})
+		optional := source != nil && source.OptionalDependencies[id]
+		refs = append(refs, componentRef{Component: node.Component, Stack: node.Stack, Optional: optional})
 	}
+	sortComponentRefs(refs)
+	return refs
+}
+
+func refsForIncoming(graph *dependency.Graph, target *dependency.Node, ids []string) []componentRef {
+	refs := make([]componentRef, 0, len(ids))
+	for _, id := range ids {
+		node, exists := graph.GetNode(id)
+		if !exists {
+			continue
+		}
+		refs = append(refs, componentRef{
+			Component: node.Component,
+			Stack:     node.Stack,
+			Optional:  node.OptionalDependencies[target.ID],
+		})
+	}
+	sortComponentRefs(refs)
+	return refs
+}
+
+func sortComponentRefs(refs []componentRef) {
 	sort.Slice(refs, func(i, j int) bool {
 		if refs[i].Stack != refs[j].Stack {
 			return refs[i].Stack < refs[j].Stack
 		}
 		return refs[i].Component < refs[j].Component
 	})
-	return refs
 }

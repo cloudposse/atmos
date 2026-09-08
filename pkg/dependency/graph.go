@@ -37,27 +37,35 @@ func (g *Graph) AddNode(node *Node) error {
 		return fmt.Errorf(errWithContextFormat, ErrNodeExists, node.ID)
 	}
 
-	// Initialize slices if nil.
+	// Initialize slices and edge metadata if nil.
 	if node.Dependencies == nil {
 		node.Dependencies = []string{}
 	}
 	if node.Dependents == nil {
 		node.Dependents = []string{}
 	}
+	if node.OptionalDependencies == nil {
+		node.OptionalDependencies = make(map[string]bool)
+	}
 
 	g.Nodes[node.ID] = node
 	return nil
 }
 
-// AddDependency creates a dependency relationship between two nodes.
+// AddDependency creates a required dependency relationship between two nodes.
 // The fromID depends on toID (fromID -> toID).
 func (g *Graph) AddDependency(fromID, toID string) error {
-	defer perf.Track(nil, "dependency.Graph.AddDependency")()
+	return g.AddDependencyWithOptional(fromID, toID, false)
+}
+
+// AddDependencyWithOptional creates a dependency relationship and records whether
+// the edge was declared optional.
+func (g *Graph) AddDependencyWithOptional(fromID, toID string, optional bool) error {
+	defer perf.Track(nil, "dependency.Graph.AddDependencyWithOptional")()
 
 	if fromID == "" || toID == "" {
 		return ErrEmptyDependencyID
 	}
-
 	if fromID == toID {
 		return fmt.Errorf(errWithContextFormat, ErrSelfDependency, fromID)
 	}
@@ -66,23 +74,21 @@ func (g *Graph) AddDependency(fromID, toID string) error {
 	if !fromExists {
 		return fmt.Errorf(errWithContextFormat, ErrNodeNotFound, fromID)
 	}
-
 	toNode, toExists := g.Nodes[toID]
 	if !toExists {
 		return fmt.Errorf(errWithContextFormat, ErrNodeNotFound, toID)
 	}
 
-	// Check if dependency already exists.
 	for _, dep := range fromNode.Dependencies {
 		if dep == toID {
-			return nil // Dependency already exists, skip.
+			fromNode.OptionalDependencies[toID] = optional
+			return nil
 		}
 	}
 
-	// Add the dependency relationship.
 	fromNode.Dependencies = append(fromNode.Dependencies, toID)
 	toNode.Dependents = append(toNode.Dependents, fromID)
-
+	fromNode.OptionalDependencies[toID] = optional
 	return nil
 }
 

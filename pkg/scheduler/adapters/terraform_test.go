@@ -231,6 +231,67 @@ func TestTerraformDependenciesModernAndLegacy(t *testing.T) {
 	})
 }
 
+func TestTerraformDependenciesRejectsMalformedDependenciesSection(t *testing.T) {
+	_, err := terraformDependencies(map[string]any{
+		cfg.DependenciesSectionName: "not-a-map",
+	})
+	require.ErrorIs(t, err, errUtils.ErrUnsupportedDependencyType)
+}
+
+func TestAddTerraformDependenciesOptionalUnresolvedTargetFails(t *testing.T) {
+	tests := []struct {
+		name       string
+		dependency map[string]any
+	}{
+		{
+			name:       "component",
+			dependency: map[string]any{"name": "{{ .missing }}", "required": false},
+		},
+		{
+			name:       "stack",
+			dependency: map[string]any{"name": "vpc", "stack": "{{ .missing }}", "required": false},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			builder := dependency.NewBuilder()
+			err := addTerraformDependencies(
+				builder,
+				map[string]terraformTargetState{},
+				"",
+				"dev",
+				"app",
+				map[string]any{
+					cfg.DependenciesSectionName: map[string]any{
+						"components": []any{test.dependency},
+					},
+				},
+			)
+			require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+		})
+	}
+}
+
+func TestAddTerraformDependenciesOptionalUnresolvedTargetWithCustomDelimiterFails(t *testing.T) {
+	builder := dependency.NewBuilder()
+	err := addTerraformDependencies(
+		builder,
+		map[string]terraformTargetState{},
+		"[[",
+		"dev",
+		"app",
+		map[string]any{
+			cfg.DependenciesSectionName: map[string]any{
+				"components": []any{
+					map[string]any{"name": "vpc", "stack": "[[ .missing ]]", "required": false},
+				},
+			},
+		},
+	)
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+}
+
 func TestExecuteTerraformClosesSharedRegistryCacheOnFailureAndCancellation(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -947,6 +1008,29 @@ func TestBuildTerraformGraphFallsBackToSettingsDependsOn(t *testing.T) {
 	app, ok := graph.GetNode("app-dev")
 	require.True(t, ok)
 	require.Equal(t, []string{"vpc-dev"}, app.Dependencies)
+}
+
+func TestBuildTerraformGraphLastDependencyOverrideAppliedBeforeAvailability(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": terraformAdapterComponent(
+						"selected",
+						[]any{
+							map[string]any{"name": "missing", "required": true},
+							map[string]any{"name": "missing", "required": false},
+						},
+						nil,
+					),
+				},
+			},
+		},
+	}
+
+	graph, err := BuildTerraformGraph(stacks)
+	require.NoError(t, err)
+	require.Empty(t, graph.Nodes["app-dev"].Dependencies)
 }
 
 func TestExecuteTerraformKeepsIndependentComponentsSequential(t *testing.T) {

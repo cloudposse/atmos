@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // terraformStacks is a small helper to build a stacks map of the shape produced
@@ -119,12 +121,8 @@ func TestBuildGraph_DependenciesComponentsInvalidPreventsSettingsFallback(t *tes
 		},
 	})
 
-	graph, err := BuildGraph(stacks)
-	require.NoError(t, err)
-
-	app, ok := graph.GetNode(NodeID("app", "dev"))
-	require.True(t, ok)
-	assert.Empty(t, app.Dependencies, "invalid authoritative dependencies.components must not fall back to settings.depends_on")
+	_, err := BuildGraph(stacks)
+	require.Error(t, err)
 }
 
 func TestBuildGraph_IgnoresMalformedStackShapes(t *testing.T) {
@@ -249,4 +247,54 @@ func TestBuildGraph_ToleratesCycles(t *testing.T) {
 
 	hasCycle, _ := graph.HasCycles()
 	assert.True(t, hasCycle)
+}
+
+func TestBuildGraph_MalformedDependenciesSectionFails(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {
+				"dependencies": "not-a-map",
+			},
+		},
+	})
+
+	_, err := BuildGraph(stacks)
+	require.ErrorIs(t, err, errUtils.ErrUnsupportedDependencyType)
+}
+
+func TestBuildGraph_RequiredModernDependencyTargetMissingFails(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {
+				"dependencies": map[string]any{
+					"components": []any{
+						map[string]any{"name": "missing"},
+					},
+				},
+			},
+		},
+	})
+
+	_, err := BuildGraph(stacks)
+	require.ErrorIs(t, err, errUtils.ErrDependencyTargetNotFound)
+}
+
+func TestBuildGraph_RequiredModernDisabledTargetFails(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {
+				"dependencies": map[string]any{
+					"components": []any{
+						map[string]any{"name": "disabled"},
+					},
+				},
+			},
+			"disabled": {
+				"metadata": map[string]any{"enabled": false},
+			},
+		},
+	})
+
+	_, err := BuildGraph(stacks)
+	require.ErrorIs(t, err, errUtils.ErrDependencyTargetUnavailable)
 }

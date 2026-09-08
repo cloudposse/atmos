@@ -37,16 +37,22 @@ func (b *GraphBuilder) AddNode(node *Node) error {
 	return nil
 }
 
-// AddDependency creates a dependency relationship between two nodes.
+// AddDependency creates a required dependency relationship between two nodes.
 // The fromID depends on toID (fromID -> toID).
 func (b *GraphBuilder) AddDependency(fromID, toID string) error {
-	defer perf.Track(nil, "dependency.GraphBuilder.AddDependency")()
+	return b.AddDependencyWithOptional(fromID, toID, false)
+}
+
+// AddDependencyWithOptional creates a dependency relationship and records whether
+// the edge was declared optional.
+func (b *GraphBuilder) AddDependencyWithOptional(fromID, toID string, optional bool) error {
+	defer perf.Track(nil, "dependency.GraphBuilder.AddDependencyWithOptional")()
 
 	if b.built {
 		return ErrGraphAlreadyBuilt
 	}
 
-	if err := b.graph.AddDependency(fromID, toID); err != nil {
+	if err := b.graph.AddDependencyWithOptional(fromID, toID, optional); err != nil {
 		return fmt.Errorf("%w: from=%s to=%s: %w", ErrAddDependencyFailed, fromID, toID, err)
 	}
 	return nil

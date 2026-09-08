@@ -183,6 +183,135 @@ func TestBuildTerraformDependencyGraph_WithDisabledComponents(t *testing.T) {
 	assert.Equal(t, "enabled", enabledNode.Component)
 }
 
+func TestBuildTerraformDependencyGraphModernDependencies(t *testing.T) {
+	tests := []struct {
+		name       string
+		dependency map[string]any
+		target     map[string]any
+		wantErr    error
+		wantEdge   bool
+	}{
+		{
+			name:       "optional present",
+			dependency: map[string]any{"name": "vpc", "required": false},
+			target:     map[string]any{},
+			wantEdge:   true,
+		},
+		{
+			name:       "optional missing",
+			dependency: map[string]any{"name": "missing", "required": false},
+		},
+		{
+			name:       "optional disabled",
+			dependency: map[string]any{"name": "disabled", "required": false},
+			target:     map[string]any{"metadata": map[string]any{"enabled": false}},
+		},
+		{
+			name:       "required missing",
+			dependency: map[string]any{"name": "missing"},
+			wantErr:    errUtils.ErrDependencyTargetNotFound,
+		},
+		{
+			name:       "required disabled",
+			dependency: map[string]any{"name": "disabled"},
+			target:     map[string]any{"metadata": map[string]any{"enabled": false}},
+			wantErr:    errUtils.ErrDependencyTargetUnavailable,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			terraform := map[string]any{
+				"app": map[string]any{
+					"dependencies": map[string]any{
+						"components": []any{test.dependency},
+					},
+				},
+				"vpc": map[string]any{},
+			}
+			if test.target != nil {
+				terraform["disabled"] = test.target
+			}
+			stacks := map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{"terraform": terraform},
+				},
+			}
+
+			graph, err := buildTerraformDependencyGraph(&schema.AtmosConfiguration{}, stacks, &schema.ConfigAndStacksInfo{})
+			if test.wantErr != nil {
+				require.ErrorIs(t, err, test.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			app, exists := graph.GetNode("app-dev")
+			require.True(t, exists)
+			if test.wantEdge {
+				require.Equal(t, []string{"vpc-dev"}, app.Dependencies)
+				require.True(t, app.OptionalDependencies["vpc-dev"])
+			} else {
+				require.Empty(t, app.Dependencies)
+			}
+		})
+	}
+}
+
+func TestBuildTerraformDependencyGraphModernCrossStackDependency(t *testing.T) {
+	stacks := map[string]any{
+		"core": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{"vpc": map[string]any{}},
+			},
+		},
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"app": map[string]any{
+						"dependencies": map[string]any{
+							"components": []any{
+								map[string]any{"name": "vpc", "stack": "core", "required": false},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := buildTerraformDependencyGraph(&schema.AtmosConfiguration{}, stacks, &schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+	app, exists := graph.GetNode("app-dev")
+	require.True(t, exists)
+	require.Equal(t, []string{"vpc-core"}, app.Dependencies)
+	require.True(t, app.OptionalDependencies["vpc-core"])
+}
+
+func TestBuildTerraformDependencyGraphModernEmptyPreventsLegacyFallback(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{},
+					"app": map[string]any{
+						"dependencies": map[string]any{
+							"components": []any{},
+						},
+						"settings": map[string]any{
+							"depends_on": []any{"vpc"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := buildTerraformDependencyGraph(&schema.AtmosConfiguration{}, stacks, &schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+	app, exists := graph.GetNode("app-dev")
+	require.True(t, exists)
+	require.Empty(t, app.Dependencies)
+}
+
 func TestApplyFiltersToGraph(t *testing.T) {
 	// Create a test graph.
 	graph := dependency.NewGraph()

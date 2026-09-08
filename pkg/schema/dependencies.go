@@ -19,8 +19,7 @@ const (
 	dependencyKindFolder = "folder"
 )
 
-// Sentinel errors returned by Dependencies.Normalize. Defined locally to avoid
-// an import cycle with the pkg/perf-anchored errors package.
+// Sentinel errors returned by Dependencies.Normalize.
 var (
 	// ErrComponentDependencyNameConflict is returned when a single dependency
 	// entry sets both `name` (v2 alias) and `component` (canonical) to
@@ -29,6 +28,8 @@ var (
 	// ErrComponentDependencyMissingPath is returned when an inline path-based
 	// dependency entry (`kind: file` or `kind: folder`) lacks the `path` field.
 	ErrComponentDependencyMissingPath = errors.New("path-based component dependency is missing 'path'")
+	// ErrComponentDependencyMissingComponent is returned when a component dependency has no target.
+	ErrComponentDependencyMissingComponent = errors.New("component dependency is missing 'component' or 'name'")
 )
 
 // ComponentDependency represents a single dependency entry. It supports two
@@ -61,18 +62,26 @@ type ComponentDependency struct {
 	// type, or — in the legacy inline shape — file/folder. Defaults to the
 	// declaring component's type for component dependencies.
 	Kind string `yaml:"kind,omitempty" json:"kind,omitempty" mapstructure:"kind"`
+	// Required controls whether an available target must be present. Nil defaults to true.
+	Required *bool `yaml:"required,omitempty" json:"required,omitempty" mapstructure:"required"`
 	// Path for file or folder dependencies (legacy inline shape). For new
 	// configurations, prefer the sibling keys `dependencies.files` /
 	// `dependencies.folders`.
 	Path string `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`
 
 	// Legacy context fields from settings.depends_on format.
+
 	// These are only populated when reading from the deprecated settings.depends_on format.
 	// For new dependencies.components format, use the stack field with templates instead.
 	Namespace   string `yaml:"-" json:"-" mapstructure:"namespace"`
 	Tenant      string `yaml:"-" json:"-" mapstructure:"tenant"`
 	Environment string `yaml:"-" json:"-" mapstructure:"environment"`
 	Stage       string `yaml:"-" json:"-" mapstructure:"stage"`
+}
+
+// IsRequired reports whether this dependency is required. An omitted value defaults to required.
+func (d *ComponentDependency) IsRequired() bool {
+	return d.Required == nil || *d.Required
 }
 
 // IsFileDependency returns true if this is a file dependency.
@@ -307,8 +316,48 @@ func (d *Dependencies) normalizeComponentEntries() error {
 		if (entry.IsFileDependency() || entry.IsFolderDependency()) && entry.Path == "" {
 			return fmt.Errorf("%w (entry %d, kind=%q)", ErrComponentDependencyMissingPath, i, entry.Kind)
 		}
+		if entry.IsComponentDependency() && entry.Component == "" {
+			return fmt.Errorf("%w (entry %d)", ErrComponentDependencyMissingComponent, i)
+		}
 	}
 	return nil
+}
+
+// ParseComponentDependencies decodes and normalizes modern component dependencies.
+// It applies last-wins semantics using effective kind and stack identity.
+func ParseComponentDependencies(section map[string]any, defaultKind, defaultStack string) ([]ComponentDependency, error) {
+	var dependencies Dependencies
+	if err := mapstructure.Decode(section, &dependencies); err != nil {
+		return nil, fmt.Errorf("decode component dependencies: %w", err)
+	}
+	if err := dependencies.Normalize(); err != nil {
+		return nil, fmt.Errorf("normalize component dependencies: %w", err)
+	}
+
+	normalized := make([]ComponentDependency, 0, len(dependencies.Components))
+	indices := make(map[string]int, len(dependencies.Components))
+	for i := range dependencies.Components {
+		dependency := &dependencies.Components[i]
+		if !dependency.IsComponentDependency() || dependency.Component == "" {
+			continue
+		}
+		kind := dependency.Kind
+		if kind == "" {
+			kind = defaultKind
+		}
+		stack := dependency.Stack
+		if stack == "" {
+			stack = defaultStack
+		}
+		key := dependency.Component + "\x00" + kind + "\x00" + stack
+		if index, exists := indices[key]; exists {
+			normalized[index] = *dependency
+			continue
+		}
+		indices[key] = len(normalized)
+		normalized = append(normalized, *dependency)
+	}
+	return normalized, nil
 }
 
 // mirrorSiblingsIntoComponents appends synthetic ComponentDependency entries
