@@ -101,6 +101,9 @@ func parseScopeStack(cmd *cobra.Command, args []string) (secretScope, error) {
 		if err != nil {
 			return scope, err
 		}
+		if err := adoptPromptedStack(cmd, chosen); err != nil {
+			return scope, err
+		}
 		scope.Stack = chosen
 	}
 	if scope.Stack == "" {
@@ -109,9 +112,22 @@ func parseScopeStack(cmd *cobra.Command, args []string) (secretScope, error) {
 			WithHint("Specify a stack with --stack or -s").
 			Err()
 	}
-	// Make the chosen stack visible to the component completion (it filters by --stack).
-	v.Set(cfg.StackStr, scope.Stack)
 	return scope, nil
+}
+
+// adoptPromptedStack records a stack chosen at the interactive prompt on the command's own
+// --stack flag, so the component completion that follows (which filters by the selected stack,
+// read through viper's flag binding) sees it exactly as if the user had passed --stack.
+//
+// It deliberately does not write the value into viper's override layer (viper.Set): an override
+// outranks every later flag parse for the life of the process, so a second `secret` command run
+// in the same process would silently keep the first command's stack. An empty choice (no TTY,
+// nothing to choose from) leaves the flag untouched so the required-flag error still fires.
+func adoptPromptedStack(cmd *cobra.Command, chosen string) error {
+	if chosen == "" {
+		return nil
+	}
+	return cmd.Flags().Set(cfg.StackStr, chosen)
 }
 
 func requireScopeComponent(scope secretScope, cmd *cobra.Command, args []string) (secretScope, error) {

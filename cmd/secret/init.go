@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -163,6 +162,9 @@ func parseInitScope(cmd *cobra.Command, args []string, all bool) (secretScope, e
 		if promptErr != nil {
 			return facet, promptErr
 		}
+		if err := adoptPromptedStack(cmd, chosen); err != nil {
+			return facet, err
+		}
 		facet.Stack = chosen
 	}
 	if facet.Stack == "" {
@@ -170,7 +172,6 @@ func parseInitScope(cmd *cobra.Command, args []string, all bool) (secretScope, e
 			WithExplanation("--stack is required for secret operations").
 			WithHint("Specify a stack with --stack or -s").Err()
 	}
-	viper.GetViper().Set("stack", facet.Stack)
 	return facet, nil
 }
 
