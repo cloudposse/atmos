@@ -277,6 +277,14 @@ func TestReconcileWrapsServerErrors(t *testing.T) {
 					_, _ = w.Write([]byte(`{"message":"server error"}`))
 					return
 				}
+				if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/_apis/identities") {
+					// A real identity response, not tt.listResponse (which is PR-shaped): resolving
+					// "reviewer-guid" to itself lets addReviewer actually reach the reviewers PUT
+					// this subtest's failure injection targets, rather than relying on lenient JSON
+					// decoding of an unrelated response shape to coincidentally produce a match.
+					_, _ = w.Write([]byte(`{"value":[{"id":"reviewer-guid","isContainer":false}]}`))
+					return
+				}
 				if r.Method == http.MethodGet {
 					_, _ = w.Write([]byte(tt.listResponse))
 					return
