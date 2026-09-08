@@ -39,6 +39,15 @@ type Publication struct {
 func PublishComponentUpdate(ctx context.Context, workdir, remote string, publication Publication, prConfig *schema.VendorPullRequestConfig, githubRepository GitHubRepositoryFunc) (*PullRequest, string, error) {
 	defer perf.Track(nil, "updater.PublishComponentUpdate")()
 
+	// Validate (and resolve) the repository address before committing and pushing anything: an
+	// incomplete prConfig (e.g. a missing azuredevops organization/project/repository) must fail
+	// loudly here, before the update branch is pushed to remote -- not after, when
+	// ReconcileComponentUpdatePullRequest would otherwise be the first place to notice and the
+	// commit/push would already be done with no pull request to show for it.
+	if _, err := resolveRepositoryAddress(ctx, workdir, remote, prConfig, githubRepository); err != nil {
+		return nil, "", err
+	}
+
 	commit, err := CommitAndPushComponentUpdate(ctx, workdir, remote, publication.Branch)
 	if err != nil || commit == "" {
 		return nil, commit, err

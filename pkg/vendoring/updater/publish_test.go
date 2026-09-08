@@ -3,6 +3,7 @@ package updater
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -229,9 +230,12 @@ func TestPublishComponentUpdateAzureDevOpsAddressing(t *testing.T) {
 
 // TestPublishComponentUpdateAzureDevOpsMissingConfig proves a missing organization/project/repository
 // fails loudly with an actionable, sentinel-wrapped error instead of silently falling back to
-// GitHub's git-remote resolution (which would resolve to the wrong repository shape entirely).
+// GitHub's git-remote resolution (which would resolve to the wrong repository shape entirely) --
+// and, critically, that the failure happens *before* anything is committed or pushed: the
+// repository address is validated up front, so an update branch with no way to open a pull request
+// never lands on the remote.
 func TestPublishComponentUpdateAzureDevOpsMissingConfig(t *testing.T) {
-	_, workdir := newGitFixture(t)
+	remote, workdir := newGitFixture(t)
 
 	branch, base, err := PrepareBranch(context.Background(), workdir, "origin", "main", "", "all")
 	require.NoError(t, err)
@@ -239,8 +243,15 @@ func TestPublishComponentUpdateAzureDevOpsMissingConfig(t *testing.T) {
 
 	prConfig := schema.VendorPullRequestConfig{Provider: azureDevOpsProviderName, Organization: "acme-org"} // Project/Repository left unset.
 	publication := Publication{Scope: "all", Branch: branch, Base: base, Report: &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "vpc", Status: vendoring.StatusUpdated}}}}
-	_, _, err = PublishComponentUpdate(context.Background(), workdir, "origin", publication, &prConfig, fakeGitHubRepository)
+	pr, commit, err := PublishComponentUpdate(context.Background(), workdir, "origin", publication, &prConfig, fakeGitHubRepository)
 	assert.ErrorIs(t, err, errUtils.ErrComponentUpdaterConfig)
+	assert.Nil(t, pr, "an invalid azuredevops config must not produce a pull request")
+	assert.Empty(t, commit, "an invalid azuredevops config must be rejected before anything is committed")
+
+	// The update branch must never have reached the bare remote either -- resolveRepositoryAddress's
+	// validation runs before CommitAndPushComponentUpdate, so nothing should have been pushed.
+	output, lookupErr := exec.Command("git", "--git-dir="+remote, "rev-parse", "--verify", "refs/heads/"+branch).CombinedOutput()
+	assert.Errorf(t, lookupErr, "branch %q must not exist on the remote, got: %s", branch, output)
 }
 
 func TestPublishComponentUpdateInvalidTemplateError(t *testing.T) {
