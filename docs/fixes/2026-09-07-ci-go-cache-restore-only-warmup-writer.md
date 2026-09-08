@@ -75,7 +75,8 @@ move without moving every consumer.
 
 ## Validation
 
-- `python3 -c yaml.safe_load` and `actionlint` pass on every edited workflow/action file.
+- Every edited workflow/action file parses with PyYAML (`python3 -c "import yaml; yaml.safe_load(open(f))"`
+  looped over the files) and `actionlint` passes on every edited workflow.
 - `go build ./...` and `go build -o build/atmos .` succeed; `./build/atmos ci cache paths
   --format=github` renders the new toolchain key
   (`atmos-toolchain-darwin-arm64-v2-5f174099f5f046d3`) with both restore-keys.

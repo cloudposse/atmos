@@ -29,6 +29,10 @@ on:
     branches:
       - main
     paths:
+      # Tool pins and the root ci.cache config shape what the toolchain
+      # install puts in the cache; re-warm when either changes.
+      - ".tool-versions"
+      - "atmos.yaml"
       - "tests/fixtures/scenarios/native-ci-e2e/**"
       - ".github/workflows/native-ci.yml"
       - "actions/cache/**"
