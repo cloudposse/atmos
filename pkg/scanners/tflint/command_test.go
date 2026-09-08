@@ -174,7 +174,7 @@ func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
 	stubInitCLIConfig(t)
 
 	originalGraph := buildTerraformGraph
-	buildTerraformGraph = func(map[string]any) (*dependency.Graph, error) {
+	buildTerraformGraph = func(map[string]any, ...string) (*dependency.Graph, error) {
 		return &dependency.Graph{Nodes: map[string]*dependency.Node{
 			"vpc-prod": {Component: "vpc", Stack: "prod"},
 			"vpc-dev":  {Component: "vpc", Stack: "dev"},
@@ -200,7 +200,7 @@ func TestExecuteDisablesComponentAuthDuringStackDiscovery(t *testing.T) {
 	stubInitCLIConfig(t)
 
 	originalGraph := buildTerraformGraph
-	buildTerraformGraph = func(map[string]any) (*dependency.Graph, error) {
+	buildTerraformGraph = func(map[string]any, ...string) (*dependency.Graph, error) {
 		return &dependency.Graph{}, nil
 	}
 	t.Cleanup(func() { buildTerraformGraph = originalGraph })
