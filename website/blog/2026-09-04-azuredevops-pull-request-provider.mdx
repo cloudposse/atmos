@@ -22,7 +22,7 @@ someone opening the PR by hand.
 
 ## The Fix
 
-`ci.pull_request.provider` now accepts `azuredevops` alongside the existing `github` value. It
+The `ci.pull_request.provider` field now accepts `azuredevops` alongside the existing `github` value. It
 follows the same create-or-update contract: Atmos looks for an already-open pull request between
 the same source and target branches first, updates that pull request's title and description in
 place when one exists, and only opens a new one when none does — so re-running a vendor sync never
