@@ -311,6 +311,63 @@ func TestScaffoldGenerateRunE_UpdateFlagWithPositionalTarget_PropagatesBaseRefEr
 	require.Error(t, err)
 }
 
+// TestScaffoldGenerateRunE_UpdateStrategyInvalidValueRejected covers
+// --update-strategy's own validation: a value outside tracked/rendered must
+// fail before any generation work starts.
+func TestScaffoldGenerateRunE_UpdateStrategyInvalidValueRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "bogus"))
+
+	err := scaffoldGenerateCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+}
+
+// TestScaffoldGenerateRunE_BaseRefWithRenderedStrategyRejected covers the
+// explicit --base-ref + --update-strategy=rendered mutual-exclusion check:
+// rendered's base ref comes from the target's own recorded scaffold.yaml,
+// not --base-ref, so combining them is a contradiction rather than a value
+// to silently ignore.
+func TestScaffoldGenerateRunE_BaseRefWithRenderedStrategyRejected(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	cmd := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, cmd.Flags().Set("base-ref", "some-ref"))
+
+	err := scaffoldGenerateCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+}
+
+// TestScaffoldGenerateRunE_RenderedStrategyRequiresScaffoldConfig covers
+// --update-strategy=rendered against a target with no recorded
+// .atmos/scaffold.yaml project record: unlike tracked (which falls back to
+// literal "HEAD" against the target's own git history), rendered has no
+// fallback -- there is nothing to reconstruct the old ref/answers from.
+func TestScaffoldGenerateRunE_RenderedStrategyRequiresScaffoldConfig(t *testing.T) {
+	t.Cleanup(func() { viper.Reset() })
+
+	dir := t.TempDir()
+
+	cmd := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("update", "true"))
+	require.NoError(t, cmd.Flags().Set("update-strategy", "rendered"))
+
+	err := scaffoldGenerateCmd.RunE(cmd, []string{"simple", dir})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrRenderedStrategyRequiresConfig)
+}
+
 // TestMaybeInitGeneratedGitRepository_PropagatesInitGitError reproduces
 // InitGitRepository failing (a leftover regular file named ".git" blocks
 // git.PlainInit) and asserts maybeInitGeneratedGitRepository returns that
