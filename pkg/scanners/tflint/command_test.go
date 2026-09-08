@@ -40,11 +40,15 @@ func testRuntime() *Runtime {
 	}
 }
 
-func stubInitCLIConfig(t *testing.T) {
+func stubInitCLIConfig(t *testing.T, delimiters ...string) {
 	t.Helper()
 	original := initCLIConfig
 	initCLIConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
-		return schema.AtmosConfiguration{}, nil
+		return schema.AtmosConfiguration{
+			Templates: schema.Templates{
+				Settings: schema.TemplatesSettings{Delimiters: delimiters},
+			},
+		}, nil
 	}
 	t.Cleanup(func() { initCLIConfig = original })
 
@@ -171,11 +175,11 @@ func TestExecuteRejectsMissingInputs(t *testing.T) {
 }
 
 func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
-	stubInitCLIConfig(t)
+	stubInitCLIConfig(t, "[[", "]]")
 
 	originalGraph := buildTerraformGraph
 	buildTerraformGraph = func(_ map[string]any, leftDelims ...string) (*dependency.Graph, error) {
-		assert.Len(t, leftDelims, 1)
+		assert.Equal(t, []string{"[["}, leftDelims)
 		return &dependency.Graph{Nodes: map[string]*dependency.Node{
 			"vpc-prod": {Component: "vpc", Stack: "prod"},
 			"vpc-dev":  {Component: "vpc", Stack: "dev"},

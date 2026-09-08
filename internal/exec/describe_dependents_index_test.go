@@ -217,6 +217,25 @@ func TestFindComponentSectionInCachedStacks_Helmfile(t *testing.T) {
 	assert.Equal(t, "nginx", section["vars"].(map[string]any)["chart"])
 }
 
+func TestFindComponentSectionInCachedStacks_AllTypesWithPrecedence(t *testing.T) {
+	stacks := map[string]any{
+		"dev-use1": map[string]any{
+			"components": map[string]any{
+				"packer": map[string]any{
+					"image": map[string]any{"vars": map[string]any{"source": "packer"}},
+				},
+				"terraform": map[string]any{
+					"image": map[string]any{"vars": map[string]any{"source": "terraform"}},
+				},
+			},
+		},
+	}
+
+	section := findComponentSectionInCachedStacks(stacks, "dev-use1", "image")
+	require.NotNil(t, section)
+	assert.Equal(t, "terraform", section["vars"].(map[string]any)["source"])
+}
+
 func TestFindComponentSectionInCachedStacks_InvalidStackSection(t *testing.T) {
 	// Stack section is not a map.
 	stacks := map[string]any{"bad": "not-a-map"}

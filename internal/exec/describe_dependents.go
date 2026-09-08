@@ -749,8 +749,38 @@ func findComponentSectionInCachedStacks(stacks map[string]any, stackName, compon
 	if !ok {
 		return nil
 	}
-	for _, componentTypeSection := range componentsSection {
-		componentTypeMap, ok := componentTypeSection.(map[string]any)
+	componentTypes := []string{
+		cfg.TerraformComponentType,
+		cfg.HelmfileComponentType,
+		cfg.PackerComponentType,
+		cfg.AnsibleComponentType,
+		cfg.ContainerComponentType,
+		cfg.EmulatorComponentType,
+		cfg.KubernetesComponentType,
+		cfg.HelmComponentType,
+	}
+	for _, componentType := range componentTypes {
+		componentTypeMap, ok := componentsSection[componentType].(map[string]any)
+		if !ok {
+			continue
+		}
+		if comp, ok := componentTypeMap[componentName].(map[string]any); ok {
+			return comp
+		}
+	}
+	knownTypes := make(map[string]struct{}, len(componentTypes))
+	for _, componentType := range componentTypes {
+		knownTypes[componentType] = struct{}{}
+	}
+	remainingTypes := make([]string, 0, len(componentsSection))
+	for componentType := range componentsSection {
+		if _, ok := knownTypes[componentType]; !ok {
+			remainingTypes = append(remainingTypes, componentType)
+		}
+	}
+	sort.Strings(remainingTypes)
+	for _, componentType := range remainingTypes {
+		componentTypeMap, ok := componentsSection[componentType].(map[string]any)
 		if !ok {
 			continue
 		}
