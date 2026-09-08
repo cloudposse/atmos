@@ -159,11 +159,11 @@ func parseInitScope(cmd *cobra.Command, args []string, all bool) (secretScope, e
 	}
 	if facet.Stack == "" {
 		chosen, promptErr := flags.PromptForMissingRequired("stack", "Choose a stack", stackCompletion, cmd, args)
+		if promptErr == nil {
+			promptErr = adoptPromptedStack(cmd, chosen)
+		}
 		if promptErr != nil {
 			return facet, promptErr
-		}
-		if err := adoptPromptedStack(cmd, chosen); err != nil {
-			return facet, err
 		}
 		facet.Stack = chosen
 	}

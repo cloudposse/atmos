@@ -47,7 +47,10 @@ its stack filter matched nothing, and the global-declaration lookup failed.
   (`import --stack prod`, then `set --stack dev`) and asserts the second command loads its service with
   `Stack == "dev"`; `TestAdoptPromptedStack_VisibleThroughFlagBinding` checks a prompted stack is visible
   through `viper.GetString("stack")` and gone after the flag reset; `TestAdoptPromptedStack_EmptyChoiceIsNoOp`
-  covers the non-interactive path.
+  and `TestRunSecretInit_MissingStackNonInteractive` cover the non-interactive path on both call sites, and
+  `TestAdoptPromptedStack_MissingFlagErrors` the helper's only failure mode. The prompt branches fold the prompt
+  error and the adopt error into the one pre-existing `if err != nil` return, so every changed line is
+  exercised without a TTY.
 
 ## Validation
 

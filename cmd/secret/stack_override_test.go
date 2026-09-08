@@ -3,10 +3,12 @@ package secret
 import (
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/secrets"
 )
 
@@ -77,4 +79,25 @@ func TestAdoptPromptedStack_EmptyChoiceIsNoOp(t *testing.T) {
 
 	require.NoError(t, adoptPromptedStack(setCmd, ""))
 	assert.False(t, setCmd.Flags().Changed("stack"))
+}
+
+// TestAdoptPromptedStack_MissingFlagErrors guards the helper's only failure mode: a command that
+// does not carry the --stack flag cannot adopt a choice, and the error must surface rather than
+// being swallowed (the secret subcommands all inherit the flag, so this is a programming-error
+// guard, not a user-facing path).
+func TestAdoptPromptedStack_MissingFlagErrors(t *testing.T) {
+	bare := &cobra.Command{Use: "bare"}
+	require.Error(t, adoptPromptedStack(bare, "staging"))
+}
+
+// TestRunSecretInit_MissingStackNonInteractive guards the non-interactive fallback on the init
+// path: with no --stack and no TTY the prompt yields nothing, nothing is adopted, and the standard
+// required-flag error fires instead of a silent empty stack.
+func TestRunSecretInit_MissingStackNonInteractive(t *testing.T) {
+	svc := newFakeSecretService()
+	installService(t, svc, nil)
+
+	err := runSecretSubcommand(t, "init", "--component", "api")
+	require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
+	assert.Empty(t, svc.setCalls)
 }

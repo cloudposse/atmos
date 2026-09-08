@@ -98,10 +98,10 @@ func parseScopeStack(cmd *cobra.Command, args []string) (secretScope, error) {
 
 	if scope.Stack == "" {
 		chosen, err := flags.PromptForMissingRequired(cfg.StackStr, "Choose a stack", stackCompletion, cmd, args)
-		if err != nil {
-			return scope, err
+		if err == nil {
+			err = adoptPromptedStack(cmd, chosen)
 		}
-		if err := adoptPromptedStack(cmd, chosen); err != nil {
+		if err != nil {
 			return scope, err
 		}
 		scope.Stack = chosen
