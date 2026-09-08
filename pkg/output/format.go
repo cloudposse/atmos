@@ -175,6 +175,16 @@ var singleValueFormatters = map[Format]singleValueFormatter{
 	FormatCSV:    func(key string, value any) (string, error) { return formatSingleDelimited(key, value, ",") },
 	FormatTSV:    func(key string, value any) (string, error) { return formatSingleDelimited(key, value, "\t") },
 	FormatGitHub: formatSingleGitHub,
+	FormatTable:  formatSingleTable,
+}
+
+// formatSingleTable renders a single key/value pair as a one-row styled table,
+// reusing the bulk formatTable renderer. SupportedFormats and the --format flag
+// help text both advertise "table" for single-value output (e.g. `atmos terraform
+// output <component> <key> --format=table`), so dispatchSingleValueFormat's
+// "unsupported format" error must never actually be reachable for FormatTable.
+func formatSingleTable(key string, value any) (string, error) {
+	return formatTable(map[string]any{key: value}, FormatOptions{})
 }
 
 // dispatchSingleValueFormat routes to the appropriate format handler.

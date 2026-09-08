@@ -395,6 +395,32 @@ func TestFormatSingleValue_Scalar(t *testing.T) {
 	}
 }
 
+// TestFormatSingleValue_Table guards FormatTable's single-value support:
+// SupportedFormats and the terraform output --format flag help text both
+// advertise "table" for single-key output, so it must render a one-row
+// styled table rather than hitting dispatchSingleValueFormat's "unsupported
+// format" error branch.
+func TestFormatSingleValue_Table(t *testing.T) {
+	result, err := FormatSingleValue("url", "https://example.com", FormatTable)
+	require.NoError(t, err)
+	assert.Contains(t, result, "url")
+	assert.Contains(t, result, "https://example.com")
+}
+
+// TestFormatSingleValue_ComplexTable proves FormatTable also accepts complex
+// (map/list) single values, same as JSON/YAML/HCL.
+func TestFormatSingleValue_ComplexTable(t *testing.T) {
+	value := map[string]any{
+		"host": "localhost",
+		"port": float64(3000),
+	}
+
+	result, err := FormatSingleValue("config", value, FormatTable)
+	require.NoError(t, err)
+	assert.Contains(t, result, "config")
+	assert.Contains(t, result, "localhost")
+}
+
 func TestFormatSingleValue_ComplexJSON(t *testing.T) {
 	// Complex types work with JSON format.
 	value := map[string]any{
