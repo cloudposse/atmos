@@ -36,7 +36,7 @@ func listDeployedStacks(ctx context.Context, client CloudFormationClient, status
 			NextToken:         nextToken,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, err)
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 		}
 		stacks = append(stacks, out.StackSummaries...)
 		if out.NextToken == nil {

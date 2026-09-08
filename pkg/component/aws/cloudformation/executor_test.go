@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1056,27 +1057,43 @@ func TestRunOperation_Apply_ConfirmationDeclined(t *testing.T) {
 
 // runOperation must, once confirmation passes and a client is built, look up
 // and actually invoke the matching operationHandlers entry (not just resolve
-// it) — asserted here by confirming the underlying (real, unreachable)
-// endpoint was actually hit rather than merely that runOperation returns.
+// it) — asserted here by confirming the underlying test endpoint was actually
+// hit (via a request counter) rather than merely that runOperation returns an
+// error. Static test credentials are configured so the SDK never falls back
+// to (slow, ultimately-failing) IMDS credential resolution — without them,
+// the call fails during credential resolution and never actually reaches the
+// test server, so the test would not exercise the dispatch path it claims to.
 func TestRunOperation_DispatchesToHandler(t *testing.T) {
-	// A real server, closed immediately: the port is guaranteed to refuse
-	// connections, so the real AWS SDK call the dispatched handler makes fails
-	// fast and deterministically rather than depending on network access.
-	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	unreachable := srv.URL
-	srv.Close()
+	var requests int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&requests, 1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	tmpDir := t.TempDir()
+	credsFile := filepath.Join(tmpDir, "credentials")
+	configFile := filepath.Join(tmpDir, "config")
+	require.NoError(t, os.WriteFile(credsFile, []byte("[test]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI\n"), 0o600))
+	require.NoError(t, os.WriteFile(configFile, []byte("[profile test]\nregion = us-east-1\n"), 0o600))
 
 	info := &schema.ConfigAndStacksInfo{
 		ComponentSection: map[string]any{
 			"settings": map[string]any{"aws_cloudformation": map[string]any{"region": "us-east-1"}},
 		},
-		AuthContext: &schema.AuthContext{AWS: &schema.AWSAuthContext{EndpointURL: unreachable}},
+		AuthContext: &schema.AuthContext{AWS: &schema.AWSAuthContext{
+			CredentialsFile: credsFile,
+			ConfigFile:      configFile,
+			Profile:         "test",
+			EndpointURL:     srv.URL,
+		}},
 	}
 	spec := &stackSpec{StackName: "vpc"}
 	octx := &opContext{Ctx: context.Background(), Info: info, Flags: map[string]any{}}
 
 	_, err := runOperation(octx, OperationGetPolicy, spec)
-	require.Error(t, err, "the dispatched handler must have actually called the (unreachable) endpoint and surfaced its failure")
+	require.Error(t, err)
+	assert.GreaterOrEqual(t, atomic.LoadInt32(&requests), int32(1), "the dispatched handler must have actually called the test endpoint")
 }
 
 func TestRunOperation_Render_NoAPICalls(t *testing.T) {

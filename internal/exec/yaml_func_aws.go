@@ -245,7 +245,7 @@ func processTagAwsCloudFormationOutputWithContext(
 	}
 	component, stack, output := parsed.Component, parsed.Stack, parsed.Expression
 
-	cleanup, err := trackOutputDependency(atmosConfig, resolutionCtx, component, stack, input)
+	cleanup, err := trackOutputDependency(atmosConfig, resolutionCtx, component, stack, "aws.cloudformation.output", input)
 	if err != nil {
 		return nil, err
 	}
