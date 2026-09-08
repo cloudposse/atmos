@@ -2,6 +2,7 @@ package describe
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -11,6 +12,14 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/tests"
 )
+
+// describeAffectedCloneRetryBudget bounds retries of the real GitHub clone this test performs.
+// A transient DNS/TLS blip reaching github.com occasionally fails the clone even moments after
+// RequireGitHubAccess confirmed reachability (and CI sets ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true,
+// making that check a no-op there anyway — see docs/fixes/2026-09-08-terraform-plugin-cache-windows-registry-flake.md
+// for the equivalent registry.terraform.io incident this mirrors). A real failure (bad ref, auth)
+// fails identically on every attempt and still fails the test once the budget is spent.
+const describeAffectedCloneRetryBudget = 30 * time.Second
 
 func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 	// Skip long tests in short mode (this test takes ~36 seconds due to Git cloning)
@@ -34,22 +43,31 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 	ref := "refs/heads/main"
 	sha := ""
 
-	affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRefClone(
-		&atmosConfig,
-		ref,
-		sha,
-		"",
-		"",
-		true,
-		true,
-		"",
-		true,
-		true,
-		nil,
-		false,
-		nil,   // authManager
-		false, // authDisabled
-	)
+	var affected []schema.Affected
+	deadline := time.Now().Add(describeAffectedCloneRetryBudget)
+	for {
+		affected, _, _, _, err = e.ExecuteDescribeAffectedWithTargetRefClone(
+			&atmosConfig,
+			ref,
+			sha,
+			"",
+			"",
+			true,
+			true,
+			"",
+			true,
+			true,
+			nil,
+			false,
+			nil,   // authManager
+			false, // authDisabled
+		)
+		if err == nil || time.Now().After(deadline) {
+			break
+		}
+		t.Logf("ExecuteDescribeAffectedWithTargetRefClone failed, retrying: %v", err)
+		time.Sleep(500 * time.Millisecond)
+	}
 	assert.Nil(t, err)
 
 	affectedYaml, err := u.ConvertToYAML(affected)

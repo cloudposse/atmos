@@ -1,6 +1,6 @@
 # Fix: `TestTerraformPluginCache` flake from a transient registry.terraform.io blip
 
-**Date:** 2026-09-09
+**Date:** 2026-09-08
 
 ## Summary
 
@@ -20,7 +20,7 @@ past it, same pattern as
 Pulled the full log via `gh api repos/cloudposse/atmos/actions/jobs/102116372680/logs`
 and found:
 
-```
+```text
 --- FAIL: TestTerraformPluginCache (38.71s)
     cli_plugin_cache_test.go:57: Failed to run terraform init component-a -s test: exit status 1
     Terraform init stderr:
@@ -64,6 +64,12 @@ stack with a `retry:` section).
   failing on the first error. A real failure (bad fixture config, missing
   provider) fails identically on every attempt and still fails the test once
   the budget is spent — this only absorbs a one-off network hiccup.
+  `runTerraformInitCommandWithEnv` now takes an explicit `timeout` (its other
+  direct caller passes `terraformInitTimeout` unchanged) so each retry
+  attempt's own context is capped to the time remaining in the 90s budget,
+  not a fresh `terraformInitTimeout` (4m) every time — `pollUntil` only
+  checks its deadline between attempts, so without this a single blocked
+  attempt could otherwise run well past the intended budget.
 
 ## Verification
 
