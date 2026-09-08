@@ -255,19 +255,36 @@ func skipUnavailableOptionalTarget(stacks map[string]any, args *DescribeDependen
 			return false, err
 		}
 	}
-	return onlyOptionalTargetDependencies(depIndex[args.Component]), nil
+	return onlyOptionalTargetDependencies(depIndex[args.Component], args.Stack), nil
 }
 
-func onlyOptionalTargetDependencies(entries []dependencyIndexEntry) bool {
-	if len(entries) == 0 {
-		return false
-	}
+func onlyOptionalTargetDependencies(entries []dependencyIndexEntry, stackName string) bool {
+	hasMatching := false
 	for i := range entries {
+		if !dependencyTargetsStack(&entries[i], stackName) {
+			continue
+		}
+		hasMatching = true
 		if entries[i].DependsOn.IsRequired() {
 			return false
 		}
 	}
-	return true
+	return hasMatching
+}
+
+func dependencyTargetsStack(entry *dependencyIndexEntry, stackName string) bool {
+	return dependencyTargetsStackValues(&entry.DependsOn, entry.StackName, stackName)
+}
+
+func dependencyTargetsStackValues(dep *schema.ComponentDependency, sourceStack, stackName string) bool {
+	if stackName == "" {
+		return true
+	}
+	targetStack := dep.Stack
+	if targetStack == "" {
+		targetStack = sourceStack
+	}
+	return targetStack == stackName
 }
 
 // findDependentsFromIndex uses the pre-computed dependency index for O(1) lookup.
@@ -290,7 +307,7 @@ func findDependentsFromIndex(
 		}
 
 		dep := e.DependsOn
-		if targetUnavailable && !dep.IsRequired() {
+		if targetUnavailable && dependencyTargetsStack(e, args.Stack) && !dep.IsRequired() {
 			continue
 		}
 		if !isDependencyMatch(&dependencyMatchParams{
@@ -411,7 +428,7 @@ func scanComponentForDependents(p *scanComponentParams) ([]schema.Dependent, err
 		if dependsOn.Component != p.Args.Component {
 			continue
 		}
-		if p.TargetUnavailable && !dependsOn.IsRequired() {
+		if p.TargetUnavailable && dependencyTargetsStackValues(dependsOn, p.StackName, p.Args.Stack) && !dependsOn.IsRequired() {
 			continue
 		}
 
