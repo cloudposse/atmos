@@ -74,6 +74,18 @@ func TestIsRetryableGitError(t *testing.T) {
 			err:      errors.New("ssh: Could not resolve hostname github.com: Temporary failure in name resolution"),
 			expected: true,
 		},
+		// Standalone forms: each of the new patterns must match on its own, without another
+		// pattern (e.g. "failed to connect to" or "temporary failure") also present in the input.
+		{
+			name:     "could not connect to server alone",
+			err:      errors.New("Could not connect to server"),
+			expected: true,
+		},
+		{
+			name:     "name resolution alone",
+			err:      errors.New("getaddrinfo: name resolution error"),
+			expected: true,
+		},
 
 		// Timeout errors (should retry).
 		{

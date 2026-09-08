@@ -28,6 +28,10 @@ func TestEffectiveRetryConfig_DefaultWhenUnset(t *testing.T) {
 			require.NotNil(t, cfg.MaxDelay)
 			assert.Equal(t, defaultSourceRetryMaxDelay, *cfg.MaxDelay)
 			assert.Equal(t, schema.BackoffExponential, cfg.BackoffStrategy)
+			require.NotNil(t, cfg.Multiplier)
+			assert.InDelta(t, defaultSourceRetryMultiplier, *cfg.Multiplier, 0)
+			require.NotNil(t, cfg.RandomJitter)
+			assert.InDelta(t, defaultSourceRetryJitter, *cfg.RandomJitter, 0)
 			// The default must be a policy the retry executor accepts as-is.
 			assert.NoError(t, retry.Validate(cfg))
 		})
