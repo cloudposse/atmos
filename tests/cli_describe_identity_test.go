@@ -32,6 +32,14 @@ func runDescribeIdentityCommand(t *testing.T, args ...string) (string, error) {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 
+	// A deadline-killed command also returns a non-nil error from Run(), which would
+	// otherwise satisfy assert.Error in the "should fail gracefully" callers below - letting
+	// a hang silently pass as an "expected failure" instead of surfacing as the attributable
+	// failure this timeout exists to produce.
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("command %v timed out after %s", args, describeIdentityCommandTimeout)
+	}
+
 	return stdout.String() + stderr.String(), err
 }
 

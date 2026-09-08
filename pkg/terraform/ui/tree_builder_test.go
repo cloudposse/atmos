@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
 func TestBuildTreeFromPlan_Empty(t *testing.T) {
@@ -264,6 +265,38 @@ func TestBuildDependencyTree_CommandFailureIncludesStderr(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrCommandFailed)
 	assert.Contains(t, err.Error(), "Error: no valid credential sources found")
+}
+
+// TestBuildDependencyTree_CommandFailureMasksSecretsInStderr is a regression test: `terraform
+// show`'s stderr (e.g. a backend-init error) can contain provider/backend secrets, and
+// wrapShowCommandError used to embed it in the returned error verbatim - bypassing the
+// masking every other subprocess stderr path in this package goes through (see
+// streamStderrToLog) - so a secret could reach the WARN log showPlanTree emits. The stderr
+// text must be masked before it's embedded in the error.
+func TestBuildDependencyTree_CommandFailureMasksSecretsInStderr(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	const secret = "super-secret-backend-token"
+	iolib.RegisterSecret(secret)
+	t.Cleanup(iolib.Reset)
+
+	t.Setenv("_ATMOS_TEST_TF_SHOW_STDERR", "Error: backend init failed, token="+secret)
+
+	opts := &TreeBuildOptions{
+		PlanfilePath:  "plan.tfplan",
+		TerraformPath: exePath,
+		WorkingDir:    t.TempDir(),
+		Stack:         "dev",
+		Component:     "vpc",
+	}
+
+	_, err = BuildDependencyTree(context.Background(), opts)
+
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), secret, "the raw secret must never reach the wrapped error")
+	assert.Contains(t, err.Error(), "Error: backend init failed, token=",
+		"surrounding diagnostic text must still be included")
 }
 
 // TestBuildDependencyTree_UsesProvidedEnv is a regression test: BuildDependencyTree used to

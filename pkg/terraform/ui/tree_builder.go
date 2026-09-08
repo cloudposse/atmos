@@ -12,6 +12,7 @@ import (
 	tfjson "github.com/hashicorp/terraform-json"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -65,14 +66,18 @@ func BuildDependencyTree(ctx context.Context, opts *TreeBuildOptions) (*Dependen
 // wrapShowCommandError wraps a `terraform show` failure, distinguishing a process that never
 // started (ErrCommandStart) from one that ran and exited non-zero (ErrCommandFailed), and
 // including the subprocess's stderr - if any - so the real cause isn't reduced to an opaque
-// "exit status 1".
+// "exit status 1". Terraform/OpenTofu error output can carry backend or provider secrets
+// (e.g. a credential embedded in a backend-init error), so stderr is masked the same way
+// streamStderrToLog masks the main plan/apply subprocess's stderr before it reaches this
+// error's message - which callers log (see showPlanTree) and could otherwise leak into
+// terminal or CI logs.
 func wrapShowCommandError(err error) error {
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
 		return fmt.Errorf("%w: terraform show: %w", errUtils.ErrCommandStart, err)
 	}
 
-	stderr := strings.TrimSpace(string(exitErr.Stderr))
+	stderr := strings.TrimSpace(iolib.MaskString(string(exitErr.Stderr)))
 	if stderr == "" {
 		return fmt.Errorf("%w: terraform show: %w", errUtils.ErrCommandFailed, err)
 	}
