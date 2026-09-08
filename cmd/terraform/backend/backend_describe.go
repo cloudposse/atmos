@@ -41,7 +41,8 @@ This includes backend settings, variables, and metadata from the stack manifest.
 			stack = v.GetString("stack")
 		}
 		identity := flags.ParseGlobalFlags(cmd, v).Identity.Value()
-		return executeDescribeCommandWithValues(result.Component, stack, identity, result.Format)
+		prompted := promptedFlags{Component: result.ComponentPrompted, Stack: result.StackPrompted}
+		return executeDescribeCommandWithValues(result.Component, stack, identity, result.Format, prompted)
 	},
 }
 

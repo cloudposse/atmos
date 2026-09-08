@@ -252,9 +252,9 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 	selectValue string,
 	atmosConfig *schema.AtmosConfiguration,
 ) (AuthManager, error) {
-	// Delegate to the stack-aware variant with an empty context to preserve the
+	// Delegate to the stack-aware variant with an empty stack to preserve the
 	// existing (no-stack) behavior for callers that don't have a target stack.
-	return CreateAndAuthenticateManagerWithAtmosConfigForStack(identityName, authConfig, selectValue, atmosConfig, ReExecContext{})
+	return CreateAndAuthenticateManagerWithAtmosConfigForStack(identityName, authConfig, selectValue, atmosConfig, "")
 }
 
 // CreateAndAuthenticateManagerWithAtmosConfigForStack is the stack-aware variant of
@@ -264,14 +264,34 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 // auth context (AuthContext.AWS, including the emulator endpoint) consumed by `!terraform.state`,
 // `!store`, `!secret`, and store hooks. Callers with a concrete (component, stack) pair should
 // use this variant; callers without a target stack can use the no-stack wrapper above.
+//
+// This signature is preserved for source compatibility with external callers of this exported
+// package API. Callers that also have component/stack values resolved via an interactive prompt
+// (so a later identity-not-found fallback can re-inject them into a profile-fallback re-exec)
+// should use CreateAndAuthenticateManagerWithReExecContext instead.
 func CreateAndAuthenticateManagerWithAtmosConfigForStack(
+	identityName string,
+	authConfig *schema.AuthConfig,
+	selectValue string,
+	atmosConfig *schema.AtmosConfiguration,
+	stack string,
+) (AuthManager, error) {
+	return CreateAndAuthenticateManagerWithReExecContext(identityName, authConfig, selectValue, atmosConfig, ReExecContext{Stack: stack})
+}
+
+// CreateAndAuthenticateManagerWithReExecContext is the ReExecContext-aware variant of
+// CreateAndAuthenticateManagerWithAtmosConfigForStack. In addition to seeding the target stack,
+// it carries component/stack values resolved via an interactive prompt into the manager's
+// stackInfo, so a later identity-not-found fallback (manager.Authenticate) can re-inject them
+// into a profile-fallback re-exec instead of dropping them.
+func CreateAndAuthenticateManagerWithReExecContext(
 	identityName string,
 	authConfig *schema.AuthConfig,
 	selectValue string,
 	atmosConfig *schema.AtmosConfiguration,
 	reExecCtx ReExecContext,
 ) (AuthManager, error) {
-	defer perf.Track(atmosConfig, "auth.CreateAndAuthenticateManagerWithAtmosConfigForStack")()
+	defer perf.Track(atmosConfig, "auth.CreateAndAuthenticateManagerWithReExecContext")()
 
 	log.Debug("CreateAndAuthenticateManager called", "identityName", identityName, "hasAuthConfig", authConfig != nil, "stack", reExecCtx.Stack)
 

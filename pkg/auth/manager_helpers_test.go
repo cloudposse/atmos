@@ -917,6 +917,20 @@ func TestCreateAuthManagerInstance_NilConfig(t *testing.T) {
 	assert.Nil(t, manager, "manager should be nil on error")
 }
 
+// TestCreateAndAuthenticateManagerWithAtmosConfigForStack_StringSignaturePreserved pins
+// CreateAndAuthenticateManagerWithAtmosConfigForStack's exported signature to a plain `stack
+// string` fifth parameter. This is a public pkg/auth API; changing it to ReExecContext would
+// break any external caller compiled against the old signature. The ReExecContext-aware
+// behavior lives in the separate CreateAndAuthenticateManagerWithReExecContext function instead.
+// Uses an unconfigured authConfig (no identities) so the assertion doesn't depend on real auth.
+func TestCreateAndAuthenticateManagerWithAtmosConfigForStack_StringSignaturePreserved(t *testing.T) {
+	manager, err := CreateAndAuthenticateManagerWithAtmosConfigForStack("some-identity", &schema.AuthConfig{}, "__SELECT__", nil, "plat-ue2-dev")
+
+	require.Error(t, err, "an identity name with no auth configured must error")
+	assert.ErrorIs(t, err, errUtils.ErrAuthNotConfigured)
+	assert.Nil(t, manager)
+}
+
 // TestCreateManagerWithAtmosConfigForStack covers the no-auth (deferred-identity) manager
 // constructor: it must reject an unconfigured auth section, and otherwise create a manager
 // without authenticating any identity, threading atmosConfig.CliConfigPath and the target

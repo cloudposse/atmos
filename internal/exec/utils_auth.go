@@ -39,9 +39,9 @@ type authManagerCreator func(identity string, authConfig *schema.AuthConfig, sel
 // defaultComponentConfigFetcher is the default implementation that calls ExecuteDescribeComponent.
 var defaultComponentConfigFetcher componentConfigFetcher = ExecuteDescribeComponent
 
-// defaultAuthManagerCreator is the default implementation that calls the stack-aware
-// auth.CreateAndAuthenticateManagerWithAtmosConfigForStack.
-var defaultAuthManagerCreator authManagerCreator = auth.CreateAndAuthenticateManagerWithAtmosConfigForStack
+// defaultAuthManagerCreator is the default implementation that calls the ReExecContext-aware
+// auth.CreateAndAuthenticateManagerWithReExecContext.
+var defaultAuthManagerCreator authManagerCreator = auth.CreateAndAuthenticateManagerWithReExecContext
 
 // resolveIdentityConfigError checks whether err signals a missing/invalid identity that a
 // profile might resolve, offering the interactive profile-selection prompt `atmos auth
