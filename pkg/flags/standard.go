@@ -1125,7 +1125,11 @@ func (p *StandardFlagParser) promptForOptionalValueFlags(result *ParsedConfig, c
 		}
 
 		// Update flag value with selection.
+		// The sentinel check above guarantees ctx.FlagValue was the sentinel, so a
+		// non-empty selectedValue here always came from the interactive prompt below,
+		// not from a pre-existing user-supplied value.
 		result.Flags[flagName] = selectedValue
+		markFieldPrompted(result, flagName)
 	}
 
 	return nil
@@ -1188,6 +1192,7 @@ func (p *StandardFlagParser) promptForSingleMissingFlag(flagName string, result 
 
 	if selectedValue != "" {
 		result.Flags[flagName] = selectedValue
+		markFieldPrompted(result, flagName)
 	}
 
 	return nil
@@ -1243,6 +1248,7 @@ func (p *StandardFlagParser) promptForMissingPositionalArgs(result *ParsedConfig
 
 		// Append the selected value to positional args.
 		result.PositionalArgs = append(result.PositionalArgs, selectedValue)
+		markFieldPrompted(result, spec.Name)
 	}
 
 	return nil

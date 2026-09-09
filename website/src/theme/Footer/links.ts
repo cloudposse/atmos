@@ -48,6 +48,7 @@ export const footerColumns: FooterColumn[] = [
         href: 'https://github.com/cloudposse/atmos/releases/latest',
       },
       { label: 'Media Kit', to: '/media-kit' },
+      { label: 'Security', to: '/security' },
     ],
   },
   {

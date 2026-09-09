@@ -12,6 +12,8 @@ import (
 )
 
 func TestPrintOrWriteToFile(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			Terminal: schema.Terminal{
@@ -67,6 +69,8 @@ func TestPrintOrWriteToFile(t *testing.T) {
 }
 
 func TestSanitizeFileName(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		input    string
@@ -157,6 +161,7 @@ func TestSanitizeFileName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.skipOS != "" && runtime.GOOS == tt.skipOS {
 				t.Skipf("Skipping test on %s", tt.skipOS)
 			}
@@ -168,6 +173,8 @@ func TestSanitizeFileName(t *testing.T) {
 }
 
 func TestToFileScheme(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		input    string
@@ -222,6 +229,7 @@ func TestToFileScheme(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.skipOS != "" && runtime.GOOS == tt.skipOS {
 				t.Skipf("Skipping test on %s: path format not applicable", tt.skipOS)
 			}
@@ -233,6 +241,8 @@ func TestToFileScheme(t *testing.T) {
 }
 
 func TestFixWindowsFileScheme(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		input       string
@@ -293,6 +303,7 @@ func TestFixWindowsFileScheme(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := fixWindowsFileScheme(tt.input)
 
 			if tt.expectError {
@@ -309,6 +320,8 @@ func TestFixWindowsFileScheme(t *testing.T) {
 }
 
 func TestRemoveTempDir(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		setup   func() string // Returns path to test with
@@ -344,6 +357,7 @@ func TestRemoveTempDir(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			path := tt.setup()
 
 			// Call removeTempDir - it doesn't return anything

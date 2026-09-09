@@ -8,6 +8,8 @@ import (
 )
 
 func TestTerraformDeclaredVarType(t *testing.T) {
+	t.Parallel()
+
 	componentSection := map[string]any{
 		componentInfoKey: map[string]any{
 			terraformConfigKey: &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
@@ -20,39 +22,46 @@ func TestTerraformDeclaredVarType(t *testing.T) {
 	}
 
 	t.Run("declared type found", func(t *testing.T) {
+		t.Parallel()
 		got, ok := TerraformDeclaredVarType(componentSection, "replicas")
 		assert.True(t, ok)
 		assert.Equal(t, "number", got)
 	})
 
 	t.Run("declared bool type found", func(t *testing.T) {
+		t.Parallel()
 		got, ok := TerraformDeclaredVarType(componentSection, "enabled")
 		assert.True(t, ok)
 		assert.Equal(t, "bool", got)
 	})
 
 	t.Run("declared list type found", func(t *testing.T) {
+		t.Parallel()
 		got, ok := TerraformDeclaredVarType(componentSection, "tags")
 		assert.True(t, ok)
 		assert.Equal(t, "list(string)", got)
 	})
 
 	t.Run("not declared", func(t *testing.T) {
+		t.Parallel()
 		_, ok := TerraformDeclaredVarType(componentSection, "does_not_exist")
 		assert.False(t, ok)
 	})
 
 	t.Run("declared with no explicit type (implicit any)", func(t *testing.T) {
+		t.Parallel()
 		_, ok := TerraformDeclaredVarType(componentSection, "anyvar")
 		assert.False(t, ok)
 	})
 
 	t.Run("non-terraform component (no component_info)", func(t *testing.T) {
+		t.Parallel()
 		_, ok := TerraformDeclaredVarType(map[string]any{}, "replicas")
 		assert.False(t, ok)
 	})
 
 	t.Run("component_info present but no terraform_config", func(t *testing.T) {
+		t.Parallel()
 		_, ok := TerraformDeclaredVarType(map[string]any{
 			componentInfoKey: map[string]any{},
 		}, "replicas")
@@ -60,6 +69,7 @@ func TestTerraformDeclaredVarType(t *testing.T) {
 	})
 
 	t.Run("nil module", func(t *testing.T) {
+		t.Parallel()
 		_, ok := TerraformDeclaredVarType(map[string]any{
 			componentInfoKey: map[string]any{
 				terraformConfigKey: (*tfconfig.Module)(nil),
@@ -69,6 +79,7 @@ func TestTerraformDeclaredVarType(t *testing.T) {
 	})
 
 	t.Run("nil componentSection", func(t *testing.T) {
+		t.Parallel()
 		_, ok := TerraformDeclaredVarType(nil, "replicas")
 		assert.False(t, ok)
 	})

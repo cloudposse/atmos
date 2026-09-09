@@ -13,6 +13,8 @@ import (
 
 // TestDetectDeletedComponents_ComponentDeleted tests detection of a single component deletion.
 func TestDetectDeletedComponents_ComponentDeleted(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// BASE has vpc and prometheus; HEAD has only vpc.
@@ -59,6 +61,8 @@ func TestDetectDeletedComponents_ComponentDeleted(t *testing.T) {
 
 // TestDetectDeletedComponents_EntireStackDeleted tests detection when an entire stack is deleted.
 func TestDetectDeletedComponents_EntireStackDeleted(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// BASE has a stack with two components; HEAD doesn't have the stack.
@@ -100,6 +104,8 @@ func TestDetectDeletedComponents_EntireStackDeleted(t *testing.T) {
 
 // TestDetectDeletedComponents_AbstractComponentNotReported tests that abstract components are skipped.
 func TestDetectDeletedComponents_AbstractComponentNotReported(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// BASE has an abstract component that's "deleted" in HEAD.
@@ -142,6 +148,8 @@ func TestDetectDeletedComponents_AbstractComponentNotReported(t *testing.T) {
 
 // TestDetectDeletedComponents_WithStackFilter tests that --stack filter is respected.
 func TestDetectDeletedComponents_WithStackFilter(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// BASE has two stacks with deleted components.
@@ -190,6 +198,8 @@ func TestDetectDeletedComponents_WithStackFilter(t *testing.T) {
 
 // TestDetectDeletedComponents_MultipleComponentTypes tests deletion across different component types.
 func TestDetectDeletedComponents_MultipleComponentTypes(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// BASE has terraform, helmfile, and packer components.
@@ -245,6 +255,8 @@ func TestDetectDeletedComponents_MultipleComponentTypes(t *testing.T) {
 // When a stack exists but lacks a components section, all BASE components are deleted with
 // deletion_type: "component" (not "stack") since the stack itself still exists.
 func TestDetectDeletedComponents_NoComponentsSection(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	remoteStacks := map[string]any{
@@ -277,6 +289,8 @@ func TestDetectDeletedComponents_NoComponentsSection(t *testing.T) {
 
 // TestDetectDeletedComponents_NoDeletions tests when nothing is deleted.
 func TestDetectDeletedComponents_NoDeletions(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Same stacks and components in both BASE and HEAD.
@@ -299,6 +313,8 @@ func TestDetectDeletedComponents_NoDeletions(t *testing.T) {
 
 // TestDetectDeletedComponents_StackSlug tests that stack_slug is correctly generated.
 func TestDetectDeletedComponents_StackSlug(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	remoteStacks := map[string]any{
@@ -331,6 +347,8 @@ func TestDetectDeletedComponents_StackSlug(t *testing.T) {
 // TestDetectDeletedComponents_MalformedData tests graceful handling of malformed stack data.
 // The function should skip invalid entries without returning errors.
 func TestDetectDeletedComponents_MalformedData(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	tests := []struct {
@@ -432,6 +450,7 @@ func TestDetectDeletedComponents_MalformedData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			deleted, err := detectDeletedComponents(&tt.remoteStacks, &tt.currentStacks, atmosConfig, "")
 			require.NoError(t, err, tt.description)
 			assert.Len(t, deleted, tt.expectedCount, tt.description)
@@ -441,6 +460,8 @@ func TestDetectDeletedComponents_MalformedData(t *testing.T) {
 
 // TestDetectDeletedComponents_ComponentPath tests that ComponentPath is correctly set for deleted components.
 func TestDetectDeletedComponents_ComponentPath(t *testing.T) {
+	t.Parallel()
+
 	// Use a minimal config with base paths set.
 	// Use filepath.Join for Windows compatibility.
 	basePath := "project"
@@ -502,6 +523,8 @@ func TestDetectDeletedComponents_ComponentPath(t *testing.T) {
 
 // TestIsAbstractComponent tests the isAbstractComponent helper.
 func TestIsAbstractComponent(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		componentSection map[string]any
@@ -536,6 +559,7 @@ func TestIsAbstractComponent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := isAbstractComponent(tt.componentSection)
 			assert.Equal(t, tt.expected, result)
 		})

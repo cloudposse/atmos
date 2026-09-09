@@ -21,6 +21,8 @@ import (
 )
 
 func TestUploadExecMetadata(t *testing.T) {
+	t.Parallel()
+
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 	apiClient := &AtmosProAPIClient{
@@ -46,6 +48,8 @@ func TestUploadExecMetadata(t *testing.T) {
 }
 
 func TestUploadExecMetadata_Error(t *testing.T) {
+	t.Parallel()
+
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 	apiClient := &AtmosProAPIClient{
@@ -75,6 +79,8 @@ func TestUploadExecMetadata_Error(t *testing.T) {
 // and a subsequent successful retry, matching doWithRetry's documented
 // behavior for every other Pro upload.
 func TestUploadExecMetadata_401RefreshRetry(t *testing.T) {
+	t.Parallel()
+
 	var attempts atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if attempts.Add(1) == 1 {
@@ -103,6 +109,8 @@ func TestUploadExecMetadata_401RefreshRetry(t *testing.T) {
 // TestUploadExecMetadata_5xxRetry verifies a transient 5xx is retried without
 // token refresh.
 func TestUploadExecMetadata_5xxRetry(t *testing.T) {
+	t.Parallel()
+
 	var attempts atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if attempts.Add(1) == 1 {
@@ -130,8 +138,11 @@ func TestUploadExecMetadata_5xxRetry(t *testing.T) {
 // TestUploadExecMetadata_NonRetryable verifies 400/403/404 are returned
 // immediately, without retry.
 func TestUploadExecMetadata_NonRetryable(t *testing.T) {
+	t.Parallel()
+
 	for _, status := range []int{http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
 			var attempts atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				attempts.Add(1)
@@ -158,6 +169,8 @@ func TestUploadExecMetadata_NonRetryable(t *testing.T) {
 // marshaled size is under MaxPayloadBytes is sent as a single request with
 // Data inline (research.md Decision 16) — no /exec/data call is made.
 func TestUploadExecMetadata_InlineUnderThreshold(t *testing.T) {
+	t.Parallel()
+
 	var execRequests, dataRequests atomic.Int32
 	var receivedBody dtos.ExecUploadRequest
 
@@ -203,6 +216,8 @@ func TestUploadExecMetadata_InlineUnderThreshold(t *testing.T) {
 // Data is the returned URL, keyed by ExecutionID (FR-011, research.md
 // Decision 16) — replacing the retired multi-chunk model.
 func TestUploadExecMetadata_BlobURLOverThreshold(t *testing.T) {
+	t.Parallel()
+
 	var execRequests, dataRequests atomic.Int32
 	var mu sync.Mutex
 	var execBody dtos.ExecUploadRequest
@@ -271,6 +286,8 @@ func TestUploadExecMetadata_BlobURLOverThreshold(t *testing.T) {
 // TestUploadExecData_Success verifies UploadExecData's request/response
 // shape directly.
 func TestUploadExecData_Success(t *testing.T) {
+	t.Parallel()
+
 	var received dtos.ExecDataUploadRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -304,6 +321,8 @@ func TestUploadExecData_Success(t *testing.T) {
 // TestUploadExecData_Error verifies a non-2xx response surfaces as an error
 // wrapping ErrFailedToUploadExecData.
 func TestUploadExecData_Error(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"success":false}`))
@@ -326,6 +345,8 @@ func TestUploadExecData_Error(t *testing.T) {
 // TestUploadExecData_MalformedJSONOn2xx verifies a 2xx response with a body
 // that fails to decode as JSON is treated as an error, never as success.
 func TestUploadExecData_MalformedJSONOn2xx(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`not json`))
@@ -348,6 +369,8 @@ func TestUploadExecData_MalformedJSONOn2xx(t *testing.T) {
 // TestUploadExecData_MissingURLOn2xx verifies a 2xx response that omits the
 // blob URL is treated as an error rather than a usable success.
 func TestUploadExecData_MissingURLOn2xx(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"success":true}`))

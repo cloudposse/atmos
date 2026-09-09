@@ -12,6 +12,8 @@ import (
 )
 
 func TestUploadInstanceStatus(t *testing.T) {
+	t.Parallel()
+
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 	apiClient := &AtmosProAPIClient{
@@ -37,6 +39,8 @@ func TestUploadInstanceStatus(t *testing.T) {
 }
 
 func TestUploadInstanceStatus_Error(t *testing.T) {
+	t.Parallel()
+
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 	apiClient := &AtmosProAPIClient{

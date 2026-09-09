@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -177,16 +178,79 @@ func TestCheckShardResults_ShardCountMismatchFailsAtOnce(t *testing.T) {
 	assert.Contains(t, out.String(), `expected 3 "linux" shard jobs, found 2`)
 }
 
-func TestCheckShardResults_Errors(t *testing.T) {
-	t.Run("fetch error propagates", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		client := rerun.NewMockRESTClient(ctrl)
-		client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, gomock.Any(), nil).Return(nil, assert.AnError)
+// TestCheckShardResults_FetchErrors covers what a failed jobs listing means:
+// definitive errors fail at once, transient ones spend a poll and are retried,
+// and a transient one that never clears fails after the last poll.
+func TestCheckShardResults_FetchErrors(t *testing.T) {
+	notFound := &api.HTTPError{StatusCode: http.StatusNotFound, Message: "Not Found"}
+	badGateway := &api.HTTPError{StatusCode: http.StatusBadGateway, Message: "Server Error"}
 
-		err := CheckShardResults(context.Background(), client, io.Discard, params("linux", 5, (&recordingWait{}).wait))
-		require.Error(t, err)
-		assert.ErrorIs(t, err, assert.AnError)
-	})
+	tests := []struct {
+		name       string
+		polls      int
+		expect     func(t *testing.T, client *rerun.MockRESTClient)
+		wantErrs   []error // Each must satisfy errors.Is; empty means success.
+		wantWaits  int
+		wantOutput []string
+	}{
+		{
+			name:  "definitive fetch error propagates at once",
+			polls: 5,
+			expect: func(_ *testing.T, client *rerun.MockRESTClient) {
+				client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, gomock.Any(), nil).Return(nil, notFound)
+			},
+			wantErrs:  []error{notFound},
+			wantWaits: 0, // A 4xx is not something waiting fixes.
+		},
+		{
+			name:  "transient fetch error is retried on the next poll",
+			polls: 5,
+			expect: func(t *testing.T, client *rerun.MockRESTClient) {
+				t.Helper()
+				gomock.InOrder(
+					client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, gomock.Any(), nil).Return(nil, badGateway),
+					client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, gomock.Any(), nil).
+						Return(jobsPage(t, shard("linux", 1, "success"), shard("linux", 2, "success"), shard("linux", 3, "success")), nil), //nolint:bodyclose // closed by the code under test, not this fixture.
+				)
+			},
+			wantWaits:  1, // One poll spent on the 502.
+			wantOutput: []string{`poll 1/5: listing "linux" shard jobs failed (`, "HTTP 502"},
+		},
+		{
+			name:  "transient fetch error that never clears fails after the last poll",
+			polls: 3,
+			expect: func(_ *testing.T, client *rerun.MockRESTClient) {
+				client.EXPECT().RequestWithContext(gomock.Any(), http.MethodGet, gomock.Any(), nil).Times(3).Return(nil, assert.AnError)
+			},
+			wantErrs:  []error{errShardListingFails, assert.AnError},
+			wantWaits: 2, // No wait after the final poll.
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			client := rerun.NewMockRESTClient(ctrl)
+			tt.expect(t, client)
+
+			rw := &recordingWait{}
+			var out bytes.Buffer
+			err := CheckShardResults(context.Background(), client, &out, params("linux", tt.polls, rw.wait))
+
+			if len(tt.wantErrs) == 0 {
+				require.NoError(t, err)
+			}
+			for _, want := range tt.wantErrs {
+				assert.ErrorIs(t, err, want)
+			}
+			assert.Len(t, rw.waits, tt.wantWaits)
+			for _, want := range tt.wantOutput {
+				assert.Contains(t, out.String(), want)
+			}
+		})
+	}
+}
+
+func TestCheckShardResults_Errors(t *testing.T) {
 	t.Run("invalid shard count", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		p := params("linux", 5, nil)

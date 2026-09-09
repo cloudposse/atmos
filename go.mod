@@ -7,7 +7,7 @@ require (
 	cloud.google.com/go/secretmanager v1.20.0
 	cloud.google.com/go/storage v1.62.2
 	dario.cat/mergo v1.0.2
-	filippo.io/age v1.3.1
+	filippo.io/age v1.3.2
 	github.com/1Password/connect-sdk-go v1.5.3
 	// Pinned to v0.3.1: v0.4.0+ adds a desktop-integration build guard that fails to compile
 	// under CGO_ENABLED=0 (Atmos's cross-platform build mode). Do not bump without verifying
@@ -25,7 +25,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/adrg/xdg v0.5.3
-	github.com/agiledragon/gomonkey/v2 v2.14.0
+	github.com/agiledragon/gomonkey/v2 v2.14.2
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/alecthomas/participle/v2 v2.1.4
 	github.com/alicebob/miniredis/v2 v2.37.0
@@ -57,7 +57,7 @@ require (
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/log v1.0.0
-	github.com/charmbracelet/x/ansi v0.11.7
+	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/cockroachdb/errors v1.13.0
 	github.com/creack/pty v1.1.24
@@ -66,7 +66,7 @@ require (
 	github.com/epiclabs-io/diff3 v0.0.0-20260520111523-3b1669897fb1
 	github.com/expr-lang/expr v1.17.8
 	github.com/fatih/color v1.19.0
-	github.com/gabriel-vasile/mimetype v1.4.13
+	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/getsentry/sentry-go v0.48.0
 	github.com/getsops/sops/v3 v3.13.1
 	github.com/go-git/go-git/v5 v5.19.2
@@ -88,7 +88,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hashicorp/hcl v1.0.1-vault-7
 	github.com/hashicorp/hcl/v2 v2.24.0
-	github.com/hashicorp/terraform-config-inspect v0.0.0-20260709150029-2fb54c236733
+	github.com/hashicorp/terraform-config-inspect v0.0.0-20260904064934-75d64de68c31
 	github.com/hashicorp/terraform-exec v0.25.2
 	github.com/hashicorp/terraform-json v0.27.2
 	github.com/hexops/gotextdiff v1.0.3
@@ -100,7 +100,7 @@ require (
 	github.com/kubescape/go-git-url v0.0.31
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/mattn/go-isatty v0.0.22
-	github.com/mattn/go-runewidth v0.0.23
+	github.com/mattn/go-runewidth v0.0.24
 	github.com/mikefarah/yq/v4 v4.52.4
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
@@ -145,7 +145,7 @@ require (
 	gopkg.in/ini.v1 v1.67.3
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	helm.sh/helm/v4 v4.2.1
+	helm.sh/helm/v4 v4.2.3
 	k8s.io/client-go v0.36.3
 	modernc.org/sqlite v1.50.1
 	mvdan.cc/sh/v3 v3.13.1
@@ -379,7 +379,7 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/rogpeppe/go-internal v1.14.1 // indirect
+	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/rs/zerolog v1.35.1 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
