@@ -80,8 +80,14 @@ func renderChildren(b *strings.Builder, nodes []*TreeNode, path uitree.Path, con
 
 		// Attribute changes sit between this row and the children's rows; their gutter
 		// carries a rail down to the children when there are any.
-		if len(node.Changes) > 0 {
-			renderAttributeChanges(b, node.Changes, uitree.ContentGutter(nodePath, len(node.Children) > 0), config)
+		if len(node.Changes) > 0 || node.UnchangedAttrCount > 0 {
+			gutter := uitree.ContentGutter(nodePath, len(node.Children) > 0)
+			if len(node.Changes) > 0 {
+				renderAttributeChanges(b, node.Changes, gutter, config)
+			}
+			if node.UnchangedAttrCount > 0 {
+				renderUnchangedAttributesFooter(b, node.UnchangedAttrCount, gutter, config)
+			}
 		}
 
 		if len(node.Children) > 0 {
@@ -298,6 +304,24 @@ func precomputeAttributeFormatting(changes []*AttributeChange) (formatted []form
 	}
 
 	return formatted, maxKeyWidth, maxOldValWidth
+}
+
+// renderUnchangedAttributesFooter renders a dim "# (N unchanged attributes hidden)" row,
+// mirroring Terraform's own plan-output convention, so a diff-only attribute list doesn't
+// read as if it were the resource's entire content. Indentation matches
+// renderAttributeChanges exactly (same gutter, same base indent) so the row lines up with
+// the attribute rows above it.
+func renderUnchangedAttributesFooter(b *strings.Builder, unchangedCount int, gutter string, config *RenderConfig) {
+	config = resolveRenderConfig(config)
+
+	baseIndent := strings.Repeat(spaceChar, symbolColumnWidth) + config.TreeStyle.Render(gutter)
+
+	noun := "attributes"
+	if unchangedCount == 1 {
+		noun = "attribute"
+	}
+	comment := fmt.Sprintf("# (%d unchanged %s hidden)", unchangedCount, noun)
+	fmt.Fprintf(b, "%s%s\n", baseIndent, config.DimStyle.Render(comment))
 }
 
 // renderAttributeChanges renders attribute-level changes, aligned under the resource line.
