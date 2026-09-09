@@ -24,7 +24,8 @@ export default function CastProDemoPage() {
             <code>https://atmos-pro.com/casts/cloudposse/atmos/main/{DEMO_PATH}.&#123;format&#125;</code>.
             Handles the render service&apos;s three response shapes: an already-rendered artifact
             (downloads immediately), a still-rendering one (polls on <code>Retry-After</code>, capped
-            at ~60s), and a hard error (surfaces the JSON error message above).
+            at ~60s), and a hard error — shown inline beneath the selected format button above,
+            whether it&apos;s a JSON error body, a generic HTTP status, or a network failure.
           </p>
         </section>
 

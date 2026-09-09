@@ -40,7 +40,11 @@ export function useCastArtifact({
   const [status, setStatus] = useState<ArtifactStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cancelledRef = useRef(false);
+  // A generation counter (rather than a single shared boolean) isolates each
+  // request: a boolean reset synchronously by the next effect run would
+  // un-cancel an older in-flight request as soon as `url` changes, letting it
+  // still update state or navigate to the stale artifact.
+  const generationRef = useRef(0);
 
   const url = useMemo(
     () => buildArtifactUrl({ owner, repo, ref, path, format, ttlSeconds, soundtrack }),
@@ -48,60 +52,75 @@ export function useCastArtifact({
   );
 
   useEffect(() => {
-    cancelledRef.current = false;
+    generationRef.current += 1;
     return () => {
-      cancelledRef.current = true;
+      generationRef.current += 1;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [url]);
 
   const check = useCallback(
-    async (elapsedMs: number) => {
-      if (cancelledRef.current) return;
+    async (elapsedMs: number, generation: number) => {
+      if (generationRef.current !== generation) return;
+
+      // Bound each fetch to the remaining wall-clock budget so a request that
+      // never settles can't hold the format control disabled past MAX_WAIT_MS.
+      const controller = new AbortController();
+      const deadline = setTimeout(() => controller.abort(), Math.max(MAX_WAIT_MS - elapsedMs, 0));
+
+      let response: Response;
       try {
-        const response = await fetch(url);
-        if (cancelledRef.current) return;
-
-        if (response.ok) {
-          setStatus('ready');
-          const downloadUrl = new URL(url);
-          downloadUrl.searchParams.set('download', '1');
-          window.location.href = downloadUrl.toString();
-          return;
-        }
-
-        if (response.status === 202) {
-          const retryAfterHeader = response.headers.get('Retry-After');
-          const retrySeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
-          const retryMs =
-            (Number.isFinite(retrySeconds) && retrySeconds > 0 ? retrySeconds : DEFAULT_RETRY_SECONDS) * 1000;
-          const nextElapsedMs = elapsedMs + retryMs;
-
-          if (nextElapsedMs > MAX_WAIT_MS) {
-            setStatus('error');
-            setErrorMessage('Still rendering after 60s. Please try again in a moment.');
-            return;
-          }
-
-          setStatus('rendering');
-          timeoutRef.current = setTimeout(() => void check(nextElapsedMs), retryMs);
-          return;
-        }
-
-        let message = `Render failed (HTTP ${response.status})`;
-        try {
-          const body = await response.json();
-          message = body?.error || body?.message || message;
-        } catch {
-          // Ignore JSON parse errors — fall back to the generic HTTP message.
-        }
-        setStatus('error');
-        setErrorMessage(message);
+        response = await fetch(url, { signal: controller.signal });
       } catch {
-        if (cancelledRef.current) return;
+        clearTimeout(deadline);
+        if (generationRef.current !== generation) return;
         setStatus('error');
-        setErrorMessage('Network error while checking render status.');
+        setErrorMessage(
+          controller.signal.aborted
+            ? 'Still rendering after 60s. Please try again in a moment.'
+            : 'Network error while checking render status.',
+        );
+        return;
       }
+      clearTimeout(deadline);
+      if (generationRef.current !== generation) return;
+
+      if (response.ok) {
+        setStatus('ready');
+        const downloadUrl = new URL(url);
+        downloadUrl.searchParams.set('download', '1');
+        window.location.href = downloadUrl.toString();
+        return;
+      }
+
+      if (response.status === 202) {
+        const retryAfterHeader = response.headers.get('Retry-After');
+        const retrySeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
+        const retryMs =
+          (Number.isFinite(retrySeconds) && retrySeconds > 0 ? retrySeconds : DEFAULT_RETRY_SECONDS) * 1000;
+        const nextElapsedMs = elapsedMs + retryMs;
+
+        if (nextElapsedMs > MAX_WAIT_MS) {
+          setStatus('error');
+          setErrorMessage('Still rendering after 60s. Please try again in a moment.');
+          return;
+        }
+
+        setStatus('rendering');
+        timeoutRef.current = setTimeout(() => void check(nextElapsedMs, generation), retryMs);
+        return;
+      }
+
+      let message = `Render failed (HTTP ${response.status})`;
+      try {
+        const body = await response.json();
+        message = body?.error || body?.message || message;
+      } catch {
+        // Ignore JSON parse errors — fall back to the generic HTTP message.
+      }
+      if (generationRef.current !== generation) return;
+      setStatus('error');
+      setErrorMessage(message);
     },
     [url],
   );
@@ -110,7 +129,7 @@ export function useCastArtifact({
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setErrorMessage(null);
     setStatus('checking');
-    void check(0);
+    void check(0, generationRef.current);
   }, [check]);
 
   return { status, errorMessage, url, start };

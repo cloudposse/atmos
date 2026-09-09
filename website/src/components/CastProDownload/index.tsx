@@ -85,8 +85,9 @@ function FormatMenuItem({
  * (https://atmos-pro.com/casts/{owner}/{repo}/{ref}/{path}.cast.{format}).
  * Handles the render service's three response shapes: an already-rendered
  * artifact (triggers a native browser download), a still-rendering one
- * (polls on Retry-After, capped at ~60s), and a hard error (surfaces the
- * JSON error message inline).
+ * (polls on Retry-After, capped at ~60s), and a hard error — surfaced inline
+ * beneath the selected format button, whether it's a JSON error body, a
+ * generic HTTP status, or a network failure.
  */
 export default function CastProDownload({
   owner,
@@ -101,6 +102,7 @@ export default function CastProDownload({
 }: CastProDownloadProps): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   // Close menu on outside click or Escape (same convention as CopyMarkdownButton).
   useEffect(() => {
@@ -111,7 +113,12 @@ export default function CastProDownload({
       }
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setMenuOpen(false);
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+        // Escape can unmount a focused format button; return focus to the
+        // trigger instead of leaving it stuck on a removed element.
+        requestAnimationFrame(() => triggerRef.current?.focus());
+      }
     }
     document.addEventListener('mousedown', onPointer);
     document.addEventListener('keydown', onKey);
@@ -124,6 +131,7 @@ export default function CastProDownload({
   return (
     <div className={[styles.container, className].filter(Boolean).join(' ')} ref={rootRef}>
       <button
+        ref={triggerRef}
         type="button"
         className={styles.trigger}
         onClick={() => setMenuOpen((open) => !open)}
