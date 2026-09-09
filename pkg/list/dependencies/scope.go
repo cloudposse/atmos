@@ -176,7 +176,9 @@ func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResul
 	if err != nil {
 		return nil, err
 	}
-	graph, err := BuildGraph(lightweightStacks)
+	// Phase A only discovers candidate nodes and edges. Required targets are
+	// validated after their declaring components have entered the closure.
+	graph, err := buildGraph(lightweightStacks, map[string]bool{})
 	if err != nil {
 		return nil, err
 	}
@@ -249,12 +251,27 @@ func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []stri
 		}
 
 		var err error
-		resolvedGraph, err = BuildGraph(mergeResolvedClosureStacks(lightweightStacks, resolvedStacks))
+		resolvedGraph, err = buildGraph(
+			mergeResolvedClosureStacks(lightweightStacks, resolvedStacks),
+			evaluatedClosureNodeIDs(evaluatedComponents),
+		)
 		if err != nil {
 			return nil, err
 		}
 		closure = ReachableClosure(resolvedGraph, roots, req.Direction, req.Depths)
 	}
+}
+
+// evaluatedClosureNodeIDs returns the source node IDs whose required targets
+// are in scope for strict validation after Phase C evaluation.
+func evaluatedClosureNodeIDs(evaluated map[string]map[string]bool) map[string]bool {
+	nodeIDs := make(map[string]bool)
+	for stackName, components := range evaluated {
+		for componentName := range components {
+			nodeIDs[NodeID(componentName, stackName)] = true
+		}
+	}
+	return nodeIDs
 }
 
 // refineRoots re-tests the seed roots against the RESOLVED graph so the final

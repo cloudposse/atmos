@@ -167,6 +167,46 @@ func TestResolveScopedClosureEvaluatesOnlyClosureComponents(t *testing.T) {
 	assert.NotContains(t, devComponents, "poison")
 }
 
+// TestResolveScopedClosureDefersRequiredTargetValidationOutsideClosure proves
+// a bounded request validates required targets only after their declaring
+// component becomes part of the resolved closure. The unrelated component is
+// deliberately invalid, but must not block selecting "app" by its literal
+// inherited label.
+func TestResolveScopedClosureDefersRequiredTargetValidationOutsideClosure(t *testing.T) {
+	t.Parallel()
+
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {
+				"metadata": map[string]any{"labels": map[string]any{"deployment": "app-dev"}},
+			},
+			"unrelated": {
+				"dependencies": map[string]any{
+					"components": []any{map[string]any{"component": "missing"}},
+				},
+			},
+		},
+	})
+	fake := &fakeDescribe{full: stacks}
+
+	result, err := ResolveScopedClosure(fake.describe, &ScopeRequest{
+		Labels:           map[string]string{"deployment": "app-dev"},
+		Direction:        DirectionForward,
+		ProcessTemplates: true,
+	})
+	require.NoError(t, err)
+
+	_, hasApp := result.Closure.GetNode(NodeID("app", "dev"))
+	_, hasUnrelated := result.Closure.GetNode(NodeID("unrelated", "dev"))
+	assert.True(t, hasApp)
+	assert.False(t, hasUnrelated)
+	for _, call := range fake.calls {
+		if call.processTemplates || call.processFunctions {
+			assert.Equal(t, []string{"app"}, call.components)
+		}
+	}
+}
+
 func TestResolveScopedClosureDepthBoundsEvaluation(t *testing.T) {
 	t.Parallel()
 

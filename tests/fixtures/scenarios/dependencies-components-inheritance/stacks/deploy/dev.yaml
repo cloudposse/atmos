@@ -22,9 +22,13 @@ components:
       # Child dependencies replace parent (base.yaml deps are NOT inherited).
       dependencies:
         components:
+          # These targets are intentionally absent: this fixture verifies that
+          # the child list replaces inherited dependencies.
           - component: network-baseline
+            required: false
           - component: security-group
             stack: shared
+            required: false
 
     # Subnet depends on vpc in the same stack.
     subnet:

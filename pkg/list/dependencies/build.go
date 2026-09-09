@@ -19,6 +19,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/tags"
 )
 
+const (
+	logFieldFrom = "from"
+	logFieldTo   = "to"
+)
+
 // NodeID returns the canonical, collision-safe node ID for a component in a
 // stack. It uses a length-prefixed encoding so that component/stack names
 // containing the delimiter character never produce the same ID for distinct
@@ -32,10 +37,17 @@ func NodeID(component, stack string) string {
 // terraform component and an edge for every component-to-component dependency
 // declared via either `dependencies.components` (preferred) or the legacy
 // `settings.depends_on`. Edges to targets that are not present in the graph
-// (e.g. disabled or filtered-out components) are skipped.
+// (e.g. disabled or filtered-out components) are skipped when optional or
+// when called by scoped structural discovery; required targets otherwise fail.
 func BuildGraph(stacks map[string]any) (*dependency.Graph, error) {
 	defer perf.Track(nil, "dependencies.BuildGraph")()
+	return buildGraph(stacks, nil)
+}
 
+// buildGraph constructs a graph and validates required targets declared by
+// validationSources. A nil source set validates every component; an empty set
+// performs structural discovery only.
+func buildGraph(stacks map[string]any, validationSources map[string]bool) (*dependency.Graph, error) {
 	graph := dependency.NewGraph()
 	targetReasons := make(map[string]string)
 
@@ -71,44 +83,19 @@ func BuildGraph(stacks map[string]any) (*dependency.Graph, error) {
 			return
 		}
 		deps = normalizeListDependencies(deps, stackName)
+		edges := graphDependencyBuilder{
+			graph:             graph,
+			targetReasons:     targetReasons,
+			validationSources: validationSources,
+			fromID:            fromID,
+			stackName:         stackName,
+			componentName:     componentName,
+			modern:            modern,
+		}
 		for i := range deps {
-			dep := &deps[i]
-			targetStack := stackName
-			if dep.Stack != "" {
-				targetStack = dep.Stack
-			}
-			toID := NodeID(dep.Component, targetStack)
-			if reason, unavailable := targetReasons[toID]; unavailable {
-				switch {
-				case modern && !dep.IsRequired():
-					log.Debug("optional dependency skipped", "event", "optional_dependency_skipped", "from", fromID, "to", toID,
-						"from_component", componentName, "from_stack", stackName, "to_component", dep.Component,
-						"to_stack", targetStack, "kind", dep.Kind, "reason", reason)
-				case modern:
-					targetErr := errUtils.ErrDependencyTargetUnavailable
-					buildErr = fmt.Errorf("%w: from=%s to=%s reason=%s", targetErr, fromID, toID, reason)
-					return
-				default:
-					log.Debug("dependency target not in graph", "from", fromID, "to", toID)
-				}
-				continue
-			}
-			if _, exists := graph.GetNode(toID); !exists {
-				switch {
-				case modern && !dep.IsRequired():
-					log.Debug("optional dependency skipped", "event", "optional_dependency_skipped", "from", fromID, "to", toID,
-						"from_component", componentName, "from_stack", stackName, "to_component", dep.Component,
-						"to_stack", targetStack, "kind", dep.Kind, "reason", "target_missing")
-				case modern:
-					buildErr = fmt.Errorf("%w: from=%s to=%s", errUtils.ErrDependencyTargetNotFound, fromID, toID)
-					return
-				default:
-					log.Debug("dependency target not in graph", "from", fromID, "to", toID)
-				}
-				continue
-			}
-			if err := graph.AddDependencyWithOptional(fromID, toID, !dep.IsRequired()); err != nil {
-				log.Debug("skipping dependency", "from", fromID, "to", toID, "error", err)
+			if err := edges.add(&deps[i]); err != nil {
+				buildErr = err
+				return
 			}
 		}
 	})
@@ -118,6 +105,74 @@ func BuildGraph(stacks map[string]any) (*dependency.Graph, error) {
 
 	graph.IdentifyRoots()
 	return graph, nil
+}
+
+func shouldValidateDependencyTarget(sourceID string, validationSources map[string]bool) bool {
+	return validationSources == nil || validationSources[sourceID]
+}
+
+type graphDependencyBuilder struct {
+	graph             *dependency.Graph
+	targetReasons     map[string]string
+	validationSources map[string]bool
+	fromID            string
+	stackName         string
+	componentName     string
+	modern            bool
+}
+
+func (b *graphDependencyBuilder) add(dep *schema.ComponentDependency) error {
+	targetStack := b.stackName
+	if dep.Stack != "" {
+		targetStack = dep.Stack
+	}
+	toID := NodeID(dep.Component, targetStack)
+	if reason, unavailable := b.targetReasons[toID]; unavailable {
+		return b.handleUnavailable(dep, toID, targetStack, reason)
+	}
+	if _, exists := b.graph.GetNode(toID); !exists {
+		return b.handleMissing(dep, toID, targetStack)
+	}
+	if err := b.graph.AddDependencyWithOptional(b.fromID, toID, !dep.IsRequired()); err != nil {
+		log.Debug("skipping dependency", logFieldFrom, b.fromID, logFieldTo, toID, "error", err)
+	}
+	return nil
+}
+
+func (b *graphDependencyBuilder) handleUnavailable(dep *schema.ComponentDependency, toID, targetStack, reason string) error {
+	if !b.modern {
+		log.Debug("dependency target not in graph", logFieldFrom, b.fromID, logFieldTo, toID)
+		return nil
+	}
+	if !dep.IsRequired() {
+		b.logOptionalDependencySkipped(dep, toID, targetStack, reason)
+		return nil
+	}
+	if shouldValidateDependencyTarget(b.fromID, b.validationSources) {
+		return fmt.Errorf("%w: from=%s to=%s reason=%s", errUtils.ErrDependencyTargetUnavailable, b.fromID, toID, reason)
+	}
+	return nil
+}
+
+func (b *graphDependencyBuilder) handleMissing(dep *schema.ComponentDependency, toID, targetStack string) error {
+	if !b.modern {
+		log.Debug("dependency target not in graph", logFieldFrom, b.fromID, logFieldTo, toID)
+		return nil
+	}
+	if !dep.IsRequired() {
+		b.logOptionalDependencySkipped(dep, toID, targetStack, "target_missing")
+		return nil
+	}
+	if shouldValidateDependencyTarget(b.fromID, b.validationSources) {
+		return fmt.Errorf("%w: from=%s to=%s", errUtils.ErrDependencyTargetNotFound, b.fromID, toID)
+	}
+	return nil
+}
+
+func (b *graphDependencyBuilder) logOptionalDependencySkipped(dep *schema.ComponentDependency, toID, targetStack, reason string) {
+	log.Debug("optional dependency skipped", "event", "optional_dependency_skipped", logFieldFrom, b.fromID, logFieldTo, toID,
+		"from_component", b.componentName, "from_stack", b.stackName, "to_component", dep.Component,
+		"to_stack", targetStack, "kind", dep.Kind, "reason", reason)
 }
 
 // UnresolvedDependencySources returns, per stack, the sorted components whose
