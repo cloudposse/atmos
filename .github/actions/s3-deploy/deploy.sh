@@ -15,10 +15,10 @@
 # re-upload) and forces the metadata update regardless of ETag — so it also
 # backfills any pre-existing objects whose headers are wrong.
 #
-# Usage: s3-deploy-with-charset.sh <local_dir> <s3_uri_with_trailing_slash>
+# Usage: deploy.sh <local_dir> <s3_uri_with_trailing_slash>
 #
 # Example:
-#   s3-deploy-with-charset.sh ./website/build s3://my-bucket/pr-123/
+#   deploy.sh ./website/build s3://my-bucket/pr-123/
 
 set -euo pipefail
 
@@ -37,7 +37,17 @@ echo "::group::Sync ${LOCAL_DIR} -> ${S3_URI}"
 # are large, gitignored binaries published out-of-band by .github/workflows/landing-demos.yaml
 # (`atmos demo publish`). They live in this same origin bucket but are NOT part of
 # website/build, so without this exclusion every site deploy would delete them.
-aws s3 sync "${LOCAL_DIR}" "${S3_URI}" --delete --exclude 'img/demos/*'
+#
+# Protect pinned schema snapshots (schemas/atmos/{atmos-manifest,atmos-config}/<version>/*.json,
+# where <version> is a full semver like 1.228.0 -- two dots, vs. the floating "1.0" path's one
+# dot) from --delete: these are immutable, append-only historical artifacts published once per
+# release (see .github/actions/publish-atmos-schema, which uploads them directly). An ordinary
+# push-to-main deploy only regenerates the floating 1.0 schema, so without this exclusion every
+# such deploy would delete every previously published pinned snapshot.
+aws s3 sync "${LOCAL_DIR}" "${S3_URI}" --delete \
+  --exclude 'img/demos/*' \
+  --exclude 'schemas/atmos/atmos-manifest/*.*.*/*' \
+  --exclude 'schemas/atmos/atmos-config/*.*.*/*'
 echo "::endgroup::"
 
 # Map text-format extensions to their `Content-Type; charset=utf-8`.

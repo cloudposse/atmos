@@ -97,60 +97,21 @@ jobs:
       - name: Download Go modules (with retry)
         uses: ./.github/actions/go-mod-download-retry
 
-      - name: Generate atmos-manifest schema
-        # website/static/schemas/atmos/atmos-manifest/ is gitignored (see .gitignore) — it is
-        # never hand-maintained or committed, only generated here from the embedded schema
-        # (pkg/datafetcher/schema/atmos/manifest/1.0.json), the single source of truth. The
-        # 1.0 path always floats to the schema shipped by the atmos version at HEAD.
-        # CGO_ENABLED=0: `go run .` builds the whole atmos binary graph, which pulls in
-        # cgo-linked hardware-security-key deps (e.g. github.com/bearsh/hid) that need
-        # system libudev headers this runner doesn't have. atmos itself always builds with
-        # CGO disabled (see .goreleaser.yml, magefiles/build.go); match that here too.
-        # GOFIPS140=latest: match every other Go-toolchain build invocation in the repo
-        # (see docs/prd/fips-140-mode.md) so this throwaway schema-generation process
-        # behaves identically to a real atmos build/test binary.
-        env:
-          CGO_ENABLED: "0"
-          GOFIPS140: latest
-        run: go run . stack schema website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+      - name: Publish atmos-manifest schema
+        uses: ./.github/actions/publish-atmos-schema
+        with:
+          schema-name: atmos-manifest
+          subcommand: stack schema
+          s3-bucket: ${{ env.S3_BUCKET_NAME }}
+          release-tag: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
 
-      - name: Publish pinned atmos-manifest schema snapshot
-        # Only on an actual GitHub release (not the push-to-main or workflow_dispatch
-        # triggers): publish an immutable, version-pinned snapshot alongside the floating
-        # 1.0 path, so users can pin `schemas.atmos.manifest` to the exact schema that
-        # shipped with a given atmos release instead of always tracking HEAD. Closes #2592.
-        if: ${{ github.event_name == 'release' }}
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          CGO_ENABLED: "0"
-          GOFIPS140: latest
-        run: |
-          version="${RELEASE_TAG#v}"
-          go run . stack schema "website/static/schemas/atmos/atmos-manifest/${version}/atmos-manifest.json"
-
-      - name: Generate atmos-config schema
-        # website/static/schemas/atmos/atmos-config/ is gitignored (see .gitignore) — it is
-        # never hand-maintained or committed, only generated here from the embedded schema
-        # (pkg/datafetcher/schema/atmos/config/1.0.json), itself generated from the Go
-        # configuration structs by `go generate ./pkg/config/schema`. The 1.0 path always
-        # floats to the schema shipped by the atmos version at HEAD.
-        env:
-          CGO_ENABLED: "0"
-          GOFIPS140: latest
-        run: go run . config schema website/static/schemas/atmos/atmos-config/1.0/atmos-config.json
-
-      - name: Publish pinned atmos-config schema snapshot
-        # Only on an actual GitHub release: publish an immutable, version-pinned snapshot
-        # alongside the floating 1.0 path, so users can pin `schemas.config` to the exact
-        # atmos.yaml schema that shipped with a given atmos release instead of tracking HEAD.
-        if: ${{ github.event_name == 'release' }}
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          CGO_ENABLED: "0"
-          GOFIPS140: latest
-        run: |
-          version="${RELEASE_TAG#v}"
-          go run . config schema "website/static/schemas/atmos/atmos-config/${version}/atmos-config.json"
+      - name: Publish atmos-config schema
+        uses: ./.github/actions/publish-atmos-schema
+        with:
+          schema-name: atmos-config
+          subcommand: config schema
+          s3-bucket: ${{ env.S3_BUCKET_NAME }}
+          release-tag: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
 
       - name: Install Dependencies and Build Website
         run: |
@@ -162,10 +123,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Copy Website to S3 Bucket
-        run: |
-          ./.github/scripts/s3-deploy-with-charset.sh \
-            website/build \
-            s3://${{ env.S3_BUCKET_NAME }}/
+        uses: ./.github/actions/s3-deploy
+        with:
+          local-dir: website/build
+          s3-uri: s3://${{ env.S3_BUCKET_NAME }}/
 
       - name: Trigger ReIndexing of atmos.tools and docs.cloudposse.com Docs
         run: |
