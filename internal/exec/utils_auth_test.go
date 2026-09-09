@@ -918,7 +918,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_Success(t *testing.T) {
 	}
 
 	// Mock auth creator returns a mock manager.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		return mockManager, nil
 	}
 
@@ -927,6 +927,46 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_Success(t *testing.T) {
 	assert.Equal(t, mockManager, result)
 	// Identity should be stored from chain.
 	assert.Equal(t, "detected-identity", info.Identity)
+}
+
+// TestCreateAndAuthenticateAuthManagerWithDeps_PassesPromptedContextToCreator verifies the
+// authCreator is invoked with a ReExecContext carrying info's prompted component/stack, not an
+// empty one. This is what lets manager.Authenticate (which reads the resulting manager's own
+// stackInfo) re-inject prompted values into a later identity-not-found profile-fallback re-exec.
+func TestCreateAndAuthenticateAuthManagerWithDeps_PassesPromptedContextToCreator(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:             "core-ue2-auto",
+		StackPrompted:     true,
+		ComponentFromArg:  "vpc",
+		ComponentPrompted: true,
+		Identity:          "",
+	}
+
+	mockManager := mockTypes.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().GetChain().Return([]string{"detected-identity"})
+
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return nil, nil
+	}
+
+	var gotReExecCtx auth.ReExecContext
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, reExecCtx auth.ReExecContext) (auth.AuthManager, error) {
+		gotReExecCtx = reExecCtx
+		return mockManager, nil
+	}
+
+	_, err := createAndAuthenticateAuthManagerWithDeps(atmosConfig, info, mockFetcher, mockCreator)
+	require.NoError(t, err)
+
+	assert.Equal(t, auth.ReExecContext{
+		Component:         "vpc",
+		ComponentPrompted: true,
+		Stack:             "core-ue2-auto",
+		StackPrompted:     true,
+	}, gotReExecCtx, "authCreator must receive info's prompted component/stack, not an empty context")
 }
 
 func TestCreateAndAuthenticateAuthManagerWithDeps_InvalidComponentError(t *testing.T) {
@@ -942,7 +982,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_InvalidComponentError(t *testi
 	}
 
 	// Mock auth creator - should not be called.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		t.Fatal("auth creator should not be called when component is invalid")
 		return nil, nil
 	}
@@ -966,7 +1006,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_AuthCreatorError(t *testing.T)
 	}
 
 	// Mock auth creator returns an error.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		return nil, errors.New("auth failed")
 	}
 
@@ -995,7 +1035,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_OtherMergeError(t *testing.T) 
 	}
 
 	// Mock auth creator should still be called because getMergedAuthConfigWithFetcher handles errors gracefully.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		return nil, nil
 	}
 
@@ -1017,7 +1057,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_NilAuthManager(t *testing.T) {
 	}
 
 	// Mock auth creator returns nil (no auth configured).
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		return nil, nil
 	}
 
@@ -1213,7 +1253,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_PreservesExistingIdentity(t *t
 		return nil, nil
 	}
 
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		return mockManager, nil
 	}
 
@@ -1233,7 +1273,7 @@ func TestResolveIdentityConfigError_NonIdentityConfigErrorWrapsUnchanged(t *test
 	tmpDir := setupExecProfileFallbackFixture(t)
 	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: tmpDir}
 
-	err := resolveIdentityConfigError(atmosConfig, errors.New("boom"), errUtils.ErrInvalidAuthConfig)
+	err := resolveIdentityConfigError(atmosConfig, &schema.ConfigAndStacksInfo{}, errors.New("boom"), errUtils.ErrInvalidAuthConfig)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
 }
@@ -1242,7 +1282,7 @@ func TestResolveIdentityConfigError_NoIdentityContextWrapsUnchanged(t *testing.T
 	tmpDir := setupExecProfileFallbackFixture(t)
 	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: tmpDir}
 
-	err := resolveIdentityConfigError(atmosConfig, errUtils.ErrInvalidIdentityConfig, errUtils.ErrInvalidAuthConfig)
+	err := resolveIdentityConfigError(atmosConfig, &schema.ConfigAndStacksInfo{}, errUtils.ErrInvalidIdentityConfig, errUtils.ErrInvalidAuthConfig)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
 }
@@ -1255,7 +1295,7 @@ func TestResolveIdentityConfigError_NoCandidateProfileWrapsUnchanged(t *testing.
 		WithContext("identity", "totally-unknown-identity").
 		Err()
 
-	err := resolveIdentityConfigError(atmosConfig, tagged, errUtils.ErrInvalidAuthConfig)
+	err := resolveIdentityConfigError(atmosConfig, &schema.ConfigAndStacksInfo{}, tagged, errUtils.ErrInvalidAuthConfig)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig),
 		"no profile defines the identity, so the original wrap must be preserved")
@@ -1269,7 +1309,7 @@ func TestResolveIdentityConfigError_CandidateProfileOffersFallback(t *testing.T)
 		WithContext("identity", "root-admin").
 		Err()
 
-	err := resolveIdentityConfigError(atmosConfig, tagged, errUtils.ErrInvalidAuthConfig)
+	err := resolveIdentityConfigError(atmosConfig, &schema.ConfigAndStacksInfo{}, tagged, errUtils.ErrInvalidAuthConfig)
 	require.Error(t, err)
 	// Non-interactive test environment: the flat wrap is replaced by the fallback's
 	// hint-enriched ErrIdentityNotFound naming the "alpha" profile.
@@ -1296,7 +1336,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_AuthCreatorError_IdentityConfi
 	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
 		return nil, nil
 	}
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		return nil, errUtils.Build(errUtils.ErrInvalidIdentityConfig).
 			WithContext("identity", "root-admin").
 			Err()
