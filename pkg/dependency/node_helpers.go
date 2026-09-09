@@ -28,7 +28,7 @@ func cloneNodeCore(node *Node) *Node {
 	return cloned
 }
 
-// cloneNodeMetadata creates a recursive copy of the metadata map.
+// cloneNodeMetadata creates a copy of the metadata map.
 func cloneNodeMetadata(metadata map[string]any) map[string]any {
 	if metadata == nil {
 		return nil
@@ -36,30 +36,9 @@ func cloneNodeMetadata(metadata map[string]any) map[string]any {
 
 	cloned := make(map[string]any, len(metadata))
 	for key, value := range metadata {
-		cloned[key] = cloneMetadataValue(value)
+		cloned[key] = value
 	}
 	return cloned
-}
-
-func cloneMetadataValue(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		return cloneNodeMetadata(typed)
-	case map[any]any:
-		cloned := make(map[any]any, len(typed))
-		for key, nested := range typed {
-			cloned[key] = cloneMetadataValue(nested)
-		}
-		return cloned
-	case []any:
-		cloned := make([]any, len(typed))
-		for index, nested := range typed {
-			cloned[index] = cloneMetadataValue(nested)
-		}
-		return cloned
-	default:
-		return value
-	}
 }
 
 // cloneNodeWithFilteredEdges creates a copy of a node with edges filtered to only include allowed nodes.

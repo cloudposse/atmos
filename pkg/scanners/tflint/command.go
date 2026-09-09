@@ -17,9 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/scanners"
-	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/tags"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
@@ -164,7 +162,6 @@ type Runtime struct {
 
 var (
 	initCLIConfig        = cfg.InitCliConfig
-	buildTerraformGraph  = scheduleradapters.BuildTerraformGraph
 	runTarget            = executeTarget
 	checkTFLintAvailable = checkTFLintAvailableImpl
 )
@@ -228,18 +225,13 @@ func execute(ctx context.Context, runtime *Runtime, info *schema.ConfigAndStacks
 	// terraformLintDescribeStacks) reports its own per-stack-file progress; this package
 	// stays decoupled from that UI and just calls through.
 	stacks, err := runtime.DescribeStacks(
-		&atmosConfig, info.Stack, nil, []string{cfg.TerraformComponentType}, nil,
+		&atmosConfig, info.Stack, components, []string{cfg.TerraformComponentType}, nil,
 		false, info.ProcessTemplates, info.ProcessFunctions, false, info.Skip, authManager, info.AuthDisabled,
 	)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
-	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
-	graph, err := buildTerraformGraph(stacks, leftDelim)
-	if err != nil {
-		return fmt.Errorf(terraformLintWrappedErrorFormat, errUtils.ErrBuildTerraformLintTargets, err)
-	}
-	targets := targetsFor(nil, requestedTargets(graph, components))
+	targets := targetsFor(nil, targetsFromStacks(stacks))
 	if len(targets) == 0 {
 		ui.Success("No Terraform components matched")
 		return nil
@@ -328,21 +320,45 @@ func filterAffected(input []schema.Affected) []schema.Affected {
 	return filtered
 }
 
-func requestedTargets(graph *dependency.Graph, components []string) []*dependency.Node {
-	if len(components) == 0 {
-		return targetsFor(graph, nil)
-	}
-	allowed := make(map[string]struct{}, len(components))
-	for _, component := range components {
-		allowed[component] = struct{}{}
-	}
-	targets := make([]*dependency.Node, 0, len(graph.Nodes))
-	for _, node := range graph.Nodes {
-		if _, ok := allowed[node.Component]; ok {
-			targets = append(targets, node)
+// targetsFromStacks returns the concrete Terraform instances that lint should
+// inspect. Lint does not schedule dependencies, so it must not build the
+// execution graph merely to enumerate these already-selected instances.
+func targetsFromStacks(stacks map[string]any) []*dependency.Node {
+	targets := make([]*dependency.Node, 0)
+	for stackName, stackValue := range stacks {
+		stack, ok := stackValue.(map[string]any)
+		if !ok {
+			continue
+		}
+		components, ok := stack[cfg.ComponentsSectionName].(map[string]any)
+		if !ok {
+			continue
+		}
+		terraform, ok := components[cfg.TerraformComponentType].(map[string]any)
+		if !ok {
+			continue
+		}
+		for componentName, componentValue := range terraform {
+			component, ok := componentValue.(map[string]any)
+			if !ok || lintTargetUnavailable(component) {
+				continue
+			}
+			targets = append(targets, &dependency.Node{Component: componentName, Stack: stackName, Type: cfg.TerraformComponentType})
 		}
 	}
 	return targets
+}
+
+func lintTargetUnavailable(component map[string]any) bool {
+	metadata, ok := component[cfg.MetadataSectionName].(map[string]any)
+	if !ok {
+		return false
+	}
+	if componentType, ok := metadata["type"].(string); ok && componentType == "abstract" {
+		return true
+	}
+	enabled, ok := metadata["enabled"].(bool)
+	return ok && !enabled
 }
 
 func targetsFor(graph *dependency.Graph, input []*dependency.Node) []*dependency.Node {

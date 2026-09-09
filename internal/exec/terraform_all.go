@@ -129,28 +129,7 @@ func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration,
 	}
 
 	if !terraformClosureRequested(info) {
-		bounded := info.Stack != "" || len(components) > 0 || len(info.Tags) > 0 || len(info.Labels) > 0
-		needsEvaluation := info.ProcessTemplates || info.ProcessFunctions
-		if bounded && needsEvaluation && !GetEagerEvaluationSetting(atmosConfig) {
-			leftDelim, rightDelim := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
-			result, err := listdeps.ResolveScopedClosure(describe, &listdeps.ScopeRequest{
-				Components:       components,
-				Stack:            info.Stack,
-				Tags:             info.Tags,
-				Labels:           info.Labels,
-				Direction:        listdeps.DirectionForward,
-				Depths:           listdeps.Depths{Dependencies: 0},
-				ProcessTemplates: info.ProcessTemplates,
-				ProcessFunctions: info.ProcessFunctions,
-				LeftDelim:        leftDelim,
-				RightDelim:       rightDelim,
-			})
-			if err != nil {
-				return nil, err
-			}
-			return result.Stacks, nil
-		}
-		return describe("", nil, info.ProcessTemplates, info.ProcessFunctions)
+		return describeTerraformStacksNarrowed(atmosConfig, info, authManager, components)
 	}
 
 	// Closure requested. Scoped evaluation only pays off when the selection is
@@ -180,6 +159,27 @@ func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration,
 		return nil, err
 	}
 	return result.Stacks, nil
+}
+
+// describeTerraformStacksNarrowed is the historical (no-closure) describe:
+// narrowed by -s/--components and the tags/labels early-skip, bit for bit.
+func describeTerraformStacksNarrowed(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager, components []string) (map[string]any, error) {
+	return ExecuteDescribeStacksWithMocks(
+		atmosConfig,
+		info.Stack,
+		components,
+		[]string{cfg.TerraformComponentType},
+		nil,
+		false,
+		info.ProcessTemplates,
+		info.ProcessFunctions,
+		false,
+		info.Skip,
+		authManager,
+		info.UseMocks,
+		info.Tags,
+		info.Labels,
+	)
 }
 
 // terraformPreflightDescribeError preserves structured errors from stack resolution

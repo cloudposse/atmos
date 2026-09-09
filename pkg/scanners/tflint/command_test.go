@@ -166,6 +166,20 @@ func TestTargetsForDeduplicatesComponentsDeterministically(t *testing.T) {
 	assert.Equal(t, "dev", targets[1].Stack)
 }
 
+func TestTargetsFromStacksSkipsUnavailableComponents(t *testing.T) {
+	targets := targetsFromStacks(map[string]any{
+		"dev": map[string]any{"components": map[string]any{"terraform": map[string]any{
+			"abstract": map[string]any{"metadata": map[string]any{"type": "abstract"}},
+			"disabled": map[string]any{"metadata": map[string]any{"enabled": false}},
+			"enabled":  map[string]any{},
+		}}},
+	})
+
+	require.Len(t, targets, 1)
+	assert.Equal(t, "enabled", targets[0].Component)
+	assert.Equal(t, "dev", targets[0].Stack)
+}
+
 func TestExecuteRejectsMissingInputs(t *testing.T) {
 	runtime := testRuntime()
 	require.ErrorIs(t, Execute(context.Background(), runtime, nil, nil, 0), errUtils.ErrNilParam)
@@ -179,59 +193,34 @@ func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
 
 	runtime := testRuntime()
 	runtime.DescribeStacks = func(
-		_ *schema.AtmosConfiguration,
-		_ string,
-		components []string,
-		_ []string,
-		_ []string,
-		_ bool,
-		_ bool,
-		_ bool,
-		_ bool,
-		_ []string,
-		_ auth.AuthManager,
-		_ bool,
+		_ *schema.AtmosConfiguration, _ string, components []string, _ []string, _ []string,
+		_ bool, _ bool, _ bool, _ bool, _ []string, _ auth.AuthManager, _ bool,
 	) (map[string]any, error) {
-		assert.Nil(t, components)
+		assert.Equal(t, []string{"requested"}, components)
 		return map[string]any{
-			"sqs-stack": map[string]any{"components": map[string]any{"terraform": map[string]any{
-				"sns-topic": map[string]any{},
-				"sqs-queue": map[string]any{},
+			"dev": map[string]any{"components": map[string]any{"terraform": map[string]any{
+				"requested": map[string]any{"dependencies": map[string]any{"components": []any{
+					map[string]any{"name": "not-a-lint-target"},
+				}}},
 			}}},
 		}, nil
 	}
 
-	originalGraph := buildTerraformGraph
-	buildTerraformGraph = func(_ map[string]any, leftDelims ...string) (*dependency.Graph, error) {
-		assert.Equal(t, []string{"[["}, leftDelims)
-		return &dependency.Graph{Nodes: map[string]*dependency.Node{
-			"sns-topic-dev": {Component: "sns-topic", Stack: "dev"},
-			"sqs-queue-dev": {Component: "sqs-queue", Stack: "dev"},
-		}}, nil
-	}
-	t.Cleanup(func() { buildTerraformGraph = originalGraph })
-
 	originalRun := runTarget
 	var linted []string
 	runTarget = func(_ context.Context, exec *targetExecution, target *dependency.Node) error {
-		assert.Equal(t, "sqs-queue", exec.BaseInfo.ComponentFromArg)
+		assert.Equal(t, "requested", exec.BaseInfo.ComponentFromArg)
 		linted = append(linted, target.Component+":"+target.Stack)
 		return nil
 	}
 	t.Cleanup(func() { runTarget = originalRun })
 
-	require.NoError(t, Execute(context.Background(), runtime, &schema.ConfigAndStacksInfo{ComponentFromArg: "sqs-queue", Stack: "dev"}, nil, 0))
-	assert.Equal(t, []string{"sqs-queue:dev"}, linted)
+	require.NoError(t, Execute(context.Background(), runtime, &schema.ConfigAndStacksInfo{ComponentFromArg: "requested", Stack: "dev"}, nil, 0))
+	assert.Equal(t, []string{"requested:dev"}, linted)
 }
 
 func TestExecuteDisablesComponentAuthDuringStackDiscovery(t *testing.T) {
 	stubInitCLIConfig(t)
-
-	originalGraph := buildTerraformGraph
-	buildTerraformGraph = func(map[string]any, ...string) (*dependency.Graph, error) {
-		return &dependency.Graph{}, nil
-	}
-	t.Cleanup(func() { buildTerraformGraph = originalGraph })
 
 	runtime := testRuntime()
 	runtime.SetupAuth = func(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
