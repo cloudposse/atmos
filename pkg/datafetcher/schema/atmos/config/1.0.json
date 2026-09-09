@@ -3823,7 +3823,7 @@
               "type": "null"
             },
             {
-              "type": "string"
+              "$ref": "#/$defs/yamlFunction"
             }
           ],
           "description": "Required controls whether an available target must be present. Nil defaults to true."

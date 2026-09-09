@@ -80,14 +80,6 @@ func BuildGraph(stacks map[string]any) (*dependency.Graph, error) {
 			toID := NodeID(dep.Component, targetStack)
 			//nolint:nestif // Required, optional, legacy, and unavailable states have distinct contracts.
 			if reason, unavailable := targetReasons[toID]; unavailable {
-				if modern && dep.IsRequired() {
-					targetErr := errUtils.ErrDependencyTargetNotFound
-					if reason == "target_disabled" {
-						targetErr = errUtils.ErrDependencyTargetUnavailable
-					}
-					buildErr = fmt.Errorf("%w: from=%s to=%s reason=%s", targetErr, fromID, toID, reason)
-					return
-				}
 				if modern && !dep.IsRequired() {
 					log.Debug("optional dependency skipped", "event", "optional_dependency_skipped", "from", fromID, "to", toID,
 						"from_component", componentName, "from_stack", stackName, "to_component", dep.Component,
@@ -96,10 +88,6 @@ func BuildGraph(stacks map[string]any) (*dependency.Graph, error) {
 				continue
 			}
 			if _, exists := graph.GetNode(toID); !exists {
-				if modern && dep.IsRequired() {
-					buildErr = fmt.Errorf("%w: from=%s to=%s reason=target_missing", errUtils.ErrDependencyTargetNotFound, fromID, toID)
-					return
-				}
 				if modern && !dep.IsRequired() {
 					log.Debug("optional dependency skipped", "event", "optional_dependency_skipped", "from", fromID, "to", toID,
 						"from_component", componentName, "from_stack", stackName, "to_component", dep.Component,

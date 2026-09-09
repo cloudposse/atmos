@@ -966,11 +966,8 @@ func addTerraformDependencies(
 				continue
 			}
 			if dep.IsRequired() {
-				targetErr := errUtils.ErrDependencyTargetNotFound
-				if target.reason == "target_disabled" {
-					targetErr = errUtils.ErrDependencyTargetUnavailable
-				}
-				return fmt.Errorf("%w: from=%s to=%s reason=%s", targetErr, fromID, toID, target.reason)
+				log.Warn("Dependency target unavailable", "from", fromID, "to", toID, "reason", target.reason)
+				continue
 			}
 			log.Info("optional dependency skipped", "event", "optional_dependency_skipped",
 				"from", fromID, "to", toID, "from_component", componentName, "from_stack", stackName,

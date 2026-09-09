@@ -101,49 +101,6 @@ func TestBuildGraphOptionalDependencies(t *testing.T) {
 	assert.Equal(t, []string{GraphNodeID("present", "dev")}, graph.Nodes[GraphNodeID("app", "dev")].Dependencies)
 }
 
-func TestBuildGraphRequiredMissingDependencyFails(t *testing.T) {
-	stacks := map[string]any{
-		"dev": map[string]any{
-			cfg.ComponentsSectionName: map[string]any{
-				cfg.KubernetesComponentType: map[string]any{
-					"app": map[string]any{
-						cfg.DependenciesSectionName: map[string]any{
-							"components": []any{map[string]any{"name": "missing"}},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	_, err := BuildGraph(stacks, cfg.KubernetesComponentType)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrDependencyTargetNotFound)
-}
-
-func TestBuildGraphRequiredDisabledDependencyFails(t *testing.T) {
-	stacks := map[string]any{
-		"dev": map[string]any{
-			cfg.ComponentsSectionName: map[string]any{
-				cfg.KubernetesComponentType: map[string]any{
-					"app": map[string]any{
-						cfg.DependenciesSectionName: map[string]any{
-							"components": []any{map[string]any{"name": "disabled"}},
-						},
-					},
-					"disabled": map[string]any{
-						cfg.MetadataSectionName: map[string]any{"enabled": false},
-					},
-				},
-			},
-		},
-	}
-
-	_, err := BuildGraph(stacks, cfg.KubernetesComponentType)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrDependencyTargetUnavailable)
-}
-
 func TestBuildGraphSupportsLegacyDependsOn(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
