@@ -79,25 +79,31 @@ jobs:
   build:
     name: Build (${{ matrix.target }})
     # windows-latest is the slowest target: it compiles this large dependency
-    # tree far slower than the Linux (self-hosted, s3-cache) and macOS runners,
-    # and on top of that the post-job Go cache save (tar + zstd of
-    # GOMODCACHE/GOCACHE) takes several minutes. A cold cache after dependency
-    # changes plus that save pushes the job past a tight limit and the run gets
-    # cancelled mid-save (see #2713's windows build being killed at 30m10s).
-    # Give the slowest target real headroom for build + cache save.
-    #
-    # 45 minutes still wasn't enough after a large merge from main cold-started
-    # the cache: every real step (build, tests, upload) finished by 12:01, but
-    # the "Post Set up Go" cache-save step alone ran another 23+ minutes before
-    # the job timeout cancelled it mid-save (run 33387953802, job 99474734663,
-    # 2026-08-31). Raised further to keep genuine cold-cache saves from
-    # tripping the timeout.
+    # tree far slower than the Linux (self-hosted) and macOS runners. A cold
+    # Go cache after dependency changes used to push the job past a tight
+    # limit and get the run cancelled mid-save (see #2713's windows build
+    # being killed at 30m10s, and run 33387953802 where the post-job cache
+    # save alone ran 23+ minutes). This job no longer saves Go caches at all
+    # (setup-go-cache is restore-only; setup-go-cache-warmup.yml is the sole
+    # writer), but keep headroom for a genuinely cold compile after a Go
+    # version bump.
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false"
+          # No extras=s3-cache: this leg's ci-toolchain save and Go cache
+          # restore must use the same GitHub Actions cache backend as the 10
+          # ubuntu-latest acceptance shards and the other hosted Linux jobs.
+          # With the s3-cache extra, its caches went to RunsOn's S3 where no
+          # hosted job could ever see them.
+          #
+          # "large" (4 cores/~32GB), not "terraform": the latter resolves to
+          # a 2-core i4i.large, and this leg is the critical path every
+          # acceptance shard waits on. Measured cold (run 34228937998): the
+          # `atmos build binary` step took 721s on "terraform" against ~350s
+          # on the 4-core hosted macOS/Windows legs compiling the same tree.
+          - os: "runs-on=${{github.run_id}}/runner=large/tag=atmos/private=false"
             target: linux
           - os: "windows-latest"
             target: windows
@@ -202,8 +208,9 @@ jobs:
         if: matrix.target == 'windows' && ! github.event.pull_request.draft
         uses: ./.github/actions/windows-dns-guard
 
-      # Pinned setup-go with caching, plus Go's caches relocated to the fast
-      # work disk on Windows (see the action for the measurements).
+      # Pinned setup-go with a restore-only Go cache (the warmup workflow is
+      # the sole writer), plus Go's caches relocated to the fast work disk on
+      # Windows (see the action for the measurements and the cache design).
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/setup-go-cache
@@ -683,16 +690,12 @@ jobs:
       # tests assert XDG defaults and Terraform's plugin cache is not safe for
       # shared concurrent use.
       #
-      # Restore-only on the shards. The repo's Actions cache holds 18.9 GB in
-      # 17 entries against a 10 GB LRU quota, every entry scoped to a
-      # refs/pull/N/merge ref and minutes old, so the static key
-      # atmos-toolchain-<os>-<arch>-v2 never hits from main (every shard logs
-      # "Cache not found for input keys"). All 10 shards then raced to save
-      # the same key and logged "Unable to reserve cache with key ..., another
-      # job may be creating this cache", with "Post Cache Atmos toolchain"
-      # costing 43 s avg / 3 min max per shard for nothing. The
-      # terraform-registry-cache job keeps the plain (restore+save) step and is
-      # the single writer of this key per OS.
+      # Restore-only on the shards: ten parallel consumers must not race to
+      # save one key ("Unable to reserve cache with key ...", with "Post
+      # Cache Atmos toolchain" costing 43 s avg / 3 min max per shard for
+      # nothing). The single writer of this key per OS is the build job's
+      # ci-toolchain step (cache: restore-and-save), which runs on the
+      # GitHub cache backend for all targets including linux.
       - name: Set up the CI toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/ci-toolchain
@@ -869,13 +872,17 @@ jobs:
     # fixed). The RunsOn "terraform" family used elsewhere in this file for
     # Go work (the build job's linux leg) turned out to be an i4i.large: 2
     # cores, 15.7GB RAM -- fewer cores than ubuntu-latest, a downgrade for
-    # this CPU/memory-bound workload. "large" (used by the release job's
-    # goreleaser step) resolves to a 4-core/~32GB instance from that family
-    # (r7a.xlarge or i4i.xlarge, whichever spot capacity RunsOn picks; both
-    # appear in real run logs) -- double the cores and RAM of "terraform", a
-    # real upgrade over ubuntu-latest given -race's extra memory overhead per
-    # test binary.
-    runs-on: "runs-on=${{github.run_id}}/runner=large/tag=atmos/extras=s3-cache/private=false"
+    # this CPU/memory-bound workload. "large" (4 cores/~32GB) was a real
+    # upgrade, but this job stayed the workflow's longest pole at ~27 minutes
+    # of pure test execution, so it now gets "xlarge" (8+ cores/~64GB, per
+    # .github's runs-on.yml): `go test` runs packages concurrently up to
+    # GOMAXPROCS, and -race's per-test memory overhead is what the extra RAM
+    # absorbs.
+    #
+    # No extras=s3-cache: the Go cache restore (setup-go-cache below) must
+    # read the GitHub Actions cache backend, where the warmup workflow saves
+    # a race-instrumented (-race, CGO_ENABLED=1) build cache on main's scope.
+    runs-on: "runs-on=${{github.run_id}}/runner=xlarge/tag=atmos/private=false"
     # Race-instrumented binaries run several times slower and use substantially
     # more memory than normal test binaries; this runs the entire `./...` suite
     # unsharded (unlike the `test` job's acceptance+unit sweep), so budget
@@ -897,16 +904,26 @@ jobs:
         with:
           persist-credentials: false
 
+      # Restores the race-instrumented build cache the warmup workflow saves
+      # (its linux leg runs `go build -race ./...` with this job's env), so
+      # the ~400-package -race compile is mostly incremental.
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          go-version-file: "go.mod"
-          cache: true
+        uses: ./.github/actions/setup-go-cache
 
       - name: Set up Atmos bootstrap
         uses: ./.github/actions/setup-atmos-bootstrap
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+
+      # Restore the toolchain directory before the installs below so they
+      # skip every tool already on disk instead of downloading five tools
+      # from the network on every run (restore-only: the build job's linux
+      # leg is this key's writer).
+      - name: Restore the Atmos toolchain cache
+        continue-on-error: true
+        uses: ./actions/cache
+        with:
+          mode: restore-only
 
       - name: Install Linux build dependencies (libudev-dev for CGO_ENABLED=1 -- see comment above)
         run: |
@@ -1011,9 +1028,9 @@ jobs:
         with:
           persist-credentials: false
 
-      # cache: false on purpose - this job compiles only the mage helper, and a
-      # save from here would put a thin archive under the Linux setup-go key
-      # that every other Linux job shares.
+      # cache: false on purpose - this job compiles only the mage helper; a
+      # restore would download ~1 GB it doesn't need, and setup-go's built-in
+      # save would write a thin archive for nothing.
       - name: Set up Go
         if: ${{ !cancelled() }}
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
@@ -1091,11 +1108,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: atmos test coverage download-shards
 
+      # The composite (restore-only) rather than raw setup-go: this thin job
+      # only runs `mage coverage:mergeShards`, and with setup-go's built-in
+      # cache it could win the save race and freeze a near-empty archive
+      # under the shared Linux key (it also pinned setup-go v6 while every
+      # other job pins v5.6.0, silently forking the cache lineage).
       - name: Set up Go for native coverage merge
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
-        with:
-          go-version-file: "go.mod"
-          cache: true
+        uses: ./.github/actions/setup-go-cache
 
       - name: Merge native coverage data
         run: go tool mage coverage:mergeShards
@@ -1264,6 +1283,15 @@ jobs:
         with:
           target: linux
 
+      # Restore the toolchain directory first so the installs below skip
+      # tools already on disk (restore-only; the build job's linux leg is
+      # this key's writer).
+      - name: Restore the Atmos toolchain cache
+        continue-on-error: true
+        uses: ./actions/cache
+        with:
+          mode: restore-only
+
       - name: Install Terraform and OpenTofu with Atmos toolchain
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1353,6 +1381,15 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+
+      # Restore the toolchain directory first so the install below skips
+      # tools already on disk (restore-only; the build job's linux leg is
+      # this key's writer).
+      - name: Restore the Atmos toolchain cache
+        continue-on-error: true
+        uses: ./actions/cache
+        with:
+          mode: restore-only
 
       - name: Install OpenTofu with Atmos toolchain
         env:
@@ -1688,7 +1725,10 @@ jobs:
 
       - name: Run Kubernetes end-to-end tests
         env:
-          GOCACHE: ${{ runner.temp }}/go-build
+          # No GOCACHE override here: setup-go-cache above restored the warm
+          # build cache into the default GOCACHE, and a previous
+          # `GOCACHE: runner.temp/go-build` override made the test compile
+          # into an empty directory — nullifying the restore entirely.
           GOTMPDIR: ${{ runner.temp }}/go-tmp
           TMPDIR: ${{ runner.temp }}/tmp
           # Atmos builds with CGO disabled. Match that here so the
@@ -1699,7 +1739,7 @@ jobs:
           # than silently skipping all coverage.
           ATMOS_ENVTEST_REQUIRED: "true"
         run: |
-          mkdir -p "$GOCACHE" "$GOTMPDIR" "$TMPDIR"
+          mkdir -p "$GOTMPDIR" "$TMPDIR"
           go test -tags envtest -count=1 ./pkg/component/kubernetes/... -run TestEnvtest
 
   # run other demo tests
@@ -1934,6 +1974,15 @@ jobs:
         with:
           target: linux
 
+      # Restore the toolchain directory first so the installs below skip
+      # tools already on disk instead of downloading them on every run
+      # (restore-only: the build job's linux leg is this key's writer).
+      - name: Restore the Atmos toolchain cache
+        continue-on-error: true
+        uses: ./actions/cache
+        with:
+          mode: restore-only
+
       - name: Install OpenTofu and TFLint with Atmos toolchain
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1982,6 +2031,15 @@ jobs:
         uses: ./.github/actions/setup-atmos-install
         with:
           target: linux
+
+      # Restore the toolchain directory first so the installs below skip
+      # tools already on disk instead of downloading them on every run
+      # (restore-only: the build job's linux leg is this key's writer).
+      - name: Restore the Atmos toolchain cache
+        continue-on-error: true
+        uses: ./actions/cache
+        with:
+          mode: restore-only
 
       - name: Install OpenTofu and TFLint with Atmos toolchain
         env:

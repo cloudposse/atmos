@@ -14,6 +14,8 @@ import (
 )
 
 func TestNewInitModel(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("mycomponent", "mystack", "init", reader)
 
@@ -29,6 +31,8 @@ func TestNewInitModel(t *testing.T) {
 }
 
 func TestNewInitModel_WithWorkspace(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("mycomponent", "mystack", "workspace", reader, WithWorkspace("dev"))
 
@@ -37,6 +41,8 @@ func TestNewInitModel_WithWorkspace(t *testing.T) {
 }
 
 func TestNewInitModel_WithClock(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	clock := newTestClock()
 	m := NewInitModel("comp", "stack", "init", reader, WithInitClock(clock))
@@ -46,6 +52,8 @@ func TestNewInitModel_WithClock(t *testing.T) {
 }
 
 func TestInitModel_Update_KeyMsg_Quit(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		key  tea.KeyMsg
@@ -56,6 +64,7 @@ func TestInitModel_Update_KeyMsg_Quit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			reader := strings.NewReader("")
 			m := NewInitModel("comp", "stack", "init", reader)
 
@@ -73,6 +82,8 @@ func TestInitModel_Update_KeyMsg_Quit(t *testing.T) {
 // (initDoneMsg) is never mistaken for a user cancellation - otherwise a normal completion
 // would report a bogus "cancelled" exit code instead of the real one.
 func TestInitModel_Update_InitDoneMsg_NotCancelled(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -85,6 +96,8 @@ func TestInitModel_Update_InitDoneMsg_NotCancelled(t *testing.T) {
 }
 
 func TestInitModel_Update_SpinnerTickMsg(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -95,6 +108,8 @@ func TestInitModel_Update_SpinnerTickMsg(t *testing.T) {
 }
 
 func TestInitModel_Update_InitLineMsg_Initializing(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -107,6 +122,8 @@ func TestInitModel_Update_InitLineMsg_Initializing(t *testing.T) {
 }
 
 func TestInitModel_Update_InitLineMsg_Provider(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -119,6 +136,8 @@ func TestInitModel_Update_InitLineMsg_Provider(t *testing.T) {
 }
 
 func TestInitModel_Update_InitLineMsg_Module(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -131,6 +150,8 @@ func TestInitModel_Update_InitLineMsg_Module(t *testing.T) {
 }
 
 func TestInitModel_Update_InitLineMsg_Success(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -141,6 +162,8 @@ func TestInitModel_Update_InitLineMsg_Success(t *testing.T) {
 }
 
 func TestInitModel_Update_InitLineMsg_MaxLines(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -159,6 +182,8 @@ func TestInitModel_Update_InitLineMsg_MaxLines(t *testing.T) {
 }
 
 func TestInitModel_Update_InitLineMsg_EmptyLine(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -171,6 +196,8 @@ func TestInitModel_Update_InitLineMsg_EmptyLine(t *testing.T) {
 }
 
 func TestInitModel_Update_InitLineMsg_PlainText(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -184,6 +211,8 @@ func TestInitModel_Update_InitLineMsg_PlainText(t *testing.T) {
 }
 
 func TestInitModel_Update_InitDoneMsg_Success(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -197,6 +226,8 @@ func TestInitModel_Update_InitDoneMsg_Success(t *testing.T) {
 }
 
 func TestInitModel_Update_InitDoneMsg_Error(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -210,6 +241,8 @@ func TestInitModel_Update_InitDoneMsg_Error(t *testing.T) {
 }
 
 func TestInitModel_View_InProgress(t *testing.T) {
+	t.Parallel()
+
 	clock := newTestClock()
 	reader := strings.NewReader("")
 	m := NewInitModel("myapp", "dev", "init", reader, WithInitClock(clock))
@@ -225,6 +258,8 @@ func TestInitModel_View_InProgress(t *testing.T) {
 }
 
 func TestInitModel_View_InProgress_WithCurrentOp(t *testing.T) {
+	t.Parallel()
+
 	clock := newTestClock()
 	reader := strings.NewReader("")
 	m := NewInitModel("myapp", "dev", "init", reader, WithInitClock(clock))
@@ -236,6 +271,8 @@ func TestInitModel_View_InProgress_WithCurrentOp(t *testing.T) {
 }
 
 func TestInitModel_View_InProgress_WithLines(t *testing.T) {
+	t.Parallel()
+
 	clock := newTestClock()
 	reader := strings.NewReader("")
 	m := NewInitModel("myapp", "dev", "init", reader, WithInitClock(clock))
@@ -247,6 +284,8 @@ func TestInitModel_View_InProgress_WithLines(t *testing.T) {
 }
 
 func TestInitModel_View_Done_Success(t *testing.T) {
+	t.Parallel()
+
 	clock := newTestClock()
 	reader := strings.NewReader("")
 	m := NewInitModel("myapp", "dev", "init", reader, WithInitClock(clock))
@@ -263,6 +302,8 @@ func TestInitModel_View_Done_Success(t *testing.T) {
 }
 
 func TestInitModel_View_Done_Error(t *testing.T) {
+	t.Parallel()
+
 	clock := newTestClock()
 	reader := strings.NewReader("")
 	m := NewInitModel("myapp", "dev", "init", reader, WithInitClock(clock))
@@ -280,6 +321,8 @@ func TestInitModel_View_Done_Error(t *testing.T) {
 }
 
 func TestInitModel_View_Done_Workspace(t *testing.T) {
+	t.Parallel()
+
 	clock := newTestClock()
 	reader := strings.NewReader("")
 	m := NewInitModel("myapp", "dev", "workspace", reader, WithInitClock(clock), WithWorkspace("staging"))
@@ -298,6 +341,8 @@ func TestInitModel_View_Done_Workspace(t *testing.T) {
 }
 
 func TestInitModel_FormatAction(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		subCommand string
@@ -313,6 +358,7 @@ func TestInitModel_FormatAction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			reader := strings.NewReader("")
 			m := NewInitModel("comp", "stack", tt.subCommand, reader, WithWorkspace(tt.workspace))
 			result := m.formatAction()
@@ -322,6 +368,8 @@ func TestInitModel_FormatAction(t *testing.T) {
 }
 
 func TestInitModel_GetError(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 	m.err = assert.AnError
@@ -330,6 +378,8 @@ func TestInitModel_GetError(t *testing.T) {
 }
 
 func TestInitModel_GetExitCode(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 	m.exitCode = 42
@@ -338,6 +388,8 @@ func TestInitModel_GetExitCode(t *testing.T) {
 }
 
 func TestInitModel_Init(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("Initializing...\n")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -351,6 +403,8 @@ func TestInitModel_Init(t *testing.T) {
 // actually produces an initLineMsg when the scanner has a line available. Init()/Update()
 // alone never execute the returned command, so this invokes it directly.
 func TestInitModel_ReadNextLine_ReturnsLine(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("Initializing the backend...\n")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -364,6 +418,8 @@ func TestInitModel_ReadNextLine_ReturnsLine(t *testing.T) {
 // TestInitModel_ReadNextLine_ScannerError verifies a scanner read error is surfaced as a
 // failed initDoneMsg rather than silently treated as a clean EOF.
 func TestInitModel_ReadNextLine_ScannerError(t *testing.T) {
+	t.Parallel()
+
 	readErr := errors.New("boom")
 	reader := iotest.ErrReader(readErr)
 	m := NewInitModel("comp", "stack", "init", reader)
@@ -379,6 +435,8 @@ func TestInitModel_ReadNextLine_ScannerError(t *testing.T) {
 // TestInitModel_ReadNextLine_EOF verifies a clean end of input produces a successful
 // initDoneMsg (exit code 0, no error).
 func TestInitModel_ReadNextLine_EOF(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -393,6 +451,8 @@ func TestInitModel_ReadNextLine_EOF(t *testing.T) {
 // TestInitModel_Update_UnhandledMsg verifies messages that don't match any known case (e.g. a
 // terminal resize) leave the model untouched and return a nil command.
 func TestInitModel_Update_UnhandledMsg(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 
@@ -406,6 +466,8 @@ func TestInitModel_Update_UnhandledMsg(t *testing.T) {
 // TestInitModel_View_InProgress_TruncatesLongLines verifies lines exceeding the display width
 // are truncated with an ellipsis rather than wrapping and corrupting the layout.
 func TestInitModel_View_InProgress_TruncatesLongLines(t *testing.T) {
+	t.Parallel()
+
 	clock := newTestClock()
 	reader := strings.NewReader("")
 	m := NewInitModel("myapp", "dev", "init", reader, WithInitClock(clock))
@@ -421,6 +483,8 @@ func TestInitModel_View_InProgress_TruncatesLongLines(t *testing.T) {
 // TestInitModel_View_Done_Cancelled verifies the cancelled-completion branch of
 // renderComplete, distinct from both the success and error completion messages.
 func TestInitModel_View_Done_Cancelled(t *testing.T) {
+	t.Parallel()
+
 	clock := newTestClock()
 	reader := strings.NewReader("")
 	m := NewInitModel("myapp", "dev", "init", reader, WithInitClock(clock))
@@ -439,6 +503,8 @@ func TestInitModel_View_Done_Cancelled(t *testing.T) {
 }
 
 func TestInitModel_Update_LineWithANSI(t *testing.T) {
+	t.Parallel()
+
 	reader := strings.NewReader("")
 	m := NewInitModel("comp", "stack", "init", reader)
 
