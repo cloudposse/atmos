@@ -177,13 +177,36 @@ func TestExecuteRejectsMissingInputs(t *testing.T) {
 func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
 	stubInitCLIConfig(t, "[[", "]]")
 
+	runtime := testRuntime()
+	runtime.DescribeStacks = func(
+		_ *schema.AtmosConfiguration,
+		_ string,
+		components []string,
+		_ []string,
+		_ []string,
+		_ bool,
+		_ bool,
+		_ bool,
+		_ bool,
+		_ []string,
+		_ auth.AuthManager,
+		_ bool,
+	) (map[string]any, error) {
+		assert.Nil(t, components)
+		return map[string]any{
+			"sqs-stack": map[string]any{"components": map[string]any{"terraform": map[string]any{
+				"sns-topic": map[string]any{},
+				"sqs-queue": map[string]any{},
+			}}},
+		}, nil
+	}
+
 	originalGraph := buildTerraformGraph
 	buildTerraformGraph = func(_ map[string]any, leftDelims ...string) (*dependency.Graph, error) {
 		assert.Equal(t, []string{"[["}, leftDelims)
 		return &dependency.Graph{Nodes: map[string]*dependency.Node{
-			"requested-prod": {Component: "requested", Stack: "prod"},
-			"requested-dev":  {Component: "requested", Stack: "dev"},
-			"dependency-dev": {Component: "dependency", Stack: "dev"},
+			"sns-topic-dev": {Component: "sns-topic", Stack: "dev"},
+			"sqs-queue-dev": {Component: "sqs-queue", Stack: "dev"},
 		}}, nil
 	}
 	t.Cleanup(func() { buildTerraformGraph = originalGraph })
@@ -191,14 +214,14 @@ func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
 	originalRun := runTarget
 	var linted []string
 	runTarget = func(_ context.Context, exec *targetExecution, target *dependency.Node) error {
-		assert.Equal(t, "requested", exec.BaseInfo.ComponentFromArg)
+		assert.Equal(t, "sqs-queue", exec.BaseInfo.ComponentFromArg)
 		linted = append(linted, target.Component+":"+target.Stack)
 		return nil
 	}
 	t.Cleanup(func() { runTarget = originalRun })
 
-	require.NoError(t, Execute(context.Background(), testRuntime(), &schema.ConfigAndStacksInfo{ComponentFromArg: "requested", Stack: "dev"}, nil, 0))
-	assert.Equal(t, []string{"requested:dev"}, linted)
+	require.NoError(t, Execute(context.Background(), runtime, &schema.ConfigAndStacksInfo{ComponentFromArg: "sqs-queue", Stack: "dev"}, nil, 0))
+	assert.Equal(t, []string{"sqs-queue:dev"}, linted)
 }
 
 func TestExecuteDisablesComponentAuthDuringStackDiscovery(t *testing.T) {
