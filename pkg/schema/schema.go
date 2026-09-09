@@ -1676,12 +1676,17 @@ type GCPAuthContext struct {
 }
 
 type ConfigAndStacksInfo struct {
-	StackFromArg                  string
-	Stack                         string
-	StackFile                     string
-	StackManifestName             string // Stack-level 'name' override from manifest (highest precedence).
-	ComponentType                 string
-	ComponentFromArg              string
+	StackFromArg      string
+	Stack             string
+	StackFile         string
+	StackManifestName string // Stack-level 'name' override from manifest (highest precedence).
+	ComponentType     string
+	ComponentFromArg  string
+	// ComponentPrompted records whether ComponentFromArg was filled in via an
+	// interactive prompt rather than supplied on the command line.
+	ComponentPrompted bool
+	// StackPrompted is the Stack equivalent of ComponentPrompted.
+	StackPrompted                 bool
 	Component                     string
 	ComponentFolderPrefix         string
 	ComponentFolderPrefixReplaced string
