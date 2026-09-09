@@ -177,7 +177,7 @@ jobs:
           set -euo pipefail
           attempt=1
           max_attempts=3
-          until go install golang.org/x/vuln/cmd/govulncheck@latest; do
+          until go install golang.org/x/vuln/cmd/govulncheck@v1.8.0; do
             if [ "$attempt" -ge "$max_attempts" ]; then
               echo "go install govulncheck failed after $max_attempts attempts" >&2
               exit 1
