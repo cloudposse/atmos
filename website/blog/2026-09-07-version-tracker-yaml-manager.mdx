@@ -1,0 +1,66 @@
+---
+slug: version-tracker-yaml-manager
+title: "Keep version fields in YAML files in sync without losing comments"
+date: 2026-09-07T13:00:00.000Z
+authors: [osterman]
+tags: [feature]
+---
+
+A Helm values file, a docker-compose override, or any other hand-maintained YAML config often carries
+one field that tracks an external dependency's version, alongside comments explaining what the
+surrounding settings do and anchors sharing config between sections. Keeping that one field in sync
+usually means either editing it by hand on every release, or running it through a full parse-and-
+regenerate step that throws the comments and anchors away.
+
+<!--truncate-->
+
+## The Problem
+
+The [Version Tracker](/cli/configuration/version/files)'s `template` manager covers YAML by treating
+a `*.tmpl` source as the source of truth and rendering it to a sibling output file — a good fit when
+the whole file is generated, but overkill for a hand-maintained file that only has one or two managed
+fields. The `marker` manager can annotate a line with a comment, but its rewrite is a plain token
+substitution, not an assignment into structured YAML. Neither manager patches a single field in an
+existing, hand-authored YAML document while leaving everything else — comments, anchors, key order —
+untouched.
+
+## The Fix
+
+A new `yaml` file manager writes locked values directly into YAML files at configured field paths. It
+reuses Atmos's own format-preserving YAML editor — the same engine behind `atmos config set` and
+`atmos stack set` — so comments, anchors and aliases, and key order on untouched fields all survive
+the edit.
+
+## How to Use It
+
+```yaml
+version:
+  dependencies:
+    cli:
+      ecosystem: github/releases
+      datasource: github-releases
+      provider: github
+      package: cli/cli
+      desired: "~2"
+
+  files:
+    - manager: yaml
+      paths:
+        - charts/*/values.yaml
+      options:
+        set:
+          - path: version
+            from: cli
+            format: '{{ trimPrefix "v" .Version }}'
+```
+
+`atmos version track apply` rewrites the configured field from the lock, stripping the `v` prefix
+GitHub tags carry via the optional `format` template; `--check` fails and lists any file that's out
+of date, so CI can catch drift before it merges.
+
+## Get Involved
+
+See the [Version Files](/cli/configuration/version/files#updating-yaml-files) docs for the full path
+syntax and the `format` field. Have feedback on this feature?
+[Open an issue](https://github.com/cloudposse/atmos/issues) or join the conversation in the
+[Cloud Posse community Slack](https://cloudposse.com/slack).

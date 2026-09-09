@@ -7,6 +7,8 @@ import (
 )
 
 func TestCompareOutputs_AllScenarios(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		origOutput  map[string]interface{}
@@ -112,6 +114,7 @@ func TestCompareOutputs_AllScenarios(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			diff := compareOutputs(tc.origOutput, tc.newOutput)
 
 			if tc.expectDiff {
@@ -131,6 +134,8 @@ func TestCompareOutputs_AllScenarios(t *testing.T) {
 }
 
 func TestCompareVariables_AllScenarios(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		origVars   map[string]interface{}
@@ -211,6 +216,7 @@ func TestCompareVariables_AllScenarios(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Create mock plans with variables
 			origPlan := map[string]interface{}{
 				"variables": makeVariablesMap(tc.origVars),
@@ -236,6 +242,8 @@ func TestCompareVariables_AllScenarios(t *testing.T) {
 }
 
 func TestCompareResources_AllScenarios(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		origRes    map[string]interface{}
@@ -322,6 +330,7 @@ func TestCompareResources_AllScenarios(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			diff := compareResources(tc.origRes, tc.newRes)
 
 			if tc.expectDiff {
@@ -348,6 +357,8 @@ func makeVariablesMap(vars map[string]interface{}) map[string]interface{} {
 }
 
 func TestProcessRootModuleResources_DataResourcesSkipped(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		resources      []interface{}
@@ -471,6 +482,7 @@ func TestProcessRootModuleResources_DataResourcesSkipped(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			rootModule := map[string]interface{}{
 				"resources": tc.resources,
 			}
@@ -484,6 +496,8 @@ func TestProcessRootModuleResources_DataResourcesSkipped(t *testing.T) {
 }
 
 func TestProcessResourceChanges_DataResourcesSkipped(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		resourceChanges []interface{}
@@ -607,6 +621,7 @@ func TestProcessResourceChanges_DataResourcesSkipped(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			plan := map[string]interface{}{
 				"resource_changes": tc.resourceChanges,
 			}
@@ -620,6 +635,8 @@ func TestProcessResourceChanges_DataResourcesSkipped(t *testing.T) {
 }
 
 func TestGetResources_DataResourcesSkipped(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		plan           map[string]interface{}
@@ -857,6 +874,7 @@ func TestGetResources_DataResourcesSkipped(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := getResources(tc.plan)
 
 			assert.Equal(t, tc.expectedResult, result, tc.description)

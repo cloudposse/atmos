@@ -74,6 +74,17 @@ func parseFacets(cmd *cobra.Command) (secretScope, error) {
 // non-interactive shells). In a non-interactive context a missing flag falls back to the standard
 // "required flag not provided" error, preserving today's pipeline behavior.
 func parseScope(cmd *cobra.Command, args []string) (secretScope, error) {
+	scope, err := parseScopeStack(cmd, args)
+	if err != nil {
+		return scope, err
+	}
+	return requireScopeComponent(scope, cmd, args)
+}
+
+// parseScopeStack resolves the common facets and requires only a stack. Commands that can prove
+// a component is irrelevant (for example, setting a uniquely global secret) use this narrower
+// helper and discover a declaration-bearing component context afterward.
+func parseScopeStack(cmd *cobra.Command, args []string) (secretScope, error) {
 	v := viper.GetViper()
 	if err := secretParser.BindFlagsToViper(cmd, v); err != nil {
 		return secretScope{}, err
@@ -87,6 +98,9 @@ func parseScope(cmd *cobra.Command, args []string) (secretScope, error) {
 
 	if scope.Stack == "" {
 		chosen, err := flags.PromptForMissingRequired(cfg.StackStr, "Choose a stack", stackCompletion, cmd, args)
+		if err == nil {
+			err = adoptPromptedStack(cmd, chosen)
+		}
 		if err != nil {
 			return scope, err
 		}
@@ -98,9 +112,28 @@ func parseScope(cmd *cobra.Command, args []string) (secretScope, error) {
 			WithHint("Specify a stack with --stack or -s").
 			Err()
 	}
-	// Make the chosen stack visible to the component completion (it filters by --stack).
-	v.Set(cfg.StackStr, scope.Stack)
+	return scope, nil
+}
 
+// adoptPromptedStack records a stack chosen at the interactive prompt on the command's own
+// --stack flag, so the component completion that follows (which filters by the selected stack,
+// read through viper's flag binding) sees it exactly as if the user had passed --stack.
+//
+// It deliberately does not write the value into viper's override layer (viper.Set): an override
+// outranks every later flag parse for the life of the process, so a second `secret` command run
+// in the same process would silently keep the first command's stack. An empty choice (no TTY,
+// nothing to choose from) leaves the flag untouched so the required-flag error still fires.
+func adoptPromptedStack(cmd *cobra.Command, chosen string) error {
+	if chosen == "" {
+		return nil
+	}
+	if err := cmd.Flags().Set(cfg.StackStr, chosen); err != nil {
+		return fmt.Errorf("%w: adopting the prompted --%s on %s: %w", errUtils.ErrInvalidFlag, cfg.StackStr, cmd.Name(), err)
+	}
+	return nil
+}
+
+func requireScopeComponent(scope secretScope, cmd *cobra.Command, args []string) (secretScope, error) {
 	if scope.Component == "" {
 		chosen, err := flags.PromptForMissingRequired("component", "Choose a component", componentCompletion, cmd, args)
 		if err != nil {

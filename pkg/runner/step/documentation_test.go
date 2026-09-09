@@ -21,6 +21,8 @@ var builtInStepTypes = func() []string {
 }()
 
 func TestStepDocumentationCoversRegisteredTypes(t *testing.T) {
+	t.Parallel()
+
 	root := filepath.Clean(filepath.Join("..", "..", ".."))
 	stepsRoot := filepath.Join(root, "website", "docs", "workflows", "workflows", "workflow", "steps")
 	typeRoot := filepath.Join(stepsRoot, "type")

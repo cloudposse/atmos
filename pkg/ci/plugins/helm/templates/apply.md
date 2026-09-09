@@ -14,6 +14,51 @@
 | Objects | `{{ .ObjectCount }}` |
 | Manifest bytes | `{{ .ManifestBytes }}` |
 
+{{ with .Lifecycle }}
+
+### Release lifecycle
+
+{{ if eq (index . "reason") "external_target" }}
+
+| Field | Value |
+| --- | --- |
+| Applied | `false` |
+| Target kind | `{{ index . "target_kind" }}` |
+| Reason | `external_target` |
+
+{{ else }}
+
+{{ if eq (index . "operation") "install" }}
+
+| Field | Value |
+| --- | --- |
+| Operation | `{{ index . "operation" }}` |
+| Wait strategy | `{{ index (index . "wait") "strategy" }}` |
+| Timeout | `{{ index . "timeout" }}` |
+| Chart hooks enabled | `{{ index . "chart_hooks" }}` |
+| Wait for Jobs | `{{ index (index . "wait") "jobs" }}` |
+| On failure | `{{ index . "on_failure" }}` |
+| Install CRDs | `{{ index . "crds" }}` |
+
+{{ else }}
+
+| Field | Value |
+| --- | --- |
+| Operation | `{{ index . "operation" }}` |
+| Wait strategy | `{{ index (index . "wait") "strategy" }}` |
+| Timeout | `{{ index . "timeout" }}` |
+| Chart hooks enabled | `{{ index . "chart_hooks" }}` |
+| Wait for Jobs | `{{ index (index . "wait") "jobs" }}` |
+| On failure | `{{ index . "on_failure" }}` |
+| Cleanup on failure | `{{ index . "cleanup_on_failure" }}` |
+| Maximum history | `{{ index (index . "history") "max" }}` |
+
+{{ end }}
+
+{{ end }}
+
+{{ end }}
+
 To reproduce locally:
 
 ```shell

@@ -1,0 +1,13 @@
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--badge-color, var(--ifm-color-emphasis-600)) 16%, transparent);
+  color: var(--badge-color, var(--ifm-color-emphasis-700));
+}

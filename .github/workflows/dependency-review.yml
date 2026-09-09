@@ -27,6 +27,9 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
+          # This job runs no Go builds; setup-go's default cache would restore
+          # ~1 GB it never reads and save a thin archive at job end.
+          cache: false
 
       - name: Dependency Review
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
