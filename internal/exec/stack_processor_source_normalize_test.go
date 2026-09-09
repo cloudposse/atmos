@@ -10,6 +10,8 @@ import (
 // string "simple form" of a component `source` (normalized to {uri: <string>}) and the map form,
 // and rejects other types — matching the JIT source provisioner.
 func TestNormalizeComponentSourceSection(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		raw    any
@@ -49,6 +51,7 @@ func TestNormalizeComponentSourceSection(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, ok := normalizeComponentSourceSection(tt.raw)
 			assert.Equal(t, tt.wantOK, ok)
 			assert.Equal(t, tt.want, got)

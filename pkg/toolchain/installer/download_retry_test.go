@@ -17,6 +17,8 @@ import (
 // downloading (including a connection reset by peer during the response-body
 // read) are classified as retryable, while terminal errors are not.
 func TestIsRetryableDownloadError(t *testing.T) {
+	t.Parallel()
+
 	connReset := &net.OpError{Op: "read", Net: "tcp", Err: os.NewSyscallError("read", syscall.ECONNRESET)}
 
 	// The exact shape produced by writeResponseToCache for a body-read reset.
@@ -43,6 +45,7 @@ func TestIsRetryableDownloadError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.want, isRetryableDownloadError(tt.err))
 		})
 	}
