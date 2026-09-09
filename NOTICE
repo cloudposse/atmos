@@ -1305,7 +1305,7 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
   - github.com/hashicorp/terraform-config-inspect/tfconfig
     License: MPL-2.0
-    URL: https://github.com/hashicorp/terraform-config-inspect/blob/2fb54c236733/LICENSE
+    URL: https://github.com/hashicorp/terraform-config-inspect/blob/75d64de68c31/LICENSE
 
   - github.com/hashicorp/terraform-exec
     License: MPL-2.0
@@ -1578,7 +1578,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/charmbracelet/x/ansi
     License: MIT
-    URL: https://github.com/charmbracelet/x/blob/ansi/v0.11.7/ansi/LICENSE
+    URL: https://github.com/charmbracelet/x/blob/ansi/v0.11.8/ansi/LICENSE
 
   - github.com/charmbracelet/x/cellbuf
     License: MIT
@@ -1698,7 +1698,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/gabriel-vasile/mimetype
     License: MIT
-    URL: https://github.com/gabriel-vasile/mimetype/blob/v1.4.13/LICENSE
+    URL: https://github.com/gabriel-vasile/mimetype/blob/v1.4.15/LICENSE
 
   - github.com/getsentry/sentry-go
     License: MIT
@@ -1982,7 +1982,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/mattn/go-runewidth
     License: MIT
-    URL: https://github.com/mattn/go-runewidth/blob/v0.0.23/LICENSE
+    URL: https://github.com/mattn/go-runewidth/blob/v0.0.24/LICENSE
 
   - github.com/mattn/go-shellwords
     License: MIT
