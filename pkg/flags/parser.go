@@ -87,6 +87,27 @@ type ParsedConfig struct {
 	//   PositionalArgs: ["vpc"]
 	//   SeparatedArgs: ["-var", "foo=bar"]
 	SeparatedArgs []string
+
+	// PromptedFields records the names of flags and positional argument specs
+	// (e.g. "stack", "component") whose value was filled in by an interactive
+	// prompt during Parse, rather than supplied via CLI flag, positional
+	// argument, environment variable, or config file. StandardParser consults
+	// this to populate StandardOptions.ComponentPrompted / StackPrompted, which
+	// callers thread into auth.ReExecContext so a profile-fallback re-exec
+	// doesn't lose (or re-prompt for) a value the user just picked
+	// interactively. Nil/absent means nothing was prompted.
+	PromptedFields map[string]bool
+}
+
+// markFieldPrompted records that name's value was filled in by an interactive
+// prompt, lazily initializing PromptedFields on first use.
+func markFieldPrompted(result *ParsedConfig, name string) {
+	defer perf.Track(nil, "flags.markFieldPrompted")()
+
+	if result.PromptedFields == nil {
+		result.PromptedFields = make(map[string]bool)
+	}
+	result.PromptedFields[name] = true
 }
 
 // GetIdentity returns the identity value from parsed flags with proper type safety.
