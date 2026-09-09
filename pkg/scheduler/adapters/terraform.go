@@ -209,6 +209,8 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		disablePluginCache:      disableTerraformPluginCacheForConcurrentRun(opts.Info),
 		queryAppliedAtSelection: terraformClosureRequested(opts.Info, opts.Selection),
 	}
+	startTerraformCIBefore(opts.Info, graph)
+
 	timings := newTerraformNodeTimings()
 	result := scheduler.New(
 		graph,
@@ -218,10 +220,14 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		scheduler.WithNodeStartHook(timings.Start),
 		scheduler.WithNodeCompleteHook(timings.Complete),
 	).Run(ctx)
+	// Deferred (not a plain call after writeTerraformSummary) so that anything
+	// startTerraformCIBefore created up front is always resolved, even if a
+	// later step in this function errors and returns early. A status must
+	// never be left pending with nothing left to update it.
+	defer finalizeTerraformCIResults(opts.Info, result, timings)
 	if err := writeTerraformSummary(opts.Info, result, timings); err != nil {
 		return err
 	}
-	finalizeTerraformCIResults(opts.Info, result, timings)
 	if result.Err != nil {
 		if skipped := skippedResultCount(result); skipped > 0 {
 			ui.Warningf("%d component(s) skipped after an earlier failure", skipped)
@@ -1546,6 +1552,54 @@ func terraformPlanChanged(result *scheduler.AggregateResult) bool {
 		}
 	}
 	return false
+}
+
+// startTerraformCIBefore fires the before-aggregate CI hook once the graph has
+// been resolved and filtered to the real component selection, creating one
+// real pending check-run per component before the scheduler starts. Mirrors
+// finalizeTerraformCIResults's guard shape on the after side.
+func startTerraformCIBefore(info *schema.ConfigAndStacksInfo, graph *dependency.Graph) {
+	if info == nil || !supportsTerraformConcurrency(info.SubCommand) || info.TerraformPlanCIBeforeHandler == nil || graph == nil {
+		return
+	}
+
+	nodes := resolvedTerraformCIPendingNodes(graph)
+	if len(nodes) == 0 {
+		return
+	}
+
+	pending := schema.TerraformPlanCIPendingSet{Command: info.SubCommand, Nodes: nodes}
+	if err := info.TerraformPlanCIBeforeHandler.HandleTerraformPlanCIBefore(pending); err != nil {
+		log.Warn("Terraform CI aggregate before-hook failed", "command", info.SubCommand, "error", err)
+	}
+}
+
+// resolvedTerraformCIPendingNodes extracts every fully-resolved (real
+// component and stack) node from graph, in deterministic order. A node
+// missing either is never advertised as pending — a status is always about a
+// specific, known target.
+func resolvedTerraformCIPendingNodes(graph *dependency.Graph) []schema.TerraformPlanCIPendingNode {
+	nodes := make([]schema.TerraformPlanCIPendingNode, 0, len(graph.Nodes))
+	for id, node := range graph.Nodes {
+		if node == nil || node.Component == "" || node.Stack == "" {
+			continue
+		}
+		nodes = append(nodes, schema.TerraformPlanCIPendingNode{
+			NodeID:    id,
+			Stack:     node.Stack,
+			Component: node.Component,
+		})
+	}
+	sort.SliceStable(nodes, func(i, j int) bool {
+		if nodes[i].Stack != nodes[j].Stack {
+			return nodes[i].Stack < nodes[j].Stack
+		}
+		if nodes[i].Component != nodes[j].Component {
+			return nodes[i].Component < nodes[j].Component
+		}
+		return nodes[i].NodeID < nodes[j].NodeID
+	})
+	return nodes
 }
 
 // finalizeTerraformCIResults converts scheduler outcomes into aggregate CI results.

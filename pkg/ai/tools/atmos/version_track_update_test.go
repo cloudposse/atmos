@@ -11,6 +11,8 @@ import (
 )
 
 func TestNewVersionTrackUpdateTool(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	tool := NewVersionTrackUpdateTool(atmosConfig)
 
@@ -19,16 +21,22 @@ func TestNewVersionTrackUpdateTool(t *testing.T) {
 }
 
 func TestVersionTrackUpdateTool_Name(t *testing.T) {
+	t.Parallel()
+
 	tool := NewVersionTrackUpdateTool(&schema.AtmosConfiguration{})
 	assert.Equal(t, "atmos_version_track_update", tool.Name())
 }
 
 func TestVersionTrackUpdateTool_Description(t *testing.T) {
+	t.Parallel()
+
 	tool := NewVersionTrackUpdateTool(&schema.AtmosConfiguration{})
 	assert.NotEmpty(t, tool.Description())
 }
 
 func TestVersionTrackUpdateTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	tool := NewVersionTrackUpdateTool(&schema.AtmosConfiguration{})
 	params := tool.Parameters()
 
@@ -39,16 +47,22 @@ func TestVersionTrackUpdateTool_Parameters(t *testing.T) {
 }
 
 func TestVersionTrackUpdateTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	tool := NewVersionTrackUpdateTool(&schema.AtmosConfiguration{})
 	assert.True(t, tool.RequiresPermission())
 }
 
 func TestVersionTrackUpdateTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	tool := NewVersionTrackUpdateTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.IsRestricted())
 }
 
 func TestVersionTrackUpdateTool_Execute(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := versionTrackFakeConfig(t)
 	tool := NewVersionTrackUpdateTool(atmosConfig)
 

@@ -12,6 +12,8 @@ import (
 )
 
 func TestEditFileTool_Interface(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -32,6 +34,8 @@ func TestEditFileTool_Interface(t *testing.T) {
 }
 
 func TestEditFileTool_Execute_MissingFilePath(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -50,6 +54,8 @@ func TestEditFileTool_Execute_MissingFilePath(t *testing.T) {
 }
 
 func TestEditFileTool_Execute_MissingOperation(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -68,6 +74,8 @@ func TestEditFileTool_Execute_MissingOperation(t *testing.T) {
 }
 
 func TestEditFileTool_Execute_FileNotFound(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp",
 	}
@@ -88,6 +96,8 @@ func TestEditFileTool_Execute_FileNotFound(t *testing.T) {
 }
 
 func TestEditFileTool_Execute_SearchReplace(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary test file.
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.yaml")
@@ -120,6 +130,8 @@ func TestEditFileTool_Execute_SearchReplace(t *testing.T) {
 }
 
 func TestEditFileTool_Execute_SearchReplace_NotFound(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary test file.
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.yaml")
@@ -147,6 +159,8 @@ func TestEditFileTool_Execute_SearchReplace_NotFound(t *testing.T) {
 }
 
 func TestEditFileTool_Execute_InsertLine(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary test file.
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.yaml")
@@ -179,6 +193,8 @@ func TestEditFileTool_Execute_InsertLine(t *testing.T) {
 }
 
 func TestEditFileTool_Execute_InsertLine_InvalidLineNumber(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary test file.
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.yaml")
@@ -206,6 +222,8 @@ func TestEditFileTool_Execute_InsertLine_InvalidLineNumber(t *testing.T) {
 }
 
 func TestEditFileTool_Execute_DeleteLines(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary test file.
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.yaml")
@@ -243,6 +261,8 @@ func TestEditFileTool_Execute_DeleteLines(t *testing.T) {
 }
 
 func TestEditFileTool_Execute_DeleteLines_InvalidRange(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary test file.
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.yaml")
@@ -270,6 +290,8 @@ func TestEditFileTool_Execute_DeleteLines_InvalidRange(t *testing.T) {
 }
 
 func TestEditFileTool_Execute_Append(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary test file.
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.yaml")
@@ -300,6 +322,8 @@ func TestEditFileTool_Execute_Append(t *testing.T) {
 }
 
 func TestEditFileTool_Execute_UnknownOperation(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary test file.
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.yaml")
@@ -325,6 +349,8 @@ func TestEditFileTool_Execute_UnknownOperation(t *testing.T) {
 }
 
 func TestEditFileTool_Execute_PathOutsideBase(t *testing.T) {
+	t.Parallel()
+
 	// Create two separate temp directories so path traversal can be tested.
 	tmpDir := t.TempDir()
 
@@ -349,6 +375,8 @@ func TestEditFileTool_Execute_PathOutsideBase(t *testing.T) {
 }
 
 func TestEditFileTool_ExtractEditParams_MissingFilePath(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp",
 	}
@@ -365,6 +393,8 @@ func TestEditFileTool_ExtractEditParams_MissingFilePath(t *testing.T) {
 }
 
 func TestEditFileTool_ExtractEditParams_MissingOperation(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	config := &schema.AtmosConfiguration{
 		BasePath: tmpDir,
@@ -382,6 +412,8 @@ func TestEditFileTool_ExtractEditParams_MissingOperation(t *testing.T) {
 }
 
 func TestEditFileTool_ExtractEditParams_EmptyOperation(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	config := &schema.AtmosConfiguration{
 		BasePath: tmpDir,
@@ -400,6 +432,8 @@ func TestEditFileTool_ExtractEditParams_EmptyOperation(t *testing.T) {
 }
 
 func TestReadFileForEdit_FileNotFound(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	nonExistent := filepath.Join(tmpDir, "ghost.txt")
 
@@ -412,6 +446,8 @@ func TestReadFileForEdit_FileNotFound(t *testing.T) {
 }
 
 func TestReadFileForEdit_Success(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "present.txt")
 	require.NoError(t, os.WriteFile(testFile, []byte("hello"), 0o600))
@@ -424,6 +460,8 @@ func TestReadFileForEdit_Success(t *testing.T) {
 }
 
 func TestEditFileTool_SearchReplace_MissingSearch(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	tool := NewEditFileTool(config)
 
@@ -436,6 +474,8 @@ func TestEditFileTool_SearchReplace_MissingSearch(t *testing.T) {
 }
 
 func TestEditFileTool_SearchReplace_MissingReplace(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	tool := NewEditFileTool(config)
 
@@ -449,6 +489,8 @@ func TestEditFileTool_SearchReplace_MissingReplace(t *testing.T) {
 }
 
 func TestEditFileTool_InsertLine_MissingLineNumber(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	tool := NewEditFileTool(config)
 
@@ -461,6 +503,8 @@ func TestEditFileTool_InsertLine_MissingLineNumber(t *testing.T) {
 }
 
 func TestEditFileTool_InsertLine_MissingContent(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	tool := NewEditFileTool(config)
 
@@ -473,6 +517,8 @@ func TestEditFileTool_InsertLine_MissingContent(t *testing.T) {
 }
 
 func TestEditFileTool_InsertLine_NegativeLineNumber(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	tool := NewEditFileTool(config)
 
@@ -486,6 +532,8 @@ func TestEditFileTool_InsertLine_NegativeLineNumber(t *testing.T) {
 }
 
 func TestEditFileTool_DeleteLines_MissingStartLine(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	tool := NewEditFileTool(config)
 
@@ -498,6 +546,8 @@ func TestEditFileTool_DeleteLines_MissingStartLine(t *testing.T) {
 }
 
 func TestEditFileTool_DeleteLines_MissingEndLine(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	tool := NewEditFileTool(config)
 
@@ -510,6 +560,8 @@ func TestEditFileTool_DeleteLines_MissingEndLine(t *testing.T) {
 }
 
 func TestEditFileTool_DeleteLines_StartAfterEnd(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	tool := NewEditFileTool(config)
 
@@ -523,6 +575,8 @@ func TestEditFileTool_DeleteLines_StartAfterEnd(t *testing.T) {
 }
 
 func TestEditFileTool_AppendContent_MissingContent(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	tool := NewEditFileTool(config)
 
@@ -533,6 +587,8 @@ func TestEditFileTool_AppendContent_MissingContent(t *testing.T) {
 }
 
 func TestEditFileTool_Execute_Append_NoTrailingNewline(t *testing.T) {
+	t.Parallel()
+
 	// Test appendContent when file does NOT end with newline.
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")

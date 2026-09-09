@@ -227,6 +227,8 @@ func (p *StandardParser) buildStandardOptions(parsedConfig *ParsedConfig, compon
 		},
 		Stack:                       GetString(parsedConfig.Flags, "stack"),
 		Component:                   component,
+		ComponentPrompted:           parsedConfig.PromptedFields["component"],
+		StackPrompted:               parsedConfig.PromptedFields["stack"],
 		Format:                      GetString(parsedConfig.Flags, "format"),
 		File:                        GetString(parsedConfig.Flags, "file"),
 		ProcessTemplates:            GetBool(parsedConfig.Flags, "process-templates"),

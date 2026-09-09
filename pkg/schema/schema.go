@@ -919,6 +919,29 @@ type TerraformPlanCIResultHandler interface {
 	HandleTerraformPlanCIResults(TerraformPlanCIResultSet) error
 }
 
+// TerraformPlanCIBeforeHandler receives the resolved, filtered node list for
+// one graph-backed Terraform run before the scheduler starts, so CI can
+// create one real pending check-run per component up front — the before-side
+// counterpart to TerraformPlanCIResultHandler.
+type TerraformPlanCIBeforeHandler interface {
+	HandleTerraformPlanCIBefore(TerraformPlanCIPendingSet) error
+}
+
+// TerraformPlanCIPendingSet contains the resolved node list for one
+// graph-backed Terraform run before execution starts.
+type TerraformPlanCIPendingSet struct {
+	Command string
+	Nodes   []TerraformPlanCIPendingNode
+}
+
+// TerraformPlanCIPendingNode identifies one component about to run.
+// Deliberately carries no result data since nothing has executed yet.
+type TerraformPlanCIPendingNode struct {
+	NodeID    string
+	Stack     string
+	Component string
+}
+
 // ComponentNodeHooks fires per-component lifecycle hooks (user-defined
 // hooks.RunAll and CI hooks.RunCIHooks, before and after) around one
 // component's execution during a multi-component/bulk run — Terraform
@@ -983,6 +1006,29 @@ type TerraformPlanCIResult struct {
 	ExitCode   int
 	Output     string
 	LogFiles   map[string]string
+	StartedAt  time.Time
+	FinishedAt time.Time
+	DurationMS int64
+	Error      string
+}
+
+// HelmCIResultSet contains deterministic per-node Helm results for one
+// graph-backed plan or apply run.
+type HelmCIResultSet struct {
+	Command string
+	Results []HelmCIResult
+}
+
+// HelmCIResult contains the execution outcome and structured Helm summary for
+// one component in a graph-backed run.
+type HelmCIResult struct {
+	NodeID     string
+	Stack      string
+	Component  string
+	Status     string
+	Processed  bool
+	ExitCode   int
+	Summary    map[string]any
 	StartedAt  time.Time
 	FinishedAt time.Time
 	DurationMS int64
@@ -1630,12 +1676,17 @@ type GCPAuthContext struct {
 }
 
 type ConfigAndStacksInfo struct {
-	StackFromArg                  string
-	Stack                         string
-	StackFile                     string
-	StackManifestName             string // Stack-level 'name' override from manifest (highest precedence).
-	ComponentType                 string
-	ComponentFromArg              string
+	StackFromArg      string
+	Stack             string
+	StackFile         string
+	StackManifestName string // Stack-level 'name' override from manifest (highest precedence).
+	ComponentType     string
+	ComponentFromArg  string
+	// ComponentPrompted records whether ComponentFromArg was filled in via an
+	// interactive prompt rather than supplied on the command line.
+	ComponentPrompted bool
+	// StackPrompted is the Stack equivalent of ComponentPrompted.
+	StackPrompted                 bool
 	Component                     string
 	ComponentFolderPrefix         string
 	ComponentFolderPrefixReplaced string
@@ -1822,6 +1873,13 @@ type ConfigAndStacksInfo struct {
 	// centralizes CI output writes for concurrent execution so GitHub
 	// summary/output files are not written by worker goroutines.
 	TerraformPlanCIResultHandler TerraformPlanCIResultHandler
+
+	// TerraformPlanCIBeforeHandler is called once, right before the scheduler
+	// starts a graph-backed multi-component Terraform plan/apply/destroy run,
+	// with the resolved and filtered node list — the before-side counterpart
+	// to TerraformPlanCIResultHandler, letting CI create real per-component
+	// pending statuses up front instead of one component-less status.
+	TerraformPlanCIBeforeHandler TerraformPlanCIBeforeHandler
 
 	// RCCleanup, when non-nil, removes the temporary Terraform CLI config file
 	// (TF_CLI_CONFIG_FILE) generated for this run. It is registered during env

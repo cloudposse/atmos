@@ -17,6 +17,8 @@ import (
 )
 
 func TestComponentPathPatternCache_GetComponentPathPattern(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -37,6 +39,7 @@ func TestComponentPathPatternCache_GetComponentPathPattern(t *testing.T) {
 	cache := newComponentPathPatternCache()
 
 	t.Run("terraform component pattern", func(t *testing.T) {
+		t.Parallel()
 		pattern, err := cache.getComponentPathPattern("vpc", cfg.TerraformComponentType, atmosConfig)
 		require.NoError(t, err)
 		assert.Contains(t, filepath.ToSlash(pattern), "components/terraform/vpc")
@@ -44,6 +47,7 @@ func TestComponentPathPatternCache_GetComponentPathPattern(t *testing.T) {
 	})
 
 	t.Run("helmfile component pattern", func(t *testing.T) {
+		t.Parallel()
 		pattern, err := cache.getComponentPathPattern("app", cfg.HelmfileComponentType, atmosConfig)
 		require.NoError(t, err)
 		assert.Contains(t, filepath.ToSlash(pattern), "components/helmfile/app")
@@ -51,6 +55,7 @@ func TestComponentPathPatternCache_GetComponentPathPattern(t *testing.T) {
 	})
 
 	t.Run("packer component pattern", func(t *testing.T) {
+		t.Parallel()
 		pattern, err := cache.getComponentPathPattern("image", cfg.PackerComponentType, atmosConfig)
 		require.NoError(t, err)
 		assert.Contains(t, filepath.ToSlash(pattern), "components/packer/image")
@@ -58,12 +63,14 @@ func TestComponentPathPatternCache_GetComponentPathPattern(t *testing.T) {
 	})
 
 	t.Run("unsupported component type", func(t *testing.T) {
+		t.Parallel()
 		_, err := cache.getComponentPathPattern("test", "unknown", atmosConfig)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrUnsupportedComponentType)
 	})
 
 	t.Run("cache stores patterns", func(t *testing.T) {
+		t.Parallel()
 		// First call.
 		pattern1, err := cache.getComponentPathPattern("vpc", cfg.TerraformComponentType, atmosConfig)
 		require.NoError(t, err)
@@ -77,6 +84,8 @@ func TestComponentPathPatternCache_GetComponentPathPattern(t *testing.T) {
 }
 
 func TestComponentPathPatternCache_ThreadSafety(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -122,6 +131,8 @@ func TestComponentPathPatternCache_ThreadSafety(t *testing.T) {
 }
 
 func TestComponentPathPatternCache_Clear(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -150,13 +161,17 @@ func TestComponentPathPatternCache_Clear(t *testing.T) {
 }
 
 func TestDeepEqualMaps(t *testing.T) {
+	t.Parallel()
+
 	t.Run("equal empty maps", func(t *testing.T) {
+		t.Parallel()
 		a := map[string]any{}
 		b := map[string]any{}
 		assert.True(t, deepEqualMaps(a, b))
 	})
 
 	t.Run("equal simple maps", func(t *testing.T) {
+		t.Parallel()
 		a := map[string]any{
 			"key1": "value1",
 			"key2": 42,
@@ -171,24 +186,28 @@ func TestDeepEqualMaps(t *testing.T) {
 	})
 
 	t.Run("different lengths", func(t *testing.T) {
+		t.Parallel()
 		a := map[string]any{"key1": "value1"}
 		b := map[string]any{"key1": "value1", "key2": "value2"}
 		assert.False(t, deepEqualMaps(a, b))
 	})
 
 	t.Run("different values", func(t *testing.T) {
+		t.Parallel()
 		a := map[string]any{"key1": "value1"}
 		b := map[string]any{"key1": "value2"}
 		assert.False(t, deepEqualMaps(a, b))
 	})
 
 	t.Run("missing key", func(t *testing.T) {
+		t.Parallel()
 		a := map[string]any{"key1": "value1"}
 		b := map[string]any{"key2": "value1"}
 		assert.False(t, deepEqualMaps(a, b))
 	})
 
 	t.Run("nested maps equal", func(t *testing.T) {
+		t.Parallel()
 		a := map[string]any{
 			"nested": map[string]any{
 				"inner": "value",
@@ -203,6 +222,7 @@ func TestDeepEqualMaps(t *testing.T) {
 	})
 
 	t.Run("nested maps different", func(t *testing.T) {
+		t.Parallel()
 		a := map[string]any{
 			"nested": map[string]any{
 				"inner": "value1",
@@ -218,30 +238,35 @@ func TestDeepEqualMaps(t *testing.T) {
 
 	// Nil vs empty map tests - critical for correct affected detection.
 	t.Run("both nil maps are equal", func(t *testing.T) {
+		t.Parallel()
 		var a map[string]any
 		var b map[string]any
 		assert.True(t, deepEqualMaps(a, b))
 	})
 
 	t.Run("nil map vs empty map are different", func(t *testing.T) {
+		t.Parallel()
 		var a map[string]any // nil
 		b := map[string]any{}
 		assert.False(t, deepEqualMaps(a, b))
 	})
 
 	t.Run("empty map vs nil map are different", func(t *testing.T) {
+		t.Parallel()
 		a := map[string]any{}
 		var b map[string]any // nil
 		assert.False(t, deepEqualMaps(a, b))
 	})
 
 	t.Run("nil map vs non-empty map are different", func(t *testing.T) {
+		t.Parallel()
 		var a map[string]any // nil
 		b := map[string]any{"key": "value"}
 		assert.False(t, deepEqualMaps(a, b))
 	})
 
 	t.Run("non-empty map vs nil map are different", func(t *testing.T) {
+		t.Parallel()
 		a := map[string]any{"key": "value"}
 		var b map[string]any // nil
 		assert.False(t, deepEqualMaps(a, b))
@@ -249,50 +274,61 @@ func TestDeepEqualMaps(t *testing.T) {
 }
 
 func TestDeepEqualValues(t *testing.T) {
+	t.Parallel()
+
 	t.Run("nil values", func(t *testing.T) {
+		t.Parallel()
 		assert.True(t, deepEqualValues(nil, nil))
 		assert.False(t, deepEqualValues(nil, "value"))
 		assert.False(t, deepEqualValues("value", nil))
 	})
 
 	t.Run("string values", func(t *testing.T) {
+		t.Parallel()
 		assert.True(t, deepEqualValues("test", "test"))
 		assert.False(t, deepEqualValues("test1", "test2"))
 	})
 
 	t.Run("int values", func(t *testing.T) {
+		t.Parallel()
 		assert.True(t, deepEqualValues(42, 42))
 		assert.False(t, deepEqualValues(42, 43))
 	})
 
 	t.Run("int64 values", func(t *testing.T) {
+		t.Parallel()
 		assert.True(t, deepEqualValues(int64(42), int64(42)))
 		assert.False(t, deepEqualValues(int64(42), int64(43)))
 	})
 
 	t.Run("float64 values", func(t *testing.T) {
+		t.Parallel()
 		assert.True(t, deepEqualValues(3.14, 3.14))
 		assert.False(t, deepEqualValues(3.14, 3.15))
 	})
 
 	t.Run("bool values", func(t *testing.T) {
+		t.Parallel()
 		assert.True(t, deepEqualValues(true, true))
 		assert.True(t, deepEqualValues(false, false))
 		assert.False(t, deepEqualValues(true, false))
 	})
 
 	t.Run("type mismatch", func(t *testing.T) {
+		t.Parallel()
 		assert.False(t, deepEqualValues("42", 42))
 		assert.False(t, deepEqualValues(42, int64(42)))
 	})
 
 	t.Run("slices equal", func(t *testing.T) {
+		t.Parallel()
 		a := []any{"a", "b", "c"}
 		b := []any{"a", "b", "c"}
 		assert.True(t, deepEqualValues(a, b))
 	})
 
 	t.Run("slices different", func(t *testing.T) {
+		t.Parallel()
 		a := []any{"a", "b", "c"}
 		b := []any{"a", "b", "d"}
 		assert.False(t, deepEqualValues(a, b))
@@ -300,37 +336,45 @@ func TestDeepEqualValues(t *testing.T) {
 }
 
 func TestDeepEqualSlices(t *testing.T) {
+	t.Parallel()
+
 	t.Run("equal empty slices", func(t *testing.T) {
+		t.Parallel()
 		a := []any{}
 		b := []any{}
 		assert.True(t, deepEqualSlices(a, b))
 	})
 
 	t.Run("equal slices", func(t *testing.T) {
+		t.Parallel()
 		a := []any{1, "two", 3.0, true}
 		b := []any{1, "two", 3.0, true}
 		assert.True(t, deepEqualSlices(a, b))
 	})
 
 	t.Run("different lengths", func(t *testing.T) {
+		t.Parallel()
 		a := []any{1, 2}
 		b := []any{1, 2, 3}
 		assert.False(t, deepEqualSlices(a, b))
 	})
 
 	t.Run("different values", func(t *testing.T) {
+		t.Parallel()
 		a := []any{1, 2, 3}
 		b := []any{1, 2, 4}
 		assert.False(t, deepEqualSlices(a, b))
 	})
 
 	t.Run("nested slices equal", func(t *testing.T) {
+		t.Parallel()
 		a := []any{[]any{1, 2}, []any{3, 4}}
 		b := []any{[]any{1, 2}, []any{3, 4}}
 		assert.True(t, deepEqualSlices(a, b))
 	})
 
 	t.Run("nested slices different", func(t *testing.T) {
+		t.Parallel()
 		a := []any{[]any{1, 2}, []any{3, 4}}
 		b := []any{[]any{1, 2}, []any{3, 5}}
 		assert.False(t, deepEqualSlices(a, b))
@@ -338,30 +382,35 @@ func TestDeepEqualSlices(t *testing.T) {
 
 	// Nil vs empty slice tests - critical for correct affected detection.
 	t.Run("both nil slices are equal", func(t *testing.T) {
+		t.Parallel()
 		var a []any
 		var b []any
 		assert.True(t, deepEqualSlices(a, b))
 	})
 
 	t.Run("nil slice vs empty slice are different", func(t *testing.T) {
+		t.Parallel()
 		var a []any // nil
 		b := []any{}
 		assert.False(t, deepEqualSlices(a, b))
 	})
 
 	t.Run("empty slice vs nil slice are different", func(t *testing.T) {
+		t.Parallel()
 		a := []any{}
 		var b []any // nil
 		assert.False(t, deepEqualSlices(a, b))
 	})
 
 	t.Run("nil slice vs non-empty slice are different", func(t *testing.T) {
+		t.Parallel()
 		var a []any // nil
 		b := []any{"value"}
 		assert.False(t, deepEqualSlices(a, b))
 	})
 
 	t.Run("non-empty slice vs nil slice are different", func(t *testing.T) {
+		t.Parallel()
 		a := []any{"value"}
 		var b []any // nil
 		assert.False(t, deepEqualSlices(a, b))
@@ -369,7 +418,10 @@ func TestDeepEqualSlices(t *testing.T) {
 }
 
 func TestIsEqual_CustomComparison(t *testing.T) {
+	t.Parallel()
+
 	t.Run("equal sections", func(t *testing.T) {
+		t.Parallel()
 		remoteStacks := &map[string]any{
 			"dev-stack": map[string]any{
 				"components": map[string]any{
@@ -395,6 +447,7 @@ func TestIsEqual_CustomComparison(t *testing.T) {
 	})
 
 	t.Run("different sections", func(t *testing.T) {
+		t.Parallel()
 		remoteStacks := &map[string]any{
 			"dev-stack": map[string]any{
 				"components": map[string]any{
@@ -418,6 +471,7 @@ func TestIsEqual_CustomComparison(t *testing.T) {
 	})
 
 	t.Run("section not found", func(t *testing.T) {
+		t.Parallel()
 		remoteStacks := &map[string]any{
 			"dev-stack": map[string]any{
 				"components": map[string]any{
@@ -435,6 +489,7 @@ func TestIsEqual_CustomComparison(t *testing.T) {
 	})
 
 	t.Run("complex nested structures", func(t *testing.T) {
+		t.Parallel()
 		remoteStacks := &map[string]any{
 			"dev-stack": map[string]any{
 				"components": map[string]any{
@@ -473,6 +528,8 @@ func TestIsEqual_CustomComparison(t *testing.T) {
 }
 
 func TestComponentPathPatternCache_GetTerraformModulePatterns(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	// Create a test Terraform component with modules.
@@ -513,6 +570,7 @@ module "remote_module" {
 	cache := newComponentPathPatternCache()
 
 	t.Run("get module patterns", func(t *testing.T) {
+		t.Parallel()
 		patterns, err := cache.getTerraformModulePatterns("vpc", atmosConfig)
 		require.NoError(t, err)
 
@@ -523,6 +581,7 @@ module "remote_module" {
 	})
 
 	t.Run("cache stores patterns", func(t *testing.T) {
+		t.Parallel()
 		// First call.
 		patterns1, err := cache.getTerraformModulePatterns("vpc", atmosConfig)
 		require.NoError(t, err)
@@ -535,12 +594,14 @@ module "remote_module" {
 	})
 
 	t.Run("non-existent component returns empty", func(t *testing.T) {
+		t.Parallel()
 		patterns, err := cache.getTerraformModulePatterns("nonexistent", atmosConfig)
 		require.NoError(t, err)
 		assert.Empty(t, patterns)
 	})
 
 	t.Run("invalid HCL includes component name and location in error", func(t *testing.T) {
+		t.Parallel()
 		badPath := filepath.Join(tempDir, "components", "terraform", "broken")
 		err := os.MkdirAll(badPath, 0o755)
 		require.NoError(t, err)
@@ -559,6 +620,8 @@ module "remote_module" {
 }
 
 func TestComponentPathPatternCache_ModulePatternsThreadSafety(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	// Create a test component.
@@ -609,9 +672,12 @@ func TestComponentPathPatternCache_ModulePatternsThreadSafety(t *testing.T) {
 // This test verifies that buildNormalizedBasePaths correctly filters out empty base paths,
 // preventing file indexing collisions.
 func TestChangedFilesIndex_EmptyBasePaths(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	t.Run("empty packer and stacks base paths are filtered out", func(t *testing.T) {
+		t.Parallel()
 		// This reproduces the original bug: Packer.BasePath and Stacks.BasePath are empty,
 		// which would cause filepath.Join(basePath, "") to return just basePath,
 		// creating duplicate entries in the normalized paths.
@@ -659,6 +725,7 @@ func TestChangedFilesIndex_EmptyBasePaths(t *testing.T) {
 	})
 
 	t.Run("file detection works with empty base paths", func(t *testing.T) {
+		t.Parallel()
 		// Verify that file-only changes are detected even when some component types
 		// have empty base paths.
 		atmosConfig := &schema.AtmosConfiguration{
@@ -698,6 +765,7 @@ func TestChangedFilesIndex_EmptyBasePaths(t *testing.T) {
 	})
 
 	t.Run("all base paths empty returns empty index", func(t *testing.T) {
+		t.Parallel()
 		// Edge case: all component types have empty base paths.
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: tempDir,
@@ -738,9 +806,12 @@ func TestChangedFilesIndex_EmptyBasePaths(t *testing.T) {
 
 // TestBuildNormalizedBasePaths tests the buildNormalizedBasePaths function directly.
 func TestBuildNormalizedBasePaths(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	t.Run("filters out empty base paths", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: tempDir,
 			Components: schema.Components{
@@ -783,6 +854,7 @@ func TestBuildNormalizedBasePaths(t *testing.T) {
 	})
 
 	t.Run("all base paths configured", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: tempDir,
 			Components: schema.Components{
@@ -808,6 +880,7 @@ func TestBuildNormalizedBasePaths(t *testing.T) {
 	})
 
 	t.Run("no base paths configured", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: tempDir,
 			Components: schema.Components{
@@ -833,6 +906,7 @@ func TestBuildNormalizedBasePaths(t *testing.T) {
 	})
 
 	t.Run("paths are absolute", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: tempDir,
 			Components: schema.Components{
@@ -849,6 +923,7 @@ func TestBuildNormalizedBasePaths(t *testing.T) {
 	})
 
 	t.Run("no duplicates", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: tempDir,
 			Components: schema.Components{
@@ -876,6 +951,8 @@ func TestBuildNormalizedBasePaths(t *testing.T) {
 }
 
 func TestChangedFilesIndex_GetRelevantFiles(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -908,6 +985,7 @@ func TestChangedFilesIndex_GetRelevantFiles(t *testing.T) {
 	index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 	t.Run("get terraform files", func(t *testing.T) {
+		t.Parallel()
 		files := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
 		// Should include ONLY terraform files (files in terraform base path).
 		assert.Len(t, files, 2)
@@ -918,6 +996,7 @@ func TestChangedFilesIndex_GetRelevantFiles(t *testing.T) {
 	})
 
 	t.Run("get helmfile files", func(t *testing.T) {
+		t.Parallel()
 		files := index.getRelevantFiles(cfg.HelmfileComponentType, atmosConfig)
 		// Should include ONLY helmfile files (files in helmfile base path).
 		assert.Len(t, files, 1)
@@ -926,6 +1005,7 @@ func TestChangedFilesIndex_GetRelevantFiles(t *testing.T) {
 	})
 
 	t.Run("get packer files", func(t *testing.T) {
+		t.Parallel()
 		files := index.getRelevantFiles(cfg.PackerComponentType, atmosConfig)
 		// Should include ONLY packer files (files in packer base path).
 		assert.Len(t, files, 1)
@@ -934,11 +1014,13 @@ func TestChangedFilesIndex_GetRelevantFiles(t *testing.T) {
 	})
 
 	t.Run("get all files", func(t *testing.T) {
+		t.Parallel()
 		files := index.getAllFiles()
 		assert.Len(t, files, 6)
 	})
 
 	t.Run("only matched files", func(t *testing.T) {
+		t.Parallel()
 		// Test with only files that match known base paths.
 		matchedFiles := []string{
 			filepath.Join(tempDir, "components/terraform/vpc/main.tf"),
@@ -961,6 +1043,8 @@ func TestChangedFilesIndex_GetRelevantFiles(t *testing.T) {
 // assigned to the wrong base path (e.g., "components/terraform-modules" incorrectly matching
 // "components/terraform" with HasPrefix).
 func TestChangedFilesIndex_PathCollisionPrevention(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -982,6 +1066,7 @@ func TestChangedFilesIndex_PathCollisionPrevention(t *testing.T) {
 	}
 
 	t.Run("files in terraform subdirectory are correctly indexed", func(t *testing.T) {
+		t.Parallel()
 		// File deep within terraform path should be correctly assigned.
 		changedFiles := []string{
 			filepath.Join(tempDir, "components/terraform/vpc/main.tf"),
@@ -994,6 +1079,7 @@ func TestChangedFilesIndex_PathCollisionPrevention(t *testing.T) {
 	})
 
 	t.Run("sibling path with shared prefix does not incorrectly match", func(t *testing.T) {
+		t.Parallel()
 		// This tests the bug fix: with HasPrefix, "components/terraform-backup" would incorrectly
 		// match "components/terraform" and be assigned to the wrong base path.
 		// With filepath.Rel path boundary checking, it correctly does NOT match any base path.
@@ -1028,6 +1114,7 @@ func TestChangedFilesIndex_PathCollisionPrevention(t *testing.T) {
 	})
 
 	t.Run("parent path does not match child path", func(t *testing.T) {
+		t.Parallel()
 		// File in parent directory should not be considered part of subdirectory.
 		// Files outside configured base paths are NOT indexed.
 		changedFiles := []string{
@@ -1044,6 +1131,8 @@ func TestChangedFilesIndex_PathCollisionPrevention(t *testing.T) {
 }
 
 func TestChangedFilesIndex_ThreadSafety(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -1091,6 +1180,8 @@ func TestChangedFilesIndex_ThreadSafety(t *testing.T) {
 // This is a regression test for the bug where allFiles contained original (potentially relative) paths
 // while bucketed entries contained absolute paths, causing pattern matching inconsistencies.
 func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -1106,6 +1197,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 	}
 
 	t.Run("getAllFiles returns absolute paths", func(t *testing.T) {
+		t.Parallel()
 		// Use absolute paths in input.
 		absPath1 := filepath.Join(tempDir, "components/terraform/vpc/main.tf")
 		absPath2 := filepath.Join(tempDir, "components/helmfile/app/helmfile.yaml")
@@ -1125,6 +1217,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 	})
 
 	t.Run("getRelevantFiles returns absolute paths", func(t *testing.T) {
+		t.Parallel()
 		// Use absolute terraform paths.
 		absPath1 := filepath.Join(tempDir, "components/terraform/vpc/main.tf")
 		absPath2 := filepath.Join(tempDir, "components/terraform/eks/main.tf")
@@ -1144,6 +1237,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 	})
 
 	t.Run("paths are normalized to absolute", func(t *testing.T) {
+		t.Parallel()
 		// When using already-absolute paths, they're stored as-is.
 		// This verifies normalization doesn't break absolute paths.
 		tfPath := filepath.Join(tempDir, "components/terraform/vpc/main.tf")
@@ -1172,6 +1266,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 	})
 
 	t.Run("absolute paths work with pattern matching", func(t *testing.T) {
+		t.Parallel()
 		// Create component structure.
 		vpcPath := filepath.Join(tempDir, "components/terraform/vpc")
 		err := os.MkdirAll(vpcPath, 0o755)
@@ -1196,6 +1291,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 	})
 
 	t.Run("dependency matching works with absolute paths", func(t *testing.T) {
+		t.Parallel()
 		// Test that dependency matching works correctly when all paths are absolute.
 		depFile := filepath.Join(tempDir, "config/settings.yaml")
 
@@ -1223,6 +1319,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 	})
 
 	t.Run("no redundant filepath.Abs calls in indexChangedFile", func(t *testing.T) {
+		t.Parallel()
 		// This test verifies that indexChangedFile receives pre-normalized absolute paths
 		// and doesn't need to call filepath.Abs again.
 
@@ -1248,6 +1345,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 	})
 
 	t.Run("empty input paths are handled correctly", func(t *testing.T) {
+		t.Parallel()
 		// Edge case: empty changed files list.
 		changedFiles := []string{}
 		index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
@@ -1260,6 +1358,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 	})
 
 	t.Run("single dot path is normalized", func(t *testing.T) {
+		t.Parallel()
 		// Edge case: single dot representing current directory.
 		changedFiles := []string{"."}
 		index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
@@ -1277,6 +1376,8 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 // git repo root, not the current working directory.
 // This is a regression test for issue #1978: atmos describe affected doesn't detect component changes.
 func TestChangedFilesIndex_GitRepoRootResolution(t *testing.T) {
+	t.Parallel()
+
 	// Simulate the scenario below.
 	// - Git repo root is /repo.
 	// - Atmos base path is /repo/atmos_test (a subdirectory).
@@ -1302,6 +1403,7 @@ func TestChangedFilesIndex_GitRepoRootResolution(t *testing.T) {
 	}
 
 	t.Run("relative paths from git diff are resolved against git repo root", func(t *testing.T) {
+		t.Parallel()
 		// This is the relative path that git diff would return.
 		// It's relative to the git repo root, not the atmos base path.
 		changedFiles := []string{
@@ -1319,6 +1421,7 @@ func TestChangedFilesIndex_GitRepoRootResolution(t *testing.T) {
 	})
 
 	t.Run("verifies correct path resolution", func(t *testing.T) {
+		t.Parallel()
 		// Relative path from git diff.
 		changedFiles := []string{
 			"atmos_test/components/terraform/second_component/main.tf",
@@ -1335,6 +1438,7 @@ func TestChangedFilesIndex_GitRepoRootResolution(t *testing.T) {
 	})
 
 	t.Run("empty git repo root falls back to filepath.Abs", func(t *testing.T) {
+		t.Parallel()
 		// When gitRepoRoot is empty, fallback to filepath.Abs (current working directory).
 		// This maintains backward compatibility for tests that use absolute paths.
 		absolutePath := filepath.Join(atmosBaseDir, "components", "terraform", "second_component", "main.tf")
@@ -1348,6 +1452,7 @@ func TestChangedFilesIndex_GitRepoRootResolution(t *testing.T) {
 	})
 
 	t.Run("relative path with empty gitRepoRoot uses filepath.Abs", func(t *testing.T) {
+		t.Parallel()
 		// When gitRepoRoot is empty and path is relative, filepath.Abs resolves against cwd.
 		// This exercises the filepath.Abs() branch in newChangedFilesIndex.
 		relativePath := filepath.Join("some", "relative", "path", "main.tf")
@@ -1369,6 +1474,8 @@ func TestChangedFilesIndex_GitRepoRootResolution(t *testing.T) {
 // ==============================================================================
 
 func TestIsComponentFolderChangedIndexed(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	// Create component paths.
@@ -1394,12 +1501,14 @@ func TestIsComponentFolderChangedIndexed(t *testing.T) {
 	patternCache := newComponentPathPatternCache()
 
 	t.Run("changed file in component folder", func(t *testing.T) {
+		t.Parallel()
 		changed, err := isComponentFolderChangedIndexed("vpc", cfg.TerraformComponentType, atmosConfig, filesIndex, patternCache)
 		require.NoError(t, err)
 		assert.True(t, changed)
 	})
 
 	t.Run("no changed files in component folder", func(t *testing.T) {
+		t.Parallel()
 		changed, err := isComponentFolderChangedIndexed("eks", cfg.TerraformComponentType, atmosConfig, filesIndex, patternCache)
 		require.NoError(t, err)
 		assert.False(t, changed)
@@ -1407,6 +1516,8 @@ func TestIsComponentFolderChangedIndexed(t *testing.T) {
 }
 
 func TestAreTerraformComponentModulesChangedIndexed(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	// Create component with module.
@@ -1435,6 +1546,7 @@ module "subnets" {
 	}
 
 	t.Run("module file changed", func(t *testing.T) {
+		t.Parallel()
 		changedFiles := []string{
 			filepath.Join(modulePath, "main.tf"),
 		}
@@ -1448,6 +1560,7 @@ module "subnets" {
 	})
 
 	t.Run("module file not changed", func(t *testing.T) {
+		t.Parallel()
 		changedFiles := []string{
 			filepath.Join(tempDir, "other/file.txt"),
 		}
@@ -1462,6 +1575,8 @@ module "subnets" {
 }
 
 func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -1474,6 +1589,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 	}
 
 	t.Run("file dependency changed", func(t *testing.T) {
+		t.Parallel()
 		depFile := filepath.Join(tempDir, "config/settings.yaml")
 		err := os.MkdirAll(filepath.Dir(depFile), 0o755)
 		require.NoError(t, err)
@@ -1495,6 +1611,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 	})
 
 	t.Run("folder dependency changed", func(t *testing.T) {
+		t.Parallel()
 		depFolder := filepath.Join(tempDir, "modules/vpc")
 		depFile := filepath.Join(depFolder, "main.tf")
 		err := os.MkdirAll(filepath.Dir(depFile), 0o755)
@@ -1517,6 +1634,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 	})
 
 	t.Run("no dependencies changed", func(t *testing.T) {
+		t.Parallel()
 		changedFiles := []string{
 			filepath.Join(tempDir, "other/unrelated.txt"),
 		}
@@ -1533,6 +1651,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 	})
 
 	t.Run("multiple dependencies, first changed", func(t *testing.T) {
+		t.Parallel()
 		depFile1 := filepath.Join(tempDir, "config/first.yaml")
 		err := os.MkdirAll(filepath.Dir(depFile1), 0o755)
 		require.NoError(t, err)
@@ -1556,6 +1675,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 	})
 
 	t.Run("empty dependencies", func(t *testing.T) {
+		t.Parallel()
 		changedFiles := []string{
 			filepath.Join(tempDir, "some/file.txt"),
 		}
@@ -1569,6 +1689,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 	})
 
 	t.Run("mixed file/folder and component dependencies", func(t *testing.T) {
+		t.Parallel()
 		// This test verifies that component dependencies (without kind=file/folder) are skipped.
 		depFile := filepath.Join(tempDir, "config/settings.yaml")
 		err := os.MkdirAll(filepath.Dir(depFile), 0o755)
@@ -1597,6 +1718,8 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 }
 
 func TestProcessHelmfileComponentsIndexed(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	// Create helmfile component structure.
@@ -1616,6 +1739,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 	}
 
 	t.Run("component metadata changed", func(t *testing.T) {
+		t.Parallel()
 		currentStacks := &map[string]any{
 			"dev-stack": map[string]any{
 				"components": map[string]any{
@@ -1680,6 +1804,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 	})
 
 	t.Run("component file changed", func(t *testing.T) {
+		t.Parallel()
 		currentStacks := &map[string]any{
 			"dev-stack": map[string]any{
 				"components": map[string]any{
@@ -1745,6 +1870,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 	})
 
 	t.Run("vars changed", func(t *testing.T) {
+		t.Parallel()
 		currentStacks := &map[string]any{
 			"dev-stack": map[string]any{
 				"components": map[string]any{
@@ -1802,6 +1928,8 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 }
 
 func TestProcessPackerComponentsIndexed(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	// Create packer component structure.
@@ -1821,6 +1949,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 	}
 
 	t.Run("component env changed", func(t *testing.T) {
+		t.Parallel()
 		currentStacks := &map[string]any{
 			"dev-stack": map[string]any{
 				"components": map[string]any{
@@ -1883,6 +2012,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 	})
 
 	t.Run("component file changed", func(t *testing.T) {
+		t.Parallel()
 		currentStacks := &map[string]any{
 			"dev-stack": map[string]any{
 				"components": map[string]any{
@@ -1942,6 +2072,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 	})
 
 	t.Run("skip abstract component", func(t *testing.T) {
+		t.Parallel()
 		currentStacks := &map[string]any{
 			"dev-stack": map[string]any{
 				"components": map[string]any{
@@ -1983,6 +2114,8 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 }
 
 func TestIsComponentFolderChangedCoverage(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	// Create component structure.
@@ -2008,6 +2141,7 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 	}
 
 	t.Run("terraform component changed", func(t *testing.T) {
+		t.Parallel()
 		changedFiles := []string{
 			filepath.Join(vpcPath, "main.tf"),
 		}
@@ -2018,6 +2152,7 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 	})
 
 	t.Run("terraform component not changed", func(t *testing.T) {
+		t.Parallel()
 		changedFiles := []string{
 			filepath.Join(tempDir, "other/file.txt"),
 		}
@@ -2028,6 +2163,7 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 	})
 
 	t.Run("helmfile component changed", func(t *testing.T) {
+		t.Parallel()
 		helmfilePath := filepath.Join(tempDir, "components/helmfile/app")
 		err := os.MkdirAll(helmfilePath, 0o755)
 		require.NoError(t, err)
@@ -2043,6 +2179,7 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 	})
 
 	t.Run("packer component changed", func(t *testing.T) {
+		t.Parallel()
 		packerPath := filepath.Join(tempDir, "components/packer/image")
 		err := os.MkdirAll(packerPath, 0o755)
 		require.NoError(t, err)
@@ -2058,6 +2195,7 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 	})
 
 	t.Run("unsupported component type", func(t *testing.T) {
+		t.Parallel()
 		changedFiles := []string{}
 
 		_, err := isComponentFolderChanged("test", "unknown", atmosConfig, changedFiles)
@@ -2066,6 +2204,7 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 	})
 
 	t.Run("subdirectory file changed", func(t *testing.T) {
+		t.Parallel()
 		subDir := filepath.Join(vpcPath, "modules/subnets")
 		err := os.MkdirAll(subDir, 0o755)
 		require.NoError(t, err)
@@ -2082,6 +2221,8 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 }
 
 func TestAreTerraformComponentModulesChanged(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -2094,6 +2235,7 @@ func TestAreTerraformComponentModulesChanged(t *testing.T) {
 	}
 
 	t.Run("component with changed module", func(t *testing.T) {
+		t.Parallel()
 		// Create component with local module.
 		componentPath := filepath.Join(tempDir, "components/terraform/vpc")
 		modulePath := filepath.Join(componentPath, "modules/subnets")
@@ -2120,6 +2262,7 @@ module "subnets" {
 	})
 
 	t.Run("component with unchanged module", func(t *testing.T) {
+		t.Parallel()
 		// Create component with local module.
 		componentPath := filepath.Join(tempDir, "components/terraform/eks")
 		modulePath := filepath.Join(componentPath, "modules/nodegroups")
@@ -2147,6 +2290,7 @@ module "nodegroups" {
 	})
 
 	t.Run("component directory does not exist returns false without error", func(t *testing.T) {
+		t.Parallel()
 		// Component doesn't exist - this is valid in affected detection.
 		changedFiles := []string{
 			filepath.Join(tempDir, "some/file.txt"),
@@ -2158,6 +2302,7 @@ module "nodegroups" {
 	})
 
 	t.Run("component with no modules returns false", func(t *testing.T) {
+		t.Parallel()
 		// Create component without modules.
 		componentPath := filepath.Join(tempDir, "components/terraform/simple")
 		err := os.MkdirAll(componentPath, 0o755)
@@ -2181,6 +2326,7 @@ resource "aws_vpc" "main" {
 	})
 
 	t.Run("component with only remote modules returns false", func(t *testing.T) {
+		t.Parallel()
 		// Create component with only remote modules (no local modules).
 		componentPath := filepath.Join(tempDir, "components/terraform/remote")
 		err := os.MkdirAll(componentPath, 0o755)
@@ -2205,6 +2351,7 @@ module "vpc" {
 	})
 
 	t.Run("component with multiple local modules, one changed", func(t *testing.T) {
+		t.Parallel()
 		// Create component with multiple local modules.
 		componentPath := filepath.Join(tempDir, "components/terraform/multi")
 		module1Path := filepath.Join(componentPath, "modules/networking")
@@ -2241,6 +2388,7 @@ module "security" {
 	})
 
 	t.Run("invalid HCL includes component name and location in error", func(t *testing.T) {
+		t.Parallel()
 		componentPath := filepath.Join(tempDir, "components", "terraform", "bad-hcl")
 		err := os.MkdirAll(componentPath, 0o755)
 		require.NoError(t, err)
@@ -2261,6 +2409,8 @@ module "security" {
 }
 
 func TestChangedFilesIndex_GetRelevantFiles_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -2279,12 +2429,14 @@ func TestChangedFilesIndex_GetRelevantFiles_EdgeCases(t *testing.T) {
 	index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 	t.Run("unknown component type returns all files", func(t *testing.T) {
+		t.Parallel()
 		files := index.getRelevantFiles("unknown-type", atmosConfig)
 		// Should fallback to all files for unknown types.
 		assert.Equal(t, index.allFiles, files)
 	})
 
 	t.Run("base path not in index returns all files", func(t *testing.T) {
+		t.Parallel()
 		// Create config with a base path that doesn't match any changed files.
 		emptyConfig := &schema.AtmosConfiguration{
 			BasePath: "/nonexistent/path",
@@ -2302,7 +2454,27 @@ func TestChangedFilesIndex_GetRelevantFiles_EdgeCases(t *testing.T) {
 	})
 }
 
+func TestChangedFilesIndex_NativeHelmBasePath(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Helm: schema.Helm{BasePath: "components/helm"},
+		},
+	}
+	helmFile := filepath.Join(tempDir, "components", "helm", "app", "Chart.yaml")
+	unrelatedFile := filepath.Join(tempDir, "config", "helm", "app-values.yaml")
+	index := newChangedFilesIndex(atmosConfig, []string{helmFile, unrelatedFile}, tempDir)
+
+	assert.Equal(t, []string{helmFile}, index.getRelevantFiles(cfg.HelmComponentType, atmosConfig))
+	assert.True(t, index.isChangedFile(unrelatedFile))
+}
+
 func TestComponentPathPatternCache_GetTerraformModulePatterns_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	// Create component with remote module (has version).
@@ -2337,6 +2509,7 @@ module "s3" {
 	cache := newComponentPathPatternCache()
 
 	t.Run("remote modules with version are skipped", func(t *testing.T) {
+		t.Parallel()
 		patterns, err := cache.getTerraformModulePatterns("app", atmosConfig)
 		require.NoError(t, err)
 		// Should be empty since all modules are remote (have version).
@@ -2344,6 +2517,7 @@ module "s3" {
 	})
 
 	t.Run("mixed local and remote modules", func(t *testing.T) {
+		t.Parallel()
 		// Create component with both local and remote modules.
 		mixedPath := filepath.Join(tempDir, "components/terraform/mixed")
 		err := os.MkdirAll(mixedPath, 0o755)
@@ -2377,6 +2551,7 @@ module "remote" {
 	})
 
 	t.Run("component with multiple local modules", func(t *testing.T) {
+		t.Parallel()
 		// Create component with multiple local modules.
 		multiPath := filepath.Join(tempDir, "components/terraform/multi")
 		err := os.MkdirAll(multiPath, 0o755)
@@ -2422,6 +2597,8 @@ module "storage" {
 }
 
 func TestProcessStackAffected_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -2437,6 +2614,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 	patternCache := newComponentPathPatternCache()
 
 	t.Run("invalid stack section returns empty", func(t *testing.T) {
+		t.Parallel()
 		// Stack section is not a map.
 		invalidStackSection := "not-a-map"
 
@@ -2458,6 +2636,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("no components section returns empty", func(t *testing.T) {
+		t.Parallel()
 		// Stack section without components.
 		stackSection := map[string]any{
 			"other": "data",
@@ -2481,6 +2660,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("components section not a map returns empty", func(t *testing.T) {
+		t.Parallel()
 		// Components section is not a map.
 		stackSection := map[string]any{
 			"components": "not-a-map",
@@ -2504,6 +2684,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("empty components sections", func(t *testing.T) {
+		t.Parallel()
 		// Valid structure but no components.
 		stackSection := map[string]any{
 			"components": map[string]any{
