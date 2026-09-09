@@ -252,16 +252,29 @@ func TestBuildGraph_SkipsMissingTarget(t *testing.T) {
 }
 
 func TestBuildGraph_FailsForRequiredUnavailableTarget(t *testing.T) {
-	stacks := terraformStacks(map[string]map[string]map[string]any{
-		"dev": {
-			"app": {
-				"dependencies": map[string]any{"components": []any{map[string]any{"component": "missing"}}},
-			},
-		},
-	})
-
-	_, err := BuildGraph(stacks)
-	require.ErrorIs(t, err, errUtils.ErrDependencyTargetNotFound)
+	tests := []struct {
+		name       string
+		target     string
+		targetBody map[string]any
+		wantErr    error
+	}{
+		{name: "missing", target: "missing", wantErr: errUtils.ErrDependencyTargetNotFound},
+		{name: "disabled", target: "disabled", targetBody: map[string]any{"metadata": map[string]any{"enabled": false}}, wantErr: errUtils.ErrDependencyTargetUnavailable},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			components := map[string]map[string]any{
+				"app": {
+					"dependencies": map[string]any{"components": []any{map[string]any{"component": test.target}}},
+				},
+			}
+			if test.targetBody != nil {
+				components[test.target] = test.targetBody
+			}
+			_, err := BuildGraph(terraformStacks(map[string]map[string]map[string]any{"dev": components}))
+			require.ErrorIs(t, err, test.wantErr)
+		})
+	}
 }
 
 func TestBuildGraph_ToleratesCycles(t *testing.T) {
