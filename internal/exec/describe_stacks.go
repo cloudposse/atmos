@@ -276,6 +276,37 @@ func ExecuteDescribeStacksWithMocks(
 	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false, useMocks, true, tagsFilter, labelsFilter, DescribeStacksErrorOptions{})
 }
 
+// ExecuteDescribeStacksWithMocksAndOptions is ExecuteDescribeStacksWithMocks plus opt-in
+// graceful degradation for recoverable per-value YAML function errors (see
+// DescribeStacksErrorOptions). Used by Terraform's `--all` preflight so that a component
+// whose `!terraform.state`/`!terraform.output` dependency hasn't been applied yet (e.g. a
+// fresh environment) doesn't abort dependency-graph resolution before the scheduler gets a
+// chance to apply that dependency first; other error classes (e.g. a missing `!secret`)
+// are not in the recoverable set and keep failing the preflight exactly as before.
+//
+//nolint:revive // Signature intentionally mirrors ExecuteDescribeStacksWithMocks with one added options parameter.
+func ExecuteDescribeStacksWithMocksAndOptions(
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+	ignoreMissingFiles bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	useMocks bool,
+	tagsFilter []string,
+	labelsFilter map[string]string,
+	errOptions DescribeStacksErrorOptions,
+) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithMocksAndOptions")()
+
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false, useMocks, true, tagsFilter, labelsFilter, errOptions)
+}
+
 // ExecuteDescribeStacksWithAuthDisabled processes stack manifests with auth explicitly disabled.
 //
 //nolint:revive // Signature intentionally mirrors ExecuteDescribeStacks with one compatibility parameter.

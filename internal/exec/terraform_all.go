@@ -110,7 +110,7 @@ func terraformClosureRequested(info *schema.ConfigAndStacksInfo) bool {
 // resulting graph, so the evaluation scope and execution set always agree.
 func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager, components []string) (map[string]any, error) {
 	describe := func(stackName string, closureComponents []string, processTemplates, processFunctions bool) (map[string]any, error) {
-		return ExecuteDescribeStacksWithMocks(
+		return ExecuteDescribeStacksWithMocksAndOptions(
 			atmosConfig,
 			stackName,
 			closureComponents, // engine-supplied closure members (nil = all); never the caller's own selection.
@@ -125,6 +125,7 @@ func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration,
 			info.UseMocks,
 			nil, // tagsFilter: see above.
 			nil, // labelsFilter: see above.
+			terraformPreflightErrorOptions(),
 		)
 	}
 
@@ -164,7 +165,7 @@ func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration,
 // describeTerraformStacksNarrowed is the historical (no-closure) describe:
 // narrowed by -s/--components and the tags/labels early-skip, bit for bit.
 func describeTerraformStacksNarrowed(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager, components []string) (map[string]any, error) {
-	return ExecuteDescribeStacksWithMocks(
+	return ExecuteDescribeStacksWithMocksAndOptions(
 		atmosConfig,
 		info.Stack,
 		components,
@@ -179,7 +180,32 @@ func describeTerraformStacksNarrowed(atmosConfig *schema.AtmosConfiguration, inf
 		info.UseMocks,
 		info.Tags,
 		info.Labels,
+		terraformPreflightErrorOptions(),
 	)
+}
+
+// terraformPreflightErrorOptions makes the `--all` preflight describe pass tolerant of
+// recoverable per-value YAML function errors (e.g. `!terraform.state`/`!terraform.output`
+// against a component that hasn't been applied yet). This is not the user-facing
+// `--error-mode` choice used by `list`/`describe` — it's intrinsic to how `--all` bootstraps
+// dependency order: the preflight only builds the dependency graph from static
+// `dependencies`/`settings.depends_on`/`metadata` (never from resolved vars), and every node
+// re-resolves its own vars fresh immediately before its own plan/apply, so a degraded
+// placeholder value here is never reused for a real apply. Other error classes (e.g. a
+// missing `!secret`) are not in the recoverable set and still fail the preflight as before.
+func terraformPreflightErrorOptions() DescribeStacksErrorOptions {
+	return DescribeStacksErrorOptions{
+		OnError: OnErrorWarn,
+		OnWarning: func(w DegradationWarning) {
+			log.Debug(
+				"Deferring unresolved value until its dependency is applied",
+				cfg.ComponentStr, w.Component,
+				cfg.StackStr, w.Stack,
+				"function", w.Function,
+				"reason", w.Reason,
+			)
+		},
+	}
 }
 
 // terraformPreflightDescribeError preserves structured errors from stack resolution
