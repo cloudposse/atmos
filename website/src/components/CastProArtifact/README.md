@@ -48,6 +48,6 @@ result after a newer one has started.
 - **`../CastShareLink`** — copies a page link, or the embed URL from `buildEmbedUrl`, to the
   clipboard.
 
-See `website/src/pages/cast-pro-demo.tsx` for a runnable example of all three, and
-`website/src/components/FileBrowser/DirectoryPage.tsx` for how the example browser wires
-`CastProDownload`/`CastShareLink` next to a rendered `CastPlayer`.
+See `website/src/pages/cast-pro-demo.tsx` for a runnable example of `CastProDownload` and
+`CastProEmbed`, and `website/src/components/FileBrowser/DirectoryPage.tsx` for how the example
+browser wires all three — `CastProDownload` and `CastShareLink` next to a rendered `CastPlayer`.

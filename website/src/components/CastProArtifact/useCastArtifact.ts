@@ -127,6 +127,11 @@ export function useCastArtifact({
 
   const start = useCallback(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    // Bump the generation here too, not just on `url` change — otherwise a
+    // repeated start() for the same url (e.g. a double click before the
+    // control disables) would share a generation with a still-live prior
+    // request and let it apply its result after this one begins.
+    generationRef.current += 1;
     setErrorMessage(null);
     setStatus('checking');
     void check(0, generationRef.current);
