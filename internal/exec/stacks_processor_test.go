@@ -10,6 +10,8 @@ import (
 
 // TestDefaultStacksProcessor_ExecuteDescribeStacks verifies that DefaultStacksProcessor correctly delegates to ExecuteDescribeStacks.
 func TestDefaultStacksProcessor_ExecuteDescribeStacks(t *testing.T) {
+	t.Parallel()
+
 	// Create a test configuration directory.
 	testDir := t.TempDir()
 
@@ -57,6 +59,8 @@ func TestDefaultStacksProcessor_ExecuteDescribeStacks(t *testing.T) {
 // of the early-skip behavior itself is covered by the ExecuteDescribeStacksScoped
 // tests directly.
 func TestDefaultStacksProcessor_ExecuteDescribeStacksScoped(t *testing.T) {
+	t.Parallel()
+
 	testDir := t.TempDir()
 
 	atmosConfig := schema.AtmosConfiguration{
@@ -85,6 +89,7 @@ func TestDefaultStacksProcessor_ExecuteDescribeStacksScoped(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := processor.ExecuteDescribeStacksScoped(
 				&atmosConfig,
 				"",         // filterByStack
@@ -113,6 +118,8 @@ func TestDefaultStacksProcessor_ExecuteDescribeStacksScoped(t *testing.T) {
 // through the StacksProcessor seam in pkg/list), so a single call confirms
 // every line of the delegation is reached.
 func TestDefaultStacksProcessor_ExecuteDescribeStacksWithAuthDisabled(t *testing.T) {
+	t.Parallel()
+
 	testDir := t.TempDir()
 
 	atmosConfig := schema.AtmosConfiguration{
@@ -143,6 +150,7 @@ func TestDefaultStacksProcessor_ExecuteDescribeStacksWithAuthDisabled(t *testing
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := processor.ExecuteDescribeStacksWithAuthDisabled(
 				&atmosConfig,
 				"",         // filterByStack

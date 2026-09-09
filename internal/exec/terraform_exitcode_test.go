@@ -13,6 +13,8 @@ import (
 // TestExitCodeExtraction tests that exit codes are correctly extracted from different error types.
 // This verifies detecting ExitCodeError before falling back to *exec.ExitError.
 func TestExitCodeExtraction(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name         string
 		err          error
@@ -47,6 +49,7 @@ func TestExitCodeExtraction(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Simulate the exit code extraction logic from terraform.go lines 564-580
 			// This mirrors the actual implementation to ensure it works correctly.
 			var exitCode int
@@ -73,6 +76,8 @@ func TestExitCodeExtraction(t *testing.T) {
 // Terraform uses single-dash flags (-detailed-exitcode), not double-dash (-detailed-exitcode).
 // See: terraform plan -help for the official flag syntax.
 func TestDetailedExitCodeFlag(t *testing.T) {
+	t.Parallel()
+
 	// Verify the constant uses single-dash syntax as per terraform documentation.
 	assert.Equal(t, "-detailed-exitcode", detailedExitCodeFlag,
 		"Terraform uses single-dash flags per Go flag convention, not GNU-style double-dash")
@@ -81,6 +86,8 @@ func TestDetailedExitCodeFlag(t *testing.T) {
 // TestExitCode2PreservationInErrorChain tests that exit code 2 is preserved through error wrapping.
 // This is critical for terraform plan -detailed-exitcode where exit code 2 means changes detected.
 func TestExitCode2PreservationInErrorChain(t *testing.T) {
+	t.Parallel()
+
 	// Simulate what happens when ExecuteShellCommand returns an ExitCodeError
 	originalErr := errUtils.ExitCodeError{Code: 2}
 
@@ -97,7 +104,10 @@ func TestExitCode2PreservationInErrorChain(t *testing.T) {
 // TestExitCodeExtractionPriority tests that ExitCodeError takes priority over other error types.
 // This ensures the fix in terraform.go checks ExitCodeError BEFORE *exec.ExitError.
 func TestExitCodeExtractionPriority(t *testing.T) {
+	t.Parallel()
+
 	t.Run("ExitCodeError is checked first", func(t *testing.T) {
+		t.Parallel()
 		// Create an ExitCodeError with exit code 2
 		err := errUtils.ExitCodeError{Code: 2}
 
@@ -114,6 +124,7 @@ func TestExitCodeExtractionPriority(t *testing.T) {
 	})
 
 	t.Run("falls back to exit code 1 for generic errors", func(t *testing.T) {
+		t.Parallel()
 		err := fmt.Errorf("some generic error")
 
 		var exitCode int
@@ -133,6 +144,8 @@ func TestExitCodeExtractionPriority(t *testing.T) {
 // This validates the fix at terraform.go:494 where we simplified the if-else logic.
 // The logic handles workspace selection failures and automatically creates missing workspaces.
 func TestWorkspaceErrorHandlingLogic(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name            string
 		err             error
@@ -172,6 +185,7 @@ func TestWorkspaceErrorHandlingLogic(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Simulate the early-return logic from terraform.go lines 494-497
 			var exitCodeErr errUtils.ExitCodeError
 			if !errors.As(tc.err, &exitCodeErr) || exitCodeErr.Code != 1 {
