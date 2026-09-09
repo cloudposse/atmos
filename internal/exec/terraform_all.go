@@ -129,7 +129,7 @@ func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration,
 	}
 
 	if !terraformClosureRequested(info) {
-		return describeTerraformStacksNarrowed(atmosConfig, info, authManager, components)
+		return describe("", nil, info.ProcessTemplates, info.ProcessFunctions)
 	}
 
 	// Closure requested. Scoped evaluation only pays off when the selection is
@@ -159,27 +159,6 @@ func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration,
 		return nil, err
 	}
 	return result.Stacks, nil
-}
-
-// describeTerraformStacksNarrowed is the historical (no-closure) describe:
-// narrowed by -s/--components and the tags/labels early-skip, bit for bit.
-func describeTerraformStacksNarrowed(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager, components []string) (map[string]any, error) {
-	return ExecuteDescribeStacksWithMocks(
-		atmosConfig,
-		info.Stack,
-		components,
-		[]string{cfg.TerraformComponentType},
-		nil,
-		false,
-		info.ProcessTemplates,
-		info.ProcessFunctions,
-		false,
-		info.Skip,
-		authManager,
-		info.UseMocks,
-		info.Tags,
-		info.Labels,
-	)
 }
 
 // terraformPreflightDescribeError preserves structured errors from stack resolution
