@@ -50,13 +50,17 @@ func profilesPublicTestFixture(t *testing.T) string {
 }
 
 func TestProfilesWithIdentity(t *testing.T) {
+	t.Parallel()
+
 	t.Run("nil config returns nil without error", func(t *testing.T) {
+		t.Parallel()
 		got, err := ProfilesWithIdentity(nil, "root-admin")
 		require.NoError(t, err)
 		assert.Nil(t, got)
 	})
 
 	t.Run("empty identity name returns nil without error", func(t *testing.T) {
+		t.Parallel()
 		cfg := &schema.AtmosConfiguration{CliConfigPath: "/anywhere"}
 		got, err := ProfilesWithIdentity(cfg, "")
 		require.NoError(t, err)
@@ -64,6 +68,7 @@ func TestProfilesWithIdentity(t *testing.T) {
 	})
 
 	t.Run("whitespace-only identity name returns nil without error", func(t *testing.T) {
+		t.Parallel()
 		cfg := &schema.AtmosConfiguration{CliConfigPath: "/anywhere"}
 		got, err := ProfilesWithIdentity(cfg, "   ")
 		require.NoError(t, err)
@@ -71,6 +76,7 @@ func TestProfilesWithIdentity(t *testing.T) {
 	})
 
 	t.Run("identity is found in exactly one profile", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := profilesPublicTestFixture(t)
 		cfg := &schema.AtmosConfiguration{
 			CliConfigPath: tmpDir,
@@ -83,6 +89,7 @@ func TestProfilesWithIdentity(t *testing.T) {
 	})
 
 	t.Run("identity is not defined in any profile → empty result", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := profilesPublicTestFixture(t)
 		cfg := &schema.AtmosConfiguration{
 			CliConfigPath: tmpDir,
@@ -95,6 +102,7 @@ func TestProfilesWithIdentity(t *testing.T) {
 	})
 
 	t.Run("malformed profile is skipped; valid profiles still match", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := profilesPublicTestFixture(t)
 
 		// Add a profile whose atmos.yaml is malformed YAML — the identity
@@ -120,13 +128,17 @@ func TestProfilesWithIdentity(t *testing.T) {
 }
 
 func TestProfilesWithAuthConfig(t *testing.T) {
+	t.Parallel()
+
 	t.Run("nil config returns nil without error", func(t *testing.T) {
+		t.Parallel()
 		got, err := ProfilesWithAuthConfig(nil)
 		require.NoError(t, err)
 		assert.Nil(t, got)
 	})
 
 	t.Run("returns both identity- and provider-defining profiles, excluding plain", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := profilesPublicTestFixture(t)
 		cfg := &schema.AtmosConfiguration{
 			CliConfigPath: tmpDir,
@@ -142,6 +154,7 @@ func TestProfilesWithAuthConfig(t *testing.T) {
 	})
 
 	t.Run("no profiles at all returns empty", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "profiles"), 0o755))
 
@@ -156,6 +169,7 @@ func TestProfilesWithAuthConfig(t *testing.T) {
 	})
 
 	t.Run("malformed profile is skipped; valid auth-bearing profiles still returned", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := profilesPublicTestFixture(t)
 
 		// Add a profile with malformed YAML — the auth-config search must
@@ -183,6 +197,8 @@ func TestProfilesWithAuthConfig(t *testing.T) {
 // ProfileDefinesAuthConfig rejects a nil config with ErrInvalidAuthConfig so
 // callers don't silently treat an absent config as "no auth".
 func TestProfileDefinesAuthConfig_NilConfigErrors(t *testing.T) {
+	t.Parallel()
+
 	_, err := ProfileDefinesAuthConfig(nil, "any-profile")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "atmosConfig is nil")
@@ -191,6 +207,8 @@ func TestProfileDefinesAuthConfig_NilConfigErrors(t *testing.T) {
 // ProfileDefinesAuthConfig returns false (no error) for a whitespace-only
 // profile name — callers shouldn't need to pre-trim.
 func TestProfileDefinesAuthConfig_EmptyProfileName(t *testing.T) {
+	t.Parallel()
+
 	cfg := &schema.AtmosConfiguration{CliConfigPath: "/anywhere"}
 	got, err := ProfileDefinesAuthConfig(cfg, "   ")
 	require.NoError(t, err)
@@ -201,6 +219,8 @@ func TestProfileDefinesAuthConfig_EmptyProfileName(t *testing.T) {
 // doesn't exist — same "absence is not an error" contract as the other
 // profile-discovery helpers.
 func TestProfileDefinesAuthConfig_ProfileNotFoundIsNotAnError(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := profilesPublicTestFixture(t)
 	cfg := &schema.AtmosConfiguration{
 		CliConfigPath: tmpDir,
@@ -215,6 +235,8 @@ func TestProfileDefinesAuthConfig_ProfileNotFoundIsNotAnError(t *testing.T) {
 // ProfileDefinesAuthConfig correctly identifies the three cases against the
 // shared fixture: identities-only, providers-only, and no-auth.
 func TestProfileDefinesAuthConfig_ClassifiesProfiles(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := profilesPublicTestFixture(t)
 	cfg := &schema.AtmosConfiguration{
 		CliConfigPath: tmpDir,
@@ -231,6 +253,7 @@ func TestProfileDefinesAuthConfig_ClassifiesProfiles(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.profile, func(t *testing.T) {
+			t.Parallel()
 			got, err := ProfileDefinesAuthConfig(cfg, tc.profile)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)

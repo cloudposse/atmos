@@ -253,7 +253,15 @@ Comment delimiters are detected per language:
 | `--` | SQL, Lua, Haskell |
 | `<!--` | HTML, XML, Markdown |
 
-Use the optional `match=` regex (with exactly one capture group) when the default version-token detection is ambiguous on the target line. Formats without comments (JSON) should use the `template` manager instead.
+Use the optional `match=` regex (with exactly one capture group) when the default version-token detection is ambiguous on the target line. For a comment-hostile format like JSON, use the [`json`](#json) manager (a targeted field write) or the [`template`](#template) manager (a rendered source file) instead.
+
+### `json`
+
+Writes locked values into JSON files at configured field paths, using [sjson](https://github.com/tidwall/sjson)/[gjson](https://github.com/tidwall/gjson) dot-path syntax. `sjson` patches only the targeted field and leaves the rest of the file's bytes — formatting, key order, whitespace — untouched. An optional `format` template (Go template + Sprig, rendered against the resolved version) can reshape the value before it's written. See [Updating JSON Files](/cli/configuration/version/files#updating-json-files) for the full reference and examples.
+
+### `yaml`
+
+Writes locked values into YAML files at configured field paths, using the same format-preserving editor behind [`atmos config set`](/cli/commands/config/config-set) and [`atmos stack set`](/cli/commands/stack/stack-set) — a targeted assignment rather than a full unmarshal/remarshal, so comments, anchors and aliases, and key order on untouched fields survive the write. Like `json`, set entries support an optional `format` template. See [Updating YAML Files](/cli/configuration/version/files#updating-yaml-files) for the full reference, including its dot-notation path syntax and unsupported configurations (multi-document streams, edits that would alter an anchor).
 
 ### `template`
 

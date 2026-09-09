@@ -10,6 +10,8 @@ import (
 )
 
 func TestProcessTemplateWithoutContext(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name        string
 		template    string
@@ -92,6 +94,7 @@ settings:
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Test with nil context
 			result, err := ProcessTmpl(nil, "test.yaml.tmpl", tc.template, nil, false)
 			if tc.expectError {
@@ -115,6 +118,8 @@ settings:
 }
 
 func TestProcessTemplateMixedContext(t *testing.T) {
+	t.Parallel()
+
 	context := map[string]any{
 		"name":    "test-app",
 		"version": "2.0.0",
@@ -141,6 +146,8 @@ calculated: {{ add 10 20 }}`
 }
 
 func TestProcessTemplateWithMissingContext(t *testing.T) {
+	t.Parallel()
+
 	template := `
 app: {{ .name }}
 timestamp: {{ now | date "2006-01-02" }}`
@@ -160,6 +167,8 @@ timestamp: {{ now | date "2006-01-02" }}`
 }
 
 func TestProcessTemplateErrorCases(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		template string
@@ -181,6 +190,7 @@ func TestProcessTemplateErrorCases(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := ProcessTmpl(nil, "test.yaml.tmpl", tc.template, tc.context, false)
 			assert.Error(t, err)
 		})
@@ -189,6 +199,8 @@ func TestProcessTemplateErrorCases(t *testing.T) {
 
 // TestProcessTemplateWithSprigFunctions tests various Sprig template functions work without context.
 func TestProcessTemplateWithSprigFunctions(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		template string
@@ -267,6 +279,7 @@ func TestProcessTemplateWithSprigFunctions(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := ProcessTmpl(nil, "test.yaml.tmpl", tc.template, nil, false)
 			require.NoError(t, err)
 			tc.validate(t, result)
@@ -319,6 +332,8 @@ timestamp: {{ now | date "2006-01-02" }}`
 // TestGetSprigFuncMap_CachingBehavior tests that Sprig function map caching works correctly.
 // This validates P7.7.2 optimization: cached Sprig function maps produce consistent results.
 func TestGetSprigFuncMap_CachingBehavior(t *testing.T) {
+	t.Parallel()
+
 	// Call getSprigFuncMap multiple times
 	funcMap1 := getSprigFuncMap()
 	require.NotNil(t, funcMap1)
@@ -361,6 +376,8 @@ func TestGetSprigFuncMap_CachingBehavior(t *testing.T) {
 // TestGetSprigFuncMap_Concurrent tests thread safety of cached Sprig function map.
 // This validates P7.7.2 optimization: sync.Once guarantees safe concurrent access.
 func TestGetSprigFuncMap_Concurrent(t *testing.T) {
+	t.Parallel()
+
 	const numGoroutines = 100
 
 	// Channel to collect results
@@ -416,6 +433,8 @@ func TestGetSprigFuncMap_Concurrent(t *testing.T) {
 // TestGetSprigFuncMap_ConcurrentTemplateProcessing tests concurrent template processing
 // with cached Sprig function maps. This is a stress test for P7.7.2.
 func TestGetSprigFuncMap_ConcurrentTemplateProcessing(t *testing.T) {
+	t.Parallel()
+
 	const numGoroutines = 50
 
 	templates := []string{

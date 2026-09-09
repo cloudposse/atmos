@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
+	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 func TestResolveTargetByProvenance(t *testing.T) {
@@ -292,10 +293,22 @@ func chdirToConfigFieldTestProject(t *testing.T) {
 // src to dst, preserving each file's permissions. Used to give each test its
 // own disposable copy of a checked-in fixture rather than mutating the
 // tracked files directly.
+//
+// Terraform runtime artifacts (see testhelpers.IsTerraformArtifact) are
+// skipped: they are not fixture source, and on Windows copying one that a
+// concurrent test process is writing fails with "another process has locked
+// a portion of the file" (observed on the basic fixture's mock component
+// terraform.tfstate.d, written by whichever shard-mate ran Terraform in place).
 func copyDirRecursive(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if path != src && testhelpers.IsTerraformArtifact(d.Name()) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		rel, err := filepath.Rel(src, path)
 		if err != nil {
@@ -319,6 +332,34 @@ func copyDirRecursive(src, dst string) error {
 		}
 		return os.WriteFile(target, content, info.Mode())
 	})
+}
+
+// TestCopyDirRecursive_SkipsTerraformArtifacts pins the fixture-copy contract:
+// source files and directories come across, Terraform runtime artifacts (the
+// gitignored state, lock, planfile and generated varfile names that another
+// test process may be writing) do not.
+func TestCopyDirRecursive_SkipsTerraformArtifacts(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+
+	statePath := filepath.Join(src, "components", "terraform", "mock", "terraform.tfstate.d", "prod-mycomponent")
+	require.NoError(t, os.MkdirAll(statePath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(statePath, "terraform.tfstate"), []byte("{}"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(src, "components", "terraform", "mock", ".terraform"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "components", "terraform", "mock", ".terraform.lock.hcl"), []byte(""), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "components", "terraform", "mock", "prod-mock.terraform.tfvars.json"), []byte("{}"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "components", "terraform", "mock", "main.tf"), []byte("# fixture"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(src, "stacks", "deploy"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "stacks", "deploy", "prod.yaml"), []byte("vars: {}"), 0o644))
+
+	require.NoError(t, copyDirRecursive(src, dst))
+
+	assert.FileExists(t, filepath.Join(dst, "components", "terraform", "mock", "main.tf"))
+	assert.FileExists(t, filepath.Join(dst, "stacks", "deploy", "prod.yaml"))
+	assert.NoDirExists(t, filepath.Join(dst, "components", "terraform", "mock", "terraform.tfstate.d"))
+	assert.NoDirExists(t, filepath.Join(dst, "components", "terraform", "mock", ".terraform"))
+	assert.NoFileExists(t, filepath.Join(dst, "components", "terraform", "mock", ".terraform.lock.hcl"))
+	assert.NoFileExists(t, filepath.Join(dst, "components", "terraform", "mock", "prod-mock.terraform.tfvars.json"))
 }
 
 func TestRunStackGet_ExplicitFile(t *testing.T) {

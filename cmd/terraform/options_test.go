@@ -10,6 +10,8 @@ import (
 )
 
 func TestParseTerraformRunOptions(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		setup    func(*viper.Viper)
@@ -265,6 +267,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			v := viper.New()
 			tt.setup(v)
 
@@ -297,6 +300,8 @@ func TestParseTerraformRunOptions(t *testing.T) {
 }
 
 func TestParseTerraformRunOptionsRejectsInvalidValues(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		setup   func(*viper.Viper)
@@ -320,6 +325,7 @@ func TestParseTerraformRunOptionsRejectsInvalidValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			v := viper.New()
 			tt.setup(v)
 
@@ -332,6 +338,8 @@ func TestParseTerraformRunOptionsRejectsInvalidValues(t *testing.T) {
 }
 
 func TestParseTerraformRunOptionsNormalizesValidatedValues(t *testing.T) {
+	t.Parallel()
+
 	v := viper.New()
 	v.Set("failure-mode", " KEEP-GOING ")
 	v.Set("log-order", " GROUPED ")
@@ -344,6 +352,8 @@ func TestParseTerraformRunOptionsNormalizesValidatedValues(t *testing.T) {
 }
 
 func TestTerraformRunOptions_Fields(t *testing.T) {
+	t.Parallel()
+
 	// Test that TerraformRunOptions struct has all expected fields.
 	opts := TerraformRunOptions{
 		ProcessTemplates:        true,
@@ -394,6 +404,8 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 
 // TestApplyOptionsToInfo tests that options are correctly applied to ConfigAndStacksInfo.
 func TestApplyOptionsToInfo(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		opts      *TerraformRunOptions
@@ -509,6 +521,7 @@ func TestApplyOptionsToInfo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			info := &schema.ConfigAndStacksInfo{}
 			applyOptionsToInfo(info, tt.opts)
 			tt.checkInfo(t, info)
@@ -521,6 +534,8 @@ func TestApplyOptionsToInfo(t *testing.T) {
 // means unlimited (-1), =N bounds the depth, boolean spellings stay
 // backward compatible, and invalid values error.
 func TestParseTerraformRunOptionsClosureFlags(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		dependencies     string
@@ -539,6 +554,7 @@ func TestParseTerraformRunOptionsClosureFlags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			v := viper.New()
 			if tt.dependencies != "" {
 				v.Set("include-dependencies", tt.dependencies)
@@ -563,6 +579,8 @@ func TestParseTerraformRunOptionsClosureFlags(t *testing.T) {
 // TestApplyOptionsToInfoClosureFlags asserts the closure depths reach
 // schema.ConfigAndStacksInfo for the scheduler adapter to consume.
 func TestApplyOptionsToInfoClosureFlags(t *testing.T) {
+	t.Parallel()
+
 	info := &schema.ConfigAndStacksInfo{}
 	applyOptionsToInfo(info, &TerraformRunOptions{
 		IncludeDependencies: -1,
