@@ -57,9 +57,9 @@ or credentials. `apply`/`deploy` install or upgrade the release
 
 `template`/`render`, `diff`/`plan`, `values`, and `apply`/`deploy` accept
 Helm-compatible value overrides for a single invocation. They never modify
-component or stack configuration, so use the same arguments with `values`,
-`diff`, and `apply` to inspect and preview the exact release values that will
-be deployed.
+component or stack configuration. Use the same arguments across all three:
+`values` to inspect resolved values with sensitive values masked, `diff` to
+preview the release changes, and `apply` to deploy them.
 
 ```shell
 atmos helm diff monitoring -s plat-ue2-dev \
