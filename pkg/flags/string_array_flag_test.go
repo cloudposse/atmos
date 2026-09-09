@@ -23,3 +23,18 @@ func TestStringArrayFlagPreservesRepeatedCommaValues(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"labels=one,two", "image.tag=1.2.3"}, values)
 }
+
+func TestStringArrayFlagRegistryAppliesNoOptDefVal(t *testing.T) {
+	registry := NewFlagRegistry()
+	registry.Register(&StringArrayFlag{StringSliceFlag: StringSliceFlag{
+		Name:        "set",
+		NoOptDefVal: "default=value",
+	}})
+	cmd := &cobra.Command{Use: "test"}
+	registry.RegisterFlags(cmd)
+
+	require.NoError(t, cmd.Flags().Parse([]string{"--set"}))
+	values, err := cmd.Flags().GetStringArray("set")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"default=value"}, values)
+}

@@ -86,6 +86,7 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	assert.Nil(t, valuesCmd.Flag("dependency-update"))
 	assert.Nil(t, valuesCmd.Flag("all"))
 	assert.Nil(t, valuesCmd.Flag("affected"))
+	assert.Contains(t, valuesCmd.Example, "atmos helm values monitoring -s plat-ue2-dev --set image.tag=2026.09.09")
 	for _, name := range helmValueOverrideFlags {
 		assert.NotNil(t, valuesCmd.Flag(name), "expected %q flag on values", name)
 	}

@@ -129,6 +129,9 @@ func newOperationCommand(name, short string) *cobra.Command {
 	parser.SetPositionalArgs(specs, validateOperationArgs, usage)
 	parser.RegisterFlags(cmd)
 	cmd.ValidArgsFunction = componentArgCompletion
+	if name == helmValuesName {
+		cmd.Example = "  atmos helm values monitoring -s plat-ue2-dev --set image.tag=2026.09.09"
+	}
 
 	return cmd
 }
