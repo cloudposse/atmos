@@ -1,6 +1,6 @@
 ---
 title: GitOps with Flux
-tags: [Emulators, Kubernetes, Automation]
+tags: [Kubernetes, Emulators, Automation]
 cast:
   file: /casts/examples/local-gitops/lifecycle.cast
   title: atmos gitops with flux lifecycle
