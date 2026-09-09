@@ -12,6 +12,8 @@ import (
 )
 
 func TestNewResolutionContext(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 
 	assert.NotNil(t, ctx)
@@ -22,6 +24,8 @@ func TestNewResolutionContext(t *testing.T) {
 }
 
 func TestResolutionContextPushPop(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -71,6 +75,8 @@ func TestResolutionContextPushPop(t *testing.T) {
 }
 
 func TestResolutionContextDetectsDirectCycle(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -97,6 +103,8 @@ func TestResolutionContextDetectsDirectCycle(t *testing.T) {
 }
 
 func TestResolutionContextDetectsIndirectCycle(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -138,6 +146,8 @@ func TestResolutionContextDetectsIndirectCycle(t *testing.T) {
 }
 
 func TestResolutionContextErrorMessage(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -182,6 +192,8 @@ func TestResolutionContextErrorMessage(t *testing.T) {
 }
 
 func TestResolutionContextAllowsValidChain(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -226,6 +238,8 @@ func TestResolutionContextAllowsValidChain(t *testing.T) {
 }
 
 func TestResolutionContextClone(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -261,12 +275,16 @@ func TestResolutionContextClone(t *testing.T) {
 }
 
 func TestResolutionContextCloneNil(t *testing.T) {
+	t.Parallel()
+
 	var ctx *ResolutionContext
 	cloned := ctx.Clone()
 	assert.Nil(t, cloned)
 }
 
 func TestGetOrCreateResolutionContext(t *testing.T) {
+	t.Parallel()
+
 	// Clear any existing context.
 	ClearResolutionContext()
 	defer ClearResolutionContext()
@@ -295,6 +313,8 @@ func TestGetOrCreateResolutionContext(t *testing.T) {
 }
 
 func TestClearResolutionContext(t *testing.T) {
+	t.Parallel()
+
 	// Clear any existing context.
 	ClearResolutionContext()
 
@@ -319,6 +339,8 @@ func TestClearResolutionContext(t *testing.T) {
 }
 
 func TestGetGoroutineID(t *testing.T) {
+	t.Parallel()
+
 	gid := getGoroutineID()
 
 	// Should be a numeric string.
@@ -341,6 +363,8 @@ func TestGetGoroutineID(t *testing.T) {
 }
 
 func TestResolutionContextMixedFunctionTypes(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -373,6 +397,8 @@ func TestResolutionContextMixedFunctionTypes(t *testing.T) {
 }
 
 func TestResolutionContextPopEmptyStack(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -386,6 +412,8 @@ func TestResolutionContextPopEmptyStack(t *testing.T) {
 }
 
 func TestResolutionContextMultipleStacksSameComponent(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -413,6 +441,8 @@ func TestResolutionContextMultipleStacksSameComponent(t *testing.T) {
 }
 
 func TestResolutionContextDiamondDependency(t *testing.T) {
+	t.Parallel()
+
 	// Diamond pattern: A depends on B and C, both B and C depend on D.
 	// This should be allowed (not a cycle).
 	ctx := NewResolutionContext()
@@ -440,6 +470,8 @@ func TestResolutionContextDiamondDependency(t *testing.T) {
 }
 
 func TestBuildCircularDependencyErrorFormatting(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -494,6 +526,8 @@ func TestBuildCircularDependencyErrorFormatting(t *testing.T) {
 }
 
 func TestGoroutineLocalContextIsolation(t *testing.T) {
+	t.Parallel()
+
 	// Clear any existing contexts.
 	ClearResolutionContext()
 	defer ClearResolutionContext()
@@ -546,6 +580,8 @@ func TestGoroutineLocalContextIsolation(t *testing.T) {
 }
 
 func TestGetOrCreateResolutionContextMultipleCalls(t *testing.T) {
+	t.Parallel()
+
 	ClearResolutionContext()
 	defer ClearResolutionContext()
 
@@ -559,6 +595,8 @@ func TestGetOrCreateResolutionContextMultipleCalls(t *testing.T) {
 }
 
 func TestNewResolutionContextInitialization(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 
 	// Check all fields are properly initialized.

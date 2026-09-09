@@ -218,4 +218,7 @@ exclude = [
   # asdf-vm.com's docs site intermittently resets connections from CI runners;
   # verified to return 200 outside CI via curl.
   "asdf-vm\\.com",
+  # k3s.io (GitHub Pages-fronted) intermittently resets connections from CI
+  # runners; verified to return 200 outside CI via curl.
+  "k3s\\.io",
 ]

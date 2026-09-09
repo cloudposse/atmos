@@ -390,6 +390,15 @@ func isRetryableGitError(err error) bool {
 	transientPatterns := []string{
 		"connection reset",
 		"connection refused",
+		// Resolver and connect failures in git's own wording. A hosted CI
+		// runner whose DNS proxy briefly drops a query reports these, and they
+		// clear on the next attempt just like a reset connection does.
+		"could not resolve host",
+		"no such host",
+		"could not connect to server",
+		"failed to connect to",
+		"network is unreachable",
+		"name resolution",
 		"timeout",
 		"timed out",
 		"eof",
