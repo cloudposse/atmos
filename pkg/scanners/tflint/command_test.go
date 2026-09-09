@@ -200,6 +200,19 @@ func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
 	assert.Equal(t, []string{"app:dev", "vpc:dev"}, linted)
 }
 
+func TestExecutePassesConfiguredTemplateDelimiterToGraph(t *testing.T) {
+	stubInitCLIConfig(t, "[[", "]]")
+
+	originalGraph := buildTerraformGraph
+	buildTerraformGraph = func(_ map[string]any, delimiters ...string) (*dependency.Graph, error) {
+		require.Equal(t, []string{"[["}, delimiters)
+		return &dependency.Graph{}, nil
+	}
+	t.Cleanup(func() { buildTerraformGraph = originalGraph })
+
+	require.NoError(t, Execute(context.Background(), testRuntime(), &schema.ConfigAndStacksInfo{}, nil, 0))
+}
+
 func TestExecuteDisablesComponentAuthDuringStackDiscovery(t *testing.T) {
 	stubInitCLIConfig(t)
 

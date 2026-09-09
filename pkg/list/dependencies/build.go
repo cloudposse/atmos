@@ -5,7 +5,6 @@
 package dependencies
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 
@@ -79,23 +78,31 @@ func BuildGraph(stacks map[string]any) (*dependency.Graph, error) {
 				targetStack = dep.Stack
 			}
 			toID := NodeID(dep.Component, targetStack)
-			//nolint:nestif // Required, optional, legacy, and unavailable states have distinct contracts.
 			if reason, unavailable := targetReasons[toID]; unavailable {
-				if modern && !dep.IsRequired() {
+				switch {
+				case modern && !dep.IsRequired():
 					log.Debug("optional dependency skipped", "event", "optional_dependency_skipped", "from", fromID, "to", toID,
 						"from_component", componentName, "from_stack", stackName, "to_component", dep.Component,
 						"to_stack", targetStack, "kind", dep.Kind, "reason", reason)
-				} else {
+				case modern:
+					targetErr := errUtils.ErrDependencyTargetUnavailable
+					buildErr = fmt.Errorf("%w: from=%s to=%s reason=%s", targetErr, fromID, toID, reason)
+					return
+				default:
 					log.Debug("dependency target not in graph", "from", fromID, "to", toID)
 				}
 				continue
 			}
 			if _, exists := graph.GetNode(toID); !exists {
-				if modern && !dep.IsRequired() {
+				switch {
+				case modern && !dep.IsRequired():
 					log.Debug("optional dependency skipped", "event", "optional_dependency_skipped", "from", fromID, "to", toID,
 						"from_component", componentName, "from_stack", stackName, "to_component", dep.Component,
 						"to_stack", targetStack, "kind", dep.Kind, "reason", "target_missing")
-				} else {
+				case modern:
+					buildErr = fmt.Errorf("%w: from=%s to=%s", errUtils.ErrDependencyTargetNotFound, fromID, toID)
+					return
+				default:
 					log.Debug("dependency target not in graph", "from", fromID, "to", toID)
 				}
 				continue
@@ -227,19 +234,20 @@ func extractComponentDependenciesWithStack(componentSection map[string]any, stac
 // surface and returns its component-to-component entries plus a boolean
 // indicating whether the `components` key was present at all.
 func dependenciesFromComponentsSection(componentSection map[string]any, stackName string) ([]schema.ComponentDependency, bool, error) {
-	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
-	if !ok {
+	dependenciesValue, exists := componentSection[cfg.DependenciesSectionName]
+	if !exists {
 		return nil, false, nil
+	}
+	depsSection, ok := dependenciesValue.(map[string]any)
+	if !ok {
+		return nil, true, fmt.Errorf("%w: %w", errUtils.ErrDependencyResolution, errUtils.ErrInvalidDependenciesSection)
 	}
 	if _, hasComponents := depsSection["components"]; !hasComponents {
 		return nil, false, nil
 	}
 	deps, err := schema.ParseComponentDependencies(depsSection, cfg.TerraformComponentType, stackName)
 	if err != nil {
-		if errors.Is(err, schema.ErrComponentDependencyInvalidRequired) {
-			return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
-		}
-		return deps, true, nil
+		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
 	}
 	return deps, true, nil
 }

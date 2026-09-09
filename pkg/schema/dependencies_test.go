@@ -322,7 +322,6 @@ func TestParseComponentDependenciesNormalizesOptionalEdges(t *testing.T) {
 			map[string]any{"component": "vpc", "required": true},
 			map[string]any{"name": "database", "required": "false", "stack": "shared"},
 			map[string]any{"kind": "file", "path": "config.yaml"},
-			map[string]any{"required": false},
 		},
 	}, "terraform", "dev")
 
@@ -499,14 +498,18 @@ func TestDependencies_Normalize_FilesFoldersSiblings(t *testing.T) {
 	})
 }
 
-func TestDependencies_Normalize_MissingComponentIsPreservedForCallersToSkip(t *testing.T) {
-	required := false
-	d := &Dependencies{
-		Components: []ComponentDependency{{Required: &required}},
+func TestDependencies_Normalize_RejectsMissingComponent(t *testing.T) {
+	tests := []ComponentDependency{
+		{},
+		{Name: ""},
+		{Component: ""},
+		{Stack: "prod"},
+		{Kind: "terraform"},
 	}
-
-	require.NoError(t, d.Normalize())
-	assert.Empty(t, d.Components[0].Component)
+	for _, entry := range tests {
+		err := (&Dependencies{Components: []ComponentDependency{entry}}).Normalize()
+		require.ErrorIs(t, err, ErrComponentDependencyMissingComponent)
+	}
 }
 
 // Helpers for the equivalence assertion.

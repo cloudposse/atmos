@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -104,7 +105,7 @@ func TestBuildGraph_DependenciesComponentsEmptyPreventsSettingsFallback(t *testi
 	assert.Empty(t, app.Dependencies, "explicit dependencies.components must not fall back to settings.depends_on")
 }
 
-func TestBuildGraph_DependenciesComponentsInvalidPreventsSettingsFallback(t *testing.T) {
+func TestBuildGraph_DependenciesComponentsInvalidFails(t *testing.T) {
 	stacks := terraformStacks(map[string]map[string]map[string]any{
 		"dev": {
 			"vpc": {},
@@ -121,12 +122,8 @@ func TestBuildGraph_DependenciesComponentsInvalidPreventsSettingsFallback(t *tes
 		},
 	})
 
-	graph, err := BuildGraph(stacks)
-	require.NoError(t, err)
-
-	app, ok := graph.GetNode(NodeID("app", "dev"))
-	require.True(t, ok)
-	assert.Empty(t, app.Dependencies, "invalid authoritative dependencies.components must not fall back to settings.depends_on")
+	_, err := BuildGraph(stacks)
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
 }
 
 func TestBuildGraph_InvalidRequiredValueFails(t *testing.T) {
@@ -254,6 +251,19 @@ func TestBuildGraph_SkipsMissingTarget(t *testing.T) {
 	assert.Empty(t, app.Dependencies)
 }
 
+func TestBuildGraph_FailsForRequiredUnavailableTarget(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {
+				"dependencies": map[string]any{"components": []any{map[string]any{"component": "missing"}}},
+			},
+		},
+	})
+
+	_, err := BuildGraph(stacks)
+	require.ErrorIs(t, err, errUtils.ErrDependencyTargetNotFound)
+}
+
 func TestBuildGraph_ToleratesCycles(t *testing.T) {
 	stacks := terraformStacks(map[string]map[string]map[string]any{
 		"dev": {
@@ -271,7 +281,7 @@ func TestBuildGraph_ToleratesCycles(t *testing.T) {
 	assert.True(t, hasCycle)
 }
 
-func TestBuildGraph_MalformedDependenciesSectionFallsBackToSettings(t *testing.T) {
+func TestBuildGraph_MalformedDependenciesSectionFails(t *testing.T) {
 	stacks := terraformStacks(map[string]map[string]map[string]any{
 		"dev": {
 			"vpc": {},
@@ -284,7 +294,7 @@ func TestBuildGraph_MalformedDependenciesSectionFallsBackToSettings(t *testing.T
 		},
 	})
 
-	graph, err := BuildGraph(stacks)
-	require.NoError(t, err)
-	assert.Equal(t, []string{NodeID("vpc", "dev")}, graph.Nodes[NodeID("app", "dev")].Dependencies)
+	_, err := BuildGraph(stacks)
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+	require.ErrorIs(t, err, errUtils.ErrInvalidDependenciesSection)
 }

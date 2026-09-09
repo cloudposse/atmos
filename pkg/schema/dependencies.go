@@ -296,7 +296,8 @@ func (d *Dependencies) OrEmpty() Dependencies {
 //     the typed slices directly.
 //
 // Returns an error if any entry has both `component` and `name` set to
-// different non-empty values, or if a path-based entry is missing `path`.
+// different non-empty values, if a path-based entry is missing `path`, or if a
+// component dependency omits both `component` and `name`.
 func (d *Dependencies) Normalize() error {
 	if d == nil {
 		return nil
@@ -310,15 +311,21 @@ func (d *Dependencies) Normalize() error {
 }
 
 // normalizeComponentEntries resolves the name↔component alias on every entry
-// and validates that any inline path-based entry has a non-empty path.
+// and validates that each entry has the fields required by its kind.
 func (d *Dependencies) normalizeComponentEntries() error {
 	for i := range d.Components {
 		entry := &d.Components[i]
 		if err := normalizeNameAlias(entry, i); err != nil {
 			return err
 		}
-		if (entry.IsFileDependency() || entry.IsFolderDependency()) && entry.Path == "" {
-			return fmt.Errorf("%w (entry %d, kind=%q)", ErrComponentDependencyMissingPath, i, entry.Kind)
+		if entry.IsFileDependency() || entry.IsFolderDependency() {
+			if entry.Path == "" {
+				return fmt.Errorf("%w (entry %d, kind=%q)", ErrComponentDependencyMissingPath, i, entry.Kind)
+			}
+			continue
+		}
+		if entry.Component == "" {
+			return fmt.Errorf("%w (entry %d)", ErrComponentDependencyMissingComponent, i)
 		}
 	}
 	return nil

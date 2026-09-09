@@ -72,6 +72,17 @@ func TestGetComponentDependencies(t *testing.T) {
 		require.ErrorIs(t, err, schema.ErrComponentDependencyInvalidRequired)
 	})
 
+	t.Run("returns all modern dependency parse errors", func(t *testing.T) {
+		_, err := getComponentDependenciesWithError(map[string]any{
+			"dependencies": map[string]any{
+				"components": "not-a-list",
+			},
+			"settings": map[string]any{"depends_on": []any{"vpc"}},
+		})
+
+		require.Error(t, err)
+	})
+
 	t.Run("falls back to settings.depends_on when dependencies.components is empty", func(t *testing.T) {
 		componentMap := map[string]any{
 			"dependencies": map[string]any{
@@ -140,7 +151,7 @@ func TestGetComponentDependencies(t *testing.T) {
 		assert.Equal(t, dependencySourceSettingsDependsOn, source)
 	})
 
-	t.Run("falls back to settings.depends_on when dependencies.components only has inline file and folder deps", func(t *testing.T) {
+	t.Run("dependencies.components with only path entries prevents settings fallback", func(t *testing.T) {
 		componentMap := map[string]any{
 			"dependencies": map[string]any{
 				"components": []any{
@@ -157,10 +168,9 @@ func TestGetComponentDependencies(t *testing.T) {
 
 		deps, settingsSection, source := getComponentDependencies(componentMap)
 
-		require.Len(t, deps, 1)
-		assert.Equal(t, "vpc", deps[0].Component)
+		assert.Empty(t, deps)
 		assert.NotNil(t, settingsSection)
-		assert.Equal(t, dependencySourceSettingsDependsOn, source)
+		assert.Equal(t, dependencySourceDependenciesComponents, source)
 	})
 
 	t.Run("returns nil when no dependencies defined", func(t *testing.T) {

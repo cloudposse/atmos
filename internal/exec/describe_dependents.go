@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -565,24 +564,22 @@ func getComponentDependenciesWithError(componentMap map[string]any) (componentDe
 	// Get settings section for later use (Spacelift/Atlantis config and IncludeSettings).
 	settingsSection, _ := componentMap["settings"].(map[string]any)
 
-	if depsSection, ok := componentMap[cfg.DependenciesSectionName].(map[string]any); ok {
-		if _, hasComponents := depsSection["components"]; hasComponents {
-			componentDeps, err := schema.ParseComponentDependencies(depsSection, "", "")
-			if errors.Is(err, schema.ErrComponentDependencyInvalidRequired) {
-				return componentDependenciesResult{settingsSection: settingsSection}, err
-			}
-			if err != nil && len(componentDeps) > 0 {
-				log.Warn("invalid dependencies section; entries may be silently ignored", "error", err)
-			}
-			componentDeps = filterComponentDependencies(componentDeps)
-			if len(componentDeps) > 0 {
-				return componentDependenciesResult{
-					dependencies:    componentDeps,
-					settingsSection: settingsSection,
-					source:          dependencySourceDependenciesComponents,
-				}, nil
-			}
+	dependenciesValue, exists := componentMap[cfg.DependenciesSectionName]
+	depsSection, ok := dependenciesValue.(map[string]any)
+	if exists && !ok {
+		return componentDependenciesResult{settingsSection: settingsSection}, fmt.Errorf("%w: %s must be a map", errUtils.ErrInvalidDependenciesSection, cfg.DependenciesSectionName)
+	}
+	if _, hasComponents := depsSection["components"]; ok && hasComponents {
+		componentDeps, err := schema.ParseComponentDependencies(depsSection, "", "")
+		if err != nil {
+			return componentDependenciesResult{settingsSection: settingsSection}, err
 		}
+		componentDeps = filterComponentDependencies(componentDeps)
+		return componentDependenciesResult{
+			dependencies:    componentDeps,
+			settingsSection: settingsSection,
+			source:          dependencySourceDependenciesComponents,
+		}, nil
 	}
 
 	if deps, source, found := getLegacyComponentDependencies(componentMap, settingsSection); found {

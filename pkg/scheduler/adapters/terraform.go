@@ -966,8 +966,11 @@ func addTerraformDependencies(
 				continue
 			}
 			if dep.IsRequired() {
-				log.Warn("Dependency target not found", "from", fromID, "to", toID)
-				continue
+				targetErr := errUtils.ErrDependencyTargetNotFound
+				if target.reason != "target_missing" {
+					targetErr = errUtils.ErrDependencyTargetUnavailable
+				}
+				return fmt.Errorf("%w: from=%s to=%s reason=%s", targetErr, fromID, toID, target.reason)
 			}
 			log.Info("optional dependency skipped", "event", "optional_dependency_skipped",
 				"from", fromID, "to", toID, "from_component", componentName, "from_stack", stackName,
@@ -1009,7 +1012,7 @@ func modernTerraformDependencies(componentSection map[string]any, stackName stri
 	}
 	depsSection, ok := dependenciesValue.(map[string]any)
 	if !ok {
-		return nil, false, nil
+		return nil, true, fmt.Errorf("%w: %s must be a map", errUtils.ErrInvalidDependenciesSection, cfg.DependenciesSectionName)
 	}
 	if _, hasComponents := depsSection["components"]; !hasComponents {
 		return nil, false, nil
@@ -1019,7 +1022,7 @@ func modernTerraformDependencies(componentSection map[string]any, stackName stri
 	if err != nil {
 		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
 	}
-	return deps, len(deps) > 0, nil
+	return deps, true, nil
 }
 
 func legacyTerraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, error) {

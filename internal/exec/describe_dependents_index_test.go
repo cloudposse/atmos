@@ -258,6 +258,8 @@ func TestFindComponentSectionInCachedStacks_Helmfile(t *testing.T) {
 }
 
 func TestFindComponentSectionInCachedStacks_AllTypesWithPrecedence(t *testing.T) {
+	t.Parallel()
+
 	stacks := map[string]any{
 		"dev-use1": map[string]any{
 			"components": map[string]any{
@@ -277,6 +279,8 @@ func TestFindComponentSectionInCachedStacks_AllTypesWithPrecedence(t *testing.T)
 }
 
 func TestFindComponentSectionInCachedStacks_PackerOnly(t *testing.T) {
+	t.Parallel()
+
 	stacks := map[string]any{
 		"dev-use1": map[string]any{
 			"components": map[string]any{

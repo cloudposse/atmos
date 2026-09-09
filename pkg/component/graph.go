@@ -441,8 +441,11 @@ func addComponentDependencies(
 				continue
 			}
 			if dep.IsRequired() {
-				log.Warn("Dependency target not found", "from", fromID, "to", toID)
-				continue
+				targetErr := errUtils.ErrDependencyTargetNotFound
+				if target.reason != "target_missing" {
+					targetErr = errUtils.ErrDependencyTargetUnavailable
+				}
+				return fmt.Errorf("%w: from=%s to=%s reason=%s", targetErr, fromID, toID, target.reason)
 			}
 			log.Info("optional dependency skipped", "event", "optional_dependency_skipped",
 				"from", fromID, "to", toID, "from_component", params.componentName, "from_stack", params.stackName,
@@ -476,21 +479,22 @@ func componentDependencies(componentSection map[string]any, componentType, stack
 
 // dependenciesFromSection extracts dependencies from the 'dependencies.components' section.
 func dependenciesFromSection(componentSection map[string]any, componentType, stackName string) ([]schema.ComponentDependency, bool, error) {
-	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
-	if !ok {
+	dependenciesValue, exists := componentSection[cfg.DependenciesSectionName]
+	if !exists {
 		return nil, false, nil
+	}
+	depsSection, ok := dependenciesValue.(map[string]any)
+	if !ok {
+		return nil, true, fmt.Errorf("%w: %w", errUtils.ErrDependencyResolution, errUtils.ErrInvalidDependenciesSection)
 	}
 	if _, hasComponents := depsSection["components"]; !hasComponents {
 		return nil, false, nil
 	}
 	deps, err := schema.ParseComponentDependencies(depsSection, componentType, stackName)
 	if err != nil {
-		if errors.Is(err, schema.ErrComponentDependencyInvalidRequired) {
-			return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
-		}
-		return deps, len(deps) > 0, nil
+		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
 	}
-	return deps, len(deps) > 0, nil
+	return deps, true, nil
 }
 
 // legacyDependenciesFromSettings extracts dependencies from the deprecated 'settings.depends_on' section.

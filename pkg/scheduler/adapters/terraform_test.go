@@ -231,22 +231,21 @@ func TestTerraformDependenciesModernAndLegacy(t *testing.T) {
 	})
 }
 
-func TestTerraformDependenciesFallsBackFromMalformedDependenciesSection(t *testing.T) {
-	dependencies, err := terraformDependencies(map[string]any{
+func TestTerraformDependenciesRejectsMalformedDependenciesSection(t *testing.T) {
+	_, err := terraformDependencies(map[string]any{
 		cfg.DependenciesSectionName: "not-a-map",
 		cfg.SettingsSectionName:     map[string]any{"depends_on": []any{"vpc"}},
 	})
-	require.NoError(t, err)
-	require.Equal(t, []schema.ComponentDependency{{Component: "vpc"}}, dependencies)
+	require.ErrorIs(t, err, errUtils.ErrInvalidDependenciesSection)
 }
 
-func TestTerraformDependenciesEmptyModernListFallsBackToSettings(t *testing.T) {
+func TestTerraformDependenciesEmptyModernListPreventsSettingsFallback(t *testing.T) {
 	dependencies, err := terraformDependencies(map[string]any{
 		cfg.DependenciesSectionName: map[string]any{"components": []any{}},
 		cfg.SettingsSectionName:     map[string]any{"depends_on": []any{"vpc"}},
 	})
 	require.NoError(t, err)
-	require.Equal(t, []schema.ComponentDependency{{Component: "vpc"}}, dependencies)
+	require.Empty(t, dependencies)
 }
 
 func TestAddTerraformDependenciesOptionalUnresolvedTargetFails(t *testing.T) {
@@ -1077,6 +1076,31 @@ func TestBuildTerraformGraphSkipsUnavailableOptionalDependencies(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, []string{"present-dev"}, app.Dependencies)
 	require.True(t, app.OptionalDependencies["present-dev"])
+}
+
+func TestBuildTerraformGraphFailsForRequiredUnavailableDependencies(t *testing.T) {
+	tests := []struct {
+		name       string
+		target     string
+		targetBody map[string]any
+		wantErr    error
+	}{
+		{name: "missing", target: "missing", wantErr: errUtils.ErrDependencyTargetNotFound},
+		{name: "disabled", target: "disabled", targetBody: terraformAdapterComponent("selected", nil, nil), wantErr: errUtils.ErrDependencyTargetUnavailable},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			components := map[string]any{
+				"app": terraformAdapterComponent("selected", []any{map[string]any{"name": test.target}}, nil),
+			}
+			if test.targetBody != nil {
+				test.targetBody[cfg.MetadataSectionName].(map[string]any)["enabled"] = false
+				components[test.target] = test.targetBody
+			}
+			_, err := BuildTerraformGraph(map[string]any{"dev": map[string]any{cfg.ComponentsSectionName: map[string]any{cfg.TerraformSectionName: components}}})
+			require.ErrorIs(t, err, test.wantErr)
+		})
+	}
 }
 
 func TestExecuteTerraformKeepsIndependentComponentsSequential(t *testing.T) {
