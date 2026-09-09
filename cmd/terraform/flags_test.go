@@ -12,6 +12,8 @@ import (
 )
 
 func TestTerraformFlags(t *testing.T) {
+	t.Parallel()
+
 	registry := TerraformFlags()
 
 	// Should have common flags (stack, dry-run) + Terraform-specific flags including identity.
@@ -49,6 +51,8 @@ func TestTerraformFlags(t *testing.T) {
 }
 
 func TestBackendExecutionFlags(t *testing.T) {
+	t.Parallel()
+
 	registry := BackendExecutionFlags()
 
 	// Should have 2 backend execution flags.
@@ -76,6 +80,8 @@ func TestBackendExecutionFlags(t *testing.T) {
 }
 
 func TestTerraformAffectedFlags(t *testing.T) {
+	t.Parallel()
+
 	registry := TerraformAffectedFlags()
 
 	// Should have 8 flags: 7 affected flags + the include-dependencies closure flag.
@@ -112,6 +118,8 @@ func TestTerraformAffectedFlags(t *testing.T) {
 }
 
 func TestWithTerraformFlags(t *testing.T) {
+	t.Parallel()
+
 	// Create a standard parser with terraform flags.
 	parser := flags.NewStandardParser(
 		WithTerraformFlags(),
@@ -127,6 +135,8 @@ func TestWithTerraformFlags(t *testing.T) {
 }
 
 func TestWithBackendExecutionFlags(t *testing.T) {
+	t.Parallel()
+
 	// Create a standard parser with backend execution flags.
 	parser := flags.NewStandardParser(
 		WithBackendExecutionFlags(),
@@ -141,6 +151,8 @@ func TestWithBackendExecutionFlags(t *testing.T) {
 }
 
 func TestWithTerraformAffectedFlags(t *testing.T) {
+	t.Parallel()
+
 	// Create a standard parser with affected flags.
 	parser := flags.NewStandardParser(
 		WithTerraformAffectedFlags(),
@@ -157,6 +169,8 @@ func TestWithTerraformAffectedFlags(t *testing.T) {
 }
 
 func TestCombinedTerraformFlags(t *testing.T) {
+	t.Parallel()
+
 	// Create a standard parser with terraform, affected, and backend execution flags.
 	parser := flags.NewStandardParser(
 		WithTerraformFlags(),
@@ -187,6 +201,8 @@ func TestCombinedTerraformFlags(t *testing.T) {
 // TestExecutionFlagsProperties verifies that shared execution flags have correct properties.
 // These flags are in TerraformFlags() and shared across all terraform commands.
 func TestExecutionFlagsProperties(t *testing.T) {
+	t.Parallel()
+
 	registry := TerraformFlags()
 
 	tests := []struct {
@@ -228,6 +244,7 @@ func TestExecutionFlagsProperties(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			flag := registry.Get(tc.flagName)
 			require.NotNil(t, flag, "%s flag should be registered", tc.flagName)
 
@@ -252,7 +269,10 @@ func TestExecutionFlagsProperties(t *testing.T) {
 // TestFlagsCobraRegistration verifies that flags are properly registered on Cobra commands.
 // This test ensures the full pipeline from flag definition to CLI availability works.
 func TestFlagsCobraRegistration(t *testing.T) {
+	t.Parallel()
+
 	t.Run("shared terraform flags are visible on cobra command", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		parser := flags.NewStandardParser(WithTerraformFlags())
 		parser.RegisterFlags(cmd)
@@ -272,6 +292,7 @@ func TestFlagsCobraRegistration(t *testing.T) {
 	})
 
 	t.Run("backend execution flags are visible on cobra command", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		parser := flags.NewStandardParser(WithBackendExecutionFlags())
 		parser.RegisterFlags(cmd)
@@ -289,6 +310,7 @@ func TestFlagsCobraRegistration(t *testing.T) {
 	})
 
 	t.Run("affected flags are visible on cobra command", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		parser := flags.NewStandardParser(WithTerraformAffectedFlags())
 		parser.RegisterFlags(cmd)
@@ -313,7 +335,10 @@ func TestFlagsCobraRegistration(t *testing.T) {
 
 // TestFlagsViperBinding verifies that flags are properly bound to Viper for value retrieval.
 func TestFlagsViperBinding(t *testing.T) {
+	t.Parallel()
+
 	t.Run("shared terraform flags bind to viper", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		v := viper.New()
 		parser := flags.NewStandardParser(WithTerraformFlags())
@@ -330,6 +355,7 @@ func TestFlagsViperBinding(t *testing.T) {
 	})
 
 	t.Run("backend execution flags bind to viper", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		v := viper.New()
 		parser := flags.NewStandardParser(WithBackendExecutionFlags())
@@ -346,6 +372,7 @@ func TestFlagsViperBinding(t *testing.T) {
 	})
 
 	t.Run("affected flags bind to viper", func(t *testing.T) {
+		t.Parallel()
 		cmd := &cobra.Command{Use: "test"}
 		v := viper.New()
 		parser := flags.NewStandardParser(WithTerraformAffectedFlags())
@@ -378,7 +405,10 @@ func getEnvVarsFromFlag(flag flags.Flag) []string {
 
 // TestFlagsEnvironmentVariables verifies that environment variables are properly configured.
 func TestFlagsEnvironmentVariables(t *testing.T) {
+	t.Parallel()
+
 	t.Run("shared terraform flags have correct env var bindings", func(t *testing.T) {
+		t.Parallel()
 		registry := TerraformFlags()
 
 		envVarTests := []struct {
@@ -402,6 +432,7 @@ func TestFlagsEnvironmentVariables(t *testing.T) {
 	})
 
 	t.Run("backend execution flags have correct env var bindings", func(t *testing.T) {
+		t.Parallel()
 		registry := BackendExecutionFlags()
 
 		envVarTests := []struct {
@@ -423,6 +454,7 @@ func TestFlagsEnvironmentVariables(t *testing.T) {
 	})
 
 	t.Run("affected flags have correct env var bindings", func(t *testing.T) {
+		t.Parallel()
 		registry := TerraformAffectedFlags()
 
 		envVarTests := []struct {
@@ -451,6 +483,8 @@ func TestFlagsEnvironmentVariables(t *testing.T) {
 
 // TestIdentityFlagConfiguration verifies the identity flag has correct NoOptDefVal for interactive selection.
 func TestIdentityFlagConfiguration(t *testing.T) {
+	t.Parallel()
+
 	registry := TerraformFlags()
 	flag := registry.Get("identity")
 	require.NotNil(t, flag)

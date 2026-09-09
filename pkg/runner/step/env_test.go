@@ -14,10 +14,13 @@ import (
 // This file tests the Execute method.
 
 func TestEnvHandler_Execute(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("env")
 	require.True(t, ok)
 
 	t.Run("sets single environment variable", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Type: "env",
@@ -38,6 +41,7 @@ func TestEnvHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("export false keeps value available to templates only", func(t *testing.T) {
+		t.Parallel()
 		export := false
 		step := &schema.WorkflowStep{
 			Name:   "template-only",
@@ -59,6 +63,7 @@ func TestEnvHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("sets multiple environment variables", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Type: "env",
@@ -80,6 +85,7 @@ func TestEnvHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("resolves templates in values", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Type: "env",
@@ -98,6 +104,7 @@ func TestEnvHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("returns error for invalid template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Type: "env",
@@ -114,6 +121,7 @@ func TestEnvHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("overwrites existing env var", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Type: "env",
@@ -132,6 +140,7 @@ func TestEnvHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("returns empty result value", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Type: "env",

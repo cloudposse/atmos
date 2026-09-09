@@ -15,10 +15,13 @@ import (
 // This file tests the Execute method.
 
 func TestJoinHandler_Execute(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("join")
 	require.True(t, ok)
 
 	t.Run("joins options with default separator", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "join",
@@ -33,6 +36,7 @@ func TestJoinHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("joins options with custom separator", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:      "test",
 			Type:      "join",
@@ -48,6 +52,7 @@ func TestJoinHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("joins options with empty separator", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:      "test",
 			Type:      "join",
@@ -64,6 +69,7 @@ func TestJoinHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("resolves templates in options", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "join",
@@ -80,6 +86,7 @@ func TestJoinHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("uses content when no options", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "join",
@@ -94,6 +101,7 @@ func TestJoinHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("resolves template in content", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "join",
@@ -109,6 +117,7 @@ func TestJoinHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("returns error for invalid option template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "join",
@@ -123,6 +132,7 @@ func TestJoinHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("returns error for invalid content template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "join",
@@ -136,6 +146,7 @@ func TestJoinHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("handles single option", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "join",
@@ -150,6 +161,7 @@ func TestJoinHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("handles space separator", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:      "test",
 			Type:      "join",

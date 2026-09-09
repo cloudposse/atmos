@@ -13,6 +13,8 @@ import (
 )
 
 func TestVerifyPlanfile_StoredPlanFileDoesNotExist(t *testing.T) {
+	t.Parallel()
+
 	info := &schema.ConfigAndStacksInfo{}
 	storedPlan := filepath.Join(t.TempDir(), "nonexistent.tfplan")
 
@@ -23,6 +25,8 @@ func TestVerifyPlanfile_StoredPlanFileDoesNotExist(t *testing.T) {
 }
 
 func TestVerifyPlanfile_StoredPlanFileExists_FailsOnStackProcessing(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary planfile so we get past the existence check.
 	tmpDir := t.TempDir()
 	storedPlan := filepath.Join(tmpDir, "stored.plan.tfplan")
@@ -43,9 +47,12 @@ func TestVerifyPlanfile_StoredPlanFileExists_FailsOnStackProcessing(t *testing.T
 }
 
 func TestFinalizeVerification(t *testing.T) {
+	t.Parallel()
+
 	freshPlan := filepath.Join(t.TempDir(), "fresh.tfplan")
 
 	t.Run("drift + fail returns verification error", func(t *testing.T) {
+		t.Parallel()
 		info := &schema.ConfigAndStacksInfo{}
 		err := finalizeVerification(info, freshPlan, "  ~ resource changed", true, schema.PlanfileVerifyFail)
 		require.Error(t, err)
@@ -57,6 +64,7 @@ func TestFinalizeVerification(t *testing.T) {
 	})
 
 	t.Run("drift + warn proceeds with the fresh plan", func(t *testing.T) {
+		t.Parallel()
 		info := &schema.ConfigAndStacksInfo{}
 		err := finalizeVerification(info, freshPlan, "  ~ resource changed", true, schema.PlanfileVerifyWarn)
 		require.NoError(t, err)
@@ -65,6 +73,7 @@ func TestFinalizeVerification(t *testing.T) {
 	})
 
 	t.Run("no drift selects the fresh plan", func(t *testing.T) {
+		t.Parallel()
 		info := &schema.ConfigAndStacksInfo{}
 		err := finalizeVerification(info, freshPlan, "", false, schema.PlanfileVerifyFail)
 		require.NoError(t, err)

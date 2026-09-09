@@ -1,0 +1,53 @@
+---
+slug: json-manager-format
+title: "Reshape a version before writing it into a JSON file"
+date: 2026-09-07T12:00:00.000Z
+authors: [osterman]
+tags: [enhancement]
+---
+
+Git tags on GitHub almost always carry a `v` prefix — `v1.228.0` — because that's the convention
+both `git tag` and GitHub releases nudge toward. Package manifests, on the other hand, almost never
+want that prefix: `package.json`, plugin manifests, and marketplace listings all expect bare
+semver. Whenever a version comes from GitHub and needs to land in one of those files, something has
+to strip the `v` first.
+
+<!--truncate-->
+
+## The Problem
+
+The [Version Tracker](/cli/configuration/version/files)'s `json` file manager writes a locked
+dependency's resolved value directly into a JSON field, byte-for-byte. For a dependency sourced
+from `github-releases` or `github-tags`, that resolved value is the raw git tag — so a target field
+that needed bare semver got `v1.228.0` verbatim, with no way to reshape it before the write.
+
+## The Fix
+
+`options.set` entries in the `json` manager now accept an optional `format`: a small Go template
+rendered against the resolved version, whose output replaces the verbatim value instead. Trimming a
+`v` prefix is the common case, but any Sprig string function — `trimSuffix`, `replace`,
+`regexReplaceAll` — is available too.
+
+## How to Use It
+
+```yaml
+version:
+  files:
+    - manager: json
+      paths:
+        - package.json
+      options:
+        set:
+          - path: version
+            from: cli
+            format: '{{ trimPrefix "v" .Version }}'
+```
+
+Leaving `format` off keeps today's default: the resolved value is written verbatim, exactly as
+before.
+
+## Get Involved
+
+See the [Version Files](/cli/configuration/version/files#updating-json-files) docs for the full
+`set` syntax. Have feedback on this feature? [Open an issue](https://github.com/cloudposse/atmos/issues)
+or join the conversation in the [Cloud Posse community Slack](https://cloudposse.com/slack).

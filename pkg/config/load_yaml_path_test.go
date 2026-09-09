@@ -9,6 +9,8 @@ import (
 )
 
 func TestFindYAMLMappingPath(t *testing.T) {
+	t.Parallel()
+
 	const doc = `
 auth:
   identities:
@@ -26,15 +28,18 @@ top: value
 	}
 
 	t.Run("nil node returns nil", func(t *testing.T) {
+		t.Parallel()
 		assert.Nil(t, findYAMLMappingPath(nil, "auth"))
 	})
 
 	t.Run("empty document returns nil", func(t *testing.T) {
+		t.Parallel()
 		node := &goyaml.Node{Kind: goyaml.DocumentNode}
 		assert.Nil(t, findYAMLMappingPath(node, "auth"))
 	})
 
 	t.Run("empty path returns the document's root node", func(t *testing.T) {
+		t.Parallel()
 		node := parse(t)
 		got := findYAMLMappingPath(node)
 		require.NotNil(t, got)
@@ -42,6 +47,7 @@ top: value
 	})
 
 	t.Run("single-level key hit", func(t *testing.T) {
+		t.Parallel()
 		node := parse(t)
 		got := findYAMLMappingPath(node, "auth")
 		require.NotNil(t, got)
@@ -49,6 +55,7 @@ top: value
 	})
 
 	t.Run("multi-level key hit", func(t *testing.T) {
+		t.Parallel()
 		node := parse(t)
 		got := findYAMLMappingPath(node, "auth", "identities")
 		require.NotNil(t, got)
@@ -59,11 +66,13 @@ top: value
 	})
 
 	t.Run("missing key returns nil", func(t *testing.T) {
+		t.Parallel()
 		node := parse(t)
 		assert.Nil(t, findYAMLMappingPath(node, "auth", "missing"))
 	})
 
 	t.Run("path through a scalar returns nil", func(t *testing.T) {
+		t.Parallel()
 		node := parse(t)
 		// auth.providers is a scalar, so descending past it must return nil.
 		assert.Nil(t, findYAMLMappingPath(node, "auth", "providers", "anything"))
