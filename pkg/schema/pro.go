@@ -1,5 +1,7 @@
 package schema
 
+import "time"
+
 // ProSettings contains Atmos Pro integration configuration.
 type ProSettings struct {
 	BaseURL         string             `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"`
@@ -11,6 +13,20 @@ type ProSettings struct {
 	GitHubHeadRef   string             `yaml:"-" json:"-" mapstructure:"github_head_ref"`
 	// GitSTS holds global defaults for the github/sts auth integration.
 	GitSTS GitSTSSettings `yaml:"git_sts,omitempty" json:"git_sts,omitempty" mapstructure:"git_sts"`
+	// Exec holds settings for the command-execution metadata upload feature.
+	Exec ExecSettings `yaml:"exec,omitempty" json:"exec,omitempty" mapstructure:"exec"`
+}
+
+// ExecSettings contains configuration for command-execution metadata upload
+// (POST /v1/atmos/exec). This only lengthens the default synchronous-upload
+// wait timeout; it is not an opt-out/opt-in switch (see FR-008a).
+type ExecSettings struct {
+	// SyncTimeout bounds how long a synchronous command (terraform
+	// plan/apply, describe affected) waits for its execution-record upload to
+	// be confirmed. Defaults to 10 seconds when unset/zero; values below 10
+	// seconds are clamped up to 10 seconds rather than allowed to shorten the
+	// default. Accepts a Go duration string (e.g. "20s", "5m").
+	SyncTimeout time.Duration `yaml:"sync_timeout,omitempty" json:"sync_timeout,omitempty" mapstructure:"sync_timeout"`
 }
 
 // GitSTSSettings contains global defaults for the github/sts auth integration.

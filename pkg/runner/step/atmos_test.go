@@ -15,6 +15,8 @@ import (
 // This file tests the helper methods that don't require running actual atmos commands.
 
 func TestAtmosHandler_ResolveStack(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("atmos")
 	require.True(t, ok)
 	atmosHandler := handler.(*AtmosHandler)
@@ -74,6 +76,7 @@ func TestAtmosHandler_ResolveStack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := atmosHandler.resolveStack(tt.step, tt.vars)
 			if tt.expectError {
 				assert.Error(t, err)
@@ -86,6 +89,8 @@ func TestAtmosHandler_ResolveStack(t *testing.T) {
 }
 
 func TestAtmosHandler_ResolveWorkDir(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("atmos")
 	require.True(t, ok)
 	atmosHandler := handler.(*AtmosHandler)
@@ -144,6 +149,7 @@ func TestAtmosHandler_ResolveWorkDir(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := atmosHandler.resolveWorkDir(tt.step, tt.vars)
 			if tt.expectError {
 				assert.Error(t, err)
@@ -156,6 +162,8 @@ func TestAtmosHandler_ResolveWorkDir(t *testing.T) {
 }
 
 func TestAtmosHandler_ResolveEnvVars(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("atmos")
 	require.True(t, ok)
 	atmosHandler := handler.(*AtmosHandler)
@@ -232,6 +240,7 @@ func TestAtmosHandler_ResolveEnvVars(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := atmosHandler.resolveEnvVars(tt.step, tt.vars)
 			if tt.expectError {
 				assert.Error(t, err)
@@ -248,11 +257,14 @@ func TestAtmosHandler_ResolveEnvVars(t *testing.T) {
 }
 
 func TestAtmosHandler_PrepareExecution(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("atmos")
 	require.True(t, ok)
 	atmosHandler := handler.(*AtmosHandler)
 
 	t.Run("basic preparation", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "atmos",
@@ -270,6 +282,7 @@ func TestAtmosHandler_PrepareExecution(t *testing.T) {
 	})
 
 	t.Run("full preparation", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:             "test",
 			Type:             "atmos",
@@ -294,6 +307,7 @@ func TestAtmosHandler_PrepareExecution(t *testing.T) {
 	})
 
 	t.Run("command resolution error", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "atmos",
@@ -307,6 +321,7 @@ func TestAtmosHandler_PrepareExecution(t *testing.T) {
 	})
 
 	t.Run("stack resolution error", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "atmos",
@@ -324,11 +339,14 @@ func TestAtmosHandler_PrepareExecution(t *testing.T) {
 // TestAtmosHandler_ExecuteResolutionError verifies that Execute surfaces
 // configuration-resolution errors before attempting to re-exec the atmos binary.
 func TestAtmosHandler_ExecuteResolutionError(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("atmos")
 	require.True(t, ok)
 	ctx := context.Background()
 
 	t.Run("invalid command template returns error", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "atmos",
@@ -340,6 +358,7 @@ func TestAtmosHandler_ExecuteResolutionError(t *testing.T) {
 	})
 
 	t.Run("invalid stack template returns error", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "atmos",
@@ -353,11 +372,14 @@ func TestAtmosHandler_ExecuteResolutionError(t *testing.T) {
 }
 
 func TestAtmosHandler_BuildAtmosResult(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("atmos")
 	require.True(t, ok)
 	atmosHandler := handler.(*AtmosHandler)
 
 	t.Run("success result", func(t *testing.T) {
+		t.Parallel()
 		result := atmosHandler.buildAtmosResult("stdout content", "stderr content", nil)
 		assert.Equal(t, "stdout content", result.Value)
 		assert.Equal(t, "stdout content", result.Metadata["stdout"])
@@ -367,6 +389,7 @@ func TestAtmosHandler_BuildAtmosResult(t *testing.T) {
 	})
 
 	t.Run("error result", func(t *testing.T) {
+		t.Parallel()
 		result := atmosHandler.buildAtmosResult("partial stdout", "error message", assert.AnError)
 		assert.Equal(t, "partial stdout", result.Value)
 		assert.Equal(t, "partial stdout", result.Metadata["stdout"])
@@ -376,6 +399,7 @@ func TestAtmosHandler_BuildAtmosResult(t *testing.T) {
 	})
 
 	t.Run("trims stdout on success", func(t *testing.T) {
+		t.Parallel()
 		result := atmosHandler.buildAtmosResult("  output with whitespace  \n", "", nil)
 		assert.Equal(t, "output with whitespace", result.Value)
 		// Raw stdout preserved in metadata.
@@ -390,11 +414,14 @@ func TestAtmosHandler_BuildAtmosResult(t *testing.T) {
 // executable (see TestMain). The sentinel is delivered via the step env, which
 // runAtmosCommand forwards to the subprocess.
 func TestAtmosHandler_Execute_Subprocess(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("atmos")
 	require.True(t, ok)
 	atmosHandler := handler.(*AtmosHandler)
 
 	t.Run("success returns trimmed stdout and zero exit code", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "deploy",
 			Command: "terraform plan",
@@ -409,6 +436,7 @@ func TestAtmosHandler_Execute_Subprocess(t *testing.T) {
 	})
 
 	t.Run("stack triggers the stack-flag append branch", func(t *testing.T) {
+		t.Parallel()
 		// Setting Stack exercises the "-s <stack>" append path in
 		// runAtmosCommand. We can't observe the subprocess args here, but the
 		// branch executes and the command must still succeed.
@@ -426,6 +454,7 @@ func TestAtmosHandler_Execute_Subprocess(t *testing.T) {
 	})
 
 	t.Run("failure captures non-zero exit code and stderr", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "deploy",
 			Command: "terraform apply",
@@ -440,6 +469,7 @@ func TestAtmosHandler_Execute_Subprocess(t *testing.T) {
 	})
 
 	t.Run("invalid command template returns error before execution", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "deploy",
 			Command: "{{ .steps.invalid.value",
@@ -453,6 +483,8 @@ func TestAtmosHandler_Execute_Subprocess(t *testing.T) {
 // TestAtmosHandler_ExecuteWithWorkflow_Subprocess covers the workflow-aware
 // entry point, which resolves the output mode from the workflow definition.
 func TestAtmosHandler_ExecuteWithWorkflow_Subprocess(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("atmos")
 	require.True(t, ok)
 	atmosHandler := handler.(*AtmosHandler)

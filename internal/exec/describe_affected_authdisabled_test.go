@@ -18,6 +18,8 @@ import (
 // auth resolution still ran even when the user passed `--identity=false`. See plan:
 // --identity=false not honored in `atmos describe affected`.
 func TestExecutePropagatesAuthDisabled(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name             string
 		args             *DescribeAffectedCmdArgs
@@ -66,6 +68,7 @@ func TestExecutePropagatesAuthDisabled(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var (
 				gotRepoAuthDisabled       *bool
 				gotCloneAuthDisabled      *bool

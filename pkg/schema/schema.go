@@ -919,6 +919,29 @@ type TerraformPlanCIResultHandler interface {
 	HandleTerraformPlanCIResults(TerraformPlanCIResultSet) error
 }
 
+// TerraformPlanCIBeforeHandler receives the resolved, filtered node list for
+// one graph-backed Terraform run before the scheduler starts, so CI can
+// create one real pending check-run per component up front — the before-side
+// counterpart to TerraformPlanCIResultHandler.
+type TerraformPlanCIBeforeHandler interface {
+	HandleTerraformPlanCIBefore(TerraformPlanCIPendingSet) error
+}
+
+// TerraformPlanCIPendingSet contains the resolved node list for one
+// graph-backed Terraform run before execution starts.
+type TerraformPlanCIPendingSet struct {
+	Command string
+	Nodes   []TerraformPlanCIPendingNode
+}
+
+// TerraformPlanCIPendingNode identifies one component about to run.
+// Deliberately carries no result data since nothing has executed yet.
+type TerraformPlanCIPendingNode struct {
+	NodeID    string
+	Stack     string
+	Component string
+}
+
 // ComponentNodeHooks fires per-component lifecycle hooks (user-defined
 // hooks.RunAll and CI hooks.RunCIHooks, before and after) around one
 // component's execution during a multi-component/bulk run — Terraform
@@ -983,6 +1006,29 @@ type TerraformPlanCIResult struct {
 	ExitCode   int
 	Output     string
 	LogFiles   map[string]string
+	StartedAt  time.Time
+	FinishedAt time.Time
+	DurationMS int64
+	Error      string
+}
+
+// HelmCIResultSet contains deterministic per-node Helm results for one
+// graph-backed plan or apply run.
+type HelmCIResultSet struct {
+	Command string
+	Results []HelmCIResult
+}
+
+// HelmCIResult contains the execution outcome and structured Helm summary for
+// one component in a graph-backed run.
+type HelmCIResult struct {
+	NodeID     string
+	Stack      string
+	Component  string
+	Status     string
+	Processed  bool
+	ExitCode   int
+	Summary    map[string]any
 	StartedAt  time.Time
 	FinishedAt time.Time
 	DurationMS int64
@@ -1823,6 +1869,13 @@ type ConfigAndStacksInfo struct {
 	// summary/output files are not written by worker goroutines.
 	TerraformPlanCIResultHandler TerraformPlanCIResultHandler
 
+	// TerraformPlanCIBeforeHandler is called once, right before the scheduler
+	// starts a graph-backed multi-component Terraform plan/apply/destroy run,
+	// with the resolved and filtered node list — the before-side counterpart
+	// to TerraformPlanCIResultHandler, letting CI create real per-component
+	// pending statuses up front instead of one component-less status.
+	TerraformPlanCIBeforeHandler TerraformPlanCIBeforeHandler
+
 	// RCCleanup, when non-nil, removes the temporary Terraform CLI config file
 	// (TF_CLI_CONFIG_FILE) generated for this run. It is registered during env
 	// assembly and invoked (deferred) after the whole terraform pipeline completes,
@@ -1841,6 +1894,35 @@ type ConfigAndStacksInfo struct {
 	// pre-set TerraformCache and does not start, verify, or close its own. Used by
 	// `atmos terraform cache mirror` to share one proxy across components.
 	TerraformCacheExternal bool `yaml:"-" json:"-" mapstructure:"-"`
+
+	// ExecMetadataDetailedExitCodeAdded is set by buildPlanSubcommandArgs when
+	// -detailed-exitcode was added to a `plan` invocation specifically because
+	// exec-metadata capture required it (FR-006e), not because the user
+	// explicitly passed --upload-status. executeMainTerraformCommand consults
+	// this to decide whether to locally neutralize a resulting exit code 2
+	// ("changes detected") for Atmos's own returned status, without touching
+	// atmosConfig.CI.Enabled or mapCIExitCode's own gate (research.md Decision
+	// 36). Transient runtime state — not serialized.
+	ExecMetadataDetailedExitCodeAdded bool `yaml:"-" json:"-" mapstructure:"-"`
+
+	// ExecMetadataRawExitCode is the terraform/tofu subprocess's own exit code
+	// for the main plan/apply/deploy invocation, captured by
+	// executeMainTerraformCommand before CI-mode's mapCIExitCode remapping (and
+	// before this feature's own local exit-2 neutralization) is applied.
+	// Threaded up to captureExecMetadataSync so TerraformExecData.exit_code
+	// (FR-006e) reports the real, unmasked subprocess outcome even when
+	// Atmos's own returned error is remapped/neutralized. Transient runtime
+	// state — not serialized.
+	ExecMetadataRawExitCode int `yaml:"-" json:"-" mapstructure:"-"`
+
+	// ExecMetadataRawOutput is the main plan/apply/deploy subprocess's own
+	// combined stdout+stderr, captured by executeCommandPipeline scoped to
+	// only that invocation — not the combined init+workspace-select+main
+	// buffer other consumers (e.g. CI job-summary hooks) use. Threaded up to
+	// captureExecMetadataSync so the exec-metadata parser sees only the real
+	// plan/apply's own output (FR-006f, research.md Decision 32). Transient
+	// runtime state — not serialized.
+	ExecMetadataRawOutput string `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // GetComponentEnvSection returns the component's env section map.

@@ -18,6 +18,8 @@ import (
 // (the same machinery `atmos workflow` uses), with the response captured as a
 // variable that a downstream step can template against.
 func TestHTTP_EndToEndThroughExecutor(t *testing.T) {
+	t.Parallel()
+
 	var gotPath, gotBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
@@ -64,6 +66,8 @@ func TestHTTP_EndToEndThroughExecutor(t *testing.T) {
 // TestHTTP_EndToEndRetryThroughExecutor verifies retry composes end-to-end:
 // a flaky server (503 then 200) succeeds when run through the executor with a retry policy.
 func TestHTTP_EndToEndRetryThroughExecutor(t *testing.T) {
+	t.Parallel()
+
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++

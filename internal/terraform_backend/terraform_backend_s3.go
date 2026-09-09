@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"sync"
@@ -111,6 +112,10 @@ type S3API interface {
 // It's a map[string]S3API.
 var s3ClientCache sync.Map
 
+// getCachedS3Client returns the S3 client for a backend, building it on first use and
+// caching it under a key derived from the region, the assume-role ARN, the Atmos auth
+// identity, and every env overlay key that changes which credentials or endpoint the
+// client resolves, so distinct identities never alias to the same client.
 func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext, envOverlay map[string]string) (S3API, error) {
 	region := GetBackendAttribute(backend, "region")
 	roleArn := GetS3BackendAssumeRoleArn(backend)
@@ -186,6 +191,39 @@ func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext,
 	return s3Client, nil
 }
 
+// ResolveBackendProfileOverlay applies the S3 backend's `profile` attribute as the
+// credential source when nothing more specific selects one, mirroring what
+// `terraform init` does with the same attribute in backend.tf.json. Precedence:
+//   - an Atmos auth AWS context is canonical and is left untouched;
+//   - an explicit `AWS_PROFILE` in the component's `env` section wins;
+//   - otherwise the backend `profile` is injected as `AWS_PROFILE` so that
+//     `!terraform.state` resolves the same credentials `!terraform.output` gets
+//     from the terraform subprocess.
+//
+// The returned overlay feeds the S3 client cache key, so two backends with
+// different profiles never share a client.
+func ResolveBackendProfileOverlay(backend *map[string]any, authContext *schema.AuthContext, envOverlay map[string]string) map[string]string {
+	defer perf.Track(nil, "terraform_backend.ResolveBackendProfileOverlay")()
+
+	if authContext != nil && authContext.AWS != nil {
+		return envOverlay
+	}
+	if envOverlay["AWS_PROFILE"] != "" {
+		return envOverlay
+	}
+	profile := GetBackendAttribute(backend, "profile")
+	if profile == "" {
+		return envOverlay
+	}
+	log.Debug("Using S3 backend profile for AWS SDK credentials", "profile", profile)
+	merged := maps.Clone(envOverlay)
+	if merged == nil {
+		merged = make(map[string]string, 1)
+	}
+	merged["AWS_PROFILE"] = profile
+	return merged
+}
+
 // ReadTerraformBackendS3 reads the Terraform state file from the configured S3 backend.
 // If the state file does not exist in the bucket, the function returns `nil`.
 func ReadTerraformBackendS3(
@@ -198,9 +236,11 @@ func ReadTerraformBackendS3(
 	backend := GetComponentBackend(componentSections)
 
 	// Honor the target component's `env` section for AWS credential resolution,
-	// matching `!terraform.output`'s subprocess behavior. nil overlay preserves
-	// the existing default-credential-chain behavior unchanged.
+	// matching `!terraform.output`'s subprocess behavior, then fall back to the
+	// backend's own `profile` the way `terraform init` does. A nil overlay from
+	// both steps preserves the default-credential-chain behavior unchanged.
 	envOverlay := ExtractComponentEnvOverlay(componentSections, ComponentEnvKeysAWS)
+	envOverlay = ResolveBackendProfileOverlay(&backend, authContext, envOverlay)
 
 	s3Client, err := getCachedS3Client(&backend, authContext, envOverlay)
 	if err != nil {

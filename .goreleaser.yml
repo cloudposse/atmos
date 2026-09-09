@@ -45,6 +45,40 @@ before:
         cosign version
       fi'
 
+    # Install syft for the `sboms:` block below. Same rationale as the cosign
+    # hook above: the reusable release workflow
+    # (cloudposse/.github/.github/workflows/shared-go-auto-release.yml) sets up
+    # Go before running GoReleaser but does not install syft, so without this
+    # hook the SBOM step fails with
+    # "exec: syft: executable file not found in $PATH" and the whole release
+    # (and therefore the drafted release) fails.
+    #
+    # This is a fallback: workflows that own their GoReleaser job (e.g.
+    # build.yml) install syft with the SHA-pinned anchore/sbom-action/
+    # download-syft step, so the hook skips when syft is already on PATH rather
+    # than compiling a second copy. Where nothing else provides it (the shared
+    # workflow above), `go install` resolves through the Go module proxy and is
+    # verified against sum.golang.org, so it needs no separate checksum pinning.
+    # `set -e` makes an install failure fail the release instead of silently
+    # falling through to a pre-existing syft; the binary is copied to
+    # /usr/local/bin because each `before.hooks` entry and the later `sboms:`
+    # step run as separate subprocesses that don't share a modified PATH or
+    # GOPATH/bin.
+    - |
+      sh -c 'set -e
+        if [ "${GITHUB_ACTIONS:-}" != "true" ]; then exit 0; fi
+        if command -v syft >/dev/null 2>&1; then
+          echo "syft already on PATH ($(command -v syft)); skipping install."
+          exit 0
+        fi
+        echo "Installing syft for SBOM cataloging..."
+        go install github.com/anchore/syft/cmd/syft@v1.51.1
+        syft_bin_dir="$(go env GOBIN)"
+        if [ -z "$syft_bin_dir" ]; then syft_bin_dir="$(go env GOPATH)/bin"; fi
+        test -x "$syft_bin_dir/syft"
+        sudo cp "$syft_bin_dir/syft" /usr/local/bin/syft
+        /usr/local/bin/syft version'
+
 builds:
   - env:
       # goreleaser does not work with CGO, it could also complicate
@@ -134,7 +168,10 @@ nfpms:
     file_name_template: '{{ replace .ConventionalFileName "~" "-" }}'
 
 sboms:
-  - artifacts: archive
+  - id: binary
+    artifacts: binary
+  - id: package
+    artifacts: package
 
 # Keyless OIDC signing of the checksums file (which covers every archive by
 # digest) — no --key, no static key material. cosign is installed by the
@@ -150,6 +187,7 @@ signs:
     args: ["sign-blob", "--yes", "--bundle=${signature}", "${artifact}"]
     artifacts: checksum
     signature: "${artifact}.sigstore.json"
+
 
 ## Copied from https://github.com/cloudposse/.github/blob/main/.github/goreleaser.yml
 ## Required to correct working go auto release workflow
