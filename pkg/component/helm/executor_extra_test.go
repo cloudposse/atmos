@@ -92,6 +92,121 @@ func TestExecuteSingle_HappyPath(t *testing.T) {
 	assert.Equal(t, "app", deleted)
 }
 
+// TestExecuteSingle_AutoGenerateFilesErrorPropagates covers the newly added
+// `if operation != OperationValues` guard in executeSingle: for any operation other
+// than "values", a failure generating component files must still abort the run.
+func TestExecuteSingle_AutoGenerateFilesErrorPropagates(t *testing.T) {
+	originalInit := initCliConfig
+	originalProcess := processStacks
+	originalProvision := provisionAndResolveComponentPath
+	t.Cleanup(func() {
+		initCliConfig = originalInit
+		processStacks = originalProcess
+		provisionAndResolveComponentPath = originalProvision
+	})
+
+	// A regular file occupies the path Helm would need to create the component
+	// directory under, so os.MkdirAll inside maybeAutoGenerateFiles fails.
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a directory"), 0o600))
+	badPath := filepath.Join(blocker, "component")
+
+	initCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		atmosConfig := schema.AtmosConfiguration{}
+		atmosConfig.Components.Helm.AutoGenerateFiles = true
+		return atmosConfig, nil
+	}
+	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+		info.ComponentIsEnabled = true
+		info.ComponentFromArg = "apps/app"
+		info.FinalComponent = "app"
+		info.ComponentSection = map[string]any{
+			"chart":    "bitnami/nginx",
+			"name":     "app",
+			"generate": map[string]any{"file.txt": "hello"},
+		}
+		return info, nil
+	}
+	provisionAndResolveComponentPath = func(context.Context, *schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string) (string, bool, error) {
+		return badPath, true, nil
+	}
+
+	err := Execute(&component.ExecutionContext{
+		SubCommand: "template",
+		Flags:      map[string]any{},
+		ConfigAndStacksInfo: schema.ConfigAndStacksInfo{
+			ComponentFromArg: "apps/app",
+			Stack:            "dev",
+		},
+	}, OperationTemplate)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create Helm component directory")
+}
+
+// TestExecuteSingle_SkipsAutoGenerateForValuesOperation covers the other side of the
+// same guard: the "values" operation must never trigger auto-generation, even when
+// AutoGenerateFiles is enabled and a generate section is present. The component path
+// deliberately points at an unwritable location; if maybeAutoGenerateFiles were still
+// invoked for "values", this would fail the same way as
+// TestExecuteSingle_AutoGenerateFilesErrorPropagates above.
+func TestExecuteSingle_SkipsAutoGenerateForValuesOperation(t *testing.T) {
+	originalInit := initCliConfig
+	originalProcess := processStacks
+	originalProvision := provisionAndResolveComponentPath
+	originalDeps := dependenciesForComponent
+	originalHooks := getHooks
+	originalCI := runCIHooks
+	t.Cleanup(func() {
+		initCliConfig = originalInit
+		processStacks = originalProcess
+		provisionAndResolveComponentPath = originalProvision
+		dependenciesForComponent = originalDeps
+		getHooks = originalHooks
+		runCIHooks = originalCI
+	})
+
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a directory"), 0o600))
+	badPath := filepath.Join(blocker, "component")
+
+	initCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		atmosConfig := schema.AtmosConfiguration{}
+		atmosConfig.Components.Helm.AutoGenerateFiles = true
+		return atmosConfig, nil
+	}
+	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+		info.ComponentIsEnabled = true
+		info.ComponentFromArg = "apps/app"
+		info.FinalComponent = "app"
+		info.ComponentSection = map[string]any{
+			"chart":    "bitnami/nginx",
+			"name":     "app",
+			"generate": map[string]any{"file.txt": "hello"},
+		}
+		return info, nil
+	}
+	provisionAndResolveComponentPath = func(context.Context, *schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string) (string, bool, error) {
+		return badPath, true, nil
+	}
+	dependenciesForComponent = func(*schema.AtmosConfiguration, string, map[string]any, map[string]any) (*dependencies.ToolchainEnvironment, error) {
+		return &dependencies.ToolchainEnvironment{}, nil
+	}
+	getHooks = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
+		return &hooks.Hooks{}, nil
+	}
+	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
+
+	err := Execute(&component.ExecutionContext{
+		SubCommand: "values",
+		Flags:      map[string]any{},
+		ConfigAndStacksInfo: schema.ConfigAndStacksInfo{
+			ComponentFromArg: "apps/app",
+			Stack:            "dev",
+		},
+	}, OperationValues)
+	require.NoError(t, err, "the values operation must skip auto-generation and never touch the unwritable component path")
+}
+
 func TestRunHelmCIHook(t *testing.T) {
 	original := runCIHooks
 	t.Cleanup(func() { runCIHooks = original })
@@ -202,6 +317,44 @@ func TestRunWithHooks_ValuesDoesNotSetUpRepositories(t *testing.T) {
 		"",
 	)
 	require.NoError(t, err)
+}
+
+// TestRunWithHooks_ValueOverrideErrorPropagates covers the newly wired
+// applyValueOverrides call in runWithHooks: a malformed --set assignment must abort
+// the operation before any hook/repository/chart-rendering work happens.
+func TestRunWithHooks_ValueOverrideErrorPropagates(t *testing.T) {
+	originalHooks := getHooks
+	originalSetup := setupRepositories
+	t.Cleanup(func() {
+		getHooks = originalHooks
+		setupRepositories = originalSetup
+	})
+
+	getHooks = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
+		return &hooks.Hooks{}, nil
+	}
+	setupRepositories = func([]chartRepository) error {
+		t.Fatal("a value-override error must short-circuit before repositories are set up")
+		return nil
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "apps/app",
+		SubCommand:       "template",
+		ComponentSection: map[string]any{
+			"chart": "bitnami/nginx",
+			"name":  "app",
+		},
+	}
+	err := runWithHooks(
+		&component.ExecutionContext{Flags: map[string]any{flagSet: []string{"not-an-assignment"}}},
+		&schema.AtmosConfiguration{},
+		info,
+		OperationTemplate,
+		"",
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--set")
 }
 
 func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
