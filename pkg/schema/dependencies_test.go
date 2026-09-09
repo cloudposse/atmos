@@ -313,6 +313,25 @@ func TestParseComponentDependenciesRejectsInvalidRenderedRequiredValue(t *testin
 	require.ErrorIs(t, err, ErrComponentDependencyInvalidRequired)
 }
 
+func TestParseComponentDependenciesNormalizesOptionalEdges(t *testing.T) {
+	required := true
+	optional := false
+	dependencies, err := ParseComponentDependencies(map[string]any{
+		"components": []any{
+			map[string]any{"name": "vpc", "required": "false"},
+			map[string]any{"component": "vpc", "required": true},
+			map[string]any{"name": "database", "required": "false", "stack": "shared"},
+			map[string]any{"kind": "file", "path": "config.yaml"},
+			map[string]any{"required": false},
+		},
+	}, "terraform", "dev")
+
+	require.NoError(t, err)
+	require.Len(t, dependencies, 2)
+	assert.Equal(t, ComponentDependency{Component: "vpc", Required: &required}, dependencies[0])
+	assert.Equal(t, ComponentDependency{Component: "database", Stack: "shared", Required: &optional}, dependencies[1])
+}
+
 func TestDependencies_Normalize_NameAlias(t *testing.T) {
 	t.Run("name alone is promoted to component", func(t *testing.T) {
 		d := &Dependencies{

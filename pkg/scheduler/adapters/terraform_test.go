@@ -1044,6 +1044,41 @@ func TestBuildTerraformGraphLastDependencyOverrideAppliedBeforeAvailability(t *t
 	require.Empty(t, graph.Nodes["app-dev"].Dependencies)
 }
 
+func TestBuildTerraformGraphSkipsUnavailableOptionalDependencies(t *testing.T) {
+	disabled := terraformAdapterComponent("selected", nil, nil)
+	disabled[cfg.MetadataSectionName].(map[string]any)["enabled"] = false
+	abstract := terraformAdapterComponent("selected", nil, nil)
+	abstract[cfg.MetadataSectionName].(map[string]any)["type"] = "abstract"
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"present":  terraformAdapterComponent("selected", nil, nil),
+					"disabled": disabled,
+					"abstract": abstract,
+					"app": terraformAdapterComponent(
+						"selected",
+						[]any{
+							map[string]any{"name": "present", "required": false},
+							map[string]any{"name": "missing", "required": false},
+							map[string]any{"name": "disabled", "required": false},
+							map[string]any{"name": "abstract", "required": false},
+						},
+						nil,
+					),
+				},
+			},
+		},
+	}
+
+	graph, err := BuildTerraformGraph(stacks)
+	require.NoError(t, err)
+	app, ok := graph.GetNode("app-dev")
+	require.True(t, ok)
+	require.Equal(t, []string{"present-dev"}, app.Dependencies)
+	require.True(t, app.OptionalDependencies["present-dev"])
+}
+
 func TestExecuteTerraformKeepsIndependentComponentsSequential(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
