@@ -180,7 +180,7 @@ func runLogs(ctx context.Context, client CloudFormationClient, stackName string,
 // per docs/io-and-ui-output.md, so even FAILED events stay on stdout rather than
 // splitting across channels.
 func writeLogLine(event *cfntypes.StackEvent) {
-	line, _ := formatStackEventLine(event)
+	line, _ := formatStackEventLine(event, false)
 	_ = data.Writeln(line)
 }
 

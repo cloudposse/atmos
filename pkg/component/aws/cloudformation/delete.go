@@ -54,8 +54,9 @@ func guardTerminationProtection(ctx context.Context, client CloudFormationClient
 	if !opts.DisableTerminationProtection {
 		return errUtils.Build(errUtils.ErrAwsCloudFormationChangeSetFailed).
 			WithExplanationf("Stack %q has termination_protection enabled.", spec.StackName).
-			WithHint("Set termination_protection: false in the component config and re-apply, " +
-				"or pass --disable-termination-protection to delete it anyway.").
+			WithHint("Pass --disable-termination-protection to delete it anyway. " +
+				"Setting termination_protection: false and re-applying does not disable " +
+				"protection on the stack; apply only ever turns protection on, never off.").
 			Err()
 	}
 	return disableTerminationProtection(ctx, client, spec.StackName)

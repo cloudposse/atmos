@@ -137,10 +137,10 @@ func TestSetStackPolicy(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// applyTerminationProtection must reconcile the stack's actual termination-protection
-// state with spec.TerminationProtection on every apply — CreateChangeSet/ExecuteChangeSet
-// have no termination-protection parameter, so this is a follow-up UpdateTerminationProtection
-// call, the same shape setStackPolicy already uses for stack policy.
+// applyTerminationProtection must enable termination protection via a follow-up
+// UpdateTerminationProtection call when the component opts in — CreateChangeSet/
+// ExecuteChangeSet have no termination-protection parameter, the same shape
+// setStackPolicy already uses for stack policy.
 func TestApplyTerminationProtection_Enables(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
@@ -157,20 +157,16 @@ func TestApplyTerminationProtection_Enables(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// applyTerminationProtection must also actively disable protection when config no
-// longer requests it — config is always the source of truth, so removing
-// termination_protection: true from a component must take effect on the next apply,
-// not just stop being enforced by Atmos's own `delete` command.
-func TestApplyTerminationProtection_Disables(t *testing.T) {
+// applyTerminationProtection must be a no-op — no client call at all — for a
+// component that never opted in via termination_protection: true, so targets
+// that don't implement UpdateTerminationProtection (e.g. an AWS emulator) are
+// never touched by components that don't use the feature. Disabling protection
+// is handled only by the explicit --disable-termination-protection delete flag,
+// never reconciled here.
+func TestApplyTerminationProtection_SkipsWhenNotEnabled(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
-	client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, input *cloudformation.UpdateTerminationProtectionInput, _ ...func(*cloudformation.Options)) (*cloudformation.UpdateTerminationProtectionOutput, error) {
-			assert.Equal(t, "vpc", *input.StackName)
-			assert.False(t, *input.EnableTerminationProtection)
-			return &cloudformation.UpdateTerminationProtectionOutput{}, nil
-		},
-	)
+	// No UpdateTerminationProtection expectation: gomock fails the test if it's called.
 
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: false}
 	err := applyTerminationProtection(context.Background(), client, spec)

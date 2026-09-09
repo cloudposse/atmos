@@ -10,8 +10,10 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // eventPollInterval is how often DescribeStackEvents is polled while a stack
@@ -25,12 +27,24 @@ const operationTimeout = 60 * time.Minute
 
 // streamStackEvents polls DescribeStackEvents from the moment it's called and
 // prints each new event as it appears, until the stack reaches a terminal status.
-// Returns the final stack status. On a non-TTY stream (CI, non-interactive), plain
-// event lines are printed; live per-resource spinners are a TTY-only enhancement
-// the standard I/O layer degrades automatically — this function only needs to emit
-// lines, not manage its own TTY detection.
+// Returns the final stack status. On an interactive TTY, in-progress resources
+// animate a live spinner line (via pkg/ui/spinner.Spinner) while completed/failed
+// resources are printed permanently above it, colored by outcome; on a non-TTY
+// stream (CI, non-interactive), plain event lines are printed via printStackEvent,
+// unchanged from before.
 func streamStackEvents(ctx context.Context, client CloudFormationClient, stackName string) (cfntypes.StackStatus, error) {
 	defer perf.Track(nil, "cloudformation.streamStackEvents")()
+
+	var sp *spinner.Spinner
+	if term.IsTTYSupportForStdout() {
+		sp = spinner.New(fmt.Sprintf("%s: watching stack events…", stackName))
+		sp.Start()
+		// Belt-and-suspenders: Stop is idempotent, so this guarantees the spinner
+		// is never left running on every return path (poll error, ctx
+		// cancellation, timeout), even though the terminal-status path below
+		// already stops it via Success/Error.
+		defer sp.Stop()
+	}
 
 	seen := make(map[string]bool)
 	deadline := time.Now().Add(operationTimeout)
@@ -41,10 +55,11 @@ func streamStackEvents(ctx context.Context, client CloudFormationClient, stackNa
 			return "", err
 		}
 		for i := range events {
-			printStackEvent(&events[i])
+			dispatchStackEvent(sp, &events[i])
 		}
 
 		if status != "" && isTerminalStackStatus(status) {
+			finishStreamSpinner(sp, stackName, status)
 			return status, nil
 		}
 
@@ -57,6 +72,47 @@ func streamStackEvents(ctx context.Context, client CloudFormationClient, stackNa
 		case <-time.After(eventPollInterval):
 		}
 	}
+}
+
+// dispatchStackEvent routes one stack event either to the plain non-TTY line
+// printer (sp == nil) or to the live spinner: in-progress events update the
+// spinner's live line, while terminal (complete/failed) events are printed
+// permanently above it, colored by outcome.
+func dispatchStackEvent(sp *spinner.Spinner, event *cfntypes.StackEvent) {
+	if sp == nil {
+		printStackEvent(event)
+		return
+	}
+
+	line, _ := formatStackEventLine(event, true)
+	status := cfntypes.StackStatus(event.ResourceStatus)
+
+	switch {
+	case !isTerminalStackStatus(status):
+		sp.Update(line)
+	case isFailedStackStatus(status):
+		sp.Println(ui.FormatError(line))
+	default:
+		sp.Println(ui.FormatSuccess(line))
+	}
+}
+
+// finishStreamSpinner reports the stack's final terminal status on the spinner
+// (success or error, matching the resource-level coloring above) and stops it.
+// A no-op when sp is nil (non-TTY path never started one). The stack name is
+// bolded (markdown, rendered by Spinner.Success/Error) to match
+// dispatchStackEvent's per-resource lines instead of flat text.
+func finishStreamSpinner(sp *spinner.Spinner, stackName string, status cfntypes.StackStatus) {
+	if sp == nil {
+		return
+	}
+
+	line := fmt.Sprintf("**%s**: %s", stackName, status)
+	if isFailedStackStatus(status) {
+		sp.Error(line)
+		return
+	}
+	sp.Success(line)
 }
 
 // pollStackEvents fetches the current stack status and any events not already in
@@ -116,14 +172,26 @@ func isFailedStackStatus(status cfntypes.StackStatus) bool {
 // formatStackEventLine renders one CREATE_IN_PROGRESS -> CREATE_COMPLETE-style
 // transition line, plus whether the event represents a failure. Pure formatting,
 // no I/O — callers pick the output channel (see printStackEvent for the UI/stderr
-// channel watch uses, and runLogs for the data/stdout channel logs uses).
-func formatStackEventLine(event *cfntypes.StackEvent) (line string, failed bool) {
+// channel watch uses, and writeLogLine for the data/stdout channel logs uses).
+//
+// The markdown parameter must be true only for callers whose line flows into a
+// renderer that actually processes markdown (ui.FormatSuccess/FormatError/
+// FormatInline/Info — see dispatchStackEvent): those bold the logical ID and
+// code-span the resource type for a lightly formatted TTY line instead of flat
+// text. Plain data/log channels (ui.Writeln, data.Writeln) never render
+// markdown, so passing true there would leak literal "**"/backtick characters
+// into piped or CI output.
+func formatStackEventLine(event *cfntypes.StackEvent, markdown bool) (line string, failed bool) {
 	logicalID := stringValue(event.LogicalResourceId)
 	resourceType := stringValue(event.ResourceType)
 	status := string(event.ResourceStatus)
 	reason := stringValue(event.ResourceStatusReason)
 
-	line = fmt.Sprintf("%s (%s): %s", logicalID, resourceType, status)
+	if markdown {
+		line = fmt.Sprintf("**%s** (`%s`): %s", logicalID, resourceType, status)
+	} else {
+		line = fmt.Sprintf("%s (%s): %s", logicalID, resourceType, status)
+	}
 	if reason != "" {
 		line += " — " + reason
 	}
@@ -134,7 +202,7 @@ func formatStackEventLine(event *cfntypes.StackEvent) (line string, failed bool)
 // docs/io-and-ui-output.md. Used by watch, which is live human-facing status,
 // not pipeable data.
 func printStackEvent(event *cfntypes.StackEvent) {
-	line, failed := formatStackEventLine(event)
+	line, failed := formatStackEventLine(event, false)
 	if failed {
 		ui.Error(line)
 		return

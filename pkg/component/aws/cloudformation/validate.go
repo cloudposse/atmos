@@ -110,15 +110,22 @@ func setStackPolicy(ctx context.Context, client CloudFormationClient, spec *stac
 	return nil
 }
 
-// applyTerminationProtection reconciles the stack's actual termination-protection
-// state with spec.TerminationProtection. CreateChangeSet/ExecuteChangeSet have no
-// termination-protection parameter, so this runs as a follow-up UpdateTerminationProtection
-// call after every successful apply — the same shape setStackPolicy uses for stack
-// policy. Called unconditionally (not just when true) so config stays the source of
-// truth: removing termination_protection from a component actually disables it on the
-// next apply, instead of only stopping enforcement by Atmos's own delete command.
+// applyTerminationProtection enables termination protection as a follow-up call
+// after a successful apply, when the component opts in via
+// termination_protection: true — CreateChangeSet/ExecuteChangeSet have no
+// termination-protection parameter, the same "no changeset parameter" shape
+// setStackPolicy uses for stack policy. It's a no-op when the component hasn't
+// opted in, so a target that doesn't support UpdateTerminationProtection (e.g. an
+// AWS emulator) is never touched by components that never asked for the feature.
+// Disabling protection is deliberately not reconciled here: it only happens via
+// the explicit `--disable-termination-protection` delete flag (see delete.go),
+// so a stack's protection is never silently turned off by an apply.
 func applyTerminationProtection(ctx context.Context, client CloudFormationClient, spec *stackSpec) error {
 	defer perf.Track(nil, "cloudformation.applyTerminationProtection")()
+
+	if !spec.TerminationProtection {
+		return nil
+	}
 
 	_, err := client.UpdateTerminationProtection(ctx, &cloudformation.UpdateTerminationProtectionInput{
 		StackName:                   awsString(spec.StackName),

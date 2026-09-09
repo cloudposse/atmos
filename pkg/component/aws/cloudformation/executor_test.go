@@ -279,7 +279,9 @@ func expectRunApplySuccessfulDeployFlow(client *MockCloudFormationClient, output
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 		}, nil),
-		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil),
+		// No UpdateTerminationProtection call: spec.TerminationProtection is
+		// false (not set below), and applyTerminationProtection is a no-op
+		// unless the component opts in.
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{
 				Outputs: []cfntypes.Output{{OutputKey: outputKey, OutputValue: outputVal}},
@@ -354,7 +356,9 @@ func TestRunApply_SetsStackPolicy(t *testing.T) {
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 		}, nil),
 		client.EXPECT().SetStackPolicy(gomock.Any(), gomock.Any()).Return(&cloudformation.SetStackPolicyOutput{}, nil),
-		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil),
+		// No UpdateTerminationProtection call: spec.TerminationProtection is
+		// false (not set below), and applyTerminationProtection is a no-op
+		// unless the component opts in.
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
 	)
 
@@ -455,7 +459,10 @@ func TestRunApply_TerminationProtectionError(t *testing.T) {
 		Info:        &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
 		Flags:       map[string]any{},
 	}
-	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+	// TerminationProtection must be true here: applyTerminationProtection is a
+	// no-op (never calls UpdateTerminationProtection) unless the component
+	// opts in, so this error path needs it enabled to be reachable at all.
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'", TerminationProtection: true}
 
 	_, err := runApply(octx, client, spec, map[string]any{})
 	require.Error(t, err)
@@ -480,7 +487,9 @@ func TestRunApply_DescribeOutputsError(t *testing.T) {
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 		}, nil),
-		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil),
+		// No UpdateTerminationProtection call: spec.TerminationProtection is
+		// false (not set below), and applyTerminationProtection is a no-op
+		// unless the component opts in.
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, sentinel),
 	)
 
