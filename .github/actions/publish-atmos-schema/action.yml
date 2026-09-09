@@ -1,0 +1,75 @@
+name: Publish Atmos Schema
+description: >
+  Generate an atmos-generated JSON Schema (e.g. atmos-manifest, atmos-config)
+  at its floating `1.0` path, from the embedded schema in
+  pkg/datafetcher/schema/ (the single source of truth; never hand-maintained,
+  only ever regenerated via `go generate`). The output directory is
+  gitignored -- it's produced fresh by this action on every website deploy,
+  never committed.
+
+  On an actual GitHub release (release-tag set), also generates and publishes
+  an immutable, version-pinned snapshot directly to S3, so users can pin a
+  schema to the exact version that shipped with a given atmos release instead
+  of always tracking HEAD. Closes #2592.
+
+  The pinned snapshot is uploaded here via `aws s3 cp`, independent of the
+  main site sync (.github/actions/s3-deploy), because that sync excludes
+  pinned schema paths from `--delete` so an ordinary push-to-main deploy
+  never prunes a previously published release's snapshot -- which means
+  each release's own new snapshot needs this explicit upload to actually
+  land in S3.
+
+inputs:
+  schema-name:
+    description: 'Schema identifier, used for both the S3 path segment and filename (e.g. atmos-manifest, atmos-config)'
+    required: true
+  subcommand:
+    description: 'Atmos CLI subcommand that generates this schema (e.g. "stack schema", "config schema")'
+    required: true
+  s3-bucket:
+    description: 'S3 bucket to publish the pinned snapshot to'
+    required: true
+  release-tag:
+    description: 'GitHub release tag (e.g. v1.228.0). Leave unset/empty outside of a release event -- only the floating schema is generated then.'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    # CGO_ENABLED=0: `go run .` builds the whole atmos binary graph, which pulls in
+    # cgo-linked hardware-security-key deps (e.g. github.com/bearsh/hid) that need
+    # system libudev headers this runner doesn't have. atmos itself always builds with
+    # CGO disabled (see .goreleaser.yml, magefiles/build.go); match that here too.
+    # GOFIPS140=latest: match every other Go-toolchain build invocation in the repo
+    # (see docs/prd/fips-140-mode.md) so this throwaway schema-generation process
+    # behaves identically to a real atmos build/test binary.
+    - name: Generate floating schema
+      shell: bash
+      env:
+        CGO_ENABLED: "0"
+        GOFIPS140: latest
+        SUBCOMMAND: ${{ inputs.subcommand }}
+        SCHEMA_NAME: ${{ inputs.schema-name }}
+      run: |
+        set -euo pipefail
+        go run . ${SUBCOMMAND} "website/static/schemas/atmos/${SCHEMA_NAME}/1.0/${SCHEMA_NAME}.json"
+
+    - name: Generate and publish pinned snapshot
+      if: ${{ inputs.release-tag != '' }}
+      shell: bash
+      env:
+        CGO_ENABLED: "0"
+        GOFIPS140: latest
+        SUBCOMMAND: ${{ inputs.subcommand }}
+        SCHEMA_NAME: ${{ inputs.schema-name }}
+        RELEASE_TAG: ${{ inputs.release-tag }}
+        S3_BUCKET_NAME: ${{ inputs.s3-bucket }}
+      run: |
+        set -euo pipefail
+        version="${RELEASE_TAG#v}"
+        path="website/static/schemas/atmos/${SCHEMA_NAME}/${version}/${SCHEMA_NAME}.json"
+        go run . ${SUBCOMMAND} "${path}"
+        aws s3 cp "${path}" \
+          "s3://${S3_BUCKET_NAME}/schemas/atmos/${SCHEMA_NAME}/${version}/${SCHEMA_NAME}.json" \
+          --content-type "application/json; charset=utf-8"
