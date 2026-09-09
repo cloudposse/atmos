@@ -1698,7 +1698,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/gabriel-vasile/mimetype
     License: MIT
-    URL: https://github.com/gabriel-vasile/mimetype/blob/v1.4.13/LICENSE
+    URL: https://github.com/gabriel-vasile/mimetype/blob/v1.4.15/LICENSE
 
   - github.com/getsentry/sentry-go
     License: MIT
