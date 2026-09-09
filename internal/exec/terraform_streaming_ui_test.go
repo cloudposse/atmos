@@ -172,6 +172,11 @@ func TestDispatchStreamingExecutor_RoutesSafely(t *testing.T) {
 			dryRun:     false,
 		},
 		{
+			name:       "providers-lock shares the init phase's ExecuteInit dispatch",
+			subCommand: subcommandProvidersLock,
+			dryRun:     false,
+		},
+		{
 			name:       "unrecognized subcommand falls through to the plain Execute path",
 			subCommand: "unknown-subcommand",
 			dryRun:     false,

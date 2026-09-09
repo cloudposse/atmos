@@ -94,11 +94,11 @@ func executeStreamingOrShell(atmosConfig *schema.AtmosConfiguration, info *schem
 }
 
 // dispatchStreamingExecutor routes to the tfui.Execute* variant matching subCommand.
-// Workspace select/new share the init spinner (ExecuteInit) since they have no
-// dedicated TUI phase of their own. Dry runs always use the plain Execute path, which
-// short-circuits without touching the terminal. The caller's cancellation (e.g. a
-// shell-option deadline) flows through ctx, so a cancelled/timed-out caller can stop a
-// running streaming Terraform process instead of leaving it orphaned.
+// Workspace select/new and the after-init providers-lock hook share the init spinner
+// (ExecuteInit) since neither has a dedicated TUI phase of its own. Dry runs always use the
+// plain Execute path, which short-circuits without touching the terminal. The caller's
+// cancellation (e.g. a shell-option deadline) flows through ctx, so a cancelled/timed-out
+// caller can stop a running streaming Terraform process instead of leaving it orphaned.
 func dispatchStreamingExecutor(ctx context.Context, subCommand string, dryRun bool, execOpts *tfui.ExecuteOptions) error {
 	if !dryRun {
 		switch subCommand {
@@ -108,7 +108,7 @@ func dispatchStreamingExecutor(ctx context.Context, subCommand string, dryRun bo
 			return tfui.ExecuteDestroy(ctx, execOpts)
 		case "plan":
 			return tfui.ExecutePlan(ctx, execOpts)
-		case subcommandInit, subcommandWorkspace:
+		case subcommandInit, subcommandWorkspace, subcommandProvidersLock:
 			return tfui.ExecuteInit(ctx, execOpts)
 		}
 	}
