@@ -200,11 +200,14 @@ func TestResolveScopedClosureDefersRequiredTargetValidationOutsideClosure(t *tes
 	_, hasUnrelated := result.Closure.GetNode(NodeID("unrelated", "dev"))
 	assert.True(t, hasApp)
 	assert.False(t, hasUnrelated)
+	evaluatedApp := false
 	for _, call := range fake.calls {
 		if call.processTemplates || call.processFunctions {
+			evaluatedApp = true
 			assert.Equal(t, []string{"app"}, call.components)
 		}
 	}
+	assert.True(t, evaluatedApp, "Phase C must evaluate the selected component")
 }
 
 func TestResolveScopedClosureDepthBoundsEvaluation(t *testing.T) {

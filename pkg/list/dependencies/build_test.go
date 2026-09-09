@@ -259,6 +259,7 @@ func TestBuildGraph_FailsForRequiredUnavailableTarget(t *testing.T) {
 		wantErr    error
 	}{
 		{name: "missing", target: "missing", wantErr: errUtils.ErrDependencyTargetNotFound},
+		{name: "abstract", target: "abstract", targetBody: map[string]any{"metadata": map[string]any{"type": "abstract"}}, wantErr: errUtils.ErrDependencyTargetNotFound},
 		{name: "disabled", target: "disabled", targetBody: map[string]any{"metadata": map[string]any{"enabled": false}}, wantErr: errUtils.ErrDependencyTargetUnavailable},
 	}
 	for _, test := range tests {

@@ -149,7 +149,11 @@ func (b *graphDependencyBuilder) handleUnavailable(dep *schema.ComponentDependen
 		return nil
 	}
 	if shouldValidateDependencyTarget(b.fromID, b.validationSources) {
-		return fmt.Errorf("%w: from=%s to=%s reason=%s", errUtils.ErrDependencyTargetUnavailable, b.fromID, toID, reason)
+		targetErr := errUtils.ErrDependencyTargetUnavailable
+		if reason == "target_missing" {
+			targetErr = errUtils.ErrDependencyTargetNotFound
+		}
+		return fmt.Errorf("%w: from=%s to=%s reason=%s", targetErr, b.fromID, toID, reason)
 	}
 	return nil
 }
@@ -245,7 +249,7 @@ func componentAvailabilityReason(componentSection map[string]any) string {
 		return ""
 	}
 	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
-		return "target_abstract"
+		return "target_missing"
 	}
 	if enabled, ok := metadataSection["enabled"].(bool); ok && !enabled {
 		return "target_disabled"
