@@ -30,7 +30,7 @@ var (
 	// ErrComponentDependencyMissingPath is returned when an inline path-based
 	// dependency entry (`kind: file` or `kind: folder`) lacks the `path` field.
 	ErrComponentDependencyMissingPath = errors.New("path-based component dependency is missing 'path'")
-	// ErrComponentDependencyMissingComponent is returned when a component dependency has no target.
+	// ErrComponentDependencyMissingComponent is retained for callers that classify an omitted target.
 	ErrComponentDependencyMissingComponent = errors.New("component dependency is missing 'component' or 'name'")
 	// ErrComponentDependencyInvalidRequired is returned when a rendered required value is not boolean.
 	ErrComponentDependencyInvalidRequired = errors.New("component dependency required value is not boolean")
@@ -320,9 +320,6 @@ func (d *Dependencies) normalizeComponentEntries() error {
 		if (entry.IsFileDependency() || entry.IsFolderDependency()) && entry.Path == "" {
 			return fmt.Errorf("%w (entry %d, kind=%q)", ErrComponentDependencyMissingPath, i, entry.Kind)
 		}
-		if entry.IsComponentDependency() && entry.Component == "" {
-			return fmt.Errorf("%w (entry %d)", ErrComponentDependencyMissingComponent, i)
-		}
 	}
 	return nil
 }
@@ -360,7 +357,7 @@ func ParseComponentDependencies(section map[string]any, defaultKind, defaultStac
 		return nil, fmt.Errorf("decode component dependencies: %w", err)
 	}
 	if err := dependencies.Normalize(); err != nil {
-		return nil, fmt.Errorf("normalize component dependencies: %w", err)
+		return dependencies.Components, fmt.Errorf("normalize component dependencies: %w", err)
 	}
 
 	normalized := make([]ComponentDependency, 0, len(dependencies.Components))

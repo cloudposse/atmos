@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/scanners"
+	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -162,6 +163,7 @@ type Runtime struct {
 
 var (
 	initCLIConfig        = cfg.InitCliConfig
+	buildTerraformGraph  = scheduleradapters.BuildTerraformGraph
 	runTarget            = executeTarget
 	checkTFLintAvailable = checkTFLintAvailableImpl
 )
@@ -231,7 +233,11 @@ func execute(ctx context.Context, runtime *Runtime, info *schema.ConfigAndStacks
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
-	targets := targetsFor(nil, targetsFromStacks(stacks))
+	graph, err := buildTerraformGraph(stacks)
+	if err != nil {
+		return fmt.Errorf(terraformLintWrappedErrorFormat, errUtils.ErrBuildTerraformLintTargets, err)
+	}
+	targets := targetsFor(graph, nil)
 	if len(targets) == 0 {
 		ui.Success("No Terraform components matched")
 		return nil
@@ -318,47 +324,6 @@ func filterAffected(input []schema.Affected) []schema.Affected {
 		filtered = append(filtered, *item)
 	}
 	return filtered
-}
-
-// targetsFromStacks returns the concrete Terraform instances that lint should
-// inspect. Lint does not schedule dependencies, so it must not build the
-// execution graph merely to enumerate these already-selected instances.
-func targetsFromStacks(stacks map[string]any) []*dependency.Node {
-	targets := make([]*dependency.Node, 0)
-	for stackName, stackValue := range stacks {
-		stack, ok := stackValue.(map[string]any)
-		if !ok {
-			continue
-		}
-		components, ok := stack[cfg.ComponentsSectionName].(map[string]any)
-		if !ok {
-			continue
-		}
-		terraform, ok := components[cfg.TerraformComponentType].(map[string]any)
-		if !ok {
-			continue
-		}
-		for componentName, componentValue := range terraform {
-			component, ok := componentValue.(map[string]any)
-			if !ok || lintTargetUnavailable(component) {
-				continue
-			}
-			targets = append(targets, &dependency.Node{Component: componentName, Stack: stackName, Type: cfg.TerraformComponentType})
-		}
-	}
-	return targets
-}
-
-func lintTargetUnavailable(component map[string]any) bool {
-	metadata, ok := component[cfg.MetadataSectionName].(map[string]any)
-	if !ok {
-		return false
-	}
-	if componentType, ok := metadata["type"].(string); ok && componentType == "abstract" {
-		return true
-	}
-	enabled, ok := metadata["enabled"].(bool)
-	return ok && !enabled
 }
 
 func targetsFor(graph *dependency.Graph, input []*dependency.Node) []*dependency.Node {

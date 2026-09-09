@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // terraformStacks is a small helper to build a stacks map of the shape produced
@@ -121,8 +121,30 @@ func TestBuildGraph_DependenciesComponentsInvalidPreventsSettingsFallback(t *tes
 		},
 	})
 
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	app, ok := graph.GetNode(NodeID("app", "dev"))
+	require.True(t, ok)
+	assert.Empty(t, app.Dependencies, "invalid authoritative dependencies.components must not fall back to settings.depends_on")
+}
+
+func TestBuildGraph_InvalidRequiredValueFails(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": {},
+			"app": {
+				"dependencies": map[string]any{
+					"components": []any{
+						map[string]any{"component": "vpc", "required": "sometimes"},
+					},
+				},
+			},
+		},
+	})
+
 	_, err := BuildGraph(stacks)
-	require.Error(t, err)
+	require.ErrorIs(t, err, schema.ErrComponentDependencyInvalidRequired)
 }
 
 func TestBuildGraph_IgnoresMalformedStackShapes(t *testing.T) {
@@ -249,15 +271,18 @@ func TestBuildGraph_ToleratesCycles(t *testing.T) {
 	assert.True(t, hasCycle)
 }
 
-func TestBuildGraph_MalformedDependenciesSectionFails(t *testing.T) {
+func TestBuildGraph_MalformedDependenciesSectionFallsBackToSettings(t *testing.T) {
 	stacks := terraformStacks(map[string]map[string]map[string]any{
 		"dev": {
+			"vpc": {},
 			"app": {
 				"dependencies": "not-a-map",
+				"settings":     map[string]any{"depends_on": []any{"vpc"}},
 			},
 		},
 	})
 
-	_, err := BuildGraph(stacks)
-	require.ErrorIs(t, err, errUtils.ErrUnsupportedDependencyType)
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+	assert.Equal(t, []string{NodeID("vpc", "dev")}, graph.Nodes[NodeID("app", "dev")].Dependencies)
 }

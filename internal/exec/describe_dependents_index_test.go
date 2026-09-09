@@ -34,6 +34,28 @@ func TestBuildDependencyIndex_NoDependencies(t *testing.T) {
 	assert.Empty(t, idx, "components without depends_on should produce empty index")
 }
 
+func TestBuildDependencyIndex_IgnoresInvalidVars(t *testing.T) {
+	t.Parallel()
+
+	idx, err := buildDependencyIndexWithError(map[string]any{
+		"dev-use1": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"app": map[string]any{
+						"vars": map[string]any{"tenant": []any{"invalid"}},
+						"dependencies": map[string]any{"components": []any{
+							map[string]any{"component": "vpc"},
+						}},
+					},
+				},
+			},
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Empty(t, idx)
+}
+
 func TestBuildDependencyIndex_WithDependencies(t *testing.T) {
 	t.Parallel()
 
@@ -336,20 +358,6 @@ func TestFindDependentsByScan_SkipsAbstractAndSelf(t *testing.T) {
 				"invalid-type": "not-a-map",
 			},
 		},
-		"prod-use1": map[string]any{
-			"components": map[string]any{
-				"terraform": map[string]any{
-					"vpc": map[string]any{
-						"vars": map[string]any{"tenant": "dev"},
-						"dependencies": map[string]any{
-							"components": []any{
-								map[string]any{"component": "vpc", "stack": "dev-use1"},
-							},
-						},
-					},
-				},
-			},
-		},
 		// Invalid stack section — should be skipped.
 		"bad-stack": "not-a-map",
 		// Missing components — should be skipped.
@@ -364,12 +372,9 @@ func TestFindDependentsByScan_SkipsAbstractAndSelf(t *testing.T) {
 
 	deps, err := findDependentsByScan(nil, args, stacks, providedVars, false)
 	require.NoError(t, err)
-	require.Len(t, deps, 2, "only the valid same-stack and cross-stack dependents should be returned")
-	actual := []string{
-		deps[0].Component + "@" + deps[0].Stack,
-		deps[1].Component + "@" + deps[1].Stack,
-	}
-	assert.ElementsMatch(t, []string{"app@dev-use1", "vpc@prod-use1"}, actual)
+	require.Len(t, deps, 1, "only 'app' should be a valid dependent")
+	assert.Equal(t, "app", deps[0].Component)
+	assert.Equal(t, "dev-use1", deps[0].Stack)
 }
 
 func TestFindDependentsFromIndex_SkipsSelfReference(t *testing.T) {

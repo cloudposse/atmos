@@ -480,14 +480,14 @@ func TestDependencies_Normalize_FilesFoldersSiblings(t *testing.T) {
 	})
 }
 
-func TestDependencies_Normalize_MissingComponentReturnsSentinel(t *testing.T) {
+func TestDependencies_Normalize_MissingComponentIsPreservedForCallersToSkip(t *testing.T) {
 	required := false
 	d := &Dependencies{
 		Components: []ComponentDependency{{Required: &required}},
 	}
 
-	err := d.Normalize()
-	require.ErrorIs(t, err, ErrComponentDependencyMissingComponent)
+	require.NoError(t, d.Normalize())
+	assert.Empty(t, d.Components[0].Component)
 }
 
 // Helpers for the equivalence assertion.

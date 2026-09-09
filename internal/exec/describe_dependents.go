@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -395,8 +396,7 @@ func scanComponentForDependents(p *scanComponentParams) ([]schema.Dependent, err
 		return nil, nil
 	}
 
-	if p.StackComponentName == p.Args.Component &&
-		(p.Args.Stack == "" || p.StackName == p.Args.Stack) {
+	if p.StackComponentName == p.Args.Component {
 		return nil, nil
 	}
 
@@ -567,11 +567,11 @@ func getComponentDependenciesWithError(componentMap map[string]any) (componentDe
 	if depsSection, ok := componentMap[cfg.DependenciesSectionName].(map[string]any); ok {
 		if _, hasComponents := depsSection["components"]; hasComponents {
 			componentDeps, err := schema.ParseComponentDependencies(depsSection, "", "")
-			if err != nil {
-				return componentDependenciesResult{
-					settingsSection: settingsSection,
-					source:          dependencySourceDependenciesComponents,
-				}, err
+			if errors.Is(err, schema.ErrComponentDependencyInvalidRequired) {
+				return componentDependenciesResult{settingsSection: settingsSection}, err
+			}
+			if err != nil && len(componentDeps) > 0 {
+				log.Warn("invalid dependencies section; entries may be silently ignored", "error", err)
 			}
 			componentDeps = filterComponentDependencies(componentDeps)
 			if len(componentDeps) > 0 {

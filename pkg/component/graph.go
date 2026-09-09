@@ -441,7 +441,7 @@ func addComponentDependencies(
 				continue
 			}
 			if dep.IsRequired() {
-				log.Warn("Dependency target unavailable", "from", fromID, "to", toID, "reason", target.reason)
+				log.Warn("Dependency target not found", "from", fromID, "to", toID)
 				continue
 			}
 			log.Info("optional dependency skipped", "event", "optional_dependency_skipped",
@@ -476,22 +476,21 @@ func componentDependencies(componentSection map[string]any, componentType, stack
 
 // dependenciesFromSection extracts dependencies from the 'dependencies.components' section.
 func dependenciesFromSection(componentSection map[string]any, componentType, stackName string) ([]schema.ComponentDependency, bool, error) {
-	dependenciesValue, exists := componentSection[cfg.DependenciesSectionName]
-	if !exists {
-		return nil, false, nil
-	}
-	depsSection, ok := dependenciesValue.(map[string]any)
+	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
 	if !ok {
-		return nil, true, fmt.Errorf("%w: dependencies must be a map", errUtils.ErrUnsupportedDependencyType)
+		return nil, false, nil
 	}
 	if _, hasComponents := depsSection["components"]; !hasComponents {
 		return nil, false, nil
 	}
 	deps, err := schema.ParseComponentDependencies(depsSection, componentType, stackName)
 	if err != nil {
-		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
+		if errors.Is(err, schema.ErrComponentDependencyInvalidRequired) {
+			return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
+		}
+		return deps, len(deps) > 0, nil
 	}
-	return deps, true, nil
+	return deps, len(deps) > 0, nil
 }
 
 // legacyDependenciesFromSettings extracts dependencies from the deprecated 'settings.depends_on' section.

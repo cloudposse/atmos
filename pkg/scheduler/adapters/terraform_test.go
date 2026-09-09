@@ -231,11 +231,22 @@ func TestTerraformDependenciesModernAndLegacy(t *testing.T) {
 	})
 }
 
-func TestTerraformDependenciesRejectsMalformedDependenciesSection(t *testing.T) {
-	_, err := terraformDependencies(map[string]any{
+func TestTerraformDependenciesFallsBackFromMalformedDependenciesSection(t *testing.T) {
+	dependencies, err := terraformDependencies(map[string]any{
 		cfg.DependenciesSectionName: "not-a-map",
+		cfg.SettingsSectionName:     map[string]any{"depends_on": []any{"vpc"}},
 	})
-	require.ErrorIs(t, err, errUtils.ErrUnsupportedDependencyType)
+	require.NoError(t, err)
+	require.Equal(t, []schema.ComponentDependency{{Component: "vpc"}}, dependencies)
+}
+
+func TestTerraformDependenciesEmptyModernListFallsBackToSettings(t *testing.T) {
+	dependencies, err := terraformDependencies(map[string]any{
+		cfg.DependenciesSectionName: map[string]any{"components": []any{}},
+		cfg.SettingsSectionName:     map[string]any{"depends_on": []any{"vpc"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []schema.ComponentDependency{{Component: "vpc"}}, dependencies)
 }
 
 func TestAddTerraformDependenciesOptionalUnresolvedTargetFails(t *testing.T) {

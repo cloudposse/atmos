@@ -166,20 +166,6 @@ func TestTargetsForDeduplicatesComponentsDeterministically(t *testing.T) {
 	assert.Equal(t, "dev", targets[1].Stack)
 }
 
-func TestTargetsFromStacksSkipsUnavailableComponents(t *testing.T) {
-	targets := targetsFromStacks(map[string]any{
-		"dev": map[string]any{"components": map[string]any{"terraform": map[string]any{
-			"abstract": map[string]any{"metadata": map[string]any{"type": "abstract"}},
-			"disabled": map[string]any{"metadata": map[string]any{"enabled": false}},
-			"enabled":  map[string]any{},
-		}}},
-	})
-
-	require.Len(t, targets, 1)
-	assert.Equal(t, "enabled", targets[0].Component)
-	assert.Equal(t, "dev", targets[0].Stack)
-}
-
 func TestExecuteRejectsMissingInputs(t *testing.T) {
 	runtime := testRuntime()
 	require.ErrorIs(t, Execute(context.Background(), runtime, nil, nil, 0), errUtils.ErrNilParam)
@@ -189,22 +175,17 @@ func TestExecuteRejectsMissingInputs(t *testing.T) {
 }
 
 func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
-	stubInitCLIConfig(t, "[[", "]]")
+	stubInitCLIConfig(t)
 
-	runtime := testRuntime()
-	runtime.DescribeStacks = func(
-		_ *schema.AtmosConfiguration, _ string, components []string, _ []string, _ []string,
-		_ bool, _ bool, _ bool, _ bool, _ []string, _ auth.AuthManager, _ bool,
-	) (map[string]any, error) {
-		assert.Equal(t, []string{"requested"}, components)
-		return map[string]any{
-			"dev": map[string]any{"components": map[string]any{"terraform": map[string]any{
-				"requested": map[string]any{"dependencies": map[string]any{"components": []any{
-					map[string]any{"name": "not-a-lint-target"},
-				}}},
-			}}},
-		}, nil
+	originalGraph := buildTerraformGraph
+	buildTerraformGraph = func(map[string]any, ...string) (*dependency.Graph, error) {
+		return &dependency.Graph{Nodes: map[string]*dependency.Node{
+			"vpc-prod": {Component: "vpc", Stack: "prod"},
+			"vpc-dev":  {Component: "vpc", Stack: "dev"},
+			"app-dev":  {Component: "app", Stack: "dev"},
+		}}, nil
 	}
+	t.Cleanup(func() { buildTerraformGraph = originalGraph })
 
 	originalRun := runTarget
 	var linted []string
@@ -215,12 +196,18 @@ func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
 	}
 	t.Cleanup(func() { runTarget = originalRun })
 
-	require.NoError(t, Execute(context.Background(), runtime, &schema.ConfigAndStacksInfo{ComponentFromArg: "requested", Stack: "dev"}, nil, 0))
-	assert.Equal(t, []string{"requested:dev"}, linted)
+	require.NoError(t, Execute(context.Background(), testRuntime(), &schema.ConfigAndStacksInfo{ComponentFromArg: "requested", Stack: "dev"}, nil, 0))
+	assert.Equal(t, []string{"app:dev", "vpc:dev"}, linted)
 }
 
 func TestExecuteDisablesComponentAuthDuringStackDiscovery(t *testing.T) {
 	stubInitCLIConfig(t)
+
+	originalGraph := buildTerraformGraph
+	buildTerraformGraph = func(map[string]any, ...string) (*dependency.Graph, error) {
+		return &dependency.Graph{}, nil
+	}
+	t.Cleanup(func() { buildTerraformGraph = originalGraph })
 
 	runtime := testRuntime()
 	runtime.SetupAuth = func(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {

@@ -124,20 +124,63 @@ func TestBuildGraphSupportsLegacyDependsOn(t *testing.T) {
 	assert.Equal(t, []string{GraphNodeID("base", "dev")}, api.Dependencies)
 }
 
-func TestBuildGraphMalformedDependenciesSectionFails(t *testing.T) {
-	_, err := BuildGraph(map[string]any{
+func TestBuildGraphEmptyModernDependenciesFallBackToSettings(t *testing.T) {
+	stacks := map[string]any{
 		"dev": map[string]any{
 			cfg.ComponentsSectionName: map[string]any{
 				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{"components": []any{}},
+						cfg.SettingsSectionName:     map[string]any{"depends_on": []any{"base"}},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := BuildGraph(stacks, cfg.KubernetesComponentType)
+	require.NoError(t, err)
+	assert.Equal(t, []string{GraphNodeID("base", "dev")}, graph.Nodes[GraphNodeID("api", "dev")].Dependencies)
+}
+
+func TestBuildGraphMalformedDependenciesSectionFallsBackToSettings(t *testing.T) {
+	graph, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
 					"api": map[string]any{
 						cfg.DependenciesSectionName: "not-a-map",
+						cfg.SettingsSectionName:     map[string]any{"depends_on": []any{"base"}},
 					},
 				},
 			},
 		},
 	}, cfg.KubernetesComponentType)
 
-	require.ErrorIs(t, err, errUtils.ErrUnsupportedDependencyType)
+	require.NoError(t, err)
+	assert.Equal(t, []string{GraphNodeID("base", "dev")}, graph.Nodes[GraphNodeID("api", "dev")].Dependencies)
+}
+
+func TestBuildGraphInvalidRequiredValueFails(t *testing.T) {
+	_, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{"components": []any{
+							map[string]any{"component": "base", "required": "sometimes"},
+						}},
+					},
+				},
+			},
+		},
+	}, cfg.KubernetesComponentType)
+
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+	require.ErrorIs(t, err, schema.ErrComponentDependencyInvalidRequired)
 }
 
 func TestBuildGraphOptionalUnresolvedTargetFails(t *testing.T) {

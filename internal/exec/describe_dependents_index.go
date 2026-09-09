@@ -90,7 +90,7 @@ func indexComponentDependencies(
 	if err := mapstructure.Decode(stackComponentVarsSection, &stackComponentVars); err != nil {
 		log.Debug("Failed to decode component vars during index build",
 			"component", stackComponentName, "stack", stackName, "error", err)
-		return fmt.Errorf("decode vars for component %q in stack %q: %w", stackComponentName, stackName, err)
+		return nil
 	}
 
 	result, err := getComponentDependenciesWithError(stackComponentMap)
