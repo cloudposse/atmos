@@ -98,7 +98,7 @@ func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
 	return nil
 }
 
-// ConvertToJSON converts the provided value to a JSON-encoded string
+// ConvertToJSON converts the provided value to a JSON-encoded string.
 func ConvertToJSON(data any) (string, error) {
 	defer perf.Track(nil, "utils.ConvertToJSON")()
 
@@ -109,11 +109,23 @@ func ConvertToJSON(data any) (string, error) {
 		ValidateJsonRawMessage:        true,
 	}
 
-	j, err := jc.Froze().MarshalIndent(data, "", strings.Repeat(" ", 3))
+	// Marshal compact with jsoniter (for its EscapeHTML/SortMapKeys/RawMessage behavior),
+	// then indent with stdlib encoding/json rather than jsoniter's own MarshalIndent: jsoniter
+	// has a long-standing bug where a []interface{} nested more than one level deep (e.g. an
+	// array of objects that themselves contain an array) loses track of the current indent
+	// depth, under-indenting that inner array's elements and closing bracket while the
+	// surrounding structure stays correctly indented. encoding/json.Indent re-indents an
+	// already-valid compact document from scratch, so it isn't subject to that bug.
+	compact, err := jc.Froze().Marshal(data)
 	if err != nil {
 		return "", err
 	}
-	return string(j), nil
+
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, compact, "", strings.Repeat(" ", 3)); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 // ConvertToJSONFast converts the provided value to a JSON-encoded string using 'ConfigFastest' config and json.Marshal without indents
