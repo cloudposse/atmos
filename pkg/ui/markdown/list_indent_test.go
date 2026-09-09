@@ -82,6 +82,15 @@ func TestFixListHangingIndent(t *testing.T) {
 				"  • Second item short",
 		},
 		{
+			name: "outer item's wrapped text resumes correctly after a nested list ends",
+			in: "  • Outer item wraps across\n" +
+				"    1. Inner item\n" +
+				"  outer continuation resumes here",
+			want: "  • Outer item wraps across\n" +
+				"    1. Inner item\n" +
+				"    outer continuation resumes here",
+		},
+		{
 			name: "no list content is left untouched",
 			in:   "Just a paragraph\nwith two lines.",
 			want: "Just a paragraph\nwith two lines.",

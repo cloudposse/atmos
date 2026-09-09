@@ -93,24 +93,43 @@ func executeStreamingOrShell(atmosConfig *schema.AtmosConfiguration, info *schem
 	return err
 }
 
-// dispatchStreamingExecutor routes to the tfui.Execute* variant matching subCommand.
-// Workspace select/new and the after-init providers-lock hook share the init spinner
-// (ExecuteInit) since neither has a dedicated TUI phase of its own. Dry runs always use the
-// plain Execute path, which short-circuits without touching the terminal. The caller's
-// cancellation (e.g. a shell-option deadline) flows through ctx, so a cancelled/timed-out
-// caller can stop a running streaming Terraform process instead of leaving it orphaned.
-func dispatchStreamingExecutor(ctx context.Context, subCommand string, dryRun bool, execOpts *tfui.ExecuteOptions) error {
+// streamingExecutorFunc is the shared signature of tfui.Execute and every
+// tfui.Execute<Phase> variant, letting selectStreamingExecutor hand one back
+// without invoking it.
+type streamingExecutorFunc func(context.Context, *tfui.ExecuteOptions) error
+
+// selectStreamingExecutor resolves the tfui.Execute* variant matching
+// subCommand without invoking it. Both dispatchStreamingExecutor and its
+// tests go through this single routing table, so a test can assert on the
+// returned function's identity (e.g. that "providers-lock" resolves to
+// tfui.ExecuteInit specifically) instead of only observing an error both
+// ExecuteInit and the plain Execute fallback would produce identically
+// outside a supported interactive environment.
+//
+// Workspace select/new and the after-init providers-lock hook share the init
+// spinner (ExecuteInit) since neither has a dedicated TUI phase of its own. Dry
+// runs always use the plain Execute path, which short-circuits without touching
+// the terminal.
+func selectStreamingExecutor(subCommand string, dryRun bool) streamingExecutorFunc {
 	if !dryRun {
 		switch subCommand {
 		case subcommandApply:
-			return tfui.ExecuteApply(ctx, execOpts)
+			return tfui.ExecuteApply
 		case "destroy":
-			return tfui.ExecuteDestroy(ctx, execOpts)
+			return tfui.ExecuteDestroy
 		case "plan":
-			return tfui.ExecutePlan(ctx, execOpts)
+			return tfui.ExecutePlan
 		case subcommandInit, subcommandWorkspace, subcommandProvidersLock:
-			return tfui.ExecuteInit(ctx, execOpts)
+			return tfui.ExecuteInit
 		}
 	}
-	return tfui.Execute(ctx, execOpts)
+	return tfui.Execute
+}
+
+// dispatchStreamingExecutor routes to the tfui.Execute* variant matching subCommand.
+// The caller's cancellation (e.g. a shell-option deadline) flows through ctx, so a
+// cancelled/timed-out caller can stop a running streaming Terraform process instead
+// of leaving it orphaned.
+func dispatchStreamingExecutor(ctx context.Context, subCommand string, dryRun bool, execOpts *tfui.ExecuteOptions) error {
+	return selectStreamingExecutor(subCommand, dryRun)(ctx, execOpts)
 }

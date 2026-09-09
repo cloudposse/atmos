@@ -5,7 +5,8 @@ package exec
 //   - executeStreamingOrShell: retry-gated shell fallback, the "streaming not
 //     requested" silent fallback, and the "streaming requested but unsupported"
 //     warn-then-fallback path.
-//   - dispatchStreamingExecutor: the subCommand -> tfui.Execute* routing table.
+//   - selectStreamingExecutor/dispatchStreamingExecutor: the subCommand ->
+//     tfui.Execute* routing table.
 //
 // The actual "streaming succeeded" branch inside executeStreamingOrShell (where
 // tfui.ShouldUseStreamingUI returns true and dispatchStreamingExecutor is invoked
@@ -15,18 +16,27 @@ package exec
 // implementation. That branch is intentionally left uncovered by this package's
 // tests (see the coverage report for this file).
 //
-// The switch cases inside dispatchStreamingExecutor ARE covered directly: each test pins
-// CI=true so telemetry.IsCI() deterministically forces every tfui.Execute* variant's own
-// precondition check (stdout/stdin TTY, CI) to return errUtils.ErrStreamingNotSupported
-// before doing any real work, regardless of whether the runner's stdout happens to be a
-// real TTY. That's a genuine safety property worth asserting: no matter which subcommand
-// is dispatched, the streaming path never attempts to spawn a real terraform process
-// outside a supported interactive environment.
+// The switch cases inside dispatchStreamingExecutor ARE covered two ways:
+//   - TestSelectStreamingExecutor_RoutesBySubcommand asserts the *identity* of
+//     the resolved tfui.Execute* variant directly (via selectStreamingExecutor),
+//     which is the only way to tell apart "routed to ExecuteInit and it
+//     refused" from "fell through to the plain Execute and it refused" - both
+//     return the identical error below.
+//   - TestDispatchStreamingExecutor_RoutesSafely pins CI=true so
+//     telemetry.IsCI() deterministically forces every tfui.Execute* variant's
+//     own precondition check (stdout/stdin TTY, CI) to return
+//     errUtils.ErrStreamingNotSupported before doing any real work, regardless
+//     of whether the runner's stdout happens to be a real TTY. That's a
+//     genuine safety property worth asserting: no matter which subcommand is
+//     dispatched, the streaming path never attempts to spawn a real terraform
+//     process outside a supported interactive environment.
 
 import (
 	"context"
 	"errors"
 	"os"
+	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -200,6 +210,47 @@ func TestDispatchStreamingExecutor_RoutesSafely(t *testing.T) {
 			require.Error(t, err, "must refuse to run outside a supported interactive environment")
 			assert.True(t, errors.Is(err, errUtils.ErrStreamingNotSupported),
 				"expected ErrStreamingNotSupported, got: %v", err)
+		})
+	}
+}
+
+// funcName returns the fully-qualified name of the function fn points to, e.g.
+// "github.com/cloudposse/atmos/pkg/terraform/ui.ExecuteInit". Used below to
+// assert selectStreamingExecutor picked a *specific* tfui.Execute* variant,
+// since every variant returns the identical errUtils.ErrStreamingNotSupported
+// outside a real TTY and so can't be told apart by their error alone.
+func funcName(fn streamingExecutorFunc) string {
+	return runtime.FuncForPC(reflect.ValueOf(fn).Pointer()).Name()
+}
+
+// TestSelectStreamingExecutor_RoutesBySubcommand asserts the *identity* of the
+// tfui.Execute* variant selectStreamingExecutor resolves for each subCommand,
+// rather than only the error it eventually returns. Without this, a
+// providers-lock/workspace case that silently regressed to falling through to
+// the plain tfui.Execute path (the "unrecognized subcommand" fallback) would
+// still pass a test that only checks for errUtils.ErrStreamingNotSupported,
+// since that fallback returns the exact same sentinel error outside a real TTY.
+func TestSelectStreamingExecutor_RoutesBySubcommand(t *testing.T) {
+	tests := []struct {
+		name       string
+		subCommand string
+		dryRun     bool
+		want       streamingExecutorFunc
+	}{
+		{name: "dry run always uses the plain Execute path", subCommand: subcommandApply, dryRun: true, want: tfui.Execute},
+		{name: "apply routes to ExecuteApply", subCommand: subcommandApply, dryRun: false, want: tfui.ExecuteApply},
+		{name: "destroy routes to ExecuteDestroy", subCommand: "destroy", dryRun: false, want: tfui.ExecuteDestroy},
+		{name: "plan routes to ExecutePlan", subCommand: "plan", dryRun: false, want: tfui.ExecutePlan},
+		{name: "init routes to ExecuteInit", subCommand: subcommandInit, dryRun: false, want: tfui.ExecuteInit},
+		{name: "workspace routes to ExecuteInit, not the plain Execute fallback", subCommand: subcommandWorkspace, dryRun: false, want: tfui.ExecuteInit},
+		{name: "providers-lock routes to ExecuteInit, not the plain Execute fallback", subCommand: subcommandProvidersLock, dryRun: false, want: tfui.ExecuteInit},
+		{name: "unrecognized subcommand falls through to the plain Execute path", subCommand: "unknown-subcommand", dryRun: false, want: tfui.Execute},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := selectStreamingExecutor(tt.subCommand, tt.dryRun)
+			assert.Equal(t, funcName(tt.want), funcName(got))
 		})
 	}
 }

@@ -327,7 +327,14 @@ func buildScaffoldDisplayText(templateName string, templateConfig interface{}, t
 	}
 	description = truncateAtWordBoundary(description, descWidth)
 
-	displayText := fmt.Sprintf("%-20s   %s", templateName, description) + sourceSuffix
+	// Truncate the displayed name too (a no-op when already within budget):
+	// "%-*s" only pads -- it never truncates -- so a scaffold key longer than
+	// scaffoldNameColumnWidth would otherwise silently push the whole line
+	// past the terminal-width budget descWidth above already assumed. The
+	// option's underlying value (set by the caller via huh.NewOption) stays
+	// the untruncated templateName, so selecting it still resolves correctly.
+	displayName := truncateAtWordBoundary(templateName, scaffoldNameColumnWidth)
+	displayText := fmt.Sprintf("%-*s   %s", scaffoldNameColumnWidth, displayName, description) + sourceSuffix
 
 	return displayText, true
 }

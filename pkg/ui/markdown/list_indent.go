@@ -24,6 +24,14 @@ var bulletPrefixPattern = regexp.MustCompile(`^• `)
 // Enumeration.BlockPrefix ". ", see the same two style sources above).
 var orderedPrefixPattern = regexp.MustCompile(`^\d+\. `)
 
+// listLevel tracks one active nesting level's hanging-indent state: the
+// visible indent of that level's own bullet/number line (baseIndent) and how
+// many extra spaces its continuation lines need (hangIndent).
+type listLevel struct {
+	baseIndent int
+	hangIndent int
+}
+
 // FixListHangingIndent re-indents wrapped continuation lines of bullet and
 // ordered markdown list items so they align under the item's own text
 // instead of falling flush with the bullet/number.
@@ -65,12 +73,14 @@ func FixListHangingIndent(rendered string) string {
 
 	lines := strings.Split(rendered, "\n")
 
-	// hangIndent is the number of extra spaces continuation lines of the
-	// current item need; -1 means "not currently inside a list item".
-	hangIndent := -1
-	// baseIndent is the visible indent width of the item's own bullet/number
-	// line; continuation lines of that item share this same indent.
-	baseIndent := -1
+	// stack holds one listLevel per active nesting depth, outermost first.
+	// Tracking a stack (rather than a single flat baseIndent/hangIndent
+	// pair) is required so that a nested list's own bullet doesn't clobber
+	// its enclosing item's state: once the nested list ends and a wrapped
+	// continuation line of the *outer* item resumes at the outer indent,
+	// the outer level is still on the stack (just no longer on top) and its
+	// hangIndent can be recovered instead of falling flush with the marker.
+	var stack []listLevel
 
 	for i, line := range lines {
 		plain := ansi.Strip(line)
@@ -78,32 +88,59 @@ func FixListHangingIndent(rendered string) string {
 		indent := len(plain) - len(trimmed)
 
 		if trimmed == "" {
-			hangIndent = -1
+			stack = stack[:0]
 			continue
 		}
 
 		if prefix := listItemPrefix(trimmed); prefix != "" {
-			baseIndent = indent
-			// Rune count, not byte length: the bullet "•" (U+2022) is a
-			// single terminal column but three UTF-8 bytes.
-			hangIndent = utf8.RuneCountInString(prefix)
+			stack = pushListLevel(stack, indent, prefix)
 			continue
 		}
 
-		if hangIndent >= 0 && indent == baseIndent {
-			// Plain leading spaces are visually identical to any styled
-			// spaces already on the line -- a space glyph has no visible
-			// foreground color -- so prepending them unstyled is safe and
-			// avoids needing to parse past embedded ANSI codes to find an
-			// "insertion point".
-			lines[i] = strings.Repeat(" ", hangIndent) + line
-			continue
-		}
-
-		hangIndent = -1
+		stack, lines[i] = applyHangingIndent(stack, indent, line)
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// pushListLevel records a new bullet/number line's own indent and hanging
+// indent onto stack. A new bullet/number at this indent either starts a
+// deeper nested list (indent greater than every tracked level) or is a new
+// sibling item replacing the level(s) at or below its own indent (indent <=
+// some tracked level's baseIndent) -- those are popped first so a sibling
+// never merges with its predecessor's state.
+func pushListLevel(stack []listLevel, indent int, prefix string) []listLevel {
+	for len(stack) > 0 && stack[len(stack)-1].baseIndent >= indent {
+		stack = stack[:len(stack)-1]
+	}
+	return append(stack, listLevel{
+		baseIndent: indent,
+		// Rune count, not byte length: the bullet "•" (U+2022) is a single
+		// terminal column but three UTF-8 bytes.
+		hangIndent: utf8.RuneCountInString(prefix),
+	})
+}
+
+// applyHangingIndent handles one non-bullet/number line: it pops any levels
+// deeper than indent (those inner list items ended, this line dedented past
+// them), then, if the now-top level's baseIndent matches indent, prepends
+// its hangIndent onto line as a continuation of that level. Otherwise indent
+// doesn't match any tracked level, so line isn't a continuation of anything
+// currently active and tracking stops entirely.
+func applyHangingIndent(stack []listLevel, indent int, line string) ([]listLevel, string) {
+	for len(stack) > 0 && stack[len(stack)-1].baseIndent > indent {
+		stack = stack[:len(stack)-1]
+	}
+
+	if len(stack) > 0 && stack[len(stack)-1].baseIndent == indent {
+		// Plain leading spaces are visually identical to any styled spaces
+		// already on the line -- a space glyph has no visible foreground
+		// color -- so prepending them unstyled is safe and avoids needing
+		// to parse past embedded ANSI codes to find an "insertion point".
+		return stack, strings.Repeat(" ", stack[len(stack)-1].hangIndent) + line
+	}
+
+	return stack[:0], line
 }
 
 // listItemPrefix returns the bullet/number prefix (e.g. "• " or "12. ") at

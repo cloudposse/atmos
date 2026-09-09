@@ -185,6 +185,36 @@ func TestBuildEmbedsTemplateOptions_FitsTerminalWidth(t *testing.T) {
 	assert.Contains(t, widest, realAWSLandingZoneDescription)
 }
 
+// TestBuildScaffoldTemplateOptions_TruncatesLongNameButKeepsFullValue covers a
+// source-free scaffold key longer than scaffoldNameColumnWidth: the displayed
+// name column must be truncated (previously "%-20s" only padded, never
+// truncated, letting a long key push the line past the terminal-width budget
+// descWidth already assumed), while the option's underlying value -- used for
+// lookup after selection -- must remain the full, untruncated key.
+func TestBuildScaffoldTemplateOptions_TruncatesLongNameButKeepsFullValue(t *testing.T) {
+	longName := "an-unusually-long-scaffold-template-key-name"
+	require.Greater(t, lipgloss.Width(longName), scaffoldNameColumnWidth)
+
+	templatesMap := map[string]interface{}{
+		longName: map[string]interface{}{
+			"description": "short description, no source",
+		},
+	}
+
+	const terminalWidth = 80
+	options, templateNames := buildScaffoldTemplateOptions(templatesMap, terminalWidth)
+	require.Len(t, options, 1)
+	require.Equal(t, []string{longName}, templateNames)
+
+	displayText := options[0].Key
+	assert.LessOrEqual(t, lipgloss.Width(displayText), terminalWidth,
+		"display text %q must fit within the terminal width budget", displayText)
+	assert.NotContains(t, displayText, longName,
+		"the untruncated name must not appear verbatim once it exceeds the name column budget")
+	assert.Equal(t, longName, options[0].Value,
+		"the option's underlying value must stay the full, untruncated template name for post-selection lookup")
+}
+
 // TestBuildScaffoldDisplayText_TruncatesDescription verifies the scaffold
 // picker (atmos scaffold) applies the same terminal-width-aware truncation
 // as the embeds picker, including when a source suffix is present.
