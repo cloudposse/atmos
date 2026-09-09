@@ -181,9 +181,9 @@ func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
 	buildTerraformGraph = func(_ map[string]any, leftDelims ...string) (*dependency.Graph, error) {
 		assert.Equal(t, []string{"[["}, leftDelims)
 		return &dependency.Graph{Nodes: map[string]*dependency.Node{
-			"vpc-prod": {Component: "vpc", Stack: "prod"},
-			"vpc-dev":  {Component: "vpc", Stack: "dev"},
-			"app-dev":  {Component: "app", Stack: "dev"},
+			"requested-prod": {Component: "requested", Stack: "prod"},
+			"requested-dev":  {Component: "requested", Stack: "dev"},
+			"dependency-dev": {Component: "dependency", Stack: "dev"},
 		}}, nil
 	}
 	t.Cleanup(func() { buildTerraformGraph = originalGraph })
@@ -198,7 +198,7 @@ func TestExecuteRoutesSortedUniqueTargets(t *testing.T) {
 	t.Cleanup(func() { runTarget = originalRun })
 
 	require.NoError(t, Execute(context.Background(), testRuntime(), &schema.ConfigAndStacksInfo{ComponentFromArg: "requested", Stack: "dev"}, nil, 0))
-	assert.Equal(t, []string{"app:dev", "vpc:dev"}, linted)
+	assert.Equal(t, []string{"requested:dev"}, linted)
 }
 
 func TestExecuteDisablesComponentAuthDuringStackDiscovery(t *testing.T) {
