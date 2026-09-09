@@ -196,7 +196,7 @@ Pre-commit captures stdout and stderr from hooks and only displays output when a
 
 - **Clean Streaming**: Atmos separates data streams (`pkg/io/`) from UI messages (`pkg/ui/`).
 - **TTY Auto-Detection**: When executed under pre-commit, stdout is not a TTY. Atmos's zero-configuration degradation automatically strips interactive spinners and TrueColor sequences while preserving clean diagnostics.
-- **Rich Diagnostics**: By utilizing `ATMOS_VALIDATION_FORMAT=plain` or leveraging Atmos's error builders (`errors/`), pre-commit outputs clear file, line, and column pointers for manifest errors.
+- **Rich Diagnostics**: By utilizing `ATMOS_VALIDATION_FORMAT=text` or leveraging Atmos's error builders (`errors/`), pre-commit outputs clear file, line, and column pointers for manifest errors.
 
 ---
 
@@ -219,7 +219,7 @@ In a consumer infrastructure repository's `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/cloudposse/atmos
-    rev: v1.227.0
+    rev: v1.228.0
     hooks:
       # Automatically regenerate component/stack READMEs
       - id: atmos-generate-docs
