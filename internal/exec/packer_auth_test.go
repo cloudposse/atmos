@@ -30,7 +30,7 @@ func stubPackerAuthSeams(t *testing.T, manager auth.AuthManager) {
 	defaultMergedAuthConfigGetter = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
 		return &schema.AuthConfig{}, nil
 	}
-	defaultAuthManagerCreator = func(identity string, authConfig *schema.AuthConfig, selectValue string, atmosConfig *schema.AtmosConfiguration, stack string) (auth.AuthManager, error) {
+	defaultAuthManagerCreator = func(identity string, authConfig *schema.AuthConfig, selectValue string, atmosConfig *schema.AtmosConfiguration, reExecCtx auth.ReExecContext) (auth.AuthManager, error) {
 		return manager, nil
 	}
 }
