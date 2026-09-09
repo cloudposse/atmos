@@ -14,6 +14,8 @@ import (
 
 // test configuration with flags --config and --config-path with multiple files and directories merge.
 func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
+	t.Parallel()
+
 	// Create tmp folder.
 	tmpDir := t.TempDir()
 	// Create atmos.yaml file.
@@ -68,6 +70,8 @@ func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
 }
 
 func TestLoadConfigFromCLIArgs(t *testing.T) {
+	t.Parallel()
+
 	// Setup valid configuration for base case.
 	validDir := t.TempDir()
 	validConfig := `
@@ -122,6 +126,7 @@ logs:
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			configInfo := schema.ConfigAndStacksInfo{
 				AtmosConfigFilesFromArg: tc.files,
 				AtmosConfigDirsFromArg:  tc.dirs,
@@ -142,6 +147,8 @@ logs:
 }
 
 func TestConnectPaths_WindowsPaths(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		paths    []string
@@ -171,6 +178,7 @@ func TestConnectPaths_WindowsPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := connectPaths(tt.paths)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -179,6 +187,8 @@ func TestConnectPaths_WindowsPaths(t *testing.T) {
 
 // TestValidatedIsFiles_EdgeCases tests edge cases for file validation.
 func TestValidatedIsFiles_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	validFile := filepath.Join(tmpDir, "test.yaml")
 	require.NoError(t, os.WriteFile(validFile, []byte("test: value"), 0o644))
@@ -211,6 +221,7 @@ func TestValidatedIsFiles_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := validatedIsFiles(tt.files)
 			assert.Error(t, err)
 			if tt.wantError != "" {
@@ -225,6 +236,8 @@ func TestValidatedIsFiles_EdgeCases(t *testing.T) {
 
 // TestValidatedIsDirs_EdgeCases tests edge cases for directory validation.
 func TestValidatedIsDirs_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	validDir := filepath.Join(tmpDir, "valid")
 	require.NoError(t, os.Mkdir(validDir, 0o755))
@@ -266,6 +279,7 @@ func TestValidatedIsDirs_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := validatedIsDirs(tt.dirs)
 			assert.Error(t, err)
 			if tt.wantError != "" {
@@ -280,6 +294,8 @@ func TestValidatedIsDirs_EdgeCases(t *testing.T) {
 
 // TestMergeConfigFromDirectories_ConfigFileVariants tests finding both atmos.yaml and .atmos.yaml.
 func TestMergeConfigFromDirectories_ConfigFileVariants(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	// Directory with atmos.yaml.
@@ -333,6 +349,7 @@ func TestMergeConfigFromDirectories_ConfigFileVariants(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			configInfo := schema.ConfigAndStacksInfo{
 				AtmosConfigDirsFromArg: tt.dirs,
 			}
@@ -350,6 +367,8 @@ func TestMergeConfigFromDirectories_ConfigFileVariants(t *testing.T) {
 
 // TestLoadConfigFromCLIArgs_ErrorPaths tests error paths in config loading.
 func TestLoadConfigFromCLIArgs_ErrorPaths(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	// Create invalid YAML file.
@@ -374,6 +393,7 @@ func TestLoadConfigFromCLIArgs_ErrorPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			configInfo := schema.ConfigAndStacksInfo{
 				AtmosConfigFilesFromArg: tt.files,
 				AtmosConfigDirsFromArg:  tt.dirs,

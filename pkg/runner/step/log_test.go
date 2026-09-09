@@ -15,6 +15,8 @@ import (
 // This file tests Execute and helper methods.
 
 func TestLogHandler_GetLogLevel(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		level    string
@@ -34,6 +36,7 @@ func TestLogHandler_GetLogLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			level := getLogLevel(tt.level)
 			assert.Equal(t, tt.expected, level)
 		})
@@ -41,11 +44,14 @@ func TestLogHandler_GetLogLevel(t *testing.T) {
 }
 
 func TestLogHandler_BuildKeyvals(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("log")
 	require.True(t, ok)
 	logHandler := handler.(*LogHandler)
 
 	t.Run("empty fields", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:   "test",
 			Fields: nil,
@@ -57,6 +63,7 @@ func TestLogHandler_BuildKeyvals(t *testing.T) {
 	})
 
 	t.Run("static fields", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Fields: map[string]string{
@@ -73,6 +80,7 @@ func TestLogHandler_BuildKeyvals(t *testing.T) {
 	})
 
 	t.Run("template fields", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Fields: map[string]string{
@@ -96,6 +104,7 @@ func TestLogHandler_BuildKeyvals(t *testing.T) {
 	})
 
 	t.Run("invalid template uses original value", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Fields: map[string]string{
@@ -119,10 +128,13 @@ func TestLogHandler_BuildKeyvals(t *testing.T) {
 }
 
 func TestLogHandlerValidation(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("log")
 	require.True(t, ok)
 
 	t.Run("valid with content", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "log",
@@ -133,6 +145,7 @@ func TestLogHandlerValidation(t *testing.T) {
 	})
 
 	t.Run("missing content", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Type: "log",
@@ -142,6 +155,7 @@ func TestLogHandlerValidation(t *testing.T) {
 	})
 
 	t.Run("with level and fields", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "log",
@@ -157,10 +171,13 @@ func TestLogHandlerValidation(t *testing.T) {
 }
 
 func TestLogHandlerExecution(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("log")
 	require.True(t, ok)
 
 	t.Run("simple log message", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_log",
 			Type:    "log",
@@ -174,6 +191,7 @@ func TestLogHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("log with template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_log",
 			Type:    "log",
@@ -188,6 +206,7 @@ func TestLogHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("log with different levels", func(t *testing.T) {
+		t.Parallel()
 		levels := []string{"trace", "debug", "info", "warn", "error"}
 		for _, level := range levels {
 			step := &schema.WorkflowStep{
@@ -205,6 +224,7 @@ func TestLogHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("log with fields", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_log",
 			Type:    "log",
@@ -222,6 +242,7 @@ func TestLogHandlerExecution(t *testing.T) {
 	})
 
 	t.Run("log with invalid template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test_log",
 			Type:    "log",
