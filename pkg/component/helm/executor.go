@@ -125,8 +125,10 @@ func executeSingle(
 		return err
 	}
 
-	if err := maybeAutoGenerateFiles(atmosConfig, info, componentPath); err != nil {
-		return err
+	if operation != OperationValues {
+		if err := maybeAutoGenerateFiles(atmosConfig, info, componentPath); err != nil {
+			return err
+		}
 	}
 
 	tenv, err := dependenciesForComponent(atmosConfig, cfg.HelmComponentType, info.StackSection, info.ComponentSection)
@@ -210,6 +212,9 @@ func runWithHooks(
 	if err != nil {
 		return err
 	}
+	if spec.Values, err = applyValueOverrides(spec.Values, ctx.Flags); err != nil {
+		return err
+	}
 	if spec.ReleaseName == "" {
 		return errUtils.ErrHelmReleaseNameRequired
 	}
@@ -232,7 +237,7 @@ func runWithHooks(
 	if err := ctx.GoContext().Err(); err != nil {
 		return err
 	}
-	if operation != OperationDelete {
+	if operationUsesRenderedChart(operation) {
 		if err := setupRepositories(spec.Repositories); err != nil {
 			return err
 		}
@@ -280,6 +285,8 @@ func runOperation(
 		diffText, err := runDiff(ctx.GoContext(), atmosConfig, info, ctx.Flags, spec)
 		summary["diff"] = diffText
 		return summary, err
+	case OperationValues:
+		return summary, data.WriteYAML(spec.Values)
 	case OperationApply:
 		applySummary, err := deliverApply(ctx.GoContext(), atmosConfig, info, ctx.Flags, spec)
 		mergeSummary(summary, applySummary)
@@ -299,6 +306,15 @@ func runOperation(
 	}
 }
 
+func operationUsesRenderedChart(operation Operation) bool {
+	switch operation {
+	case OperationTemplate, OperationDiff, OperationApply:
+		return true
+	default:
+		return false
+	}
+}
+
 func emitLifecycleWarnings(warnings []lifecycleWarning) {
 	for _, warning := range warnings {
 		ui.Warningf("%s (field: %s, code: %s)", warning.Message, warning.Field, warning.Code)
@@ -315,7 +331,8 @@ func reportResolvedLifecycle(resolution releaseLifecycleResolution) {
 		}
 	}
 	policy := resolution.Policy
-	log.Debug("Resolved Helm release lifecycle",
+	log.Debug(
+		"Resolved Helm release lifecycle",
 		"operation", policy.Operation,
 		"wait_strategy", policy.WaitStrategy,
 		"wait_strategy_reason", reason,

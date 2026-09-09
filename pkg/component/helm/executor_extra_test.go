@@ -166,6 +166,44 @@ func TestRunWithHooks_DeleteSuccess(t *testing.T) {
 	assert.Equal(t, "app", deleted)
 }
 
+func TestRunWithHooks_ValuesDoesNotSetUpRepositories(t *testing.T) {
+	originalHooks := getHooks
+	originalCI := runCIHooks
+	originalSetup := setupRepositories
+	t.Cleanup(func() {
+		getHooks = originalHooks
+		runCIHooks = originalCI
+		setupRepositories = originalSetup
+	})
+
+	getHooks = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
+		return &hooks.Hooks{}, nil
+	}
+	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
+	setupRepositories = func([]chartRepository) error {
+		t.Fatal("values must not set up chart repositories")
+		return nil
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "apps/app",
+		SubCommand:       "values",
+		ComponentSection: map[string]any{
+			"chart":  "bitnami/nginx",
+			"name":   "app",
+			"values": map[string]any{"image": map[string]any{"tag": "component"}},
+		},
+	}
+	err := runWithHooks(
+		&component.ExecutionContext{Flags: map[string]any{flagSet: []string{"image.tag=preview"}}},
+		&schema.AtmosConfiguration{},
+		info,
+		OperationValues,
+		"",
+	)
+	require.NoError(t, err)
+}
+
 func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
 	originalHooks := getHooks
 	originalApply := applyHelmRelease
@@ -200,6 +238,7 @@ func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
 			"chart":     "bitnami/nginx",
 			"name":      "app",
 			"namespace": "component-ns",
+			"values":    map[string]any{"image": map[string]any{"tag": "component"}},
 			"repositories": []any{
 				map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"},
 			},
@@ -208,11 +247,13 @@ func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
 	err := runWithHooks(&component.ExecutionContext{Flags: map[string]any{
 		"namespace":                         "incident-ns",
 		cfg.HelmDependencyUpdateSectionName: true,
+		flagSet:                             []string{"image.tag=incident"},
 	}}, &schema.AtmosConfiguration{}, info, OperationApply, "")
 	require.NoError(t, err)
 	require.NotNil(t, appliedSpec)
 	assert.Equal(t, "incident-ns", appliedSpec.Namespace)
 	assert.True(t, appliedSpec.DependencyUpdate)
+	assert.Equal(t, "incident", appliedSpec.Values["image"].(map[string]any)["tag"])
 	require.Len(t, setup, 1)
 	assert.Equal(t, "bitnami", setup[0].Name)
 }

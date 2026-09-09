@@ -35,6 +35,7 @@ import Experimental from "@site/src/components/Experimental";
 atmos helm template <component> --stack <stack>
 atmos helm diff <component> --stack <stack>
 atmos helm plan <component> --stack <stack>
+atmos helm values <component> --stack <stack>
 atmos helm apply <component> --stack <stack>
 atmos helm deploy <component> --stack <stack>
 atmos helm delete <component> --stack <stack>
@@ -51,6 +52,32 @@ The native Helm component renders charts in-process with the Helm Go SDK
 (equivalent to `helm template`), so `atmos helm template` works without a cluster
 or credentials. `apply`/`deploy` install or upgrade the release
 (`helm upgrade --install`); `delete` uninstalls it.
+
+## Runtime value overrides
+
+`template`/`render`, `diff`/`plan`, and `apply`/`deploy` accept Helm-compatible
+value overrides for a single invocation. They never modify component or stack
+configuration, so use the same arguments with `diff` and `apply` to preview the
+exact release values that will be deployed.
+
+```shell
+atmos helm diff monitoring -s plat-ue2-dev \
+  -f incident-values.yaml \
+  --set image.tag=2026.09.09 \
+  --set-string annotations.change-ticket=INC-1234
+
+atmos helm apply monitoring -s plat-ue2-dev \
+  -f incident-values.yaml \
+  --set image.tag=2026.09.09 \
+  --set-string annotations.change-ticket=INC-1234
+```
+
+Use repeatable `-f`/`--values`, `--set`, `--set-string`, `--set-file`,
+`--set-json`, and `--set-literal` flags. Local files are resolved from the
+invoking directory; Helm-supported remote value URLs are also accepted. Values
+follow Helm precedence: component `values_files` then inline `values`, followed
+by CLI value files (in order), `--set-json`, `--set`, `--set-string`,
+`--set-file`, and `--set-literal`.
 
 ## Native CI Summaries
 
@@ -165,6 +192,9 @@ atmos helm deploy monitoring -s plat-ue2-dev --target deployment-repo
 
   <dt>[`diff`](/cli/commands/helm/diff) / [`plan`](/cli/commands/helm/plan)</dt>
   <dd>Show a unified diff against a baseline — the deployed release, a local manifest, or a GitOps deployment repository.</dd>
+
+  <dt>[`values`](/cli/commands/helm/values)</dt>
+  <dd>Print final component values as formatted, masked YAML.</dd>
 
   <dt>[`apply`](/cli/commands/helm/apply) / [`deploy`](/cli/commands/helm/deploy)</dt>
   <dd>Install or upgrade the release, or deliver rendered manifests to a target.</dd>

@@ -95,6 +95,8 @@ func (r *FlagRegistry) SetCompletionFunc(name string, fn func(*cobra.Command, []
 		f.CompletionFunc = fn
 	case *StringSliceFlag:
 		f.CompletionFunc = fn
+	case *StringArrayFlag:
+		f.CompletionFunc = fn
 	}
 }
 
@@ -269,6 +271,8 @@ func (r *FlagRegistry) registerFlagToSet(flagSet *pflag.FlagSet, flag Flag) {
 				flagSet.Lookup(f.Name).NoOptDefVal = f.NoOptDefVal
 			}
 		}
+	case *StringArrayFlag:
+		flagSet.StringArrayP(f.Name, f.Shorthand, f.Default, f.Description)
 	}
 }
 
