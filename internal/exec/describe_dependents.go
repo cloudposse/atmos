@@ -396,7 +396,8 @@ func scanComponentForDependents(p *scanComponentParams) ([]schema.Dependent, err
 		return nil, nil
 	}
 
-	if p.StackComponentName == p.Args.Component {
+	if p.StackComponentName == p.Args.Component &&
+		(p.Args.Stack == "" || p.StackName == p.Args.Stack) {
 		return nil, nil
 	}
 

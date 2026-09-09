@@ -277,7 +277,9 @@ func TestBuildGraph_MalformedDependenciesSectionFallsBackToSettings(t *testing.T
 			"vpc": {},
 			"app": {
 				"dependencies": "not-a-map",
-				"settings":     map[string]any{"depends_on": []any{"vpc"}},
+				"settings": map[string]any{
+					"depends_on": map[string]any{"1": map[string]any{"component": "vpc"}},
+				},
 			},
 		},
 	})
