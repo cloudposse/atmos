@@ -13,6 +13,8 @@ import (
 
 // TestProcessYAMLConfigFileWithTemplate tests that template files are processed based on their extension.
 func TestProcessYAMLConfigFileWithTemplate(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory for test files
 	tempDir := t.TempDir()
 
@@ -145,6 +147,7 @@ metadata:
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Write test file
 			filePath := filepath.Join(tempDir, tc.fileName)
 			err := os.WriteFile(filePath, []byte(tc.fileContent), 0o644)
@@ -181,6 +184,8 @@ metadata:
 // TestProcessYAMLConfigFileWithContext_PreservesExplicitYAMLFunctionTag verifies that
 // the structured template pre-processing path does not discard a YAML function tag.
 func TestProcessYAMLConfigFileWithContext_PreservesExplicitYAMLFunctionTag(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 	stackPath := filepath.Join(tempDir, "stack.yaml.tmpl")
 	require.NoError(t, os.WriteFile(stackPath, []byte(`
@@ -232,6 +237,8 @@ components:
 
 // TestProcessImportSectionWithTemplates tests that imports correctly identify template files.
 func TestProcessImportSectionWithTemplates(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name            string
 		stackMap        map[string]any
@@ -299,6 +306,7 @@ func TestProcessImportSectionWithTemplates(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			imports, err := ProcessImportSection(tc.stackMap, "test.yaml")
 			require.NoError(t, err)
 			require.Len(t, imports, len(tc.expectedImports))
@@ -315,6 +323,8 @@ func TestProcessImportSectionWithTemplates(t *testing.T) {
 
 // TestTemplateFileDetectionIntegration tests end-to-end template file detection and processing.
 func TestTemplateFileDetectionIntegration(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	// Create test files with different extensions
@@ -410,6 +420,8 @@ components:
 
 // TestTemplateProcessingWithSkipFlag tests that skip_templates_processing flag still works.
 func TestTemplateProcessingWithSkipFlag(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	// Create a template file with valid YAML even when not processed
@@ -506,6 +518,8 @@ components:
 // TestGlobalIgnoreMissingTemplateValues tests that the global templates.settings.ignore_missing_template_values
 // setting in atmos.yaml is used as a fallback when per-import ignore_missing_template_values is not set.
 func TestGlobalIgnoreMissingTemplateValues(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	// Create a main stack file that imports a catalog file with context but missing template vars.
