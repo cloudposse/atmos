@@ -6,3 +6,7 @@ terraform:
       test:
         a: a-overridden
         b: b-overridden
+    retry:
+      max_attempts: 5
+      conditions:
+        - /GOAWAY/

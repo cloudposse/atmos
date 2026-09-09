@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-`atmos scaffold` is a command suite for generating code, configurations, and directory structures from templates. It provides a flexible scaffolding system that supports embedded templates, custom templates from `atmos.yaml`, and remote templates from Git repositories. The command enables teams to standardize component creation, enforce best practices, and accelerate development.
+`atmos scaffold` is a command suite for generating code, configurations, and directory structures from templates. It provides a flexible scaffolding system that supports embedded templates, custom templates from `atmos.yaml`, and remote templates from Git repositories, HTTPS/S3 archives, and OCI registries. The command enables teams to standardize component creation, enforce best practices, and accelerate development.
 
 ## Problem Statement
 
@@ -39,6 +39,13 @@ and `pkg/generator/` for the source of truth on current behavior.
 - `pkg/generator` package (shared with `atmos init`)
 
 **Also implemented, shipped after this PRD was first written**:
+- `spec.fields[].options:` dynamic sourcing and `{label, value}` option
+  objects — a `select`/`multiselect` field's `options:` can be an
+  `answers.<name>` dot-path, a Go-template expression (rendered via the same
+  `Processor.RenderAnswersListExpression` mechanism `matrix:` axes use), or a
+  list of `{label, value}` objects instead of plain strings, with label
+  recovery through a direct dot-path reference. See "Dynamic and Label/Value
+  `options:`" below.
 - `spec.fields[].when:` and `spec.files[].when:` — declarative conditional
   prompting and file generation, gated on prompt answers via the same CEL
   `when:` engine workflows/hooks/custom commands use (`pkg/condition`)
@@ -55,6 +62,11 @@ and `pkg/generator/` for the source of truth on current behavior.
   don't apply. The resolved combination is available as `.matrix.<axis>` in
   `target:`, in `when:`, and in the file's own content — see "Dynamic File
   Generation (`matrix`)" below.
+- OCI registry template sources (`oci://ghcr.io/org/template:v1`) — a
+  template argument or `scaffold.templates` `source:` can point at an OCI
+  registry reference, pulled via the same `pkg/oci` client `atmos vendor
+  pull` and JIT component-source provisioning use. See "Phase 3: Remote
+  Templates" below.
 
 **Still not implemented** (see "Future Enhancements" below):
 - ❌ Remote-template caching/version pinning beyond a single `--ref`
@@ -430,6 +442,158 @@ supports the same `when:` mechanism to gate whether a specific auto-discovered f
 generated. Compound conditions use CEL's `&&`/`||`/`!` (the `{all:/any:/not:}` map form
 pkg/condition also parses is not accepted by the scaffold JSON Schema).
 
+### Dynamic and Label/Value `options:`
+
+**Status**: Implemented and shipped. A `select`/`multiselect` field's
+`options:` (`FieldDefinition.Options` in `pkg/project/config/config.go`) can
+be more than a static list of plain strings: it can be sourced dynamically
+from an earlier answer, and its entries can carry a separate display label.
+
+A plain YAML list of strings is a valid `options:` value:
+
+```yaml
+spec:
+  fields:
+    - name: environment
+      type: select
+      options: [dev, staging, production]
+```
+
+`options:` also accepts two dynamic forms, exactly the two `spec.files[].matrix:`
+axes already support (see "Dynamic File Generation (`matrix`)" below) —
+`options:` deliberately mirrors that convention rather than inventing a new
+one:
+
+- An `answers.<path>` dot-path string, resolved the same way a matrix axis's
+  dot-path is: the referenced value must already be list-shaped (a
+  `multiselect` answer, or a structured value supplied through `--set` or a
+  `spec.values` preset that was never declared as a field at all).
+- A Go-template expression, rendered through the identical
+  `Processor.RenderAnswersListExpression` mechanism a `matrix:` axis
+  expression uses, with `answers` exposed the same way.
+
+```yaml
+spec:
+  fields:
+    - name: envs
+      type: multiselect
+      options: [dev, staging, prod]
+
+    # Sourced from the prior multiselect answer -- only ever offers
+    # environments the user actually selected above.
+    - name: default_env
+      type: select
+      options: "answers.envs"
+```
+
+```yaml
+spec:
+  fields:
+    - name: csv_owners
+      type: input
+      label: Comma-separated list of component owners (e.g. GitHub teams)
+      default: "platform-team,security-team"
+
+    # Free-text source: any Sprig/Gomplate function is available, so a plain
+    # string answer becomes a list-shaped options source the same way a
+    # matrix axis expression does. Owners aren't a small fixed set the way
+    # environment or region typically are -- that's the case this form
+    # exists for.
+    - name: primary_owner
+      type: select
+      options: '{{ splitList "," answers.csv_owners }}'
+```
+
+Unlike `matrix:` axes, both the interactive huh-based form and the headless
+`--set`/`--defaults` validation path (`ValidateFieldValues`) support dynamic
+`options:`. In the interactive form, a scaffold prompts fields one at a
+time (each its own `huh.Group`/page), so this isn't a same-screen live
+update — it's a guarantee that a later field's choices correctly reflect
+whatever the user ultimately answered for an earlier field by the time that
+later field is actually shown or validated. A later field's `OptionsFunc`
+is bound (via `optionsBindings`/`referencedAnswerNames` in
+`pkg/project/config/form.go`) to the pointer of every field its source
+references, so its option list resolves correctly regardless of source
+field type — not just `multiselect`, but `select`, `input`, and `confirm`
+too (`pkg/project/config/dynamic_options_huh_test.go` drives this through
+huh's real `Update` cycle, not just the resolution closure, for each of
+those source types).
+
+**Label/value option objects**: an `options:` list entry can be a
+`{label, value}` object (the new `FieldOption` type) instead of a plain
+string, mirroring `huh.NewOption(label, value)` — `value` is required and is
+what's stored in `answers`/passed to templates; `label` is what's displayed
+and defaults to `value` when omitted:
+
+```yaml
+spec:
+  fields:
+    - name: envs
+      type: select
+      options:
+        - label: Development
+          value: dev
+        - label: Staging
+          value: staging
+        - value: prod # No label -- displays as "prod".
+```
+
+**Label recovery through a dot-path**: when a later field's `options:`
+sources from an earlier `{label, value}`-based field via a *direct*,
+single-segment `answers.<name>` dot-path (not a deeper path like
+`answers.nested.envs`, and not a template expression), the labels are
+recovered onto the filtered subset of values actually present in that
+answer:
+
+```yaml
+spec:
+  fields:
+    - name: envs
+      type: multiselect
+      options:
+        - label: Development
+          value: dev
+        - label: Staging
+          value: staging
+        - label: Production
+          value: prod
+
+    # envs answer is [dev, staging] -> default_env offers "Development" and
+    # "Staging" (recovered labels, filtered to the selected values) -- not
+    # "Production", and not the raw "dev"/"staging" values.
+    - name: default_env
+      type: select
+      options: "answers.envs"
+```
+
+Labels never reach `answers`/templates — only values do, structurally
+guaranteed by how huh's own option binding works (`Value(&value)` only ever
+writes back an option's `Value`, never its `Label`), not just documented
+behavior (`pkg/project/config/form.go`'s `toHuhOptions`).
+
+**Non-goals / limitations**:
+- **No field-declaration-order validation at load time.** A dot-path's root
+  name is never checked against field order when the scaffold loads —
+  deliberately: load time can't distinguish a genuine forward/self-reference
+  mistake from a legitimate `spec.values`-preset or `--set`-supplied value
+  that was never declared as a field at all (see `validateFieldOptionsSource`'s
+  doc comment in `pkg/project/config/validation.go`). A forward reference (or
+  a field referencing itself) loads successfully and degrades gracefully at
+  runtime instead of erroring: a not-yet-resolved answer is `nil`, which
+  resolves to an empty option list — no constraint, any value accepted —
+  rather than a validation failure.
+- **No label propagation through a chain of dynamic references.** Label
+  recovery only looks at a *direct* single-segment dot-path's immediately
+  referenced field. If a third field sources its `options:` from
+  `default_env` (itself dynamically sourced from `envs`), labels are not
+  chased back through that second hop — it degrades to `label == value`.
+- **No label propagation through the template-expression form.** A
+  Go-template expression's renderer only ever produces plain strings — Sprig
+  and Gomplate functions like `splitList` can't produce structured
+  `{label, value}` pairs — so a template-expression-sourced field's options
+  always have `label == value`, even if the referenced answer's own field
+  used `{label, value}` objects.
+
 ### Dynamic File Generation (`matrix`)
 
 **Status**: Implemented and shipped. It reuses the exact axis shape the workflow
@@ -600,7 +764,7 @@ into a list — so a value containing whitespace, commas, or quotes survives int
 with no escaping rule for template authors to learn or a custom encoding to maintain.
 This requires an axis expression to be exactly one value-producing action (no
 surrounding literal text, no `if`/`range`/`with`, no variable assignment);
-`RenderMatrixAxisExpression` rejects anything else with a clear error before ever
+`RenderAnswersListExpression` rejects anything else with a clear error before ever
 rendering it.
 
 **Behavior**:
@@ -738,20 +902,48 @@ supplies the same template/target-dir on `--update` as on initial generation.
 one; the shipped design reads bases directly from git instead — see "Update
 Flow" above), and `pre_generate`/`post_generate` hooks.
 
-### Phase 3: Remote Templates (Future)
+### Phase 3: Remote Templates
 
-**Support Git sources**:
-- Parse Git URLs with go-getter syntax
-- Clone/fetch remote repositories
-- Cache templates locally
-- Version pinning support
+**Status**: Remote sources are git, HTTPS, and S3 (via go-getter) plus OCI
+registries, which reuse `pkg/oci` (the same client `atmos vendor pull` and
+JIT terraform-source provisioning use) rather than go-getter, since OCI
+registries aren't a go-getter scheme. All of this is implemented in
+`pkg/generator/source` (`Resolve`/`Hydrate`), the seam that lets both `atmos
+scaffold generate` and `atmos init` distribute templates remotely while
+reusing the same generator engine.
 
-**Example**:
+**Git/HTTPS/S3 sources** (go-getter):
 ```bash
 atmos scaffold generate \
   git::https://github.com/company/templates.git//eks?ref=v1.0.0 \
   ./components/terraform/eks
 ```
+`--ref` is sugar that appends `?ref=<value>` to a git source (`source.WithRef`);
+it's a documented no-op for OCI, S3, and local sources, which address a
+specific version through the source string itself instead.
+
+**OCI registry sources**:
+```bash
+atmos scaffold generate \
+  oci://ghcr.io/company/templates:v1.0.0 \
+  ./components/terraform/eks
+```
+Pulled via `oci.ProcessImage` into a temporary directory, then loaded the
+same way any other fetched source is (`requireScaffoldConfig` still requires
+a `scaffold.yaml` at the artifact's root). Authentication follows `pkg/oci`'s
+precedence (Docker keychain → `ATMOS_GITHUB_TOKEN` for ghcr.io → anonymous,
+with automatic anonymous retry on a 401/403) — see the `atmos-vendoring`
+skill's OCI auth documentation rather than duplicating it here. A
+`scaffold.templates` entry in `atmos.yaml` can declare an `oci://...`
+`source:` exactly like a git source; `source:` is a freeform string with no
+scheme-specific schema.
+
+`--git`, `--base-ref`, and `--update` behave the same regardless of source
+type, OCI included: `--git` only initializes a git repository in the
+*generated output directory* after generation completes, and `--update`'s
+3-way-merge base is always read from that output directory's own git history
+(`pkg/generator/engine/merge_update.go`'s `SetupGitStorage`), never by
+re-fetching or re-checking-out the template source at a ref.
 
 ## CLI Usage Examples
 
@@ -998,7 +1190,7 @@ Location: `website/docs/cli/commands/scaffold.mdx`
 6. **Template Structure** - scaffold.yaml format
 7. **Template Syntax** - Go templates, Gomplate, Sprig
 8. **Updating Scaffolds** - Using `--update` flag (shipped)
-9. **Remote Templates** - Git sources (Phase 3)
+9. **Remote Templates** - Git/HTTPS/S3 and OCI registry sources (shipped)
 10. **Troubleshooting** - Common errors and solutions
 
 ### Template Documentation
@@ -1048,6 +1240,10 @@ Location: `website/docs/cli/commands/scaffold.mdx`
 - Dynamic default values (computed from other inputs) — still future
 - ✅ **Shipped**: dynamic file generation over a Cartesian product of axes
   (`spec.files[].matrix:`, see "Dynamic File Generation (`matrix`)" above)
+- ✅ **Shipped**: dynamic `options:` sourcing (an `answers.*` dot-path or a
+  Go-template expression) and `{label, value}` option objects with label
+  recovery through a direct dot-path (`spec.fields[].options:`, see "Dynamic
+  and Label/Value `options:`" above)
 
 ### IDE Integration
 

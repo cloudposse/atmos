@@ -55,7 +55,7 @@ rules that `init` consumes unchanged.
 | `--dry-run` | not available | available |
 | `--defaults` | not available (non-interactive detection only) | available |
 | `list`/`validate` subcommands | none — use `atmos scaffold list`/`validate` | `scaffold list`/`scaffold validate` |
-| Template sources | embedded + catalog (project templates) | embedded + custom (`atmos.yaml`) + catalog/remote |
+| Template sources | embedded + catalog + direct remote (git/https/s3/oci) | embedded + custom (`atmos.yaml`) + catalog + direct remote (git/https/s3/oci) |
 
 Both share every other flag: `--force`, `--update`, `--base-ref`, `--interactive`/`-i`,
 `--set key=value`, `--source-override` (env `ATMOS_INIT_SOURCE_OVERRIDE`, also accepts

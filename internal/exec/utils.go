@@ -280,6 +280,13 @@ func processComponentConfig(
 		return fmt.Errorf("'components.%s.%s.retry' in the stack manifest '%s': %w", componentType, component, stack, err)
 	}
 
+	// Decode the (already merged: atmos.yaml global < stack-level < component-inheritance)
+	// `flags:` block into typed terraform CLI execution flag defaults.
+	componentFlags, err := schema.DecodeTerraformFlags(componentSection[cfg.FlagsSectionName])
+	if err != nil {
+		return fmt.Errorf("'components.%s.%s.flags' in the stack manifest '%s': %w", componentType, component, stack, err)
+	}
+
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
@@ -314,6 +321,7 @@ func processComponentConfig(
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
 	configAndStacksInfo.ComponentRetrySection = componentRetrySection
+	configAndStacksInfo.Flags = componentFlags
 	configAndStacksInfo.BaseComponentPath = baseComponentName
 	configAndStacksInfo.ComponentInheritanceChain = componentInheritanceChain
 	configAndStacksInfo.ComponentIsAbstract = componentIsAbstract
@@ -1456,6 +1464,12 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 		// Always assign — including nil — so a retry section removed via templates
 		// or YAML functions clears any previously decoded config.
 		configAndStacksInfo.ComponentRetrySection = retryCfg
+	}
+
+	if flags, err := schema.DecodeTerraformFlags(configAndStacksInfo.ComponentSection[cfg.FlagsSectionName]); err != nil {
+		log.Warn("Failed to restore terraform flags configuration after template processing", "error", err)
+	} else {
+		configAndStacksInfo.Flags = flags
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {

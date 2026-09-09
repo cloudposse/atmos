@@ -57,14 +57,17 @@ const filePermissions = 0o644
 const fieldNameErrorFormat = "%w: %q"
 
 var (
-	errInvalidBooleanFieldValue = errors.New("invalid boolean field value")
-	errFieldMustBeText          = errors.New("field must be text")
-	errFieldMustBeStringOption  = errors.New("field must be a string option")
-	errFieldUnsupportedOption   = errors.New("field has unsupported option")
-	errFieldMustBeStringOptions = errors.New("field must be a list of string options")
-	errFieldMustBeBoolean       = errors.New("field must be true or false")
-	errFieldValidationFailed    = errors.New("field validation failed")
-	errInvalidFieldPattern      = errors.New("invalid field validation pattern")
+	errInvalidBooleanFieldValue   = errors.New("invalid boolean field value")
+	errFieldMustBeText            = errors.New("field must be text")
+	errFieldMustBeStringOption    = errors.New("field must be a string option")
+	errFieldUnsupportedOption     = errors.New("field has unsupported option")
+	errFieldMustBeStringOptions   = errors.New("field must be a list of string options")
+	errFieldMustBeBoolean         = errors.New("field must be true or false")
+	errFieldValidationFailed      = errors.New("field validation failed")
+	errInvalidFieldPattern        = errors.New("invalid field validation pattern")
+	errFieldOptionsSourceInvalid  = errors.New("field options source is invalid")
+	errFieldOptionsSourceNotFound = errors.New("field options source not found in answers")
+	errFieldOptionsSourceNotList  = errors.New("field options source did not resolve to a list")
 )
 
 // ScaffoldConfigDir is the directory name for user scaffold configuration.
@@ -231,6 +234,16 @@ func (MatrixAxes) JSONSchemaExtend(schema *invopop.Schema) {
 	}
 }
 
+// FieldOption is one static choice for a select or multiselect field's
+// Options, pairing a display Label with the underlying Value that actually
+// flows into answers/templates/When -- mirrors huh.NewOption(label, value)
+// exactly. Value is required; Label defaults to Value when omitted, so a
+// plain string list (no labels) keeps working unchanged.
+type FieldOption struct {
+	Label string `yaml:"label,omitempty" json:"label,omitempty" jsonschema:"description=Display text shown in the prompt (defaults to value)"`
+	Value string `yaml:"value" json:"value" jsonschema:"description=Underlying value stored in answers and passed to templates"`
+}
+
 // FieldValidation constrains the allowed values for a FieldDefinition.
 type FieldValidation struct {
 	// Pattern is a regular expression the value must match (for input fields).
@@ -248,7 +261,7 @@ type FieldDefinition struct {
 	Description string           `yaml:"description,omitempty" json:"description,omitempty" jsonschema:"description=Longer help text shown with the prompt"`
 	Required    bool             `yaml:"required,omitempty" json:"required,omitempty" jsonschema:"description=Whether a value must be provided"`
 	Default     any              `yaml:"default,omitempty" json:"default,omitempty" jsonschema:"description=Default value"`
-	Options     []string         `yaml:"options,omitempty" json:"options,omitempty" jsonschema:"description=Choices for select and multiselect fields"`
+	Options     any              `yaml:"options,omitempty" json:"options,omitempty" jsonschema:"description=Static list of choices (plain strings or {label: value} objects); a dot-path string into answers.* (e.g. answers.environments); or a Go-template expression computing the list,oneof_type=string;array"`
 	Placeholder string           `yaml:"placeholder,omitempty" json:"placeholder,omitempty" jsonschema:"description=Placeholder text for input fields"`
 	Validation  *FieldValidation `yaml:"validation,omitempty" json:"validation,omitempty" jsonschema:"description=Optional validation constraints for this field"`
 	// When gates whether this field is prompted for, evaluated against

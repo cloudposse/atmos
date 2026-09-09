@@ -9,16 +9,16 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-func TestRenderMatrixAxisExpression_TopLevelKeys(t *testing.T) {
+func TestRenderAnswersListExpression_TopLevelKeys(t *testing.T) {
 	p := NewProcessor()
 	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
 
-	got, err := p.RenderMatrixAxisExpression("{{ collectKeys answers.environments }}", answers, nil)
+	got, err := p.RenderAnswersListExpression("{{ collectKeys answers.environments }}", answers, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"dev", "staging"}, got)
 }
 
-func TestRenderMatrixAxisExpression_NestedKeysAcrossEnvironments(t *testing.T) {
+func TestRenderAnswersListExpression_NestedKeysAcrossEnvironments(t *testing.T) {
 	p := NewProcessor()
 	answers := map[string]interface{}{
 		"environments": map[string]interface{}{
@@ -28,79 +28,79 @@ func TestRenderMatrixAxisExpression_NestedKeysAcrossEnvironments(t *testing.T) {
 		},
 	}
 
-	got, err := p.RenderMatrixAxisExpression(`{{ collectKeys answers.environments "regions" }}`, answers, nil)
+	got, err := p.RenderAnswersListExpression(`{{ collectKeys answers.environments "regions" }}`, answers, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"us-east-1", "us-west-2"}, got)
 }
 
-func TestRenderMatrixAxisExpression_EmptyResultYieldsEmptySlice(t *testing.T) {
+func TestRenderAnswersListExpression_EmptyResultYieldsEmptySlice(t *testing.T) {
 	p := NewProcessor()
 	answers := map[string]interface{}{"environments": map[string]interface{}{}}
 
-	got, err := p.RenderMatrixAxisExpression("{{ collectKeys answers.environments }}", answers, nil)
+	got, err := p.RenderAnswersListExpression("{{ collectKeys answers.environments }}", answers, nil)
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
 
-func TestRenderMatrixAxisExpression_InvalidTemplateErrors(t *testing.T) {
+func TestRenderAnswersListExpression_InvalidTemplateErrors(t *testing.T) {
 	p := NewProcessor()
 
-	_, err := p.RenderMatrixAxisExpression("{{ collectKeys ", map[string]interface{}{}, nil)
+	_, err := p.RenderAnswersListExpression("{{ collectKeys ", map[string]interface{}{}, nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixExpressionFailed)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldExpressionFailed)
 }
 
-func TestRenderMatrixAxisExpression_ExecutionErrorPropagates(t *testing.T) {
+func TestRenderAnswersListExpression_ExecutionErrorPropagates(t *testing.T) {
 	p := NewProcessor()
 
 	// answers.environments is a string, not a map, so collectKeys must fail at
 	// execution time rather than parse time.
-	_, err := p.RenderMatrixAxisExpression("{{ collectKeys answers.environments }}", map[string]interface{}{"environments": "dev,staging"}, nil)
+	_, err := p.RenderAnswersListExpression("{{ collectKeys answers.environments }}", map[string]interface{}{"environments": "dev,staging"}, nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixExpressionFailed)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldExpressionFailed)
 }
 
-// TestRenderMatrixAxisExpression_CustomDelimiters proves a matrix axis
+// TestRenderAnswersListExpression_CustomDelimiters proves a template
 // expression is detected/rendered using the scaffold's own spec.delimiters
 // override (e.g. "[[" / "]]"), not a hardcoded "{{" / "}}", matching how
 // target: and file content rendering already honor it via
 // ProcessTemplateWithDelimiters.
-func TestRenderMatrixAxisExpression_CustomDelimiters(t *testing.T) {
+func TestRenderAnswersListExpression_CustomDelimiters(t *testing.T) {
 	p := NewProcessor()
 	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
 
-	got, err := p.RenderMatrixAxisExpression("[[ collectKeys answers.environments ]]", answers, []string{"[[", "]]"})
+	got, err := p.RenderAnswersListExpression("[[ collectKeys answers.environments ]]", answers, []string{"[[", "]]"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"dev", "staging"}, got)
 }
 
-// TestRenderMatrixAxisExpression_EmptyLeftDelimiterFallsBackToDefault
+// TestRenderAnswersListExpression_EmptyLeftDelimiterFallsBackToDefault
 // proves a malformed delimiter pair with an empty left side (e.g. ["",
 // "]]"]) falls back to the full "{{"/"}}" default rather than producing a
 // mismatched half-custom/half-default pair (text/template.Delims treats an
 // empty argument as "use the default" for that side only).
-func TestRenderMatrixAxisExpression_EmptyLeftDelimiterFallsBackToDefault(t *testing.T) {
+func TestRenderAnswersListExpression_EmptyLeftDelimiterFallsBackToDefault(t *testing.T) {
 	p := NewProcessor()
 	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
 
-	got, err := p.RenderMatrixAxisExpression("{{ collectKeys answers.environments }}", answers, []string{"", "]]"})
+	got, err := p.RenderAnswersListExpression("{{ collectKeys answers.environments }}", answers, []string{"", "]]"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"dev", "staging"}, got)
 }
 
-// TestRenderMatrixAxisExpression_EmptyRightDelimiterFallsBackToDefault
-// mirrors TestRenderMatrixAxisExpression_EmptyLeftDelimiterFallsBackToDefault
+// TestRenderAnswersListExpression_EmptyRightDelimiterFallsBackToDefault
+// mirrors TestRenderAnswersListExpression_EmptyLeftDelimiterFallsBackToDefault
 // for an empty right delimiter (e.g. ["[[", ""]).
-func TestRenderMatrixAxisExpression_EmptyRightDelimiterFallsBackToDefault(t *testing.T) {
+func TestRenderAnswersListExpression_EmptyRightDelimiterFallsBackToDefault(t *testing.T) {
 	p := NewProcessor()
 	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
 
-	got, err := p.RenderMatrixAxisExpression("{{ collectKeys answers.environments }}", answers, []string{"[[", ""})
+	got, err := p.RenderAnswersListExpression("{{ collectKeys answers.environments }}", answers, []string{"[[", ""})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"dev", "staging"}, got)
 }
 
-func TestParseAxisExpressionResult(t *testing.T) {
+func TestParseExpressionResult(t *testing.T) {
 	tests := []struct {
 		name    string
 		in      string
@@ -118,10 +118,10 @@ func TestParseAxisExpressionResult(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseAxisExpressionResult(tt.in, "irrelevant")
+			got, err := parseExpressionResult(tt.in, "irrelevant")
 			if tt.wantErr {
 				require.Error(t, err)
-				assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixExpressionFailed)
+				assert.ErrorIs(t, err, errUtils.ErrScaffoldExpressionFailed)
 				return
 			}
 			require.NoError(t, err)
@@ -130,94 +130,94 @@ func TestParseAxisExpressionResult(t *testing.T) {
 	}
 }
 
-// TestRenderMatrixAxisExpression_WhitespaceValueSurvives is the real,
+// TestRenderAnswersListExpression_WhitespaceValueSurvives is the real,
 // end-to-end regression test for the bug the toJson wrap exists to fix:
 // unlike a mocked AxisRenderer, this exercises the actual renderer, so a
 // regression back to text/template's default "[a b c]" slice formatting
 // (which splits "us east" into two values) would fail this test.
-func TestRenderMatrixAxisExpression_WhitespaceValueSurvives(t *testing.T) {
+func TestRenderAnswersListExpression_WhitespaceValueSurvives(t *testing.T) {
 	p := NewProcessor()
 	answers := map[string]interface{}{"environments": map[string]interface{}{"us east": nil, "dev": nil}}
 
-	got, err := p.RenderMatrixAxisExpression("{{ collectKeys answers.environments }}", answers, nil)
+	got, err := p.RenderAnswersListExpression("{{ collectKeys answers.environments }}", answers, nil)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"us east", "dev"}, got)
 }
 
-// TestRenderMatrixAxisExpression_CommaAndQuotesSurvive covers the other
+// TestRenderAnswersListExpression_CommaAndQuotesSurvive covers the other
 // values CodeRabbit's review asked for explicit coverage of.
-func TestRenderMatrixAxisExpression_CommaAndQuotesSurvive(t *testing.T) {
+func TestRenderAnswersListExpression_CommaAndQuotesSurvive(t *testing.T) {
 	p := NewProcessor()
 	answers := map[string]interface{}{"teams": map[string]interface{}{`team, "platform"`: nil}}
 
-	got, err := p.RenderMatrixAxisExpression("{{ collectKeys answers.teams }}", answers, nil)
+	got, err := p.RenderAnswersListExpression("{{ collectKeys answers.teams }}", answers, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{`team, "platform"`}, got)
 }
 
-// TestRenderMatrixAxisExpression_CustomDelimitersWithTrimMarkers proves the
+// TestRenderAnswersListExpression_CustomDelimitersWithTrimMarkers proves the
 // AST-based toJson append (not string/delimiter manipulation) survives Go's
 // whitespace-trim markers at the action's boundary.
-func TestRenderMatrixAxisExpression_CustomDelimitersWithTrimMarkers(t *testing.T) {
+func TestRenderAnswersListExpression_CustomDelimitersWithTrimMarkers(t *testing.T) {
 	p := NewProcessor()
 	answers := map[string]interface{}{"environments": map[string]interface{}{"dev": nil, "staging": nil}}
 
-	got, err := p.RenderMatrixAxisExpression("[[- collectKeys answers.environments -]]", answers, []string{"[[", "]]"})
+	got, err := p.RenderAnswersListExpression("[[- collectKeys answers.environments -]]", answers, []string{"[[", "]]"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"dev", "staging"}, got)
 }
 
-func TestRenderMatrixAxisExpression_RejectsSurroundingText(t *testing.T) {
+func TestRenderAnswersListExpression_RejectsSurroundingText(t *testing.T) {
 	p := NewProcessor()
 
-	_, err := p.RenderMatrixAxisExpression("prefix {{ collectKeys answers.environments }}", map[string]interface{}{}, nil)
+	_, err := p.RenderAnswersListExpression("prefix {{ collectKeys answers.environments }}", map[string]interface{}{}, nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixExpressionFailed)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldExpressionFailed)
 }
 
-func TestRenderMatrixAxisExpression_RejectsMultipleActions(t *testing.T) {
+func TestRenderAnswersListExpression_RejectsMultipleActions(t *testing.T) {
 	p := NewProcessor()
 
-	_, err := p.RenderMatrixAxisExpression("{{ collectKeys answers.a }}{{ collectKeys answers.b }}", map[string]interface{}{}, nil)
+	_, err := p.RenderAnswersListExpression("{{ collectKeys answers.a }}{{ collectKeys answers.b }}", map[string]interface{}{}, nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixExpressionFailed)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldExpressionFailed)
 }
 
-func TestRenderMatrixAxisExpression_RejectsControlStructures(t *testing.T) {
+func TestRenderAnswersListExpression_RejectsControlStructures(t *testing.T) {
 	p := NewProcessor()
 
-	_, err := p.RenderMatrixAxisExpression(`{{ range collectKeys answers.environments }}{{ . }}{{ end }}`, map[string]interface{}{}, nil)
+	_, err := p.RenderAnswersListExpression(`{{ range collectKeys answers.environments }}{{ . }}{{ end }}`, map[string]interface{}{}, nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixExpressionFailed)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldExpressionFailed)
 }
 
-func TestRenderMatrixAxisExpression_RejectsVariableAssignment(t *testing.T) {
+func TestRenderAnswersListExpression_RejectsVariableAssignment(t *testing.T) {
 	p := NewProcessor()
 
-	_, err := p.RenderMatrixAxisExpression("{{ $x := collectKeys answers.environments }}", map[string]interface{}{}, nil)
+	_, err := p.RenderAnswersListExpression("{{ $x := collectKeys answers.environments }}", map[string]interface{}{}, nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixExpressionFailed)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldExpressionFailed)
 }
 
-// TestRenderMatrixAxisExpression_SplitListSurvivesWhitespace proves the fix
-// generalizes to any Sprig/Gomplate function composed into an axis
+// TestRenderAnswersListExpression_SplitListSurvivesWhitespace proves the fix
+// generalizes to any Sprig/Gomplate function composed into an answers-list
 // expression, not just collectKeys.
-func TestRenderMatrixAxisExpression_SplitListSurvivesWhitespace(t *testing.T) {
+func TestRenderAnswersListExpression_SplitListSurvivesWhitespace(t *testing.T) {
 	p := NewProcessor()
 	answers := map[string]interface{}{"environments_csv": "us east,dev"}
 
-	got, err := p.RenderMatrixAxisExpression(`{{ splitList "," answers.environments_csv }}`, answers, nil)
+	got, err := p.RenderAnswersListExpression(`{{ splitList "," answers.environments_csv }}`, answers, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"us east", "dev"}, got)
 }
 
-// TestRenderMatrixAxisExpression_InvalidResultType proves a computed axis
+// TestRenderAnswersListExpression_InvalidResultType proves a computed
 // expression that doesn't resolve to a list of strings fails clearly
 // instead of being silently coerced.
-func TestRenderMatrixAxisExpression_InvalidResultType(t *testing.T) {
+func TestRenderAnswersListExpression_InvalidResultType(t *testing.T) {
 	p := NewProcessor()
 
-	_, err := p.RenderMatrixAxisExpression("{{ 5 }}", map[string]interface{}{}, nil)
+	_, err := p.RenderAnswersListExpression("{{ 5 }}", map[string]interface{}{}, nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrScaffoldMatrixExpressionFailed)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldExpressionFailed)
 }

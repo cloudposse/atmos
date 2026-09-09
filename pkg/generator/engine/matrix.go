@@ -26,18 +26,20 @@ const answersPrefix = "answers."
 // list of string values, honoring the scaffold's own spec.delimiters
 // override. A nil renderer disables template-expression axes, keeping
 // ExpandMatrix's core algorithm free of any templating dependency -- see
-// Processor.RenderMatrixAxisExpression in funcs.go for the real
+// Processor.RenderAnswersListExpression in funcs.go for the real
 // implementation.
 type AxisRenderer func(expr string, answers map[string]interface{}, delimiters []string) ([]string, error)
 
-// defaultAxisDelimiters returns delimiters unchanged when it's a valid
+// defaultDelimiters returns delimiters unchanged when it's a valid
 // two-element pair with both sides non-empty, otherwise the default
-// "{{"/"}}". An empty side is rejected rather than passed through: an
-// empty left delimiter would make strings.Contains(v, delimiters[0]) match
-// every axis value in resolveMatrixAxis, and text/template.Delims treats
-// an empty argument as "use the default" for that side only, producing a
-// mismatched half-custom/half-default pair.
-func defaultAxisDelimiters(delimiters []string) []string {
+// "{{"/"}}". Named generically (not "axis") because it also backs
+// RenderAnswersListExpression in funcs.go, shared by matrix axis and field
+// Options expressions alike. An empty side is rejected rather than passed
+// through: an empty left delimiter would make strings.Contains(v,
+// delimiters[0]) match every axis value in resolveMatrixAxis, and
+// text/template.Delims treats an empty argument as "use the default" for
+// that side only, producing a mismatched half-custom/half-default pair.
+func defaultDelimiters(delimiters []string) []string {
 	if len(delimiters) != 2 || delimiters[0] == "" || delimiters[1] == "" {
 		return []string{defaultLeftDelimiter, defaultRightDelimiter}
 	}
@@ -50,11 +52,11 @@ func defaultAxisDelimiters(delimiters []string) []string {
 // pkg/workflow's own matrix step expansion has, so regenerating the same
 // answers produces the same file set, in the same order, every time.
 // Delimiters is the active scaffold's left/right template delimiter pair
-// (see defaultAxisDelimiters for what an empty/nil value defaults to).
+// (see defaultDelimiters for what an empty/nil value defaults to).
 func ExpandMatrix(matrix map[string]any, answers map[string]interface{}, render AxisRenderer, delimiters []string) ([]map[string]string, error) {
 	defer perf.Track(nil, "engine.ExpandMatrix")()
 
-	delimiters = defaultAxisDelimiters(delimiters)
+	delimiters = defaultDelimiters(delimiters)
 
 	resolved := make(map[string][]string, len(matrix))
 	for axis, raw := range matrix {

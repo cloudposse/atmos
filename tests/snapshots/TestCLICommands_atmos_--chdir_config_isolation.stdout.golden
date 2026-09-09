@@ -20,6 +20,11 @@ components:
     plan:
       skip_planfile: false
     plugin_cache: true
+    ui:
+      enabled: false
+      compact: null
+      show_attribute_bar: null
+      max_lines: 0
     auto_provision_workdir_for_outputs: true
   helmfile:
     base_path: ""
@@ -130,5 +135,12 @@ auth:
 container:
   runtime:
     auto_start: true
+toolchain:
+  install_path: ""
+  file_path: ""
+  tools_dir: ""
+  versions_file: ""
+  use_tool_versions: false
+  use_lock_file: true
 list:
   error_mode: warn

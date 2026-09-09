@@ -105,6 +105,20 @@ version:
     - manager: marker
       paths:
         - Dockerfile
+    - manager: json
+      paths:
+        - package.json
+      options:
+        set:
+          - path: version
+            from: nginx
+    - manager: yaml
+      paths:
+        - charts/*/values.yaml
+      options:
+        set:
+          - path: version
+            from: nginx
     - manager: template
       paths:
         - "**/*.tmpl"
@@ -114,6 +128,8 @@ File managers:
 
 - `github-actions`: rewrites workflow `uses:` refs from locked GitHub Action versions.
 - `marker`: rewrites annotated arbitrary text lines such as `# atmos:version nginx`.
+- `json`: writes locked values into JSON files at configured `options.set: [{path, from, format}]` field paths (sjson/gjson dot-path syntax).
+- `yaml`: writes locked values into YAML files at the same `options.set` shape, via the format-preserving YAML editor (dot-notation paths, e.g. `sources[0].version`); rejects multi-document files and edits that would alter an anchor.
 - `template`: renders `*.tmpl` files with `.version` context.
 
 Use `atmos version track apply <track> --check` or `atmos version track verify <track>` in CI to

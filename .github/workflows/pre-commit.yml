@@ -4,6 +4,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+
 env:
   # Released binary used by hooks that invoke Atmos. This must not build source
   # during pre-commit, which runs in a worktree-sensitive lifecycle event.
@@ -15,9 +18,10 @@ env:
   # golangci-lint: Already runs in codeql.yml lint-golangci job
   # lintroller: Already runs in codeql.yml lint-golangci job (via custom-gcl binary)
   SKIP: go-build-mod,golangci-lint,lintroller
-  # Use pipe fallback so transient proxy.golang.org 5xx errors during
-  # `go mod download` fall back to direct module fetches.
-  GOPROXY: "https://proxy.golang.org|direct"
+  # No `|direct` fallback: under harden-runner's block mode a direct fetch
+  # only fans out to blocked vanity-import hosts and burns minutes; see the
+  # GOPROXY comment in test.yml.
+  GOPROXY: "https://proxy.golang.org"
 
 jobs:
   pre-commit:
@@ -64,10 +68,12 @@ jobs:
           # Add Go bin to PATH
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
+      # Pre-download dependencies to prevent go mod tidy from trying to fetch
+      # internal packages. With retry: GOPROXY no longer falls back to direct
+      # fetches (they only hit blocked vanity hosts under harden-runner's block
+      # mode), so transient proxy errors are handled by retrying instead.
       - name: Download Go module dependencies
-        run: |
-          # Pre-download dependencies to prevent go mod tidy from trying to fetch internal packages
-          go mod download
+        uses: ./.github/actions/go-mod-download-retry
 
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0

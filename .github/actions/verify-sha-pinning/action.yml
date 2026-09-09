@@ -14,6 +14,15 @@ inputs:
     description: 'Directory containing workflow files to scan'
     required: false
     default: '.github/workflows'
+  allowlist-file:
+    description: >
+      JSON file listing owner/repo pairs this action cannot drift-check via
+      the GitHub API for a documented, maintainer-reviewed reason (see
+      allowlist.json and the README). A resolution failure for a listed
+      repo is reported as a warning only for the documented HTTP 403
+      access-block condition; other resolution failures fail CI.
+    required: false
+    default: '.github/actions/verify-sha-pinning/allowlist.json'
 
 outputs:
   verified-count:
@@ -25,6 +34,9 @@ outputs:
   unpinned-count:
     description: 'Number of third-party action references that are not SHA-pinned at all'
     value: ${{ steps.verify.outputs.unpinned_count }}
+  allowlisted-count:
+    description: 'Number of resolution failures downgraded to a warning via allowlist.json'
+    value: ${{ steps.verify.outputs.allowlisted_count }}
   status:
     description: 'Overall result: pass or fail'
     value: ${{ steps.verify.outputs.status }}
@@ -37,6 +49,7 @@ runs:
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         WORKFLOW_DIR: ${{ inputs.workflow-dir }}
+        ALLOWLIST_FILE: ${{ inputs.allowlist-file }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
@@ -46,6 +59,55 @@ runs:
           const workflowDir = process.env.WORKFLOW_DIR;
           const tagShaCache = new Map();
           const nonRetryableStatuses = new Set([400, 401, 403, 404, 422]);
+
+          // A non-empty string, trimmed.
+          function isNonEmptyString(value) {
+            return typeof value === 'string' && value.trim().length > 0;
+          }
+
+          // Reject anything that isn't a fully-specified, maintainer-reviewed
+          // allowlist entry. A malformed entry must never be able to silently
+          // suppress a real drift failure — fail loudly instead.
+          function validateAllowlistEntry(entry, seen) {
+            if (!isNonEmptyString(entry?.action)) {
+              throw new Error(`Invalid allowlist.json entry: missing or empty "action": ${JSON.stringify(entry)}`);
+            }
+            if (!isNonEmptyString(entry.description)) {
+              throw new Error(`Invalid allowlist.json entry for "${entry.action}": missing or empty "description"`);
+            }
+            if (!Array.isArray(entry.references) || entry.references.length === 0 || !entry.references.every(isNonEmptyString)) {
+              throw new Error(`Invalid allowlist.json entry for "${entry.action}": "references" must be a non-empty array of non-empty strings`);
+            }
+            if (seen.has(entry.action)) {
+              throw new Error(`Invalid allowlist.json: duplicate entry for "${entry.action}"`);
+            }
+          }
+
+          // Repos a maintainer has explicitly reviewed and confirmed cannot be
+          // drift-checked via the API (see allowlist.json for the description).
+          // This is the ONLY way a resolution failure is downgraded from a
+          // hard failure — never inferred from the error's status or text.
+          const allowlist = new Map();
+          try {
+            const entries = JSON.parse(fs.readFileSync(process.env.ALLOWLIST_FILE, 'utf8'));
+            for (const entry of entries) {
+              validateAllowlistEntry(entry, allowlist);
+              allowlist.set(entry.action, entry);
+            }
+          } catch (err) {
+            if (err.code !== 'ENOENT') throw err;
+          }
+
+          // The ONLY error condition allowlist.json is allowed to downgrade:
+          // a clean HTTP 403 from the upstream API (e.g. an org-level IP
+          // allow-list), never a 404, a ref-shape bug, or an exhausted retry.
+          class AccessBlockedError extends Error {
+            constructor(message, cause) {
+              super(message, { cause });
+              this.name = 'AccessBlockedError';
+              this.status = 403;
+            }
+          }
 
           const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -78,6 +140,7 @@ runs:
             core.setOutput('verified_count', 0);
             core.setOutput('failed_count', 0);
             core.setOutput('unpinned_count', 0);
+            core.setOutput('allowlisted_count', 0);
             core.setOutput('status', 'pass');
             core.setOutput('results_json', '[]');
             return;
@@ -129,6 +192,7 @@ runs:
             core.setOutput('verified_count', 0);
             core.setOutput('failed_count', 0);
             core.setOutput('unpinned_count', 0);
+            core.setOutput('allowlisted_count', 0);
             core.setOutput('status', 'pass');
             core.setOutput('results_json', '[]');
             return;
@@ -180,8 +244,26 @@ runs:
 
               throw new Error(`Unexpected ref object type: ${obj.type}`);
             } catch (err) {
+              if (err instanceof AccessBlockedError) throw err;
               if (err.status === 404) {
                 throw new Error(`Tag "${tag}" not found in ${owner}/${repo}`);
+              }
+              if (err.status === 403) {
+                // A rate-limit 403 isn't a per-repo access-block condition —
+                // it means this token is out of budget for every remaining
+                // lookup, allowlisted repo or not. Let it fail loudly instead
+                // of being silently absorbed by one repo's allowlist entry.
+                // Detected via the documented x-ratelimit-remaining response
+                // header (a structured API signal), never by inspecting the
+                // error's message text.
+                const rateLimitRemaining = err.response?.headers?.['x-ratelimit-remaining'];
+                if (rateLimitRemaining === '0') {
+                  throw err;
+                }
+                throw new AccessBlockedError(
+                  `API access blocked (403) resolving tag "${tag}" in ${owner}/${repo}: ${err.message}`,
+                  err
+                );
               }
               throw err;
             }
@@ -225,6 +307,7 @@ runs:
           let verified = 0;
           let failed = 0;
           let unpinned = 0;
+          let allowlisted = 0;
           const errors = [];
           const results = [];
 
@@ -295,6 +378,25 @@ runs:
               }
             } catch (err) {
               const detail = err.message;
+
+              // Only a maintainer-reviewed entry in allowlist.json AND the
+              // explicitly verified access-block condition (a 403 from the
+              // upstream API) can downgrade a resolution failure to a
+              // warning — never any other error type, and never an inference
+              // from the error's message text. See that file for why.
+              const entry = allowlist.get(`${ref.owner}/${ref.repo}`);
+              if (entry && err instanceof AccessBlockedError) {
+                const msg = `⚠️  ${label} — tag verification unavailable (${ref.file}:${ref.line}): ${detail}\n` +
+                  `   Allowlisted: ${entry.description}`;
+                core.warning(msg);
+                allowlisted++;
+                results.push({
+                  action: label, file: ref.file, line: ref.line,
+                  status: 'allowlisted', detail: entry.description,
+                });
+                continue;
+              }
+
               const msg = `❌ ${label} — ${detail} (${ref.file}:${ref.line})`;
               core.error(msg);
               errors.push(msg);
@@ -307,11 +409,12 @@ runs:
           }
 
           core.info(`\n${'─'.repeat(60)}`);
-          core.info(`Verified: ${verified}  Failed: ${failed}  Unpinned: ${unpinned}  Total: ${refs.length}`);
+          core.info(`Verified: ${verified}  Failed: ${failed}  Unpinned: ${unpinned}  Allowlisted: ${allowlisted}  Total: ${refs.length}`);
 
           core.setOutput('verified_count', verified);
           core.setOutput('failed_count', failed);
           core.setOutput('unpinned_count', unpinned);
+          core.setOutput('allowlisted_count', allowlisted);
           core.setOutput('status', (failed > 0 || unpinned > 0) ? 'fail' : 'pass');
           core.setOutput('results_json', JSON.stringify(results));
 
@@ -370,6 +473,7 @@ runs:
           const unpinned = parseInt(process.env.UNPINNED_COUNT || '0', 10);
           const total = results.length;
           const branchPinned = results.filter(r => r.status === 'pinned-branch').length;
+          const allowlisted = results.filter(r => r.status === 'allowlisted').length;
           const status = process.env.STATUS || 'pass';
 
           // Find existing comment
@@ -383,10 +487,10 @@ runs:
           );
           const existing = comments.find(c => c.body?.includes(marker));
 
-          let body;
-          if (status === 'fail') {
-            // Build failure table
-            const rows = results.map(r => {
+          // Shared row renderer — used by both the failure table and the
+          // allowlisted-only warning table below, so the two stay in sync.
+          function renderRows(rs) {
+            return rs.map(r => {
               const loc = `\`${r.file}:${r.line}\``;
               if (r.status === 'verified') {
                 return `| \`${r.action}\` | ${loc} | ✅ Verified | |`;
@@ -394,12 +498,20 @@ runs:
               if (r.status === 'pinned-branch') {
                 return `| \`${r.action}\` | ${loc} | ℹ️ Pinned (branch) | ${r.detail || ''} |`;
               }
+              if (r.status === 'allowlisted') {
+                return `| \`${r.action}\` | ${loc} | ⚠️ Allowlisted (documented) | ${r.detail || ''} |`;
+              }
               if (r.status === 'unpinned') {
                 return `| \`${r.action}\` | ${loc} | ❌ Unpinned | ${r.detail || ''} |`;
               }
               return `| \`${r.action}\` | ${loc} | ❌ ${r.status === 'error' ? 'Error' : 'Mismatch'} | ${r.detail || ''} |`;
             }).join('\n');
+          }
 
+          const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+          let body;
+          if (status === 'fail') {
             body = `${marker}
           > [!WARNING]
           > #### SHA Pin Verification Failed
@@ -408,9 +520,9 @@ runs:
 
           | Action | Location | Status | Details |
           |--------|----------|--------|---------|
-          ${rows}
+          ${renderRows(results)}
 
-          See the [action run](${'https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId}) for full details.`;
+          See the [action run](${runUrl}) for full details.`;
           } else if (total === 0) {
             // No third-party action references found — only update if there was a previous warning
             if (!existing) return;
@@ -419,6 +531,23 @@ runs:
           > #### SHA Pin Verification — No References Found
           >
           > No third-party action references detected in workflow files.`;
+          } else if (allowlisted > 0) {
+            // Status is 'pass' (no failed/unpinned), but at least one reference
+            // relies on a documented allowlist entry — that reliance must stay
+            // visible even though it doesn't block CI. Always post/update,
+            // regardless of whether a prior comment exists, so a resolved
+            // failure never silently flips to an unqualified "Passed ✅".
+            body = `${marker}
+          > [!WARNING]
+          > #### SHA Pin Verification Passed — with documented exceptions
+          >
+          > All **${total}** third-party action reference(s) are covered, but **${allowlisted}** rel${allowlisted === 1 ? 'ies' : 'y'} on a documented allowlist entry in \`allowlist.json\` and could not be automatically drift-checked. This does not fail CI, but should be reviewed.
+
+          | Action | Location | Status | Details |
+          |--------|----------|--------|---------|
+          ${renderRows(results.filter(r => r.status === 'allowlisted'))}
+
+          See the [action run](${runUrl}) for full details.`;
           } else {
             // All passed — only post if updating a previous warning
             if (!existing) {

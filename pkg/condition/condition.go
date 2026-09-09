@@ -51,6 +51,14 @@ type Context struct {
 	// spec.files[].matrix row), available to CEL expressions as the `matrix`
 	// map, keyed by axis name. Empty outside a matrix context.
 	Matrix map[string]string
+	// Flags carries a custom command's declared --flag values (both string and bool
+	// typed), available to CEL expressions as the `flags` map, e.g.
+	// `when: "flags.dry_run == true"`. Empty outside a custom-command context.
+	Flags map[string]any
+	// Arguments carries a custom command's declared positional argument values,
+	// available to CEL expressions as the `arguments` map, e.g.
+	// `when: "arguments.environment == 'prod'"`. Empty outside a custom-command context.
+	Arguments map[string]string
 	// OS is runtime.GOOS (e.g. "darwin", "linux", "windows"), letting `when:` replace a
 	// dedicated `platforms:` field, e.g. `when: "os == 'darwin'"`.
 	OS string

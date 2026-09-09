@@ -810,12 +810,12 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 	// Prompt the user to edit the configuration values unless --use-defaults is specified
 	// This allows them to review and modify values from command line, config, or defaults
 	if !useDefaults {
-		if err := config.PromptForScaffoldConfig(scaffoldConfig, mergedValues); err != nil {
+		if err := config.PromptForScaffoldConfig(scaffoldConfig, mergedValues, config.WithFieldOptionsRenderer(ui.processor.RenderAnswersListExpression)); err != nil {
 			return nil, nil, fmt.Errorf("failed to prompt for configuration: %w", err)
 		}
 	}
 
-	if err := validateSetupValues(scaffoldConfig, mergedValues); err != nil {
+	if err := validateSetupValues(scaffoldConfig, mergedValues, ui.processor.RenderAnswersListExpression); err != nil {
 		return nil, nil, err
 	}
 
@@ -899,8 +899,8 @@ func coerceSetupFieldTypes(scaffoldConfig *config.ScaffoldConfig, mergedValues m
 // interactive and non-interactive generation. Prompt-level validation
 // provides immediate feedback, while this canonical check also covers
 // defaults, persisted values, and --set values.
-func validateSetupValues(scaffoldConfig *config.ScaffoldConfig, mergedValues map[string]interface{}) error {
-	err := config.ValidateFieldValues(scaffoldConfig, mergedValues)
+func validateSetupValues(scaffoldConfig *config.ScaffoldConfig, mergedValues map[string]interface{}, render config.FieldOptionsRenderer) error {
+	err := config.ValidateFieldValues(scaffoldConfig, mergedValues, config.WithFieldOptionsRenderer(render))
 	if err == nil {
 		return nil
 	}
@@ -1001,7 +1001,7 @@ func (ui *InitUI) processMatrixedFileEntry(
 	activeDelimiters []string,
 	seenRenderedPaths map[string]string,
 ) (successCount, errorCount int, failedPaths []string, err error) {
-	rows, expandErr := engine.ExpandMatrix(spec.Matrix, mergedValues, ui.processor.RenderMatrixAxisExpression, activeDelimiters)
+	rows, expandErr := engine.ExpandMatrix(spec.Matrix, mergedValues, ui.processor.RenderAnswersListExpression, activeDelimiters)
 	if expandErr != nil {
 		ui.writeOutput(fileStatusFormat,
 			ui.errorStyle.Render(ui.xMark),

@@ -188,6 +188,16 @@ func TestProvisionWithParams_BackendProvisioningFailure(t *testing.T) {
 }
 
 func TestAutoProvisionBackendWrapsCreationError(t *testing.T) {
+	// Reset before registering, not just after: autoProvisionBackend also
+	// consults the exists-checker registry (backend.BackendExists), which is
+	// separately populated by s3.go's init() with the real, network-calling
+	// S3BackendExists. Whichever test in this package happens to run first
+	// under -shuffle=on inherits that real checker unless it clears the
+	// registry itself first -- leaving it in place makes BackendExists error
+	// (no AWS credentials/network in CI), which autoProvisionBackend treats
+	// as "defer to terraform init" and silently skips the create call this
+	// test means to exercise.
+	backend.ResetRegistryForTesting()
 	t.Cleanup(backend.ResetRegistryForTesting)
 
 	backendProvisionErr := errors.New("bucket already exists")
@@ -209,6 +219,12 @@ func TestAutoProvisionBackendWrapsCreationError(t *testing.T) {
 }
 
 func TestAutoProvisionBackendWritesWarningsToOutputWriter(t *testing.T) {
+	// Reset before registering, not just after -- see the comment in
+	// TestAutoProvisionBackendWrapsCreationError for why: this test doesn't
+	// register its own exists-checker, so it must not inherit whatever the
+	// registry (possibly the real, network-calling S3BackendExists from
+	// s3.go's init()) happens to hold when this test runs.
+	backend.ResetRegistryForTesting()
 	t.Cleanup(backend.ResetRegistryForTesting)
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err)

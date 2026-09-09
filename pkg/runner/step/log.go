@@ -6,6 +6,7 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/safenum"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -85,12 +86,7 @@ func (h *LogHandler) buildKeyvals(step *schema.WorkflowStep, vars *Variables) []
 // Each field becomes 2 entries (key + value), so we need fieldsLen*2 capacity.
 // Returns min(fieldsLen*2, maxCapacity) without risk of overflow.
 func safeKeyvalsCapacity(fieldsLen, maxCapacity int) int {
-	// If fieldsLen would cause overflow when doubled, use maxCapacity.
-	// maxCapacity/2 is the largest safe input for doubling.
-	if fieldsLen > maxCapacity/2 {
-		return maxCapacity
-	}
-	return fieldsLen * 2
+	return safenum.Cap(fieldsLen, fieldsLen, maxCapacity)
 }
 
 // getLogLevel parses a log level string.

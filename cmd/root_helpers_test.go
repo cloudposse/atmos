@@ -1978,7 +1978,13 @@ func TestGetTerminalWidthPrecedence(t *testing.T) {
 	originalConfig := atmosConfig
 	t.Cleanup(func() {
 		atmosConfig = originalConfig
-		ui.Reset()
+		// Re-initialize rather than leave the formatter nil: TestMain's
+		// ui.InitFormatter runs once at binary startup, so under
+		// -shuffle=on any test that runs after this one in the same binary
+		// would otherwise see ui.ErrUIFormatterNotInitialized (see
+		// docs/fixes for the incident where TestSupportCommand_RunE failed
+		// exactly this way).
+		ui.ReinitFormatter()
 	})
 
 	t.Run("default when no terminal width is known", func(t *testing.T) {

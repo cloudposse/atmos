@@ -12,3 +12,7 @@ components:
   terraform:
     vpc:
       vars: !include ../components/terraform/vpc/envs/dev.tfvars
+      # Per-component override: cap this component's concurrent operations at 4,
+      # below Terraform's own -parallelism default of 10.
+      flags:
+        parallelism: 4

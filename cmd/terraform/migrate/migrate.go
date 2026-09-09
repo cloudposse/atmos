@@ -165,10 +165,13 @@ func executeTfmigrateSingle(info *schema.ConfigAndStacksInfo, opts tfmigrate.Opt
 		return err
 	}
 
-	if err := selectTfmigrateWorkspace(execCtx); err != nil {
-		return err
-	}
-
+	// Resolve the zero-config default (and its "nothing to migrate yet" Skip
+	// verdict) before touching the workspace: when there is no migration to
+	// run, tfmigrate must be skipped entirely, without ever invoking the
+	// terraform/tofu binary for a workspace select that has no purpose.
+	// resolveTfmigrateDefaultConfig only reads execCtx state ProcessStacks
+	// already resolved (component dir, backend, TerraformWorkspace), so it
+	// does not depend on the workspace having been selected.
 	resolved, err := resolveTfmigrateDefaultConfig(execCtx, opts)
 	if resolved.Cleanup != nil {
 		defer resolved.Cleanup()
@@ -180,6 +183,10 @@ func executeTfmigrateSingle(info *schema.ConfigAndStacksInfo, opts tfmigrate.Opt
 		return nil
 	}
 	opts = resolved.Options
+
+	if err := selectTfmigrateWorkspace(execCtx); err != nil {
+		return err
+	}
 
 	args, err := tfmigrate.BuildArgs(opts)
 	if err != nil {

@@ -22,12 +22,15 @@ When you define a `component:` section in a custom command with a `type`, Atmos:
 
 ### Typed Arguments and Flags
 
-To tell Atmos which argument or flag provides the component name and stack name, use semantic types:
+To tell Atmos which argument or flag provides the component name and stack name, set `provides:`
+on the argument or flag definition:
 
-- **Arguments**: Set `type: component` or `type: stack` in the argument definition
-- **Flags**: Set `semantic_type: component` or `semantic_type: stack` in the flag definition
+- **Arguments**: Set `provides: component` or `provides: stack`
+- **Flags**: Set `provides: component` or `provides: stack`
 
-Note: For flags, we use `semantic_type` because `type` is already used to specify the data type (`string`, `bool`).
+Older configs may instead use `type: component`/`type: stack` on arguments, or
+`semantic_type: component`/`semantic_type: stack` on flags — both still work but are deprecated in
+favor of `provides:`, which uses the same field name on both.
 
 ### Example: Script Runner
 
@@ -42,13 +45,13 @@ commands:
     arguments:
       - name: component
         description: "Component name"
-        type: component              # This argument provides the component name
+        provides: component          # This argument provides the component name
         required: true
     flags:
       - name: stack
         shorthand: s
         description: "Stack name"
-        semantic_type: stack         # This flag provides the stack name
+        provides: stack               # This flag provides the stack name
         required: true
     component:
       type: script                   # Define the custom component type
@@ -144,12 +147,12 @@ commands:
   - name: deploy
     arguments:
       - name: component
-        type: component
+        provides: component
         required: true
     flags:
       - name: stack
         shorthand: s
-        semantic_type: stack
+        provides: stack
         required: true
     component:
       type: script
@@ -200,12 +203,12 @@ commands:
     description: "Run Ansible playbooks"
     arguments:
       - name: component
-        type: component
+        provides: component
         required: true
     flags:
       - name: stack
         shorthand: s
-        semantic_type: stack
+        provides: stack
         required: true
       - name: check
         description: "Run in check mode (dry-run)"
@@ -230,12 +233,12 @@ commands:
     description: "Apply Kubernetes manifests"
     arguments:
       - name: component
-        type: component
+        provides: component
         required: true
     flags:
       - name: stack
         shorthand: s
-        semantic_type: stack
+        provides: stack
         required: true
       - name: dry-run
         type: bool

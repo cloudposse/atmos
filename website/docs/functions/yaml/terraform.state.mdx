@@ -171,6 +171,15 @@ in the YQ expression using the `//` operator. Atmos will evaluate the default wh
 This allows you to mock outputs when executing `atmos terraform plan` where there are dependencies between components,
 and the dependent components are not provisioned yet.
 
+:::tip Looking for reusable, component-owned mock fixtures?
+A `//` default is a one-off fallback baked into a single expression. If you want a producer
+component to declare its mock outputs once and have every consumer resolve them consistently,
+use the dedicated [`mocks`](/components/terraform/stack-config#mocks) stack-config section with the
+`--use-mocks` flag instead — see [Component Mocks for Terraform YAML Lookups](/changelog/terraform-component-mocks).
+A `//` default in the caller's expression still applies even when the referenced component
+declares no `mocks` section at all; without one, an undeclared `mocks` section is a hard error.
+:::
+
 :::tip Default Value Behavior
 Atmos distinguishes between **recoverable errors** (component not provisioned, output missing) and **non-recoverable errors** (backend API failures):
 
@@ -601,8 +610,32 @@ A component with no whitelisted env key produces no overlay and resolves credent
 When `!terraform.state` constructs its in-process AWS client, credential sources resolve in this order (lowest wins → highest wins):
 
 1. Process environment (whatever `AWS_PROFILE` etc. is set in the shell running Atmos).
-2. The target component's whitelisted `env` overlay (this section).
-3. Atmos auth (`AWSAuthContext`) — wins outright when configured.
+2. The target component's S3 backend `profile` attribute (see below).
+3. The target component's whitelisted `env` overlay (this section).
+4. Atmos auth (`AWSAuthContext`) — wins outright when configured.
+
+### Backend `profile` attribute
+
+If the target component's `backend.s3` section sets `profile`, `!terraform.state` uses it as `AWS_PROFILE` whenever
+neither Atmos auth nor the component's `env.AWS_PROFILE` selects credentials. This is the same precedence
+`terraform init` applies to the `profile` attribute it finds in `backend.tf.json`, so a stack that only sets the
+profile on the backend (a common pattern when every stage maps to its own named profile) resolves the same
+credentials for `!terraform.state` as it already does for `!terraform.output`:
+
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: !template '{{ .vars.stage }}-tfstate'
+      region: us-west-2
+      profile: !template '{{ .vars.stage }}:terraform'
+      assume_role:
+        role_arn: !template 'arn:aws:iam::{{ .vars.account_id }}:role/terraform'
+```
+
+With this configuration, `!terraform.state vpc {{ .stack }} vpc_id` loads the `<stage>:terraform` profile and then
+assumes `assume_role.role_arn`, exactly as the backend does during `terraform init`. No `env` section is required.
 
 ### Example: per-namespace AWS profile
 

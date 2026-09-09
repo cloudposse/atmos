@@ -9,6 +9,17 @@ on:
     types:
       - released
 
+# Serialize deploys. The merge queue can land several PRs on main minutes apart, and
+# each push triggers a deploy that runs `aws s3 sync --delete` against the ONE shared
+# origin prefix. Two runs in flight at once race: run A uploads its hashed bundles and
+# index.html, then run B's --delete removes A's bundles (they are not in B's build)
+# while A's index.html still references them -- the site goes blank until the next
+# deploy. Only the newest pending run is kept per group; the in-flight run is never
+# cancelled because aborting mid-sync would leave a half-uploaded site.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 env:
   AWS_REGION: us-east-2
   IAM_ROLE_ARN: arn:aws:iam::557075604627:role/cplive-plat-ue2-prod-atmos-docs-gha
@@ -30,6 +41,25 @@ jobs:
       url: https://${{ env.DEPLOYMENT_HOST }}
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            sts.us-east-2.amazonaws.com:443
+            *.actions.githubusercontent.com:443
+            github.com:443
+            api.github.com:443
+            nodejs.org:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            proxy.golang.org:443
+            storage.googleapis.com:443
+            us.i.posthog.com:443
+            cplive-plat-ue2-prod-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
+            api.scorecard.dev:443
+            www.bestpractices.dev:443
+
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
@@ -44,15 +74,21 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version-file: "website/.nvmrc"
-
+      # pnpm before Node: setup-node's pnpm-store cache needs the pnpm binary
+      # on PATH to locate the store. Previously nothing cached the store and
+      # `pnpm install --frozen-lockfile` downloaded the full dependency tree
+      # on every run.
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: "website/.nvmrc"
+          cache: pnpm
+          cache-dependency-path: website/pnpm-lock.yaml
 
       - name: Set up Go
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
@@ -60,60 +96,28 @@ jobs:
         with:
           go-version-file: "go.mod"
 
-      - name: Generate atmos-manifest schema
-        # website/static/schemas/atmos/atmos-manifest/ is gitignored (see .gitignore) — it is
-        # never hand-maintained or committed, only generated here from the embedded schema
-        # (pkg/datafetcher/schema/atmos/manifest/1.0.json), the single source of truth. The
-        # 1.0 path always floats to the schema shipped by the atmos version at HEAD.
-        # CGO_ENABLED=0: `go run .` builds the whole atmos binary graph, which pulls in
-        # cgo-linked hardware-security-key deps (e.g. github.com/bearsh/hid) that need
-        # system libudev headers this runner doesn't have. atmos itself always builds with
-        # CGO disabled (see .goreleaser.yml, magefiles/build.go); match that here too.
-        # GOFIPS140=latest: match every other Go-toolchain build invocation in the repo
-        # (see docs/prd/fips-140-mode.md) so this throwaway schema-generation process
-        # behaves identically to a real atmos build/test binary.
-        env:
-          CGO_ENABLED: "0"
-          GOFIPS140: latest
-        run: go run . stack schema website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+      # `go run .` below has no prior module cache warm-up, so a single
+      # mid-stream proxy.golang.org reset (e.g. "stream error: ...
+      # INTERNAL_ERROR; received from peer") aborts it outright -- see
+      # docs/fixes/2026-08-25-build-atmos-go-mod-download-retry.md.
+      - name: Download Go modules (with retry)
+        uses: ./.github/actions/go-mod-download-retry
 
-      - name: Publish pinned atmos-manifest schema snapshot
-        # Only on an actual GitHub release (not the push-to-main or workflow_dispatch
-        # triggers): publish an immutable, version-pinned snapshot alongside the floating
-        # 1.0 path, so users can pin `schemas.atmos.manifest` to the exact schema that
-        # shipped with a given atmos release instead of always tracking HEAD. Closes #2592.
-        if: ${{ github.event_name == 'release' }}
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          CGO_ENABLED: "0"
-          GOFIPS140: latest
-        run: |
-          version="${RELEASE_TAG#v}"
-          go run . stack schema "website/static/schemas/atmos/atmos-manifest/${version}/atmos-manifest.json"
+      - name: Publish atmos-manifest schema
+        uses: ./.github/actions/publish-atmos-schema
+        with:
+          schema-name: atmos-manifest
+          subcommand: stack schema
+          s3-bucket: ${{ env.S3_BUCKET_NAME }}
+          release-tag: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
 
-      - name: Generate atmos-config schema
-        # website/static/schemas/atmos/atmos-config/ is gitignored (see .gitignore) — it is
-        # never hand-maintained or committed, only generated here from the embedded schema
-        # (pkg/datafetcher/schema/atmos/config/1.0.json), itself generated from the Go
-        # configuration structs by `go generate ./pkg/config/schema`. The 1.0 path always
-        # floats to the schema shipped by the atmos version at HEAD.
-        env:
-          CGO_ENABLED: "0"
-          GOFIPS140: latest
-        run: go run . config schema website/static/schemas/atmos/atmos-config/1.0/atmos-config.json
-
-      - name: Publish pinned atmos-config schema snapshot
-        # Only on an actual GitHub release: publish an immutable, version-pinned snapshot
-        # alongside the floating 1.0 path, so users can pin `schemas.config` to the exact
-        # atmos.yaml schema that shipped with a given atmos release instead of tracking HEAD.
-        if: ${{ github.event_name == 'release' }}
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          CGO_ENABLED: "0"
-          GOFIPS140: latest
-        run: |
-          version="${RELEASE_TAG#v}"
-          go run . config schema "website/static/schemas/atmos/atmos-config/${version}/atmos-config.json"
+      - name: Publish atmos-config schema
+        uses: ./.github/actions/publish-atmos-schema
+        with:
+          schema-name: atmos-config
+          subcommand: config schema
+          s3-bucket: ${{ env.S3_BUCKET_NAME }}
+          release-tag: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
 
       - name: Install Dependencies and Build Website
         run: |
@@ -125,10 +129,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Copy Website to S3 Bucket
-        run: |
-          ./.github/scripts/s3-deploy-with-charset.sh \
-            website/build \
-            s3://${{ env.S3_BUCKET_NAME }}/
+        uses: ./.github/actions/s3-deploy
+        with:
+          local-dir: website/build
+          s3-uri: s3://${{ env.S3_BUCKET_NAME }}/
 
       - name: Trigger ReIndexing of atmos.tools and docs.cloudposse.com Docs
         run: |

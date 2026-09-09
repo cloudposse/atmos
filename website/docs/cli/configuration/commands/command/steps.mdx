@@ -125,11 +125,28 @@ Step predicates are:
 </dl>
 
 CEL expressions can read `ci`, `status`, `stack`, `component`, `workflow`,
-`step`, and `env`. For workflow and custom command steps, `status` is the
-current command status: `success` before any step fails and `failure` after an
-earlier step failed. Also available: `os`/`arch`/`platform` (for example
-`when: "os == 'darwin'"`) and the freshness facts `checksum`, `timestamp`,
-`preconditions`, `sources`, `artifacts` — see [`inputs`](/workflows/steps/inputs),
+`step`, `env`, `flags`, and `arguments`. For workflow and custom command steps,
+`status` is the current command status: `success` before any step fails and
+`failure` after an earlier step failed. `flags` and `arguments` mirror the
+command's own declared `--flag`/positional values — the same data available to
+steps as `{{ .Flags.name }}`/`{{ .Arguments.name }}` in templates — so a step
+can gate on how the command was invoked:
+
+```yaml
+commands:
+  - name: deploy
+    flags:
+      - name: dry-run
+        type: bool
+    steps:
+      - type: shell
+        command: terraform apply
+        when: !cel '!flags["dry-run"]'
+```
+
+Also available: `os`/`arch`/`platform` (for example `when: "os == 'darwin'"`)
+and the freshness facts `checksum`, `timestamp`, `preconditions`, `sources`,
+`artifacts` — see [`inputs`](/workflows/steps/inputs),
 [`artifacts`](/workflows/steps/artifacts), and
 [`preconditions`](/workflows/steps/preconditions).
 

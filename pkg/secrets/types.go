@@ -77,6 +77,8 @@ type Status struct {
 type ResolveOptions struct {
 	// Path is an optional YQ-style path expression applied to a structured secret value.
 	Path string
+	// Raw requests the original textual payload instead of the store's structured value.
+	Raw bool
 	// Default is an optional fallback value used when the secret is missing.
 	Default *string
 }

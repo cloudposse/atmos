@@ -84,6 +84,28 @@ problem or technique first, the way someone outside the project would recognize 
 
 Structure the body `## The Problem` / `## The Fix` / `## How to Use It` / `## Get Involved`.
 
+### Rule 1a — Open on the real reason, at the scope it actually applies to
+
+Find the actual motivating reason for the change (PR description, linked issue, commit messages) before
+writing the intro, and open on *that* — not a plausible-sounding scenario constructed to fit it, and not
+narrowed to the one path you happened to notice it through when the real gap is broader. Both are the same
+mistake: substituting a specific, contrived framing for the real, general one.
+
+- **Correct** — `2026-07-13-atmos-stack-schema-command.mdx`: "Editors, CI pipelines, and offline
+  environments that want to validate stack manifests locally have had one option: fetch the JSON Schema
+  from `atmos.tools`... and hope it matches." A real, checkable limitation, not an anecdote.
+- **Violation (invented)** — `2026-08-06-toolchain-lockfile-default.mdx` opened with a fabricated "a
+  teammate's laptop and CI don't quite match" vignette, when the real reason (stated correctly two
+  paragraphs later) was simpler: the fix already existed but was undocumented, so nobody enabled it.
+- **Violation (over-narrowed)** — `2026-08-05-taskfile-convergence.mdx` opens "If you've ever tried to move
+  a `Taskfile.yml` over to Atmos, you've hit the gap..." — framing a general task-runner deficiency (no
+  dependency ordering, no incremental builds — table-stakes features nearly every task runner has) as if it
+  only matters to people migrating from one specific competitor. The real problem, stated correctly under
+  `## The Problem`, is category-general: Atmos was missing it as a task runner, full stop.
+
+If you can't find the real reason, ask rather than invent one — and state it at the scope it actually
+applies to.
+
 ## Rule 2 — Never open prose with a backtick
 
 Prose (a sentence, paragraph, or the post intro) must start with a word, not an inline code span or fence.
@@ -130,6 +152,8 @@ implementation structure — describe behavior only in CLI/config/output terms.
 ## Pre-publish checklist
 
 - [ ] Intro opens on the problem, not the feature, and doesn't open with a backtick
+- [ ] The opening problem is the real, specific reason this change happened (checked against the PR
+      description/issue/commits) — not a generic scenario invented to justify it
 - [ ] Body follows Problem → Fix → How to Use It → Get Involved (no `## What Changed` opener)
 - [ ] Tag(s) exist in `website/blog/tags.yml`
 - [ ] Author exists in `website/blog/authors.yml` (added in this PR if new)

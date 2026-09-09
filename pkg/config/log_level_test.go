@@ -10,6 +10,8 @@ import (
 )
 
 func TestLogLevelCaseNormalization(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		inputLevel    string
@@ -69,6 +71,7 @@ func TestLogLevelCaseNormalization(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create minimal atmosConfig and configAndStacksInfo
 			atmosConfig := &schema.AtmosConfiguration{
 				Logs: schema.Logs{},
@@ -89,6 +92,8 @@ func TestLogLevelCaseNormalization(t *testing.T) {
 }
 
 func TestLogLevelInvalidValues(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		inputLevel string
@@ -100,6 +105,7 @@ func TestLogLevelInvalidValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				Logs: schema.Logs{},
 			}
@@ -116,6 +122,8 @@ func TestLogLevelInvalidValues(t *testing.T) {
 }
 
 func TestLogLevelEmptyOrWhitespace(t *testing.T) {
+	t.Parallel()
+
 	// Empty or whitespace log levels should be treated as empty (no error, no change)
 	tests := []struct {
 		name       string
@@ -128,6 +136,7 @@ func TestLogLevelEmptyOrWhitespace(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				Logs: schema.Logs{
 					Level: "Info", // Pre-existing level

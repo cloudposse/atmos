@@ -132,14 +132,24 @@ func removeWindowsTrustStore(certPath string) error {
 }
 
 func nativeWindowsTrustInstall(certPath string) error {
+	// Snapshot the package-level function var before runTrustOperation spawns
+	// its background goroutine, rather than letting the closure read it live:
+	// on a timeout, runTrustOperation returns to the caller while that
+	// goroutine keeps running (there's no context to cancel a plain Go func
+	// with), and a caller (in practice, a test's t.Cleanup) that reassigns
+	// installWindowsTrustFunc afterward would race with this goroutine's read
+	// of it. The goroutine now only ever touches its own private copy.
+	install := installWindowsTrustFunc
 	return runTrustOperation("Windows trust store install", func() error {
-		return installWindowsTrustFunc(certPath)
+		return install(certPath)
 	})
 }
 
 func nativeWindowsTrustRemove(certPath string) error {
+	// See nativeWindowsTrustInstall: same snapshot-before-async-use reasoning.
+	remove := removeWindowsTrustFunc
 	return runTrustOperation("Windows trust store removal", func() error {
-		return removeWindowsTrustFunc(certPath)
+		return remove(certPath)
 	})
 }
 

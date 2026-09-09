@@ -93,6 +93,8 @@ func TestGenerateMarksDeprecatedConfigurationFields(t *testing.T) {
 		{"Docs", "pagination", "settings.terminal.pagination"},
 		{"Provider", "provider_type", "driver"},
 		{"VersionProvider", "type", "kind"},
+		{"CommandArgument", "type", "provides"},
+		{"CommandFlag", "semantic_type", "provides"},
 	} {
 		t.Run(test.definition+"/"+test.property, func(t *testing.T) {
 			definition := defs[test.definition].(map[string]any)

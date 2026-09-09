@@ -32,7 +32,7 @@ spec:
   description: ...            # longer help text shown with the prompt
   required: true
   default: my-default
-  options: [a, b, c]          # select/multiselect only
+  options: [a, b, c]          # select/multiselect only; see below for {label,value}/dynamic forms
   placeholder: e.g. vpc       # input fields only
   validation:
     pattern: '^[a-z][a-z0-9-]*$'
@@ -43,8 +43,62 @@ spec:
 Field name uniqueness is enforced — a duplicate `name` fails to load
 (`ErrDuplicateScaffoldFieldName`) rather than silently dropping an answer.
 
+### `options:` — static, label/value, or dynamic
+
+`options:` (select/multiselect only) accepts four shapes:
+
+- A plain string list — label and value are the same:
+  ```yaml
+  options: [dev, staging, prod]
+  ```
+- A list of `{label, value}` objects — `value` is required (a non-empty string); `label` is
+  optional and defaults to `value` when omitted. Only `value` ever reaches
+  `answers`/templates/`when:` — `label` is presentation-only:
+  ```yaml
+  options:
+    - label: Development
+      value: dev
+    - label: Production
+      value: prod
+  ```
+- A dot-path string, `answers.<name>` — resolves against an earlier field's answer, a
+  `spec.values` preset, or a `--set`-supplied value never declared as a field at all. Must resolve
+  to a list-shaped value (a `multiselect` answer, or a structured `[]string`/`[]any` of strings).
+  Mirrors `spec.files[].matrix` axis dot-path resolution exactly — same `answers.` prefix
+  convention, same underlying resolver:
+  ```yaml
+  options: answers.envs
+  ```
+- A Go-template expression (recognized by containing the scaffold's configured left delimiter,
+  `{{` by default) — computes the list from nested/structured answer data:
+  ```yaml
+  options: '{{ splitList "," answers.csv_field }}'
+  ```
+
+Both dynamic forms (dot-path and template expression) resolve correctly once the referenced
+earlier field has been answered — interactively (fields prompt one at a time, so a later field is
+only ever shown after the ones before it) or headlessly against `--set`/`--defaults`-supplied
+values. Unlike
+an earlier, now-removed load-time check, a dot-path's root name is **not** validated against field
+declaration order at load time — load time can't distinguish a genuine forward/self-reference
+mistake from a legitimate `spec.values` preset or `--set`-supplied value that was never declared
+as a field at all. A forward reference simply resolves to no options at that point (disabling the
+membership check for that field, not erroring); a self-reference is tautologically valid (the
+field's own final answer is what gets checked against itself). See
+`validateFieldOptionsSource`/`resolveFieldOptionsFromAnswers` in
+`pkg/project/config/validation.go`.
+
+**Label recovery**: when a *direct* single-segment dot-path (`answers.<name>`, not a deeper path
+like `answers.nested.envs`, and not a template expression) sources from a field whose own
+`options:` used `{label, value}` pairs, those labels are recovered for the filtered subset of
+values present in the referenced answer — a value present in the answer but absent from the
+source field's own options list falls back to `label == value` rather than erroring or being
+dropped. Label recovery does not propagate through a chained dynamic reference (a dot-path field
+sourcing from another dot-path field) or through the template-expression form — both always yield
+`label == value`.
+
 `when:` is evaluated by building one `huh.Group` per field (huh's `WithHideFunc`)
-against a live snapshot of every other field's current answer at render time — so a
+against a snapshot of every other field's current answer at render time — so a
 `when:` can only meaningfully reference fields **declared earlier** in the `fields:`
 list. In non-interactive mode (`--defaults`/no TTY), the same `when:` check gates
 whether a hidden required field is treated as "missing" (`MissingRequiredValues`), so

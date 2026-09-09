@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -48,6 +49,7 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/auth/providers/atmospro/broker"
 
 	"github.com/cloudposse/atmos/pkg/ci"
+	cistartup "github.com/cloudposse/atmos/pkg/ci/startup"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/diagnostics"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
@@ -60,6 +62,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/proexec"
 	atmosprofile "github.com/cloudposse/atmos/pkg/profile"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -580,7 +583,7 @@ var RootCmd = &cobra.Command{
 		// The global masker may have been created before CLI flags were parsed (e.g. by early
 		// output), so its enabled state reflects the `--mask` default, not the parsed flag.
 		// Reconcile it now that flags are available so `--mask=false` reliably disables masking.
-		iolib.ReconcileMasking()
+		reconcileMaskingForCommand(cmd)
 		ioCtx := iolib.GetContext()
 		ui.InitFormatter(ioCtx)
 		data.InitWriter(ioCtx)
@@ -654,6 +657,7 @@ var RootCmd = &cobra.Command{
 		// enabled. No-op outside a supported CI provider or for help commands.
 		if !isHelpRequested && !isCompletionCommand(cmd) {
 			cicache.AutoRestore(cmd, &tmpConfig)
+			cistartup.PrintStartupStatus(&tmpConfig)
 		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
@@ -682,6 +686,29 @@ var RootCmd = &cobra.Command{
 		err := e.ExecuteAtmosCmd()
 		return err
 	},
+}
+
+// reconcileMaskingForCommand applies the configured masking policy and then
+// honors a command-local --mask flag when a subcommand shadows the root flag.
+// Several component command groups register their own persistent common flags;
+// Viper remains bound to the root flag, so the changed local value must win.
+func reconcileMaskingForCommand(cmd *cobra.Command) {
+	iolib.ReconcileMasking()
+	if cmd == nil {
+		return
+	}
+	for current := cmd; current != nil; current = current.Parent() {
+		maskFlag := current.PersistentFlags().Lookup("mask")
+		if maskFlag == nil || !maskFlag.Changed {
+			continue
+		}
+		enabled, err := strconv.ParseBool(maskFlag.Value.String())
+		if err != nil {
+			return
+		}
+		iolib.GetContext().Masker().SetEnabled(enabled)
+		return
+	}
 }
 
 // debugModePromotion records the outcome of a CI-driven log-level promotion.
@@ -1851,6 +1878,7 @@ func Execute() error {
 	workdir.SetAtmosConfig(&atmosConfig)
 	terraformcache.SetAtmosConfig(&atmosConfig)
 	sbomcmd.SetAtmosConfig(&atmosConfig)
+	proexec.SetAtmosConfig(&atmosConfig)
 
 	if initErr != nil {
 		// Handle config initialization errors based on command context.
@@ -1940,6 +1968,11 @@ func Execute() error {
 	})
 
 	telemetry.CaptureCmd(cmd, err)
+
+	// Best-effort, asynchronous Atmos Pro command-execution metadata upload
+	// (no-ops unless CI is detected AND Atmos Pro is configured). Placed
+	// immediately after the telemetry hook it mirrors — see pkg/proexec.
+	proexec.CaptureAsync(cmd, err)
 
 	// Run AI analysis on captured output unless this is an "atmos ai" subcommand.
 	if !aisetup.IsAISubcommand(cmd) && aiCtx.RunAnalysis(err) {

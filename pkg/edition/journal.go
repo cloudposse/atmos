@@ -154,6 +154,15 @@ var journal = []Entry{
 		Description: "Helmfile EKS integration is opt-in; kubeconfig is no longer downloaded automatically before Helmfile commands.",
 		Ref:         "https://github.com/cloudposse/atmos/pull/1903",
 	},
+	{
+		Date:        "2026-08-05",
+		Key:         "toolchain.use_lock_file",
+		Kind:        KindValue,
+		Old:         false,
+		New:         true,
+		Description: "The toolchain writes toolchain.lock.yaml by default, pinning resolved tool versions and checksums for reproducible installs across platforms and CI.",
+		Ref:         "https://atmos.tools/changelog/toolchain-lockfile-default",
+	},
 }
 
 // Journal returns a copy of the journal sorted by date (oldest first), then key.

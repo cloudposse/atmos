@@ -43,8 +43,8 @@ For complete Terraform/OpenTofu documentation, see:
 			return err
 		}
 
-		// Parse base terraform options.
-		opts, err := ParseTerraformRunOptions(v)
+		// Parse base terraform options with command context for UI flag detection.
+		opts, err := ParseTerraformRunOptions(v, cmd)
 		if err != nil {
 			return err
 		}
@@ -89,7 +89,7 @@ func newWorkspacePassthroughSubcommand(name, short string) *cobra.Command {
 				return err
 			}
 
-			opts, err := ParseTerraformRunOptions(v)
+			opts, err := ParseTerraformRunOptions(v, leaf)
 			if err != nil {
 				return err
 			}

@@ -31,6 +31,14 @@ type BaseResolution struct {
 
 	// EventType describes the CI event (e.g., "pull_request", "push").
 	EventType string
+
+	// Checkout classifies what commit the workflow actually checked out,
+	// relative to the event payload (e.g., "head.sha", "merge-commit",
+	// "synthetic-merge", "unknown"). Base-resolution strategies are only
+	// correct for specific checkouts, so surfacing the classification in
+	// logs makes wrong-base incidents diagnosable from a single line.
+	// Empty for events where the distinction does not apply.
+	Checkout string
 }
 
 // Provider represents a CI/CD provider (GitHub Actions, GitLab CI, etc.).

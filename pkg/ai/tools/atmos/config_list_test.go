@@ -14,6 +14,8 @@ import (
 )
 
 func TestNewConfigListTool(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	tool := NewConfigListTool(atmosConfig)
 
@@ -22,16 +24,22 @@ func TestNewConfigListTool(t *testing.T) {
 }
 
 func TestConfigListTool_Name(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigListTool(&schema.AtmosConfiguration{})
 	assert.Equal(t, "atmos_config_list", tool.Name())
 }
 
 func TestConfigListTool_Description(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigListTool(&schema.AtmosConfiguration{})
 	assert.Contains(t, tool.Description(), "List the dot-notation setting paths")
 }
 
 func TestConfigListTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigListTool(&schema.AtmosConfiguration{})
 	params := tool.Parameters()
 
@@ -43,20 +51,27 @@ func TestConfigListTool_Parameters(t *testing.T) {
 }
 
 func TestConfigListTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigListTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.RequiresPermission())
 }
 
 func TestConfigListTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigListTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.IsRestricted())
 }
 
 func TestConfigListTool_Execute(t *testing.T) {
+	t.Parallel()
+
 	tool := NewConfigListTool(&schema.AtmosConfiguration{})
 	ctx := context.Background()
 
 	t.Run("lists all paths with no pattern", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "logs:\n  level: debug\nmcp:\n  enabled: true\n")
 
@@ -80,6 +95,7 @@ func TestConfigListTool_Execute(t *testing.T) {
 	})
 
 	t.Run("filters by glob pattern", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "logs:\n  level: debug\nmcp:\n  enabled: true\n")
 
@@ -100,6 +116,7 @@ func TestConfigListTool_Execute(t *testing.T) {
 	})
 
 	t.Run("pattern matching nothing returns empty entries", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "logs:\n  level: debug\n")
 
@@ -116,6 +133,7 @@ func TestConfigListTool_Execute(t *testing.T) {
 	})
 
 	t.Run("empty file yields no entries", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "")
 
@@ -131,6 +149,7 @@ func TestConfigListTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails when the explicit file override does not exist", func(t *testing.T) {
+		t.Parallel()
 		result, err := tool.Execute(ctx, map[string]interface{}{
 			"file": filepath.Join(t.TempDir(), "does-not-exist.yaml"),
 		})
@@ -141,6 +160,7 @@ func TestConfigListTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with malformed yaml content", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		file := writeConfigFixture(t, dir, "logs: {level: debug\n")
 
@@ -154,6 +174,8 @@ func TestConfigListTool_Execute(t *testing.T) {
 }
 
 func TestFilterConfigPathEntries(t *testing.T) {
+	t.Parallel()
+
 	entries := []atmosyaml.PathEntry{
 		{Path: "logs.level", Type: "string", Value: "debug"},
 		{Path: "mcp.enabled", Type: "bool", Value: "true"},
@@ -161,11 +183,13 @@ func TestFilterConfigPathEntries(t *testing.T) {
 	}
 
 	t.Run("empty pattern returns all entries", func(t *testing.T) {
+		t.Parallel()
 		got := filterConfigPathEntries(entries, "")
 		assert.Len(t, got, 3)
 	})
 
 	t.Run("wildcard prefix pattern", func(t *testing.T) {
+		t.Parallel()
 		got := filterConfigPathEntries(entries, "mcp.*")
 		assert.Len(t, got, 2)
 		assert.Equal(t, "mcp.enabled", got[0].Path)
@@ -173,12 +197,14 @@ func TestFilterConfigPathEntries(t *testing.T) {
 	})
 
 	t.Run("exact match pattern", func(t *testing.T) {
+		t.Parallel()
 		got := filterConfigPathEntries(entries, "logs.level")
 		require.Len(t, got, 1)
 		assert.Equal(t, "logs.level", got[0].Path)
 	})
 
 	t.Run("no match", func(t *testing.T) {
+		t.Parallel()
 		got := filterConfigPathEntries(entries, "nothing.matches")
 		assert.Empty(t, got)
 	})

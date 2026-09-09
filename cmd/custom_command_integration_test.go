@@ -1560,10 +1560,10 @@ func TestCustomCommandIntegration_ComponentEnvExported(t *testing.T) {
 		Name:        "test-component-env",
 		Description: "Dump the environment of a custom component step",
 		Arguments: []schema.CommandArgument{
-			{Name: "component", Type: "component", Required: true},
+			{Name: "component", Provides: "component", Required: true},
 		},
 		Flags: []schema.CommandFlag{
-			{Name: "stack", Shorthand: "s", SemanticType: "stack", Required: true},
+			{Name: "stack", Shorthand: "s", Provides: "stack", Required: true},
 		},
 		Component: &schema.CommandComponent{Type: "script"},
 		Env:       []schema.CommandEnv{{Key: "_ATMOS_TEST_DUMP_ENV", Value: envOutputFile}},

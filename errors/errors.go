@@ -29,6 +29,7 @@ var (
 	ErrInvalidErrorMode                      = errors.New("invalid error mode")
 	ErrParseFile                             = errors.New("failed to parse file")
 	ErrParseURL                              = errors.New("failed to parse URL")
+	ErrParseHexColor                         = errors.New("failed to parse hex color")
 	ErrInvalidURL                            = errors.New("invalid URL")
 	ErrCreateDownloadClient                  = errors.New("failed to create download client")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
@@ -46,6 +47,9 @@ var (
 	ErrValidPackage                          = errors.New("no valid installer package provided for")
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
 	ErrTUIRun                                = errors.New("failed to run TUI")
+	ErrStdoutPipe                            = errors.New("failed to get stdout pipe")
+	ErrStderrPipe                            = errors.New("failed to get stderr pipe")
+	ErrCommandStart                          = errors.New("failed to start command")
 	ErrUIFormatterNotInitialized             = errors.New("ui formatter not initialized")
 	ErrMarkdownRendererInit                  = errors.New("failed to initialize markdown renderer")
 	ErrMarkdownRender                        = errors.New("failed to render markdown content")
@@ -114,6 +118,7 @@ var (
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
+	ErrUnexpectedModelType                   = errors.New("unexpected model type")
 	ErrSpinnerOperationInterrupted           = errors.New("operation was interrupted")
 
 	// Version Tracker errors.
@@ -141,6 +146,14 @@ var (
 	ErrVersionJSONDuplicatePath         = errors.New("json manager has more than one set entry targeting the same path")
 	ErrVersionJSONExpandPathsFailed     = errors.New("json manager failed to expand configured paths")
 	ErrVersionJSONReadFailed            = errors.New("json manager failed to read target file")
+	ErrVersionJSONFormatInvalid         = errors.New("json manager set entry format template is invalid")
+	ErrVersionYAMLOptionsInvalid        = errors.New("yaml manager options are invalid")
+	ErrVersionYAMLSetFailed             = errors.New("yaml manager failed to set value at path")
+	ErrVersionYAMLPathTypeMismatch      = errors.New("yaml manager refused to overwrite a map or list with a scalar value")
+	ErrVersionYAMLDuplicatePath         = errors.New("yaml manager has more than one set entry targeting the same path")
+	ErrVersionYAMLExpandPathsFailed     = errors.New("yaml manager failed to expand configured paths")
+	ErrVersionYAMLReadFailed            = errors.New("yaml manager failed to read target file")
+	ErrVersionYAMLFormatInvalid         = errors.New("yaml manager set entry format template is invalid")
 	ErrVersionLockWriteFailed           = errors.New("failed to write version lock file")
 
 	// Theme-related errors.
@@ -160,6 +173,7 @@ var (
 	ErrUnknownHelpTopic       = errors.New("unknown help topic")
 	ErrTTYRequired            = errors.New("requires a TTY")
 	ErrInvalidAuthManagerType = errors.New("invalid authManager type")
+	ErrStreamingNotSupported  = errors.New("streaming UI not supported in this environment")
 
 	// Component and positional argument errors.
 	ErrComponentRequired          = errors.New("component is required")
@@ -204,6 +218,7 @@ var (
 	ErrTerraformStateNotProvisioned = errors.New("terraform state not provisioned")
 	ErrTerraformOutputNotFound      = errors.New("terraform output not found")
 	ErrTerraformOutputFailed        = errors.New("failed to retrieve terraform outputs")
+	ErrParseTerraformOutput         = errors.New("failed to parse terraform output")
 
 	// Terraform output component configuration errors.
 	ErrMissingExecutable      = errors.New("component does not have 'command' (executable) defined")
@@ -224,7 +239,7 @@ var (
 
 	// --use-mocks errors.
 	ErrTerraformComponentMocksNotDeclared = errors.New("terraform component does not declare `mocks` required by --use-mocks")
-	ErrTerraformMockOutputNotDeclared     = errors.New("mocked terraform output is not declared for component")
+	ErrTerraformMockOutputNotDeclared     = errors.New("mocked terraform output is not declared")
 
 	// API/infrastructure errors - should cause non-zero exit.
 	// These errors indicate backend API failures that should not use YQ defaults.
@@ -502,6 +517,7 @@ var (
 	ErrInvalidComponentSecrets                    = errors.New("invalid component secrets section")
 	ErrStoreIsSecret                              = errors.New("store is a secret store; use !secret instead of !store")
 	ErrInvalidComponentGenerate                   = errors.New("invalid component generate section")
+	ErrInvalidComponentFlags                      = errors.New("invalid component flags section")
 	ErrInvalidComponentAuth                       = errors.New("invalid component auth section")
 	ErrInvalidComponentProvision                  = errors.New("invalid component provision section")
 	ErrInvalidComponentMetadata                   = errors.New("invalid component metadata section")
@@ -523,6 +539,8 @@ var (
 	ErrInvalidComponentOverridesRequiredVersion   = errors.New("invalid component overrides required_version attribute")
 	ErrInvalidComponentOverridesHooks             = errors.New("invalid component overrides hooks section")
 	ErrInvalidComponentOverridesGenerate          = errors.New("invalid component overrides generate section")
+	ErrInvalidComponentOverridesProvision         = errors.New("invalid component overrides provision section")
+	ErrInvalidComponentOverridesFlags             = errors.New("invalid component overrides flags section")
 	ErrInvalidComponentAttribute                  = errors.New("invalid component attribute")
 	ErrInvalidComponentMetadataComponent          = errors.New("invalid component metadata.component attribute")
 	ErrInvalidSpaceLiftSettings                   = errors.New("invalid spacelift settings section")
@@ -570,6 +588,8 @@ var (
 	ErrGeneratorValidation   = errors.New("generator validation failed")
 	ErrGenerationFailed      = errors.New("generation failed")
 	ErrGeneratorWriteFailed  = errors.New("failed to write generated file")
+	ErrGeneratorRemoveFailed = errors.New("failed to remove generated file")
+	ErrGeneratedNotRegular   = errors.New("generated file path is not a regular file")
 	ErrMissingWorkingDir     = errors.New("working directory is required")
 	ErrMissingProviderSource = errors.New("required_providers entry missing 'source' field")
 
@@ -651,6 +671,7 @@ var (
 	ErrInvalidAuthSection               = errors.New("invalid auth section")
 	ErrInvalidGlobalMetadataSection     = errors.New("invalid metadata section")
 	ErrGlobalMetadataFieldNotAllowed    = errors.New("metadata field is not allowed at global (stack-wide) scope")
+	ErrInvalidGlobalRetrySection        = errors.New("invalid retry section")
 	ErrInvalidImportSection             = errors.New("invalid import section")
 	ErrInvalidImport                    = errors.New("invalid import")
 	ErrInvalidRemoteImport              = errors.New("invalid remote import")
@@ -659,6 +680,7 @@ var (
 	ErrClearCache                       = errors.New("failed to clear cache")
 	ErrInvalidOverridesSection          = errors.New("invalid overrides section")
 	ErrInvalidTerraformOverridesSection = errors.New("invalid terraform overrides section")
+	ErrInvalidHelmOverridesSection      = errors.New("invalid helm overrides section")
 	ErrInvalidHelmfileOverridesSection  = errors.New("invalid helmfile overrides section")
 	ErrInvalidBaseComponentConfig       = errors.New("invalid base component config")
 	ErrCircularComponentInheritance     = ErrStackCircularInheritance
@@ -670,6 +692,7 @@ var (
 	ErrInvalidTerraformEnv                = errors.New("invalid terraform env section")
 	ErrInvalidTerraformProviders          = errors.New("invalid terraform providers section")
 	ErrInvalidTerraformGenerateSection    = errors.New("invalid terraform generate section")
+	ErrInvalidTerraformFlagsSection       = errors.New("invalid terraform flags section")
 	ErrInvalidTerraformBackendType        = errors.New("invalid terraform backend_type")
 	ErrMissingTerraformBackendType        = errors.New("'backend_type' is missing for the component")
 	ErrMissingTerraformBackendConfig      = errors.New("'backend' config is missing for the component")
@@ -760,6 +783,10 @@ var (
 	ErrTokenRefreshFailed           = errors.New("failed to refresh API token")
 	ErrFailedToUnmarshalAPIResponse = errors.New("failed to unmarshal API response")
 	ErrNilRequestDTO                = errors.New("nil request DTO")
+	ErrFailedToUploadExecMetadata   = errors.New("failed to upload execution metadata")
+	ErrFailedToUploadExecData       = errors.New("failed to upload execution data")
+	ErrExecPayloadTooLarge          = errors.New("execution metadata payload too large")
+	ErrExecSyncTimeout              = errors.New("execution metadata upload timed out")
 
 	// Pro commit errors.
 	ErrCommitMessageRequired = errors.New("commit message is required")
@@ -905,6 +932,9 @@ var (
 	ErrReadDirectory       = errors.New("failed to read directory")
 	ErrComputeRelativePath = errors.New("failed to compute relative path")
 	ErrFileOperation       = errors.New("file operation failed")
+
+	// Archive extraction safety errors (pkg/filesystem).
+	ErrArchiveEntryEscapesDest = errors.New("archive entry escapes destination directory")
 
 	// OCI/Container image errors.
 	ErrCreateTempDirectory   = ErrCreateTempDir // Alias to avoid duplicate sentinels
@@ -1246,7 +1276,6 @@ var (
 	ErrInitializationPartialFailure     = errors.New("initialization partially failed")
 	ErrInitTemplateNotFound             = errors.New("init template not found")
 	ErrInvalidScaffoldSection           = errors.New("invalid scaffold section")
-	ErrScaffoldSourceUnsupported        = errors.New("scaffold source scheme not supported")
 	ErrScaffoldFetchSource              = errors.New("failed to fetch scaffold source")
 	ErrScaffoldCatalogLoad              = errors.New("failed to load scaffold catalog")
 	ErrTemplateConfigNameRequired       = errors.New("template config with metadata.name is required to write a project record")
@@ -1262,6 +1291,8 @@ var (
 	ErrScaffoldMatrixExpressionFailed   = errors.New("matrix axis expression failed to render")
 	ErrScaffoldMatrixAxisValueNotScalar = errors.New("matrix axis value is not scalar")
 	ErrScaffoldDuplicateOutputPath      = errors.New("two files rendered to the same output path")
+	ErrScaffoldFieldOptionsInvalid      = errors.New("field options must be a static list, an answers.* dot-path, or a template expression")
+	ErrScaffoldExpressionFailed         = errors.New("template expression failed to render")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")
@@ -1358,22 +1389,24 @@ var (
 	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
 
 	// CI-related errors.
-	ErrCIDisabled              = errors.New("CI server is disabled")
-	ErrCIProviderNotDetected   = errors.New("CI provider not detected")
-	ErrCIProviderNotFound      = errors.New("CI provider not found")
-	ErrCIOperationNotSupported = errors.New("operation not supported by CI provider")
-	ErrCICheckRunCreateFailed  = errors.New("failed to create check run")
-	ErrCICheckRunUpdateFailed  = errors.New("failed to update check run")
-	ErrCIStatusFetchFailed     = errors.New("failed to fetch CI status")
-	ErrCIOutputWriteFailed     = errors.New("failed to write CI output")
-	ErrCISummaryWriteFailed    = errors.New("failed to write CI summary")
-	ErrCIAnnotationFailed      = errors.New("failed to emit CI annotations")
-	ErrCISARIFUploadFailed     = errors.New("failed to upload SARIF to CI provider")
-	ErrCICommentPostFailed     = errors.New("failed to post PR comment")
-	ErrCICommentListFailed     = errors.New("failed to list PR comments")
-	ErrCICommentUpdateFailed   = errors.New("failed to update PR comment")
-	ErrCICommentNotFound       = errors.New("PR comment not found")
-	ErrGitHubTokenNotFound     = errors.New("GitHub token not found")
+	ErrCIDisabled                 = errors.New("CI server is disabled")
+	ErrCIProviderNotDetected      = errors.New("CI provider not detected")
+	ErrCIProviderNotFound         = errors.New("CI provider not found")
+	ErrCIOperationNotSupported    = errors.New("operation not supported by CI provider")
+	ErrCICheckRunCreateFailed     = errors.New("failed to create check run")
+	ErrCICheckRunUpdateFailed     = errors.New("failed to update check run")
+	ErrCICheckRunMissingComponent = errors.New("check run requires a resolved component and stack")
+	ErrCIStatusContextIncomplete  = errors.New("status context requires all parts to be non-empty")
+	ErrCIStatusFetchFailed        = errors.New("failed to fetch CI status")
+	ErrCIOutputWriteFailed        = errors.New("failed to write CI output")
+	ErrCISummaryWriteFailed       = errors.New("failed to write CI summary")
+	ErrCIAnnotationFailed         = errors.New("failed to emit CI annotations")
+	ErrCISARIFUploadFailed        = errors.New("failed to upload SARIF to CI provider")
+	ErrCICommentPostFailed        = errors.New("failed to post PR comment")
+	ErrCICommentListFailed        = errors.New("failed to list PR comments")
+	ErrCICommentUpdateFailed      = errors.New("failed to update PR comment")
+	ErrCICommentNotFound          = errors.New("PR comment not found")
+	ErrGitHubTokenNotFound        = errors.New("GitHub token not found")
 
 	// Planfile storage errors.
 	ErrPlanfileNotFound           = errors.New("planfile not found")
@@ -1413,6 +1446,7 @@ var (
 	ErrCacheBackendNotFound = errors.New("cache backend not found")
 	ErrCacheInvalidArgs     = errors.New("invalid cache arguments")
 	ErrCacheKeyRequired     = errors.New("cache key is required")
+	ErrCachePathsRequired   = errors.New("cache paths are required")
 	ErrCacheArchiveFailed   = errors.New("failed to build cache archive")
 	ErrCacheExtractFailed   = errors.New("failed to extract cache archive")
 	ErrCacheBackendRequest  = errors.New("cache backend request failed")
@@ -1603,6 +1637,18 @@ var (
 	ErrHelmReleaseNameRequired       = errors.New("helm component is missing a release name")
 	ErrHelmDiffFailed                = errors.New("failed to compute helm diff")
 	ErrHelmBaselineRead              = errors.New("failed to read helm diff baseline")
+	ErrHelmLifecycleDecode           = errors.New("failed to decode helm release lifecycle")
+	ErrHelmFailureActionInvalid      = errors.New("invalid helm on_failure action")
+	ErrHelmWaitStrategyInvalid       = errors.New("invalid helm wait strategy")
+	ErrHelmTimeoutInvalid            = errors.New("invalid helm release timeout")
+	ErrHelmMaxHistoryInvalid         = errors.New("invalid helm release history limit")
+	ErrHelmWaitForJobsRequiresWait   = errors.New("helm wait_for_jobs requires watcher or legacy wait strategy")
+	ErrHelmLifecycleFlagInapplicable = errors.New("helm release lifecycle flag does not apply to selected operation")
+	ErrHelmLifecycleExternalTarget   = errors.New("helm release lifecycle flags require a Kubernetes target")
+	ErrHelmReleaseHistory            = errors.New("failed to inspect helm release history")
+	ErrHelmReleaseUpgrade            = errors.New("failed to upgrade helm release")
+	ErrHelmReleaseUninstall          = errors.New("failed to uninstall helm release")
+	ErrHelmReleaseOperation          = errors.New("failed to perform helm release operation")
 )
 
 // Stack dependency (`depends_on`) resolution errors.

@@ -21,13 +21,29 @@ on:
       - "internal/exec/workflow_utils.go"
       - "pkg/runner/step/**"
       - "pkg/workflow/**"
+  # Push runs exist only to write this workflow's cache (the provider mirror
+  # + toolchain, ~700 MB) on main's scope, which pull_request runs can read
+  # but never write. Without this the key only ever existed on per-PR refs,
+  # so every PR re-mirrored from the network and re-saved its own copy.
+  push:
+    branches:
+      - main
+    paths:
+      # Tool pins and the root ci.cache config shape what the toolchain
+      # install puts in the cache; re-warm when either changes.
+      - ".tool-versions"
+      - "atmos.yaml"
+      - "tests/fixtures/scenarios/native-ci-e2e/**"
+      - ".github/workflows/native-ci.yml"
+      - "actions/cache/**"
   workflow_dispatch:
 
+# Least-privilege default; the terraform-plan/terraform-apply jobs below
+# declare their own narrower job-level permissions (they're the only jobs
+# that actually call the GitHub statuses/comments/code-scanning APIs via
+# Atmos's native-CI reporting) that override this baseline.
 permissions:
   contents: read
-  pull-requests: write
-  security-events: write
-  statuses: write
 
 env:
   ATMOS_BOOTSTRAP_VERSION: "1.223.0"
@@ -35,15 +51,23 @@ env:
   ATMOS_VERSION_CHECK_ENABLED: "false"
   NATIVE_CI_TRIVY_VERSION: "0.70.0"
   NATIVE_CI_KICS_VERSION: "2.1.20"
-  # Use pipe fallback so transient proxy.golang.org 5xx errors during
-  # `go mod download` fall back to direct module fetches.
-  GOPROXY: "https://proxy.golang.org|direct"
+  # No `|direct` fallback: under harden-runner's block mode a direct fetch
+  # only fans out to blocked vanity-import hosts and burns minutes; see the
+  # GOPROXY comment in test.yml.
+  GOPROXY: "https://proxy.golang.org"
 
 jobs:
   workflow-groups:
     name: "[native ci] workflow groups (${{ matrix.group_mode }})"
+    # Push runs only warm the cache (see the warm-cache job); the E2E jobs
+    # exercise PR-oriented native-CI reporting and stay off the push path.
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # This job never sets GITHUB_TOKEN/ATMOS_CI_GITHUB_TOKEN and only formats
+    # log-group markers to stdout, so it needs nothing beyond checkout.
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -55,6 +79,21 @@ jobs:
       ATMOS_CI_GROUPS_MODE: ${{ matrix.group_mode }}
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            us.i.posthog.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
+
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -87,8 +126,17 @@ jobs:
 
   terraform-plan:
     name: "[native ci] terraform plan"
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Atmos's native-CI GitHub reporting (pkg/ci/providers/github) posts commit
+    # statuses, upserts PR comments, and uploads SARIF during `atmos terraform
+    # plan` — see pkg/ci/providers/github/{checks,comments,codescanning}.go.
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+      statuses: write
     env:
       ATMOS_CI_GROUPS_MODE: auto
 
@@ -99,6 +147,31 @@ jobs:
           - 4566:4566
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            us.i.posthog.com:443
+            checkpoint-api.hashicorp.com:443
+            registry.terraform.io:443
+            releases.hashicorp.com:443
+            pypi.org:443
+            api0.prismacloud.io:443
+            mirror.gcr.io:443
+            check.trivy.dev:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
+            raw.githubusercontent.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            rekor.sigstore.dev:443
+
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -109,8 +182,13 @@ jobs:
         with:
           atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
+      # restore-only: pull_request runs would otherwise each save their own
+      # ~700 MB copy on a per-PR ref no other run can read. The warm-cache
+      # job below is this key's single writer, on main's scope.
       - name: Restore Atmos native CI cache
         uses: ./actions/cache
+        with:
+          mode: restore-only
         env:
           ATMOS_CHDIR: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
 
@@ -139,6 +217,13 @@ jobs:
     needs: terraform-plan
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Same native-CI reporting as terraform-plan above, exercised during
+    # `atmos terraform apply`.
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+      statuses: write
     env:
       ATMOS_CI_GROUPS_MODE: auto
 
@@ -149,6 +234,27 @@ jobs:
           - 4566:4566
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            us.i.posthog.com:443
+            checkpoint-api.hashicorp.com:443
+            registry.terraform.io:443
+            releases.hashicorp.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
+            raw.githubusercontent.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            rekor.sigstore.dev:443
+
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -159,8 +265,13 @@ jobs:
         with:
           atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
+      # restore-only: pull_request runs would otherwise each save their own
+      # ~700 MB copy on a per-PR ref no other run can read. The warm-cache
+      # job below is this key's single writer, on main's scope.
       - name: Restore Atmos native CI cache
         uses: ./actions/cache
+        with:
+          mode: restore-only
         env:
           ATMOS_CHDIR: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
 
@@ -183,3 +294,70 @@ jobs:
           ATMOS_CI_GITHUB_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
         run: atmos terraform apply bucket -s test -auto-approve
+
+  # The single writer of this workflow's cache key. Runs only on push to main
+  # (whose cache scope every pull_request run can read) and repeats just the
+  # cache-populating steps — toolchain install + provider mirror — without the
+  # PR-oriented plan/apply reporting above.
+  warm-cache:
+    name: "[native ci] warm cache (main)"
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            us.i.posthog.com:443
+            checkpoint-api.hashicorp.com:443
+            registry.terraform.io:443
+            releases.hashicorp.com:443
+            pypi.org:443
+            mirror.gcr.io:443
+            check.trivy.dev:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            google.golang.org:443
+            modernc.org:443
+            raw.githubusercontent.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            rekor.sigstore.dev:443
+
+      - name: Check out code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up and build Atmos
+        uses: ./.github/actions/setup-atmos-build
+        with:
+          atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+
+      - name: Restore and save the Atmos native CI cache
+        uses: ./actions/cache
+        with:
+          mode: restore-and-save
+        env:
+          ATMOS_CHDIR: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+
+      - name: Validate native CI fixture
+        working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+        run: atmos validate stacks
+
+      # Populates the cache content the plan/apply jobs restore: the provider
+      # mirror plus the toolchain installs it triggers.
+      - name: Mirror Terraform providers
+        working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+        env:
+          # TFLint release-attestation verification invokes `gh`, which reads
+          # GH_TOKEN (not GITHUB_TOKEN) while installing tool dependencies.
+          GH_TOKEN: ${{ github.token }}
+        run: atmos terraform cache mirror bucket -s test --platform=linux_amd64 --format=json

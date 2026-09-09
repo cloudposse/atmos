@@ -80,6 +80,8 @@ func validTerraformMergeOpts(atmosCfg *schema.AtmosConfiguration) (*ComponentPro
 // component is surfaced as a real error — never silently dropped or merged into the wrong
 // section — by isolating one colliding field at a time against an otherwise valid component.
 func TestMergeComponentConfigurations_SectionMergeErrors(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		mutate  func(opts *ComponentProcessorOptions, res *ComponentProcessorResult)
@@ -152,6 +154,13 @@ func TestMergeComponentConfigurations_SectionMergeErrors(t *testing.T) {
 			name: "generate section",
 			mutate: func(opts *ComponentProcessorOptions, res *ComponentProcessorResult) {
 				opts.GlobalAndTerraformGenerate = collidingSection()
+			},
+			wantErr: errUtils.ErrMergeKeyCollision,
+		},
+		{
+			name: "flags section",
+			mutate: func(opts *ComponentProcessorOptions, res *ComponentProcessorResult) {
+				opts.GlobalAndTerraformFlags = collidingSection()
 			},
 			wantErr: errUtils.ErrMergeKeyCollision,
 		},
@@ -229,6 +238,7 @@ func TestMergeComponentConfigurations_SectionMergeErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosCfg := &schema.AtmosConfiguration{}
 			opts, res := validTerraformMergeOpts(atmosCfg)
 			tt.mutate(opts, res)
@@ -247,6 +257,8 @@ func TestMergeComponentConfigurations_SectionMergeErrors(t *testing.T) {
 // `render:` section (gated behind ComponentType == kubernetes, unlike paths/manifests above)
 // surfaces a structural-merge failure the same way.
 func TestMergeComponentConfigurations_KubernetesRenderMergeError(t *testing.T) {
+	t.Parallel()
+
 	atmosCfg := &schema.AtmosConfiguration{}
 	opts := ComponentProcessorOptions{
 		ComponentType:           cfg.KubernetesComponentType,
@@ -271,6 +283,8 @@ func TestMergeComponentConfigurations_KubernetesRenderMergeError(t *testing.T) {
 // TestMergeComponentConfigurations_HelmMergeErrors verifies the Helm-only native-fields merge and
 // the shared Helm CLI plugins merge (supportsPlugins) surface structural-merge failures.
 func TestMergeComponentConfigurations_HelmMergeErrors(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		mutate func(opts *ComponentProcessorOptions, res *ComponentProcessorResult)
@@ -291,6 +305,7 @@ func TestMergeComponentConfigurations_HelmMergeErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosCfg := &schema.AtmosConfiguration{}
 			opts := ComponentProcessorOptions{
 				ComponentType:  cfg.HelmComponentType,
@@ -318,6 +333,8 @@ func TestMergeComponentConfigurations_HelmMergeErrors(t *testing.T) {
 // is merged earlier and independently) surfaces as a real error from
 // processSettingsIntegrationsGithub, rather than being silently dropped.
 func TestMergeComponentConfigurations_SettingsIntegrationsGithubMergeError(t *testing.T) {
+	t.Parallel()
+
 	atmosCfg := &schema.AtmosConfiguration{}
 	atmosCfg.Integrations.GitHub = collidingSection()
 
@@ -347,6 +364,8 @@ func TestMergeComponentConfigurations_SettingsIntegrationsGithubMergeError(t *te
 // succeeds (the scalar cleanly wins over the nil placeholder), but writing the still-unresolved
 // function string back into the merged result cannot navigate through the now-scalar parent.
 func TestMergeComponentConfigurations_DeferredWriteBackNavigationError(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		mutate  func(opts *ComponentProcessorOptions, res *ComponentProcessorResult)
@@ -380,6 +399,7 @@ func TestMergeComponentConfigurations_DeferredWriteBackNavigationError(t *testin
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosCfg := &schema.AtmosConfiguration{}
 			opts, res := validTerraformMergeOpts(atmosCfg)
 			tt.mutate(opts, res)

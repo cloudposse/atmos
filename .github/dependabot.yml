@@ -57,3 +57,175 @@ updates:
   ignore:
     - dependency-name: "*"
       update-types: ["version-update:semver-major"]
+
+# Tracks the Dockerfile's `FROM debian:trixie-slim@sha256:...` pin and opens a
+# PR when the upstream digest moves, so pinning by digest doesn't mean losing
+# security updates.
+- package-ecosystem: docker
+  directory: /
+  labels:
+    - dependencies
+    - docker
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+
+# Tracks the digest-pinned base images in the devcontainer and screenshot
+# tooling Dockerfiles.
+- package-ecosystem: docker
+  directory: /.devcontainer
+  labels:
+    - dependencies
+    - docker
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+
+- package-ecosystem: docker
+  directory: /demo/screenshots
+  labels:
+    - dependencies
+    - docker
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+
+# Tracks the digest-pinned base images in the example component/step/devcontainer
+# Dockerfiles used in docs and CI fixtures.
+- package-ecosystem: docker
+  directory: /examples/container-component
+  labels:
+    - dependencies
+    - docker
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+
+- package-ecosystem: docker
+  directory: /examples/container-step
+  labels:
+    - dependencies
+    - docker
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+
+- package-ecosystem: docker
+  directory: /examples/devcontainer-build
+  labels:
+    - dependencies
+    - docker
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+
+# Standalone Go modules under tools/ aren't reached by the root gomod entry.
+- package-ecosystem: gomod
+  directory: /tools/gomodcheck
+  labels:
+    - dependencies
+    - go
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+  ignore:
+    - dependency-name: "*"
+      update-types: ["version-update:semver-major"]
+
+- package-ecosystem: gomod
+  directory: /tools/lintroller
+  labels:
+    - dependencies
+    - go
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+  ignore:
+    - dependency-name: "*"
+      update-types: ["version-update:semver-major"]
+
+# Website plugins with their own package.json aren't reached by the /website
+# npm entry (website/package.json has no npm workspaces).
+- package-ecosystem: npm
+  directory: /website/plugins/custom-loaders
+  labels:
+    - dependencies
+    - javascript
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+  ignore:
+    - dependency-name: "*"
+      update-types: ["version-update:semver-major"]
+
+- package-ecosystem: npm
+  directory: /website/plugins/docusaurus-plugin-llms-txt
+  labels:
+    - dependencies
+    - javascript
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+  ignore:
+    - dependency-name: "*"
+      update-types: ["version-update:semver-major"]
+
+- package-ecosystem: npm
+  directory: /website/plugins/fetch-latest-release
+  labels:
+    - dependencies
+    - javascript
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+  ignore:
+    - dependency-name: "*"
+      update-types: ["version-update:semver-major"]
+
+- package-ecosystem: npm
+  directory: /website/plugins/glossary-tooltips
+  labels:
+    - dependencies
+    - javascript
+    - no-release
+  schedule:
+    interval: weekly
+    day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
+  ignore:
+    - dependency-name: "*"
+      update-types: ["version-update:semver-major"]

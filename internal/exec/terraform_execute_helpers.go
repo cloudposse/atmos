@@ -109,21 +109,31 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 			return nil, err
 		}
 		// Wrap unexpected errors (e.g. MergeComponentAuthFromConfig failures) with the sentinel
-		// to match the behaviour of createAndAuthenticateAuthManagerWithDeps.
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
+		// to match the behaviour of createAndAuthenticateAuthManagerWithDeps. When the error names
+		// a missing identity, offer the same profile-selection prompt `atmos auth login` has.
+		return nil, resolveIdentityConfigError(atmosConfig, info, err, errUtils.ErrInvalidAuthConfig)
 	}
 
 	// Create and authenticate the AuthManager using the same injectable creator as
-	// createAndAuthenticateAuthManagerWithDeps to keep injection points unified.
+	// createAndAuthenticateAuthManagerWithDeps to keep injection points unified. Carry
+	// forward prompted component/stack so a later identity-not-found fallback inside
+	// Authenticate can re-inject them into a profile-fallback re-exec.
 	authManager, err := defaultAuthManagerCreator(
-		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, info.Stack,
+		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, auth.ReExecContext{
+			Component:         info.ComponentFromArg,
+			ComponentPrompted: info.ComponentPrompted,
+			Stack:             info.Stack,
+			StackPrompted:     info.StackPrompted,
+		},
 	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrUserAborted) {
 			errUtils.Exit(errUtils.ExitCodeSIGINT)
 		}
 		// Wrap auth creation failures with the sentinel to match createAndAuthenticateAuthManagerWithDeps.
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
+		// When the error names a missing identity, offer the same profile-selection prompt
+		// `atmos auth login` has.
+		return nil, resolveIdentityConfigError(atmosConfig, info, err, errUtils.ErrFailedToInitializeAuthManager)
 	}
 
 	// Store manager for nested YAML functions (e.g. !terraform.state).
@@ -961,21 +971,19 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 // provisioners itself) use this directly to avoid running the provisioners twice.
 func executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...ShellCommandOption) error {
 	initArgs := buildInitArgs(atmosConfig, info, varFile)
-	err := executeShellCommandWithRetry(
+	err := ExecuteShellCommandWithRetry(
 		atmosConfig,
 		info,
 		"init",
 		func(o ...ShellCommandOption) error {
-			return ExecuteShellCommand(
-				*atmosConfig,
-				info.Command,
-				initArgs,
-				componentPath,
-				info.ComponentEnvList,
-				info.DryRun,
-				info.RedirectStdErr,
-				o...,
-			)
+			return executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
+				componentPath:  componentPath,
+				args:           initArgs,
+				gatePhase:      subcommandInit,
+				subCommand:     subcommandInit,
+				redirectStdErr: info.RedirectStdErr,
+				shellOpts:      o,
+			})
 		},
 		opts...,
 	)

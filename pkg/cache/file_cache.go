@@ -98,6 +98,8 @@ func NewFileCache(subpath string, opts ...FileCacheOption) (*FileCache, error) {
 // This ensures valid filenames regardless of key content while preserving
 // the original file extension for proper template processing.
 func keyToFilename(key string) string {
+	// codeql[go/weak-sensitive-data-hashing] -- hashes a cache key to derive a
+	// deterministic filename; never used for credential verification or storage.
 	hash := sha256.Sum256([]byte(key))
 	base := fmt.Sprintf("%x", hash[:8])
 

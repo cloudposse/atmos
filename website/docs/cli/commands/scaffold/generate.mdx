@@ -49,13 +49,21 @@ atmos scaffold generate terraform-component ./components/terraform/vpc \
 ## Template Sources
 
 Select an embedded template, a template declared under `scaffold.templates` in `atmos.yaml`, or a
-local/remote source. A source can be pinned with `--ref` to make a release, tag, or commit explicit.
+local/remote source — git, HTTPS, S3, or an OCI registry reference. A git source can be pinned
+with `--ref` to make a release, tag, or commit explicit; `--ref` has no effect on OCI/S3/local
+sources, which address a specific version through the source string itself.
 
 ```shell
 atmos scaffold list
 atmos scaffold generate ./scaffolds/terraform-component ./components/terraform/vpc
 atmos scaffold generate https://github.com/example/platform-templates.git ./output --ref v1.2.0
+atmos scaffold generate oci://ghcr.io/example/templates:v1.0.0 ./components/terraform/vpc
 ```
+
+An OCI source is pulled the same way `atmos vendor pull` fetches OCI-hosted components —
+authentication uses the same precedence (Docker keychain, then `ATMOS_GITHUB_TOKEN` for
+`ghcr.io`, then anonymous); see [Vendor URL Syntax](/vendor/url-syntax#oci-syntax) for
+details.
 
 ## Template Configuration
 
@@ -94,10 +102,111 @@ their declared `options`; `false` remains a valid answer for a required boolean.
 earlier field answers through `answers`; use CEL (`&&`, `||`, `!`) for compound logic because the
 map-style `{all, any, not}` form is not accepted by scaffold manifests.
 
+## Dynamic and Label/Value Options
+
+`select` and `multiselect` fields declare their choices through `options:`, which accepts four
+shapes. A plain list of strings is the common case, where each choice's label and underlying
+value are the same:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: environment
+      type: select
+      options: [dev, staging, production]
+```
+
+An option can instead be a `{label, value}` object, for when the displayed choice should read
+differently from the value stored in `answers` and passed to templates. `value` is required;
+`label` defaults to `value` when omitted:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: environment
+      type: select
+      options:
+        - label: Development
+          value: dev
+        - label: Staging
+          value: staging
+        - value: production # No label -- displays as "production".
+```
+
+`options:` can also be sourced dynamically, using exactly the two forms `spec.files[].matrix`
+axes support below: a dot-path into `answers.*`, or a Go-template expression:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: environments
+      type: multiselect
+      options: [dev, staging, production]
+
+    # Sourced from the prior multiselect answer -- only offers environments
+    # the user actually selected above.
+    - name: default_environment
+      type: select
+      options: "answers.environments"
+```
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: csv_owners
+      type: input
+      label: Comma-separated list of component owners (e.g. GitHub teams)
+
+    - name: primary_owner
+      type: select
+      options: '{{ splitList "," answers.csv_owners }}'
+```
+
+A dot-path source must resolve to an already list-shaped answer -- a `multiselect` answer, a
+`spec.values` preset, or a `--set`-supplied value never declared as a field at all -- while a
+template expression computes the list the same way a matrix axis expression does. Both dynamic
+forms resolve correctly against whatever the earlier field was ultimately answered, whether that
+answer came from the interactive prompt (fields are prompted one at a time, so a later field is
+only ever shown after the ones before it) or from `--set`/`--defaults`.
+
+When a later field's dot-path sources directly from a field using `{label, value}` options,
+labels are recovered for the filtered subset of values present in the referenced answer:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: environments
+      type: multiselect
+      options:
+        - label: Development
+          value: dev
+        - label: Staging
+          value: staging
+        - label: Production
+          value: prod
+
+    # environments answer is [dev, staging] -> default_environment offers
+    # "Development" and "Staging" -- not "Production", and not the raw
+    # "dev"/"staging" values.
+    - name: default_environment
+      type: select
+      options: "answers.environments"
+```
+
+Only values ever reach `answers` and templates; labels are presentation-only.
+
+Two limitations to keep in mind: there's no field-declaration-order validation at load time, so a
+forward reference, self-reference, or typo'd dot-path loads successfully and degrades to an empty
+option list (no constraint, any value accepted) at runtime instead of erroring; and label recovery
+looks back only one hop -- it does not chase labels through a chain of dynamic references, nor
+through the template-expression form, both of which fall back to `label == value`.
+
 ## Dynamic File Generation
 
 `matrix:` expands a single discovered file into one generated file per resolved combination — the
-Cartesian product of one or more axes, using the same axis shape the workflow `matrix:` step uses:
+Cartesian product of one or more axes, using the same axis shape the workflow `matrix:` step uses.
+Axis values share the same `answers.`-prefix dot-path and template-expression convention as a
+dynamic `options:` source (see "Dynamic and Label/Value Options" above).
 
 ```yaml title="scaffold.yaml"
 spec:

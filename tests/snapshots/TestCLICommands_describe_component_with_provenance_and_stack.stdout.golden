@@ -9,6 +9,8 @@ import:                                           # ○ [3] mixins/stage/dev.yam
   - catalog/mock/defaults                         # ○ [3] mixins/stage/dev.yaml:3
   - mixins/stage/dev                              # ○ [2] orgs/acme/_defaults.yaml:3
   - orgs/acme/_defaults                           # ● [1] orgs/acme/dev/us-east-1.yaml:3
+metadata:                                         # ○ [4] catalog/mock/defaults.yaml:6
+  component: mock                                 # ○ [4] catalog/mock/defaults.yaml:6
 vars:                                             # ○ [4] catalog/mock/defaults.yaml:8
   enabled: true                                   # ○ [4] catalog/mock/defaults.yaml:8
   environment: development                        # ○ [3] mixins/stage/dev.yaml:13
@@ -22,4 +24,3 @@ vars:                                             # ○ [4] catalog/mock/default
     stage: dev                                    # ○ [3] mixins/stage/dev.yaml:15
     tenant: acme                                  # ○ [2] orgs/acme/_defaults.yaml:14
   tenant: acme                                    # ○ [2] orgs/acme/_defaults.yaml:6
-

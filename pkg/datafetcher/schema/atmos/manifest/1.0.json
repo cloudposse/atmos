@@ -44,6 +44,9 @@
     "metadata": {
       "$ref": "#/definitions/global_metadata"
     },
+    "retry": {
+      "$ref": "#/definitions/retry"
+    },
     "components": {
       "$ref": "#/definitions/components"
     },
@@ -345,7 +348,7 @@
     },
     "components": {
       "title": "components",
-      "description": "Components section. Supports built-in types (terraform, helmfile, kubernetes, packer) and custom component types defined in custom commands.",
+      "description": "Components section. Supports built-in types (terraform, helmfile, helm, kubernetes, packer) and custom component types defined in custom commands.",
       "oneOf": [
         {
           "type": "string",
@@ -451,6 +454,9 @@
             },
             "retry": {
               "$ref": "#/definitions/retry"
+            },
+            "flags": {
+              "$ref": "#/definitions/terraform_flags"
             }
           },
           "required": []
@@ -573,6 +579,9 @@
             },
             "retry": {
               "$ref": "#/definitions/retry"
+            },
+            "flags": {
+              "$ref": "#/definitions/terraform_flags"
             }
           },
           "required": []
@@ -1006,6 +1015,82 @@
         }
       ]
     },
+    "helm_wait_strategy": {
+      "title": "helm_wait_strategy",
+      "description": "Helm 4 release wait strategy",
+      "type": "string",
+      "enum": [
+        "watcher",
+        "hookOnly",
+        "legacy"
+      ]
+    },
+    "helm_wait_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {"$ref": "#/definitions/helm_wait_strategy"},
+        "jobs": {"type": "boolean"}
+      }
+    },
+    "helm_delete_wait_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {"$ref": "#/definitions/helm_wait_strategy"}
+      }
+    },
+    "helm_history_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max": {"type": "integer", "minimum": 0}
+      }
+    },
+    "helm_install_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout": {"type": "string"},
+        "chart_hooks": {"type": "boolean"},
+        "wait": {"$ref": "#/definitions/helm_wait_policy"},
+        "crds": {"type": "string", "enum": ["create", "skip"]},
+        "on_failure": {"type": "string", "enum": ["uninstall", "keep"]}
+      }
+    },
+    "helm_upgrade_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout": {"type": "string"},
+        "chart_hooks": {"type": "boolean"},
+        "wait": {"$ref": "#/definitions/helm_wait_policy"},
+        "on_failure": {"type": "string", "enum": ["rollback", "keep"]},
+        "cleanup_on_failure": {"type": "boolean"}
+      }
+    },
+    "helm_delete_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout": {"type": "string"},
+        "chart_hooks": {"type": "boolean"},
+        "wait": {"$ref": "#/definitions/helm_delete_wait_policy"}
+      }
+    },
+    "helm_release_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout": {"type": "string"},
+        "chart_hooks": {"type": "boolean"},
+        "wait": {"$ref": "#/definitions/helm_wait_policy"},
+        "history": {"$ref": "#/definitions/helm_history_policy"},
+        "install": {"$ref": "#/definitions/helm_install_policy"},
+        "upgrade": {"$ref": "#/definitions/helm_upgrade_policy"},
+        "delete": {"$ref": "#/definitions/helm_delete_policy"}
+      }
+    },
     "kubernetes": {
       "title": "kubernetes",
       "description": "Kubernetes component type defaults",
@@ -1159,6 +1244,9 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "values": {
+              "type": "object"
+            },
             "vars": {
               "$ref": "#/definitions/vars"
             },
@@ -1195,6 +1283,9 @@
             "auth": {
               "$ref": "#/definitions/component_auth"
             },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
             "dependencies": {
               "$ref": "#/definitions/dependencies"
             },
@@ -1203,6 +1294,12 @@
             },
             "provision": {
               "$ref": "#/definitions/provision"
+            },
+            "overrides": {
+              "$ref": "#/definitions/helm_overrides"
+            },
+            "release": {
+              "$ref": "#/definitions/helm_release_policy"
             }
           },
           "required": []
@@ -1263,6 +1360,9 @@
             },
             "namespace": {
               "type": "string"
+            },
+            "create_namespace": {
+              "type": "boolean"
             },
             "name": {
               "type": "string"
@@ -1325,6 +1425,12 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "overrides": {
+              "$ref": "#/definitions/helm_overrides"
+            },
+            "release": {
+              "$ref": "#/definitions/helm_release_policy"
             }
           },
           "required": []
@@ -2645,6 +2751,47 @@
             },
             "required_version": {
               "$ref": "#/definitions/required_version"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helm_overrides": {
+      "title": "helm_overrides",
+      "description": "Native Helm overrides section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "retry": {
+              "$ref": "#/definitions/retry"
+            },
+            "values": {
+              "type": "object"
             }
           },
           "required": []
@@ -4601,6 +4748,43 @@
                 "type": "string"
               },
               "description": "Regex patterns matched against captured stdout/stderr. Only errors whose output matches at least one pattern are retried. Patterns may be wrapped in `/.../` for readability."
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "terraform_flags": {
+      "title": "terraform_flags",
+      "description": "Default values for terraform CLI execution flags (lock-timeout, lock, parallelism, refresh, compact-warnings). Settable globally under components.terraform.flags in atmos.yaml, per stack under a root-level terraform.flags block, and per component under a component's own flags block (field-level override, highest-precedence layer below an explicit CLI-typed compat flag).",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "lock_timeout": {
+              "type": "string",
+              "description": "Default value for terraform's -lock-timeout flag (e.g. \"30s\", \"5m\"). Unset means terraform's own 0s default applies."
+            },
+            "lock": {
+              "type": "boolean",
+              "description": "Default value for terraform's -lock flag. Unset means terraform's own default (true) applies."
+            },
+            "parallelism": {
+              "type": "integer",
+              "description": "Default value for terraform's -parallelism flag. Unset means terraform's own default (10) applies."
+            },
+            "refresh": {
+              "type": "boolean",
+              "description": "Default value for terraform's -refresh flag. Unset means terraform's own default (true) applies. Not applied to `apply <planfile>` — terraform rejects -refresh when applying a saved plan."
+            },
+            "compact_warnings": {
+              "type": "boolean",
+              "description": "Default value for terraform's -compact-warnings flag."
             }
           },
           "required": []

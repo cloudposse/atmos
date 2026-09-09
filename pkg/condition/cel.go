@@ -44,6 +44,8 @@ func conditionCELEnv() (*cel.Env, error) {
 			cel.Variable("sources", cel.ListType(cel.MapType(cel.StringType, cel.DynType))),
 			cel.Variable("artifacts", cel.ListType(cel.MapType(cel.StringType, cel.DynType))),
 			cel.Variable("matrix", cel.MapType(cel.StringType, cel.StringType)),
+			cel.Variable("flags", cel.MapType(cel.StringType, cel.DynType)),
+			cel.Variable("arguments", cel.MapType(cel.StringType, cel.StringType)),
 		)
 		if celEnvErr != nil {
 			celEnvErr = fmt.Errorf("%w: failed to initialize CEL environment: %w", ErrInvalidWhenCondition, celEnvErr)
@@ -66,6 +68,14 @@ func (ctx Context) activation() map[string]any {
 	if matrix == nil {
 		matrix = map[string]string{}
 	}
+	flags := ctx.Flags
+	if flags == nil {
+		flags = map[string]any{}
+	}
+	arguments := ctx.Arguments
+	if arguments == nil {
+		arguments = map[string]string{}
+	}
 	return map[string]any{
 		"ci":            ctx.CI,
 		"status":        ctx.Status,
@@ -86,6 +96,8 @@ func (ctx Context) activation() map[string]any {
 		"sources":       fileFactsOrEmpty(ctx.Sources),
 		"artifacts":     fileFactsOrEmpty(ctx.Artifacts),
 		"matrix":        matrix,
+		"flags":         flags,
+		"arguments":     arguments,
 	}
 }
 

@@ -74,11 +74,15 @@
                 "type": "string"
               },
               "options": {
-                "description": "Choices for select and multiselect fields",
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
+                "description": "Static list of choices (plain strings or {label: value} objects); a dot-path string into answers.* (e.g. answers.environments); or a Go-template expression computing the list",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array"
+                  }
+                ]
               },
               "placeholder": {
                 "description": "Placeholder text for input fields",

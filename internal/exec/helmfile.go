@@ -454,16 +454,11 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	// toolchain-installed helmfile (under the install path, not the system PATH)
 	// is found — mirroring the `version` subcommand above. Falls back to the bare
 	// command name when no toolchain dependency provides it.
-	err = ExecuteShellCommand(
-		atmosConfig,
-		tenv.Resolve(info.Command),
-		allArgsAndFlags,
-		componentPath,
-		envVars,
-		info.DryRun,
-		info.RedirectStdErr,
-		shellOpts...,
-	)
+	err = executeHelmfileCommandWithRetry(&atmosConfig, &info, tenv, retryExecParams{
+		allArgsAndFlags: allArgsAndFlags,
+		componentPath:   componentPath,
+		envVars:         envVars,
+	}, shellOpts...)
 	if info.NodeHooks != nil {
 		if afterErr := info.NodeHooks.After(context.Background(), &info, stdoutBuf.String()+stderrBuf.String(), err); afterErr != nil && err == nil {
 			err = afterErr
@@ -480,6 +475,37 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	return nil
+}
+
+// executeHelmfileCommandWithRetry runs the resolved helmfile subcommand through
+// ExecuteShellCommandWithRetry. Extracted from ExecuteHelmfile so the retry wiring can
+// be unit-tested directly with a fake invoke, without standing up ExecuteHelmfile's full
+// stack-processing/auth/toolchain preamble or requiring a real helmfile binary.
+func executeHelmfileCommandWithRetry(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	tenv *dependencies.ToolchainEnvironment,
+	params retryExecParams,
+	shellOpts ...ShellCommandOption,
+) error {
+	return ExecuteShellCommandWithRetry(
+		atmosConfig,
+		info,
+		info.SubCommand,
+		func(o ...ShellCommandOption) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				tenv.Resolve(info.Command),
+				params.allArgsAndFlags,
+				params.componentPath,
+				params.envVars,
+				info.DryRun,
+				info.RedirectStdErr,
+				o...,
+			)
+		},
+		shellOpts...,
+	)
 }
 
 // renderAndDeliver is a seam over helmfile.RenderAndDeliver so the inline

@@ -5,24 +5,55 @@ on:
     paths-ignore:
       - "README.md"
 
+# Least-privilege default; the release job below declares its own
+# job-level permissions that override this baseline.
 permissions:
-  attestations: write
-  contents: write
-  id-token: write
-  pull-requests: write
-  packages: write
-  issues: write
+  contents: read
 
 jobs:
   release:
+    # This workflow runs on pull_request by design: it publishes a prerelease binary for a PR
+    # a maintainer has labeled `release/feature`, so the shared workflow checks out the PR's
+    # head ref and signs/publishes with the release secrets. Two things keep that safe:
+    #
+    #   - The label gate. Applying `release/feature` needs triage access, so only
+    #     maintainers can opt a PR into a release.
+    #   - The same-repository gate below. `pull_request` (unlike `pull_request_target`)
+    #     never exposes repository secrets to a fork's PR anyway, but this makes that
+    #     explicit and keeps a labeled fork PR from starting the job at all, instead of
+    #     failing partway through with empty secrets.
+    #
+    # The secrets can't be narrowed further: the callee declares no `workflow_call.secrets`
+    # schema, so an explicit secrets map is rejected at startup (see the note on
+    # `secrets: inherit` below).
     if: |
-      github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release/feature')
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@49ac8cd5c4cf74abdbf24a80027cd3bde811133a # main
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'release/feature')
+    # shared-go-auto-release.yml declares permissions: {} itself — all
+    # release-writing operations go through a separately-scoped GitHub App
+    # installation token (BOT_GITHUB_APP_ID), not GITHUB_TOKEN. id-token:
+    # write is still needed here, though: cosign's keyless OIDC signing (in
+    # the goreleaser job's `signs` step) reads the runner's OIDC token-minting
+    # endpoint, which is gated purely by this job's own id-token permission —
+    # independent of which token is used for git/API calls elsewhere.
+    permissions:
+      contents: read
+      id-token: write
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8293d764b32a1211aacc40e24328f13e8fc5cf32 # main
     with:
-      publish: true
-      prerelease: true
+      # shared-go-auto-release.yml declares publish/prerelease/draft as
+      # `type: string`, not boolean — quote/stringify these so the values
+      # match the declared input type.
+      publish: 'true'
+      prerelease: 'true'
       format: binary
       environment: 'feature-releases'
       runs-on: '["runs-on=${{github.run_id}}", "runner=large", "tag=atmos","extras=s3-cache", "private=false"]'
-      draft: ${{ github.event.pull_request.draft }}
+      draft: ${{ github.event.pull_request.draft && 'true' || 'false' }}
+    # `secrets: inherit`, not an explicit map: shared-go-auto-release.yml doesn't declare a
+    # `workflow_call.secrets:` schema, so GitHub rejects a named-secret map against it outright
+    # (observed as a startup_failure -- "likely failed because of a workflow file issue" -- with
+    # zero jobs ever created, on both this workflow and test.yml after an earlier attempt to
+    # narrow this to an explicit list).
     secrets: inherit

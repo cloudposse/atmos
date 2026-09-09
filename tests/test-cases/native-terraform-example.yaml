@@ -47,6 +47,10 @@ tests:
         - '"cidr_block": "10.0.0.0/16"'
         - '"environment": "dev"'
         - '"enable_dns_hostnames": true'
+        # flags: fleet-wide lock_timeout (atmos.yaml) merged with dev's own
+        # parallelism override (stack manifest) — field-level, not whole-block.
+        - '"lock_timeout": "5m"'
+        - '"parallelism": 4'
       exit_code: 0
 
   # Test 3: Prod stack uses native YAML vars and explicit stack name
@@ -76,6 +80,9 @@ tests:
         - '"cidr_block": "10.1.0.0/16"'
         - '"environment": "prod"'
         - '"enable_dns_hostnames": true'
+        # flags: only the atmos.yaml fleet-wide lock_timeout applies here — production
+        # doesn't override parallelism, unlike dev.
+        - '"lock_timeout": "5m"'
       exit_code: 0
 
   # Test 4: Using filename when explicit name exists fails with helpful error

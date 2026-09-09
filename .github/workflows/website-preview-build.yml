@@ -24,27 +24,56 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            nodejs.org:443
+            registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            proxy.golang.org:443
+            storage.googleapis.com:443
+            us.i.posthog.com:443
+            api.scorecard.dev:443
+            www.bestpractices.dev:443
+
       - name: Checkout Repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version-file: "website/.nvmrc"
-
+      # pnpm before Node: setup-node's pnpm-store cache needs the pnpm binary
+      # on PATH to locate the store. Previously nothing cached the store and
+      # `pnpm install --frozen-lockfile` downloaded the full dependency tree
+      # on every run.
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: "website/.nvmrc"
+          cache: pnpm
+          cache-dependency-path: website/pnpm-lock.yaml
 
       - name: Set up Go
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: "go.mod"
+
+      # `go run .` below has no prior module cache warm-up, so a single
+      # mid-stream proxy.golang.org reset (e.g. "stream error: ...
+      # INTERNAL_ERROR; received from peer") aborts it outright -- see
+      # docs/fixes/2026-08-25-build-atmos-go-mod-download-retry.md.
+      - name: Download Go modules (with retry)
+        uses: ./.github/actions/go-mod-download-retry
 
       - name: Generate atmos-manifest schema
         # website/static/schemas/atmos/atmos-manifest/ is gitignored (see .gitignore) — it is
