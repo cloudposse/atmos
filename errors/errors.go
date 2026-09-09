@@ -1743,6 +1743,15 @@ var (
 	ErrDuplicateVendorComponent = errors.New("duplicate component declared in vendor manifest")
 )
 
+// GitHub Enterprise Server (GHES) endpoint resolution errors.
+var (
+	// ErrInvalidGitHubEndpointURL indicates a GitHub endpoint environment variable
+	// (e.g. GITHUB_SERVER_URL, GITHUB_API_URL, ATMOS_TOOLCHAIN_GITHUB_URL) could not be
+	// parsed as an absolute HTTP(S) URL. The resolver falls back to its default rather
+	// than failing, so this error is logged at debug level, not surfaced to the user.
+	ErrInvalidGitHubEndpointURL = errors.New("invalid GitHub endpoint URL")
+)
+
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.
 // When Code is 0, it indicates successful completion that should exit cleanly without printing errors.
