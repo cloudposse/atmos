@@ -37,7 +37,8 @@ var createCmd = &cobra.Command{
 			stack = v.GetString("stack")
 		}
 		identity := flags.ParseGlobalFlags(cmd, v).Identity.Value()
-		return executeProvisionCommandWithValues(result.Component, stack, identity)
+		prompted := promptedFlags{Component: result.ComponentPrompted, Stack: result.StackPrompted}
+		return executeProvisionCommandWithValues(result.Component, stack, identity, prompted)
 	},
 }
 
