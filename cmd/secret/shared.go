@@ -135,7 +135,7 @@ func adoptPromptedStack(cmd *cobra.Command, chosen string) error {
 
 func requireScopeComponent(scope secretScope, cmd *cobra.Command, args []string) (secretScope, error) {
 	if scope.Component == "" {
-		chosen, err := flags.PromptForMissingRequired("component", "Choose a component", componentCompletion, cmd, args)
+		chosen, err := flags.PromptForMissingRequired("component", "Choose a component", componentCompletionForStack(scope.Stack), cmd, args)
 		if err != nil {
 			return scope, err
 		}
