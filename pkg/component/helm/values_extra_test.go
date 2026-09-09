@@ -151,11 +151,13 @@ func TestApplyValueOverridesUsesHelmPrecedence(t *testing.T) {
 		"priority": "from-component",
 		"nested":   map[string]any{"component": true},
 	}, map[string]any{
-		flagValues:     []string{valuesFile},
-		flagSetJSON:    []string{`json={"enabled":true}`},
-		flagSet:        []string{"priority=from-set", "typed=42"},
-		flagSetString:  []string{"priority=from-string", "asString=42"},
-		flagSetFile:    []string{"payload=" + setFile},
+		flagValues:    []string{valuesFile},
+		flagSetJSON:   []string{`json={"enabled":true}`},
+		flagSet:       []string{"priority=from-set", "typed=42"},
+		flagSetString: []string{"priority=from-string", "asString=42"},
+		// Helm's --set-file expression parser reserves backslashes as escapes,
+		// while Windows accepts this portable slash-delimited path form.
+		flagSetFile:    []string{"payload=" + filepath.ToSlash(setFile)},
 		flagSetLiteral: []string{"priority=from-literal", "literal=a,b"},
 	})
 	require.NoError(t, err)
