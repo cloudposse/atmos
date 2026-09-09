@@ -314,10 +314,25 @@ jobs:
       - name: Download modules
         uses: ./.github/actions/go-mod-download-retry
 
+      # The custom-gcl binary is a full golangci-lint build with the
+      # lintroller plugin compiled in — several minutes of compile on every
+      # run without this cache (the mage target's mtime-based staleness check
+      # can never pass on a fresh checkout). Key on everything that goes into
+      # the binary: its build manifest, the plugin source, the module graph,
+      # and the Go version that compiles it.
+      - name: Cache the custom golangci-lint binary
+        id: custom-gcl-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ./custom-gcl
+          key: custom-gcl-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.custom-gcl.yml', 'tools/lintroller/**', 'go.mod', 'go.sum') }}
+
       # Install the golangci-lint v2 CLI tool (not the linters themselves).
       # This tool is needed to run `golangci-lint custom` which builds a custom binary
       # that includes both standard linters AND our custom module plugins.
+      # Skipped on a cache hit: it exists only to build custom-gcl.
       - name: Install golangci-lint v2 for custom build
+        if: steps.custom-gcl-cache.outputs.cache-hit != 'true'
         run: |
           # Pin to commit that fixes "-c advice.detachedHead=false" bug (PR #6206)
           # https://github.com/golangci/golangci-lint/pull/6206
@@ -325,6 +340,7 @@ jobs:
 
       # Build a custom golangci-lint binary with our lintroller plugin compiled in.
       - name: Build custom golangci-lint with lintroller plugin
+        if: steps.custom-gcl-cache.outputs.cache-hit != 'true'
         run: |
           set -e
 
@@ -334,11 +350,15 @@ jobs:
           # Build custom golangci-lint with plugins (staleness-guarded; see magefiles/)
           go tool mage lint:customGCL
 
-          # Verify the custom binary was created
+      - name: Put the custom golangci-lint on PATH
+        run: |
+          set -e
+
+          # Verify the custom binary exists (built above, or cache-restored)
           test -x ./custom-gcl || { echo "Error: custom-gcl not found or not executable"; exit 1; }
 
-          # Replace system binary with our custom one
-          mv ~/go/bin/golangci-lint ~/go/bin/golangci-lint.system
+          # Make our custom build the `golangci-lint` the action below invokes
+          mkdir -p ~/go/bin
           cp ./custom-gcl ~/go/bin/golangci-lint
           chmod +x ~/go/bin/golangci-lint
 
