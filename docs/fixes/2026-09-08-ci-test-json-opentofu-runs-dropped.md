@@ -6,9 +6,9 @@
 
 In CI mode, `atmos terraform test` always runs `terraform|tofu test -json` and builds the step
 summary, the JUnit report, and inline annotations from that event stream. The parser only accepted
-a `test_run`/`test_file` event as final when it carried `progress: "complete"`. OpenTofu never
-emits a `progress` field at all -- it emits exactly one event per run/file carrying only the final
-`status` -- so under OpenTofu every run and file event was discarded. The `test_summary` event has
+a `test_run`/`test_file` event as final when it carried `progress: "complete"`. OpenTofu 1.12.5
+emits no `progress` field at all -- it emits exactly one event per run/file carrying only the
+final `status` -- so under OpenTofu every run and file event was discarded. The `test_summary` event has
 the same shape in both tools, so the badge counts still came out right while the results table was
 empty and `<component>.junit.xml` reported `tests="0"` on a passing run. Separately, both tools
 emit an assertion-failure `diagnostic` *after* the run's final event, but the parser only attached

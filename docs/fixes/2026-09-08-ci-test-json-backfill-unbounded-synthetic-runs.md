@@ -55,11 +55,16 @@ purpose.
   -- all pass, including the two new oversized-count tests, in under 2s (proving the cap actually
   bounds the work rather than just bounding the assertion).
 - `go test ./pkg/ci/...` -- full package, all pass, no regressions in JUnit/handlers rendering.
-- Confirmed the new tests are load-bearing: with the fix removed (`git stash` of the three
-  non-test files), the package fails to *compile* because the tests reference
-  `maxBackfillRunsPerStatus` and `BackfillTruncated`, which only exist after the fix. Actually
-  reverting just the loop's bound (to reproduce a literal billion-iteration append) was not run,
-  since doing so would intentionally trigger the exact memory-exhaustion/hang this fix prevents.
+- Confirmed compile-time (not behavioral) coverage: with the fix removed (`git stash` of the
+  three non-test files), the package fails to *compile* because the tests reference
+  `maxBackfillRunsPerStatus` and `BackfillTruncated`, which only exist after the fix. This proves
+  the tests are wired to the new symbols, not that they'd catch a regression to the unbounded
+  loop while those symbols still exist. The behavioral proof is the tests themselves: both call
+  `backfillMissingTestJSONRuns`/`ParseTestJSON` with a real `Pass: 1_000_000_000` count and assert
+  the actual output is capped at `maxBackfillRunsPerStatus`, completing in well under 2s -- so the
+  cap is genuinely exercised, not just asserted against a hypothetical. Reverting just the loop's
+  bound (to reproduce a literal billion-iteration append) was not run, since doing so would
+  intentionally trigger the exact memory-exhaustion/hang this fix prevents.
 - `atmos fix lint` (patch-scoped, `--new-from-rev=origin/main`) -- the only findings are 3
   pre-existing issues in unrelated files (`pkg/store/providers/azure_keyvault_store.go`,
   `cmd/terraform/utils.go`, `pkg/component/helm/client.go`); none in the files touched by this
