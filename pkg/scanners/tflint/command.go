@@ -228,7 +228,7 @@ func execute(ctx context.Context, runtime *Runtime, info *schema.ConfigAndStacks
 	// terraformLintDescribeStacks) reports its own per-stack-file progress; this package
 	// stays decoupled from that UI and just calls through.
 	stacks, err := runtime.DescribeStacks(
-		&atmosConfig, info.Stack, components, []string{cfg.TerraformComponentType}, nil,
+		&atmosConfig, info.Stack, nil, []string{cfg.TerraformComponentType}, nil,
 		false, info.ProcessTemplates, info.ProcessFunctions, false, info.Skip, authManager, info.AuthDisabled,
 	)
 	if err != nil {
@@ -239,7 +239,7 @@ func execute(ctx context.Context, runtime *Runtime, info *schema.ConfigAndStacks
 	if err != nil {
 		return fmt.Errorf(terraformLintWrappedErrorFormat, errUtils.ErrBuildTerraformLintTargets, err)
 	}
-	targets := targetsFor(graph, nil)
+	targets := targetsFor(nil, requestedTargets(graph, components))
 	if len(targets) == 0 {
 		ui.Success("No Terraform components matched")
 		return nil
@@ -326,6 +326,23 @@ func filterAffected(input []schema.Affected) []schema.Affected {
 		filtered = append(filtered, *item)
 	}
 	return filtered
+}
+
+func requestedTargets(graph *dependency.Graph, components []string) []*dependency.Node {
+	if len(components) == 0 {
+		return targetsFor(graph, nil)
+	}
+	allowed := make(map[string]struct{}, len(components))
+	for _, component := range components {
+		allowed[component] = struct{}{}
+	}
+	targets := make([]*dependency.Node, 0, len(graph.Nodes))
+	for _, node := range graph.Nodes {
+		if _, ok := allowed[node.Component]; ok {
+			targets = append(targets, node)
+		}
+	}
+	return targets
 }
 
 func targetsFor(graph *dependency.Graph, input []*dependency.Node) []*dependency.Node {
