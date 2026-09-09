@@ -45,59 +45,59 @@ echo "::group::Sync ${LOCAL_DIR} -> ${S3_URI}"
 # push-to-main deploy only regenerates the floating 1.0 schema, so without this exclusion every
 # such deploy would delete every previously published pinned snapshot.
 aws s3 sync "${LOCAL_DIR}" "${S3_URI}" --delete \
-  --exclude 'img/demos/*' \
-  --exclude 'schemas/atmos/atmos-manifest/*.*.*/*' \
-  --exclude 'schemas/atmos/atmos-config/*.*.*/*'
+	--exclude 'img/demos/*' \
+	--exclude 'schemas/atmos/atmos-manifest/*.*.*/*' \
+	--exclude 'schemas/atmos/atmos-config/*.*.*/*'
 echo "::endgroup::"
 
 # Map text-format extensions to their `Content-Type; charset=utf-8`.
 # Server-side copy is cheap, so the list is generous — unmatched extensions
 # no-op silently.
 declare -A TEXT_TYPES=(
-  [html]="text/html; charset=utf-8"
-  [htm]="text/html; charset=utf-8"
-  [css]="text/css; charset=utf-8"
-  [js]="application/javascript; charset=utf-8"
-  [mjs]="application/javascript; charset=utf-8"
-  [json]="application/json; charset=utf-8"
-  [map]="application/json; charset=utf-8"
-  [webmanifest]="application/manifest+json; charset=utf-8"
-  [xml]="application/xml; charset=utf-8"
-  [rss]="application/xml; charset=utf-8"
-  [atom]="application/xml; charset=utf-8"
-  [svg]="image/svg+xml; charset=utf-8"
-  [txt]="text/plain; charset=utf-8"
-  [md]="text/markdown; charset=utf-8"
-  [csv]="text/plain; charset=utf-8"
-  [tsv]="text/plain; charset=utf-8"
-  [yaml]="text/plain; charset=utf-8"
-  [yml]="text/plain; charset=utf-8"
-  [sh]="text/x-shellscript; charset=utf-8"
-  [bash]="text/x-shellscript; charset=utf-8"
-  [tf]="text/plain; charset=utf-8"
-  [tfvars]="text/plain; charset=utf-8"
-  [hcl]="text/plain; charset=utf-8"
-  [rego]="text/plain; charset=utf-8"
-  [toml]="application/toml; charset=utf-8"
-  [ini]="text/plain; charset=utf-8"
-  [cfg]="text/plain; charset=utf-8"
-  [py]="text/plain; charset=utf-8"
-  [go]="text/plain; charset=utf-8"
-  [rb]="text/plain; charset=utf-8"
-  [ts]="text/plain; charset=utf-8"
-  [tsx]="text/plain; charset=utf-8"
-  [jsx]="text/plain; charset=utf-8"
+	[html]="text/html; charset=utf-8"
+	[htm]="text/html; charset=utf-8"
+	[css]="text/css; charset=utf-8"
+	[js]="application/javascript; charset=utf-8"
+	[mjs]="application/javascript; charset=utf-8"
+	[json]="application/json; charset=utf-8"
+	[map]="application/json; charset=utf-8"
+	[webmanifest]="application/manifest+json; charset=utf-8"
+	[xml]="application/xml; charset=utf-8"
+	[rss]="application/xml; charset=utf-8"
+	[atom]="application/xml; charset=utf-8"
+	[svg]="image/svg+xml; charset=utf-8"
+	[txt]="text/plain; charset=utf-8"
+	[md]="text/markdown; charset=utf-8"
+	[csv]="text/plain; charset=utf-8"
+	[tsv]="text/plain; charset=utf-8"
+	[yaml]="text/plain; charset=utf-8"
+	[yml]="text/plain; charset=utf-8"
+	[sh]="text/x-shellscript; charset=utf-8"
+	[bash]="text/x-shellscript; charset=utf-8"
+	[tf]="text/plain; charset=utf-8"
+	[tfvars]="text/plain; charset=utf-8"
+	[hcl]="text/plain; charset=utf-8"
+	[rego]="text/plain; charset=utf-8"
+	[toml]="application/toml; charset=utf-8"
+	[ini]="text/plain; charset=utf-8"
+	[cfg]="text/plain; charset=utf-8"
+	[py]="text/plain; charset=utf-8"
+	[go]="text/plain; charset=utf-8"
+	[rb]="text/plain; charset=utf-8"
+	[ts]="text/plain; charset=utf-8"
+	[tsx]="text/plain; charset=utf-8"
+	[jsx]="text/plain; charset=utf-8"
 )
 
 echo "::group::Re-stamp Content-Type with charset=utf-8 for text formats"
 for ext in "${!TEXT_TYPES[@]}"; do
-  ct="${TEXT_TYPES[$ext]}"
-  echo "  *.${ext}  ->  ${ct}"
-  aws s3 cp "${S3_URI}" "${S3_URI}" \
-    --recursive --exclude "*" --include "*.${ext}" \
-    --metadata-directive REPLACE \
-    --content-type "${ct}" \
-    --no-progress
+	ct="${TEXT_TYPES[$ext]}"
+	echo "  *.${ext}  ->  ${ct}"
+	aws s3 cp "${S3_URI}" "${S3_URI}" \
+		--recursive --exclude "*" --include "*.${ext}" \
+		--metadata-directive REPLACE \
+		--content-type "${ct}" \
+		--no-progress
 done
 echo "::endgroup::"
 
