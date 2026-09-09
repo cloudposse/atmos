@@ -15,17 +15,8 @@ overrides, and it never mentioned that combining an override flag with `--all`/`
 The field test built `./build/atmos` from the branch and ran real commands against the
 `examples/helm` fixture. Two findings came out of that pass:
 
-1. `usage.mdx` line 58 read "`template`/`render`, `diff`/`plan`, and `apply`/`deploy` accept
-   Helm-compatible value overrides," leaving out `values` even though `helm-values.mdx`, the code
-   (`operationSupportsValueOverrides` in `cmd/helm/helm.go`), and `agent-skills/skills/atmos-helm/SKILL.md`
-   all correctly include it. A reader of only that paragraph could wrongly conclude `values` doesn't
-   take overrides.
-2. Live testing (`atmos helm template --all -s dev --set image.tag=blast-all`) confirmed the same
-   override is broadcast identically to every component matched by `--all`. This is consistent with
-   how `--all` already works for every other flag, but it was undocumented anywhere near the
-   override or `--all`/`--affected` flag descriptions in `usage.mdx`, `helm-diff.mdx`, or
-   `helm-template.mdx` — a real hazard for `apply --all --set ...`, which can push an unintended
-   value onto every release in a batch.
+1. `usage.mdx` line 58 read "`template`/`render`, `diff`/`plan`, and `apply`/`deploy` accept Helm-compatible value overrides," leaving out `values` even though `helm-values.mdx`, the code (`operationSupportsValueOverrides` in `cmd/helm/helm.go`), and `agent-skills/skills/atmos-helm/SKILL.md` all correctly include it. A reader of only that paragraph could wrongly conclude `values` doesn't take overrides.
+2. Live testing (`atmos helm template --all -s dev --set image.tag=blast-all`) confirmed the same override is broadcast identically to every component matched by `--all`. This is consistent with how `--all` already works for every other flag, but it was undocumented anywhere near the override or `--all`/`--affected` flag descriptions in `usage.mdx`, `helm-diff.mdx`, or `helm-template.mdx` — a real hazard for `apply --all --set ...`, which can push an unintended value onto every release in a batch.
 
 This is a documentation-only fix; no runtime behavior changed.
 
