@@ -13,8 +13,8 @@ cluster, no cloud credentials — and watch a change travel all the way around:
 
 ```
 atmos render  ─push─▶  Gitea (Git server emulator)  ─watch─▶  Flux  ─apply─▶  k3s (Kubernetes emulator)
-     ▲                                                                              │
-     └──────────────────────────  you observe it running  ◀───────────────────────┘
+      ▲                                                                              │
+      └──────────────────────────  you observe it running  ◀───────────────────────┘
 ```
 
 Two local emulators do the heavy lifting:
