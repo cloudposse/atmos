@@ -19,4 +19,8 @@ runs:
   steps:
     - name: Sync to S3 and restamp charset
       shell: bash
-      run: ${{ github.action_path }}/deploy.sh "${{ inputs.local-dir }}" "${{ inputs.s3-uri }}"
+      env:
+        DEPLOY_SCRIPT: ${{ github.action_path }}/deploy.sh
+        LOCAL_DIR: ${{ inputs.local-dir }}
+        S3_URI: ${{ inputs.s3-uri }}
+      run: '"$DEPLOY_SCRIPT" "$LOCAL_DIR" "$S3_URI"'
