@@ -95,14 +95,18 @@ Every distinct Go-toolchain build invocation in the repo sets `GOFIPS140`:
 | `internal/ci/acceptance/command.go` (`goCommandEnvironment()`) | Sharded acceptance-test binaries built via `mage acceptance:*` |
 | `.github/workflows/website-deploy-prod.yml` / `website-preview-build.yml` | Throwaway `go run .` invocations that generate the website's schema JSON files (not a distributed artifact); set for consistency with every other build here, not because these processes make TLS calls |
 
-This table covers every build invocation *in this repo*. It does not cover the Homebrew
-distribution path: the `atmos` formula lives entirely in the external `Homebrew/homebrew-core`
-repo (this repo's only involvement is a version-bump PR via `brew bump-formula-pr` in
-`.github/workflows/build.yml`), and that formula's `install` block did a plain `go build`
-with no `GOFIPS140` set — so `brew install atmos` produced a binary reporting `"fips": false`
-while GitHub Release binaries correctly reported `"fips": true`. A fix is proposed upstream:
-[Homebrew/homebrew-core#302847](https://github.com/Homebrew/homebrew-core/pull/302847) (draft,
-pending review/merge by Homebrew maintainers, outside this repo's control).
+This table covers every build invocation *in this repo*. It did not use to cover the
+Homebrew distribution path: the `atmos` formula lives entirely in the external
+`Homebrew/homebrew-core` repo (this repo's only involvement is a version-bump PR via
+`brew bump-formula-pr` in `.github/workflows/build.yml`), and that formula's `install`
+block did a plain `go build` with no `GOFIPS140` set — so `brew install atmos` produced
+a binary reporting `"fips": false` while GitHub Release binaries correctly reported
+`"fips": true`. Fixed upstream in
+[Homebrew/homebrew-core#302953](https://github.com/Homebrew/homebrew-core/pull/302953)
+(merged 2026-09-09); `brew install atmos` now sets `GOFIPS140=latest` too, closing the
+gap. (An earlier attempt, [#302847](https://github.com/Homebrew/homebrew-core/pull/302847),
+was auto-closed by BrewTestBot for not following homebrew-core's PR template — see this
+repo's `homebrew` skill, `.claude/skills/homebrew/SKILL.md`, for what that requires.)
 
 Go does support a `godebug (fips140=on)` block in `go.mod` (see go.dev/doc/godebug), but
 that only sets the *runtime default* for `GODEBUG=fips140`, not the build-time FIPS module
