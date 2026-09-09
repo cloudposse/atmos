@@ -22,6 +22,8 @@ import (
 const describeAffectedCloneRetryBudget = 30 * time.Second
 
 func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
+	t.Parallel()
+
 	// Skip long tests in short mode (this test takes ~36 seconds due to Git cloning)
 	tests.SkipIfShort(t)
 
@@ -92,6 +94,8 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 }
 
 func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
+	t.Parallel()
+
 	// Check for Git repository with valid remotes precondition
 	tests.RequireGitRemoteWithValidURL(t)
 

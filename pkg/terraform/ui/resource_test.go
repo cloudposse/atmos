@@ -9,6 +9,8 @@ import (
 )
 
 func TestResourceTracker_NewResourceTracker(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 	assert.NotNil(t, rt)
 	assert.Equal(t, PhaseInitializing, rt.GetPhase())
@@ -19,6 +21,8 @@ func TestResourceTracker_NewResourceTracker(t *testing.T) {
 }
 
 func TestResourceTracker_HandlePlannedChange(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	msg := &PlannedChangeMessage{
@@ -46,6 +50,8 @@ func TestResourceTracker_HandlePlannedChange(t *testing.T) {
 }
 
 func TestResourceTracker_HandleApplyStart(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	// First add a planned change.
@@ -85,6 +91,8 @@ func TestResourceTracker_HandleApplyStart(t *testing.T) {
 }
 
 func TestResourceTracker_HandleApplyComplete(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	// Add planned change and start.
@@ -124,6 +132,8 @@ func TestResourceTracker_HandleApplyComplete(t *testing.T) {
 }
 
 func TestResourceTracker_HandleApplyErrored(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	rt.HandleMessage(&PlannedChangeMessage{
@@ -159,6 +169,8 @@ func TestResourceTracker_HandleApplyErrored(t *testing.T) {
 }
 
 func TestResourceTracker_HandleRefresh(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	start := &RefreshStartMessage{
@@ -192,6 +204,8 @@ func TestResourceTracker_HandleRefresh(t *testing.T) {
 }
 
 func TestResourceTracker_HandleDiagnostic(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	// Warning diagnostic.
@@ -231,6 +245,8 @@ func TestResourceTracker_HandleDiagnostic(t *testing.T) {
 }
 
 func TestResourceTracker_HandleChangeSummary(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	summary := &ChangeSummaryMessage{
@@ -253,6 +269,8 @@ func TestResourceTracker_HandleChangeSummary(t *testing.T) {
 }
 
 func TestResourceTracker_HandlePlanChangeSummary(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	// Plan operations also receive change_summary.
@@ -278,6 +296,8 @@ func TestResourceTracker_HandlePlanChangeSummary(t *testing.T) {
 }
 
 func TestResourceTracker_HandleVersionMessage(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	version := &VersionMessage{
@@ -291,6 +311,8 @@ func TestResourceTracker_HandleVersionMessage(t *testing.T) {
 }
 
 func TestResourceTracker_ResourceOrder(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	// Add resources in specific order.
@@ -311,6 +333,8 @@ func TestResourceTracker_ResourceOrder(t *testing.T) {
 }
 
 func TestResourceTracker_Concurrency(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	done := make(chan bool, 100)
@@ -347,6 +371,8 @@ func TestResourceTracker_Concurrency(t *testing.T) {
 }
 
 func TestResourceTracker_HandleApplyStart_UnplannedResource(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	// Apply start for resource NOT in plan (edge case for dynamic resources).
@@ -377,6 +403,8 @@ func TestResourceTracker_HandleApplyStart_UnplannedResource(t *testing.T) {
 }
 
 func TestResourceTracker_HandleRefreshStart_ExistingResource(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	// Add planned change first.
@@ -417,6 +445,8 @@ func TestResourceTracker_HandleRefreshStart_ExistingResource(t *testing.T) {
 }
 
 func TestResourceTracker_HandleOutputs(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	outputs := &OutputsMessage{
@@ -436,6 +466,8 @@ func TestResourceTracker_HandleOutputs(t *testing.T) {
 }
 
 func TestResourceTracker_GetCurrentActivity_NoActive(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	// Add a completed resource.
@@ -452,6 +484,8 @@ func TestResourceTracker_GetCurrentActivity_NoActive(t *testing.T) {
 }
 
 func TestResourceTracker_GetCurrentActivity_WithActive(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	// Add and start a resource.
@@ -475,6 +509,8 @@ func TestResourceTracker_GetCurrentActivity_WithActive(t *testing.T) {
 }
 
 func TestResourceTracker_HandleApplyProgress(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	// Set up resource in progress.
@@ -507,6 +543,8 @@ func TestResourceTracker_HandleApplyProgress(t *testing.T) {
 }
 
 func TestResourceTracker_ChangeSummaryWithErrorDoesNotOverridePhase(t *testing.T) {
+	t.Parallel()
+
 	rt := NewResourceTracker()
 
 	// First, error diagnostic.

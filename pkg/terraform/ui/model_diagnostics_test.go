@@ -209,3 +209,70 @@ func TestExtractFirstSentence_NoWordBoundaryTruncatesRaw(t *testing.T) {
 	require.True(t, strings.HasSuffix(result, "..."))
 	assert.Equal(t, text[:maxTextLength]+"...", result)
 }
+
+// TestExtractFirstSentence_DeprecationDetailWithEmbeddedIdentifierPeriods is a regression
+// test for a real-world Terraform deprecation detail (S3 bucket attribute deprecation),
+// taken verbatim from `terraform plan`'s plain-text output:
+//
+//	This value's attribute new.acceleration_status is derived from
+//	aws_s3_bucket.origin.acceleration_status, which is deprecated with the
+//	following message:
+//
+//	acceleration_status is deprecated. Use the
+//	aws_s3_bucket_accelerate_configuration resource instead.
+//
+// Two things must hold: periods inside dotted identifiers like "new.acceleration_status"
+// and "aws_s3_bucket.origin.acceleration_status" must not be mistaken for sentence
+// boundaries, and the result must prefer the final, specific, actionable paragraph over the
+// generic derived-from-a-deprecated-source lead-in. That lead-in is boilerplate repeated
+// across every deprecated-attribute warning, while the final paragraph is the only part
+// that says what's actually deprecated.
+func TestExtractFirstSentence_DeprecationDetailWithEmbeddedIdentifierPeriods(t *testing.T) {
+	detail := "This value's attribute new.acceleration_status is derived from " +
+		"aws_s3_bucket.origin.acceleration_status, which is deprecated with the following message:" +
+		"\n\nacceleration_status is deprecated. Use the aws_s3_bucket_accelerate_configuration resource instead."
+
+	result := extractFirstSentence(detail)
+
+	assert.NotContains(t, result, "\n")
+	assert.Equal(t, "acceleration_status is deprecated.", result)
+}
+
+// TestLogDiagnostic_DeprecationMessageHasNoEmbeddedNewline is an end-to-end regression test:
+// a deprecation diagnostic's logged message must be a single line, so the trailing
+// address=/file=/line= keyvals stay attached to it instead of trailing a short, disconnected
+// second line (which visually reads as the keyvals being "pushed" far to the right).
+func TestLogDiagnostic_DeprecationMessageHasNoEmbeddedNewline(t *testing.T) {
+	origLevel := log.GetLevel()
+	t.Cleanup(func() {
+		log.SetOutput(os.Stderr)
+		log.SetLevel(origLevel)
+	})
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	log.SetLevel(log.InfoLevel)
+
+	m := NewModel("comp", "stack", "plan", strings.NewReader(""))
+	m.GetTracker().HandleMessage(&DiagnosticMessage{
+		Diagnostic: Diagnostic{
+			Severity: "warning",
+			Summary:  "Value derived from a deprecated source",
+			Detail: "This value's attribute new.acceleration_status is derived from " +
+				"aws_s3_bucket.origin.acceleration_status, which is deprecated with the following message:" +
+				"\n\nacceleration_status is deprecated. Use the aws_s3_bucket_accelerate_configuration resource instead.",
+			Range: &DiagnosticRange{
+				Filename: ".terraform/plat/modules/spa_web/main.tf",
+				Start:    DiagnosticLocation{Line: 24},
+			},
+		},
+	})
+
+	m.LogDiagnostics()
+
+	out := strings.TrimRight(buf.String(), "\n")
+	assert.NotContains(t, out, "\n")
+	assert.Contains(t, out, "acceleration_status is deprecated.")
+	assert.Contains(t, out, "file=.terraform/plat/modules/spa_web/main.tf")
+	assert.Contains(t, out, "line=24")
+}
