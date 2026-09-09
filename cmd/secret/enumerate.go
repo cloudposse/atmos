@@ -5,11 +5,11 @@ import (
 	"sort"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
@@ -131,14 +131,20 @@ func stackCompletion(_ *cobra.Command, _ []string, _ string) ([]string, cobra.Sh
 	return distinct(entries, func(e scopeEntry) string { return e.Stack }), cobra.ShellCompDirectiveNoFileComp
 }
 
-// componentCompletion returns the distinct components that declare secrets in the currently
-// selected --stack (read from viper, so it reflects a value just chosen via the stack prompt).
-func componentCompletion(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-	entries, _, err := enumerateScopesFn(secretScope{Stack: viper.GetString("stack")})
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
+// componentCompletionForStack returns a completion function scoped to the given stack, filtering
+// directly on the caller's resolved value instead of reading a stack from viper. Used by the
+// missing --component prompt (requireScopeComponent), which already knows the resolved stack
+// (whether it came from a flag or was just chosen interactively) — passing it in directly avoids
+// needing to mirror it into global viper state, which would leak across command invocations (see
+// docs/fixes for the incident this replaced).
+func componentCompletionForStack(stack string) flags.CompletionFunc {
+	return func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		entries, _, err := enumerateScopesFn(secretScope{Stack: stack})
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return distinct(entries, func(e scopeEntry) string { return e.Component }), cobra.ShellCompDirectiveNoFileComp
 	}
-	return distinct(entries, func(e scopeEntry) string { return e.Component }), cobra.ShellCompDirectiveNoFileComp
 }
 
 // checkStackSopsCollisions enumerates a stack's secret-declaring instances and verifies their SOPS

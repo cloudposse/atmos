@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
 )
 
@@ -175,30 +176,46 @@ func TestStackCompletion(t *testing.T) {
 	})
 }
 
-// TestComponentCompletion exercises the shell-completion seam for --component, including that it
-// reads the currently-selected stack from viper.
-func TestComponentCompletion(t *testing.T) {
-	t.Run("returns distinct components", func(t *testing.T) {
-		viper.Reset()
-		t.Cleanup(viper.Reset)
-		viper.Set("stack", "prod")
-		overrideEnumerateScopes(t, []scopeEntry{
-			{Stack: "prod", Component: "web"},
-			{Stack: "prod", Component: "api"},
-		}, nil)
+// TestComponentCompletionForStack proves the completion filters by the stack passed directly to
+// it, independent of any global viper "stack" value. This is the fix for the leak where
+// componentCompletion's viper-based variant let one invocation's resolved stack (interactively
+// chosen or otherwise) affect a later invocation's --component prompt.
+func TestComponentCompletionForStack(t *testing.T) {
+	orig := enumerateScopesFn
+	enumerateScopesFn = func(scope secretScope) ([]scopeEntry, *schema.AtmosConfiguration, error) {
+		switch scope.Stack {
+		case "prod":
+			return []scopeEntry{{Stack: "prod", Component: "api"}}, &schema.AtmosConfiguration{}, nil
+		case "dev":
+			return []scopeEntry{{Stack: "dev", Component: "web"}}, &schema.AtmosConfiguration{}, nil
+		default:
+			return nil, &schema.AtmosConfiguration{}, nil
+		}
+	}
+	t.Cleanup(func() { enumerateScopesFn = orig })
 
-		got, directive := componentCompletion(&cobra.Command{}, nil, "")
-		assert.Equal(t, []string{"api", "web"}, got)
-		assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	})
+	// A decoy global viper "stack" value must have no effect on the result below.
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	viper.Set("stack", "decoy")
 
-	t.Run("enumerate error yields no completions", func(t *testing.T) {
-		overrideEnumerateScopes(t, nil, errors.New("boom"))
+	gotProd, directive := componentCompletionForStack("prod")(&cobra.Command{}, nil, "")
+	assert.Equal(t, []string{"api"}, gotProd)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 
-		got, directive := componentCompletion(&cobra.Command{}, nil, "")
-		assert.Nil(t, got)
-		assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	})
+	gotDev, directive := componentCompletionForStack("dev")(&cobra.Command{}, nil, "")
+	assert.Equal(t, []string{"web"}, gotDev)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestComponentCompletionForStack_EnumerateError covers componentCompletionForStack's error path:
+// a failed enumeration yields no completions rather than propagating the error.
+func TestComponentCompletionForStack_EnumerateError(t *testing.T) {
+	overrideEnumerateScopes(t, nil, errors.New("boom"))
+
+	got, directive := componentCompletionForStack("prod")(&cobra.Command{}, nil, "")
+	assert.Nil(t, got)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
 
 // TestCheckStackSopsCollisions covers the write-time SOPS collision guard: the no-collision path,
