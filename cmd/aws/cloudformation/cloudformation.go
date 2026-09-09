@@ -11,6 +11,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/aws/cloudformation/backend"
 	"github.com/cloudposse/atmos/cmd/aws/cloudformation/source"
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -43,6 +44,13 @@ const (
 )
 
 var cloudFormationParser *flags.StandardParser
+
+// stackFlagCompletion reuses cmd/terraform/shared's generic stack-name
+// completion (component/stack listing is not terraform-specific despite the
+// package's name — cmd/aws/cloudformation/backend already reuses it verbatim
+// for the same reason). Package-local alias: cloudformation.go lives in
+// package cloudformation, a different package than cmd/aws/cloudformation/backend.
+var stackFlagCompletion = shared.StackFlagCompletion
 
 var (
 	cfnInitCliConfig     = cfg.InitCliConfig
@@ -176,6 +184,12 @@ func newOperationCommand(use, subCommand, short string) *cobra.Command {
 	}
 
 	options := operationFlagOptions(use, subCommand)
+	options = append(options, flags.WithConditionalCompletionPrompt(
+		"stack",
+		"Choose a stack",
+		stackFlagCompletion,
+		func(_ *flags.ParsedConfig) bool { return !hasSelectionFlags(cmd) },
+	))
 	options = append(options, flags.WithConditionalPositionalArgPrompt(
 		"component",
 		"Choose an aws/cloudformation component",
@@ -209,6 +223,11 @@ func newOperationCommand(use, subCommand, short string) *cobra.Command {
 // `delete` and `changeset delete`).
 func operationFlagOptions(use, subCommand string) []flags.Option {
 	options := []flags.Option{
+		// Registered locally (not just inherited from CloudFormationCmd's
+		// persistent --stack) so the missing-stack interactive prompt below can
+		// populate it: WithConditionalCompletionPrompt only takes effect for a
+		// flag registered on this same parser (see promptForSingleMissingFlag).
+		flags.WithStackFlag(),
 		flags.WithBoolFlag(flagAll, "", false, "Process all aws/cloudformation components in dependency order."),
 		flags.WithBoolFlag(flagAffected, "", false, "Process affected aws/cloudformation components in dependency order."),
 		flags.WithBoolFlag("include-dependents", "", false, "Include dependent components when processing affected aws/cloudformation components."),

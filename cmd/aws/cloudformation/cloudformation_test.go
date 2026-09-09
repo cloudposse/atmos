@@ -86,7 +86,7 @@ func TestCloudFormationCmdRunEShowsUsage(t *testing.T) {
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	renderCmd := newOperationCommand("render", "render", "Render")
 	for _, name := range []string{
-		"all", "affected", "include-dependents", "repo-path", "base", "ref", "sha",
+		"stack", "all", "affected", "include-dependents", "repo-path", "base", "ref", "sha",
 		"ssh-key", "ssh-key-password", "clone-target-ref", "tags", "labels",
 	} {
 		assert.NotNil(t, renderCmd.Flag(name), "expected render flag %q", name)
@@ -364,7 +364,10 @@ func TestBuildConfigAndStacksInfoWithNoTagsOrLabels(t *testing.T) {
 
 func TestApplySelectionFlagsReadsStackDryRunAllAffected(t *testing.T) {
 	cmd := newOperationCommand("apply", "apply", "Apply")
-	cmd.Flags().String("stack", "", "")
+	// --stack is now registered locally by newOperationCommand itself (see
+	// flags.WithStackFlag() in operationFlagOptions) so the missing-stack
+	// interactive prompt can populate it; re-registering it here would panic
+	// with "flag redefined: stack".
 	cmd.Flags().Bool("dry-run", false, "")
 	require.NoError(t, cmd.Flags().Set("stack", "tenant-env-stage"))
 	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
@@ -381,7 +384,10 @@ func TestApplySelectionFlagsReadsStackDryRunAllAffected(t *testing.T) {
 func TestInitConfigAndStacksInfo(t *testing.T) {
 	t.Setenv("ATMOS_IDENTITY", "dev-admin")
 	cmd := configuredOperationCommand(t, "apply", map[string]string{"all": "true"})
-	cmd.Flags().String("stack", "", "")
+	// --stack is now registered locally by newOperationCommand itself (see
+	// flags.WithStackFlag() in operationFlagOptions) so the missing-stack
+	// interactive prompt can populate it; re-registering it here would panic
+	// with "flag redefined: stack".
 	cmd.Flags().Bool("dry-run", false, "")
 	require.NoError(t, cmd.Flags().Set("stack", "tenant-env-stage"))
 	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
@@ -417,7 +423,10 @@ func TestInitConfigAndStacksInfoNoArgs(t *testing.T) {
 
 func TestApplySelectionFlagsReadsAffected(t *testing.T) {
 	cmd := newOperationCommand("apply", "apply", "Apply")
-	cmd.Flags().String("stack", "", "")
+	// --stack is now registered locally by newOperationCommand itself (see
+	// flags.WithStackFlag() in operationFlagOptions) so the missing-stack
+	// interactive prompt can populate it; re-registering it here would panic
+	// with "flag redefined: stack".
 	cmd.Flags().Bool("dry-run", false, "")
 	require.NoError(t, cmd.Flags().Set("affected", "true"))
 
@@ -445,6 +454,66 @@ func TestNewOperationCommandRunEInvokesRunOperation(t *testing.T) {
 	assert.Equal(t, "app", fake.executed[0].Component)
 	assert.Equal(t, "apply", fake.executed[0].SubCommand)
 }
+
+// Regression test for the bug where `atmos aws cloudformation apply <component>`
+// (and every other operation verb) hard-errored with "stack is required" instead
+// of interactively prompting, because --stack was only ever registered as a
+// persistent flag on CloudFormationCmd (the parent), never on
+// newOperationCommand's own per-command parser — and flags.WithCompletionPrompt
+// only takes effect for a flag registered on the SAME parser (see
+// promptForSingleMissingFlag in pkg/flags/standard.go). Before the fix, --stack
+// was not a local flag on newOperationCommand's cmd at all, so setting it below
+// on an unmounted command (as it is here, and as every other test in this file
+// constructs it) would fail with "unknown flag: --stack" — the local
+// registration only existed transitively via CloudFormationCmd.AddCommand's
+// parent/InheritedFlags() wiring in production.
+func TestNewOperationCommandRegistersStackFlagLocally(t *testing.T) {
+	original, hadOriginal := component.GetProvider(cfg.CloudFormationComponentType)
+	fake := &recordingProvider{}
+	require.NoError(t, component.Register(fake))
+	t.Cleanup(func() {
+		if hadOriginal {
+			require.NoError(t, component.Register(original))
+		}
+	})
+
+	cmd := newOperationCommand("apply", "apply", "Apply")
+	require.NotNil(t, cmd.Flag("stack"),
+		"expected apply to register --stack locally (flags.WithStackFlag() in operationFlagOptions) "+
+			"so the missing-stack interactive prompt (flags.WithConditionalCompletionPrompt in newOperationCommand) can populate it")
+
+	// --stack must actually flow through to the ExecutionContext.
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	require.NoError(t, cmd.RunE(cmd, []string{"demo"}))
+	require.Len(t, fake.executed, 1)
+	assert.Equal(t, "dev", fake.executed[0].Stack)
+}
+
+// Companion to TestNewOperationCommandRegistersStackFlagLocally: in a
+// non-interactive environment (the default for `go test`, with no TTY), the
+// missing-stack prompt must gracefully no-op rather than panic or hang, letting
+// the component still execute (downstream stack-required validation is the real
+// aws/cloudformation provider's responsibility, not exercised via this fake).
+func TestNewOperationCommandRunEWithoutStackDoesNotPanicNonInteractively(t *testing.T) {
+	original, hadOriginal := component.GetProvider(cfg.CloudFormationComponentType)
+	fake := &recordingProvider{}
+	require.NoError(t, component.Register(fake))
+	t.Cleanup(func() {
+		if hadOriginal {
+			require.NoError(t, component.Register(original))
+		}
+	})
+
+	cmd := newOperationCommand("apply", "apply", "Apply")
+	require.NoError(t, cmd.RunE(cmd, []string{"demo"}))
+	require.Len(t, fake.executed, 1)
+	assert.Empty(t, fake.executed[0].Stack, "non-interactive test environment must not hang or fabricate a stack")
+}
+
+// hasSelectionFlags gates both the component (Use Case 3) and stack (Use Case
+// 1) prompts in newOperationCommand; the stack prompt reuses the identical
+// closure already proven by TestSelectionFlagsAndComponentCompletion, so no
+// separate coverage is needed for the gating condition itself.
 
 func TestRunOperationDelegatesToRegisteredProvider(t *testing.T) {
 	original, hadOriginal := component.GetProvider(cfg.CloudFormationComponentType)
