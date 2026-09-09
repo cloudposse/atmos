@@ -13,6 +13,8 @@ import (
 // TestYamlFunctionsReturnTypes verifies that YAML functions can return different types
 // (strings, maps, lists) and they are handled correctly, especially in list contexts.
 func TestYamlFunctionsReturnTypes(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name         string
 		yamlContent  string
@@ -155,11 +157,13 @@ test:
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{}
 
 			// Parse the YAML
 			result, err := u.UnmarshalYAMLFromFile[map[string]interface{}](
-				atmosConfig, tc.yamlContent, "test.yaml")
+				atmosConfig, tc.yamlContent, "test.yaml",
+			)
 
 			assert.NoError(t, err, "Should parse without error")
 
@@ -172,6 +176,8 @@ test:
 // TestYamlFunctionsInListsNoErrorOnExecution verifies that the fix doesn't cause
 // the "invalid number of arguments" error when functions are actually executed.
 func TestYamlFunctionsInListsNoErrorOnExecution(t *testing.T) {
+	t.Parallel()
+
 	// This simulates the exact scenario from the user's bug report
 	yamlContent := `
 import:
@@ -188,7 +194,8 @@ import:
 
 	// Parse the YAML - this should NOT error with "invalid number of arguments"
 	result, err := u.UnmarshalYAMLFromFile[map[string]interface{}](
-		atmosConfig, yamlContent, "test.yaml")
+		atmosConfig, yamlContent, "test.yaml",
+	)
 	// The functions might fail to execute (components don't exist), but we should
 	// NOT get the concatenation error
 	if err != nil {

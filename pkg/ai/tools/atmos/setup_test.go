@@ -11,6 +11,8 @@ import (
 )
 
 func TestRegisterTools_NoAllowList_RegistersEverything(t *testing.T) {
+	t.Parallel()
+
 	registry := tools.NewRegistry()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -25,6 +27,8 @@ func TestRegisterTools_NoAllowList_RegistersEverything(t *testing.T) {
 }
 
 func TestRegisterTools_WithAllowList_FiltersRegistration(t *testing.T) {
+	t.Parallel()
+
 	registry := tools.NewRegistry()
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
@@ -56,6 +60,8 @@ func TestRegisterTools_WithAllowList_FiltersRegistration(t *testing.T) {
 }
 
 func TestRegisterTools_EmptyAllowList_TreatedAsUnset(t *testing.T) {
+	t.Parallel()
+
 	registry := tools.NewRegistry()
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
@@ -73,6 +79,8 @@ func TestRegisterTools_EmptyAllowList_TreatedAsUnset(t *testing.T) {
 }
 
 func TestIsToolAllowed(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		allowed  []string
@@ -89,6 +97,7 @@ func TestIsToolAllowed(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				AI: schema.AISettings{
 					Tools: schema.AIToolSettings{Allowed: tt.allowed},

@@ -34,6 +34,8 @@ func fastRetryConfig() retryConfig {
 }
 
 func TestDoWithRetry_SuccessOnFirstAttempt(t *testing.T) {
+	t.Parallel()
+
 	cfg := fastRetryConfig()
 
 	callCount := 0
@@ -47,6 +49,8 @@ func TestDoWithRetry_SuccessOnFirstAttempt(t *testing.T) {
 }
 
 func TestDoWithRetry_ServerErrorThenSuccess(t *testing.T) {
+	t.Parallel()
+
 	cfg := fastRetryConfig()
 
 	callCount := 0
@@ -63,6 +67,8 @@ func TestDoWithRetry_ServerErrorThenSuccess(t *testing.T) {
 }
 
 func TestDoWithRetry_AuthErrorThenSuccess(t *testing.T) {
+	t.Parallel()
+
 	cfg := fastRetryConfig()
 	refresher := newMockRefresher()
 
@@ -81,6 +87,8 @@ func TestDoWithRetry_AuthErrorThenSuccess(t *testing.T) {
 }
 
 func TestDoWithRetry_AuthRefreshFailureAbortsRetry(t *testing.T) {
+	t.Parallel()
+
 	cfg := fastRetryConfig()
 	refresher := &mockRefresher{returnErr: errors.Join(errUtils.ErrTokenRefreshFailed, fmt.Errorf("OIDC unavailable"))}
 
@@ -97,6 +105,8 @@ func TestDoWithRetry_AuthRefreshFailureAbortsRetry(t *testing.T) {
 }
 
 func TestDoWithRetry_NonRetryableNonAPIError(t *testing.T) {
+	t.Parallel()
+
 	cfg := fastRetryConfig()
 	refresher := newMockRefresher()
 
@@ -113,6 +123,8 @@ func TestDoWithRetry_NonRetryableNonAPIError(t *testing.T) {
 }
 
 func TestDoWithRetry_NonRetryable400(t *testing.T) {
+	t.Parallel()
+
 	cfg := fastRetryConfig()
 
 	callCount := 0
@@ -126,6 +138,8 @@ func TestDoWithRetry_NonRetryable400(t *testing.T) {
 }
 
 func TestDoWithRetry_NonRetryable403(t *testing.T) {
+	t.Parallel()
+
 	cfg := fastRetryConfig()
 
 	callCount := 0
@@ -139,6 +153,8 @@ func TestDoWithRetry_NonRetryable403(t *testing.T) {
 }
 
 func TestDoWithRetry_NonRetryable404(t *testing.T) {
+	t.Parallel()
+
 	cfg := fastRetryConfig()
 
 	callCount := 0
@@ -152,6 +168,8 @@ func TestDoWithRetry_NonRetryable404(t *testing.T) {
 }
 
 func TestDoWithRetry_AllRetriesExhausted(t *testing.T) {
+	t.Parallel()
+
 	cfg := fastRetryConfig()
 
 	callCount := 0
@@ -166,6 +184,8 @@ func TestDoWithRetry_AllRetriesExhausted(t *testing.T) {
 }
 
 func TestDoWithRetry_NetworkErrorRetried(t *testing.T) {
+	t.Parallel()
+
 	cfg := fastRetryConfig()
 
 	callCount := 0
@@ -182,6 +202,8 @@ func TestDoWithRetry_NetworkErrorRetried(t *testing.T) {
 }
 
 func TestDoWithRetry_ExponentialBackoff(t *testing.T) {
+	t.Parallel()
+
 	// Use a measurable base delay to verify exponential increase.
 	cfg := retryConfig{maxRetries: 3, baseDelay: 10 * time.Millisecond}
 

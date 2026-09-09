@@ -11,12 +11,16 @@ import (
 
 // TestNewAuthContextWrapper verifies that authContextWrapper is properly created.
 func TestNewAuthContextWrapper(t *testing.T) {
+	t.Parallel()
+
 	t.Run("nil authContext returns nil wrapper", func(t *testing.T) {
+		t.Parallel()
 		wrapper := newAuthContextWrapper(nil)
 		assert.Nil(t, wrapper, "Should return nil for nil authContext")
 	})
 
 	t.Run("valid authContext creates wrapper with stackInfo", func(t *testing.T) {
+		t.Parallel()
 		authContext := &schema.AuthContext{
 			AWS: &schema.AWSAuthContext{
 				Profile: "test-profile",
@@ -34,6 +38,8 @@ func TestNewAuthContextWrapper(t *testing.T) {
 
 // TestAuthContextWrapperGetStackInfo verifies GetStackInfo returns the correct stackInfo.
 func TestAuthContextWrapperGetStackInfo(t *testing.T) {
+	t.Parallel()
+
 	authContext := &schema.AuthContext{
 		AWS: &schema.AWSAuthContext{
 			Profile:         "test-identity",
@@ -56,6 +62,8 @@ func TestAuthContextWrapperGetStackInfo(t *testing.T) {
 // TestAuthContextWrapperResolvePrincipalSetting verifies ResolvePrincipalSetting returns nil, false.
 // The wrapper doesn't have access to identity/provider configuration, only auth context.
 func TestAuthContextWrapperResolvePrincipalSetting(t *testing.T) {
+	t.Parallel()
+
 	authContext := &schema.AuthContext{
 		AWS: &schema.AWSAuthContext{
 			Profile: "test-identity",
@@ -80,6 +88,8 @@ func TestAuthContextWrapperResolvePrincipalSetting(t *testing.T) {
 // The wrapper only propagates auth context for nested component resolution and
 // must never be used as a real credential store.
 func TestAuthContextWrapperCredentialStoreType(t *testing.T) {
+	t.Parallel()
+
 	wrapper := newAuthContextWrapper(&schema.AuthContext{})
 	require.NotNil(t, wrapper)
 
@@ -91,6 +101,8 @@ func TestAuthContextWrapperCredentialStoreType(t *testing.T) {
 // TestAuthContextWrapperResolveProviderConfig verifies ResolveProviderConfig returns nil, false.
 // The wrapper doesn't have access to provider configuration.
 func TestAuthContextWrapperResolveProviderConfig(t *testing.T) {
+	t.Parallel()
+
 	authContext := &schema.AuthContext{
 		AWS: &schema.AWSAuthContext{
 			Profile: "test-identity",

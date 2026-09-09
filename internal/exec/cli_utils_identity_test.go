@@ -12,6 +12,8 @@ import (
 // TestProcessArgsAndFlags_IdentityFlag tests the identity flag parsing logic in processArgsAndFlags.
 // This is a unit test for the fix that handles `--identity` without a value.
 func TestProcessArgsAndFlags_IdentityFlag(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		args             []string
@@ -107,6 +109,7 @@ func TestProcessArgsAndFlags_IdentityFlag(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Call processArgsAndFlags directly
 			info, err := processArgsAndFlags("terraform", tc.args)
 
@@ -130,6 +133,8 @@ func TestProcessArgsAndFlags_IdentityFlag(t *testing.T) {
 // identity value. This guards against regressions in valueTakingCommonFlags and the
 // optional-value branch in processArgsAndFlags.
 func TestProcessArgsAndFlags_IdentityFlagShortStripping(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		args             []string
@@ -152,6 +157,7 @@ func TestProcessArgsAndFlags_IdentityFlagShortStripping(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			info, err := processArgsAndFlags("terraform", tc.args)
 			require.NoError(t, err)
 			assert.Equal(t, tc.expectedIdentity, info.Identity)
@@ -162,6 +168,8 @@ func TestProcessArgsAndFlags_IdentityFlagShortStripping(t *testing.T) {
 
 // TestProcessArgsAndFlags_IdentityFlagHelmfile tests identity flag parsing for helmfile commands.
 func TestProcessArgsAndFlags_IdentityFlagHelmfile(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		args             []string
@@ -190,6 +198,7 @@ func TestProcessArgsAndFlags_IdentityFlagHelmfile(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			info, err := processArgsAndFlags("helmfile", tc.args)
 			require.NoError(t, err, tc.description)
 			assert.Equal(t, tc.expectedIdentity, info.Identity, tc.description)
@@ -199,6 +208,8 @@ func TestProcessArgsAndFlags_IdentityFlagHelmfile(t *testing.T) {
 
 // TestProcessArgsAndFlags_IdentityFlagPacker tests identity flag parsing for packer commands.
 func TestProcessArgsAndFlags_IdentityFlagPacker(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		args             []string
@@ -227,6 +238,7 @@ func TestProcessArgsAndFlags_IdentityFlagPacker(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			info, err := processArgsAndFlags("packer", tc.args)
 			require.NoError(t, err, tc.description)
 			assert.Equal(t, tc.expectedIdentity, info.Identity, tc.description)
