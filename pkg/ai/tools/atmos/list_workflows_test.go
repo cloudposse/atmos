@@ -13,6 +13,8 @@ import (
 )
 
 func TestListWorkflowsTool_Interface(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := setupWorkflowsTestEnv(t)
 	tool := NewListWorkflowsTool(atmosConfig)
 
@@ -28,6 +30,8 @@ func TestListWorkflowsTool_Interface(t *testing.T) {
 }
 
 func TestListWorkflowsTool_Execute_ListsAll(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := setupWorkflowsTestEnv(t)
 	tool := NewListWorkflowsTool(atmosConfig)
 
@@ -57,6 +61,8 @@ func TestListWorkflowsTool_Execute_ListsAll(t *testing.T) {
 }
 
 func TestListWorkflowsTool_Execute_EmptyWorkflowsDir(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	workflowsDir := filepath.Join(tmpDir, "workflows")
 	require.NoError(t, os.MkdirAll(workflowsDir, 0o755))
@@ -81,6 +87,8 @@ func TestListWorkflowsTool_Execute_EmptyWorkflowsDir(t *testing.T) {
 }
 
 func TestListWorkflowsTool_Execute_FileFilter(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := setupWorkflowsTestEnv(t)
 	tool := NewListWorkflowsTool(atmosConfig)
 

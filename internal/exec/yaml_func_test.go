@@ -13,6 +13,8 @@ import (
 
 // TestYamlFunctionsInLists tests that YAML functions work correctly when used in lists.
 func TestYamlFunctionsInLists(t *testing.T) {
+	t.Parallel()
+
 	// Test case 1: Simple list with terraform.output functions
 	yamlContent1 := `
 test_list:
@@ -80,6 +82,7 @@ import:
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			t.Logf("Testing: %s", tc.description)
 
 			// First, let's see what the raw YAML parsing gives us
@@ -113,6 +116,8 @@ import:
 // TestYamlFunctionsInListsNoConcatenation verifies the fix for the issue where YAML functions
 // in lists were being concatenated, causing "invalid number of arguments" errors.
 func TestYamlFunctionsInListsNoConcatenation(t *testing.T) {
+	t.Parallel()
+
 	// This test specifically addresses the reported issue
 	yamlContent := `
 components:
