@@ -20,6 +20,8 @@ type stsPayload struct {
 // TestDecodeEnvelope_UnwrapsData verifies the canonical envelope is unwrapped so the
 // typed payload is read from `data`, not the top level.
 func TestDecodeEnvelope_UnwrapsData(t *testing.T) {
+	t.Parallel()
+
 	const body = `{"success":true,"status":200,"data":{"tokens":[{"owner":"o","token":"t"}]}}`
 
 	env, err := DecodeEnvelope[stsPayload](strings.NewReader(body))
@@ -35,6 +37,8 @@ func TestDecodeEnvelope_UnwrapsData(t *testing.T) {
 // Data. This documents why routing every Pro response through the envelope is mandatory —
 // a flat decode silently drops a data-nested result and surfaces no error.
 func TestDecodeEnvelope_FlatPayloadDropsData(t *testing.T) {
+	t.Parallel()
+
 	const flat = `{"tokens":[{"owner":"o","token":"t"}]}`
 
 	env, err := DecodeEnvelope[stsPayload](strings.NewReader(flat))
@@ -46,6 +50,8 @@ func TestDecodeEnvelope_FlatPayloadDropsData(t *testing.T) {
 // server-side message via EffectiveErrorMessage, tolerating both the current
 // `errorMessage` field and the legacy `error` field.
 func TestDecodeEnvelope_SurfacesError(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		body string
@@ -56,6 +62,7 @@ func TestDecodeEnvelope_SurfacesError(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			env, err := DecodeEnvelope[stsPayload](strings.NewReader(tc.body))
 			require.NoError(t, err)
 			assert.False(t, env.Success)
@@ -67,6 +74,8 @@ func TestDecodeEnvelope_SurfacesError(t *testing.T) {
 // TestDecodeEnvelope_GenericOverPayloadType verifies the decoder is payload-agnostic by
 // instantiating it with a different typed payload.
 func TestDecodeEnvelope_GenericOverPayloadType(t *testing.T) {
+	t.Parallel()
+
 	type tokenData struct {
 		Token string `json:"token"`
 	}
@@ -79,6 +88,8 @@ func TestDecodeEnvelope_GenericOverPayloadType(t *testing.T) {
 
 // TestDecodeEnvelope_InvalidJSON verifies a malformed body is returned as an error.
 func TestDecodeEnvelope_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
 	_, err := DecodeEnvelope[stsPayload](strings.NewReader("not-json"))
 	require.Error(t, err)
 }

@@ -7,6 +7,8 @@ import (
 var componentName = "test-component"
 
 func TestIsComponentEnabled(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		componentAttrs map[string]any
@@ -54,6 +56,7 @@ func TestIsComponentEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := isComponentEnabled(tt.componentAttrs, componentName)
 			if got != tt.want {
 				t.Errorf("isComponentEnabled() = %v, want %v", got, tt.want)
@@ -63,6 +66,8 @@ func TestIsComponentEnabled(t *testing.T) {
 }
 
 func TestIsComponentEnabled_CaseSensitivity(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		componentAttrs map[string]any
@@ -94,6 +99,7 @@ func TestIsComponentEnabled_CaseSensitivity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := isComponentEnabled(tt.componentAttrs, componentName)
 			if got != tt.want {
 				t.Errorf("isComponentEnabled() = %v, want %v", got, tt.want)
@@ -103,6 +109,8 @@ func TestIsComponentEnabled_CaseSensitivity(t *testing.T) {
 }
 
 func TestIsComponentLocked(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		componentAttrs map[string]any
@@ -150,6 +158,7 @@ func TestIsComponentLocked(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := isComponentLocked(tt.componentAttrs)
 			if got != tt.want {
 				t.Errorf("isComponentEnabled() = %v, want %v", got, tt.want)

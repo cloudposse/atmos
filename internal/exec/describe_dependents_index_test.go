@@ -10,11 +10,15 @@ import (
 )
 
 func TestBuildDependencyIndex_Empty(t *testing.T) {
+	t.Parallel()
+
 	idx := buildDependencyIndex(map[string]any{})
 	assert.Empty(t, idx, "empty stacks should produce empty index")
 }
 
 func TestBuildDependencyIndex_NoDependencies(t *testing.T) {
+	t.Parallel()
+
 	stacks := map[string]any{
 		"dev-use1": map[string]any{
 			"components": map[string]any{
@@ -31,6 +35,8 @@ func TestBuildDependencyIndex_NoDependencies(t *testing.T) {
 }
 
 func TestBuildDependencyIndex_WithDependencies(t *testing.T) {
+	t.Parallel()
+
 	stacks := map[string]any{
 		"dev-use1": map[string]any{
 			"components": map[string]any{
@@ -84,6 +90,8 @@ func TestBuildDependencyIndex_WithDependencies(t *testing.T) {
 }
 
 func TestBuildDependencyIndex_SkipsAbstractComponents(t *testing.T) {
+	t.Parallel()
+
 	stacks := map[string]any{
 		"dev-use1": map[string]any{
 			"components": map[string]any{
@@ -106,6 +114,8 @@ func TestBuildDependencyIndex_SkipsAbstractComponents(t *testing.T) {
 }
 
 func TestBuildDependencyIndex_SkipsDisabledComponents(t *testing.T) {
+	t.Parallel()
+
 	stacks := map[string]any{
 		"dev-use1": map[string]any{
 			"components": map[string]any{
@@ -128,6 +138,8 @@ func TestBuildDependencyIndex_SkipsDisabledComponents(t *testing.T) {
 }
 
 func TestBuildDependencyIndex_MultipleStacks(t *testing.T) {
+	t.Parallel()
+
 	stacks := map[string]any{
 		"dev-use1": map[string]any{
 			"components": map[string]any{
@@ -166,6 +178,8 @@ func TestBuildDependencyIndex_MultipleStacks(t *testing.T) {
 }
 
 func TestFindComponentSectionInCachedStacks(t *testing.T) {
+	t.Parallel()
+
 	stacks := map[string]any{
 		"dev-use1": map[string]any{
 			"components": map[string]any{
@@ -192,6 +206,8 @@ func TestFindComponentSectionInCachedStacks(t *testing.T) {
 }
 
 func TestFindDependentsFromIndex_NoMatches(t *testing.T) {
+	t.Parallel()
+
 	args := &DescribeDependentsArgs{Component: "vpc", Stack: "dev-use1", DepIndex: dependencyIndex{}}
 	providedVars := &schema.Context{Namespace: "acme", Tenant: "dev"}
 
@@ -200,6 +216,8 @@ func TestFindDependentsFromIndex_NoMatches(t *testing.T) {
 }
 
 func TestFindComponentSectionInCachedStacks_Helmfile(t *testing.T) {
+	t.Parallel()
+
 	stacks := map[string]any{
 		"dev-use1": map[string]any{
 			"components": map[string]any{
@@ -218,6 +236,8 @@ func TestFindComponentSectionInCachedStacks_Helmfile(t *testing.T) {
 }
 
 func TestFindComponentSectionInCachedStacks_InvalidStackSection(t *testing.T) {
+	t.Parallel()
+
 	// Stack section is not a map.
 	stacks := map[string]any{"bad": "not-a-map"}
 	assert.Nil(t, findComponentSectionInCachedStacks(stacks, "bad", "vpc"))
@@ -228,6 +248,8 @@ func TestFindComponentSectionInCachedStacks_InvalidStackSection(t *testing.T) {
 }
 
 func TestFindDependentsByScan_SkipsAbstractAndSelf(t *testing.T) {
+	t.Parallel()
+
 	stacks := map[string]any{
 		"dev-use1": map[string]any{
 			"components": map[string]any{
@@ -299,6 +321,8 @@ func TestFindDependentsByScan_SkipsAbstractAndSelf(t *testing.T) {
 }
 
 func TestFindDependentsFromIndex_SkipsSelfReference(t *testing.T) {
+	t.Parallel()
+
 	idx := dependencyIndex{
 		"vpc": {
 			{

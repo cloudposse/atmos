@@ -11,6 +11,8 @@ import (
 // TestGenerateNewPlanFileArgs verifies that -var flags are preserved when generating a new plan file.
 // This test doesn't actually run terraform, it just verifies the argument construction.
 func TestGenerateNewPlanFileArgs(t *testing.T) {
+	t.Parallel()
+
 	// Create a test info object simulating the plan-diff command with -var flag
 	info := &schema.ConfigAndStacksInfo{
 		SubCommand: "plan-diff",

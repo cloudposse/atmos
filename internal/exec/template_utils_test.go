@@ -15,6 +15,8 @@ import (
 
 // TestWriteMergedDataToFile tests that merged data is written to a file and returns a valid file URL.
 func TestWriteMergedDataToFile(t *testing.T) {
+	t.Parallel()
+
 	tempDir, err := createTempDirectory()
 	if err != nil {
 		t.Fatalf("createTempDirectory error: %v", err)
@@ -78,6 +80,8 @@ func TestWriteMergedDataToFile(t *testing.T) {
 
 // TestWriteOuterTopLevelFile tests that the top-level JSON file is written and its URL is valid.
 func TestWriteOuterTopLevelFile(t *testing.T) {
+	t.Parallel()
+
 	tempDir, err := createTempDirectory()
 	if err != nil {
 		t.Fatalf("createTempDirectory error: %v", err)
@@ -136,6 +140,8 @@ func TestWriteOuterTopLevelFile(t *testing.T) {
 
 // TestProcessTmplWithDatasourcesGomplate tests that a static template is rendered correctly.
 func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
+	t.Parallel()
+
 	// Test case 1: Static content with no interpolation
 	mergedData := map[string]interface{}{
 		// No variables to interpolate.
