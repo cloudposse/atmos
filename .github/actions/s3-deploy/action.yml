@@ -1,0 +1,26 @@
+name: S3 Deploy
+description: >
+  Sync a local directory to an S3 website origin, then force
+  `Content-Type: ...; charset=utf-8` on text-format objects (see deploy.sh
+  for why this second pass is needed). Shared by the prod and PR-preview
+  website deploy workflows so the sync/exclude/charset logic lives in one
+  place instead of two copies.
+
+inputs:
+  local-dir:
+    description: 'Local directory to sync (e.g. website/build)'
+    required: true
+  s3-uri:
+    description: 'Destination S3 URI, with or without a trailing slash (e.g. s3://my-bucket/pr-123/)'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Sync to S3 and restamp charset
+      shell: bash
+      env:
+        DEPLOY_SCRIPT: ${{ github.action_path }}/deploy.sh
+        LOCAL_DIR: ${{ inputs.local-dir }}
+        S3_URI: ${{ inputs.s3-uri }}
+      run: '"$DEPLOY_SCRIPT" "$LOCAL_DIR" "$S3_URI"'
