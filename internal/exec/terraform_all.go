@@ -129,6 +129,27 @@ func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration,
 	}
 
 	if !terraformClosureRequested(info) {
+		bounded := info.Stack != "" || len(components) > 0 || len(info.Tags) > 0 || len(info.Labels) > 0
+		needsEvaluation := info.ProcessTemplates || info.ProcessFunctions
+		if bounded && needsEvaluation && !GetEagerEvaluationSetting(atmosConfig) {
+			leftDelim, rightDelim := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+			result, err := listdeps.ResolveScopedClosure(describe, &listdeps.ScopeRequest{
+				Components:       components,
+				Stack:            info.Stack,
+				Tags:             info.Tags,
+				Labels:           info.Labels,
+				Direction:        listdeps.DirectionForward,
+				Depths:           listdeps.Depths{Dependencies: 0},
+				ProcessTemplates: info.ProcessTemplates,
+				ProcessFunctions: info.ProcessFunctions,
+				LeftDelim:        leftDelim,
+				RightDelim:       rightDelim,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return result.Stacks, nil
+		}
 		return describe("", nil, info.ProcessTemplates, info.ProcessFunctions)
 	}
 

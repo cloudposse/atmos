@@ -80,6 +80,28 @@ func TestDescribeTerraformStacksForExecution_ClosureRequested(t *testing.T) {
 			"eks/istio/test-app",
 		}, prodComponents)
 	})
+
+	t.Run("bounded selection without closure flags still resolves direct dependencies", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentType:    "terraform",
+			SubCommand:       "plan",
+			Stack:            "prod",
+			ProcessTemplates: true,
+		}
+		atmosConfig, err := cfg.InitCliConfig(*info, true)
+		require.NoError(t, err)
+
+		stacks, err := describeTerraformStacksForExecution(&atmosConfig, info, nil, []string{"eks/istio/test-app"})
+		require.NoError(t, err)
+		require.Len(t, stacks, 1)
+		require.ElementsMatch(t, []string{
+			"vpc",
+			"eks/cluster",
+			"eks/istio/base",
+			"eks/istio/istiod",
+			"eks/istio/test-app",
+		}, terraformComponentNames(t, stacks, "prod"))
+	})
 }
 
 // TestDescribeTerraformStacksForExecution_ClosureErrorPropagates proves
