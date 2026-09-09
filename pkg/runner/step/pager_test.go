@@ -16,6 +16,8 @@ import (
 // This file tests helper methods.
 
 func TestPagerHandler_ShouldRenderMarkdown(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("pager")
 	require.True(t, ok)
 	pagerHandler := handler.(*PagerHandler)
@@ -84,6 +86,7 @@ func TestPagerHandler_ShouldRenderMarkdown(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := pagerHandler.shouldRenderMarkdown(tt.step, tt.path)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -91,6 +94,8 @@ func TestPagerHandler_ShouldRenderMarkdown(t *testing.T) {
 }
 
 func TestPagerHandler_ResolveTitle(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("pager")
 	require.True(t, ok)
 	pagerHandler := handler.(*PagerHandler)
@@ -159,6 +164,7 @@ func TestPagerHandler_ResolveTitle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := pagerHandler.resolveTitle(tt.step, tt.vars, tt.resolvedPath)
 			if tt.expectError {
 				assert.Error(t, err)
@@ -171,11 +177,14 @@ func TestPagerHandler_ResolveTitle(t *testing.T) {
 }
 
 func TestPagerHandler_ReadFile(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("pager")
 	require.True(t, ok)
 	pagerHandler := handler.(*PagerHandler)
 
 	t.Run("read existing file", func(t *testing.T) {
+		t.Parallel()
 		// Create a temp file.
 		tmpDir := t.TempDir()
 		tmpFile := filepath.Join(tmpDir, "test.txt")
@@ -189,6 +198,7 @@ func TestPagerHandler_ReadFile(t *testing.T) {
 	})
 
 	t.Run("read non-existent file", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{Name: "test", Path: "/nonexistent/path/file.txt"}
 		_, err := pagerHandler.readFile("/nonexistent/path/file.txt", step)
 		assert.Error(t, err)
@@ -196,11 +206,14 @@ func TestPagerHandler_ReadFile(t *testing.T) {
 }
 
 func TestPagerHandler_LoadContent(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("pager")
 	require.True(t, ok)
 	pagerHandler := handler.(*PagerHandler)
 
 	t.Run("load inline content", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Content: "Inline content here",
@@ -215,6 +228,7 @@ func TestPagerHandler_LoadContent(t *testing.T) {
 	})
 
 	t.Run("load content with template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Content: "Hello {{ .steps.name.value }}",
@@ -230,6 +244,7 @@ func TestPagerHandler_LoadContent(t *testing.T) {
 	})
 
 	t.Run("load content from file", func(t *testing.T) {
+		t.Parallel()
 		// Create a temp file.
 		tmpDir := t.TempDir()
 		tmpFile := filepath.Join(tmpDir, "test.txt")
@@ -250,6 +265,7 @@ func TestPagerHandler_LoadContent(t *testing.T) {
 	})
 
 	t.Run("load content from file with template path", func(t *testing.T) {
+		t.Parallel()
 		// Create a temp file.
 		tmpDir := t.TempDir()
 		tmpFile := filepath.Join(tmpDir, "test.txt")
@@ -271,6 +287,7 @@ func TestPagerHandler_LoadContent(t *testing.T) {
 	})
 
 	t.Run("load content with invalid path template", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Path: "{{ .steps.invalid.value",
@@ -283,6 +300,7 @@ func TestPagerHandler_LoadContent(t *testing.T) {
 	})
 
 	t.Run("load content from non-existent file", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Path: "/nonexistent/path/file.txt",
@@ -296,11 +314,14 @@ func TestPagerHandler_LoadContent(t *testing.T) {
 }
 
 func TestPagerHandler_RenderMarkdown(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("pager")
 	require.True(t, ok)
 	pagerHandler := handler.(*PagerHandler)
 
 	t.Run("render simple markdown", func(t *testing.T) {
+		t.Parallel()
 		content := "# Hello\n\nThis is **bold** text."
 		rendered, err := pagerHandler.renderMarkdown(content)
 		require.NoError(t, err)
@@ -310,6 +331,7 @@ func TestPagerHandler_RenderMarkdown(t *testing.T) {
 	})
 
 	t.Run("render empty content", func(t *testing.T) {
+		t.Parallel()
 		rendered, err := pagerHandler.renderMarkdown("")
 		require.NoError(t, err)
 		// Empty content should return empty-ish result.
@@ -317,6 +339,7 @@ func TestPagerHandler_RenderMarkdown(t *testing.T) {
 	})
 
 	t.Run("render markdown list", func(t *testing.T) {
+		t.Parallel()
 		content := "- Item 1\n- Item 2\n- Item 3"
 		rendered, err := pagerHandler.renderMarkdown(content)
 		require.NoError(t, err)
@@ -331,11 +354,14 @@ func TestPagerHandler_RenderMarkdown(t *testing.T) {
 // TestPagerHandler_ExecuteErrors verifies that Execute surfaces errors that occur
 // before the interactive pager is launched, so it never blocks in a non-TTY run.
 func TestPagerHandler_ExecuteErrors(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("pager")
 	require.True(t, ok)
 	ctx := context.Background()
 
 	t.Run("invalid content template returns error", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name:    "test",
 			Type:    "pager",
@@ -347,6 +373,7 @@ func TestPagerHandler_ExecuteErrors(t *testing.T) {
 	})
 
 	t.Run("invalid path template returns error", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Type: "pager",
@@ -358,6 +385,7 @@ func TestPagerHandler_ExecuteErrors(t *testing.T) {
 	})
 
 	t.Run("missing file returns error", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Type: "pager",

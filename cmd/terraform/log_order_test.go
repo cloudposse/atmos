@@ -12,6 +12,8 @@ import (
 )
 
 func TestLogOrderFlagRegistered(t *testing.T) {
+	t.Parallel()
+
 	cases := map[string]*cobra.Command{
 		"apply":   applyCmd,
 		"deploy":  deployCmd,
@@ -20,6 +22,7 @@ func TestLogOrderFlagRegistered(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			f := c.Flags().Lookup("log-order")
 			require.NotNil(t, f, "--log-order must be registered on %s", name)
 			assert.Equal(t, "stream", f.DefValue, "default should be stream")
@@ -28,6 +31,8 @@ func TestLogOrderFlagRegistered(t *testing.T) {
 }
 
 func TestDeployConcurrencyFlagsRegistered(t *testing.T) {
+	t.Parallel()
+
 	for _, name := range []string{"max-concurrency", "failure-mode", "log-order"} {
 		assert.NotNil(t, deployCmd.Flags().Lookup(name), "deploy must register --%s", name)
 	}
@@ -36,6 +41,8 @@ func TestDeployConcurrencyFlagsRegistered(t *testing.T) {
 }
 
 func TestDeployOptionsFlowToInfo(t *testing.T) {
+	t.Parallel()
+
 	v := viper.New()
 	v.Set("log-order", "grouped")
 	v.Set("max-concurrency", 4)
