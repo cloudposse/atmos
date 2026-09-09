@@ -11,6 +11,8 @@ import (
 )
 
 func TestStartManagedTerraformCache_ExternalCacheIsNoop(t *testing.T) {
+	t.Parallel()
+
 	// An externally managed cache (e.g. the mirror's shared proxy) is reused, so the
 	// per-component startup is a no-op.
 	setup, cleanup, err := startManagedTerraformCache(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{
@@ -23,6 +25,8 @@ func TestStartManagedTerraformCache_ExternalCacheIsNoop(t *testing.T) {
 }
 
 func TestStartManagedTerraformCache_DisabledIsNoop(t *testing.T) {
+	t.Parallel()
+
 	// With no cache configured, tfcache.Start returns nil and the helper does nothing.
 	info := &schema.ConfigAndStacksInfo{}
 	setup, cleanup, err := startManagedTerraformCache(&schema.AtmosConfiguration{}, info)
@@ -34,6 +38,8 @@ func TestStartManagedTerraformCache_DisabledIsNoop(t *testing.T) {
 }
 
 func TestStartManagedTerraformCache_EnabledStartsProxy(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Components.Terraform.Cache = &schema.TerraformCacheConfig{
 		Enabled:  true,

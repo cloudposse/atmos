@@ -48,6 +48,8 @@ func fastRetry(t *testing.T, maxAttempts int, conditions ...string) *schema.Retr
 }
 
 func TestHTTPHandler_Validate(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("http")
 	require.True(t, ok)
 
@@ -94,6 +96,7 @@ func TestHTTPHandler_Validate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := handler.Validate(tt.step)
 			if tt.wantErr == nil {
 				require.NoError(t, err)
@@ -107,6 +110,8 @@ func TestHTTPHandler_Validate(t *testing.T) {
 
 // TestHTTPHandler_GetWithQuery runs an end-to-end GET against a real local server.
 func TestHTTPHandler_GetWithQuery(t *testing.T) {
+	t.Parallel()
+
 	var gotMethod, gotQuery, gotHeader string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
@@ -140,6 +145,8 @@ func TestHTTPHandler_GetWithQuery(t *testing.T) {
 
 // TestHTTPHandler_PostRawBody verifies raw body POST end-to-end.
 func TestHTTPHandler_PostRawBody(t *testing.T) {
+	t.Parallel()
+
 	var gotBody, gotCT string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
@@ -171,6 +178,8 @@ func TestHTTPHandler_PostRawBody(t *testing.T) {
 
 // TestHTTPHandler_PostFormURLEncoded verifies form params default to urlencoded.
 func TestHTTPHandler_PostFormURLEncoded(t *testing.T) {
+	t.Parallel()
+
 	var gotCT, gotStatus, gotEnv string
 	var parseErr error
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -207,6 +216,8 @@ func TestHTTPHandler_PostFormURLEncoded(t *testing.T) {
 
 // TestHTTPHandler_PostFormJSON verifies form params are JSON-encoded when Content-Type is JSON.
 func TestHTTPHandler_PostFormJSON(t *testing.T) {
+	t.Parallel()
+
 	var gotBody, gotCT string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
@@ -235,6 +246,8 @@ func TestHTTPHandler_PostFormJSON(t *testing.T) {
 
 // TestHTTPHandler_ExpectStatusOverride confirms a non-2xx success code is accepted.
 func TestHTTPHandler_ExpectStatusOverride(t *testing.T) {
+	t.Parallel()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted) // 202.
 	}))
@@ -256,6 +269,8 @@ func TestHTTPHandler_ExpectStatusOverride(t *testing.T) {
 
 // TestHTTPHandler_ExpectResponseRegex covers both matching and non-matching bodies.
 func TestHTTPHandler_ExpectResponseRegex(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		body    string
@@ -267,6 +282,7 @@ func TestHTTPHandler_ExpectResponseRegex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				_, _ = io.WriteString(w, tt.body)
 			}))
@@ -294,6 +310,8 @@ func TestHTTPHandler_ExpectResponseRegex(t *testing.T) {
 
 // TestHTTPHandler_RetryOn5xx verifies the step retries server errors and then succeeds.
 func TestHTTPHandler_RetryOn5xx(t *testing.T) {
+	t.Parallel()
+
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -323,6 +341,8 @@ func TestHTTPHandler_RetryOn5xx(t *testing.T) {
 
 // TestHTTPHandler_RetryOn429 verifies 429 Too Many Requests is retried.
 func TestHTTPHandler_RetryOn429(t *testing.T) {
+	t.Parallel()
+
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -350,6 +370,8 @@ func TestHTTPHandler_RetryOn429(t *testing.T) {
 
 // TestHTTPHandler_NoRetryOn4xx is the negative path: 404 must fail fast, not retry.
 func TestHTTPHandler_NoRetryOn4xx(t *testing.T) {
+	t.Parallel()
+
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -375,6 +397,8 @@ func TestHTTPHandler_NoRetryOn4xx(t *testing.T) {
 // TestHTTPHandler_RetryConditions verifies retry.conditions can force retry of an
 // otherwise non-retryable status (e.g. 400).
 func TestHTTPHandler_RetryConditions(t *testing.T) {
+	t.Parallel()
+
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -402,6 +426,8 @@ func TestHTTPHandler_RetryConditions(t *testing.T) {
 
 // TestHTTPHandler_TemplateResolution verifies url/headers/body resolve from env vars.
 func TestHTTPHandler_TemplateResolution(t *testing.T) {
+	t.Parallel()
+
 	var gotPath, gotAuth, gotBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
@@ -437,6 +463,8 @@ func TestHTTPHandler_TemplateResolution(t *testing.T) {
 
 // TestHTTPHandler_TransportError verifies an unreachable endpoint fails (no panic).
 func TestHTTPHandler_TransportError(t *testing.T) {
+	t.Parallel()
+
 	// Bind an ephemeral port, then close it so the address deterministically refuses
 	// connections (relying on a fixed low port like :1 is not portable across runners).
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -461,6 +489,8 @@ func TestHTTPHandler_TransportError(t *testing.T) {
 // TestHTTPHandler_WebhookAlias verifies the "webhook" alias resolves to the http
 // handler and that a step declared with type: webhook validates and executes.
 func TestHTTPHandler_WebhookAlias(t *testing.T) {
+	t.Parallel()
+
 	aliased, ok := Get("webhook")
 	require.True(t, ok, "webhook alias must resolve")
 	canonical := mustGetHTTPHandler(t)
@@ -484,6 +514,8 @@ func TestHTTPHandler_WebhookAlias(t *testing.T) {
 }
 
 func TestHTTPHandler_SanitizeHTTPDestination(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		raw  string
@@ -508,6 +540,7 @@ func TestHTTPHandler_SanitizeHTTPDestination(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.want, sanitizeHTTPDestination(tt.raw))
 		})
 	}
@@ -521,6 +554,8 @@ const badTemplate = "{{ range .steps }}{{ . }}"
 // buildHTTPRequest: bad URL templates, relative URLs, and bad header/query/body/form
 // templates. None of these reach the network, so no test server is needed.
 func TestHTTPHandler_BuildRequestErrors(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		step    *schema.WorkflowStep
@@ -573,6 +608,7 @@ func TestHTTPHandler_BuildRequestErrors(t *testing.T) {
 	handler := mustGetHTTPHandler(t)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			_, err := handler.Execute(context.Background(), tt.step, NewVariables())
 			require.Error(t, err)
 			assert.ErrorIs(t, err, tt.wantErr)
@@ -583,6 +619,8 @@ func TestHTTPHandler_BuildRequestErrors(t *testing.T) {
 // TestHTTPHandler_CustomTimeout verifies a valid per-attempt timeout is honored
 // end-to-end (the success path through resolveHTTPTimeout with a non-empty value).
 func TestHTTPHandler_CustomTimeout(t *testing.T) {
+	t.Parallel()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "ok")
 	}))
@@ -601,6 +639,8 @@ func TestHTTPHandler_CustomTimeout(t *testing.T) {
 
 // TestHTTPHandler_TimeoutErrors covers the error paths in resolveHTTPTimeout.
 func TestHTTPHandler_TimeoutErrors(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		timeout string
@@ -613,6 +653,7 @@ func TestHTTPHandler_TimeoutErrors(t *testing.T) {
 	handler := mustGetHTTPHandler(t)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			step := &schema.WorkflowStep{
 				Name: "wh", Type: "http", URL: "https://example.com", Timeout: tt.timeout,
 			}
@@ -626,6 +667,8 @@ func TestHTTPHandler_TimeoutErrors(t *testing.T) {
 // TestHTTPHandler_ExpectStatusMismatch verifies an out-of-list status fails fast
 // with ErrHTTPStepUnexpectedStatus (no retry configured).
 func TestHTTPHandler_ExpectStatusMismatch(t *testing.T) {
+	t.Parallel()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -646,6 +689,8 @@ func TestHTTPHandler_ExpectStatusMismatch(t *testing.T) {
 // TestHTTPHandler_InvalidRetryConditionSkipped verifies an unparseable retry
 // condition is skipped (not panicked on); the 400 then fails fast since nothing matches.
 func TestHTTPHandler_InvalidRetryConditionSkipped(t *testing.T) {
+	t.Parallel()
+
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -668,6 +713,8 @@ func TestHTTPHandler_InvalidRetryConditionSkipped(t *testing.T) {
 
 // TestHTTPHandler_HeadMethod verifies a non-body verb round-trips successfully.
 func TestHTTPHandler_HeadMethod(t *testing.T) {
+	t.Parallel()
+
 	var gotMethod string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
@@ -685,6 +732,8 @@ func TestHTTPHandler_HeadMethod(t *testing.T) {
 }
 
 func TestHTTPError(t *testing.T) {
+	t.Parallel()
+
 	cause := errUtils.ErrHTTPStepRequestFailed
 	transportErr := &httpError{transport: true, cause: cause}
 	assert.Contains(t, transportErr.Error(), "transport error")
@@ -696,12 +745,16 @@ func TestHTTPError(t *testing.T) {
 }
 
 func TestResolveHTTPTimeoutDefault(t *testing.T) {
+	t.Parallel()
+
 	d, err := resolveHTTPTimeout(&schema.WorkflowStep{Name: "wh"}, NewVariables())
 	require.NoError(t, err)
 	assert.Equal(t, httpDefaultTimeout, d)
 }
 
 func TestHTTPExpectCheck(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		expect     *httpExpect
@@ -726,19 +779,24 @@ func TestHTTPExpectCheck(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.want, tt.expect.check(tt.statusCode, tt.body))
 		})
 	}
 }
 
 func TestHTTPHelpers(t *testing.T) {
+	t.Parallel()
+
 	t.Run("findHeader case-insensitive", func(t *testing.T) {
+		t.Parallel()
 		headers := map[string]string{"content-type": "application/json"}
 		assert.Equal(t, "application/json", findHeader(headers, "Content-Type"))
 		assert.Equal(t, "", findHeader(headers, "X-Missing"))
 	})
 
 	t.Run("flattenHeaders joins multi-value", func(t *testing.T) {
+		t.Parallel()
 		h := http.Header{"X-Multi": []string{"a", "b"}, "X-One": []string{"c"}}
 		flat := flattenHeaders(h)
 		assert.Equal(t, "a, b", flat["X-Multi"])
@@ -746,12 +804,14 @@ func TestHTTPHelpers(t *testing.T) {
 	})
 
 	t.Run("stripRegexSlashes", func(t *testing.T) {
+		t.Parallel()
 		assert.Equal(t, "ok", stripRegexSlashes("/ok/"))
 		assert.Equal(t, "ok", stripRegexSlashes("ok"))
 		assert.Equal(t, "/", stripRegexSlashes("/"))
 	})
 
 	t.Run("sortedMethods is stable and complete", func(t *testing.T) {
+		t.Parallel()
 		methods := sortedMethods()
 		assert.Equal(t, len(httpMethods), len(methods))
 		assert.Equal(t, []string{

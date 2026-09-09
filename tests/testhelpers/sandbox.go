@@ -203,8 +203,8 @@ func copyDir(src, dst string) error {
 			continue
 		}
 
-		// Skip terraform artifacts using existing shouldRemoveArtifact function.
-		if shouldRemoveArtifact(info.Name()) {
+		// Skip terraform artifacts.
+		if IsTerraformArtifact(info.Name()) {
 			continue
 		}
 
@@ -274,7 +274,7 @@ func cleanTerraformArtifacts(dst string) error {
 			return filepath.SkipDir
 		}
 
-		if shouldRemoveArtifact(info.Name()) {
+		if IsTerraformArtifact(info.Name()) {
 			os.RemoveAll(path)
 			if info.IsDir() {
 				return filepath.SkipDir
@@ -284,8 +284,15 @@ func cleanTerraformArtifacts(dst string) error {
 	})
 }
 
-// shouldRemoveArtifact checks if a file or directory should be removed.
-func shouldRemoveArtifact(name string) bool {
+// IsTerraformArtifact reports whether a file or directory base name is a
+// Terraform runtime artifact (.terraform, terraform.tfstate.d, state, lock,
+// planfile and generated varfile names) rather than fixture source. Sandbox
+// copies skip and clean these; other tests that copy a checked-in fixture
+// should skip them too: they are gitignored, written by whichever test runs
+// Terraform against the fixture in place, and on Windows a file being written
+// is locked, so copying it from a concurrent test process fails with "another
+// process has locked a portion of the file".
+func IsTerraformArtifact(name string) bool {
 	// Check for terraform artifacts.
 	switch name {
 	case ".terraform", ".terraform.lock.hcl", "terraform.tfstate.d",

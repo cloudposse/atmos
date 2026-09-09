@@ -17,6 +17,8 @@ import (
 )
 
 func TestLoadConfigFile_RetriesDotenvMergeIncludes(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".env"), []byte("DATABASE_URL=postgres://localhost/db\nAWS_REGION=from-dotenv\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, AtmosConfigFileName), []byte(`base_path: ./
@@ -33,6 +35,8 @@ env:
 }
 
 func TestResolveDotenvMergeIncludeKeys(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, AtmosConfigFileName)
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".env"), []byte("DATABASE_URL=postgres://localhost/db\nAWS_REGION=from-dotenv\nSHARED=base\n"), 0o644))
@@ -72,6 +76,8 @@ templates:
 }
 
 func TestResolveDotenvMergeIncludeKeys_NoChangeAndErrors(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, AtmosConfigFileName)
 
@@ -88,6 +94,8 @@ func TestResolveDotenvMergeIncludeKeys_NoChangeAndErrors(t *testing.T) {
 }
 
 func TestResolveDotenvMergeIncludeValueBranches(t *testing.T) {
+	t.Parallel()
+
 	changed, err := resolveDotenvMergeIncludeKeysInNode("atmos.yaml", nil)
 	require.NoError(t, err)
 	assert.False(t, changed)
@@ -110,6 +118,8 @@ func TestResolveDotenvMergeIncludeValueBranches(t *testing.T) {
 }
 
 func TestFindConfigFile(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yml"), []byte("base_path: ./\n"), 0o644))
 	require.NoError(t, os.Mkdir(filepath.Join(tmpDir, "directory.yaml"), 0o755))
@@ -123,6 +133,8 @@ func TestFindConfigFile(t *testing.T) {
 }
 
 func TestDotenvIncludeCaseMaps(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, AtmosConfigFileName)
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".env"), []byte("DATABASE_URL=postgres://localhost/db\nAWS_REGION=from-dotenv\n"), 0o644))
@@ -152,6 +164,8 @@ templates:
 }
 
 func TestDotenvIncludeCaseMapsSkipsInvalidInputs(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, AtmosConfigFileName)
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".env.invalid"), []byte("INVALID LINE WITH SPACES\n"), 0o644))
@@ -171,6 +185,8 @@ func TestDotenvIncludeCaseMapsSkipsInvalidInputs(t *testing.T) {
 }
 
 func TestDotenvIncludeHelpers(t *testing.T) {
+	t.Parallel()
+
 	assert.True(t, canRetryWithResolvedDotenvMergeIncludes(errors.New("yaml: map merge requires map or sequence of maps")))
 	assert.False(t, canRetryWithResolvedDotenvMergeIncludes(nil))
 	assert.False(t, canRetryWithResolvedDotenvMergeIncludes(errors.New("different error")))
@@ -189,6 +205,7 @@ func TestDotenvIncludeHelpers(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.includeValue, func(t *testing.T) {
+			t.Parallel()
 			includeFile, ok := parseDotenvIncludeFile(tt.includeValue)
 			assert.Equal(t, tt.expectedOK, ok)
 			assert.Equal(t, tt.expectedFile, includeFile)
@@ -197,6 +214,8 @@ func TestDotenvIncludeHelpers(t *testing.T) {
 }
 
 func TestFindYAMLPathNode(t *testing.T) {
+	t.Parallel()
+
 	var root yaml.Node
 	require.NoError(t, yaml.Unmarshal([]byte(`env:
   AWS_REGION: us-east-2
@@ -215,6 +234,8 @@ templates:
 }
 
 func TestExtractAndRestoreEnvMapsFromViper(t *testing.T) {
+	t.Parallel()
+
 	v := viper.New()
 	v.SetConfigType(yamlType)
 	require.NoError(t, v.ReadConfig(strings.NewReader(`env:

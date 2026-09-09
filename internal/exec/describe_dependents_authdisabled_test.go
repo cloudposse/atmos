@@ -19,6 +19,8 @@ import (
 // `authDisabled=false` — re-introducing the per-component auth attempt the user tried
 // to disable. CodeRabbit flagged this gap on PR #2471.
 func TestDescribeDependentsExec_Execute_ForwardsAuthDisabled(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name              string
 		propsAuthDisabled bool
@@ -29,6 +31,7 @@ func TestDescribeDependentsExec_Execute_ForwardsAuthDisabled(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 

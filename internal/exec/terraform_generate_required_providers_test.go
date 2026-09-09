@@ -32,7 +32,10 @@ func newTestRequiredProvidersCmd() *cobra.Command {
 }
 
 func TestParseRequiredProvidersFlags(t *testing.T) {
+	t.Parallel()
+
 	t.Run("all defaults", func(t *testing.T) {
+		t.Parallel()
 		cmd := newTestRequiredProvidersCmd()
 
 		f, err := parseRequiredProvidersFlags(cmd)
@@ -45,6 +48,7 @@ func TestParseRequiredProvidersFlags(t *testing.T) {
 	})
 
 	t.Run("all flags set propagate through", func(t *testing.T) {
+		t.Parallel()
 		cmd := newTestRequiredProvidersCmd()
 		cmd.SetArgs([]string{
 			"--stack", "dev-us-east-1",
@@ -75,6 +79,7 @@ func TestParseRequiredProvidersFlags(t *testing.T) {
 	})
 
 	t.Run("missing 'file' flag returns empty (file is optional)", func(t *testing.T) {
+		t.Parallel()
 		// Build a cmd that doesn't even register `file`. The helper deliberately
 		// ignores the lookup error on `file` because the flag is optional —
 		// asserting it survives a missing registration is the regression guard.
@@ -90,6 +95,7 @@ func TestParseRequiredProvidersFlags(t *testing.T) {
 	})
 
 	t.Run("missing required flag (stack) surfaces error", func(t *testing.T) {
+		t.Parallel()
 		// Drop `stack` entirely so flags.GetString("stack") returns an error.
 		cmd := &cobra.Command{Use: "required-providers"}
 		cmd.Flags().StringP("file", "f", "", "")
@@ -103,6 +109,8 @@ func TestParseRequiredProvidersFlags(t *testing.T) {
 }
 
 func TestConfigureCustomFilePath(t *testing.T) {
+	t.Parallel()
+
 	// genCtx baseline — the helper only mutates CustomFilename / WorkingDir,
 	// so anything else is irrelevant for these table-driven cases.
 	//
@@ -154,6 +162,7 @@ func TestConfigureCustomFilePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx := makeCtx()
 			configureCustomFilePath(ctx, tt.fileFromArg)
 
@@ -171,10 +180,13 @@ func TestConfigureCustomFilePath(t *testing.T) {
 }
 
 func TestGenerateRequiredProvidersFile_EarlyReturns(t *testing.T) {
+	t.Parallel()
+
 	// Each sub-test exercises a path that returns nil WITHOUT invoking the
 	// underlying generator.Generate (which would need a real component on disk).
 	// Together they cover the "nothing to generate" guard and the DryRun guard.
 	t.Run("no required_version and no required_providers is a no-op", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		info := &schema.ConfigAndStacksInfo{
 			ComponentFromArg:  "vpc",
@@ -188,6 +200,7 @@ func TestGenerateRequiredProvidersFile_EarlyReturns(t *testing.T) {
 	})
 
 	t.Run("DryRun skips the generator", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		info := &schema.ConfigAndStacksInfo{
 			ComponentFromArg: "vpc",
@@ -204,6 +217,7 @@ func TestGenerateRequiredProvidersFile_EarlyReturns(t *testing.T) {
 	})
 
 	t.Run("DryRun honors custom file path without writing", func(t *testing.T) {
+		t.Parallel()
 		// Belt-and-suspenders: even when fileFromArg includes a custom path,
 		// DryRun must still return cleanly with no side effects.
 		atmosConfig := &schema.AtmosConfiguration{}
@@ -220,6 +234,8 @@ func TestGenerateRequiredProvidersFile_EarlyReturns(t *testing.T) {
 }
 
 func TestExecuteTerraformGenerateRequiredProvidersCmd_ArgValidation(t *testing.T) {
+	t.Parallel()
+
 	// The command is gated by cobra.ExactArgs(1) when invoked through the
 	// real command tree, but the helper itself defends against the no-args
 	// case directly. This test pins that defensive check.
@@ -235,6 +251,7 @@ func TestExecuteTerraformGenerateRequiredProvidersCmd_ArgValidation(t *testing.T
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ExecuteTerraformGenerateRequiredProvidersCmd(cmd, tt.args)
 			require.Error(t, err)
 			assert.True(t, errors.Is(err, errUtils.ErrInvalidComponentArgument),
