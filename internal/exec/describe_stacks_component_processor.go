@@ -107,6 +107,13 @@ type describeStacksProcessor struct {
 	// nil and reported here instead of aborting the whole describe-stacks call. See
 	// ProcessCustomYamlTagsLenient and ExecuteDescribeStacksWithOptions.
 	onWarning func(DegradationWarning)
+	// degradeAuthErrors mirrors onWarning's lenient/strict split specifically for
+	// resolveComponentAuthManager's own construction failures. withDegradation defaults this
+	// to true (matching the original, single-flag list/describe --error-mode=warn behavior);
+	// withStrictAuth flips it back to false for callers (the Terraform --all/--query preflight)
+	// that want YAML-function values to degrade but a component's own unresolvable identity to
+	// stay fatal.
+	degradeAuthErrors bool
 	// deferredContexts holds every component's deferred-merge contexts, recovered from the
 	// FindStacksMap cache in ExecuteDescribeStacks. processComponentEntry looks up each
 	// component's entry to run Stage 3 (resolveDeferredYamlFunctions) after Stage 2 — this
@@ -118,10 +125,23 @@ type describeStacksProcessor struct {
 // withDegradation switches the processor to lenient YAML-function processing: recoverable
 // per-value errors are substituted with nil and reported via onWarning instead of failing
 // the whole describe-stacks call. Passing a nil onWarning restores the default strict
-// behavior (equivalent to not calling withDegradation at all).
+// behavior (equivalent to not calling withDegradation at all). A non-nil onWarning also
+// defaults degradeAuthErrors to true (the original, single-flag behavior); chain
+// withStrictAuth to opt back out just for component-specific auth-manager failures.
 func (p *describeStacksProcessor) withDegradation(onWarning func(DegradationWarning)) *describeStacksProcessor {
 	p.onWarning = onWarning
+	p.degradeAuthErrors = onWarning != nil
 	return p
+}
+
+// withStrictAuth keeps a component-specific auth-manager construction failure fatal even
+// though withDegradation has enabled lenient YAML-function processing. Used by the
+// Terraform --all/--query preflight (DescribeStacksErrorOptions.StrictAuth): a not-yet-applied
+// dependency's `!terraform.state` value should degrade, but a component whose own identity
+// can't be resolved should still abort before real Terraform commands run with the wrong
+// (or a merely inherited) credential set.
+func (p *describeStacksProcessor) withStrictAuth() {
+	p.degradeAuthErrors = false
 }
 
 // newDescribeStacksProcessor creates a processor with an empty result map.
@@ -230,7 +250,7 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 	}
 	resolved, createErr := resolver(p.atmosConfig, componentSection, componentName, stackName, p.authManager)
 	if createErr != nil {
-		if p.onWarning != nil {
+		if p.onWarning != nil && p.degradeAuthErrors {
 			p.onWarning(DegradationWarning{
 				Stack:     stackName,
 				Component: componentName,

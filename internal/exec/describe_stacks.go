@@ -161,6 +161,15 @@ type DescribeStacksErrorOptions struct {
 	// convenience — it shares the same threading path as OnError/OnWarning. Optional; a nil
 	// OnProgress is a no-op, matching every existing caller's behavior exactly.
 	OnProgress func(stackFile string, index, total int)
+	// StrictAuth, when true, keeps a component-specific auth-manager construction failure
+	// fatal even under OnErrorWarn (see describeStacksProcessor.resolveComponentAuthManager) --
+	// only the recoverable per-value YAML-function errors (e.g. !terraform.state hitting a
+	// not-yet-provisioned backend) degrade. The zero value (false) preserves the original
+	// list/describe --error-mode=warn behavior, where a component whose own declared identity
+	// can't be resolved gracefully falls back to the parent AuthManager instead of aborting --
+	// appropriate for merely listing/describing stacks, but not for a Terraform preflight
+	// about to run real commands with whatever credentials it resolves.
+	StrictAuth bool
 }
 
 // ResolveErrorMode determines the effective --error-mode value using the documented
@@ -252,7 +261,15 @@ func ExecuteDescribeStacks(
 // When non-empty, tagsFilter/labelsFilter let out-of-scope components be skipped
 // before auth/template/YAML-function evaluation (see
 // describeStacksProcessor.scopeDecision) instead of only being filtered after the
-// fact by pkg/scheduler/adapters/terraform.go's post-filter.
+// fact by pkg/scheduler/adapters/terraform.go's post-filter. The errOptions parameter opts
+// a caller into graceful degradation for recoverable per-value YAML function errors (see
+// DescribeStacksErrorOptions) -- used by Terraform's `--all` preflight so that a
+// component whose `!terraform.state`/`!terraform.output` dependency hasn't been
+// applied yet (e.g. a fresh environment) doesn't abort dependency-graph resolution
+// before the scheduler gets a chance to apply that dependency first; other error
+// classes (e.g. a missing `!secret`) are not in the recoverable set and keep failing
+// the preflight exactly as before. The zero value (DescribeStacksErrorOptions{}) is
+// strict, matching every caller's behavior before errOptions was added.
 //
 //nolint:revive // Signature intentionally mirrors ExecuteDescribeStacks with compatibility parameters.
 func ExecuteDescribeStacksWithMocks(
@@ -270,39 +287,9 @@ func ExecuteDescribeStacksWithMocks(
 	useMocks bool,
 	tagsFilter []string,
 	labelsFilter map[string]string,
-) (map[string]any, error) {
-	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithMocks")()
-
-	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false, useMocks, true, tagsFilter, labelsFilter, DescribeStacksErrorOptions{})
-}
-
-// ExecuteDescribeStacksWithMocksAndOptions is ExecuteDescribeStacksWithMocks plus opt-in
-// graceful degradation for recoverable per-value YAML function errors (see
-// DescribeStacksErrorOptions). Used by Terraform's `--all` preflight so that a component
-// whose `!terraform.state`/`!terraform.output` dependency hasn't been applied yet (e.g. a
-// fresh environment) doesn't abort dependency-graph resolution before the scheduler gets a
-// chance to apply that dependency first; other error classes (e.g. a missing `!secret`)
-// are not in the recoverable set and keep failing the preflight exactly as before.
-//
-//nolint:revive // Signature intentionally mirrors ExecuteDescribeStacksWithMocks with one added options parameter.
-func ExecuteDescribeStacksWithMocksAndOptions(
-	atmosConfig *schema.AtmosConfiguration,
-	filterByStack string,
-	components []string,
-	componentTypes []string,
-	sections []string,
-	ignoreMissingFiles bool,
-	processTemplates bool,
-	processYamlFunctions bool,
-	includeEmptyStacks bool,
-	skip []string,
-	authManager auth.AuthManager,
-	useMocks bool,
-	tagsFilter []string,
-	labelsFilter map[string]string,
 	errOptions DescribeStacksErrorOptions,
 ) (map[string]any, error) {
-	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithMocksAndOptions")()
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithMocks")()
 
 	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false, useMocks, true, tagsFilter, labelsFilter, errOptions)
 }
@@ -456,6 +443,9 @@ func executeDescribeStacks(
 	processor.deferredContexts = deferredContexts
 	if errOptions.OnError == OnErrorWarn {
 		processor.withDegradation(errOptions.OnWarning)
+		if errOptions.StrictAuth {
+			processor.withStrictAuth()
+		}
 	}
 
 	totalStackFiles := len(stacksMap)

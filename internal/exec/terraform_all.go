@@ -110,7 +110,7 @@ func terraformClosureRequested(info *schema.ConfigAndStacksInfo) bool {
 // resulting graph, so the evaluation scope and execution set always agree.
 func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager, components []string) (map[string]any, error) {
 	describe := func(stackName string, closureComponents []string, processTemplates, processFunctions bool) (map[string]any, error) {
-		return ExecuteDescribeStacksWithMocksAndOptions(
+		return ExecuteDescribeStacksWithMocks(
 			atmosConfig,
 			stackName,
 			closureComponents, // engine-supplied closure members (nil = all); never the caller's own selection.
@@ -165,7 +165,7 @@ func describeTerraformStacksForExecution(atmosConfig *schema.AtmosConfiguration,
 // describeTerraformStacksNarrowed is the historical (no-closure) describe:
 // narrowed by -s/--components and the tags/labels early-skip, bit for bit.
 func describeTerraformStacksNarrowed(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager, components []string) (map[string]any, error) {
-	return ExecuteDescribeStacksWithMocksAndOptions(
+	return ExecuteDescribeStacksWithMocks(
 		atmosConfig,
 		info.Stack,
 		components,
@@ -193,9 +193,16 @@ func describeTerraformStacksNarrowed(atmosConfig *schema.AtmosConfiguration, inf
 // re-resolves its own vars fresh immediately before its own plan/apply, so a degraded
 // placeholder value here is never reused for a real apply. Other error classes (e.g. a
 // missing `!secret`) are not in the recoverable set and still fail the preflight as before.
+//
+// StrictAuth is set so a component whose own declared identity can't be resolved (e.g. its
+// local emulator isn't running) still fails the preflight immediately, instead of silently
+// falling back to a parent AuthManager and going on to attempt a real, and much slower and
+// more confusing, network call with the wrong credentials — the list/describe --error-mode=warn
+// behavior that plain YAML-function degradation shares this mechanism with.
 func terraformPreflightErrorOptions() DescribeStacksErrorOptions {
 	return DescribeStacksErrorOptions{
-		OnError: OnErrorWarn,
+		OnError:    OnErrorWarn,
+		StrictAuth: true,
 		OnWarning: func(w DegradationWarning) {
 			log.Debug(
 				"Deferring unresolved value until its dependency is applied",
