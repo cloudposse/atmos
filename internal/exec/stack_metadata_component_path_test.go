@@ -14,6 +14,8 @@ import (
 // TestMetadataComponent_PathHandling tests all scenarios where metadata.component
 // specifies the component path, which can be absolute or relative.
 func TestMetadataComponent_PathHandling(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                   string
 		atmosBasePath          string
@@ -199,6 +201,7 @@ func TestMetadataComponent_PathHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.skipOnWindows && runtime.GOOS == "windows" {
 				t.Skipf("Skipping Unix-specific test on Windows")
 			}
@@ -294,6 +297,8 @@ func TestMetadataComponent_PathHandling(t *testing.T) {
 // TestMetadataComponent_ResolutionPriority tests that metadata.component
 // correctly overrides the top-level component attribute.
 func TestMetadataComponent_ResolutionPriority(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                  string
 		topLevelComponent     string
@@ -340,6 +345,7 @@ func TestMetadataComponent_ResolutionPriority(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Build component section
 			componentSection := make(map[string]any)
 
@@ -365,6 +371,8 @@ func TestMetadataComponent_ResolutionPriority(t *testing.T) {
 // TestMetadataComponent_CompletePathResolution tests the complete path resolution
 // with metadata.component through the entire stack processing flow.
 func TestMetadataComponent_CompletePathResolution(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                  string
 		atmosBasePath         string
@@ -409,6 +417,7 @@ func TestMetadataComponent_CompletePathResolution(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.skipOnWindows && runtime.GOOS == "windows" {
 				t.Skipf("Skipping Unix-specific test on Windows")
 			}

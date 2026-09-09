@@ -301,16 +301,20 @@ func finalizeExecuteResult(opts *ExecuteOptions, m *Model, exitCode int) error {
 }
 
 // showPlanTree parses the given planfile and renders the dependency tree with a badge
-// summary. Silently does nothing if the planfile can't be parsed.
+// summary. Logs a warning and renders nothing if the planfile can't be parsed - the plan
+// itself already succeeded, so this best-effort presentation step must not fail the command,
+// but staying silent left users with no way to tell why the summary was missing.
 func showPlanTree(ctx context.Context, opts *ExecuteOptions, planFile string) {
 	tree, treeErr := BuildDependencyTree(ctx, &TreeBuildOptions{
 		PlanfilePath:  planFile,
 		TerraformPath: opts.Command,
 		WorkingDir:    opts.WorkingDir,
+		Env:           opts.Env,
 		Stack:         opts.Stack,
 		Component:     opts.Component,
 	})
 	if treeErr != nil {
+		log.Warn("Failed to render plan summary", "error", treeErr)
 		return
 	}
 
@@ -608,6 +612,7 @@ func showTwoPhasePlanTree(ctx context.Context, opts *ExecuteOptions, planFile st
 		PlanfilePath:  planFile,
 		TerraformPath: opts.Command,
 		WorkingDir:    opts.WorkingDir,
+		Env:           opts.Env,
 		Stack:         opts.Stack,
 		Component:     opts.Component,
 	})

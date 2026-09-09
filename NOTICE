@@ -731,7 +731,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - helm.sh/helm/v4
     License: Apache-2.0
-    URL: https://github.com/helm/helm/blob/v4.2.1/LICENSE
+    URL: https://github.com/helm/helm/blob/v4.2.3/LICENSE
 
   - k8s.io/api
     License: Apache-2.0
@@ -824,7 +824,7 @@ BSD LICENSED DEPENDENCIES
 
   - filippo.io/age
     License: BSD-3-Clause
-    URL: https://github.com/FiloSottile/age/blob/v1.3.1/LICENSE
+    URL: https://github.com/FiloSottile/age/blob/v1.3.2/LICENSE
 
   - filippo.io/edwards25519
     License: BSD-3-Clause
@@ -1052,7 +1052,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/rogpeppe/go-internal/fmtsort
     License: BSD-3-Clause
-    URL: https://github.com/rogpeppe/go-internal/blob/v1.14.1/LICENSE
+    URL: https://github.com/rogpeppe/go-internal/blob/v1.16.0/LICENSE
 
   - github.com/russross/blackfriday/v2
     License: BSD-2-Clause

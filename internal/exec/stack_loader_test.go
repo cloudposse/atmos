@@ -11,6 +11,8 @@ import (
 )
 
 func TestNewStackLoader(t *testing.T) {
+	t.Parallel()
+
 	// Test that NewStackLoader creates a valid ExecStackLoader.
 	loader := NewStackLoader()
 	require.NotNil(t, loader, "NewStackLoader should return a non-nil loader")
@@ -18,6 +20,8 @@ func TestNewStackLoader(t *testing.T) {
 }
 
 func TestExecStackLoader_FindStacksMap(t *testing.T) {
+	t.Parallel()
+
 	// Test that FindStacksMap delegates to the underlying FindStacksMap function.
 	// This is a basic smoke test to ensure the interface is properly implemented.
 	loader := NewStackLoader()
@@ -47,6 +51,8 @@ func TestExecStackLoader_FindStacksMap(t *testing.T) {
 var _ component.StackLoader = (*ExecStackLoader)(nil)
 
 func TestExecStackLoader_ImplementsInterface(t *testing.T) {
+	t.Parallel()
+
 	// Runtime verification that ExecStackLoader implements the component.StackLoader interface.
 	// The compile-time check above ensures interface conformance; this test verifies
 	// the method can be called without panicking.
