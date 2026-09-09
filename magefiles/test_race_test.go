@@ -99,6 +99,22 @@ func TestTestRace(t *testing.T) {
 		require.ErrorIs(t, err, errMageRepoRootNotFound)
 	})
 
+	t.Run("ATMOS_TEST_RACE_PARALLEL overrides the -parallel cap", func(t *testing.T) {
+		root := initGitRepoFixture(t)
+		t.Chdir(root)
+		argsFile := setUpFakePathBinary(t, "go")
+		t.Setenv("TEST", "./cmd/...")
+		t.Setenv(raceParallelEnv, "8")
+
+		require.NoError(t, Test{}.Race())
+
+		assert.Equal(t, []string{
+			"test", "-race", "-shuffle=on", "-parallel=8",
+			"./cmd/...",
+			"-timeout", raceTestTimeout,
+		}, readFakeBinArgs(t, argsFile))
+	})
+
 	t.Run("builds go test args from TEST and TESTARGS", func(t *testing.T) {
 		root := initGitRepoFixture(t)
 		t.Chdir(root)
@@ -110,7 +126,7 @@ func TestTestRace(t *testing.T) {
 
 		args := readFakeBinArgs(t, argsFile)
 		assert.Equal(t, []string{
-			"test", "-race", "-shuffle=on",
+			"test", "-race", "-shuffle=on", "-parallel=" + raceParallelDefault,
 			"./cmd/...", "./pkg/toolchain/...",
 			"-run", "TestFoo", "-v",
 			"-timeout", raceTestTimeout,

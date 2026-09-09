@@ -15,6 +15,8 @@ import (
 // TestAtmosDecodeHook_StringToTimeDuration tests that the decode hook
 // correctly handles string to time.Duration conversion.
 func TestAtmosDecodeHook_StringToTimeDuration(t *testing.T) {
+	t.Parallel()
+
 	type config struct {
 		Timeout time.Duration `mapstructure:"timeout"`
 	}
@@ -36,6 +38,8 @@ func TestAtmosDecodeHook_StringToTimeDuration(t *testing.T) {
 // TestAtmosDecodeHook_StringToSlice tests that the decode hook
 // correctly handles string to slice conversion.
 func TestAtmosDecodeHook_StringToSlice(t *testing.T) {
+	t.Parallel()
+
 	type config struct {
 		Tags []string `mapstructure:"tags"`
 	}
@@ -57,6 +61,8 @@ func TestAtmosDecodeHook_StringToSlice(t *testing.T) {
 // TestAtmosDecodeHook_TasksDecodeHook tests that the decode hook
 // correctly handles Tasks (flexible command steps) conversion.
 func TestAtmosDecodeHook_TasksDecodeHook(t *testing.T) {
+	t.Parallel()
+
 	type config struct {
 		Steps schema.Tasks `mapstructure:"steps"`
 	}
@@ -87,6 +93,8 @@ steps:
 }
 
 func TestAtmosDecodeHook_CommandEnvMap(t *testing.T) {
+	t.Parallel()
+
 	type config struct {
 		Commands []schema.Command `mapstructure:"commands"`
 	}
@@ -123,6 +131,8 @@ commands:
 }
 
 func TestAtmosDecodeHook_NestedCastSimulatePromptInCommandSteps(t *testing.T) {
+	t.Parallel()
+
 	type config struct {
 		Commands []schema.Command `mapstructure:"commands"`
 	}
@@ -176,6 +186,8 @@ commands:
 }
 
 func TestCommandEnvFromMapEntryVariants(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		key     string
@@ -225,6 +237,7 @@ func TestCommandEnvFromMapEntryVariants(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := commandEnvFromMapEntry(tt.key, tt.value)
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
@@ -237,6 +250,8 @@ func TestCommandEnvFromMapEntryVariants(t *testing.T) {
 }
 
 func TestNormalizeCommandArrayVariants(t *testing.T) {
+	t.Parallel()
+
 	assert.Nil(t, normalizeCommandArray(nil))
 	assert.Nil(t, normalizeCommandArray("invalid"))
 
@@ -262,6 +277,8 @@ func TestNormalizeCommandArrayVariants(t *testing.T) {
 
 // TestAtmosDecodeHook_Combined tests that all decode hooks work together.
 func TestAtmosDecodeHook_Combined(t *testing.T) {
+	t.Parallel()
+
 	type config struct {
 		Timeout time.Duration `mapstructure:"timeout"`
 		Tags    []string      `mapstructure:"tags"`

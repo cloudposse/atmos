@@ -14,11 +14,14 @@ import (
 // This file tests helper methods.
 
 func TestInputHandler_ResolveOptionalValue(t *testing.T) {
+	t.Parallel()
+
 	handler, ok := Get("input")
 	require.True(t, ok)
 	inputHandler := handler.(*InputHandler)
 
 	t.Run("empty value returns empty", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{Name: "test"}
 		vars := NewVariables()
 		ctx := context.Background()
@@ -29,6 +32,7 @@ func TestInputHandler_ResolveOptionalValue(t *testing.T) {
 	})
 
 	t.Run("static value", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{Name: "test"}
 		vars := NewVariables()
 		ctx := context.Background()
@@ -39,6 +43,7 @@ func TestInputHandler_ResolveOptionalValue(t *testing.T) {
 	})
 
 	t.Run("template value", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{Name: "test"}
 		vars := NewVariables()
 		vars.Set("env", NewStepResult("production"))
@@ -50,6 +55,7 @@ func TestInputHandler_ResolveOptionalValue(t *testing.T) {
 	})
 
 	t.Run("invalid template returns error", func(t *testing.T) {
+		t.Parallel()
 		step := &schema.WorkflowStep{Name: "test"}
 		vars := NewVariables()
 		ctx := context.Background()
