@@ -152,7 +152,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	}
 
 	leftDelim, _ := tags.TemplateDelims(opts.AtmosConfig.Templates.Settings.Delimiters)
-	graph, err := BuildTerraformGraph(opts.Stacks, leftDelim)
+	graph, err := buildTerraformGraph(opts.Stacks, leftDelim, map[string]bool{})
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrBuildDepGraph, err)
 	}
@@ -160,6 +160,9 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	graph, err = FilterTerraformGraph(opts.AtmosConfig, graph, opts.Info, opts.Selection)
 	if err != nil {
 		return err
+	}
+	if _, err = buildTerraformGraph(opts.Stacks, leftDelim, terraformGraphNodeIDs(graph)); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrBuildDepGraph, err)
 	}
 
 	if graph.Size() == 0 {
@@ -284,6 +287,13 @@ func BuildTerraformGraph(stacks map[string]any, leftDelims ...string) (*dependen
 	if len(leftDelims) > 0 {
 		leftDelim = leftDelims[0]
 	}
+	return buildTerraformGraph(stacks, leftDelim, nil)
+}
+
+// buildTerraformGraph constructs a graph and validates required targets declared
+// by validationSources. A nil source set validates every component; an empty set
+// performs structural discovery only.
+func buildTerraformGraph(stacks map[string]any, leftDelim string, validationSources map[string]bool) (*dependency.Graph, error) {
 	builder := dependency.NewBuilder()
 	targets := make(map[string]terraformTargetState)
 
@@ -309,7 +319,7 @@ func BuildTerraformGraph(stacks map[string]any, leftDelims ...string) (*dependen
 		if shouldSkipComponent(componentSection) {
 			return nil
 		}
-		return addTerraformDependencies(builder, targets, leftDelim, stackName, componentName, componentSection)
+		return addTerraformDependencies(builder, targets, validationSources, leftDelim, stackName, componentName, componentSection)
 	}); err != nil {
 		return nil, fmt.Errorf("adding dependencies: %w", err)
 	}
@@ -929,6 +939,7 @@ func terraformTargetStateFor(componentSection map[string]any) terraformTargetSta
 func addTerraformDependencies(
 	builder *dependency.GraphBuilder,
 	targets map[string]terraformTargetState,
+	validationSources map[string]bool,
 	leftDelim string,
 	stackName string,
 	componentName string,
@@ -965,12 +976,12 @@ func addTerraformDependencies(
 				log.Warn("Dependency target not found", "from", fromID, "to", toID)
 				continue
 			}
-			if dep.IsRequired() {
+			if dep.IsRequired() && shouldValidateTerraformDependencyTarget(fromID, validationSources) {
 				targetErr := errUtils.ErrDependencyTargetNotFound
 				if target.reason != "target_missing" {
 					targetErr = errUtils.ErrDependencyTargetUnavailable
 				}
-				return fmt.Errorf("%w: from=%s to=%s reason=%s", targetErr, fromID, toID, target.reason)
+				return fmt.Errorf("%w: component=%s stack=%s target_component=%s target_stack=%s reason=%s", targetErr, componentName, stackName, dep.Component, depStack, target.reason)
 			}
 			log.Info("optional dependency skipped", "event", "optional_dependency_skipped",
 				"from", fromID, "to", toID, "from_component", componentName, "from_stack", stackName,
@@ -987,6 +998,18 @@ func addTerraformDependencies(
 		}
 	}
 	return nil
+}
+
+func shouldValidateTerraformDependencyTarget(sourceID string, validationSources map[string]bool) bool {
+	return validationSources == nil || validationSources[sourceID]
+}
+
+func terraformGraphNodeIDs(graph *dependency.Graph) map[string]bool {
+	nodeIDs := make(map[string]bool, graph.Size())
+	for nodeID := range graph.Nodes {
+		nodeIDs[nodeID] = true
+	}
+	return nodeIDs
 }
 
 // terraformDependencies extracts modern or legacy dependency declarations from a component.

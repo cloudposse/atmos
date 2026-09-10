@@ -151,7 +151,7 @@ func TestGetComponentDependencies(t *testing.T) {
 		assert.Equal(t, dependencySourceSettingsDependsOn, source)
 	})
 
-	t.Run("dependencies.components with only path entries prevents settings fallback", func(t *testing.T) {
+	t.Run("falls back to settings.depends_on when dependencies.components has only path entries", func(t *testing.T) {
 		componentMap := map[string]any{
 			"dependencies": map[string]any{
 				"components": []any{
@@ -168,9 +168,10 @@ func TestGetComponentDependencies(t *testing.T) {
 
 		deps, settingsSection, source := getComponentDependencies(componentMap)
 
-		assert.Empty(t, deps)
+		require.Len(t, deps, 1)
+		assert.Equal(t, "vpc", deps[0].Component)
 		assert.NotNil(t, settingsSection)
-		assert.Equal(t, dependencySourceDependenciesComponents, source)
+		assert.Equal(t, dependencySourceSettingsDependsOn, source)
 	})
 
 	t.Run("returns nil when no dependencies defined", func(t *testing.T) {

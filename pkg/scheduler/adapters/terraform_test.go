@@ -269,6 +269,7 @@ func TestAddTerraformDependenciesOptionalUnresolvedTargetFails(t *testing.T) {
 			err := addTerraformDependencies(
 				builder,
 				map[string]terraformTargetState{},
+				nil,
 				"",
 				"dev",
 				"app",
@@ -288,6 +289,7 @@ func TestAddTerraformDependenciesOptionalUnresolvedTargetWithCustomDelimiterFail
 	err := addTerraformDependencies(
 		builder,
 		map[string]terraformTargetState{},
+		nil,
 		"[[",
 		"dev",
 		"app",
@@ -1101,6 +1103,61 @@ func TestBuildTerraformGraphFailsForRequiredUnavailableDependencies(t *testing.T
 			require.ErrorIs(t, err, test.wantErr)
 		})
 	}
+}
+
+func TestExecuteTerraformDefersRequiredTargetValidationOutsideSelectedStack(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	stacks["qa"] = map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformSectionName: map[string]any{
+				"retired-cleanup": terraformAdapterComponent("selected", []any{map[string]any{"component": "deleted-network"}}, nil),
+			},
+		},
+	}
+	var executed []string
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			Stack:      "dev",
+			SubCommand: terraformSubCommandPlan,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			executed = append(executed, execution.Info.Component+"@"+execution.Info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"app@dev", "database@dev", "vpc@dev"}, executed)
+}
+
+func TestExecuteTerraformReportsSelectedRequiredDependencyContext(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": terraformAdapterComponent("selected", []any{map[string]any{"component": "missing"}}, nil),
+				},
+			},
+		},
+	}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			Stack:      "dev",
+			SubCommand: terraformSubCommandPlan,
+		},
+		Stacks:   stacks,
+		Executor: func(TerraformExecution) (TerraformExecutionResult, error) { return TerraformExecutionResult{}, nil },
+	})
+
+	require.ErrorIs(t, err, errUtils.ErrDependencyTargetNotFound)
+	require.ErrorContains(t, err, "component=app stack=dev target_component=missing target_stack=dev reason=target_missing")
 }
 
 func TestExecuteTerraformKeepsIndependentComponentsSequential(t *testing.T) {

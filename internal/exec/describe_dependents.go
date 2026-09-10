@@ -575,11 +575,13 @@ func getComponentDependenciesWithError(componentMap map[string]any) (componentDe
 			return componentDependenciesResult{settingsSection: settingsSection}, err
 		}
 		componentDeps = filterComponentDependencies(componentDeps)
-		return componentDependenciesResult{
-			dependencies:    componentDeps,
-			settingsSection: settingsSection,
-			source:          dependencySourceDependenciesComponents,
-		}, nil
+		if len(componentDeps) > 0 {
+			return componentDependenciesResult{
+				dependencies:    componentDeps,
+				settingsSection: settingsSection,
+				source:          dependencySourceDependenciesComponents,
+			}, nil
+		}
 	}
 
 	if deps, source, found := getLegacyComponentDependencies(componentMap, settingsSection); found {

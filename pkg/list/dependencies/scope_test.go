@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // errFakeDescribeStack is returned by fakeDescribe when errOnStack matches.
@@ -488,8 +490,7 @@ func TestResolveScopedClosureReverseDiscoversTemplatedDependent(t *testing.T) {
 			// Also has a templated dependency, but it resolves to a target
 			// OUTSIDE the closure: it must be evaluated (conservatively) yet
 			// excluded from the final closure.
-			"batch": dependsOn(map[string]any{"component": "{{ .vars.other_component }}"}),
-			"other": {},
+			"batch": {"dependencies": map[string]any{"components": []any{map[string]any{"component": "{{ .vars.other_component }}"}}}},
 		},
 	})
 	resolved := terraformStacks(map[string]map[string]map[string]any{
@@ -501,8 +502,7 @@ func TestResolveScopedClosureReverseDiscoversTemplatedDependent(t *testing.T) {
 			"monitor": dependsOn(map[string]any{"component": "vpc", "stack": "dev"}),
 		},
 		"qa": {
-			"batch": dependsOn(map[string]any{"component": "other"}),
-			"other": {},
+			"batch": {"dependencies": map[string]any{"components": []any{map[string]any{"component": "missing"}}}},
 		},
 	})
 	describe := &fakeDescribe{full: lightweight, resolved: resolved}
@@ -521,12 +521,30 @@ func TestResolveScopedClosureReverseDiscoversTemplatedDependent(t *testing.T) {
 	_, ok = result.Closure.GetNode(NodeID("monitor", "ops"))
 	require.True(t, ok, "reverse closure must discover a cross-stack dependent with a templated stack target")
 
-	// Extra evaluation is conservative, not membership: batch resolved to a
-	// dependency outside the closure and must be excluded from it.
+	// Extra evaluation is conservative, not membership: batch resolves to a
+	// missing required target outside the closure and must not fail this request.
 	_, ok = result.Closure.GetNode(NodeID("batch", "qa"))
 	require.False(t, ok, "an evaluated non-dependent must not join the closure")
-	_, ok = result.Closure.GetNode(NodeID("other", "qa"))
-	require.False(t, ok, "the non-dependent's own dependency must not join the closure")
+}
+
+func TestResolveScopedClosureFailsForRequiredTargetWithinClosure(t *testing.T) {
+	t.Parallel()
+
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {"dependencies": map[string]any{"components": []any{map[string]any{"component": "missing"}}}},
+		},
+	})
+	fake := &fakeDescribe{full: stacks}
+
+	_, err := ResolveScopedClosure(fake.describe, &ScopeRequest{
+		Components:       []string{"app"},
+		Stack:            "dev",
+		Direction:        DirectionForward,
+		ProcessTemplates: true,
+	})
+
+	require.ErrorIs(t, err, errUtils.ErrDependencyTargetNotFound)
 }
 
 // TestResolveScopedClosureForwardSkipsUnresolvedSourceEvaluation is the

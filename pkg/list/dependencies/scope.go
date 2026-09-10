@@ -253,22 +253,31 @@ func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []stri
 		var err error
 		resolvedGraph, err = buildGraph(
 			mergeResolvedClosureStacks(lightweightStacks, resolvedStacks),
-			evaluatedClosureNodeIDs(evaluatedComponents),
+			map[string]bool{},
 		)
 		if err != nil {
 			return nil, err
 		}
 		closure = ReachableClosure(resolvedGraph, roots, req.Direction, req.Depths)
+		if _, err = buildGraph(
+			mergeResolvedClosureStacks(lightweightStacks, resolvedStacks),
+			evaluatedClosureNodeIDs(closure, evaluatedComponents),
+		); err != nil {
+			return nil, err
+		}
 	}
 }
 
 // evaluatedClosureNodeIDs returns the source node IDs whose required targets
 // are in scope for strict validation after Phase C evaluation.
-func evaluatedClosureNodeIDs(evaluated map[string]map[string]bool) map[string]bool {
+func evaluatedClosureNodeIDs(closure *dependency.Graph, evaluated map[string]map[string]bool) map[string]bool {
 	nodeIDs := make(map[string]bool)
 	for stackName, components := range evaluated {
 		for componentName := range components {
-			nodeIDs[NodeID(componentName, stackName)] = true
+			nodeID := NodeID(componentName, stackName)
+			if _, ok := closure.GetNode(nodeID); ok {
+				nodeIDs[nodeID] = true
+			}
 		}
 	}
 	return nodeIDs
