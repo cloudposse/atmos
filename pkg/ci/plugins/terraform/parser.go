@@ -14,12 +14,19 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // testJSONMaxLine is the max bufio token size for a `test -json` line (a
 // diagnostic with a long detail can be large).
 const testJSONMaxLine = 4 * 1024 * 1024
+
+// maxBackfillRunsPerStatus caps synthetic placeholder rows backfillMissingTestJSONRuns can
+// create for a single status. A test_summary count is untrusted input (from the tool's -json
+// stream); without a cap, a single oversized count (e.g. passed: 1000000000) would make the
+// backfill loop append unbounded rows and exhaust memory / hang the CI command.
+const maxBackfillRunsPerStatus = 10_000
 
 // millisecondsPerSecond converts the `elapsed` field (milliseconds in the
 // `test -json` stream) to the seconds used by JUnit `time` attributes.
@@ -839,8 +846,11 @@ type testRunKey struct {
 	run  string
 }
 
-// pendingDiag holds the first error diagnostic seen for a run, attached when the
-// run's `complete` event arrives (diagnostics precede the complete event).
+// pendingDiag holds the first error diagnostic seen for a run. Ordering is not
+// fixed: mid-run provider errors precede the run's final event, but assertion
+// failures follow it (both Terraform and OpenTofu), so a diagnostic is attached
+// at build time when it arrived first and reconciled in finalizeTestJSON when
+// it arrived after.
 type pendingDiag struct {
 	message string
 	file    string
@@ -876,8 +886,17 @@ func ParseTestJSON(stream []byte) *plugin.OutputResult {
 		}
 	}
 
-	finalizeTestJSON(data, result, summary)
+	finalizeTestJSON(data, result, summary, diagByRun)
 	return result
+}
+
+// testEventComplete reports whether a test_run/test_file event is the final one
+// for its subject. Terraform emits intermediate progress events (`starting`,
+// `running`, `teardown`) and marks the last one `progress: "complete"`.
+// OpenTofu emits a single event per run/file with no `progress` field at all,
+// carrying only the final `status` -- so a bare status is also terminal.
+func testEventComplete(progress, status string) bool {
+	return progress == "complete" || (progress == "" && status != "")
 }
 
 func handleTestJSONEvent(
@@ -911,7 +930,7 @@ func handleTestJSONEvent(
 func completedTestFile(ev *testJSONEvent) (plugin.TerraformTestFile, bool) {
 	var tf testJSONFile
 	_ = json.Unmarshal(ev.TestFileP, &tf)
-	if tf.Progress != "complete" {
+	if !testEventComplete(tf.Progress, tf.Status) {
 		return plugin.TerraformTestFile{}, false
 	}
 	path := firstNonEmpty(tf.Path, ev.TestFile)
@@ -952,7 +971,7 @@ func recordDiagnostic(ev *testJSONEvent, diagByRun map[testRunKey]pendingDiag) {
 func completedTestRun(ev *testJSONEvent, diagByRun map[testRunKey]pendingDiag) (plugin.TerraformTestRun, bool) {
 	var tr testJSONRun
 	_ = json.Unmarshal(ev.TestRunP, &tr)
-	if tr.Progress != "complete" {
+	if !testEventComplete(tr.Progress, tr.Status) {
 		return plugin.TerraformTestRun{}, false
 	}
 	return buildTestRun(ev, tr, diagByRun), true
@@ -999,25 +1018,103 @@ func buildTestRun(ev *testJSONEvent, tr testJSONRun, diagByRun map[testRunKey]pe
 		Duration: float64(tr.Elapsed) / millisecondsPerSecond,
 	}
 	if dg, ok := diagByRun[testRunKey{file: ev.TestFile, run: name}]; ok {
-		run.Error = dg.message
-		if dg.line > 0 {
-			run.Line = dg.line
-		}
-		if dg.file != "" {
-			run.File = dg.file
-		}
+		attachPendingDiag(&run, dg)
 	}
 	return run
 }
 
+// attachPendingDiag copies a diagnostic's message and source location onto a run.
+func attachPendingDiag(run *plugin.TerraformTestRun, dg pendingDiag) {
+	run.Error = dg.message
+	if dg.line > 0 {
+		run.Line = dg.line
+	}
+	if dg.file != "" {
+		run.File = dg.file
+	}
+}
+
+// attachLateDiagnostics attaches diagnostics that arrived after their run's
+// final event (assertion failures in both tools), which buildTestRun could not
+// see at the time the run was recorded.
+func attachLateDiagnostics(data *plugin.TerraformTestOutputData, diagByRun map[testRunKey]pendingDiag) {
+	for i := range data.Runs {
+		run := &data.Runs[i]
+		if run.Error != "" {
+			continue
+		}
+		if dg, ok := diagByRun[testRunKey{file: run.File, run: run.Name}]; ok {
+			attachPendingDiag(run, dg)
+		}
+	}
+}
+
 // finalizeTestJSON sets totals/counts and HasErrors from the parsed runs and the
 // authoritative test_summary (when present).
-func finalizeTestJSON(data *plugin.TerraformTestOutputData, result *plugin.OutputResult, summary *testJSONSummary) {
+func finalizeTestJSON(
+	data *plugin.TerraformTestOutputData,
+	result *plugin.OutputResult,
+	summary *testJSONSummary,
+	diagByRun map[testRunKey]pendingDiag,
+) {
+	attachLateDiagnostics(data, diagByRun)
 	data.Total = len(data.Runs)
 	collectTestJSONRunResults(data, result)
 	applyTestJSONSummary(data, summary)
+	backfillMissingTestJSONRuns(data)
 	populateTestFileCounts(data)
 	result.HasErrors = testJSONHasErrors(data, result)
+}
+
+// backfillMissingTestJSONRuns is a last-resort guard: if the authoritative
+// test_summary counts ever exceed the runs actually captured into data.Runs
+// (i.e. a tool emitted run events in a shape this parser did not recognise), it
+// synthesizes placeholder rows so data.Total/Pass/Fail/Error/Skip, the JUnit
+// report, and the step-summary table can never disagree. It never removes or
+// mutates real captured rows, and it warns loudly when it fires, because that
+// means the parser has a schema gap to fix rather than a condition to tolerate.
+//
+// The summary counts are untrusted input from the tool's -json stream, so the
+// number of rows synthesized per status is capped at maxBackfillRunsPerStatus:
+// without a cap, a single oversized count could make this loop append unbounded
+// rows and exhaust memory or hang the CI command. When a count is truncated,
+// data.BackfillTruncated is set so callers can report the parser output as
+// incomplete rather than silently under-representing the truncated status.
+func backfillMissingTestJSONRuns(data *plugin.TerraformTestOutputData) {
+	remaining := map[string]int{
+		testStatusPass:  data.Pass,
+		testStatusFail:  data.Fail,
+		testStatusError: data.Error,
+		testStatusSkip:  data.Skip,
+	}
+	for _, r := range data.Runs {
+		if _, ok := remaining[r.Status]; ok {
+			remaining[r.Status]--
+		}
+	}
+	for _, status := range []string{testStatusPass, testStatusFail, testStatusError, testStatusSkip} {
+		missing := remaining[status]
+		if missing <= 0 {
+			continue
+		}
+		toCreate := missing
+		if toCreate > maxBackfillRunsPerStatus {
+			log.Error("terraform test JSON stream under-reported runs; capping synthesized placeholder rows",
+				"status", status, "missing", missing, "cap", maxBackfillRunsPerStatus, "captured_runs", len(data.Runs))
+			toCreate = maxBackfillRunsPerStatus
+			data.BackfillTruncated = true
+		} else {
+			log.Warn("terraform test JSON stream under-reported runs; synthesizing placeholder rows",
+				"status", status, "missing", missing, "captured_runs", len(data.Runs))
+		}
+		for i := 0; i < toCreate; i++ {
+			data.Runs = append(data.Runs, plugin.TerraformTestRun{
+				Name:   fmt.Sprintf("run detail unavailable (%s)", status),
+				Status: status,
+			})
+		}
+	}
+	data.Total = len(data.Runs)
 }
 
 func collectTestJSONRunResults(data *plugin.TerraformTestOutputData, result *plugin.OutputResult) {
@@ -1051,7 +1148,8 @@ func applyTestJSONSummary(data *plugin.TerraformTestOutputData, summary *testJSO
 }
 
 func testJSONHasErrors(data *plugin.TerraformTestOutputData, result *plugin.OutputResult) bool {
-	return data.Fail > 0 || data.Error > 0 || len(result.Errors) > 0 || len(data.CleanupFailures) > 0
+	return data.Fail > 0 || data.Error > 0 || len(result.Errors) > 0 || len(data.CleanupFailures) > 0 ||
+		data.BackfillTruncated
 }
 
 // populateTestFileCounts derives file-level counts from completed run events.
@@ -1158,14 +1256,17 @@ func renderTestRunLine(b *strings.Builder, run *plugin.TerraformTestRun) {
 
 func renderTestSummaryLine(b *strings.Builder, data *plugin.TerraformTestOutputData) {
 	headline := "Success!"
-	if data.Fail > 0 || data.Error > 0 || len(data.CleanupFailures) > 0 {
+	if data.Fail > 0 || data.Error > 0 || len(data.CleanupFailures) > 0 || data.BackfillTruncated {
 		headline = "Failure!"
 	}
 	if data.Error > 0 {
 		fmt.Fprintf(b, "%s %d passed, %d failed, %d errored, %d skipped.\n", headline, data.Pass, data.Fail, data.Error, data.Skip)
-		return
+	} else {
+		fmt.Fprintf(b, "%s %d passed, %d failed, %d skipped.\n", headline, data.Pass, data.Fail, data.Skip)
 	}
-	fmt.Fprintf(b, "%s %d passed, %d failed, %d skipped.\n", headline, data.Pass, data.Fail, data.Skip)
+	if data.BackfillTruncated {
+		fmt.Fprintf(b, "  parser output incomplete: summary counts exceeded the synthesized-run cap\n")
+	}
 }
 
 // ParseOutput parses terraform output for a given command (fallback when JSON not available).
