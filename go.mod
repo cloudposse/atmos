@@ -425,7 +425,7 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.3 // indirect
-	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
+	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 	gocloud.dev v0.45.0 // indirect
 	golang.org/x/crypto v0.56.0
 	golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a // indirect

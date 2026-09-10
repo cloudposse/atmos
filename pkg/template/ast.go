@@ -174,6 +174,26 @@ func fieldKey(ident []string) string {
 	return strings.Join(ident, ".")
 }
 
+// WalkNodes calls fn for every node in every template associated with tmpl
+// (including tmpl itself, and any template declared inside it with `define`),
+// using the same traversal rules as UsesFunctions. It exists so packages
+// outside this one can run their own analysis passes (for example, a
+// deprecation lint) over a parsed template without duplicating the AST
+// traversal.
+func WalkNodes(tmpl *template.Template, fn func(parse.Node)) {
+	defer perf.Track(nil, "template.WalkNodes")()
+
+	if tmpl == nil {
+		return
+	}
+	for _, t := range tmpl.Templates() {
+		if t.Tree == nil || t.Root == nil {
+			continue
+		}
+		walkAST(t.Root, fn)
+	}
+}
+
 // UsesFunctions reports whether the parsed template (or any template
 // associated with it, e.g. one declared with `define`) calls any of the
 // named functions, or any of the named `identifier.Method` chains

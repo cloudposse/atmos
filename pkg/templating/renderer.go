@@ -107,6 +107,7 @@ type engine struct {
 	gomplate bool
 	sprig    bool
 	cache    *DatasourceCache
+	reporter DeprecationReporter
 	live     liveRenderHolder
 }
 
@@ -114,7 +115,7 @@ type engine struct {
 func New(opts ...Option) Engine {
 	defer perf.Track(nil, "templating.New")()
 
-	e := &engine{gomplate: true, sprig: true, cache: defaultDatasourceCache}
+	e := &engine{gomplate: true, sprig: true, cache: defaultDatasourceCache, reporter: defaultDeprecationReporter}
 	for _, opt := range opts {
 		opt(e)
 	}
@@ -149,6 +150,9 @@ func (e *engine) Render(ctx context.Context, req *Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if e.gomplate {
+		lintDeprecatedUsage(parsed, plan, e.reporter)
+	}
 
 	if !e.gomplate || !needsGomplateRenderer(parsed) {
 		return executePlain(parsed, req.Data)
@@ -167,7 +171,7 @@ func (e *engine) plan(ctx context.Context, req *Request) (*renderPlan, error) {
 
 	plan := &renderPlan{
 		req:        req,
-		funcs:      e.baseFuncs(ctx, req.Funcs),
+		funcs:      e.baseFuncs(ctx, req.Name, req.Funcs),
 		left:       req.LeftDelim,
 		right:      req.RightDelim,
 		missingKey: missingKey,

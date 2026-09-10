@@ -73,6 +73,7 @@ var (
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
 	ErrInvalidTemplateSettings               = errors.New("invalid template settings")
 	ErrTemplateEvaluation                    = errors.New("template evaluation failed")
+	ErrTemplateConversion                    = errors.New("template value conversion failed")
 	ErrCommandEnvDecodeFailed                = schemaPkg.ErrCommandEnvDecodeFailed
 	ErrCastStepRequiresSteps                 = errors.New("cast step requires nested steps")
 	ErrCastSessionRequiresActions            = errors.New("cast session step requires session actions")

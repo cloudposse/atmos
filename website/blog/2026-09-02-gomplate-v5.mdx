@@ -50,9 +50,16 @@ Atmos.
 ## What to Check in Your Stacks
 
 Gomplate removed functions it had deprecated in v3 and changed a few datasource behaviors between
-v3 and v5. Most stacks will need no changes. If yours uses any of the following, update the
-template before upgrading. The [templates configuration reference](/cli/configuration/templates)
-and the [datasources reference](/templates/datasources) carry the same list.
+v3 and v5. Most stacks will need no changes, and none of what follows breaks a stack on upgrade:
+Atmos recognizes every removed function name and keeps it working; the first time a stack
+manifest uses one, Atmos logs a warning that names the exact replacement to switch to. Treat that warning
+as a to-do rather than an error — the shim serving these old names will be removed in a future
+major release of Atmos, so it is worth working through the list rather than leaving it running
+indefinitely. The two datasource behavior changes near the end of this list are different: Atmos
+can recognize the pattern in your configuration and warn about it, but it cannot reproduce
+Gomplate's old datasource behavior, so those two are worth checking before you lean on the
+affected templates. The [templates configuration reference](/cli/configuration/templates) and the
+[datasources reference](/templates/datasources) carry the same list.
 
 ### Renamed functions
 
@@ -79,18 +86,22 @@ cidr: '{{ net.ParsePrefix .vars.cidr }}'
 ```
 
 The unqualified aliases `slice`, `contains`, `hasPrefix`, `hasSuffix`, `split`, `splitN`, and
-`trim` are no longer registered by Gomplate. In practice most of them keep working: `slice` is a
-built-in of Go templates, and `contains`, `hasPrefix`, `hasSuffix`, `split`, and `trim` are also
-defined by Sprig, which Atmos enables by default through `templates.settings.sprig.enabled`. Be
-aware that Sprig's argument order differs from Gomplate's for some of these. The only alias with
-no fallback is `splitN`; replace it with `strings.SplitN`. If you have disabled Sprig, switch all of
-them to their `strings.*` or `coll.*` forms.
+`trim` are no longer registered by Gomplate. In practice most of them keep working without any
+warning at all: `slice` is a built-in of Go templates, and `contains`, `hasPrefix`, `hasSuffix`,
+`split`, and `trim` are also defined by Sprig, which Atmos enables by default through
+`templates.settings.sprig.enabled`. Be aware that Sprig's argument order differs from Gomplate's
+for some of these. If you have disabled Sprig, Atmos's compatibility shim takes over for those five
+names with Gomplate's original argument order, logging the same kind of warning described above.
+There is no Sprig equivalent for `splitN` at all, so the shim covers it either way. Replace any of
+them with their `strings.*` or `coll.*` forms when you get the chance.
 
 ### Conversions and regular expressions now fail loudly
 
 Conversion functions such as `conv.ToInt64`, `conv.ToFloat64`, and `conv.Atoi` used to return `0`
 when handed something they could not convert. They now return an error, which surfaces as a
-template processing failure. If a stack relied on the silent zero, guard the input first:
+template processing failure; Atmos does not paper over this one, since silently returning `0` for
+bad input is exactly the kind of behavior worth losing. The error message spells out the fix. If a
+stack relied on the silent zero, guard the input first:
 
 ```yaml
 retries: '{{ if .vars.retries }}{{ conv.ToInt64 .vars.retries }}{{ else }}0{{ end }}'
@@ -104,7 +115,9 @@ and the pattern.
 
 A second argument to `datasource` is resolved as a relative URL against the datasource's `url`.
 Directory datasources must end with a trailing `/`, and a subpath that begins with `/` replaces
-the base path rather than appending to it:
+the base path rather than appending to it. Atmos warns when it sees a datasource used this way
+without a trailing slash on its URL, but it cannot know whether you meant the old or the new
+resolution, so the warning is a prompt to check the stack, not an automatic fix:
 
 ```yaml
 settings:
@@ -126,7 +139,9 @@ components:
 
 An `aws+smp://` datasource returns the parameter's value itself rather than an object with a
 `.Value` field. Drop the field access, and if the parameter holds a JSON document, tell the
-datasource to parse it with the `type` query parameter:
+datasource to parse it with the `type` query parameter. Atmos recognizes a configured `aws+smp://`
+datasource read with `.Value` still attached and warns about it, without guessing at what the
+parameter actually contains:
 
 ```yaml
 settings:

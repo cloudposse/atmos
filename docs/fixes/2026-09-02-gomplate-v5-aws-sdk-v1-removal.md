@@ -73,6 +73,37 @@ package-global metrics map (not safe for concurrent use, while Atmos renders sta
   `website/docs/functions/template/atmos.GomplateDatasource.mdx`), changelog post
   `website/blog/2026-09-02-gomplate-v5.mdx`, roadmap milestone.
 
+### Compatibility shims
+
+`pkg/templating/compat.go`, `compat_aliases.go` and `compat_lint.go` add a compatibility layer so
+templates written against gomplate v3 names keep working instead of failing outright:
+
+- `engine.baseFuncs` replaces the `conv`, `strings` and `net` entries gomplate registers with
+  wrapper structs (`convWrapper`, `stringsWrapper`, `netWrapper`) that embed a structurally-matched
+  interface over the real v5 namespace object (obtained from gomplate's own function map, so the
+  wrapper stays behind whatever gomplate itself provides) and add back the removed v3 methods
+  (`conv.Bool`, `conv.Slice`, `conv.Dict`, `conv.Has`, `strings.Sort`, `net.ParseIP`,
+  `net.ParseIPPrefix`, `net.ParseIPRange`), delegating to the v5 replacement.
+  `TestNamespaceWrappersCoverUpstreamMethods` reflects over the real gomplate objects and fails if
+  a wrapper falls behind the upstream method set.
+- `applyBareAliasShims` re-registers the v3 bare aliases (`contains`, `hasPrefix`, `hasSuffix`,
+  `split`, `trim`, `splitN`) with gomplate's original (non-pipelined) argument order, but only when
+  Sprig hasn't already claimed the name — Sprig is layered before this runs, so with Sprig enabled
+  nothing changes from v3's behavior. `slice` is deliberately never shimmed, since it would shadow
+  text/template's own builtin.
+- `conv.ToInt64`/`ToInt`/`ToFloat64`/`Atoi` are overridden (not shimmed) purely to attach a hint to
+  gomplate v5's new error return; the silent-zero fallback v3 had is not restored.
+- Every shim call and hinted error routes through a `DeprecationReporter` (`WithDeprecationReporter`
+  option), defaulting to a logger that warns once per (template name, function name) for the life of
+  the process, so a shared catalog template doesn't flood the log across every stack that imports it.
+- `lintDeprecatedUsage`, run after `parsePlain` whenever gomplate is enabled, walks the parsed AST
+  (via the new `pkg/template.WalkNodes` export) to warn about two datasource behavior changes this
+  layer cannot emulate: `.Value` chained on an `aws+smp://` read, and a datasource sub-path argument
+  whose alias URL doesn't end in `/`. It also warns about any configured `boltdb://` datasource. All
+  three are warn-only findings; the render is never blocked by them.
+- New static error `ErrTemplateConversion` in `errors/errors.go`, wrapped with a hint by the
+  conversion-error overrides above.
+
 ## Validation
 
 ```bash

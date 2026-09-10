@@ -77,18 +77,24 @@ func stubFuncs() template.FuncMap {
 
 // baseFuncs assembles Gomplate, Sprig and caller functions in precedence order:
 // later layers win, so Sprig overrides Gomplate and the caller overrides both.
-func (e *engine) baseFuncs(ctx context.Context, extra template.FuncMap) template.FuncMap {
+// The name parameter is the template name (Request.Name), threaded through so
+// the compatibility shims in compat.go and compat_aliases.go can attribute a
+// deprecation warning to the template that triggered it.
+func (e *engine) baseFuncs(ctx context.Context, name string, extra template.FuncMap) template.FuncMap {
 	funcs := template.FuncMap{}
 	if e.gomplate {
-		for k, v := range GomplateFuncs(ctx) {
+		gomplateFuncs := GomplateFuncs(ctx)
+		for k, v := range gomplateFuncs {
 			funcs[k] = v
 		}
+		applyNamespaceShims(funcs, gomplateFuncs, name, e.reporter)
 	}
 	if e.sprig {
 		for k, v := range SprigFuncMap() {
 			funcs[k] = v
 		}
 	}
+	applyBareAliasShims(funcs, name, e.reporter)
 	for k, v := range extra {
 		funcs[k] = v
 	}

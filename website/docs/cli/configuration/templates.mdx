@@ -157,7 +157,11 @@ For this reason, you can use the `templates.settings.sprig.enabled` and `templat
 ### Removed and Renamed Gomplate Functions
 
 Atmos embeds Gomplate v5. Functions that Gomplate deprecated in v3 were removed upstream in v4, so templates written
-against older Atmos releases may need updating. Each removed function has a direct replacement:
+against older Atmos releases reference names that no longer exist in Gomplate itself. Atmos keeps every one of them
+working through a compatibility shim: the old name still runs, produces the same result as its replacement, and logs a
+warning (once per stack manifest per function) naming the exact replacement to switch to. The shim is a bridge, not a
+long-term guarantee — it will be removed in a future major release of Atmos, so treat the warning as a to-do, not
+background noise. Each removed function has a direct replacement:
 
 <dl>
   <dt>`conv.Bool`</dt>
@@ -170,7 +174,7 @@ against older Atmos releases may need updating. Each removed function has a dire
   <dd>Use [`coll.Sort`](https://docs.gomplate.ca/functions/coll/#collsort).</dd>
 
   <dt>`net.ParseIP`, `net.ParseIPPrefix`, `net.ParseIPRange`</dt>
-  <dd>Use [`net.ParseAddr`](https://docs.gomplate.ca/functions/net/#netparseaddr), [`net.ParsePrefix`](https://docs.gomplate.ca/functions/net/#netparseprefix), and [`net.ParseRange`](https://docs.gomplate.ca/functions/net/#netparserange).</dd>
+  <dd>Use [`net.ParseAddr`](https://docs.gomplate.ca/functions/net/#netparseaddr), [`net.ParsePrefix`](https://docs.gomplate.ca/functions/net/#netparseprefix), and [`net.ParseRange`](https://docs.gomplate.ca/functions/net/#netparserange). The replacements return `netip.Addr`/`netip.Prefix`/a range type instead of the older IP types, so code that inspects the result directly (rather than just printing it) may need small adjustments.</dd>
 
   <dt>`slice`, `contains`, `hasPrefix`, `hasSuffix`, `split`, `splitN`, `trim` (bare aliases)</dt>
   <dd>
@@ -179,15 +183,31 @@ against older Atmos releases may need updating. Each removed function has a dire
 
     When `templates.settings.sprig.enabled` is `true` (the default), the bare `contains`, `hasPrefix`, `hasSuffix`,
     `split`, and `trim` names keep working through [Sprig](https://masterminds.github.io/sprig/), which defines functions
-    of the same name (note that Sprig's argument order differs from Gomplate's in some cases). The bare `slice` name is a
-    Go `text/template` built-in and continues to work. There is no Sprig fallback for `splitN`.
+    of the same name (note that Sprig's argument order differs from Gomplate's in some cases) — Atmos doesn't warn in
+    that case, since Sprig owns the name and nothing changed. With Sprig disabled, Atmos's compatibility shim serves
+    the old Gomplate argument order and warns instead. The bare `slice` name is a Go `text/template` built-in and
+    continues to work as the builtin, unshimmed, in every configuration. There is no Sprig fallback for `splitN`, so
+    the shim covers it either way.
   </dd>
 </dl>
 
 Two further upstream changes affect existing templates:
 
-- Conversion functions such as `conv.ToInt64`, `conv.ToFloat64`, and `conv.Atoi` (and the functions built on them) now return an error on input they cannot convert, instead of silently returning `0`.
+- Conversion functions such as `conv.ToInt64`, `conv.ToFloat64`, and `conv.Atoi` (and the functions built on them) now return an error on input they cannot convert, instead of silently returning `0`. Atmos does not restore the old silent-zero behavior; the error message includes a hint to guard the call with `if` or a default.
 - The `regexp.*` functions return an error for an invalid pattern instead of panicking.
+
+Two datasource behaviors also changed upstream. Atmos can't emulate either one, so instead it warns when it recognizes
+the pattern in your stack manifests, naming the fix:
+
+- An `aws+smp://` (AWS SSM Parameter Store) datasource now returns the parameter value directly instead of a struct
+  with a `Value` field. Drop the trailing `.Value` from calls like `(ds "param").Value`; add `?type=application/json`
+  to the datasource URL if you need the value parsed as JSON.
+- A sub-path argument to `ds`/`datasource`/`include` (for example `ds "config" "nested/file.yaml"`) is now resolved as
+  a relative URL against the datasource's own URL, so the datasource URL must end with `/` to be treated as a
+  directory.
+
+The `boltdb://` datasource scheme was removed upstream with no replacement; Atmos warns if a configured datasource
+still uses it.
 
 Gomplate v5 also adds the [`semver.*`](https://docs.gomplate.ca/functions/semver/) namespace for parsing and comparing semantic versions.
 
