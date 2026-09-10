@@ -131,34 +131,43 @@ func FileURI(path string) string {
 	return (&url.URL{Scheme: "file", Path: cleaned}).String()
 }
 
-// InsteadOfRules returns the GIT_CONFIG entries that redirect https and ssh git fetches of a
-// github.com owner (e.g. github.com/cloudposse/) to that owner's directory under root on disk,
-// for each of owners. Rules are per-owner, not a single host-wide rewrite, because
-// pkg/downloader/custom_git_detector.go only recognizes a per-owner insteadOf when deciding
-// whether to skip injecting a token into the URL: a host-wide rule would let token injection add
-// userinfo, which would in turn stop git's own insteadOf prefix match from matching, silently
-// sending the clone out to the real network.
-func InsteadOfRules(root string, owners ...string) []gitconfigenv.GitConfigEntry {
-	var entries []gitconfigenv.GitConfigEntry
-	for _, owner := range owners {
-		base := FileURI(filepath.Join(root, owner)) + "/"
-		key := "url." + base + ".insteadOf"
-		for _, target := range insteadOfTargets("github.com", owner) {
-			entries = append(entries, gitconfigenv.GitConfigEntry{Key: key, Value: target})
-		}
+// InsteadOfRules returns the GIT_CONFIG entries that redirect https and ssh git fetches of
+// exactly one github.com repository (owner/repo, in its canonical ".git" URL form) to the bare
+// mirror at <root>/<owner>/<repo>.git on disk.
+//
+// The rules are repo-scoped, not owner-wide, on purpose. A rule for "https://github.com/<owner>/"
+// would also capture every other repository of that owner that anything in the test process
+// fetches through git -- including terraform's own module downloads (for example a
+// `git::https://github.com/cloudposse/terraform-null-label?ref=<sha>` module source, pinned to an
+// upstream commit no synthetic mirror can reproduce) -- and point them at paths that do not
+// exist. Scoping to the one mirrored repository leaves every other fetch exactly as it was.
+//
+// The rules are still recognized by pkg/downloader/custom_git_detector.go, which decides whether
+// to skip injecting a token into the URL by matching an insteadOf value's host and *owner*: with
+// these rules present, atmos skips URL token injection for every github.com/<owner>/... URL and
+// lets git's rewrite (or, for the non-mirrored repositories, the harness's extraheader) win. That
+// matters because a URL with injected userinfo would no longer start with the rule's value and
+// would silently go out to the network instead of the mirror.
+func InsteadOfRules(root, owner, repo string) []gitconfigenv.GitConfigEntry {
+	base := FileURI(filepath.Join(root, owner, repo+".git"))
+	key := "url." + base + ".insteadOf"
+	entries := make([]gitconfigenv.GitConfigEntry, 0, len(insteadOfTargets("github.com", owner, repo)))
+	for _, target := range insteadOfTargets("github.com", owner, repo) {
+		entries = append(entries, gitconfigenv.GitConfigEntry{Key: key, Value: target})
 	}
 	return entries
 }
 
-// insteadOfTargets returns the URL forms each owner-scoped mirror rule should
-// rewrite: https and ssh, so it covers git::https://…, shorthand, and
-// ssh:// references alike. Mirrors pkg/auth/integrations/github/sts.go's
-// insteadOfTargets (the real broker's equivalent), duplicated here rather
-// than imported because that package is production auth logic this test
-// helper has no business depending on.
-func insteadOfTargets(host, owner string) []string {
+// insteadOfTargets returns the URL forms the mirror rule should rewrite for one repository:
+// https and ssh, both in the canonical ".git" form go-getter hands to git for
+// github.com/<owner>/<repo>.git shorthand, git::https:// and ssh:// references alike. This
+// mirrors the shape of pkg/auth/integrations/github/sts.go's insteadOfTargets (the real broker's
+// equivalent, which is owner-scoped because a token covers a whole owner), duplicated here rather
+// than imported because that package is production auth logic this test helper has no business
+// depending on.
+func insteadOfTargets(host, owner, repo string) []string {
 	return []string{
-		"https://" + host + "/" + owner + "/",
-		"ssh://git@" + host + "/" + owner + "/",
+		"https://" + host + "/" + owner + "/" + repo + ".git",
+		"ssh://git@" + host + "/" + owner + "/" + repo + ".git",
 	}
 }
