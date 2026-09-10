@@ -343,6 +343,13 @@ func resolveExistingAncestor(dir string) (string, error) {
 	}
 }
 
+// newAtomicWriteFS is indirected through a package-level var so tests can
+// substitute a mock filesystem.FileSystem (see pkg/filesystem's generated
+// MockFileSystem) and force WriteFileAtomic to fail -- a real disk write
+// failure (permission denied, out of space) is otherwise impractical to
+// trigger portably in a test.
+var newAtomicWriteFS = func() filesystem.FileSystem { return filesystem.NewOSFileSystem() }
+
 // writeFileSecure writes content to fullPath, closing the TOCTOU gap between
 // an earlier existence check and the write. For non-overwrite writes it uses
 // exclusive creation (O_EXCL), which atomically fails if something raced in
@@ -353,7 +360,7 @@ func resolveExistingAncestor(dir string) (string, error) {
 // secondary symlink-safety win over a plain O_TRUNC open.
 func writeFileSecure(fullPath string, content []byte, perm os.FileMode, overwrite bool) (err error) {
 	if overwrite {
-		return filesystem.NewOSFileSystem().WriteFileAtomic(fullPath, content, perm)
+		return newAtomicWriteFS().WriteFileAtomic(fullPath, content, perm)
 	}
 
 	f, openErr := os.OpenFile(fullPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
@@ -554,7 +561,7 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 			return errUtils.Build(errUtils.ErrThreeWayMerge).
 				WithExplanation("`--update` requires a git repository to compute a 3-way merge base").
 				WithHint("Run inside a git repository and/or pass `--base-ref`").
-				WithHint("Or use `--force` to overwrite the file").
+				WithHint("Or drop `--update` and use `--force` alone to overwrite the file").
 				WithContext("file_path", file.Path).
 				WithExitCode(2).
 				Err()
