@@ -65,14 +65,18 @@ func TestPollStackEvents_DeduplicatesAcrossCalls(t *testing.T) {
 
 	eventID1 := "event-1"
 	logicalID := "MyBucket"
+	// DescribeStackEvents returns the same event on both polls (CloudFormation's
+	// API always returns the full event history, not just new events since the
+	// last call) -- pollStackEvents' own seen-map bookkeeping is what must
+	// prevent the second call from re-reporting event-1 as fresh.
 	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{
 		StackEvents: []cfntypes.StackEvent{
 			{EventId: &eventID1, LogicalResourceId: &logicalID, ResourceStatus: cfntypes.ResourceStatusCreateInProgress},
 		},
-	}, nil)
+	}, nil).Times(2)
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateInProgress}},
-	}, nil)
+	}, nil).Times(2)
 
 	seen := make(map[string]bool)
 	events, status, err := pollStackEvents(context.Background(), client, "vpc", seen)
@@ -80,6 +84,13 @@ func TestPollStackEvents_DeduplicatesAcrossCalls(t *testing.T) {
 	assert.Len(t, events, 1)
 	assert.Equal(t, cfntypes.StackStatusCreateInProgress, status)
 	assert.True(t, seen["event-1"])
+
+	// Second poll with the same client and seen map: event-1 was already
+	// recorded, so it must not be reported as fresh again.
+	events, status, err = pollStackEvents(context.Background(), client, "vpc", seen)
+	require.NoError(t, err)
+	assert.Empty(t, events, "an event already recorded in seen must not be reported as fresh on a subsequent poll")
+	assert.Equal(t, cfntypes.StackStatusCreateInProgress, status)
 }
 
 // printStackEvent must render a plain transition line via ui.Writeln for a

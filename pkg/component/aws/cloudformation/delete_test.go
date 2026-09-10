@@ -37,6 +37,76 @@ func TestDeleteStack_DisableTerminationProtectionFlag(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// deleteStack must restore termination protection when DeleteStack fails
+// after protection was disabled via --disable-termination-protection --
+// otherwise a failed delete attempt silently leaves a previously-protected
+// stack unprotected.
+func TestDeleteStack_RestoresTerminationProtectionOnDeleteFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	gomock.InOrder(
+		client.EXPECT().UpdateTerminationProtection(gomock.Any(), &cloudformation.UpdateTerminationProtectionInput{
+			StackName:                   awsString("vpc"),
+			EnableTerminationProtection: awsBool(false),
+		}).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil),
+		client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(nil, errors.New("delete rejected")),
+		client.EXPECT().UpdateTerminationProtection(gomock.Any(), &cloudformation.UpdateTerminationProtectionInput{
+			StackName:                   awsString("vpc"),
+			EnableTerminationProtection: awsBool(true),
+		}).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil),
+	)
+
+	spec := &stackSpec{StackName: "vpc", TerminationProtection: true}
+	err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+	assert.Contains(t, err.Error(), "delete rejected")
+}
+
+// deleteStack must join a restoration failure with the original delete error
+// (rather than swallowing either) when restoring termination protection also
+// fails for a reason unrelated to the stack having actually entered deletion.
+func TestDeleteStack_RestoreFailureJoinedWithDeleteError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	gomock.InOrder(
+		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil),
+		client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(nil, errors.New("delete rejected")),
+		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied")),
+	)
+
+	spec := &stackSpec{StackName: "vpc", TerminationProtection: true}
+	err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "delete rejected", "must preserve the original delete error")
+	assert.Contains(t, err.Error(), "access denied", "must include the restoration failure with context")
+}
+
+// deleteStack must not treat AWS's DELETE_IN_PROGRESS/DELETE_COMPLETE
+// rejection of the restore attempt as a failure: the delete actually started
+// server-side despite the observed DeleteStack error, so there is nothing to
+// restore and only the original delete error should surface.
+func TestDeleteStack_RestoreSkippedWhenDeleteActuallyInProgress(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	gomock.InOrder(
+		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil),
+		client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(nil, errors.New("timeout")),
+		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).
+			Return(nil, errors.New("ValidationError: cannot update termination protection while stack is DELETE_IN_PROGRESS")),
+	)
+
+	spec := &stackSpec{StackName: "vpc", TerminationProtection: true}
+	err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "timeout")
+	assert.NotContains(t, err.Error(), "DELETE_IN_PROGRESS",
+		"the expected DELETE_IN_PROGRESS restoration rejection must not be surfaced as an additional error")
+}
+
 func TestDeleteStack_NoTerminationProtection(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)

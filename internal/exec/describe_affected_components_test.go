@@ -669,6 +669,93 @@ func TestAddCloudFormationSectionAffected_NoFalsePositives(t *testing.T) {
 	assert.Empty(t, affected)
 }
 
+// A section absent from the local component and never present on the remote
+// component either (e.g. tags was never configured on either ref) must not
+// be reported as affected -- only a genuine presence asymmetry is a change.
+func TestAddCloudFormationSectionAffected_AbsentOnBothSidesNoFalsePositive(t *testing.T) {
+	t.Parallel()
+
+	componentSection := map[string]any{sectionNameStackName: "vpc-prod"}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{sectionNameStackName: "vpc-prod"})
+
+	var affected []schema.Affected
+	err := addCloudFormationSectionAffected(
+		&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+		&componentSection, &remoteStacks, &remoteStacks,
+		false, false,
+	)
+	require.NoError(t, err)
+	assert.Empty(t, affected, "tags/stack_policy/role_arn/etc. absent on both sides must not report as affected")
+}
+
+// A section that existed on the remote ref but was removed from the current
+// component (present remotely, absent locally) must still be detected as a
+// change: the previous local-presence guard silently skipped this direction,
+// letting a removed tags/stack_policy/role_arn/etc. section slip past
+// affected detection and skip a required deployment.
+func TestAddCloudFormationSectionAffected_SectionRemoved(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		section    string
+		remoteVal  any
+		wantReason string
+	}{
+		{"tags", sectionNameTags, map[string]any{"env": "prod"}, affectedReasonStackTags},
+		{"stack_policy", sectionNameStackPolicy, map[string]any{"file": "policy.json"}, affectedReasonStackStackPolicy},
+		{"role_arn", sectionNameRoleArn, "arn:aws:iam::111:role/deploy", affectedReasonStackRoleArn},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// stack_name is present and unchanged on both sides -- only the
+			// removed section under test should surface as affected.
+			componentSection := map[string]any{sectionNameStackName: "vpc-prod"}
+			remoteStacks := cfnRemoteStacksWith(map[string]any{
+				sectionNameStackName: "vpc-prod",
+				tt.section:           tt.remoteVal,
+			})
+
+			var affected []schema.Affected
+			err := addCloudFormationSectionAffected(
+				&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+				&componentSection, &remoteStacks, &remoteStacks,
+				false, false,
+			)
+			require.NoError(t, err)
+
+			require.Len(t, affected, 1, "a section removed locally but present remotely must be detected")
+			assert.Equal(t, tt.wantReason, affected[0].Affected)
+		})
+	}
+}
+
+// A section added locally that never existed on the remote ref (present
+// locally, absent remotely) must also be detected as a change.
+func TestAddCloudFormationSectionAffected_SectionAdded(t *testing.T) {
+	t.Parallel()
+
+	componentSection := map[string]any{
+		sectionNameStackName: "vpc-prod",
+		sectionNameTags:      map[string]any{"env": "prod"},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{sectionNameStackName: "vpc-prod"})
+
+	var affected []schema.Affected
+	err := addCloudFormationSectionAffected(
+		&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+		&componentSection, &remoteStacks, &remoteStacks,
+		false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, affectedReasonStackTags, affected[0].Affected)
+}
+
 // TestProcessCloudFormationComponentsIndexed mirrors TestProcessHelmComponentsIndexed:
 // a metadata change, a first-class section change (stack_name), and a settings
 // change must all surface as distinct affected reasons for the same component.

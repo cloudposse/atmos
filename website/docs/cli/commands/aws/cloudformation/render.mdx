@@ -46,8 +46,8 @@ atmos aws cloudformation render --affected --labels cost-center=platform
 ## Flags
 
 <dl>
-  <dt>`--stack`, `-s` <em>(required)</em></dt>
-  <dd>Atmos stack.</dd>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
 
   <dt>`--all` <em>(optional)</em></dt>
   <dd>Render all `aws/cloudformation` components in dependency order.</dd>
@@ -57,6 +57,9 @@ atmos aws cloudformation render --affected --labels cost-center=platform
 
   <dt>`--include-dependents` <em>(optional)</em></dt>
   <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--base` <em>(optional)</em></dt>
+  <dd>Git base ref or SHA to compare against for affected detection: `--base origin/main`. Used with `--affected`.</dd>
 
   <dt>`--tags` <em>(optional)</em></dt>
   <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>

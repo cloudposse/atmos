@@ -17,7 +17,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Seams for testing.
@@ -96,11 +95,24 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 	return runWithHooks(ctx, atmosConfig, info, operation, spec)
 }
 
-// resolveSpecAndTemplate resolves the component's on-disk path (including JIT
-// source provisioning), builds the SDK-ready stackSpec, and — for every
-// operation except delete, which needs no template — loads the template body,
-// registers NoEcho values with the masker, and loads the stack policy.
+// resolveSpecAndTemplate builds the SDK-ready stackSpec and — for every
+// operation except delete and output, neither of which touches local files —
+// resolves the component's on-disk path (including JIT source provisioning),
+// loads the template body, registers NoEcho values with the masker, and loads
+// the stack policy. Delete only needs spec.StackName (already set by
+// buildStackSpec) and output only needs the deployed stack's name, so both
+// return immediately: a source checkout or provisioning failure must not
+// block deleting a stack or reading its outputs.
 func resolveSpecAndTemplate(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) (*stackSpec, error) {
+	spec, err := buildStackSpec(info.ComponentSection)
+	if err != nil {
+		return nil, err
+	}
+
+	if operation == OperationDelete || operation == OperationOutput {
+		return spec, nil
+	}
+
 	componentPath, err := resolveComponentPath(atmosConfig, info)
 	if err != nil {
 		return nil, err
@@ -108,15 +120,6 @@ func resolveSpecAndTemplate(atmosConfig *schema.AtmosConfiguration, info *schema
 	componentPath, _, err = provisionAndResolveComponentPath(context.Background(), provisioner.OutputWriters{}, atmosConfig, info, cfg.CloudFormationComponentType, componentPath)
 	if err != nil {
 		return nil, err
-	}
-
-	spec, err := buildStackSpec(info.ComponentSection)
-	if err != nil {
-		return nil, err
-	}
-
-	if operation == OperationDelete {
-		return spec, nil
 	}
 
 	spec.TemplateBody, err = loadTemplateBody(componentPath, spec)
@@ -226,7 +229,14 @@ func renderDiffSummary(stackName string, result *changeSetResult) {
 		return
 	}
 
-	_ = data.Writeln(fmt.Sprintf("%s: %d resource change(s)", stackName, len(result.Changes)))
+	resourceChangeCount := 0
+	for _, change := range result.Changes {
+		if change.ResourceChange != nil {
+			resourceChangeCount++
+		}
+	}
+
+	_ = data.Writeln(fmt.Sprintf("%s: %d resource change(s)", stackName, resourceChangeCount))
 	for _, change := range result.Changes {
 		rc := change.ResourceChange
 		if rc == nil {
@@ -288,7 +298,9 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 		return summary, err
 	}
 	summary["outputs"] = outputs
-	renderOutputsSummary(outputs, octx.Flags)
+	if err := renderOutputsSummary(outputs, octx.Flags); err != nil {
+		return summary, err
+	}
 	return summary, nil
 }
 
@@ -329,14 +341,18 @@ func runOutput(ctx context.Context, client CloudFormationClient, stackName strin
 		return summary, err
 	}
 	summary["outputs"] = outputs
-	renderOutputsSummary(outputs, flags)
+	if err := renderOutputsSummary(outputs, flags); err != nil {
+		return summary, err
+	}
 	return summary, nil
 }
 
 // renderOutputsSummary writes the Outputs to the data channel (stdout) in the
 // requested format (default: table), reusing the shared pkg/output formatter —
 // the full standard format set (json/yaml/hcl/env/dotenv/bash/csv/tsv/github).
-func renderOutputsSummary(outputs map[string]any, flags map[string]any) {
+// Returns an error on formatter or write failure so callers report the
+// operation as unsuccessful instead of silently succeeding with no output.
+func renderOutputsSummary(outputs map[string]any, flags map[string]any) error {
 	format := sharedoutput.FormatTable
 	if f, ok := flags["format"].(string); ok && f != "" {
 		format = sharedoutput.Format(f)
@@ -352,8 +368,7 @@ func renderOutputsSummary(outputs map[string]any, flags map[string]any) {
 
 	rendered, err := sharedoutput.FormatOutputsWithOptions(outputs, format, opts)
 	if err != nil {
-		ui.Error(fmt.Sprintf("failed to format outputs: %v", err))
-		return
+		return fmt.Errorf("format CloudFormation outputs: %w", err)
 	}
-	_ = data.Write(rendered)
+	return data.Write(rendered)
 }

@@ -107,6 +107,14 @@ func (e HookEvent) Normalize() HookEvent {
 		return AfterHelmfileApply
 	case BeforeHelmfileDeploy, BeforeHelmfileSync:
 		return BeforeHelmfileApply
+	case AfterAwsCloudFormationPlan:
+		return AfterAwsCloudFormationDiff
+	case BeforeAwsCloudFormationPlan:
+		return BeforeAwsCloudFormationDiff
+	case AfterAwsCloudFormationDeploy:
+		return AfterAwsCloudFormationApply
+	case BeforeAwsCloudFormationDeploy:
+		return BeforeAwsCloudFormationApply
 	default:
 		return e
 	}

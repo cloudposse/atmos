@@ -63,7 +63,7 @@ func uploadPackage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, 
 
 	backend, err := newS3BackendFunc(atmosConfig, info, s3Target)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating S3 packaging backend for bucket %q: %w", s3Target.Bucket, err)
 	}
 
 	sum := sha256.Sum256([]byte(templateBody))

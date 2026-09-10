@@ -53,8 +53,8 @@ atmos aws cloudformation output --affected --base origin/main
 ## Flags
 
 <dl>
-  <dt>`--stack`, `-s` <em>(required)</em></dt>
-  <dd>Atmos stack.</dd>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
 
   <dt>`--format` <em>(optional, default `table`)</em></dt>
   <dd>Output format: `json`, `yaml`, `hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table`, or `github`.</dd>
@@ -73,6 +73,9 @@ atmos aws cloudformation output --affected --base origin/main
 
   <dt>`--include-dependents` <em>(optional)</em></dt>
   <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--base` <em>(optional)</em></dt>
+  <dd>Git base ref or SHA to compare against for affected detection: `--base origin/main`. Used with `--affected`.</dd>
 
   <dt>`--tags` <em>(optional)</em></dt>
   <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>

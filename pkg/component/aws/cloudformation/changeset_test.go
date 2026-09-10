@@ -181,6 +181,39 @@ func TestCreateChangeSet_DetectsCreateVsUpdate(t *testing.T) {
 	}
 }
 
+// createChangeSet must send TemplateURL (not TemplateBody) when spec.TemplateURL
+// is set (a packaged, over-the-inline-limit template) -- CreateChangeSet
+// accepts exactly one of the two and rejects a request setting both.
+func TestCreateChangeSet_UsesTemplateURLWhenPackaged(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+
+	var gotInput *cloudformation.CreateChangeSetInput
+	client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, input *cloudformation.CreateChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error) {
+			gotInput = input
+			return &cloudformation.CreateChangeSetOutput{}, nil
+		},
+	)
+	client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+		Status: cfntypes.ChangeSetStatusCreateComplete,
+	}, nil)
+
+	spec := &stackSpec{
+		StackName:    "vpc",
+		TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'",
+		TemplateURL:  "s3://my-bucket/dev/vpc/template-abc",
+	}
+	_, err := createChangeSet(context.Background(), client, spec)
+	require.NoError(t, err)
+
+	require.NotNil(t, gotInput)
+	require.NotNil(t, gotInput.TemplateURL)
+	assert.Equal(t, spec.TemplateURL, *gotInput.TemplateURL)
+	assert.Nil(t, gotInput.TemplateBody, "TemplateBody must not be set alongside TemplateURL")
+}
+
 // createChangeSet must propagate a stackExists failure (an API error other
 // than "does not exist") without attempting to create a changeset.
 func TestCreateChangeSet_StackExistsError(t *testing.T) {
@@ -391,6 +424,31 @@ func TestWaitForChangeSet_ContextCancelled(t *testing.T) {
 func TestSanitizeChangeSetSuffix(t *testing.T) {
 	assert.Equal(t, "acme-plat-ue2-dev-vpc", sanitizeChangeSetSuffix("acme-plat-ue2-dev-vpc"))
 	assert.Equal(t, "acme-plat-vpc", sanitizeChangeSetSuffix("acme_plat-vpc"), "non-alphanumeric-non-hyphen characters (e.g. underscore) become hyphens")
+}
+
+// TestChangeSetName_MaxLengthStackName guards against a CloudFormation
+// CreateChangeSet rejection: ChangeSetName (like stack names) is capped at 128
+// characters, but changeSetName previously concatenated "atmos-<suffix>-<nanos>"
+// with no bound, so a maximum-length (128-char) stack name produced a
+// ChangeSetName well over the limit and CreateChangeSet would reject the
+// deployment outright.
+func TestChangeSetName_MaxLengthStackName(t *testing.T) {
+	maxStackName := strings.Repeat("a", 128)
+
+	name := changeSetName(maxStackName)
+
+	assert.LessOrEqual(t, len(name), changeSetNameMaxLength,
+		"generated change-set name must never exceed CloudFormation's 128-character ChangeSetName limit")
+	assert.True(t, strings.HasPrefix(name, "atmos-"), "name should keep the atmos- prefix")
+}
+
+// A short, ordinary stack name must still produce a name that round-trips the
+// full sanitized suffix (no truncation needed).
+func TestChangeSetName_ShortStackName(t *testing.T) {
+	name := changeSetName("vpc")
+
+	assert.LessOrEqual(t, len(name), changeSetNameMaxLength)
+	assert.Contains(t, name, "atmos-vpc-", "short stack names should not be truncated")
 }
 
 // wrapAPICallError must recognize AWS's "does not exist" validation error

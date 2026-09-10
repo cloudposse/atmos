@@ -109,15 +109,42 @@ var directoryArchiveExtensions = []string{
 	".tar.zst", ".tzst", ".tar", ".zip",
 }
 
-// IsArchiveURI checks if the URI's path ends in a directory-producing archive
-// extension (a tarball or zip go-getter will decompress into a directory tree).
-// This matches on the path suffix, ignoring any query string, so it works for
-// any scheme (http(s)://, file://, s3::, etc.) rather than only http(s).
+// archiveQueryParam is go-getter's query parameter that explicitly overrides
+// extension-based archive detection: any value other than "false" (including
+// an explicit archive type like "zip") forces unarchiving, and "false"
+// disables it even for a recognized archive extension. See
+// https://pkg.go.dev/github.com/hashicorp/go-getter#hdr-Archiving.
+const archiveQueryParam = "archive"
+
+// IsArchiveURI checks whether go-getter will unpack this source into a
+// directory tree (a tarball or zip), rather than staging it as a single file.
+// It honors go-getter's explicit `archive` query parameter override before
+// falling back to extension-based detection on the path suffix, and strips
+// both any go-getter subdirectory (`//...`) suffix and the query string
+// first: a URI like `https://example.com/archive.zip//nested/dir` must still
+// be recognized as an archive by its source extension, not misclassified by
+// its subdirectory path, and `?archive=zip`/`?archive=false` must override
+// extension detection either direction (forcing unarchiving even with no
+// recognized extension, or disabling it for a recognized one) rather than
+// being silently dropped along with the rest of the query string.
 func IsArchiveURI(uri string) bool {
-	path := uri
+	source, _ := getter.SourceDirSubdir(uri)
+
+	path := source
+	var rawQuery string
 	if idx := strings.IndexByte(path, '?'); idx != -1 {
+		rawQuery = path[idx+1:]
 		path = path[:idx]
 	}
+
+	if rawQuery != "" {
+		if values, err := url.ParseQuery(rawQuery); err == nil {
+			if archive, ok := values[archiveQueryParam]; ok && len(archive) > 0 {
+				return !strings.EqualFold(archive[0], "false")
+			}
+		}
+	}
+
 	lowerPath := strings.ToLower(path)
 	for _, ext := range directoryArchiveExtensions {
 		if strings.HasSuffix(lowerPath, ext) {

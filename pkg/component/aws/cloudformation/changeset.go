@@ -3,6 +3,7 @@ package cloudformation
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,9 +43,26 @@ type changeSetResult struct {
 	ChangeSetType cfntypes.ChangeSetType
 }
 
+// changeSetNameMaxLength is CloudFormation's hard limit on ChangeSetName length
+// (same limit as stack names): https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/API_CreateChangeSet.html
+const changeSetNameMaxLength = 128
+
+// decimalBase is passed to strconv.FormatInt for the changeset name's
+// timestamp suffix (a plain base-10 decimal, not hex/octal).
+const decimalBase = 10
+
 // changeSetName generates a unique, stack-scoped changeset name for this operation.
+// The sanitized suffix is truncated so the final "atmos-<suffix>-<timestamp>" name
+// never exceeds CloudFormation's 128-character ChangeSetName limit, even for a
+// maximum-length stack name.
 func changeSetName(stackName string) string {
-	return fmt.Sprintf("atmos-%s-%d", sanitizeChangeSetSuffix(stackName), time.Now().UnixNano())
+	timestamp := strconv.FormatInt(time.Now().UnixNano(), decimalBase)
+	suffix := sanitizeChangeSetSuffix(stackName)
+	maxSuffixLength := changeSetNameMaxLength - len("atmos--") - len(timestamp)
+	if len(suffix) > maxSuffixLength {
+		suffix = suffix[:maxSuffixLength]
+	}
+	return fmt.Sprintf("atmos-%s-%s", suffix, timestamp)
 }
 
 // sanitizeChangeSetSuffix keeps changeset names within CloudFormation's
@@ -135,11 +153,19 @@ func createChangeSet(ctx context.Context, client CloudFormationClient, spec *sta
 		ChangeSetName:    awsString(name),
 		StackName:        awsString(spec.StackName),
 		ChangeSetType:    changeSetType,
-		TemplateBody:     awsString(spec.TemplateBody),
 		Parameters:       spec.Parameters,
 		Capabilities:     spec.Capabilities,
 		Tags:             spec.Tags,
 		NotificationARNs: spec.NotificationArns,
+	}
+	// CreateChangeSet accepts exactly one of TemplateBody/TemplateURL. A
+	// packaged template (spec.TemplateURL set by deliverApply, e.g. because it
+	// exceeds the 51,200-byte inline limit) must use TemplateURL -- sending
+	// both, or falling back to an oversized TemplateBody, is rejected by AWS.
+	if spec.TemplateURL != "" {
+		input.TemplateURL = awsString(spec.TemplateURL)
+	} else {
+		input.TemplateBody = awsString(spec.TemplateBody)
 	}
 	if spec.RoleArn != "" {
 		input.RoleARN = awsString(spec.RoleArn)

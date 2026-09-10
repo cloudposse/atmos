@@ -57,8 +57,8 @@ atmos aws cloudformation delete --affected --labels cost-center=platform
 ## Flags
 
 <dl>
-  <dt>`--stack`, `-s` <em>(required)</em></dt>
-  <dd>Atmos stack.</dd>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
 
   <dt>`--auto-approve` <em>(optional)</em></dt>
   <dd>Skip the interactive confirmation prompt. Without it, `delete` prompts for confirmation on a TTY before deleting the stack.</dd>

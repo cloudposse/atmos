@@ -202,13 +202,22 @@ func TestExecuteBulk_All(t *testing.T) {
 
 	origGraph := executeGraph
 	var gotOpts *component.GraphExecutionOptions
-	executeGraph = func(_ context.Context, opts *component.GraphExecutionOptions) error {
+	var gotCtx context.Context
+	executeGraph = func(ctx context.Context, opts *component.GraphExecutionOptions) error {
+		gotCtx = ctx
 		gotOpts = opts
 		return nil
 	}
 	t.Cleanup(func() { executeGraph = origGraph })
 
-	ctx := &component.ExecutionContext{Flags: map[string]any{"foo": "bar"}}
+	// Cancel the caller's context up front: executeBulk must forward this
+	// cancellation into ExecuteGraph via ctx.GoContext() rather than
+	// discarding it with context.Background(), which would let bulk
+	// CloudFormation runs continue after the caller gave up.
+	callerCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	ctx := &component.ExecutionContext{Context: callerCtx, Flags: map[string]any{"foo": "bar"}}
 	atmosConfig := &schema.AtmosConfiguration{}
 	info := &schema.ConfigAndStacksInfo{All: true}
 
@@ -220,6 +229,9 @@ func TestExecuteBulk_All(t *testing.T) {
 	assert.Equal(t, string(OperationApply), gotOpts.SubCommand)
 	assert.Nil(t, gotOpts.Selection, "--all (not --affected) must pass a nil selection")
 	assert.Equal(t, ctx.Flags, gotOpts.Flags)
+	require.NotNil(t, gotCtx)
+	assert.ErrorIs(t, gotCtx.Err(), context.Canceled,
+		"executeBulk must forward the caller's cancellation into ExecuteGraph instead of a disconnected context.Background()")
 }
 
 // executeBulk must propagate an executeDescribeStacks failure without

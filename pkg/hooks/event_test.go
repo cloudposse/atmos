@@ -44,3 +44,17 @@ func TestHookEvent_Normalize_OutputRefreshNotAliased(t *testing.T) {
 	assert.Equal(t, BeforeTerraformRefresh, BeforeTerraformRefresh.Normalize())
 	assert.Equal(t, AfterTerraformRefresh, AfterTerraformRefresh.Normalize())
 }
+
+// aws/cloudformation's CLI verbs (plan, deploy) are aliases for the canonical
+// executor-emitted events (diff, apply): the executor only ever fires
+// Before/AfterAwsCloudFormationDiff and Before/AfterAwsCloudFormationApply
+// (see eventsFor in pkg/component/aws/cloudformation/executor.go), so a hook
+// configured for "before.aws/cloudformation.plan" or
+// "...deploy" must normalize to the event the executor actually emits, or it
+// would never fire.
+func TestHookEvent_Normalize_AwsCloudFormationPlanDeployAliased(t *testing.T) {
+	assert.Equal(t, BeforeAwsCloudFormationDiff, BeforeAwsCloudFormationPlan.Normalize())
+	assert.Equal(t, AfterAwsCloudFormationDiff, AfterAwsCloudFormationPlan.Normalize())
+	assert.Equal(t, BeforeAwsCloudFormationApply, BeforeAwsCloudFormationDeploy.Normalize())
+	assert.Equal(t, AfterAwsCloudFormationApply, AfterAwsCloudFormationDeploy.Normalize())
+}

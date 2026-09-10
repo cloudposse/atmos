@@ -423,6 +423,30 @@ func TestIsArchiveURI(t *testing.T) {
 	assert.False(t, IsArchiveURI(""))
 }
 
+// IsArchiveURI must honor go-getter's explicit `archive` query parameter
+// override in both directions -- forcing unarchiving even without a
+// recognized extension, and disabling it even with one -- and must strip a
+// go-getter subdirectory (`//...`) suffix before checking the source's own
+// extension, rather than checking the combined source+subdir path suffix.
+func TestIsArchiveURI_ArchiveQueryParamAndSubdirectory(t *testing.T) {
+	// archive=<type> forces unarchiving even with no recognized extension.
+	assert.True(t, IsArchiveURI("https://example.com/download?archive=zip"),
+		"an explicit archive type must force unarchiving regardless of extension")
+	// archive=false disables unarchiving even for a recognized extension.
+	assert.False(t, IsArchiveURI("https://example.com/archive.zip?archive=false"),
+		"archive=false must override extension-based detection")
+	// A subdirectory suffix (go-getter's //nested syntax) must not mask the
+	// source's own archive extension.
+	assert.True(t, IsArchiveURI("https://example.com/archive.zip//nested"),
+		"a subdirectory suffix must not hide the source's archive extension")
+	// archive=true is the explicit form of the default (extension-detected)
+	// behavior and must still force unarchiving.
+	assert.True(t, IsArchiveURI("https://example.com/download?archive=true"))
+	// A subdirectory combined with an explicit archive override: the override
+	// still wins, and the subdirectory suffix is not consulted.
+	assert.False(t, IsArchiveURI("https://example.com/archive.zip//nested?archive=false"))
+}
+
 func TestIsNonGitHTTPURI(t *testing.T) {
 	tests := []struct {
 		name     string

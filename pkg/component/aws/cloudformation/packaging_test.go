@@ -242,6 +242,7 @@ func TestUploadPackage_BackendConstructionError(t *testing.T) {
 	_, err := uploadPackage(context.Background(), &schema.AtmosConfiguration{}, info, s3Target, "template body")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bucket not accessible")
+	assert.Contains(t, err.Error(), "my-bucket", "wrapped error must name the bucket it was trying to reach")
 }
 
 // uploadPackage must wrap a real upload failure with the s3:// destination it

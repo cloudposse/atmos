@@ -52,11 +52,15 @@ func deliverApply(octx *opContext, client CloudFormationClient, spec *stackSpec)
 		summary[targetKey] = selected.Kind
 	}
 
-	if selected.Kind == cfg.CloudFormationComponentType {
-		result, err := deployDirect(octx.Ctx, client, spec)
-		return summary, result, err
-	}
-
+	// Package before delivery whenever the template needs it (exceeds
+	// CloudFormation's inline TemplateBody limit) or an aws/s3 target was
+	// selected directly -- regardless of which kind ultimately receives it.
+	// A direct-deploy target (kind: aws/cloudformation) needs the resulting
+	// TemplateURL just as much as an external (e.g. git) target needs the
+	// packaged reference: CreateChangeSet rejects a TemplateBody over 51,200
+	// bytes just as surely as embedding that same oversized body verbatim in
+	// a delivered artifact would be wasteful and duplicate the packaging this
+	// step already did.
 	if needsPackaging(spec.TemplateBody) || selected.Kind == kindAwsS3 {
 		s3Target, err := resolvePackagingTarget(provisionSection, selected)
 		if err != nil {
@@ -68,6 +72,12 @@ func deliverApply(octx *opContext, client CloudFormationClient, spec *stackSpec)
 		}
 		summary["package_url"] = pkg.URL
 		summary["package_sha256"] = pkg.SHA256
+		spec.TemplateURL = pkg.URL
+	}
+
+	if selected.Kind == cfg.CloudFormationComponentType {
+		result, err := deployDirect(octx.Ctx, client, spec)
+		return summary, result, err
 	}
 
 	if selected.Kind == kindAwsS3 {
@@ -174,8 +184,9 @@ func s3ConfigFromTarget(name string, block map[string]any) (*targetS3Config, err
 // Kubernetes manifests.
 func deliverToExternalTarget(octx *opContext, selected *target.SelectedTarget, spec *stackSpec, summary map[string]any) error {
 	fileName := spec.StackName + ".yaml"
-	files := map[string][]byte{fileName: []byte(spec.TemplateBody)}
-	summary["template_bytes"] = len(spec.TemplateBody)
+	content := templateContentForDelivery(spec)
+	files := map[string][]byte{fileName: content}
+	summary["template_bytes"] = len(content)
 
 	artifact := target.ProvisionArtifact{
 		Kind:   target.ArtifactKindCloudFormationTemplate,
@@ -198,6 +209,20 @@ func deliverToExternalTarget(octx *opContext, selected *target.SelectedTarget, s
 		Artifact:     artifact,
 		EnvProvider:  authManagerFor(octx.Info),
 	})
+}
+
+// templateContentForDelivery returns the bytes an external (e.g. git) target
+// artifact should contain: when deliverApply already packaged the template
+// (spec.TemplateURL set, because it needed packaging), a small pointer
+// document referencing the uploaded location -- not the original oversized
+// body, which packaging was specifically meant to avoid duplicating into
+// every delivery destination. Otherwise, the raw template body is delivered
+// as-is (the common case: no packaging was needed).
+func templateContentForDelivery(spec *stackSpec) []byte {
+	if spec.TemplateURL == "" {
+		return []byte(spec.TemplateBody)
+	}
+	return []byte(fmt.Sprintf("# Packaged by atmos aws cloudformation -- the original template exceeded\n# CloudFormation's inline size limit and was uploaded here instead of being\n# embedded in this delivery.\nTemplateURL: %s\n", spec.TemplateURL))
 }
 
 // authManagerFor returns the Atmos Auth manager as an identity-environment

@@ -156,6 +156,44 @@ func TestDeliverToExternalTarget_GitTargetNotConfigured(t *testing.T) {
 	assert.Equal(t, len(spec.TemplateBody), summary["template_bytes"])
 }
 
+// deliverToExternalTarget must deliver the packaged reference (a small
+// TemplateURL pointer document), not the original oversized template body,
+// once deliverApply has already packaged the template (spec.TemplateURL set)
+// -- re-embedding the full body into every delivery destination is exactly
+// what packaging was meant to avoid.
+func TestDeliverToExternalTarget_UsesPackagedReferenceWhenPackaged(t *testing.T) {
+	octx := &opContext{
+		Ctx:         context.Background(),
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "dev"},
+	}
+	selected := &target.SelectedTarget{Kind: "git", Name: "gitops"}
+	largeTemplate := "AWSTemplateFormatVersion: '2010-09-09'\n" + strings.Repeat("a", templateInlineSizeLimit+1)
+	spec := &stackSpec{StackName: "vpc", TemplateBody: largeTemplate, TemplateURL: "s3://my-bucket/dev/vpc/template-abc"}
+	summary := map[string]any{}
+
+	err := deliverToExternalTarget(octx, selected, spec, summary)
+	require.Error(t, err, "the git target has no repository configured")
+	assert.ErrorIs(t, err, errUtils.ErrGitRepositoryNotFound)
+	assert.Less(t, summary["template_bytes"].(int), len(spec.TemplateBody),
+		"a packaged delivery must be far smaller than the original oversized body")
+}
+
+func TestTemplateContentForDelivery_NotPackaged(t *testing.T) {
+	spec := &stackSpec{TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+	assert.Equal(t, []byte(spec.TemplateBody), templateContentForDelivery(spec))
+}
+
+func TestTemplateContentForDelivery_Packaged(t *testing.T) {
+	spec := &stackSpec{
+		TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\n" + strings.Repeat("a", templateInlineSizeLimit+1),
+		TemplateURL:  "s3://my-bucket/dev/vpc/template-abc",
+	}
+	content := templateContentForDelivery(spec)
+	assert.Less(t, len(content), len(spec.TemplateBody))
+	assert.Contains(t, string(content), spec.TemplateURL)
+}
+
 // deployDirect must skip ExecuteChangeSet and streamStackEvents when the
 // changeset is a no-op — a no-op apply must not attempt to execute anything.
 func TestDeployDirect_NoOp(t *testing.T) {
@@ -302,6 +340,68 @@ func TestDeliverApply_DirectDeployKind(t *testing.T) {
 	require.NotNil(t, result)
 	assert.False(t, result.NoOp)
 	assert.Equal(t, "default", summary[targetKey])
+}
+
+// deliverApply must package an oversized template before a direct deploy
+// (the implicit `kind: aws/cloudformation` default target) and pass the
+// packaged TemplateURL to CreateChangeSet instead of the raw body: AWS
+// rejects a TemplateBody over 51,200 bytes, and only TemplateURL supports
+// templates beyond that limit.
+func TestDeliverApply_DirectDeployKind_PackagesLargeTemplate(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	mockBackend := artifact.NewMockBackend(ctrl)
+	mockBackend.EXPECT().Upload(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	stubNewS3Backend(t, mockBackend, nil)
+
+	var gotInput *cloudformation.CreateChangeSetInput
+	gomock.InOrder(
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
+		client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, input *cloudformation.CreateChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error) {
+				gotInput = input
+				return &cloudformation.CreateChangeSetOutput{}, nil
+			},
+		),
+		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
+			Status: cfntypes.ChangeSetStatusCreateComplete,
+		}, nil),
+		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+		}, nil),
+	)
+
+	largeTemplate := "AWSTemplateFormatVersion: '2010-09-09'\n" + strings.Repeat("a", templateInlineSizeLimit+1)
+	octx := &opContext{
+		Ctx:         context.Background(),
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+			ComponentSection: map[string]any{
+				cfg.ProvisionSectionName: map[string]any{
+					"targets": map[string]any{
+						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket"},
+					},
+				},
+			},
+		},
+		Flags: map[string]any{},
+	}
+	spec := &stackSpec{StackName: "vpc", TemplateBody: largeTemplate}
+
+	summary, result, err := deliverApply(octx, client, spec)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.NotEmpty(t, summary["package_url"])
+
+	require.NotNil(t, gotInput)
+	require.NotNil(t, gotInput.TemplateURL, "an oversized template must be sent via TemplateURL")
+	assert.Equal(t, summary["package_url"], *gotInput.TemplateURL)
+	assert.Nil(t, gotInput.TemplateBody, "TemplateBody must not also be set once packaged (CreateChangeSet rejects both)")
 }
 
 // deliverApply must be publish-only when a `kind: aws/s3` target is directly

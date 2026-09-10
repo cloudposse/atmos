@@ -142,21 +142,45 @@ func TestRunDelete_FailedStatus(t *testing.T) {
 	require.Error(t, err)
 }
 
+// expectDescribeStacksWithVpcIDOutput sets up the single DescribeStacks call
+// TestRunOutput and TestRunOutput_RenderError both need (a stack with a
+// VpcId Output) -- their behavior under test diverges only in the
+// requested --format.
+func expectDescribeStacksWithVpcIDOutput(client *MockCloudFormationClient, outputKey, outputVal *string) {
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{
+			Outputs: []cfntypes.Output{{OutputKey: outputKey, OutputValue: outputVal}},
+		}},
+	}, nil)
+}
+
 func TestRunOutput(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 
 	outputKey := "VpcId"
 	outputVal := "vpc-123"
-	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{
-			Outputs: []cfntypes.Output{{OutputKey: &outputKey, OutputValue: &outputVal}},
-		}},
-	}, nil)
+	expectDescribeStacksWithVpcIDOutput(client, &outputKey, &outputVal)
 
 	summary, err := runOutput(context.Background(), client, "vpc", map[string]any{"format": "json"}, map[string]any{})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"VpcId": "vpc-123"}, summary["outputs"])
+}
+
+// runOutput must propagate a renderOutputsSummary failure (e.g. an
+// unsupported --format) as an error instead of reporting success with no
+// rendered output.
+func TestRunOutput_RenderError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	outputKey := "VpcId"
+	outputVal := "vpc-123"
+	expectDescribeStacksWithVpcIDOutput(client, &outputKey, &outputVal)
+
+	_, err := runOutput(context.Background(), client, "vpc", map[string]any{"format": "not-a-real-format"}, map[string]any{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "format CloudFormation outputs")
 }
 
 // renderDiffSummary must report a no-op changeset without listing any
@@ -202,23 +226,23 @@ func TestRenderDiffSummary_ListsResourceChanges(t *testing.T) {
 	out := captureStdout(t, func() {
 		renderDiffSummary("vpc", result)
 	})
-	// The summary count is len(result.Changes) — including the nil-ResourceChange
-	// entry that renderDiffSummary's loop skips when printing per-resource lines.
-	assert.Contains(t, out, "vpc: 3 resource change(s)")
+	// The summary count must match what the per-resource loop actually prints:
+	// only entries with a non-nil ResourceChange, excluding hook-only changes.
+	assert.Contains(t, out, "vpc: 2 resource change(s)")
 	assert.Contains(t, out, "MyBucket")
 	assert.Contains(t, out, "(replacement: True)")
 	assert.Contains(t, out, "MyRole")
 	assert.NotContains(t, out, "MyRole (replacement", "an Add with no Replacement must not print a replacement annotation")
 }
 
-// runApply's happy path: deliver, no stack policy configured, then render the
-// end-of-deploy Outputs summary.
-func TestRunApply_Success(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	client := NewMockCloudFormationClient(ctrl)
-
-	outputKey := "VpcId"
-	outputVal := "vpc-123"
+// expectRunApplySuccessfulDeployFlow sets up the common gomock expectation
+// chain a fully successful runApply exercises: deliver (create, execute,
+// stream events to CreateComplete), apply termination protection, then
+// describe outputs. Shared by TestRunApply_Success and
+// TestRunApply_RenderOutputsError so the two don't hand-roll the same
+// eight-call sequence (the render step is the only place their behavior
+// under test diverges).
+func expectRunApplySuccessfulDeployFlow(client *MockCloudFormationClient, outputKey, outputVal *string) {
 	gomock.InOrder(
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
 		client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil),
@@ -233,10 +257,21 @@ func TestRunApply_Success(t *testing.T) {
 		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{
-				Outputs: []cfntypes.Output{{OutputKey: &outputKey, OutputValue: &outputVal}},
+				Outputs: []cfntypes.Output{{OutputKey: outputKey, OutputValue: outputVal}},
 			}},
 		}, nil),
 	)
+}
+
+// runApply's happy path: deliver, no stack policy configured, then render the
+// end-of-deploy Outputs summary.
+func TestRunApply_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	outputKey := "VpcId"
+	outputVal := "vpc-123"
+	expectRunApplySuccessfulDeployFlow(client, &outputKey, &outputVal)
 
 	octx := &opContext{
 		Ctx:         context.Background(),
@@ -250,6 +285,30 @@ func TestRunApply_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, summary["no_op"].(bool))
 	assert.Equal(t, map[string]any{"VpcId": "vpc-123"}, summary["outputs"])
+}
+
+// runApply must propagate a renderOutputsSummary failure (e.g. an unsupported
+// --format) as an error instead of reporting the deploy as successful with no
+// rendered output -- the deploy itself already fully succeeded by this point.
+func TestRunApply_RenderOutputsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	outputKey := "VpcId"
+	outputVal := "vpc-123"
+	expectRunApplySuccessfulDeployFlow(client, &outputKey, &outputVal)
+
+	octx := &opContext{
+		Ctx:         context.Background(),
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info:        &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
+		Flags:       map[string]any{"format": "not-a-real-format"},
+	}
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+
+	_, err := runApply(octx, client, spec, map[string]any{"stack_name": "vpc"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "format CloudFormation outputs")
 }
 
 // runApply must apply the stack policy after a successful deploy when
@@ -505,23 +564,26 @@ func TestRunOutput_DescribeStacksError(t *testing.T) {
 }
 
 // renderOutputsSummary must honor the flatten and uppercase flags, and must
-// report (not panic on) a formatting error for an unsupported format.
+// return (not panic on, not silently swallow) a formatting error for an
+// unsupported format -- runOutput/runApply depend on this error to report the
+// operation as unsuccessful instead of reporting success with no output.
 func TestRenderOutputsSummary_FlattenUppercaseAndFormatError(t *testing.T) {
 	outputs := map[string]any{"nested": map[string]any{"id": "vpc-123"}}
 
+	var renderErr error
 	out := captureStdout(t, func() {
-		renderOutputsSummary(outputs, map[string]any{
+		renderErr = renderOutputsSummary(outputs, map[string]any{
 			"format":    "json",
 			"flatten":   true,
 			"uppercase": true,
 		})
 	})
+	require.NoError(t, renderErr)
 	assert.Contains(t, out, "NESTED")
 
-	errOut := captureStderr(t, func() {
-		renderOutputsSummary(map[string]any{"id": "vpc-123"}, map[string]any{"format": "not-a-real-format"})
-	})
-	assert.Contains(t, errOut, "failed to format outputs")
+	err := renderOutputsSummary(map[string]any{"id": "vpc-123"}, map[string]any{"format": "not-a-real-format"})
+	require.Error(t, err, "an unsupported format must be returned as an error, not swallowed")
+	assert.Contains(t, err.Error(), "format CloudFormation outputs")
 }
 
 // stubProvisionAndResolveComponentPath overrides the provisionAndResolveComponentPath
@@ -536,10 +598,13 @@ func stubProvisionAndResolveComponentPath(t *testing.T, dir string, err error) {
 	t.Cleanup(func() { provisionAndResolveComponentPath = original })
 }
 
-// resolveSpecAndTemplate must skip template/stack-policy loading entirely for
-// a delete operation (delete needs no template).
+// resolveSpecAndTemplate must skip template/stack-policy loading -- and local
+// path provisioning entirely -- for a delete operation (delete only needs
+// spec.StackName). Stubbing provisionAndResolveComponentPath to fail proves
+// delete never reaches it: a source checkout or provisioning failure must not
+// block deleting a stack.
 func TestResolveSpecAndTemplate_DeleteSkipsTemplateLoad(t *testing.T) {
-	stubProvisionAndResolveComponentPath(t, t.TempDir(), nil)
+	stubProvisionAndResolveComponentPath(t, "", errors.New("provisioning must not be attempted for delete"))
 
 	info := &schema.ConfigAndStacksInfo{
 		ComponentSection: map[string]any{"stack_name": "vpc", "template": "template.yaml"},
@@ -547,6 +612,23 @@ func TestResolveSpecAndTemplate_DeleteSkipsTemplateLoad(t *testing.T) {
 	spec, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, OperationDelete)
 	require.NoError(t, err)
 	assert.Empty(t, spec.TemplateBody, "delete must never load the template body")
+	assert.Equal(t, "vpc", spec.StackName)
+}
+
+// resolveSpecAndTemplate must likewise skip local path provisioning entirely
+// for an output operation (output only needs spec.StackName to query the
+// deployed stack's outputs via the API). A source checkout or provisioning
+// failure must not block reading a stack's outputs.
+func TestResolveSpecAndTemplate_OutputSkipsProvisioning(t *testing.T) {
+	stubProvisionAndResolveComponentPath(t, "", errors.New("provisioning must not be attempted for output"))
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{"stack_name": "vpc", "template": "template.yaml"},
+	}
+	spec, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, OperationOutput)
+	require.NoError(t, err)
+	assert.Empty(t, spec.TemplateBody, "output must never load the template body")
+	assert.Equal(t, "vpc", spec.StackName)
 }
 
 // resolveSpecAndTemplate's happy path for a non-delete operation: template

@@ -37,7 +37,7 @@ stack-scoped API calls always failed. The confirmed live repro: a component with
 deployed as a direct stack, running `atmos aws cfn apply <component> -s <stack> --target
 artifacts`, hit:
 
-```
+```text
 Error: aws/cloudformation API call failed: operation error CloudFormation: UpdateTerminationProtection, https response error
 StatusCode: 400, ... api error ValidationError: Stack [<name>] does not exist
 ```

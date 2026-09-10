@@ -887,13 +887,22 @@ func addCloudFormationSectionAffected(
 	}
 
 	for _, section := range sections {
-		value, ok := (*componentSection)[section.name]
-		if !ok {
+		value, localOk := (*componentSection)[section.name]
+		remoteValue, remoteOk := remoteCloudFormationSectionValue(remoteStacks, stackName, componentName, section.name)
+
+		// Compare presence and values on both sides: a section present on
+		// only one side (added or removed) is a change, not just a differing
+		// value on a section present on both. Skipping when the section is
+		// merely absent locally would silently miss a removed `tags`,
+		// `stack_policy`, `role_arn`, etc. that still exists on the remote
+		// ref — the exact regression this symmetric check guards against.
+		if !localOk && !remoteOk {
 			continue
 		}
-		if isComponentSectionEqual(remoteStacks, stackName, cfg.CloudFormationComponentType, componentName, value, section.name) {
+		if localOk && remoteOk && reflect.DeepEqual(value, remoteValue) {
 			continue
 		}
+
 		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
 			componentSection, section.reason, includeSpaceliftAdminStacks, currentStacks, includeSettings)
 		if err != nil {
@@ -902,6 +911,30 @@ func addCloudFormationSectionAffected(
 	}
 
 	return nil
+}
+
+// remoteCloudFormationSectionValue reports whether the named aws/cloudformation
+// section exists on the remote-ref version of the component (regardless of
+// whether its value matches the local one), and returns that value if so.
+func remoteCloudFormationSectionValue(remoteStacks *map[string]any, stackName, componentName, sectionName string) (any, bool) {
+	remoteStackSection, ok := (*remoteStacks)[stackName].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentTypeSection, ok := remoteComponentsSection[cfg.CloudFormationComponentType].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentSection, ok := remoteComponentTypeSection[componentName].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	value, ok := remoteComponentSection[sectionName]
+	return value, ok
 }
 
 func addHelmSectionAffected(
