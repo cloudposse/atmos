@@ -62,6 +62,8 @@ func TestDetectDeletedComponents_ComponentDeleted(t *testing.T) {
 // TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted guards against
 // helm/kubernetes deletions going undetected (both were previously omitted
 // from the hardcoded [terraform, helmfile, packer] search list).
+//
+//nolint:paralleltest // registerFakeComponentTypes mutates the shared component registry (comp.Reset/comp.Register); must run serially.
 func TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted(t *testing.T) {
 	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType)
 

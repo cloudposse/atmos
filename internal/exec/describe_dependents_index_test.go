@@ -346,6 +346,8 @@ func TestFindComponentSectionInCachedStacks_PackerOnly(t *testing.T) {
 // against a dependency resolving to nothing for any component type
 // registered via the component-provider registry (previously only
 // terraform/helmfile were checked here).
+//
+//nolint:paralleltest // registerFakeComponentTypes mutates the shared component registry (comp.Reset/comp.Register); must run serially.
 func TestFindComponentSectionInCachedStacks_RegisteredProviderTypes(t *testing.T) {
 	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType)
 	require.NotEmpty(t, comp.ListTypes(), "test setup should have registered fake provider types")
@@ -369,6 +371,7 @@ func TestFindComponentSectionInCachedStacks_RegisteredProviderTypes(t *testing.T
 	}
 }
 
+//nolint:paralleltest // registerFakeComponentTypes mutates the shared component registry (comp.Reset/comp.Register); must run serially.
 func TestComponentSectionSearchOrder_IncludesLegacyAndRegisteredTypes(t *testing.T) {
 	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType)
 	require.NotEmpty(t, comp.ListTypes(), "test setup should have registered fake provider types")
