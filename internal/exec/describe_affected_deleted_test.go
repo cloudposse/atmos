@@ -110,6 +110,58 @@ func TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted(t *testing.T)
 	assert.Equal(t, cfg.KubernetesComponentType, byComponent["cert-manager"].ComponentType)
 }
 
+// TestDetectDeletedComponents_HelmAndKubernetesEntireStackDeleted guards the
+// processAllComponentsAsDeleted path (entire-stack deletion) for registered
+// component types. The sibling test above only exercises
+// processDeletedComponentsInStack (a component removed from a stack that
+// still exists); this exercises the other loop that was also switched from
+// the hardcoded [terraform, helmfile, packer] list to
+// componentSectionSearchOrder().
+//
+//nolint:paralleltest // registerFakeComponentTypes mutates the shared component registry (comp.Reset/comp.Register); must run serially.
+func TestDetectDeletedComponents_HelmAndKubernetesEntireStackDeleted(t *testing.T) {
+	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	remoteStacks := map[string]any{
+		"dev-us-east-1": map[string]any{
+			"components": map[string]any{
+				cfg.HelmComponentType: map[string]any{
+					"nginx-ingress": map[string]any{
+						"vars": map[string]any{"replicas": 3},
+					},
+				},
+				cfg.KubernetesComponentType: map[string]any{
+					"cert-manager": map[string]any{
+						"vars": map[string]any{"namespace": "cert-manager"},
+					},
+				},
+			},
+		},
+	}
+
+	// The entire stack is gone in HEAD.
+	currentStacks := map[string]any{}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	require.NoError(t, err)
+	require.Len(t, deleted, 2)
+
+	byComponent := make(map[string]schema.Affected, len(deleted))
+	for _, d := range deleted {
+		byComponent[d.Component] = d
+	}
+	require.Contains(t, byComponent, "nginx-ingress")
+	require.Contains(t, byComponent, "cert-manager")
+	assert.Equal(t, cfg.HelmComponentType, byComponent["nginx-ingress"].ComponentType)
+	assert.Equal(t, cfg.KubernetesComponentType, byComponent["cert-manager"].ComponentType)
+	assert.Equal(t, affectedReasonDeletedStack, byComponent["nginx-ingress"].Affected)
+	assert.Equal(t, deletionTypeStack, byComponent["nginx-ingress"].DeletionType)
+	assert.Equal(t, affectedReasonDeletedStack, byComponent["cert-manager"].Affected)
+	assert.Equal(t, deletionTypeStack, byComponent["cert-manager"].DeletionType)
+}
+
 // TestDetectDeletedComponents_EntireStackDeleted tests detection when an entire stack is deleted.
 func TestDetectDeletedComponents_EntireStackDeleted(t *testing.T) {
 	t.Parallel()
