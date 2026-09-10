@@ -160,8 +160,21 @@ func downloadToCacheWithProgress(url, cachePath string, progress func(downloaded
 }
 
 func downloadToCacheOnceWithProgress(url, cachePath string, progress func(downloaded, total int64)) (string, error) {
+	// The default GitHub host allowlist (pkg/http's isGitHubHost) does not include bare
+	// github.com, only api.github.com/raw.githubusercontent.com/uploads.github.com, so
+	// release-download URLs built by BuildAssetURL (github.com/<owner>/<repo>/releases/
+	// download/...) would otherwise go out unauthenticated even when a token is available.
+	// Verified safe to add: `curl -I -H "Authorization: Bearer $TOKEN" <release URL>` returns
+	// the same 302 as the unauthenticated request, redirecting cross-host to
+	// objects.githubusercontent.com/release-assets.githubusercontent.com, and Go's
+	// http.Client strips Authorization on cross-host redirects (stripAuthOnCrossHostRedirect),
+	// so the token is never leaked to the storage host.
+	toolchainHost := github.ToolchainEndpoints().Host
 	client := httpClient.NewDefaultClient(
 		httpClient.WithGitHubToken(github.GetGitHubToken()),
+		httpClient.WithGitHubHostMatcher(func(host string) bool {
+			return host == "api.github.com" || host == "raw.githubusercontent.com" || host == "uploads.github.com" || host == toolchainHost
+		}),
 	)
 
 	req, err := http.NewRequest("GET", url, nil)

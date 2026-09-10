@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/expr-lang/expr"
@@ -71,50 +72,74 @@ func NewURLRegistry(baseURL string, ref string) *URLRegistry {
 // applyGitHubRef transforms a GitHub URL to a raw content URL at a specific Git ref.
 // Converts: https://github.com/{owner}/{repo} with ref and path
 // To: https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}
-// If ref is empty or the URL is not a GitHub URL, returns the original URL.
+// A URL on the GitHub Enterprise Server host configured via RepoEndpoints
+// (GITHUB_SERVER_URL) is converted the same way, but to that host's own /raw/ path instead of
+// raw.githubusercontent.com. This is a user-supplied custom registry source
+// (toolchain.registries[].source), so both public github.com and the configured GHES host are
+// recognized regardless of which one the user's own repositories use. If ref is empty or the
+// URL is not a recognized GitHub host, returns the original URL unchanged.
 func applyGitHubRef(baseURL string, ref string) string {
-	if ref == "" {
+	if ref == "" || strings.Contains(baseURL, "raw.githubusercontent.com") {
 		return baseURL
 	}
 
-	// Only transform github.com URLs (not raw.githubusercontent.com which already has ref in path).
-	if !strings.Contains(baseURL, "github.com") || strings.Contains(baseURL, "raw.githubusercontent.com") {
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
 		return baseURL
 	}
 
-	// Parse the URL to extract owner, repo, and optional path.
-	// Format: https://github.com/owner/repo or https://github.com/owner/repo/path/to/file.yaml
-	parts := strings.Split(baseURL, "/")
-
-	// Find github.com position.
-	githubIdx := -1
-	for i, part := range parts {
-		if part == "github.com" {
-			githubIdx = i
-			break
-		}
-	}
-
-	if githubIdx == -1 || githubIdx+2 >= len(parts) {
-		// URL doesn't have owner/repo after github.com.
+	target, ok := matchGitHubEndpoints(parsed.Host)
+	if !ok {
+		// Not a GitHub URL.
 		return baseURL
 	}
 
-	owner := parts[githubIdx+1]
-	repo := parts[githubIdx+2]
-
-	// Get the path after owner/repo (if any).
-	var path string
-	if githubIdx+3 < len(parts) {
-		path = strings.Join(parts[githubIdx+3:], "/")
+	coords, ok := parseOwnerRepoPath(parsed.Path)
+	if !ok {
+		// The URL doesn't have owner/repo after the host.
+		return baseURL
 	}
 
-	// Construct raw.githubusercontent.com URL.
-	if path != "" {
-		return fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo, ref, path)
+	return target.RawURL(coords.owner, coords.repo, ref, coords.path)
+}
+
+// matchGitHubEndpoints reports which Endpoints value a raw-content host belongs to: a literal
+// "github.com" always resolves to the public github.com shape (even if RepoEndpoints resolves
+// to a different GHES host in this environment, since the input URL explicitly named
+// github.com), otherwise the host must match the configured GHES host from RepoEndpoints.
+func matchGitHubEndpoints(host string) (github.Endpoints, bool) {
+	if host == "github.com" {
+		return github.Endpoints{Host: "github.com"}, true
 	}
-	// If no path specified, assume registry.yaml at root.
-	return fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/registry.yaml", owner, repo, ref)
+	if endpoints := github.RepoEndpoints(); endpoints.IsHost(host) {
+		return endpoints, true
+	}
+	return github.Endpoints{}, false
+}
+
+// ownerRepoPath holds the owner, repo, and path components parsed from a registry source URL.
+type ownerRepoPath struct {
+	owner string
+	repo  string
+	path  string
+}
+
+// parseOwnerRepoPath splits a URL path of the form "/owner/repo" or
+// "/owner/repo/path/to/file.yaml" into its owner, repo, and path components. When no path
+// segment follows owner/repo, path defaults to "registry.yaml" (the index file at the repo
+// root). Returns ok=false when the path doesn't have at least owner and repo segments.
+func parseOwnerRepoPath(urlPath string) (ownerRepoPath, bool) {
+	parts := strings.Split(strings.Trim(urlPath, "/"), "/")
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return ownerRepoPath{}, false
+	}
+
+	path := "registry.yaml"
+	if len(parts) > 2 {
+		path = strings.Join(parts[2:], "/")
+	}
+
+	return ownerRepoPath{owner: parts[0], repo: parts[1], path: path}, true
 }
 
 // GetTool fetches tool metadata from the custom URL.

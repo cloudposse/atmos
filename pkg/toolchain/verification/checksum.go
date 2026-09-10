@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strings"
 
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
@@ -153,7 +154,11 @@ func checksumFileURL(tool *registry.Tool, version, assetURL string, checksum *re
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", repoOwner, repoName, releaseVersion, checksumAsset), nil
+	// Checksum sidecars live alongside the tool's own release asset, which is always fetched
+	// via the toolchain endpoints (ATMOS_TOOLCHAIN_GITHUB_URL) -- a separate concern from the
+	// repo endpoints, since aqua-registry tool releases live on public github.com by default
+	// even for GHES users.
+	return ghtoken.ToolchainEndpoints().ReleaseAssetURL(repoOwner, repoName, releaseVersion, checksumAsset), nil
 }
 
 func checksumReleaseVersion(tool *registry.Tool, version, assetURL, assetName string, replacements map[string]string) (string, error) {
@@ -185,7 +190,7 @@ func effectiveReleaseVersionFromAssetURL(assetURL, version string) string {
 
 func releaseVersionFromGitHubAssetURL(rawURL string) string {
 	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.Host != "github.com" {
+	if err != nil || (parsed.Host != "github.com" && !ghtoken.ToolchainEndpoints().IsHost(parsed.Host)) {
 		return ""
 	}
 	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
