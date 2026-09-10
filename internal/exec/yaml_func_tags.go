@@ -1,7 +1,12 @@
 package exec
 
 import (
+	"fmt"
+	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
@@ -57,17 +62,37 @@ func processTagTags(atmosConfig *schema.AtmosConfiguration, _ string, stackInfo 
 }
 
 // processTagLabels processes the !labels YAML function.
-// It returns the current component's own metadata.labels as a map[string]any of strings.
-// The function takes no parameters and returns an empty map if metadata.labels is unset.
+// Without arguments it returns the current component's metadata.labels as a map.
+// With a key it returns that label's string value, an explicit fallback, or an error.
 //
 // Usage in YAML:
 //
 //	labels: !labels
-func processTagLabels(atmosConfig *schema.AtmosConfiguration, _ string, stackInfo *schema.ConfigAndStacksInfo) any {
+func processTagLabels(atmosConfig *schema.AtmosConfiguration, input string, stackInfo *schema.ConfigAndStacksInfo) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagLabels")()
 
+	args, err := fnparser.ParseLabels(strings.TrimSpace(strings.TrimPrefix(input, "!labels")))
+	if err != nil {
+		return nil, fmt.Errorf("%w: !labels: %w", errUtils.ErrInvalidArguments, err)
+	}
 	metadata := componentMetadata(stackInfo)
-	return anyMap(tags.ToStringMap(metadata["labels"]))
+	labels := tags.ToStringMap(metadata["labels"])
+	if args.Key == nil {
+		return anyMap(labels), nil
+	}
+	if value, ok := labels[*args.Key]; ok {
+		return value, nil
+	}
+	if args.Default != nil {
+		return *args.Default, nil
+	}
+	missing := errUtils.Build(errUtils.ErrLabelNotFound).
+		WithExplanationf("The !labels function could not find metadata.labels[%q].", *args.Key).
+		WithHint("Define the label or supply a fallback: !labels key default")
+	if stackInfo != nil {
+		missing = missing.WithContext("component", stackInfo.ComponentFromArg).WithContext("stack", stackInfo.Stack)
+	}
+	return nil, missing.Err()
 }
 
 // processTagLabelsKeys processes the !labels.keys YAML function.

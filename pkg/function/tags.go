@@ -110,7 +110,7 @@ const (
 	// TagTags returns the current component's own metadata.tags as a list.
 	TagTags = fntag.Tags
 
-	// TagLabels returns the current component's own metadata.labels as a map.
+	// TagLabels returns the current component's own metadata.labels as a map, or a single label with an optional fallback.
 	TagLabels = fntag.Labels
 
 	// TagLabelsKeys returns the current component's own metadata.labels keys as a sorted list.
