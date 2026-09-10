@@ -68,6 +68,41 @@ tests:
         - "./components/terraform/myapp1/README.md"
       exit_code: 0
 
+  # Git-only split of atmos_vendor_pull: pulls just the two sources vendored over git
+  # (github/stargazers, weather), so this case exercises the local git mirror
+  # (tests/testhelpers/gitmirror) and needs no ghcr.io/GitHub credentials at all, unlike
+  # atmos_vendor_pull above which also pulls an oci:// source and therefore keeps the
+  # github_token precondition.
+  - name: atmos_vendor_pull_git
+    short: false
+    enabled: true
+    description: "Ensure 'atmos vendor pull --tags=git' vendors git sources without any GitHub credentials, via the local git mirror."
+    workdir: "fixtures/scenarios/vendor"
+    clean: true
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--tags=git"
+    expect:
+      timeout: "5m"
+      file_exists:
+        - "./components/terraform/github/stargazers/main/main.tf"
+        - "./components/terraform/github/stargazers/main/outputs.tf"
+        - "./components/terraform/github/stargazers/main/providers.tf"
+        - "./components/terraform/github/stargazers/main/variables.tf"
+        - "./components/terraform/github/stargazers/main/versions.tf"
+        - "./components/terraform/weather/main/main.tf"
+        - "./components/terraform/weather/main/outputs.tf"
+        - "./components/terraform/weather/main/providers.tf"
+        - "./components/terraform/weather/main/variables.tf"
+        - "./components/terraform/weather/main/versions.tf"
+      file_not_exists:
+        - "./components/terraform/myapp1/main.tf"
+        - "./components/terraform/myapp2/main.tf"
+        - "./components/terraform/test-components/main/main.tf"
+      exit_code: 0
+
   # Tests for simple filename exclusions (without **/ prefix) - regression test for bug fix
   - name: atmos_vendor_simple_exclude
     short: false

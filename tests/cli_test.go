@@ -44,6 +44,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/tests/testhelpers"
+	"github.com/cloudposse/atmos/tests/testhelpers/gitconfigenv"
+	"github.com/cloudposse/atmos/tests/testhelpers/gitmirror"
 )
 
 // Command-line flag for regenerating snapshots.
@@ -57,6 +59,7 @@ var (
 	atmosRunnerOnce     sync.Once
 	atmosRunnerErr      error
 	coverDir            string // GOCOVERDIR environment variable value.
+	gitMirrorRoot       string // Root of the local git mirror built in TestMain (see gitmirror).
 	sandboxRegistry     = make(map[string]*testhelpers.SandboxEnvironment)
 	sandboxMutex        sync.RWMutex
 )
@@ -821,7 +824,29 @@ func TestMain(m *testing.M) {
 	// instead of depending on host-installed binaries. Only missing tools are
 	// installed; best-effort, so failures leave per-test preconditions to skip
 	// the affected tests.
-	testhelpers.ProvisionToolchain(logger, testhelpers.DefaultTools)
+	testhelpers.ProvisionToolchain(logger, testhelpers.DefaultTools())
+
+	// Build a local git mirror of examples/ and redirect cloudposse/* git fetches to it via
+	// per-owner GIT_CONFIG insteadOf rules, so the acceptance suite never depends on live GitHub
+	// connectivity for the vendor/import fixtures that reference
+	// github.com/cloudposse/atmos.git//examples/... (tests/test-cases/vendor-test.yaml,
+	// demo-globs.yaml, demo-vendoring.yaml). Unconditional -- not gated behind
+	// ATMOS_TEST_OFFLINE or any other flag -- otherwise PR shards keep hitting GitHub.
+	var mirrorErr error
+	gitMirrorRoot, mirrorErr = os.MkdirTemp("", "atmos-git-mirror-*") //nolint:lintroller // no *testing.T in TestMain; cleaned up below.
+	if mirrorErr != nil {
+		logger.Fatal("failed to create git mirror temp dir", mirrorErr)
+	}
+	if mirrorErr = gitmirror.Build(gitMirrorRoot); mirrorErr != nil {
+		logger.Fatal("failed to build local git mirror", mirrorErr)
+	}
+	logger.Info("built local git mirror for cloudposse/atmos", "path", gitMirrorRoot)
+
+	mirrorEnv := map[string]string{}
+	gitconfigenv.Append(mirrorEnv, os.Environ(), gitmirror.InsteadOfRules(gitMirrorRoot, gitmirror.Owner)...)
+	for key, value := range mirrorEnv {
+		os.Setenv(key, value) //nolint:lintroller // Set before m.Run(); no *testing.T available in TestMain; must persist process-wide for every subtest.
+	}
 
 	// Auto-start the Floci cloud emulators for the opt-in Floci E2E tests. This is a
 	// no-op unless ATMOS_TEST_FLOCI=true and the FLOCI_* endpoint env vars are unset,
@@ -847,6 +872,11 @@ func TestMain(m *testing.M) {
 	// Clean up the temporary binary if we built one
 	if atmosRunner != nil {
 		atmosRunner.Cleanup()
+	}
+
+	// Clean up the local git mirror.
+	if gitMirrorRoot != "" {
+		os.RemoveAll(gitMirrorRoot)
 	}
 
 	errUtils.Exit(exitCode)
@@ -980,27 +1010,31 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	//   - On CI (headless): hangs forever because there's no UI for Keychain
 	//   - Locally on macOS: shows a Keychain popup asking permission
 	// We fix this by disabling credential.helper and injecting GITHUB_TOKEN directly.
+	//
+	// This must APPEND to, not overwrite, any GIT_CONFIG_* entries already exported
+	// process-wide (TestMain's git mirror insteadOf rules, see gitmirror/gitconfigenv):
+	// git's GIT_CONFIG_COUNT/KEY_n/VALUE_n protocol is positional, so writing our own
+	// COUNT=1|2 here would silently discard slots another producer already claimed.
 	if _, exists := tc.Env["GIT_CONFIG_COUNT"]; !exists {
+		entries := []gitconfigenv.GitConfigEntry{
+			// Disable credential helper (prevents osxkeychain hangs/popups).
+			{Key: "credential.helper", Value: ""},
+		}
 		if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
-			// Disable credential helper (prevents osxkeychain hangs/popups) and inject token.
+			// Inject token directly instead of relying on a credential helper.
 			gitBasicAuthCredential := "x-access-token:" + githubToken
 			basicAuth := base64.StdEncoding.EncodeToString([]byte(gitBasicAuthCredential))
 			// pkg/io's masker auto-registers plain GITHUB_TOKEN and base64(GITHUB_TOKEN), but
-			// GIT_CONFIG_VALUE_1 below embeds base64("x-access-token:"+GITHUB_TOKEN) -- a
+			// the extraheader value below embeds base64("x-access-token:"+GITHUB_TOKEN) -- a
 			// different byte sequence the prefix changes the encoding of, so it needs its own
 			// registration or redactAndCapDiagOutput can't catch it in captured child output.
 			iolib.RegisterSecret(gitBasicAuthCredential)
-			tc.Env["GIT_CONFIG_COUNT"] = "2"
-			tc.Env["GIT_CONFIG_KEY_0"] = "credential.helper"
-			tc.Env["GIT_CONFIG_VALUE_0"] = ""
-			tc.Env["GIT_CONFIG_KEY_1"] = "http.https://github.com/.extraheader"
-			tc.Env["GIT_CONFIG_VALUE_1"] = "AUTHORIZATION: basic " + basicAuth
-		} else {
-			// No token available — just disable the credential helper to prevent hangs/popups.
-			tc.Env["GIT_CONFIG_COUNT"] = "1"
-			tc.Env["GIT_CONFIG_KEY_0"] = "credential.helper"
-			tc.Env["GIT_CONFIG_VALUE_0"] = ""
+			entries = append(entries, gitconfigenv.GitConfigEntry{
+				Key:   "http.https://github.com/.extraheader",
+				Value: "AUTHORIZATION: basic " + basicAuth,
+			})
 		}
+		gitconfigenv.Append(tc.Env, os.Environ(), entries...)
 	}
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
