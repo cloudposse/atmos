@@ -118,10 +118,36 @@ func TestRunGetTemplate_Success(t *testing.T) {
 	out := captureStdout(t, func() {
 		summary, err := runGetTemplate(context.Background(), client, "vpc", map[string]any{"original": true}, map[string]any{})
 		require.NoError(t, err)
-		assert.Equal(t, "AWSTemplateFormatVersion: '2010-09-09'", summary["template"])
+		assert.Equal(t, "AWSTemplateFormatVersion: \"2010-09-09\"\n", summary["template"])
 	})
 	assert.Equal(t, cfntypes.TemplateStageOriginal, gotStage)
 	assert.Contains(t, out, "AWSTemplateFormatVersion")
+}
+
+// runGetTemplate must pretty-print the body as YAML even when CloudFormation
+// returns it as JSON (its common stored representation regardless of how the
+// template was originally authored), rather than echoing AWS's raw response.
+func TestRunGetTemplate_JSONBodyPrettyPrintedAsYAML(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	client.EXPECT().GetTemplate(gomock.Any(), gomock.Any()).Return(
+		&cloudformation.GetTemplateOutput{
+			TemplateBody: awsString(`{"AWSTemplateFormatVersion":"2010-09-09","Resources":{"Marker":{"Type":"AWS::SSM::Parameter"}}}`),
+		}, nil,
+	)
+
+	out := captureStdout(t, func() {
+		summary, err := runGetTemplate(context.Background(), client, "vpc", map[string]any{}, map[string]any{})
+		require.NoError(t, err)
+		formatted, ok := summary["template"].(string)
+		require.True(t, ok)
+		assert.NotContains(t, formatted, "{", "JSON body must be re-serialized as YAML, not echoed verbatim")
+		assert.Contains(t, formatted, "AWSTemplateFormatVersion:")
+		assert.Contains(t, formatted, "Resources:")
+		assert.Contains(t, formatted, "Marker:")
+	})
+	assert.NotContains(t, out, "{", "the data channel must receive the pretty-printed YAML, not raw JSON")
 }
 
 // runGetTemplate must propagate a getDeployedTemplate failure.
