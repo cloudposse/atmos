@@ -175,11 +175,31 @@ func parseDatasourceURL(value string) (*url.URL, error) {
 		parsed.Path = parsed.Path[1:]
 	}
 
+	foldDriveLetterHost(parsed)
+
 	if parsed.Scheme == "" && path.IsAbs(parsed.Path) {
 		parsed.Scheme = "file"
 	}
 
 	return parsed, nil
+}
+
+// foldDriveLetterHost repairs a file URL whose Windows drive letter was parsed
+// as the host. Atmos builds file URLs for temp files with the drive letter in
+// the path and no host (see fixWindowsFileScheme in internal/exec), which is
+// also the form gomplate expects; but url.URL.String renders that as
+// "file://D:/path", and parsing it again yields Host "D:" and Path "/path".
+// Moving the drive letter back into the path restores the canonical form.
+func foldDriveLetterHost(parsed *url.URL) {
+	if parsed.Scheme != "file" || len(parsed.Host) != 2 || parsed.Host[1] != ':' {
+		return
+	}
+	letter := parsed.Host[0]
+	if (letter < 'a' || letter > 'z') && (letter < 'A' || letter > 'Z') {
+		return
+	}
+	parsed.Path = parsed.Host + parsed.Path
+	parsed.Host = ""
 }
 
 // windowsVolumeToFileURL prefixes a value that starts with a Windows volume
