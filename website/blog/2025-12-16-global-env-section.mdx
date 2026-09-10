@@ -38,7 +38,7 @@ Global env variables have the lowest priority and can be overridden at any level
 
 ## Visibility
 
-The global env section is visible via `atmos describe config`:
+The global env section is visible via [`atmos describe config`](/cli/commands/describe/config):
 
 ```bash
 atmos describe config | grep -A5 '"env"'
@@ -50,3 +50,5 @@ atmos describe config | grep -A5 '"env"'
 - Configure Terraform plugin cache directories
 - Define organization-wide proxy settings
 - Set logging or debugging flags for all tools
+
+For usage and configuration, see [Environment Variables](/cli/configuration/env).

@@ -1,12 +1,16 @@
 package merge
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestYAMLMerger_CleanMerges(t *testing.T) {
@@ -765,8 +769,32 @@ func TestYAMLMerger_KindDivergencePreservesOursAndRecordsConflict(t *testing.T) 
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, result.HasConflicts)
+	assert.True(t, result.HasMarkers, "a real ours/theirs divergence always has a node pair to splice markers from")
 	assert.Equal(t, 1, result.ConflictCount)
 	assert.Contains(t, result.Content, "nested: true")
+}
+
+// TestYAMLMerger_DroppedDocumentConflictHasNoMarkers covers
+// mergeDocumentStreams' ours==nil branch: the user's stream dropped a
+// document the template went on to change. That's recorded as a conflict
+// (via addConflict) with no ours/theirs node pair to splice inline markers
+// from, so HasConflicts is true but HasMarkers must be false -- unlike every
+// other conflict this merger records, which always comes from addNodeConflict
+// and therefore always has a marker.
+func TestYAMLMerger_DroppedDocumentConflictHasNoMarkers(t *testing.T) {
+	base := "doc: one\n---\ndoc: two\n"
+	ours := "doc: one\n"
+	theirs := "doc: one\n---\ndoc: two\ntemplate: true\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.HasConflicts)
+	assert.False(t, result.HasMarkers, "a dropped document has no node pair to splice markers from")
+	assert.Equal(t, []string{"documents[1]"}, result.ConflictPaths)
+	assert.NotContains(t, result.Content, "<<<<<<<")
+	assert.Contains(t, result.Content, "template: true")
 }
 
 func TestYAMLMerger_ComplexMappingKeyError(t *testing.T) {
@@ -914,6 +942,319 @@ func TestYAMLMerger_PreservesTagsAndStyle(t *testing.T) {
 			t.Logf("Result:\n%s", result.Content)
 		})
 	}
+}
+
+// TestYAMLMerger_ConflictMarkers_Scalar covers the inline-marker path: both
+// sides of the conflict are scalars, so the reconstructed markers fit on the
+// same line as the key. This is the exact shape from the original bug report
+// (github.com/cloudposse/atmos/issues/2912): a scalar value diverges on both
+// sides while an unrelated key is added by each side too.
+func TestYAMLMerger_ConflictMarkers_Scalar(t *testing.T) {
+	base := "setting: original\nkey1: v1\n"
+	ours := "setting: user-change\nkey1: v1\ncustom: mine\n"
+	theirs := "setting: template-change\nkey1: v1\nfeature: enabled\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+	require.Equal(t, []string{"documents[0].setting"}, result.ConflictPaths)
+
+	assert.Equal(t, `<<<<<<< Ours
+setting: user-change
+=======
+setting: template-change
+>>>>>>> Theirs
+key1: v1
+custom: mine
+feature: enabled
+`, result.Content)
+}
+
+// TestYAMLMerger_ConflictMarkers_KindDivergence covers the block-marker path:
+// one side is a scalar and the other a mapping (a real structural
+// divergence), so the reconstructed markers wrap an indented block beneath
+// the key rather than fitting inline.
+func TestYAMLMerger_ConflictMarkers_KindDivergence(t *testing.T) {
+	base := "key: value\n"
+	ours := "key:\n  nested: true\n"
+	theirs := "key:\n  - item\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	assert.Equal(t, `key:
+  <<<<<<< Ours
+  nested: true
+  =======
+  - item
+  >>>>>>> Theirs
+`, result.Content)
+}
+
+// TestYAMLMerger_ConflictMarkers_MultipleConflictsDoNotCollide guards the
+// fixed-width sentinel format: with more than 10 conflicts in one document, a
+// naive substring search (e.g. sentinel "...0" matching inside "...01") would
+// misattribute markers to the wrong conflict. Every conflict here must
+// resolve to its own value on both sides.
+func TestYAMLMerger_ConflictMarkers_MultipleConflictsDoNotCollide(t *testing.T) {
+	var base, ours, theirs strings.Builder
+	const count = 12
+	for i := 0; i < count; i++ {
+		fmt.Fprintf(&base, "k%d: base%d\n", i, i)
+		fmt.Fprintf(&ours, "k%d: ours%d\n", i, i)
+		fmt.Fprintf(&theirs, "k%d: theirs%d\n", i, i)
+	}
+
+	result, err := NewYAMLMerger(100).Merge(base.String(), ours.String(), theirs.String())
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, count, result.ConflictCount)
+
+	for i := 0; i < count; i++ {
+		assert.Contains(t, result.Content, fmt.Sprintf("k%d: ours%d", i, i))
+		assert.Contains(t, result.Content, fmt.Sprintf("k%d: theirs%d", i, i))
+	}
+	assert.Equal(t, count, strings.Count(result.Content, "<<<<<<< Ours"))
+	assert.Equal(t, count, strings.Count(result.Content, ">>>>>>> Theirs"))
+}
+
+// TestYAMLMerger_ConflictMarkers_PreexistingSentinelLookalike guards against
+// sentinel collisions: a scalar value already equal to the old, purely
+// sequential sentinel format (ATMOSMERGECONFLICT000000) must not be mistaken
+// for a real conflict placeholder by findSentinel/spliceConflictMarkers, and
+// must survive an unrelated conflict elsewhere in the document untouched.
+// The random suffix and forbidden-corpus check in conflictTracker.nextSentinel
+// guarantee this; without them, this literal value colliding with the first
+// sentinel issued would corrupt it in unpredictable ways.
+func TestYAMLMerger_ConflictMarkers_PreexistingSentinelLookalike(t *testing.T) {
+	base := "setting: original\nlookalike: ATMOSMERGECONFLICT000000\n"
+	ours := "setting: user-change\nlookalike: ATMOSMERGECONFLICT000000\n"
+	theirs := "setting: template-change\nlookalike: ATMOSMERGECONFLICT000000\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	// The lookalike value is identical on all three sides, so it must pass
+	// through untouched -- appearing exactly once, and not wrapped in (or
+	// replaced by) conflict markers meant for the unrelated "setting" key.
+	assert.Equal(t, 1, strings.Count(result.Content, "ATMOSMERGECONFLICT000000"))
+	assert.Equal(t, `<<<<<<< Ours
+setting: user-change
+=======
+setting: template-change
+>>>>>>> Theirs
+lookalike: ATMOSMERGECONFLICT000000
+`, result.Content)
+}
+
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates forces
+// cryptoRandRead (the crypto/rand.Read indirection used by
+// randomSentinelSuffix) to fail, and asserts a real ours/theirs divergence
+// surfaces that failure as ErrThreeWayMerge instead of silently succeeding.
+// Note: crypto/rand.Reader itself never errors on any platform Atmos
+// supports, so this branch (and everything upstream that propagates its
+// error -- nextSentinel, addNodeConflict, pickConflictValue, and every
+// mergeNodes/mergeMappings/mergeSequences/mergeScalars call site above
+// them) is otherwise unreachable from a test.
+func TestYAMLMerger_RandomSentinelSuffixFailurePropagates(t *testing.T) {
+	original := cryptoRandRead
+	injectedErr := errors.New("injected rand failure")
+	cryptoRandRead = func([]byte) (int, error) { return 0, injectedErr }
+	t.Cleanup(func() { cryptoRandRead = original })
+
+	_, err := NewYAMLMerger(100).Merge("setting: original\n", "setting: user-change\n", "setting: template-change\n")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates_SequenceConflict is
+// the mergeSequences counterpart of
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates: a real ours/theirs
+// sequence divergence routes through mergeSequences' own pickConflictValue
+// call instead of mergeMappings'.
+func TestYAMLMerger_RandomSentinelSuffixFailurePropagates_SequenceConflict(t *testing.T) {
+	original := cryptoRandRead
+	injectedErr := errors.New("injected rand failure")
+	cryptoRandRead = func([]byte) (int, error) { return 0, injectedErr }
+	t.Cleanup(func() { cryptoRandRead = original })
+
+	_, err := NewYAMLMerger(100).Merge("items:\n  - a\n", "items:\n  - b\n", "items:\n  - c\n")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates_AddedKeyKindMismatch
+// covers mergeMappings' "!inBase && inTheirs" branch, where both sides add
+// the same key but with different node kinds -- a distinct pickConflictValue
+// call site from the "all three have the key" case the base
+// TestYAMLMerger_RandomSentinelSuffixFailurePropagates test exercises.
+func TestYAMLMerger_RandomSentinelSuffixFailurePropagates_AddedKeyKindMismatch(t *testing.T) {
+	original := cryptoRandRead
+	injectedErr := errors.New("injected rand failure")
+	cryptoRandRead = func([]byte) (int, error) { return 0, injectedErr }
+	t.Cleanup(func() { cryptoRandRead = original })
+
+	_, err := NewYAMLMerger(100).Merge("base: unrelated\n", "base: unrelated\nnewkey: scalar\n", "base: unrelated\nnewkey:\n  nested: true\n")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+// TestYAMLMerger_ConflictMarkers_MultilineScalar covers inlineConflictBlock's
+// loop over additional lines of a multi-line scalar (e.g. a block literal `|`
+// value): both ours and theirs are still ScalarNode, so the conflict renders
+// inline, but each side spans more than one line once re-encoded.
+func TestYAMLMerger_ConflictMarkers_MultilineScalar(t *testing.T) {
+	base := "setting: |\n  line1\n"
+	ours := "setting: |\n  ours-line1\n  ours-line2\n"
+	theirs := "setting: |\n  theirs-line1\n  theirs-line2\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	assert.Equal(t, `<<<<<<< Ours
+setting: |
+  ours-line1
+  ours-line2
+=======
+setting: |
+  theirs-line1
+  theirs-line2
+>>>>>>> Theirs
+`, result.Content)
+}
+
+// TestYAMLMerger_ConflictMarkers_SuffixPreservedForBothAlternatives covers a
+// real ours/theirs divergence where the sentinel's line has trailing content
+// after it -- here, an inline comment addNodeConflict carries over from
+// ours' own LineComment (see addNodeConflict). That trailing text must
+// survive on *both* reconstructed alternatives, not just be tacked onto the
+// closing >>>>>>> Theirs marker line: only one alternative survives manual
+// resolution, and a resolution that deletes the theirs block (or just the
+// marker lines) must not silently drop it.
+func TestYAMLMerger_ConflictMarkers_SuffixPreservedForBothAlternatives(t *testing.T) {
+	base := "key: original\n"
+	ours := "key: user-change # user note\n"
+	theirs := "key: template-change\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	assert.Equal(t, `<<<<<<< Ours
+key: user-change # user note
+=======
+key: template-change # user note
+>>>>>>> Theirs
+`, result.Content)
+}
+
+// TestYAMLMerger_ConflictMarkers_FlowStyleSuffixPreserved covers a
+// divergence inside a flow-style mapping: the sentinel replaces only key
+// "a"'s value, so the rest of the flow mapping (", b: 2}") trails the
+// sentinel on the same encoded line. That trailing text must close out
+// *both* reconstructed alternatives so each remains a syntactically valid,
+// self-contained flow mapping on its own -- not just close out whichever one
+// happens to sit next to the >>>>>>> Theirs marker.
+func TestYAMLMerger_ConflictMarkers_FlowStyleSuffixPreserved(t *testing.T) {
+	base := "obj: {a: 1, b: 2}\n"
+	ours := "obj: {a: user, b: 2}\n"
+	theirs := "obj: {a: template, b: 2}\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 1, result.ConflictCount)
+
+	assert.Equal(t, `<<<<<<< Ours
+obj: {a: user, b: 2}
+=======
+obj: {a: template, b: 2}
+>>>>>>> Theirs
+`, result.Content)
+}
+
+// TestFindSentinel_DeterministicEarliestByteIndex guards against
+// findSentinel silently depending on Go's randomized map iteration order:
+// when a line holds more than one sentinel (the documented flow-style case
+// in spliceConflictMarkers' doc comment), it must always pick the one with
+// the smallest byte index, not whichever the map happens to yield first.
+// Ranging over the same two-entry map many times exercises different
+// iteration orders, so the old implementation (return on first map hit)
+// would have failed this near-certainly before it ever reached run 50.
+func TestFindSentinel_DeterministicEarliestByteIndex(t *testing.T) {
+	first := nodeConflict{sentinel: "ATMOSMERGECONFLICT000000-aaaaaaaa"}
+	second := nodeConflict{sentinel: "ATMOSMERGECONFLICT000001-bbbbbbbb"}
+	line := "obj: {a: " + first.sentinel + ", b: " + second.sentinel + "}"
+	bySentinel := map[string]nodeConflict{
+		first.sentinel:  first,
+		second.sentinel: second,
+	}
+
+	for i := 0; i < 50; i++ {
+		conflict, sentinel, idx := findSentinel(line, bySentinel)
+		assert.Equal(t, first.sentinel, sentinel, "must always pick the earliest sentinel by byte index")
+		assert.Equal(t, first, conflict)
+		assert.Equal(t, strings.Index(line, first.sentinel), idx)
+	}
+}
+
+// TestYAMLMerger_ConflictMarkers_DrainsMultipleSentinelsOnOneLine covers two
+// independent conflicts (keys "a" and "b") landing on the same flow-style
+// line. Both must be drained into real, nested diff3 markers.
+//
+// The second sentinel must never reach the output as literal placeholder
+// text (see appendTailToLastLine). "b"'s conflict is nested once under each
+// of "a"'s two alternatives (three <<<<<<< Ours/>>>>>>> Theirs pairs total,
+// not two): resolving "a" one way or the other still leaves "b" to resolve
+// independently, so each of "a"'s alternatives needs its own copy of "b"'s
+// markers rather than sharing one.
+func TestYAMLMerger_ConflictMarkers_DrainsMultipleSentinelsOnOneLine(t *testing.T) {
+	base := "obj: {a: 1, b: 2}\n"
+	ours := "obj: {a: user-a, b: user-b}\n"
+	theirs := "obj: {a: template-a, b: template-b}\n"
+
+	result, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.NoError(t, err)
+	require.True(t, result.HasConflicts)
+	require.Equal(t, 2, result.ConflictCount)
+
+	assert.NotContains(t, result.Content, "ATMOSMERGECONFLICT",
+		"every sentinel must be drained into real markers, none left as literal placeholder text")
+	// Built line-by-line (rather than a raw string literal) since "obj: {a:
+	// user-a, b: " genuinely ends in a trailing space -- the original ": "
+	// key-value separator, immediately followed by the nested block on its
+	// own line -- and a literal trailing space in a backtick string is easy
+	// to lose to editor/linter whitespace trimming.
+	wantLines := []string{
+		"<<<<<<< Ours",
+		"obj: {a: user-a, b: ",
+		"<<<<<<< Ours",
+		"user-b}",
+		"=======",
+		"template-b}",
+		">>>>>>> Theirs",
+		"=======",
+		"obj: {a: template-a, b: ",
+		"<<<<<<< Ours",
+		"user-b}",
+		"=======",
+		"template-b}",
+		">>>>>>> Theirs",
+		">>>>>>> Theirs",
+		"",
+	}
+	assert.Equal(t, strings.Join(wantLines, "\n"), result.Content)
 }
 
 func TestYAMLMerger_PreservesLineComments(t *testing.T) {

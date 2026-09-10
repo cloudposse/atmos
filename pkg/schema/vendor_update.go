@@ -37,7 +37,7 @@ type VendorCIConfig struct {
 
 // VendorPullRequestConfig configures pull request publishing for vendor CI.
 type VendorPullRequestConfig struct {
-	Provider     string   `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider" validate:"omitempty,oneof=github"`
+	Provider     string   `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider" validate:"omitempty,oneof=github azuredevops"`
 	BaseBranch   string   `yaml:"base_branch,omitempty" json:"base_branch,omitempty" mapstructure:"base_branch"`
 	BranchPrefix string   `yaml:"branch_prefix,omitempty" json:"branch_prefix,omitempty" mapstructure:"branch_prefix"`
 	Title        string   `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
@@ -46,6 +46,15 @@ type VendorPullRequestConfig struct {
 	Draft        bool     `yaml:"draft,omitempty" json:"draft,omitempty" mapstructure:"draft"`
 	Reviewers    []string `yaml:"reviewers,omitempty" json:"reviewers,omitempty" mapstructure:"reviewers"`
 	Assignees    []string `yaml:"assignees,omitempty" json:"assignees,omitempty" mapstructure:"assignees"`
+	// Organization is the Azure DevOps organization name (azuredevops provider only). Together
+	// with Project and Repository it addresses a repository the way GitHub's owner/repository
+	// pair does, since Azure DevOps requires three segments: organization/project/repository.
+	Organization string `yaml:"organization,omitempty" json:"organization,omitempty" mapstructure:"organization"`
+	// Project is the Azure DevOps project name (azuredevops provider only). See Organization.
+	Project string `yaml:"project,omitempty" json:"project,omitempty" mapstructure:"project"`
+	// Repository is the repository name (azuredevops provider only). GitHub instead derives its
+	// owner/repository pair from the local Git remote, so this field is a no-op for that provider.
+	Repository string `yaml:"repository,omitempty" json:"repository,omitempty" mapstructure:"repository"`
 }
 
 // VendorSummaryConfig configures CI summary output for vendor updates.

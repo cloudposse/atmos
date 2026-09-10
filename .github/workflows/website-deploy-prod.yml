@@ -26,6 +26,8 @@ env:
   IAM_ROLE_SESSION_NAME: cloudposse-atmos-ci-deploy-release
   S3_BUCKET_NAME: cplive-plat-ue2-prod-atmos-docs-origin
   DEPLOYMENT_HOST: atmos.tools
+  # atmos-docs-site-spa (plat-ue2-prod) in cloudposse/infra-live.
+  CLOUDFRONT_DISTRIBUTION_ID: E2WVYUGW40ZPA8
 
 # These permissions are needed to interact with the GitHub's OIDC Token endpoint
 permissions:
@@ -57,6 +59,7 @@ jobs:
             storage.googleapis.com:443
             us.i.posthog.com:443
             cplive-plat-ue2-prod-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
+            cloudfront.amazonaws.com:443
             api.scorecard.dev:443
             www.bestpractices.dev:443
 
@@ -128,11 +131,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # `s3 sync --delete` can remove hashed JS/CSS bundles that an edge location's
+      # cached `index.html` from the previous deploy still references (the
+      # distribution's default cache behavior floors caching at
+      # cloudfront_min_ttl=60s regardless of origin Cache-Control headers), so this
+      # also invalidates the distribution -- see s3-deploy/action.yml. The deploy
+      # role already has cloudfront:CreateInvalidation on this distribution
+      # (infra-live github-actions-iam-policy.tf).
       - name: Copy Website to S3 Bucket
         uses: ./.github/actions/s3-deploy
         with:
           local-dir: website/build
           s3-uri: s3://${{ env.S3_BUCKET_NAME }}/
+          cloudfront-distribution-id: ${{ env.CLOUDFRONT_DISTRIBUTION_ID }}
 
       - name: Trigger ReIndexing of atmos.tools and docs.cloudposse.com Docs
         run: |
