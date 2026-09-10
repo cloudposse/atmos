@@ -1,0 +1,108 @@
+{
+  "name": "atmos-vscode",
+  "displayName": "Atmos",
+  "description": "VS Code extension for Atmos - cloud infrastructure orchestration with stack-based configuration",
+  "version": "0.1.0",
+  "publisher": "cloudposse",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cloudposse/atmos"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:atmos.yaml"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "atmos-explorer",
+          "title": "Atmos",
+          "icon": "media/atmos.svg"
+        }
+      ]
+    },
+    "views": {
+      "atmos-explorer": [
+        {
+          "id": "atmosComponents",
+          "name": "Components"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "atmos.showRenderedYaml",
+        "title": "Atmos: Show Rendered Component YAML"
+      },
+      {
+        "command": "atmos.refreshComponents",
+        "title": "Atmos: Refresh Components",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "atmos.describeComponent",
+        "title": "Atmos: Describe Component"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "atmos.refreshComponents",
+          "when": "view == atmosComponents",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "atmos.showRenderedYaml",
+          "when": "view == atmosComponents && viewItem == stackInstance"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Atmos",
+      "properties": {
+        "atmos.binaryPath": {
+          "type": "string",
+          "default": "atmos",
+          "description": "Path to the atmos binary"
+        },
+        "atmos.lsp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Atmos LSP server for completion, hover, and go-to-definition"
+        },
+        "atmos.mcp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Atmos MCP server for component data"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.5.0"
+  }
+}
