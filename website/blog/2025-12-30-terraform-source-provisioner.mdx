@@ -55,22 +55,22 @@ components:
 The new commands are available for each component type:
 
 **Terraform:**
-- `atmos terraform source pull` - Vendor a component from source configuration (use `--force` to re-vendor)
-- `atmos terraform source list` - List components with source configured
-- `atmos terraform source describe` - View source configuration
-- `atmos terraform source delete` - Remove vendored source directory
+- [`atmos terraform source pull`](/cli/commands/terraform/source/pull) - Vendor a component from source configuration (use `--force` to re-vendor)
+- [`atmos terraform source list`](/cli/commands/terraform/source/list) - List components with source configured
+- [`atmos terraform source describe`](/cli/commands/terraform/source/describe) - View source configuration
+- [`atmos terraform source delete`](/cli/commands/terraform/source/delete) - Remove vendored source directory
 
 **Helmfile:**
-- `atmos helmfile source pull`
-- `atmos helmfile source list`
-- `atmos helmfile source describe`
-- `atmos helmfile source delete`
+- [`atmos helmfile source pull`](/cli/commands/helmfile/source/pull)
+- [`atmos helmfile source list`](/cli/commands/helmfile/source/list)
+- [`atmos helmfile source describe`](/cli/commands/helmfile/source/describe)
+- [`atmos helmfile source delete`](/cli/commands/helmfile/source/delete)
 
 **Packer:**
-- `atmos packer source pull`
-- `atmos packer source list`
-- `atmos packer source describe`
-- `atmos packer source delete`
+- [`atmos packer source pull`](/cli/commands/packer/source/pull)
+- [`atmos packer source list`](/cli/commands/packer/source/list)
+- [`atmos packer source describe`](/cli/commands/packer/source/describe)
+- [`atmos packer source delete`](/cli/commands/packer/source/delete)
 
 ## Why This Matters
 
@@ -270,6 +270,8 @@ project/
     ├── staging.yaml
     └── prod.yaml
 ```
+
+For usage and configuration, see [Source](/vendor/component-manifest/source).
 
 ## Get Involved
 
