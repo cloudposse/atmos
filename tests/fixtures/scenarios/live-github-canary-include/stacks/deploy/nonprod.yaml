@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Fixture for tests/live_github_canary_test.go: a small, unauthenticated `!include.raw` fetch of a
+# real raw.githubusercontent.com file, so the acceptance suite keeps exercising a genuinely live
+# unauthenticated HTTP fetch path (as opposed to the mocked fetch used elsewhere, see
+# tests/yaml_functions_include_test.go's mockRemoteIncludes).
+vars:
+  stage: nonprod
+
+components:
+  terraform:
+    component-1:
+      metadata:
+        component: yaml-functions
+      vars:
+        stage: nonprod
+        raw_context: !include.raw https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
