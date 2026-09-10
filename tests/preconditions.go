@@ -57,6 +57,20 @@ func ShouldCheckPreconditions() bool {
 	return os.Getenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS") != "true"
 }
 
+// Offline reports whether ATMOS_TEST_OFFLINE is set to "true", in which case every test that
+// depends on live network access -- RequireGitHubAccess, RequireNetworkAccess, and the
+// live_github/live_github_authenticated canaries gated by RequireLiveGitHub -- must skip.
+//
+// This is checked independently of ShouldCheckPreconditions/ATMOS_TEST_SKIP_PRECONDITION_CHECKS:
+// that flag only bypasses the connectivity *probes* those helpers run before a test (CI sets it
+// so tests relying on the local git mirror/HTTP mock don't also require live GitHub reachability),
+// it never means "run this test's live network calls anyway." An offline developer, or a run with
+// ATMOS_TEST_OFFLINE=true, wants live-network tests skipped outright, not attempted and left to
+// time out or fail. See docs/prd/test-preconditions.md.
+func Offline() bool {
+	return os.Getenv("ATMOS_TEST_OFFLINE") == "true"
+}
+
 // setAWSProfileEnv temporarily sets the AWS_PROFILE environment variable.
 func setAWSProfileEnv(profileName string) func() {
 	if profileName == "" {
@@ -291,6 +305,10 @@ func checkGitHubRateLimit(t *testing.T, client *http.Client) *GitHubRateLimitInf
 func RequireGitHubAccess(t *testing.T) *GitHubRateLimitInfo {
 	t.Helper()
 
+	if Offline() {
+		t.Skip("ATMOS_TEST_OFFLINE=true: skipping test that requires live GitHub access")
+	}
+
 	if !ShouldCheckPreconditions() {
 		return nil
 	}
@@ -318,6 +336,10 @@ func RequireGitHubAccess(t *testing.T) *GitHubRateLimitInfo {
 func RequireNetworkAccess(t *testing.T, url string) {
 	t.Helper()
 
+	if Offline() {
+		t.Skip("ATMOS_TEST_OFFLINE=true: skipping test that requires live network access")
+	}
+
 	if !ShouldCheckPreconditions() {
 		return
 	}
@@ -336,6 +358,30 @@ func RequireNetworkAccess(t *testing.T, url string) {
 		t.Skipf("%s returned status %d. Check service availability or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
 			url, resp.StatusCode)
 	}
+}
+
+// RequireLiveGitHub gates a canary test that must reach the real github.com rather than the
+// acceptance suite's local git mirror (tests/testhelpers/gitmirror) or HTTP mock
+// (tests/testhelpers/httpmock). It skips under ATMOS_TEST_OFFLINE (via RequireGitHubAccess,
+// independent of ATMOS_TEST_SKIP_PRECONDITION_CHECKS) and gives the live_github/
+// live_github_authenticated test-case preconditions and the live-GitHub canary tests a single,
+// named entry point.
+func RequireLiveGitHub(t *testing.T) *GitHubRateLimitInfo {
+	t.Helper()
+	return RequireGitHubAccess(t)
+}
+
+// RequireLiveGitHubAuthenticated gates a canary that additionally needs a real GITHUB_TOKEN --
+// used by the "live_github_authenticated" precondition and canaries that exercise the
+// authenticated code path against live GitHub.
+func RequireLiveGitHubAuthenticated(t *testing.T) *GitHubRateLimitInfo {
+	t.Helper()
+
+	info := RequireLiveGitHub(t)
+	if os.Getenv("GITHUB_TOKEN") == "" {
+		t.Skip("GITHUB_TOKEN not set: skipping authenticated live GitHub canary")
+	}
+	return info
 }
 
 // RequireExecutable checks if an executable is available in PATH.

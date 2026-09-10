@@ -29,8 +29,24 @@ type GitConfigEntry struct {
 // target. Existing entries in base always come first, so an owner-scoped
 // mirror redirect exported process-wide is never shadowed by a later,
 // per-test override that also wants to add git config entries.
+//
+// Append is a convenience wrapper around AppendEntries for the common case of
+// reading existing entries straight from an environment slice with no
+// filtering. Callers that need to drop specific existing entries first (e.g.
+// a live-GitHub canary removing the process-wide mirror redirect) should call
+// ReadEntries, filter with Without, and then call AppendEntries directly.
 func Append(target map[string]string, base []string, entries ...GitConfigEntry) {
-	all := append(readEntries(base), entries...)
+	AppendEntries(target, ReadEntries(base), entries...)
+}
+
+// AppendEntries writes existing followed by entries into target as a fresh,
+// consistently renumbered GIT_CONFIG_COUNT/KEY_n/VALUE_n set. It never mutates
+// existing or entries, and never observes later mutation of either slice by
+// the caller.
+func AppendEntries(target map[string]string, existing []GitConfigEntry, entries ...GitConfigEntry) {
+	all := make([]GitConfigEntry, 0, len(existing)+len(entries))
+	all = append(all, existing...)
+	all = append(all, entries...)
 
 	target["GIT_CONFIG_COUNT"] = strconv.Itoa(len(all))
 	for i, entry := range all {
@@ -40,9 +56,33 @@ func Append(target map[string]string, base []string, entries ...GitConfigEntry) 
 	}
 }
 
-// readEntries extracts any existing GIT_CONFIG_COUNT/KEY_n/VALUE_n entries
+// Without returns a copy of entries with every entry matching predicate
+// removed. Used, for example, to strip the process-wide git mirror insteadOf
+// rules (see gitmirror.InsteadOfRules and IsInsteadOfEntry) from a specific
+// test case's git config so a live-GitHub canary is not redirected to the
+// local mirror.
+func Without(entries []GitConfigEntry, predicate func(GitConfigEntry) bool) []GitConfigEntry {
+	kept := make([]GitConfigEntry, 0, len(entries))
+	for _, entry := range entries {
+		if !predicate(entry) {
+			kept = append(kept, entry)
+		}
+	}
+	return kept
+}
+
+// IsInsteadOfEntry reports whether entry is a `url.<base>.insteadOf` rule
+// (the shape gitmirror.InsteadOfRules produces), as opposed to an unrelated
+// git config override such as credential.helper or an HTTP extraheader.
+func IsInsteadOfEntry(entry GitConfigEntry) bool {
+	return strings.HasSuffix(entry.Key, ".insteadOf")
+}
+
+// ReadEntries extracts any existing GIT_CONFIG_COUNT/KEY_n/VALUE_n entries
 // from an environment slice of "KEY=VALUE" pairs (e.g. os.Environ()).
-func readEntries(env []string) []GitConfigEntry {
+// Exported so callers can filter the result (see Without) before
+// re-serializing it with AppendEntries.
+func ReadEntries(env []string) []GitConfigEntry {
 	lookup := make(map[string]string, len(env))
 	for _, kv := range env {
 		key, value, ok := strings.Cut(kv, "=")
