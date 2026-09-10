@@ -72,7 +72,9 @@ tests:
   # (github/stargazers, weather), so this case exercises the local git mirror
   # (tests/testhelpers/gitmirror) and needs no ghcr.io/GitHub credentials at all, unlike
   # atmos_vendor_pull above which also pulls an oci:// source and therefore keeps the
-  # github_token precondition.
+  # github_token precondition. It deliberately asserts only what it vendors: this fixture's
+  # components/** output is gitignored, so `clean: true` cannot remove what an earlier case
+  # in the same shard (atmos_vendor_pull) left behind, and file_not_exists checks would flake.
   - name: atmos_vendor_pull_git
     short: false
     enabled: true
@@ -97,10 +99,6 @@ tests:
         - "./components/terraform/weather/main/providers.tf"
         - "./components/terraform/weather/main/variables.tf"
         - "./components/terraform/weather/main/versions.tf"
-      file_not_exists:
-        - "./components/terraform/myapp1/main.tf"
-        - "./components/terraform/myapp2/main.tf"
-        - "./components/terraform/test-components/main/main.tf"
       exit_code: 0
 
   # Tests for simple filename exclusions (without **/ prefix) - regression test for bug fix

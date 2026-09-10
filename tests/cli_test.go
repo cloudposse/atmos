@@ -826,8 +826,8 @@ func TestMain(m *testing.M) {
 	// the affected tests.
 	testhelpers.ProvisionToolchain(logger, testhelpers.DefaultTools())
 
-	// Build a local git mirror of examples/ and redirect cloudposse/* git fetches to it via
-	// per-owner GIT_CONFIG insteadOf rules, so the acceptance suite never depends on live GitHub
+	// Build a local git mirror of examples/ and redirect github.com/cloudposse/atmos.git fetches to it via
+	// repo-scoped GIT_CONFIG insteadOf rules, so the acceptance suite never depends on live GitHub
 	// connectivity for the vendor/import fixtures that reference
 	// github.com/cloudposse/atmos.git//examples/... (tests/test-cases/vendor-test.yaml,
 	// demo-globs.yaml, demo-vendoring.yaml). Unconditional -- not gated behind
@@ -843,7 +843,7 @@ func TestMain(m *testing.M) {
 	logger.Info("built local git mirror for cloudposse/atmos", "path", gitMirrorRoot)
 
 	mirrorEnv := map[string]string{}
-	gitconfigenv.Append(mirrorEnv, os.Environ(), gitmirror.InsteadOfRules(gitMirrorRoot, gitmirror.Owner)...)
+	gitconfigenv.Append(mirrorEnv, os.Environ(), gitmirror.InsteadOfRules(gitMirrorRoot, gitmirror.Owner, gitmirror.Repo)...)
 	for key, value := range mirrorEnv {
 		os.Setenv(key, value) //nolint:lintroller // Set before m.Run(); no *testing.T available in TestMain; must persist process-wide for every subtest.
 	}
