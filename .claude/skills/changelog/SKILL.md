@@ -149,6 +149,15 @@ implementation structure — describe behavior only in CLI/config/output terms.
 - **Correct** — `2026-06-29-ci-log-groups.mdx` and `2026-06-28-list-dependencies.mdx` describe mechanisms only
   in terms of commands, flags, and observable output — never Go internals.
 
+## Rule 5 — Link features to usage documentation
+
+Link the first useful prose mention of a feature, command, flag, configuration field, or YAML
+function to the specific usage page or section. A changelog announcement should lead the reader
+to instructions they can follow. Keep code blocks copyable and avoid linking every repetition.
+Verify the actual route and heading anchor; filenames are not always public URLs. When supported
+functionality has no usage documentation, add it to the appropriate reference page before linking.
+For retired functionality, link applicable migration or deprecation guidance without rewriting history.
+
 ## Pre-publish checklist
 
 - [ ] Intro opens on the problem, not the feature, and doesn't open with a backtick
@@ -157,6 +166,7 @@ implementation structure — describe behavior only in CLI/config/output terms.
 - [ ] Body follows Problem → Fix → How to Use It → Get Involved (no `## What Changed` opener)
 - [ ] Tag(s) exist in `website/blog/tags.yml`
 - [ ] Author exists in `website/blog/authors.yml` (added in this PR if new)
+- [ ] Feature terms link to verified usage documentation, including relevant section anchors
 - [ ] No Go package paths / internal file layout mentioned
 - [ ] Cast embedded if a relevant recording exists (optional otherwise)
 - [ ] `cd website && npm run build` succeeds

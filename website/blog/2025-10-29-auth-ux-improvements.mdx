@@ -16,7 +16,7 @@ We've made several quality-of-life improvements to Atmos authentication commands
 
 ## Interactive Identity Selection for Terraform
 
-Terraform commands now support interactive identity selection when you use `--identity` without specifying a name:
+Terraform commands now support interactive identity selection when you use [`--identity`](/cli/commands/auth/usage#flags) without specifying a name:
 
 ```bash
 # Interactive selector appears
@@ -65,7 +65,7 @@ atmos auth whoami prod-admin  # Still works
 
 The `auth logout` command now offers three levels of cleanup:
 
-- **`atmos auth logout <identity>`** - Clear one identity's cached credentials (keyring + files)
+- **[`atmos auth logout <identity>`](/cli/commands/auth/logout)** - Clear one identity's cached credentials (keyring + files)
 - **`atmos auth logout --provider <name>`** - Clear provider and all identities using it (keyring + files + provider directory)
 - **`atmos auth logout --all`** - Clear all identities AND providers (complete cleanup)
 
@@ -73,7 +73,7 @@ The `auth logout` command now offers three levels of cleanup:
 
 Note: Your `atmos.yaml` configuration is never modified - logout only removes cached credentials.
 
-Each identity in `atmos auth list` now shows authentication status indicators:
+Each identity in [`atmos auth list`](/cli/commands/auth/list) now shows authentication status indicators:
 - ✓ Authenticated with valid credentials
 - ⚠ Authenticated but credentials expiring soon
 - ✗ Not authenticated or credentials expired

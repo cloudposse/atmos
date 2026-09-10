@@ -88,12 +88,12 @@ components:
               action: down
 ```
 
-`atmos terraform test` fires these hooks around the run: the emulator comes up, the fixture VPC is applied,
+[`atmos terraform test`](/cli/commands/terraform/test) fires these hooks around the run: the emulator comes up, the fixture VPC is applied,
 the app test uses that VPC, and `when: always` guarantees teardown even when a test fails. The app component
 owns its test fixture lifecycle without scripts or a custom command wrapper.
 
 When a test needs fixture outputs, define them under the component's `test.vars`. Atmos resolves those
-values after the setup hook, so `test.vars` can use `!terraform.state` to read the fixture VPC ID and pass
+values after the setup hook, so `test.vars` can use [`!terraform.state`](/functions/yaml/terraform.state) to read the fixture VPC ID and pass
 it into `.tftest.hcl` as a declared Terraform test variable.
 
 ## In CI: Test Summaries

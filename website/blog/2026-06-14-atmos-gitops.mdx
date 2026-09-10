@@ -8,7 +8,7 @@ tags: [feature]
 
 import CastPlayer from '@site/src/components/CastPlayer'
 
-Atmos now treats Git as a foundational platform capability — on par with Toolchain, Auth, and Hooks — built to enable GitOps workflows where you need to commit artifacts to a source of truth: deployment repos consumed by Argo CD or Flux, provider lock files, rendered manifests. Define managed repositories once in `atmos.yaml`, then clone, inspect, diff, commit, and push them through a new `atmos git` command group, or publish generated artifacts automatically on lifecycle events with the new `git` hook kind.
+Atmos now treats Git as a foundational platform capability — on par with Toolchain, Auth, and Hooks — built to enable GitOps workflows where you need to commit artifacts to a source of truth: deployment repos consumed by Argo CD or Flux, provider lock files, rendered manifests. Define managed repositories once in `atmos.yaml`, then clone, inspect, diff, commit, and push them through a new [`atmos git`](/cli/commands/git/usage) command group, or publish generated artifacts automatically on lifecycle events with the new `git` hook kind.
 
 <!--truncate-->
 
@@ -34,10 +34,10 @@ git:
 On top of that foundation:
 
 - **`atmos git` commands** — `init`, `clone`, `pull`, `status`, `diff`, `commit`, `push`, and `list`, with `--all` bulk operations across every configured repository. Clone accepts configured names, plain URLs, or go-getter style URIs (`git::https://...?ref=main&depth=1`) — the same syntax you already use in vendoring. `init`, `clone`, `pull`, and `push` pass arguments after `--` verbatim to the underlying git invocation, so uncommon git flags still compose with Atmos safety rules.
-- **Bootstrap from scratch or from a template** — `atmos git init` creates a configured repository whose remote has no content yet: workdir, initial branch, and remote wired up, ready to commit and push. `--from=<uri>` seeds it from a template (one fresh initial commit), and `--from=<uri> --keep-history` migrates an existing repository while keeping the source pullable as an `upstream` remote.
+- **Bootstrap from scratch or from a template** — [`atmos git init`](/cli/commands/git/init) creates a configured repository whose remote has no content yet: workdir, initial branch, and remote wired up, ready to commit and push. `--from=<uri>` seeds it from a template (one fresh initial commit), and `--from=<uri> --keep-history` migrates an existing repository while keeping the source pullable as an `upstream` remote.
 - **A `git` hook kind** — publish generated files on lifecycle events like `after.terraform.apply`, committing to the current repository or a managed deployment repository, with templated commit messages and provenance trailers (`Atmos-Stack`, `Atmos-Component`).
-- **Local Git hook shims** — `atmos git hooks install` wires `.git/hooks/*` (pre-commit, commit-msg, ...) to Atmos workflows and custom commands, replacing Husky-style glue.
-- **Native CI checkout** — in GitHub Actions with `ci.enabled: true`, a bare `atmos git clone` infers the current repository from CI metadata and clones it into the workspace, replacing `actions/checkout`. GitHub STS credentials flow to every Git subprocess automatically via `GIT_CONFIG_*`.
+- **Local Git hook shims** — [`atmos git hooks install`](/cli/commands/git/hooks/install) wires `.git/hooks/*` (pre-commit, commit-msg, ...) to Atmos workflows and custom commands, replacing Husky-style glue.
+- **Native CI checkout** — in GitHub Actions with `ci.enabled: true`, a bare [`atmos git clone`](/cli/commands/git/clone) infers the current repository from CI metadata and clones it into the workspace, replacing `actions/checkout`. GitHub STS credentials flow to every Git subprocess automatically via `GIT_CONFIG_*`.
 
 ## Why This Matters
 
@@ -105,7 +105,7 @@ See the [`atmos git` command reference](/cli/commands/git/usage) and the [Git co
 
 ## Bootstrapping a Repository — `atmos git init`
 
-Cloning assumes the repository already exists. Often it doesn't yet: you're standing up a *new* GitOps deployment repo for a new cluster, a new tenant, a new environment. `atmos git init` is clone's counterpart — it creates a configured repository whose remote has no content, on the configured branch, with the remote wired up, ready for `atmos git commit` and `atmos git push`:
+Cloning assumes the repository already exists. Often it doesn't yet: you're standing up a *new* GitOps deployment repo for a new cluster, a new tenant, a new environment. `atmos git init` is clone's counterpart — it creates a configured repository whose remote has no content, on the configured branch, with the remote wired up, ready for [`atmos git commit`](/cli/commands/git/commit) and [`atmos git push`](/cli/commands/git/push):
 
 ```shell
 atmos git init flux-prod        # empty repo, origin -> configured uri, ready to push

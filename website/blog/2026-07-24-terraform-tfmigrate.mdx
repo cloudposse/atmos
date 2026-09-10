@@ -10,7 +10,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 
 Refactoring Terraform code leaves state behind. Rename a resource, or move it between root modules, and every plan shows a destroy-and-recreate for infrastructure that never changed. You can fix this by hand with `terraform state mv`, but that command only fixes one workspace at a time. It is easy to get wrong, and no one can review it before it runs.
 
-[`tfmigrate`](https://github.com/minamijoyo/tfmigrate) turns these state changes into migration files that you store under version control. Atmos runs these files for you — manually from the CLI, or automatically from Terraform lifecycle hooks — in the same component context as `atmos terraform plan` and `apply`.
+[`tfmigrate`](https://github.com/minamijoyo/tfmigrate) turns these state changes into migration files that you store under version control. Atmos runs these files for you — manually from the CLI, or automatically from Terraform lifecycle hooks — in the same component context as [`atmos terraform plan`](/cli/commands/terraform/plan) and [`apply`](/cli/commands/terraform/apply).
 
 ```shell
 atmos terraform migrate plan s3-bucket -s plat-ue2-dev
@@ -25,9 +25,9 @@ atmos terraform migrate apply s3-bucket -s plat-ue2-dev
 
 The new `atmos terraform migrate` command family adds:
 
-- `atmos terraform migrate plan` to preview a migration.
-- `atmos terraform migrate apply` to apply a migration.
-- `atmos terraform migrate list` to inspect per-component hook and history context.
+- [`atmos terraform migrate plan`](/cli/commands/terraform/migrate-plan) to preview a migration.
+- [`atmos terraform migrate apply`](/cli/commands/terraform/migrate-apply) to apply a migration.
+- [`atmos terraform migrate list`](/cli/commands/terraform/migrate-list) to inspect per-component hook and history context.
 - `kind: tfmigrate` hooks for running migrations from Terraform lifecycle events.
 - Zero-config history storage that reuses the component's Terraform backend.
 
@@ -161,3 +161,5 @@ workflow persist it.
 - [`atmos terraform migrate`](/cli/commands/terraform/migrate)
 - [Hooks](/stacks/hooks)
 - [Terraform Component Configuration](/cli/configuration/components/terraform)
+
+For usage and configuration, see [Atmos component migration in YAML config](/tutorials/atmos-component-migrations-in-yaml).
