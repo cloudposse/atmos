@@ -29,7 +29,9 @@ func TestBuild(t *testing.T) {
 
 	clone := t.TempDir()
 	cloneDir := filepath.Join(clone, "checkout")
-	out, err := exec.Command("git", "clone", "--quiet", "--branch", "main", bareDir, cloneDir).CombinedOutput()
+	cloneCmd := exec.Command("git", "clone", "--quiet", "--branch", "main", bareDir, cloneDir)
+	cloneCmd.Env = gitEnv() // Verify with the same scrubbed env Build uses.
+	out, err := cloneCmd.CombinedOutput()
 	require.NoError(t, err, "git clone failed: %s", out)
 
 	// The mirror's root must directly contain examples/, mirroring the same relative

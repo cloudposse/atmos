@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/otiai10/copy"
 
@@ -42,6 +43,9 @@ const filePerm = 0o600
 // out to, since none of it is useful in a test log.
 const gitQuiet = "--quiet"
 
+// gitConfig is the git subcommand used to set the throwaway scratch repo's local options.
+const gitConfig = "config"
+
 // Build creates a bare git mirror of this checkout's examples/ directory at
 // <root>/cloudposse/atmos.git, on branch main. Only examples/ is copied (the
 // only subtree any test-case fixture vendors from cloudposse/atmos), so the
@@ -59,8 +63,10 @@ func Build(root string) error {
 	defer os.RemoveAll(work)
 
 	examplesDest := filepath.Join(work, "examples")
+	// Skip nested .git directories AND .git files (gitlinks): either would turn part of the copy
+	// into a submodule entry pointing at a commit this repository does not contain.
 	skipGitDirs := func(info os.FileInfo, _, _ string) (bool, error) {
-		return info.IsDir() && info.Name() == ".git", nil
+		return info.Name() == ".git", nil
 	}
 	if err := copy.Copy(filepath.Join(repoRoot, "examples"), examplesDest, copy.Options{Skip: skipGitDirs}); err != nil {
 		return fmt.Errorf("gitmirror: copy examples/: %w", err)
@@ -70,15 +76,44 @@ func Build(root string) error {
 		return err
 	}
 
+	// Fail early, and loudly, if the commit did not land: a later push would only report a
+	// confusing "nonexistent object" for refs/heads/main.
+	if err := runGit(work, "rev-parse", "--verify", gitQuiet, "HEAD"); err != nil {
+		return fmt.Errorf("gitmirror: scratch repo has no commit on HEAD (%s): %w", gitStatus(work), err)
+	}
+
 	ownerDir := filepath.Join(root, Owner)
 	if err := os.MkdirAll(ownerDir, dirPerm); err != nil {
 		return fmt.Errorf("gitmirror: create owner dir: %w", err)
 	}
 	bareDir := filepath.Join(ownerDir, Repo+".git")
-	if err := runGit("", "clone", gitQuiet, "--bare", work, bareDir); err != nil {
-		return fmt.Errorf("gitmirror: bare clone: %w", err)
+	// Publish into a fresh bare repository with a push rather than `git clone --bare <path>`. A
+	// local clone copies (or hardlinks) the scratch repo's object files directly and then writes
+	// refs pointing at them; a push moves the objects through the pack protocol, which does not
+	// depend on the on-disk layout of the scratch object store. On the macOS runners the local
+	// clone failed with "trying to write ref 'refs/heads/main' with nonexistent object".
+	if err := runGit("", "init", gitQuiet, "--bare", bareDir); err != nil {
+		return fmt.Errorf("gitmirror: init bare mirror: %w", err)
+	}
+	if err := runGit(work, "push", gitQuiet, bareDir, "HEAD:refs/heads/main"); err != nil {
+		return fmt.Errorf("gitmirror: push to bare mirror: %w", err)
+	}
+	if err := runGit(bareDir, "symbolic-ref", "HEAD", "refs/heads/main"); err != nil {
+		return fmt.Errorf("gitmirror: set mirror HEAD: %w", err)
 	}
 	return nil
+}
+
+// gitStatus returns `git status --short --branch` for dir, for error diagnostics only.
+func gitStatus(dir string) string {
+	cmd := exec.Command("git", "status", "--short", "--branch")
+	cmd.Dir = dir
+	cmd.Env = gitEnv()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "git status failed: " + err.Error()
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // commitWorkingRepo turns a plain directory into a single-commit git repo on
@@ -89,12 +124,14 @@ func commitWorkingRepo(dir string) error {
 	steps := [][]string{
 		{"init", gitQuiet},
 		{"checkout", gitQuiet, "-b", "main"},
-		{"config", "user.email", "gitmirror@atmos.test"},
-		{"config", "user.name", "Atmos Test Git Mirror"},
+		{gitConfig, "user.email", "gitmirror@atmos.test"},
+		{gitConfig, "user.name", "Atmos Test Git Mirror"},
 		// Never sign commits in throwaway test repos: signing is slow, needs no
 		// verification here, and hangs on dev machines whose global git config
 		// enables commit.gpgsign (e.g. a 1Password agent).
-		{"config", "commit.gpgsign", "false"},
+		{gitConfig, "commit.gpgsign", "false"},
+		// Never let `git commit` spawn a detached `gc --auto` in a throwaway repo.
+		{gitConfig, "gc.auto", "0"},
 		{"add", "-A"},
 		{"commit", gitQuiet, "-m", "gitmirror: snapshot of examples/"},
 	}
@@ -113,11 +150,31 @@ func runGit(dir string, args ...string) error {
 	if dir != "" {
 		cmd.Dir = dir
 	}
+	cmd.Env = gitEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("gitmirror: git %v failed: %w: %s", args, err, out)
 	}
 	return nil
+}
+
+// gitEnv returns the process environment without the variables that make git operate on a
+// repository other than the one in its working directory (GIT_DIR, GIT_WORK_TREE,
+// GIT_INDEX_FILE, GIT_OBJECT_DIRECTORY, GIT_ALTERNATE_OBJECT_DIRECTORIES). The mirror is built
+// from throwaway directories, and any of those leaking in from the caller's environment would
+// silently redirect the scratch repo's objects or refs elsewhere.
+func gitEnv() []string {
+	env := os.Environ()
+	kept := make([]string, 0, len(env))
+	for _, kv := range env {
+		key, _, _ := strings.Cut(kv, "=")
+		switch key {
+		case "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES":
+			continue
+		}
+		kept = append(kept, kv)
+	}
+	return kept
 }
 
 // FileURI converts a filesystem path into a file:// URI usable as a git remote or GIT_CONFIG
