@@ -1,0 +1,134 @@
+.container {
+  position: relative;
+  display: inline-block;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 2rem;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ifm-color-content-secondary);
+  background: transparent;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.trigger:hover,
+.trigger:focus-visible {
+  border-color: var(--ifm-color-emphasis-300);
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-content);
+}
+
+.trigger:focus-visible {
+  outline: 1px solid var(--ifm-color-primary);
+  outline-offset: -1px;
+}
+
+.icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+}
+
+.spin {
+  animation: cast-pro-download-spin 0.8s linear infinite;
+}
+
+@keyframes cast-pro-download-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 11rem;
+  background: var(--ifm-background-surface-color, var(--ifm-color-emphasis-0));
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  padding: 0.25rem;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.menuItemGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 1.875rem;
+  padding: 0 0.55rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--ifm-color-content-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  font-family: inherit;
+  width: 100%;
+  text-align: left;
+}
+
+.menuItem:hover:not(:disabled),
+.menuItem:focus-visible:not(:disabled) {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-content);
+  outline: none;
+}
+
+.menuItem:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.hint {
+  margin-left: auto;
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: var(--ifm-color-content-secondary);
+}
+
+.errorText {
+  margin: 0 0.55rem 0.375rem;
+  font-size: 0.6875rem;
+  color: var(--ifm-color-danger);
+}
+
+html[data-theme='dark'] .trigger {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+html[data-theme='dark'] .trigger:hover,
+html[data-theme='dark'] .trigger:focus-visible,
+html[data-theme='dark'] .menuItem:hover:not(:disabled),
+html[data-theme='dark'] .menuItem:focus-visible:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+html[data-theme='dark'] .menu {
+  border-color: rgba(255, 255, 255, 0.12);
+}
