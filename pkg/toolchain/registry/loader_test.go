@@ -43,7 +43,7 @@ func TestCreateRegistry_RefValidation(t *testing.T) {
 				Ref:    "v1.0.0",
 			},
 			wantErr:     true,
-			errContains: "'ref' is only supported for github.com URLs",
+			errContains: "'ref' is only supported for github.com (or configured GitHub Enterprise Server) URLs",
 		},
 		{
 			name: "ref with non-GitHub URL should error",
@@ -53,7 +53,7 @@ func TestCreateRegistry_RefValidation(t *testing.T) {
 				Ref:    "v1.0.0",
 			},
 			wantErr:     true,
-			errContains: "'ref' is only supported for github.com URLs",
+			errContains: "'ref' is only supported for github.com (or configured GitHub Enterprise Server) URLs",
 		},
 		{
 			name: "no ref with any URL should succeed",

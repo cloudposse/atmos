@@ -136,11 +136,10 @@ func CheckPRCacheAndUpdate(ctx context.Context, prNumber int, showProgress bool)
 		return true, nil
 	}
 
-	// Get GitHub token if available (not required for public repos).
-	token := github.GetGitHubToken()
-
-	// Get current PR head SHA.
-	currentSHA, err := github.GetPRHeadSHA(ctx, atmosOwner, atmosRepo, prNumber, token)
+	// Atmos self-install is a toolchain concern: the atmos binary's own build artifacts live
+	// on public github.com by default even for GHES users (see ToolchainEndpoints), so this
+	// uses the toolchain-scoped fetcher rather than the RepoEndpoints-scoped free function.
+	currentSHA, err := github.NewToolchainArtifactFetcher(ctx).GetPRHeadSHA(ctx, atmosOwner, atmosRepo, prNumber)
 	if err != nil {
 		return false, handlePRArtifactError(err, prNumber)
 	}
@@ -235,8 +234,8 @@ func InstallFromPR(prNumber int, showProgress bool) (string, error) {
 		ui.Infof("Installing Atmos from PR #%d...", prNumber)
 	}
 
-	// Get artifact info.
-	artifactInfo, err := github.GetPRArtifactInfo(ctx, atmosOwner, atmosRepo, prNumber)
+	// Get artifact info. Toolchain-scoped fetcher: see the comment in CheckPRCacheAndUpdate.
+	artifactInfo, err := github.NewToolchainArtifactFetcher(ctx).GetPRArtifactInfo(ctx, atmosOwner, atmosRepo, prNumber)
 	if err != nil {
 		return "", handlePRArtifactError(err, prNumber)
 	}
@@ -719,7 +718,7 @@ func isBrewAvailable() bool {
 
 // handlePRArtifactError converts GitHub errors to user-friendly errors.
 func handlePRArtifactError(err error, prNumber int) error {
-	prURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d", atmosOwner, atmosRepo, prNumber)
+	prURL := fmt.Sprintf("%s/%s/%s/pull/%d", github.ToolchainEndpoints().ServerURL, atmosOwner, atmosRepo, prNumber)
 
 	// Check for specific error types.
 	if errors.Is(err, github.ErrPRNotFound) {

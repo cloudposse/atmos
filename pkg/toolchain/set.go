@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -368,8 +369,10 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 }
 
 // fetchGitHubVersions fetches available versions and titles from GitHub releases.
+// Uses the toolchain endpoints (ATMOS_TOOLCHAIN_GITHUB_API_URL), not the repo endpoints:
+// aqua-registry tool releases live on public github.com even for GHES users, by default.
 func fetchGitHubVersions(owner, repo string) ([]versionItem, error) {
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", owner, repo)
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=100", github.ToolchainEndpoints().APIURL, owner, repo)
 
 	resp, err := makeGitHubRequest(apiURL)
 	if err != nil {
@@ -447,7 +450,7 @@ func makeGitHubRequest(apiURL string) (*http.Response, error) {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
 
-		r, err := client.Do(req) //nolint:gosec // Scheme+host (api.github.com) is a hardcoded literal; owner/repo only ever substitute into the path, so they cannot redirect the request to a different host.
+		r, err := client.Do(req) //nolint:gosec // Scheme+host come from the trusted ToolchainEndpoints resolver (env-configured, not request data); owner/repo only ever substitute into the path, so they cannot redirect the request to a different host.
 		if err != nil {
 			lastErr = fmt.Errorf("%w: failed to fetch releases from GitHub: %w", errUtils.ErrHTTPRequestFailed, err)
 			if attempt == githubRequestRetryMaxAttempts {
