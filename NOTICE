@@ -940,7 +940,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/gofrs/flock
     License: BSD-3-Clause
-    URL: https://github.com/gofrs/flock/blob/v0.13.0/LICENSE
+    URL: https://github.com/gofrs/flock/blob/v0.13.1/LICENSE
 
   - github.com/gogo/protobuf
     License: BSD-3-Clause
