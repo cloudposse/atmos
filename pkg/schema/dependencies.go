@@ -66,7 +66,7 @@ type ComponentDependency struct {
 	// type, or — in the legacy inline shape — file/folder. Defaults to the
 	// declaring component's type for component dependencies.
 	Kind string `yaml:"kind,omitempty" json:"kind,omitempty" mapstructure:"kind"`
-	// Required controls whether an unavailable target causes an error. False skips unavailable targets; nil defaults to true.
+	// Required controls whether a missing or unavailable target causes an error. Nil defaults to true.
 	Required *bool `yaml:"required,omitempty" json:"required,omitempty" mapstructure:"required"`
 	// Path for file or folder dependencies (legacy inline shape). For new
 	// configurations, prefer the sibling keys `dependencies.files` /

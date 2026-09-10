@@ -2067,7 +2067,7 @@
               "type": "string"
             }
           ],
-          "description": "Required controls whether an unavailable target causes an error. False skips unavailable targets; nil defaults to true."
+          "description": "Required controls whether a missing or unavailable target causes an error. Nil defaults to true."
         }
       },
       "anyOf": [
