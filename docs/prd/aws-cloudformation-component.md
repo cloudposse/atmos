@@ -208,7 +208,6 @@ components:
       notification_arns: []
       disable_rollback: false
       termination_protection: true
-      timeout_in_minutes: 30
 
       settings:
         aws_cloudformation:
@@ -444,7 +443,17 @@ read-only preview never leaks an AWS changeset object against the account's chan
 runs best-effort: a `DeleteChangeSet` failure is surfaced as a warning, not a command error, since the
 diff itself already succeeded and was rendered, and a stray leftover changeset never blocks a
 subsequent `plan`/`diff`/`apply` (each run generates its own uniquely-named changeset and doesn't
-depend on the previous one being gone). `apply`/`deploy` execute the changeset (`ExecuteChangeSet`)
+depend on the previous one being gone). When the previewed stack doesn't exist yet, `CreateChangeSet`
+is called with `ChangeSetType=CREATE`, which as a side effect creates a placeholder root stack in
+`REVIEW_IN_PROGRESS` state — `DeleteChangeSet` does **not** remove that stack, only the changeset
+object. For this case, cleanup must also call `DeleteStack` on the placeholder after deleting the
+changeset, or a `plan`/`diff` against a not-yet-created stack leaks a stack against the account's
+stack-count quota on every preview. Unlike the changeset cleanup, this stack-delete step is surfaced
+as a command error (or a retryable cleanup result), not a silent warning, since a leaked
+`REVIEW_IN_PROGRESS` stack is more disruptive than a leaked changeset — it can collide with a
+subsequent real `apply`'s own `ChangeSetType=CREATE` call. Previews that target an existing stack
+never create this placeholder and only need the existing `DeleteChangeSet` cleanup.
+`apply`/`deploy` execute the changeset (`ExecuteChangeSet`)
 rather than calling `UpdateStack` directly, giving every apply the same "review before mutate"
 semantics as changesets provide, without requiring users to manage changesets by hand. The explicit
 `changeset create/execute/list/delete` verbs exist for users who want manual control (e.g. a two-phase
@@ -557,15 +566,24 @@ exporting secrets as environment variables does not apply. Instead:
 - Secrets flow into **`parameters:` values** via `!secret` (see the `DbPassword` line in
   [Public Interface](#public-interface)), resolved at stack-processing time and passed directly in the
   `CreateStack`/`CreateChangeSet` API call's parameter list.
-- CloudFormation's own `NoEcho` only affects the AWS Console's parameter display — it does **not**
-  redact the value from `DescribeStacks`/`DescribeChangeSet` API responses, and a NoEcho parameter's
-  value can still resurface unmasked in a stack's `Outputs`/resource `Metadata` if the template wires
-  it there. Atmos does its own masking on top: parameters declared `NoEcho` in the template are
-  registered with the masker **by value**, so every rendered surface — `plan`/`diff` changeset
+- CloudFormation's own `NoEcho` masks the parameter value (as `****`) in the AWS Console and in
+  `DescribeStacks`/`DescribeStackEvents`/`DescribeChangeSet` API responses — but only at that
+  parameter-echo surface: a NoEcho parameter's value can still resurface unmasked in a stack's
+  `Outputs`/template `Metadata`/resource `Metadata` if the template wires it there, since those are
+  rendered from the template's own definitions rather than the parameter-echo path. Atmos does its
+  own masking on top: parameters declared `NoEcho` in the template are registered with the masker
+  **by value** (and known encodings of it), so every rendered surface — `plan`/`diff` changeset
   rendering, `describe stacks`/`describe component` output, `output`/`atmos.Component()` results,
-  logs — masks that value wherever it reappears, not just the original parameter field, through the
-  existing Gitleaks-backed masking pipeline (the same guarantee the secrets subsystem provides
-  elsewhere for resolved `!secret` values).
+  logs — masks that value wherever it reappears verbatim, not just the original parameter field,
+  through the existing Gitleaks-backed masking pipeline (the same guarantee the secrets subsystem
+  provides elsewhere for resolved `!secret` values). This is **literal-value masking, not data-flow
+  tracking**: a template that derives a non-preserving transformation of the secret — e.g.
+  `Fn::Select` over `Fn::Split` slicing it into a substring — into an `Outputs` or `Metadata` value
+  produces a string the masker's registered patterns won't match, so it renders unmasked. For a value
+  that must never appear in a stack's outputs at all, use a
+  [dynamic reference](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/dynamic-references.html)
+  (`{{resolve:...}}`) instead of a plain parameter, so CloudFormation itself never materializes the
+  secret into `Outputs`/`Metadata` as a literal value in the first place.
 - The `env:` section remains supported for its normal cross-type uses (hooks, `!exec`, template
   functions), but is **not** a secret-delivery channel for the CloudFormation API itself.
 
@@ -637,6 +655,16 @@ its own design, not through this verb.
 
 - `--retain-resources <logical-ids>` passed through to the API (only valid for `DELETE_FAILED`
   stacks, per AWS semantics — surfaced with a hint when misused).
+- **The configured `role_arn` is passed as `DeleteStack`'s `RoleARN` parameter** when set, the same
+  CloudFormation-service-role distinction [Changesets](#changesets) draws for
+  `CreateChangeSet`/`ExecuteChangeSet` — it is not caller credentials, only `iam:PassRole` on it.
+  When `role_arn` is unset, `DeleteStack` falls back to the stack's previously associated role (the
+  role that was last used to update it) or, if the stack has no associated role at all, a session
+  from the caller's own credentials. That means a stack whose `role_arn` was changed or removed in
+  config, or a stack created before this component type set one, can be deleted under a different
+  identity than the currently configured service role — worth calling out explicitly since it's easy
+  to assume `role_arn`'s absence means "caller identity," when it can just as easily mean "whatever
+  role the stack remembers from its last update."
 - **Termination protection is respected, never auto-disabled**: deleting a stack with
   `termination_protection: true` fails with an actionable hint telling the user to flip the config
   field and re-apply first (or use an explicit `--disable-termination-protection` escape hatch that
@@ -899,7 +927,6 @@ type AwsCloudFormation struct {
     NotificationArns  []string
     DisableRollback   bool
     TerminationProtection bool
-    TimeoutInMinutes  int
 }
 ```
 
@@ -908,13 +935,20 @@ registered as a field on `type Components struct` alongside `Terraform`, `Helmfi
 `Plugins` remain-map — but a built-in type needs the typed field for the
 [base-path chain](#atmosyaml-base-path-chain)).
 
+No `TimeoutInMinutes`/`timeout_in_minutes` field: that's a `CreateStack`-only parameter with no
+`CreateChangeSet`/`ExecuteChangeSet` equivalent, and this component type never calls `CreateStack`
+directly (see [Changesets](#changesets)) — a config field with no API path to reach would silently
+do nothing. If a future initial-create path is added that calls `CreateStack` directly, the field
+can be introduced then with documented plan/apply semantics; until it exists, exposing it in config
+would be a config option that validates but silently no-ops.
+
 JSON Schema — **four files**, not one:
 
 1. `pkg/datafetcher/schema/stacks/stack-config/1.0.json` gains an
     `aws_cloudformation_component_manifest` definition, modeled directly on `helm_component_manifest`
     — type-specific properties (`template`, `stack_name`, `parameters`, `capabilities`, `tags`,
-    `stack_policy`, `role_arn`, `notification_arns`, `disable_rollback`, `termination_protection`,
-    `timeout_in_minutes`) plus the shared cross-type sections
+    `stack_policy`, `role_arn`, `notification_arns`, `disable_rollback`, `termination_protection`)
+    plus the shared cross-type sections
     (`vars`/`env`/`settings`/`hooks`/`generate`/`source`/`provision`/`auth`/`dependencies`/`metadata`),
     with `additionalProperties: false`.
 2. `pkg/datafetcher/schema/atmos/manifest/1.0.json` — the parallel manifest schema carries its own
