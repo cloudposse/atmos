@@ -54,7 +54,7 @@ components:
   container:
     base_path: components/container
   aws/cloudformation:
-    base_path: ""
+    base_path: components/cloudformation
 stacks:
   base_path: stacks
   included_paths:
@@ -120,7 +120,7 @@ ansibleDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 kubernetesDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 helmDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 containerDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/components/container
-cloudFormationDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
+cloudFormationDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/components/cloudformation
 vendorDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 workflowsDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 default: false

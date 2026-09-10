@@ -51,7 +51,7 @@ atmos_cli_config:
     container:
       base_path: components/container
     aws/cloudformation:
-      base_path: ""
+      base_path: components/cloudformation
   stacks:
     base_path: stacks
     included_paths:

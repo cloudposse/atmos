@@ -54,7 +54,7 @@ components:
   container:
     base_path: components/container
   aws/cloudformation:
-    base_path: ""
+    base_path: components/cloudformation
 stacks:
   base_path: chdir-isolation-stacks
   included_paths:
@@ -119,7 +119,7 @@ ansibleDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-is
 kubernetesDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
 helmDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
 containerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation/components/container
-cloudFormationDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
+cloudFormationDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation/components/cloudformation
 vendorDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation/chdir-isolation-vendor
 workflowsDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
 default: false
