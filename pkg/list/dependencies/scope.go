@@ -49,6 +49,13 @@ type ScopeRequest struct {
 	// selectors in the lightweight graph.
 	LeftDelim  string
 	RightDelim string
+	// SkipTargetValidation preserves direct dependent lookup's historical
+	// tolerance for unavailable targets after resolved closure evaluation.
+	SkipTargetValidation bool
+	// IncludeLegacyReverseSources evaluates legacy settings.depends_on sources
+	// while resolving reverse closures whose context-based targets are not
+	// represented by the structural graph.
+	IncludeLegacyReverseSources bool
 }
 
 // selector builds the seed selector for this request. Both the lightweight
@@ -213,6 +220,9 @@ func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []stri
 	extraEval := map[string][]string{}
 	if req.Direction != DirectionForward {
 		extraEval = UnresolvedDependencySources(lightweightStacks, req.LeftDelim)
+		if req.IncludeLegacyReverseSources {
+			mergeEvaluationTargets(extraEval, LegacyDependencySources(lightweightStacks))
+		}
 	}
 
 	for {
@@ -260,13 +270,23 @@ func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []stri
 			return nil, err
 		}
 		closure = ReachableClosure(resolvedGraph, roots, req.Direction, req.Depths)
-		if _, err = buildGraph(
-			mergeResolvedClosureStacks(lightweightStacks, resolvedStacks),
-			evaluatedClosureNodeIDs(closure, evaluatedComponents),
-			req.LeftDelim,
-		); err != nil {
-			return nil, err
+		if !req.SkipTargetValidation {
+			if _, err = buildGraph(
+				mergeResolvedClosureStacks(lightweightStacks, resolvedStacks),
+				evaluatedClosureNodeIDs(closure, evaluatedComponents),
+				req.LeftDelim,
+			); err != nil {
+				return nil, err
+			}
 		}
+	}
+}
+
+func mergeEvaluationTargets(targets, additional map[string][]string) {
+	for stackName, components := range additional {
+		targets[stackName] = append(targets[stackName], components...)
+		sort.Strings(targets[stackName])
+		targets[stackName] = slices.Compact(targets[stackName])
 	}
 }
 
@@ -276,9 +296,10 @@ func evaluatedClosureNodeIDs(closure *dependency.Graph, evaluated map[string]map
 	nodeIDs := make(map[string]bool)
 	for stackName, components := range evaluated {
 		for componentName := range components {
-			nodeID := NodeID(componentName, stackName)
-			if _, ok := closure.GetNode(nodeID); ok {
-				nodeIDs[nodeID] = true
+			for _, node := range closure.Nodes {
+				if node.Stack == stackName && node.Component == componentName {
+					nodeIDs[node.ID] = true
+				}
 			}
 		}
 	}

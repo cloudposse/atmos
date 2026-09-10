@@ -421,3 +421,30 @@ func TestFindDependentsFromIndex_SkipsSelfReference(t *testing.T) {
 	result := findDependentsFromIndex(nil, args, providedVars, false)
 	assert.Empty(t, result, "self-references should be skipped")
 }
+
+func TestFindDependentsFromIndex_IncludesCrossStackSameNameDependent(t *testing.T) {
+	t.Parallel()
+
+	idx := dependencyIndex{
+		"vpc": {
+			{
+				StackName:          "prod-use1",
+				StackComponentName: "vpc",
+				StackComponentType: "terraform",
+				StackComponentVars: schema.Context{Tenant: "dev"},
+				DepSource:          dependencySourceDependenciesComponents,
+				DependsOn: schema.ComponentDependency{
+					Component: "vpc",
+					Stack:     "dev-use1",
+				},
+			},
+		},
+	}
+	args := &DescribeDependentsArgs{Component: "vpc", Stack: "dev-use1", DepIndex: idx}
+	providedVars := &schema.Context{Tenant: "dev"}
+
+	result := findDependentsFromIndex(nil, args, providedVars, false)
+	require.Len(t, result, 1)
+	assert.Equal(t, "vpc", result[0].Component)
+	assert.Equal(t, "prod-use1", result[0].Stack)
+}

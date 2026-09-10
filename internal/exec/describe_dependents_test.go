@@ -1229,6 +1229,26 @@ func TestDescribeDependents_DependenciesComponentsFormat(t *testing.T) {
 	}
 }
 
+func TestDescribeDependents_ScopesTemplateEvaluationToReverseClosure(t *testing.T) {
+	t.Chdir("../../tests/fixtures/scenarios/dependencies-scoped-evaluation")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	dependents, err := ExecuteDescribeDependents(&atmosConfig, &DescribeDependentsArgs{
+		Component:            "root",
+		Stack:                "app-a",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.Len(t, dependents, 1)
+	assert.Equal(t, "child", dependents[0].Component)
+	assert.Equal(t, "app-a", dependents[0].Stack)
+}
+
 // TestDescribeDependents_DependenciesComponentsInheritance_WithAppendMerge tests that
 // when list_merge_strategy: append is configured in atmos.yaml, dependencies.components
 // uses append merge during stack processing.

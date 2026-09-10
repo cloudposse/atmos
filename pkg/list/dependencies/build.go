@@ -33,9 +33,16 @@ func NodeID(component, stack string) string {
 	return fmt.Sprintf("%d:%s/%d:%s", len(component), component, len(stack), stack)
 }
 
+func componentNodeID(component, stack, componentType string) string {
+	if componentType == cfg.TerraformComponentType {
+		return NodeID(component, stack)
+	}
+	return fmt.Sprintf("%s/%d:%s", NodeID(component, stack), len(componentType), componentType)
+}
+
 // BuildGraph constructs a cycle-tolerant dependency graph from the described
 // stacks map. It adds a node for every concrete (non-abstract, enabled)
-// terraform component and an edge for every component-to-component dependency
+// component and an edge for every component-to-component dependency
 // declared via either `dependencies.components` (preferred) or the legacy
 // `settings.depends_on`. Edges to targets that are not present in the graph
 // (e.g. disabled or filtered-out components) are skipped when optional or
@@ -54,8 +61,8 @@ func buildGraph(stacks map[string]any, validationSources map[string]bool, leftDe
 	targetReasons := make(map[string]string)
 
 	// First pass: record all concrete component targets, including unavailable ones.
-	walkAllComponents(stacks, func(stackName, componentName string, componentSection map[string]any) {
-		nodeID := NodeID(componentName, stackName)
+	walkAllComponents(stacks, func(stackName, componentType, componentName string, componentSection map[string]any) {
+		nodeID := componentNodeID(componentName, stackName, componentType)
 		if reason := componentAvailabilityReason(componentSection); reason != "" {
 			targetReasons[nodeID] = reason
 			return
@@ -64,7 +71,7 @@ func buildGraph(stacks map[string]any, validationSources map[string]bool, leftDe
 			ID:        nodeID,
 			Component: componentName,
 			Stack:     stackName,
-			Type:      cfg.TerraformComponentType,
+			Type:      componentType,
 			Metadata:  componentSection,
 		}
 		if err := graph.AddNode(node); err != nil {
@@ -74,23 +81,24 @@ func buildGraph(stacks map[string]any, validationSources map[string]bool, leftDe
 
 	// Second pass: add dependency edges now that all nodes exist.
 	var buildErr error
-	walkComponents(stacks, func(stackName, componentName string, componentSection map[string]any) {
+	walkComponents(stacks, func(stackName, componentType, componentName string, componentSection map[string]any) {
 		if buildErr != nil {
 			return
 		}
-		fromID := NodeID(componentName, stackName)
-		deps, modern, err := extractComponentDependenciesWithStack(componentSection, stackName, validationSources != nil, leftDelim)
+		fromID := componentNodeID(componentName, stackName, componentType)
+		deps, modern, err := extractComponentDependenciesWithStack(componentSection, componentType, stackName, validationSources != nil, leftDelim)
 		if err != nil {
 			buildErr = fmt.Errorf("parsing dependencies for %q in stack %q: %w", componentName, stackName, err)
 			return
 		}
-		deps = normalizeListDependencies(deps, stackName)
+		deps = normalizeListDependencies(deps, stackName, componentType)
 		edges := graphDependencyBuilder{
 			graph:             graph,
 			targetReasons:     targetReasons,
 			validationSources: validationSources,
 			fromID:            fromID,
 			stackName:         stackName,
+			componentType:     componentType,
 			componentName:     componentName,
 			modern:            modern,
 		}
@@ -119,6 +127,7 @@ type graphDependencyBuilder struct {
 	validationSources map[string]bool
 	fromID            string
 	stackName         string
+	componentType     string
 	componentName     string
 	modern            bool
 }
@@ -128,7 +137,11 @@ func (b *graphDependencyBuilder) add(dep *schema.ComponentDependency) error {
 	if dep.Stack != "" {
 		targetStack = dep.Stack
 	}
-	toID := NodeID(dep.Component, targetStack)
+	targetType := dep.Kind
+	if targetType == "" {
+		targetType = b.componentType
+	}
+	toID := componentNodeID(dep.Component, targetStack, targetType)
 	if reason, unavailable := b.targetReasons[toID]; unavailable {
 		return b.handleUnavailable(dep, toID, targetStack, reason)
 	}
@@ -193,8 +206,8 @@ func UnresolvedDependencySources(stacks map[string]any, leftDelim string) map[st
 	defer perf.Track(nil, "dependencies.UnresolvedDependencySources")()
 
 	sources := make(map[string][]string)
-	walkComponents(stacks, func(stackName, componentName string, componentSection map[string]any) {
-		deps, _, err := extractComponentDependenciesWithStack(componentSection, "", true, leftDelim)
+	walkComponents(stacks, func(stackName, componentType, componentName string, componentSection map[string]any) {
+		deps, _, err := extractComponentDependenciesWithStack(componentSection, componentType, "", true, leftDelim)
 		if err != nil {
 			return
 		}
@@ -211,40 +224,65 @@ func UnresolvedDependencySources(stacks map[string]any, leftDelim string) map[st
 	return sources
 }
 
-// walkComponents iterates over every concrete terraform component in the stacks
+// LegacyDependencySources returns the components that declare legacy
+// settings.depends_on dependencies. Their context-based target matching is
+// resolved by describe dependents rather than the structural graph.
+func LegacyDependencySources(stacks map[string]any) map[string][]string {
+	sources := make(map[string][]string)
+	walkComponents(stacks, func(stackName, componentType, componentName string, componentSection map[string]any) {
+		deps, modern, err := extractComponentDependenciesWithStack(componentSection, componentType, "", true, "")
+		if err == nil && !modern && len(deps) > 0 {
+			sources[stackName] = append(sources[stackName], componentName)
+		}
+	})
+	for stackName := range sources {
+		sort.Strings(sources[stackName])
+	}
+	return sources
+}
+
+// walkComponents iterates over every concrete component in the stacks
 // map, skipping abstract and disabled components.
-func walkComponents(stacks map[string]any, fn func(stackName, componentName string, componentSection map[string]any)) {
+func walkComponents(stacks map[string]any, fn func(stackName, componentType, componentName string, componentSection map[string]any)) {
 	walkComponentsWithUnavailable(stacks, fn, false)
 }
 
-func walkAllComponents(stacks map[string]any, fn func(stackName, componentName string, componentSection map[string]any)) {
+func walkAllComponents(stacks map[string]any, fn func(stackName, componentType, componentName string, componentSection map[string]any)) {
 	walkComponentsWithUnavailable(stacks, fn, true)
 }
 
-func walkComponentsWithUnavailable(stacks map[string]any, fn func(stackName, componentName string, componentSection map[string]any), includeUnavailable bool) {
+func walkComponentsWithUnavailable(stacks map[string]any, fn func(stackName, componentType, componentName string, componentSection map[string]any), includeUnavailable bool) {
 	for stackName, stackSection := range stacks {
-		stackSectionMap, ok := stackSection.(map[string]any)
+		componentsSection, ok := stackComponentsSection(stackSection)
 		if !ok {
 			continue
 		}
-		componentsSection, ok := stackSectionMap[cfg.ComponentsSectionName].(map[string]any)
-		if !ok {
+		for componentType, componentTypeSection := range componentsSection {
+			walkComponentType(stackName, componentType, componentTypeSection, includeUnavailable, fn)
+		}
+	}
+}
+
+func stackComponentsSection(stackSection any) (map[string]any, bool) {
+	stackSectionMap, ok := stackSection.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	componentsSection, ok := stackSectionMap[cfg.ComponentsSectionName].(map[string]any)
+	return componentsSection, ok
+}
+
+func walkComponentType(stackName, componentType string, componentTypeSection any, includeUnavailable bool, fn func(string, string, string, map[string]any)) {
+	components, ok := componentTypeSection.(map[string]any)
+	if !ok {
+		return
+	}
+	for componentName, compSection := range components {
+		componentSection, ok := compSection.(map[string]any)
+		if !ok || (!includeUnavailable && shouldSkipComponent(componentSection)) {
 			continue
 		}
-		terraformSection, ok := componentsSection[cfg.TerraformSectionName].(map[string]any)
-		if !ok {
-			continue
-		}
-		for componentName, compSection := range terraformSection {
-			componentSection, ok := compSection.(map[string]any)
-			if !ok {
-				continue
-			}
-			if !includeUnavailable && shouldSkipComponent(componentSection) {
-				continue
-			}
-			fn(stackName, componentName, componentSection)
-		}
+		fn(stackName, componentType, componentName, componentSection)
 	}
 }
 
@@ -279,15 +317,15 @@ func shouldSkipComponent(componentSection map[string]any) bool {
 }
 
 func extractComponentDependencies(componentSection map[string]any) []schema.ComponentDependency {
-	deps, _, err := extractComponentDependenciesWithStack(componentSection, "", false, "")
+	deps, _, err := extractComponentDependenciesWithStack(componentSection, cfg.TerraformComponentType, "", false, "")
 	if err != nil {
 		return nil
 	}
 	return deps
 }
 
-func extractComponentDependenciesWithStack(componentSection map[string]any, stackName string, structural bool, leftDelim string) ([]schema.ComponentDependency, bool, error) {
-	deps, found, err := dependenciesFromComponentsSection(componentSection, stackName, structural, leftDelim)
+func extractComponentDependenciesWithStack(componentSection map[string]any, componentType, stackName string, structural bool, leftDelim string) ([]schema.ComponentDependency, bool, error) {
+	deps, found, err := dependenciesFromComponentsSection(componentSection, componentType, stackName, structural, leftDelim)
 	if err != nil || found {
 		return filterComponentDependencies(deps), found, err
 	}
@@ -297,7 +335,7 @@ func extractComponentDependenciesWithStack(componentSection map[string]any, stac
 // dependenciesFromComponentsSection reads the preferred `dependencies.components`
 // surface and returns its component-to-component entries plus a boolean
 // indicating whether the `components` key was present at all.
-func dependenciesFromComponentsSection(componentSection map[string]any, stackName string, structural bool, leftDelim string) ([]schema.ComponentDependency, bool, error) {
+func dependenciesFromComponentsSection(componentSection map[string]any, componentType, stackName string, structural bool, leftDelim string) ([]schema.ComponentDependency, bool, error) {
 	dependenciesValue, exists := componentSection[cfg.DependenciesSectionName]
 	if !exists {
 		return nil, false, nil
@@ -312,7 +350,7 @@ func dependenciesFromComponentsSection(componentSection map[string]any, stackNam
 	if structural {
 		depsSection = deferUnresolvedRequired(depsSection, leftDelim)
 	}
-	deps, err := schema.ParseComponentDependencies(depsSection, cfg.TerraformComponentType, stackName)
+	deps, err := schema.ParseComponentDependencies(depsSection, componentType, stackName)
 	if err != nil {
 		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
 	}
@@ -391,17 +429,17 @@ func filterComponentDependencies(deps []schema.ComponentDependency) []schema.Com
 	return result
 }
 
-func normalizeListDependencies(deps []schema.ComponentDependency, stackName string) []schema.ComponentDependency {
+func normalizeListDependencies(deps []schema.ComponentDependency, stackName, componentType string) []schema.ComponentDependency {
 	normalized := make([]schema.ComponentDependency, 0, len(deps))
 	indices := make(map[string]int, len(deps))
 	for i := range deps {
 		dep := &deps[i]
-		if !dep.IsComponentDependency() || dep.Component == "" || (dep.Kind != "" && dep.Kind != cfg.TerraformComponentType) {
+		if !dep.IsComponentDependency() || dep.Component == "" {
 			continue
 		}
 		kind := dep.Kind
 		if kind == "" {
-			kind = cfg.TerraformComponentType
+			kind = componentType
 		}
 		stack := dep.Stack
 		if stack == "" {

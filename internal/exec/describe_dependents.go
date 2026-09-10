@@ -11,10 +11,12 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/list/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -163,21 +165,15 @@ func ExecuteDescribeDependents(
 	stacks := args.Stacks
 	if stacks == nil {
 		var err error
-		stacks, err = ExecuteDescribeStacksWithOptions(
-			atmosConfig,
-			args.OnlyInStack,
-			nil,
-			nil,
-			nil,
-			false,
-			args.ProcessTemplates,
-			args.ProcessYamlFunctions,
-			false,
-			args.Skip,
-			args.AuthManager,
-			args.AuthDisabled,
-			args.ErrOptions,
-		)
+		if shouldScopeDescribeDependents(atmosConfig, args) {
+			stacks, err = resolveScopedDependentStacks(atmosConfig, args)
+		} else {
+			stacks, err = ExecuteDescribeStacksWithOptions(
+				atmosConfig, args.OnlyInStack, nil, nil, nil, false,
+				args.ProcessTemplates, args.ProcessYamlFunctions, false, args.Skip,
+				args.AuthManager, args.AuthDisabled, args.ErrOptions,
+			)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -246,6 +242,37 @@ func ExecuteDescribeDependents(
 	return dependents, nil
 }
 
+func shouldScopeDescribeDependents(atmosConfig *schema.AtmosConfiguration, args *DescribeDependentsArgs) bool {
+	return args.OnlyInStack == "" && (args.ProcessTemplates || args.ProcessYamlFunctions) && !GetEagerEvaluationSetting(atmosConfig)
+}
+
+func resolveScopedDependentStacks(atmosConfig *schema.AtmosConfiguration, args *DescribeDependentsArgs) (map[string]any, error) {
+	leftDelim, rightDelim := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	result, err := dependencies.ResolveScopedClosure(
+		func(stack string, components []string, processTemplates, processFunctions bool) (map[string]any, error) {
+			return ExecuteDescribeStacksWithOptions(
+				atmosConfig, stack, components, nil, nil, false, processTemplates, processFunctions,
+				false, args.Skip, args.AuthManager, args.AuthDisabled, args.ErrOptions,
+			)
+		},
+		&dependencies.ScopeRequest{
+			Components:                  []string{args.Component},
+			Stack:                       args.Stack,
+			Direction:                   dependencies.DirectionReverse,
+			ProcessTemplates:            args.ProcessTemplates,
+			ProcessFunctions:            args.ProcessYamlFunctions,
+			LeftDelim:                   leftDelim,
+			RightDelim:                  rightDelim,
+			SkipTargetValidation:        true,
+			IncludeLegacyReverseSources: true,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return result.Stacks, nil
+}
+
 func skipUnavailableOptionalTarget(stacks map[string]any, args *DescribeDependentsArgs) (bool, error) {
 	depIndex := args.DepIndex
 	if depIndex == nil {
@@ -302,7 +329,7 @@ func findDependentsFromIndex(
 		e := &entries[i]
 
 		// Skip self-references.
-		if e.StackComponentName == args.Component {
+		if e.StackName == args.Stack && e.StackComponentName == args.Component {
 			continue
 		}
 

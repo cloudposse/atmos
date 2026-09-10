@@ -80,6 +80,40 @@ func TestBuildGraph_DependenciesComponents(t *testing.T) {
 	assert.Equal(t, []string{NodeID("app", "dev")}, web.Dependencies)
 }
 
+func TestBuildGraph_CrossTypeDependency(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{},
+				},
+				"helmfile": map[string]any{
+					"nginx": map[string]any{
+						"dependencies": map[string]any{
+							"components": []any{
+								map[string]any{"component": "vpc", "kind": "terraform"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	for _, node := range graph.Nodes {
+		if node.Component != "nginx" {
+			continue
+		}
+		assert.Equal(t, "helmfile", node.Type)
+		assert.Equal(t, []string{NodeID("vpc", "dev")}, node.Dependencies)
+		return
+	}
+	t.Fatal("helmfile nginx node is missing")
+}
+
 func TestBuildGraph_DependenciesComponentsEmptyPreventsSettingsFallback(t *testing.T) {
 	stacks := terraformStacks(map[string]map[string]map[string]any{
 		"dev": {

@@ -214,7 +214,7 @@ func (c *dependenciesDescribeContext) describeStacks(filterByStack string, compo
 		&c.atmosConfig,
 		filterByStack,
 		components,
-		[]string{cfg.TerraformComponentType},
+		nil,
 		nil,
 		false, // ignoreMissingFiles
 		processTemplates,
