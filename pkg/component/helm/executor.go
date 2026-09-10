@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -292,7 +293,7 @@ func runOperation(
 		summary["diff"] = diffText
 		return summary, err
 	case OperationValues:
-		return summary, data.WriteYAML(spec.Values)
+		return summary, u.PrintAsYAML(atmosConfig, spec.Values)
 	case OperationApply:
 		applySummary, err := deliverApply(ctx.GoContext(), atmosConfig, info, ctx.Flags, spec)
 		mergeSummary(summary, applySummary)
@@ -744,6 +745,26 @@ func emitOperationStatus(operation Operation, summary map[string]any, opErr erro
 	writeStatusLine(msg)
 }
 
+// displayPath renders an absolute path relative to the current working directory for
+// display in status messages. Local chart paths are always resolved to absolute
+// internally (see resolveLocalChart) so Helm's loader works regardless of invoking
+// directory, but an absolute path is noisy in a terminal message -- fall back to the
+// original path whenever the working directory or relative path can't be determined.
+func displayPath(path string) string {
+	if path == "" || !filepath.IsAbs(path) {
+		return path
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return path
+	}
+	rel, err := filepath.Rel(wd, path)
+	if err != nil {
+		return path
+	}
+	return rel
+}
+
 // formatOperationStatus builds the one-line status message for apply/delete from the operation
 // summary. It returns an empty string for operations that need no status line (template, diff).
 func formatOperationStatus(operation Operation, summary map[string]any) string {
@@ -753,7 +774,7 @@ func formatOperationStatus(operation Operation, summary map[string]any) string {
 	case OperationApply:
 		msg := fmt.Sprintf("Applied Helm release `%s` to namespace `%s`", release, namespace)
 		if chart, ok := summary["chart"].(string); ok && chart != "" {
-			msg += fmt.Sprintf(" ((chart `%s`))", chart)
+			msg += fmt.Sprintf(" (chart `%s`)", displayPath(chart))
 		}
 		return msg
 	case OperationDelete:
