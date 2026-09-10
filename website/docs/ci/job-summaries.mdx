@@ -154,6 +154,14 @@ detected or forced with `--ci`/`ATMOS_CI`:
 Helmfile summaries are summaries-only. The summary includes component, stack, command status, a
 local reproduction command, and captured masked stdout/stderr in a collapsible section.
 
+## CloudFormation Summaries
+
+When `ci.enabled: true` and summaries are enabled, native CloudFormation commands write compact
+job summaries in CI. `diff` shows the pending changeset, `apply` and `delete` show the stack
+operation result, and `drift detect` and `drift describe` show drifted resources. These summaries
+are for human review; CloudFormation commands do not emit `$GITHUB_OUTPUT` values, commit statuses,
+PR comments, or stored artifacts.
+
 ## Configuration
 
 <dl>
