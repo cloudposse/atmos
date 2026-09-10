@@ -20,7 +20,7 @@ When exploring a new infrastructure codebase, you're often overwhelmed with ques
 - Which stacks use a specific component?
 - What's the region and environment for each deployment?
 
-Running `atmos list instances` gives you raw data, but not the specific view you need to answer these questions quickly.
+Running [`atmos list instances`](/cli/commands/list/list-instances) gives you raw data, but not the specific view you need to answer these questions quickly.
 
 ## The Solution
 
@@ -144,10 +144,10 @@ atmos list instances --columns "component,vars.region,vars.account_id"
 
 Column customization is available for:
 - ✅ `atmos list instances` - All component instances across stacks
-- ✅ `atmos list components` - Components in your project
-- ✅ `atmos list stacks` - Stack configurations
-- ✅ `atmos list workflows` - Available workflows
-- ✅ `atmos list vendor` - Vendored dependencies
+- ✅ [`atmos list components`](/cli/commands/list/components) - Components in your project
+- ✅ [`atmos list stacks`](/cli/commands/list/stacks) - Stack configurations
+- ✅ [`atmos list workflows`](/cli/commands/list/list-workflows) - Available workflows
+- ✅ [`atmos list vendor`](/cli/commands/list/list-vendor) - Vendored dependencies
 
 Each command has access to its own template context with fields like `.stack`, `.component`, `.vars.*`, `.settings.*`, `.metadata.*`, and more.
 
@@ -159,3 +159,5 @@ Each command has access to its own template context with fields like `.stack`, `
 - [List Vendor Documentation](/cli/commands/list/list-vendor)
 
 Make exploring your cloud architecture as easy as modeling it. Configure your columns once, and every team member gets the view they need.
+
+For usage and configuration, see [List Command Configuration](/cli/configuration/list).

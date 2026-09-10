@@ -43,7 +43,7 @@ components:
           enabled: true  # That's it!
 ```
 
-When you run `atmos terraform plan vpc -s dev`, Atmos:
+When you run [`atmos terraform plan vpc -s dev`](/cli/commands/terraform/plan), Atmos:
 
 1. **Checks** if the backend exists
 2. **Provisions** it if needed (with secure defaults)
@@ -141,7 +141,7 @@ The provisioner automatically assumes the role to create the bucket in the targe
 
 ## CLI Command
 
-For manual provisioning or CI/CD pipelines, use the `atmos terraform backend` command:
+For manual provisioning or CI/CD pipelines, use the [`atmos terraform backend`](/cli/commands/terraform/terraform-backend) command:
 
 ```bash
 # Provision backend explicitly
@@ -215,3 +215,5 @@ We'd love to hear how you're using automatic backend provisioning! Share your ex
 ---
 
 **Try it today** and simplify your Terraform state management workflow!
+
+For usage and configuration, see [Backend Provisioning](/stacks/components/provision/backend).

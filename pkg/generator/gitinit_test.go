@@ -181,3 +181,99 @@ func TestPinInitialBaseRef_NoOptionsStillWritesBaseRef(t *testing.T) {
 	assert.Equal(t, "def456", metadata.BaseRef)
 	assert.Empty(t, metadata.Template.Name)
 }
+
+// TestPinInitialBaseRefForInit_WritesInitMetadata verifies `atmos init`'s pin
+// writes to .atmos/init/metadata.yaml (storage.InitMetadataPath) rather than
+// the scaffold command's .atmos/scaffold/metadata.yaml -- the two commands
+// must not clobber each other's pinned base ref.
+func TestPinInitialBaseRefForInit_WritesInitMetadata(t *testing.T) {
+	dir := t.TempDir()
+
+	require.NoError(t, PinInitialBaseRefForInit(
+		dir, "abc123",
+		WithTemplateName("simple"),
+		WithTemplateVersion("2.0.0"),
+		WithSource("embedded"),
+	))
+
+	metadata, err := storage.NewMetadataStorage(storage.InitMetadataPath(dir)).Load()
+	require.NoError(t, err)
+	require.NotNil(t, metadata)
+	assert.Equal(t, "abc123", metadata.BaseRef)
+	assert.Equal(t, "simple", metadata.Template.Name)
+	assert.Equal(t, "2.0.0", metadata.Template.Version)
+	assert.Equal(t, "embedded", metadata.Template.Source)
+
+	// Must not also write (or be confused with) the scaffold command's
+	// separate metadata file at the same target directory.
+	assert.NoFileExists(t, storage.ScaffoldMetadataPath(dir))
+}
+
+// TestPinInitialBaseRefForInit_NoopWhenSkipped mirrors
+// TestPinInitialBaseRef_NoopWhenSkipped for the init variant: no commit means
+// nothing to pin.
+func TestPinInitialBaseRefForInit_NoopWhenSkipped(t *testing.T) {
+	dir := t.TempDir()
+
+	require.NoError(t, PinInitialBaseRefForInit(dir, "", WithTemplateName("simple")))
+
+	assert.NoFileExists(t, storage.InitMetadataPath(dir))
+}
+
+// TestResolveDefaultBaseRef_ExplicitAlwaysWins verifies an explicit --base-ref
+// short-circuits before ever consulting pinned metadata, regardless of what
+// (if anything) is pinned at targetDir.
+func TestResolveDefaultBaseRef_ExplicitAlwaysWins(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, PinInitialBaseRef(dir, "pinned-ref", WithTemplateName("basic")))
+
+	resolved, err := ResolveDefaultBaseRef("v1.2.3", dir, storage.ScaffoldMetadataPath(dir))
+
+	require.NoError(t, err)
+	assert.Equal(t, "v1.2.3", resolved)
+}
+
+// TestResolveDefaultBaseRef_FallsBackToHEADWithNoPin reproduces the original
+// bug fix: with no --base-ref and no pinned metadata (a pre-fix target, or one
+// that was never git-initialized), --update must still get a usable base ref
+// instead of silently setting up no git storage at all.
+func TestResolveDefaultBaseRef_FallsBackToHEADWithNoPin(t *testing.T) {
+	dir := t.TempDir()
+
+	resolved, err := ResolveDefaultBaseRef("", dir, storage.ScaffoldMetadataPath(dir))
+
+	require.NoError(t, err)
+	assert.Equal(t, "HEAD", resolved)
+}
+
+// TestResolveDefaultBaseRef_PrefersPinnedMetadataOverHEAD verifies the actual
+// fix: once a pin exists, it wins over live HEAD so a customization committed
+// after generation doesn't silently become indistinguishable from the
+// unmodified base.
+func TestResolveDefaultBaseRef_PrefersPinnedMetadataOverHEAD(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, PinInitialBaseRef(dir, "pinned-sha", WithTemplateName("basic")))
+
+	resolved, err := ResolveDefaultBaseRef("", dir, storage.ScaffoldMetadataPath(dir))
+
+	require.NoError(t, err)
+	assert.Equal(t, "pinned-sha", resolved)
+}
+
+// TestResolveDefaultBaseRef_PropagatesLoadError verifies a genuinely
+// unreadable metadata file (corrupt YAML here) surfaces as an error instead
+// of silently falling back to "HEAD" -- swallowing it would quietly
+// reintroduce the silent-overwrite bug the first time the pin file itself is
+// damaged.
+func TestResolveDefaultBaseRef_PropagatesLoadError(t *testing.T) {
+	dir := t.TempDir()
+	metadataPath := storage.ScaffoldMetadataPath(dir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metadataPath), 0o755))
+	require.NoError(t, os.WriteFile(metadataPath, []byte("not: valid: yaml: ["), 0o600))
+
+	resolved, err := ResolveDefaultBaseRef("", dir, metadataPath)
+
+	require.Error(t, err)
+	assert.Empty(t, resolved)
+	assert.NotEqual(t, "HEAD", resolved)
+}
