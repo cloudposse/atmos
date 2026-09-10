@@ -68,7 +68,7 @@ func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error
 		return nil, err
 	}
 
-	log.Debug("atmos.GomplateDatasource(): processed datasource", "alias", alias, "result", result)
+	log.Debug("atmos.GomplateDatasource(): processed datasource", "alias", alias)
 
 	return result, nil
 }

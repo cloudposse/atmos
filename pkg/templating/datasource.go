@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -40,14 +41,52 @@ func NewDatasourceCache() *DatasourceCache {
 // preserving the process-wide caching users rely on.
 var defaultDatasourceCache = NewDatasourceCache()
 
-func cacheKey(alias string, args []string) string {
-	return alias + "\x00" + strings.Join(args, "\x00")
+// cacheKeySep separates the fields folded into a datasource cache key. It is
+// a control character, so it can't collide with an alias, URL, header, or
+// argument value.
+const cacheKeySep = "\x00"
+
+// cacheKey builds the datasource cache key from the alias, its effective
+// definition (URL and headers) and the call arguments. The definition is part
+// of the key because datasources are defined per stack manifest
+// (settings.templates.settings.gomplate.datasources): two stacks can define
+// the same alias with different URLs or headers, and without the definition
+// in the key one stack's cached value would leak into the other's render.
+func cacheKey(alias string, ds Datasource, args []string) string {
+	return alias + cacheKeySep + ds.URL + cacheKeySep + headerKey(ds.Headers) + cacheKeySep + strings.Join(args, cacheKeySep)
 }
 
+// headerKey deterministically renders headers (sorted keys, sorted values per
+// key) so that two Datasource definitions differing only in header order
+// produce the same key, while differing header values produce different keys.
+func headerKey(headers map[string][]string) string {
+	if len(headers) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(headers))
+	for k := range headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var b strings.Builder
+	for _, k := range keys {
+		values := append([]string(nil), headers[k]...)
+		sort.Strings(values)
+		b.WriteString(k)
+		b.WriteByte('=')
+		b.WriteString(strings.Join(values, ","))
+		b.WriteByte(';')
+	}
+	return b.String()
+}
+
+// load returns the cached value for key, if any.
 func (c *DatasourceCache) load(key string) (any, bool) {
 	return c.entries.Load(key)
 }
 
+// store caches value under key.
 func (c *DatasourceCache) store(key string, value any) {
 	c.entries.Store(key, value)
 }
@@ -55,18 +94,24 @@ func (c *DatasourceCache) store(key string, value any) {
 // Datasource returns the parsed value of the datasource registered under alias
 // for the render in progress. It can only be called from a template function
 // while Render is executing that template through gomplate's renderer; Render
-// routes any template that references atmos.GomplateDatasource there.
+// routes any template that references atmos.GomplateDatasource there. A live
+// render is required before the cache is even consulted, both because a
+// value can only be produced by rendering and because the cache key itself is
+// built from the live render's datasource definitions.
 func (e *engine) Datasource(alias string, args ...string) (any, error) {
 	defer perf.Track(nil, "templating.Engine.Datasource")()
-
-	key := cacheKey(alias, args)
-	if value, ok := e.cache.load(key); ok && value != nil {
-		return value, nil
-	}
 
 	state := e.live.get()
 	if state == nil || state.tmpl == nil {
 		return nil, errUtils.ErrGomplateDatasourceUnavailable
+	}
+
+	// An alias not present in the render's datasource map is one defined
+	// inline via defineDatasource; key on alias+args with an empty definition.
+	ds := state.datasources[alias]
+	key := cacheKey(alias, ds, args)
+	if value, ok := e.cache.load(key); ok && value != nil {
+		return value, nil
 	}
 
 	call := make([]string, 0, len(args)+1)

@@ -286,9 +286,12 @@ func TestRender_GomplatePath_TimeoutReachesDatasource(t *testing.T) {
 }
 
 func TestRender_GomplatePath_HTTPHeaders(t *testing.T) {
+	var mu sync.Mutex
 	var gotAccept string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		gotAccept = r.Header.Get("Accept")
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ip":"203.0.113.7"}`))
 	}))
@@ -303,6 +306,9 @@ func TestRender_GomplatePath_HTTPHeaders(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "203.0.113.7", out)
+
+	mu.Lock()
+	defer mu.Unlock()
 	assert.Equal(t, "application/json", gotAccept)
 }
 
@@ -393,32 +399,49 @@ func TestDatasource_ViaTemplateFunction(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "atmos-b", out)
 
-		cached, ok := cache.load(cacheKey("cfg", nil))
+		cached, ok := cache.load(cacheKey("cfg", Datasource{URL: cfg}, nil))
 		require.True(t, ok)
 		assert.Equal(t, "atmos", cached.(map[string]any)["name"])
+	})
 
-		// A cached alias is served without a live render.
-		value, err := e.Datasource("cfg")
+	t.Run("outside a render, Datasource errors with ErrGomplateDatasourceUnavailable even when cached", func(t *testing.T) {
+		cache := NewDatasourceCache()
+		e, funcs := newEngine(cache)
+		req := Request{
+			Name:        "t",
+			Text:        `{{ (atmos.GomplateDatasource "cfg").name }}`,
+			Funcs:       funcs,
+			Datasources: map[string]Datasource{"cfg": {URL: cfg}},
+		}
+		_, err := e.Render(context.Background(), &req)
 		require.NoError(t, err)
-		assert.Equal(t, "atmos", value.(map[string]any)["name"])
+		// The value is now cached, but Datasource still requires a live render:
+		// there is no render in progress here, so it must error rather than
+		// silently serve the cached value.
+		_, ok := cache.load(cacheKey("cfg", Datasource{URL: cfg}, nil))
+		require.True(t, ok)
+
+		_, err = e.Datasource("cfg")
+		require.ErrorIs(t, err, errUtils.ErrGomplateDatasourceUnavailable)
 	})
 
 	t.Run("args are part of the cache key", func(t *testing.T) {
 		cache := NewDatasourceCache()
 		e, funcs := newEngine(cache)
+		ds := Datasource{URL: filepath.ToSlash(dir) + "/"}
 		req := Request{
 			Name:        "t",
 			Text:        `{{ (atmos.GomplateDatasource "dir" "config.yaml").name }}`,
 			Funcs:       funcs,
-			Datasources: map[string]Datasource{"dir": {URL: filepath.ToSlash(dir) + "/"}},
+			Datasources: map[string]Datasource{"dir": ds},
 		}
 		out, err := e.Render(context.Background(), &req)
 		require.NoError(t, err)
 		assert.Equal(t, "atmos", out)
 
-		_, okBare := cache.load(cacheKey("dir", nil))
+		_, okBare := cache.load(cacheKey("dir", ds, nil))
 		assert.False(t, okBare)
-		_, okArgs := cache.load(cacheKey("dir", []string{"config.yaml"}))
+		_, okArgs := cache.load(cacheKey("dir", ds, []string{"config.yaml"}))
 		assert.True(t, okArgs)
 	})
 
@@ -432,7 +455,7 @@ func TestDatasource_ViaTemplateFunction(t *testing.T) {
 		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "nope")
-		_, ok := cache.load(cacheKey("nope", nil))
+		_, ok := cache.load(cacheKey("nope", Datasource{}, nil))
 		assert.False(t, ok)
 	})
 
@@ -451,6 +474,50 @@ func TestDatasource_ViaTemplateFunction(t *testing.T) {
 			Funcs: funcs,
 		})
 		require.ErrorIs(t, err, errUtils.ErrGomplateDatasourceUnavailable)
+	})
+
+	t.Run("two engines with the same alias but different URLs do not share a cached value", func(t *testing.T) {
+		cache := NewDatasourceCache()
+		cfg1 := writeFixture(t, "config.yaml", "name: one\n")
+		cfg2 := writeFixture(t, "config.yaml", "name: two\n")
+		require.NotEqual(t, cfg1, cfg2)
+
+		e1, funcs1 := newEngine(cache)
+		out1, err := e1.Render(context.Background(), &Request{
+			Name:        "t",
+			Text:        `{{ (atmos.GomplateDatasource "cfg").name }}`,
+			Funcs:       funcs1,
+			Datasources: map[string]Datasource{"cfg": {URL: cfg1}},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "one", out1)
+
+		e2, funcs2 := newEngine(cache)
+		out2, err := e2.Render(context.Background(), &Request{
+			Name:        "t",
+			Text:        `{{ (atmos.GomplateDatasource "cfg").name }}`,
+			Funcs:       funcs2,
+			Datasources: map[string]Datasource{"cfg": {URL: cfg2}},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "two", out2)
+	})
+
+	t.Run("different headers produce different cache keys", func(t *testing.T) {
+		cache := NewDatasourceCache()
+
+		keyA := cacheKey("api", Datasource{URL: "https://example.test/", Headers: map[string][]string{"Accept": {"application/json"}}}, nil)
+		keyB := cacheKey("api", Datasource{URL: "https://example.test/", Headers: map[string][]string{"Accept": {"application/xml"}}}, nil)
+		assert.NotEqual(t, keyA, keyB)
+
+		cache.store(keyA, "json-value")
+		valueB, ok := cache.load(keyB)
+		assert.False(t, ok)
+		assert.Nil(t, valueB)
+
+		valueA, ok := cache.load(keyA)
+		require.True(t, ok)
+		assert.Equal(t, "json-value", valueA)
 	})
 }
 

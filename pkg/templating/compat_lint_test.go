@@ -81,6 +81,26 @@ func TestLintDeprecatedUsage(t *testing.T) {
 			wantCount:   0,
 		},
 		{
+			name:           "sub-path supplied through a pipe warns",
+			text:           `{{ "a.yaml" | ds "dir" }}`,
+			datasources:    map[string]Datasource{"dir": {URL: "file:///tmp/data"}},
+			wantDeprecated: `ds "dir" <sub-path>`,
+			wantCount:      1,
+		},
+		{
+			name:        "directory URL with a query string is fine",
+			text:        `{{ ds "dir" "a.yaml" }}`,
+			datasources: map[string]Datasource{"dir": {URL: "file:///tmp/data/?type=json"}},
+			wantCount:   0,
+		},
+		{
+			name:           "non-directory URL whose query string ends in a slash warns",
+			text:           `{{ ds "dir" "a.yaml" }}`,
+			datasources:    map[string]Datasource{"dir": {URL: "file:///tmp/data?redirect=/"}},
+			wantDeprecated: `ds "dir" <sub-path>`,
+			wantCount:      1,
+		},
+		{
 			name:           "boltdb datasource scheme warns even if unused in the template",
 			text:           `hello`,
 			datasources:    map[string]Datasource{"kv": {URL: "boltdb:///tmp/db.bolt"}},

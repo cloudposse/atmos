@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -151,6 +152,46 @@ func TestNetParseIP_InvalidInputErrors(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unable to parse IP")
+}
+
+// TestNetParseIP_LegacyIPMethods verifies the legacyIP adapter net.ParseIP
+// returns keeps the v3 netaddr.IP method surface working: IsZero, Is4in6 and
+// IPAddr under their v3 names/signatures (netip.Addr spells the first two
+// IsValid/Is4In6 and has no equivalent of the third), Prior (netip.Addr:
+// Prev), and every netip.Addr method promoted unchanged, including String.
+func TestNetParseIP_LegacyIPMethods(t *testing.T) {
+	tests := []struct {
+		name       string
+		ip         string
+		wantIs4in6 bool
+		wantIPAddr string
+	}{
+		{name: "IPv4", ip: "203.0.113.7", wantIs4in6: false, wantIPAddr: "203.0.113.7"},
+		{name: "IPv4-mapped IPv6", ip: "::ffff:203.0.113.7", wantIs4in6: true, wantIPAddr: "203.0.113.7"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := New().Render(context.Background(), &Request{
+				Name: "t",
+				Text: `{{ $ip := net.ParseIP .ip }}` +
+					`zero=[{{ $ip.IsZero }}] ` +
+					`is4in6=[{{ $ip.Is4in6 }}] ` +
+					`ipaddr=[{{ $ip.IPAddr }}] ` +
+					`prior=[{{ $ip.Prior }}] ` +
+					`string=[{{ $ip }}]`,
+				Data: map[string]any{"ip": tt.ip},
+			})
+			require.NoError(t, err)
+			assert.Contains(t, out, "zero=[false]")
+			assert.Contains(t, out, "is4in6=["+strconv.FormatBool(tt.wantIs4in6)+"]")
+			assert.Contains(t, out, "ipaddr=["+tt.wantIPAddr+"]")
+			assert.Contains(t, out, "string=["+tt.ip+"]")
+
+			// Prior must not panic and must differ from the original address.
+			assert.NotContains(t, out, "prior=["+tt.ip+"]")
+		})
+	}
 }
 
 // TestConvWrapper_ConversionErrorsCarryHint verifies conv.ToInt64/ToInt/

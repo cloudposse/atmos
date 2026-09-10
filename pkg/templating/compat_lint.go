@@ -37,8 +37,8 @@ func lintDeprecatedUsage(parsed *template.Template, plan *renderPlan, reporter D
 		switch n := node.(type) {
 		case *parse.ChainNode:
 			lintDotValueOnSecretsManagerDatasource(n, plan, reporter)
-		case *parse.CommandNode:
-			lintDatasourceSubPathURL(n, plan, reporter)
+		case *parse.PipeNode:
+			lintDatasourceSubPathURLPipe(n, plan, reporter)
 		}
 	})
 }
@@ -88,14 +88,36 @@ func lintDotValueOnSecretsManagerDatasource(chain *parse.ChainNode, plan *render
 			"Drop `.Value`; if you need the parsed JSON value of a String parameter, add `?type=application/json` to the datasource URL.")
 }
 
+// lintDatasourceSubPathURLPipe checks every command in pipe for a datasource
+// sub-path call. A command at index > 0 within the pipe additionally
+// receives the previous command's output as an implicit final argument (for
+// example `{{ "app.yaml" | ds "dir" }}` passes "app.yaml" as ds's last
+// argument at execution time), which is invisible to cmd.Args, so the
+// command's position in the pipe tells lintDatasourceSubPathURL to count one
+// extra argument.
+func lintDatasourceSubPathURLPipe(pipe *parse.PipeNode, plan *renderPlan, reporter DeprecationReporter) {
+	if pipe == nil {
+		return
+	}
+	for i, cmd := range pipe.Cmds {
+		extraArgs := 0
+		if i > 0 {
+			extraArgs = 1
+		}
+		lintDatasourceSubPathURL(cmd, extraArgs, plan, reporter)
+	}
+}
+
 // lintDatasourceSubPathURL warns about a `ds`/`datasource`/`include`/
 // `atmos.GomplateDatasource` call with two or more arguments (an alias plus a
 // sub-path) whose alias URL doesn't end in "/": gomplate v5 resolves the
 // sub-path argument as a relative URL against the alias URL, so a directory
-// datasource must end with "/" to be treated as one.
-func lintDatasourceSubPathURL(cmd *parse.CommandNode, plan *renderPlan, reporter DeprecationReporter) {
+// datasource must end with "/" to be treated as one. The extraArgs parameter
+// accounts for a sub-path supplied through a pipeline rather than lexically
+// in cmd.Args; see lintDatasourceSubPathURLPipe.
+func lintDatasourceSubPathURL(cmd *parse.CommandNode, extraArgs int, plan *renderPlan, reporter DeprecationReporter) {
 	callName, ok := datasourceCallName(cmd)
-	if !ok || len(cmd.Args) < 3 {
+	if !ok || len(cmd.Args)+extraArgs < 3 {
 		return
 	}
 	alias, ok := literalDatasourceAlias(cmd)
@@ -103,11 +125,25 @@ func lintDatasourceSubPathURL(cmd *parse.CommandNode, plan *renderPlan, reporter
 		return
 	}
 	ds, ok := plan.req.Datasources[alias]
-	if !ok || strings.HasSuffix(ds.URL, "/") {
+	if !ok || isDatasourceDirectoryURL(ds.URL) {
 		return
 	}
 	reporter.Deprecated(plan.req.Name, callName+" \""+alias+"\" <sub-path>", "a trailing slash on the datasource URL",
 		"sub-path arguments are resolved as relative URLs in gomplate v5; end the datasource URL with `/` so it is treated as a directory (currently: \""+ds.URL+"\").")
+}
+
+// isDatasourceDirectoryURL reports whether rawURL identifies a directory
+// datasource. It parses the URL and checks the path component, so a query
+// string (e.g. "file:///tmp/data/?type=json") doesn't hide a trailing slash
+// in the path, and a query string ending in "/" (e.g.
+// "file:///tmp/data?redirect=/") doesn't falsely look like one. If rawURL
+// can't be parsed, it falls back to checking the raw string.
+func isDatasourceDirectoryURL(rawURL string) bool {
+	parsed, err := parseDatasourceURL(rawURL)
+	if err != nil {
+		return strings.HasSuffix(rawURL, "/")
+	}
+	return strings.HasSuffix(parsed.Path, "/")
 }
 
 // datasourceCallName reports the datasource function name at the head of

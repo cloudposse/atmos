@@ -322,6 +322,8 @@ func ExtractPlainFieldRef(templateStr string) (FieldRef, bool, error) {
 	return ref, ok, nil
 }
 
+// Returns the template's only action node when the template consists of
+// exactly one action surrounded by nothing but whitespace.
 func singlePlainAction(tmpl *template.Template) (*parse.ActionNode, bool) {
 	if tmpl.Tree == nil || tmpl.Root == nil {
 		return nil, false
@@ -345,6 +347,8 @@ func singlePlainAction(tmpl *template.Template) (*parse.ActionNode, bool) {
 	return action, action != nil
 }
 
+// Extracts the field reference from an action that is a single, undecorated
+// field access such as .a.b with no pipeline or arguments.
 func fieldRefFromAction(action *parse.ActionNode) (FieldRef, bool) {
 	if action.Pipe == nil || len(action.Pipe.Decl) != 0 || len(action.Pipe.Cmds) != 1 {
 		return FieldRef{}, false
@@ -378,6 +382,7 @@ func LookupFieldPath(data any, path []string) (any, bool) {
 	return current, true
 }
 
+// Reads key from a map[string]any or any string-keyed map.
 func lookupMapValue(data any, key string) (any, bool) {
 	if data == nil {
 		return nil, false

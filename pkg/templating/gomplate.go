@@ -38,6 +38,10 @@ type liveRender struct {
 	left, right string
 	err         error
 	captured    any
+	// datasources is the render's datasource map (plan.req.Datasources), used
+	// by engine.Datasource to build a cache key from the effective definition
+	// of the alias being read, not just its name.
+	datasources map[string]Datasource
 }
 
 // liveRenderHolder guards the engine's live render pointer.
@@ -46,12 +50,14 @@ type liveRenderHolder struct {
 	live *liveRender
 }
 
+// set records live as the render in progress (nil when none is).
 func (h *liveRenderHolder) set(live *liveRender) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.live = live
 }
 
+// get returns the render in progress, or nil when none is.
 func (h *liveRenderHolder) get() *liveRender {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -74,7 +80,7 @@ func (e *engine) renderWithGomplate(ctx context.Context, plan *renderPlan) (stri
 		return "", err
 	}
 
-	state := &liveRender{left: plan.left, right: plan.right}
+	state := &liveRender{left: plan.left, right: plan.right, datasources: plan.req.Datasources}
 	e.live.set(state)
 	defer e.live.set(nil)
 

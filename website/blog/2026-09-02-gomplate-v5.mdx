@@ -31,10 +31,13 @@ from the build altogether, which meant upgrading the template engine across two 
 
 ## The Fix
 
-Atmos now embeds Gomplate v5, which is built on the AWS SDK for Go v2. Every Gomplate function and
-datasource that Atmos supported before continues to work, and Sprig functions are still layered on
-top by default. What changed is what ships inside the binary: the AWS SDK for Go v1 is no longer
-present in any form.
+Atmos now embeds Gomplate v5, which is built on the AWS SDK for Go v2. Most stack templates keep
+working unchanged, and Sprig functions are still layered on top by default. Function names Gomplate
+removed in v5 keep working too, through a compatibility shim that logs a warning naming the
+replacement the first time a stack manifest calls one. A handful of datasource behaviors changed in
+ways Atmos cannot paper over with a shim — [what to check in your stacks](#what-to-check-in-your-stacks)
+below covers each one. What changed unconditionally is what ships inside the binary: the AWS SDK for
+Go v1 is no longer present in any form.
 
 One HashiCorp Vault authentication library still pulled the old SDK in its latest tagged release,
 even though its development branch had already been ported to v2. Atmos pins that library to the
