@@ -6,16 +6,17 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // findDependentsFromIndex uses the pre-computed dependency index for O(1) lookup.
-func findDependentsFromIndex(atmosConfig *schema.AtmosConfiguration, args *DescribeDependentsArgs, providedComponentVars *schema.Context, targetUnavailable bool) []schema.Dependent {
+func findDependentsFromIndex(atmosConfig *schema.AtmosConfiguration, args *DescribeDependentsArgs, providedComponentVars *schema.Context, targetUnavailable bool) ([]schema.Dependent, error) {
 	return findDependentsFromIndexWithStacks(atmosConfig, args, providedComponentVars, targetUnavailable, nil)
 }
 
-func findDependentsFromIndexWithStacks(atmosConfig *schema.AtmosConfiguration, args *DescribeDependentsArgs, providedComponentVars *schema.Context, targetUnavailable bool, stacks map[string]any) []schema.Dependent {
+func findDependentsFromIndexWithStacks(atmosConfig *schema.AtmosConfiguration, args *DescribeDependentsArgs, providedComponentVars *schema.Context, targetUnavailable bool, stacks map[string]any) ([]schema.Dependent, error) {
 	var dependents []schema.Dependent
 
 	entries := args.DepIndex[args.Component]
@@ -28,14 +29,18 @@ func findDependentsFromIndexWithStacks(atmosConfig *schema.AtmosConfiguration, a
 		}
 
 		dep := e.DependsOn
-		if optionalDependencyTargetUnavailable(&optionalDependencyTargetParams{
+		unavailable, err := dependencyTargetUnavailable(&dependencyTargetParams{
 			stacks:      stacks,
 			args:        args,
 			dep:         &dep,
 			sourceStack: e.StackName,
 			sourceType:  e.StackComponentType,
 			fallback:    targetUnavailable,
-		}) {
+		})
+		if err != nil {
+			return nil, err
+		}
+		if unavailable {
 			continue
 		}
 		if !isDependencyMatch(&dependencyMatchParams{
@@ -52,7 +57,7 @@ func findDependentsFromIndexWithStacks(atmosConfig *schema.AtmosConfiguration, a
 		dependents = append(dependents, buildDependentEntry(atmosConfig, args, e))
 	}
 
-	return dependents
+	return dependents, nil
 }
 
 // findDependentsByScan falls back to the full O(stacks * components) scan.
@@ -132,7 +137,7 @@ func scanComponentForDependents(p *scanComponentParams) ([]schema.Dependent, err
 
 	var stackComponentVars schema.Context
 	if err := mapstructure.Decode(stackComponentVarsSection, &stackComponentVars); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode vars for component %q in stack %q: %w", p.StackComponentName, p.StackName, err)
 	}
 
 	result, err := getComponentDependenciesWithError(stackComponentMap)
@@ -148,24 +153,28 @@ func scanComponentForDependents(p *scanComponentParams) ([]schema.Dependent, err
 		dependencies:    componentDeps,
 		settingsSection: settingsSection,
 		source:          depSource,
-	}), nil
+	})
 }
 
-func scanComponentDependencies(p *scanComponentParams, stackComponentMap, stackComponentVarsSection map[string]any, stackComponentVars *schema.Context, result componentDependenciesResult) []schema.Dependent {
+func scanComponentDependencies(p *scanComponentParams, stackComponentMap, stackComponentVarsSection map[string]any, stackComponentVars *schema.Context, result componentDependenciesResult) ([]schema.Dependent, error) {
 	var dependents []schema.Dependent
 	for depIdx := range result.dependencies {
 		dependsOn := &result.dependencies[depIdx]
 		if dependsOn.Component != p.Args.Component {
 			continue
 		}
-		if optionalDependencyTargetUnavailable(&optionalDependencyTargetParams{
+		unavailable, err := dependencyTargetUnavailable(&dependencyTargetParams{
 			stacks:      p.Stacks,
 			args:        p.Args,
 			dep:         dependsOn,
 			sourceStack: p.StackName,
 			sourceType:  p.StackComponentType,
 			fallback:    p.TargetUnavailable,
-		}) {
+		})
+		if err != nil {
+			return nil, err
+		}
+		if unavailable {
 			continue
 		}
 		if !isDependencyMatch(&dependencyMatchParams{
@@ -191,10 +200,10 @@ func scanComponentDependencies(p *scanComponentParams, stackComponentMap, stackC
 		dependents = append(dependents, buildDependentEntry(p.AtmosConfig, p.Args, e))
 	}
 
-	return dependents
+	return dependents, nil
 }
 
-type optionalDependencyTargetParams struct {
+type dependencyTargetParams struct {
 	stacks      map[string]any
 	args        *DescribeDependentsArgs
 	dep         *schema.ComponentDependency
@@ -203,12 +212,12 @@ type optionalDependencyTargetParams struct {
 	fallback    bool
 }
 
-func optionalDependencyTargetUnavailable(p *optionalDependencyTargetParams) bool {
-	if p.dep.IsRequired() || !dependencyTargetsStackValues(p.dep, p.sourceStack, p.args.Stack) {
-		return false
+func dependencyTargetUnavailable(p *dependencyTargetParams) (bool, error) {
+	if !dependencyTargetsStackValues(p.dep, p.sourceStack, p.args.Stack) {
+		return false, nil
 	}
 	if p.stacks == nil {
-		return p.fallback
+		return unavailableDependencyTarget(p.dep, p.fallback, errUtils.ErrDependencyTargetUnavailable)
 	}
 
 	targetStack := p.dep.Stack
@@ -220,7 +229,20 @@ func optionalDependencyTargetUnavailable(p *optionalDependencyTargetParams) bool
 		targetType = p.sourceType
 	}
 	target := findComponentSectionInCachedStacksByType(p.stacks, targetStack, p.args.Component, targetType)
-	return target == nil || isAbstractOrDisabled(target, p.args.Component)
+	if target == nil {
+		return unavailableDependencyTarget(p.dep, true, errUtils.ErrDependencyTargetNotFound)
+	}
+	return unavailableDependencyTarget(p.dep, isAbstractOrDisabled(target, p.args.Component), errUtils.ErrDependencyTargetUnavailable)
+}
+
+func unavailableDependencyTarget(dep *schema.ComponentDependency, unavailable bool, targetErr error) (bool, error) {
+	if !unavailable {
+		return false, nil
+	}
+	if !dep.IsRequired() {
+		return true, nil
+	}
+	return false, fmt.Errorf("%w: component %q in stack %q", targetErr, dep.Component, dep.Stack)
 }
 
 // buildDependentEntry constructs a Dependent struct from a dependency index entry.

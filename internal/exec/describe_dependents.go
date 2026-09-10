@@ -224,7 +224,11 @@ func ExecuteDescribeDependents(
 	// When a pre-computed dependency index is available, use O(1) lookup.
 	// Otherwise, fall back to the full O(stacks × components) scan.
 	if args.DepIndex != nil {
-		dependents = findDependentsFromIndexWithStacks(atmosConfig, args, &providedComponentVars, targetUnavailable, stacks)
+		var err error
+		dependents, err = findDependentsFromIndexWithStacks(atmosConfig, args, &providedComponentVars, targetUnavailable, stacks)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		var err error
 		dependents, err = findDependentsByScan(atmosConfig, args, stacks, &providedComponentVars, targetUnavailable)

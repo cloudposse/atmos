@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -235,7 +236,8 @@ func TestFindDependentsFromIndex_NoMatches(t *testing.T) {
 	args := &DescribeDependentsArgs{Component: "vpc", Stack: "dev-use1", DepIndex: dependencyIndex{}}
 	providedVars := &schema.Context{Namespace: "acme", Tenant: "dev"}
 
-	result := findDependentsFromIndex(nil, args, providedVars, false)
+	result, err := findDependentsFromIndex(nil, args, providedVars, false)
+	require.NoError(t, err)
 	assert.Nil(t, result, "no index entries should return nil")
 }
 
@@ -418,7 +420,8 @@ func TestFindDependentsFromIndex_SkipsSelfReference(t *testing.T) {
 	args := &DescribeDependentsArgs{Component: "vpc", Stack: "dev-use1", DepIndex: idx}
 	providedVars := &schema.Context{Tenant: "dev"}
 
-	result := findDependentsFromIndex(nil, args, providedVars, false)
+	result, err := findDependentsFromIndex(nil, args, providedVars, false)
+	require.NoError(t, err)
 	assert.Empty(t, result, "self-references should be skipped")
 }
 
@@ -443,7 +446,8 @@ func TestFindDependentsFromIndex_IncludesCrossStackSameNameDependent(t *testing.
 	args := &DescribeDependentsArgs{Component: "vpc", Stack: "dev-use1", DepIndex: idx}
 	providedVars := &schema.Context{Tenant: "dev"}
 
-	result := findDependentsFromIndex(nil, args, providedVars, false)
+	result, err := findDependentsFromIndex(nil, args, providedVars, false)
+	require.NoError(t, err)
 	require.Len(t, result, 1)
 	assert.Equal(t, "vpc", result[0].Component)
 	assert.Equal(t, "prod-use1", result[0].Stack)
@@ -518,4 +522,94 @@ func TestExecuteDescribeDependents_RetainsOptionalAvailableCrossTypeTarget(t *te
 			assert.Equal(t, "dev", dependents[0].Stack)
 		})
 	}
+}
+
+func TestExecuteDescribeDependents_RejectsRequiredUnavailableCrossTypeTarget(t *testing.T) {
+	t.Parallel()
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"image": map[string]any{"vars": map[string]any{"tenant": "dev"}},
+					"app": map[string]any{
+						"vars": map[string]any{"tenant": "dev"},
+						"dependencies": map[string]any{
+							"components": []any{map[string]any{"component": "image", "kind": "packer"}},
+						},
+					},
+				},
+				"packer": map[string]any{
+					"image": map[string]any{
+						"metadata": map[string]any{"enabled": false},
+						"vars":     map[string]any{"tenant": "dev"},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range []struct {
+		name  string
+		index dependencyIndex
+	}{
+		{
+			name: "index",
+			index: dependencyIndex{
+				"image": {
+					{
+						StackName:          "dev",
+						StackComponentName: "app",
+						StackComponentType: "terraform",
+						StackComponentVars: schema.Context{Tenant: "dev"},
+						DepSource:          dependencySourceDependenciesComponents,
+						DependsOn: schema.ComponentDependency{
+							Component: "image",
+							Kind:      "packer",
+						},
+					},
+				},
+			},
+		},
+		{name: "scan"},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			args := &DescribeDependentsArgs{
+				Component: "image",
+				Stack:     "dev",
+				Stacks:    stacks,
+				DepIndex:  test.index,
+			}
+
+			_, err := ExecuteDescribeDependents(&schema.AtmosConfiguration{}, args)
+			require.ErrorIs(t, err, errUtils.ErrDependencyTargetUnavailable)
+		})
+	}
+}
+
+func TestFindDependentsByScan_ReportsInvalidVarsContext(t *testing.T) {
+	t.Parallel()
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"app": map[string]any{
+						"vars": map[string]any{"tenant": []any{"invalid"}},
+						"dependencies": map[string]any{
+							"components": []any{map[string]any{"component": "image"}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := findDependentsByScan(nil, &DescribeDependentsArgs{Component: "image", Stack: "dev"}, stacks, &schema.Context{}, false)
+	require.Error(t, err)
+	require.ErrorContains(t, err, `component "app"`)
+	require.ErrorContains(t, err, `stack "dev"`)
 }
