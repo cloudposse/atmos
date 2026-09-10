@@ -226,3 +226,23 @@ func TestPopulateCloudFormationCIResultFromSummary_DriftDescribeFallsBackToDrift
 	assert.Equal(t, "dev-vpc", result.StackName)
 	assert.Equal(t, 3, result.DriftedCount)
 }
+
+func TestSummaryLen(t *testing.T) {
+	tests := []struct {
+		name  string
+		value any
+		want  int
+	}{
+		{"nil value", nil, 0},
+		{"non-slice value", "not-a-slice", 0},
+		{"non-slice int", 42, 0},
+		{"empty slice", []int{}, 0},
+		{"populated slice", []int{1, 2, 3}, 3},
+		{"populated string slice", []string{"a", "b"}, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, summaryLen(tt.value))
+		})
+	}
+}
