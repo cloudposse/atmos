@@ -5,6 +5,7 @@ tests:
     short: false
     enabled: true
     snapshot: false
+    clean: true
     tty: true
     description: "Vendoring works with pull command"
     workdir: "../examples/demo-vendoring/"
@@ -12,8 +13,6 @@ tests:
     args:
       - "vendor"
       - "pull"
-    preconditions:
-      - "github_token"
     skip:
       # PTY not supported on windows
       os: !not windows
@@ -40,8 +39,6 @@ tests:
     args:
       - "vendor"
       - "pull"
-    preconditions:
-      - "github_token"
     env:
       ATMOS_LOGS_LEVEL: Debug
     expect:
