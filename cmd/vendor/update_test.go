@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendoring/updater"
 	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
@@ -87,6 +88,44 @@ func TestVendorUpdateCommand_StackSelectorDescribeStacksErrorPropagates(t *testi
 	err := vendorUpdateCmd.RunE(vendorUpdateCmd, nil)
 
 	require.Error(t, err)
+}
+
+// TestVendorPullRequestConfig proves vendorPullRequestConfig maps every vendor.ci.pull_request.*
+// viper key onto the matching schema.VendorPullRequestConfig field -- including Organization,
+// Project, and Repository, which only the azuredevops provider consumes (see
+// pkg/vendoring/updater.resolveRepositoryAddress) -- so a key/field typo or spelling drift is
+// caught by a failing assertion rather than silently reading as an empty string at runtime.
+func TestVendorPullRequestConfig(t *testing.T) {
+	v := viper.New()
+	v.Set("vendor.ci.pull_request.provider", "azuredevops")
+	v.Set("vendor.ci.pull_request.base_branch", "main")
+	v.Set("vendor.ci.pull_request.branch_prefix", "atmos-update/")
+	v.Set("vendor.ci.pull_request.title", "chore: update components")
+	v.Set("vendor.ci.pull_request.body", "automated component update")
+	v.Set("vendor.ci.pull_request.labels", []string{"component-update", "automated"})
+	v.Set("vendor.ci.pull_request.draft", true)
+	v.Set("vendor.ci.pull_request.reviewers", []string{"reviewer-guid"})
+	v.Set("vendor.ci.pull_request.assignees", []string{"assignee-guid"})
+	v.Set("vendor.ci.pull_request.organization", "acme-org")
+	v.Set("vendor.ci.pull_request.project", "platform")
+	v.Set("vendor.ci.pull_request.repository", "infra")
+
+	got := vendorPullRequestConfig(v)
+
+	assert.Equal(t, schema.VendorPullRequestConfig{
+		Provider:     "azuredevops",
+		BaseBranch:   "main",
+		BranchPrefix: "atmos-update/",
+		Title:        "chore: update components",
+		Body:         "automated component update",
+		Labels:       []string{"component-update", "automated"},
+		Draft:        true,
+		Reviewers:    []string{"reviewer-guid"},
+		Assignees:    []string{"assignee-guid"},
+		Organization: "acme-org",
+		Project:      "platform",
+		Repository:   "infra",
+	}, got)
 }
 
 // TestVendorUpdateCommand_LabelsSelector proves --labels alone (no --stack) resolves through

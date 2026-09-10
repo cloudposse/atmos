@@ -16,7 +16,7 @@ Atmos now postpones merging YAML functions until after the regular merge is done
 
 ## The Problem: Type Conflicts During Merge
 
-YAML functions (like `!template`, `!terraform.output`, `!store.get`, and others) are represented as strings during
+YAML functions (like [`!template`](/functions/yaml/template), [`!terraform.output`](/functions/yaml/terraform.output), [`!store.get`](/functions/yaml/store.get), and others) are represented as strings during
 configuration loading, but they resolve to different types after evaluation.
 When Atmos tried to merge a concrete value (like a string `"10.0.0.0/16"`) with a YAML function string
 (like `!template '{{ .settings.vpc_cidr }}'`), it encountered type conflicts. The standard merge process couldn't
@@ -69,10 +69,10 @@ The new deferred merge infrastructure introduces a three-phase approach:
 Before merging, Atmos walks through each configuration file and identifies YAML functions:
 - `!template` - Go template rendering
 - `!terraform.output` - Output from other components
-- `!terraform.state` - State file queries
-- `!store.get` / `!store` - Store lookups
-- `!exec` - Command execution
-- `!env` - Environment variable expansion
+- [`!terraform.state`](/functions/yaml/terraform.state) - State file queries
+- `!store.get` / [`!store`](/functions/yaml/store) - Store lookups
+- [`!exec`](/functions/yaml/exec) - Command execution
+- [`!env`](/functions/yaml/env) - Environment variable expansion
 
 These functions are temporarily replaced with `nil` placeholders and stored in a **deferred merge context** with their:
 - Original value
@@ -210,6 +210,8 @@ listeners:
 
 For technical details on the implementation, see
 the [Deferred YAML Function Merge Handling PRD](https://github.com/cloudposse/atmos/blob/main/docs/prd/deferred-yaml-functions-evaluation-in-merge.md).
+
+For usage and configuration, see [Type-Aware Merging of YAML Functions](/reference/yaml-function-merging).
 
 ## Get Involved
 
