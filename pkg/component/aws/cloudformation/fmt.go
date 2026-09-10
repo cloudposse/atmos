@@ -50,6 +50,53 @@ func formatTemplate(body string) (string, error) {
 	return buf.String(), nil
 }
 
+// forceBlockStyle recursively resets every node's Style to the encoder's
+// default heuristics. A plain yaml.Node round-trip preserves each node's
+// original style, so content that started as JSON (CloudFormation's common
+// stored representation for a deployed template, regardless of how it was
+// originally authored) survives formatTemplate's re-indentation still
+// wrapped in JSON's flow notation (`{...}`/`[...]`) and double-quoted keys
+// instead of rendering as normal, idiomatic YAML. Only Style controls
+// flow/quoting presentation; Tag (which carries intrinsic function short
+// forms like !Ref/!Sub/!GetAtt) is untouched.
+func forceBlockStyle(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+	node.Style = 0
+	for _, child := range node.Content {
+		forceBlockStyle(child)
+	}
+}
+
+// formatTemplateAsBlockYAML re-serializes a template body as pretty-printed,
+// block-style YAML regardless of whether CloudFormation returned it as JSON
+// or YAML — for read-only display (e.g. `get template`), where there's no
+// locally-authored file/style to preserve. This differs from formatTemplate,
+// which deliberately preserves a local file's existing style/comments for
+// `aws cfn fmt`.
+func formatTemplateAsBlockYAML(body string) (string, error) {
+	defer perf.Track(nil, "cloudformation.formatTemplateAsBlockYAML")()
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(body), &doc); err != nil {
+		return "", fmt.Errorf(wrapFmt, errUtils.ErrInvalidAwsCloudFormationSettings, err)
+	}
+	forceBlockStyle(&doc)
+
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(yamlIndent)
+	if err := enc.Encode(&doc); err != nil {
+		return "", fmt.Errorf(wrapFmt, errUtils.ErrInvalidAwsCloudFormationSettings, err)
+	}
+	if err := enc.Close(); err != nil {
+		return "", fmt.Errorf(wrapFmt, errUtils.ErrInvalidAwsCloudFormationSettings, err)
+	}
+
+	return buf.String(), nil
+}
+
 // runFmt formats the component's local template. With --check, reports
 // whether the file is already formatted (via ErrAwsCloudFormationFmtNotClean,
 // for CI) without writing; otherwise formats in place.
