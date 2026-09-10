@@ -107,24 +107,45 @@ export function interpretPollResponse(status, body) {
 //
 // `initialElapsedMs` (default 0) lets tests start a poller already close to
 // the slowdown/ceiling thresholds instead of simulating the real timeline
-// tick by tick; real callers never need to pass it.
-export function createPoller({ url, onUpdate, fetchImpl = fetch, initialElapsedMs = 0 }) {
+// tick by tick; real callers never need to pass it. `now` (default
+// `Date.now`) is the monotonic clock used to compute elapsed time — tests
+// mock it (via `node:test`'s `Date` mock timer) so the ceiling can be
+// exercised deterministically without a real 30-minute wait.
+//
+// Elapsed time is always derived from `now() - startedAt`, never accumulated
+// as a nominal counter of poll intervals. A poll interval only tells the
+// poller when to check again — it says nothing about how long that check
+// itself takes. Deriving elapsed time from actual wall-clock time (rather
+// than "polls so far * interval") is what makes MAX_WAIT_MS a real ceiling
+// on total wait even when an individual round trip runs long: a slow poll
+// can't quietly hand the next poll a fresh budget.
+export function createPoller({ url, onUpdate, fetchImpl = fetch, initialElapsedMs = 0, now = Date.now }) {
   let cancelled = false;
   let timeoutHandle = null;
   let activeController = null;
+  let startedAt = 0;
 
-  async function poll(elapsedMs) {
+  function elapsed() {
+    return now() - startedAt;
+  }
+
+  async function poll() {
     if (cancelled) return;
 
+    const elapsedMs = elapsed();
     if (elapsedMs >= MAX_WAIT_MS) {
-      onUpdate({ status: 'error', errorMessage: STILL_RENDERING_MESSAGE, elapsedMs });
+      onUpdate({ status: 'error', errorMessage: STILL_RENDERING_MESSAGE, elapsedMs: MAX_WAIT_MS });
       return;
     }
 
     const controller = new AbortController();
     activeController = controller;
-    // Bound this fetch to the remaining wall-clock budget so a request that
-    // never settles can't hold the button disabled past MAX_WAIT_MS.
+    // Bound the *entire* round trip — the fetch AND the subsequent JSON body
+    // read — to the remaining wall-clock budget, so neither a stalled
+    // request nor a hanging body stream can hold the button disabled past
+    // MAX_WAIT_MS. Aborting the controller cancels an in-flight
+    // `response.json()` read too (the body reader is tied to the same
+    // signal), so this deadline stays live until the body has been read.
     const deadline = setTimeout(() => controller.abort(), MAX_WAIT_MS - elapsedMs);
 
     let response;
@@ -136,20 +157,19 @@ export function createPoller({ url, onUpdate, fetchImpl = fetch, initialElapsedM
       onUpdate(
         controller.signal.aborted
           ? { status: 'error', errorMessage: STILL_RENDERING_MESSAGE, elapsedMs: MAX_WAIT_MS }
-          : { status: 'error', errorMessage: NETWORK_ERROR_MESSAGE, elapsedMs },
+          : { status: 'error', errorMessage: NETWORK_ERROR_MESSAGE, elapsedMs: elapsed() },
       );
       return;
     }
-    clearTimeout(deadline);
-    if (cancelled) return;
 
     // A 200 with a non-JSON content type is the legacy/cached shape: a ready
     // artifact served as the file itself, even though we asked for JSON.
     // Abort right away so this poll doesn't transfer the file — the caller
     // does a separate, explicit navigation to actually download.
     if (response.status === 200 && !(response.headers.get('content-type') || '').toLowerCase().includes('json')) {
+      clearTimeout(deadline);
       controller.abort();
-      onUpdate({ status: 'ready', elapsedMs });
+      onUpdate({ status: 'ready', elapsedMs: elapsed() });
       return;
     }
 
@@ -160,12 +180,22 @@ export function createPoller({ url, onUpdate, fetchImpl = fetch, initialElapsedM
       // Ignore JSON parse errors — the classifier below falls back to a
       // generic message/rendering state.
     }
+    clearTimeout(deadline);
     if (cancelled) return;
 
+    if (controller.signal.aborted) {
+      // The remaining budget ran out while the body was still being read —
+      // report the ceiling rather than treating the aborted read as a
+      // legitimate (if empty) response.
+      onUpdate({ status: 'error', errorMessage: STILL_RENDERING_MESSAGE, elapsedMs: MAX_WAIT_MS });
+      return;
+    }
+
     const outcome = interpretPollResponse(response.status, body);
+    const currentElapsed = elapsed();
 
     if (outcome.kind === 'ready') {
-      onUpdate({ status: 'ready', elapsedMs });
+      onUpdate({ status: 'ready', elapsedMs: currentElapsed });
       return;
     }
 
@@ -174,21 +204,22 @@ export function createPoller({ url, onUpdate, fetchImpl = fetch, initialElapsedM
         status: 'rendering',
         phase: outcome.phase,
         progress: outcome.progress,
-        elapsedMs,
-        slow: isSlow(elapsedMs),
+        elapsedMs: currentElapsed,
+        slow: isSlow(currentElapsed),
       });
-      const interval = nextPollIntervalMs(elapsedMs);
-      timeoutHandle = setTimeout(() => void poll(elapsedMs + interval), interval);
+      const interval = nextPollIntervalMs(currentElapsed);
+      timeoutHandle = setTimeout(() => void poll(), interval);
       return;
     }
 
-    onUpdate({ status: 'error', errorMessage: outcome.message, elapsedMs });
+    onUpdate({ status: 'error', errorMessage: outcome.message, elapsedMs: currentElapsed });
   }
 
   return {
     start() {
       cancelled = false;
-      void poll(initialElapsedMs);
+      startedAt = now() - initialElapsedMs;
+      void poll();
     },
     cancel() {
       cancelled = true;

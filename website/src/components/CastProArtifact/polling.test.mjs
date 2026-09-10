@@ -162,7 +162,7 @@ test('describeStatus labels queued vs. processing and flags a slow render', () =
 });
 
 test('createPoller: 202 -> 202 -> legacy non-JSON 200 downloads exactly once and polls every 3s', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const ready = legacyReadyResponse();
   const { fetchImpl, calls } = queueFetch([
     jsonResponse(202, { data: { artifacts: [{ status: 'processing', progress: null }] } }),
@@ -194,7 +194,7 @@ test('createPoller: 202 -> 202 -> legacy non-JSON 200 downloads exactly once and
 });
 
 test('createPoller: an immediate legacy non-JSON 200 is ready right away without reading the body', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const ready = legacyReadyResponse();
   const { fetchImpl, calls } = queueFetch([ready.response]);
 
@@ -210,7 +210,7 @@ test('createPoller: an immediate legacy non-JSON 200 is ready right away without
 });
 
 test('createPoller: an immediate 200 JSON body with status "ready" downloads right away', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const { fetchImpl, calls } = queueFetch([
     jsonResponse(200, { data: { artifacts: [{ status: 'ready', url: 'https://example.test/token', progress: null }] } }),
   ]);
@@ -226,7 +226,7 @@ test('createPoller: an immediate 200 JSON body with status "ready" downloads rig
 });
 
 test('createPoller: a 200 JSON body with status "processing" keeps rendering and polls again', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const { fetchImpl, calls } = queueFetch([
     jsonResponse(200, { data: { artifacts: [{ status: 'processing', progress: { percent: 40, stage: 'encoding' } }] } }),
     jsonResponse(200, { data: { artifacts: [{ status: 'ready', progress: null }] } }),
@@ -253,7 +253,7 @@ test('createPoller: a 200 JSON body with status "processing" keeps rendering and
 });
 
 test('createPoller: a 404 surfaces the "not found" message inline instead of a network error', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const { fetchImpl } = queueFetch([
     jsonResponse(404, { success: false, error: 'Cast file was not found at the requested commit and path' }),
   ]);
@@ -270,7 +270,7 @@ test('createPoller: a 404 surfaces the "not found" message inline instead of a n
 });
 
 test('createPoller: 500 surfaces the JSON error inline and never navigates', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const { fetchImpl } = queueFetch([jsonResponse(500, { success: false, error: 'render backend unavailable' })]);
 
   const updates = [];
@@ -283,7 +283,7 @@ test('createPoller: 500 surfaces the JSON error inline and never navigates', asy
 });
 
 test('createPoller: a 202 seen past 13 minutes elapsed marks the render slow and polls at 10s', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const { fetchImpl } = queueFetch([
     jsonResponse(202, { data: { artifacts: [{ status: 'processing', progress: null }] } }),
   ]);
@@ -305,7 +305,7 @@ test('createPoller: a 202 seen past 13 minutes elapsed marks the render slow and
 });
 
 test('createPoller: gives up at the 30-minute ceiling with a non-failure message, without polling again', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const { fetchImpl, calls } = queueFetch([]);
 
   const updates = [];
@@ -324,7 +324,7 @@ test('createPoller: gives up at the 30-minute ceiling with a non-failure message
 });
 
 test('createPoller: a hung fetch is aborted at the remaining budget and reported as still-rendering', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const fetchImpl = (url, init) =>
     new Promise((_resolve, reject) => {
       init.signal.addEventListener('abort', () => reject(new Error('aborted')));
@@ -345,8 +345,82 @@ test('createPoller: a hung fetch is aborted at the remaining budget and reported
   assert.deepEqual(updates, [{ status: 'error', errorMessage: STILL_RENDERING_MESSAGE, elapsedMs: MAX_WAIT_MS }]);
 });
 
+test('createPoller: a slow round trip consumes real wall-clock time toward the ceiling, not just the nominal poll interval', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  // The first poll's fetch doesn't resolve for 29 minutes — nearly the
+  // entire budget — before finally returning a "still rendering" 202. A
+  // poller that tracked elapsed time as a nominal counter (polls-so-far *
+  // interval) would see this as elapsedMs === 0 and hand the next poll a
+  // fresh 30-minute budget; a wall-clock-based poller must instead see
+  // elapsedMs ~= 29 minutes and enforce the ceiling shortly after, not
+  // ~29 minutes later still.
+  const slowDelayMs = 29 * 60 * 1000;
+  let resolveFetch;
+  // Real fetch rejects an in-flight request when its AbortSignal fires; the
+  // mock must do the same so the second poll's own deadline (asserted below)
+  // can actually cut it off instead of hanging forever.
+  const fetchImpl = (url, init) =>
+    new Promise((resolve, reject) => {
+      resolveFetch = () =>
+        resolve(jsonResponse(202, { data: { artifacts: [{ status: 'processing', progress: null }] } }));
+      init.signal.addEventListener('abort', () => reject(new Error('aborted')));
+    });
+
+  const updates = [];
+  const poller = createPoller({ url: 'https://example.test/cast.mp4', fetchImpl, onUpdate: (u) => updates.push(u) });
+
+  poller.start();
+  await flush();
+  await tick(t, slowDelayMs);
+  resolveFetch();
+  await flush();
+
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].status, 'rendering');
+  assert.equal(updates[0].elapsedMs, slowDelayMs, 'must report true wall-clock elapsed, not the nominal 0');
+
+  // The reschedule (slowed to 10s past the 13-minute threshold) must respect
+  // the real remaining budget (~1 minute) rather than restarting a fresh
+  // 30-minute window from this poll's nominal elapsedMs.
+  await tick(t, SLOW_POLL_INTERVAL_MS);
+  await tick(t, MAX_WAIT_MS - slowDelayMs - SLOW_POLL_INTERVAL_MS);
+
+  assert.equal(updates.length, 2);
+  assert.deepEqual(updates[1], { status: 'error', errorMessage: STILL_RENDERING_MESSAGE, elapsedMs: MAX_WAIT_MS });
+});
+
+test('createPoller: a 202 response whose JSON body hangs forever is aborted at the deadline and reported as still-rendering', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const fetchImpl = (url, init) =>
+    Promise.resolve({
+      status: 202,
+      headers: headers('application/json'),
+      // Mirrors real fetch semantics: response.json()'s body read is tied to
+      // the same AbortSignal as the request, so aborting the controller
+      // after fetch() has already resolved still rejects a pending read.
+      json: () =>
+        new Promise((_resolve, reject) => {
+          init.signal.addEventListener('abort', () => reject(new Error('aborted')));
+        }),
+    });
+
+  const updates = [];
+  const poller = createPoller({
+    url: 'https://example.test/cast.mp4',
+    fetchImpl,
+    onUpdate: (u) => updates.push(u),
+    initialElapsedMs: MAX_WAIT_MS - 5_000,
+  });
+
+  poller.start();
+  await flush();
+  await tick(t, 5_000);
+
+  assert.deepEqual(updates, [{ status: 'error', errorMessage: STILL_RENDERING_MESSAGE, elapsedMs: MAX_WAIT_MS }]);
+});
+
 test('createPoller: a genuine network failure (not our own abort) is reported distinctly', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const fetchImpl = async () => {
     throw new TypeError('Failed to fetch');
   };
@@ -361,7 +435,7 @@ test('createPoller: a genuine network failure (not our own abort) is reported di
 });
 
 test('createPoller: cancel() stops a pending poll from ever firing', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const { fetchImpl, calls } = queueFetch([
     jsonResponse(202, { data: { artifacts: [{ status: 'processing', progress: null }] } }),
   ]);

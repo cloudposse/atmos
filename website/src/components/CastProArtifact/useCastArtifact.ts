@@ -83,6 +83,12 @@ export function useCastArtifact({
 
   useEffect(() => {
     generationRef.current += 1;
+    // A previous poller (for the old `url`) may have left `state.status`
+    // stuck at 'checking'/'rendering' — its cleanup below cancels it, but
+    // cancelling doesn't reset state. Without this, the new url would start
+    // with `busy` still true and no active poller to ever clear it, leaving
+    // the download button permanently disabled.
+    setState(IDLE_STATE);
     return () => {
       generationRef.current += 1;
       pollerRef.current?.cancel();
@@ -103,7 +109,13 @@ export function useCastArtifact({
       url,
       onUpdate: (update: Partial<PollerState> & { status: ArtifactStatus }) => {
         if (generationRef.current !== generation) return;
-        setState((prev) => ({ ...prev, ...update }));
+        // Terminal updates ('ready'/'error') omit `phase`/`progress`/`slow` —
+        // merging them onto `prev` would leave the last rendering progress
+        // showing beside a ready/error state. Drop back to IDLE_STATE first
+        // for terminal updates so those transient fields clear.
+        setState((prev) =>
+          update.status === 'rendering' ? { ...prev, ...update } : { ...IDLE_STATE, ...update },
+        );
         if (update.status === 'ready') {
           const downloadUrl = new URL(url);
           downloadUrl.searchParams.set('download', '1');

@@ -73,7 +73,15 @@ function FormatMenuItem({
         <span>{format.toUpperCase()}</span>
         {hint && <span className={styles.hint}>{hint}</span>}
         {progressPercent !== null && (
-          <span className={styles.progressTrack} title={progress.stage}>
+          <span
+            className={styles.progressTrack}
+            title={progress.stage}
+            role="progressbar"
+            aria-valuenow={Math.round(progressPercent)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuetext={`${progress.stage}: ${Math.round(progressPercent)}%`}
+          >
             <span className={styles.progressFill} style={{ width: `${progressPercent}%` }} />
           </span>
         )}
