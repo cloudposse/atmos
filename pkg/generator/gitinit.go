@@ -122,6 +122,34 @@ func WithSource(source string) PinOption {
 func PinInitialBaseRef(targetPath, headSHA string, opts ...PinOption) error {
 	defer perf.Track(nil, "generator.PinInitialBaseRef")()
 
+	return pinBaseRef(storage.ScaffoldMetadataPath(targetPath), storage.NewScaffoldMetadata, headSHA, opts...)
+}
+
+// PinInitialBaseRefForInit is PinInitialBaseRef's counterpart for `atmos
+// init`, which records its own generation metadata separately at
+// .atmos/init/metadata.yaml (see storage.InitMetadataPath) rather than
+// .atmos/scaffold/metadata.yaml -- the two commands track unrelated
+// generation history, but the pin mechanism itself is identical, so it's
+// shared here rather than reimplemented a second time. It was reimplemented
+// once before: `atmos init --update` shipped with the same silent-overwrite
+// bug PinInitialBaseRef/ResolveDefaultBaseRef guard against, because the
+// fix for `atmos scaffold generate --update` lived only in cmd/scaffold and
+// was never ported to cmd/init.
+func PinInitialBaseRefForInit(targetPath, headSHA string, opts ...PinOption) error {
+	defer perf.Track(nil, "generator.PinInitialBaseRefForInit")()
+
+	return pinBaseRef(storage.InitMetadataPath(targetPath), storage.NewInitMetadata, headSHA, opts...)
+}
+
+// pinBaseRef is the shared implementation behind PinInitialBaseRef and
+// PinInitialBaseRefForInit; only the metadata path and constructor differ
+// between the two commands.
+func pinBaseRef(
+	metadataPath string,
+	newMetadata func(templateName, templateVersion, templateSource, baseRef string, variables map[string]string) *storage.GenerationMetadata,
+	headSHA string,
+	opts ...PinOption,
+) error {
 	if headSHA == "" {
 		return nil
 	}
@@ -131,11 +159,55 @@ func PinInitialBaseRef(targetPath, headSHA string, opts ...PinOption) error {
 		opt(&pinOpts)
 	}
 
-	metadata := storage.NewScaffoldMetadata(pinOpts.templateName, pinOpts.templateVersion, pinOpts.source, headSHA, nil)
-	if err := storage.NewMetadataStorage(storage.ScaffoldMetadataPath(targetPath)).Save(metadata); err != nil {
-		return fmt.Errorf("%w: pin initial scaffold base ref: %w", errUtils.ErrMetadataSave, err)
+	metadata := newMetadata(pinOpts.templateName, pinOpts.templateVersion, pinOpts.source, headSHA, nil)
+	if err := storage.NewMetadataStorage(metadataPath).Save(metadata); err != nil {
+		return fmt.Errorf("%w: pin initial base ref: %w", errUtils.ErrMetadataSave, err)
 	}
 	return nil
+}
+
+// ResolveDefaultBaseRef fills in the 3-way-merge base ref used by `--update`
+// when the caller didn't supply --base-ref explicitly (which always wins
+// when set). It prefers the ref pinned at targetDir by PinInitialBaseRef/
+// PinInitialBaseRefForInit -- the commit that actually contains this
+// project's pristine generated content -- over live HEAD. Without a pin,
+// --update always diffs against whatever HEAD happens to be by the time it
+// runs; once a customization is committed, that makes it indistinguishable
+// from the unmodified base, and the merge silently lets the freshly
+// rendered template overwrite it. Falling back to plain "HEAD" (pre-fix
+// targets with no pin, or a non-git target) still fixes the original bug
+// this guards against: with no baseRef at all, --update silently sets up no
+// git storage, and every file fails with an opaque "three-way merge
+// failed".
+//
+// A genuinely unreadable metadata file (corrupt YAML, permission denied --
+// anything other than the file simply not existing yet) is surfaced as an
+// error instead of silently falling back to "HEAD": swallowing it would
+// defeat the whole point of the pin, quietly reintroducing the
+// silent-overwrite bug the first time the pin file itself is damaged. The
+// storage.MetadataStorage.Load method returns (nil, nil) specifically when
+// the file is absent, so that case alone still falls through to the
+// HEAD/pin logic below.
+//
+// The metadataPath parameter is the caller's own pinned-metadata location
+// (see storage.ScaffoldMetadataPath/storage.InitMetadataPath) -- shared here
+// so `atmos scaffold generate --update` and `atmos init --update`, which pin
+// and resolve base refs identically but keep separate metadata, can't drift
+// apart the way they did before.
+func ResolveDefaultBaseRef(baseRef, targetDir, metadataPath string) (string, error) {
+	defer perf.Track(nil, "generator.ResolveDefaultBaseRef")()
+
+	if baseRef != "" {
+		return baseRef, nil
+	}
+	metadata, err := storage.NewMetadataStorage(metadataPath).Load()
+	if err != nil {
+		return "", fmt.Errorf("resolve default --base-ref from %s: %w", targetDir, err)
+	}
+	if metadata != nil && metadata.BaseRef != "" {
+		return metadata.BaseRef, nil
+	}
+	return "HEAD", nil
 }
 
 func isInsideGitRepository(path string) bool {

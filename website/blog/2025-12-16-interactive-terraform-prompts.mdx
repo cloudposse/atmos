@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [feature, dx]
 ---
 
-Terraform commands now feature interactive prompts for component and stack selection. Run `atmos terraform plan` without arguments and get an intuitive selector instead of an error message.
+Terraform commands now feature interactive prompts for component and stack selection. Run [`atmos terraform plan`](/cli/commands/terraform/plan) without arguments and get an intuitive selector instead of an error message.
 
 <!--truncate-->
 
@@ -142,6 +142,8 @@ settings:
 ```
 
 Interactive prompts are automatically disabled in CI environments (detected via `CI` environment variable) and when output is piped.
+
+For usage and configuration, see [atmos terraform apply](/cli/commands/terraform/apply).
 
 ## Get Involved
 

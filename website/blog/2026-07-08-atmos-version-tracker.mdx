@@ -95,7 +95,7 @@ Any text file with comments can carry a managed version via a marker annotation:
 ENV TOFU_VERSION=1.10.6
 ```
 
-And comment-hostile formats (like JSON) render from `*.tmpl` templates with the `.version` context. In stacks, `!version name` and `{{ .version.name }}` resolve from the lock, so versions stop being copy-pasted into stack manifests at all.
+And comment-hostile formats (like JSON) render from `*.tmpl` templates with the `.version` context. In stacks, [`!version name`](/functions/yaml/version) and `{{ .version.name }}` resolve from the lock, so versions stop being copy-pasted into stack manifests at all.
 
 ## How to Use It
 
@@ -116,9 +116,11 @@ steps:
   - run: atmos version track verify          # lock fresh AND files current
 ```
 
-`atmos version track status` shows where you stand at any time — including `newer-available (blocked)` when a newer version exists upstream but your cooldown or strategy is deliberately holding it back. That's a passing state, not a failure: the locked version is exactly what your policy wants deployed.
+[`atmos version track status`](/cli/commands/version/track/status) shows where you stand at any time — including `newer-available (blocked)` when a newer version exists upstream but your cooldown or strategy is deliberately holding it back. That's a passing state, not a failure: the locked version is exactly what your policy wants deployed.
 
 See the [`atmos version track` command reference](/cli/commands/version/track) and [Managed Versions configuration](/cli/configuration/version/managed-versions) for the full surface, or try the runnable [`examples/version-tracker`](https://github.com/cloudposse/atmos/tree/main/examples/version-tracker) example.
+
+For usage and configuration, see [Version](/cli/configuration/version).
 
 ## Get Involved
 
