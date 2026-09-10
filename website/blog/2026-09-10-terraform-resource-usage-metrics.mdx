@@ -1,0 +1,62 @@
+---
+slug: terraform-resource-usage-metrics
+title: "See CPU, memory, and time for every Terraform run"
+date: 2026-09-10T13:00:00.000Z
+authors: [osterman]
+tags: [feature]
+---
+
+A `terraform apply` finishes in twelve minutes. Was most of that spent generating a plan, waiting on a
+slow provider API, or a provider plugin chewing through memory? The output tells you what changed and
+how long the command took overall — nothing more.
+
+<!--truncate-->
+
+## The Problem
+
+Terraform runs are often the single most expensive step in a pipeline, but operators have no visibility
+into where that cost actually goes. Is a particular component slow because of network calls, because a
+provider plugin is memory-hungry, or because of contention with other jobs on the same runner? Without
+per-run resource data, answering that means reaching for external profiling tools, if anyone bothers at
+all — most teams just shrug and wait it out.
+
+## The Fix
+
+`terraform plan`, `apply`, and `deploy` now measure the actual resource cost of the run: the terraform
+process itself and everything it spawns — provider plugins and any other child processes — not just the
+negligible overhead of the Atmos CLI wrapper around it. When the command finishes, Atmos prints a
+one-line summary:
+
+```
+ℹ Completed in 45.2s | CPU: 12.3s user, 4.1s sys | Peak memory: 512 MB
+```
+
+At the end of the whole invocation — including multi-component runs like `--affected` plans that
+execute many components — Atmos also prints one aggregate summary covering everything that ran:
+
+```
+ℹ Total in 3m12.4s | CPU: 48.9s user, 16.2s sys | Peak memory: 780 MB
+```
+
+The same, more accurate numbers now flow into the execution data Atmos Pro receives for CI runs, so
+cost- and performance-visibility features in Pro reflect what the component actually cost to run, not
+just the CLI wrapper's own footprint.
+
+## How to Use It
+
+Both summary lines are on by default — no setup required. If you'd rather not see them (for example, in
+a scripted context where you don't want the extra output), turn them off with one setting:
+
+```yaml
+settings:
+  metrics:
+    enabled: false
+```
+
+This only controls local terminal output; it never affects what Atmos Pro receives. See the
+[Metrics settings](/cli/configuration/settings/metrics) docs for details.
+
+## Get Involved
+
+Have feedback on this feature? [Open an issue](https://github.com/cloudposse/atmos/issues) or join the
+conversation in the [Cloud Posse community Slack](https://cloudposse.com/slack).
