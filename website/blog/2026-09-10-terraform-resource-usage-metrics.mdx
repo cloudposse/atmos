@@ -25,18 +25,18 @@ whether the pipeline runs on plain GitHub Actions, Atmos alone, or Atmos Pro.
 
 `terraform plan`, `apply`, and `deploy` now measure the actual resource cost of the run: the terraform
 process itself and everything it spawns — provider plugins and any other child processes — not just the
-negligible overhead of the Atmos CLI wrapper around it. When the command finishes, Atmos prints a
-one-line summary:
+negligible overhead of the Atmos CLI wrapper around it. When each component's command finishes, Atmos
+prints a one-line summary identifying which component and stack it covers — important in a
+multi-component `--all`/`--affected` run, where this line prints once per component:
 
 ```
-ℹ Completed in 45.2s | CPU: 12.3s user, 4.1s sys | Peak memory: 512 MB
+▶ Completed vpc -s dev in 45.2s | CPU: 12.3s user, 4.1s sys | Peak memory: 512 MB
 ```
 
-At the end of the whole invocation — including multi-component runs like `--affected` plans that
-execute many components — Atmos also prints one aggregate summary covering everything that ran:
+At the end of the whole invocation, Atmos also prints one aggregate summary covering everything that ran:
 
 ```
-ℹ Total in 3m12.4s | CPU: 48.9s user, 16.2s sys | Peak memory: 780 MB
+▶ Total for this invocation in 3m12.4s | CPU: 48.9s user, 16.2s sys | Peak memory: 780 MB
 ```
 
 The same, more accurate numbers now flow into the execution data Atmos Pro receives for CI runs, and — when

@@ -509,7 +509,12 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 		info.ExecMetadataRawMetrics = &combined
 
 		if proexec.IsSyncCommand("atmos terraform " + info.SubCommand) {
-			metricsprocess.DisplaySummary("Completed", combined, atmosConfig)
+			// Identify the component/stack in the label itself — in a multi-component
+			// run (e.g. --all/--affected), this line prints once per component, so a
+			// bare "Completed" would be ambiguous once scrolled away from its own
+			// plan/apply output.
+			label := fmt.Sprintf("Completed %s -s %s", info.ComponentFromArg, info.Stack)
+			metricsprocess.DisplaySummary(label, combined, atmosConfig)
 		}
 	}
 

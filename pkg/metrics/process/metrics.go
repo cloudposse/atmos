@@ -224,7 +224,7 @@ func DisplayFinalSummary(atmosConfig *schema.AtmosConfiguration) {
 
 	combined := Combine(SelfUsageSoFar(), total)
 	combined.WallTime = time.Since(SelfBaselineTakenAt())
-	DisplaySummary("Total", combined, atmosConfig)
+	DisplaySummary("Total for this invocation", combined, atmosConfig)
 }
 
 // FormatDuration formats a duration for human display (e.g. "45.2s", "800ms").
