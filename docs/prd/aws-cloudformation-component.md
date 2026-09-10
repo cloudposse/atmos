@@ -448,11 +448,17 @@ is called with `ChangeSetType=CREATE`, which as a side effect creates a placehol
 `REVIEW_IN_PROGRESS` state — `DeleteChangeSet` does **not** remove that stack, only the changeset
 object. For this case, cleanup must also call `DeleteStack` on the placeholder after deleting the
 changeset, or a `plan`/`diff` against a not-yet-created stack leaks a stack against the account's
-stack-count quota on every preview. Unlike the changeset cleanup, this stack-delete step is surfaced
-as a command error (or a retryable cleanup result), not a silent warning, since a leaked
-`REVIEW_IN_PROGRESS` stack is more disruptive than a leaked changeset — it can collide with a
-subsequent real `apply`'s own `ChangeSetType=CREATE` call. Previews that target an existing stack
-never create this placeholder and only need the existing `DeleteChangeSet` cleanup.
+stack-count quota on every preview. `DeleteStack` is itself asynchronous — it only requests deletion
+and returns immediately, leaving the stack in `DELETE_IN_PROGRESS` — so cleanup must poll
+`DescribeStacks` (or use the SDK's `StackDeleteComplete` waiter) until the placeholder is actually
+gone before returning control. Returning early would let a subsequent real `apply` race a still-mid-
+delete placeholder: `ChangeSetType=CREATE` is only valid against a stack that doesn't exist yet, not
+one sitting in `DELETE_IN_PROGRESS`/`REVIEW_IN_PROGRESS`, so that `apply` would fail. Both the
+`DeleteStack` call itself and the wait are surfaced as a command error (or a retryable cleanup
+result), not a silent warning like the changeset cleanup — including a `DELETE_FAILED` terminal
+state or a wait timeout — since a leaked `REVIEW_IN_PROGRESS`/`DELETE_FAILED` stack is more disruptive
+than a leaked changeset. Previews that target an existing stack never create this placeholder and
+only need the existing `DeleteChangeSet` cleanup.
 `apply`/`deploy` execute the changeset (`ExecuteChangeSet`)
 rather than calling `UpdateStack` directly, giving every apply the same "review before mutate"
 semantics as changesets provide, without requiring users to manage changesets by hand. The explicit
@@ -579,11 +585,18 @@ exporting secrets as environment variables does not apply. Instead:
   provides elsewhere for resolved `!secret` values). This is **literal-value masking, not data-flow
   tracking**: a template that derives a non-preserving transformation of the secret — e.g.
   `Fn::Select` over `Fn::Split` slicing it into a substring — into an `Outputs` or `Metadata` value
-  produces a string the masker's registered patterns won't match, so it renders unmasked. For a value
-  that must never appear in a stack's outputs at all, use a
+  produces a string the masker's registered patterns won't match, so it renders unmasked. A
   [dynamic reference](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/dynamic-references.html)
-  (`{{resolve:...}}`) instead of a plain parameter, so CloudFormation itself never materializes the
-  secret into `Outputs`/`Metadata` as a literal value in the first place.
+  (`{{resolve:...}}`) narrows this, but doesn't eliminate it: CloudFormation resolves the reference
+  server-side rather than passing the plaintext through the template/parameter, and only in
+  *supported resource-property contexts* — it is not a general secrecy guarantee. A template can
+  still take that resolved value and wire it into `Outputs`, template `Metadata`, resource
+  `Metadata`, or a resource's primary identifier (the value `!Ref` returns), and CloudFormation
+  materializes it as plaintext in every one of those — Metadata and Outputs perform no
+  redaction/masking of their own, and primary identifiers routinely surface in API responses and
+  logs. Treat all four of those as forbidden destinations for a secret or any value derived from
+  one, whether it arrived via a plain `NoEcho` parameter or a dynamic reference — neither mechanism
+  protects a value once the template itself chooses to expose it there.
 - The `env:` section remains supported for its normal cross-type uses (hooks, `!exec`, template
   functions), but is **not** a secret-delivery channel for the CloudFormation API itself.
 
