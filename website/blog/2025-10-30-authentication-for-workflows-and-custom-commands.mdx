@@ -27,7 +27,7 @@ This approach ensures that credentials are isolated and never serialized in logs
 
 ## Bug Fix: Auth Shell Environment Variables
 
-We fixed a regression in `atmos auth shell` where it wasn't setting the required environment variables for credential file resolution. Previously, when you ran:
+We fixed a regression in [`atmos auth shell`](/cli/commands/auth/shell) where it wasn't setting the required environment variables for credential file resolution. Previously, when you ran:
 
 ```bash
 atmos auth shell my-identity

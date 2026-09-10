@@ -126,7 +126,7 @@ components:
 
 The `name` field is extracted during stack processing and used wherever the logical stack name is needed:
 
-- **Stack identification** - `atmos describe stacks` shows the custom name
+- **Stack identification** - [`atmos describe stacks`](/cli/commands/describe/stacks) shows the custom name
 - **Stack selection** - Use `-s my-legacy-prod-stack` on the command line
 - **Terraform workspace** - Workspace name derives from the stack name
 - **Dependencies** - Reference stacks by their logical name in `depends_on`

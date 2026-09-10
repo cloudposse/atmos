@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [feature, dx]
 ---
 
-File generation now features interactive component and stack selection, plus cross-provisioner support for helmfile and packer. Run `atmos terraform generate files` without arguments and get an intuitive selector.
+File generation now features interactive component and stack selection, plus cross-provisioner support for helmfile and packer. Run [`atmos terraform generate files`](/cli/commands/terraform/generate/files) without arguments and get an intuitive selector.
 
 <!--truncate-->
 
@@ -103,6 +103,8 @@ atmos terraform generate files vpc -s ue2-dev --interactive=false
 # Via environment variable
 export ATMOS_INTERACTIVE=false
 ```
+
+For usage and configuration, see [Generate Terraform Files](/stacks/generate).
 
 ## Get Involved
 
