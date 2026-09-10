@@ -1675,6 +1675,21 @@ var (
 	ErrGitHubAuthorization = errors.New("GitHub authorization failed")
 	// ErrPullRequestReconciliation indicates Atmos could not reconcile an existing or new PR.
 	ErrPullRequestReconciliation = errors.New("pull request reconciliation failed")
+	// ErrAzureDevOpsTokenNotFound indicates AZURE_DEVOPS_EXT_PAT is not set.
+	ErrAzureDevOpsTokenNotFound = errors.New("Azure DevOps personal access token not found")
+	// ErrAzureDevOpsAuthorization indicates an authentication or permission failure from the Azure DevOps API.
+	ErrAzureDevOpsAuthorization = errors.New("Azure DevOps authorization failed")
+	// ErrAzureDevOpsAssigneesUnsupported indicates Azure DevOps pull requests do not support assignees.
+	ErrAzureDevOpsAssigneesUnsupported = errors.New("Azure DevOps pull requests do not support assignees")
+	// ErrAzureDevOpsNamespaceInvalid indicates PullRequestOptions.Namespace was not exactly the
+	// single project segment Azure DevOps' organization/project/repository addressing requires.
+	ErrAzureDevOpsNamespaceInvalid = errors.New("Azure DevOps pull request namespace must be exactly one project segment")
+	// ErrAzureDevOpsReviewerNotFound indicates a configured reviewer's display name, account name,
+	// or email matched no Azure DevOps identity.
+	ErrAzureDevOpsReviewerNotFound = errors.New("Azure DevOps reviewer identity not found")
+	// ErrAzureDevOpsReviewerAmbiguous indicates a configured reviewer's display name, account name,
+	// or email matched more than one Azure DevOps identity.
+	ErrAzureDevOpsReviewerAmbiguous = errors.New("Azure DevOps reviewer identity is ambiguous")
 	// ErrGitFetchFailed indicates `git fetch` of a base or feature branch failed.
 	ErrGitFetchFailed = errors.New("git fetch failed")
 	// ErrGitCheckoutFailed indicates `git checkout` of a feature branch failed.

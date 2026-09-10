@@ -32,7 +32,7 @@ components:
 
 Network operations are inherently unreliable. Transient failures like connection resets, timeouts, and rate limits can cause vendoring to fail even when there's nothing wrong with your configuration.
 
-Previously, you'd have to manually retry `atmos vendor pull` or `atmos terraform source pull` when these failures occurred. Now Atmos handles this automatically with intelligent retry logic:
+Previously, you'd have to manually retry [`atmos vendor pull`](/cli/commands/vendor/pull) or [`atmos terraform source pull`](/cli/commands/terraform/source/pull) when these failures occurred. Now Atmos handles this automatically with intelligent retry logic:
 
 - **Exponential backoff** prevents thundering herd problems
 - **Jitter** adds randomness to avoid synchronized retries across parallel operations
@@ -112,6 +112,8 @@ The retry logic automatically detects transient errors including:
 - "Remote end hung up unexpectedly" during git operations
 
 Non-retryable errors (like authentication failures or repository not found) fail immediately without retry.
+
+For usage and configuration, see [Source](/vendor/component-manifest/source).
 
 ## Get Involved
 

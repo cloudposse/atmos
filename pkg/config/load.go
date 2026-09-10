@@ -734,6 +734,15 @@ func bridgeVendorUpdaterConfig(atmosConfig *schema.AtmosConfiguration) {
 	if len(pr.Assignees) > 0 {
 		v.Set("vendor.ci.pull_request.assignees", pr.Assignees)
 	}
+	if pr.Organization != "" {
+		v.Set("vendor.ci.pull_request.organization", pr.Organization)
+	}
+	if pr.Project != "" {
+		v.Set("vendor.ci.pull_request.project", pr.Project)
+	}
+	if pr.Repository != "" {
+		v.Set("vendor.ci.pull_request.repository", pr.Repository)
+	}
 
 	if atmosConfig.Vendor.CI.Summary.Enabled != nil {
 		v.Set("vendor.ci.summary.enabled", *atmosConfig.Vendor.CI.Summary.Enabled)

@@ -40,3 +40,5 @@ Set `ATMOS_CI_GITHUB_TOKEN` to the workflow's default token, and let `GITHUB_TOK
 ```
 
 Terraform uses `GITHUB_TOKEN` (the App token with repo permissions), and Atmos CI uses `ATMOS_CI_GITHUB_TOKEN` (the workflow token with `statuses: write`). Both work concurrently without conflict.
+
+For usage and configuration, see [CI Configuration](/cli/configuration/ci).

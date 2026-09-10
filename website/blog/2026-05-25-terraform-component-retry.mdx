@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [feature]
 ---
 
-Provider downloads fail. Registries return 502s. State backends time out. None of that is your code's fault, but when it happens during `atmos terraform plan` in CI, the only recovery has always been a manual re-run. With this release you can configure per-component retry so transient failures recover automatically — without retrying real Terraform errors.
+Provider downloads fail. Registries return 502s. State backends time out. None of that is your code's fault, but when it happens during [`atmos terraform plan`](/cli/commands/terraform/plan) in CI, the only recovery has always been a manual re-run. With this release you can configure per-component retry so transient failures recover automatically — without retrying real Terraform errors.
 
 <!--truncate-->
 
