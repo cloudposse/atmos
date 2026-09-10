@@ -3,6 +3,7 @@
 package process
 
 import (
+	"os"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -53,4 +54,11 @@ func diffRusageValues(now rusageSnapshot, baseline *rusageSnapshot) ProcessMetri
 func filetimeToDuration(ft windows.Filetime) time.Duration {
 	ticks := int64(ft.HighDateTime)<<32 | int64(ft.LowDateTime)
 	return time.Duration(ticks) * 100 * time.Nanosecond
+}
+
+// populateSysUsage is a no-op on Windows: os.ProcessState.SysUsage() returns
+// nil there (no rusage equivalent), so CollectFromProcessState's
+// UserTime()/SystemTime() values (already set by the caller) are all that's
+// available for a subprocess tree.
+func populateSysUsage(_ *ProcessMetrics, _ *os.ProcessState) {
 }

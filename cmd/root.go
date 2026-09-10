@@ -60,6 +60,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/proexec"
@@ -1973,6 +1974,12 @@ func Execute() error {
 	// (no-ops unless CI is detected AND Atmos Pro is configured). Placed
 	// immediately after the telemetry hook it mirrors — see pkg/proexec.
 	proexec.CaptureAsync(cmd, err)
+
+	// End-of-invocation aggregate local resource-usage summary: atmos's own
+	// usage combined with every subprocess spawned during the whole run (e.g.
+	// every component plan in a multi-component --affected run). Gated by
+	// settings.metrics.enabled (default true); no-ops when no subprocess ran.
+	metricsprocess.DisplayFinalSummary(&atmosConfig)
 
 	// Run AI analysis on captured output unless this is an "atmos ai" subcommand.
 	if !aisetup.IsAISubcommand(cmd) && aiCtx.RunAnalysis(err) {

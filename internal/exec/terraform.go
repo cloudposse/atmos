@@ -12,6 +12,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/proexec"
 	// Import backend provisioner to register S3 provisioner.
@@ -295,7 +296,14 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand 
 		data = params.Parser(subCommand, rawExitCode, info.ExecMetadataRawOutput)
 	}
 
-	in := &proexec.ExecRecordInput{Command: "terraform " + subCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data}
+	// info.ExecMetadataRawMetrics is typed `any` (not *process.ProcessMetrics)
+	// to avoid an import cycle — pkg/metrics/process imports pkg/schema for
+	// its own settings gate, so pkg/schema cannot import it back. A nil or
+	// mistyped value here is silently treated as "no override", falling back
+	// to proexec.buildRecord's own process.SelfUsageSoFar() default.
+	metrics, _ := info.ExecMetadataRawMetrics.(*metricsprocess.ProcessMetrics)
+
+	in := &proexec.ExecRecordInput{Command: "terraform " + subCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data, Metrics: metrics}
 	if syncErr := proexec.CaptureSync(atmosConfig, in); syncErr != nil {
 		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
 	}

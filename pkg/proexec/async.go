@@ -10,7 +10,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -26,15 +25,6 @@ const asyncFlushCeiling = 2 * time.Second
 // logKeyCommand is the structured-log key used for the reported command name
 // across CaptureAsync's log lines.
 const logKeyCommand = "command"
-
-// processBaseline is captured once, as early as possible in the process's
-// lifetime (at package load, before any command runs), so both the async
-// default path and any synchronous command's own CaptureSync call diff
-// against the same baseline (data-model.md's "Correlation ID"/metrics rules,
-// research.md Decision 3).
-//
-//nolint:gochecknoglobals // Intentional: one baseline per process lifetime.
-var processBaseline = process.Baseline()
 
 // currentAtmosConfig is set once by cmd/root.go (mirroring the SetAtmosConfig
 // pattern already used by other cmd/* packages) so CaptureAsync — which is
@@ -216,8 +206,7 @@ func flagAsTyped(f *pflag.Flag) []string {
 // is returned to the caller to log — it never surfaces to the user or alters
 // the calling command's outcome.
 func uploadExecMetadata(in *ExecRecordInput, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
-	metrics := processBaseline.Since()
-	req, buildErr := buildRecord(in, &metrics, gitRepo)
+	req, buildErr := buildRecord(in, gitRepo)
 	if buildErr != nil {
 		return buildErr
 	}

@@ -540,6 +540,8 @@ type AtmosSettings struct {
 	Telemetry TelemetrySettings `yaml:"telemetry,omitempty" json:"telemetry,omitempty" mapstructure:"telemetry"`
 	// Provision contains global defaults for provisioning.
 	Provision ProvisionSettings `yaml:"provision,omitempty" json:"provision,omitempty" mapstructure:"provision"`
+	// Metrics controls local command-execution resource-usage display.
+	Metrics MetricsSettings `yaml:"metrics,omitempty" json:"metrics,omitempty" mapstructure:"metrics"`
 }
 
 // TelemetrySettings contains configuration for telemetry collection.
@@ -1928,6 +1930,17 @@ type ConfigAndStacksInfo struct {
 	// plan/apply's own output (FR-006f, research.md Decision 32). Transient
 	// runtime state — not serialized.
 	ExecMetadataRawOutput string `yaml:"-" json:"-" mapstructure:"-"`
+
+	// ExecMetadataRawMetrics holds a *process.ProcessMetrics (pkg/metrics/process)
+	// combining the main plan/apply/deploy subprocess tree's resource usage with
+	// atmos's own self-usage, captured by executeMainTerraformCommand. Typed as
+	// `any` rather than *process.ProcessMetrics to avoid an import cycle
+	// (pkg/metrics/process imports pkg/schema for the settings gate on its own
+	// display helpers); callers type-assert back to *process.ProcessMetrics.
+	// Threaded up to captureExecMetadataSync so TerraformExecData.metrics
+	// reflects the subprocess tree, not just atmos's own usage. Transient
+	// runtime state — not serialized.
+	ExecMetadataRawMetrics any `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // GetComponentEnvSection returns the component's env section map.

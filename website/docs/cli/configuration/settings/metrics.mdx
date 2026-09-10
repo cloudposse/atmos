@@ -1,0 +1,81 @@
+---
+title: Metrics
+sidebar_position: 8
+sidebar_label: metrics
+sidebar_class_name: command
+description: Configure local command-execution resource-usage display
+id: metrics
+slug: /cli/configuration/settings/metrics
+---
+
+import Intro from '@site/src/components/Intro';
+import KeyPoints from '@site/src/components/KeyPoints';
+import Note from '@site/src/components/Note';
+import File from '@site/src/components/File';
+
+<Intro>
+Atmos can print a one-line resource-usage summary — elapsed time, CPU time, and peak memory — after `terraform plan`/`apply`/`deploy` complete, plus a final aggregate summary covering every subprocess spawned during the whole invocation. The `settings.metrics` section controls whether that local display is shown.
+</Intro>
+
+<KeyPoints>
+- Shown by default after `terraform plan`, `apply`, and `deploy`
+- A final aggregate line summarizes every subprocess spawned during the whole run (e.g. every component plan in a multi-component `--affected` run)
+- Disable the local display with a single setting
+- Never affects the separate Atmos Pro command-execution metadata upload
+</KeyPoints>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  metrics:
+    # Show the local per-command / final-summary resource-usage display. Defaults to true.
+    enabled: true
+```
+</File>
+
+To disable the local display:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  metrics:
+    enabled: false
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`settings.metrics.enabled`</dt>
+  <dd>
+    Controls whether the local resource-usage summary (elapsed time, CPU time, peak memory) is printed after `terraform plan`/`apply`/`deploy`, and whether the final aggregate summary is printed at the end of the whole `atmos` invocation. This setting only controls local display — it never gates or affects the separate Atmos Pro command-execution metadata upload, which is controlled by CI detection and Atmos Pro configuration (see [Atmos Pro settings](/cli/configuration/settings/pro)).
+
+    - **Type:** `boolean`
+    - **Default:** `true`
+  </dd>
+</dl>
+
+<Note>
+The per-command display only appears for `terraform plan`, `apply`, and `deploy` — the same commands that synchronously report execution metadata to Atmos Pro when it's configured. Commands with no subprocess (e.g. `describe affected`) don't show a per-command line, but their usage still contributes to the final aggregate summary at the end of the invocation.
+</Note>
+
+## Use Cases
+
+### Disable for Scripted/CI Output
+
+Teams that parse `atmos terraform` output in scripts, or want minimal CI logs, can turn off the local display entirely:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  metrics:
+    enabled: false
+```
+</File>
+
+## See Also
+
+- [Settings](/cli/configuration/settings) — Overview of all settings
+- [Atmos Pro](/cli/configuration/settings/pro) — Command-execution metadata upload (separate from this local display)

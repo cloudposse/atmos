@@ -2008,6 +2008,20 @@
             }
           ],
           "description": "Provision contains global defaults for provisioning."
+        },
+        "metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricsSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Metrics controls local command-execution resource-usage display."
         }
       },
       "type": "object"
@@ -7790,6 +7804,26 @@
       },
       "type": "object",
       "description": "MaskSettings contains configuration for sensitive data masking."
+    },
+    "MetricsSettings": {
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Enabled controls the local per-command / final-summary resource-usage display (ui.Info). Defaults to true when unset. Never gates the Atmos Pro exec-metadata upload — only local display."
+        }
+      },
+      "type": "object",
+      "description": "MetricsSettings contains configuration for local command-execution metrics display."
     },
     "Packer": {
       "properties": {

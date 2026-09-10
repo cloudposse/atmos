@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
@@ -24,8 +25,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -449,6 +452,17 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 		return nil
 	}
 
+	// capturedMetrics receives this invocation's subprocess-tree resource
+	// usage (terraform/tofu plus its own children, e.g. provider plugins) via
+	// WithMetricsCallback, for combining with atmos's own self-usage below.
+	var capturedMetrics *metricsprocess.ProcessMetrics
+	shellStartedAt := time.Now()
+	allOpts := make([]ShellCommandOption, 0, len(opts)+1)
+	allOpts = append(allOpts, opts...)
+	allOpts = append(allOpts, WithMetricsCallback(func(m *metricsprocess.ProcessMetrics) {
+		capturedMetrics = m
+	}))
+
 	err := ExecuteShellCommandWithRetry(
 		atmosConfig,
 		info,
@@ -463,7 +477,7 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 				shellOpts:      o,
 			})
 		},
-		opts...,
+		allOpts...,
 	)
 
 	// An explicit `atmos terraform init` reaches this main-command path rather
@@ -481,6 +495,23 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	// (via captureExecMetadataSync) reports the real subprocess outcome even when
 	// Atmos's own returned status is remapped/neutralized further down.
 	info.ExecMetadataRawExitCode = exitCode
+
+	// Combine this invocation's subprocess-tree usage (terraform/tofu plus its
+	// own children) with atmos's own self-usage so both the exec-metadata
+	// upload and the local display reflect the whole command, not just one
+	// side of it. Local display is scoped to the sync-upload allowlist
+	// (terraform plan/apply/deploy) so it stays in lockstep with what Atmos
+	// Pro actually receives — commands with no subprocess (e.g. `describe
+	// affected`) keep reporting only atmos's own self-usage, unchanged.
+	if capturedMetrics != nil {
+		combined := metricsprocess.Combine(metricsprocess.SelfUsageSoFar(), *capturedMetrics)
+		combined.WallTime = time.Since(shellStartedAt)
+		info.ExecMetadataRawMetrics = &combined
+
+		if proexec.IsSyncCommand("atmos terraform " + info.SubCommand) {
+			metricsprocess.DisplaySummary("Completed", combined, atmosConfig)
+		}
+	}
 
 	// Upload status only when explicitly requested via --upload-status flag.
 	// Upload failures are logged but never cause the terraform command to fail —
