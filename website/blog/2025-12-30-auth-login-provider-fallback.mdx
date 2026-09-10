@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [enhancement, dx]
 ---
 
-`atmos auth login` now automatically falls back to provider authentication when no identities are configured, enabling seamless first-time login with `auto_provision_identities`.
+[`atmos auth login`](/cli/commands/auth/login) now automatically falls back to provider authentication when no identities are configured, enabling seamless first-time login with `auto_provision_identities`.
 
 <!--truncate-->
 
@@ -17,12 +17,12 @@ Previously, running `atmos auth login` with only a provider configured (no stati
 Now Atmos automatically detects this scenario and falls back to provider-level authentication:
 
 - **Single provider**: Auto-selected without prompting
-- **Multiple providers**: Interactive selection (or use `--provider` flag)
+- **Multiple providers**: Interactive selection (or use [`--provider`](/cli/commands/auth/login#flags) flag)
 - **Non-interactive/CI**: Requires explicit `--provider` flag with helpful error message
 
 ## Why This Matters
 
-With `auto_provision_identities: true`, providers discover and cache available identities after SSO login. But on first login (or after `atmos auth logout` clears the cache), there are no identities yet. This change eliminates the friction:
+With `auto_provision_identities: true`, providers discover and cache available identities after SSO login. But on first login (or after [`atmos auth logout`](/cli/commands/auth/logout) clears the cache), there are no identities yet. This change eliminates the friction:
 
 ```shell
 # Before: Required knowledge of the --provider flag

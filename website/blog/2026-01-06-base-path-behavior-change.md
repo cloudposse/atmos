@@ -108,7 +108,7 @@ For reference, here's how different `base_path` values are now interpreted:
 
 This change was made to support running `atmos` commands from anywhere within a repository, similar to how `git` commands work. The git root discovery enables:
 
-- Running `atmos terraform plan vpc -s dev` from any subdirectory
+- Running [`atmos terraform plan vpc -s dev`](/cli/commands/terraform/plan) from any subdirectory
 - Consistent behavior regardless of current working directory
 - Better alignment with developer workflows
 
@@ -120,3 +120,5 @@ For users with non-standard project layouts, the explicit `base_path: "."` provi
 - [PR #1868: Fix base path resolution and fallback order](https://github.com/cloudposse/atmos/pull/1868)
 - [Issue #1858: Path resolution regression](https://github.com/cloudposse/atmos/issues/1858)
 - [CLI Configuration Documentation](https://atmos.tools/cli/configuration)
+
+For usage and configuration, see [CLI Configuration](/cli/configuration).
