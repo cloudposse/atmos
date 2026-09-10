@@ -86,13 +86,17 @@ func SelfBaselineTakenAt() time.Time {
 }
 
 // CollectFromProcessState extracts resource-usage metrics for a subprocess
-// tree — the given cmd and all of its children — from cmd.ProcessState after
-// cmd.Wait() has returned. Go's ProcessState.UserTime()/SystemTime() already
-// aggregate "the exited process and its children" on every platform; on Unix,
-// ProcessState.SysUsage() additionally exposes the same aggregate (via
-// wait4(2)) for memory/page-fault/context-switch/block-I/O counters. Safe to
-// call with a nil cmd or a nil ProcessState (e.g. the process never started):
-// only WallTime is populated in that case.
+// tree — the given cmd and, on Unix, all of its children — from
+// cmd.ProcessState after cmd.Wait() has returned. On Unix,
+// ProcessState.UserTime()/SystemTime() aggregate "the exited process and its
+// children" (Go's documented behavior, backed by wait4(2)'s rusage), and
+// ProcessState.SysUsage() additionally exposes the same aggregate for
+// memory/page-fault/context-switch/block-I/O counters. On Windows, Go's
+// UserTime()/SystemTime() are backed by GetProcessTimes, which reports only
+// the named process, not its descendants — so Windows CPU-time metrics cover
+// cmd itself alone, excluding any child processes it spawns (e.g. Terraform
+// provider plugins). Safe to call with a nil cmd or a nil ProcessState (e.g.
+// the process never started): only WallTime is populated in that case.
 func CollectFromProcessState(cmd *exec.Cmd, wallTime time.Duration) *ProcessMetrics {
 	defer perf.Track(nil, "process.CollectFromProcessState")()
 

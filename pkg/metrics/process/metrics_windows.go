@@ -57,8 +57,12 @@ func filetimeToDuration(ft windows.Filetime) time.Duration {
 }
 
 // populateSysUsage is a no-op on Windows: os.ProcessState.SysUsage() returns
-// nil there (no rusage equivalent), so CollectFromProcessState's
-// UserTime()/SystemTime() values (already set by the caller) are all that's
-// available for a subprocess tree.
+// nil there (no rusage equivalent), so memory/page-fault/context-switch/
+// block-I/O counters are never available. CollectFromProcessState's
+// UserTime()/SystemTime() values (already set by the caller) are Windows's
+// only subprocess-tree signal, and even those are direct-process-only —
+// GetProcessTimes (which Go's implementation calls) reports the named
+// process alone, not its descendants, so a Terraform provider plugin's CPU
+// time is not reflected in the Windows numbers the way it is on Unix.
 func populateSysUsage(_ *ProcessMetrics, _ *os.ProcessState) {
 }

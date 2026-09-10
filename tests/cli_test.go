@@ -548,8 +548,10 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// of the whole invocation). Wall time, CPU time, and peak memory are inherently
 	// non-deterministic across runs/runners, so this line can never be part of a stable
 	// golden snapshot — strip it entirely, matching the whole-line-strip pattern already used
-	// above for other environment-dependent log lines.
-	resourceMetricsSummaryLogRegex := regexp.MustCompile(`(?m)^.*\b(?:Completed|Total) in \S+ \| CPU: [^\n]*\n?`)
+	// above for other environment-dependent log lines. Anchored to ui.Info's literal "▶ "
+	// icon prefix (pkg/ui/interfaces.go: Info renders "▶ {text}") so this can only match
+	// Atmos's own summary line, never coincidental text in Terraform's own console output.
+	resourceMetricsSummaryLogRegex := regexp.MustCompile(`(?m)^▶ (?:Completed|Total) in \S+ \| CPU: [^\n]*\n?`)
 	result = resourceMetricsSummaryLogRegex.ReplaceAllString(result, "")
 
 	// 16. Apply custom replacements if provided.

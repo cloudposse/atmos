@@ -58,7 +58,7 @@ settings:
 </dl>
 
 <Note>
-The per-command display only appears for `terraform plan`, `apply`, and `deploy` — the same commands that synchronously report execution metadata to Atmos Pro when it's configured. Commands with no subprocess (e.g. `describe affected`) don't show a per-command line, but their usage still contributes to the final aggregate summary at the end of the invocation.
+The per-command display only appears for `terraform plan`, `apply`, and `deploy` — the same commands that synchronously report execution metadata to Atmos Pro when it's configured. Commands with no subprocess (e.g. `describe affected`) don't show a per-command line, and don't trigger the final aggregate summary either — that line only appears when at least one subprocess ran during the invocation (Terraform/OpenTofu, Helmfile, Packer, or a workflow step), and covers Atmos's own usage together with every one of those subprocess runs.
 </Note>
 
 ## Use Cases
