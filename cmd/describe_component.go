@@ -205,6 +205,10 @@ func getRunnableDescribeComponentCmd(
 			return fmt.Errorf("%w: the command requires one argument `component`", errUtils.ErrInvalidArguments)
 		}
 
+		if err := resolveDescribeComponentStack(cmd, args); err != nil {
+			return err
+		}
+
 		f, err := parseDescribeComponentFlags(cmd)
 		if err != nil {
 			return err
@@ -233,6 +237,15 @@ func getRunnableDescribeComponentCmd(
 		f.errorMode = e.ResolveErrorMode(f.errorMode, atmosConfig.Describe.ErrorMode)
 		if f.errorMode != "strict" && f.errorMode != "warn" && f.errorMode != "silent" {
 			return fmt.Errorf("%w: %q", e.ErrInvalidErrorMode, f.errorMode)
+		}
+
+		// Validated here (after resolveDescribeComponentStack's interactive prompt has
+		// had a chance to fill it in, and after the flag-shape validations above) rather
+		// than via cmd.MarkPersistentFlagRequired("stack"): that Cobra-native mechanism
+		// runs BEFORE RunE and would bypass the prompt entirely. See
+		// resolveDescribeComponentStack's doc comment for the full rationale.
+		if f.stack == "" {
+			return errUtils.ErrMissingStack
 		}
 
 		component, err = resolveComponentFromPathIfNeeded(&g, &atmosConfig, component, f.stack, needsPathResolution)
@@ -271,6 +284,49 @@ func getRunnableDescribeComponentCmd(
 			AuthManager:          authManager,
 		})
 	}
+}
+
+// describeComponentStackCompletion is the completion function used to prompt for a
+// missing --stack flag. A package-level var (rather than calling StackFlagCompletion
+// directly) so tests can substitute a fake completion function without needing a
+// real Atmos config/stacks setup -- mirroring the existing seam pattern used for
+// initCliConfig/executeDescribeStacks in cmd/terraform/shared/prompt.go.
+var describeComponentStackCompletion flags.CompletionFunc = StackFlagCompletion
+
+// resolveDescribeComponentStack fills in a missing `--stack` flag interactively when
+// possible, writing the selection back onto cmd's own "stack" flag so the caller's
+// subsequent cmd.Flags().GetString("stack") read (via parseDescribeComponentFlags)
+// observes it.
+//
+// `describe component` used to enforce --stack via
+// cmd.MarkPersistentFlagRequired("stack"), which is Cobra's own required-flag
+// validation and runs BEFORE RunE -- so it always produced Cobra's generic
+// "required flag(s) \"stack\" not set" error and never gave this interactive
+// prompt a chance to run, even in a real terminal. Registering the flag as
+// not-required and validating it here (after attempting the prompt) restores the
+// documented `$ atmos describe component vpc` -> `? Choose a stack` behavior.
+//
+// Args is the command's positional args (already validated to be exactly the
+// component name by cobra.ExactArgs(1)), passed through so StackFlagCompletion can
+// filter the stack list down to stacks that actually define that component.
+func resolveDescribeComponentStack(cmd *cobra.Command, args []string) error {
+	stackFlag := cmd.Flags().Lookup("stack")
+	if stackFlag == nil || stackFlag.Value.String() != "" || stackFlag.Changed {
+		// Either there's no stack flag, a value is already present, or the user
+		// explicitly set it (even to empty) -- nothing to prompt for.
+		return nil
+	}
+
+	selected, err := flags.PromptForMissingRequired("stack", "Choose a stack", describeComponentStackCompletion, cmd, args)
+	if err != nil {
+		return err
+	}
+	if selected == "" {
+		// Not interactive, or no matching stacks -- let the caller's own
+		// ErrMissingStack check report the missing flag.
+		return nil
+	}
+	return stackFlag.Value.Set(selected)
 }
 
 // resolveComponentFromPathIfNeeded resolves a filesystem path to a component name when needed.
@@ -312,10 +368,11 @@ func init() {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
-	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
-	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-	}
-
+	// --stack is intentionally NOT marked required here (contrast with
+	// MarkPersistentFlagRequired used elsewhere): that Cobra-native mechanism
+	// validates before RunE ever runs, which would bypass
+	// resolveDescribeComponentStack's interactive prompt entirely. Missing --stack
+	// is instead validated in getRunnableDescribeComponentCmd after the prompt has
+	// had a chance to fill it in.
 	describeCmd.AddCommand(describeComponentCmd)
 }

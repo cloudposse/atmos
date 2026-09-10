@@ -1,6 +1,7 @@
 package provenance
 
 import (
+	"reflect"
 	"testing"
 
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -151,5 +152,64 @@ func TestFilterEmptySectionsNilContextKeepsEverything(t *testing.T) {
 
 	if len(filteredMap) != len(data) {
 		t.Errorf("expected all %d keys to survive with a nil context, got %d: %v", len(data), len(filteredMap), filteredMap)
+	}
+}
+
+// TestFilterEmptySectionsKeepsNonEmptyUnprovenancedSections is a regression
+// test for the bug where `describe component --provenance` (the default
+// output mode) silently dropped real, non-empty top-level sections that never
+// got a per-key provenance entry recorded -- notably aws/cloudformation's
+// path/stack_name/parameters/hooks/settings/provision, which are populated as
+// plain copied values rather than merged key-by-key through the
+// provenance-tracked merge path. See
+// docs/fixes/2026-09-09-cfn-describe-component-missing-fields.md.
+//
+// A section must survive filtering if it has recorded provenance OR its
+// value is genuinely non-empty; only sections that are both unprovenanced
+// AND empty (Atmos-generated placeholders like "backend: {}") should be
+// dropped.
+func TestFilterEmptySectionsKeepsNonEmptyUnprovenancedSections(t *testing.T) {
+	ctx := m.NewMergeContext()
+	ctx.EnableProvenance()
+	// Only "vars" has recorded provenance; everything else below is real,
+	// non-empty aws/cloudformation component data with no provenance at all.
+	ctx.RecordProvenance("components.aws/cloudformation.demo.vars.stage", m.ProvenanceEntry{
+		File: "deploy/local.yaml", Line: 8, Type: m.ProvenanceTypeInline, Depth: 1,
+	})
+
+	data := map[string]any{
+		"vars":                   map[string]any{"stage": "local"},
+		"path":                   "template.yaml",
+		"stack_name":             "atmos-cfn-demo-local",
+		"parameters":             map[string]any{"Stage": "local"},
+		"termination_protection": true,
+		"capabilities":           []any{"CAPABILITY_NAMED_IAM"},
+		"settings":               map[string]any{"aws_cloudformation": map[string]any{"region": "us-east-1"}},
+		"hooks":                  map[string]any{"mark-after-apply": map[string]any{"kind": "command"}},
+		"backend":                map[string]any{}, // genuinely empty placeholder, no provenance.
+		"overrides":              map[string]any{}, // genuinely empty placeholder, no provenance.
+	}
+
+	filtered := filterEmptySections(data, ctx)
+	filteredMap, ok := filtered.(map[string]any)
+	if !ok {
+		t.Fatalf("expected filterEmptySections to return a map, got %T", filtered)
+	}
+
+	for _, key := range []string{"vars", "path", "stack_name", "parameters", "termination_protection", "capabilities", "settings", "hooks"} {
+		value, ok := filteredMap[key]
+		if !ok {
+			t.Errorf("expected non-empty section %q to survive filtering even without provenance, but it was dropped: %v", key, filteredMap)
+			continue
+		}
+		if !reflect.DeepEqual(value, data[key]) {
+			t.Errorf("expected section %q to keep its original value %v, got %v", key, data[key], value)
+		}
+	}
+
+	for _, key := range []string{"backend", "overrides"} {
+		if _, ok := filteredMap[key]; ok {
+			t.Errorf("expected empty, unprovenanced section %q to be filtered out, but it survived: %v", key, filteredMap)
+		}
 	}
 }

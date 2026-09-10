@@ -46,6 +46,18 @@ const (
 	explanationForeground = "#F7FAFC"
 	hexColorLength        = 6
 	hexColorBase          = 16
+
+	// ExplanationGradientMinSteps is a floor on the number of gradient steps used
+	// by gradientRatio. Without it, a short callout (2-3 wrapped lines, the most
+	// common case for real error explanations/hints) samples the gradient at
+	// i/(total-1), which for total<=3 always includes both pure endpoint colors
+	// with zero blending in between -- visually a jarring two-tone seam rather
+	// than a gradient. Flooring the step count treats short callouts as a narrow
+	// slice near the start of a longer virtual gradient, so adjacent lines get
+	// close, blended shades instead of the extremes. Callouts with more lines
+	// than this floor already sample the full gradient smoothly and are
+	// unaffected (their total-1 exceeds the floor, so the formula is unchanged).
+	explanationGradientMinSteps = 3
 )
 
 type markdownSections struct {
@@ -559,7 +571,14 @@ func gradientRatio(index int, total int) float64 {
 	if total <= 1 {
 		return 0
 	}
-	return float64(index) / float64(total-1)
+	// Floor the step count so short callouts sample a narrow, blended slice of
+	// the gradient near its start instead of jumping straight to the pure
+	// start/end colors. See explanationGradientMinSteps for the full rationale.
+	steps := total - 1
+	if steps < explanationGradientMinSteps {
+		steps = explanationGradientMinSteps
+	}
+	return float64(index) / float64(steps)
 }
 
 func interpolateHexColor(start string, end string, ratio float64) string {

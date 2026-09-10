@@ -64,3 +64,43 @@ func TestFilterAndListStacks_NoMatchingComponent(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Nil(t, output)
 }
+
+// TestFilterAndListStacks_NonTerraformComponentType is a regression test: this
+// function is shared by non-terraform completion/prompt callers (e.g.
+// cmd/container/completions.go, cmd/ansible/completions.go, cmd/cmd_utils.go's
+// describe-stack completion), so it must find a component defined under any
+// component type section, not only "terraform" -- otherwise it always returns
+// zero matches for every other component type.
+func TestFilterAndListStacks_NonTerraformComponentType(t *testing.T) {
+	stacksMap := map[string]any{
+		"prod": map[string]any{
+			"components": map[string]any{
+				"aws/cloudformation": map[string]any{
+					"vpc": map[string]any{"stack_name": "prod-vpc"},
+				},
+			},
+		},
+		"dev": map[string]any{
+			"components": map[string]any{
+				"container": map[string]any{
+					"api": map[string]any{},
+				},
+			},
+		},
+		"unrelated": map[string]any{
+			"components": map[string]any{
+				"aws/cloudformation": map[string]any{
+					"rds": map[string]any{},
+				},
+			},
+		},
+	}
+
+	output, err := FilterAndListStacks(stacksMap, "vpc")
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"prod"}, output)
+
+	output, err = FilterAndListStacks(stacksMap, "api")
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"dev"}, output)
+}
