@@ -40,15 +40,11 @@ func testRuntime() *Runtime {
 	}
 }
 
-func stubInitCLIConfig(t *testing.T, delimiters ...string) {
+func stubInitCLIConfig(t *testing.T) {
 	t.Helper()
 	original := initCLIConfig
 	initCLIConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
-		return schema.AtmosConfiguration{
-			Templates: schema.Templates{
-				Settings: schema.TemplatesSettings{Delimiters: delimiters},
-			},
-		}, nil
+		return schema.AtmosConfiguration{}, nil
 	}
 	t.Cleanup(func() { initCLIConfig = original })
 
