@@ -1,6 +1,7 @@
 package ansible
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1264,7 +1265,7 @@ func TestExecutePlaybookCommandWithRetry_MatchingError_Retries(t *testing.T) {
 	}
 
 	atmosConfig := schema.AtmosConfiguration{}
-	err = executePlaybookCommandWithRetry(&atmosConfig, info, cmdArgs, t.TempDir(), envVars)
+	err = executePlaybookCommandWithRetry(context.Background(), &atmosConfig, info, cmdArgs, t.TempDir(), envVars)
 	require.Error(t, err, "all 3 attempts fail in this fixture, so the final error must propagate")
 
 	counterBytes, readErr := os.ReadFile(counterFile)
@@ -1298,7 +1299,7 @@ func TestExecutePlaybookCommandWithRetry_NonMatchingError_FailsFast(t *testing.T
 	}
 
 	atmosConfig := schema.AtmosConfiguration{}
-	err = executePlaybookCommandWithRetry(&atmosConfig, info, cmdArgs, t.TempDir(), envVars)
+	err = executePlaybookCommandWithRetry(context.Background(), &atmosConfig, info, cmdArgs, t.TempDir(), envVars)
 	require.Error(t, err)
 
 	counterBytes, readErr := os.ReadFile(counterFile)

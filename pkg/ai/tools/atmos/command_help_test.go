@@ -73,7 +73,9 @@ func TestCommandHelpTool_Execute_MissingCommandParam(t *testing.T) {
 }
 
 func TestCommandHelpTool_Execute_NoProviderConfigured(t *testing.T) {
+	commandTreeProviderMu.RLock()
 	previous := commandTreeProvider
+	commandTreeProviderMu.RUnlock()
 	SetCommandTreeProvider(nil)
 	t.Cleanup(func() { SetCommandTreeProvider(previous) })
 

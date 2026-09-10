@@ -235,12 +235,36 @@ func TestRootHelpFunc_RealTree_UnknownSubcommandErrors(t *testing.T) {
 
 			parentCmd := findChildCommand(RootCmd, tt.parentName)
 			require.NotNilf(t, parentCmd, "RootCmd must have a %q subcommand registered", tt.parentName)
+			// parentCmd is a package-level singleton NewTestKit does not reach (it
+			// only snapshots/restores RootCmd's own flags, not nested subcommands').
+			// Cobra parses --help onto parentCmd's own FlagSet before this test's
+			// unknown-subcommand check ever runs, leaving Changed=true there
+			// afterward; a later test's dispatch on the same command tree (e.g.
+			// TestRootHelpFunc_RealTree_ValidCasesStillRenderHelp reusing the same
+			// "version"/"toolchain"/"terraform" commands) would otherwise see that
+			// leaked state. Reset it here too, symmetric with that test's own reset.
+			t.Cleanup(func() { _ = parentCmd.Flags().Set("help", "false") })
 
 			oldStderr := os.Stderr
 			r, w, pipeErr := os.Pipe()
 			require.NoError(t, pipeErr)
 			os.Stderr = w
 			t.Cleanup(func() { os.Stderr = oldStderr })
+
+			// Drain the pipe concurrently with the write side. showUsageAndExit's
+			// rendered "Unknown command" error (with hints, styling, and the full
+			// subcommand list -- worst case "terraform" with 40 children) can
+			// exceed the OS pipe buffer (64KB on macOS/Linux); writing it
+			// synchronously then reading afterward deadlocks the write once the
+			// buffer fills, since nothing drains the pipe until after
+			// ExecuteC() returns -- which itself can't return until the write
+			// (inside it) completes.
+			outputCh := make(chan []byte, 1)
+			go func() {
+				var output bytes.Buffer
+				_, _ = io.Copy(&output, r)
+				outputCh <- output.Bytes()
+			}()
 
 			args := []string{tt.parentName, tt.bogus, "--help"}
 			os.Args = append([]string{"atmos"}, args...)
@@ -257,8 +281,7 @@ func TestRootHelpFunc_RealTree_UnknownSubcommandErrors(t *testing.T) {
 			require.NoError(t, w.Close())
 			os.Stderr = oldStderr
 			var output bytes.Buffer
-			_, copyErr := io.Copy(&output, r)
-			require.NoError(t, copyErr)
+			output.Write(<-outputCh)
 
 			assert.True(t, exitCalled, "unknown subcommand + --help must call OsExit")
 			assert.Equal(t, 1, exitCode)
@@ -389,11 +412,21 @@ func TestRootHelpFunc_RealTree_ValidCasesStillRenderHelp(t *testing.T) {
 
 			target := findChildCommand(RootCmd, tt.parentName)
 			require.NotNilf(t, target, "RootCmd must have a %q subcommand registered", tt.parentName)
+			// target (and child, below) are package-level singletons NewTestKit does
+			// not reach: it only snapshots/restores RootCmd's own flags, not nested
+			// subcommands'. This real --help invocation leaves the flag Changed=true
+			// on target (and child), which a later test's cobra dispatch on the same
+			// command tree honors regardless of that later invocation's own args --
+			// see TestRootHelpFunc_RealTree_UnknownSubcommandErrors's "toolchain
+			// versions --help" case, which this leak makes silently succeed instead
+			// of reporting "unknown command". Reset both after this subtest.
+			t.Cleanup(func() { _ = target.Flags().Set("help", "false") })
 
 			args := []string{tt.parentName}
 			if tt.childName != "" {
 				child := findChildCommand(target, tt.childName)
 				require.NotNilf(t, child, "%q must have a %q subcommand registered", tt.parentName, tt.childName)
+				t.Cleanup(func() { _ = child.Flags().Set("help", "false") })
 				args = append(args, tt.childName)
 			}
 			args = append(args, "--help")

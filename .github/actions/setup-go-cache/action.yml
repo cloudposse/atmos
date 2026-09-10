@@ -1,0 +1,137 @@
+name: Set up Go with its caches on the fast disk
+description: >-
+  actions/setup-go plus this repo's Go cache strategy, with two Windows-specific fixes applied
+  first: Git's GNU tar goes first on PATH for @actions/cache (see windows-gnu-tar), and Go's build
+  and module caches are relocated onto the runner's work disk. On GitHub's windows-latest runners
+  the work disk (D:, where RUNNER_TEMP and the workspace live) is a separate, much faster disk
+  than C:, where Go's default cache locations (%LOCALAPPDATA%, %GOPATH%) sit. Measured on our
+  ~1.7 GB go-build+mod archive with .github/workflows/cache-perf.yml: restore 276 s -> 94 s, save
+  590 s -> 175 s, go build ./... 599 s -> 455 s. The same step also points GOTMPDIR, TEMP and TMP
+  at the work disk, since Go's build scratch and every t.TempDir() the tests create otherwise land
+  on the slow one too. No-op on Linux/macOS, and on any Windows image where the work disk and
+  LOCALAPPDATA share a drive.
+
+  Caching is restore-only here, replacing setup-go's built-in exact-key-immutable cache, which had
+  two structural problems: any go.sum change cold-started every OS with no fallback, and whichever
+  job saved first froze the entry for that go.sum -- when the nightly warmup (which then ran only
+  `go mod download`) won that race, the frozen entry had an empty GOCACHE and every later build
+  compiled from scratch while logging a cache hit. Instead: this action restores the newest
+  matching entry via restore-keys (preferring same-go.sum entries, falling back to any entry for
+  this OS/arch/Go version), and the only writer is setup-go-cache-warmup.yml, which runs real
+  builds on main's scope (nightly, and on go.sum-changing pushes to main) and saves under a
+  run-unique key. PR jobs never save, which also ends the per-PR 1-1.8 GB duplicate archives and
+  the multi-GB saves that landed on throwaway merge-queue refs.
+
+  The key deliberately excludes ImageOS (unlike setup-go's), so the RunsOn ubuntu22 legs and the
+  ubuntu24 GitHub-hosted jobs share one lineage. That is safe for this repo's builds: atmos builds
+  with CGO_ENABLED=0, and for the cgo-enabled race suite a compiler mismatch just misses those
+  entries in GOCACHE (Go hashes the C compiler identity into cgo action IDs), it never reuses them
+  incorrectly.
+
+inputs:
+  go-version-file:
+    description: Passed through to actions/setup-go.
+    required: false
+    default: go.mod
+  cache:
+    description: Whether to restore GOMODCACHE + GOCACHE ("true"/"false").
+    required: false
+    default: "true"
+  cache-dependency-path:
+    description: Glob of files hashed into the cache key; **/go.sum by default.
+    required: false
+    default: "**/go.sum"
+
+outputs:
+  cache-hit:
+    description: Whether a cache entry was restored (exact or prefix match).
+    value: ${{ steps.restore.outputs.cache-matched-key != '' }}
+  cache-primary-key:
+    description: >-
+      The rendered primary key (OS/arch/Go version/dependency hash, no run suffix). The warmup
+      workflow appends the run id to this to form its save key.
+    value: ${{ steps.restore.outputs.cache-primary-key }}
+  go-version:
+    description: actions/setup-go's go-version output.
+    value: ${{ steps.go.outputs.go-version }}
+
+runs:
+  using: composite
+  steps:
+    # The cache archives (restore here, save in the warmup workflow) go
+    # through @actions/cache, which picks its tar at that point.
+    - name: Use GNU tar for cache archives (Windows)
+      uses: ./.github/actions/windows-gnu-tar
+
+    # Must run before the restore step: GITHUB_ENV written here applies to
+    # every later step of the job, so `go build`/`go test` in the job use the
+    # same caches the restore populated.
+    - name: Put Go's caches and temp dirs on the runner's work disk (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $work  = Split-Path -Qualifier $env:RUNNER_TEMP
+        $local = Split-Path -Qualifier $env:LOCALAPPDATA
+        if ($work -eq $local) {
+          Write-Host "Work disk and LOCALAPPDATA share a drive ($work); keeping default drive"
+          $root = Join-Path $env:LOCALAPPDATA 'go-caches'
+        } else {
+          $root = Join-Path $env:RUNNER_TEMP 'go'
+          Write-Host "Relocating Go caches from $local to $root ($work is the runner's work disk)"
+        }
+        Add-Content $env:GITHUB_ENV "GOCACHE=$root\build"
+        Add-Content $env:GITHUB_ENV "GOMODCACHE=$root\pkg\mod"
+        # Scratch space too: Go's build temp (GOTMPDIR) and the process temp
+        # dir that t.TempDir()/os.TempDir() resolve from (TEMP/TMP) default to
+        # %LOCALAPPDATA%\Temp on the same slow disk, so every fixture copy and
+        # scratch file the tests make paid the same IOPS penalty. Placed next
+        # to RUNNER_TEMP (D:\a\tmp) rather than under it: temp paths show up
+        # in atmos's own output, and RUNNER_TEMP is D:\a\_temp, whose "\_"
+        # the output layer mangles into "_" (a Markdown-escape bug that the
+        # acceptance tests then catch; tracked separately).
+        $tmp = Join-Path (Split-Path -Parent $env:RUNNER_TEMP) 'tmp'
+        New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+        Write-Host "Relocating temp dirs (GOTMPDIR, TEMP, TMP) to $tmp"
+        Add-Content $env:GITHUB_ENV "GOTMPDIR=$tmp"
+        Add-Content $env:GITHUB_ENV "TEMP=$tmp"
+        Add-Content $env:GITHUB_ENV "TMP=$tmp"
+
+    # Deterministic cache locations on Linux/macOS, so the restore step, the
+    # warmup's save step, and every runner image agree on the paths (macOS
+    # would otherwise default GOCACHE to ~/Library/Caches/go-build).
+    - name: Pin Go's cache locations (Linux/macOS)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        echo "GOCACHE=$HOME/.cache/go-build" >> "$GITHUB_ENV"
+        echo "GOMODCACHE=$HOME/go/pkg/mod" >> "$GITHUB_ENV"
+
+    - name: Set up Go
+      id: go
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      with:
+        go-version-file: ${{ inputs.go-version-file }}
+        # Caching is handled by the restore step below (see the description).
+        cache: false
+
+    # GitHub Actions cache scoping isolates this: a pull_request run gets
+    # read-only access to the default branch's cache scope, cannot restore
+    # caches from sibling PRs, and cannot write into the default branch's
+    # scope (only push/workflow_dispatch/schedule can). Since nothing here
+    # ever saves, there is no cross-PR or PR->main poisoning path at all.
+    #
+    # The primary key never exists as saved (the warmup appends its run id),
+    # so restore-keys do the real work: newest same-go.sum entry first, then
+    # the newest entry for this OS/arch/Go version.
+    - name: Restore the Go build and module caches
+      id: restore
+      if: inputs.cache == 'true'
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: |
+          ${{ env.GOCACHE }}
+          ${{ env.GOMODCACHE }}
+        key: go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}
+        restore-keys: |
+          go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}-
+          go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-

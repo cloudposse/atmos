@@ -72,7 +72,7 @@ func TestSetupTerraformAuth_ErrInvalidComponent(t *testing.T) {
 func TestSetupTerraformAuth_AuthCreatorError_WrapsWithSentinel(t *testing.T) {
 	orig := defaultAuthManagerCreator
 	t.Cleanup(func() { defaultAuthManagerCreator = orig })
-	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
+	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		return nil, errors.New("auth backend unavailable")
 	}
 
@@ -99,7 +99,7 @@ func TestSetupTerraformAuth_IdentityStoredAndManagerSet(t *testing.T) {
 
 	orig := defaultAuthManagerCreator
 	t.Cleanup(func() { defaultAuthManagerCreator = orig })
-	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
+	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		return mockMgr, nil
 	}
 
@@ -120,7 +120,7 @@ func TestSetupTerraformAuth_IdentityStoredAndManagerSet(t *testing.T) {
 func TestSetupTerraformAuth_NilManager_NoAuthBridge(t *testing.T) {
 	orig := defaultAuthManagerCreator
 	t.Cleanup(func() { defaultAuthManagerCreator = orig })
-	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
+	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		return nil, nil
 	}
 
@@ -205,7 +205,7 @@ func TestSetupTerraformAuth_IdentityFlagPropagatesToAuthCreator(t *testing.T) {
 	var capturedIdentity string
 	origCreator := defaultAuthManagerCreator
 	t.Cleanup(func() { defaultAuthManagerCreator = origCreator })
-	defaultAuthManagerCreator = func(identity string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
+	defaultAuthManagerCreator = func(identity string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		capturedIdentity = identity
 		// Return nil manager so we don't trip into authenticateWithIdentity logic.
 		return nil, nil
@@ -248,7 +248,7 @@ func TestSetupTerraformAuth_EmptyIdentity_AllowsAutoDetection(t *testing.T) {
 	var capturedIdentity string
 	origCreator := defaultAuthManagerCreator
 	t.Cleanup(func() { defaultAuthManagerCreator = origCreator })
-	defaultAuthManagerCreator = func(identity string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
+	defaultAuthManagerCreator = func(identity string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		capturedIdentity = identity
 		return nil, nil
 	}
@@ -261,4 +261,59 @@ func TestSetupTerraformAuth_EmptyIdentity_AllowsAutoDetection(t *testing.T) {
 
 	assert.Equal(t, "", capturedIdentity,
 		"empty info.Identity must remain empty so pkg/auth.resolveIdentityName can auto-detect the default")
+}
+
+// TestSetupTerraformAuth_MergedConfigError_IdentityConfigOffersProfileFallback reproduces
+// the reported bug: a stack component declares a `default: true` identity marker that
+// isn't defined in the currently loaded global auth config (pkg/auth/config_helpers.go's
+// resolveComponentIdentityMarker), which getMergedAuthConfig surfaces as
+// ErrInvalidIdentityConfig before any AuthManager exists. When a profile defines that
+// identity, setupTerraformAuth must offer the same profile-selection prompt `atmos auth
+// login` already has instead of the flat "invalid auth config: invalid identity config".
+func TestSetupTerraformAuth_MergedConfigError_IdentityConfigOffersProfileFallback(t *testing.T) {
+	tmpDir := setupExecProfileFallbackFixture(t)
+
+	origGetter := defaultMergedAuthConfigGetter
+	t.Cleanup(func() { defaultMergedAuthConfigGetter = origGetter })
+	defaultMergedAuthConfigGetter = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
+		return nil, errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+			WithExplanationf("Component default identity %q is not defined in the active global auth configuration", "root-admin").
+			WithContext("identity", "root-admin").
+			WithExitCode(1).
+			Err()
+	}
+
+	atmosConfig := schema.AtmosConfiguration{CliConfigPath: tmpDir}
+	info := schema.ConfigAndStacksInfo{Stack: "core-ue2-auto", ComponentFromArg: "vpc"}
+
+	_, err := setupTerraformAuth(&atmosConfig, &info)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrIdentityNotFound),
+		"expected the profile-fallback's ErrIdentityNotFound, got: %v", err)
+	assert.False(t, errors.Is(err, errUtils.ErrInvalidAuthConfig),
+		"profile fallback must replace the flat \"invalid auth config: invalid identity config\" wrap")
+}
+
+// TestSetupTerraformAuth_MergedConfigError_IdentityConfigNoCandidateStillWraps verifies
+// the pre-existing behavior is preserved when no profile defines the missing identity:
+// setupTerraformAuth must still fall back to the flat ErrInvalidAuthConfig wrap.
+func TestSetupTerraformAuth_MergedConfigError_IdentityConfigNoCandidateStillWraps(t *testing.T) {
+	tmpDir := setupExecProfileFallbackFixture(t)
+
+	origGetter := defaultMergedAuthConfigGetter
+	t.Cleanup(func() { defaultMergedAuthConfigGetter = origGetter })
+	defaultMergedAuthConfigGetter = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
+		return nil, errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+			WithContext("identity", "totally-unknown-identity").
+			WithExitCode(1).
+			Err()
+	}
+
+	atmosConfig := schema.AtmosConfiguration{CliConfigPath: tmpDir}
+	info := schema.ConfigAndStacksInfo{Stack: "core-ue2-auto", ComponentFromArg: "vpc"}
+
+	_, err := setupTerraformAuth(&atmosConfig, &info)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig),
+		"no candidate profile → original wrap must be preserved")
 }

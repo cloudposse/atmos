@@ -13,6 +13,8 @@ import (
 // TestMetadataNameInheritance tests that metadata.name is properly inherited from base components
 // and used in workspace_key_prefix calculation for Terraform backends.
 func TestMetadataNameInheritance(t *testing.T) {
+	t.Parallel()
+
 	trueVal := true
 	falseVal := false
 
@@ -151,6 +153,7 @@ func TestMetadataNameInheritance(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Setup AtmosConfiguration with metadata inheritance setting.
 			atmosConfig := &schema.AtmosConfiguration{
 				Stacks: schema.Stacks{
@@ -206,6 +209,8 @@ func TestMetadataNameInheritance(t *testing.T) {
 // TestMetadataTypeNotInherited tests that metadata.type is NOT inherited.
 // Component type is per-component and should be explicitly defined.
 func TestMetadataTypeNotInherited(t *testing.T) {
+	t.Parallel()
+
 	trueVal := true
 	falseVal := false
 
@@ -287,6 +292,7 @@ func TestMetadataTypeNotInherited(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Setup AtmosConfiguration with metadata inheritance setting.
 			atmosConfig := &schema.AtmosConfiguration{
 				Stacks: schema.Stacks{
@@ -338,6 +344,8 @@ func TestMetadataTypeNotInherited(t *testing.T) {
 // TestMetadataInheritsNotInherited tests that metadata.inherits is NOT inherited
 // (it's the meta-property defining inheritance itself).
 func TestMetadataInheritsNotInherited(t *testing.T) {
+	t.Parallel()
+
 	trueVal := true
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -373,6 +381,8 @@ func TestMetadataInheritsNotInherited(t *testing.T) {
 
 // TestMetadataInheritanceConfiguration tests the stacks.inherit.metadata configuration flag.
 func TestMetadataInheritanceConfiguration(t *testing.T) {
+	t.Parallel()
+
 	trueVal := true
 	falseVal := false
 
@@ -414,6 +424,7 @@ func TestMetadataInheritanceConfiguration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				Stacks: schema.Stacks{
 					Inherit: schema.StacksInherit{
@@ -455,6 +466,8 @@ func TestMetadataInheritanceConfiguration(t *testing.T) {
 
 // TestMetadataDeepMerge tests that metadata fields are deeply merged.
 func TestMetadataDeepMerge(t *testing.T) {
+	t.Parallel()
+
 	trueVal := true
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -499,6 +512,8 @@ func TestMetadataDeepMerge(t *testing.T) {
 // TestVersionedComponentUpgrade tests the primary use case: upgrading versioned components
 // while maintaining stable workspace_key_prefix via metadata.name inheritance.
 func TestVersionedComponentUpgrade(t *testing.T) {
+	t.Parallel()
+
 	// Simulate upgrade from vpc/v2 to vpc/v3.
 	tests := []struct {
 		name                       string
@@ -528,6 +543,7 @@ func TestVersionedComponentUpgrade(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			trueVal := true
 
 			atmosConfig := &schema.AtmosConfiguration{
@@ -644,6 +660,8 @@ func simpleMerge(base, override map[string]any) map[string]any {
 
 // TestIsMetadataInheritanceEnabled tests the StacksInherit.IsMetadataInheritanceEnabled() method.
 func TestIsMetadataInheritanceEnabled(t *testing.T) {
+	t.Parallel()
+
 	trueVal := true
 	falseVal := false
 
@@ -676,6 +694,7 @@ func TestIsMetadataInheritanceEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := tt.inherit.IsMetadataInheritanceEnabled()
 			assert.Equal(t, tt.expected, result)
 		})
@@ -684,6 +703,8 @@ func TestIsMetadataInheritanceEnabled(t *testing.T) {
 
 // TestMetadataFieldsInheritance tests that specific metadata fields are correctly inherited.
 func TestMetadataFieldsInheritance(t *testing.T) {
+	t.Parallel()
+
 	trueVal := true
 
 	tests := []struct {
@@ -826,6 +847,7 @@ func TestMetadataFieldsInheritance(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				Stacks: schema.Stacks{
 					Inherit: schema.StacksInherit{
@@ -859,6 +881,8 @@ func TestMetadataFieldsInheritance(t *testing.T) {
 
 // TestMetadataInheritanceWithEmptyMaps tests edge cases with empty maps.
 func TestMetadataInheritanceWithEmptyMaps(t *testing.T) {
+	t.Parallel()
+
 	trueVal := true
 
 	tests := []struct {
@@ -903,6 +927,7 @@ func TestMetadataInheritanceWithEmptyMaps(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				Stacks: schema.Stacks{
 					Inherit: schema.StacksInherit{
@@ -939,6 +964,8 @@ func TestMetadataInheritanceWithEmptyMaps(t *testing.T) {
 
 // TestGCSBackendMetadataName tests that GCS backend uses metadata.name for prefix.
 func TestGCSBackendMetadataName(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		component         string
@@ -982,6 +1009,7 @@ func TestGCSBackendMetadataName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{}
 
 			backendType, backendConfig, err := processTerraformBackend(
@@ -1008,6 +1036,8 @@ func TestGCSBackendMetadataName(t *testing.T) {
 
 // TestAzureBackendMetadataName tests that Azure backend uses metadata.name for key prefix.
 func TestAzureBackendMetadataName(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		component         string
@@ -1051,6 +1081,7 @@ func TestAzureBackendMetadataName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{}
 
 			backendType, backendConfig, err := processTerraformBackend(
@@ -1078,6 +1109,8 @@ func TestAzureBackendMetadataName(t *testing.T) {
 
 // TestMultiLevelInheritance tests inheritance through multiple levels.
 func TestMultiLevelInheritance(t *testing.T) {
+	t.Parallel()
+
 	trueVal := true
 
 	// Simulate grandparent -> parent -> child inheritance.
@@ -1151,6 +1184,7 @@ func TestMultiLevelInheritance(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				Stacks: schema.Stacks{
 					Inherit: schema.StacksInherit{
@@ -1177,6 +1211,8 @@ func TestMultiLevelInheritance(t *testing.T) {
 
 // TestReleaseTracksPattern tests the release tracks use case with metadata.name.
 func TestReleaseTracksPattern(t *testing.T) {
+	t.Parallel()
+
 	trueVal := true
 
 	// Test the release tracks pattern where components inherit from track-specific bases.
@@ -1191,6 +1227,7 @@ func TestReleaseTracksPattern(t *testing.T) {
 
 	for _, track := range tracks {
 		t.Run("track_"+track.trackName, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := &schema.AtmosConfiguration{
 				Stacks: schema.Stacks{
 					Inherit: schema.StacksInherit{
@@ -1254,6 +1291,8 @@ func TestReleaseTracksPattern(t *testing.T) {
 
 // TestComponentProcessorResult tests the ComponentProcessorResult struct.
 func TestComponentProcessorResult(t *testing.T) {
+	t.Parallel()
+
 	// Test that ComponentProcessorResult correctly holds metadata.
 	result := &ComponentProcessorResult{
 		BaseComponentMetadata: map[string]any{
@@ -1274,6 +1313,8 @@ func TestComponentProcessorResult(t *testing.T) {
 
 // TestFilterBaseMetadata tests the filterBaseMetadata helper function.
 func TestFilterBaseMetadata(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		input          map[string]any
@@ -1364,6 +1405,7 @@ func TestFilterBaseMetadata(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := filterBaseMetadata(tt.input)
 
 			// Verify all expected keys exist with correct values.

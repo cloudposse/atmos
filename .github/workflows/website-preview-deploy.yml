@@ -6,6 +6,16 @@ on:
     types:
       - completed
 
+# Serialize deploys per PR. Each preview deploys to its own s3://.../pr-<N>/ prefix with
+# `aws s3 sync --delete`, so two builds of the same PR finishing close together can race
+# (see the matching comment in website-deploy-prod.yml). Never cancel the in-flight run.
+# A workflow_run with no associated PR (manual dispatch of the build, or a fork PR) has
+# no pull_requests[0]; fall back to the run id so those never share one group. The job
+# below also refuses to deploy in that case.
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.id }}
+  cancel-in-progress: false
+
 env:
   AWS_REGION: us-east-2
   IAM_ROLE_ARN: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
@@ -21,8 +31,11 @@ permissions:
 
 jobs:
   website-deploy-preview:
-    # Do not deploy the website to the preview environment if the PR has the label 'website-no-deploy' or the workflow run failed
-    if: ${{ github.event.workflow_run.conclusion == 'success' && !contains(github.event.workflow_run.pull_requests.*.labels.*.name, 'website-no-deploy')  }}
+    # Do not deploy the website to the preview environment if the workflow run failed, if
+    # there is no associated PR (manual dispatch of the build, or a fork PR: an empty PR
+    # number would deploy to s3://.../pr-/ and check out an empty ref), or if the PR has
+    # the label 'website-no-deploy'.
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.pull_requests[0].number > 0 && !contains(github.event.workflow_run.pull_requests.*.labels.*.name, 'website-no-deploy') }}
     runs-on: ubuntu-latest
     environment:
       name: release
@@ -36,7 +49,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -85,10 +98,10 @@ jobs:
           github-token: ${{ steps.github-app.outputs.token }}
 
       - name: Copy Website to S3 Bucket PR Folder
-        run: |
-          ./.github/scripts/s3-deploy-with-charset.sh \
-            website/build \
-            s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/
+        uses: ./.github/actions/s3-deploy
+        with:
+          local-dir: website/build
+          s3-uri: s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/
 
       - name: Update deployment status
         uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1

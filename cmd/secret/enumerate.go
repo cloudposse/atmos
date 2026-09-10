@@ -5,11 +5,11 @@ import (
 	"sort"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
@@ -18,9 +18,10 @@ import (
 // scopeEntry is a single (stack, component) instance that declares one or more secrets, paired
 // with its resolved component section (declarations carry their derived scope after stack merge).
 type scopeEntry struct {
-	Stack     string
-	Component string
-	Section   map[string]any
+	Stack         string
+	Component     string
+	ComponentType string
+	Section       map[string]any
 }
 
 // enumerateScopesFn is a seam so tests can inject scope entries without real stack processing.
@@ -66,7 +67,8 @@ func enumerateSecretScopes(facet secretScope) ([]scopeEntry, *schema.AtmosConfig
 
 // collectSecretScopeEntries traverses the describe-stacks map
 // (stack -> components -> <type> -> component -> section) and keeps the instances that declare
-// secrets, optionally narrowed to a single component. Entries are sorted by stack then component.
+// secrets, optionally narrowed to a single component. Entries are sorted by stack, component,
+// then component type so a name shared across component types has deterministic ordering.
 func collectSecretScopeEntries(stacksMap map[string]any, componentFilter string) []scopeEntry {
 	var entries []scopeEntry
 	for stackName, raw := range stacksMap {
@@ -81,7 +83,10 @@ func collectSecretScopeEntries(stacksMap map[string]any, componentFilter string)
 		if entries[i].Stack != entries[j].Stack {
 			return entries[i].Stack < entries[j].Stack
 		}
-		return entries[i].Component < entries[j].Component
+		if entries[i].Component != entries[j].Component {
+			return entries[i].Component < entries[j].Component
+		}
+		return entries[i].ComponentType < entries[j].ComponentType
 	})
 	return entries
 }
@@ -94,7 +99,7 @@ func secretEntriesInStack(stackName string, stackMap map[string]any, componentFi
 		return nil
 	}
 	var entries []scopeEntry
-	for _, typeRaw := range comps {
+	for componentType, typeRaw := range comps {
 		typeMap, ok := typeRaw.(map[string]any)
 		if !ok {
 			continue
@@ -110,7 +115,7 @@ func secretEntriesInStack(stackName string, stackMap map[string]any, componentFi
 			if len(secrets.ExtractDeclarations(section)) == 0 {
 				continue
 			}
-			entries = append(entries, scopeEntry{Stack: stackName, Component: compName, Section: section})
+			entries = append(entries, scopeEntry{Stack: stackName, Component: compName, ComponentType: componentType, Section: section})
 		}
 	}
 	return entries
@@ -126,14 +131,20 @@ func stackCompletion(_ *cobra.Command, _ []string, _ string) ([]string, cobra.Sh
 	return distinct(entries, func(e scopeEntry) string { return e.Stack }), cobra.ShellCompDirectiveNoFileComp
 }
 
-// componentCompletion returns the distinct components that declare secrets in the currently
-// selected --stack (read from viper, so it reflects a value just chosen via the stack prompt).
-func componentCompletion(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-	entries, _, err := enumerateScopesFn(secretScope{Stack: viper.GetString("stack")})
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
+// componentCompletionForStack returns a completion function scoped to the given stack, filtering
+// directly on the caller's resolved value instead of reading a stack from viper. Used by the
+// missing --component prompt (requireScopeComponent), which already knows the resolved stack
+// (whether it came from a flag or was just chosen interactively) — passing it in directly avoids
+// needing to mirror it into global viper state, which would leak across command invocations (see
+// docs/fixes for the incident this replaced).
+func componentCompletionForStack(stack string) flags.CompletionFunc {
+	return func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		entries, _, err := enumerateScopesFn(secretScope{Stack: stack})
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return distinct(entries, func(e scopeEntry) string { return e.Component }), cobra.ShellCompDirectiveNoFileComp
 	}
-	return distinct(entries, func(e scopeEntry) string { return e.Component }), cobra.ShellCompDirectiveNoFileComp
 }
 
 // checkStackSopsCollisions enumerates a stack's secret-declaring instances and verifies their SOPS

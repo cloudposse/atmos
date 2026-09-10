@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/vendor"
+	"github.com/cloudposse/atmos/tests"
 )
 
 var (
@@ -547,9 +547,7 @@ func TestCopyFile_FailCreateDir(t *testing.T) {
 // TestCopyFile_FailChmod simulates failure when setting file permissions.
 // If the patch doesn't take effect, the test will be skipped.
 func TestCopyFile_FailChmod(t *testing.T) {
-	if runtime.GOARCH == "arm64" {
-		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
-	}
+	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.ApplyFunc to mock stdlib/vendor functions")
 
 	patches := gomonkey.ApplyFunc(os.Chmod, func(name string, mode os.FileMode) error {
 		return errSimulatedChmodFailure
@@ -664,9 +662,7 @@ func (fde fakeDirEntryWithInfo) Info() (os.FileInfo, error) { return fde.info, n
 
 // TestProcessPrefixEntry_FailMkdir simulates an error when creating a directory in processPrefixEntry.
 func TestProcessPrefixEntry_FailMkdir(t *testing.T) {
-	if runtime.GOARCH == "arm64" {
-		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
-	}
+	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.ApplyFunc to mock stdlib/vendor functions")
 
 	srcDir := t.TempDir()
 	dstDir := t.TempDir()
@@ -703,9 +699,7 @@ func TestProcessPrefixEntry_FailMkdir(t *testing.T) {
 
 // TestCopyToTargetWithPatterns_UseCpCopy ensures that when no inclusion/exclusion patterns are defined, the cp.Copy branch is used.
 func TestCopyToTargetWithPatterns_UseCpCopy(t *testing.T) {
-	if runtime.GOARCH == "arm64" {
-		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
-	}
+	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.ApplyFunc to mock stdlib/vendor functions")
 
 	srcDir := t.TempDir()
 	dstDir := t.TempDir()
@@ -769,9 +763,7 @@ func TestGetMatchesForPattern_ShallowNoMatches(t *testing.T) {
 
 // TestProcessMatch_RelPathError simulates an error in computing the relative path in processMatch.
 func TestProcessMatch_RelPathError(t *testing.T) {
-	if runtime.GOARCH == "arm64" {
-		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
-	}
+	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.ApplyFunc to mock stdlib/vendor functions")
 
 	srcDir := "/dummy/src"
 	dstPath := "/dummy/dst"

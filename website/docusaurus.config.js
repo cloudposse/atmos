@@ -437,7 +437,11 @@ const config = {
         [
             'docusaurus-plugin-sentry',
             {
-              DSN: 'https://b022344b0e7cc96f803033fff3b377ee@o56155.ingest.us.sentry.io/4507472203087872',
+              // docusaurus-plugin-sentry v2 interpolates this value verbatim into
+              // https://js.sentry-cdn.com/<value>.min.js, so it must be the Sentry Loader
+              // Script public key (the user-info part of the DSN), NOT the full DSN. Passing
+              // the DSN produced a bogus URL that 404s and is CORS-blocked in the browser.
+              DSN: 'b022344b0e7cc96f803033fff3b377ee',
             },
         ],
         [
@@ -451,6 +455,9 @@ const config = {
         ],
         [
             path.resolve(__dirname, 'plugins', 'doc-release-data'), {}
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'fetch-security-posture'), {}
         ],
         [
             path.resolve(__dirname, 'plugins', 'docusaurus-plugin-llms-txt'),

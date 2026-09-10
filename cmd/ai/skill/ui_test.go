@@ -66,3 +66,23 @@ func resetFlagChangedForTest(t *testing.T, cmd *cobra.Command, name string) {
 	require.NoError(t, flag.Value.Set(flag.DefValue))
 	flag.Changed = false
 }
+
+// resetInstallCmdFlagsForTest resets every flag registered on the
+// package-level installCmd singleton (see install.go's init) back to
+// default/unchanged. A flag left Changed=true by an earlier test -- whether
+// via Flags().Set, which marks Changed, or even via a "reset" helper that
+// itself calls Flags().Set to restore a default and so also marks
+// Changed=true -- silently affects a later test's own run under
+// -shuffle=on, e.g. --client/--scope/--path leaking to change which skills
+// are considered already installed or where distribution happens.
+func resetInstallCmdFlagsForTest(t *testing.T) {
+	t.Helper()
+
+	resetFlagChangedForTest(t, installCmd, "force")
+	resetFlagChangedForTest(t, installCmd, "yes")
+	resetFlagChangedForTest(t, installCmd, "path")
+	resetFlagChangedForTest(t, installCmd, "all-clients")
+	resetFlagChangedForTest(t, installCmd, scopeFlag)
+	resetFlagChangedForTest(t, installCmd, "global")
+	resetStringSliceFlagForTest(t, installCmd)
+}

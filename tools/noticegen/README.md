@@ -28,7 +28,12 @@ go run . <repo-root> [output-path]
     per-module table and `googlecloud.go` for the generic
     `cloud.google.com/go[/*]` rule (one rule covers every submodule, since
     they all share a predictable tag/URL shape).
-4. Renders `NOTICE`, grouped by license family: Apache-2.0 and BSD sections
+4. Fetches the repository's description live from the GitHub API
+    (`GET /repos/cloudposse/atmos`) for NOTICE's tagline, and stamps the
+    copyright line with the current year -- both regenerated fresh every run
+    instead of hand-maintained, so they can't drift or go stale the way a
+    literal string does. See `repo.go`.
+5. Renders `NOTICE`, grouped by license family: Apache-2.0 and BSD sections
     are always present (even if empty); MPL-2.0 and MIT sections only appear
     when there's at least one matching dependency. Other license families
     (ISC, ...) are counted in the summary but not rendered as their own
@@ -45,6 +50,7 @@ overrides:
 | `LICENSE_GOOS`          | `linux` | Build target `go-licenses`/`go list` scan under |
 | `LICENSE_GOARCH`        | `amd64` | ditto                                            |
 | `LICENSE_CGO_ENABLED`   | `1`     | ditto                                            |
+| `GH_TOKEN` / `GITHUB_TOKEN` (optional) | unset | Authenticates the GitHub API description fetch, avoiding the unauthenticated 60 req/hour rate limit; `GH_TOKEN` takes precedence, matching the `gh` CLI |
 
 ## Tests
 

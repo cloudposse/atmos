@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	stdio "io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -17,7 +20,10 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
+	"github.com/cloudposse/atmos/pkg/pro/dtos"
+	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -216,6 +222,161 @@ func TestExecuteListInstancesCmd_UploadPath(t *testing.T) {
 
 	// Error is expected (config load will fail).
 	assert.Error(t, err)
+}
+
+// TestExecuteListInstancesCmd_ProGateWithoutUpload is the regression test for
+// spec.md's 2026-08-22 Clarifications session, which superseded FR-006c's
+// original --upload-only gating: a plain `atmos list instances` (no
+// --upload) run with Atmos Pro integration active (CI detected AND Pro
+// credentials configured, i.e. proexec.GateOpen true) must still attach the
+// instance list to the invocation's exec-metadata Data via
+// proexec.SetPendingAsyncData, without ever calling POST /api/v1/instances.
+func TestExecuteListInstancesCmd_ProGateWithoutUpload(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	preserved := telemetry.PreserveCIEnvVars()
+	t.Cleanup(func() { telemetry.RestoreCIEnvVars(preserved) })
+	t.Setenv("CI", "true")
+	t.Setenv("ATMOS_PRO_TOKEN", "test-token")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "table", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{BasePath: fixturePath}
+
+	require.NoError(t, ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:   info,
+		Cmd:    cmd,
+		Args:   []string{},
+		Format: "table",
+		Upload: false,
+	}))
+
+	// Drain the pending data through the real exec-metadata consumer to prove
+	// it was actually set, mirroring TestUploadInstancesWithDeps_SetsPendingAsyncDataForExecMetadata.
+	var received []dtos.ExecUploadRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/atmos/exec") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var req dtos.ExecUploadRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		received = append(received, req)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	defer server.Close()
+
+	proExecConfig := &schema.AtmosConfiguration{}
+	proExecConfig.Settings.Pro.BaseURL = server.URL
+	proExecConfig.Settings.Pro.Token = "test-token"
+	proexec.SetAtmosConfig(proExecConfig)
+	t.Cleanup(func() { proexec.SetAtmosConfig(nil) })
+
+	proexec.CaptureAsync(&cobra.Command{Use: "list-instances"}, nil)
+
+	require.Len(t, received, 1)
+	require.NotNil(t, received[0].Data)
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(received[0].Data, &decoded))
+	assert.InEpsilon(t, float64(1), decoded["version"], 0)
+	instancesVal, ok := decoded["instances"].([]any)
+	require.True(t, ok, "data.instances must be an array")
+	assert.NotEmpty(t, instancesVal)
+}
+
+// TestExecuteListInstancesCmd_NoUploadNoProGate_NoPendingData proves the
+// negative half of the 2026-08-22 gating: when NEITHER --upload NOR Atmos
+// Pro integration (proexec.GateOpen) is active, no instance list is
+// computed and no data is handed to the exec-metadata consumer.
+func TestExecuteListInstancesCmd_NoUploadNoProGate_NoPendingData(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	preserved := telemetry.PreserveCIEnvVars()
+	t.Cleanup(func() { telemetry.RestoreCIEnvVars(preserved) })
+	os.Unsetenv("CI")
+
+	origProToken, hadProToken := os.LookupEnv("ATMOS_PRO_TOKEN")
+	t.Cleanup(func() {
+		if hadProToken {
+			os.Setenv("ATMOS_PRO_TOKEN", origProToken)
+		} else {
+			os.Unsetenv("ATMOS_PRO_TOKEN")
+		}
+	})
+	os.Unsetenv("ATMOS_PRO_TOKEN")
+
+	// proexec.pendingAsyncData is package-level global state, read-and-cleared
+	// only by CaptureAsync itself (see proexec/async.go). Another test in this
+	// binary that exercises uploadInstancesWithDeps's success path (e.g.
+	// TestUploadInstancesWithDeps_Success) sets it as a side effect and never
+	// calls CaptureAsync to consume it -- that's fine in production, where
+	// cmd/root.go's post-run hook always calls CaptureAsync once per process,
+	// but leaves it dangling for whichever test happens to call CaptureAsync
+	// next. Reset explicitly so this test's own assertion doesn't depend on
+	// what ran before it in the same test binary.
+	proexec.SetPendingAsyncData(nil)
+
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "table", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{BasePath: fixturePath}
+
+	require.NoError(t, ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:   info,
+		Cmd:    cmd,
+		Args:   []string{},
+		Format: "table",
+		Upload: false,
+	}))
+
+	var received []dtos.ExecUploadRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/atmos/exec") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var req dtos.ExecUploadRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		received = append(received, req)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	defer server.Close()
+
+	// Enable CI+Pro only for this send step, so CaptureAsync itself fires and
+	// we can observe whether ExecuteListInstancesCmd left any pending data
+	// behind — independent of whether CaptureAsync's own gate would have
+	// fired during the (CI/Pro-less) ExecuteListInstancesCmd call above.
+	t.Setenv("CI", "true")
+	t.Setenv("ATMOS_PRO_TOKEN", "test-token")
+	proExecConfig := &schema.AtmosConfiguration{}
+	proExecConfig.Settings.Pro.BaseURL = server.URL
+	proExecConfig.Settings.Pro.Token = "test-token"
+	proexec.SetAtmosConfig(proExecConfig)
+	t.Cleanup(func() { proexec.SetAtmosConfig(nil) })
+
+	proexec.CaptureAsync(&cobra.Command{Use: "list-instances"}, nil)
+
+	require.Len(t, received, 1)
+	assert.Nil(t, received[0].Data)
 }
 
 // TestParseColumnsFlag tests parsing column specifications from CLI flags.

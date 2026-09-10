@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	ckerrors "github.com/cockroachdb/errors"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 	versionmanager "github.com/cloudposse/atmos/pkg/version/manager"
 )
@@ -281,6 +283,57 @@ func TestPlanDefaultsAndErrors(t *testing.T) {
 		}
 		if len(clean.inputs) != 1 {
 			t.Fatalf("expected the rule after the broken one to still be planned, got %d calls", len(clean.inputs))
+		}
+	})
+
+	// Guards against the field-test finding that a broken rule silently
+	// discarded every other rule's successfully planned changes with no
+	// indication anything was withheld: apply stays atomic (no partial
+	// writes), but the error must now name what got held back.
+	t.Run("hints at changes withheld by another rule's failure", func(t *testing.T) {
+		resetRegistryForTest(t)
+		cfg := testConfig(t)
+		sentinel := errors.New("boom")
+		broken := &fakeManager{name: "broken", err: sentinel}
+		clean := &fakeManager{name: "clean", changes: []FileChange{{Path: "clean.yaml"}}}
+		Register(broken)
+		Register(clean)
+		cfg.Version.Files = []schema.VersionFileRule{
+			{Manager: "broken"},
+			{Manager: "clean"},
+		}
+
+		planned, err := Plan(context.Background(), &RunOptions{Config: cfg})
+		if planned != nil {
+			t.Fatalf("Plan changes = %#v, want nil (apply must stay atomic)", planned)
+		}
+		if !errors.Is(err, sentinel) {
+			t.Fatalf("Plan error = %v, want sentinel", err)
+		}
+		hints := ckerrors.GetAllHints(err)
+		found := false
+		for _, hint := range hints {
+			if strings.Contains(hint, "clean.yaml") && strings.Contains(hint, "clean") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("Plan error hints = %#v, want a hint naming the withheld clean.yaml (clean) change", hints)
+		}
+	})
+
+	t.Run("no withheld-changes hint when every rule fails", func(t *testing.T) {
+		resetRegistryForTest(t)
+		cfg := testConfig(t)
+		sentinel := errors.New("boom")
+		Register(&fakeManager{name: "broken", err: sentinel})
+		cfg.Version.Files = []schema.VersionFileRule{{Manager: "broken"}}
+
+		_, err := Plan(context.Background(), &RunOptions{Config: cfg})
+		for _, hint := range ckerrors.GetAllHints(err) {
+			if strings.Contains(hint, "withheld") {
+				t.Fatalf("Plan error hints = %#v, want no withheld-changes hint when nothing was planned", hint)
+			}
 		}
 	})
 }

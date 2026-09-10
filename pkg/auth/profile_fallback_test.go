@@ -16,6 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/reexec"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // stubRunForm replaces runForm for a single test with a function that returns
@@ -114,7 +115,7 @@ func TestMaybeOfferProfileFallback_LoopGuardSkips(t *testing.T) {
 	t.Setenv(reexec.DepthEnvVar, "1")
 
 	m := newFallbackManager(tmpDir)
-	err := m.maybeOfferProfileFallback(context.Background(), "root-admin")
+	err := m.maybeOfferProfileFallback(context.Background(), "root-admin", ReExecContext{})
 	assert.NoError(t, err, "loop guard must short-circuit without error")
 }
 
@@ -127,7 +128,7 @@ func TestMaybeOfferProfileFallback_ExplicitFlagSkips(t *testing.T) {
 	os.Args = []string{"atmos", "--profile", "alpha", "terraform", "plan"}
 
 	m := newFallbackManager(tmpDir)
-	err := m.maybeOfferProfileFallback(context.Background(), "dev-user")
+	err := m.maybeOfferProfileFallback(context.Background(), "dev-user", ReExecContext{})
 	assert.NoError(t, err, "explicit --profile must suppress the fallback")
 }
 
@@ -139,7 +140,7 @@ func TestMaybeOfferProfileFallback_ExplicitEnvSkips(t *testing.T) {
 	t.Setenv("ATMOS_PROFILE", "alpha")
 
 	m := newFallbackManager(tmpDir)
-	err := m.maybeOfferProfileFallback(context.Background(), "dev-user")
+	err := m.maybeOfferProfileFallback(context.Background(), "dev-user", ReExecContext{})
 	assert.NoError(t, err, "ATMOS_PROFILE must suppress the fallback")
 }
 
@@ -150,7 +151,7 @@ func TestMaybeOfferProfileFallback_NoCandidatesReturnsNil(t *testing.T) {
 	tmpDir := profileFallbackFixture(t)
 
 	m := newFallbackManager(tmpDir)
-	err := m.maybeOfferProfileFallback(context.Background(), "nonexistent")
+	err := m.maybeOfferProfileFallback(context.Background(), "nonexistent", ReExecContext{})
 	assert.NoError(t, err, "no candidate profile → no fallback error")
 }
 
@@ -164,7 +165,7 @@ func TestMaybeOfferProfileFallback_NonInteractiveEnrichesError(t *testing.T) {
 	// isInteractive() returns false without --interactive — this is the
 	// non-interactive path.
 	m := newFallbackManager(tmpDir)
-	err := m.maybeOfferProfileFallback(context.Background(), "root-admin")
+	err := m.maybeOfferProfileFallback(context.Background(), "root-admin", ReExecContext{})
 	require.Error(t, err, "non-interactive must return an enriched error")
 	assert.ErrorIs(t, err, errUtils.ErrIdentityNotFound)
 
@@ -242,7 +243,7 @@ func TestReExecWithProfile_BuildsArgvAndEnv(t *testing.T) {
 	os.Args = []string{"atmos", "terraform", "plan", "--stack", "dev"}
 	t.Cleanup(func() { os.Args = origArgs })
 
-	err := reExecWithProfile("developer")
+	err := reExecWithProfile("developer", ReExecContext{})
 	require.ErrorIs(t, err, errExecMockCalled)
 
 	assert.NotEmpty(t, gotArgv0, "argv0 (binary path) must be populated")
@@ -281,11 +282,204 @@ func TestReExecWithProfile_NoExtraArgs(t *testing.T) {
 	os.Args = []string{"atmos"}
 	t.Cleanup(func() { os.Args = origArgs })
 
-	err := reExecWithProfile("prod")
+	err := reExecWithProfile("prod", ReExecContext{})
 	require.ErrorIs(t, err, errExecMockCalled)
 
 	require.Len(t, gotArgs, 3)
 	assert.Equal(t, []string{"atmos", "--profile", "prod"}, gotArgs)
+}
+
+// reExecWithProfile injects component/stack values that were resolved via an
+// interactive prompt so the re-exec'd child doesn't have to re-prompt for
+// them. This is the regression guard for the "profile prompt causes
+// component/stack to be prompted twice" bug.
+func TestReExecWithProfile_InjectsPromptedComponentAndStack(t *testing.T) {
+	t.Cleanup(func() { reexec.Exec = originalExecFunc })
+
+	var gotArgs []string
+	reexec.Exec = func(_ string, argv []string, _ []string) error {
+		gotArgs = argv
+		return errExecMockCalled
+	}
+
+	origArgs := os.Args
+	os.Args = []string{"atmos", "terraform", "plan", "--ui"}
+	t.Cleanup(func() { os.Args = origArgs })
+
+	reExecCtx := ReExecContext{
+		Component:         "vpc",
+		ComponentPrompted: true,
+		Stack:             "core-ue2-auto",
+		StackPrompted:     true,
+	}
+	err := reExecWithProfile("managers", reExecCtx)
+	require.ErrorIs(t, err, errExecMockCalled)
+
+	assert.Contains(t, gotArgs, "vpc", "prompted component must be injected into the child argv")
+	assert.Contains(t, gotArgs, "--stack", "prompted stack flag must be injected into the child argv")
+	assert.Contains(t, gotArgs, "core-ue2-auto", "prompted stack value must be injected into the child argv")
+}
+
+// reExecWithProfile must NOT inject component/stack values the user already
+// typed on the command line — only values resolved via a prompt. Otherwise a
+// user-supplied component would be duplicated as a positional argument.
+func TestReExecWithProfile_DoesNotInjectUnpromptedValues(t *testing.T) {
+	t.Cleanup(func() { reexec.Exec = originalExecFunc })
+
+	var gotArgs []string
+	reexec.Exec = func(_ string, argv []string, _ []string) error {
+		gotArgs = argv
+		return errExecMockCalled
+	}
+
+	origArgs := os.Args
+	os.Args = []string{"atmos", "terraform", "plan", "vpc", "--stack", "core-ue2-auto"}
+	t.Cleanup(func() { os.Args = origArgs })
+
+	// Component/stack were resolved (e.g. from the command line), but not via
+	// a prompt, so ComponentPrompted/StackPrompted are false.
+	reExecCtx := ReExecContext{
+		Component: "vpc",
+		Stack:     "core-ue2-auto",
+	}
+	err := reExecWithProfile("managers", reExecCtx)
+	require.ErrorIs(t, err, errExecMockCalled)
+
+	// New argv: [atmos, --profile, managers, terraform, plan, vpc, --stack, core-ue2-auto].
+	require.Len(t, gotArgs, 8, "component/stack must not be duplicated: %v", gotArgs)
+}
+
+// reExecWithProfile treats ComponentPrompted and StackPrompted independently:
+// a mixed state (only one of the two prompted) must inject exactly the
+// prompted value, never the other, and never duplicate or drop either one.
+// This is the regression guard for the case the prior two tests didn't
+// cover — "both prompted" and "both unprompted" could both pass even if a
+// bug always injected/omitted the two fields together instead of tracking
+// them independently.
+func TestReExecWithProfile_MixedPromptedStates(t *testing.T) {
+	tests := []struct {
+		name              string
+		componentPrompted bool
+		stackPrompted     bool
+		wantArgs          []string
+	}{
+		{
+			name:              "neither prompted",
+			componentPrompted: false,
+			stackPrompted:     false,
+			wantArgs:          []string{"atmos", "--profile", "managers", "terraform", "plan"},
+		},
+		{
+			name:              "component only prompted",
+			componentPrompted: true,
+			stackPrompted:     false,
+			wantArgs:          []string{"atmos", "--profile", "managers", "terraform", "plan", "vpc"},
+		},
+		{
+			name:              "stack only prompted",
+			componentPrompted: false,
+			stackPrompted:     true,
+			wantArgs:          []string{"atmos", "--profile", "managers", "terraform", "plan", "--stack", "core-ue2-auto"},
+		},
+		{
+			name:              "both prompted",
+			componentPrompted: true,
+			stackPrompted:     true,
+			wantArgs:          []string{"atmos", "--profile", "managers", "terraform", "plan", "--stack", "core-ue2-auto", "vpc"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Cleanup(func() { reexec.Exec = originalExecFunc })
+
+			var gotArgs []string
+			reexec.Exec = func(_ string, argv []string, _ []string) error {
+				gotArgs = argv
+				return errExecMockCalled
+			}
+
+			origArgs := os.Args
+			os.Args = []string{"atmos", "terraform", "plan"}
+			t.Cleanup(func() { os.Args = origArgs })
+
+			reExecCtx := ReExecContext{
+				Component:         "vpc",
+				ComponentPrompted: tt.componentPrompted,
+				Stack:             "core-ue2-auto",
+				StackPrompted:     tt.stackPrompted,
+			}
+			err := reExecWithProfile("managers", reExecCtx)
+			require.ErrorIs(t, err, errExecMockCalled)
+
+			assert.Equal(t, tt.wantArgs, gotArgs, "complete child argv must match exactly")
+		})
+	}
+}
+
+// countOccurrences returns how many elements of argv equal val.
+func countOccurrences(argv []string, val string) int {
+	count := 0
+	for _, a := range argv {
+		if a == val {
+			count++
+		}
+	}
+	return count
+}
+
+// Authenticate builds its ReExecContext from the manager's own stackInfo, so a
+// component/stack resolved via an interactive prompt survives an
+// identity-not-found profile-fallback re-exec. This is the regression guard
+// for the manager.go bug where an empty ReExecContext{} was passed
+// unconditionally, silently dropping any prompted values before they ever
+// reached reExecWithProfile.
+func TestAuthenticate_PassesPromptedComponentAndStackToProfileFallback(t *testing.T) {
+	resetGlobalProfileState(t)
+	stubInteractiveTrue(t)
+	stubRunForm(t, nil) // huh.Select defaults the bound value to the first sorted option.
+
+	// Two profiles defining the same identity so promptForProfileSelection
+	// takes the multi-candidate huh.Select branch — the single-candidate
+	// confirm branch can't have its bound bool flipped from a stub (see
+	// TestConfirmSingleProfileSelection_DefaultNoIsAbort).
+	tmpDir := t.TempDir()
+	for _, name := range []string{"alpha", "beta"} {
+		dir := filepath.Join(tmpDir, "profiles", name)
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		yaml := `auth:
+  identities:
+    shared-admin:
+      kind: aws/user
+`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(yaml), 0o644))
+	}
+
+	t.Cleanup(func() { reexec.Exec = originalExecFunc })
+	var gotArgs []string
+	reexec.Exec = func(_ string, argv []string, _ []string) error {
+		gotArgs = argv
+		return errExecMockCalled
+	}
+
+	m := &manager{
+		cliConfigPath: tmpDir,
+		config:        &schema.AuthConfig{},
+		stackInfo: &schema.ConfigAndStacksInfo{
+			ComponentFromArg:  "vpc",
+			ComponentPrompted: true,
+			Stack:             "core-ue2-auto",
+			StackPrompted:     true,
+		},
+	}
+
+	_, err := m.Authenticate(context.Background(), "shared-admin")
+	require.ErrorIs(t, err, errExecMockCalled,
+		"the identity-not-found path must reach reExecWithProfile via the manager's own stackInfo")
+
+	assert.Equal(t, 1, countOccurrences(gotArgs, "vpc"), "prompted component must appear exactly once: %v", gotArgs)
+	assert.Equal(t, 1, countOccurrences(gotArgs, "--stack"), "prompted --stack flag must appear exactly once: %v", gotArgs)
+	assert.Equal(t, 1, countOccurrences(gotArgs, "core-ue2-auto"), "prompted stack value must appear exactly once: %v", gotArgs)
 }
 
 // anyProfileFallbackFixture creates profiles that exercise the identity-
@@ -468,6 +662,42 @@ func TestMaybeOfferAnyProfileFallback_Exported_LoopGuard(t *testing.T) {
 		"exported wrapper must respect the loop guard")
 }
 
+// MaybeOfferProfileFallbackForIdentity is the manager-independent entry point used by
+// exec-layer callers (terraform/helmfile/packer/native components) that hit an
+// invalid/missing identity before any AuthManager exists. It must satisfy the same
+// gating rules as the method it wraps, using only a cliConfigPath — no manager
+// construction required.
+func TestMaybeOfferProfileFallbackForIdentity_NoCandidatesReturnsNil(t *testing.T) {
+	resetGlobalProfileState(t)
+	tmpDir := profileFallbackFixture(t)
+
+	err := MaybeOfferProfileFallbackForIdentity(context.Background(), tmpDir, "nonexistent", ReExecContext{})
+	assert.NoError(t, err, "no candidate profile → no fallback error")
+}
+
+func TestMaybeOfferProfileFallbackForIdentity_LoopGuardSkips(t *testing.T) {
+	resetGlobalProfileState(t)
+	tmpDir := profileFallbackFixture(t)
+	t.Setenv(reexec.DepthEnvVar, "1")
+
+	err := MaybeOfferProfileFallbackForIdentity(context.Background(), tmpDir, "root-admin", ReExecContext{})
+	assert.NoError(t, err, "loop guard must short-circuit without error")
+}
+
+func TestMaybeOfferProfileFallbackForIdentity_NonInteractiveEnrichesError(t *testing.T) {
+	resetGlobalProfileState(t)
+	tmpDir := profileFallbackFixture(t)
+
+	err := MaybeOfferProfileFallbackForIdentity(context.Background(), tmpDir, "root-admin", ReExecContext{})
+	require.Error(t, err, "non-interactive must return an enriched error")
+	assert.ErrorIs(t, err, errUtils.ErrIdentityNotFound)
+
+	assert.True(t, hintsContain(err, "alpha"),
+		"enriched error hints must mention the profile that defines the identity")
+	assert.True(t, hintsContain(err, "root-admin"),
+		"enriched error hints must mention the requested identity")
+}
+
 // reExecWithProfile must strip --chdir/-C from the child argv so a relative
 // chdir applied to the parent is not re-applied against the already-changed
 // cwd. This is the regression guard for the chdir family of fixes documented
@@ -486,7 +716,7 @@ func TestReExecWithProfile_StripsChdirFromArgv(t *testing.T) {
 	os.Args = []string{"atmos", "--chdir", "/tmp", "auth", "login"}
 	t.Cleanup(func() { os.Args = origArgs })
 
-	err := reExecWithProfile("dev")
+	err := reExecWithProfile("dev", ReExecContext{})
 	require.ErrorIs(t, err, errExecMockCalled)
 
 	for i, a := range gotArgs {
@@ -523,7 +753,7 @@ func TestReExecWithProfile_FiltersChdirFromEnv(t *testing.T) {
 	os.Args = []string{"atmos", "auth", "login"}
 	t.Cleanup(func() { os.Args = origArgs })
 
-	err := reExecWithProfile("dev")
+	err := reExecWithProfile("dev", ReExecContext{})
 	require.ErrorIs(t, err, errExecMockCalled)
 
 	// FilterChdirEnv emits "ATMOS_CHDIR=" (empty) as an explicit override so the
@@ -768,7 +998,7 @@ func TestMaybeOfferProfileFallback_InteractiveUserAborted(t *testing.T) {
 	tmpDir := profileFallbackFixture(t)
 
 	m := newFallbackManager(tmpDir)
-	err := m.maybeOfferProfileFallback(context.Background(), "root-admin")
+	err := m.maybeOfferProfileFallback(context.Background(), "root-admin", ReExecContext{})
 	assert.ErrorIs(t, err, errUtils.ErrUserAborted,
 		"interactive + user aborts → whole fallback must return ErrUserAborted")
 }
@@ -783,7 +1013,7 @@ func TestMaybeOfferProfileFallback_InteractivePromptError(t *testing.T) {
 	tmpDir := profileFallbackFixture(t)
 
 	m := newFallbackManager(tmpDir)
-	err := m.maybeOfferProfileFallback(context.Background(), "root-admin")
+	err := m.maybeOfferProfileFallback(context.Background(), "root-admin", ReExecContext{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrUnsupportedInputType)
 }
@@ -827,7 +1057,7 @@ func TestMaybeOfferProfileFallback_InteractiveReExecFails(t *testing.T) {
 	}
 
 	m := newFallbackManager(tmpDir)
-	err := m.maybeOfferProfileFallback(context.Background(), "shared-id")
+	err := m.maybeOfferProfileFallback(context.Background(), "shared-id", ReExecContext{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to re-exec",
 		"re-exec failure must propagate through the interactive branch")

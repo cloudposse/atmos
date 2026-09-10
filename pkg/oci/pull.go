@@ -41,6 +41,19 @@ const (
 	ociLayerRetryMaxAttempts  = 3
 	ociLayerRetryInitialDelay = time.Second
 	ociLayerRetryMaxDelay     = 4 * time.Second
+
+	// The initial registry connection (remote.Get, resolving the manifest) can
+	// lose a race against a CI runner's own egress-firewall rule propagation --
+	// observed in production on Harden-Runner block-mode Windows runners: the
+	// WFP allow rule for the registry host is still being installed at the
+	// exact moment the TCP connect happens, producing a transient "forbidden by
+	// its access permissions" dial error milliseconds before the rule takes
+	// effect. Retry with the same bounded backoff already used for layer
+	// downloads, on the same auth (this is independent of, and runs before,
+	// the anonymous-auth fallback for rejected credentials).
+	ociManifestRetryMaxAttempts  = 3
+	ociManifestRetryInitialDelay = time.Second
+	ociManifestRetryMaxDelay     = 4 * time.Second
 )
 
 // opentofuModulePkgArtifactType is the OCI artifactType OpenTofu's native
@@ -61,6 +74,12 @@ var defaultFileSystem = filesystem.NewOSFileSystem()
 // Tests override this to simulate registry responses without spinning up an
 // httptest server. Production code must not reassign it.
 var remoteGet = remote.Get
+
+// ociManifestRetryConfig is the package-level retry config remoteGetWithRetry
+// uses. Tests override this with a zero-delay config to exercise retryable
+// paths without incurring real backoff delays. Production code must not
+// reassign it.
+var ociManifestRetryConfig = defaultOCIManifestRetryConfig()
 
 // ResolvedImage is the immutable registry identity selected for an OCI source.
 // Digest is the descriptor digest for the selected manifest; it is suitable for
@@ -189,7 +208,7 @@ func pullImage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, ref 
 
 	log.Info("Authenticating to OCI registry", "registry", registry, "method", authSource)
 
-	descriptor, err := remoteGet(ref, remote.WithAuth(authMethod), remote.WithContext(ctx))
+	descriptor, err := remoteGetWithRetry(ctx, ref, authMethod, ociManifestRetryConfig)
 	if err == nil {
 		return descriptor, nil
 	}
@@ -199,7 +218,7 @@ func pullImage(ctx context.Context, atmosConfig *schema.AtmosConfiguration, ref 
 	// credentials lack the required scope. Non-auth errors (DNS, TLS, timeouts,
 	// 5xx) skip retry — they need a different remediation.
 	if authMethod != authn.Anonymous && isOCIAuthRejection(err) {
-		anonDescriptor, anonErr := remoteGet(ref, remote.WithAuth(authn.Anonymous), remote.WithContext(ctx))
+		anonDescriptor, anonErr := remoteGetWithRetry(ctx, ref, authn.Anonymous, ociManifestRetryConfig)
 		if anonErr == nil {
 			log.Warn("OCI auth rejected, succeeded with anonymous fallback",
 				"registry", registry, "auth_attempted", authSource)
@@ -279,6 +298,61 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 	}
 
 	return nil
+}
+
+// remoteGetWithRetry calls remoteGet, retrying only transient connection-level
+// failures (see isRetryableOCIConnectError) on the same auth method. It does
+// not retry registry-level rejections (auth/status errors) -- those are
+// handled by pullImage's separate anonymous-auth fallback, one layer up.
+func remoteGetWithRetry(ctx context.Context, ref name.Reference, authMethod authn.Authenticator, retryConfig *schema.RetryConfig) (*remote.Descriptor, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	attempts := 0
+	var descriptor *remote.Descriptor
+	err := retry.WithPredicate(ctx, retryConfig, func() error {
+		attempts++
+		var getErr error
+		descriptor, getErr = remoteGet(ref, remote.WithAuth(authMethod), remote.WithContext(ctx))
+		if getErr != nil && ctx.Err() == nil && isRetryableOCIConnectError(getErr) && attempts < ociManifestRetryMaxAttempts {
+			log.Warn("Retrying OCI registry connection after transient failure", "attempt", attempts)
+		}
+		return getErr
+	}, func(err error) bool {
+		return ctx.Err() == nil && isRetryableOCIConnectError(err)
+	})
+	return descriptor, err
+}
+
+func defaultOCIManifestRetryConfig() *schema.RetryConfig {
+	maxAttempts := ociManifestRetryMaxAttempts
+	initialDelay := ociManifestRetryInitialDelay
+	maxDelay := ociManifestRetryMaxDelay
+	return &schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+	}
+}
+
+// isRetryableOCIConnectError reports whether err is a transient network-layer
+// failure (DNS, dial, connection reset/timeout) worth retrying before the
+// registry has even responded -- as opposed to a registry-level auth/status
+// rejection, which isOCIAuthRejection handles via anonymous fallback instead.
+func isRetryableOCIConnectError(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var transportErr *transport.Error
+	if errors.As(err, &transportErr) {
+		// The registry answered (even with an error status): not a
+		// connection-level failure, so leave it to the auth-fallback path.
+		return false
+	}
+	var networkErr net.Error
+	return errors.As(err, &networkErr)
 }
 
 // processLayerWithRetry retries only transient failures while opening an OCI

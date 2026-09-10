@@ -2,7 +2,6 @@ package exec
 
 import (
 	"errors"
-	"runtime"
 	"testing"
 
 	"github.com/agiledragon/gomonkey/v2"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestExtractAffectedNodeIDs(t *testing.T) {
@@ -42,12 +42,7 @@ func TestExtractAffectedNodeIDs(t *testing.T) {
 }
 
 func TestGetAffectedComponents(t *testing.T) {
-	// Skip on ARM64 due to gomonkey incompatibility with Apple Silicon.
-	// GoMonkey requires runtime code patching which macOS memory protection prevents.
-	// See: https://github.com/agiledragon/gomonkey/issues/169
-	if runtime.GOARCH == "arm64" {
-		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
-	}
+	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.ApplyFunc to mock ExecuteDescribeAffected*")
 
 	tests := []struct {
 		name          string
@@ -313,12 +308,7 @@ func TestGetAffectedComponents(t *testing.T) {
 }
 
 func TestExecuteTerraformAffected(t *testing.T) {
-	// Skip on ARM64 due to gomonkey incompatibility with Apple Silicon.
-	// GoMonkey requires runtime code patching which macOS memory protection prevents.
-	// See: https://github.com/agiledragon/gomonkey/issues/169
-	if runtime.GOARCH == "arm64" {
-		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
-	}
+	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.ApplyFunc to mock ExecuteDescribeAffectedWithTargetRepoPath")
 
 	tests := []struct {
 		name          string
@@ -492,12 +482,7 @@ func TestExecuteTerraformAffected(t *testing.T) {
 
 // Benchmark tests.
 func BenchmarkGetAffectedComponents(b *testing.B) {
-	// Skip on ARM64 due to gomonkey incompatibility with Apple Silicon.
-	// GoMonkey requires runtime code patching which macOS memory protection prevents.
-	// See: https://github.com/agiledragon/gomonkey/issues/169
-	if runtime.GOARCH == "arm64" {
-		b.Skip("Skipping gomonkey benchmark on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
-	}
+	tests.SkipIfGomonkeyUnsafe(b, "uses gomonkey.ApplyFunc to mock ExecuteDescribeAffectedWithTargetRepoPath")
 
 	args := &DescribeAffectedCmdArgs{
 		CLIConfig: &schema.AtmosConfiguration{},

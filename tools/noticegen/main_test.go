@@ -23,7 +23,7 @@ func TestRunDefaultsOutputPathUnderRoot(t *testing.T) {
 	t.Cleanup(func() { os.Args = origArgs })
 	os.Args = []string{"noticegen", root}
 
-	require.NoError(t, run())
+	require.NoError(t, runNotice(stubDescription))
 
 	_, err := os.Stat(filepath.Join(root, "NOTICE"))
 	require.NoError(t, err)
@@ -42,13 +42,17 @@ func TestRunExplicitOutputPath(t *testing.T) {
 	t.Cleanup(func() { os.Args = origArgs })
 	os.Args = []string{"noticegen", root, outPath}
 
-	require.NoError(t, run())
+	require.NoError(t, runNotice(stubDescription))
 
 	data, err := os.ReadFile(outPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "example.com/dep")
 }
 
+// TestRunPropagatesGenerateError covers run() itself (not the injected
+// runNotice core): an empty PATH fails at ensureGoLicenses, before the
+// network-dependent description fetch runs, so this exercises run()'s
+// production closure without ever making a real GitHub API call.
 func TestRunPropagatesGenerateError(t *testing.T) {
 	t.Setenv("PATH", "")
 

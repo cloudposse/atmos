@@ -104,6 +104,9 @@ validate:
     exclude:
       - "**/*.go"
       - "tests/snapshots/**/*.golden"
+      # specs/ holds Spec Kit planning docs (spec.md, plan.md, tasks.md, etc.)
+      # generated/edited outside repo formatting conventions; not shipped code.
+      - "specs/**"
     # If set to true, the default ignore patterns (like .git/*) will not be applied.
     ignore_defaults: false
     # Runs the checker without making any changes or producing output, useful for testing configuration.
@@ -301,15 +304,19 @@ docs:
 #
 # The cache is purely an accelerator: the workflow always installs exact pinned
 # versions, so it stays correct no matter what the cache already holds. The
-# trailing version token is a manual cache-bust — bump it to start from a clean
-# cache. restore_keys lets a bumped token still seed from the previous blob.
+# .tool-versions hash rolls the key automatically when tool pins change
+# (GitHub Actions cache entries are immutable, so without it a bump kept
+# serving the stale blob until someone hand-bumped the version token). The
+# version token remains as a manual cache-bust for anything the hash misses.
+# restore_keys let a rolled key still seed from the previous blob.
 ci:
   # Enable native CI summaries and failure annotations for repository validation.
   enabled: true
   cache:
     enabled: true
-    key: 'atmos-toolchain-{{.OS}}-{{.Arch}}-v2'
+    key: 'atmos-toolchain-{{.OS}}-{{.Arch}}-v2-{{ hashFiles ".tool-versions" }}'
     restore_keys:
+      - 'atmos-toolchain-{{.OS}}-{{.Arch}}-v2-'
       - 'atmos-toolchain-{{.OS}}-{{.Arch}}-'
 toolchain:
   registries:

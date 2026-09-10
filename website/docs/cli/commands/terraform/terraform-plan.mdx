@@ -264,6 +264,21 @@ components:
         ```
     </dd>
 
+    <dt>`--ui` <em>(optional)</em></dt>
+    <dd>
+        Enable streaming UI mode for real-time resource status display. Shows a Docker-build-style progress view with spinners, progress bar, and resource states.
+
+        The UI automatically disables when output is piped, in CI environments, or when running unsupported commands.
+
+        `--ui` errors when combined with `--max-concurrency` greater than `1`, since concurrently-scheduled components can't share one terminal for their full-screen UI sessions. Use `--max-concurrency 1` (the default) with `--ui`, or drop `--ui` to run concurrently.
+
+        ```shell
+        atmos terraform plan vpc -s dev --ui
+        ```
+
+        Use `--ui=false` to explicitly disable when enabled by config.
+    </dd>
+
     <dt>`--ci` <em>(optional)</em></dt>
     <dd>
         Enable CI mode for automated pipelines. When enabled, Atmos writes job summaries, CI output variables, and status checks based on the [`ci` configuration](/cli/configuration/ci) in `atmos.yaml`.

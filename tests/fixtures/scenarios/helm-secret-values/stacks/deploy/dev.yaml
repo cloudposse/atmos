@@ -1,0 +1,30 @@
+vars:
+  stage: dev
+
+secrets:
+  vars:
+    service-account-json:
+      store: gcp-secrets
+    plain-token:
+      store: gcp-secrets
+    signing-key:
+      store: gcp-secrets
+
+components:
+  helm:
+    secret-values:
+      metadata:
+        component: secret-values
+      chart: "."
+      namespace: example
+      values:
+        structured_service_account: !secret service-account-json
+        env:
+          - name: SERVICE_ACCOUNT_JSON
+            value: !secret service-account-json |raw
+          - name: CLIENT_EMAIL
+            value: !secret service-account-json | path ".client_email"
+          - name: PLAIN_TOKEN
+            value: !secret plain-token
+          - name: SIGNING_KEY
+            value: !secret signing-key

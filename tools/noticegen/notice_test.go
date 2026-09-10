@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,12 +21,12 @@ func TestRenderFullEntrySet(t *testing.T) {
 		{Module: "github.com/other/isc", URL: "https://example.com/isc/LICENSE", License: "ISC"},
 	}
 
-	got := Render(entries)
+	got := Render(entries, "Atmos - Universal Tool for DevOps and Cloud Automation")
 
-	want := `NOTICE
+	want := fmt.Sprintf(`NOTICE
 
 Atmos - Universal Tool for DevOps and Cloud Automation
-Copyright 2021-2025 Cloud Posse, LLC
+Copyright 2021-%d Cloud Posse, LLC
 
 This product includes software developed by Cloud Posse, LLC and the Atmos community.
 
@@ -90,7 +92,7 @@ listed above or check the dependency's repository.
 
 For more information about Atmos licensing, see:
   https://github.com/cloudposse/atmos
-`
+`, time.Now().Year())
 
 	assert.Equal(t, want, got)
 }
@@ -104,7 +106,7 @@ func TestRenderOmitsEmptyOptionalSections(t *testing.T) {
 		{Module: "github.com/apache/only", URL: "https://example.com/apache/LICENSE", License: "Apache-2.0"},
 	}
 
-	got := Render(entries)
+	got := Render(entries, "A test tagline.")
 
 	assert.Contains(t, got, "APACHE 2.0 LICENSED DEPENDENCIES")
 	assert.Contains(t, got, "BSD LICENSED DEPENDENCIES")
@@ -120,7 +122,7 @@ func TestRenderOmitsEmptyOptionalSections(t *testing.T) {
 }
 
 func TestRenderEmptyEntries(t *testing.T) {
-	got := Render(nil)
+	got := Render(nil, "A test tagline.")
 	assert.Contains(t, got, "APACHE 2.0 LICENSED DEPENDENCIES")
 	assert.Contains(t, got, "BSD LICENSED DEPENDENCIES")
 	assert.NotContains(t, got, "MOZILLA PUBLIC LICENSE")

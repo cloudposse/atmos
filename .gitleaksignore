@@ -1,0 +1,6 @@
+# Fingerprints gitleaks must ignore, in its native path:rule:line form.
+# These are deliberately fake private keys inside tests that exercise secret
+# masking; they are not credentials. Without this file every commit that
+# stages these files (including merges of main) fails the gitleaks hook.
+pkg/io/masker_test.go:private-key:272
+pkg/component/helm/secret_values_integration_test.go:private-key:25

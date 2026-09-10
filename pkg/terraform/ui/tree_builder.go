@@ -1,0 +1,531 @@
+package ui
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os/exec"
+	"sort"
+	"strings"
+
+	tfjson "github.com/hashicorp/terraform-json"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+// dotSeparator is the separator used to join address/reference path segments.
+const dotSeparator = "."
+
+// noOpAction represents a resource change with no effective action.
+const noOpAction = "no-op"
+
+// TreeBuildOptions groups the parameters needed to build a dependency tree from a planfile.
+type TreeBuildOptions struct {
+	PlanfilePath  string
+	TerraformPath string
+	WorkingDir    string
+	// Env is the component's effective environment (credentials, TF_DATA_DIR, backend
+	// config) assembled by the caller for the original plan/apply run - mirrors
+	// fetchAndDisplayOutputs. Without it this subprocess falls back to the Atmos process's
+	// own ambient environment, which can point at the wrong TF_DATA_DIR (so providers
+	// Terraform already installed for this component become invisible to `terraform show`)
+	// or lack credentials the provider schema lookup needs.
+	Env       []string
+	Stack     string
+	Component string
+}
+
+// BuildDependencyTree parses a planfile and builds the dependency tree.
+func BuildDependencyTree(ctx context.Context, opts *TreeBuildOptions) (*DependencyTree, error) {
+	defer perf.Track(nil, "terraform.ui.BuildDependencyTree")()
+
+	// Run terraform show -json planfile.
+	terraformPath, planfilePath := opts.TerraformPath, opts.PlanfilePath
+	cmd := exec.CommandContext(ctx, terraformPath, "show", "-json", planfilePath)
+	cmd.Dir = opts.WorkingDir
+	if len(opts.Env) > 0 {
+		cmd.Env = opts.Env
+	}
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, wrapShowCommandError(err)
+	}
+
+	var plan tfjson.Plan
+	if err := json.Unmarshal(output, &plan); err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
+	}
+
+	return buildTreeFromPlan(&plan, opts.Stack, opts.Component), nil
+}
+
+// wrapShowCommandError wraps a `terraform show` failure, distinguishing a process that never
+// started (ErrCommandStart) from one that ran and exited non-zero (ErrCommandFailed), and
+// including the subprocess's stderr - if any - so the real cause isn't reduced to an opaque
+// "exit status 1". Terraform/OpenTofu error output can carry backend or provider secrets
+// (e.g. a credential embedded in a backend-init error), so stderr is masked the same way
+// streamStderrToLog masks the main plan/apply subprocess's stderr before it reaches this
+// error's message - which callers log (see showPlanTree) and could otherwise leak into
+// terminal or CI logs.
+func wrapShowCommandError(err error) error {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return fmt.Errorf("%w: terraform show: %w", errUtils.ErrCommandStart, err)
+	}
+
+	stderr := strings.TrimSpace(iolib.MaskString(string(exitErr.Stderr)))
+	if stderr == "" {
+		return fmt.Errorf("%w: terraform show: %w", errUtils.ErrCommandFailed, err)
+	}
+	return fmt.Errorf("%w: terraform show: %w: %s", errUtils.ErrCommandFailed, err, stderr)
+}
+
+// buildTreeFromPlan builds a dependency tree from an already-parsed plan. It never fails:
+// any malformed resource change data is simply skipped or attached to the root.
+func buildTreeFromPlan(plan *tfjson.Plan, stack, component string) *DependencyTree {
+	tree := &DependencyTree{
+		Root:      &TreeNode{Address: "root"},
+		nodes:     make(map[string]*TreeNode),
+		Stack:     stack,
+		Component: component,
+	}
+
+	populateTreeNodes(tree, plan)
+
+	// Build parent-child relationships from dependencies.
+	if plan.Config != nil && plan.Config.RootModule != nil {
+		buildRelationships(tree, plan)
+	} else {
+		// No config available, attach all nodes to root.
+		attachAllToRoot(tree)
+	}
+
+	// Sort children at each level for consistent output.
+	sortChildren(tree.Root)
+
+	return tree
+}
+
+// populateTreeNodes creates tree nodes for all non-data, non-no-op resource changes in the plan.
+func populateTreeNodes(tree *DependencyTree, plan *tfjson.Plan) {
+	for _, rc := range plan.ResourceChanges {
+		// Skip data sources and no-op changes.
+		if rc.Mode == "data" {
+			continue
+		}
+
+		action := resourceChangeAction(rc)
+		if action == noOpAction {
+			continue
+		}
+
+		changes, unchangedCount := extractAttributeChanges(rc)
+		node := &TreeNode{
+			Address:            rc.Address,
+			Action:             action,
+			IsModule:           isModuleAddress(rc.Address),
+			Changes:            changes,
+			UnchangedAttrCount: unchangedCount,
+		}
+		tree.nodes[rc.Address] = node
+	}
+}
+
+// resourceChangeAction determines the action for a resource change, handling composite
+// actions like replace (delete+create).
+func resourceChangeAction(rc *tfjson.ResourceChange) string {
+	if rc.Change == nil {
+		return noOpAction
+	}
+
+	switch {
+	case len(rc.Change.Actions) == 2:
+		// Composite action: Terraform can emit ["delete", "create"] or ["create", "delete"]
+		// for replace operations. We represent this as "replace".
+		return "replace"
+	case len(rc.Change.Actions) > 0:
+		return string(rc.Change.Actions[0])
+	default:
+		return noOpAction
+	}
+}
+
+// isModuleAddress determines if this is a module node vs a resource within a module.
+// A module node has address like "module.vpc", while a resource within a module
+// has address like "module.vpc.aws_subnet.main" (contains a resource type/name after module path).
+func isModuleAddress(addr string) bool {
+	if !strings.HasPrefix(addr, "module"+dotSeparator) {
+		return false
+	}
+	// Count the parts: module.name = 2 parts (is module), module.name.type.name = 4+ parts (is resource).
+	// A pure module reference has exactly 2 parts: ["module", "name"].
+	// Anything with more parts is a resource within a module.
+	parts := strings.Split(addr, dotSeparator)
+	return len(parts) == 2
+}
+
+// stripInstanceKey removes a trailing count/for_each instance key (e.g. ["public"] or [0])
+// from a resource instance address, returning the base config-declared address. Config-level
+// dependency maps (built by extractDependencies from plan.Config, which has no notion of
+// instances) are keyed by this base address, while ResourceChanges addresses carry the
+// instance key, so this normalization is required before any dependsOn lookup.
+func stripInstanceKey(addr string) string {
+	var b strings.Builder
+	depth := 0
+	for _, r := range addr {
+		switch {
+		case r == '[':
+			depth++
+		case r == ']':
+			if depth > 0 {
+				depth--
+			}
+		case depth == 0:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// buildInstancesByBaseIndex indexes tree.nodes' instance addresses by their base (uninstanced)
+// address. A dependency on an entire count/for_each resource references the resource's base
+// address (Terraform has no syntax to depend on just one instance of a collection), so
+// resolving it needs a representative instance node — sorting each base's instances makes
+// resolveDependencyNode's choice of "first" deterministic.
+func buildInstancesByBaseIndex(tree *DependencyTree) map[string][]string {
+	instancesByBase := make(map[string][]string, len(tree.nodes))
+	for addr := range tree.nodes {
+		base := stripInstanceKey(addr)
+		instancesByBase[base] = append(instancesByBase[base], addr)
+	}
+	for _, addrs := range instancesByBase {
+		sort.Strings(addrs)
+	}
+	return instancesByBase
+}
+
+// resolveDependencyNode resolves a dependency reference address to a tree node: an exact
+// (already-instanced) match first, else — when dep is a count/for_each resource's base
+// address referencing the whole collection, since Terraform has no syntax to depend on just
+// one instance of it — the alphabetically-first instance of that resource in the change set,
+// so the dependency still anchors under a real node instead of falling back to root.
+func resolveDependencyNode(tree *DependencyTree, instancesByBase map[string][]string, dep string) *TreeNode {
+	if node, ok := tree.nodes[dep]; ok {
+		return node
+	}
+	instances := instancesByBase[dep]
+	if len(instances) == 0 {
+		return nil
+	}
+	return tree.nodes[instances[0]]
+}
+
+// attachAllToRoot attaches every node directly to the tree root (used when no config is available).
+func attachAllToRoot(tree *DependencyTree) {
+	for _, node := range tree.nodes {
+		node.Parent = tree.Root
+		tree.Root.Children = append(tree.Root.Children, node)
+	}
+}
+
+func buildRelationships(tree *DependencyTree, plan *tfjson.Plan) {
+	// Build a dependency map: resource -> resources it depends on.
+	dependsOn := make(map[string][]string)
+
+	// Extract dependencies from configuration.
+	extractDependencies(plan.Config.RootModule, "", dependsOn)
+
+	// Build reverse map: resource -> resources that depend on it.
+	dependedBy := make(map[string][]string)
+	for resource, deps := range dependsOn {
+		for _, dep := range deps {
+			dependedBy[dep] = append(dependedBy[dep], resource)
+		}
+	}
+
+	instancesByBase := buildInstancesByBaseIndex(tree)
+
+	// Find root resources (resources with no dependencies in our change set).
+	attached := make(map[string]bool)
+	for addr, node := range tree.nodes {
+		// dependsOn is keyed by the config-declared resource address (extractDependencies
+		// reads plan.Config, which has no instance keys), but addr here comes from
+		// ResourceChanges and carries a count/for_each instance key (e.g.
+		// aws_subnet.a["public"]). Without stripping it, every count/for_each instance
+		// misses its dependsOn entry and falls through to root, regardless of its real
+		// dependency chain.
+		deps := dependsOn[stripInstanceKey(addr)]
+		hasParentInChangeSet := false
+		for _, dep := range deps {
+			parentNode := resolveDependencyNode(tree, instancesByBase, dep)
+			if parentNode == nil {
+				continue
+			}
+			hasParentInChangeSet = true
+			// Find the first dependency that's in the change set and use it as parent.
+			node.Parent = parentNode
+			parentNode.Children = append(parentNode.Children, node)
+			attached[addr] = true
+			break
+		}
+		if !hasParentInChangeSet {
+			// This is a root-level resource.
+			node.Parent = tree.Root
+			tree.Root.Children = append(tree.Root.Children, node)
+			attached[addr] = true
+		}
+	}
+
+	// Attach any remaining unattached nodes to root.
+	for addr, node := range tree.nodes {
+		if !attached[addr] {
+			node.Parent = tree.Root
+			tree.Root.Children = append(tree.Root.Children, node)
+		}
+	}
+}
+
+func extractDependencies(module *tfjson.ConfigModule, prefix string, dependsOn map[string][]string) {
+	if module == nil {
+		return
+	}
+
+	// Process resources in this module.
+	for _, res := range module.Resources {
+		addr := res.Address
+		if prefix != "" {
+			addr = prefix + dotSeparator + addr
+		}
+
+		var deps []string
+
+		// Explicit depends_on.
+		deps = append(deps, res.DependsOn...)
+
+		// Implicit dependencies from expressions.
+		for _, expr := range res.Expressions {
+			deps = append(deps, extractReferences(expr, prefix)...)
+		}
+
+		if len(deps) > 0 {
+			dependsOn[addr] = deps
+		}
+	}
+
+	// Recursively process child modules.
+	for name, call := range module.ModuleCalls {
+		childPrefix := "module" + dotSeparator + name
+		if prefix != "" {
+			childPrefix = prefix + dotSeparator + childPrefix
+		}
+		if call.Module != nil {
+			extractDependencies(call.Module, childPrefix, dependsOn)
+		}
+	}
+}
+
+// extractReferences extracts resource address references from a Terraform expression,
+// filtering out variable/local references and normalizing module-qualified addresses.
+func extractReferences(expr *tfjson.Expression, prefix string) []string {
+	if expr == nil {
+		return nil
+	}
+
+	var refs []string
+	for _, ref := range expr.References {
+		// Filter out self-references and local values.
+		if strings.HasPrefix(ref, "var.") || strings.HasPrefix(ref, "local.") {
+			continue
+		}
+
+		if strings.HasPrefix(ref, "module.") {
+			ref = normalizeModuleReference(ref)
+		} else {
+			ref = normalizeResourceReference(ref, prefix)
+		}
+		refs = append(refs, ref)
+	}
+	return refs
+}
+
+// normalizeModuleReference collapses a module-qualified reference (e.g.
+// module.vpc.aws_subnet.main.id) down to the granularity tracked by the tree:
+// the module path for nested modules, or module.type.name for a single module.
+func normalizeModuleReference(ref string) string {
+	parts := strings.Split(ref, dotSeparator)
+
+	// Count how many "module" keywords we have.
+	// For nested modules (e.g., module.network.module.vpc.aws_subnet.main),
+	// we want to extract only the module path (module.network.module.vpc),
+	// not the resource within it.
+	// But for single modules (module.vpc.aws_subnet.main), we want the full resource address.
+	moduleCount := 0
+	lastModuleIdx := -1
+	for i, part := range parts {
+		if part == "module" {
+			moduleCount++
+			lastModuleIdx = i
+		}
+	}
+
+	if moduleCount > 1 {
+		// Nested module - extract the module path, plus the resource type/name
+		// that follows it when present (e.g. module.a.module.b.aws_subnet.main.id ->
+		// module.a.module.b.aws_subnet.main).
+		if lastModuleIdx < 0 || lastModuleIdx+1 >= len(parts) {
+			return ref
+		}
+		end := lastModuleIdx + 2 // Through the last module.<name>.
+		if end+2 <= len(parts) {
+			end += 2 // Also keep resource_type.resource_name when present.
+		}
+		return strings.Join(parts[:end], dotSeparator)
+	}
+
+	// Single module - extract module.name.resource_type.resource_name.
+	// Minimum for a module reference: module.name (2 parts).
+	// For a resource within a module: module.name.resource_type.resource_name (4+ parts).
+	switch {
+	case len(parts) >= 4:
+		// Extract the module path and resource address.
+		// e.g., module.vpc.aws_subnet.main.id -> module path is module.vpc,
+		// resource is aws_subnet.main.
+		return strings.Join(parts[:4], dotSeparator)
+	case len(parts) >= 2:
+		// Just a module reference (module.name) - keep as-is.
+		return parts[0] + dotSeparator + parts[1]
+	default:
+		return ref
+	}
+}
+
+// normalizeResourceReference strips the attribute path from a non-module reference,
+// keeping only resource_type.name, and applies the module prefix if present.
+func normalizeResourceReference(ref, prefix string) string {
+	parts := strings.Split(ref, dotSeparator)
+	if len(parts) >= 2 {
+		// Keep resource_type.name format.
+		ref = parts[0] + dotSeparator + parts[1]
+	}
+	// Add prefix for module context.
+	if prefix != "" {
+		ref = prefix + dotSeparator + ref
+	}
+	return ref
+}
+
+func sortChildren(node *TreeNode) {
+	if node == nil {
+		return
+	}
+
+	// Sort children by address.
+	sort.Slice(node.Children, func(i, j int) bool {
+		return node.Children[i].Address < node.Children[j].Address
+	})
+
+	// Recursively sort grandchildren.
+	for _, child := range node.Children {
+		sortChildren(child)
+	}
+}
+
+// extractAttributeChanges returns the changed top-level attributes for a resource, along
+// with a count of how many of its top-level attributes were present but unchanged (so
+// callers can render Terraform's own "# (N unchanged attributes hidden)" convention instead
+// of a diff-only view that gives no sense of how much of the resource stayed the same).
+func extractAttributeChanges(rc *tfjson.ResourceChange) (changes []*AttributeChange, unchangedCount int) {
+	if rc.Change == nil {
+		return nil, 0
+	}
+
+	// Parse before/after as maps.
+	beforeMap, _ := rc.Change.Before.(map[string]interface{})
+	afterMap, _ := rc.Change.After.(map[string]interface{})
+	unknownMap, _ := rc.Change.AfterUnknown.(map[string]interface{})
+	sensitiveMap, _ := rc.Change.AfterSensitive.(map[string]interface{})
+
+	forcesReplacement := extractForcesReplacement(rc.Change.ReplacePaths)
+	sortedKeys := sortedAttributeKeys(beforeMap, afterMap)
+	maps := attributeMaps{Before: beforeMap, After: afterMap, Unknown: unknownMap, Sensitive: sensitiveMap}
+
+	for _, key := range sortedKeys {
+		if change := buildAttributeChange(key, maps, forcesReplacement); change != nil {
+			changes = append(changes, change)
+		}
+	}
+
+	return changes, len(sortedKeys) - len(changes)
+}
+
+// extractForcesReplacement builds the set of top-level attribute names that force resource
+// replacement. ReplacePaths is a slice of paths, where each path is a slice of indexes
+// (strings or ints); for top-level attributes, the path is a single-element slice
+// containing the attribute name.
+func extractForcesReplacement(replacePaths []interface{}) map[string]bool {
+	forcesReplacement := make(map[string]bool)
+	for _, path := range replacePaths {
+		pathSlice, ok := path.([]interface{})
+		if !ok || len(pathSlice) == 0 {
+			continue
+		}
+		// The first element is the top-level attribute name.
+		if attrName, ok := pathSlice[0].(string); ok {
+			forcesReplacement[attrName] = true
+		}
+	}
+	return forcesReplacement
+}
+
+// sortedAttributeKeys returns the union of keys from the before/after maps, sorted for
+// consistent output.
+func sortedAttributeKeys(beforeMap, afterMap map[string]interface{}) []string {
+	allKeys := make(map[string]bool)
+	for k := range beforeMap {
+		allKeys[k] = true
+	}
+	for k := range afterMap {
+		allKeys[k] = true
+	}
+
+	sortedKeys := make([]string, 0, len(allKeys))
+	for k := range allKeys {
+		sortedKeys = append(sortedKeys, k)
+	}
+	sort.Strings(sortedKeys)
+	return sortedKeys
+}
+
+// attributeMaps bundles the before/after/unknown/sensitive maps parsed from a resource
+// change, so per-key lookups only need to pass a single value around.
+type attributeMaps struct {
+	Before, After, Unknown, Sensitive map[string]interface{}
+}
+
+// buildAttributeChange compares a single attribute's before/after value and returns the
+// AttributeChange if it changed, or nil if it's unchanged. Indexing a nil map returns the
+// zero value in Go, so maps.Unknown/maps.Sensitive may be nil without a separate nil check.
+func buildAttributeChange(key string, maps attributeMaps, forcesReplacement map[string]bool) *AttributeChange {
+	beforeVal := maps.Before[key]
+	afterVal := maps.After[key]
+
+	unknown, _ := maps.Unknown[key].(bool)
+	sensitive, _ := maps.Sensitive[key].(bool)
+
+	// Only include if the value changed.
+	if !valuesEqual(beforeVal, afterVal) || unknown {
+		return &AttributeChange{
+			Key:               key,
+			Before:            beforeVal,
+			After:             afterVal,
+			Unknown:           unknown,
+			Sensitive:         sensitive,
+			ForcesReplacement: forcesReplacement[key],
+		}
+	}
+	return nil
+}

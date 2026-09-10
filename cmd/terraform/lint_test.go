@@ -3,7 +3,6 @@ package terraform
 import (
 	"context"
 	"errors"
-	"runtime"
 	"strconv"
 	"testing"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/scanners/tflint"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestTerraformLintCommandSetup(t *testing.T) {
@@ -92,9 +92,7 @@ func TestTerraformLintAffectedArgsCopiesFlagsAndExecutionInfo(t *testing.T) {
 }
 
 func TestRunTerraformLintDispatchesDirectAndAffectedModes(t *testing.T) {
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		t.Skip("gomonkey binary patching is not supported on macOS ARM64")
-	}
+	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.NewPatches to mock lint dependencies")
 
 	newCommand := func() *cobra.Command {
 		cmd := &cobra.Command{Use: "lint"}
@@ -154,9 +152,7 @@ func TestRunTerraformLintDispatchesDirectAndAffectedModes(t *testing.T) {
 }
 
 func TestRunTerraformLintReturnsPreparationErrors(t *testing.T) {
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		t.Skip("gomonkey binary patching is not supported on macOS ARM64")
-	}
+	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.NewPatches to mock lint dependencies")
 
 	t.Run("validation", func(t *testing.T) {
 		want := errors.New("invalid config")

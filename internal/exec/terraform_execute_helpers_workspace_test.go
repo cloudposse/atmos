@@ -272,3 +272,112 @@ func TestExecuteMainTerraformCommand_FailedExplicitInitSkipsAfterInit(t *testing
 	}
 	require.Error(t, executeMainTerraformCommand(&atmosConfig, &info, []string{"-test.run=^$"}, "", false))
 }
+
+// TestExecuteMainTerraformCommand_LocalNeutralization_ExecMetadataOnly is the
+// reproduce-first regression test for FR-006e/research.md Decision 36: with
+// exec-metadata capture active (info.ExecMetadataDetailedExitCodeAdded true)
+// and ci.enabled NOT set — the common real-world case — a subprocess exiting
+// 2 ("changes detected") must still leave Atmos's own returned status
+// unaffected (nil, not an error), while info.ExecMetadataRawExitCode still
+// reports the real 2 so TerraformExecData.exit_code isn't silently
+// uninformative. The global atmosConfig.CI.Enabled switch itself must remain
+// untouched — this is a local, call-site-scoped remap, not a flip of it.
+func TestExecuteMainTerraformCommand_LocalNeutralization_ExecMetadataOnly(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:                        "plan",
+		Command:                           exePath,
+		ComponentEnvList:                  []string{"_ATMOS_TEST_EXIT_CODE=2"},
+		ExecMetadataDetailedExitCodeAdded: true,
+	}
+
+	execErr := executeMainTerraformCommand(&atmosConfig, &info, []string{"-test.run=^$"}, "", false)
+
+	assert.NoError(t, execErr, "exit code 2 from an exec-metadata-only -detailed-exitcode addition must be neutralized for Atmos's own returned status")
+	assert.Equal(t, 2, info.ExecMetadataRawExitCode, "the real subprocess exit code must still be recorded for TerraformExecData.exit_code")
+	assert.False(t, atmosConfig.CI.Enabled, "the global ci.enabled switch must remain untouched by this local neutralization")
+}
+
+// TestExecuteMainTerraformCommand_NoNeutralization_UploadStatusOnly verifies
+// the local neutralization does NOT apply when -detailed-exitcode's presence
+// is attributable to the legacy --upload-status flag rather than
+// exec-metadata capture (info.ExecMetadataDetailedExitCodeAdded false) — that
+// flag's pre-existing exit-2 propagation behavior must be unaffected by this
+// feature (research.md Decision 36).
+func TestExecuteMainTerraformCommand_NoNeutralization_UploadStatusOnly(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		Command:          exePath,
+		ComponentEnvList: []string{"_ATMOS_TEST_EXIT_CODE=2"},
+		// ExecMetadataDetailedExitCodeAdded intentionally left false.
+	}
+
+	execErr := executeMainTerraformCommand(&atmosConfig, &info, []string{"-test.run=^$"}, "", true)
+
+	require.Error(t, execErr, "exit code 2 must still propagate when -detailed-exitcode wasn't added for exec-metadata reasons")
+	var exitCodeErr errUtils.ExitCodeError
+	require.True(t, errors.As(execErr, &exitCodeErr))
+	assert.Equal(t, 2, exitCodeErr.Code)
+	assert.Equal(t, 2, info.ExecMetadataRawExitCode)
+}
+
+// TestExecuteMainTerraformCommand_GlobalCIRemap_StillTakesPrecedence verifies
+// that when atmosConfig.CI.Enabled is already true, the existing global
+// mapCIExitCode path neutralizes exit code 2 as before — this feature's local
+// neutralization is additive, not a replacement, and must not interfere with
+// the pre-existing global remap.
+func TestExecuteMainTerraformCommand_GlobalCIRemap_StillTakesPrecedence(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.CI.Enabled = true
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:                        "plan",
+		Command:                           exePath,
+		ComponentEnvList:                  []string{"_ATMOS_TEST_EXIT_CODE=2"},
+		ExecMetadataDetailedExitCodeAdded: true,
+	}
+
+	execErr := executeMainTerraformCommand(&atmosConfig, &info, []string{"-test.run=^$"}, "", false)
+
+	assert.NoError(t, execErr)
+	assert.Equal(t, 2, info.ExecMetadataRawExitCode)
+	assert.True(t, atmosConfig.CI.Enabled)
+}
+
+// TestCaptureExecMetadataSync_RawExitCodeSurvivesGlobalRemap is the
+// reproduce-first regression test reproducing the original production bug
+// (FR-006e): TerraformExecData.exit_code must report the real, pre-remap
+// subprocess exit code even when Atmos's own returned status/base-envelope
+// exit_code has been remapped/neutralized to success.
+func TestCaptureExecMetadataSync_RawExitCodeSurvivesGlobalRemap(t *testing.T) {
+	t.Setenv("CI", "true")
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg:        "cdn",
+		Stack:                   "plat-use2-dev",
+		ExecMetadataRawExitCode: 2, // set by executeMainTerraformCommand before any remap.
+	}
+
+	var gotExitCode int
+	parser := func(subCommand string, exitCode int, output string) any {
+		gotExitCode = exitCode
+		return map[string]any{"exit_code": exitCode}
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	// params.Err is nil, mirroring executeMainTerraformCommand's neutralized return
+	// for Atmos's own status — the base envelope's exit_code (FR-003) derives from
+	// this and correctly reports 0/success.
+	captureExecMetadataSync(atmosConfig, "plan", info, execMetadataSyncParams{Parser: parser, Err: nil})
+
+	assert.Equal(t, 2, gotExitCode, "TerraformExecData.exit_code must report the real pre-remap exit code, not the neutralized 0")
+}

@@ -1,5 +1,11 @@
 hashicorp/terraform 1.15.8
-opentofu/opentofu 1.12.5
+opentofu/opentofu 1.12.6
 peteretelej/tree v1.3.0
 sharkdp/bat v0.26.1
-tofu v1.11.6
+hashicorp/packer 1.16.0
+helm/helm v3.21.4
+helmfile/helmfile v1.7.4
+terraform-linters/tflint 0.64.0
+# tofu: intentional duplicate of opentofu/opentofu, pinned to the same
+# version. Required by CI's pinned atmos:1.215.0 image; see docs/fixes.
+tofu 1.12.6

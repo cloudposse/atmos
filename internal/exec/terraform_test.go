@@ -374,7 +374,10 @@ func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
 	// deterministic across OSes, so this assertion accepts any of the
 	// documented error messages those files can surface — previously the test
 	// was brittle and only passed when Linux/Windows happened to hit a file
-	// whose error contained "invalid".
+	// whose error contained "invalid". missing-import.yaml's error
+	// (errors.ErrStackImportNotFound wrapping errors.ErrFailedToFindImport)
+	// surfaced this same brittleness again in CI when the walk hit it first:
+	// neither sentinel's text matched any prior branch.
 	errMsg := strings.ToLower(err.Error())
 	assert.True(
 		t,
@@ -383,8 +386,10 @@ func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
 			strings.Contains(errMsg, "no matches found") ||
 			strings.Contains(errMsg, "function") ||
 			strings.Contains(errMsg, "template") ||
-			strings.Contains(errMsg, "missing properties"),
-		"expected an invalid-stacks error mentioning invalid/unclosed/template/function/no matches, got: %s",
+			strings.Contains(errMsg, "missing properties") ||
+			strings.Contains(errMsg, "import not found") ||
+			strings.Contains(errMsg, "failed to find import"),
+		"expected an invalid-stacks error mentioning invalid/unclosed/template/function/no matches/import not found, got: %s",
 		err.Error(),
 	)
 }

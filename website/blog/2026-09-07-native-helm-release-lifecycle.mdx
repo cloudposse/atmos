@@ -1,0 +1,76 @@
+---
+slug: native-helm-release-lifecycle
+title: "Declarative Release Lifecycle for Native Helm Components"
+authors: [shirkevich]
+tags: [feature, experimental]
+---
+
+Shipping a Helm release is rarely a single `helm upgrade --install`. A first install onto a cold cluster needs a generous timeout; a routine upgrade should fail fast. A broken upgrade should roll back and clean up the resources it left behind; a broken first install should uninstall itself so it doesn't wedge the next attempt. Some releases must wait for their Jobs to finish, others only for a readiness gate, and a few shouldn't wait at all. Getting this right usually means memorizing a pile of Helm flags and threading them into shell wrappers per command — and trusting that every environment runs the same incantation.
+
+<!--truncate-->
+
+Native Helm components in Atmos now let you declare that entire lifecycle as configuration — per operation — and inherit it the same way you inherit everything else in a stack.
+
+## The Problem
+
+Helm exposes the knobs — waiting, timeouts, atomic upgrades, cleanup-on-failure, history retention, waiting for Jobs, CRD handling, hook control — but only as flags on individual command invocations. That has two costs:
+
+- **The policy lives in shell history, not in your repo.** The intent behind a release ("wait for the watcher, keep ten revisions, roll back on a failed upgrade") is invisible to the next person and drifts between laptops, CI, and production because nothing pins it down.
+- **One flat set of flags can't express operation-specific intent.** A slow first install and a quick upgrade want different timeouts. Rollback is the right recovery for an upgrade but meaningless on a first install — there is no previous revision to return to. Uninstall-on-failure is the opposite: exactly right for a first install, wrong for an upgrade you want to preserve. A single set of flags forces one compromise across all three.
+
+## The Fix
+
+Native Helm components take a `release` policy with release-wide defaults and operation-specific overlays for `install`, `upgrade`, and `delete`. The whole tree deep-merges through your stack defaults, abstract/base components, and the concrete component — so a platform team can set org-wide defaults and individual components override only what they need. Explicit CLI flags still win at the highest precedence, so incident-time overrides remain a one-liner.
+
+The policy covers the lifecycle end to end:
+
+- **Wait strategy** — pick the status watcher, a hook-only wait, or legacy waiting, and optionally wait for Jobs to complete.
+- **Per-operation timeouts** — a long budget for the first install, a short one for upgrades and deletes.
+- **Failure recovery** — uninstall a failed first install; roll back a failed upgrade and clean up its partial resources.
+- **History retention, chart hooks, and CRD policy** — keep N revisions, enable or skip chart hooks, and choose whether CRDs are created or left alone.
+- **Dry run** — preview an apply without persisting a release or touching the cluster.
+
+Invalid combinations fail early and clearly — asking for `rollback` on an install, or a field that doesn't apply to the selected operation, is rejected before anything runs rather than silently ignored.
+
+## How to Use It
+
+Declare the lifecycle on the component. Release-wide settings sit at the top; `install`, `upgrade`, and `delete` refine them:
+
+```yaml
+components:
+  helm:
+    my-app:
+      chart: "."
+      namespace: my-app
+      release:
+        timeout: 4m
+        wait:
+          strategy: watcher
+        history:
+          max: 10
+        install:
+          timeout: 10m            # a cold-start install gets more room
+          on_failure: uninstall   # don't leave a wedged half-install behind
+        upgrade:
+          on_failure: rollback    # return to the last good revision
+          cleanup_on_failure: true
+        delete:
+          wait:
+            strategy: legacy
+      values:
+        replicaCount: 2
+```
+
+Atmos selects the operation for you and applies the matching overlay:
+
+```shell
+atmos helm apply my-app -s dev            # install or upgrade, per the release's state
+atmos helm apply my-app -s dev --dry-run  # preview, no release persisted
+atmos helm apply my-app -s dev --timeout 15m   # incident-time override wins
+```
+
+Native Helm support is still experimental (Atmos prints a 🧪 notice when you use it), so the surface may evolve — but the release policy above is what you'll reach for to make deployments deterministic across environments.
+
+## Get Involved
+
+The full contract lives in the native Helm release lifecycle PRD in the repo, and the `atmos-helm` skill documents day-to-day usage. If you run Helm through Atmos, try declaring a `release` policy on a component and tell us where the defaults or precedence surprised you — that feedback is what shapes the feature out of experimental.

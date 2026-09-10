@@ -996,11 +996,28 @@ Second test skill.
 	err = os.WriteFile(registryPath, registryData, 0o600)
 	require.NoError(t, err)
 
-	// Set force flag.
+	// Set force flag. Use Flags().Set (not Lookup().Value.Set): only the
+	// former marks the pflag as Changed, which viper's binding checks to
+	// decide precedence -- uninstall.go reads v.GetBool("force"), not the
+	// flag directly, so a Value.Set that leaves Changed=false can resolve to
+	// a stale/default value instead of "true" depending on what ran before
+	// this test under -shuffle=on. Every other force-flag test in this file
+	// already uses Flags().Set for this reason.
+	//
+	// uninstallCmd is a package-level singleton, so cleanup must restore both
+	// the original value and Changed state, not just set the value back to
+	// "false": Flags().Set always marks Changed=true regardless of the value
+	// passed, so a cleanup that only calls Flags().Set("force", "false")
+	// would leave Changed=true, making later shuffled tests treat "false" as
+	// an explicit CLI value instead of falling through to env/config.
 	forceFlag := uninstallCmd.Flags().Lookup("force")
-	if forceFlag != nil {
-		_ = forceFlag.Value.Set("true")
-	}
+	originalForceValue := forceFlag.Value.String()
+	originalForceChanged := forceFlag.Changed
+	require.NoError(t, uninstallCmd.Flags().Set("force", "true"))
+	t.Cleanup(func() {
+		_ = uninstallCmd.Flags().Set("force", originalForceValue)
+		forceFlag.Changed = originalForceChanged
+	})
 
 	// Capture stdout.
 	oldStdout := os.Stdout

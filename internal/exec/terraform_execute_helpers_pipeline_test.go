@@ -561,6 +561,44 @@ func TestExecuteShellCommandWithRetry_BufferResetBetweenAttempts(t *testing.T) {
 	assert.Equal(t, 2, called, "buffer must reset so attempt 2's non-matching error stops the loop")
 }
 
+// TestExecuteShellCommandWithRetry_ExecMetadataBufsResetBetweenAttempts verifies
+// that the exec-metadata stdout/stderr tee buffers (withExecMetadataOutputCapture,
+// carried through baseOpts) are reset at the start of every retry attempt, so the
+// exec-metadata parser only ever sees the latest attempt's output rather than
+// every attempt's output concatenated together.
+func TestExecuteShellCommandWithRetry_ExecMetadataBufsResetBetweenAttempts(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(5),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+	}
+
+	var execStdoutBuf, execStderrBuf bytes.Buffer
+	baseOpts := []ShellCommandOption{withExecMetadataOutputCapture(&execStdoutBuf, &execStderrBuf)}
+
+	called := 0
+	fakeInvoke := func(opts ...ShellCommandOption) error {
+		called++
+		cfg := applyOptsForTest(opts)
+		if called == 1 {
+			_, _ = cfg.stderrCapture.Write([]byte("502 Bad Gateway"))
+			_, _ = cfg.execMetadataStdoutCapture.Write([]byte("attempt-1 output"))
+			return errors.New("transient")
+		}
+		_, _ = cfg.stderrCapture.Write([]byte("permission denied"))
+		_, _ = cfg.execMetadataStdoutCapture.Write([]byte("attempt-2 output"))
+		return errors.New("real failure")
+	}
+
+	err := ExecuteShellCommandWithRetry(&atmosConfig, &info, "test", fakeInvoke, baseOpts...)
+	require.Error(t, err)
+	assert.Equal(t, 2, called)
+	assert.Equal(t, "attempt-2 output", execStdoutBuf.String(), "exec-metadata stdout buffer must not carry over attempt 1's output")
+	assert.Empty(t, execStderrBuf.String())
+}
+
 // TestExecuteShellCommandWithRetry_ComposesWithCallerCapture verifies that a
 // caller-supplied stdout/stderr capture writer (e.g. helmfile capturing output for a
 // NodeHooks.After callback) keeps receiving the full output even when retry is also
