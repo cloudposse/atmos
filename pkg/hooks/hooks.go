@@ -14,12 +14,13 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helm"       // Register helm CI plugin.
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helmfile"   // Register helmfile CI plugin.
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/kubernetes" // Register kubernetes CI plugin.
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"  // Register terraform CI plugin.
-	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic"  // Register generic CI provider.
-	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"   // Register GitHub Actions CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/cloudformation" // Register cloudformation CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helm"           // Register helm CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helmfile"       // Register helmfile CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/kubernetes"     // Register kubernetes CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"      // Register terraform CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic"      // Register generic CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"       // Register GitHub Actions CI provider.
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
