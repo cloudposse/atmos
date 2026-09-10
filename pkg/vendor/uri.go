@@ -9,6 +9,7 @@ import (
 
 	"github.com/hashicorp/go-getter"
 
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -200,6 +201,14 @@ func isKnownHostFileURL(lowerURI string) bool {
 			return true
 		}
 	}
+
+	// GitHub raw content via path also matches on a GitHub Enterprise Server host configured
+	// via GITHUB_SERVER_URL, not just literal "github.com" (see knownHostFilePatterns above).
+	if repoHost := ghtoken.RepoEndpoints().Host; repoHost != "github.com" &&
+		strings.Contains(lowerURI, repoHost) && strings.Contains(lowerURI, "/raw/") {
+		return true
+	}
+
 	return false
 }
 
@@ -234,6 +243,9 @@ func IsGitURI(uri string) bool {
 	host := strings.ToLower(parsedURL.Host)
 	path := parsedURL.Path
 
+	// Deliberately github.com-only (see the equivalent knownHosts comment in
+	// pkg/stack/imports/uri.go): a GitHub Enterprise Server host isn't guessable from a bare
+	// hostname, so GHES users write a full URL rather than relying on shorthand here.
 	knownHosts := []string{"github.com", "gitlab.com", "bitbucket.org"}
 	for _, knownHost := range knownHosts {
 		if host == knownHost || strings.HasSuffix(host, "."+knownHost) {

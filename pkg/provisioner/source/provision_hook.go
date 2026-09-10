@@ -444,7 +444,10 @@ func isLocalSource(uri string) bool {
 	if strings.HasPrefix(uri, "file://") {
 		return true
 	}
-	// Remote indicators - if any of these are present, it's remote.
+	// Remote indicators - if any of these are present, it's remote. Deliberately
+	// github.com-only (see the equivalent knownHosts comment in pkg/stack/imports/uri.go): a
+	// bare hostname can't guess a GitHub Enterprise Server host, and any URI naming one already
+	// matches the "://" scheme indicator above.
 	remoteIndicators := []string{
 		"://",        // Any URL scheme (https://, git://, s3://, etc.).
 		"github.com", // GitHub.
