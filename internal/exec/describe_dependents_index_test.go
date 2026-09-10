@@ -448,3 +448,74 @@ func TestFindDependentsFromIndex_IncludesCrossStackSameNameDependent(t *testing.
 	assert.Equal(t, "vpc", result[0].Component)
 	assert.Equal(t, "prod-use1", result[0].Stack)
 }
+
+func TestExecuteDescribeDependents_RetainsOptionalAvailableCrossTypeTarget(t *testing.T) {
+	t.Parallel()
+
+	optional := false
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"image": map[string]any{
+						"metadata": map[string]any{"enabled": false},
+						"vars":     map[string]any{"tenant": "dev"},
+					},
+					"app": map[string]any{
+						"vars": map[string]any{"tenant": "dev"},
+						"dependencies": map[string]any{
+							"components": []any{map[string]any{"component": "image", "kind": "packer", "required": optional}},
+						},
+					},
+				},
+				"packer": map[string]any{
+					"image": map[string]any{"vars": map[string]any{"tenant": "dev"}},
+				},
+			},
+		},
+	}
+
+	for _, test := range []struct {
+		name  string
+		index dependencyIndex
+	}{
+		{
+			name: "index",
+			index: dependencyIndex{
+				"image": {
+					{
+						StackName:          "dev",
+						StackComponentName: "app",
+						StackComponentType: "terraform",
+						StackComponentVars: schema.Context{Tenant: "dev"},
+						DepSource:          dependencySourceDependenciesComponents,
+						DependsOn: schema.ComponentDependency{
+							Component: "image",
+							Kind:      "packer",
+							Required:  &optional,
+						},
+					},
+				},
+			},
+		},
+		{name: "scan"},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			args := &DescribeDependentsArgs{
+				Component: "image",
+				Stack:     "dev",
+				Stacks:    stacks,
+				DepIndex:  test.index,
+			}
+
+			dependents, err := ExecuteDescribeDependents(&schema.AtmosConfiguration{}, args)
+			require.NoError(t, err)
+			require.Len(t, dependents, 1)
+			assert.Equal(t, "app", dependents[0].Component)
+			assert.Equal(t, "dev", dependents[0].Stack)
+		})
+	}
+}

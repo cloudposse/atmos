@@ -86,7 +86,7 @@ func buildGraph(stacks map[string]any, validationSources map[string]bool, leftDe
 			return
 		}
 		fromID := componentNodeID(componentName, stackName, componentType)
-		deps, modern, err := extractComponentDependenciesWithStack(componentSection, componentType, stackName, validationSources != nil, leftDelim)
+		deps, modern, err := extractComponentDependenciesWithStack(componentSection, componentType, stackName, leftDelim)
 		if err != nil {
 			buildErr = fmt.Errorf("parsing dependencies for %q in stack %q: %w", componentName, stackName, err)
 			return
@@ -207,7 +207,7 @@ func UnresolvedDependencySources(stacks map[string]any, leftDelim string) map[st
 
 	sources := make(map[string][]string)
 	walkComponents(stacks, func(stackName, componentType, componentName string, componentSection map[string]any) {
-		deps, _, err := extractComponentDependenciesWithStack(componentSection, componentType, "", true, leftDelim)
+		deps, _, err := extractComponentDependenciesWithStack(componentSection, componentType, "", leftDelim)
 		if err != nil {
 			return
 		}
@@ -230,7 +230,7 @@ func UnresolvedDependencySources(stacks map[string]any, leftDelim string) map[st
 func LegacyDependencySources(stacks map[string]any) map[string][]string {
 	sources := make(map[string][]string)
 	walkComponents(stacks, func(stackName, componentType, componentName string, componentSection map[string]any) {
-		deps, modern, err := extractComponentDependenciesWithStack(componentSection, componentType, "", true, "")
+		deps, modern, err := extractComponentDependenciesWithStack(componentSection, componentType, "", "")
 		if err == nil && !modern && len(deps) > 0 {
 			sources[stackName] = append(sources[stackName], componentName)
 		}
@@ -317,15 +317,15 @@ func shouldSkipComponent(componentSection map[string]any) bool {
 }
 
 func extractComponentDependencies(componentSection map[string]any) []schema.ComponentDependency {
-	deps, _, err := extractComponentDependenciesWithStack(componentSection, cfg.TerraformComponentType, "", false, "")
+	deps, _, err := extractComponentDependenciesWithStack(componentSection, cfg.TerraformComponentType, "", "")
 	if err != nil {
 		return nil
 	}
 	return deps
 }
 
-func extractComponentDependenciesWithStack(componentSection map[string]any, componentType, stackName string, structural bool, leftDelim string) ([]schema.ComponentDependency, bool, error) {
-	deps, found, err := dependenciesFromComponentsSection(componentSection, componentType, stackName, structural, leftDelim)
+func extractComponentDependenciesWithStack(componentSection map[string]any, componentType, stackName, leftDelim string) ([]schema.ComponentDependency, bool, error) {
+	deps, found, err := dependenciesFromComponentsSection(componentSection, componentType, stackName, leftDelim)
 	if err != nil || found {
 		return filterComponentDependencies(deps), found, err
 	}
@@ -335,7 +335,7 @@ func extractComponentDependenciesWithStack(componentSection map[string]any, comp
 // dependenciesFromComponentsSection reads the preferred `dependencies.components`
 // surface and returns its component-to-component entries plus a boolean
 // indicating whether the `components` key was present at all.
-func dependenciesFromComponentsSection(componentSection map[string]any, componentType, stackName string, structural bool, leftDelim string) ([]schema.ComponentDependency, bool, error) {
+func dependenciesFromComponentsSection(componentSection map[string]any, componentType, stackName, leftDelim string) ([]schema.ComponentDependency, bool, error) {
 	dependenciesValue, exists := componentSection[cfg.DependenciesSectionName]
 	if !exists {
 		return nil, false, nil
@@ -347,9 +347,7 @@ func dependenciesFromComponentsSection(componentSection map[string]any, componen
 	if _, hasComponents := depsSection["components"]; !hasComponents {
 		return nil, false, nil
 	}
-	if structural {
-		depsSection = deferUnresolvedRequired(depsSection, leftDelim)
-	}
+	depsSection = deferUnresolvedRequired(depsSection, leftDelim)
 	deps, err := schema.ParseComponentDependencies(depsSection, componentType, stackName)
 	if err != nil {
 		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)

@@ -178,6 +178,28 @@ func TestBuildGraph_InvalidRequiredValueFails(t *testing.T) {
 	require.ErrorIs(t, err, schema.ErrComponentDependencyInvalidRequired)
 }
 
+func TestBuildGraph_DefersUnresolvedRequiredTemplate(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": {},
+			"app": {
+				"dependencies": map[string]any{
+					"components": []any{
+						map[string]any{"component": "vpc", "required": "{{ .vars.vpc_required }}"},
+					},
+				},
+			},
+		},
+	})
+
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	app, ok := graph.GetNode(NodeID("app", "dev"))
+	require.True(t, ok)
+	assert.Equal(t, []string{NodeID("vpc", "dev")}, app.Dependencies)
+}
+
 func TestBuildGraph_IgnoresMalformedStackShapes(t *testing.T) {
 	stacks := map[string]any{
 		"stack-is-not-map": "bad",

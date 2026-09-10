@@ -3,7 +3,6 @@ package exec
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/list/dependencies"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -226,7 +224,7 @@ func ExecuteDescribeDependents(
 	// When a pre-computed dependency index is available, use O(1) lookup.
 	// Otherwise, fall back to the full O(stacks × components) scan.
 	if args.DepIndex != nil {
-		dependents = findDependentsFromIndex(atmosConfig, args, &providedComponentVars, targetUnavailable)
+		dependents = findDependentsFromIndexWithStacks(atmosConfig, args, &providedComponentVars, targetUnavailable, stacks)
 	} else {
 		var err error
 		dependents, err = findDependentsByScan(atmosConfig, args, stacks, &providedComponentVars, targetUnavailable)
@@ -314,228 +312,6 @@ func dependencyTargetsStackValues(dep *schema.ComponentDependency, sourceStack, 
 	return targetStack == stackName
 }
 
-// findDependentsFromIndex uses the pre-computed dependency index for O(1) lookup.
-func findDependentsFromIndex(
-	atmosConfig *schema.AtmosConfiguration,
-
-	args *DescribeDependentsArgs,
-	providedComponentVars *schema.Context,
-	targetUnavailable bool,
-) []schema.Dependent {
-	var dependents []schema.Dependent
-
-	entries := args.DepIndex[args.Component]
-	for i := range entries {
-		e := &entries[i]
-
-		// Skip self-references.
-		if e.StackName == args.Stack && e.StackComponentName == args.Component {
-			continue
-		}
-
-		dep := e.DependsOn
-		if targetUnavailable && dependencyTargetsStack(e, args.Stack) && !dep.IsRequired() {
-			continue
-		}
-		if !isDependencyMatch(&dependencyMatchParams{
-			depSource:             e.DepSource,
-			dependsOn:             &dep,
-			args:                  args,
-			stackName:             e.StackName,
-			providedComponentVars: providedComponentVars,
-			stackComponentVars:    &e.StackComponentVars,
-		}) {
-			continue
-		}
-
-		dependent := buildDependentEntry(atmosConfig, args, e)
-		dependents = append(dependents, dependent)
-	}
-
-	return dependents
-}
-
-// findDependentsByScan falls back to the full O(stacks * components) scan.
-func findDependentsByScan(
-	atmosConfig *schema.AtmosConfiguration,
-	args *DescribeDependentsArgs,
-	stacks map[string]any,
-	providedComponentVars *schema.Context,
-	targetUnavailable bool,
-) ([]schema.Dependent, error) {
-	var dependents []schema.Dependent
-
-	for stackName, stackSection := range stacks {
-		stackSectionMap, ok := stackSection.(map[string]any)
-		if !ok {
-			continue
-		}
-		stackComponentsSection, ok := stackSectionMap["components"].(map[string]any)
-		if !ok {
-			continue
-		}
-
-		for stackComponentType, stackComponentTypeSection := range stackComponentsSection {
-			stackComponentTypeSectionMap, ok := stackComponentTypeSection.(map[string]any)
-			if !ok {
-				continue
-			}
-
-			for stackComponentName, stackComponent := range stackComponentTypeSectionMap {
-				deps, err := scanComponentForDependents(&scanComponentParams{
-					AtmosConfig:           atmosConfig,
-					Args:                  args,
-					StackName:             stackName,
-					StackComponentType:    stackComponentType,
-					StackComponentName:    stackComponentName,
-					StackComponent:        stackComponent,
-					ProvidedComponentVars: providedComponentVars,
-					TargetUnavailable:     targetUnavailable,
-				})
-				if err != nil {
-					return nil, err
-				}
-				dependents = append(dependents, deps...)
-			}
-		}
-	}
-
-	return dependents, nil
-}
-
-// scanComponentParams groups parameters for scanComponentForDependents.
-type scanComponentParams struct {
-	AtmosConfig           *schema.AtmosConfiguration
-	Args                  *DescribeDependentsArgs
-	StackName             string
-	StackComponentType    string
-	StackComponentName    string
-	StackComponent        any
-	ProvidedComponentVars *schema.Context
-	TargetUnavailable     bool
-}
-
-// scanComponentForDependents checks a single component for dependencies on the provided component.
-func scanComponentForDependents(p *scanComponentParams) ([]schema.Dependent, error) {
-	stackComponentMap, ok := p.StackComponent.(map[string]any)
-	if !ok {
-		return nil, nil
-	}
-
-	if p.StackComponentName == p.Args.Component &&
-		(p.Args.Stack == "" || p.StackName == p.Args.Stack) {
-		return nil, nil
-	}
-
-	if isAbstractOrDisabled(stackComponentMap, p.StackComponentName) {
-		return nil, nil
-	}
-
-	stackComponentVarsSection, ok := stackComponentMap["vars"].(map[string]any)
-	if !ok {
-		return nil, nil
-	}
-
-	var stackComponentVars schema.Context
-	if err := mapstructure.Decode(stackComponentVarsSection, &stackComponentVars); err != nil {
-		return nil, err
-	}
-
-	result, err := getComponentDependenciesWithError(stackComponentMap)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"parse dependencies for component %q in stack %q: %w",
-			p.StackComponentName,
-			p.StackName,
-			err,
-		)
-	}
-	componentDeps, settingsSection, depSource := result.dependencies, result.settingsSection, result.source
-	if len(componentDeps) == 0 {
-		return nil, nil
-	}
-
-	var dependents []schema.Dependent
-	for depIdx := range componentDeps {
-		dependsOn := &componentDeps[depIdx]
-		if dependsOn.Component != p.Args.Component {
-			continue
-		}
-		if p.TargetUnavailable && dependencyTargetsStackValues(dependsOn, p.StackName, p.Args.Stack) && !dependsOn.IsRequired() {
-			continue
-		}
-
-		if !isDependencyMatch(&dependencyMatchParams{
-			depSource:             depSource,
-			dependsOn:             dependsOn,
-			args:                  p.Args,
-			stackName:             p.StackName,
-			providedComponentVars: p.ProvidedComponentVars,
-			stackComponentVars:    &stackComponentVars,
-		}) {
-			continue
-		}
-
-		e := &dependencyIndexEntry{
-			StackName:                 p.StackName,
-			StackComponentName:        p.StackComponentName,
-			StackComponentType:        p.StackComponentType,
-			StackComponentMap:         stackComponentMap,
-			StackComponentVarsSection: stackComponentVarsSection,
-			StackComponentVars:        stackComponentVars,
-			SettingsSection:           settingsSection,
-		}
-		dependents = append(dependents, buildDependentEntry(p.AtmosConfig, p.Args, e))
-	}
-
-	return dependents, nil
-}
-
-// buildDependentEntry constructs a Dependent struct from a dependency index entry.
-func buildDependentEntry(
-	atmosConfig *schema.AtmosConfiguration,
-	args *DescribeDependentsArgs,
-	e *dependencyIndexEntry,
-) schema.Dependent {
-	dependent := schema.Dependent{
-		Component:     e.StackComponentName,
-		ComponentPath: BuildComponentPath(atmosConfig, &e.StackComponentMap, e.StackComponentType),
-		ComponentType: e.StackComponentType,
-		Stack:         e.StackName,
-		StackSlug:     fmt.Sprintf("%s-%s", e.StackName, strings.ReplaceAll(e.StackComponentName, "/", "-")),
-		Namespace:     e.StackComponentVars.Namespace,
-		Tenant:        e.StackComponentVars.Tenant,
-		Environment:   e.StackComponentVars.Environment,
-		Stage:         e.StackComponentVars.Stage,
-	}
-
-	if e.StackComponentType == "terraform" {
-		configAndStacksInfo := schema.ConfigAndStacksInfo{
-			ComponentFromArg:         e.StackComponentName,
-			Stack:                    e.StackName,
-			ComponentVarsSection:     e.StackComponentVarsSection,
-			ComponentSettingsSection: e.SettingsSection,
-			ComponentSection: map[string]any{
-				cfg.VarsSectionName:     e.StackComponentVarsSection,
-				cfg.SettingsSectionName: e.SettingsSection,
-			},
-		}
-
-		if spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo); err == nil {
-			dependent.SpaceliftStack = spaceliftStackName
-		}
-		if atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo); err == nil {
-			dependent.AtlantisProject = atlantisProjectName
-		}
-	}
-
-	if args.IncludeSettings {
-		dependent.Settings = e.SettingsSection
-	}
-
-	return dependent
-}
-
 // sortDependentsByStackSlug sorts the dependents by stack slug.
 func sortDependentsByStackSlug(deps []schema.Dependent) {
 	if len(deps) == 0 {
@@ -563,129 +339,6 @@ func sortDependentsByStackSlugRecursive(deps []schema.Dependent) {
 		sortDependentsByStackSlugRecursive(deps[i].Dependents)
 	}
 	sortDependentsByStackSlug(deps)
-}
-
-// dependencySource indicates where dependencies were loaded from.
-type dependencySource int
-
-const (
-	dependencySourceNone dependencySource = iota
-	dependencySourceDependenciesComponents
-	dependencySourceSettingsDependsOn
-)
-
-type componentDependenciesResult struct {
-	dependencies    []schema.ComponentDependency
-	settingsSection map[string]any
-	source          dependencySource
-}
-
-// getComponentDependencies keeps the historical test-facing shape.
-func getComponentDependencies(componentMap map[string]any) ([]schema.ComponentDependency, map[string]any, dependencySource) {
-	result, _ := getComponentDependenciesWithError(componentMap)
-	return result.dependencies, result.settingsSection, result.source
-}
-
-// getComponentDependenciesWithError extracts component dependencies and returns parse failures.
-func getComponentDependenciesWithError(componentMap map[string]any) (componentDependenciesResult, error) {
-	// Get settings section for later use (Spacelift/Atlantis config and IncludeSettings).
-	settingsSection, _ := componentMap["settings"].(map[string]any)
-
-	dependenciesValue, exists := componentMap[cfg.DependenciesSectionName]
-	depsSection, ok := dependenciesValue.(map[string]any)
-	if exists && !ok {
-		return componentDependenciesResult{settingsSection: settingsSection}, fmt.Errorf("%w: %s must be a map", errUtils.ErrInvalidDependenciesSection, cfg.DependenciesSectionName)
-	}
-	if _, hasComponents := depsSection["components"]; ok && hasComponents {
-		componentDeps, err := schema.ParseComponentDependencies(depsSection, "", "")
-		if err != nil {
-			return componentDependenciesResult{settingsSection: settingsSection}, err
-		}
-		componentDeps = filterComponentDependencies(componentDeps)
-		if len(componentDeps) > 0 {
-			return componentDependenciesResult{
-				dependencies:    componentDeps,
-				settingsSection: settingsSection,
-				source:          dependencySourceDependenciesComponents,
-			}, nil
-		}
-	}
-
-	if deps, source, found := getLegacyComponentDependencies(componentMap, settingsSection); found {
-		return componentDependenciesResult{
-			dependencies:    deps,
-			settingsSection: settingsSection,
-			source:          source,
-		}, nil
-	}
-
-	return componentDependenciesResult{settingsSection: settingsSection}, nil
-}
-
-func getLegacyComponentDependencies(componentMap, settingsSection map[string]any) ([]schema.ComponentDependency, dependencySource, bool) {
-	if settingsSection != nil {
-		var settings schema.Settings
-		if err := mapstructure.Decode(settingsSection, &settings); err == nil && len(settings.DependsOn) > 0 {
-			log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
-			deps := make([]schema.ComponentDependency, 0, len(settings.DependsOn))
-			for key := range settings.DependsOn {
-				ctx := settings.DependsOn[key]
-				deps = append(deps, contextToComponentDependency(&ctx))
-			}
-			return deps, dependencySourceSettingsDependsOn, true
-		}
-	}
-
-	if directDependsOn, ok := componentMap["depends_on"]; ok {
-		var settings schema.Settings
-		if err := mapstructure.Decode(map[string]any{"depends_on": directDependsOn}, &settings); err == nil && len(settings.DependsOn) > 0 {
-			log.Debug("component depends_on is deprecated, use dependencies.components instead")
-			deps := make([]schema.ComponentDependency, 0, len(settings.DependsOn))
-			for key := range settings.DependsOn {
-				ctx := settings.DependsOn[key]
-				deps = append(deps, contextToComponentDependency(&ctx))
-			}
-			return deps, dependencySourceSettingsDependsOn, true
-		}
-	}
-
-	return nil, dependencySourceNone, false
-}
-
-// filterComponentDependencies removes file/folder path dependencies from the
-// dependents path. Those entries affect `describe affected`, but they are not
-// component-to-component relationships and must not suppress settings.depends_on
-// fallback during mixed migrations.
-func filterComponentDependencies(deps []schema.ComponentDependency) []schema.ComponentDependency {
-	if len(deps) == 0 {
-		return nil
-	}
-
-	result := make([]schema.ComponentDependency, 0, len(deps))
-	for i := range deps {
-		if !deps[i].IsComponentDependency() || deps[i].Component == "" {
-			continue
-		}
-		result = append(result, deps[i])
-	}
-	if len(result) == 0 {
-		return nil
-	}
-	return result
-}
-
-// contextToComponentDependency converts a legacy schema.Context to schema.ComponentDependency.
-// This is used to support the deprecated settings.depends_on format.
-// All context fields are preserved for matching logic.
-func contextToComponentDependency(ctx *schema.Context) schema.ComponentDependency {
-	return schema.ComponentDependency{
-		Component:   ctx.Component,
-		Stack:       ctx.Stack,
-		Namespace:   ctx.Namespace,
-		Tenant:      ctx.Tenant,
-		Environment: ctx.Environment,
-		Stage:       ctx.Stage,
-	}
 }
 
 // dependencyMatchParams groups parameters for dependency matching to stay within argument limits.
@@ -790,11 +443,7 @@ func findComponentSectionInCachedStacks(stacks map[string]any, stackName, compon
 	// Match the same configured component-type precedence as describe component.
 	// Unknown component types are considered afterward in lexical order.
 	for _, componentType := range componentTypes {
-		componentTypeMap, ok := componentsSection[componentType].(map[string]any)
-		if !ok {
-			continue
-		}
-		if comp, ok := componentTypeMap[componentName].(map[string]any); ok {
+		if comp := findComponentSectionInCachedStacksByType(stacks, stackName, componentName, componentType); comp != nil {
 			return comp
 		}
 	}
@@ -810,13 +459,26 @@ func findComponentSectionInCachedStacks(stacks map[string]any, stackName, compon
 	}
 	sort.Strings(remainingTypes)
 	for _, componentType := range remainingTypes {
-		componentTypeMap, ok := componentsSection[componentType].(map[string]any)
-		if !ok {
-			continue
-		}
-		if comp, ok := componentTypeMap[componentName].(map[string]any); ok {
+		if comp := findComponentSectionInCachedStacksByType(stacks, stackName, componentName, componentType); comp != nil {
 			return comp
 		}
 	}
 	return nil
+}
+
+func findComponentSectionInCachedStacksByType(stacks map[string]any, stackName, componentName, componentType string) map[string]any {
+	stackSection, ok := stacks[stackName].(map[string]any)
+	if !ok {
+		return nil
+	}
+	componentsSection, ok := stackSection["components"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	componentTypeMap, ok := componentsSection[componentType].(map[string]any)
+	if !ok {
+		return nil
+	}
+	component, _ := componentTypeMap[componentName].(map[string]any)
+	return component
 }
