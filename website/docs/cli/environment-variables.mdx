@@ -497,6 +497,75 @@ These environment variables configure Atmos behavior and can override settings i
   </dd>
 </dl>
 
+## GitHub Enterprise Server (GHES) {#github-enterprise-server-ghes}
+
+These variables point Atmos at a GitHub Enterprise Server instance instead of public
+`github.com`. `GITHUB_SERVER_URL` and `GITHUB_API_URL` are the same variables GitHub Actions
+already exports on both `github.com` and GHES runners, so CI configuration typically needs no
+changes.
+
+The toolchain (aqua-registry tools and their release assets) is a **separate concern** from
+where your own repositories live: aqua-registry tools are hosted on public `github.com` even
+when your repositories are on GHES, so the toolchain does not follow `GITHUB_SERVER_URL` /
+`GITHUB_API_URL`. Use the `ATMOS_TOOLCHAIN_*` variables instead — for example, to point the
+toolchain at a corporate release proxy or mirror.
+
+<dl>
+  <dt>`GITHUB_SERVER_URL`</dt>
+  <dd>
+    Base URL of the GitHub (or GHES) web/clone host for your own repositories. Default:
+    `https://github.com`. Used by the CI provider, imports/vendoring raw fetches, the
+    `pkg/github` API client (releases, tags, artifacts), the token host allowlist, and token
+    injection host recognition.
+
+    ```shell
+    GITHUB_SERVER_URL=https://github.example.com
+    ```
+  </dd>
+
+  <dt>`GITHUB_API_URL`</dt>
+  <dd>
+    Base URL of the GitHub (or GHES) REST API for your own repositories. Default:
+    `https://api.github.com`; on GHES this is typically `https://<host>/api/v3`.
+
+    ```shell
+    GITHUB_API_URL=https://github.example.com/api/v3
+    ```
+  </dd>
+
+  <dt>`ATMOS_TOOLCHAIN_GITHUB_URL`</dt>
+  <dd>
+    Base URL used for toolchain release assets and source archives (`github_release` and
+    `github_archive` tool types). Default: `https://github.com`. Independent of
+    `GITHUB_SERVER_URL`.
+  </dd>
+
+  <dt>`ATMOS_TOOLCHAIN_GITHUB_API_URL`</dt>
+  <dd>
+    Base URL used for toolchain repository API calls (e.g. fetching a tool's available
+    versions). Default: `https://api.github.com`. Independent of `GITHUB_API_URL`.
+  </dd>
+
+  <dt>`ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL`</dt>
+  <dd>
+    Base URL of the aqua-registry raw content mirror (serves `registry.yaml` and per-package
+    `pkgs/<name>/registry.yaml` files). Default:
+    `https://raw.githubusercontent.com/aquaproj/aqua-registry/main`.
+
+    ```shell
+    ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL=https://releases.corp.example.com/aqua-registry/main
+    ```
+  </dd>
+</dl>
+
+:::note
+The `owner/repo` and `github.com/owner/repo` shorthand forms (imports, vendoring, `atmos git
+clone`, AI skill sources, etc.) always resolve to public `github.com`. On GHES, write the full
+URL (e.g. `https://github.example.com/owner/repo`) instead of the shorthand — a bare hostname
+can't be distinguished from a relative path, so shorthand detection can't safely guess a GHES
+host.
+:::
+
 ## AI Integration
 
 <dl>
