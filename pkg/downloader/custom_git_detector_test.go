@@ -161,6 +161,55 @@ func TestDetect_PreservesExplicitDepth(t *testing.T) {
 	}
 }
 
+// TestDetect_GHESHostInjectsTokenLikeGitHubCom pins the GHES contract: a host configured
+// via GITHUB_SERVER_URL must be recognized and treated exactly like github.com for token
+// injection and default-username selection, without needing any atmos.yaml change.
+func TestDetect_GHESHostInjectsTokenLikeGitHubCom(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
+	t.Setenv("GITHUB_TOKEN", "ghes-token")
+
+	config := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			InjectGithubToken: true,
+			GithubToken:       "ghes-token",
+		},
+	}
+	detector := &CustomGitDetector{atmosConfig: &config, source: "repo.git"}
+
+	result, ok, err := detector.Detect("https://ghe.example.com/org/repo.git", "")
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if !ok {
+		t.Fatalf("Expected ok to be true for a GITHUB_SERVER_URL-configured GHES host")
+	}
+	if !strings.Contains(result, "x-access-token:ghes-token@ghe.example.com") {
+		t.Errorf("Expected token to be injected with the GitHub default username for the GHES host, got: %s", result)
+	}
+}
+
+// TestIsGitHubHost_RespectsGHESServerURL exercises isConfiguredGitHubHost/isSupportedHost
+// directly, independent of Detect's other side effects.
+func TestIsGitHubHost_RespectsGHESServerURL(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
+
+	if !isSupportedHost("ghe.example.com") {
+		t.Error("Expected the GITHUB_SERVER_URL host to be a supported host")
+	}
+	if isSupportedHost("some-other-host.example.com") {
+		t.Error("Expected an unrelated host to remain unsupported")
+	}
+}
+
+func TestGetDefaultUsername_GHESHost(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
+
+	detector := CustomGitDetector{atmosConfig: &schema.AtmosConfiguration{}}
+	if un := detector.getDefaultUsername("ghe.example.com"); un != "x-access-token" {
+		t.Errorf("Expected x-access-token for the GHES host, got %s", un)
+	}
+}
+
 func TestDetect_UnsupportedHost(t *testing.T) {
 	// This tests the branch when the URL host is not supported (not GitHub, GitLab, or Bitbucket)
 	config := fakeAtmosConfig()
