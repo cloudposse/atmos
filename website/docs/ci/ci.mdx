@@ -90,9 +90,9 @@ ci:
 
 Running Atmos in GitHub Actions reduces to two steps for the basics: **check out the repository, then run an `atmos` command.** Atmos detects the CI environment automatically and produces job summaries and output variables with no extra setup. Status checks, check runs, and PR comments need matching [permissions](#permissions); SBOM uploads and planfile storage in `github/artifacts` also need the `github-runtime` action.
 
-Terraform commands use the full native CI feature set. Kubernetes commands currently emit
-human-readable job summaries only; they do not write `$GITHUB_OUTPUT` values, commit statuses,
-PR comments, or stored artifacts.
+Terraform commands use the full native CI feature set. Kubernetes and CloudFormation commands
+currently emit human-readable job summaries only; they do not write `$GITHUB_OUTPUT` values, commit
+statuses, PR comments, or stored artifacts.
 
 The examples below pin the Atmos version via a [repository variable](https://docs.github.com/en/actions/learn-github-actions/variables) named `ATMOS_VERSION` (e.g. set to `1.200.0`). We don't publish a `latest` tag, so always pin to a specific release.
 
@@ -469,18 +469,22 @@ when you require that.
 
 Rich Markdown summaries with resource counts, inline badges, collapsible diffs, and captured
 command output written to `$GITHUB_STEP_SUMMARY`. Terraform includes plan/apply summaries plus
-the broader native CI features below. Helm and Helmfile currently write summaries only.
-Templates are fully customizable with Go template syntax.
+the broader native CI features below. Helm, Helmfile, and CloudFormation currently write
+summaries only. Templates are fully customizable with Go template syntax.
 
 Kubernetes summaries are intentionally compact: `plan`/`diff` show created, changed, and
 no-change objects; `apply`/`deploy` show applied or delivered objects; `delete` shows deleted
 and not-found objects; `validate` shows valid and invalid objects plus errors.
 
+CloudFormation summaries are compact in the same way: `diff` shows the pending changeset,
+`apply`/`delete` show the stack operation result, and `drift detect`/`drift describe` show
+the drifted resources found against the deployed stack.
+
 ### [Outputs](/cli/configuration/ci/output)
 
 Terraform plan and apply results exported as CI output variables for use in downstream jobs.
-On GitHub Actions, these are written to `$GITHUB_OUTPUT`. Kubernetes commands do not emit
-output variables in v1.
+On GitHub Actions, these are written to `$GITHUB_OUTPUT`. Kubernetes and CloudFormation
+commands do not emit output variables.
 
 ### [Checks](/cli/configuration/ci/checks)
 
@@ -493,7 +497,8 @@ When `ci.comments.enabled: true`, Terraform plans running in a pull-request cont
 rendered plan summary as a PR comment. The comment uses the same template as the job summary and,
 with the default `upsert` behavior, updates one comment per command, component, and stack on later
 runs. This requires GitHub Actions `pull-requests: write`; comments are not posted for non-PR runs,
-when no summary is available, or by apply, deploy, Kubernetes, Helm, or Helmfile commands.
+when no summary is available, or by apply, deploy, Kubernetes, Helm, Helmfile, or CloudFormation
+commands.
 
 ### [Planfile Storage](/ci/planfile-storage)
 
@@ -555,6 +560,12 @@ CI features are activated with the `--ci` flag on supported commands or automati
 
   <dt>[`atmos kubernetes render|plan|diff|apply|deploy|delete|validate [--ci]`](/cli/commands/kubernetes/usage)</dt>
   <dd>Run Kubernetes operations with a native job summary only. No output variables, status checks, comments, or artifacts are emitted.</dd>
+
+  <dt>[`atmos aws cloudformation diff|apply|delete [--ci]`](/cli/commands/aws/cloudformation)</dt>
+  <dd>Run CloudFormation diff, apply, and delete with a native job summary only. No output variables, status checks, comments, or artifacts are emitted.</dd>
+
+  <dt>[`atmos aws cloudformation drift detect|describe [--ci]`](/cli/commands/aws/cloudformation/drift)</dt>
+  <dd>Run CloudFormation drift detection and description with a native job summary only.</dd>
 </dl>
 
 ## Providers

@@ -191,7 +191,10 @@ func resolveSpecAndTemplate(atmosConfig *schema.AtmosConfiguration, info *schema
 	return spec, nil
 }
 
-// runWithHooks runs the before/after hooks around the operation.
+// runWithHooks runs the before/after hooks around the operation. The Native CI
+// summary hook (runCIHook) fires on both success and failure — mirroring
+// Kubernetes's runWithHooks — since a job summary describing a failed
+// operation is exactly as useful as one describing a successful one.
 func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation, spec *stackSpec) error {
 	hookSet, err := getHooks(atmosConfig, info)
 	if err != nil {
@@ -203,12 +206,30 @@ func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConf
 	}
 
 	octx := &opContext{Ctx: context.Background(), AtmosConfig: atmosConfig, Info: info, Flags: ctx.Flags}
-	_, opErr := runOperation(octx, operation, spec)
+	summary, opErr := runOperation(octx, operation, spec)
+
+	// User-defined `hooks:` blocks run first, then the CI summary dispatch —
+	// matching the ordering Kubernetes's executor uses between its own
+	// user-hook and CI-hook calls. The CI hook is fire-and-forget (errors are
+	// logged, not returned; see runCIHook), so it never masks opErr or the
+	// after-hooks error below.
+	afterErr := hookSet.RunAll(after, atmosConfig, info, nil, nil)
+	runCIHook(ciHookParams{
+		event:       after,
+		flags:       ctx.Flags,
+		atmosConfig: atmosConfig,
+		info:        info,
+		summary:     summary,
+		commandErr:  opErr,
+	})
+
+	// The underlying operation's own error takes priority: a failed apply is
+	// the more actionable/severe failure than a problem in a user-defined
+	// after-hook, and callers (exit code, CI status) should see it first.
 	if opErr != nil {
 		return opErr
 	}
-
-	return hookSet.RunAll(after, atmosConfig, info, nil, nil)
+	return afterErr
 }
 
 // eventsFor maps an Operation to its before/after hook events.
@@ -220,6 +241,10 @@ func eventsFor(operation Operation) (hooks.HookEvent, hooks.HookEvent) {
 		return hooks.BeforeAwsCloudFormationApply, hooks.AfterAwsCloudFormationApply
 	case OperationDelete:
 		return hooks.BeforeAwsCloudFormationDelete, hooks.AfterAwsCloudFormationDelete
+	case OperationDriftDetect:
+		return hooks.BeforeAwsCloudFormationDriftDetect, hooks.AfterAwsCloudFormationDriftDetect
+	case OperationDriftDescribe:
+		return hooks.BeforeAwsCloudFormationDriftDescribe, hooks.AfterAwsCloudFormationDriftDescribe
 	default:
 		return hooks.HookEvent(""), hooks.HookEvent("")
 	}
