@@ -3820,10 +3820,10 @@
               "type": "boolean"
             },
             {
-              "type": "null"
+              "type": "string"
             },
             {
-              "$ref": "#/$defs/yamlFunction"
+              "type": "null"
             }
           ],
           "description": "Required controls whether an available target must be present. Nil defaults to true."

@@ -46,6 +46,15 @@ func TestRender_MarksOptionalDependency(t *testing.T) {
 	out, err := Render(graph, Options{Format: "json", Direction: DirectionForward, Component: "app", Stack: "dev"})
 	require.NoError(t, err)
 	assert.Contains(t, out, `"optional": true`)
+
+	reverse, err := Render(graph, Options{
+		Format:    "json",
+		Direction: DirectionReverse,
+		Component: "observability",
+		Stack:     "dev",
+	})
+	require.NoError(t, err)
+	assert.Contains(t, reverse, `"optional": true`)
 }
 
 func TestRenderSkipsOptionalUnavailableDependencies(t *testing.T) {

@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -88,9 +87,12 @@ func indexComponentDependencies(
 
 	var stackComponentVars schema.Context
 	if err := mapstructure.Decode(stackComponentVarsSection, &stackComponentVars); err != nil {
-		log.Debug("Failed to decode component vars during index build",
-			"component", stackComponentName, "stack", stackName, "error", err)
-		return nil
+		return fmt.Errorf(
+			"decode vars for component %q in stack %q: %w",
+			stackComponentName,
+			stackName,
+			err,
+		)
 	}
 
 	result, err := getComponentDependenciesWithError(stackComponentMap)

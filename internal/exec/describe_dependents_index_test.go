@@ -38,7 +38,7 @@ func TestBuildDependencyIndex_IgnoresInvalidVars(t *testing.T) {
 	t.Parallel()
 
 	idx, err := buildDependencyIndexWithError(map[string]any{
-		"dev-use1": map[string]any{
+		"dev": map[string]any{
 			"components": map[string]any{
 				"terraform": map[string]any{
 					"app": map[string]any{
@@ -52,8 +52,10 @@ func TestBuildDependencyIndex_IgnoresInvalidVars(t *testing.T) {
 		},
 	})
 
-	require.NoError(t, err)
-	assert.Empty(t, idx)
+	require.Error(t, err)
+	assert.Nil(t, idx)
+	require.ErrorContains(t, err, `component "app"`)
+	require.ErrorContains(t, err, `stack "dev"`)
 }
 
 func TestBuildDependencyIndex_WithDependencies(t *testing.T) {

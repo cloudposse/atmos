@@ -23,7 +23,7 @@ dependencies:
       required: false
 ```
 
-Required dependencies remain the default, preserving existing behavior. Optional dependencies are included normally when their target is present and enabled. Missing or disabled targets simply omit that edge. Invalid dependency configuration still fails instead of being hidden by optionality.
+Required dependencies remain the default, preserving existing behavior. Optional dependencies are included normally when their target is present, enabled, and concrete. Missing, disabled, or abstract targets simply omit that edge. Invalid dependency configuration still fails instead of being hidden by optionality.
 
 The `required` value can also be rendered from a template. Atmos applies the configured template delimiters before parsing the result as a boolean:
 
@@ -49,7 +49,7 @@ components:
             required: false
 ```
 
-Omit `required` when the target must be available. Optionality only suppresses genuine target absence or disabled state; malformed entries remain errors.
+Omit `required` when the target must be present, enabled, and concrete. Optionality only suppresses missing, disabled, or abstract targets; malformed entries remain errors.
 
 ## Get Involved
 
