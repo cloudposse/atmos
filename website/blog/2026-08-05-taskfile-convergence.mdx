@@ -143,7 +143,7 @@ A handful of smaller gaps closed alongside the above:
   facts already available everywhere else `when:` is.
 - **Native command aliases** — `aliases: [dep, d]` on a custom command, registered in-process,
   distinct from the top-level subprocess-redirect `aliases:` config.
-- **`internal: true`** — hide a command from `atmos help`/`atmos list` while leaving it fully
+- **`internal: true`** — hide a command from [`atmos help`](/cli/commands/help)/[`atmos list`](/cli/commands/list/usage) while leaving it fully
   invocable, for commands meant only to be run as someone else's dependency.
 - **`values:`** on flags and arguments — restrict a flag to a fixed set of choices, with static
   validation and an interactive picker when a required value is missing.
@@ -156,6 +156,8 @@ migration required. See [dependencies](/cli/configuration/commands/dependencies)
 [`preconditions`](/workflows/steps/preconditions), and [`continue`](/workflows/steps/continue) for
 the full field references, or the [Alternatives](/reference/alternatives) page for how Atmos
 compares to go-task more broadly.
+
+For usage and configuration, see [Migrating from Taskfile.yml](/migration/taskfile).
 
 ## Get Involved
 

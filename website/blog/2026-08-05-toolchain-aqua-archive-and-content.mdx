@@ -5,7 +5,7 @@ authors: [osterman]
 tags: [feature]
 ---
 
-Atmos's Aqua-compatible toolchain registry now understands two more package types: `github_archive` and `github_content`. Tools that ship as a source tarball (like `adr-tools` and `tfenv`) or as a single raw file in a repo (like `kubens` and `kubectx`) can now be installed through `atmos toolchain install` without any registry workarounds.
+Atmos's Aqua-compatible toolchain registry now understands two more package types: `github_archive` and `github_content`. Tools that ship as a source tarball (like `adr-tools` and `tfenv`) or as a single raw file in a repo (like `kubens` and `kubectx`) can now be installed through [`atmos toolchain install`](/cli/commands/toolchain/install) without any registry workarounds.
 
 <!--truncate-->
 
@@ -62,6 +62,8 @@ The download URL becomes `https://raw.githubusercontent.com/ahmetb/kubectx/{vers
 Aqua's upstream registry has hundreds of entries that use these two types — `tfenv`, `tgswitch`, `adr-tools`, `kubectx`, `kubens`, and many one-binary shell-script projects. Until now, those entries were dead in Atmos. Adding these two package types unblocks all of them without registry-level changes: pull the Aqua registry entry as-is and it just works.
 
 The Aqua-compatible build/install types (`go_install`, `go_build_install`, `cargo`) remain unsupported — they require invoking a language toolchain at install time rather than downloading an artifact, which is a different installation model. A follow-up issue tracks that work.
+
+For usage and configuration, see [atmos toolchain](/cli/commands/toolchain/usage).
 
 ## Get Involved
 
