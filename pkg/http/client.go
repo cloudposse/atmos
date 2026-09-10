@@ -271,13 +271,28 @@ func isGitHubHost(host string) bool {
 	// Respect GITHUB_API_URL and GITHUB_SERVER_URL for GitHub Enterprise Server (GHES) and
 	// similar deployments. On real GHES these resolve to the same host, but tests (and some
 	// proxy setups) may configure them independently, so both are checked.
+	//
+	// Only a non-default host extends the allowlist. GitHub Actions exports
+	// GITHUB_SERVER_URL=https://github.com on every github.com runner, and honoring that would
+	// make bare github.com receive tokens in CI but not on a developer machine. Sending the token
+	// to github.com/<owner>/<repo>/releases/download/... is a deliberate, per-client decision
+	// (see the host matcher in pkg/toolchain/installer/download.go), not an ambient one.
 	for _, envVar := range [...]string{"GITHUB_API_URL", "GITHUB_SERVER_URL"} {
 		//nolint:forbidigo // Direct env lookup required for GHES configuration.
-		if rawURL := os.Getenv(envVar); rawURL != "" {
-			parsed, err := url.ParseRequestURI(rawURL)
-			if err == nil && normalizeHost(parsed.Hostname()) == host {
-				return true
-			}
+		rawURL := os.Getenv(envVar)
+		if rawURL == "" {
+			continue
+		}
+		parsed, err := url.ParseRequestURI(rawURL)
+		if err != nil {
+			continue
+		}
+		envHost := normalizeHost(parsed.Hostname())
+		if envHost == "github.com" {
+			continue
+		}
+		if envHost == host {
+			return true
 		}
 	}
 

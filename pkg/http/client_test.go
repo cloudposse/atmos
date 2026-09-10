@@ -1222,8 +1222,10 @@ func TestGet_ErrorBodyContentType(t *testing.T) {
 // TestIsGitHubHost_DefaultAllowlist verifies the default isGitHubHost allowlist
 // without any GITHUB_API_URL override.
 func TestIsGitHubHost_DefaultAllowlist(t *testing.T) {
-	// Ensure GITHUB_API_URL is not set so we test default behavior.
+	// Ensure neither GHES variable is set so we test default behavior: GitHub Actions exports
+	// GITHUB_SERVER_URL and GITHUB_API_URL on every runner.
 	t.Setenv("GITHUB_API_URL", "")
+	t.Setenv("GITHUB_SERVER_URL", "")
 
 	assert.True(t, isGitHubHost("api.github.com"))
 	assert.True(t, isGitHubHost("raw.githubusercontent.com"))
@@ -1262,11 +1264,25 @@ func TestIsGitHubHost_InvalidGITHUB_API_URL(t *testing.T) {
 // GITHUB_API_URL) also adds a GHES host to the allowlist, covering GHES setups (or test
 // mocks) where the web host and API host differ.
 func TestIsGitHubHost_GITHUB_SERVER_URL(t *testing.T) {
+	t.Setenv("GITHUB_API_URL", "")
 	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
 
 	assert.True(t, isGitHubHost("ghes.example.com"), "GITHUB_SERVER_URL hostname should be allowed")
+	assert.True(t, isGitHubHost("GHES.EXAMPLE.COM:443"), "matching must normalize case and default port")
 	assert.True(t, isGitHubHost("api.github.com"), "default allowlist still applies")
 	assert.False(t, isGitHubHost("evil.example.com"))
+	assert.False(t, isGitHubHost("github.com"), "bare github.com stays denied under a GHES server URL")
+
+	// GitHub Actions exports GITHUB_SERVER_URL=https://github.com on every github.com runner; the
+	// default host must not extend the allowlist, or token attachment would differ between CI and
+	// a developer machine.
+	t.Setenv("GITHUB_SERVER_URL", "https://github.com")
+	assert.False(t, isGitHubHost("github.com"), "the github.com default must not extend the allowlist")
+
+	// An invalid value is ignored; the defaults still apply.
+	t.Setenv("GITHUB_SERVER_URL", "not a url")
+	assert.False(t, isGitHubHost("github.com"))
+	assert.True(t, isGitHubHost("api.github.com"))
 }
 
 // TestNormalizeHost verifies that normalizeHost canonicalises hostnames correctly.
@@ -1310,6 +1326,7 @@ func TestNormalizeHost(t *testing.T) {
 // variations and trailing dots in the host parameter.
 func TestIsGitHubHost_CaseAndTrailingDot(t *testing.T) {
 	t.Setenv("GITHUB_API_URL", "")
+	t.Setenv("GITHUB_SERVER_URL", "")
 
 	positives := []string{
 		"API.GITHUB.COM",
