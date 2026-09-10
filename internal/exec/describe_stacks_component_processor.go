@@ -120,6 +120,16 @@ type describeStacksProcessor struct {
 	// processor does not go through processStacks (utils.go), so it must resolve deferred
 	// YAML functions itself instead of silently losing their contribution (#2888).
 	deferredContexts AllStacksDeferredContexts
+	// evalSections is the opt-in evaluation-scope filter set by
+	// ExecuteDescribeStacksWithEvalSections: when non-nil, template rendering and YAML-function
+	// resolution (Stages 2/3, plus Go-template rendering) only run for these top-level component
+	// sections -- see isSectionRequired. This is DELIBERATELY separate from `sections` (which
+	// only trims the OUTPUT after full evaluation and is unaffected by this field): the two solve
+	// different problems and reusing `sections` for both would silently change the long-standing
+	// behavior of `atmos describe stacks --sections=X` (today a pure output filter that never
+	// skips evaluation). Only the `list` commands ever set evalSections; every other caller
+	// leaves it nil and gets exactly the eager-evaluation behavior that predates this field.
+	evalSections []string
 }
 
 // withDegradation switches the processor to lenient YAML-function processing: recoverable
@@ -548,7 +558,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 
 	// Process Go templates.
 	if p.processTemplates {
-		componentSection, err = processComponentSectionTemplates(p.atmosConfig, &info, componentSection, secs.settings)
+		componentSection, err = processComponentSectionTemplates(p.atmosConfig, &info, componentSection, secs.settings, p.evalSections)
 		if err != nil {
 			return err
 		}
@@ -574,6 +584,7 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 			skip,
 			p.onWarning,
 			!p.resolveSecrets && iolib.MaskingEnabled(),
+			p.evalSections,
 		)
 		if err != nil {
 			return err
@@ -634,7 +645,7 @@ func (p *describeStacksProcessor) resolveDeferredForComponent(
 	for k, v := range info.ComponentSection {
 		componentTemplateContext[k] = v
 	}
-	if err := resolveDeferredYamlFunctions(p.atmosConfig, info, &settingsSectionStruct, componentTemplateContext, skip); err != nil {
+	if err := resolveDeferredYamlFunctions(p.atmosConfig, info, &settingsSectionStruct, componentTemplateContext, skip, p.evalSections); err != nil {
 		return nil, err
 	}
 
@@ -1049,16 +1060,40 @@ func addSectionsToComponentEntry(
 
 // processComponentSectionTemplates applies Go template processing to a component section
 // and returns the rendered section as a map.
+//
+// The evalSections parameter is the opt-in evaluation-scope filter (see isSectionRequired): when
+// non-nil, only the top-level sections it names are serialized into the template SOURCE that
+// text/template actually parses and executes -- any atmos.Component/atmos.GomplateDatasource/etc.
+// call embedded in a skipped section's raw text is never invoked, which is the actual fix for
+// https://github.com/cloudposse/atmos/issues/3068. The template CONTEXT (the "." root available
+// to {{ }} expressions) is still built from the full, unfiltered componentSection below, so a
+// required section's template can still plain-field-access into a skipped section's raw (merged
+// but unrendered) value -- see the accepted cross-section limitation documented on
+// isSectionRequired's callers.
 func processComponentSectionTemplates(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	componentSection map[string]any,
 	settingsSection map[string]any,
+	evalSections []string,
 ) (map[string]any, error) {
+	evalInput, evalExcluded := splitSectionsByRequirement(componentSection, evalSections)
+
 	// Sections computed from Terraform source code (`component_info`) are not Atmos
 	// configuration and must not be rendered as `Go` templates. They stay in the template
 	// context below, only the rendered input excludes them. See #2145.
-	templateInput, nonTemplatedSections := splitNonTemplatedSections(componentSection)
+	templateInput, nonTemplatedSections := splitNonTemplatedSections(evalInput)
+
+	if len(templateInput) == 0 {
+		// Nothing needs template rendering (e.g. no column references any section). Skip
+		// ProcessTmplWithDatasources and the YAML round-trip entirely and hand back every section
+		// untouched -- this is the fast path that avoids the atmos.Component/GomplateDatasource
+		// slow path in #3068 when it isn't needed at all.
+		result := make(map[string]any, len(nonTemplatedSections)+len(evalExcluded))
+		restoreNonTemplatedSections(result, nonTemplatedSections)
+		restoreNonTemplatedSections(result, evalExcluded)
+		return result, nil
+	}
 
 	componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
 		templateInput,
@@ -1120,6 +1155,7 @@ func processComponentSectionTemplates(
 	}
 
 	restoreNonTemplatedSections(converted, nonTemplatedSections)
+	restoreNonTemplatedSections(converted, evalExcluded)
 
 	return converted, nil
 }
@@ -1128,6 +1164,14 @@ func processComponentSectionTemplates(
 // When onWarning is non-nil, recoverable per-value errors are tolerated — see
 // ProcessCustomYamlTagsLenient. For example, a Terraform backend might not yet be provisioned.
 // The secretsMaskOnly parameter selects the inspection behavior that replaces !secret values without a backend lookup.
+//
+// The evalSections parameter is the opt-in evaluation-scope filter (see isSectionRequired): when
+// non-nil, only the top-level sections it names are walked for
+// `!terraform.state`/`!terraform.output`/`!store`/etc. YAML functions. Skipped sections are
+// restored untouched afterward. Stage 2's YAML-function resolution has no cross-section
+// dependency -- each tag resolves independently of its siblings (only a shared ResolutionContext
+// exists, for cycle detection) -- so narrowing its input map is safe without needing a separate
+// "context" the way Go-template rendering does.
 func processComponentSectionYAMLFunctions(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
@@ -1135,14 +1179,18 @@ func processComponentSectionYAMLFunctions(
 	skip []string,
 	onWarning func(DegradationWarning),
 	secretsMaskOnly bool,
+	evalSections []string,
 ) (map[string]any, error) {
 	info.SecretsMaskOnly = secretsMaskOnly
+
+	evalInput, evalExcluded := splitSectionsByRequirement(componentSection, evalSections)
+
 	var converted map[string]any
 	var err error
 	if onWarning != nil {
 		converted, err = ProcessCustomYamlTagsLenient(
 			atmosConfig,
-			componentSection,
+			evalInput,
 			info.Stack,
 			skip,
 			info,
@@ -1151,7 +1199,7 @@ func processComponentSectionYAMLFunctions(
 	} else {
 		converted, err = ProcessCustomYamlTags(
 			atmosConfig,
-			componentSection,
+			evalInput,
 			info.Stack,
 			skip,
 			info,
@@ -1160,6 +1208,7 @@ func processComponentSectionYAMLFunctions(
 	if err != nil {
 		return nil, err
 	}
+	restoreNonTemplatedSections(converted, evalExcluded)
 	return converted, nil
 }
 

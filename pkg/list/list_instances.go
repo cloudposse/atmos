@@ -435,6 +435,31 @@ func sortInstances(instances []schema.Instance) []schema.Instance {
 	return instances
 }
 
+// ResolveInstancesEvalSections computes the evaluation-scope filter (see
+// column.RequiredSections/e.ExecuteDescribeStacksWithEvalSections) for the resolved column set.
+// `metadata` is unconditionally folded in: extract.Metadata always reads it (enabled/locked/tags/
+// labels/status/type derive from it), and createInstance filters abstract components on
+// metadata.type before any row is ever built — both independent of which columns are displayed.
+//
+// Returns nil (full eager evaluation, the historical behavior) whenever RequiredSections can't
+// statically prove which sections are safe to skip, OR when --filter/--query is set: both are YQ
+// expressions (a different, unparsed-here expression language), so which fields they touch cannot
+// be statically determined the way column.Value Go-template refs can — see
+// column.RequiredSections' doc comment on under-computing being unsafe.
+func resolveInstancesEvalSections(columns []column.Config, opts *InstancesCommandOptions) []string {
+	defer perf.Track(nil, "list.resolveInstancesEvalSections")()
+
+	if opts.FilterSpec != "" || opts.Query != "" {
+		return nil
+	}
+
+	sections, ok := column.RequiredSections(columns)
+	if !ok {
+		return nil
+	}
+	return column.EnsureSection(sections, "metadata")
+}
+
 // getInstanceColumns returns column configuration from CLI flag, atmos.yaml, or defaults.
 // Returns error if CLI flag parsing fails.
 // Precedence: CLI flag > list.instances.columns > components.list.columns (deprecated) > defaults.
@@ -607,6 +632,7 @@ func processInstancesWithDeps(
 	authDisabled bool,
 	tagsFilter []string,
 	labelsFilter map[string]string,
+	evalSections []string,
 ) ([]schema.Instance, map[string]any, error) {
 	stacksMap, err := executeDescribeStacksForInstances(
 		atmosConfig,
@@ -618,6 +644,7 @@ func processInstancesWithDeps(
 		authDisabled,
 		tagsFilter,
 		labelsFilter,
+		evalSections,
 	)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
@@ -675,13 +702,42 @@ type scopedStacksProcessor interface {
 	) (map[string]any, error)
 }
 
+// evalSectionsStacksProcessor is the optional interface for processors supporting the
+// evaluation-sections gate (see column.RequiredSections / e.ExecuteDescribeStacksWithEvalSections)
+// on top of the auth-disabled + tags/labels-scoped behavior. Kept separate from
+// scopedStacksProcessor and authDisabledStacksProcessor so existing test doubles that only
+// implement those narrower interfaces keep compiling and behaving exactly as before — evalSections
+// gating is purely an additional, optional optimization, never a correctness requirement.
+type evalSectionsStacksProcessor interface {
+	ExecuteDescribeStacksWithEvalSections(
+		atmosConfig *schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+		authManager auth.AuthManager,
+		authDisabled bool,
+		tagsFilter []string,
+		labelsFilter map[string]string,
+		evalSections []string,
+	) (map[string]any, error)
+}
+
 // executeDescribeStacksForInstances dispatches to the most capable describe
-// variant the processor implements: the scoped variant when a tags/labels
-// early-skip filter is requested, the auth-disabled variant when authDisabled
-// is set, and the standard ExecuteDescribeStacks call otherwise. The `skip`
-// list is forwarded to every path so --skip continues to bypass the named
-// YAML functions. A processor without the optional scoped interface simply
-// describes unscoped — the row filters remain the authoritative final pass.
+// variant the processor implements: the eval-sections variant when a non-nil
+// evalSections filter is requested (a strict superset of the scoped/auth-disabled
+// behavior below), the scoped variant when a tags/labels early-skip filter is
+// requested, the auth-disabled variant when authDisabled is set, and the standard
+// ExecuteDescribeStacks call otherwise. The `skip` list is forwarded to every path
+// so --skip continues to bypass the named YAML functions. A processor without the
+// relevant optional interface simply describes without that capability — the row
+// filters remain the authoritative final pass, and eval-sections gating is purely
+// a performance/warning optimization, never required for correctness.
 //
 //nolint:revive // Helper mirrors the StacksProcessor call shape with skip + authDisabled passthrough.
 func executeDescribeStacksForInstances(
@@ -693,7 +749,26 @@ func executeDescribeStacksForInstances(
 	authDisabled bool,
 	tagsFilter []string,
 	labelsFilter map[string]string,
+	evalSections []string,
 ) (map[string]any, error) {
+	if evalSections != nil {
+		if processor, ok := stacksProcessor.(evalSectionsStacksProcessor); ok {
+			return processor.ExecuteDescribeStacksWithEvalSections(
+				atmosConfig, "", nil, nil, nil,
+				false, // ignoreMissingFiles
+				processTemplates,
+				processYamlFunctions,
+				false, // includeEmptyStacks
+				skip,
+				authManager,
+				authDisabled,
+				tagsFilter,
+				labelsFilter,
+				evalSections,
+			)
+		}
+	}
+
 	if len(tagsFilter) > 0 || len(labelsFilter) > 0 {
 		if processor, ok := stacksProcessor.(scopedStacksProcessor); ok {
 			return processor.ExecuteDescribeStacksScoped(
@@ -755,6 +830,7 @@ func processInstances(
 	authDisabled bool,
 	tagsFilter []string,
 	labelsFilter map[string]string,
+	evalSections []string,
 ) ([]schema.Instance, map[string]any, error) {
 	return processInstancesWithDeps(
 		atmosConfig,
@@ -767,6 +843,7 @@ func processInstances(
 		authDisabled,
 		tagsFilter,
 		labelsFilter,
+		evalSections,
 	)
 }
 
@@ -927,11 +1004,24 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	// With closure flags, the whole flow goes through the shared scoped closure
 	// engine instead: only the closure's stacks and components are evaluated,
 	// and the membership filter below owns row selection.
+	//
+	// Resolve columns before describing so the evaluation-scope filter (below) always matches
+	// the columns that actually end up on screen.
+	columns, err := getInstanceColumns(&atmosConfig, opts.ColumnsFlag)
+	if err != nil {
+		log.Error("failed to get columns", "error", err)
+		return errors.Join(errUtils.ErrInvalidConfig, err)
+	}
+
 	var instances []schema.Instance
 	var closureMembers map[string]struct{}
 	if opts.closureRequested() {
 		instances, closureMembers, err = processInstancesScopedClosure(&atmosConfig, opts, labels)
 	} else {
+		// evalSections narrows evaluation to the sections the resolved columns (plus `metadata`,
+		// which extract.Metadata and buildInstanceFilters's tags/labels filters always need) and
+		// the --filter/--query row transforms actually read — see resolveInstancesEvalSections.
+		evalSections := resolveInstancesEvalSections(columns, opts)
 		instances, _, err = processInstances(
 			&atmosConfig,
 			opts.AuthManager,
@@ -942,6 +1032,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 			opts.AuthDisabled,
 			opts.Tags,
 			labels,
+			evalSections,
 		)
 	}
 	if err != nil {
@@ -951,13 +1042,6 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 
 	// Extract instances into renderer-compatible format with metadata fields.
 	data := extract.Metadata(instances)
-
-	// Get column configuration.
-	columns, err := getInstanceColumns(&atmosConfig, opts.ColumnsFlag)
-	if err != nil {
-		log.Error("failed to get columns", "error", err)
-		return errors.Join(errUtils.ErrInvalidConfig, err)
-	}
 
 	// Create column selector.
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())

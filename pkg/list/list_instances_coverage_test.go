@@ -612,6 +612,64 @@ func TestGetInstanceColumns(t *testing.T) {
 	}
 }
 
+// TestResolveInstancesEvalSections verifies the evaluation-scope filter derived from the resolved
+// column set: `metadata` is always folded in (extract.Metadata and createInstance's abstract-type
+// filtering always read it, regardless of which columns are shown), and --filter/--query force a
+// nil (full eager evaluation) fallback since their YQ expressions cannot be statically analyzed
+// the way column.Value Go-template refs can.
+func TestResolveInstancesEvalSections(t *testing.T) {
+	tests := []struct {
+		name        string
+		columns     []column.Config
+		opts        *InstancesCommandOptions
+		expectNil   bool
+		expectExact []string
+	}{
+		{
+			name:        "default columns require only metadata",
+			columns:     defaultInstanceColumns,
+			opts:        &InstancesCommandOptions{},
+			expectExact: []string{"metadata"},
+		},
+		{
+			name:        "columns referencing vars require vars and metadata",
+			columns:     []column.Config{{Name: "Component", Value: "{{ .component }}"}, {Name: "Region", Value: "{{ .vars.region }}"}},
+			opts:        &InstancesCommandOptions{},
+			expectExact: []string{"metadata", "vars"},
+		},
+		{
+			name:      "unresolvable column (raw) falls back to nil",
+			columns:   []column.Config{{Name: "Raw", Value: "{{ .raw }}"}},
+			opts:      &InstancesCommandOptions{},
+			expectNil: true,
+		},
+		{
+			name:      "--filter set forces nil (YQ expression, not statically analyzable)",
+			columns:   defaultInstanceColumns,
+			opts:      &InstancesCommandOptions{FilterSpec: ".enabled == true"},
+			expectNil: true,
+		},
+		{
+			name:      "--query set forces nil (YQ expression, not statically analyzable)",
+			columns:   defaultInstanceColumns,
+			opts:      &InstancesCommandOptions{Query: ".component"},
+			expectNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := resolveInstancesEvalSections(tt.columns, tt.opts)
+			if tt.expectNil {
+				assert.Nil(t, result)
+				return
+			}
+			require.NotNil(t, result)
+			assert.ElementsMatch(t, tt.expectExact, result)
+		})
+	}
+}
+
 // TestBuildInstanceSorters tests sorter configuration.
 func TestBuildInstanceSorters(t *testing.T) {
 	tests := []struct {
