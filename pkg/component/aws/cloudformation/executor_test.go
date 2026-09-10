@@ -144,9 +144,16 @@ func TestRunDelete(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 
-	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
-	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
-	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+	gomock.InOrder(
+		// deleteStack's live termination-protection check: local config is
+		// false, so live state must be checked before the delete proceeds.
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{}},
+		}, nil),
+		client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
+	)
 
 	spec := &stackSpec{StackName: "vpc"}
 	summary, err := runDelete(context.Background(), client, map[string]any{}, spec, map[string]any{})
@@ -158,11 +165,17 @@ func TestRunDelete_FailedStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 
-	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
-	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
-	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusDeleteFailed}},
-	}, nil)
+	gomock.InOrder(
+		// deleteStack's live termination-protection check.
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{}},
+		}, nil),
+		client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusDeleteFailed}},
+		}, nil),
+	)
 
 	spec := &stackSpec{StackName: "vpc"}
 	_, err := runDelete(context.Background(), client, map[string]any{}, spec, map[string]any{})
@@ -561,6 +574,9 @@ func TestRunDelete_DeleteStackError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	sentinel := errors.New("delete stack failed")
 
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{}},
+	}, nil)
 	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(nil, sentinel)
 
 	spec := &stackSpec{StackName: "vpc"}
@@ -575,6 +591,9 @@ func TestRunDelete_StreamEventsError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	sentinel := errors.New("describe stack events failed")
 
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{}},
+	}, nil)
 	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
 	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, sentinel)
 
@@ -1184,9 +1203,15 @@ func TestOperationHandlers_Dispatch(t *testing.T) {
 			name: "delete",
 			op:   OperationDelete,
 			setup: func(m *MockCloudFormationClient) {
-				m.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
-				m.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
-				m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
+				gomock.InOrder(
+					// deleteStack's live termination-protection check.
+					m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+						Stacks: []cfntypes.Stack{{}},
+					}, nil),
+					m.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil),
+					m.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+					m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
+				)
 			},
 			check: func(t *testing.T, summary map[string]any) {
 				assert.Equal(t, string(cfntypes.StackStatusDeleteComplete), summary["final_status"])

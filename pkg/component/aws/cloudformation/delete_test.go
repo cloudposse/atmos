@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/stretchr/testify/assert"
@@ -111,10 +112,56 @@ func TestDeleteStack_NoTerminationProtection(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 
+	// Local config says false, so the live state must be checked before the
+	// gate is skipped; live state reports protection off too, so delete
+	// proceeds with no hint.
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{EnableTerminationProtection: aws.Bool(false)}},
+	}, nil)
 	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
 
 	spec := &stackSpec{StackName: "vpc"}
 	err := deleteStack(context.Background(), client, spec, deleteOptions{})
+	require.NoError(t, err)
+}
+
+// TestDeleteStack_BlocksOnLiveTerminationProtection proves the fix for the
+// field-test bug: local config says termination_protection: false (drifted
+// from AWS because apply only ever turns protection ON, never OFF — see
+// applyTerminationProtection), but the stack is still live-protected in AWS.
+// The gate must still fire the actionable hint, and DeleteStack must never be
+// called.
+func TestDeleteStack_BlocksOnLiveTerminationProtection(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{EnableTerminationProtection: aws.Bool(true)}},
+	}, nil)
+	// No DeleteStack expectation — the guard must short-circuit before it.
+
+	spec := &stackSpec{StackName: "vpc", TerminationProtection: false}
+	err := deleteStack(context.Background(), client, spec, deleteOptions{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+}
+
+// TestDeleteStack_DisableTerminationProtectionFlag_SkipsLiveLookup proves
+// --disable-termination-protection unconditionally disables protection (via
+// UpdateTerminationProtection) and proceeds to DeleteStack without ever
+// issuing a DescribeStacks lookup first, regardless of which signal (local
+// config or live AWS state) would otherwise have reported protection on.
+func TestDeleteStack_DisableTerminationProtectionFlag_SkipsLiveLookup(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	// No DescribeStacks expectation — must not be called.
+	client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(&cloudformation.UpdateTerminationProtectionOutput{}, nil)
+	client.EXPECT().DeleteStack(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackOutput{}, nil)
+
+	// Local config says false (the drifted case), yet --disable-termination-protection still works.
+	spec := &stackSpec{StackName: "vpc", TerminationProtection: false}
+	err := deleteStack(context.Background(), client, spec, deleteOptions{DisableTerminationProtection: true})
 	require.NoError(t, err)
 }
 
@@ -161,25 +208,25 @@ func TestDisableTerminationProtection_Error(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
-// currentStackStatus must wrap a DescribeStacks API error.
-func TestCurrentStackStatus_DescribeStacksError(t *testing.T) {
+// describeStack must wrap a DescribeStacks API error.
+func TestDescribeStack_DescribeStacksError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
 
-	_, err := currentStackStatus(context.Background(), client, "vpc")
+	_, err := describeStack(context.Background(), client, "vpc")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
-// currentStackStatus must error (not panic) when DescribeStacks returns no
+// describeStack must error (not panic) when DescribeStacks returns no
 // matching stack.
-func TestCurrentStackStatus_NoStackFound(t *testing.T) {
+func TestDescribeStack_NoStackFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil)
 
-	_, err := currentStackStatus(context.Background(), client, "vpc")
+	_, err := describeStack(context.Background(), client, "vpc")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "vpc")
 }
