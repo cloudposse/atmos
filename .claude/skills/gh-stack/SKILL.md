@@ -57,8 +57,14 @@ matches this repo's Git Safety Protocol. Preserve the work first, then switch:
 
 - Commit it, even as a throwaway WIP commit on the current branch (`git commit -m 'WIP: <tag>'`) —
   you can `git reset --soft HEAD~1` to restore it as unstaged changes once you're back on this layer.
-- Or copy the dirty files out to a temporary worktree or a patch file (`git diff > /tmp/<tag>.patch`)
-  outside the repo tree, and reapply after switching back.
+- Or copy the dirty files out to a temporary worktree, or a patch file written safely: create a
+  private temp directory (`dir=$(mktemp -d)`), exclusively create the patch file inside it
+  (`patch=$(mktemp "$dir/XXXXXX.patch")` — avoids following a pre-existing symlink at a predictable
+  shared `/tmp/<tag>.patch` path), and capture with `git diff HEAD > "$patch"` — `HEAD`, not a bare
+  `git diff`, so both staged and unstaged tracked changes are captured (a bare `git diff` only
+  compares the working tree against the index and silently drops anything already staged); untracked
+  files still need separate handling (copy them by hand — don't `git stash -u`, per this repo's
+  no-stash convention). Reapply after switching back, then remove the temp directory.
 
 Only if neither is viable and the changes are genuinely disposable, ask the user for explicit approval
 before discarding — never remove uncommitted work by default. Never switch layers mid-edit with dirty
@@ -99,9 +105,13 @@ This fast-forwards the branch pointer and merges in the parent's new commit's fi
 touching your working tree's dirty files, as long as those dirty files don't conflict with what the
 fast-forward brings in (they won't, if the parent commit only touched files you haven't touched).
 
-Once the upper layer has real commits of its own, use `gh stack rebase`/`gh stack sync` instead (after
-committing or unstaging first, per gotcha #1) — that's the tool built for cascading a real rebase
-across every branch in the stack.
+Once the upper layer has real commits of its own, use `gh stack rebase`/`gh stack sync` instead — but
+only from a genuinely clean worktree first. `github/gh-stack` requires zero uncommitted changes,
+staged or not, for these commands, and does not stash them automatically. Unstaging alone (`git
+restore --staged .`) is not enough — it clears the index but leaves working-tree modifications in
+place, and those still block the command. Commit what you have or safely move it out of the working
+tree first (per gotcha #1), not just unstage it. Once clean, `gh stack rebase`/`gh stack sync` is the
+tool built for cascading a real rebase across every branch in the stack.
 
 ### 3. Trust GitHub's `mergeable`/conflict report over a local pairwise branch comparison
 
@@ -140,11 +150,16 @@ rebase` reports zero conflicts, only then is it reasonable to treat GitHub's cac
 and worth a recheck after a short wait (GitHub's own mergeability computation can lag a
 `gh stack submit` push by a few seconds, but it resolves in well under a minute).
 
-When resolving the conflicts `gh stack rebase` surfaces, prefer **keeping both sides** over picking
-one — in this repo, stacked layers usually add independent, coexisting things to the same shared
-file (e.g. two different component types each adding their own `case` in the same switch
-statement, or their own field in the same struct). A conflict here is almost never "which change is
-correct," it's "both changes are correct and need to be merged together textually."
+When resolving the conflicts `gh stack rebase` surfaces, first check whether the two sides are
+actually independent, then combine them — don't reflexively keep both. In this repo, stacked layers
+usually add independent, coexisting things to the same shared file (e.g. two different component
+types each adding their own `case` in the same switch statement, or their own field in the same
+struct); for those, prefer **keeping both sides** over picking one — a conflict here is usually not
+“which change is correct,” it's “both changes are correct and need to be merged.” But when the two
+sides touch the same case, field, or logic in incompatible ways, keeping both blindly produces
+duplicate cases or contradictory logic — resolve the conflict semantically instead, picking the
+correct combined behavior rather than concatenating both raw hunks, and re-run the affected checks
+afterward.
 
 ## PR labeling across a stack
 
