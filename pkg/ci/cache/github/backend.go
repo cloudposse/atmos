@@ -158,10 +158,13 @@ func NewBackend(opts cache.Options) (cache.Backend, error) {
 	b := &Backend{
 		blobClient: &http.Client{Timeout: blobTimeout},
 		restClient: restClient,
-		baseURL:    "https://api.github.com",
-		owner:      owner,
-		repo:       repo,
-		version:    version,
+		// RepoEndpoints resolves GITHUB_API_URL (defaulting to api.github.com), so cache
+		// list/delete work against a GitHub Enterprise Server instance the same way they
+		// do against github.com.
+		baseURL: ghtoken.RepoEndpoints().APIURL,
+		owner:   owner,
+		repo:    repo,
+		version: version,
 	}
 
 	// The runtime client (used only by save/restore) is available solely inside a
@@ -525,8 +528,8 @@ func ownerRepoFromLocalGit() (string, string) {
 		log.Debug("CI cache: could not read local git remote for owner/repo resolution", "error", err)
 		return "", ""
 	}
-	if info.RepoHost != "github.com" {
-		log.Debug("CI cache: local git remote is not hosted on github.com", "host", info.RepoHost)
+	if info.RepoHost != "github.com" && !ghtoken.RepoEndpoints().IsHost(info.RepoHost) {
+		log.Debug("CI cache: local git remote is not hosted on github.com or the configured GHES host", "host", info.RepoHost)
 		return "", ""
 	}
 	return info.RepoOwner, info.RepoName

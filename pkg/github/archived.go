@@ -12,7 +12,8 @@ import (
 )
 
 // githubHost is the hostname that identifies a GitHub.com repository (as opposed to GitLab,
-// Bitbucket, a self-hosted Git server, etc.).
+// Bitbucket, a self-hosted Git server, etc.). ParseOwnerRepo additionally recognizes the
+// GitHub Enterprise Server host configured via RepoEndpoints (GITHUB_SERVER_URL).
 const githubHost = "github.com"
 
 // IsArchived reports whether a GitHub repository is archived. Archived-ness is repository
@@ -52,7 +53,7 @@ func ParseOwnerRepo(gitURI string) (owner, repo string, ok bool) {
 	defer perf.Track(nil, "github.ParseOwnerRepo")()
 
 	u, err := url.Parse(gitURI)
-	if err != nil || u.Host != githubHost {
+	if err != nil || (u.Host != githubHost && !RepoEndpoints().IsHost(u.Host)) {
 		return "", "", false
 	}
 

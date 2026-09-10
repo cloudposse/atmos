@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -44,7 +45,7 @@ func GetReleaseBody(ctx context.Context, client HTTPClient, token string, ref Re
 func GetPullRequestBody(ctx context.Context, client HTTPClient, token, repo string, number int) (string, error) {
 	defer perf.Track(nil, "releasenotes.GetPullRequestBody")()
 
-	url := fmt.Sprintf("https://api.github.com/repos/%s/pulls/%d", repo, number)
+	url := fmt.Sprintf("%s/repos/%s/pulls/%d", ghtoken.RepoEndpoints().APIURL, repo, number)
 	req, err := newGitHubAPIRequest(ctx, http.MethodGet, token, url, nil)
 	if err != nil {
 		return "", fmt.Errorf("releasenotes: build request for PR #%d: %w", number, err)
@@ -110,7 +111,7 @@ func UpdateReleaseBody(ctx context.Context, client HTTPClient, token string, ref
 }
 
 func newGitHubRequest(ctx context.Context, method, token string, ref ReleaseRef, body io.Reader) (*http.Request, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/%s", ref.Repo, ref.ID)
+	url := fmt.Sprintf("%s/repos/%s/releases/%s", ghtoken.RepoEndpoints().APIURL, ref.Repo, ref.ID)
 	req, err := newGitHubAPIRequest(ctx, method, token, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("releasenotes: build %s request for release %s: %w", method, ref.ID, err)
