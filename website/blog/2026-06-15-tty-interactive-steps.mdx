@@ -83,13 +83,15 @@ Rule of thumb: use `tty`/`interactive` when you want Atmos supervising (masking,
 
 ## How It Works
 
-With `tty: true`, Atmos runs the step under a pseudo-terminal (the same mechanism `atmos devcontainer attach` uses). With `interactive: true`, your terminal switches to raw mode for the duration of the step, so the Ctrl-C byte travels through the PTY to the child process — Atmos never even sees the signal. Secret masking is applied to the PTY output stream, so credentials in session output are still redacted.
+With `tty: true`, Atmos runs the step under a pseudo-terminal (the same mechanism [`atmos devcontainer attach`](/cli/commands/devcontainer/attach) uses). With `interactive: true`, your terminal switches to raw mode for the duration of the step, so the Ctrl-C byte travels through the PTY to the child process — Atmos never even sees the signal. Secret masking is applied to the PTY output stream, so credentials in session output are still redacted.
 
 Pseudo-terminals are supported on macOS and Linux. On Windows, `tty: true` falls back to attaching the real console streams directly; sessions still work and Ctrl-C still goes to the step, but secret masking is unavailable in that mode (Atmos warns when masking is enabled).
 
 ## How to Use It
 
 See the [Interactive and TTY Steps](/cli/configuration/commands/steps#interactive-and-tty-steps) documentation for the full reference, including semantics of each flag and platform notes.
+
+For usage and configuration, see [interactive](/workflows/steps/interactive).
 
 ## Get Involved
 

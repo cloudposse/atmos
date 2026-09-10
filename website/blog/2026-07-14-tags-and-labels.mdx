@@ -8,7 +8,7 @@ tags: [feature]
 
 Your stack hierarchy picks one way to organize your infrastructure — org, account, region, component type — and it can only pick one. `vpc` in `stacks/orgs/acme/prod/network.yaml` tells you where it lives in that tree; it doesn't tell you it's tier-1, or that platform owns it, or that it's in scope for SOX. Those characteristics don't belong to one branch of the tree — they apply across many stacks and many components at once, and a single component is usually several of them simultaneously. Your AWS accounts and auth identities have the same problem: `prod-admin` doesn't tell you it's the production one, or the elevated one, until you already know that.
 
-Tags and labels give components that organizational context directly — components get both; auth identities and providers get tags — so you can select and act on infrastructure by what it is instead of by where you filed it.
+[Tags](/stacks/components/component-metadata#tags) and [labels](/stacks/components/component-metadata#labels) give components that organizational context directly — components get both; auth identities and providers get tags — so you can select and act on infrastructure by what it is instead of by where you filed it.
 
 <!--truncate-->
 
@@ -59,14 +59,14 @@ auth:
 
 ## How to Use It
 
-**Listing and filtering components:**
+**[Listing and filtering components](/cli/commands/list/components):**
 
 ```shell
 atmos list components --tags production,tier-1
 atmos list components --labels cost-center=platform,compliance=sox
 ```
 
-**Bulk operations** — `--tags`/`--labels` compose with `--all`/`--affected` everywhere Atmos already supports bulk selection, across every component type:
+**[Bulk operations](/cli/commands/terraform/usage)** — [`--tags`](/stacks/components/component-metadata#tags)/[`--labels`](/stacks/components/component-metadata#labels) compose with [`--all`](/cli/commands/terraform/plan#plan-all-components)/[`--affected`](/cli/commands/terraform/plan#plan-affected-components) everywhere Atmos already supports bulk selection, across every component type:
 
 ```shell
 atmos terraform apply --affected --tags production
@@ -75,9 +75,9 @@ atmos helm apply --affected --tags production
 atmos container up --all --tags production
 ```
 
-Because this lives in the shared component registry (`pkg/component`), any component type — built-in or custom — that adopts the standard bulk-execution pattern gets `--tags`/`--labels` filtering automatically, with no per-type code.
+The same selection syntax works across supported component types, so you can reuse your labels when operating on different kinds of infrastructure.
 
-**The same filtering works for auth**, since providers and identities are tagged the same way:
+**The same filtering works for [auth](/cli/commands/auth/list)**, since providers and identities are tagged the same way:
 
 ```shell
 atmos auth list --tags production
@@ -85,7 +85,7 @@ atmos auth login --tags admin,production   # auto-selects if exactly one match, 
 atmos auth logout --tags production        # logs out every matching provider
 ```
 
-**Bridging into your modules** — four new YAML functions read a component's own `metadata.tags`/`metadata.labels` without the usual `!template`/`toJson` boilerplate: `!tags` and `!labels` return the values directly, and `!labels.keys`/`!labels.values` return just the label map's keys or values. The most common use is feeding `metadata.labels` into the `var.tags` a `terraform-null-label`-style module expects (Terraform and AWS call a map "tags"; Atmos calls it a "label" — same data, different name):
+**Bridging into your modules** — four new YAML functions read a component's own [`metadata.tags`](/stacks/components/component-metadata#tags)/[`metadata.labels`](/stacks/components/component-metadata#labels) without the usual [`!template`](/functions/yaml/template)/`toJson` boilerplate: [`!tags`](/functions/yaml/tags) and [`!labels`](/functions/yaml/labels) return the values directly, and [`!labels.keys`](/functions/yaml/labels.keys)/[`!labels.values`](/functions/yaml/labels.values) return just the label map's keys or values. The most common use is feeding `metadata.labels` into the `var.tags` a `terraform-null-label`-style module expects (Terraform and AWS call a map "tags"; Atmos calls it a "label" — same data, different name):
 
 ```yaml title="stacks/orgs/acme/prod/network.yaml"
 components:
@@ -98,6 +98,8 @@ components:
       vars:
         tags: !labels   # var.tags (map) <- metadata.labels
 ```
+
+For individual label values and optional defaults, see the [label lookup reference](/functions/yaml/labels#single-label-lookup). For a workflow configuration example, see [runner selection in Atmos Pro](/cli/configuration/settings/pro#choose-a-runner-per-component-or-stack).
 
 ## Get Involved
 
