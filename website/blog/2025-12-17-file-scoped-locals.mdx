@@ -148,7 +148,7 @@ Locals can be defined at three levels, with inner scopes inheriting from outer:
 
 1. **Global** (stack file root) - Available throughout the file
 2. **Component-type** (`terraform`, `helmfile`, `packer` sections) - Inherits from global
-3. **Component-level** (inside component definitions) - Inherits from global + component-type, and from base components via `metadata.inherits`
+3. **Component-level** (inside component definitions) - Inherits from global + component-type, and from base components via [`metadata.inherits`](/stacks/components/component-metadata#inherits)
 
 ```yaml
 # Global locals
@@ -319,6 +319,8 @@ vars:
 
 - [Stack Templates](/templates) - Go templating in stack manifests
 - [Configuration Provenance](/cli/commands/describe/component) - Track where values come from
-- [YAML Functions](/functions/yaml) - Dynamic configuration with `!terraform.output`, `!env`, etc.
+- [YAML Functions](/functions/yaml) - Dynamic configuration with [`!terraform.output`](/functions/yaml/terraform.output), [`!env`](/functions/yaml/env), etc.
 
 We'd love to hear how you're using locals in your configurations. Share your patterns in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions) or open an issue if you encounter any problems.
+
+For usage and configuration, see [Configure Locals](/stacks/locals).
