@@ -447,6 +447,25 @@ func TestIsArchiveURI_ArchiveQueryParamAndSubdirectory(t *testing.T) {
 	assert.False(t, IsArchiveURI("https://example.com/archive.zip//nested?archive=false"))
 }
 
+// An empty `archive` value (`?archive=`, as opposed to the parameter being
+// absent entirely) must be treated as no override at all -- go-getter falls
+// through to extension-based detection in this case rather than forcing
+// unarchiving (see client.go's `archiveV != ""` check upstream). Regression
+// test for a bug where `len(archive) > 0` alone (without checking the value
+// itself was non-empty) treated `?archive=` as `!EqualFold("", "false")` ==
+// true, misclassifying a single-file source as an archive.
+func TestIsArchiveURI_EmptyArchiveQueryParamFallsBackToExtensionDetection(t *testing.T) {
+	// A single-file extension with an empty archive param must still be
+	// detected as a non-archive via extension detection, not forced true.
+	assert.False(t, IsArchiveURI("https://example.com/file.yaml?archive="),
+		"an empty archive value must fall back to extension detection, not force unarchiving")
+	// An actual archive extension with an empty archive param must still be
+	// detected as an archive via extension detection (proving the empty value
+	// falls through rather than forcing false).
+	assert.True(t, IsArchiveURI("https://example.com/archive.zip?archive="),
+		"an empty archive value must fall back to extension detection, not disable unarchiving")
+}
+
 func TestIsNonGitHTTPURI(t *testing.T) {
 	tests := []struct {
 		name     string

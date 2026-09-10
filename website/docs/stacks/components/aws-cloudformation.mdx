@@ -241,7 +241,10 @@ declare additional named targets under `provision.targets`, selected with
     review step or a template too large to pass inline. This same target is
     also used automatically to package (upload) any template that exceeds
     CloudFormation's 51,200-byte inline size limit, whichever target is
-    selected for the deploy.
+    selected for the deploy. `bucket` and `region` are both required: `region`
+    builds the `https://` S3 URL passed as `CreateChangeSet`'s `TemplateURL`
+    (AWS rejects a bare `s3://` URI there), so it can't be left to be inferred
+    later.
 
 ```yaml
 components:

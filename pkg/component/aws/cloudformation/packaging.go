@@ -183,9 +183,14 @@ func packageObjectName(prefix string, info *schema.ConfigAndStacksInfo, digest s
 	return strings.TrimSuffix(prefix, "/") + "/" + name
 }
 
-// packageURL constructs the s3:// URL for a packaged template. CreateChangeSet's
-// TemplateURL parameter also accepts virtual-hosted-style https URLs; s3:// is
-// used here since it's unambiguous across regions/partitions.
+// packageURL constructs the virtual-hosted-style https:// URL CreateChangeSet's
+// TemplateURL parameter requires. AWS rejects a bare s3:// URI here (TemplateURL
+// must be an S3 or Systems Manager document URL starting with https://), so a
+// region is mandatory -- s3ConfigFromTarget enforces that before this is ever
+// called. GovCloud/China partitions (a different DNS suffix than
+// amazonaws.com) aren't handled: nothing else in this codebase resolves AWS
+// partition yet, so extending that is left to a future change if/when it's
+// needed rather than guessed at here.
 func packageURL(s3Target *targetS3Config, name string) string {
-	return fmt.Sprintf("s3://%s/%s", s3Target.Bucket, name)
+	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", s3Target.Bucket, s3Target.Region, name)
 }

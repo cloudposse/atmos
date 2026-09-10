@@ -72,11 +72,22 @@ func TestS3ConfigFromTarget_MissingBucket(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
 }
 
+// s3ConfigFromTarget must reject a target with a bucket but no region: region
+// is required to build a valid CloudFormation TemplateURL (see packageURL),
+// and there's no reliable way to recover it after the fact once uploadPackage
+// has already run.
+func TestS3ConfigFromTarget_MissingRegion(t *testing.T) {
+	_, err := s3ConfigFromTarget("artifacts", map[string]any{"bucket": "my-bucket"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAwsCloudFormationSettings)
+	assert.Contains(t, err.Error(), "region")
+}
+
 func TestResolvePackagingTarget_DirectS3Selection(t *testing.T) {
 	selected := &target.SelectedTarget{
 		Kind:   "aws/s3",
 		Name:   "artifacts",
-		Config: map[string]any{"bucket": "my-bucket"},
+		Config: map[string]any{"bucket": "my-bucket", "region": "us-east-1"},
 	}
 	cfg, err := resolvePackagingTarget(nil, selected)
 	require.NoError(t, err)
@@ -93,7 +104,7 @@ func TestResolvePackagingTarget_NoS3TargetDeclared(t *testing.T) {
 func TestResolvePackagingTarget_ImplicitSingleS3Target(t *testing.T) {
 	provisionSection := map[string]any{
 		"targets": map[string]any{
-			"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket"},
+			"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket", "region": "us-east-1"},
 			"gitops":    map[string]any{"kind": "git"},
 		},
 	}
@@ -156,7 +167,7 @@ func TestDeliverToExternalTarget_GitTargetNotConfigured(t *testing.T) {
 	assert.Equal(t, len(spec.TemplateBody), summary["template_bytes"])
 }
 
-// deliverToExternalTarget must deliver the packaged reference (a small
+// DeliverToExternalTarget must deliver the packaged reference (a small
 // TemplateURL pointer document), not the original oversized template body,
 // once deliverApply has already packaged the template (spec.TemplateURL set)
 // -- re-embedding the full body into every delivery destination is exactly
@@ -342,7 +353,7 @@ func TestDeliverApply_DirectDeployKind(t *testing.T) {
 	assert.Equal(t, "default", summary[targetKey])
 }
 
-// deliverApply must package an oversized template before a direct deploy
+// DeliverApply must package an oversized template before a direct deploy
 // (the implicit `kind: aws/cloudformation` default target) and pass the
 // packaged TemplateURL to CreateChangeSet instead of the raw body: AWS
 // rejects a TemplateBody over 51,200 bytes, and only TemplateURL supports
@@ -384,7 +395,7 @@ func TestDeliverApply_DirectDeployKind_PackagesLargeTemplate(t *testing.T) {
 			ComponentSection: map[string]any{
 				cfg.ProvisionSectionName: map[string]any{
 					"targets": map[string]any{
-						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket"},
+						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket", "region": "us-east-1"},
 					},
 				},
 			},
@@ -423,7 +434,7 @@ func TestDeliverApply_DirectS3Selection_PublishOnly(t *testing.T) {
 			ComponentSection: map[string]any{
 				cfg.ProvisionSectionName: map[string]any{
 					"targets": map[string]any{
-						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket"},
+						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket", "region": "us-east-1"},
 					},
 				},
 			},
@@ -436,7 +447,8 @@ func TestDeliverApply_DirectS3Selection_PublishOnly(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, result, "publish-only delivery must not run a deploy")
 	assert.Equal(t, "artifacts", summary[targetKey])
-	assert.Equal(t, "s3://my-bucket/dev/vpc/template-", summary["package_url"].(string)[:len("s3://my-bucket/dev/vpc/template-")])
+	wantPrefix := "https://my-bucket.s3.us-east-1.amazonaws.com/dev/vpc/template-"
+	assert.Equal(t, wantPrefix, summary["package_url"].(string)[:len(wantPrefix)])
 	assert.NotEmpty(t, summary["package_sha256"])
 }
 
@@ -459,7 +471,7 @@ func TestDeliverApply_UploadPackageError(t *testing.T) {
 			ComponentSection: map[string]any{
 				cfg.ProvisionSectionName: map[string]any{
 					"targets": map[string]any{
-						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket"},
+						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket", "region": "us-east-1"},
 					},
 				},
 			},
@@ -500,7 +512,7 @@ func TestDeliverApply_ExternalTarget_PackagesLargeTemplate(t *testing.T) {
 					"default": "gitops",
 					"targets": map[string]any{
 						"gitops":    map[string]any{"kind": "git"},
-						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket"},
+						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket", "region": "us-east-1"},
 					},
 				},
 			},
@@ -612,8 +624,8 @@ func TestDeliverApply_GitTarget_SmallTemplate_NoPackagingTargetNeeded(t *testing
 func TestResolvePackagingTarget_DisambiguatedWithPackagingField(t *testing.T) {
 	provisionSection := map[string]any{
 		"targets": map[string]any{
-			"bucket-a": map[string]any{"kind": "aws/s3", "bucket": "bucket-a"},
-			"bucket-b": map[string]any{"kind": "aws/s3", "bucket": "bucket-b"},
+			"bucket-a": map[string]any{"kind": "aws/s3", "bucket": "bucket-a", "region": "us-east-1"},
+			"bucket-b": map[string]any{"kind": "aws/s3", "bucket": "bucket-b", "region": "us-east-1"},
 			"gitops":   map[string]any{"kind": "git", "packaging": "bucket-b"},
 		},
 	}

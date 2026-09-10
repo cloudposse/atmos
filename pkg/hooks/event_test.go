@@ -45,7 +45,7 @@ func TestHookEvent_Normalize_OutputRefreshNotAliased(t *testing.T) {
 	assert.Equal(t, AfterTerraformRefresh, AfterTerraformRefresh.Normalize())
 }
 
-// aws/cloudformation's CLI verbs (plan, deploy) are aliases for the canonical
+// AWS CloudFormation's CLI verbs (plan, deploy) are aliases for the canonical
 // executor-emitted events (diff, apply): the executor only ever fires
 // Before/AfterAwsCloudFormationDiff and Before/AfterAwsCloudFormationApply
 // (see eventsFor in pkg/component/aws/cloudformation/executor.go), so a hook

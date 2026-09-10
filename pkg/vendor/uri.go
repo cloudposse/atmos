@@ -110,9 +110,12 @@ var directoryArchiveExtensions = []string{
 }
 
 // archiveQueryParam is go-getter's query parameter that explicitly overrides
-// extension-based archive detection: any value other than "false" (including
-// an explicit archive type like "zip") forces unarchiving, and "false"
-// disables it even for a recognized archive extension. See
+// extension-based archive detection: any non-empty value other than "false"
+// (including an explicit archive type like "zip") forces unarchiving, and
+// "false" disables it even for a recognized archive extension. An empty value
+// (`?archive=`, as opposed to the parameter being entirely absent) is treated
+// the same as absent -- go-getter falls through to extension-based detection
+// rather than forcing unarchiving. See
 // https://pkg.go.dev/github.com/hashicorp/go-getter#hdr-Archiving.
 const archiveQueryParam = "archive"
 
@@ -139,7 +142,11 @@ func IsArchiveURI(uri string) bool {
 
 	if rawQuery != "" {
 		if values, err := url.ParseQuery(rawQuery); err == nil {
-			if archive, ok := values[archiveQueryParam]; ok && len(archive) > 0 {
+			// go-getter treats a present-but-empty value (`?archive=`) the same as
+			// absent: it falls through to extension-based detection rather than
+			// forcing unarchiving (see client.go's `archiveV != ""` check upstream).
+			// Only a non-empty value is a real override.
+			if archive, ok := values[archiveQueryParam]; ok && len(archive) > 0 && archive[0] != "" {
 				return !strings.EqualFold(archive[0], "false")
 			}
 		}

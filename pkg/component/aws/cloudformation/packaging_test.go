@@ -34,8 +34,15 @@ func TestPackageObjectName(t *testing.T) {
 }
 
 func TestPackageURL(t *testing.T) {
-	url := packageURL(&targetS3Config{Bucket: "my-bucket"}, "dev/vpc/template-abc.yaml")
-	assert.Equal(t, "s3://my-bucket/dev/vpc/template-abc.yaml", url)
+	url := packageURL(&targetS3Config{Bucket: "my-bucket", Region: "us-east-1"}, "dev/vpc/template-abc.yaml")
+	assert.Equal(t, "https://my-bucket.s3.us-east-1.amazonaws.com/dev/vpc/template-abc.yaml", url)
+}
+
+// packageURL must vary the endpoint by region -- a hard-coded region here
+// would let a bug that ignores s3Target.Region pass unnoticed.
+func TestPackageURL_UsesConfiguredRegion(t *testing.T) {
+	url := packageURL(&targetS3Config{Bucket: "my-bucket", Region: "eu-west-1"}, "dev/vpc/template-abc.yaml")
+	assert.Equal(t, "https://my-bucket.s3.eu-west-1.amazonaws.com/dev/vpc/template-abc.yaml", url)
 }
 
 // newS3Backend must construct a real backend for the default (no-identity)
@@ -220,12 +227,12 @@ func TestUploadPackage_Success(t *testing.T) {
 	stubNewS3Backend(t, mockBackend, nil)
 
 	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"}
-	s3Target := &targetS3Config{Bucket: "my-bucket"}
+	s3Target := &targetS3Config{Bucket: "my-bucket", Region: "us-east-1"}
 
 	pkg, err := uploadPackage(context.Background(), &schema.AtmosConfiguration{}, info, s3Target, templateBody)
 	require.NoError(t, err)
 	require.NotNil(t, pkg)
-	assert.Equal(t, "s3://my-bucket/"+gotName, pkg.URL)
+	assert.Equal(t, "https://my-bucket.s3.us-east-1.amazonaws.com/"+gotName, pkg.URL)
 	assert.Len(t, pkg.SHA256, 64, "SHA256 must be a full hex-encoded digest")
 	assert.Equal(t, int64(len(templateBody)), gotSize)
 	assert.Contains(t, gotName, "dev/vpc/template-")

@@ -580,7 +580,10 @@ type ProvisionTarget struct {
 	Bucket string `yaml:"bucket,omitempty" json:"bucket,omitempty" mapstructure:"bucket"`
 	// Prefix is the destination key prefix within Bucket (aws/s3 kind).
 	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty" mapstructure:"prefix"`
-	// Region overrides the bucket's region (aws/s3 kind; defaults to the active identity's region).
+	// Region is the bucket's region (aws/s3 kind). Required: it builds the
+	// https:// TemplateURL CreateChangeSet needs for a packaged template, and
+	// unlike the CloudFormation client's own region resolution there is no
+	// reliable way to recover it after the S3 upload has already happened.
 	Region string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
 }
 

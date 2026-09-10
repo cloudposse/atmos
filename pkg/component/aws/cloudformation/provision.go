@@ -167,13 +167,24 @@ func findS3Targets(provisionSection map[string]any) map[string]map[string]any {
 }
 
 // s3ConfigFromTarget extracts bucket/prefix/region from a resolved `kind: aws/s3` target block.
+//
+// Region is required (not just optional metadata): packageURL below needs it
+// to build a CloudFormation-compatible https:// TemplateURL (AWS rejects a
+// bare s3:// URI), and unlike the CloudFormation client's own region
+// resolution (region.go's resolveRegion, which can defer to the active
+// identity or the SDK default chain), there is no reliable way to recover the
+// region the S3 upload actually used after the fact -- artifact.Backend's
+// Upload returns only an error, no location/region back to the caller.
 func s3ConfigFromTarget(name string, block map[string]any) (*targetS3Config, error) {
 	bucket, _ := block["bucket"].(string)
 	if bucket == "" {
 		return nil, fmt.Errorf("%w: aws/s3 target %q is missing `bucket`", errUtils.ErrInvalidAwsCloudFormationSettings, name)
 	}
-	prefix, _ := block["prefix"].(string)
 	region, _ := block["region"].(string)
+	if region == "" {
+		return nil, fmt.Errorf("%w: aws/s3 target %q is missing `region` (required to build a valid TemplateURL)", errUtils.ErrInvalidAwsCloudFormationSettings, name)
+	}
+	prefix, _ := block["prefix"].(string)
 	return &targetS3Config{Name: name, Bucket: bucket, Prefix: prefix, Region: region}, nil
 }
 

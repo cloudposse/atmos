@@ -498,7 +498,7 @@ func TestRunApply_PublishOnlyTarget_SkipsPostDeploySteps(t *testing.T) {
 			ComponentSection: map[string]any{
 				cfg.ProvisionSectionName: map[string]any{
 					"targets": map[string]any{
-						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket"},
+						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket", "region": "us-east-1"},
 					},
 				},
 			},
