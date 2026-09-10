@@ -56,10 +56,6 @@ func init() {
 	})
 }
 
-// defaultAquaRegistryBaseURL is the upstream aqua-registry raw content base URL.
-// It serves both the top-level registry.yaml index and the per-package pkgs/<name>/registry.yaml files.
-const defaultAquaRegistryBaseURL = "https://raw.githubusercontent.com/aquaproj/aqua-registry/main"
-
 // AquaRegistry represents the Aqua registry structure.
 type AquaRegistry struct {
 	client          httpClient.Client
@@ -67,7 +63,7 @@ type AquaRegistry struct {
 	cacheStore      cache.Store
 	githubToken     string
 	githubBaseURL   string
-	registryBaseURL string // Base URL of the aqua-registry repo (raw content). See defaultAquaRegistryBaseURL.
+	registryBaseURL string // Base URL of the aqua-registry repo (raw content). Default resolved via github.AquaRegistryURL.
 	lastSearchTotal int    // Total number of search results before pagination.
 	pathIndexMu     sync.RWMutex
 	pathIndex       map[string]string  // "owner/repo" -> registry path of one package under that owner/repo. Monorepo packages (e.g., kubernetes/kubernetes/{kubectl,kubeadm,...}) collide here — last wins. Use packageList for full enumeration.
@@ -98,6 +94,18 @@ type scoredTool struct {
 
 // RegistryOption is a functional option for configuring AquaRegistry.
 type RegistryOption func(*AquaRegistry)
+
+// toolchainHostMatcher builds a GitHub host-authentication predicate covering the default
+// public GitHub hosts (api.github.com, raw.githubusercontent.com, uploads.github.com) plus
+// the resolved toolchain endpoints host, so a GitHub token is attached both to standard
+// aqua-registry/release traffic and to a configured corporate mirror
+// (ATMOS_TOOLCHAIN_GITHUB_URL/ATMOS_TOOLCHAIN_GITHUB_API_URL). Installing any host matcher
+// replaces pkg/http's own default allowlist entirely, so those defaults are reproduced here.
+func toolchainHostMatcher(endpoints github.Endpoints) func(string) bool {
+	return func(host string) bool {
+		return host == "api.github.com" || host == "raw.githubusercontent.com" || host == "uploads.github.com" || endpoints.IsHost(host)
+	}
+}
 
 // WithGitHubBaseURL sets the GitHub API base URL (primarily for testing).
 func WithGitHubBaseURL(url string) RegistryOption {
@@ -132,17 +140,24 @@ func NewAquaRegistry(opts ...RegistryOption) *AquaRegistry {
 	}
 
 	githubToken := github.GetGitHubToken()
+	// Toolchain endpoints are a separate concern from repo endpoints (GITHUB_SERVER_URL/
+	// GITHUB_API_URL): aqua-registry tools live on public github.com even when the user's own
+	// repositories are on a GitHub Enterprise Server, so this must not follow those vars.
+	// ATMOS_TOOLCHAIN_GITHUB_API_URL / ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL default to the same
+	// public endpoints, so behavior is unchanged unless those vars are set.
+	toolchainEndpoints := github.ToolchainEndpoints()
 	ar := &AquaRegistry{
 		client: httpClient.NewDefaultClient(
 			httpClient.WithGitHubToken(githubToken),
+			httpClient.WithGitHubHostMatcher(toolchainHostMatcher(toolchainEndpoints)),
 		),
 		cache: &RegistryCache{
 			baseDir: filepath.Join(cacheBaseDir, "registry"),
 		},
 		cacheStore:      cache.NewFileStore(cacheBaseDir),
 		githubToken:     githubToken,
-		githubBaseURL:   "https://api.github.com", // default
-		registryBaseURL: defaultAquaRegistryBaseURL,
+		githubBaseURL:   toolchainEndpoints.APIURL,
+		registryBaseURL: github.AquaRegistryURL(),
 	}
 
 	// Apply options.
@@ -867,9 +882,10 @@ func (ar *AquaRegistry) BuildAssetURL(tool *registry.Tool, version string) (stri
 		return assetName, nil
 	}
 
-	// For github_release type, construct GitHub release URL using the full tag.
-	return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
-		tool.RepoOwner, tool.RepoName, releaseVersion, assetName), nil
+	// For github_release type, construct the GitHub release URL using the full tag. Uses the
+	// toolchain endpoints (ATMOS_TOOLCHAIN_GITHUB_URL), not the repo endpoints: aqua-registry
+	// tool releases live on public github.com even for GHES users, by default.
+	return github.ToolchainEndpoints().ReleaseAssetURL(tool.RepoOwner, tool.RepoName, releaseVersion, assetName), nil
 }
 
 // resolveVersionStrings determines the release version and semver based on tool config.
