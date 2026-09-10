@@ -8,11 +8,13 @@ components:
     nat-gateway:
       vars:
         environment: test
-      dependencies:
-        tools:
-          infracost: "0.10.44"
       hooks:
         cost:
           events:
             - after.terraform.plan
           kind: infracost
+          # Cast-only stand-in: produces deterministic Infracost-compatible
+          # output without requiring credentials or the pricing API.
+          command: sh
+          args:
+            - "$ATMOS_COMPONENT_PATH/infracost-emulator"
