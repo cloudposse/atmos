@@ -16,21 +16,21 @@ revoked at the end — with **zero `.tf` changes**.
 
 ## What Changed
 
-Two new `atmos auth` kinds, modeled on the existing `aws/ecr` and `aws/eks` integrations:
+Two new [`atmos auth`](/cli/commands/auth/usage) kinds, modeled on the existing `aws/ecr` and `aws/eks` integrations:
 
 - **Provider `kind: atmos/pro`** — authenticates the Atmos CLI *to Atmos Pro* by federating the
   GitHub Actions runner's OIDC token (no secrets required) into an Atmos Pro session. v1 is OIDC-only,
   so it works out of the box in GitHub Actions.
 - **Integration `kind: github/sts`** — on login it asks Atmos Pro to mint scoped, short-lived GitHub
   App installation tokens, materializes them as per-owner git URL rewrites for child processes, and
-  revokes them when the command finishes (in CI) and on `atmos auth logout`.
+  revokes them when the command finishes (in CI) and on [`atmos auth logout`](/cli/commands/auth/logout).
 
 We also added **`ATMOS_PRO_GITHUB_TOKEN`**, a convenience env var that Atmos-native git operations
 (vendoring, source provisioning, go-getter) prefer over `ATMOS_GITHUB_TOKEN`/`GITHUB_TOKEN`.
 
 And — because the `atmos/pro` identity isn't something a stack ever "claims" the way it claims an
 AWS/Azure/GCP identity — **in CI, `github/sts` now provisions automatically the first time Atmos is
-about to read a remote git source.** No explicit `atmos auth login` step is required: `atmos vendor
+about to read a remote git source.** No explicit [`atmos auth login`](/cli/commands/auth/login) step is required: `atmos vendor
 pull`, a `source:` component, a remote `import:`, or `terraform init` of a private module each
 transparently trigger the mint. It's gated on running in CI plus having the `atmos/pro` + `github/sts`
 config present (`auto_provision`, default `true`), and minted tokens are reused across invocations in
@@ -43,7 +43,7 @@ the same job until they expire.
 - **Least privilege, deny-by-default.** Identity is derived server-side from your workspace's trust
   policies — the CLI never asks for a specific repo. Repos you aren't trusted for are simply excluded
   (with a clear reason in the logs).
-- **Zero `.tf` changes.** The same minted token transparently authenticates `atmos vendor pull`, an
+- **Zero `.tf` changes.** The same minted token transparently authenticates [`atmos vendor pull`](/cli/commands/vendor/pull), an
   Atmos `source:` component, and `terraform init` of a private `git::https://…` module. Terraform's
   native `git` honors the injected `GIT_CONFIG_*` rewrites, so nothing in your Terraform code changes.
 - **Multi-org by design.** Because tokens are minted per `(installation, permission-set)`, a single run
@@ -96,7 +96,7 @@ atmos auth logout                         # revokes the tokens
 Beyond Atmos's own git operations, you can hand the minted token to **anything** that takes a
 GitHub token — `gh`, `actions/checkout`, or the REST API — all built into the CLI. Set `token_env`
 on the integration to pick the variable name, then mint in one step and consume in the next with
-`atmos auth env --format=github`:
+[`atmos auth env --format=github`](/cli/commands/auth/env):
 
 ```yaml
 # atmos.yaml
@@ -129,6 +129,8 @@ steps:
 ```
 
 Use `token_env: GH_TOKEN_{owner}` to export one token per owner in multi-org runs.
+
+For usage and configuration, see [Atmos Pro](/cli/configuration/settings/pro).
 
 ## Get Involved
 

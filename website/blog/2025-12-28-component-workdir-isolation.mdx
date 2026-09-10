@@ -30,7 +30,7 @@ components:
         cidr_block: "10.1.0.0/16"
 ```
 
-Both instances point to the same component directory: `components/terraform/vpc/`. When you run `atmos terraform plan vpc -s dev`, Atmos generates a `dev-vpc.terraform.tfvars.json` file in that directory. Run `atmos terraform plan vpc -s prod` in another terminal, and it generates `prod-vpc.terraform.tfvars.json` in the same place.
+Both instances point to the same component directory: `components/terraform/vpc/`. When you run [`atmos terraform plan vpc -s dev`](/cli/commands/terraform/plan), Atmos generates a `dev-vpc.terraform.tfvars.json` file in that directory. Run `atmos terraform plan vpc -s prod` in another terminal, and it generates `prod-vpc.terraform.tfvars.json` in the same place.
 
 **Here's where things get messy:**
 
@@ -160,3 +160,5 @@ components:
 ```
 
 For more details, see the [Component Configuration documentation](/cli/configuration/components).
+
+For usage and configuration, see [Workdir Provisioning](/stacks/components/provision/workdir).

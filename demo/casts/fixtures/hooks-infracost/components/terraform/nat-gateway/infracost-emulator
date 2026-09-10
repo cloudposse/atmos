@@ -2,18 +2,9 @@
 set -eu
 
 out_file="${ATMOS_OUTPUT_FILE:-}"
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --out-file)
-      shift
-      out_file="${1:-}"
-      ;;
-  esac
-  shift || true
-done
 
 if [ -z "$out_file" ]; then
-  echo "missing --out-file or ATMOS_OUTPUT_FILE" >&2
+  echo "missing ATMOS_OUTPUT_FILE" >&2
   exit 2
 fi
 
