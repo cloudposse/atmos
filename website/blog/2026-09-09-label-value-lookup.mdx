@@ -5,17 +5,17 @@ authors: [osterman]
 tags: [enhancement]
 ---
 
-A runner selector or cost center belongs on the component that uses it, but passing just that
-value into a module or workflow has required a Go template. The [`!labels` function](/functions/yaml/labels)
-now accepts a key and an optional fallback, making individual labels as easy to read as the full map.
+A component can have several labels, while a variable may need only one value.
+The [`!labels` function](/functions/yaml/labels) now accepts a key to read a single
+component label, with an optional fallback when that label is absent.
 
 <!--truncate-->
 
 ## The Problem
 
-The existing template `{{ .metadata.labels.runner }}` reads one label, while bare
-[`!labels`](/functions/yaml/labels) returns all of them. A shared workflow mixin also needs to handle components
-that have no runner label, without duplicating the same value across every stack.
+Individual labels are already accessible through Go templates, such as
+`{{ .metadata.labels.owner }}`. The [`!labels` function](/functions/yaml/labels)
+previously returned only the full map and accepted no key or fallback argument.
 
 ## The Fix
 
@@ -29,33 +29,25 @@ Existing empty-string values are preserved. Bare `!labels` continues to return t
 ```yaml
 components:
   terraform:
-    cluster:
+    vpc:
       metadata:
         labels:
           cost-center: platform
-          runner: self-hosted-large
       vars:
         cost_center: !labels cost-center
         owner: !labels owner "Platform Team"
-      settings:
-        pro:
-          pull_request:
-            synchronize:
-              workflows:
-                atmos-terraform-plan.yaml:
-                  inputs:
-                    component: "{{ .atmos_component }}"
-                    stack: "{{ .atmos_stack }}"
-                    runner: !labels runner ubuntu-latest
 ```
+
+Here `cost_center` resolves to `platform`. Since the component has no `owner` label,
+`owner` resolves to the explicit fallback, `Platform Team`.
 
 Keys are literal, including dots, slashes, and hyphens. Quote fallback values containing spaces;
 use `""` when the fallback should be an empty string. Values reflect
 [stack defaults and component inheritance](/stacks/components/component-metadata#global-stack-wide-metadata).
 
-For the GitHub runner input and apply-routing requirements, see
-[choosing a runner per component or stack](/cli/configuration/settings/pro#choose-a-runner-per-component-or-stack).
+See the [label lookup reference](/functions/yaml/labels) for full-map access and
+Go template equivalents.
 
 ## Get Involved
 
-Share your label-based workflow patterns in [Atmos discussions](https://github.com/orgs/cloudposse/discussions).
+Share your label lookup use cases in [Atmos discussions](https://github.com/orgs/cloudposse/discussions).
