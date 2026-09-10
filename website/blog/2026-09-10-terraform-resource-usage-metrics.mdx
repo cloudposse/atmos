@@ -1,24 +1,25 @@
 ---
 slug: terraform-resource-usage-metrics
-title: "See CPU, memory, and time for every Terraform run"
+title: "Right-size CI runners with real Terraform resource data"
 date: 2026-09-10T13:00:00.000Z
 authors: [osterman]
 tags: [feature]
 ---
 
-A `terraform apply` finishes in twelve minutes. Was most of that spent generating a plan, waiting on a
-slow provider API, or a provider plugin chewing through memory? The output tells you what changed and
-how long the command took overall — nothing more.
+Every CI runner — a GitHub-hosted tier or a self-hosted pool — has to be sized before a single job runs
+on it. Get it wrong small and jobs queue or get OOM-killed on a memory-hungry provider plugin; get it
+wrong large and every job pays for idle capacity it never touches. Nothing in a pipeline's output tells
+you which side of that line you're on.
 
 <!--truncate-->
 
 ## The Problem
 
-Terraform runs are often the single most expensive step in a pipeline, but operators have no visibility
-into where that cost actually goes. Is a particular component slow because of network calls, because a
-provider plugin is memory-hungry, or because of contention with other jobs on the same runner? Without
-per-run resource data, answering that means reaching for external profiling tools, if anyone bothers at
-all — most teams just shrug and wait it out.
+Right-sizing a runner pool means knowing what a job actually costs to run, and Terraform is usually the
+most expensive step in the pipeline. But teams size runners by guessing, then watching for OOM kills or
+timeouts and bumping the tier — because nothing reports what a `plan` or `apply` actually consumed. That
+guessing game repeats for every new component, every provider version bump, and every runner generation,
+whether the pipeline runs on plain GitHub Actions, Atmos alone, or Atmos Pro.
 
 ## The Fix
 
@@ -38,9 +39,10 @@ execute many components — Atmos also prints one aggregate summary covering eve
 ℹ Total in 3m12.4s | CPU: 48.9s user, 16.2s sys | Peak memory: 780 MB
 ```
 
-The same, more accurate numbers now flow into the execution data Atmos Pro receives for CI runs, so
-cost- and performance-visibility features in Pro reflect what the component actually cost to run, not
-just the CLI wrapper's own footprint.
+The same, more accurate numbers now flow into the execution data Atmos Pro receives for CI runs. Instead
+of guessing at a runner tier and adjusting after the fact, size a pool from real peak-memory and CPU-time
+numbers per component — and re-check that sizing whenever a provider version bump or a new component
+changes the actual footprint.
 
 ## How to Use It
 
