@@ -44,14 +44,22 @@ func getDeployedStackPolicy(ctx context.Context, client CloudFormationClient, st
 }
 
 // runGetTemplate renders the deployed stack's template to the data channel.
+// CloudFormation may return the body as JSON even when the stack was
+// originally deployed from YAML, so it's re-serialized through
+// formatTemplateAsBlockYAML for consistent, pretty-printed YAML output rather
+// than echoing AWS's raw response verbatim.
 func runGetTemplate(ctx context.Context, client CloudFormationClient, stackName string, flags map[string]any, summary map[string]any) (map[string]any, error) {
 	original, _ := flags["original"].(bool)
 	body, err := getDeployedTemplate(ctx, client, stackName, original)
 	if err != nil {
 		return summary, err
 	}
-	summary["template"] = body
-	_ = data.Write(body)
+	formatted, err := formatTemplateAsBlockYAML(body)
+	if err != nil {
+		return summary, err
+	}
+	summary["template"] = formatted
+	_ = data.Write(formatted)
 	return summary, nil
 }
 
