@@ -328,6 +328,41 @@ func HasDynamicScope(templateStr string) (bool, error) {
 	return dynamic, nil
 }
 
+// HasRootReference reports whether a template contains a bare "." action (*parse.DotNode) --
+// e.g. "{{ . }}" or "{{ printf "%v" . }}" -- which accesses the entire root data value rather
+// than a specific named field. ExtractFieldRefs only records *parse.FieldNode matches, so a
+// template consisting solely of "{{ . }}" yields zero field references even though it exposes
+// every field of the root, including ones no FieldNode ever names. Callers like
+// pkg/list/column.RequiredSections that statically enumerate which root-level fields a template
+// touches must treat any such reference as unresolvable rather than silently recording it as
+// touching nothing.
+func HasRootReference(templateStr string) (bool, error) {
+	defer perf.Track(nil, "template.HasRootReference")()
+
+	if !strings.Contains(templateStr, templateOpenDelim) {
+		return false, nil
+	}
+
+	tmpl, err := template.New("").Parse(templateStr)
+	if err != nil {
+		return false, err
+	}
+
+	tree := tmpl.Tree
+	if tree == nil || tree.Root == nil {
+		return false, nil
+	}
+
+	root := false
+	walkAST(tree.Root, func(node parse.Node) {
+		if _, ok := node.(*parse.DotNode); ok {
+			root = true
+		}
+	})
+
+	return root, nil
+}
+
 // LookupFieldPath resolves a field path against map-like data.
 func LookupFieldPath(data any, path []string) (any, bool) {
 	defer perf.Track(nil, "template.LookupFieldPath")()

@@ -1089,7 +1089,10 @@ func processComponentSectionTemplates(
 		// ProcessTmplWithDatasources and the YAML round-trip entirely and hand back every section
 		// untouched -- this is the fast path that avoids the atmos.Component/GomplateDatasource
 		// slow path in #3068 when it isn't needed at all.
-		result := make(map[string]any, len(nonTemplatedSections)+len(evalExcluded))
+		//
+		// Size the map from a single len() — CodeQL's allocation-size-overflow rule flags
+		// len(nonTemplatedSections)+len(evalExcluded); the map grows as needed for the rest.
+		result := make(map[string]any, len(nonTemplatedSections))
 		restoreNonTemplatedSections(result, nonTemplatedSections)
 		restoreNonTemplatedSections(result, evalExcluded)
 		return result, nil

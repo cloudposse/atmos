@@ -43,12 +43,13 @@ var derivedFields = map[string]struct{}{
 // whose first path segment names a section.
 //
 // Returns ok=false whenever any column can't be statically resolved this way: a catch-all `.raw`
-// reference (which exposes the entire row, including every section), a `range`/`with` block
-// (which rebinds "." — see pkg/template.HasDynamicScope), an unparseable template, or any
-// top-level field this function does not recognize as either section-backed or derived. Callers
-// MUST treat ok=false as "pass nil / evaluate everything": under-computing the required set is
-// far worse than over-computing it, since a displayed column would then show raw, unevaluated
-// text instead of falling back cleanly to full evaluation.
+// reference (which exposes the entire row, including every section), a bare root reference like
+// `{{ . }}` (which likewise exposes the entire row — see pkg/template.HasRootReference), a
+// `range`/`with` block (which rebinds "." — see pkg/template.HasDynamicScope), an unparseable
+// template, or any top-level field this function does not recognize as either section-backed or
+// derived. Callers MUST treat ok=false as "pass nil / evaluate everything": under-computing the
+// required set is far worse than over-computing it, since a displayed column would then show raw,
+// unevaluated text instead of falling back cleanly to full evaluation.
 //
 // A true result with an empty (non-nil) `sections` slice is a real, meaningful answer — "no
 // section is required" — and is distinct from a nil slice. Callers MUST preserve that
@@ -63,6 +64,11 @@ func RequiredSections(columns []Config) (sections []string, ok bool) {
 	for _, col := range columns {
 		dynamic, err := atmostemplate.HasDynamicScope(col.Value)
 		if err != nil || dynamic {
+			return nil, false
+		}
+
+		rootRef, err := atmostemplate.HasRootReference(col.Value)
+		if err != nil || rootRef {
 			return nil, false
 		}
 

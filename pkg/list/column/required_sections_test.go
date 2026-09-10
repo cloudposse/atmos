@@ -82,6 +82,16 @@ func TestRequiredSections(t *testing.T) {
 			wantOK:  false,
 		},
 		{
+			name:    "root value triggers fallback",
+			columns: []Config{{Name: "Raw", Value: "{{ . }}"}},
+			wantOK:  false,
+		},
+		{
+			name:    "root value as function argument triggers fallback",
+			columns: []Config{{Name: "Raw", Value: `{{ printf "%v" . }}`}},
+			wantOK:  false,
+		},
+		{
 			name:    "range over dynamic scope triggers fallback",
 			columns: []Config{{Name: "List", Value: "{{ range .vars.list }}{{ .name }}{{ end }}"}},
 			wantOK:  false,

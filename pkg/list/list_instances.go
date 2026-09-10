@@ -440,13 +440,17 @@ func sortInstances(instances []schema.Instance) []schema.Instance {
 // `metadata` is unconditionally folded in: extract.Metadata always reads it (enabled/locked/tags/
 // labels/status/type derive from it), and createInstance filters abstract components on
 // metadata.type before any row is ever built — both independent of which columns are displayed.
+// `settings` is folded in whenever this invocation may upload instances (opts.Upload, or Atmos
+// Pro's GateOpen firing implicitly): buildUploadInstances reads instance.Settings for
+// extractProSettings's "settings.pro" payload regardless of which columns are on screen, so
+// skipping settings evaluation would silently upload unresolved template/YAML-tag text.
 //
 // Returns nil (full eager evaluation, the historical behavior) whenever RequiredSections can't
 // statically prove which sections are safe to skip, OR when --filter/--query is set: both are YQ
 // expressions (a different, unparsed-here expression language), so which fields they touch cannot
 // be statically determined the way column.Value Go-template refs can — see
 // column.RequiredSections' doc comment on under-computing being unsafe.
-func resolveInstancesEvalSections(columns []column.Config, opts *InstancesCommandOptions) []string {
+func resolveInstancesEvalSections(atmosConfig *schema.AtmosConfiguration, columns []column.Config, opts *InstancesCommandOptions) []string {
 	defer perf.Track(nil, "list.resolveInstancesEvalSections")()
 
 	if opts.FilterSpec != "" || opts.Query != "" {
@@ -457,7 +461,11 @@ func resolveInstancesEvalSections(columns []column.Config, opts *InstancesComman
 	if !ok {
 		return nil
 	}
-	return column.EnsureSection(sections, "metadata")
+	sections = column.EnsureSection(sections, "metadata")
+	if opts.Upload || proexec.GateOpen(atmosConfig) {
+		sections = column.EnsureSection(sections, "settings")
+	}
+	return sections
 }
 
 // getInstanceColumns returns column configuration from CLI flag, atmos.yaml, or defaults.
@@ -1021,7 +1029,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		// evalSections narrows evaluation to the sections the resolved columns (plus `metadata`,
 		// which extract.Metadata and buildInstanceFilters's tags/labels filters always need) and
 		// the --filter/--query row transforms actually read — see resolveInstancesEvalSections.
-		evalSections := resolveInstancesEvalSections(columns, opts)
+		evalSections := resolveInstancesEvalSections(&atmosConfig, columns, opts)
 		instances, _, err = processInstances(
 			&atmosConfig,
 			opts.AuthManager,
