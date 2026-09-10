@@ -65,13 +65,18 @@
 //
 // ## GitHub Enterprise Server (GHES)
 //
-// For GHES deployments set the GITHUB_API_URL environment variable to the GHES API
-// base URL. The default host matcher ([isGitHubHost]) reads this variable and treats
-// the configured hostname as an additional allowed host:
+// For GHES deployments set GITHUB_SERVER_URL and/or GITHUB_API_URL to the GHES base
+// URLs (Actions already exports both on GHES runners). The default host matcher
+// ([isGitHubHost]) reads these variables and treats the configured hostname as an
+// additional allowed host:
 //
-//	GITHUB_API_URL=https://github.mycorp.example.com
+//	GITHUB_SERVER_URL=https://github.mycorp.example.com
+//	GITHUB_API_URL=https://github.mycorp.example.com/api/v3
 //
-// Alternatively, use [WithGitHubHostMatcher] for programmatic control.
+// Alternatively, use [WithGitHubHostMatcher] for programmatic control. See
+// pkg/github's Endpoints (RepoEndpoints) for the single place these variables are
+// resolved for everything except this package (which cannot import pkg/github without
+// an import cycle, since pkg/github already depends on pkg/http).
 //
 // # Host-matcher precedence
 //
@@ -79,8 +84,8 @@
 // precedence order (highest to lowest):
 //
 //  1. [WithGitHubHostMatcher] — an explicit custom predicate always wins.
-//  2. GITHUB_API_URL — when set and [WithGitHubHostMatcher] was NOT applied,
-//     the GHES hostname from the environment variable is added to the allowlist.
+//  2. GITHUB_API_URL / GITHUB_SERVER_URL — when set and [WithGitHubHostMatcher] was NOT
+//     applied, the GHES hostname from either environment variable is added to the allowlist.
 //  3. Built-in allowlist — api.github.com, raw.githubusercontent.com, uploads.github.com.
 //
 // If you need GHES support together with a custom matcher, include the GHES host

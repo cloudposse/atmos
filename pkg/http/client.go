@@ -258,18 +258,26 @@ func normalizeHost(host string) string {
 // It is also used as the fallback when GitHubAuthenticatedTransport.hostMatcher is nil.
 //
 // Precedence: WithGitHubHostMatcher (explicit custom predicate) takes full precedence over
-// this default allowlist, including the GITHUB_API_URL lookup.  If you need GHES support
-// together with a custom matcher, include the GHES host in your custom predicate.
+// this default allowlist, including the GITHUB_API_URL/GITHUB_SERVER_URL lookup.  If you need
+// GHES support together with a custom matcher, include the GHES host in your custom predicate.
+//
+// Note: this package cannot import pkg/github's Endpoints resolver (pkg/github already
+// imports pkg/http for token resolution, so the reverse import would cycle), hence the
+// env vars are read directly here rather than through the shared resolver. Both places
+// read the same variables with the same github.com defaults, so behavior stays consistent.
 func isGitHubHost(host string) bool {
 	host = normalizeHost(host)
 
-	// Respect GITHUB_API_URL for GitHub Enterprise Server (GHES) and similar deployments.
-	// When set, the hostname of GITHUB_API_URL is treated as an allowed GitHub API host.
-	//nolint:forbidigo // Direct env lookup required for GHES configuration.
-	if apiURL := os.Getenv("GITHUB_API_URL"); apiURL != "" {
-		parsed, err := url.ParseRequestURI(apiURL)
-		if err == nil && normalizeHost(parsed.Hostname()) == host {
-			return true
+	// Respect GITHUB_API_URL and GITHUB_SERVER_URL for GitHub Enterprise Server (GHES) and
+	// similar deployments. On real GHES these resolve to the same host, but tests (and some
+	// proxy setups) may configure them independently, so both are checked.
+	for _, envVar := range [...]string{"GITHUB_API_URL", "GITHUB_SERVER_URL"} {
+		//nolint:forbidigo // Direct env lookup required for GHES configuration.
+		if rawURL := os.Getenv(envVar); rawURL != "" {
+			parsed, err := url.ParseRequestURI(rawURL)
+			if err == nil && normalizeHost(parsed.Hostname()) == host {
+				return true
+			}
 		}
 	}
 
