@@ -6,9 +6,9 @@ tags: [enhancement, dx]
 date: 2026-04-27T12:00:00.000Z
 ---
 
-Every `atmos list` subcommand that processes stack manifests now accepts `--process-templates` and `--process-functions`
+Every [`atmos list`](/cli/commands/list/usage) subcommand that processes stack manifests now accepts `--process-templates` and `--process-functions`
 (with matching `ATMOS_PROCESS_TEMPLATES` / `ATMOS_PROCESS_FUNCTIONS` env vars), matching the flag surface of
-`atmos describe affected` and `atmos describe stacks`. Defaults are `true` across the board.
+[`atmos describe affected`](/cli/commands/describe/affected) and [`atmos describe stacks`](/cli/commands/describe/stacks). Defaults are `true` across the board.
 
 <!--truncate-->
 
@@ -22,7 +22,7 @@ Five commands gained the two flags:
 - `atmos list sources`
 - `atmos list stacks`
 
-`atmos list affected`, `atmos list settings`, and `atmos list values` (plus its `list vars` alias) already had them;
+[`atmos list affected`](/cli/commands/list/affected), [`atmos list settings`](/cli/commands/list/settings), and [`atmos list values`](/cli/commands/list/list-values) (plus its `list vars` alias) already had them;
 the naming, defaults, and env-var bindings now line up with the rest of the `list` family and with `describe affected` / `describe stacks` / `describe component`.
 
 ## Why This Matters
@@ -30,7 +30,7 @@ the naming, defaults, and env-var bindings now line up with the rest of the `lis
 The two flags control two different things, and the distinction finally matches what's actually happening:
 
 - **`--process-templates`** toggles Go template processing — including the `atmos.Component(...)` template function.
-- **`--process-functions`** toggles YAML functions — `!terraform.state`, `!terraform.output`, `!store`, `!aws.*`, and friends.
+- **`--process-functions`** toggles YAML functions — [`!terraform.state`](/functions/yaml/terraform.state), [`!terraform.output`](/functions/yaml/terraform.output), [`!store`](/functions/yaml/store), `!aws.*`, and friends.
 
 Before this release, the flag descriptions and docs conflated the two. If you wanted to run `atmos list instances --upload`
 in CI against a repo where component sections call `atmos.Component(...)` inside Go templates,
@@ -76,6 +76,8 @@ ATMOS_PROCESS_FUNCTIONS=false atmos list instances
 If you're running locally without `tofu` / `terraform` on `$PATH` and hit errors from `!terraform.state` or `!terraform.output`, flip `--process-functions=false` — templates that don't touch terraform outputs still render correctly.
 
 Docs for each command list the two flags in full: see [`atmos list instances`](/cli/commands/list/list-instances), [`atmos list components`](/cli/commands/list/components), [`atmos list metadata`](/cli/commands/list/list-metadata), [`atmos list sources`](/cli/commands/list/sources), and [`atmos list stacks`](/cli/commands/list/stacks).
+
+For usage and configuration, see [List Command Configuration](/cli/configuration/list).
 
 ## Get Involved
 

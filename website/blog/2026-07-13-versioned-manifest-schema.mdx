@@ -23,7 +23,7 @@ the schema running today. And there was no way to ask for "the schema as of Atmo
 "the schema right now."
 
 Compounding the problem, the published schema and the schema actually compiled into the `atmos`
-binary (the one `atmos validate stacks` uses by default) were two separately hand-maintained
+binary (the one [`atmos validate stacks`](/cli/commands/validate/stacks) uses by default) were two separately hand-maintained
 files that had quietly drifted apart — the binary's copy was missing whole sections
 (`dependencies`, `generate`, `provision`, `source`, and dozens of newer workflow step fields) that
 the website copy had, and vice versa.
@@ -60,6 +60,8 @@ decouple "upgrade the binary" from "adopt new manifest fields."
 
 A pinned URL only exists for releases going forward from this change — earlier releases only have
 the floating `1.0` path.
+
+For usage and configuration, see [atmos validate schema](/cli/commands/validate/schema).
 
 ## Get Involved
 

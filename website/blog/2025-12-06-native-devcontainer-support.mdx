@@ -42,11 +42,11 @@ We asked ourselves: if devcontainers are just JSON configuration describing whic
 
 After all, launching a container, mounting volumes, forwarding ports, and executing commands is straightforward. And Atmos can bring superpowers that go beyond basic devcontainer support.
 
-**The result? Install Atmos and a container runtime (Docker or Podman), and you're done.** No separate devcontainer CLI, no additional tools. Our implementation is actually slicker than the official CLI—it natively integrates with `atmos auth` to pass authentication credentials to running containers, and includes automatic output masking so you can operate securely. From that point on, everything can happen from a Docker image that gets pulled automatically.
+**The result? Install Atmos and a container runtime (Docker or Podman), and you're done.** No separate devcontainer CLI, no additional tools. Our implementation is actually slicker than the official CLI—it natively integrates with [`atmos auth`](/cli/commands/auth/usage) to pass authentication credentials to running containers, and includes automatic output masking so you can operate securely. From that point on, everything can happen from a Docker image that gets pulled automatically.
 
 ## Introducing `atmos devcontainer shell`
 
-The heart of Atmos devcontainer support is one command: **`atmos devcontainer shell`**
+The heart of Atmos devcontainer support is one command: **[`atmos devcontainer shell`](/cli/commands/devcontainer/shell)**
 
 ```bash
 # Launch an interactive shell in your devcontainer
@@ -78,7 +78,7 @@ $ atmos devcontainer shell
   python-dev
 ```
 
-Just like `atmos auth login`, Atmos makes the experience smooth and intuitive.
+Just like [`atmos auth login`](/cli/commands/auth/login), Atmos makes the experience smooth and intuitive.
 
 ### Shell Autocomplete
 
@@ -139,7 +139,7 @@ devcontainer:
 
 ### Use Existing devcontainer.json Files
 
-Already have `.devcontainer/devcontainer.json` files? Atmos can use them directly with the `!include` function:
+Already have `.devcontainer/devcontainer.json` files? Atmos can use them directly with the [`!include`](/functions/yaml/include) function:
 
 ```yaml
 # atmos.yaml

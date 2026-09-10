@@ -27,8 +27,8 @@ untouched.
 ## The Fix
 
 A new `yaml` file manager writes locked values directly into YAML files at configured field paths. It
-reuses Atmos's own format-preserving YAML editor — the same engine behind `atmos config set` and
-`atmos stack set` — so comments, anchors and aliases, and key order on untouched fields all survive
+reuses Atmos's own format-preserving YAML editor — the same engine behind [`atmos config set`](/cli/commands/config/config-set) and
+[`atmos stack set`](/cli/commands/stack/stack-set) — so comments, anchors and aliases, and key order on untouched fields all survive
 the edit.
 
 ## How to Use It
@@ -54,7 +54,7 @@ version:
             format: '{{ trimPrefix "v" .Version }}'
 ```
 
-`atmos version track apply` rewrites the configured field from the lock, stripping the `v` prefix
+[`atmos version track apply`](/cli/commands/version/track/apply) rewrites the configured field from the lock, stripping the `v` prefix
 GitHub tags carry via the optional `format` template; `--check` fails and lists any file that's out
 of date, so CI can catch drift before it merges.
 

@@ -54,7 +54,7 @@ Atmos wires the emulator into the rest of the system automatically:
 - **The same stacks everywhere.** Because the emulator is bound through Atmos identity and provider
   generation, your component code doesn't change between local and real cloud — laptop and CI run the
   identical configuration.
-- **Persistent by default.** State survives `down`/`up`; `atmos emulator reset` wipes it, and
+- **Persistent by default.** State survives `down`/`up`; [`atmos emulator reset`](/cli/commands/emulator/reset) wipes it, and
   `--ephemeral` opts out per run.
 
 You can apply, destroy, and re-apply against a local cloud in seconds, without touching an account or
@@ -126,9 +126,9 @@ atmos emulator up registry -s local --ephemeral
 
 ## How to Use It
 
-- `atmos emulator up <component> -s <stack>` to start an emulator, then run your normal
-  `atmos terraform …` commands against it.
-- `atmos emulator ps`, `logs`, and `exec` to inspect a running emulator (it outlives the `atmos`
+- [`atmos emulator up <component> -s <stack>`](/cli/commands/emulator/up) to start an emulator, then run your normal
+  [`atmos terraform …`](/cli/commands/terraform/usage) commands against it.
+- [`atmos emulator ps`](/cli/commands/emulator/ps), `logs`, and `exec` to inspect a running emulator (it outlives the `atmos`
   process and is rediscovered by label — no local state files).
 - `atmos emulator reset <component> -s <stack>` to wipe persisted state.
 - `--ephemeral` (or `ephemeral: true` on the component) for a throwaway instance.
@@ -152,3 +152,5 @@ And the Kubernetes emulator lifecycle:
 <CastPlayer src="/casts/examples/emulator-k8s/lifecycle.cast" title="atmos kubernetes emulator lifecycle" chrome controls scrubber />
 
 [View the full example](/examples/emulator-k8s)
+
+For usage and configuration, see [Using Emulators](/components/emulator).

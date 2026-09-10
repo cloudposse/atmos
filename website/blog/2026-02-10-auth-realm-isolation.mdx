@@ -44,7 +44,7 @@ Realms are determined by priority:
 
 ## Viewing Your Realm
 
-The `atmos auth whoami` and `atmos auth login` commands now display the active realm:
+The [`atmos auth whoami`](/cli/commands/auth/whoami) and [`atmos auth login`](/cli/commands/auth/login) commands now display the active realm:
 
 ```
 atmos auth login --identity my-identity
@@ -73,6 +73,8 @@ This is a **breaking change**. Existing credentials will not be found after upda
 because they were stored in the old path format.
 
 **Action required**: Run `atmos auth login` after updating to re-authenticate.
+
+For usage and configuration, see [Authentication](/cli/configuration/auth).
 
 ## Get Involved
 

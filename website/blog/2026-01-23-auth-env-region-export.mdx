@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [enhancement]
 ---
 
-The `atmos auth env` command now exports `AWS_REGION` and `AWS_DEFAULT_REGION`
+The [`atmos auth env`](/cli/commands/auth/env) command now exports `AWS_REGION` and `AWS_DEFAULT_REGION`
 when region is configured in your identity settings.
 
 <!--truncate-->
@@ -40,8 +40,8 @@ terraform plan  # running terraform directly, not via atmos
 
 ## When You Don't Need This
 
-For atmos commands (`atmos terraform plan`, `atmos terraform apply`, etc.),
-region is **automatically injected** - no sourcing required. The `!env AWS_REGION`
+For atmos commands ([`atmos terraform plan`](/cli/commands/terraform/plan), [`atmos terraform apply`](/cli/commands/terraform/apply), etc.),
+region is **automatically injected** - no sourcing required. The [`!env AWS_REGION`](/functions/yaml/env)
 YAML function works automatically in stack configurations when using atmos commands.
 
 ## Important Notes

@@ -70,7 +70,7 @@ hooks:
 ```
 
 Values inside `with:` are rendered with the standard hook template context and YAML functions,
-so `{{ .atmos_component }}` and `!store ...` work there. Each step receives the usual `ATMOS_*`
+so `{{ .atmos_component }}` and [`!store ...`](/functions/yaml/store) work there. Each step receives the usual `ATMOS_*`
 environment (`ATMOS_STACK`, `ATMOS_COMPONENT`, `ATMOS_COMPONENT_PATH`, …) plus any `env:` you add.
 
 ## Announce Success — or Failure
