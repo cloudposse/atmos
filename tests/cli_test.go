@@ -543,6 +543,15 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	anonymousGitHubAccessLogRegex := regexp.MustCompile(`(?m)^.*No GitHub token resolved; using anonymous \(unauthenticated\) GitHub access \(subject to rate limits\)[^\n]*\n?`)
 	result = anonymousGitHubAccessLogRegex.ReplaceAllString(result, "")
 
+	// 16a. Drop the resource-usage summary line settings.metrics.enabled prints locally
+	// ("Completed in ..." after terraform plan/apply/deploy, "Total in ..." once at the end
+	// of the whole invocation). Wall time, CPU time, and peak memory are inherently
+	// non-deterministic across runs/runners, so this line can never be part of a stable
+	// golden snapshot — strip it entirely, matching the whole-line-strip pattern already used
+	// above for other environment-dependent log lines.
+	resourceMetricsSummaryLogRegex := regexp.MustCompile(`(?m)^.*\b(?:Completed|Total) in \S+ \| CPU: [^\n]*\n?`)
+	result = resourceMetricsSummaryLogRegex.ReplaceAllString(result, "")
+
 	// 16. Apply custom replacements if provided.
 	// These are test-specific patterns that don't need to be part of the global sanitization.
 	// IMPORTANT: This must run LAST so it can override any built-in sanitization results.
