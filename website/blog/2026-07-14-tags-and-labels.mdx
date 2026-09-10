@@ -99,7 +99,7 @@ components:
         tags: !labels   # var.tags (map) <- metadata.labels
 ```
 
-For individual label values and optional defaults, see the [label lookup reference](/functions/yaml/labels#single-label-lookup). For a workflow configuration example, see [runner selection in Atmos Pro](/cli/configuration/settings/pro#choose-a-runner-per-component-or-stack).
+To read an individual label in a template, use `{{ .metadata.labels.runner }}`. See the [template context reference](/templates) for accessing component configuration.
 
 ## Get Involved
 
