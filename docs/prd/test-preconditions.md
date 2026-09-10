@@ -113,13 +113,13 @@ than fails in that case -- only a genuine 401/403/404 or an actual atmos bug fai
 
 **Enforced Rules**:
 1. **Must use `t.Skipf()` instead of `t.Skip()`**: Ensures all skips include descriptive reasons
-   - Enforced via `forbidigo` linter pattern: `\.Skip\(`
-   - Message: "Use t.Skipf with a descriptive reason instead of t.Skip"
+    - Enforced via `forbidigo` linter pattern: `\.Skip\(`
+    - Message: "Use t.Skipf with a descriptive reason instead of t.Skip"
 
 2. **Environment variable handling**:
-   - Production code must use `viper.BindEnv` (enforced by `forbidigo`)
-   - Test files and test helpers can use `os.Getenv`/`os.Setenv`
-   - Configured via `exclude-rules` in `.golangci.yml`
+    - Production code must use `viper.BindEnv` (enforced by `forbidigo`)
+    - Test files and test helpers can use `os.Getenv`/`os.Setenv`
+    - Configured via `exclude-rules` in `.golangci.yml`
 
 ### Binary Freshness Detection
 
@@ -159,22 +159,22 @@ func TestGitHubVendoring(t *testing.T) {
 ### Developer Workflow
 
 1. **Run tests to see requirements**:
-   ```bash
-   go test ./...
-   # SKIP: AWS profile 'dev' not configured: required for S3 backend testing...
-   ```
+    ```bash
+    go test ./...
+    # SKIP: AWS profile 'dev' not configured: required for S3 backend testing...
+    ```
 
 2. **Either configure dependencies**:
-   ```bash
-   aws configure --profile dev
-   export GITHUB_TOKEN=ghp_...
-   ```
+    ```bash
+    aws configure --profile dev
+    export GITHUB_TOKEN=ghp_...
+    ```
 
 3. **Or bypass checks**:
-   ```bash
-   export ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true
-   go test ./...
-   ```
+    ```bash
+    export ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true
+    go test ./...
+    ```
 
 ## Benefits Achieved
 
