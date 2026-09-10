@@ -14,13 +14,14 @@ import Note from '@site/src/components/Note';
 import File from '@site/src/components/File';
 
 <Intro>
-Atmos can print a one-line resource-usage summary — elapsed time, CPU time, and peak memory — after `terraform plan`/`apply`/`deploy` complete, plus a final aggregate summary covering every subprocess spawned during the whole invocation. The `settings.metrics` section controls whether that local display is shown.
+Atmos can print a one-line resource-usage summary — elapsed time, CPU time, and peak memory — after `terraform plan`/`apply`/`deploy` complete, plus a final aggregate summary covering every subprocess spawned during the whole invocation. The `settings.metrics` section controls whether that local display is shown. The same numbers also appear in the GitHub Actions job summary when [Native CI](/cli/configuration/ci) is active, independent of this setting.
 </Intro>
 
 <KeyPoints>
 - Shown by default after `terraform plan`, `apply`, and `deploy`
 - A final aggregate line summarizes every subprocess spawned during the whole run (e.g. every component plan in a multi-component `--affected` run)
 - Disable the local display with a single setting
+- Also appears in the Native CI job summary — a quick way to see what a component actually costs before sizing a runner
 - Never affects the separate Atmos Pro command-execution metadata upload
 </KeyPoints>
 
@@ -60,6 +61,16 @@ settings:
 <Note>
 The per-command display only appears for `terraform plan`, `apply`, and `deploy` — the same commands that synchronously report execution metadata to Atmos Pro when it's configured. Commands with no subprocess (e.g. `describe affected`) don't show a per-command line, and don't trigger the final aggregate summary either — that line only appears when at least one subprocess ran during the invocation (Terraform/OpenTofu, Helmfile, Packer, or a workflow step), and covers Atmos's own usage together with every one of those subprocess runs.
 </Note>
+
+## Native CI Job Summaries
+
+When [Native CI](/cli/configuration/ci) is active, `terraform plan` and `apply` also render a **Resource usage** line in the GitHub Actions job summary — the same wall-time, CPU-time, and peak-memory figures as the local display, formatted identically:
+
+```
+📊 Resource usage: 45.2s wall · 12.3s user / 4.1s sys CPU · 512.0 MB peak memory
+```
+
+This is controlled by CI detection, not by `settings.metrics.enabled` — it appears whenever the job summary itself is generated, so it's visible directly in the GitHub Actions run UI without opening a log. It's the fastest way to see what a component actually costs when sizing a runner tier or a self-hosted pool.
 
 ## Use Cases
 

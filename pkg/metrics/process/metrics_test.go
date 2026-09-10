@@ -242,7 +242,7 @@ func TestFormatDuration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, formatDuration(tt.d))
+			assert.Equal(t, tt.want, FormatDuration(tt.d))
 		})
 	}
 }
@@ -267,7 +267,7 @@ func TestFormatBytes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, formatBytes(tt.b))
+			assert.Equal(t, tt.want, FormatBytes(tt.b))
 		})
 	}
 }

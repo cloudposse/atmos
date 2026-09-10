@@ -195,9 +195,9 @@ func DisplaySummary(label string, m ProcessMetrics, atmosConfig *schema.AtmosCon
 	}
 
 	msg := fmt.Sprintf("%s in %s | CPU: %s user, %s sys",
-		label, formatDuration(m.WallTime), formatDuration(m.UserCPUTime), formatDuration(m.SystemCPUTime))
+		label, FormatDuration(m.WallTime), FormatDuration(m.UserCPUTime), FormatDuration(m.SystemCPUTime))
 	if m.MaxRSSBytes > 0 {
-		msg += fmt.Sprintf(" | Peak memory: %s", formatBytes(m.MaxRSSBytes))
+		msg += fmt.Sprintf(" | Peak memory: %s", FormatBytes(m.MaxRSSBytes))
 	}
 	ui.Info(msg)
 }
@@ -227,16 +227,25 @@ func DisplayFinalSummary(atmosConfig *schema.AtmosConfiguration) {
 	DisplaySummary("Total", combined, atmosConfig)
 }
 
-// formatDuration formats a duration for human display.
-func formatDuration(d time.Duration) string {
+// FormatDuration formats a duration for human display (e.g. "45.2s", "800ms").
+// Exported so other packages that render resource-usage numbers alongside
+// Atmos's own local display — e.g. the Native CI job-summary templates —
+// produce identically formatted values.
+func FormatDuration(d time.Duration) string {
+	defer perf.Track(nil, "process.FormatDuration")()
+
 	if d < time.Second {
 		return fmt.Sprintf("%dms", d.Milliseconds())
 	}
 	return fmt.Sprintf("%.1fs", d.Seconds())
 }
 
-// formatBytes formats bytes into a human-readable string.
-func formatBytes(b int64) string {
+// FormatBytes formats bytes into a human-readable string (e.g. "512.0 MB").
+// Exported for the same cross-package formatting-consistency reason as
+// FormatDuration.
+func FormatBytes(b int64) string {
+	defer perf.Track(nil, "process.FormatBytes")()
+
 	const (
 		kb = 1024
 		mb = 1024 * kb

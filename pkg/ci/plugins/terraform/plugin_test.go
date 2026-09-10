@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -9,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -81,6 +83,64 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 	// Check terraform-specific fields.
 	assert.Equal(t, 1, ctx.Resources.Create)
 	assert.True(t, ctx.HasChanges())
+}
+
+// TestPlugin_BuildTemplateContext_Metrics verifies that buildTemplateContext reads
+// info.ExecMetadataRawMetrics (set by internal/exec/terraform_execute_helpers_exec.go)
+// and populates ctx.Metrics with the formatted summary the template renders.
+func TestPlugin_BuildTemplateContext_Metrics(t *testing.T) {
+	p := &Plugin{}
+	output := "Plan: 1 to add, 0 to change, 0 to destroy."
+
+	t.Run("populated when ExecMetadataRawMetrics is a *process.ProcessMetrics", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "vpc",
+			Stack:            "dev-us-east-1",
+			ExecMetadataRawMetrics: &metricsprocess.ProcessMetrics{
+				WallTime:      45200 * time.Millisecond,
+				UserCPUTime:   12300 * time.Millisecond,
+				SystemCPUTime: 4100 * time.Millisecond,
+				MaxRSSBytes:   512 * 1024 * 1024,
+			},
+		}
+
+		result, err := p.buildTemplateContext(info, nil, output, "plan", nil)
+		require.NoError(t, err)
+		ctx, ok := result.(*TerraformTemplateContext)
+		require.True(t, ok)
+
+		require.NotNil(t, ctx.Metrics)
+		assert.Equal(t, "45.2s", ctx.Metrics.WallTime)
+		assert.Equal(t, "12.3s", ctx.Metrics.CPUUser)
+		assert.Equal(t, "4.1s", ctx.Metrics.CPUSys)
+		assert.Equal(t, "512.0 MB", ctx.Metrics.PeakMemory)
+	})
+
+	t.Run("nil when ExecMetadataRawMetrics is unset", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "dev-us-east-1"}
+
+		result, err := p.buildTemplateContext(info, nil, output, "plan", nil)
+		require.NoError(t, err)
+		ctx, ok := result.(*TerraformTemplateContext)
+		require.True(t, ok)
+
+		assert.Nil(t, ctx.Metrics)
+	})
+
+	t.Run("nil when ExecMetadataRawMetrics holds an unexpected type", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg:       "vpc",
+			Stack:                  "dev-us-east-1",
+			ExecMetadataRawMetrics: "not-a-process-metrics-pointer",
+		}
+
+		result, err := p.buildTemplateContext(info, nil, output, "plan", nil)
+		require.NoError(t, err)
+		ctx, ok := result.(*TerraformTemplateContext)
+		require.True(t, ok)
+
+		assert.Nil(t, ctx.Metrics)
+	})
 }
 
 func TestPlugin_BuildTemplateContext_Test(t *testing.T) {

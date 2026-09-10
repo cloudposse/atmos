@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -55,6 +56,44 @@ type TerraformTemplateContext struct {
 
 	// AtmosVersion is the running Atmos CLI version, used to cache-bust the CI badge image.
 	AtmosVersion string
+
+	// Metrics holds the formatted resource-usage summary for this run (the
+	// terraform/tofu subprocess tree combined with Atmos's own usage — the
+	// same combined figure as the local "Completed in ..." display and the
+	// Atmos Pro execution record). Nil when no metrics were captured, e.g.
+	// settings.metrics is unavailable to this code path or the process never
+	// started; templates must guard with {{ if .Metrics }}.
+	Metrics *TerraformMetricsSummary
+}
+
+// TerraformMetricsSummary is the pre-formatted, template-ready resource-usage
+// summary for a single terraform plan/apply/deploy run. PeakMemory is empty on
+// platforms (e.g. Windows) or samples where no memory figure is available —
+// templates should omit that portion of the line when it's empty.
+type TerraformMetricsSummary struct {
+	WallTime   string
+	CPUUser    string
+	CPUSys     string
+	PeakMemory string
+}
+
+// newTerraformMetricsSummary formats raw process metrics for template
+// rendering, reusing pkg/metrics/process's own formatting so the job summary
+// matches the local CLI display and never drifts from it independently.
+func newTerraformMetricsSummary(m *metricsprocess.ProcessMetrics) *TerraformMetricsSummary {
+	if m == nil {
+		return nil
+	}
+
+	summary := &TerraformMetricsSummary{
+		WallTime: metricsprocess.FormatDuration(m.WallTime),
+		CPUUser:  metricsprocess.FormatDuration(m.UserCPUTime),
+		CPUSys:   metricsprocess.FormatDuration(m.SystemCPUTime),
+	}
+	if m.MaxRSSBytes > 0 {
+		summary.PeakMemory = metricsprocess.FormatBytes(m.MaxRSSBytes)
+	}
+	return summary
 }
 
 // NewTemplateContext creates a TerraformTemplateContext from a base context and parsed output.

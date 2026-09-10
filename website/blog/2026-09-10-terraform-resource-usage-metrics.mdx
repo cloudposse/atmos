@@ -39,10 +39,17 @@ execute many components — Atmos also prints one aggregate summary covering eve
 ℹ Total in 3m12.4s | CPU: 48.9s user, 16.2s sys | Peak memory: 780 MB
 ```
 
-The same, more accurate numbers now flow into the execution data Atmos Pro receives for CI runs. Instead
-of guessing at a runner tier and adjusting after the fact, size a pool from real peak-memory and CPU-time
-numbers per component — and re-check that sizing whenever a provider version bump or a new component
-changes the actual footprint.
+The same, more accurate numbers now flow into the execution data Atmos Pro receives for CI runs, and — when
+[Native CI](/cli/configuration/ci) is active — into the GitHub Actions job summary itself, right next to the
+resource-change badges:
+
+```
+📊 Resource usage: 45.2s wall · 12.3s user / 4.1s sys CPU · 512.0 MB peak memory
+```
+
+Instead of guessing at a runner tier and adjusting after the fact, size a pool from real peak-memory and
+CPU-time numbers per component, visible directly in the run UI — and re-check that sizing whenever a
+provider version bump or a new component changes the actual footprint.
 
 ## How to Use It
 

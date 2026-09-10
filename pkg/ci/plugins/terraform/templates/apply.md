@@ -37,6 +37,11 @@
 > This apply deleted resources. Please verify the result carefully.
 {{- end }}
 
+{{- if .Metrics }}
+
+📊 **Resource usage:** {{ .Metrics.WallTime }} wall · {{ .Metrics.CPUUser }} user / {{ .Metrics.CPUSys }} sys CPU{{ if .Metrics.PeakMemory }} · {{ .Metrics.PeakMemory }} peak memory{{ end }}
+{{- end }}
+
 {{- if .Result.HasErrors }}
 <details><summary><a id="result-{{$target}}" />:warning: Error summary</summary>
 {{- else if .HasResourceChanges }}
