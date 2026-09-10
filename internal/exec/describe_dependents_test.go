@@ -1301,6 +1301,7 @@ components:
 		ProcessYamlFunctions: true,
 	})
 	require.ErrorIs(t, err, errUtils.ErrDependencyTargetUnavailable)
+	require.ErrorContains(t, err, `component "image" of kind "packer" in stack "dev"`)
 }
 
 // TestDescribeDependents_DependenciesComponentsInheritance_WithAppendMerge tests that

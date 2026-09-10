@@ -562,6 +562,52 @@ func TestResolveScopedClosureReverseEvaluatesRequiredUnavailableModernSource(t *
 	require.True(t, ok, "reverse scope must evaluate required sources whose unavailable typed target is selected")
 }
 
+func TestResolveScopedClosureReverseEvaluatesRequiredSourceForSelectedTagOrLabel(t *testing.T) {
+	t.Parallel()
+
+	stacks := map[string]any{
+		"dev": map[string]any{"components": map[string]any{
+			"terraform": map[string]any{
+				"image": map[string]any{"metadata": map[string]any{
+					"tags":   []any{"target"},
+					"labels": map[string]any{"role": "target"},
+				}},
+				"app": map[string]any{"dependencies": map[string]any{"components": []any{
+					map[string]any{"component": "image", "kind": "packer"},
+				}}},
+			},
+			"packer": map[string]any{
+				"image": map[string]any{"metadata": map[string]any{"enabled": false}},
+			},
+		}},
+	}
+
+	for _, test := range []struct {
+		name string
+		req  ScopeRequest
+	}{
+		{name: "tag", req: ScopeRequest{Tags: []string{"target"}}},
+		{name: "label", req: ScopeRequest{Labels: map[string]string{"role": "target"}}},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fake := &fakeDescribe{full: stacks}
+			test.req.Stack = "dev"
+			test.req.Direction = DirectionReverse
+			test.req.ProcessTemplates = true
+			test.req.SkipTargetValidation = true
+			test.req.IncludeRequiredReverseSources = true
+
+			result, err := ResolveScopedClosure(fake.describe, &test.req)
+			require.NoError(t, err)
+			components := result.Stacks["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)
+			_, ok := components["app"]
+			require.True(t, ok, "reverse scope must evaluate a required source for the selected target")
+		})
+	}
+}
+
 func TestResolveScopedClosureFailsForRequiredTargetWithinClosure(t *testing.T) {
 	t.Parallel()
 

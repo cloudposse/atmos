@@ -217,7 +217,7 @@ func dependencyTargetUnavailable(p *dependencyTargetParams) (bool, error) {
 		return false, nil
 	}
 	if p.stacks == nil {
-		return unavailableDependencyTarget(p.dep, p.fallback, errUtils.ErrDependencyTargetUnavailable)
+		return unavailableDependencyTarget(p.dep, p.fallback, p.dep.Stack, p.dep.Kind, errUtils.ErrDependencyTargetUnavailable)
 	}
 
 	targetStack := p.dep.Stack
@@ -230,19 +230,19 @@ func dependencyTargetUnavailable(p *dependencyTargetParams) (bool, error) {
 	}
 	target := findComponentSectionInCachedStacksByType(p.stacks, targetStack, p.args.Component, targetType)
 	if target == nil {
-		return unavailableDependencyTarget(p.dep, true, errUtils.ErrDependencyTargetNotFound)
+		return unavailableDependencyTarget(p.dep, true, targetStack, targetType, errUtils.ErrDependencyTargetNotFound)
 	}
-	return unavailableDependencyTarget(p.dep, isAbstractOrDisabled(target, p.args.Component), errUtils.ErrDependencyTargetUnavailable)
+	return unavailableDependencyTarget(p.dep, isAbstractOrDisabled(target, p.args.Component), targetStack, targetType, errUtils.ErrDependencyTargetUnavailable)
 }
 
-func unavailableDependencyTarget(dep *schema.ComponentDependency, unavailable bool, targetErr error) (bool, error) {
+func unavailableDependencyTarget(dep *schema.ComponentDependency, unavailable bool, targetStack, targetType string, targetErr error) (bool, error) {
 	if !unavailable {
 		return false, nil
 	}
 	if !dep.IsRequired() {
 		return true, nil
 	}
-	return false, fmt.Errorf("%w: component %q in stack %q", targetErr, dep.Component, dep.Stack)
+	return false, fmt.Errorf("%w: component %q of kind %q in stack %q", targetErr, dep.Component, targetType, targetStack)
 }
 
 // buildDependentEntry constructs a Dependent struct from a dependency index entry.

@@ -227,12 +227,15 @@ func UnresolvedDependencySources(stacks map[string]any, leftDelim string) map[st
 // RequiredDependencySources returns modern dependency sources that require one
 // of the selected components. Reverse scoped evaluation needs these sources
 // when an unavailable target prevents the structural graph from recording an edge.
-func RequiredDependencySources(stacks map[string]any, componentNames []string) map[string][]string {
+func RequiredDependencySources(stacks map[string]any, targets []rootTarget) map[string][]string {
 	defer perf.Track(nil, "dependencies.RequiredDependencySources")()
 
-	targets := make(map[string]struct{}, len(componentNames))
-	for _, componentName := range componentNames {
-		targets[componentName] = struct{}{}
+	targetsByStack := make(map[string]map[string]struct{}, len(targets))
+	for _, target := range targets {
+		if targetsByStack[target.stack] == nil {
+			targetsByStack[target.stack] = make(map[string]struct{})
+		}
+		targetsByStack[target.stack][target.component] = struct{}{}
 	}
 
 	sources := make(map[string][]string)
@@ -242,7 +245,11 @@ func RequiredDependencySources(stacks map[string]any, componentNames []string) m
 			return
 		}
 		for i := range deps {
-			if _, ok := targets[deps[i].Component]; ok && deps[i].IsRequired() {
+			targetStack := deps[i].Stack
+			if targetStack == "" {
+				targetStack = stackName
+			}
+			if _, ok := targetsByStack[targetStack][deps[i].Component]; ok && deps[i].IsRequired() {
 				sources[stackName] = append(sources[stackName], componentName)
 				return
 			}
