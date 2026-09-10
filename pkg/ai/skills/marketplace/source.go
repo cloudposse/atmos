@@ -6,8 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// githubComHost is the public GitHub host, used as the default when no GitHub Enterprise
+// Server host is configured, and as the target of Format 0's bare owner/repo shorthand.
+const githubComHost = "github.com"
 
 // SourceInfo contains parsed source information.
 type SourceInfo struct {
@@ -44,24 +49,31 @@ func ParseSource(source string) (*SourceInfo, error) {
 		}
 	}
 
+	// GitHub Enterprise Server host configured via GITHUB_SERVER_URL, if any (equal to
+	// githubComHost when unset). Formats 1-3 below accept this host in addition to
+	// github.com, since a marketplace source URL is a user-supplied value naming wherever
+	// their skill repos actually live. Format 0 (bare owner/repo shorthand) deliberately stays
+	// github.com-only: an unqualified "owner/repo" can't disambiguate which host was meant.
+	ghesHost := ghtoken.RepoEndpoints().Host
+
 	// Format 0: Bare owner/repo shorthand (GitHub assumed).
 	if isOwnerRepoShorthand(source) {
-		return parseGitHubShorthand("github.com/"+source, ref)
+		return parseGitHubShorthand(githubComHost+"/"+source, ref, githubComHost)
 	}
 
-	// Format 1: GitHub shorthand (github.com/user/repo).
-	if strings.HasPrefix(source, "github.com/") {
-		return parseGitHubShorthand(source, ref)
+	// Format 1: GitHub (or GHES) shorthand (github.com/user/repo).
+	if host, ok := matchGitHubSourceHost(source, ghesHost, "%s/"); ok {
+		return parseGitHubShorthand(source, ref, host)
 	}
 
 	// Format 2: HTTPS URL (https://github.com/user/repo.git).
-	if strings.HasPrefix(source, "https://github.com/") {
-		return parseGitHubHTTPS(source, ref)
+	if host, ok := matchGitHubSourceHost(source, ghesHost, "https://%s/"); ok {
+		return parseGitHubHTTPS(source, ref, host)
 	}
 
 	// Format 3: SSH URL (git@github.com:user/repo.git).
-	if strings.HasPrefix(source, "git@github.com:") {
-		return parseGitHubSSH(source, ref)
+	if host, ok := matchGitHubSourceHost(source, ghesHost, "git@%s:"); ok {
+		return parseGitHubSSH(source, ref, host)
 	}
 
 	// Format 4: Local filesystem path (file:// URL, or a plain path that exists on
@@ -110,6 +122,21 @@ func parseLocalSource(source string) *SourceInfo {
 	}
 }
 
+// matchGitHubSourceHost reports whether source is prefixed with either githubComHost or
+// ghesHost, using prefixTemplate as an fmt.Sprintf template with a single "%s" for the host
+// (e.g. "%s/", "https://%s/", "git@%s:"). Returns the matched host and ok=true, or ok=false
+// when neither matches. When ghesHost equals githubComHost (GHES not configured), it is not
+// checked a second time.
+func matchGitHubSourceHost(source, ghesHost, prefixTemplate string) (host string, ok bool) {
+	if strings.HasPrefix(source, fmt.Sprintf(prefixTemplate, githubComHost)) {
+		return githubComHost, true
+	}
+	if ghesHost != githubComHost && strings.HasPrefix(source, fmt.Sprintf(prefixTemplate, ghesHost)) {
+		return ghesHost, true
+	}
+	return "", false
+}
+
 // isOwnerRepoShorthand returns true for bare "owner/repo" format
 // (no dots, no colons, no slashes beyond the single separator).
 func isOwnerRepoShorthand(source string) bool {
@@ -120,11 +147,24 @@ func isOwnerRepoShorthand(source string) bool {
 	return len(parts) == 2 && parts[0] != "" && parts[1] != ""
 }
 
-// parseGitHubShorthand parses github.com/user/repo format.
-func parseGitHubShorthand(source, ref string) (*SourceInfo, error) {
-	parts := strings.Split(strings.TrimPrefix(source, "github.com/"), "/")
+// githubCloneURL builds the HTTPS clone URL for owner/repo on host: github.com's default
+// ServerURL when host is "github.com", or the resolved RepoEndpoints ServerURL otherwise (the
+// two coincide unless GITHUB_SERVER_URL points at a GHES host while the source URL explicitly
+// named plain github.com).
+func githubCloneURL(host, owner, repo string) string {
+	serverURL := "https://" + githubComHost
+	if host != githubComHost {
+		serverURL = ghtoken.RepoEndpoints().ServerURL
+	}
+	return fmt.Sprintf("%s/%s/%s.git", serverURL, owner, repo)
+}
+
+// parseGitHubShorthand parses "<host>/user/repo" format (host is "github.com" or the
+// configured GHES host).
+func parseGitHubShorthand(source, ref, host string) (*SourceInfo, error) {
+	parts := strings.Split(strings.TrimPrefix(source, host+"/"), "/")
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("%w: invalid GitHub shorthand format (expected github.com/user/repo)", ErrInvalidSource)
+		return nil, fmt.Errorf("%w: invalid GitHub shorthand format (expected %s/user/repo)", ErrInvalidSource, host)
 	}
 
 	owner := parts[0]
@@ -135,16 +175,15 @@ func parseGitHubShorthand(source, ref string) (*SourceInfo, error) {
 		Owner:    owner,
 		Repo:     repo,
 		Ref:      ref,
-		URL:      fmt.Sprintf("https://github.com/%s/%s.git", owner, repo),
-		FullPath: fmt.Sprintf("github.com/%s/%s", owner, repo),
+		URL:      githubCloneURL(host, owner, repo),
+		FullPath: fmt.Sprintf("%s/%s/%s", host, owner, repo),
 		Name:     repo,
 	}, nil
 }
 
-// parseGitHubHTTPS parses https://github.com/user/repo.git format.
-func parseGitHubHTTPS(source, ref string) (*SourceInfo, error) {
-	// Remove https://github.com/ prefix.
-	remainder := strings.TrimPrefix(source, "https://github.com/")
+// parseGitHubHTTPS parses "https://<host>/user/repo.git" format.
+func parseGitHubHTTPS(source, ref, host string) (*SourceInfo, error) {
+	remainder := strings.TrimPrefix(source, "https://"+host+"/")
 	parts := strings.Split(remainder, "/")
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("%w: invalid GitHub HTTPS URL format", ErrInvalidSource)
@@ -158,16 +197,15 @@ func parseGitHubHTTPS(source, ref string) (*SourceInfo, error) {
 		Owner:    owner,
 		Repo:     repo,
 		Ref:      ref,
-		URL:      fmt.Sprintf("https://github.com/%s/%s.git", owner, repo),
-		FullPath: fmt.Sprintf("github.com/%s/%s", owner, repo),
+		URL:      githubCloneURL(host, owner, repo),
+		FullPath: fmt.Sprintf("%s/%s/%s", host, owner, repo),
 		Name:     repo,
 	}, nil
 }
 
-// parseGitHubSSH parses git@github.com:user/repo.git format.
-func parseGitHubSSH(source, ref string) (*SourceInfo, error) {
-	// Remove git@github.com: prefix.
-	remainder := strings.TrimPrefix(source, "git@github.com:")
+// parseGitHubSSH parses "git@<host>:user/repo.git" format.
+func parseGitHubSSH(source, ref, host string) (*SourceInfo, error) {
+	remainder := strings.TrimPrefix(source, "git@"+host+":")
 	parts := strings.Split(remainder, "/")
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("%w: invalid GitHub SSH URL format", ErrInvalidSource)
@@ -181,8 +219,8 @@ func parseGitHubSSH(source, ref string) (*SourceInfo, error) {
 		Owner:    owner,
 		Repo:     repo,
 		Ref:      ref,
-		URL:      fmt.Sprintf("https://github.com/%s/%s.git", owner, repo), // Use HTTPS for cloning.
-		FullPath: fmt.Sprintf("github.com/%s/%s", owner, repo),
+		URL:      githubCloneURL(host, owner, repo), // Use HTTPS for cloning.
+		FullPath: fmt.Sprintf("%s/%s/%s", host, owner, repo),
 		Name:     repo,
 	}, nil
 }

@@ -63,6 +63,39 @@ func TestParseSource_SSH(t *testing.T) {
 	assert.Equal(t, "atmos", info.Repo)
 }
 
+// TestParseSource_GHESHost verifies that shorthand/HTTPS/SSH source formats also recognize a
+// GitHub Enterprise Server host configured via GITHUB_SERVER_URL, and that the resulting clone
+// URL and FullPath target that host rather than github.com.
+func TestParseSource_GHESHost(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+	shorthand, err := ParseSource("ghes.example.com/cloudposse/atmos")
+	require.NoError(t, err)
+	assert.Equal(t, "cloudposse", shorthand.Owner)
+	assert.Equal(t, "atmos", shorthand.Repo)
+	assert.Equal(t, "https://ghes.example.com/cloudposse/atmos.git", shorthand.URL)
+	assert.Equal(t, "ghes.example.com/cloudposse/atmos", shorthand.FullPath)
+
+	https, err := ParseSource("https://ghes.example.com/cloudposse/atmos.git")
+	require.NoError(t, err)
+	assert.Equal(t, "cloudposse", https.Owner)
+	assert.Equal(t, "atmos", https.Repo)
+	assert.Equal(t, "https://ghes.example.com/cloudposse/atmos.git", https.URL)
+
+	ssh, err := ParseSource("git@ghes.example.com:cloudposse/atmos.git")
+	require.NoError(t, err)
+	assert.Equal(t, "cloudposse", ssh.Owner)
+	assert.Equal(t, "atmos", ssh.Repo)
+	assert.Equal(t, "https://ghes.example.com/cloudposse/atmos.git", ssh.URL)
+
+	// A github.com URL is still recognized (and still clones from github.com), even though
+	// RepoEndpoints resolves to the GHES host in this environment.
+	githubCom, err := ParseSource("https://github.com/cloudposse/atmos.git")
+	require.NoError(t, err)
+	assert.Equal(t, "https://github.com/cloudposse/atmos.git", githubCom.URL)
+	assert.Equal(t, "github.com/cloudposse/atmos", githubCom.FullPath)
+}
+
 func TestParseSource_InvalidFormats(t *testing.T) {
 	tests := []struct {
 		name   string
