@@ -1080,6 +1080,21 @@ type KubernetesObjectCIResult struct {
 	Diff string
 }
 
+// CloudFormationCIResult contains the compact result data rendered into native CI
+// job summaries for one CloudFormation component command.
+type CloudFormationCIResult struct {
+	Stack           string
+	Component       string
+	Command         string
+	StackName       string
+	ExitCode        int
+	Error           string
+	ChangeSetName   string
+	ResourceChanges int
+	DriftStatus     string
+	DriftedCount    int
+}
+
 // CIConfig contains CI/CD integration configuration.
 // Uses provider-agnostic naming to support GitHub Actions, GitLab CI, and other providers.
 type CIConfig struct {

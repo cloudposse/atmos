@@ -1092,6 +1092,28 @@ Author the `from-rain` migration guide (scope defined above), polish docs, gradu
 *Success criteria*: a real Rain user can follow the guide to a working Atmos-managed stack in the
 guide's target time-to-first-deploy.
 
+**Phase 5 — Native CI Integration**
+A new `pkg/ci/plugins/cloudformation` package registers `aws/cloudformation` with the native CI
+plugin registry (`GetType()` returns `"aws/cloudformation"`), the same registration pattern already
+used by Terraform, Helmfile, Kubernetes, and Helm. It renders compact job summaries for `diff`,
+`apply`, `delete`, `drift detect`, and `drift describe` — the same tier Kubernetes and Helmfile
+occupy today (summaries only; no output variables, status checks, PR comments, or stored artifacts —
+that richer tier remains Terraform-only). Two new lifecycle hook events round out the
+[hook event enumeration](#auth-hooks-secrets-stores--workflow-integration): `before.`/`after.`
+`aws/cloudformation.drift-detect` and `before.`/`after.` `aws/cloudformation.drift-describe` (the
+`diff`/`apply`/`delete` events already exist from Phase 1). Activation is identical to every other
+native CI plugin: `ci.enabled: true` in `atmos.yaml`, auto-detected in a CI environment, or forced
+with `--ci`/`ATMOS_CI=true`.
+*Future Work* (not scheduled in any phase): CI events for changesets
+(`changeset-create`/`changeset-execute`/etc.) and stack sets, and routing CloudFormation drift
+results into the Atmos Pro dashboard — the `pro.AtmosProAPIClient.UploadInstanceStatus` pipeline
+Terraform's drift detection already uses — for parity with Terraform. Until that lands, CloudFormation
+drift remains a local/CLI-only signal via `--fail-on-drift`.
+*Success criteria*: `atmos aws cloudformation diff/apply/delete` and
+`atmos aws cloudformation drift detect/describe` each emit a compact `$GITHUB_STEP_SUMMARY` job
+summary when run with `--ci` or inside a detected CI environment, matching the Kubernetes/Helmfile
+summary tier, with no output variables, status checks, PR comments, or artifacts produced.
+
 ## Risks & Mitigation
 
 | Risk | Mitigation |
@@ -1172,3 +1194,4 @@ would need its own PRD evaluating whether an SDK-native or shell-out design fits
 | 2026-08-24 | Dependencies, source & Floci amendments: Dependencies & DAG Ordering section (dependents index is type-generic; `findComponentSectionInCachedStacks` added as wiring item 8); Source Provisioning & Vendoring expanded with JIT `source:` YAML examples incl. single-file templates and the `source pull/list/describe/delete` verb group; Floci AWS emulator E2E tier and `examples/cloudformation` added to Testing Strategy |
 | 2026-08-24 | Packaging destination restructured as a provision target: new `kind: aws/s3` target (`bucket`/`prefix`) replaces `settings.aws_cloudformation.s3_bucket`/`s3_prefix`; implicit single-target resolution with `packaging:` disambiguator; `--target <s3-target>` = publish-only delivery; kind string matches artifacts-PRD/stores `aws/*` vocabulary; `ProvisionTarget` struct gains the S3 fields; direct-deploy target kind is `aws/cloudformation` (the type string, kubernetes precedent) with an implicit default target when no `provision:` is declared |
 | 2026-08-24 | Auth section upgraded: primary SDK seam is `pkg/aws/identity.LoadConfigWithAuth` (the `cmd/aws/*` pattern, in-process, emulator/FIPS-aware) superseding the helm env seam for client construction; component `auth:` confirmed generically plumbed; per-target `ProvisionTarget.Auth` overrides enable cross-account deploy-vs-bucket identities; `role_arn` clarified as the CloudFormation service role, not caller credentials |
+| 2026-09-09 | Phase 5 added: Native CI Integration — `pkg/ci/plugins/cloudformation` plugin registers `aws/cloudformation` alongside Terraform/Helmfile/Kubernetes/Helm; compact job summaries for `diff`/`apply`/`delete`/`drift detect`/`drift describe` at the Kubernetes/Helmfile tier; new `drift-detect`/`drift-describe` hook events; changeset/stack-set CI events and Atmos Pro drift-status upload recorded as unscheduled future work |

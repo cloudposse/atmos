@@ -620,6 +620,7 @@ func TestRunDelete_DeleteStackError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	sentinel := errors.New("delete stack failed")
 
+	// deleteStack's live termination-protection check runs first (local config is false).
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 		Stacks: []cfntypes.Stack{{}},
 	}, nil)
@@ -637,6 +638,7 @@ func TestRunDelete_StreamEventsError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	sentinel := errors.New("describe stack events failed")
 
+	// deleteStack's live termination-protection check runs first (local config is false).
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 		Stacks: []cfntypes.Stack{{}},
 	}, nil)
@@ -1278,7 +1280,7 @@ func TestOperationHandlers_Dispatch(t *testing.T) {
 			op:   OperationDelete,
 			setup: func(m *MockCloudFormationClient) {
 				gomock.InOrder(
-					// deleteStack's live termination-protection check.
+					// deleteStack's live termination-protection check (local config is false).
 					m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 						Stacks: []cfntypes.Stack{{}},
 					}, nil),
