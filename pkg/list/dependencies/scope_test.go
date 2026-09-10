@@ -527,6 +527,41 @@ func TestResolveScopedClosureReverseDiscoversTemplatedDependent(t *testing.T) {
 	require.False(t, ok, "an evaluated non-dependent must not join the closure")
 }
 
+func TestResolveScopedClosureReverseEvaluatesRequiredUnavailableModernSource(t *testing.T) {
+	t.Parallel()
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"image": map[string]any{},
+					"app": map[string]any{"dependencies": map[string]any{"components": []any{
+						map[string]any{"component": "image", "kind": "packer"},
+					}}},
+				},
+				"packer": map[string]any{
+					"image": map[string]any{"metadata": map[string]any{"enabled": false}},
+				},
+			},
+		},
+	}
+	fake := &fakeDescribe{full: stacks}
+
+	result, err := ResolveScopedClosure(fake.describe, &ScopeRequest{
+		Components:                    []string{"image"},
+		Stack:                         "dev",
+		Direction:                     DirectionReverse,
+		ProcessTemplates:              true,
+		SkipTargetValidation:          true,
+		IncludeRequiredReverseSources: true,
+	})
+
+	require.NoError(t, err)
+	components := result.Stacks["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)
+	_, ok := components["app"]
+	require.True(t, ok, "reverse scope must evaluate required sources whose unavailable typed target is selected")
+}
+
 func TestResolveScopedClosureFailsForRequiredTargetWithinClosure(t *testing.T) {
 	t.Parallel()
 

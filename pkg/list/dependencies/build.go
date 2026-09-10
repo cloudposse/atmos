@@ -224,6 +224,36 @@ func UnresolvedDependencySources(stacks map[string]any, leftDelim string) map[st
 	return sources
 }
 
+// RequiredDependencySources returns modern dependency sources that require one
+// of the selected components. Reverse scoped evaluation needs these sources
+// when an unavailable target prevents the structural graph from recording an edge.
+func RequiredDependencySources(stacks map[string]any, componentNames []string) map[string][]string {
+	defer perf.Track(nil, "dependencies.RequiredDependencySources")()
+
+	targets := make(map[string]struct{}, len(componentNames))
+	for _, componentName := range componentNames {
+		targets[componentName] = struct{}{}
+	}
+
+	sources := make(map[string][]string)
+	walkComponents(stacks, func(stackName, componentType, componentName string, componentSection map[string]any) {
+		deps, modern, err := extractComponentDependenciesWithStack(componentSection, componentType, "", "")
+		if err != nil || !modern {
+			return
+		}
+		for i := range deps {
+			if _, ok := targets[deps[i].Component]; ok && deps[i].IsRequired() {
+				sources[stackName] = append(sources[stackName], componentName)
+				return
+			}
+		}
+	})
+	for stackName := range sources {
+		sort.Strings(sources[stackName])
+	}
+	return sources
+}
+
 // LegacyDependencySources returns the components that declare legacy
 // settings.depends_on dependencies. Their context-based target matching is
 // resolved by describe dependents rather than the structural graph.

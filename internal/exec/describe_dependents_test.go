@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1247,6 +1249,58 @@ func TestDescribeDependents_ScopesTemplateEvaluationToReverseClosure(t *testing.
 	require.Len(t, dependents, 1)
 	assert.Equal(t, "child", dependents[0].Component)
 	assert.Equal(t, "app-a", dependents[0].Stack)
+}
+
+func TestExecuteDescribeDependents_RejectsRequiredUnavailableTypedTargetFromResolvedStacks(t *testing.T) {
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(`
+base_path: .
+components:
+  terraform:
+    base_path: components/terraform
+  packer:
+    base_path: components/packer
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "dev.yaml"), []byte(`
+components:
+  terraform:
+    image:
+      vars:
+        tenant: dev
+    app:
+      vars:
+        tenant: dev
+      dependencies:
+        components:
+          - component: image
+            kind: packer
+  packer:
+    image:
+      metadata:
+        enabled: false
+      vars:
+        tenant: dev
+`), 0o644))
+	t.Chdir(tmpDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	_, err = ExecuteDescribeDependents(&atmosConfig, &DescribeDependentsArgs{
+		Component:            "image",
+		Stack:                "dev",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.ErrorIs(t, err, errUtils.ErrDependencyTargetUnavailable)
 }
 
 // TestDescribeDependents_DependenciesComponentsInheritance_WithAppendMerge tests that

@@ -56,6 +56,9 @@ type ScopeRequest struct {
 	// while resolving reverse closures whose context-based targets are not
 	// represented by the structural graph.
 	IncludeLegacyReverseSources bool
+	// IncludeRequiredReverseSources evaluates modern required dependency sources
+	// whose unavailable targets are omitted from the structural graph.
+	IncludeRequiredReverseSources bool
 }
 
 // selector builds the seed selector for this request. Both the lightweight
@@ -222,6 +225,9 @@ func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []stri
 		extraEval = UnresolvedDependencySources(lightweightStacks, req.LeftDelim)
 		if req.IncludeLegacyReverseSources {
 			mergeEvaluationTargets(extraEval, LegacyDependencySources(lightweightStacks))
+		}
+		if req.IncludeRequiredReverseSources {
+			mergeEvaluationTargets(extraEval, RequiredDependencySources(lightweightStacks, req.Components))
 		}
 	}
 

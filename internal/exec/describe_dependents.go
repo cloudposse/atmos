@@ -258,15 +258,16 @@ func resolveScopedDependentStacks(atmosConfig *schema.AtmosConfiguration, args *
 			)
 		},
 		&dependencies.ScopeRequest{
-			Components:                  []string{args.Component},
-			Stack:                       args.Stack,
-			Direction:                   dependencies.DirectionReverse,
-			ProcessTemplates:            args.ProcessTemplates,
-			ProcessFunctions:            args.ProcessYamlFunctions,
-			LeftDelim:                   leftDelim,
-			RightDelim:                  rightDelim,
-			SkipTargetValidation:        true,
-			IncludeLegacyReverseSources: true,
+			Components:                    []string{args.Component},
+			Stack:                         args.Stack,
+			Direction:                     dependencies.DirectionReverse,
+			ProcessTemplates:              args.ProcessTemplates,
+			ProcessFunctions:              args.ProcessYamlFunctions,
+			LeftDelim:                     leftDelim,
+			RightDelim:                    rightDelim,
+			SkipTargetValidation:          true,
+			IncludeLegacyReverseSources:   true,
+			IncludeRequiredReverseSources: true,
 		},
 	)
 	if err != nil {
