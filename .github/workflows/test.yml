@@ -937,6 +937,11 @@ jobs:
           if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
             sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
           fi
+          # Chrome is preinstalled on some runner images but is not needed by
+          # this libudev-only step. Its mutable apt index intermittently
+          # returns a hash mismatch, failing the entire race suite before it
+          # reaches the tests.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
