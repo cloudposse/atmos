@@ -11,7 +11,7 @@ and its [providers](https://atmos.tools/cli/configuration/auth/providers) and
 
 | User has...                                                          | Maps to                                          |
 |------------------------------------------------------------------------|--------------------------------------------------|
-| `az login` (interactive user), `az account set --subscription`         | [Interactive User Login](#interactive-user-login--azurecli-or-azuredevice-code) |
+| `az login` (interactive user), `az account set --subscription`         | [Interactive User Login](#interactive-user-login--azurecli-azuredevice-code-or-azureinteractive) |
 | CI service principal with a federated credential (no stored secret)    | [CI Service Principal → azure/oidc](#ci-service-principal-with-federated-credential--azureoidc) |
 | `az login --service-principal -u <id> -p <secret>` (client secret, not federated) | [No Direct Equivalent: Client-Secret Service Principal](#no-direct-equivalent-client-secret-service-principal) |
 | `az login --identity` (VM/AKS Managed Identity)                        | [No Direct Equivalent: Managed Identity](#no-direct-equivalent-managed-identity) |
@@ -21,7 +21,7 @@ and its [providers](https://atmos.tools/cli/configuration/auth/providers) and
 
 | Old az CLI workflow                                                     | `atmos auth` equivalent |
 |----------------------------------------------------------------------------|----------------------------|
-| `az login` (interactive, incl. device code)                                | `atmos auth login -i x` |
+| `az login` (interactive, incl. device code or browser)                     | `atmos auth login -i x` |
 | `az login --service-principal -u <id> -p <secret>` (client secret)         | **No direct equivalent** -- see [No Direct Equivalent: Client-Secret Service Principal](#no-direct-equivalent-client-secret-service-principal) |
 | `az account set --subscription <id>`                                       | No manual step -- the identity's `principal.subscription_id` selects this automatically |
 | `az account show`                                                          | `atmos auth whoami -i x` |
@@ -51,7 +51,7 @@ Tell users switching from az CLI that Atmos's Azure login is opportunistically c
 their existing `az` commands out of the box, unlike AWS/GCP where Atmos deliberately avoids the
 default file locations.
 
-## Interactive User Login → `azure/cli` or `azure/device-code`
+## Interactive User Login → `azure/cli`, `azure/device-code`, or `azure/interactive`
 
 **Before:**
 ```bash
@@ -83,10 +83,17 @@ auth:
 ```
 
 **Or, if the user wants Atmos-native login without keeping the az CLI installed**, swap
-`kind: azure/cli` for `kind: azure/device-code` (same `spec.tenant_id`/`subscription_id`/
-`location` fields, plus optional `spec.client_id` which defaults to Azure CLI's own public client
-ID). `azure/device-code` prompts a browser-based device code flow instead of requiring a prior
-`az login`.
+`kind: azure/cli` for `kind: azure/device-code` or `kind: azure/interactive` (same
+`spec.tenant_id`/`subscription_id`/`location` fields, plus optional `spec.client_id` which
+defaults to Azure CLI's own public client ID). Both authenticate directly through Atmos instead of
+requiring a prior `az login`:
+
+- `azure/device-code` -- classic device code flow (visit a URL, enter a code). Matches
+  `az login --use-device-code`.
+- `azure/interactive` -- opens a browser to a localhost redirect (auth code + PKCE), the same flow
+  plain `az login` uses by default. Prefer this one when the tenant's Conditional Access policy
+  blocks device code (AADSTS 530035, a fairly common lockdown) -- the browser session carries full
+  Conditional Access context that the device code flow can't.
 
 All Azure provider fields (`tenant_id`, `subscription_id`, `location`, `client_id`,
 `cloud_environment`) live under `spec:`, unlike AWS and GCP providers where most fields are
@@ -148,7 +155,7 @@ az cloud set --name AzureUSGovernment
 az login
 ```
 
-**After:** add `spec.cloud_environment` to any of the three provider kinds above:
+**After:** add `spec.cloud_environment` to any of the four provider kinds above:
 ```yaml
 auth:
   providers:
@@ -167,7 +174,7 @@ set explicitly even if the user's az CLI is already pointed at the sovereign clo
 ## Common Gotchas
 
 - **`azure/subscription` is never standalone** -- it always needs `via.provider` pointing at one
-  of `azure/cli`, `azure/device-code`, or `azure/oidc`.
+  of `azure/cli`, `azure/device-code`, `azure/interactive`, or `azure/oidc`.
 - **All provider-specific fields live under `spec:`**, not top-level -- easy to get wrong if the
   user is also migrating AWS or GCP profiles in the same session, where most fields are top-level.
 - **No client-secret service principal or Managed Identity kind exists yet.** Don't guess at
