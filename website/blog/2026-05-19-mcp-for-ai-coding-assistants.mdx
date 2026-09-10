@@ -16,7 +16,7 @@ server configuration, AWS credentials, and toolchain version — in **one
 AWS credentials live; each MCP server is automatically wrapped with the
 right identity for the question it'll answer (billing → payer account,
 CloudTrail → audit, IAM → root, workload queries → dev/rpg/staging). One
-`atmos auth login` covers them all — no API keys in CLI configs, no
+[`atmos auth login`](/cli/commands/auth/login) covers them all — no API keys in CLI configs, no
 `AWS_PROFILE` swapping between prompts. The server set spans the
 [Atmos MCP server](/ai/mcp-server) for project stacks,
 the [AWS MCP server suite](https://github.com/awslabs/mcp) for live cloud
@@ -107,15 +107,15 @@ auth:
           id: "123456789012"
 ```
 
-`atmos mcp export` reads the `mcp.servers` block, wraps every server with
-`identity` in `atmos auth exec -i <identity> --`, prepends the toolchain's
+[`atmos mcp export`](/cli/commands/mcp/export) reads the `mcp.servers` block, wraps every server with
+`identity` in [`atmos auth exec -i <identity> --`](/cli/commands/auth/exec), prepends the toolchain's
 `PATH` so `uvx` resolves, and writes a `.mcp.json` ready for any
 MCP-compatible client.
 
 For Claude Code that's the native format. Gemini's
 `.gemini/settings.json` is structurally identical, so the same export
 works with `--output .gemini/settings.json`. For Codex, it's TOML format — and the example
-[walks you through that](/examples/mcp-for-ai-coding-assistants#openai-codex-cli).
+[walks you through that](/examples/mcp-for-ai-coding-assistants).
 
 The result: many MCP servers, three AI CLIs, one Atmos config.
 
@@ -140,13 +140,13 @@ The AWS servers plus the embedded **atmos** server are stdio-transport
 and managed through `atmos mcp export`. The **atmos-pro** entry is HTTP-
 transport (it runs on `https://atmos-pro.com/mcp`), so it's registered
 directly with each AI CLI alongside the exported config — see the
-[Atmos Pro section](#the-atmos-pro-mcp-server-saas-history-and-drift) below.
+[Atmos Pro section](#the-atmos-pro-mcp-server-saas) below.
 
 ### What the `atmos` MCP server does
 
 The first entry — **atmos** — is the
 [Atmos MCP server itself](/ai/mcp-server), running
-inside the `atmos` binary via `atmos mcp start`. Including it in the
+inside the `atmos` binary via [`atmos mcp start`](/cli/commands/mcp/start). Including it in the
 exported config gives your AI coding assistant programmatic access to
 **your Atmos project** — the stacks, components, manifests, and the
 `atmos` CLI as a whole — alongside the AWS introspection tools.
@@ -159,7 +159,7 @@ It exposes more than 20 tools:
 `atmos_compliance_report`.
 
 Write-side tools (`write_*`, `execute_bash_command`)
-respect [Atmos's tool permission model](/cli/configuration/ai/tools#permissions).
+respect [Atmos's tool permission model](/cli/configuration/ai/tools#permission-modes).
 The MCP server runs in YOLO mode by default, so the AI coding
 assistant's own permission UI — Claude Code's per-tool approval,
 Codex's confirm prompt, Gemini's consent dialog — handles execution
@@ -217,8 +217,8 @@ validation, YAML functions, vendoring, toolchain, GitOps, auth, …) that
 activate based on what you ask.
 
 Without skills, an AI assistant falls back to general training data that
-may generate invalid YAML, miss features like `!store` /
-`!terraform.output`, or use wrong CLI flags. With skills, the assistant
+may generate invalid YAML, miss features like [`!store`](/functions/yaml/store) /
+[`!terraform.output`](/functions/yaml/terraform.output), or use wrong CLI flags. With skills, the assistant
 loads the right Atmos context just before answering. The skills are
 built on the open [AGENTS.md](https://agents.md/) and
 [Agent Skills](https://agentskills.io/specification) standards, so they
@@ -240,7 +240,7 @@ for tool-specific install paths.
 files and live state; skills answer *"what should this code do?"* by
 teaching the assistant Atmos's conventions. The same prompt — *"set up
 cross-stack dependencies with remote state"* — pulls live data through
-MCP **and** applies Atmos-native patterns (`!terraform.state`, abstract
+MCP **and** applies Atmos-native patterns ([`!terraform.state`](/functions/yaml/terraform.state), abstract
 components, inheritance) from the relevant skill. Stronger
 together than either alone.
 
@@ -418,7 +418,7 @@ config layouts:
 ## Related Examples
 
 - **[Atmos MCP integrations](/examples/mcp)** — Same external
-MCP server config, but Atmos drives the AI loop (`atmos ai ask`) instead of an
+MCP server config, but Atmos drives the AI loop ([`atmos ai ask`](/cli/commands/ai/ask)) instead of an
 external CLI. Useful if you'd rather stay inside the `atmos` CLI than spawn
 Claude Code / Codex / Gemini.
 - **[Atmos AI with Claude Code](/examples/ai-claude-code)** —
@@ -437,7 +437,7 @@ smart-routing.
 - [Atmos Auth](/cli/configuration/auth) — provider/identity
 model and `atmos auth login` flow.
 - [Atmos Toolchain](/cli/configuration/toolchain) — how
-toolchain aliases and `atmos toolchain install` work.
+toolchain aliases and [`atmos toolchain install`](/cli/commands/toolchain/install) work.
 - [Atmos MCP Server](/ai/mcp-server) — the
 Atmos-AI-tools-as-MCP-server mode, exposed to your AI coding assistant via
 the `atmos` entry in `mcp.servers`.
@@ -454,3 +454,5 @@ HTTP-transport SaaS server for drift, deployments, and audit context.
 full capability list and the design choices behind the OAuth flow.
 - [AWS MCP servers (awslabs/mcp)](https://github.com/awslabs/mcp) — the upstream
 source of the AWS MCP servers used in the example.
+
+For usage and configuration, see [MCP](/mcp).
