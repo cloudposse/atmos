@@ -38,8 +38,9 @@ components:
         owner: !labels owner "Platform Team"
 ```
 
-Here `cost_center` resolves to `platform`. Since the component has no `owner` label,
-`owner` resolves to the explicit fallback, `Platform Team`.
+Here `cost_center` resolves to `platform`. If the resolved metadata has no `owner` label
+after stack defaults and component inheritance, `owner` resolves to the explicit fallback,
+`Platform Team`. An inherited `owner` label supplies its value instead.
 
 Keys are literal, including dots, slashes, and hyphens. Quote fallback values containing spaces;
 use `""` when the fallback should be an empty string. Values reflect
