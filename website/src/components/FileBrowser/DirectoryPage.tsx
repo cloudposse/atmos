@@ -12,6 +12,8 @@ import CopyMarkdownButton from './CopyMarkdownButton';
 import { findExampleByName, getExampleNameFromPath } from './utils';
 import GistDisclaimer from '@site/src/components/GistDisclaimer';
 import CastPlayer from '@site/src/components/CastPlayer';
+import CastProDownload from '@site/src/components/CastProDownload';
+import CastShareLink from '@site/src/components/CastShareLink';
 import CommandBox from '@site/src/components/CommandBox';
 import type { ExamplesTree, FileBrowserOptions, DirectoryNode } from './types';
 import styles from './styles.module.css';
@@ -52,6 +54,20 @@ export default function DirectoryPage({
   const showCast = isExampleRoot && !!example.cast?.file;
   const showCopyMarkdown = isExampleRoot && !!optionsData.enableCopyMarkdown;
   const showInstallCommand = isExampleRoot && !!optionsData.installCommandTemplate;
+
+  // The cast source lives under website/static/**, which is committed to the
+  // repo at that same literal path (unlike other example files, which live
+  // under optionsData.githubPath) — so the Atmos Pro rendering service's
+  // repo path is derived here rather than reusing githubPath.
+  const [proOwner, proRepo] = (optionsData.githubRepo || '').split('/');
+  const proSource = showCast
+    ? {
+        owner: proOwner,
+        repo: proRepo,
+        gitRef: optionsData.githubBranch || 'main',
+        path: `website/static${example.cast!.file}`,
+      }
+    : null;
 
   return (
     <Layout title={pageTitle}>
@@ -94,6 +110,22 @@ export default function DirectoryPage({
                 controls
                 scrubber
               />
+              {proSource && (
+                <div className={styles.castActions}>
+                  <CastShareLink
+                    owner={proSource.owner}
+                    repo={proSource.repo}
+                    gitRef={proSource.gitRef}
+                    path={proSource.path}
+                  />
+                  <CastProDownload
+                    owner={proSource.owner}
+                    repo={proSource.repo}
+                    gitRef={proSource.gitRef}
+                    path={proSource.path}
+                  />
+                </div>
+              )}
             </div>
           )}
 
