@@ -12,7 +12,7 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 Atmos can now connect to external MCP servers and use their tools directly in AI conversations.
 Configure any MCP server in `atmos.yaml`, and its tools appear alongside native Atmos tools
-in `atmos ai chat`, `atmos ai ask`, and `atmos ai exec` — no custom integration code needed.
+in [`atmos ai chat`](/cli/commands/ai/chat), [`atmos ai ask`](/cli/commands/ai/ask), and [`atmos ai exec`](/cli/commands/ai/exec) — no custom integration code needed.
 
 <!--truncate-->
 
@@ -234,7 +234,7 @@ Use the same servers from Claude Code, Cursor, or any MCP-compatible IDE:
 atmos mcp export
 ```
 
-Servers with `identity` are automatically wrapped with `atmos auth exec` for
+Servers with `identity` are automatically wrapped with [`atmos auth exec`](/cli/commands/auth/exec) for
 credential injection. The generated `.mcp.json` works with Claude Code out of the box.
 
 ## Atmos YAML Functions
@@ -549,3 +549,5 @@ $ atmos ai ask "List all IAM roles with admin access"
 - [MCP Commands](/cli/commands/mcp/list) — CLI command reference
 - [AWS MCP Servers](https://github.com/awslabs/mcp) — All available AWS servers
 - [Atmos AI](/ai) — AI features overview
+
+For usage and configuration, see [MCP](/mcp).

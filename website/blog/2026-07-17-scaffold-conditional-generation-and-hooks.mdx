@@ -49,12 +49,12 @@ owns the contract; the consuming team supplies only the choices that belong to i
   generate the corresponding manifest only in that case.
 - **Lifecycle hooks.** Templates can run declared work before or after generation—formatting,
   validation, or setup—with the same condition engine used by Atmos workflows and CI hooks. Teams
-  can use `--skip-hooks` as an explicit per-invocation escape hatch.
-- **Day-two updates.** The `atmos scaffold generate --update` command re-runs a template against
+  can use [`--skip-hooks`](/cli/commands/scaffold/generate) as an explicit per-invocation escape hatch.
+- **Day-two updates.** The [`atmos scaffold generate --update`](/cli/commands/scaffold/generate) command re-runs a template against
   an existing project and performs an optimistic three-way merge. It is a strong fit for shared
   boilerplate that changes infrequently across many projects: non-overlapping improvements can be
   carried forward, while real conflicts stay visible instead of silently overwriting local work.
-  The `--merge-strategy` option selects manual, ours, or theirs conflict handling.
+  The [`--merge-strategy`](/cli/commands/scaffold/generate) option selects manual, ours, or theirs conflict handling.
 
 Both `when:` forms use the condition language shared by Atmos workflows and CI hooks. The `answers`
 variable exposes the values collected so far, allowing a golden path to express its decisions once

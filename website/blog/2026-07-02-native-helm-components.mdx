@@ -51,15 +51,15 @@ components:
 The component `values:` map **is** the chart's values, merged through Atmos
 inheritance. Charts can be local (`chart: .`), from a repository, or OCI
 (`chart: oci://...`). The Helm Go SDK renders everything in-process, so
-`atmos helm template` works with no cluster and no credentials.
+[`atmos helm template`](/cli/commands/helm/template) works with no cluster and no credentials.
 
 ## Why This Matters
 
 Helm has no native secrets concept — the ecosystem reaches for the `helm-secrets`
-plugin and SOPS. Atmos provides it directly: secret values flow in through the `!secret` YAML
+plugin and SOPS. Atmos provides it directly: secret values flow in through the [`!secret`](/functions/yaml/secret) YAML
 function and are masked automatically. Helm has no
 native dependency ordering across releases — Atmos provides it through the
-component DAG (`dependencies.components`), so `atmos helm apply --all` and
+component DAG (`dependencies.components`), so [`atmos helm apply --all`](/cli/commands/helm/apply) and
 `--affected` deploy in the right order.
 
 ## How to Use It
@@ -101,7 +101,7 @@ atmos helm deploy monitoring -s plat-ue2-dev --target deployment-repo
 
 ### Real diffs — no plugin required
 
-`atmos helm diff` (alias `plan`) shows a true unified diff, not just a dry-run
+[`atmos helm diff`](/cli/commands/helm/diff) (alias `plan`) shows a true unified diff, not just a dry-run
 dump. Atmos renders the chart client-side and compares it with the
 [helm-diff](https://github.com/databus23/helm-diff) engine embedded directly in the
 binary — so you get the familiar `+`/`-` output **without installing the
