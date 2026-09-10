@@ -14,7 +14,7 @@ For teams using [Atmos Pro](https://atmos-pro.com), the Atmos CLI now pushes ins
 
 [Atmos Pro](https://atmos-pro.com) gives teams a real-time view of every infrastructure component across all environments. With this release, the status pipeline gets significantly faster: the CLI reports results to Atmos Pro immediately after each terraform operation completes.
 
-When you run `atmos terraform plan` or `atmos terraform deploy` with `--upload-status`, the CLI sends the raw execution result to Atmos Pro. The dashboard updates within seconds, showing whether each component is in sync, has drift, or encountered an error — across every stack, every environment, at a glance.
+When you run [`atmos terraform plan`](/cli/commands/terraform/plan) or [`atmos terraform deploy`](/cli/commands/terraform/deploy) with `--upload-status`, the CLI sends the raw execution result to Atmos Pro. The dashboard updates within seconds, showing whether each component is in sync, has drift, or encountered an error — across every stack, every environment, at a glance.
 
 ## How It Works
 
@@ -54,3 +54,5 @@ Infrastructure teams managing hundreds of components need to know the state of t
 - **CI-native** — works seamlessly in GitHub Actions, GitLab CI, or any CI system
 
 If you're managing infrastructure at scale, [Atmos Pro](https://atmos-pro.com) turns your CLI output into a shared, real-time operational view for the entire team.
+
+For usage and configuration, see [atmos list instances](/cli/commands/list/list-instances).
