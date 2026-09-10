@@ -199,15 +199,11 @@ func runWithHooks(
 	if err := ctx.GoContext().Err(); err != nil {
 		return err
 	}
-	hookSet, err := getHooks(atmosConfig, info)
-	if err != nil {
-		return err
-	}
-	before, after := eventsFor(info.SubCommand, operation)
-	if err := hookSet.RunAll(before, atmosConfig, info, nil, nil); err != nil {
-		return err
-	}
 
+	// Build and validate the chart spec -- including CLI value overrides --
+	// before running any before-hooks. Hooks can have side effects (git
+	// operations, external commands), so a malformed --set/--values must abort
+	// the operation before those side effects run, not after.
 	spec, err := buildChartSpec(atmosConfig, info, componentPath)
 	if err != nil {
 		return err
@@ -234,6 +230,16 @@ func runWithHooks(
 		}
 		reportResolvedLifecycle(spec.Lifecycle)
 	}
+
+	hookSet, err := getHooks(atmosConfig, info)
+	if err != nil {
+		return err
+	}
+	before, after := eventsFor(info.SubCommand, operation)
+	if err := hookSet.RunAll(before, atmosConfig, info, nil, nil); err != nil {
+		return err
+	}
+
 	if err := ctx.GoContext().Err(); err != nil {
 		return err
 	}

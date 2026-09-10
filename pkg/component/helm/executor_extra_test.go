@@ -321,7 +321,10 @@ func TestRunWithHooks_ValuesDoesNotSetUpRepositories(t *testing.T) {
 
 // TestRunWithHooks_ValueOverrideErrorPropagates covers the newly wired
 // applyValueOverrides call in runWithHooks: a malformed --set assignment must abort
-// the operation before any hook/repository/chart-rendering work happens.
+// the operation before any before-hook, repository setup, or chart-rendering work
+// happens. The getHooks mock is the witness for hook execution: before-hooks can
+// have side effects (git operations, external commands), so it must never even be
+// reached once value-override validation fails, not just RunAll skipped afterward.
 func TestRunWithHooks_ValueOverrideErrorPropagates(t *testing.T) {
 	originalHooks := getHooks
 	originalSetup := setupRepositories
@@ -331,7 +334,8 @@ func TestRunWithHooks_ValueOverrideErrorPropagates(t *testing.T) {
 	})
 
 	getHooks = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
-		return &hooks.Hooks{}, nil
+		t.Fatal("a value-override error must short-circuit before hooks are resolved or run")
+		return nil, nil
 	}
 	setupRepositories = func([]chartRepository) error {
 		t.Fatal("a value-override error must short-circuit before repositories are set up")
