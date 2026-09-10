@@ -8,6 +8,8 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
+// TestLabelsLookupInWorkflowInputs verifies that defaults and inherited overrides
+// resolve identically through label lookups and templates before workflow dispatch.
 func TestLabelsLookupInWorkflowInputs(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/atmos-yaml-functions-merge")
 	for _, tc := range []struct {

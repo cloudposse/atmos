@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// stackInfoWithMetadata builds the component context used by tag and label tests.
 func stackInfoWithMetadata(metadata map[string]any) *schema.ConfigAndStacksInfo {
 	return &schema.ConfigAndStacksInfo{
 		ComponentSection: schema.AtmosSectionMapType{
@@ -18,6 +19,7 @@ func stackInfoWithMetadata(metadata map[string]any) *schema.ConfigAndStacksInfo 
 	}
 }
 
+// TestProcessTagTags checks generic slice results and missing metadata behavior.
 func TestProcessTagTags(t *testing.T) {
 	t.Parallel()
 
@@ -50,6 +52,7 @@ func TestProcessTagTags(t *testing.T) {
 	})
 }
 
+// TestProcessTagLabels verifies that bare !labels returns the complete map or an empty map when unset.
 func TestProcessTagLabels(t *testing.T) {
 	t.Parallel()
 
@@ -75,6 +78,7 @@ func TestProcessTagLabels(t *testing.T) {
 	})
 }
 
+// TestProcessTagLabelsKeysAndValues verifies deterministic ordering and empty-label results.
 func TestProcessTagLabelsKeysAndValues(t *testing.T) {
 	t.Parallel()
 
@@ -104,8 +108,8 @@ func TestProcessTagLabelsKeysAndValues(t *testing.T) {
 	})
 }
 
-// Exercise the dispatcher so argument matching, errors, and function skipping
-// are covered together with value lookup.
+// TestLabelsLookupDispatch checks label values, fallbacks, errors, tag boundaries,
+// and function skipping through the shared YAML function dispatcher.
 func TestLabelsLookupDispatch(t *testing.T) {
 	t.Parallel()
 	info := stackInfoWithMetadata(map[string]any{"labels": map[string]any{

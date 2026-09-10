@@ -11,7 +11,7 @@ templates first, then executes the YAML functions.
 
 ```yaml
 vars:
-  tags: !labels                         # Complete metadata.labels map
+  labels: !labels                       # Complete metadata.labels map
   runner: !labels runner                # One literal, case-sensitive key
   owner: !labels owner "Platform Team"  # Fallback only when the key is absent
   optional: !labels missing ""          # Explicit empty fallback
