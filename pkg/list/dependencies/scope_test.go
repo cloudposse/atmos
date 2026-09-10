@@ -547,6 +547,66 @@ func TestResolveScopedClosureFailsForRequiredTargetWithinClosure(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrDependencyTargetNotFound)
 }
 
+func TestResolveScopedClosureRendersTemplatedRequiredBeforeValidation(t *testing.T) {
+	t.Parallel()
+
+	lightweight := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {"dependencies": map[string]any{"components": []any{map[string]any{
+				"component": "metrics",
+				"required":  "[[ .vars.metrics_required ]]",
+			}}}},
+		},
+	})
+
+	t.Run("optional after rendering", func(t *testing.T) {
+		t.Parallel()
+
+		describe := &fakeDescribe{
+			full: lightweight,
+			resolved: terraformStacks(map[string]map[string]map[string]any{
+				"dev": {"app": {"dependencies": map[string]any{"components": []any{map[string]any{"component": "metrics", "required": false}}}}},
+			}),
+		}
+
+		result, err := ResolveScopedClosure(describe.describe, &ScopeRequest{
+			Components:       []string{"app"},
+			Stack:            "dev",
+			Direction:        DirectionForward,
+			ProcessTemplates: true,
+			LeftDelim:        "[[",
+			RightDelim:       "]]",
+		})
+
+		require.NoError(t, err)
+		app, ok := result.Closure.GetNode(NodeID("app", "dev"))
+		require.True(t, ok)
+		assert.Empty(t, app.Dependencies)
+	})
+
+	t.Run("required after rendering", func(t *testing.T) {
+		t.Parallel()
+
+		describe := &fakeDescribe{
+			full: lightweight,
+			resolved: terraformStacks(map[string]map[string]map[string]any{
+				"dev": {"app": {"dependencies": map[string]any{"components": []any{map[string]any{"component": "metrics", "required": true}}}}},
+			}),
+		}
+
+		_, err := ResolveScopedClosure(describe.describe, &ScopeRequest{
+			Components:       []string{"app"},
+			Stack:            "dev",
+			Direction:        DirectionForward,
+			ProcessTemplates: true,
+			LeftDelim:        "[[",
+			RightDelim:       "]]",
+		})
+
+		require.ErrorIs(t, err, errUtils.ErrDependencyTargetNotFound)
+	})
+}
+
 // TestResolveScopedClosureForwardSkipsUnresolvedSourceEvaluation is the
 // negative path: the conservative extra evaluation is a reverse/both-direction
 // recovery. A forward-only request converges through the closure itself (the

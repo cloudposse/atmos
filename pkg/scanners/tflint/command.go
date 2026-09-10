@@ -19,7 +19,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/scanners"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/tags"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
@@ -164,7 +163,6 @@ type Runtime struct {
 
 var (
 	initCLIConfig        = cfg.InitCliConfig
-	buildTerraformGraph  = scheduleradapters.BuildTerraformGraph
 	runTarget            = executeTarget
 	checkTFLintAvailable = checkTFLintAvailableImpl
 )
@@ -234,12 +232,7 @@ func execute(ctx context.Context, runtime *Runtime, info *schema.ConfigAndStacks
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
-	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
-	graph, err := buildTerraformGraph(stacks, leftDelim)
-	if err != nil {
-		return fmt.Errorf(terraformLintWrappedErrorFormat, errUtils.ErrBuildTerraformLintTargets, err)
-	}
-	targets := targetsFor(graph, nil)
+	targets := targetsFor(nil, scheduleradapters.TerraformTargets(stacks))
 	if len(targets) == 0 {
 		ui.Success("No Terraform components matched")
 		return nil

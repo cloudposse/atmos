@@ -6,6 +6,7 @@ package dependencies
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -41,13 +42,14 @@ func NodeID(component, stack string) string {
 // when called by scoped structural discovery; required targets otherwise fail.
 func BuildGraph(stacks map[string]any) (*dependency.Graph, error) {
 	defer perf.Track(nil, "dependencies.BuildGraph")()
-	return buildGraph(stacks, nil)
+	return buildGraph(stacks, nil, "")
 }
 
 // buildGraph constructs a graph and validates required targets declared by
 // validationSources. A nil source set validates every component; an empty set
-// performs structural discovery only.
-func buildGraph(stacks map[string]any, validationSources map[string]bool) (*dependency.Graph, error) {
+// performs structural discovery only. Scoped graph construction defers
+// unresolved required values until the graph's selected sources are rendered.
+func buildGraph(stacks map[string]any, validationSources map[string]bool, leftDelim string) (*dependency.Graph, error) {
 	graph := dependency.NewGraph()
 	targetReasons := make(map[string]string)
 
@@ -77,7 +79,7 @@ func buildGraph(stacks map[string]any, validationSources map[string]bool) (*depe
 			return
 		}
 		fromID := NodeID(componentName, stackName)
-		deps, modern, err := extractComponentDependenciesWithStack(componentSection, stackName)
+		deps, modern, err := extractComponentDependenciesWithStack(componentSection, stackName, validationSources != nil, leftDelim)
 		if err != nil {
 			buildErr = fmt.Errorf("parsing dependencies for %q in stack %q: %w", componentName, stackName, err)
 			return
@@ -192,7 +194,10 @@ func UnresolvedDependencySources(stacks map[string]any, leftDelim string) map[st
 
 	sources := make(map[string][]string)
 	walkComponents(stacks, func(stackName, componentName string, componentSection map[string]any) {
-		deps := extractComponentDependencies(componentSection)
+		deps, _, err := extractComponentDependenciesWithStack(componentSection, "", true, leftDelim)
+		if err != nil {
+			return
+		}
 		for i := range deps {
 			if tags.SelectorUnresolved(deps[i].Component, leftDelim) || tags.SelectorUnresolved(deps[i].Stack, leftDelim) {
 				sources[stackName] = append(sources[stackName], componentName)
@@ -274,15 +279,15 @@ func shouldSkipComponent(componentSection map[string]any) bool {
 }
 
 func extractComponentDependencies(componentSection map[string]any) []schema.ComponentDependency {
-	deps, _, err := extractComponentDependenciesWithStack(componentSection, "")
+	deps, _, err := extractComponentDependenciesWithStack(componentSection, "", false, "")
 	if err != nil {
 		return nil
 	}
 	return deps
 }
 
-func extractComponentDependenciesWithStack(componentSection map[string]any, stackName string) ([]schema.ComponentDependency, bool, error) {
-	deps, found, err := dependenciesFromComponentsSection(componentSection, stackName)
+func extractComponentDependenciesWithStack(componentSection map[string]any, stackName string, structural bool, leftDelim string) ([]schema.ComponentDependency, bool, error) {
+	deps, found, err := dependenciesFromComponentsSection(componentSection, stackName, structural, leftDelim)
 	if err != nil || found {
 		return filterComponentDependencies(deps), found, err
 	}
@@ -292,7 +297,7 @@ func extractComponentDependenciesWithStack(componentSection map[string]any, stac
 // dependenciesFromComponentsSection reads the preferred `dependencies.components`
 // surface and returns its component-to-component entries plus a boolean
 // indicating whether the `components` key was present at all.
-func dependenciesFromComponentsSection(componentSection map[string]any, stackName string) ([]schema.ComponentDependency, bool, error) {
+func dependenciesFromComponentsSection(componentSection map[string]any, stackName string, structural bool, leftDelim string) ([]schema.ComponentDependency, bool, error) {
 	dependenciesValue, exists := componentSection[cfg.DependenciesSectionName]
 	if !exists {
 		return nil, false, nil
@@ -304,11 +309,43 @@ func dependenciesFromComponentsSection(componentSection map[string]any, stackNam
 	if _, hasComponents := depsSection["components"]; !hasComponents {
 		return nil, false, nil
 	}
+	if structural {
+		depsSection = deferUnresolvedRequired(depsSection, leftDelim)
+	}
 	deps, err := schema.ParseComponentDependencies(depsSection, cfg.TerraformComponentType, stackName)
 	if err != nil {
 		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
 	}
 	return deps, true, nil
+}
+
+// deferUnresolvedRequired removes unresolved required values from the
+// lightweight graph so they retain the conservative required default until the
+// selected component is rendered during scoped evaluation.
+func deferUnresolvedRequired(depsSection map[string]any, leftDelim string) map[string]any {
+	entries, ok := depsSection["components"].([]any)
+	if !ok {
+		return depsSection
+	}
+	deferred := false
+	clonedEntries := make([]any, len(entries))
+	for i, entry := range entries {
+		component, ok := entry.(map[string]any)
+		if !ok || !tags.SelectorUnresolved(component["required"], leftDelim) {
+			clonedEntries[i] = entry
+			continue
+		}
+		clonedComponent := maps.Clone(component)
+		delete(clonedComponent, "required")
+		clonedEntries[i] = clonedComponent
+		deferred = true
+	}
+	if !deferred {
+		return depsSection
+	}
+	clonedSection := maps.Clone(depsSection)
+	clonedSection["components"] = clonedEntries
+	return clonedSection
 }
 
 // dependenciesFromSettings reads the legacy `settings.depends_on` surface.

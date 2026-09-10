@@ -451,7 +451,10 @@ func TestManifestSchema_OverridesFieldCoverage(t *testing.T) {
 }
 
 func TestManifestSchema_ComponentDependencyRequiredForms(t *testing.T) {
-	schemaData := loadEmbeddedSchemaBytes(t)
+	schemas := map[string][]byte{
+		"embedded": loadEmbeddedSchemaBytes(t),
+		"fixture":  loadFixtureSchemaBytes(t),
+	}
 	tests := []struct {
 		name      string
 		value     any
@@ -464,24 +467,26 @@ func TestManifestSchema_ComponentDependencyRequiredForms(t *testing.T) {
 		{name: "plain string deferred to template parsing", value: "sometimes", wantValid: true},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			manifest := map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"app": map[string]any{
-							"dependencies": map[string]any{
-								"components": []any{
-									map[string]any{"name": "vpc", "required": test.value},
+	for schemaName, schemaData := range schemas {
+		for _, test := range tests {
+			t.Run(schemaName+"/"+test.name, func(t *testing.T) {
+				manifest := map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"app": map[string]any{
+								"dependencies": map[string]any{
+									"components": []any{
+										map[string]any{"name": "vpc", "required": test.value},
+									},
 								},
 							},
 						},
 					},
-				},
-			}
-			result := validateManifestAgainstSchema(t, schemaData, manifest)
-			assert.Equal(t, test.wantValid, result.Valid(), "%s", result.Errors())
-		})
+				}
+				result := validateManifestAgainstSchema(t, schemaData, manifest)
+				assert.Equal(t, test.wantValid, result.Valid(), "%s", result.Errors())
+			})
+		}
 	}
 }
 

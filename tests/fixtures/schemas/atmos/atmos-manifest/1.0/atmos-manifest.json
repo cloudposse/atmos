@@ -2791,6 +2791,20 @@
         "path": {
           "type": "string",
           "description": "File or folder path for legacy inline path-based dependencies. Required when `kind` is `file` or `folder`. New configurations should use the sibling `dependencies.files` / `dependencies.folders` keys instead."
+        },
+        "required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Required controls whether an available target must be present. Nil defaults to true."
         }
       },
       "anyOf": [

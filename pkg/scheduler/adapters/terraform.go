@@ -290,6 +290,28 @@ func BuildTerraformGraph(stacks map[string]any, leftDelims ...string) (*dependen
 	return buildTerraformGraph(stacks, leftDelim, nil)
 }
 
+// TerraformTargets returns enabled, concrete Terraform components from described stacks
+// without resolving their dependency graph.
+func TerraformTargets(stacks map[string]any) []*dependency.Node {
+	defer perf.Track(nil, "scheduler.adapters.TerraformTargets")()
+
+	targets := make([]*dependency.Node, 0)
+	_ = walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
+		if shouldSkipComponent(componentSection) {
+			return nil
+		}
+		targets = append(targets, &dependency.Node{
+			ID:        terraformNodeID(componentName, stackName),
+			Component: componentName,
+			Stack:     stackName,
+			Type:      cfg.TerraformComponentType,
+			Metadata:  componentSection,
+		})
+		return nil
+	})
+	return targets
+}
+
 // buildTerraformGraph constructs a graph and validates required targets declared
 // by validationSources. A nil source set validates every component; an empty set
 // performs structural discovery only.

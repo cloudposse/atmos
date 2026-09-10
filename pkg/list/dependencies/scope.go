@@ -178,7 +178,7 @@ func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResul
 	}
 	// Phase A only discovers candidate nodes and edges. Required targets are
 	// validated after their declaring components have entered the closure.
-	graph, err := buildGraph(lightweightStacks, map[string]bool{})
+	graph, err := buildGraph(lightweightStacks, map[string]bool{}, req.LeftDelim)
 	if err != nil {
 		return nil, err
 	}
@@ -254,6 +254,7 @@ func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []stri
 		resolvedGraph, err = buildGraph(
 			mergeResolvedClosureStacks(lightweightStacks, resolvedStacks),
 			map[string]bool{},
+			req.LeftDelim,
 		)
 		if err != nil {
 			return nil, err
@@ -262,6 +263,7 @@ func resolveClosureStacks(describe DescribeFunc, req *ScopeRequest, roots []stri
 		if _, err = buildGraph(
 			mergeResolvedClosureStacks(lightweightStacks, resolvedStacks),
 			evaluatedClosureNodeIDs(closure, evaluatedComponents),
+			req.LeftDelim,
 		); err != nil {
 			return nil, err
 		}

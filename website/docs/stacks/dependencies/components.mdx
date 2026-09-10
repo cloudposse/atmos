@@ -59,8 +59,8 @@ Each entry in `dependencies.components` is an object with these fields:
   <dt>kind <em>(string, optional)</em></dt>
   <dd>The dependency type: `terraform`, `helmfile`, `packer`, or a registered plugin type. Defaults to the declaring component's type for component dependencies.</dd>
 
-  <dt>required <em>(boolean, default: true)</em></dt>
-  <dd>Whether the target must be concrete and enabled. Set to `false` when the dependency should provide ordering only when that target is available.</dd>
+  <dt>required <em>(boolean or template, default: true)</em></dt>
+  <dd>Whether the target must be concrete and enabled. Set to `false` when the dependency should provide ordering only when that target is available. A template may render this value to `true` or `false`; any other rendered value returns an error.</dd>
 </dl>
 
 :::info Migrating from `settings.depends_on`?
@@ -85,6 +85,16 @@ components:
 ```
 
 When `observability` is available, Atmos includes it in dependency ordering. When it is absent, disabled, or abstract, Atmos omits only that optional edge. Invalid dependency entries still return errors.
+
+Use a template when optionality depends on stack values. The template must render
+to a boolean:
+
+```yaml
+dependencies:
+  components:
+    - name: observability
+      required: "{{ .vars.observability_required }}"
+```
 
 For commands bounded by `--stack`, `--labels`, `--components`, or `--tags` together with `--include-dependencies` or `--include-dependents`, Atmos evaluates only the selected components and their reachable dependency closure. An unrelated component cannot cause template, YAML-function, or required-target errors for that operation.
 
