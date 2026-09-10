@@ -46,9 +46,19 @@ func GetLatestRelease(owner string, repo string) (string, error) {
 	return *release.TagName, nil
 }
 
-// GetReleases fetches GitHub releases with pagination, prerelease filtering, and date filtering.
+// GetReleases fetches GitHub releases with pagination, prerelease filtering, and date
+// filtering, scoped to RepoEndpoints (the user's own repositories).
 func GetReleases(opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
 	defer perf.Track(nil, "github.GetReleases")()
+
+	return getReleasesWithClient(newGitHubClient(context.Background()), opts)
+}
+
+// getReleasesWithClient is the client-injectable core of GetReleases, so callers needing a
+// different Endpoints scope (e.g. GetReleaseVersions) can reuse the same pagination/filtering
+// logic against a differently-scoped client.
+func getReleasesWithClient(client *github.Client, opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
+	defer perf.Track(nil, "github.getReleasesWithClient")()
 
 	log.Debug(
 		"Fetching releases from GitHub API",
@@ -60,44 +70,9 @@ func GetReleases(opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
 	)
 
 	ctx := context.Background()
-	client := newGitHubClient(ctx)
 
-	// Check rate limits before making requests.
-	rateLimits, _, err := client.RateLimit.Get(ctx)
-	if err == nil && rateLimits != nil && rateLimits.Core != nil {
-		remaining := rateLimits.Core.Remaining
-		limit := rateLimits.Core.Limit
-
-		log.Debug(
-			"GitHub API rate limits",
-			"remaining", remaining,
-			"limit", limit,
-			"resetAt", rateLimits.Core.Reset.Time,
-		)
-
-		if remaining < githubAPIMinRateLimitThreshold {
-			resetTime := rateLimits.Core.Reset.Time
-			waitDuration := time.Until(resetTime)
-
-			builder := errUtils.Build(errUtils.ErrGitHubRateLimitExceeded).
-				WithExplanation(fmt.Sprintf("Only %d requests remaining, resets at %s (in %s)",
-					remaining,
-					resetTime.Format(time.RFC3339),
-					waitDuration.Round(time.Second)))
-
-			if httpClient.GetGitHubTokenFromEnv() != "" {
-				builder.
-					WithHint("Your GitHub token may be invalid or expired").
-					WithHint("Verify your token: `gh auth status`").
-					WithHint("Try re-authenticating: `gh auth login`")
-			} else {
-				builder.
-					WithHint("Authenticate with GitHub CLI: `gh auth login`").
-					WithHint("Or set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variable")
-			}
-
-			return nil, builder.Err()
-		}
+	if err := checkRateLimitBeforeFetch(ctx, client); err != nil {
+		return nil, err
 	}
 
 	// Fetch releases from GitHub API with pagination.
@@ -113,6 +88,53 @@ func GetReleases(opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
 
 	// Apply offset and limit.
 	return applyPagination(allReleases, opts.Offset, opts.Limit), nil
+}
+
+// checkRateLimitBeforeFetch queries the current rate limit and returns a user-friendly error
+// when remaining requests are below githubAPIMinRateLimitThreshold. A rate-limit lookup
+// failure is not itself an error here: the caller's actual fetch will surface any real API
+// problem, so this check is best-effort and silently skipped on error.
+func checkRateLimitBeforeFetch(ctx context.Context, client *github.Client) error {
+	rateLimits, _, err := client.RateLimit.Get(ctx)
+	if err != nil || rateLimits == nil || rateLimits.Core == nil {
+		return nil //nolint:nilerr // Best-effort rate-limit check: a lookup failure isn't fatal, the actual fetch call surfaces any real API problem.
+	}
+
+	remaining := rateLimits.Core.Remaining
+	limit := rateLimits.Core.Limit
+
+	log.Debug(
+		"GitHub API rate limits",
+		"remaining", remaining,
+		"limit", limit,
+		"resetAt", rateLimits.Core.Reset.Time,
+	)
+
+	if remaining >= githubAPIMinRateLimitThreshold {
+		return nil
+	}
+
+	resetTime := rateLimits.Core.Reset.Time
+	waitDuration := time.Until(resetTime)
+
+	builder := errUtils.Build(errUtils.ErrGitHubRateLimitExceeded).
+		WithExplanation(fmt.Sprintf("Only %d requests remaining, resets at %s (in %s)",
+			remaining,
+			resetTime.Format(time.RFC3339),
+			waitDuration.Round(time.Second)))
+
+	if httpClient.GetGitHubTokenFromEnv() != "" {
+		builder.
+			WithHint("Your GitHub token may be invalid or expired").
+			WithHint("Verify your token: `gh auth status`").
+			WithHint("Try re-authenticating: `gh auth login`")
+	} else {
+		builder.
+			WithHint("Authenticate with GitHub CLI: `gh auth login`").
+			WithHint("Or set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variable")
+	}
+
+	return builder.Err()
 }
 
 // fetchAllReleases fetches releases from GitHub API with pagination.
@@ -253,13 +275,15 @@ func GetLatestReleaseInfo(owner, repo string) (*github.RepositoryRelease, error)
 }
 
 // GetReleaseVersions fetches release versions as strings (tag names without 'v' prefix).
-// Returns only non-prerelease versions, suitable for toolchain version management.
+// Returns only non-prerelease versions, for toolchain version management: it is scoped to
+// ToolchainEndpoints, not RepoEndpoints, since toolchain-managed tool releases live on public
+// github.com by default even for GHES users.
 func GetReleaseVersions(owner, repo string, limit int) ([]string, error) {
 	defer perf.Track(nil, "github.GetReleaseVersions")()
 
 	log.Debug("Fetching release versions from GitHub API", logFieldOwner, owner, logFieldRepo, repo, "limit", limit)
 
-	releases, err := GetReleases(ReleasesOptions{
+	releases, err := getReleasesWithClient(newToolchainGitHubClient(context.Background()), ReleasesOptions{
 		Owner:              owner,
 		Repo:               repo,
 		Limit:              limit,

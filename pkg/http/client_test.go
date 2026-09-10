@@ -1258,6 +1258,17 @@ func TestIsGitHubHost_InvalidGITHUB_API_URL(t *testing.T) {
 	assert.False(t, isGitHubHost("example.com"))
 }
 
+// TestIsGitHubHost_GITHUB_SERVER_URL verifies that GITHUB_SERVER_URL alone (without
+// GITHUB_API_URL) also adds a GHES host to the allowlist, covering GHES setups (or test
+// mocks) where the web host and API host differ.
+func TestIsGitHubHost_GITHUB_SERVER_URL(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+	assert.True(t, isGitHubHost("ghes.example.com"), "GITHUB_SERVER_URL hostname should be allowed")
+	assert.True(t, isGitHubHost("api.github.com"), "default allowlist still applies")
+	assert.False(t, isGitHubHost("evil.example.com"))
+}
+
 // TestNormalizeHost verifies that normalizeHost canonicalises hostnames correctly.
 func TestNormalizeHost(t *testing.T) {
 	tests := []struct {
