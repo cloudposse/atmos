@@ -16,18 +16,26 @@ import {
   nextPollIntervalMs,
 } from './polling.mjs';
 
+function headers(contentType) {
+  return { get: (name) => (name.toLowerCase() === 'content-type' ? contentType : null) };
+}
+
 function jsonResponse(status, data) {
   return {
     status,
+    headers: headers('application/json'),
     json: async () => data,
   };
 }
 
-function readyResponse() {
+// The legacy/cached shape: a ready artifact served as the file itself
+// (non-JSON content type), which must be aborted without ever being read.
+function legacyReadyResponse() {
   let jsonCalled = false;
   return {
     response: {
       status: 200,
+      headers: headers('video/mp4'),
       json: async () => {
         jsonCalled = true;
         return {};
@@ -81,6 +89,32 @@ test('interpretPollResponse: 202 "processing" artifact status carries progress t
   });
 });
 
+test('interpretPollResponse: 200 with a "ready" artifact status is ready', () => {
+  const outcome = interpretPollResponse(200, {
+    data: { artifacts: [{ status: 'ready', url: 'https://example.test/token', progress: null }] },
+  });
+  assert.deepEqual(outcome, { kind: 'ready' });
+});
+
+test('interpretPollResponse: 200 with a "processing" artifact status is still rendering', () => {
+  const outcome = interpretPollResponse(200, {
+    data: { artifacts: [{ status: 'processing', progress: { percent: 40, stage: 'encoding' } }] },
+  });
+  assert.deepEqual(outcome, {
+    kind: 'rendering',
+    phase: 'processing',
+    progress: { percent: 40, stage: 'encoding' },
+  });
+});
+
+test('interpretPollResponse: 404 surfaces the not-found message verbatim', () => {
+  const outcome = interpretPollResponse(404, {
+    success: false,
+    error: 'Cast file was not found at the requested commit and path',
+  });
+  assert.deepEqual(outcome, { kind: 'error', message: 'Cast file was not found at the requested commit and path' });
+});
+
 test('interpretPollResponse: 202 with a "failed" artifact is terminal', () => {
   const outcome = interpretPollResponse(202, {
     data: { artifacts: [{ status: 'failed', error: 'ffmpeg crashed' }] },
@@ -127,9 +161,9 @@ test('describeStatus labels queued vs. processing and flags a slow render', () =
   );
 });
 
-test('createPoller: 202 -> 202 -> 200 downloads exactly once and polls every 3s', async (t) => {
+test('createPoller: 202 -> 202 -> legacy non-JSON 200 downloads exactly once and polls every 3s', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  const ready = readyResponse();
+  const ready = legacyReadyResponse();
   const { fetchImpl, calls } = queueFetch([
     jsonResponse(202, { data: { artifacts: [{ status: 'processing', progress: null }] } }),
     jsonResponse(202, { data: { artifacts: [{ status: 'processing', progress: null }] } }),
@@ -153,15 +187,15 @@ test('createPoller: 202 -> 202 -> 200 downloads exactly once and polls every 3s'
   assert.equal(updates[2].status, 'ready');
 
   assert.equal(calls.length, 3);
-  assert.equal(ready.jsonCalled, false, 'the ready (200) response body must never be read');
+  assert.equal(ready.jsonCalled, false, 'the legacy non-JSON 200 response body must never be read');
 
   const readyUpdates = updates.filter((u) => u.status === 'ready');
   assert.equal(readyUpdates.length, 1, 'must reach the ready state exactly once');
 });
 
-test('createPoller: an immediate 200 is ready right away without reading the body', async (t) => {
+test('createPoller: an immediate legacy non-JSON 200 is ready right away without reading the body', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  const ready = readyResponse();
+  const ready = legacyReadyResponse();
   const { fetchImpl, calls } = queueFetch([ready.response]);
 
   const updates = [];
@@ -173,6 +207,66 @@ test('createPoller: an immediate 200 is ready right away without reading the bod
   assert.equal(calls.length, 1);
   assert.deepEqual(updates, [{ status: 'ready', elapsedMs: 0 }]);
   assert.equal(ready.jsonCalled, false);
+});
+
+test('createPoller: an immediate 200 JSON body with status "ready" downloads right away', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { fetchImpl, calls } = queueFetch([
+    jsonResponse(200, { data: { artifacts: [{ status: 'ready', url: 'https://example.test/token', progress: null }] } }),
+  ]);
+
+  const updates = [];
+  const poller = createPoller({ url: 'https://example.test/cast.mp4', fetchImpl, onUpdate: (u) => updates.push(u) });
+
+  poller.start();
+  await flush();
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(updates, [{ status: 'ready', elapsedMs: 0 }]);
+});
+
+test('createPoller: a 200 JSON body with status "processing" keeps rendering and polls again', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { fetchImpl, calls } = queueFetch([
+    jsonResponse(200, { data: { artifacts: [{ status: 'processing', progress: { percent: 40, stage: 'encoding' } }] } }),
+    jsonResponse(200, { data: { artifacts: [{ status: 'ready', progress: null }] } }),
+  ]);
+
+  const updates = [];
+  const poller = createPoller({ url: 'https://example.test/cast.mp4', fetchImpl, onUpdate: (u) => updates.push(u) });
+
+  poller.start();
+  await flush();
+  assert.equal(updates.length, 1);
+  assert.deepEqual(updates[0], {
+    status: 'rendering',
+    phase: 'processing',
+    progress: { percent: 40, stage: 'encoding' },
+    elapsedMs: 0,
+    slow: false,
+  });
+
+  await tick(t, POLL_INTERVAL_MS);
+  assert.equal(calls.length, 2, 'must poll again instead of getting stuck on the interim 200');
+  assert.equal(updates.length, 2);
+  assert.equal(updates[1].status, 'ready');
+});
+
+test('createPoller: a 404 surfaces the "not found" message inline instead of a network error', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { fetchImpl } = queueFetch([
+    jsonResponse(404, { success: false, error: 'Cast file was not found at the requested commit and path' }),
+  ]);
+
+  const updates = [];
+  const poller = createPoller({ url: 'https://example.test/cast.mp4', fetchImpl, onUpdate: (u) => updates.push(u) });
+
+  poller.start();
+  await flush();
+
+  assert.deepEqual(updates, [
+    { status: 'error', errorMessage: 'Cast file was not found at the requested commit and path', elapsedMs: 0 },
+  ]);
 });
 
 test('createPoller: 500 surfaces the JSON error inline and never navigates', async (t) => {

@@ -13,12 +13,16 @@ connection open, and never sends artifact bytes while still rendering:
 - **202** + `Retry-After` (ignored — see below) + JSON body while queued/rendering:
   `data.artifacts[0].status` is `"queued" | "processing" | "ready" | "failed"`; an optional
   `data.artifacts[0].progress` (`{ percent, stage }`) may appear once the service starts sending it.
-- **200** once ready — but as the *rendered artifact itself* (`Content-Type: video/mp4`,
-  `image/gif`, etc.), not JSON, even though `Accept: application/json` was sent. Treat any `200`
-  as ready and never read the body — `polling.mjs` aborts the fetch as soon as the status line
-  arrives so a poll never transfers the full file.
-- **400/500** with a JSON `{ success: false, error }` body — terminal failure; `error` is
-  human-readable and safe to show verbatim.
+- **200** + JSON body once ready — `data.artifacts[0].status === "ready"` is the readiness
+  signal, using the same `data.artifacts[0]` shape as the 202 case above. `artifacts[0].url` is a
+  tokened direct link to the artifact (unused here); `blobUrl` is always `null`. Some responses
+  may still come back as the *rendered artifact itself* (`Content-Type: video/mp4`, `image/gif`,
+  etc.) rather than this JSON body — `polling.mjs` checks `Content-Type` and, for that non-JSON
+  shape, aborts the fetch as soon as the status line arrives so a poll never transfers the full
+  file, treating it as ready without reading it.
+- **400/404/500** with a JSON `{ success: false, error }` body — terminal failure, readable
+  cross-origin; `error` is human-readable and safe to show verbatim (e.g. a 404 reads "Cast file
+  was not found at the requested commit and path").
 
 A sibling `.cast` URL (no format suffix) returns an HTML page with an embedded player, for
 `<iframe>` use.
