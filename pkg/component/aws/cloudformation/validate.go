@@ -48,7 +48,7 @@ func setStackPolicy(ctx context.Context, client CloudFormationClient, spec *stac
 		StackPolicyBody: awsString(spec.StackPolicyBody),
 	})
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
+		return wrapAPICallError(spec.StackName, err)
 	}
 	return nil
 }
@@ -68,7 +68,7 @@ func applyTerminationProtection(ctx context.Context, client CloudFormationClient
 		EnableTerminationProtection: awsBool(spec.TerminationProtection),
 	})
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
+		return wrapAPICallError(spec.StackName, err)
 	}
 	return nil
 }

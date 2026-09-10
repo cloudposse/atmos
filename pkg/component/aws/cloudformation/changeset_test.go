@@ -3,10 +3,12 @@ package cloudformation
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -389,4 +391,39 @@ func TestWaitForChangeSet_ContextCancelled(t *testing.T) {
 func TestSanitizeChangeSetSuffix(t *testing.T) {
 	assert.Equal(t, "acme-plat-ue2-dev-vpc", sanitizeChangeSetSuffix("acme-plat-ue2-dev-vpc"))
 	assert.Equal(t, "acme-plat-vpc", sanitizeChangeSetSuffix("acme_plat-vpc"), "non-alphanumeric-non-hyphen characters (e.g. underscore) become hyphens")
+}
+
+// wrapAPICallError must recognize AWS's "does not exist" validation error
+// shape (the one a follow-up call like UpdateTerminationProtection/
+// SetStackPolicy/DescribeStacks hits when it targets a stack that was never
+// actually deployed) and add an explanation + actionable hint via the error
+// builder, while still matching both the sentinel and the original AWS error
+// via errors.Is.
+func TestWrapAPICallError_StackNotFound(t *testing.T) {
+	awsErr := errors.New(`operation error CloudFormation: UpdateTerminationProtection, https response error ` +
+		`StatusCode: 400, api error ValidationError: Stack [fixdemo-dev] does not exist`)
+
+	err := wrapAPICallError("fixdemo-dev", awsErr)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+	assert.ErrorIs(t, err, awsErr)
+
+	hints := cockroachErrors.GetAllHints(err)
+	require.NotEmpty(t, hints, "error must carry at least one hint")
+	joined := strings.Join(hints, " ")
+	assert.Contains(t, joined, "--target")
+	assert.Contains(t, joined, "apply")
+}
+
+// wrapAPICallError must leave every other AWS error shape as the existing
+// plain sentinel wrap, without inventing a hint for an error it hasn't
+// specifically recognized.
+func TestWrapAPICallError_OtherError_PlainWrap(t *testing.T) {
+	awsErr := errors.New("operation error CloudFormation: CreateChangeSet, access denied")
+
+	err := wrapAPICallError("fixdemo-dev", awsErr)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+	assert.ErrorIs(t, err, awsErr)
+	assert.Empty(t, cockroachErrors.GetAllHints(err), "an unrecognized AWS error must not get an invented hint")
 }

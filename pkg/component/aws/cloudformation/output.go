@@ -2,11 +2,9 @@ package cloudformation
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -18,7 +16,7 @@ func describeStackOutputs(ctx context.Context, client CloudFormationClient, stac
 
 	out, err := client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: awsString(stackName)})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
+		return nil, wrapAPICallError(stackName, err)
 	}
 	if len(out.Stacks) == 0 {
 		return map[string]any{}, nil

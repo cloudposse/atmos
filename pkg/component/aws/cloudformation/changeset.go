@@ -91,6 +91,29 @@ func isStackNotFoundError(err error) bool {
 	return strings.Contains(err.Error(), "does not exist")
 }
 
+// wrapAPICallError wraps a raw AWS CloudFormation SDK error with the shared
+// ErrAwsCloudFormationAPICallFailed sentinel. For the common "stack does not
+// exist" validation error — e.g. a post-apply follow-up call (SetStackPolicy,
+// UpdateTerminationProtection, the DescribeStacks behind describeStackOutputs)
+// reaching a stack that was never actually deployed — this uses the error
+// builder to add an explanation and an actionable hint, instead of surfacing
+// AWS's raw, unexplained message verbatim (the confusing error a user hit
+// running `apply --target <publish-only-target>` before runApply learned to
+// skip these follow-up calls for non-direct-deploy targets; see runApply).
+// Every other AWS error shape falls back to the existing plain "%w: %w"
+// wrap: forcing a hint onto an error shape this helper hasn't specifically
+// recognized risks being wrong or misleading.
+func wrapAPICallError(stackName string, err error) error {
+	if !isStackNotFoundError(err) {
+		return fmt.Errorf(wrapFmt, errUtils.ErrAwsCloudFormationAPICallFailed, err)
+	}
+	return errUtils.Build(errUtils.ErrAwsCloudFormationAPICallFailed).
+		WithCause(err).
+		WithExplanationf("Stack %q doesn't exist yet.", stackName).
+		WithHint("Check `--target`/`-s`/component name, or run `apply` without `--target` first if you need to create the stack directly.").
+		Err()
+}
+
 // createChangeSet creates a changeset (CREATE or UPDATE, auto-detected) and waits
 // for it to finish computing, returning the described changeset.
 func createChangeSet(ctx context.Context, client CloudFormationClient, spec *stackSpec) (*changeSetResult, error) {

@@ -11,7 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	artifact "github.com/cloudposse/atmos/pkg/ci/artifact"
-	s3store "github.com/cloudposse/atmos/pkg/ci/artifact/s3"
+	_ "github.com/cloudposse/atmos/pkg/ci/artifact/s3" // Registers the "aws/s3" artifact.Backend factory used via artifact.NewBackend below.
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
@@ -100,9 +100,23 @@ type targetS3Config struct {
 // target, authenticated via the active identity (never a bare ambient
 // credential chain — see environment.go for the same in-process principle
 // applied to the CloudFormation client itself).
+//
+// Critically, "the active identity" is not the same thing as "an explicit
+// identity: override": most stacks authenticate via a default identity
+// (auth.identities.<name>.default: true) and never set info.Identity at all.
+// The activeIdentityName helper below resolves the identity name whichever
+// way it was activated — explicit override or default — the same way
+// environment.go's awsAuthContextFrom/buildAWSConfig already trust whatever
+// identity has resolved onto info for the CloudFormation client itself,
+// rather than requiring info.Identity to be a non-empty explicit string.
 func newS3Backend(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, s3Target *targetS3Config) (artifact.Backend, error) {
 	opts := artifact.StoreOptions{
-		Type: "s3",
+		// Type must match the registered artifact.Backend factory key ("aws/s3",
+		// not "s3" — see pkg/ci/artifact/s3/store.go's storeName const): this is
+		// now a real registry lookup via artifact.NewBackend below, whereas it was
+		// previously inert metadata when this function called s3store.NewStore
+		// directly.
+		Type: "aws/s3",
 		Options: map[string]any{
 			"bucket": s3Target.Bucket,
 			"prefix": s3Target.Prefix,
@@ -111,20 +125,52 @@ func newS3Backend(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAnd
 		AtmosConfig: atmosConfig,
 	}
 
-	if info.Identity != "" {
+	if identityName := activeIdentityName(info); identityName != "" {
 		authManager, ok := info.AuthManager.(types.AuthManager)
 		if !ok {
-			// Fail loudly rather than silently falling back to s3store's default
-			// (ambient) credential chain — that would upload the packaged template
-			// using whatever AWS credentials happen to be available in the
-			// environment instead of the identity the component explicitly requested.
-			return nil, fmt.Errorf("%w: identity %q", errUtils.ErrAwsCloudFormationIdentityResolutionFailed, info.Identity)
+			// Fail loudly rather than silently falling back to the artifact
+			// registry's default (ambient) credential chain — that would upload
+			// the packaged template using whatever AWS credentials happen to be
+			// available in the environment instead of the identity that is
+			// actually active for this command (explicit override or default).
+			return nil, fmt.Errorf("%w: identity %q", errUtils.ErrAwsCloudFormationIdentityResolutionFailed, identityName)
 		}
-		opts.Identity = info.Identity
+		opts.Identity = identityName
 		opts.Resolver = authbridge.NewResolver(authManager, info)
 	}
 
-	return s3store.NewStore(opts)
+	// Route through the artifact registry's NewBackend (rather than calling
+	// s3store.NewStore directly) so that, when opts.Resolver is set, the
+	// registry's SetAuthContext wiring (registry.go) actually reaches the
+	// backend. Calling s3store.NewStore directly — as this used to — built
+	// opts.Resolver into the call but never wired it into the Store, silently
+	// leaving the identity-aware client uninitialized until s3store's own
+	// nil-resolver fallback quietly reached for the ambient chain instead.
+	return artifact.NewBackend(opts)
+}
+
+// activeIdentityName returns the identity name whose credentials should
+// authenticate the S3 upload: an explicit component-level identity: override
+// (info.Identity) when set, otherwise the identity that already authenticated
+// as this command's active/default identity, if any. The active identity's
+// name is recovered from AuthContext.AWS.Profile, which the auth system always
+// sets to the identity name (see pkg/auth/cloud/aws/setup.go's
+// Profile: params.IdentityName) — regardless of whether that identity was
+// selected via an explicit override or a configured default. Returns "" when
+// no identity is active at all, in which case the caller falls back to the
+// ambient AWS credential chain (e.g. local/unauthenticated usage where no
+// Atmos auth is configured).
+func activeIdentityName(info *schema.ConfigAndStacksInfo) string {
+	if info == nil {
+		return ""
+	}
+	if info.Identity != "" {
+		return info.Identity
+	}
+	if info.AuthContext != nil && info.AuthContext.AWS != nil {
+		return info.AuthContext.AWS.Profile
+	}
+	return ""
 }
 
 // packageObjectName builds a deterministic, content-addressed S3 key for the

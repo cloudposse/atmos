@@ -15,7 +15,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -410,6 +412,55 @@ func TestRunApply_DescribeOutputsError(t *testing.T) {
 	_, err := runApply(octx, client, spec, map[string]any{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+}
+
+// runApply must not touch stack-policy/termination-protection/outputs when the
+// selected provision target is publish-only (`kind: aws/s3`, e.g.
+// `--target artifacts`): deliverApply never created or touched a stack in that
+// case (result == nil), so running those follow-up calls previously crashed
+// with a raw "Stack does not exist" AWS error unrelated to what the user
+// actually asked for. Regression test for that bug: the fake CloudFormation
+// client has zero expectations, so any UpdateTerminationProtection/
+// SetStackPolicy/DescribeStacks call fails the test.
+func TestRunApply_PublishOnlyTarget_SkipsPostDeploySteps(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl) // no expectations: any CFN API call fails the test.
+
+	mockBackend := artifact.NewMockBackend(ctrl)
+	mockBackend.EXPECT().Upload(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	stubNewS3Backend(t, mockBackend, nil)
+
+	octx := &opContext{
+		Ctx:         context.Background(),
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+			ComponentSection: map[string]any{
+				cfg.ProvisionSectionName: map[string]any{
+					"targets": map[string]any{
+						"artifacts": map[string]any{"kind": "aws/s3", "bucket": "my-bucket"},
+					},
+				},
+			},
+		},
+		Flags: map[string]any{targetKey: "artifacts"},
+	}
+	// StackPolicyBody + TerminationProtection are both set to prove the gate
+	// actually skips those steps rather than happening to have nothing to do.
+	spec := &stackSpec{
+		StackName:             "vpc",
+		TemplateBody:          "AWSTemplateFormatVersion: '2010-09-09'",
+		TerminationProtection: true,
+		StackPolicyBody:       `{"Statement": []}`,
+	}
+
+	summary, err := runApply(octx, client, spec, map[string]any{"stack_name": "vpc"})
+	require.NoError(t, err)
+	assert.Equal(t, "artifacts", summary[targetKey])
+	assert.NotContains(t, summary, "outputs")
+	assert.NotContains(t, summary, "changeset_id")
+	assert.NotContains(t, summary, "no_op")
 }
 
 // runDelete must propagate a deleteStack failure without attempting to stream events.

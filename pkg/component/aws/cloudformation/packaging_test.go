@@ -89,6 +89,92 @@ func TestNewS3Backend_IdentitySetButAuthManagerWrongType_Errors(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationIdentityResolutionFailed)
 }
 
+// newS3Backend must route through the identity-aware path for the standard,
+// documented default-identity pattern (auth.identities.<name>.default: true,
+// no explicit identity: override on the component) — this is a regression
+// test for a real-AWS field-test bug: info.Identity is empty in this case, but
+// info.AuthContext.AWS.Profile already carries the active default identity's
+// name (set by pkg/auth/cloud/aws/setup.go), exactly as environment.go's
+// awsAuthContextFrom trusts for the CloudFormation client itself. Construction
+// must succeed via the identity-aware (deferred-auth) path rather than the
+// bare ambient chain.
+func TestNewS3Backend_DefaultIdentityViaAuthContext(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockManager := authtypes.NewMockAuthManager(ctrl)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		// No explicit Identity override — the standard default-identity pattern.
+		AuthContext: &schema.AuthContext{
+			AWS: &schema.AWSAuthContext{Profile: "prod-admin"},
+		},
+		AuthManager: mockManager,
+	}
+	s3Target := &targetS3Config{Bucket: "my-bucket"}
+
+	backend, err := newS3Backend(atmosConfig, info, s3Target)
+	require.NoError(t, err)
+	require.NotNil(t, backend)
+	assert.Equal(t, "aws/s3", backend.Name())
+}
+
+// newS3Backend must fail loudly (not silently fall back to the bare ambient
+// chain) when a default identity is active (AuthContext.AWS.Profile set) but
+// info.AuthManager doesn't implement types.AuthManager. This extends the same
+// fail-loud principle already covered by
+// TestNewS3Backend_IdentitySetButAuthManagerWrongType_Errors to the
+// default-identity case, so the hardening doesn't regress to the pre-fix
+// behavior for stacks that never set an explicit identity: override.
+func TestNewS3Backend_DefaultIdentityAuthManagerWrongType_Errors(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{
+			AWS: &schema.AWSAuthContext{Profile: "prod-admin"},
+		},
+		AuthManager: nil,
+	}
+	s3Target := &targetS3Config{Bucket: "my-bucket"}
+
+	_, err := newS3Backend(atmosConfig, info, s3Target)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationIdentityResolutionFailed)
+	assert.Contains(t, err.Error(), "prod-admin")
+}
+
+// activeIdentityName must prefer an explicit info.Identity override over the
+// active/default identity recovered from AuthContext.AWS.Profile.
+func TestActiveIdentityName_ExplicitOverridesDefault(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		Identity: "explicit-role",
+		AuthContext: &schema.AuthContext{
+			AWS: &schema.AWSAuthContext{Profile: "default-role"},
+		},
+	}
+	assert.Equal(t, "explicit-role", activeIdentityName(info))
+}
+
+// activeIdentityName must fall back to AuthContext.AWS.Profile — the active
+// default identity's name — when no explicit override is set.
+func TestActiveIdentityName_FallsBackToAuthContext(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{
+			AWS: &schema.AWSAuthContext{Profile: "default-role"},
+		},
+	}
+	assert.Equal(t, "default-role", activeIdentityName(info))
+}
+
+// activeIdentityName must return "" — signaling the ambient credential chain
+// is genuinely intended — when no identity is active at all: no explicit
+// override, and no AuthContext (e.g. Atmos auth isn't configured for this
+// run). This is the negative-path counterpart proving the recovery/fallback
+// added above does NOT trigger when no identity condition is present.
+func TestActiveIdentityName_NoneActive(t *testing.T) {
+	assert.Equal(t, "", activeIdentityName(&schema.ConfigAndStacksInfo{}))
+	assert.Equal(t, "", activeIdentityName(&schema.ConfigAndStacksInfo{AuthContext: &schema.AuthContext{}}))
+	assert.Equal(t, "", activeIdentityName(nil))
+}
+
 // newS3Backend must propagate the underlying store's validation error (e.g. a
 // missing bucket) rather than swallowing it.
 func TestNewS3Backend_MissingBucket(t *testing.T) {

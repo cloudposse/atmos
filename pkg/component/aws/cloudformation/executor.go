@@ -243,6 +243,20 @@ func renderDiffSummary(stackName string, result *changeSetResult) {
 // runApply executes the changeset (creating or updating the stack) and renders
 // the end-of-deploy Outputs summary — the same view the standalone `output` verb
 // renders, per the PRD's direct response to the #1 Rain-user complaint.
+//
+// The stack-policy/termination-protection/outputs follow-up steps below only
+// run when deliverApply actually performed a direct stack deploy, signaled by
+// a non-nil result. The other two outcomes of deliverApply — a `kind: aws/s3`
+// target selected directly (publish-only: template uploaded, no stack
+// touched) and any other kind (e.g. `kind: git`, delivered via the generic
+// target registry) — never create or touch a CloudFormation stack, so there
+// is nothing for these stack-scoped calls to act on; running them anyway
+// previously crashed with a raw "Stack does not exist" AWS error that had
+// nothing to do with what the user actually asked for. A non-nil result is a
+// reliable signal for this: it is populated exclusively by deployDirect's
+// changeset flow (see waitForChangeSet), which always returns a non-nil
+// result on every success path (including the no-op case), and any error
+// from that path is already handled by the err != nil check above.
 func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, summary map[string]any) (map[string]any, error) {
 	deploySummary, result, err := deliverApply(octx, client, spec)
 	for k, v := range deploySummary {
@@ -251,10 +265,13 @@ func runApply(octx *opContext, client CloudFormationClient, spec *stackSpec, sum
 	if err != nil {
 		return summary, err
 	}
-	if result != nil {
-		summary["changeset_id"] = result.ChangeSetID
-		summary["no_op"] = result.NoOp
+	if result == nil {
+		// Publish-only (aws/s3) or external-target (e.g. git) delivery: no
+		// direct stack deploy happened.
+		return summary, nil
 	}
+	summary["changeset_id"] = result.ChangeSetID
+	summary["no_op"] = result.NoOp
 
 	if spec.StackPolicyBody != "" {
 		if err := setStackPolicy(octx.Ctx, client, spec); err != nil {
