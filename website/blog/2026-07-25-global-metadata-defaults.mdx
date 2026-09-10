@@ -8,7 +8,7 @@ tags: [feature]
 
 Most components in a stack share the same cost center label or the same compliance-scope tag. `vars`, `env`, and `settings` can all be declared once at the stack level and inherited by every component. `metadata` couldn't — every component had to repeat the same `labels`/`tags`, and a `metadata:` block placed at the top of a stack file was silently ignored.
 
-Stack manifests can now declare stack-wide metadata defaults that every component inherits, with the component's own `metadata:` still free to override them.
+Stack manifests can now declare stack-wide [metadata](/stacks/components/component-metadata#global-stack-wide-metadata) defaults that every component inherits, with the component's own `metadata:` still free to override them.
 
 <!--truncate-->
 
@@ -29,7 +29,7 @@ metadata:
 
 Only the fields that make sense as shared defaults are allowed here: `labels`, `tags`, `custom`, `enabled`, `locked`, and `terraform_workspace_pattern`. Component-identity fields — `component`, `inherits`, `type`, `name`, `terraform_workspace` — stay component-only, and setting one of these at the stack level is now a clear validation error instead of a silent no-op.
 
-Precedence runs lowest to highest: stack-wide default → the component's `metadata.inherits` base-component chain → the component's own local `metadata:` block, which always wins:
+Precedence runs lowest to highest: stack-wide default → the component's [`metadata.inherits`](/stacks/components/component-metadata#inherits) base-component chain → the component's own local `metadata:` block, which always wins:
 
 ```yaml title="stacks/orgs/acme/prod/network.yaml"
 components:
@@ -42,7 +42,7 @@ components:
 
 ## How to Use It
 
-Combine a stack-wide default with the `!labels`/`!tags` YAML functions (see [Tags and Labels](/changelog/tags-and-labels)) to feed a shared label set into every component's Terraform variables without repeating it:
+Combine a stack-wide default with the [`!labels`](/functions/yaml/labels)/[`!tags`](/functions/yaml/tags) YAML functions (see [Tags and Labels](/changelog/tags-and-labels)) to feed a shared label set into every component's Terraform variables without repeating it:
 
 ```yaml title="stacks/orgs/acme/prod/_defaults.yaml"
 metadata:

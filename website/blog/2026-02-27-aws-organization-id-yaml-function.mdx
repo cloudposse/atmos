@@ -6,7 +6,7 @@ authors: [aknysh]
 tags: [feature]
 ---
 
-Access the AWS Organization ID directly in stack configuration with the new `!aws.organization_id` YAML function.
+Access the AWS Organization ID directly in stack configuration with the new [`!aws.organization_id`](/functions/yaml/aws.organization-id) YAML function.
 
 <!--truncate-->
 
@@ -14,7 +14,7 @@ Access the AWS Organization ID directly in stack configuration with the new `!aw
 
 Atmos now includes a new `!aws.organization_id` YAML function that retrieves the AWS Organization ID by calling
 the AWS Organizations `DescribeOrganization` API. This complements the existing AWS context functions:
-`!aws.account_id`, `!aws.caller_identity_arn`, `!aws.caller_identity_user_id`, and `!aws.region`.
+[`!aws.account_id`](/functions/yaml/aws.account-id), [`!aws.caller_identity_arn`](/functions/yaml/aws.caller-identity-arn), [`!aws.caller_identity_user_id`](/functions/yaml/aws.caller-identity-user-id), and [`!aws.region`](/functions/yaml/aws.region).
 
 ```yaml
 components:

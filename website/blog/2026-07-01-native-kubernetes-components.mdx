@@ -47,7 +47,7 @@ atmos kubernetes diff   argocd -s plat-ue2-dev    # server-side diff
 atmos kubernetes apply  argocd -s plat-ue2-dev    # server-side apply
 ```
 
-`--all` and `--affected` run components in dependency order, so the same change
+[`--all`](/cli/commands/kubernetes/usage) and [`--affected`](/cli/commands/kubernetes/usage) run components in dependency order, so the same change
 detection that drives Terraform pipelines works for Kubernetes.
 
 <CastPlayer src="/casts/examples/kubernetes/lifecycle.cast" title="atmos kubernetes lifecycle" chrome controls scrubber />
