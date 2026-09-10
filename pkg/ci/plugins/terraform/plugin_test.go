@@ -87,60 +87,77 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 
 // TestPlugin_BuildTemplateContext_Metrics verifies that buildTemplateContext reads
 // info.ExecMetadataRawMetrics (set by internal/exec/terraform_execute_helpers_exec.go)
-// and populates ctx.Metrics with the formatted summary the template renders.
+// and populates ctx.Metrics with the formatted summary the template renders — including
+// the platform-specific branch where MaxRSSBytes is 0 (e.g. Windows, or any sample with
+// no rusage-equivalent data), which newTerraformMetricsSummary must still report as a
+// non-nil summary with an empty PeakMemory, not a nil summary.
 func TestPlugin_BuildTemplateContext_Metrics(t *testing.T) {
 	p := &Plugin{}
 	output := "Plan: 1 to add, 0 to change, 0 to destroy."
 
-	t.Run("populated when ExecMetadataRawMetrics is a *process.ProcessMetrics", func(t *testing.T) {
-		info := &schema.ConfigAndStacksInfo{
-			ComponentFromArg: "vpc",
-			Stack:            "dev-us-east-1",
-			ExecMetadataRawMetrics: &metricsprocess.ProcessMetrics{
+	tests := []struct {
+		name        string
+		rawMetrics  any
+		wantMetrics *TerraformMetricsSummary
+	}{
+		{
+			name: "populated when ExecMetadataRawMetrics is a *process.ProcessMetrics",
+			rawMetrics: &metricsprocess.ProcessMetrics{
 				WallTime:      45200 * time.Millisecond,
 				UserCPUTime:   12300 * time.Millisecond,
 				SystemCPUTime: 4100 * time.Millisecond,
 				MaxRSSBytes:   512 * 1024 * 1024,
 			},
-		}
+			wantMetrics: &TerraformMetricsSummary{
+				WallTime:   "45.2s",
+				CPUUser:    "12.3s",
+				CPUSys:     "4.1s",
+				PeakMemory: "512.0 MB",
+			},
+		},
+		{
+			name: "non-nil with empty PeakMemory when MaxRSSBytes is 0 (e.g. Windows)",
+			rawMetrics: &metricsprocess.ProcessMetrics{
+				WallTime:      1500 * time.Millisecond,
+				UserCPUTime:   800 * time.Millisecond,
+				SystemCPUTime: 200 * time.Millisecond,
+				MaxRSSBytes:   0,
+			},
+			wantMetrics: &TerraformMetricsSummary{
+				WallTime:   "1.5s",
+				CPUUser:    "800ms",
+				CPUSys:     "200ms",
+				PeakMemory: "",
+			},
+		},
+		{
+			name:        "nil when ExecMetadataRawMetrics is unset",
+			rawMetrics:  nil,
+			wantMetrics: nil,
+		},
+		{
+			name:        "nil when ExecMetadataRawMetrics holds an unexpected type",
+			rawMetrics:  "not-a-process-metrics-pointer",
+			wantMetrics: nil,
+		},
+	}
 
-		result, err := p.buildTemplateContext(info, nil, output, "plan", nil)
-		require.NoError(t, err)
-		ctx, ok := result.(*TerraformTemplateContext)
-		require.True(t, ok)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &schema.ConfigAndStacksInfo{
+				ComponentFromArg:       "vpc",
+				Stack:                  "dev-us-east-1",
+				ExecMetadataRawMetrics: tt.rawMetrics,
+			}
 
-		require.NotNil(t, ctx.Metrics)
-		assert.Equal(t, "45.2s", ctx.Metrics.WallTime)
-		assert.Equal(t, "12.3s", ctx.Metrics.CPUUser)
-		assert.Equal(t, "4.1s", ctx.Metrics.CPUSys)
-		assert.Equal(t, "512.0 MB", ctx.Metrics.PeakMemory)
-	})
+			result, err := p.buildTemplateContext(info, nil, output, "plan", nil)
+			require.NoError(t, err)
+			ctx, ok := result.(*TerraformTemplateContext)
+			require.True(t, ok)
 
-	t.Run("nil when ExecMetadataRawMetrics is unset", func(t *testing.T) {
-		info := &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "dev-us-east-1"}
-
-		result, err := p.buildTemplateContext(info, nil, output, "plan", nil)
-		require.NoError(t, err)
-		ctx, ok := result.(*TerraformTemplateContext)
-		require.True(t, ok)
-
-		assert.Nil(t, ctx.Metrics)
-	})
-
-	t.Run("nil when ExecMetadataRawMetrics holds an unexpected type", func(t *testing.T) {
-		info := &schema.ConfigAndStacksInfo{
-			ComponentFromArg:       "vpc",
-			Stack:                  "dev-us-east-1",
-			ExecMetadataRawMetrics: "not-a-process-metrics-pointer",
-		}
-
-		result, err := p.buildTemplateContext(info, nil, output, "plan", nil)
-		require.NoError(t, err)
-		ctx, ok := result.(*TerraformTemplateContext)
-		require.True(t, ok)
-
-		assert.Nil(t, ctx.Metrics)
-	})
+			assert.Equal(t, tt.wantMetrics, ctx.Metrics)
+		})
+	}
 }
 
 func TestPlugin_BuildTemplateContext_Test(t *testing.T) {
