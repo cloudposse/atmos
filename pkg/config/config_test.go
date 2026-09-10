@@ -597,6 +597,43 @@ func TestAtmosConfigAbsolutePaths(t *testing.T) {
 		assert.Equal(t, baseDir, config.VendorDirAbsolutePath)
 		assert.Equal(t, baseDir, config.WorkflowsDirAbsolutePath)
 	})
+
+	// TestAtmosConfigAbsolutePaths_CloudFormationDefaultFallback guards against a real-AWS
+	// field-test bug: components."aws/cloudformation".base_path is a brand-new field that no
+	// pre-existing atmos.yaml sets, so an empty BasePath must default to
+	// "components/cloudformation" (mirroring the Container fix above) instead of collapsing
+	// the absolute path to the bare project root.
+	t.Run("computes cloudformation absolute path from empty base_path default", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-cloudformation-test")
+		config := &schema.AtmosConfiguration{
+			BasePath:   baseDir,
+			Components: schema.Components{CloudFormation: schema.AwsCloudFormation{BasePath: ""}},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.Equal(t, filepath.Join(baseDir, "components", "cloudformation"), config.CloudFormationDirAbsolutePath)
+		assert.Equal(t, "components/cloudformation", config.Components.CloudFormation.BasePath,
+			"empty BasePath should be defaulted in place, matching the Container fix's behavior")
+	})
+
+	// An explicit components."aws/cloudformation".base_path override must still be respected
+	// and not be clobbered by the empty-string default.
+	t.Run("computes cloudformation absolute path from explicit base_path override", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-cloudformation-test")
+		config := &schema.AtmosConfiguration{
+			BasePath:   baseDir,
+			Components: schema.Components{CloudFormation: schema.AwsCloudFormation{BasePath: "custom/cfn-templates"}},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.Equal(t, filepath.Join(baseDir, "custom", "cfn-templates"), config.CloudFormationDirAbsolutePath)
+		assert.Equal(t, "custom/cfn-templates", config.Components.CloudFormation.BasePath,
+			"explicit BasePath must not be overwritten by the default")
+	})
 }
 
 // Helper functions.

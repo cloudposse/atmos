@@ -551,9 +551,18 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	atmosConfig.ContainerDirAbsolutePath = containerDirAbsPath
 
-	// Convert aws/cloudformation dir to an absolute path.
+	// Convert aws/cloudformation dir to an absolute path. Mirrors the Container fix above:
+	// components."aws/cloudformation".base_path is a brand-new field, so existing atmos.yaml
+	// files never set it, and defaultCliConfig's own default only applies via
+	// mergeDefaultConfig when no config file is found at all. Default it defensively here so
+	// CloudFormationDirAbsolutePath (and any other reader of Components.CloudFormation.BasePath)
+	// always sees "components/cloudformation" instead of silently falling back to the bare
+	// project root.
+	if atmosConfig.Components.CloudFormation.BasePath == "" {
+		atmosConfig.Components.CloudFormation.BasePath = "components/cloudformation"
+	}
 	cloudFormationBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.CloudFormation.BasePath)
-	cloudFormationDirAbsPath, err := filepath.Abs(cloudFormationBasePath)
+	cloudFormationDirAbsPath, err := absPathOrError(cloudFormationBasePath, "aws/cloudformation base path")
 	if err != nil {
 		return err
 	}
