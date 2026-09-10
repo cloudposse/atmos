@@ -58,6 +58,8 @@ func TestEventsFor(t *testing.T) {
 		{OperationDiff, hooks.BeforeAwsCloudFormationDiff, hooks.AfterAwsCloudFormationDiff},
 		{OperationApply, hooks.BeforeAwsCloudFormationApply, hooks.AfterAwsCloudFormationApply},
 		{OperationDelete, hooks.BeforeAwsCloudFormationDelete, hooks.AfterAwsCloudFormationDelete},
+		{OperationDriftDetect, hooks.BeforeAwsCloudFormationDriftDetect, hooks.AfterAwsCloudFormationDriftDetect},
+		{OperationDriftDescribe, hooks.BeforeAwsCloudFormationDriftDescribe, hooks.AfterAwsCloudFormationDriftDescribe},
 		{OperationRender, hooks.HookEvent(""), hooks.HookEvent("")},
 	}
 	for _, tt := range tests {
