@@ -61,6 +61,36 @@ func (m *GitHubMockServer) RegisterTag(owner, repo, name string) {
 	m.tags[key] = append(m.tags[key], name)
 }
 
+// apiRepoRoute identifies which /api/v3/repos/{owner}/{repo}/{resource}[/...] handler serves
+// a request, or that none does.
+type apiRepoRoute int
+
+const (
+	apiRepoRouteNone apiRepoRoute = iota
+	apiRepoRouteLatestRelease
+	apiRepoRouteReleasesList
+	apiRepoRouteTagsList
+)
+
+// classifyAPIRepoRoute maps a request's "/"-split path segments (as returned for
+// /api/v3/repos/{owner}/{repo}/{resource}[/...]) to the handler that serves it. Requires an
+// exact segment count per endpoint (rather than e.g. "at least 4") so malformed paths like
+// "/releases/123" or "/tags/extra" 404 instead of silently matching a collection route, which
+// would hide an incorrect GitHub endpoint construction in the code under test.
+func classifyAPIRepoRoute(parts []string) apiRepoRoute {
+	resource := parts[2]
+	switch {
+	case resource == "releases" && len(parts) == 4 && parts[3] == "latest":
+		return apiRepoRouteLatestRelease
+	case resource == "releases" && len(parts) == 3:
+		return apiRepoRouteReleasesList
+	case resource == "tags" && len(parts) == 3:
+		return apiRepoRouteTagsList
+	default:
+		return apiRepoRouteNone
+	}
+}
+
 // tryAPIRepos handles GET /api/v3/repos/{owner}/{repo}/releases[/latest] and
 // /api/v3/repos/{owner}/{repo}/tags. Returns false (unhandled) for any other path so the
 // caller can continue trying other routes.
@@ -75,15 +105,15 @@ func (m *GitHubMockServer) tryAPIRepos(w http.ResponseWriter, r *http.Request) b
 		http.NotFound(w, r)
 		return true
 	}
-	owner, repo, resource := parts[0], parts[1], parts[2]
+	owner, repo := parts[0], parts[1]
 	key := owner + "/" + repo
 
-	switch {
-	case resource == "releases" && len(parts) >= 4 && parts[3] == "latest":
+	switch classifyAPIRepoRoute(parts) {
+	case apiRepoRouteLatestRelease:
 		m.writeLatestRelease(w, r, key)
-	case resource == "releases":
+	case apiRepoRouteReleasesList:
 		m.writeReleasesList(w, r, key)
-	case resource == "tags":
+	case apiRepoRouteTagsList:
 		m.writeTagsList(w, r, key)
 	default:
 		http.NotFound(w, r)
@@ -118,6 +148,17 @@ func (m *GitHubMockServer) writeReleasesList(w http.ResponseWriter, r *http.Requ
 
 	page := queryInt(r, "page", 1)
 	perPage := queryInt(r, "per_page", defaultPerPage)
+
+	// Clamp page to the available page count before computing start/end: a page value beyond
+	// that range multiplied by perPage can otherwise overflow int and produce a negative start,
+	// which would panic on the releases[start:end] slice below.
+	totalPages := (len(releases) + perPage - 1) / perPage
+	if totalPages < 1 {
+		totalPages = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
 
 	start := (page - 1) * perPage
 	end := start + perPage
@@ -160,6 +201,11 @@ func (m *GitHubMockServer) writeTagsList(w http.ResponseWriter, r *http.Request,
 	writeJSON(w, out)
 }
 
+// archiveSuffix is the required trailing extension of an archive download path
+// (/{owner}/{repo}/archive/refs/tags/{tag}.tar.gz); without it the path is malformed and must
+// not be served, even if every other segment matches.
+const archiveSuffix = ".tar.gz"
+
 // tryReleaseDownload handles GET /{owner}/{repo}/releases/download/{tag}/{asset} and
 // GET /{owner}/{repo}/archive/refs/tags/{tag}.tar.gz -- the web-host (not API-host) shapes
 // pkg/github.Endpoints.ReleaseAssetURL/ArchiveURL build. Returns false (unhandled) for any
@@ -168,35 +214,55 @@ func (m *GitHubMockServer) tryReleaseDownload(w http.ResponseWriter, r *http.Req
 	segments := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
 	if len(segments) == downloadPathSegments && segments[2] == "releases" && segments[3] == "download" {
-		owner, repo, tag, asset := segments[0], segments[1], segments[downloadTagIndex], segments[downloadAssetIndex]
-		key := strings.Join([]string{owner, repo, tag, asset}, "/")
-		m.mu.Lock()
-		data, ok := m.assets[key]
-		m.mu.Unlock()
-		if !ok {
-			http.NotFound(w, r)
-			return true
-		}
-		writeBytes(w, data, "")
-		return true
+		return m.tryReleaseAssetDownload(w, r, segments)
 	}
-
-	if len(segments) == downloadPathSegments && segments[2] == "archive" && segments[3] == "refs" && segments[4] == "tags" {
-		owner, repo := segments[0], segments[1]
-		tag := strings.TrimSuffix(segments[downloadAssetIndex], ".tar.gz")
-		key := strings.Join([]string{owner, repo, tag}, "/")
-		m.mu.Lock()
-		data, ok := m.archives[key]
-		m.mu.Unlock()
-		if !ok {
-			http.NotFound(w, r)
-			return true
-		}
-		writeBytes(w, data, "application/gzip")
-		return true
+	if isArchiveDownloadPath(segments) {
+		return m.tryArchiveDownload(w, r, segments)
 	}
-
 	return false
+}
+
+// isArchiveDownloadPath reports whether segments is a well-formed
+// /{owner}/{repo}/archive/refs/tags/{tag}.tar.gz path.
+func isArchiveDownloadPath(segments []string) bool {
+	return len(segments) == downloadPathSegments &&
+		segments[2] == "archive" && segments[3] == "refs" && segments[4] == "tags" &&
+		strings.HasSuffix(segments[downloadAssetIndex], archiveSuffix)
+}
+
+// tryReleaseAssetDownload serves a registered release asset for a path already matched as
+// /{owner}/{repo}/releases/download/{tag}/{asset}, always reporting true (handled): either the
+// asset bytes, or a 404 when unregistered.
+func (m *GitHubMockServer) tryReleaseAssetDownload(w http.ResponseWriter, r *http.Request, segments []string) bool {
+	owner, repo, tag, asset := segments[0], segments[1], segments[downloadTagIndex], segments[downloadAssetIndex]
+	key := strings.Join([]string{owner, repo, tag, asset}, "/")
+	m.mu.Lock()
+	data, ok := m.assets[key]
+	m.mu.Unlock()
+	if !ok {
+		http.NotFound(w, r)
+		return true
+	}
+	writeBytes(w, data, "")
+	return true
+}
+
+// tryArchiveDownload serves a registered tag archive for a path already matched by
+// isArchiveDownloadPath, always reporting true (handled): either the archive bytes, or a 404
+// when unregistered.
+func (m *GitHubMockServer) tryArchiveDownload(w http.ResponseWriter, r *http.Request, segments []string) bool {
+	owner, repo := segments[0], segments[1]
+	tag := strings.TrimSuffix(segments[downloadAssetIndex], archiveSuffix)
+	key := strings.Join([]string{owner, repo, tag}, "/")
+	m.mu.Lock()
+	data, ok := m.archives[key]
+	m.mu.Unlock()
+	if !ok {
+		http.NotFound(w, r)
+		return true
+	}
+	writeBytes(w, data, "application/gzip")
+	return true
 }
 
 // RegisterReleaseAsset registers data to be served at
