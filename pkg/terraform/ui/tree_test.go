@@ -202,6 +202,48 @@ func TestDependencyTree_GetChangeSummary_WithReplace(t *testing.T) {
 	assert.Equal(t, 2, remove) // aws_instance.old + aws_instance.web (replace).
 }
 
+// TestDependencyTree_HasOutputChanges is a regression test for issue #3114: a plan whose only
+// diff is an output value (no resource changes at all) must be detectable as "has changes" via
+// a signal separate from GetChangeSummary's resource-only counts.
+func TestDependencyTree_HasOutputChanges(t *testing.T) {
+	t.Parallel()
+
+	plan := &tfjson.Plan{
+		ResourceChanges: []*tfjson.ResourceChange{},
+		OutputChanges: map[string]*tfjson.Change{
+			"vpc_id": {Actions: tfjson.Actions{tfjson.ActionUpdate}},
+		},
+	}
+
+	tree := buildTreeFromPlan(plan, "dev", "vpc")
+
+	assert.True(t, tree.HasOutputChanges())
+	assert.Equal(t, 1, tree.OutputChangeCount())
+
+	add, change, remove := tree.GetChangeSummary()
+	assert.Equal(t, 0, add)
+	assert.Equal(t, 0, change)
+	assert.Equal(t, 0, remove)
+}
+
+// TestDependencyTree_HasOutputChanges_NoOpNotCounted verifies that no-op/read output entries
+// (present in every plan, changed or not) don't spuriously flip HasOutputChanges to true.
+func TestDependencyTree_HasOutputChanges_NoOpNotCounted(t *testing.T) {
+	t.Parallel()
+
+	plan := &tfjson.Plan{
+		OutputChanges: map[string]*tfjson.Change{
+			"vpc_id": {Actions: tfjson.Actions{tfjson.ActionNoop}},
+			"region": {Actions: tfjson.Actions{tfjson.ActionRead}},
+		},
+	}
+
+	tree := buildTreeFromPlan(plan, "dev", "vpc")
+
+	assert.False(t, tree.HasOutputChanges())
+	assert.Equal(t, 0, tree.OutputChangeCount())
+}
+
 func TestSortChildren(t *testing.T) {
 	t.Parallel()
 
@@ -1203,7 +1245,7 @@ func TestGetContrastTextColor_InvalidInput(t *testing.T) {
 func TestRenderChangeSummaryBadges_NoChanges(t *testing.T) {
 	t.Parallel()
 
-	result := RenderChangeSummaryBadges(0, 0, 0)
+	result := RenderChangeSummaryBadges(0, 0, 0, false)
 	assert.Contains(t, result, "NO CHANGES")
 	// Use patterns with numbers to avoid matching within "NO CHANGES".
 	assert.NotRegexp(t, `\d+ ADD`, result)
@@ -1214,7 +1256,7 @@ func TestRenderChangeSummaryBadges_NoChanges(t *testing.T) {
 func TestRenderChangeSummaryBadges_OnlyAdd(t *testing.T) {
 	t.Parallel()
 
-	result := RenderChangeSummaryBadges(3, 0, 0)
+	result := RenderChangeSummaryBadges(3, 0, 0, false)
 	assert.Contains(t, result, "3 ADD")
 	assert.NotContains(t, result, "CHANGE")
 	assert.NotContains(t, result, "DELETE")
@@ -1224,7 +1266,7 @@ func TestRenderChangeSummaryBadges_OnlyAdd(t *testing.T) {
 func TestRenderChangeSummaryBadges_OnlyChange(t *testing.T) {
 	t.Parallel()
 
-	result := RenderChangeSummaryBadges(0, 2, 0)
+	result := RenderChangeSummaryBadges(0, 2, 0, false)
 	assert.Contains(t, result, "2 CHANGE")
 	assert.NotContains(t, result, "ADD")
 	assert.NotContains(t, result, "DELETE")
@@ -1234,7 +1276,7 @@ func TestRenderChangeSummaryBadges_OnlyChange(t *testing.T) {
 func TestRenderChangeSummaryBadges_OnlyRemove(t *testing.T) {
 	t.Parallel()
 
-	result := RenderChangeSummaryBadges(0, 0, 5)
+	result := RenderChangeSummaryBadges(0, 0, 5, false)
 	assert.Contains(t, result, "5 DELETE")
 	assert.NotContains(t, result, "ADD")
 	assert.NotContains(t, result, "CHANGE")
@@ -1244,10 +1286,32 @@ func TestRenderChangeSummaryBadges_OnlyRemove(t *testing.T) {
 func TestRenderChangeSummaryBadges_AllTypes(t *testing.T) {
 	t.Parallel()
 
-	result := RenderChangeSummaryBadges(1, 2, 3)
+	result := RenderChangeSummaryBadges(1, 2, 3, false)
 	assert.Contains(t, result, "1 ADD")
 	assert.Contains(t, result, "2 CHANGE")
 	assert.Contains(t, result, "3 DELETE")
+	assert.NotContains(t, result, "NO CHANGES")
+}
+
+// TestRenderChangeSummaryBadges_OutputOnlyChange is a regression test for issue #3114: when
+// resource counts are all zero but an output value changed, the badge must not read
+// "NO CHANGES" - the plan/apply is not actually a no-op.
+func TestRenderChangeSummaryBadges_OutputOnlyChange(t *testing.T) {
+	t.Parallel()
+
+	result := RenderChangeSummaryBadges(0, 0, 0, true)
+	assert.NotContains(t, result, "NO CHANGES")
+	assert.Contains(t, result, "OUTPUTS CHANGED")
+}
+
+// TestRenderChangeSummaryBadges_ResourceAndOutputChanges verifies the output-changed badge is
+// additive: it appears alongside resource-change badges rather than replacing them.
+func TestRenderChangeSummaryBadges_ResourceAndOutputChanges(t *testing.T) {
+	t.Parallel()
+
+	result := RenderChangeSummaryBadges(1, 0, 0, true)
+	assert.Contains(t, result, "1 ADD")
+	assert.Contains(t, result, "OUTPUTS CHANGED")
 	assert.NotContains(t, result, "NO CHANGES")
 }
 
