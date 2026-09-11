@@ -1,6 +1,8 @@
 package helm
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -69,4 +71,49 @@ func TestFormatOperationStatus(t *testing.T) {
 
 	require.Empty(t, formatOperationStatus(OperationTemplate, summary))
 	require.Empty(t, formatOperationStatus(OperationDiff, summary))
+}
+
+// The chart segment must use single, balanced parens around a single markdown code
+// span. A doubled "((chart `%s`))" breaks Glamour's inline-code detection, so the
+// backticks leak into the rendered terminal output as literal characters instead of
+// styling the path as code (confirmed by rendering both forms through the real
+// ui.Formatter -- the doubled form renders with visible backticks, the single form
+// renders the path in the same style as the backticked release/namespace above it).
+func TestFormatOperationStatus_ChartUsesSingleBalancedParens(t *testing.T) {
+	summary := map[string]any{
+		"release_name": "echo-server",
+		"namespace":    "echo-server",
+		"chart":        "./chart",
+	}
+
+	apply := formatOperationStatus(OperationApply, summary)
+	require.Contains(t, apply, "(chart `./chart`)")
+	assert.NotContains(t, apply, "((")
+	assert.NotContains(t, apply, "))")
+}
+
+// displayPath renders an absolute chart path relative to the current working
+// directory for terminal display, since local charts are always resolved to an
+// absolute path internally (see resolveLocalChart) regardless of invoking directory.
+func TestDisplayPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"empty path passes through unchanged", "", ""},
+		{"already-relative path passes through unchanged", "./chart", "./chart"},
+		{"absolute path under cwd becomes relative", filepath.Join(wd, "components", "helm", "demo"), filepath.Join("components", "helm", "demo")},
+		{"absolute path equal to cwd becomes a dot", wd, "."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, displayPath(tt.path))
+		})
+	}
 }
