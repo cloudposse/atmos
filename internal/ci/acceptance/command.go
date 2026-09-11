@@ -34,7 +34,40 @@ const (
 	// can't grow that buffer without limit. The real diagnostic is one short line
 	// (well under this), so bounding it doesn't affect detection.
 	maxTransientMatchWindow = 4096
+
+	// Caps how many subprocesses (go build/go test/go tool covdata, plus each
+	// precompiled *.test.exe) this package launches at once. This package's own
+	// acceptance tests run dozens of t.Parallel() subtests that each shell out,
+	// so without a cap, a wide/many-core CI runner lets that many real `go`
+	// toolchain invocations (each independently allocating and syscalling
+	// heavily) run fully concurrently. On Windows that has produced a
+	// runtime-fatal GC/allocator crash ("fatal error: found pointer to free
+	// object" / "marked free object in span") in mcache/mgcsweep during a
+	// concurrent os/exec process launch -- a long-standing, still-recurring
+	// class of Go runtime race under heavy concurrent allocation+syscall
+	// pressure on Windows (see e.g. golang/go#44900, #45364, #47415, #54247),
+	// not anything specific to the command being run. Serializing actual
+	// subprocess launches (while still letting the surrounding Go test logic
+	// run in parallel) avoids the trigger condition without giving up test
+	// parallelism where it doesn't involve a real subprocess.
+	maxConcurrentSubprocesses = 4
 )
+
+// subprocessSlots limits how many commandRunner.run/output calls -- across every
+// commandRunner instance, since each caller constructs its own -- may have a real
+// `cmd.Run()` in flight at once. See maxConcurrentSubprocesses.
+var subprocessSlots = make(chan struct{}, maxConcurrentSubprocesses)
+
+// acquireSubprocessSlot blocks until a subprocess slot is free or ctx is done,
+// returning a release func to call (typically deferred) once the subprocess exits.
+func acquireSubprocessSlot(ctx context.Context) (func(), error) {
+	select {
+	case subprocessSlots <- struct{}{}:
+		return func() { <-subprocessSlots }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
 
 var (
 	errInvalidConfiguration = errors.New("invalid acceptance configuration")
@@ -115,7 +148,12 @@ func (r commandRunner) run(ctx context.Context, opts runOptions, name string, ar
 			cmd.Stderr = io.MultiWriter(r.stderr, detector)
 		}
 
+		release, slotErr := acquireSubprocessSlot(ctx)
+		if slotErr != nil {
+			return fmt.Errorf("%w: run %s: %w", errCommandFailed, commandString(name, args), slotErr)
+		}
 		err := cmd.Run()
+		release()
 		if err == nil {
 			return nil
 		}
@@ -185,8 +223,14 @@ func (r commandRunner) output(ctx context.Context, dir string, env []string, nam
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("run %s: %w: %s", commandString(name, args), err, strings.TrimSpace(stderr.String()))
+	release, err := acquireSubprocessSlot(ctx)
+	if err != nil {
+		return "", fmt.Errorf("run %s: %w", commandString(name, args), err)
+	}
+	runErr := cmd.Run()
+	release()
+	if runErr != nil {
+		return "", fmt.Errorf("run %s: %w: %s", commandString(name, args), runErr, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), nil
 }
