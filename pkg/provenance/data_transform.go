@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -79,6 +80,14 @@ func renameImportsToImport(data any, ctx *m.MergeContext) any {
 // data. Treating "no provenance" as "must be empty" silently dropped those
 // populated sections from `describe component --provenance` output — see
 // docs/fixes/2026-09-09-cfn-describe-component-missing-fields.md.
+//
+// The cfg.ComponentSectionName key ("component") is excluded from the "OR
+// non-empty" escape hatch: stack_processor_process_stacks.go unconditionally
+// sets it to the component's own name on every component, purely for the
+// template system's consumption, regardless of whether the user ever wrote a
+// `component:` attribute. It is therefore always non-empty but never
+// meaningfully "configured" unless it actually has recorded provenance (i.e.
+// a user explicitly set it), so it must stay gated on provenance alone.
 func filterEmptySections(data any, ctx *m.MergeContext) any {
 	defer perf.Track(nil, "provenance.filterEmptySections")()
 
@@ -91,7 +100,8 @@ func filterEmptySections(data any, ctx *m.MergeContext) any {
 	filtered := make(map[string]any)
 
 	for key, value := range dataMap {
-		if hasSectionProvenance(ctx, key) || !isEmptyValue(value) {
+		revivableByNonEmpty := key != cfg.ComponentSectionName && !isEmptyValue(value)
+		if hasSectionProvenance(ctx, key) || revivableByNonEmpty {
 			filtered[key] = value
 		}
 	}

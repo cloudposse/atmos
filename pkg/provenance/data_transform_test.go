@@ -213,3 +213,64 @@ func TestFilterEmptySectionsKeepsNonEmptyUnprovenancedSections(t *testing.T) {
 		}
 	}
 }
+
+// TestFilterEmptySectionsDropsSyntheticComponentKey is a regression test for
+// the "component" key leaking into every `describe component` output.
+// The stack_processor_process_stacks.go file unconditionally sets
+// componentMap["component"] = componentName on every component for the
+// template system's own consumption, regardless of whether the user ever
+// wrote a `component:` attribute. Unlike aws/cloudformation's plain-value
+// sections, it must stay gated on provenance alone -- otherwise the "OR
+// non-empty" escape hatch (TestFilterEmptySectionsKeepsNonEmptyUnprovenancedSections)
+// resurrects it for every component, since it is a non-empty string with no
+// provenance by construction.
+func TestFilterEmptySectionsDropsSyntheticComponentKey(t *testing.T) {
+	ctx := m.NewMergeContext()
+	ctx.EnableProvenance()
+	// No provenance recorded for "component" -- this mirrors the synthetic,
+	// Go-injected value that was never written by a user.
+
+	data := map[string]any{
+		"component": "test-component",
+		"path":      "template.yaml", // unrelated plain-value section, no provenance.
+	}
+
+	filtered := filterEmptySections(data, ctx)
+	filteredMap, ok := filtered.(map[string]any)
+	if !ok {
+		t.Fatalf("expected filterEmptySections to return a map, got %T", filtered)
+	}
+
+	if _, ok := filteredMap["component"]; ok {
+		t.Errorf("expected synthetic, unprovenanced 'component' key to be filtered out, but it survived: %v", filteredMap)
+	}
+	if _, ok := filteredMap["path"]; !ok {
+		t.Errorf("expected unrelated non-empty unprovenanced section 'path' to still survive via the non-empty escape hatch, but it was dropped: %v", filteredMap)
+	}
+}
+
+// TestFilterEmptySectionsKeepsUserSetComponentKey verifies that a
+// user-authored `component:` attribute (real provenance recorded) still
+// survives filtering, distinguishing it from the synthetic, Go-injected
+// default value covered by TestFilterEmptySectionsDropsSyntheticComponentKey.
+func TestFilterEmptySectionsKeepsUserSetComponentKey(t *testing.T) {
+	ctx := m.NewMergeContext()
+	ctx.EnableProvenance()
+	ctx.RecordProvenance("components.terraform.app.component", m.ProvenanceEntry{
+		File: "dev.yaml", Line: 3, Type: m.ProvenanceTypeInline, Depth: 1,
+	})
+
+	data := map[string]any{
+		"component": "base-component",
+	}
+
+	filtered := filterEmptySections(data, ctx)
+	filteredMap, ok := filtered.(map[string]any)
+	if !ok {
+		t.Fatalf("expected filterEmptySections to return a map, got %T", filtered)
+	}
+
+	if value, ok := filteredMap["component"]; !ok || value != "base-component" {
+		t.Errorf("expected user-set 'component' key (has recorded provenance) to survive filtering, got %v", filteredMap)
+	}
+}
