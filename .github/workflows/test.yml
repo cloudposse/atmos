@@ -881,10 +881,10 @@ jobs:
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
         with:
-          # Planning only runs `go list`; downloading the multi-gigabyte race
-          # build cache here costs more than it saves. The race shards below
-          # still restore the warmed cache before compiling and testing.
-          cache: false
+          # Planning only needs Mage and `go list`; restore its dedicated
+          # nightly-warmed cache instead of the multi-gigabyte race archive.
+          # The race shards below still restore the full warmed cache.
+          cache: race-plan
 
       - name: Plan race shards
         id: plan
