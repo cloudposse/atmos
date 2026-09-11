@@ -256,6 +256,11 @@ func processTagAwsCloudFormationOutputWithContext(
 	if stackInfo != nil {
 		authContext = stackInfo.AuthContext
 		authManager = stackInfo.AuthManager
+		// Propagate AuthDisabled downstream even when no AuthManager was created (mirrors
+		// !terraform.output / !terraform.state): the wrapper's stack info tells
+		// resolveNestedOutputAuth to skip resolving the target component's own auth section
+		// instead of falling through to the target's default identity.
+		authManager = propagateAuthDisabledManager(authManager, stackInfo)
 	}
 	resolvedAuthContext, _ := resolveNestedOutputAuth(
 		atmosConfig, component, stack, authContext, authManager, resolveAuthManagerForNestedComponent,

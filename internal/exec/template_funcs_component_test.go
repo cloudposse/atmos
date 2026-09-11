@@ -328,3 +328,39 @@ func TestWrapComponentDescribeError_BreaksErrInvalidComponentChain(t *testing.T)
 		})
 	}
 }
+
+// TestAuthCacheKeySuffix_EndpointURL verifies that two AWS auth contexts sharing the same
+// profile and region but pointing at different endpoint URLs (e.g. two CloudFormation
+// endpoint overrides) produce distinct cache-key suffixes, so atmos.Component()'s output
+// cache can't conflate results resolved against different endpoints.
+func TestAuthCacheKeySuffix_EndpointURL(t *testing.T) {
+	base := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			Profile: "same-profile",
+			Region:  "us-east-1",
+		},
+	}
+	overridden := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			Profile:     "same-profile",
+			Region:      "us-east-1",
+			EndpointURL: "http://localhost:4566",
+		},
+	}
+
+	baseKey := authCacheKeySuffix(base)
+	overriddenKey := authCacheKeySuffix(overridden)
+
+	assert.NotEqual(t, baseKey, overriddenKey,
+		"cache-key suffixes must differ when EndpointURL differs, even with identical profile/region")
+
+	// Two contexts with the same overridden endpoint must still collide (cache hit expected).
+	sameOverridden := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			Profile:     "same-profile",
+			Region:      "us-east-1",
+			EndpointURL: "http://localhost:4566",
+		},
+	}
+	assert.Equal(t, overriddenKey, authCacheKeySuffix(sameOverridden))
+}
