@@ -96,6 +96,18 @@ func TestRunOperationDispatchesWithSummaries(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, summary["diff"], "app-config")
 
+	info.SubCommand = "values"
+	spec.Values = map[string]any{"image": map[string]any{"tag": "preview"}}
+	summary, err = runOperation(
+		&component.ExecutionContext{Flags: map[string]any{}},
+		&schema.AtmosConfiguration{},
+		info,
+		OperationValues,
+		spec,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "values", summary["command"])
+
 	info.SubCommand = "apply"
 	summary, err = runOperation(&component.ExecutionContext{Flags: map[string]any{}}, &schema.AtmosConfiguration{}, info, OperationApply, spec)
 	require.NoError(t, err)
