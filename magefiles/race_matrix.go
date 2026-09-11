@@ -99,7 +99,7 @@ func shuffleRacePackages(packages []string, seedValue string) []string {
 	hasher := fnv.New64a()
 	_, _ = hasher.Write([]byte(seedValue))
 	seed := hasher.Sum64()
-	rng := rand.New(rand.NewPCG(seed, seed))
+	rng := rand.New(rand.NewPCG(seed, seed)) //nolint:gosec // Deterministic test sharding; not security-sensitive.
 	rng.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
 	return shuffled
 }
