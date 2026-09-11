@@ -487,7 +487,10 @@ func installViaAquaMockJQ(t *testing.T, atmosBinary, version string) ([]byte, er
 
 	mock := httpmock.NewGitHubMockServer(t)
 	const owner, repo = "jqlang", "jq"
-	assetName := "jq-" + runtime.GOOS + "-" + runtime.GOARCH
+	// The installer appends .exe to raw (non-archive, no-extension) binary asset names on
+	// Windows (see pkg/toolchain/installer/asset.go's ensureWindowsExeExtensionForOS), so the
+	// registered asset name must match via the same exported helper or the install 404s there.
+	assetName := installer.EnsureWindowsExeExtension("jq-" + runtime.GOOS + "-" + runtime.GOARCH)
 	mock.RegisterAquaTool(&httpmock.AquaTool{
 		Owner: owner,
 		Repo:  repo,
