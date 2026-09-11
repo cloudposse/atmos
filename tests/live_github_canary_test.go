@@ -95,10 +95,9 @@ func copyCanaryFixture(t *testing.T, name string) string {
 // AtmosRunner.CommandContext, which carries PATH/GOCOVERDIR setup worth preserving) suitable for
 // driving atmos against real, live github.com:
 //
-//   - Any process-wide git mirror insteadOf rules TestMain exported (tests/testhelpers/gitmirror)
-//     are stripped. The mirror only contains cloudposse/atmos; a canary cloning a different
-//     cloudposse repo must not be silently redirected into it, and even a canary targeting
-//     cloudposse/atmos itself needs to hit the real network here.
+//   - GIT_CONFIG_GLOBAL is pointed at an empty file, so the local git mirror's insteadOf rules
+//     TestMain exported through it (tests/testhelpers/gitmirror.WriteGitConfig) do not apply:
+//     even a canary targeting cloudposse/atmos itself must hit the real network here.
 //   - When authenticated is false, every GitHub token env var is blanked and GH_CONFIG_DIR points
 //     at an empty temp dir, defeating the `gh auth token` CLI fallback
 //     (pkg/downloader/custom_git_detector.go resolveToken, pkg/github.GetGitHubTokenFromCLI) so
@@ -108,8 +107,14 @@ func copyCanaryFixture(t *testing.T, name string) string {
 func githubCanaryEnv(t *testing.T, base []string, authenticated bool) []string {
 	t.Helper()
 
-	mirrorFreeEntries := gitconfigenv.Without(gitconfigenv.ReadEntries(base), gitconfigenv.IsInsteadOfEntry)
+	existingEntries := gitconfigenv.ReadEntries(base)
 	env := removeEnvPrefixed(base, "GIT_CONFIG_COUNT=", "GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")
+
+	// TestMain delivers the local git mirror's url.*.insteadOf rules through GIT_CONFIG_GLOBAL
+	// (tests/testhelpers/gitmirror.WriteGitConfig). A canary must reach the real github.com, so
+	// point git at an empty global config instead; atmos never reads that variable.
+	env = removeEnvKeys(env, "GIT_CONFIG_GLOBAL")
+	env = append(env, "GIT_CONFIG_GLOBAL="+emptyGitConfigFile(t))
 
 	gitEntries := []gitconfigenv.GitConfigEntry{
 		// Disable credential helper (prevents osxkeychain hangs/popups), mirroring
@@ -140,7 +145,7 @@ func githubCanaryEnv(t *testing.T, base []string, authenticated bool) []string {
 	}
 
 	gitConfigVars := map[string]string{}
-	gitconfigenv.AppendEntries(gitConfigVars, mirrorFreeEntries, gitEntries...)
+	gitconfigenv.AppendEntries(gitConfigVars, existingEntries, gitEntries...)
 	for k, v := range gitConfigVars {
 		env = append(env, k+"="+v)
 	}

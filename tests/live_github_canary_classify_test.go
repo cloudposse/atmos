@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -113,17 +114,39 @@ func TestSetEnvVar_AddsNewKey(t *testing.T) {
 	assert.Equal(t, []string{"PATH=/usr/bin", "ATMOS_XDG_CACHE_HOME=/new"}, got)
 }
 
+// mirrorGitConfigEnv is the GIT_CONFIG_GLOBAL entry TestMain exports for the local git mirror's
+// insteadOf rules (tests/testhelpers/gitmirror.WriteGitConfig); canaries must replace it.
+const mirrorGitConfigEnv = "GIT_CONFIG_GLOBAL=/mirror/gitconfig"
+
+// assertMirrorRulesDisabled verifies env points GIT_CONFIG_GLOBAL at an empty file (so the
+// mirror's insteadOf rules do not apply) rather than at TestMain's mirror gitconfig.
+func assertMirrorRulesDisabled(t *testing.T, env []string) {
+	t.Helper()
+
+	assertEnvNotContains(t, env, mirrorGitConfigEnv)
+	for _, kv := range env {
+		if path, ok := strings.CutPrefix(kv, "GIT_CONFIG_GLOBAL="); ok {
+			info, err := os.Stat(path)
+			require.NoError(t, err, "GIT_CONFIG_GLOBAL must point at an existing file")
+			require.Zero(t, info.Size(), "GIT_CONFIG_GLOBAL must point at an EMPTY gitconfig")
+			return
+		}
+	}
+	t.Fatalf("expected env to set GIT_CONFIG_GLOBAL, got %v", env)
+}
+
 // TestGithubCanaryEnv_Unauthenticated verifies the unauthenticated branch blanks every GitHub
-// token env var, sets GH_CONFIG_DIR, strips mirror insteadOf rules, and does not add the
+// token env var, sets GH_CONFIG_DIR, disables the mirror's insteadOf rules, and does not add the
 // extraheader entry even when the ambient environment has a real token.
 func TestGithubCanaryEnv_Unauthenticated(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "should-not-be-used")
 
 	base := []string{
 		"PATH=/usr/bin",
+		mirrorGitConfigEnv,
 		"GIT_CONFIG_COUNT=1",
-		"GIT_CONFIG_KEY_0=url.file:///mirror/cloudposse/.insteadOf",
-		"GIT_CONFIG_VALUE_0=https://github.com/cloudposse/",
+		"GIT_CONFIG_KEY_0=credential.helper",
+		"GIT_CONFIG_VALUE_0=",
 	}
 
 	env := githubCanaryEnv(t, base, false)
@@ -133,27 +156,27 @@ func TestGithubCanaryEnv_Unauthenticated(t *testing.T) {
 	assertEnvContains(t, env, "ATMOS_PRO_GITHUB_TOKEN=")
 	assertEnvContains(t, env, "GH_TOKEN=")
 	assertEnvHasPrefix(t, env, "GH_CONFIG_DIR=")
-	assertEnvNotContains(t, env, "url.file:///mirror/cloudposse/.insteadOf")
+	assertMirrorRulesDisabled(t, env)
+	// Pre-existing git config entries are preserved, not dropped.
+	assertEnvContains(t, env, "GIT_CONFIG_KEY_0=credential.helper")
 	assertEnvNotContains(t, env, "http.https://github.com/.extraheader")
 }
 
 // TestGithubCanaryEnv_Authenticated verifies the authenticated branch keeps GITHUB_TOKEN, adds
-// the extraheader entry, and still strips mirror insteadOf rules.
+// the extraheader entry, and still disables the mirror's insteadOf rules.
 func TestGithubCanaryEnv_Authenticated(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "ghp_test_token")
 
 	base := []string{
 		"PATH=/usr/bin",
 		"GITHUB_TOKEN=ghp_test_token",
-		"GIT_CONFIG_COUNT=1",
-		"GIT_CONFIG_KEY_0=url.file:///mirror/cloudposse/.insteadOf",
-		"GIT_CONFIG_VALUE_0=https://github.com/cloudposse/",
+		mirrorGitConfigEnv,
 	}
 
 	env := githubCanaryEnv(t, base, true)
 
 	assertEnvContains(t, env, "GITHUB_TOKEN=ghp_test_token")
-	assertEnvNotContains(t, env, "url.file:///mirror/cloudposse/.insteadOf")
+	assertMirrorRulesDisabled(t, env)
 
 	found := false
 	for _, kv := range env {

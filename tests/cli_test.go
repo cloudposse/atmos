@@ -1029,6 +1029,19 @@ func scrubGitHubAuth(t *testing.T, tc *TestCase) {
 	tc.Env["GH_CONFIG_DIR"] = t.TempDir()
 }
 
+// emptyGitConfigFile creates an empty gitconfig in a per-test temp dir and returns its path, for
+// use as GIT_CONFIG_GLOBAL when a test must run git WITHOUT the mirror rewrite rules TestMain
+// exports process-wide (see the live_github preconditions and tests/live_github_canary_test.go).
+func emptyGitConfigFile(t *testing.T) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatalf("failed to create empty gitconfig %s: %v", path, err)
+	}
+	return path
+}
+
 // prepareAtmosCommand prepares an atmos command with coverage support if enabled.
 func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exec.Cmd {
 	// AtmosRunner should be initialized early in runCLICommandTest before directory changes
@@ -1183,14 +1196,16 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	for key, value := range tc.Env {
 		envBase = append(envBase, key+"="+value)
 	}
-	existingEntries := gitconfigenv.ReadEntries(envBase)
+	gitconfigenv.AppendEntries(tc.Env, gitconfigenv.ReadEntries(envBase), entries...)
+
 	if liveGitHub || liveGitHubAuthenticated {
-		// A live-GitHub canary must reach the real github.com, not the local mirror TestMain
-		// exported process-wide (tests/testhelpers/gitmirror) -- strip its url.*.insteadOf
-		// rules before merging in this test case's own entries.
-		existingEntries = gitconfigenv.Without(existingEntries, gitconfigenv.IsInsteadOfEntry)
+		// A live-GitHub canary must reach the real github.com, not the local git mirror. TestMain
+		// delivers the mirror's url.*.insteadOf rules through GIT_CONFIG_GLOBAL
+		// (tests/testhelpers/gitmirror.WriteGitConfig), so point this case's GIT_CONFIG_GLOBAL at an
+		// empty file instead: git then sees no rewrite rules at all, and atmos -- which never reads
+		// that variable -- behaves exactly as it does for any other case.
+		tc.Env["GIT_CONFIG_GLOBAL"] = emptyGitConfigFile(t)
 	}
-	gitconfigenv.AppendEntries(tc.Env, existingEntries, entries...)
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
