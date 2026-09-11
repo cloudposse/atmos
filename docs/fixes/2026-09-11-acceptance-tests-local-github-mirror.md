@@ -39,9 +39,15 @@ unaware: it sees the same URLs, runs the same detector, and injects the same tok
   scans the env form for broker rewrites and would skip URL token injection, which changed the
   credentials-leakage golden and removed the injected-token path from the test. With the file form the golden
   is byte-identical to `main`.
-- The harness sets a static `GITHUB_TOKEN` when none is ambient, so atmos never falls back to `gh auth token`
-  (an unknown value would miss the rules and silently go live). Ambient CI tokens are registered with the
-  mirror too, so the mixed git plus OCI case keeps working.
+- The harness injects nothing into the test environment. Instead it registers every token atmos could
+  actually choose: any ambient `GITHUB_TOKEN`/`ATMOS_GITHUB_TOKEN`/`ATMOS_PRO_GITHUB_TOKEN` plus, mirroring
+  `pkg/downloader/custom_git_detector.go`'s `resolveToken` fallback order exactly, the `gh auth token` value
+  when available. With no ambient token and no authenticated `gh` CLI, atmos injects nothing and git matches
+  the anonymous rule, which the mirror accepts. This keeps atmos fully unaware of the mirror -- it runs the
+  exact production token-resolution path, never a value manufactured for the test -- and avoids the earlier
+  design's flaw, where a harness-manufactured fallback token got attached to every GitHub HTTPS request
+  atmos makes (not just git clones), breaking unrelated live-GitHub fixtures such as raw `!include` fetches
+  on a machine with no real token.
 - The shared server allows anonymous fetches because `cloudposse/atmos` is public and an explicit
   `git::https://` source bypasses atmos's detector (no injection), exactly as in production; the
   401-challenge path that proves token validation end to end is covered by `gitmirror`'s own tests.
