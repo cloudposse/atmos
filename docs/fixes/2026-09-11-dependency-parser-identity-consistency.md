@@ -8,11 +8,11 @@ Unrendered `required` templates now retain the required default until rendering,
 
 ## Context
 
-Several dependency consumers decoded an unrendered `required` template as a boolean before templates ran. Cached dependent lookup also considered an unavailable same-named component of a different type, while scoped lookup did not.
+Several dependency consumers decoded an unrendered `required` template as a boolean before templates ran. Cached dependent lookup also considered an unavailable same-named component of a different type, while scoped lookup did not. One optional-dependency regression still expected the superseded cross-type behavior and failed CI.
 
 ## Changes
 
-Added a shared dependency-section preparation helper and applied it before modern dependency parsing, including component and Terraform graph builders with configured custom delimiters. The dependent lookup now records the resolved root type and ignores relationships whose effective target type differs from that root.
+Added a shared dependency-section preparation helper and applied it before modern dependency parsing, including component and Terraform graph builders with configured custom delimiters. The dependent lookup now records the resolved root type and ignores relationships whose effective target type differs from that root. Updated the optional cross-type regression to verify this selected-root-type contract for both indexed and scan lookup.
 
 ## Validation
 

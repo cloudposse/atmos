@@ -452,7 +452,7 @@ func TestFindDependentsFromIndex_IncludesCrossStackSameNameDependent(t *testing.
 	assert.Equal(t, "prod-use1", result[0].Stack)
 }
 
-func TestExecuteDescribeDependents_RetainsOptionalAvailableCrossTypeTarget(t *testing.T) {
+func TestExecuteDescribeDependents_IgnoresOptionalAvailableCrossTypeTarget(t *testing.T) {
 	t.Parallel()
 
 	optional := false
@@ -516,9 +516,7 @@ func TestExecuteDescribeDependents_RetainsOptionalAvailableCrossTypeTarget(t *te
 
 			dependents, err := ExecuteDescribeDependents(&schema.AtmosConfiguration{}, args)
 			require.NoError(t, err)
-			require.Len(t, dependents, 1)
-			assert.Equal(t, "app", dependents[0].Component)
-			assert.Equal(t, "dev", dependents[0].Stack)
+			require.Empty(t, dependents)
 		})
 	}
 }
