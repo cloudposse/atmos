@@ -468,17 +468,27 @@ func TestResourceTracker_HandleOutputs(t *testing.T) {
 // TestResourceTracker_HasOutputChanges_TrueWhenOutputChanged is a regression test for issue
 // #3114: the tracker must be able to report a real (non-no-op) output value change, since
 // OutputsMessage.Outputs[name].Action is otherwise parsed and stored but never consulted.
+// TestResourceTracker_HasOutputChanges_TrueWhenOutputChanged is table-driven across every real
+// output action so a create/delete regression in isOutputChangeAction (which would make
+// HasOutputChanges wrongly report false, and the streaming summary claim "no changes") can't
+// slip through covered only by the update case.
 func TestResourceTracker_HasOutputChanges_TrueWhenOutputChanged(t *testing.T) {
 	t.Parallel()
 
-	rt := NewResourceTracker()
-	rt.HandleMessage(&OutputsMessage{
-		Outputs: map[string]OutputValue{
-			"vpc_id": {Value: "vpc-123abc", Action: "update"},
-		},
-	})
+	for _, action := range []string{"create", "update", "delete"} {
+		t.Run(action, func(t *testing.T) {
+			t.Parallel()
 
-	assert.True(t, rt.HasOutputChanges())
+			rt := NewResourceTracker()
+			rt.HandleMessage(&OutputsMessage{
+				Outputs: map[string]OutputValue{
+					"vpc_id": {Value: "vpc-123abc", Action: action},
+				},
+			})
+
+			assert.True(t, rt.HasOutputChanges())
+		})
+	}
 }
 
 // TestResourceTracker_HasOutputChanges_FalseWhenNoOpOrRead verifies no-op/read/absent output

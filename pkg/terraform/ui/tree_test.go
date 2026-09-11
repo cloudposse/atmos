@@ -204,30 +204,53 @@ func TestDependencyTree_GetChangeSummary_WithReplace(t *testing.T) {
 
 // TestDependencyTree_HasOutputChanges is a regression test for issue #3114: a plan whose only
 // diff is an output value (no resource changes at all) must be detectable as "has changes" via
-// a signal separate from GetChangeSummary's resource-only counts.
+// a signal separate from GetChangeSummary's resource-only counts. Table-driven across every
+// tfjson output action so a create/delete regression in countOutputChanges (which would make
+// HasOutputChanges wrongly report false, and the executor skip an output-only plan as "no
+// changes") can't slip through covered only by the update case.
 func TestDependencyTree_HasOutputChanges(t *testing.T) {
 	t.Parallel()
 
-	plan := &tfjson.Plan{
-		ResourceChanges: []*tfjson.ResourceChange{},
-		OutputChanges: map[string]*tfjson.Change{
-			"vpc_id": {Actions: tfjson.Actions{tfjson.ActionUpdate}},
-		},
+	tests := []struct {
+		name          string
+		action        tfjson.Action
+		expectChanges bool
+		expectCount   int
+	}{
+		{name: "create", action: tfjson.ActionCreate, expectChanges: true, expectCount: 1},
+		{name: "update", action: tfjson.ActionUpdate, expectChanges: true, expectCount: 1},
+		{name: "delete", action: tfjson.ActionDelete, expectChanges: true, expectCount: 1},
+		{name: "no-op", action: tfjson.ActionNoop, expectChanges: false, expectCount: 0},
+		{name: "read", action: tfjson.ActionRead, expectChanges: false, expectCount: 0},
 	}
 
-	tree := buildTreeFromPlan(plan, "dev", "vpc")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	assert.True(t, tree.HasOutputChanges())
-	assert.Equal(t, 1, tree.OutputChangeCount())
+			plan := &tfjson.Plan{
+				ResourceChanges: []*tfjson.ResourceChange{},
+				OutputChanges: map[string]*tfjson.Change{
+					"vpc_id": {Actions: tfjson.Actions{tt.action}},
+				},
+			}
 
-	add, change, remove := tree.GetChangeSummary()
-	assert.Equal(t, 0, add)
-	assert.Equal(t, 0, change)
-	assert.Equal(t, 0, remove)
+			tree := buildTreeFromPlan(plan, "dev", "vpc")
+
+			assert.Equal(t, tt.expectChanges, tree.HasOutputChanges())
+			assert.Equal(t, tt.expectCount, tree.OutputChangeCount())
+
+			add, change, remove := tree.GetChangeSummary()
+			assert.Equal(t, 0, add)
+			assert.Equal(t, 0, change)
+			assert.Equal(t, 0, remove)
+		})
+	}
 }
 
-// TestDependencyTree_HasOutputChanges_NoOpNotCounted verifies that no-op/read output entries
-// (present in every plan, changed or not) don't spuriously flip HasOutputChanges to true.
+// TestDependencyTree_HasOutputChanges_NoOpNotCounted verifies that multiple simultaneous
+// no-op/read output entries (present in every plan, changed or not) don't spuriously flip
+// HasOutputChanges to true.
 func TestDependencyTree_HasOutputChanges_NoOpNotCounted(t *testing.T) {
 	t.Parallel()
 
