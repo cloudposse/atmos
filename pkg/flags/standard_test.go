@@ -1388,6 +1388,121 @@ func TestStandardFlagParser_RegisterStringSliceFlag(t *testing.T) {
 	})
 }
 
+// TestStandardFlagParser_RegisterStringArrayFlag covers registerStringArrayFlag's
+// NoOptDefVal, ValidValues, and Required branches -- the *StringArrayFlag
+// counterparts of TestStandardFlagParser_RegisterStringSliceFlag, added for Helm's
+// --set-style flags which must not split on commas.
+func TestStandardFlagParser_RegisterStringArrayFlag(t *testing.T) {
+	t.Run("registers string array flag without splitting on commas", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringArrayFlag("set", "s", nil, "Set values"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		setFlag := cmd.Flags().Lookup("set")
+		require.NotNil(t, setFlag)
+		assert.Equal(t, "s", setFlag.Shorthand)
+		assert.Equal(t, "stringArray", setFlag.Value.Type())
+	})
+
+	t.Run("applies NoOptDefVal for the bare-flag sentinel pattern", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringArrayFlag("set", "", nil, "Set values"),
+			WithNoOptDefVal("set", "__SELECT__"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		setFlag := cmd.Flags().Lookup("set")
+		require.NotNil(t, setFlag)
+		assert.Equal(t, "__SELECT__", setFlag.NoOptDefVal)
+	})
+
+	t.Run("populates validValues for runtime validation", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringArrayFlag("set", "", nil, "Set values"),
+			WithValidValues("set", "image.tag=stable", "image.tag=preview"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		require.NoError(t, cmd.Flags().Set("set", "image.tag=stable"))
+		require.NoError(t, cmd.Flags().Set("set", "bogus"))
+
+		flags := map[string]interface{}{"set": []string{"image.tag=stable", "bogus"}}
+		err := parser.validateFlagValues(flags, cmd.Flags())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "bogus")
+	})
+
+	t.Run("marks a required string array flag", func(t *testing.T) {
+		arrayFlag := &StringArrayFlag{StringSliceFlag: StringSliceFlag{
+			Name:        "required-set",
+			Description: "Required set values",
+			Required:    true,
+		}}
+		parser := NewStandardFlagParser()
+		parser.registry.Register(arrayFlag)
+
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		setFlag := cmd.Flags().Lookup("required-set")
+		require.NotNil(t, setFlag)
+		assert.Equal(t, []string{"true"}, setFlag.Annotations[cobra.BashCompOneRequiredFlag])
+	})
+}
+
+// TestStandardFlagParser_Parse_PopulatesStringArrayFlagFromViper covers the
+// *StringArrayFlag case in populateFlagsFromViper, verifying repeated --set-style
+// values are read back as a string slice without comma-splitting.
+func TestStandardFlagParser_Parse_PopulatesStringArrayFlagFromViper(t *testing.T) {
+	parser := NewStandardFlagParser(WithStringArrayFlag("set", "", nil, "Set values"))
+	cmd := &cobra.Command{Use: "test", Args: cobra.NoArgs}
+	parser.RegisterFlags(cmd)
+
+	v := viper.New()
+	require.NoError(t, parser.BindToViper(v))
+
+	require.NoError(t, cmd.Flags().Set("set", "image.tag=preview,rc1"))
+	require.NoError(t, cmd.Flags().Set("set", "replicas=3"))
+
+	result, err := parser.Parse(context.Background(), []string{})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"image.tag=preview,rc1", "replicas=3"}, GetStringSlice(result.Flags, "set"))
+}
+
+// TestStandardFlagParser_CurrentFlagValue_StringArrayFlag covers the *StringArrayFlag
+// branch of currentFlagValue, both with and without a bound Viper instance.
+func TestStandardFlagParser_CurrentFlagValue_StringArrayFlag(t *testing.T) {
+	t.Run("reads via cmd.Flags() when no Viper instance is bound", func(t *testing.T) {
+		parser := NewStandardFlagParser(WithStringArrayFlag("set", "", nil, "Set values"))
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		require.NoError(t, cmd.Flags().Set("set", "image.tag=preview,rc1"))
+
+		value, ok := parser.currentFlagValue(cmd, "set")
+		require.True(t, ok)
+		assert.Equal(t, []string{"image.tag=preview,rc1"}, value)
+	})
+
+	t.Run("reads via Viper when a Viper instance is bound", func(t *testing.T) {
+		parser := NewStandardFlagParser(WithStringArrayFlag("set", "", nil, "Set values"))
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+		require.NoError(t, cmd.Flags().Set("set", "image.tag=preview,rc1"))
+
+		v := viper.New()
+		require.NoError(t, parser.BindFlagsToViper(cmd, v))
+
+		value, ok := parser.currentFlagValue(cmd, "set")
+		require.True(t, ok)
+		assert.Equal(t, []string{"image.tag=preview,rc1"}, value)
+	})
+}
+
 // TestStandardFlagParser_HandleInteractivePrompts_AllCases tests all prompt use cases.
 func TestStandardFlagParser_HandleInteractivePrompts_AllCases(t *testing.T) {
 	// Save original viper state.
