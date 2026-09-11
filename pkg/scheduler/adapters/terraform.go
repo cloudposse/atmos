@@ -1037,7 +1037,7 @@ func addTerraformDependencies(
 	componentSection map[string]any,
 ) error {
 	fromID := terraformNodeID(componentName, stackName)
-	dependencies, modern, err := terraformDependenciesWithSource(componentSection, stackName)
+	dependencies, modern, err := terraformDependenciesWithSource(componentSection, stackName, leftDelim)
 	if err != nil {
 		return fmt.Errorf("parsing dependencies for %q in stack %q: %w", componentName, stackName, err)
 	}
@@ -1113,12 +1113,12 @@ func terraformGraphNodeIDs(graph *dependency.Graph) map[string]bool {
 
 // terraformDependencies extracts modern or legacy dependency declarations from a component.
 func terraformDependencies(componentSection map[string]any) ([]schema.ComponentDependency, error) {
-	deps, _, err := terraformDependenciesWithSource(componentSection, "")
+	deps, _, err := terraformDependenciesWithSource(componentSection, "", "")
 	return deps, err
 }
 
-func terraformDependenciesWithSource(componentSection map[string]any, stackName string) ([]schema.ComponentDependency, bool, error) {
-	dependencies, found, err := modernTerraformDependencies(componentSection, stackName)
+func terraformDependenciesWithSource(componentSection map[string]any, stackName, leftDelim string) ([]schema.ComponentDependency, bool, error) {
+	dependencies, found, err := modernTerraformDependencies(componentSection, stackName, leftDelim)
 	if err != nil || found {
 		return dependencies, found, err
 	}
@@ -1127,7 +1127,7 @@ func terraformDependenciesWithSource(componentSection map[string]any, stackName 
 	return legacy, false, err
 }
 
-func modernTerraformDependencies(componentSection map[string]any, stackName string) ([]schema.ComponentDependency, bool, error) {
+func modernTerraformDependencies(componentSection map[string]any, stackName, leftDelim string) ([]schema.ComponentDependency, bool, error) {
 	dependenciesValue, exists := componentSection[cfg.DependenciesSectionName]
 	if !exists {
 		return nil, false, nil
@@ -1140,7 +1140,7 @@ func modernTerraformDependencies(componentSection map[string]any, stackName stri
 		return nil, false, nil
 	}
 
-	depsSection = schema.DeferUnresolvedRequired(depsSection, "")
+	depsSection = schema.DeferUnresolvedRequired(depsSection, leftDelim)
 	deps, err := schema.ParseComponentDependencies(depsSection, cfg.TerraformComponentType, stackName)
 	if err != nil {
 		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)

@@ -410,7 +410,7 @@ func addComponentDependencies(
 	params dependencyParams,
 ) error {
 	fromID := GraphNodeID(params.componentName, params.stackName)
-	deps, modern, err := componentDependencies(params.componentSection, params.componentType, params.stackName)
+	deps, modern, err := componentDependencies(params.componentSection, params.componentType, params.stackName, leftDelim)
 	if err != nil {
 		return err
 	}
@@ -464,8 +464,8 @@ func addComponentDependencies(
 	return nil
 }
 
-func componentDependencies(componentSection map[string]any, componentType, stackName string) ([]schema.ComponentDependency, bool, error) {
-	deps, found, err := dependenciesFromSection(componentSection, componentType, stackName)
+func componentDependencies(componentSection map[string]any, componentType, stackName, leftDelim string) ([]schema.ComponentDependency, bool, error) {
+	deps, found, err := dependenciesFromSection(componentSection, componentType, stackName, leftDelim)
 	if err != nil || found {
 		return deps, found, err
 	}
@@ -478,7 +478,7 @@ func componentDependencies(componentSection map[string]any, componentType, stack
 }
 
 // dependenciesFromSection extracts dependencies from the 'dependencies.components' section.
-func dependenciesFromSection(componentSection map[string]any, componentType, stackName string) ([]schema.ComponentDependency, bool, error) {
+func dependenciesFromSection(componentSection map[string]any, componentType, stackName, leftDelim string) ([]schema.ComponentDependency, bool, error) {
 	dependenciesValue, exists := componentSection[cfg.DependenciesSectionName]
 	if !exists {
 		return nil, false, nil
@@ -490,7 +490,7 @@ func dependenciesFromSection(componentSection map[string]any, componentType, sta
 	if _, hasComponents := depsSection["components"]; !hasComponents {
 		return nil, false, nil
 	}
-	depsSection = schema.DeferUnresolvedRequired(depsSection, "")
+	depsSection = schema.DeferUnresolvedRequired(depsSection, leftDelim)
 	deps, err := schema.ParseComponentDependencies(depsSection, componentType, stackName)
 	if err != nil {
 		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)

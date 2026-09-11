@@ -206,6 +206,28 @@ func TestBuildGraphInvalidRequiredValueFails(t *testing.T) {
 	require.ErrorIs(t, err, schema.ErrComponentDependencyInvalidRequired)
 }
 
+func TestBuildGraphDefersCustomDelimitedRequiredValue(t *testing.T) {
+	graph, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{"components": []any{
+							map[string]any{"component": "base", "required": "[[ .vars.base_required ]]"},
+						}},
+					},
+				},
+			},
+		},
+	}, cfg.KubernetesComponentType, "[[")
+
+	require.NoError(t, err)
+	api, ok := graph.GetNode(GraphNodeID("api", "dev"))
+	require.True(t, ok)
+	require.Equal(t, []string{GraphNodeID("base", "dev")}, api.Dependencies)
+}
+
 func TestBuildGraphOptionalUnresolvedTargetFails(t *testing.T) {
 	_, err := BuildGraph(map[string]any{
 		"dev": map[string]any{

@@ -12,12 +12,13 @@ Several dependency consumers decoded an unrendered `required` template as a bool
 
 ## Changes
 
-Added a shared dependency-section preparation helper and applied it before modern dependency parsing. The dependent lookup now records the resolved root type and ignores relationships whose effective target type differs from that root.
+Added a shared dependency-section preparation helper and applied it before modern dependency parsing, including component and Terraform graph builders with configured custom delimiters. The dependent lookup now records the resolved root type and ignores relationships whose effective target type differs from that root.
 
 ## Validation
 
 - Focused `internal/exec` regressions for unrendered `required` values and index/scan cross-type lookup.
 - Focused custom-delimiter schema regression.
+- Focused custom-delimiter graph-builder regressions for component and Terraform dependency graphs.
 - Compile-only checks for `pkg/component`, `pkg/list/dependencies`, and `pkg/scheduler/adapters`.
 
 ## Follow-ups

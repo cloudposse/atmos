@@ -306,6 +306,28 @@ func TestAddTerraformDependenciesOptionalUnresolvedTargetWithCustomDelimiterFail
 	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
 }
 
+func TestBuildTerraformGraphDefersCustomDelimitedRequiredValue(t *testing.T) {
+	graph, err := buildTerraformGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformComponentType: map[string]any{
+					"base": map[string]any{},
+					"app": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{"components": []any{
+							map[string]any{"component": "base", "required": "[[ .vars.base_required ]]"},
+						}},
+					},
+				},
+			},
+		},
+	}, "[[", nil)
+
+	require.NoError(t, err)
+	app, ok := graph.GetNode(terraformNodeID("app", "dev"))
+	require.True(t, ok)
+	require.Equal(t, []string{terraformNodeID("base", "dev")}, app.Dependencies)
+}
+
 func TestDiscoverTerraformGraphRetainsValidDependenciesAfterUnresolvedDeclaration(t *testing.T) {
 	graph := discoverTerraformGraph(map[string]any{
 		"dev": map[string]any{
