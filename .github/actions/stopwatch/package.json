@@ -1,5 +1,5 @@
 {
-  "name": "@cloudposse/ci-timing-summary-action",
+  "name": "@cloudposse/stopwatch-action",
   "version": "1.0.0",
   "private": true,
   "type": "module",

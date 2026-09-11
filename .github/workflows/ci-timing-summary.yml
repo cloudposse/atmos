@@ -73,10 +73,10 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.repository.default_branch }}
-          sparse-checkout: .github/actions/ci-timing-summary
+          sparse-checkout: .github/actions/stopwatch
 
       - name: Update sticky CI timing comment
-        uses: ./.github/actions/ci-timing-summary
+        uses: ./.github/actions/stopwatch
         with:
           github-token: ${{ github.token }}
           workflow-run-id: ${{ github.event.workflow_run.id }}

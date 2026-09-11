@@ -1,4 +1,4 @@
-# CI Timing Summary action
+# Stopwatch action
 
 This repository-local JavaScript action updates one sticky pull-request comment
 with timing data from every GitHub Actions workflow run found for the PR's current

@@ -1,4 +1,4 @@
-name: CI Timing Summary
+name: Stopwatch
 description: Publish a sticky pull-request comment summarizing all GitHub Actions workflow and job timings for a commit.
 author: Cloud Posse
 
@@ -16,7 +16,7 @@ inputs:
   comment-marker:
     description: Hidden marker used to find and update the sticky comment.
     required: false
-    default: "<!-- atmos-ci-timing-summary -->"
+    default: "<!-- atmos-stopwatch -->"
 
 outputs:
   published:

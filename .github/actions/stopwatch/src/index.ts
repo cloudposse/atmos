@@ -129,7 +129,7 @@ class GitHubClient {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${this.#token}`,
         "Content-Type": "application/json",
-        "User-Agent": "atmos-ci-timing-summary",
+        "User-Agent": "atmos-stopwatch",
         "X-GitHub-Api-Version": API_VERSION,
       },
       body: body === undefined ? undefined : JSON.stringify(body),
