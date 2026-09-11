@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/installer"
 	"github.com/cloudposse/atmos/tests/testhelpers"
+	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
 // TestToolchainCustomCommands_InstallAllTools verifies that all tools defined in
@@ -47,7 +48,9 @@ func TestToolchainCustomCommands_InstallAllTools(t *testing.T) {
 	// Build atmos binary for testing.
 	atmosBinary := buildAtmosBinary(t)
 
-	// Tools to install with their expected binary names and paths.
+	// Tools to install with their expected binary names and paths. jq's install mechanics are
+	// covered separately by TestToolchainCustomCommands_InstallJQViaMock, against a mocked
+	// registry/release instead of the real network -- it is not repeated here.
 	tools := []struct {
 		name       string // Tool name for installation (owner/repo@version)
 		binaryName string // Expected binary name
@@ -58,7 +61,6 @@ func TestToolchainCustomCommands_InstallAllTools(t *testing.T) {
 		{"charmbracelet/gum@0.17.0", "gum", "charmbracelet", "gum", "0.17.0"},
 		{"derailed/k9s@0.32.7", "k9s", "derailed", "k9s", "0.32.7"},
 		{"helm/helm@3.16.3", "helm", "helm", "helm", "3.16.3"},
-		{"jqlang/jq@1.7.1", "jq", "jqlang", "jq", "1.7.1"},
 		{"opentofu/opentofu@1.9.0", "tofu", "opentofu", "opentofu", "1.9.0"},
 	}
 
@@ -77,6 +79,49 @@ func TestToolchainCustomCommands_InstallAllTools(t *testing.T) {
 			assertBinaryExists(t, binaryPath, tool.binaryName)
 		})
 	}
+}
+
+// TestToolchainCustomCommands_InstallJQViaMock verifies atmos's own install mechanics --
+// aqua-registry lookup, release-asset download, placement at the expected path -- for the
+// jqlang/jq install this file's other tests used to cover live, using a fake jqlang/jq
+// aqua-registry entry and release asset served by the httpmock GitHub facade instead of the
+// real network. It asserts only that atmos placed a file at the expected path: per
+// tests/testhelpers/httpmock's contract, a fake asset registered this way must never be
+// executed, so this deliberately does NOT run `jq --version` the way
+// TestToolchainCustomCommands_ToolsExecutable does for the other tools.
+func TestToolchainCustomCommands_InstallJQViaMock(t *testing.T) {
+	defer perf.Track(nil, "tests.TestToolchainCustomCommands_InstallJQViaMock")()
+
+	workDir := "fixtures/scenarios/toolchain-custom-commands"
+	t.Chdir(workDir)
+
+	toolsDir := ".tools"
+	os.RemoveAll(toolsDir)
+	defer os.RemoveAll(toolsDir)
+
+	atmosBinary := buildAtmosBinary(t)
+
+	mock := httpmock.NewGitHubMockServer(t)
+	const owner, repo, version, binaryName = "jqlang", "jq", "1.7.1", "jq"
+	assetName := "jq-" + runtime.GOOS + "-" + runtime.GOARCH
+	mock.RegisterAquaTool(&httpmock.AquaTool{
+		Owner: owner,
+		Repo:  repo,
+		Asset: "jq-{{.OS}}-{{.Arch}}",
+	})
+	mock.RegisterReleaseAsset(owner, repo, version, assetName, []byte("#!/bin/sh\necho fake-jq-never-executed\n"))
+
+	cmd := exec.Command(atmosBinary, "toolchain", "install", owner+"/"+repo+"@"+version)
+	cmd.Env = append(os.Environ(), "ATMOS_LOGS_LEVEL=Info")
+	for k, v := range mock.EnvForSubprocess() {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	output, err := cmd.CombinedOutput()
+	t.Logf("Install output for %s/%s@%s:\n%s", owner, repo, version, string(output))
+	require.NoError(t, err, "toolchain install %s/%s@%s should succeed against the mock", owner, repo, version)
+
+	binaryPath := getBinaryPath(toolsDir, owner, repo, version, binaryName)
+	assertBinaryExists(t, binaryPath, binaryName)
 }
 
 // TestToolchainCustomCommands_ToolsExecutable verifies that installed tools

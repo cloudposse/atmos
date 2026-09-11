@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain/installer"
+	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
 // Tool version constants for maintainability.
@@ -197,13 +198,21 @@ func TestToolchainAquaTools_InstallAllTools(t *testing.T) {
 		{"replicatedhq/kots@" + versionKots, "kubectl-kots", "replicatedhq", "kots", versionKots},
 	}
 
-	// Install cross-platform tools on all platforms.
+	// Install cross-platform tools on all platforms. jq's entry is redirected at a mocked
+	// aqua-registry entry and release asset (installViaAquaMockJQ) instead of the real
+	// network: this subtest only ever asserts the binary exists (never executes it), so it
+	// qualifies as pure install-mechanics coverage. Every other tool here stays live.
 	for _, tool := range crossPlatformTools {
 		t.Run("Install_"+tool.binaryName, func(t *testing.T) {
-			// Install the tool.
-			cmd := exec.Command(atmosBinary, "toolchain", "install", tool.name)
-			cmd.Env = append(os.Environ(), "ATMOS_LOGS_LEVEL=Info")
-			output, err := cmd.CombinedOutput()
+			var output []byte
+			var err error
+			if tool.owner == "jqlang" {
+				output, err = installViaAquaMockJQ(t, atmosBinary, tool.version)
+			} else {
+				cmd := exec.Command(atmosBinary, "toolchain", "install", tool.name)
+				cmd.Env = append(os.Environ(), "ATMOS_LOGS_LEVEL=Info")
+				output, err = cmd.CombinedOutput()
+			}
 			t.Logf("Install output for %s:\n%s", tool.name, string(output))
 
 			require.NoError(t, err, "toolchain install %s should succeed", tool.name)
@@ -423,7 +432,10 @@ func TestToolchainAquaTools_WindowsKotsPlatformError(t *testing.T) {
 // a tool that doesn't exist in any registry shows a clear "tool not in registry" error.
 //
 // This uses replicatedhq/replicated which does NOT exist in the Aqua registry
-// (only replicatedhq/kots and replicatedhq/outdated exist).
+// (only replicatedhq/kots and replicatedhq/outdated exist). Verified against a mock instead
+// of the real aqua registry -- this test asserts atmos's own "not found" error formatting,
+// not anything about the real registry's contents, and an unregistered path 404s on the mock
+// exactly as an absent package does on the real registry, with no special setup required.
 func TestToolchainAquaTools_NonExistentToolError(t *testing.T) {
 	defer perf.Track(nil, "tests.TestToolchainAquaTools_NonExistentToolError")()
 
@@ -433,9 +445,14 @@ func TestToolchainAquaTools_NonExistentToolError(t *testing.T) {
 	// Build atmos binary for testing.
 	atmosBinary := buildAtmosBinary(t)
 
+	mock := httpmock.NewGitHubMockServer(t)
+
 	// Attempt to install replicatedhq/replicated which doesn't exist in the registry.
 	cmd := exec.Command(atmosBinary, "toolchain", "install", "replicatedhq/replicated@"+versionReplicate)
 	cmd.Env = append(os.Environ(), "ATMOS_LOGS_LEVEL=Info")
+	for k, v := range mock.EnvForSubprocess() {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
 	output, err := cmd.CombinedOutput()
 	outputStr := string(output)
 	plainOutput := ansi.Strip(outputStr)
@@ -458,6 +475,32 @@ func TestToolchainAquaTools_NonExistentToolError(t *testing.T) {
 		"Error should suggest searching the registry or checking configuration")
 
 	t.Logf("✓ Non-existent tool error correctly shown for replicatedhq/replicated")
+}
+
+// installViaAquaMockJQ runs `atmos toolchain install jqlang/jq@version` against a fresh
+// httpmock GitHub facade serving a fake jqlang/jq aqua-registry entry and release asset,
+// instead of the real network. Only atmos's own install mechanics are under test here (the
+// binary lands at the expected path); per tests/testhelpers/httpmock's contract the fake
+// asset must never be executed, so callers must not run `jq --version` on the result.
+func installViaAquaMockJQ(t *testing.T, atmosBinary, version string) ([]byte, error) {
+	t.Helper()
+
+	mock := httpmock.NewGitHubMockServer(t)
+	const owner, repo = "jqlang", "jq"
+	assetName := "jq-" + runtime.GOOS + "-" + runtime.GOARCH
+	mock.RegisterAquaTool(&httpmock.AquaTool{
+		Owner: owner,
+		Repo:  repo,
+		Asset: "jq-{{.OS}}-{{.Arch}}",
+	})
+	mock.RegisterReleaseAsset(owner, repo, version, assetName, []byte("#!/bin/sh\necho fake-jq-never-executed\n"))
+
+	cmd := exec.Command(atmosBinary, "toolchain", "install", owner+"/"+repo+"@"+version)
+	cmd.Env = append(os.Environ(), "ATMOS_LOGS_LEVEL=Info")
+	for k, v := range mock.EnvForSubprocess() {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	return cmd.CombinedOutput()
 }
 
 // getToolsInstallPath returns the tools install path from atmos config.
