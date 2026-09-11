@@ -1362,6 +1362,7 @@ func TestOperationHandlers_DriftDetect_ThreadsFailOnDriftFlag(t *testing.T) {
 func TestOperationsSkippingTemplateLoad_Contents(t *testing.T) {
 	mustSkip := []Operation{
 		OperationDelete,
+		OperationOutput,
 		OperationChangesetExecute,
 		OperationChangesetList,
 		OperationChangesetDelete,
