@@ -12,14 +12,14 @@ This guide covers the development workflow for contributing to Atmos.
 
 1. Clone the repository
 2. Run the development setup:
-   ```bash
-   atmos dev setup
-   ```
-   This will:
-   - Install Go dependencies
-   - Install pre-commit and golangci-lint (using brew, apt, or pip)
-   - Set up pre-commit hooks
-   - Install required Go tools
+    ```bash
+    atmos dev setup
+    ```
+    This will:
+    - Install Go dependencies
+    - Install pre-commit and golangci-lint (using brew, apt, or pip)
+    - Set up pre-commit hooks
+    - Install required Go tools
 
 ## Development Workflow
 
@@ -170,10 +170,10 @@ The `scripts/test-geodesic-prebuilt.sh` script allows you to quickly test Atmos 
 **What it does:**
 1. Builds Atmos for Linux (cross-compiles if needed for your architecture)
 2. Launches a Geodesic container with:
-   - The pre-built Atmos binary mounted to `/usr/local/bin/atmos`
-   - Your infrastructure directory mounted to `/workspace`
-   - Atmos-managed AWS credentials from `$XDG_CONFIG_HOME/atmos` (defaults to `~/.config/atmos`)
-   - Standard XDG environment variables configured
+    - The pre-built Atmos binary mounted to `/usr/local/bin/atmos`
+    - Your infrastructure directory mounted to `/workspace`
+    - Atmos-managed AWS credentials from `$XDG_CONFIG_HOME/atmos` (defaults to `~/.config/atmos`)
+    - Standard XDG environment variables configured
 
 This workflow is much faster than rebuilding Geodesic images during development and allows you to iterate quickly on Atmos changes while testing in a realistic containerized environment.
 
