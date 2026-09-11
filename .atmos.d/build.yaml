@@ -23,6 +23,7 @@ commands:
         content: Building Atmos...
       - &build_binary_step
         type: shell
+        output: viewport
         command: |
           set -eu
           go tool mage build:binary "${ATMOS_BUILD_TARGET:-default}" "${ATMOS_BUILD_VERSION:-test}"
