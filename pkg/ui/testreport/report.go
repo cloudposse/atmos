@@ -52,11 +52,14 @@ type Reporter struct {
 	done    chan error
 	cancel  context.CancelFunc
 	err     error
+
+	startedAt  time.Time
+	finishedAt time.Time
 }
 
 // New constructs a reporter. The execution tree is fixed before any tests run.
 func New(title string, roots []*Node, output io.Writer) *Reporter {
-	r := &Reporter{title: title, roots: roots, nodes: map[string]*Node{}, output: output}
+	r := &Reporter{title: title, roots: roots, nodes: map[string]*Node{}, output: output, startedAt: time.Now()}
 	var visit func([]*Node)
 	visit = func(nodes []*Node) {
 		for _, n := range nodes {
@@ -149,6 +152,12 @@ func (r *Reporter) failureBlock(id, status, logs string) string {
 
 // Finish leaves a permanent tree and summary in scrollback.
 func (r *Reporter) Finish() error {
+	// Freeze wall-clock duration before terminal cleanup, including concurrent tests only once.
+	r.mu.Lock()
+	if r.finishedAt.IsZero() {
+		r.finishedAt = time.Now()
+	}
+	r.mu.Unlock()
 	if r.program != nil {
 		r.program.Send(finishMsg{})
 		if err := <-r.done; err != nil {
@@ -217,9 +226,14 @@ func (r *Reporter) View(width int, spinning string, final bool) string {
 		}
 		fmt.Fprintf(&b, "     %s\n", bar.ViewAs(fraction))
 	}
-	fmt.Fprintf(&b, "     %s%s%s\n",
+	end := r.finishedAt
+	if end.IsZero() {
+		end = time.Now()
+	}
+	fmt.Fprintf(&b, "     %s%s%s%s\n",
 		styles.Body.Bold(true).Render(fmt.Sprintf("%d/%d", complete, c["total"])),
-		styles.Muted.Render(" · "), renderCounts(c))
+		styles.Muted.Render(" · "), renderCounts(c),
+		styles.Muted.Render(fmt.Sprintf(" · %.1fs elapsed", end.Sub(r.startedAt).Seconds())))
 	return b.String()
 }
 

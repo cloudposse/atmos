@@ -28,6 +28,7 @@ func TestTreeCountsAndConnectivity(t *testing.T) {
 	assert.NotContains(t, view, "first line")
 	assert.NoError(t, r.Finish())
 	assert.Equal(t, 1, strings.Count(output.String(), "first line"))
+	assert.Regexp(t, `3/3 .* · [0-9]+\.[0-9]s elapsed`, ansi.Strip(output.String()))
 	assert.NotContains(t, ansi.Strip(r.View(25, "", false)), "\x1b")
 }
 
@@ -48,7 +49,7 @@ func TestLiveReporterCompletionDoesNotDeadlock(t *testing.T) {
 		r.program.Kill()
 		t.Fatal("live reporter deadlocked")
 	}
-	assert.Contains(t, output.String(), "1/1")
+	assert.Regexp(t, `1/1 .* · [0-9]+\.[0-9]s elapsed`, ansi.Strip(output.String()))
 	assert.Equal(t, 200, strings.Count(output.String(), "failure detail"))
 }
 
