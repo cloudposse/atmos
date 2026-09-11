@@ -39,6 +39,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/github"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -65,13 +66,6 @@ var (
 	sandboxRegistry     = make(map[string]*testhelpers.SandboxEnvironment)
 	sandboxMutex        sync.RWMutex
 )
-
-// gitMirrorStaticToken is the Basic-Auth token TestMain registers with the local git mirror
-// server unconditionally (see TestMain), and runCLICommandTest falls back to injecting via
-// GITHUB_TOKEN when a test case supplies no real credentials of its own (see
-// ensureGitMirrorTokenFallback) -- so vendor tests that clone cloudposse/atmos never fall back to
-// `gh auth token` and quietly go out to the live network.
-const gitMirrorStaticToken = "atmos-test-mirror-token"
 
 // Define styles using lipgloss.
 var (
@@ -865,18 +859,34 @@ func TestMain(m *testing.M) {
 		logger.Fatal("failed to start local git mirror server", mirrorErr)
 	}
 
-	// Register the harness's static fallback token (see ensureGitMirrorTokenFallback) plus any
-	// ambient credentials already in the environment, so a real developer/CI token also
-	// authenticates against the mirror -- needed for atmos_vendor_pull, which mixes a git mirror
-	// source with a live ghcr.io OCI source and keeps its github_token precondition.
-	mirrorTokens := []string{gitMirrorStaticToken}
+	// Register every token atmos could actually inject, so the harness never manufactures a
+	// credential of its own: any ambient GITHUB_TOKEN/ATMOS_GITHUB_TOKEN/ATMOS_PRO_GITHUB_TOKEN
+	// (a real developer/CI token also authenticates against the mirror -- needed for
+	// atmos_vendor_pull, which mixes a git mirror source with a live ghcr.io OCI source and keeps
+	// its github_token precondition), plus the `gh auth token` value -- mirroring
+	// pkg/downloader/custom_git_detector.go's resolveToken fallback order exactly, so atmos runs
+	// its real production code path against the mirror instead of an injected value it would
+	// never actually choose. With no ambient token and no authenticated `gh` CLI, atmos injects
+	// nothing and git matches the anonymous rule instead, which the mirror accepts (see
+	// AllowAnonymous() above) -- the same "no credentials" path an anonymous clone of this public
+	// repo takes in production.
+	var mirrorTokens []string
 	for _, envVar := range []string{"GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "ATMOS_PRO_GITHUB_TOKEN"} {
 		if token := os.Getenv(envVar); token != "" {
 			mirrorTokens = append(mirrorTokens, token)
 		}
 	}
+	if token := github.GetGitHubTokenFromCLI(); token != "" {
+		mirrorTokens = append(mirrorTokens, token)
+	}
 	for _, token := range mirrorTokens {
 		gitMirrorServer.RegisterToken(token)
+		// Mask the same base64("x-access-token:"+token) byte sequence a git-over-HTTP request via
+		// the CustomGitDetector-injected URL carries as a Basic-Auth header -- a different byte
+		// sequence than plain GITHUB_TOKEN or base64(GITHUB_TOKEN), which pkg/io's masker already
+		// auto-registers (mirrors the extraheader registration in runCLICommandTest for the same
+		// reasoning).
+		iolib.RegisterSecret("x-access-token:" + token)
 	}
 
 	gitConfigFile, mirrorErr := os.CreateTemp("", "atmos-git-mirror-gitconfig-*")
@@ -1014,37 +1024,6 @@ func ensureAtmosRunner(t *testing.T) {
 	}
 }
 
-// ensureGitMirrorTokenFallback sets env["GITHUB_TOKEN"] to the local git mirror server's static
-// token (see TestMain and gitMirrorStaticToken) when neither env nor the ambient environment
-// already provides one of GITHUB_TOKEN/ATMOS_GITHUB_TOKEN/ATMOS_PRO_GITHUB_TOKEN -- the same
-// three environment variables pkg/downloader/custom_git_detector.go's resolveToken checks, in
-// the same order. This keeps atmos's own token-injection code path exercised even when a test
-// (or a developer shell with `-u GITHUB_TOKEN`) supplies no real GitHub credentials at all,
-// instead of letting resolveToken fall further back to `gh auth token` -- a value the mirror
-// would reject with 401, or worse, a real credential that quietly goes out to the live network.
-//
-// An entry already present in env, even an explicit empty string, is left untouched: a later PR
-// uses an explicit empty value to scrub inherited auth for live-canary test cases, and
-// overriding that would defeat the point.
-func ensureGitMirrorTokenFallback(env map[string]string) {
-	names := []string{"GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "ATMOS_PRO_GITHUB_TOKEN"}
-	for _, name := range names {
-		if _, ok := env[name]; ok {
-			return
-		}
-		if os.Getenv(name) != "" {
-			return
-		}
-	}
-
-	env["GITHUB_TOKEN"] = gitMirrorStaticToken
-	// Mask the same base64("x-access-token:"+token) byte sequence a git-over-HTTP request via the
-	// CustomGitDetector-injected URL carries as a Basic-Auth header -- a different byte sequence
-	// than plain GITHUB_TOKEN or base64(GITHUB_TOKEN), which pkg/io's masker already auto-registers
-	// (mirrors the extraheader registration a few lines below for the same reasoning).
-	iolib.RegisterSecret("x-access-token:" + gitMirrorStaticToken)
-}
-
 func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Skip long tests in short mode
 	if testing.Short() && tc.Short != nil && !*tc.Short {
@@ -1103,12 +1082,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		t.Setenv("GITHUB_ACTOR", "")
 		t.Setenv("GITHUB_USERNAME", "")
 	}
-
-	// Ensure atmos injects a token the local git mirror server recognizes (see TestMain and
-	// gitmirror.Serve) whenever it would otherwise inject none, so vendor tests that clone
-	// cloudposse/atmos never fall back to `gh auth token` -- an unknown value the mirror would
-	// reject with 401, or worse, a real credential that quietly goes out to the live network.
-	ensureGitMirrorTokenFallback(tc.Env)
 
 	// Prevent git from hanging waiting for credentials or interactive input.
 	// On macOS CI, the actions/checkout step configures git credentials as local config
