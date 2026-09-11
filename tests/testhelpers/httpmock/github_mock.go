@@ -77,7 +77,16 @@ type failureRule struct {
 func NewGitHubMockServer(t *testing.T) *GitHubMockServer {
 	t.Helper()
 
-	mock := &GitHubMockServer{
+	mock, closeServer := NewGitHubMockServerStandalone()
+	t.Cleanup(closeServer)
+	return mock
+}
+
+// NewGitHubMockServerStandalone creates a mock server without requiring a *testing.T,
+// returning a close func the caller must invoke itself. For use in contexts with no
+// *testing.T available, such as TestMain, where NewGitHubMockServer cannot be called.
+func NewGitHubMockServerStandalone() (mock *GitHubMockServer, closeServer func()) {
+	mock = &GitHubMockServer{
 		files:      make(map[string]string),
 		aquaPrefix: defaultAquaPrefix,
 		aquaTools:  make(map[string]*AquaTool),
@@ -90,8 +99,7 @@ func NewGitHubMockServer(t *testing.T) *GitHubMockServer {
 
 	mock.Server = httptest.NewServer(http.HandlerFunc(mock.handle))
 
-	t.Cleanup(func() { mock.Server.Close() })
-	return mock
+	return mock, mock.Server.Close
 }
 
 // handle is the mock's single entry point: log the request, apply any registered failure

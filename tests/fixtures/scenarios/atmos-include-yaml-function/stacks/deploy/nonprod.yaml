@@ -4,8 +4,16 @@
 import: !include config/import.yaml
 
 # Download the remote file using `go-getter` and assign the `components.terraform.component-1.settings` section
-# from the file to the `settings` section` in the current stack
-settings: !include https://raw.githubusercontent.com/cloudposse/atmos/main/tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml .components.terraform.component-1.settings
+# from the file to the `settings` section` in the current stack.
+#
+# This is a github.com blob URL (not a literal raw.githubusercontent.com URL) so that
+# github.ConvertToRawURL (pkg/github/client.go, invoked by pkg/utils/yaml_include_by_extension.go's
+# processRemoteFile) routes it through pkg/github.Endpoints.RawURL. By default (GITHUB_SERVER_URL
+# unset) that resolves to the exact same raw.githubusercontent.com URL as before -- byte-identical
+# behavior. When GITHUB_SERVER_URL/GITHUB_API_URL point at a mock (see
+# tests/test-cases/atmos-include-yaml-function.yaml), it resolves to the mock's GHES-shape
+# /raw/<owner>/<repo>/<ref>/<path> route instead, so this fixture never depends on live GitHub.
+settings: !include https://github.com/cloudposse/atmos/blob/main/tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml .components.terraform.component-1.settings
 
 components:
   terraform:
