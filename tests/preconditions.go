@@ -306,7 +306,7 @@ func RequireGitHubAccess(t *testing.T) *GitHubRateLimitInfo {
 	t.Helper()
 
 	if Offline() {
-		t.Skip("ATMOS_TEST_OFFLINE=true: skipping test that requires live GitHub access")
+		t.Skipf("ATMOS_TEST_OFFLINE=true: skipping test that requires live GitHub access")
 	}
 
 	if !ShouldCheckPreconditions() {
@@ -337,7 +337,7 @@ func RequireNetworkAccess(t *testing.T, url string) {
 	t.Helper()
 
 	if Offline() {
-		t.Skip("ATMOS_TEST_OFFLINE=true: skipping test that requires live network access")
+		t.Skipf("ATMOS_TEST_OFFLINE=true: skipping test that requires live network access")
 	}
 
 	if !ShouldCheckPreconditions() {
@@ -379,7 +379,7 @@ func RequireLiveGitHubAuthenticated(t *testing.T) *GitHubRateLimitInfo {
 
 	info := RequireLiveGitHub(t)
 	if os.Getenv("GITHUB_TOKEN") == "" {
-		t.Skip("GITHUB_TOKEN not set: skipping authenticated live GitHub canary")
+		t.Skipf("GITHUB_TOKEN not set: skipping authenticated live GitHub canary")
 	}
 	return info
 }
