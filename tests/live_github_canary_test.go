@@ -38,19 +38,36 @@ const contextTFMarker = "ONLY EDIT THIS FILE IN github.com/cloudposse/terraform-
 // tests (see docs/fixes/2026-08-10-github-transient-error-tls-cert-flake.md); these canaries
 // drive a subprocess instead of a typed Go error, so classification works off captured stderr
 // text.
+//
+// Bare tokens like "tls", "timeout", or a 3-digit number are NOT enough on their own: an
+// unrelated, real atmos error (e.g. a stack variable literally named "timeout") can contain the
+// same word without describing a network condition at all, which would wrongly turn a genuine
+// bug into a silent skip. Each pattern below therefore requires either an unambiguous phrase
+// (e.g. "connection refused") or, for timeout/TLS/HTTP-status tokens, the surrounding network
+// diagnostic or parsed-status text real git/net-http/GitHub-API error strings actually use.
 var transientLiveGitHubPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)could not resolve host`),
 	regexp.MustCompile(`(?i)could not connect`),
 	regexp.MustCompile(`(?i)failed to connect`),
 	regexp.MustCompile(`(?i)connection refused`),
 	regexp.MustCompile(`(?i)connection reset`),
-	regexp.MustCompile(`(?i)\btimeout\b`),
+	// context deadline exceeded / Client.Timeout exceeded: Go's net/http client timeout wrapping.
+	regexp.MustCompile(`(?i)context deadline exceeded`),
+	regexp.MustCompile(`(?i)client\.timeout exceeded`),
+	// i/o timeout / TLS handshake timeout: Go's net package dial/handshake timeout wrapping.
+	regexp.MustCompile(`(?i)i/o timeout`),
+	regexp.MustCompile(`(?i)tls handshake timeout`),
 	regexp.MustCompile(`(?i)timed out`),
-	regexp.MustCompile(`(?i)\btls\b`),
+	// "tls:" (colon) is how Go's crypto/tls wraps its own errors (e.g. "tls: failed to verify
+	// certificate"); a bare "tls" word elsewhere is not necessarily a network condition.
+	regexp.MustCompile(`(?i)\btls:`),
 	regexp.MustCompile(`(?i)x509`),
-	regexp.MustCompile(`\b429\b`),
 	regexp.MustCompile(`(?i)rate limit`),
-	regexp.MustCompile(`\b50[0-9]\b`),
+	// A 429/5xx HTTP status code is only meaningful paired with its reason phrase (e.g. "429 Too
+	// Many Requests", "503 Service Unavailable"); a bare 3-digit number could be a line number, a
+	// port, or any other unrelated identifier.
+	regexp.MustCompile(`\b429\b\s+[A-Z]`),
+	regexp.MustCompile(`\b5\d{2}\b\s+[A-Z]`),
 }
 
 // classifyLiveGitHubFailure reports whether stderr describes a transient condition outside a
@@ -107,7 +124,15 @@ func copyCanaryFixture(t *testing.T, name string) string {
 func githubCanaryEnv(t *testing.T, base []string, authenticated bool) []string {
 	t.Helper()
 
-	existingEntries := gitconfigenv.ReadEntries(base)
+	// Strip any inherited insteadOf rule (a redirect to something other than real github.com, e.g.
+	// the local git mirror) and, for the unauthenticated canaries, any inherited GitHub
+	// authorization extraheader: a live-GitHub canary's isolation contract requires it reach real,
+	// unauthenticated github.com regardless of what git config entries the parent process already
+	// carries.
+	existingEntries := gitconfigenv.Without(gitconfigenv.ReadEntries(base), gitconfigenv.IsInsteadOfEntry)
+	if !authenticated {
+		existingEntries = gitconfigenv.Without(existingEntries, gitconfigenv.IsExtraHeaderEntry)
+	}
 	env := removeEnvPrefixed(base, "GIT_CONFIG_COUNT=", "GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")
 
 	// TestMain delivers the local git mirror's url.*.insteadOf rules through GIT_CONFIG_GLOBAL
