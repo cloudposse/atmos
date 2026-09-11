@@ -52,10 +52,18 @@ func TestBuild(t *testing.T) {
 	_, err = os.Stat(weatherMain)
 	require.NoError(t, err, "expected %s to exist in the mirror", weatherMain)
 
-	// The mirror must not carry a nested .git directory under examples/ (would confuse
-	// git operations on the outer repo).
-	_, err = os.Stat(filepath.Join(cloneDir, "examples", ".git"))
-	require.True(t, os.IsNotExist(err))
+	// The mirror must not carry a .git entry anywhere under examples/, not just at its root
+	// (would confuse git operations on the outer repo, or turn part of the copy into a
+	// submodule-like gitlink).
+	require.NoError(t, filepath.WalkDir(filepath.Join(cloneDir, "examples"), func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.Name() == ".git" {
+			t.Errorf("unexpected .git entry in mirror: %s", path)
+		}
+		return nil
+	}))
 }
 
 // TestFileURI verifies FileURI produces a well-formed file:// URI, including the
