@@ -2,6 +2,7 @@ package provenance
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -110,19 +111,26 @@ func filterEmptySections(data any, ctx *m.MergeContext) any {
 }
 
 // isEmptyValue reports whether value is a shape Atmos uses for generated
-// placeholder sections that were never configured: nil, an empty map, or an
-// empty slice. Scalars (including the empty string) are never considered
-// empty here, since a deliberately-set empty string is real data, not a
-// placeholder.
+// placeholder sections that were never configured: nil, an empty or nil map,
+// or an empty or nil slice of any element type. Scalars (including the empty
+// string) are never considered empty here, since a deliberately-set empty
+// string is real data, not a placeholder.
+//
+// Kind-based reflection (rather than a type switch on map[string]any/[]any)
+// is required because some sections -- e.g. ComponentImportsSection, always
+// assigned into the component map as []string -- carry a typed nil or empty
+// slice of a concrete element type. A type switch would fall through to the
+// default case and treat that placeholder as non-empty, resurrecting an
+// unprovenanced, genuinely-empty "import: []" section.
 func isEmptyValue(value any) bool {
 	if value == nil {
 		return true
 	}
-	switch v := value.(type) {
-	case map[string]any:
-		return len(v) == 0
-	case []any:
-		return len(v) == 0
+
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Map, reflect.Slice:
+		return rv.IsNil() || rv.Len() == 0
 	default:
 		return false
 	}

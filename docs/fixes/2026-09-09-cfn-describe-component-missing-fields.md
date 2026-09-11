@@ -118,8 +118,11 @@ task's original hypothesis about a missing CFN whitelist entry there was disprov
 - Manual CLI check: `atmos build` from repo root, then from `examples/cloudformation`:
   `atmos describe component demo -s local` (no flags — the actual default path, since
   `--provenance` defaults to enabled) now prints `path: template.yaml`, `stack_name:
-  atmos-cfn-demo-local`, `parameters:`, `hooks:`, `settings:`, `provision:`, `metadata:`, and
-  `component:` — all previously silently dropped from this exact invocation.
+  atmos-cfn-demo-local`, `parameters:`, `hooks:`, `settings:`, `provision:`, and `metadata:` — all
+  previously silently dropped from this exact invocation. (A later fix on this branch excludes the
+  synthetic, always-injected `component` key from this same resurrection logic, so `component:`
+  does *not* appear here unless the stack YAML explicitly sets it — see the `git log` history on
+  `pkg/provenance/data_transform.go` for that follow-up.)
 - `GOTOOLCHAIN=go1.26.6 ./custom-gcl run --config=.golangci.yml --allow-serial-runners
   --new-from-rev=origin/main` — reports findings only in files owned by other concurrent fixes on
   this branch (`pkg/component/aws/cloudformation/*`, `pkg/utils/component_path_utils.go`,

@@ -274,3 +274,67 @@ func TestFilterEmptySectionsKeepsUserSetComponentKey(t *testing.T) {
 		t.Errorf("expected user-set 'component' key (has recorded provenance) to survive filtering, got %v", filteredMap)
 	}
 }
+
+// TestFilterEmptySectionsDropsTypedEmptySlice is a regression test for a typed
+// nil/empty slice (e.g. ComponentImportsSection, always assigned into the
+// component map as []string) being treated as non-empty by isEmptyValue's
+// former type switch on map[string]any/[]any, which fell through to the
+// default case for any other concrete slice type. That resurrected an
+// unprovenanced, genuinely-empty "import: []" section for components with no
+// stack imports at all.
+func TestFilterEmptySectionsDropsTypedEmptySlice(t *testing.T) {
+	ctx := m.NewMergeContext()
+	ctx.EnableProvenance()
+	// No provenance recorded for "import" -- mirrors a component with no
+	// stack imports, where ComponentImportsSection is a nil or empty []string.
+
+	data := map[string]any{
+		"import":       []string(nil),
+		"dependencies": []string{},
+	}
+
+	filtered := filterEmptySections(data, ctx)
+	filteredMap, ok := filtered.(map[string]any)
+	if !ok {
+		t.Fatalf("expected filterEmptySections to return a map, got %T", filtered)
+	}
+
+	for _, key := range []string{"import", "dependencies"} {
+		if _, ok := filteredMap[key]; ok {
+			t.Errorf("expected typed nil/empty slice section %q (no provenance) to be filtered out, but it survived: %v", key, filteredMap)
+		}
+	}
+}
+
+// TestIsEmptyValue exercises isEmptyValue directly across the shapes it must
+// distinguish: nil, empty/nil maps and slices of any concrete type, non-empty
+// maps/slices, and scalars (including the empty string, which is real data).
+func TestIsEmptyValue(t *testing.T) {
+	cases := []struct {
+		name  string
+		value any
+		want  bool
+	}{
+		{"nil", nil, true},
+		{"nil []any", []any(nil), true},
+		{"empty []any", []any{}, true},
+		{"nil []string", []string(nil), true},
+		{"empty []string", []string{}, true},
+		{"non-empty []string", []string{"a"}, false},
+		{"nil map[string]any", map[string]any(nil), true},
+		{"empty map[string]any", map[string]any{}, true},
+		{"non-empty map[string]any", map[string]any{"a": 1}, false},
+		{"empty string", "", false},
+		{"non-empty string", "x", false},
+		{"zero int", 0, false},
+		{"bool false", false, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isEmptyValue(tc.value); got != tc.want {
+				t.Errorf("isEmptyValue(%#v) = %v, want %v", tc.value, got, tc.want)
+			}
+		})
+	}
+}

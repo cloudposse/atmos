@@ -319,7 +319,7 @@ func resolveDescribeComponentStack(cmd *cobra.Command, args []string) error {
 
 	selected, err := flags.PromptForMissingRequired("stack", "Choose a stack", describeComponentStackCompletion, cmd, args)
 	if err != nil {
-		return err
+		return fmt.Errorf("prompt for --stack: %w", err)
 	}
 	if selected == "" {
 		// Not interactive, or no matching stacks -- let the caller's own
