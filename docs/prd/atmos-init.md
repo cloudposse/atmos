@@ -32,7 +32,11 @@ source of truth on current behavior.
 **What exists today**:
 - `atmos init` command with embedded templates (`simple`, `atmos`)
 - Interactive and non-interactive (`--interactive=false`) project setup
-- `--force`, `--update`, `--base-ref`, `--merge-strategy`, `--skip-hooks` flags
+- `--force`, `--update`, `--base-ref`, `--update-strategy`, `--merge-strategy`,
+  `--merge-driver`, `--skip-hooks` flags. `--update-strategy=rendered` re-renders
+  the template at the ref recorded in `.atmos/scaffold.yaml` instead of reading
+  `--base-ref` from the project's own Git history — see `docs/prd/atmos-scaffold.md`'s
+  "Also implemented" section for the full design
 - `pkg/generator` package (shared with `atmos scaffold`)
 - Because `atmos init` shares `atmos scaffold`'s `pkg/generator/ui.InitUI` code
   path, it also inherits `spec.fields[].when:`, `spec.files[].when:`, and
@@ -163,9 +167,11 @@ atmos init [template] [target]
   --force, -f              Overwrite existing files
   --interactive, -i        Interactive mode (default: true)
   --update                 Update an existing project via a 3-way merge (requires a git base; see --base-ref)
-  --base-ref               Git ref to use as the 3-way merge base with --update (defaults to HEAD)
+  --base-ref               Git ref to use as the 3-way merge base with --update (defaults to HEAD; tracked-only, see --update-strategy)
+  --update-strategy        Where --update's merge base comes from (tracked|rendered; default: tracked)
   --set key=value          Set template variables
   --merge-strategy         Conflict resolution strategy for --update (manual|ours|theirs; default: manual)
+  --merge-driver           Merge algorithm for --update (auto|text; default: auto)
   --max-changes            Maximum change threshold percentage (NOT IMPLEMENTED as a flag — internal default is hardcoded)
   --dry-run                NOT IMPLEMENTED — atmos init has no --dry-run flag today (unlike atmos scaffold generate)
 ```
@@ -246,14 +252,17 @@ components:
 ### Update Flow (with 3-Way Merge)
 
 **Key concept**: The merge base is read directly from git — there is no
-on-disk base snapshot or metadata file.
+on-disk base snapshot or metadata file. This describes the default
+`--update-strategy=tracked`; `--update-strategy=rendered` instead re-renders
+the template at the ref recorded in `.atmos/scaffold.yaml` (no git dependency
+at all) — see `docs/prd/atmos-scaffold.md`'s "Also implemented" section.
 
 ```
 Initial generation:
 1. Render template files
 2. Write files to target directory
 
-Update (atmos init --update):
+Update (atmos init --update, --update-strategy=tracked default):
 1. Resolve --base-ref (defaults to HEAD) in the target directory's git repository
 2. Load each file's base content directly from that git ref
    (pkg/generator/storage.GitBaseStorage.LoadBase reads the blob straight out
