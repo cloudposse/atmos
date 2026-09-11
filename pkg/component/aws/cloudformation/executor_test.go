@@ -372,12 +372,14 @@ func TestRunApply_DeliverError(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrProvisionTargetNotFound)
 }
 
-// runApply must propagate a setStackPolicy failure after a successful deploy.
-func TestRunApply_SetStackPolicyError(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	client := NewMockCloudFormationClient(ctrl)
-	sentinel := errors.New("set stack policy failed")
-
+// expectSuccessfulDeployThenCall sets up the gomock.InOrder chain for a full, successful
+// CreateChangeSet -> Execute -> DescribeStacks deploy, followed by final — the caller's own
+// post-deploy follow-up expectation (SetStackPolicy, UpdateTerminationProtection, ...). Shared by
+// every "runApply must propagate a follow-up-call failure after a successful deploy" test below,
+// which only differ in which follow-up call fails; keeping the whole chain (deploy sequence +
+// follow-up) inside one gomock.InOrder preserves the same strict ordering the pre-extraction
+// duplicated blocks each enforced independently.
+func expectSuccessfulDeployThenCall(client *MockCloudFormationClient, final *gomock.Call) {
 	gomock.InOrder(
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
 		client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil),
@@ -389,8 +391,17 @@ func TestRunApply_SetStackPolicyError(t *testing.T) {
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 		}, nil),
-		client.EXPECT().SetStackPolicy(gomock.Any(), gomock.Any()).Return(nil, sentinel),
+		final,
 	)
+}
+
+// runApply must propagate a setStackPolicy failure after a successful deploy.
+func TestRunApply_SetStackPolicyError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	sentinel := errors.New("set stack policy failed")
+
+	expectSuccessfulDeployThenCall(client, client.EXPECT().SetStackPolicy(gomock.Any(), gomock.Any()).Return(nil, sentinel))
 
 	octx := &opContext{
 		Ctx:         context.Background(),
@@ -415,19 +426,7 @@ func TestRunApply_TerminationProtectionError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	sentinel := errors.New("update termination protection failed")
 
-	gomock.InOrder(
-		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
-		client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil),
-		client.EXPECT().DescribeChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeChangeSetOutput{
-			Status: cfntypes.ChangeSetStatusCreateComplete,
-		}, nil),
-		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
-		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
-		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
-			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
-		}, nil),
-		client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(nil, sentinel),
-	)
+	expectSuccessfulDeployThenCall(client, client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).Return(nil, sentinel))
 
 	octx := &opContext{
 		Ctx:         context.Background(),

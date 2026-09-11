@@ -66,6 +66,24 @@ func TestRequireConfirmation_ChangesetExecutePrompts(t *testing.T) {
 	assert.Contains(t, gotMessage, "vpc")
 }
 
+// changeset-execute must include the changeset name in the confirmation prompt when one is given,
+// so two changesets against the same stack produce distinguishable prompts — a user who supplies
+// a valid but unintended --changeset-name can catch the mistake before it executes.
+func TestRequireConfirmation_ChangesetExecutePromptsIncludesChangesetName(t *testing.T) {
+	var gotMessage string
+	original := confirmOperation
+	confirmOperation = func(message string) (bool, error) {
+		gotMessage = message
+		return true, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	flags := map[string]any{"changeset-name": "my-changeset"}
+	require.NoError(t, requireConfirmation(OperationChangesetExecute, "vpc", flags))
+	assert.Contains(t, gotMessage, "my-changeset")
+	assert.Contains(t, gotMessage, "vpc")
+}
+
 // changeset-execute must respect --auto-approve like apply/delete.
 func TestRequireConfirmation_ChangesetExecuteAutoApproveSkipsPrompt(t *testing.T) {
 	original := confirmOperation

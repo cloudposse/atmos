@@ -122,6 +122,29 @@ func TestGetOutputs_APIError(t *testing.T) {
 	assert.ErrorIs(t, err, sentinel)
 }
 
+// GetOutputs must classify DescribeStacks' SDK-shaped "does not exist" ValidationError (returned
+// for a named, nonexistent stack — as opposed to the empty-Stacks shape covered by
+// TestGetOutputs_StackNotFound) as ErrAwsCloudFormationStackNotFound, not the generic
+// ErrAwsCloudFormationAPICallFailed, so callers (e.g. `!aws.cloudformation.output`'s YQ-default
+// fallback) can detect a missing stack via errors.Is.
+func TestGetOutputs_APIError_StackNotFoundValidationError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockcloudFormationAPI(ctrl)
+
+	sdkErr := errors.New(`operation error CloudFormation: DescribeStacks, https response error StatusCode: 400, ` +
+		`api error ValidationError: Stack [missing-stack] does not exist`)
+	mockClient.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, sdkErr)
+
+	stubOutputsSeams(t, nil, mockClient)
+
+	_, err := GetOutputs(context.Background(), "us-east-1", "missing-stack", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackNotFound)
+	assert.NotErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed,
+		"a classified missing-stack error must not also match the generic API-call-failed sentinel")
+	assert.Contains(t, err.Error(), "missing-stack")
+}
+
 // GetOutputs must propagate a config-loading failure without ever
 // constructing a client or calling DescribeStacks.
 func TestGetOutputs_LoadConfigError(t *testing.T) {

@@ -10,6 +10,7 @@ package cloudformation
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -68,6 +69,9 @@ func GetOutputs(ctx context.Context, region, stackName string, authContext *sche
 	client := newCloudFormationClient(awsCfg, endpointURL)
 	out, err := client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)})
 	if err != nil {
+		if isStackNotFoundError(err) {
+			return nil, fmt.Errorf("%w: stack %q: %w", errUtils.ErrAwsCloudFormationStackNotFound, stackName, err)
+		}
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 	if len(out.Stacks) == 0 {
@@ -86,4 +90,14 @@ func GetOutputs(ctx context.Context, region, stackName string, authContext *sche
 		outputs[*o.OutputKey] = value
 	}
 	return outputs, nil
+}
+
+// isStackNotFoundError reports whether err is CloudFormation's "does not exist" ValidationError,
+// returned by DescribeStacks for a named stack that was never deployed (as opposed to an
+// account-wide DescribeStacks call, which instead returns an empty Stacks slice). Mirrors
+// pkg/component/aws/cloudformation's own isStackNotFoundError classifier — kept as a small local
+// copy rather than a shared import to avoid coupling this intentionally narrow leaf package (see
+// the package doc comment) to the full CloudFormation component implementation.
+func isStackNotFoundError(err error) bool {
+	return strings.Contains(err.Error(), "does not exist")
 }

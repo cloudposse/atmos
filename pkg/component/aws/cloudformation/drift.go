@@ -47,16 +47,62 @@ func detectDrift(ctx context.Context, client CloudFormationClient, stackName str
 	return pollDriftDetection(ctx, client, detectionID)
 }
 
-// pollDriftDetection polls DescribeStackDriftDetectionStatus until the detection
-// operation reaches DETECTION_COMPLETE or DETECTION_FAILED.
+// errDriftDetectionTimedOut wraps ErrAwsCloudFormationAPICallFailed for both places
+// pollDriftDetection can discover the per-detection timeout: a stalled AWS request unblocked by
+// timeoutCtx's deadline, and the between-poll wait's own timeoutCtx.Done() case.
+func errDriftDetectionTimedOut() error {
+	return fmt.Errorf("%w: timed out waiting for drift detection", errUtils.ErrAwsCloudFormationAPICallFailed)
+}
+
+// classifyDriftPollError maps a DescribeStackDriftDetectionStatus failure to the right error:
+// the caller's own cancellation (ctx.Err()) takes priority, then the per-request timeoutCtx
+// deadline, then the raw AWS error wrapped generically. Split out of pollDriftDetection to keep
+// its cyclomatic complexity down.
+func classifyDriftPollError(ctx, timeoutCtx context.Context, err error) error {
+	if parentErr := ctx.Err(); parentErr != nil {
+		return parentErr
+	}
+	if timeoutCtx.Err() != nil {
+		return errDriftDetectionTimedOut()
+	}
+	return fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
+}
+
+// waitForNextDriftPoll blocks until the next poll is due, returning nil to continue looping.
+// The caller's own context (ctx) is checked first, with priority: once both ctx and the derived
+// timeoutCtx are done (timeoutCtx is cancelled whenever its parent ctx is), a select between
+// them could otherwise pick either case at random, sometimes misreporting a caller cancellation
+// as a drift-detection timeout.
+func waitForNextDriftPoll(ctx, timeoutCtx context.Context) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timeoutCtx.Done():
+		return errDriftDetectionTimedOut()
+	case <-time.After(driftPollInterval):
+		return nil
+	}
+}
+
+// pollDriftDetection polls DescribeStackDriftDetectionStatus until the detection operation
+// reaches DETECTION_COMPLETE or DETECTION_FAILED. DriftDetectionTimeout bounds a child context
+// passed to every AWS request (not just the between-request wait), so a stalled
+// DescribeStackDriftDetectionStatus call can't keep the command blocked past the timeout. The
+// caller's own cancellation (ctx.Err()) is preserved and reported separately from the child
+// context's own deadline, which maps to ErrAwsCloudFormationAPICallFailed.
 func pollDriftDetection(ctx context.Context, client CloudFormationClient, detectionID string) (*driftDetectionResult, error) {
-	deadline := time.Now().Add(driftDetectionTimeout)
+	timeoutCtx, cancel := context.WithTimeout(ctx, driftDetectionTimeout)
+	defer cancel()
+
 	for {
-		out, err := client.DescribeStackDriftDetectionStatus(ctx, &cloudformation.DescribeStackDriftDetectionStatusInput{
+		out, err := client.DescribeStackDriftDetectionStatus(timeoutCtx, &cloudformation.DescribeStackDriftDetectionStatusInput{
 			StackDriftDetectionId: awsString(detectionID),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
+			return nil, classifyDriftPollError(ctx, timeoutCtx, err)
 		}
 
 		result := &driftDetectionResult{
@@ -76,13 +122,8 @@ func pollDriftDetection(ctx context.Context, client CloudFormationClient, detect
 			return result, fmt.Errorf("%w: %s", errUtils.ErrAwsCloudFormationAPICallFailed, result.StatusReason)
 		}
 
-		if time.Now().After(deadline) {
-			return result, fmt.Errorf("%w: timed out waiting for drift detection", errUtils.ErrAwsCloudFormationAPICallFailed)
-		}
-		select {
-		case <-ctx.Done():
-			return result, ctx.Err()
-		case <-time.After(driftPollInterval):
+		if err := waitForNextDriftPoll(ctx, timeoutCtx); err != nil {
+			return result, err
 		}
 	}
 }

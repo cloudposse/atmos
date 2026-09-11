@@ -154,6 +154,43 @@ func TestPollDriftDetection_ContextCancelled(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
+// pollDriftDetection must enforce driftDetectionTimeout on the individual AWS request, not just
+// the between-poll wait: a DescribeStackDriftDetectionStatus call that never returns on its own
+// must still unblock once the per-request context's deadline passes, instead of hanging the
+// command indefinitely.
+func TestPollDriftDetection_TimeoutEnforcedPerRequest(t *testing.T) {
+	shrinkDriftTiming(t, time.Minute, 10*time.Millisecond)
+
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStackDriftDetectionStatus(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, _ *cloudformation.DescribeStackDriftDetectionStatusInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStackDriftDetectionStatusOutput, error) {
+			// Simulate a stalled request: block until the request-scoped context (not a
+			// fixed sleep) is what ends the call, proving the child context we pass in is
+			// what unblocks it.
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	)
+
+	done := make(chan struct{})
+	var err error
+	go func() {
+		_, err = pollDriftDetection(context.Background(), client, "detection-1")
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("pollDriftDetection did not return within the per-request timeout budget")
+	}
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+	assert.Contains(t, err.Error(), "timed out")
+}
+
 // describeResourceDrifts must paginate through every NextToken.
 func TestDescribeResourceDrifts_Paginates(t *testing.T) {
 	ctrl := gomock.NewController(t)
