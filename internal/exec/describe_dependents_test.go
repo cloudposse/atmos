@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1251,7 +1250,7 @@ func TestDescribeDependents_ScopesTemplateEvaluationToReverseClosure(t *testing.
 	assert.Equal(t, "app-a", dependents[0].Stack)
 }
 
-func TestExecuteDescribeDependents_RejectsRequiredUnavailableTypedTargetFromResolvedStacks(t *testing.T) {
+func TestExecuteDescribeDependents_IgnoresRequiredUnavailableTargetOfDifferentType(t *testing.T) {
 	tmpDir := t.TempDir()
 	stacksDir := filepath.Join(tmpDir, "stacks")
 	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
@@ -1294,14 +1293,14 @@ components:
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	_, err = ExecuteDescribeDependents(&atmosConfig, &DescribeDependentsArgs{
+	dependents, err := ExecuteDescribeDependents(&atmosConfig, &DescribeDependentsArgs{
 		Component:            "image",
 		Stack:                "dev",
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
 	})
-	require.ErrorIs(t, err, errUtils.ErrDependencyTargetUnavailable)
-	require.ErrorContains(t, err, `component "image" of kind "packer" in stack "dev"`)
+	require.NoError(t, err)
+	require.Empty(t, dependents)
 }
 
 // TestDescribeDependents_DependenciesComponentsInheritance_WithAppendMerge tests that
