@@ -1,0 +1,83 @@
+name: CI Timing Summary
+
+on:
+  # GitHub does not have a native "all PR workflows completed" event. Every
+  # relevant completion invokes this coordinator; it writes only when all
+  # latest workflow runs and jobs for the current PR head SHA are complete.
+  # Keep this list in sync with workflows that can run for an open PR.
+  workflow_run:
+    workflows:
+      - Algolia
+      - atmos.ci
+      - autofix.ci
+      - Claude Quality Checks
+      - CodeQL
+      - Dependency Review
+      - Feature release
+      - Go Version Change Detection
+      - install.sh smoke
+      - landing-demos
+      - Link Check
+      - Native CI
+      - Planfile Artifacts E2E
+      - Planfile Verify E2E
+      - PR Size Labeler
+      - Pre-commit
+      - Release Documentation Check
+      - Screengrabs
+      - Tests
+      - TruffleHog secret scan
+      - Validate Agent Skills
+      - Validate Codeowners
+      - Validation E2E
+      - Verify Repository Symlinks
+      - Verify SHA Pinning
+      - Version Tracker
+      - vhs
+      - Website Preview Build
+    types: [completed]
+
+# Deny by default; the coordinator job grants only the API access it uses.
+permissions: {}
+
+# A later completion for the same commit supersedes an older coordinator. The
+# action also verifies the PR still points at this SHA immediately before write.
+concurrency:
+  group: ci-timing-summary-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  summarize:
+    # Closed-PR cleanup and non-PR invocations are intentionally not included.
+    if: github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+
+      # workflow_run executes with default-branch privileges. Load only the
+      # reviewed action implementation from that branch, never from the PR.
+      - name: Check out timing action from the default branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: actions/ci-timing-summary
+
+      - name: Update sticky CI timing comment
+        uses: ./actions/ci-timing-summary
+        with:
+          github-token: ${{ github.token }}
+          workflow-run-id: ${{ github.event.workflow_run.id }}
+          settle-seconds: "30"
