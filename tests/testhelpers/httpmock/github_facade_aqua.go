@@ -2,6 +2,7 @@ package httpmock
 
 import (
 	"net/http"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -133,7 +134,9 @@ func (m *GitHubMockServer) tryAqua(w http.ResponseWriter, r *http.Request) bool 
 
 // writeAquaIndex serves every registered aqua tool as the top-level registry.yaml index,
 // which pkg/toolchain/registry/aqua's fetchRegistryIndex uses to resolve 3-segment (monorepo)
-// package paths.
+// package paths. Tools are sorted by path so the index -- and therefore the consumer's
+// last-write-wins pathIndex for monorepo siblings sharing an owner/repo -- is deterministic
+// across requests instead of depending on Go's randomized map iteration order.
 func (m *GitHubMockServer) writeAquaIndex(w http.ResponseWriter) {
 	m.mu.Lock()
 	tools := make([]*AquaTool, 0, len(m.aquaTools))
@@ -141,6 +144,10 @@ func (m *GitHubMockServer) writeAquaIndex(w http.ResponseWriter) {
 		tools = append(tools, tool)
 	}
 	m.mu.Unlock()
+
+	sort.Slice(tools, func(i, j int) bool {
+		return tools[i].path() < tools[j].path()
+	})
 
 	packages := make([]aquaPackageYAML, len(tools))
 	for i, tool := range tools {

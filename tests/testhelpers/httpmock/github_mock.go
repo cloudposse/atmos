@@ -102,11 +102,17 @@ func NewGitHubMockServerStandalone() (mock *GitHubMockServer, closeServer func()
 	return mock, mock.Server.Close
 }
 
-// handle is the mock's single entry point: log the request, apply any registered failure
-// injection, then try each path-prefix route in turn before falling back to the legacy
-// suffix-matched file map.
+// handle is the mock's single entry point: log the request, reject any method other than GET
+// (the façade is read-only), apply any registered failure injection, then try each path-prefix
+// route in turn before falling back to the legacy suffix-matched file map.
 func (m *GitHubMockServer) handle(w http.ResponseWriter, r *http.Request) {
 	m.logRequest(r)
+
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
 
 	const apiPrefix = "/api/v3/"
 	if strings.HasPrefix(r.URL.Path, apiPrefix) {
@@ -204,11 +210,18 @@ func (m *GitHubMockServer) URL() string {
 }
 
 // SetAquaPrefix overrides the path prefix used for the aqua-registry endpoints (default
-// "/aqua"). Must be called before any RegisterAquaTool/aqua request.
+// "/aqua"). Must be called before any RegisterAquaTool/aqua request. The prefix is normalized
+// to have a leading slash and no trailing slash (e.g. "registry" and "/registry/" both become
+// "/registry"), except an empty prefix, which is preserved as-is to mean the server root --
+// tryAqua's path matching and EnvForSubprocess's URL construction both require this shape.
 func (m *GitHubMockServer) SetAquaPrefix(prefix string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.aquaPrefix = strings.TrimRight(prefix, "/")
+	prefix = strings.Trim(prefix, "/")
+	if prefix != "" {
+		prefix = "/" + prefix
+	}
+	m.aquaPrefix = prefix
 }
 
 // EnvForSubprocess returns the environment variables a subprocess needs to route GitHub,
