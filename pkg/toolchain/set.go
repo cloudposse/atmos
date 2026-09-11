@@ -446,7 +446,11 @@ func makeGitHubRequest(apiURL string) (*http.Response, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToCreateRequest, err)
 		}
-		if token != "" {
+		// Only send the token over https: ATMOS_TOOLCHAIN_GITHUB_API_URL can resolve to a
+		// non-https scheme (resolveEndpointURL accepts it as a fallback-safe default), and
+		// sending "Authorization: Bearer <token>" to a plain-http endpoint would leak it in
+		// cleartext.
+		if token != "" && strings.EqualFold(req.URL.Scheme, "https") {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
 

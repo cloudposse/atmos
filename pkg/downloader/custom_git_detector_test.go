@@ -188,6 +188,34 @@ func TestDetect_GHESHostInjectsTokenLikeGitHubCom(t *testing.T) {
 	}
 }
 
+// TestDetect_HTTPSchemeSkipsTokenInjection pins that a plain-HTTP URL never receives a
+// GitHub token as URL userinfo, even for a recognized host (github.com or a GHES host
+// configured via GITHUB_SERVER_URL with an "http://" scheme). Injecting the token would send
+// it in cleartext over the wire.
+func TestDetect_HTTPSchemeSkipsTokenInjection(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "http://ghe.example.com")
+	t.Setenv("GITHUB_TOKEN", "ghes-token")
+
+	config := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			InjectGithubToken: true,
+			GithubToken:       "ghes-token",
+		},
+	}
+	detector := &CustomGitDetector{atmosConfig: &config, source: "repo.git"}
+
+	result, ok, err := detector.Detect("http://ghe.example.com/org/repo.git", "")
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if !ok {
+		t.Fatalf("Expected ok to be true for a recognized host")
+	}
+	if strings.Contains(result, "ghes-token") {
+		t.Errorf("Expected no token to be injected into an http:// URL, got: %s", result)
+	}
+}
+
 // TestIsGitHubHost_RespectsGHESServerURL exercises isConfiguredGitHubHost/isSupportedHost
 // directly, independent of Detect's other side effects.
 func TestIsGitHubHost_RespectsGHESServerURL(t *testing.T) {

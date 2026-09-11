@@ -559,11 +559,15 @@ toolchain at a corporate release proxy or mirror.
 </dl>
 
 :::note
-The `owner/repo` and `github.com/owner/repo` shorthand forms (imports, vendoring, `atmos git
-clone`, AI skill sources, etc.) always resolve to public `github.com`. On GHES, write the full
-URL (e.g. `https://github.example.com/owner/repo`) instead of the shorthand — a bare hostname
-can't be distinguished from a relative path, so shorthand detection can't safely guess a GHES
-host.
+The bare `owner/repo` and literal `github.com/owner/repo` shorthand forms (imports, vendoring,
+`atmos git clone`, AI skill sources, etc.) always resolve to public `github.com` — a bare
+hostname can't be distinguished from a relative path, so shorthand detection can't safely guess
+a GHES host from either form. On GHES, write the full URL instead (e.g.
+`https://github.example.com/owner/repo`), with one exception: AI skill sources also accept the
+*actual* configured GHES host without a scheme (`github.example.com/owner/repo`), since a skill
+source is always a repository reference, never a local path. Imports and vendor manifests need
+the explicit scheme even for the real GHES host. `atmos git clone` has no shorthand form at all
+(on github.com or GHES); it always needs a full URI (HTTPS, SCP-style, or go-getter syntax).
 :::
 
 ## AI Integration

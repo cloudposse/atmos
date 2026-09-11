@@ -103,13 +103,16 @@ func applyGitHubRef(baseURL string, ref string) string {
 	return target.RawURL(coords.owner, coords.repo, ref, coords.path)
 }
 
-// matchGitHubEndpoints reports which Endpoints value a raw-content host belongs to: a literal
-// "github.com" always resolves to the public github.com shape (even if RepoEndpoints resolves
-// to a different GHES host in this environment, since the input URL explicitly named
-// github.com), otherwise the host must match the configured GHES host from RepoEndpoints.
+// matchGitHubEndpoints reports which Endpoints value a raw-content host belongs to: a host that
+// normalizes to "github.com" (case-insensitive, default port stripped, e.g. "GitHub.Com" or
+// "github.com:443") always resolves to the public github.com shape -- even if RepoEndpoints
+// resolves to a different GHES host in this environment, since the input URL explicitly named
+// github.com -- otherwise the host must match the configured GHES host from RepoEndpoints.
+// Endpoints.IsHost applies the same normalization for both comparisons.
 func matchGitHubEndpoints(host string) (github.Endpoints, bool) {
-	if host == "github.com" {
-		return github.Endpoints{Host: "github.com"}, true
+	githubCom := github.Endpoints{Host: "github.com"}
+	if githubCom.IsHost(host) {
+		return githubCom, true
 	}
 	if endpoints := github.RepoEndpoints(); endpoints.IsHost(host) {
 		return endpoints, true

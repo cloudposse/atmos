@@ -97,13 +97,18 @@ type RegistryOption func(*AquaRegistry)
 
 // toolchainHostMatcher builds a GitHub host-authentication predicate covering the default
 // public GitHub hosts (api.github.com, raw.githubusercontent.com, uploads.github.com) plus
-// the resolved toolchain endpoints host, so a GitHub token is attached both to standard
-// aqua-registry/release traffic and to a configured corporate mirror
-// (ATMOS_TOOLCHAIN_GITHUB_URL/ATMOS_TOOLCHAIN_GITHUB_API_URL). Installing any host matcher
-// replaces pkg/http's own default allowlist entirely, so those defaults are reproduced here.
+// the resolved toolchain endpoints' web/clone host (endpoints.Host, from
+// ATMOS_TOOLCHAIN_GITHUB_URL) and its API host (endpoints.APIURL, from
+// ATMOS_TOOLCHAIN_GITHUB_API_URL) so a GitHub token is attached both to standard
+// aqua-registry/release traffic and to a configured corporate mirror -- including one where the
+// web and API hosts differ. The ar.client field (which handles githubBaseURL requests, built
+// from APIURL) needs the latter; without it, an API host that differs from the web host would
+// never receive the token. Installing any host matcher replaces pkg/http's own default
+// allowlist entirely, so those defaults are reproduced here.
 func toolchainHostMatcher(endpoints github.Endpoints) func(string) bool {
 	return func(host string) bool {
-		return host == "api.github.com" || host == "raw.githubusercontent.com" || host == "uploads.github.com" || endpoints.IsHost(host)
+		return host == "api.github.com" || host == "raw.githubusercontent.com" || host == "uploads.github.com" ||
+			endpoints.IsHost(host) || endpoints.IsAPIHost(host)
 	}
 }
 

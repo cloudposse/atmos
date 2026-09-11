@@ -212,12 +212,19 @@ func ConvertToRawURL(githubURL string) (string, error) {
 		return githubURL, nil
 	}
 
-	// Must be github.com or the configured GHES host.
-	if u.Host != "github.com" && !endpoints.IsHost(u.Host) {
+	// Select the endpoints matching this URL's host: an explicit github.com URL always resolves
+	// against the public endpoints, even when RepoEndpoints (GITHUB_SERVER_URL) points at a
+	// different GitHub Enterprise Server host -- otherwise a literal github.com link would be
+	// rewritten to "<GHES>/raw/..." instead of raw.githubusercontent.com. Only URLs on the
+	// configured GHES host use RepoEndpoints.
+	switch {
+	case u.Host == defaultGitHubServerHost:
+		return parseGitHubDotComURL(newEndpoints(defaultGitHubServerURL, defaultGitHubAPIURL), u.Path)
+	case endpoints.IsHost(u.Host):
+		return parseGitHubDotComURL(endpoints, u.Path)
+	default:
 		return "", fmt.Errorf("%w: %s (expected github.com or the configured GitHub Enterprise Server host)", ErrUnsupportedGitHubHost, u.Host)
 	}
-
-	return parseGitHubDotComURL(endpoints, u.Path)
 }
 
 // parseGitHubDotComURL parses a github.com (or GHES) URL path and converts it to a raw URL.

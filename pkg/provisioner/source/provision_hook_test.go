@@ -813,6 +813,18 @@ func TestIsLocalSource(t *testing.T) {
 	}
 }
 
+// TestIsLocalSourceGHESSCPStyle verifies that an SCP-style Git URI naming the configured
+// GitHub Enterprise Server host is classified as remote, even though it has no "://"
+// separator and the GHES host isn't in the literal remoteIndicators list.
+func TestIsLocalSourceGHESSCPStyle(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com")
+
+	assert.False(t, isLocalSource("git@ghe.example.com:org/repo.git"),
+		"SCP-style URI naming the configured GHES host should be classified as remote")
+	assert.True(t, isLocalSource("git@other.example.com:org/repo.git"),
+		"SCP-style URI naming an unconfigured host should not be treated as the GHES host")
+}
+
 // Tests for checkMetadataChanges with various version scenarios.
 
 func TestCheckMetadataChanges(t *testing.T) {

@@ -1003,6 +1003,28 @@ func TestFetchGitHubVersionsNetworkEdgeCases(t *testing.T) {
 	})
 }
 
+// TestMakeGitHubRequestOmitsTokenOverHTTP pins that makeGitHubRequest never sends the
+// "github-token" as a Bearer credential to a plain-http apiURL: ATMOS_TOOLCHAIN_GITHUB_API_URL
+// can resolve to a non-https scheme, and doing so would leak the token in cleartext.
+func TestMakeGitHubRequestOmitsTokenOverHTTP(t *testing.T) {
+	viper.Set("github-token", "test-token")
+	defer viper.Set("github-token", "")
+
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer server.Close()
+
+	resp, err := makeGitHubRequest(server.URL)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Empty(t, gotAuth, "expected no Authorization header sent to a plain-http endpoint")
+}
+
 // TestMakeGitHubRequestRetry covers the retry behavior added to recover from
 // transient failures (network hiccups, rate limiting, server errors) the kind
 // CI runners occasionally hit — without retrying deterministic client errors
