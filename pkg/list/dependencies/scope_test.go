@@ -382,6 +382,7 @@ func TestResolveScopedClosurePropagatesPerStackDescribeErrors(t *testing.T) {
 		ProcessTemplates: true,
 	})
 	require.ErrorIs(t, err, errFakeDescribeStack)
+	require.ErrorContains(t, err, "evaluating stack \"dev\" components [app db]")
 }
 
 // TestMergeResolvedClosureStacks covers the overlay merge directly, including
@@ -527,7 +528,7 @@ func TestResolveScopedClosureReverseDiscoversTemplatedDependent(t *testing.T) {
 	require.False(t, ok, "an evaluated non-dependent must not join the closure")
 }
 
-func TestResolveScopedClosureReverseEvaluatesRequiredUnavailableModernSource(t *testing.T) {
+func TestResolveScopedClosureReverseSkipsRequiredSourceForDifferentTargetType(t *testing.T) {
 	t.Parallel()
 
 	stacks := map[string]any{
@@ -559,10 +560,10 @@ func TestResolveScopedClosureReverseEvaluatesRequiredUnavailableModernSource(t *
 	require.NoError(t, err)
 	components := result.Stacks["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)
 	_, ok := components["app"]
-	require.True(t, ok, "reverse scope must evaluate required sources whose unavailable typed target is selected")
+	require.False(t, ok, "reverse scope must not evaluate a source whose typed target differs from the selected target")
 }
 
-func TestResolveScopedClosureReverseEvaluatesRequiredSourceForSelectedTagOrLabel(t *testing.T) {
+func TestResolveScopedClosureReverseSkipsRequiredSourceForDifferentTargetTypeSelectedByTagOrLabel(t *testing.T) {
 	t.Parallel()
 
 	stacks := map[string]any{
@@ -603,7 +604,7 @@ func TestResolveScopedClosureReverseEvaluatesRequiredSourceForSelectedTagOrLabel
 			require.NoError(t, err)
 			components := result.Stacks["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)
 			_, ok := components["app"]
-			require.True(t, ok, "reverse scope must evaluate a required source for the selected target")
+			require.False(t, ok, "reverse scope must not evaluate a source whose typed target differs from the selected target")
 		})
 	}
 }

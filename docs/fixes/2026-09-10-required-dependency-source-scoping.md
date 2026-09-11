@@ -12,13 +12,15 @@ Reverse scoped evaluation omitted modern required dependency sources when their 
 
 ## Changes
 
-Direct dependent lookup now asks scoped reverse evaluation to include sources with required modern dependencies on selected root component-and-stack pairs. Root pairs are derived after component, tag, and label selection. Unavailable-target errors report the resolved stack and declared kind.
+Direct dependent lookup now asks scoped reverse evaluation to include sources with required modern dependencies on selected root component, stack, and type identities. Root targets are derived after component, tag, and label selection. Required-source discovery honors configured template delimiters, and Phase C evaluation failures include the affected stack and component list. Unavailable-target errors report the resolved stack and declared kind.
 
 ## Validation
 
 - Focused scoped reverse-resolution regression.
 - Focused tag and label reverse-selection regression.
 - Focused resolved-stack dependent lookup regression.
+- Focused type-sensitive required-source and custom-delimiter regressions.
+- Focused Phase C evaluation error-context regression.
 - Fresh CLI reproduction for a disabled `packer:image` required by `app`.
 
 ## Follow-ups

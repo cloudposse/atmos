@@ -1,6 +1,7 @@
 package dependencies
 
 import (
+	"fmt"
 	"maps"
 	"path"
 	"path/filepath"
@@ -211,8 +212,9 @@ func ResolveScopedClosure(describe DescribeFunc, req *ScopeRequest) (*ScopeResul
 }
 
 type rootTarget struct {
-	component string
-	stack     string
+	component     string
+	componentType string
+	stack         string
 }
 
 func rootTargets(graph *dependency.Graph, roots []string) []rootTarget {
@@ -220,7 +222,7 @@ func rootTargets(graph *dependency.Graph, roots []string) []rootTarget {
 	for _, id := range roots {
 		node, ok := graph.GetNode(id)
 		if ok {
-			targets = append(targets, rootTarget{component: node.Component, stack: node.Stack})
+			targets = append(targets, rootTarget{component: node.Component, componentType: node.Type, stack: node.Stack})
 		}
 	}
 	return targets
@@ -307,7 +309,7 @@ func evaluatePendingClosureComponents(describe DescribeFunc, req *ScopeRequest, 
 		}
 		partial, err := describe(stackName, components, req.ProcessTemplates, req.ProcessFunctions)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("evaluating stack %q components %v: %w", stackName, components, err)
 		}
 		p.resolvedStacks = mergeResolvedClosureStacks(p.resolvedStacks, partial)
 		if p.evaluatedComponents[stackName] == nil {
@@ -332,7 +334,7 @@ func reverseExtraEvaluationTargets(stacks map[string]any, req *ScopeRequest, tar
 		mergeEvaluationTargets(extraEval, LegacyDependencySources(stacks))
 	}
 	if req.IncludeRequiredReverseSources {
-		mergeEvaluationTargets(extraEval, RequiredDependencySources(stacks, targets))
+		mergeEvaluationTargets(extraEval, RequiredDependencySources(stacks, targets, req.LeftDelim))
 	}
 	return extraEval
 }

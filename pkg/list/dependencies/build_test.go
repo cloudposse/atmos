@@ -99,6 +99,46 @@ func TestBuildGraph_DependenciesComponents(t *testing.T) {
 	assert.Equal(t, []string{NodeID("app", "dev")}, web.Dependencies)
 }
 
+func TestRequiredDependencySourcesMatchesTargetType(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{"image": map[string]any{}},
+				"packer": map[string]any{
+					"image": map[string]any{},
+					"builder": map[string]any{
+						"dependencies": map[string]any{
+							"components": []any{map[string]any{"name": "image", "kind": "packer"}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	terraformSources := RequiredDependencySources(stacks, []rootTarget{{component: "image", componentType: "terraform", stack: "dev"}}, "")
+	packerSources := RequiredDependencySources(stacks, []rootTarget{{component: "image", componentType: "packer", stack: "dev"}}, "")
+
+	assert.Empty(t, terraformSources)
+	assert.Equal(t, map[string][]string{"dev": {"builder"}}, packerSources)
+}
+
+func TestRequiredDependencySourcesHonorsConfiguredDelimiter(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"image": {},
+			"app": {"dependencies": map[string]any{"components": []any{map[string]any{
+				"name":     "image",
+				"required": "[[ .dependencyRequired ]]",
+			}}}},
+		},
+	})
+
+	sources := RequiredDependencySources(stacks, []rootTarget{{component: "image", componentType: "terraform", stack: "dev"}}, "[[")
+
+	assert.Equal(t, map[string][]string{"dev": {"app"}}, sources)
+}
+
 func TestBuildGraph_CrossTypeDependency(t *testing.T) {
 	stacks := map[string]any{
 		"dev": map[string]any{
