@@ -43,7 +43,14 @@ func requireConfirmation(operation Operation, stackName string, flags map[string
 		return nil
 	}
 
-	confirmed, err := confirmOperation(fmt.Sprintf("%s stack %q?", verb, stackName))
+	message := fmt.Sprintf("%s stack %q?", verb, stackName)
+	if operation == OperationChangesetExecute {
+		if changesetName, _ := flags["changeset-name"].(string); changesetName != "" {
+			message = fmt.Sprintf("execute changeset %q against stack %q?", changesetName, stackName)
+		}
+	}
+
+	confirmed, err := confirmOperation(message)
 	if err != nil {
 		return err
 	}
