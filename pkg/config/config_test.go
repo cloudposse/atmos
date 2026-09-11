@@ -13,6 +13,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestDefaultConfig_TerraformInit verifies that the default config resolves
+// init.mode/init.reconfigure/init.upgrade to "auto" when unset in atmos.yaml.
+func TestDefaultConfig_TerraformInit(t *testing.T) {
+	assert.Equal(t, schema.TerraformInitModeAuto, defaultCliConfig.Components.Terraform.Init.Mode)
+	assert.Equal(t, schema.TerraformInitReconfigureAuto, defaultCliConfig.Components.Terraform.Init.Reconfigure)
+	assert.Equal(t, schema.TerraformInitUpgradeAuto, defaultCliConfig.Components.Terraform.Init.Upgrade)
+	assert.False(t, defaultCliConfig.Components.Terraform.Init.PassVars)
+}
+
 // TestInitCliConfig should initialize atmos configuration with the correct base path and atmos Config File Path.
 // It should also check that the base path and atmos Config File Path are correctly set and directory.
 func TestInitCliConfig(t *testing.T) {

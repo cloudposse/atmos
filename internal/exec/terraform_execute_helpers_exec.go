@@ -29,6 +29,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // componentExecContext holds the per-execution state assembled by prepareComponentExecution.
@@ -205,25 +206,7 @@ func executeCommandPipeline(
 	addRegionEnvVarForImport(info)
 
 	if shouldRunMainTerraformCommand(info) {
-		// FR-006f: capture this invocation's own stdout/stderr into a buffer pair
-		// scoped to ONLY the main command, in addition to (not instead of) whatever
-		// WithStdoutCapture/WithStderrCapture already accumulate across the whole
-		// init+workspace-select+main pipeline for other consumers (e.g.
-		// cmd/terraform's capturedPlanOutput, used by CI job-summary hooks). Without
-		// this, incidental init/workspace-select output (e.g. a stray "No changes."
-		// lookalike) can poison the exec-metadata parser's extraction even though the
-		// real plan/apply's own output is correct (research.md Decision 32).
-		var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
-		mainOpts := append(slices.Clone(opts), withExecMetadataOutputCapture(&execMetadataStdoutBuf, &execMetadataStderrBuf))
-
-		// Phase-level CI log grouping (Dimension "phase"): fold the main subcommand
-		// (plan/apply/destroy/…) into its own collapsible group, separate from init
-		// and workspace setup.
-		err = ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, info.SubCommand), func() error {
-			return executeMainTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, mainOpts...)
-		})
-		info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
-		if err != nil {
+		if err = runMainCommandPhase(atmosConfig, info, execCtx, allArgsAndFlags, componentPath, uploadStatusFlag, opts...); err != nil {
 			return err
 		}
 	}
@@ -232,9 +215,118 @@ func executeCommandPipeline(
 	return nil
 }
 
+// runMainCommandPhase runs the main plan/apply/destroy/… subcommand under its own CI phase
+// group, capturing scoped exec-metadata output (FR-006f), and — on failure — gives smart init
+// exactly one chance to recover via recoverFromInitRequired before propagating the error.
+func runMainCommandPhase( //nolint:revive // argument-limit: every parameter is load-bearing context passed straight through to recoverFromInitRequired.
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+	allArgsAndFlags []string,
+	componentPath string,
+	uploadStatusFlag bool,
+	opts ...ShellCommandOption,
+) error {
+	// FR-006f: capture this invocation's own stdout/stderr into a buffer pair
+	// scoped to ONLY the main command, in addition to (not instead of) whatever
+	// WithStdoutCapture/WithStderrCapture already accumulate across the whole
+	// init+workspace-select+main pipeline for other consumers (e.g.
+	// cmd/terraform's capturedPlanOutput, used by CI job-summary hooks). Without
+	// this, incidental init/workspace-select output (e.g. a stray "No changes."
+	// lookalike) can poison the exec-metadata parser's extraction even though the
+	// real plan/apply's own output is correct (research.md Decision 32).
+	var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
+	mainOpts := append(slices.Clone(opts), withExecMetadataOutputCapture(&execMetadataStdoutBuf, &execMetadataStderrBuf))
+
+	// Phase-level CI log grouping (Dimension "phase"): fold the main subcommand
+	// (plan/apply/destroy/…) into its own collapsible group, separate from init
+	// and workspace setup.
+	mainErr := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, info.SubCommand), func() error {
+		return executeMainTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, mainOpts...)
+	})
+	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
+	if mainErr == nil {
+		return nil
+	}
+
+	return recoverFromInitRequired(atmosConfig, info, execCtx, allArgsAndFlags, componentPath, uploadStatusFlag,
+		mainErr, &execMetadataStdoutBuf, &execMetadataStderrBuf, opts...)
+}
+
+// recoverFromInitRequired is smart init's plan/apply-time safety net: when the main command
+// just failed, it classifies the captured output for a known "init is required" diagnostic
+// (autoinit.Classify) and, if Atmos's own recovery policy says to (autoinit.ShouldRecover),
+// forces exactly one `terraform init` re-run with the flag(s) the diagnostic asked for, then
+// retries the main command exactly once more. This is the correction for a smart-init bet gone
+// wrong: skipping init looked safe based on the fingerprint, but terraform/tofu itself now
+// disagrees.
+//
+// No recovery is attempted for the init subcommand itself (there is no "init required" fallback
+// for init) or when ShouldRecover reports a policy error (e.g. the user explicitly disabled
+// implicit init) — that error is joined with the original failure and returned as-is.
+func recoverFromInitRequired( //nolint:revive // argument-limit: every parameter is load-bearing context from runMainCommandPhase.
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+	allArgsAndFlags []string,
+	componentPath string,
+	uploadStatusFlag bool,
+	mainErr error,
+	stdoutBuf, stderrBuf *bytes.Buffer,
+	opts ...ShellCommandOption,
+) error {
+	if info.SubCommand == subcommandInit {
+		return mainErr
+	}
+
+	combined := stdoutBuf.String() + "\n" + stderrBuf.String() + "\n" + mainErr.Error()
+	rec, policyErr := classifyInitRecovery(atmosConfig, info, combined)
+	if policyErr != nil {
+		return errors.Join(mainErr, policyErr)
+	}
+	if !rec.Run {
+		return mainErr
+	}
+
+	ui.Warning(fmt.Sprintf("Terraform requires initialization; running init and retrying '%s'", info.SubCommand))
+
+	initErr := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandInit), func() error {
+		return executeTerraformInitForcedFn(atmosConfig, info, componentPath, execCtx.varFile, rec.WithReconfigure, rec.WithUpgrade, opts...)
+	})
+	if initErr != nil {
+		return errors.Join(mainErr, initErr)
+	}
+
+	return retryMainCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, opts...)
+}
+
+// retryMainCommand re-runs the main subcommand once after a forced init recovery, resetting the
+// exec-metadata capture so info.ExecMetadataRawOutput reflects only the retry's own output.
+func retryMainCommand( //nolint:revive // argument-limit: every parameter is load-bearing context passed straight through to executeMainTerraformCommandFn.
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	allArgsAndFlags []string,
+	componentPath string,
+	uploadStatusFlag bool,
+	opts ...ShellCommandOption,
+) error {
+	var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
+	mainOpts := append(slices.Clone(opts), withExecMetadataOutputCapture(&execMetadataStdoutBuf, &execMetadataStderrBuf))
+
+	err := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, info.SubCommand), func() error {
+		return executeMainTerraformCommandFn(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, mainOpts...)
+	})
+	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
+	return err
+}
+
 // dispatchAfterInitFn is a seam for testing the explicit-init path. Implicit
 // init dispatches the same provisioners in executeTerraformInitCommand.
 var dispatchAfterInitFn = dispatchAfterInit
+
+// executeMainTerraformCommandFn is a seam for testing recoverFromInitRequired's retry-once
+// behavior (retryMainCommand) without launching a real subprocess.
+var executeMainTerraformCommandFn = executeMainTerraformCommand
 
 // runWorkspaceSetupPhase selects or creates the Terraform workspace under its own
 // phase-level CI log group. The group is emitted only when workspace setup will
@@ -469,9 +561,11 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	// An explicit `atmos terraform init` reaches this main-command path rather
 	// than executeTerraformInitCommand. Keep its lifecycle equivalent to an
 	// implicit init so post-init provisioners can complete and persist provider
-	// locks for workdir and vendored components.
+	// locks for workdir and vendored components, and so the smart-init marker
+	// gets recorded (recordAutoInit) exactly as it would for an implicit init.
 	if err == nil && info.SubCommand == subcommandInit {
 		dispatchAfterInitFn(atmosConfig, info, componentPath, opts...)
+		recordAutoInit(newAutoInitInputs(atmosConfig, info, componentPath, constructTerraformComponentVarfileName(info)), allArgsAndFlags)
 	}
 
 	exitCode := resolveExitCode(err)

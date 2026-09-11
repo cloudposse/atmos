@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/autoinit"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -258,62 +259,107 @@ func TestShouldRunTerraformInit_FalseWhenSkipInitOverridesDeployRunInit(t *testi
 	assert.False(t, shouldRunTerraformInit(&atmosConfig, &info))
 }
 
+func TestShouldRunTerraformInit_FalseWhenModeNever(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.Init.Mode = schema.TerraformInitModeNever
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+	assert.False(t, shouldRunTerraformInit(&atmosConfig, &info))
+}
+
+func TestShouldRunTerraformInit_TrueWhenModeAuto(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.Init.Mode = schema.TerraformInitModeAuto
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+	assert.True(t, shouldRunTerraformInit(&atmosConfig, &info))
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // buildInitArgs
 // ──────────────────────────────────────────────────────────────────────────────
+//
+// buildInitArgs itself is a thin, decision-driven arg assembler: init, then -reconfigure when
+// decision.Reconfigure, then -upgrade when decision.Upgrade, then -var-file when Init.PassVars.
+// These tests exercise that assembly directly against hand-built autoinit.Decision values,
+// rather than re-deriving the decision (that policy is pkg/terraform/autoinit's own contract,
+// covered by its own tests). The former workdir-specific reconfigure carve-out is exercised at
+// the decideAutoInit level instead (TestDecideAutoInit_* below), since decision.Reconfigure now
+// carries that rule for every component via the backend fingerprint comparison.
 
 func TestBuildInitArgs_BasicInit(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json", autoinit.Decision{})
 	assert.Equal(t, []string{"init"}, args)
 }
 
-func TestBuildInitArgs_ReconfigureWhenWorkspace(t *testing.T) {
+func TestBuildInitArgs_Reconfigure(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
-	info := schema.ConfigAndStacksInfo{SubCommand: "workspace"}
-	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json", autoinit.Decision{Reconfigure: true})
 	assert.Equal(t, []string{"init", "-reconfigure"}, args)
 }
 
-func TestBuildInitArgs_ReconfigureWhenConfigEnabled(t *testing.T) {
+func TestBuildInitArgs_Upgrade(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
-	atmosConfig.Components.Terraform.InitRunReconfigure = true
 	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
-	assert.Equal(t, []string{"init", "-reconfigure"}, args)
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json", autoinit.Decision{Upgrade: true})
+	assert.Equal(t, []string{"init", "-upgrade"}, args)
+}
+
+func TestBuildInitArgs_ReconfigureAndUpgrade(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json", autoinit.Decision{Reconfigure: true, Upgrade: true})
+	assert.Equal(t, []string{"init", "-reconfigure", "-upgrade"}, args)
 }
 
 func TestBuildInitArgs_PassVarsWithoutReconfigure(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	atmosConfig.Components.Terraform.Init.PassVars = true
 	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-	args := buildInitArgs(&atmosConfig, &info, "my-component.tfvars.json")
+	args := buildInitArgs(&atmosConfig, &info, "my-component.tfvars.json", autoinit.Decision{})
 	assert.Equal(t, []string{"init", varFileFlag, "my-component.tfvars.json"}, args)
 }
 
 func TestBuildInitArgs_PassVarsWithReconfigure(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
-	atmosConfig.Components.Terraform.InitRunReconfigure = true
 	atmosConfig.Components.Terraform.Init.PassVars = true
 	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-	args := buildInitArgs(&atmosConfig, &info, "my-component.tfvars.json")
+	args := buildInitArgs(&atmosConfig, &info, "my-component.tfvars.json", autoinit.Decision{Reconfigure: true})
 	assert.Equal(t, []string{"init", "-reconfigure", varFileFlag, "my-component.tfvars.json"}, args)
 }
 
-func TestBuildInitArgs_PassVarsWithWorkspaceAndReconfigure(t *testing.T) {
+func TestBuildInitArgs_PassVarsWithReconfigureAndUpgrade(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	atmosConfig.Components.Terraform.Init.PassVars = true
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+	args := buildInitArgs(&atmosConfig, &info, "my-component.tfvars.json", autoinit.Decision{Reconfigure: true, Upgrade: true})
+	assert.Equal(t, []string{"init", "-reconfigure", "-upgrade", varFileFlag, "my-component.tfvars.json"}, args)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// decideAutoInit
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestDecideAutoInit_ForcedForWorkspaceSubcommand verifies that the workspace subcommand
+// always forces RunInit=true (ReasonForced) regardless of the fingerprint -- workspace
+// operations need a clean state on each run. (decision.Reconfigure's own policy nuances are
+// pkg/terraform/autoinit's contract, covered by its own tests -- this only checks that
+// decideAutoInit feeds the workspace-subcommand force signal into the Request at all.)
+func TestDecideAutoInit_ForcedForWorkspaceSubcommand(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{SubCommand: "workspace"}
-	args := buildInitArgs(&atmosConfig, &info, "my-component.tfvars.json")
-	assert.Equal(t, []string{"init", "-reconfigure", varFileFlag, "my-component.tfvars.json"}, args)
+	decision := decideAutoInit(&atmosConfig, &info, nil, false)
+	assert.True(t, decision.RunInit)
+	assert.Equal(t, autoinit.ReasonForced, decision.Reason)
 }
 
-// TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned verifies that -reconfigure is
-// added when the workdir was actually wiped and re-provisioned this invocation
-// (WorkdirReprovisionedKey set by the source/workdir provisioner).
-// This prevents "Do you want to migrate all workspaces?" on fresh workdirs.
-func TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned(t *testing.T) {
+// TestDecideAutoInit_ForcedForReprovisionedWorkdir verifies that a re-provisioned workdir
+// (WorkdirReprovisionedKey set by the source/workdir provisioner) forces RunInit=true
+// (ReasonForced), since any prior init marker belonged to the wiped directory. This is the
+// decision-level replacement for the former buildInitArgs workdir carve-out: it feeds exactly
+// the same signal the old code checked (WorkdirReprovisionedKey) into autoinit.Decide instead.
+func TestDecideAutoInit_ForcedForReprovisionedWorkdir(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
 		SubCommand: "apply",
@@ -322,84 +368,38 @@ func TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned(t *testing.T) {
 			provWorkdir.WorkdirReprovisionedKey: struct{}{},
 		},
 	}
-	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
-	assert.Equal(t, []string{"init", "-reconfigure"}, args)
+	decision := decideAutoInit(&atmosConfig, &info, nil, false)
+	assert.True(t, decision.RunInit)
+	assert.Equal(t, autoinit.ReasonForced, decision.Reason)
 }
 
-// TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned_WithPassVars verifies that both
-// -reconfigure and -var-file are added when workdir was re-provisioned and PassVars is enabled.
-func TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned_WithPassVars(t *testing.T) {
-	atmosConfig := schema.AtmosConfiguration{}
-	atmosConfig.Components.Terraform.Init.PassVars = true
-	info := schema.ConfigAndStacksInfo{
-		SubCommand: "apply",
-		ComponentSection: map[string]any{
-			provWorkdir.WorkdirPathKey:          "/tmp/.workdir/terraform/demo-consumer",
-			provWorkdir.WorkdirReprovisionedKey: struct{}{},
-		},
-	}
-	args := buildInitArgs(&atmosConfig, &info, "my-component.tfvars.json")
-	assert.Equal(t, []string{"init", "-reconfigure", varFileFlag, "my-component.tfvars.json"}, args)
-}
-
-// TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved verifies that -reconfigure is NOT
-// added when the workdir exists but was not re-provisioned (TTL not expired).
-// Adding -reconfigure causes OpenTofu to treat init as fresh and prompt
-// "Do you want to migrate all workspaces?" even when the backend is unchanged.
-func TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved(t *testing.T) {
+// TestDecideAutoInit_NotForcedForPreservedWorkdir verifies that a preserved (not
+// re-provisioned) workdir does NOT force init on its own -- only the explicit force
+// parameter, the workspace subcommand, or WorkdirReprovisionedKey do.
+func TestDecideAutoInit_NotForcedForPreservedWorkdir(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
 		SubCommand: "apply",
 		ComponentSection: map[string]any{
 			provWorkdir.WorkdirPathKey: "/tmp/.workdir/terraform/demo-consumer",
-			// WorkdirReprovisionedKey intentionally absent — TTL not expired
+			// WorkdirReprovisionedKey intentionally absent.
 		},
 	}
-	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
-	assert.Equal(t, []string{"init"}, args)
+	decision := decideAutoInit(&atmosConfig, &info, nil, false)
+	// nil Inputs (dry run / no fingerprint target) always runs init (ReasonNoInputs) --
+	// that's autoinit's own contract, not a force signal from decideAutoInit.
+	assert.Equal(t, autoinit.ReasonNoInputs, decision.Reason)
 }
 
-// TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved_InitRunReconfigureIgnored verifies
-// that InitRunReconfigure: true is ignored for workdir components with a preserved workdir.
-// -reconfigure + workspace state dirs causes the "migrate all workspaces?" prompt even
-// when the backend is unchanged; the global flag must not override this protection.
-func TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved_InitRunReconfigureIgnored(t *testing.T) {
+// TestDecideAutoInit_ExplicitForceParameter verifies that the force parameter (used by
+// buildInitSubcommandArgs for an explicit `atmos terraform init`) forces RunInit regardless of
+// SubCommand or ComponentSection.
+func TestDecideAutoInit_ExplicitForceParameter(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
-	atmosConfig.Components.Terraform.InitRunReconfigure = true
-	info := schema.ConfigAndStacksInfo{
-		SubCommand: "apply",
-		ComponentSection: map[string]any{
-			provWorkdir.WorkdirPathKey: "/tmp/.workdir/terraform/demo-consumer",
-			// WorkdirReprovisionedKey intentionally absent — workdir was NOT wiped
-		},
-	}
-	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
-	assert.Equal(t, []string{"init"}, args)
-}
-
-// TestBuildInitArgs_ReconfigureForNonWorkdir_InitRunReconfigure verifies that
-// InitRunReconfigure: true still works as expected for non-workdir components.
-func TestBuildInitArgs_ReconfigureForNonWorkdir_InitRunReconfigure(t *testing.T) {
-	atmosConfig := schema.AtmosConfiguration{}
-	atmosConfig.Components.Terraform.InitRunReconfigure = true
-	info := schema.ConfigAndStacksInfo{
-		SubCommand:       "apply",
-		ComponentSection: map[string]any{}, // no WorkdirPathKey
-	}
-	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
-	assert.Equal(t, []string{"init", "-reconfigure"}, args)
-}
-
-// TestBuildInitArgs_NoReconfigureWithoutWorkdir verifies that -reconfigure is NOT
-// added for regular (non-workdir) components unless explicitly configured.
-func TestBuildInitArgs_NoReconfigureWithoutWorkdir(t *testing.T) {
-	atmosConfig := schema.AtmosConfiguration{}
-	info := schema.ConfigAndStacksInfo{
-		SubCommand:       "apply",
-		ComponentSection: map[string]any{},
-	}
-	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
-	assert.Equal(t, []string{"init"}, args)
+	info := schema.ConfigAndStacksInfo{SubCommand: "init"}
+	decision := decideAutoInit(&atmosConfig, &info, nil, true)
+	assert.True(t, decision.RunInit)
+	assert.Equal(t, autoinit.ReasonForced, decision.Reason)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

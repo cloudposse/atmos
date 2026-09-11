@@ -47,7 +47,10 @@ var (
 				PluginCache:             true, // Enabled by default for zero-config performance.
 				PluginCacheDir:          "",   // Empty = use XDG default (~/.cache/atmos/terraform/plugins).
 				Init: schema.TerraformInit{
-					PassVars: false,
+					PassVars:    false,
+					Mode:        schema.TerraformInitModeAuto,
+					Reconfigure: schema.TerraformInitReconfigureAuto,
+					Upgrade:     schema.TerraformInitUpgradeAuto,
 				},
 				Plan: schema.TerraformPlan{
 					SkipPlanfile: false,

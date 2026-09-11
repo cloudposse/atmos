@@ -12309,9 +12309,43 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Mode controls whether Atmos runs `terraform init` before a subcommand:\n`auto` (default) skips it when the init fingerprint recorded after the last\nsuccessful init is unchanged, `always` runs it on every invocation, and\n`never` never runs it (the same as `--skip-init`)."
+        },
+        "reconfigure": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Reconfigure controls when `-reconfigure` is added to `terraform init`:\n`auto` (default) adds it only when the backend configuration changed since\nthe last init, `always` adds it on every init, and `never` never adds it.\nTakes precedence over the deprecated `init_run_reconfigure`."
+        },
+        "upgrade": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Upgrade controls when `-upgrade` is added to `terraform init`: `auto`\n(default) adds it only when terraform/tofu reports that an upgrade is\nrequired, `always` adds it on every init, and `never` never adds it."
         }
       },
-      "type": "object"
+      "type": "object",
+      "description": "TerraformInit configures the `terraform init` that Atmos runs before other\nterraform subcommands (and while resolving !terraform.output)."
     },
     "TerraformLint": {
       "properties": {

@@ -91,9 +91,11 @@ func (d *defaultWorkdirProvisioner) Provision(
 // and atmos.Component calls against JIT components fail with an empty-directory
 // error from terraform init.
 //
-// config must be passed by pointer — this function may set config.InitRunReconfigure
-// to true when a fresh provision occurs, which must be visible to the subsequent
-// runInit call.
+// The config argument must be passed by pointer — this function may set
+// config.WorkdirReprovisioned to true when a fresh provision occurs, which
+// must be visible to the subsequent autoinit.Decide call (ensureInitialized
+// forces init via Request.Force when set, since a brand-new workdir has no
+// .terraform/ directory to fingerprint against).
 func (e *Executor) ensureWorkdirProvisioned(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
@@ -129,7 +131,7 @@ func (e *Executor) ensureWorkdirProvisioned(
 		// before any new DoChan call can observe the key.
 		if actual, loaded := workdirProvisionCache.LoadOrStore(cacheKey, false); loaded {
 			// Key was already present: return the stored freshness value so every
-			// goroutine (including late arrivals) can set InitRunReconfigure correctly.
+			// goroutine (including late arrivals) can set WorkdirReprovisioned correctly.
 			return actual, nil
 		}
 
@@ -161,7 +163,7 @@ func (e *Executor) ensureWorkdirProvisioned(
 
 		// Update the cache entry from the placeholder (false) to the actual freshness
 		// value. Late-arriving goroutines that start a new DoChan after this Store will
-		// read freshlyProvisioned from the cache and set InitRunReconfigure correctly.
+		// read freshlyProvisioned from the cache and set WorkdirReprovisioned correctly.
 		workdirProvisionCache.Store(cacheKey, freshlyProvisioned)
 
 		writeVisibleOutput(func() {
@@ -185,8 +187,8 @@ func (e *Executor) ensureWorkdirProvisioned(
 		if res.Err != nil {
 			return res.Err
 		}
-		if reconfigure, _ := res.Val.(bool); reconfigure {
-			config.InitRunReconfigure = true
+		if reprovisioned, _ := res.Val.(bool); reprovisioned {
+			config.WorkdirReprovisioned = true
 		}
 		return nil
 	case <-ctx.Done():

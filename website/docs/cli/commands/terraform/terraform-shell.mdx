@@ -58,8 +58,10 @@ components:
     # Auto-generate backend configuration
     auto_generate_backend_file: true
 
-    # Run 'terraform init -reconfigure' when entering shell
-    init_run_reconfigure: true
+    # Init behavior when entering shell (auto skips init/-reconfigure when unneeded)
+    init:
+      mode: auto
+      reconfigure: auto
 
     # Enable workspace management
     workspaces_enabled: true
@@ -119,7 +121,8 @@ shell:
 These settings can also be controlled via environment variables:
 ```shell
 export ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=true
-export ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=true
+export ATMOS_COMPONENTS_TERRAFORM_INIT_MODE=auto
+export ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE=auto
 export ATMOS_COMPONENTS_TERRAFORM_WORKSPACES_ENABLED=true
 ```
 
@@ -235,6 +238,33 @@ atmos terraform shell infra/vpc -s tenant1-ue2-dev --identity dev-role
 
         ```shell
         atmos terraform shell <component> -s <stack> --skip-init
+        ```
+    </dd>
+
+    <dt>`--init-mode` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.mode`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never` (same as `--skip-init`).
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --init-mode=always
+        ```
+    </dd>
+
+    <dt>`--init-reconfigure` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.reconfigure`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never`.
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --init-reconfigure=always
+        ```
+    </dd>
+
+    <dt>`--init-upgrade` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.upgrade`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never`.
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --init-upgrade=always
         ```
     </dd>
 </dl>

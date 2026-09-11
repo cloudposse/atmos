@@ -1,12 +1,14 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -84,6 +86,34 @@ func Test_setFeatureFlags(t *testing.T) {
 			expectError:  true,
 			errorMessage: "strconv.ParseBool: parsing \"not-a-boolean\": invalid syntax",
 		},
+		{
+			name: "test init mode/reconfigure/upgrade flags",
+			configAndStacks: schema.ConfigAndStacksInfo{
+				InitMode:        "never",
+				InitReconfigure: "always",
+				InitUpgrade:     "always",
+			},
+			expectedConfig: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						Init: schema.TerraformInit{
+							Mode:        schema.TerraformInitModeNever,
+							Reconfigure: schema.TerraformInitReconfigureAlways,
+							Upgrade:     schema.TerraformInitUpgradeAlways,
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "test invalid init.mode flag",
+			configAndStacks: schema.ConfigAndStacksInfo{
+				InitMode: "sometimes",
+			},
+			expectError:  true,
+			errorMessage: errUtils.ErrInvalidInitMode.Error(),
+		},
 	}
 
 	for _, tt := range tests {
@@ -121,6 +151,9 @@ func Test_setFeatureFlags(t *testing.T) {
 				assert.Equal(t, tt.expectedConfig.Components.Terraform.AutoGenerateBackendFile, config.Components.Terraform.AutoGenerateBackendFile)
 				assert.Equal(t, tt.expectedConfig.Components.Terraform.InitRunReconfigure, config.Components.Terraform.InitRunReconfigure)
 				assert.Equal(t, tt.expectedConfig.Components.Terraform.Init.PassVars, config.Components.Terraform.Init.PassVars)
+				assert.Equal(t, tt.expectedConfig.Components.Terraform.Init.Mode, config.Components.Terraform.Init.Mode)
+				assert.Equal(t, tt.expectedConfig.Components.Terraform.Init.Reconfigure, config.Components.Terraform.Init.Reconfigure)
+				assert.Equal(t, tt.expectedConfig.Components.Terraform.Init.Upgrade, config.Components.Terraform.Init.Upgrade)
 				assert.Equal(t, tt.expectedConfig.Components.Terraform.Plan.SkipPlanfile, config.Components.Terraform.Plan.SkipPlanfile)
 				assert.Equal(t, tt.expectedConfig.Workflows.BasePath, config.Workflows.BasePath)
 			}
@@ -592,6 +625,92 @@ func TestProcessEnvVars_TerraformFlags(t *testing.T) {
 		// The env var must override the preconfigured CompactWarnings=true with false.
 		assert.False(t, config.Components.Terraform.Flags.CompactWarnings)
 	})
+}
+
+// TestProcessEnvVars_TerraformInit covers the 3 ATMOS_COMPONENTS_TERRAFORM_INIT_{MODE,
+// RECONFIGURE,UPGRADE} env vars: valid values, case-insensitive normalization, and
+// invalid values wrapping the matching sentinel error (errors.Is-checked per CLAUDE.md).
+func TestProcessEnvVars_TerraformInit(t *testing.T) {
+	t.Run("valid values are applied", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_MODE", "never")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE", "always")
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE", "always")
+
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.NoError(t, err)
+
+		assert.Equal(t, schema.TerraformInitModeNever, config.Components.Terraform.Init.Mode)
+		assert.Equal(t, schema.TerraformInitReconfigureAlways, config.Components.Terraform.Init.Reconfigure)
+		assert.Equal(t, schema.TerraformInitUpgradeAlways, config.Components.Terraform.Init.Upgrade)
+	})
+
+	t.Run("values are normalized (trimmed and lower-cased)", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_MODE", "  ALWAYS  ")
+
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.NoError(t, err)
+
+		assert.Equal(t, schema.TerraformInitModeAlways, config.Components.Terraform.Init.Mode)
+	})
+
+	t.Run("unset env vars leave the field unset", func(t *testing.T) {
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.NoError(t, err)
+
+		assert.Empty(t, config.Components.Terraform.Init.Mode)
+		assert.Empty(t, config.Components.Terraform.Init.Reconfigure)
+		assert.Empty(t, config.Components.Terraform.Init.Upgrade)
+	})
+
+	t.Run("invalid ATMOS_COMPONENTS_TERRAFORM_INIT_MODE errors", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_MODE", "sometimes")
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrInvalidInitMode))
+	})
+
+	t.Run("invalid ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE errors", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE", "sometimes")
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrInvalidInitReconfigure))
+	})
+
+	t.Run("invalid ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE errors", func(t *testing.T) {
+		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE", "sometimes")
+		config := &schema.AtmosConfiguration{Schemas: make(map[string]interface{})}
+		err := processEnvVars(config)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrInvalidInitUpgrade))
+	})
+}
+
+// TestSetFeatureFlags_InvalidInitEnumValues covers the CLI-flag-override validation path
+// (setFeatureFlags) for the three tri-state init flags, using errors.Is per CLAUDE.md.
+func TestSetFeatureFlags_InvalidInitEnumValues(t *testing.T) {
+	tests := []struct {
+		name string
+		info schema.ConfigAndStacksInfo
+		want error
+	}{
+		{name: "invalid init-mode", info: schema.ConfigAndStacksInfo{InitMode: "sometimes"}, want: errUtils.ErrInvalidInitMode},
+		{name: "invalid init-reconfigure", info: schema.ConfigAndStacksInfo{InitReconfigure: "sometimes"}, want: errUtils.ErrInvalidInitReconfigure},
+		{name: "invalid init-upgrade", info: schema.ConfigAndStacksInfo{InitUpgrade: "sometimes"}, want: errUtils.ErrInvalidInitUpgrade},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{}
+			err := setFeatureFlags(config, &tt.info)
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, tt.want))
+		})
+	}
 }
 
 func TestFindAllStackConfigsInPathsForStack(t *testing.T) {

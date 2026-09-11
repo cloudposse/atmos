@@ -293,6 +293,21 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
 	}
 
+	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_MODE", foundEnvVarMessage,
+		schema.TerraformInitMode.IsValid, errUtils.ErrInvalidInitMode, &atmosConfig.Components.Terraform.Init.Mode); err != nil {
+		return err
+	}
+
+	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE", foundEnvVarMessage,
+		schema.TerraformInitReconfigure.IsValid, errUtils.ErrInvalidInitReconfigure, &atmosConfig.Components.Terraform.Init.Reconfigure); err != nil {
+		return err
+	}
+
+	if err := setInitEnumEnvVar("ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE", foundEnvVarMessage,
+		schema.TerraformInitUpgrade.IsValid, errUtils.ErrInvalidInitUpgrade, &atmosConfig.Components.Terraform.Init.Upgrade); err != nil {
+		return err
+	}
+
 	componentsPlanSkipPlanfile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE")
 	if len(componentsPlanSkipPlanfile) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE", componentsPlanSkipPlanfile)
@@ -498,6 +513,33 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	}
 
 	return nil
+}
+
+// setInitEnumEnvVar reads envVar, normalizes it (trim + lowercase), validates it with isValid,
+// and stores it in dest. Shared by the init.mode/init.reconfigure/init.upgrade ENV variables so
+// each one stays a single call in processEnvVars instead of a repeated read/validate/assign block.
+func setInitEnumEnvVar[T ~string](envVar, foundEnvVarMessage string, isValid func(T) bool, sentinel error, dest *T) error {
+	value := os.Getenv(envVar) //nolint:forbidigo // matches the established os.Getenv pattern used throughout processEnvVars; see comment above ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT.
+	if len(value) == 0 {
+		return nil
+	}
+	log.Debug(foundEnvVarMessage, envVar, value)
+	normalized, err := normalizeInitEnumValue(value, isValid, sentinel)
+	if err != nil {
+		return err
+	}
+	*dest = normalized
+	return nil
+}
+
+// normalizeInitEnumValue trims and lower-cases value, then validates it with isValid, returning
+// a wrapped sentinel error (with the original, un-normalized value for readability) when invalid.
+func normalizeInitEnumValue[T ~string](value string, isValid func(T) bool, sentinel error) (T, error) {
+	normalized := T(strings.ToLower(strings.TrimSpace(value)))
+	if !isValid(normalized) {
+		return "", fmt.Errorf("%w: %q", sentinel, value)
+	}
+	return normalized, nil
 }
 
 func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) error {
@@ -775,6 +817,18 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
 		log.Debug(cmdLineArg, InitPassVars, configAndStacksInfo.InitPassVars)
 	}
+	if err := applyInitEnumFlag(configAndStacksInfo.InitMode, InitModeFlag,
+		schema.TerraformInitMode.IsValid, errUtils.ErrInvalidInitMode, &atmosConfig.Components.Terraform.Init.Mode); err != nil {
+		return err
+	}
+	if err := applyInitEnumFlag(configAndStacksInfo.InitReconfigure, InitReconfigureFlag,
+		schema.TerraformInitReconfigure.IsValid, errUtils.ErrInvalidInitReconfigure, &atmosConfig.Components.Terraform.Init.Reconfigure); err != nil {
+		return err
+	}
+	if err := applyInitEnumFlag(configAndStacksInfo.InitUpgrade, InitUpgradeFlag,
+		schema.TerraformInitUpgrade.IsValid, errUtils.ErrInvalidInitUpgrade, &atmosConfig.Components.Terraform.Init.Upgrade); err != nil {
+		return err
+	}
 	if len(configAndStacksInfo.PlanSkipPlanfile) > 0 {
 		planSkipPlanfileBool, err := strconv.ParseBool(configAndStacksInfo.PlanSkipPlanfile)
 		if err != nil {
@@ -783,6 +837,22 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		atmosConfig.Components.Terraform.Plan.SkipPlanfile = planSkipPlanfileBool
 		log.Debug(cmdLineArg, PlanSkipPlanfile, configAndStacksInfo.PlanSkipPlanfile)
 	}
+	return nil
+}
+
+// applyInitEnumFlag normalizes and validates a CLI-flag override (raw, possibly empty) for one of
+// the init.mode/init.reconfigure/init.upgrade tri-state settings, storing the result in dest when
+// raw is non-empty. Shared by setFeatureFlags so each of the three flags stays a single call.
+func applyInitEnumFlag[T ~string](raw, flagName string, isValid func(T) bool, sentinel error, dest *T) error {
+	if len(raw) == 0 {
+		return nil
+	}
+	normalized, err := normalizeInitEnumValue(raw, isValid, sentinel)
+	if err != nil {
+		return err
+	}
+	*dest = normalized
+	log.Debug(cmdLineArg, flagName, raw)
 	return nil
 }
 

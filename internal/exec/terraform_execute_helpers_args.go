@@ -14,7 +14,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/proexec"
-	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -266,20 +265,18 @@ func appendApplyPlanFileArg(info *schema.ConfigAndStacksInfo, allArgsAndFlags []
 	return append(allArgsAndFlags, planFile)
 }
 
-// buildInitSubcommandArgs extends allArgsAndFlags for the `terraform init` subcommand.
-// It runs provisioners (via prepareInitExecution), optionally updates *componentPath
-// via the workdir provisioner, and adds the -reconfigure / -var-file flags when configured.
+// buildInitSubcommandArgs extends allArgsAndFlags for the explicit `atmos terraform init`
+// subcommand. It runs provisioners (via prepareInitExecution), optionally updates
+// *componentPath via the workdir provisioner, and adds the -reconfigure / -upgrade / -var-file
+// flags called for by autoinit.Decide (called with Force: true, since the user explicitly asked
+// for init to run — see decideAutoInit); executeMainTerraformCommand records the init marker
+// once this explicit init subprocess actually succeeds.
 //
 // MUTUAL EXCLUSION CONTRACT: this function is called ONLY when SubCommand == "init"
 // (i.e. init is the main command).  For pre-step init invocations, executeTerraformInitPhase
 // in terraform_execute_helpers.go handles the provisioner call via prepareInitExecution.
 // These two paths must never both execute in the same command invocation or provisioners
 // will run twice.
-//
-// NOTE: buildInitArgs (used by executeTerraformInitPhase) also adds -reconfigure when
-// SubCommand == "workspace" because workspace operations need a clean state on each run.
-// This function omits that check because the init-as-main-command path never originates
-// from a workspace subcommand — the asymmetry is intentional.
 func buildInitSubcommandArgs(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
@@ -294,16 +291,14 @@ func buildInitSubcommandArgs(
 	}
 	*componentPath = newPath
 
-	// For workdir components, ignore InitRunReconfigure when the workdir was not
-	// re-provisioned — see buildInitArgs for the full rationale.
-	_, hasWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
-	_, wasReprovisioned := info.ComponentSection[provWorkdir.WorkdirReprovisionedKey]
-	useReconfigure := wasReprovisioned
-	if !hasWorkdir {
-		useReconfigure = useReconfigure || atmosConfig.Components.Terraform.InitRunReconfigure
-	}
-	if useReconfigure {
+	in := newAutoInitInputs(atmosConfig, info, *componentPath, varFile)
+	decision := decideAutoInit(atmosConfig, info, in, true)
+
+	if decision.Reconfigure {
 		allArgsAndFlags = append(allArgsAndFlags, "-reconfigure")
+	}
+	if decision.Upgrade {
+		allArgsAndFlags = append(allArgsAndFlags, "-upgrade")
 	}
 	if atmosConfig.Components.Terraform.Init.PassVars {
 		allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)

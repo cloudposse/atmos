@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -32,11 +33,14 @@ type streamingExecRequest struct {
 // (per tfui.ShouldUseStreamingUI(req.gatePhase)), falling back to a plain ExecuteShellCommand
 // when streaming is disabled or unsupported (non-TTY, CI, or the TUI reports
 // ErrStreamingNotSupported). The request's shellOpts are forwarded to every
-// ExecuteShellCommand call (e.g. the retry wrapper's stdout/stderr capture) — the TUI
-// executors have no equivalent, so they run without them. When the component has retry
-// conditions configured, streaming is skipped entirely and the shell path always runs:
-// executeShellCommandWithRetry matches conditions against output captured via shellOpts,
-// and the TUI never populates that capture buffer, so retries would silently never fire.
+// ExecuteShellCommand call (e.g. the retry wrapper's stdout/stderr capture); the streaming path
+// forwards the same stdout/stderr-capture and exec-metadata-capture writers from shellOpts into
+// tfui.ExecuteOptions.StdoutCapture/StderrCapture (see streamingCaptureWriters below), so
+// consumers like the retry-condition matcher and smart-init's failure classifier still see the
+// terraform/tofu output even when it streamed through the TUI instead of the plain shell path.
+// When the component has retry conditions configured, streaming is skipped entirely and the
+// shell path always runs: ExecuteShellCommandWithRetry's own capture/reset cycle between
+// attempts has no TUI equivalent, so retries always go through the plain shell path.
 //
 // The request's gatePhase and subCommand are usually the same value, except for
 // workspace select/new: those gate on the "init" phase (workspace setup is part of the
@@ -71,17 +75,20 @@ func executeStreamingOrShell(atmosConfig *schema.AtmosConfiguration, info *schem
 		return runShell()
 	}
 
+	stdoutCapture, stderrCapture := streamingCaptureWriters(req.shellOpts)
 	execOpts := &tfui.ExecuteOptions{
-		Command:      info.Command,
-		Args:         req.args,
-		WorkingDir:   req.componentPath,
-		Env:          info.ComponentEnvList,
-		Component:    info.FinalComponent,
-		Stack:        info.Stack,
-		SubCommand:   req.subCommand,
-		Workspace:    req.workspace,
-		DryRun:       info.DryRun,
-		RenderConfig: tfui.BuildRenderConfig(atmosConfig.Components.Terraform.UI),
+		Command:       info.Command,
+		Args:          req.args,
+		WorkingDir:    req.componentPath,
+		Env:           info.ComponentEnvList,
+		Component:     info.FinalComponent,
+		Stack:         info.Stack,
+		SubCommand:    req.subCommand,
+		Workspace:     req.workspace,
+		DryRun:        info.DryRun,
+		RenderConfig:  tfui.BuildRenderConfig(atmosConfig.Components.Terraform.UI),
+		StdoutCapture: stdoutCapture,
+		StderrCapture: stderrCapture,
 	}
 
 	ctx := shellCommandContext(req.shellOpts...)
@@ -91,6 +98,35 @@ func executeStreamingOrShell(atmosConfig *schema.AtmosConfiguration, info *schem
 		return runShell()
 	}
 	return err
+}
+
+// streamingCaptureWriters builds a shellCommandConfig from shellOpts (applying the option funcs
+// to a zero config, mirroring execMetadataOutputCaptureFromOpts) and returns the stdout/stderr
+// writers the streaming TUI executors should additionally tee their output into: the ordinary
+// WithStdoutCapture/WithStderrCapture writer combined with the scoped exec-metadata tee writer
+// (withExecMetadataOutputCapture) via io.MultiWriter when both are set, so neither consumer's
+// capture goes dark just because a phase happened to run through the TUI instead of the plain
+// shell path. Returns (nil, nil) when shellOpts requests no capture at all.
+func streamingCaptureWriters(shellOpts []ShellCommandOption) (stdout, stderr io.Writer) {
+	var cfg shellCommandConfig
+	for _, opt := range shellOpts {
+		opt(&cfg)
+	}
+	return combineCaptureWriters(cfg.stdoutCapture, cfg.execMetadataStdoutCapture),
+		combineCaptureWriters(cfg.stderrCapture, cfg.execMetadataStderrCapture)
+}
+
+// combineCaptureWriters returns a over io.MultiWriter(a, b) when both are set, whichever of a/b
+// is non-nil when only one is, or nil when neither is set.
+func combineCaptureWriters(a, b io.Writer) io.Writer {
+	switch {
+	case a == nil:
+		return b
+	case b == nil:
+		return a
+	default:
+		return io.MultiWriter(a, b)
+	}
 }
 
 // streamingExecutorFunc is the shared signature of tfui.Execute and every

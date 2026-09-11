@@ -149,9 +149,30 @@ These environment variables configure Atmos behavior and can override settings i
 
   <dt>`ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE`</dt>
   <dd>
-    Run `terraform init -reconfigure` when executing `atmos terraform` commands.
+    Run `terraform init -reconfigure` when executing `atmos terraform` commands. Deprecated in favor of `ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE`.
 
     - **YAML Path:** `components.terraform.init_run_reconfigure`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_INIT_MODE`</dt>
+  <dd>
+    Controls when Atmos runs `terraform init` automatically: `auto` (default, skip when nothing relevant changed), `always`, or `never`.
+
+    - **YAML Path:** `components.terraform.init.mode`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE`</dt>
+  <dd>
+    Controls when Atmos adds `-reconfigure` to an automatic `terraform init`: `auto` (default, only when the backend changed), `always`, or `never`.
+
+    - **YAML Path:** `components.terraform.init.reconfigure`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE`</dt>
+  <dd>
+    Controls when Atmos adds `-upgrade` to an automatic `terraform init`: `auto` (default, only when Terraform/OpenTofu reports it's required), `always`, or `never`.
+
+    - **YAML Path:** `components.terraform.init.upgrade`
   </dd>
 
   <dt>`ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS`</dt>
@@ -644,7 +665,22 @@ These environment variables configure Atmos behavior and can override settings i
 
   <dt>`ATMOS_INIT_RUN_RECONFIGURE`</dt>
   <dd>
-    Override the `init_run_reconfigure` setting from `atmos.yaml`.
+    Override the `init_run_reconfigure` setting from `atmos.yaml`. Deprecated in favor of `ATMOS_INIT_RECONFIGURE`.
+  </dd>
+
+  <dt>`ATMOS_INIT_MODE`</dt>
+  <dd>
+    Override the `--init-mode` flag / `components.terraform.init.mode` setting: `auto` (default), `always`, or `never`.
+  </dd>
+
+  <dt>`ATMOS_INIT_RECONFIGURE`</dt>
+  <dd>
+    Override the `--init-reconfigure` flag / `components.terraform.init.reconfigure` setting: `auto` (default), `always`, or `never`.
+  </dd>
+
+  <dt>`ATMOS_INIT_UPGRADE`</dt>
+  <dd>
+    Override the `--init-upgrade` flag / `components.terraform.init.upgrade` setting: `auto` (default), `always`, or `never`.
   </dd>
 
   <dt>`ATMOS_TERRAFORM_VERIFY_PLAN`</dt>
