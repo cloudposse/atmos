@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -524,7 +523,7 @@ func TestExecuteDescribeDependents_RetainsOptionalAvailableCrossTypeTarget(t *te
 	}
 }
 
-func TestExecuteDescribeDependents_RejectsRequiredUnavailableCrossTypeTarget(t *testing.T) {
+func TestExecuteDescribeDependents_IgnoresRequiredUnavailableCrossTypeTarget(t *testing.T) {
 	t.Parallel()
 
 	stacks := map[string]any{
@@ -584,8 +583,9 @@ func TestExecuteDescribeDependents_RejectsRequiredUnavailableCrossTypeTarget(t *
 				DepIndex:  test.index,
 			}
 
-			_, err := ExecuteDescribeDependents(&schema.AtmosConfiguration{}, args)
-			require.ErrorIs(t, err, errUtils.ErrDependencyTargetUnavailable)
+			dependents, err := ExecuteDescribeDependents(&schema.AtmosConfiguration{}, args)
+			require.NoError(t, err)
+			require.Empty(t, dependents)
 		})
 	}
 }

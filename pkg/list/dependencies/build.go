@@ -6,7 +6,6 @@ package dependencies
 
 import (
 	"fmt"
-	"maps"
 	"sort"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -389,41 +388,12 @@ func dependenciesFromComponentsSection(componentSection map[string]any, componen
 	if _, hasComponents := depsSection["components"]; !hasComponents {
 		return nil, false, nil
 	}
-	depsSection = deferUnresolvedRequired(depsSection, leftDelim)
+	depsSection = schema.DeferUnresolvedRequired(depsSection, leftDelim)
 	deps, err := schema.ParseComponentDependencies(depsSection, componentType, stackName)
 	if err != nil {
 		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
 	}
 	return deps, true, nil
-}
-
-// deferUnresolvedRequired removes unresolved required values from the
-// lightweight graph so they retain the conservative required default until the
-// selected component is rendered during scoped evaluation.
-func deferUnresolvedRequired(depsSection map[string]any, leftDelim string) map[string]any {
-	entries, ok := depsSection["components"].([]any)
-	if !ok {
-		return depsSection
-	}
-	deferred := false
-	clonedEntries := make([]any, len(entries))
-	for i, entry := range entries {
-		component, ok := entry.(map[string]any)
-		if !ok || !tags.SelectorUnresolved(component["required"], leftDelim) {
-			clonedEntries[i] = entry
-			continue
-		}
-		clonedComponent := maps.Clone(component)
-		delete(clonedComponent, "required")
-		clonedEntries[i] = clonedComponent
-		deferred = true
-	}
-	if !deferred {
-		return depsSection
-	}
-	clonedSection := maps.Clone(depsSection)
-	clonedSection["components"] = clonedEntries
-	return clonedSection
 }
 
 // dependenciesFromSettings reads the legacy `settings.depends_on` surface.

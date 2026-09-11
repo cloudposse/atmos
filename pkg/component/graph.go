@@ -490,6 +490,7 @@ func dependenciesFromSection(componentSection map[string]any, componentType, sta
 	if _, hasComponents := depsSection["components"]; !hasComponents {
 		return nil, false, nil
 	}
+	depsSection = schema.DeferUnresolvedRequired(depsSection, "")
 	deps, err := schema.ParseComponentDependencies(depsSection, componentType, stackName)
 	if err != nil {
 		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)

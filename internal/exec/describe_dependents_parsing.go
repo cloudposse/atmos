@@ -33,7 +33,11 @@ func getComponentDependencies(componentMap map[string]any) ([]schema.ComponentDe
 }
 
 // getComponentDependenciesWithError extracts component dependencies and returns parse failures.
-func getComponentDependenciesWithError(componentMap map[string]any) (componentDependenciesResult, error) {
+func getComponentDependenciesWithError(componentMap map[string]any, leftDelims ...string) (componentDependenciesResult, error) {
+	leftDelim := ""
+	if len(leftDelims) > 0 {
+		leftDelim = leftDelims[0]
+	}
 	// Get settings section for later use (Spacelift/Atlantis config and IncludeSettings).
 	settingsSection, _ := componentMap["settings"].(map[string]any)
 
@@ -43,6 +47,7 @@ func getComponentDependenciesWithError(componentMap map[string]any) (componentDe
 		return componentDependenciesResult{settingsSection: settingsSection}, fmt.Errorf("%w: %s must be a map", errUtils.ErrInvalidDependenciesSection, cfg.DependenciesSectionName)
 	}
 	if _, hasComponents := depsSection["components"]; ok && hasComponents {
+		depsSection = schema.DeferUnresolvedRequired(depsSection, leftDelim)
 		componentDeps, err := schema.ParseComponentDependencies(depsSection, "", "")
 		if err != nil {
 			return componentDependenciesResult{settingsSection: settingsSection}, err

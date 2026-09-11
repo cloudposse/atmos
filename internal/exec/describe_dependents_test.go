@@ -61,6 +61,20 @@ func TestGetComponentDependencies(t *testing.T) {
 		assert.False(t, *deps[0].Required)
 	})
 
+	t.Run("defers unrendered required values", func(t *testing.T) {
+		result, err := getComponentDependenciesWithError(map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "monitoring", "required": "{{ .vars.monitoring_required }}"},
+				},
+			},
+		})
+
+		require.NoError(t, err)
+		require.Len(t, result.dependencies, 1)
+		assert.Nil(t, result.dependencies[0].Required)
+	})
+
 	t.Run("returns invalid rendered required errors", func(t *testing.T) {
 		_, err := getComponentDependenciesWithError(map[string]any{
 			"dependencies": map[string]any{

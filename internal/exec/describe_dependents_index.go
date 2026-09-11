@@ -33,7 +33,11 @@ func buildDependencyIndex(stacks map[string]any) dependencyIndex {
 	return idx
 }
 
-func buildDependencyIndexWithError(stacks map[string]any) (dependencyIndex, error) {
+func buildDependencyIndexWithError(stacks map[string]any, leftDelims ...string) (dependencyIndex, error) {
+	leftDelim := ""
+	if len(leftDelims) > 0 {
+		leftDelim = leftDelims[0]
+	}
 	idx := make(dependencyIndex)
 
 	for stackName, stackSection := range stacks {
@@ -54,7 +58,7 @@ func buildDependencyIndexWithError(stacks map[string]any) (dependencyIndex, erro
 
 			for stackComponentName, stackComponent := range stackComponentTypeSectionMap {
 				if err := indexComponentDependencies(
-					idx, stackName, stackComponentType, stackComponentName, stackComponent,
+					idx, stackName, stackComponentType, stackComponentName, stackComponent, leftDelim,
 				); err != nil {
 					return nil, err
 				}
@@ -70,6 +74,7 @@ func indexComponentDependencies(
 	idx dependencyIndex,
 	stackName, stackComponentType, stackComponentName string,
 	stackComponent any,
+	leftDelim string,
 ) error {
 	stackComponentMap, ok := stackComponent.(map[string]any)
 	if !ok {
@@ -95,7 +100,7 @@ func indexComponentDependencies(
 		)
 	}
 
-	result, err := getComponentDependenciesWithError(stackComponentMap)
+	result, err := getComponentDependenciesWithError(stackComponentMap, leftDelim)
 	if err != nil {
 		return fmt.Errorf("parse dependencies for component %q in stack %q: %w", stackComponentName, stackName, err)
 	}

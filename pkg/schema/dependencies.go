@@ -3,6 +3,7 @@ package schema
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"strconv"
 	"strings"
@@ -391,6 +392,47 @@ func ParseComponentDependencies(section map[string]any, defaultKind, defaultStac
 		normalized = append(normalized, *dependency)
 	}
 	return normalized, nil
+}
+
+// DeferUnresolvedRequired removes unrendered required values so callers that
+// parse an unevaluated component retain the conservative required default.
+func DeferUnresolvedRequired(section map[string]any, leftDelim string) map[string]any {
+	entries, ok := section["components"].([]any)
+	if !ok {
+		return section
+	}
+
+	deferred := false
+	clonedEntries := make([]any, len(entries))
+	for i, entry := range entries {
+		component, ok := entry.(map[string]any)
+		if !ok || !unresolvedRequiredValue(component["required"], leftDelim) {
+			clonedEntries[i] = entry
+			continue
+		}
+		clonedComponent := maps.Clone(component)
+		delete(clonedComponent, "required")
+		clonedEntries[i] = clonedComponent
+		deferred = true
+	}
+	if !deferred {
+		return section
+	}
+
+	clonedSection := maps.Clone(section)
+	clonedSection["components"] = clonedEntries
+	return clonedSection
+}
+
+func unresolvedRequiredValue(value any, leftDelim string) bool {
+	stringValue, ok := value.(string)
+	if !ok {
+		return false
+	}
+	if leftDelim == "" {
+		leftDelim = "{{"
+	}
+	return strings.Contains(stringValue, leftDelim) || strings.HasPrefix(strings.TrimSpace(stringValue), "!")
 }
 
 // mirrorSiblingsIntoComponents appends synthetic ComponentDependency entries

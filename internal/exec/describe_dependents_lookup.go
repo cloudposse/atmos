@@ -140,7 +140,7 @@ func scanComponentForDependents(p *scanComponentParams) ([]schema.Dependent, err
 		return nil, fmt.Errorf("decode vars for component %q in stack %q: %w", p.StackComponentName, p.StackName, err)
 	}
 
-	result, err := getComponentDependenciesWithError(stackComponentMap)
+	result, err := getComponentDependenciesWithError(stackComponentMap, p.Args.leftDelim)
 	if err != nil {
 		return nil, fmt.Errorf("parse dependencies for component %q in stack %q: %w", p.StackComponentName, p.StackName, err)
 	}
@@ -227,6 +227,9 @@ func dependencyTargetUnavailable(p *dependencyTargetParams) (bool, error) {
 	targetType := p.dep.Kind
 	if targetType == "" {
 		targetType = p.sourceType
+	}
+	if p.args.componentType != "" && targetType != p.args.componentType {
+		return true, nil
 	}
 	target := findComponentSectionInCachedStacksByType(p.stacks, targetStack, p.args.Component, targetType)
 	if target == nil {

@@ -303,6 +303,20 @@ func TestComponentDependency_IsRequiredDefaultsToTrue(t *testing.T) {
 	assert.False(t, optionalDependency.IsRequired())
 }
 
+func TestDeferUnresolvedRequiredHonorsConfiguredDelimiter(t *testing.T) {
+	section := map[string]any{
+		"components": []any{
+			map[string]any{"name": "monitoring", "required": "[[ .vars.monitoring_required ]]"},
+		},
+	}
+
+	deferred := DeferUnresolvedRequired(section, "[[")
+	entry := deferred["components"].([]any)[0].(map[string]any)
+
+	assert.NotContains(t, entry, "required")
+	assert.Equal(t, "[[ .vars.monitoring_required ]]", section["components"].([]any)[0].(map[string]any)["required"])
+}
+
 func TestParseComponentDependenciesRejectsInvalidRenderedRequiredValue(t *testing.T) {
 	_, err := ParseComponentDependencies(map[string]any{
 		"components": []any{

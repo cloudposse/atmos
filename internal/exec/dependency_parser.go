@@ -76,6 +76,7 @@ func (p *DependencyParser) ParseComponentDependencies(
 			return fmt.Errorf("%w: dependencies must be a map", errUtils.ErrInvalidDependenciesSection)
 		}
 		if _, modern := depsMap["components"]; modern {
+			depsMap = schema.DeferUnresolvedRequired(depsMap, p.leftDelim)
 			dependencies, err := schema.ParseComponentDependencies(depsMap, cfg.TerraformComponentType, stackName)
 			if err != nil {
 				return fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)

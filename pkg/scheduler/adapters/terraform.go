@@ -1140,6 +1140,7 @@ func modernTerraformDependencies(componentSection map[string]any, stackName stri
 		return nil, false, nil
 	}
 
+	depsSection = schema.DeferUnresolvedRequired(depsSection, "")
 	deps, err := schema.ParseComponentDependencies(depsSection, cfg.TerraformComponentType, stackName)
 	if err != nil {
 		return nil, true, fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)

@@ -56,7 +56,9 @@ type DescribeDependentsArgs struct {
 	// ErrOptions configures graceful degradation for the internal stack resolution when
 	// Stacks is not pre-computed. The zero value (OnErrorStrict) matches the historical
 	// fail-fast behavior.
-	ErrOptions DescribeStacksErrorOptions
+	ErrOptions    DescribeStacksErrorOptions
+	componentType string
+	leftDelim     string
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -154,6 +156,7 @@ func ExecuteDescribeDependents(
 	if atmosConfig == nil {
 		return nil, errUtils.ErrAtmosConfigIsNil
 	}
+	args.leftDelim, _ = tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
 
 	dependents := []schema.Dependent{}
 	var ok bool
@@ -179,7 +182,8 @@ func ExecuteDescribeDependents(
 
 	// Get the provided component section.
 	// When stacks are cached, extract directly from the cache to avoid redundant stack resolution.
-	providedComponentSection := findComponentSectionInCachedStacks(stacks, args.Stack, args.Component)
+	providedComponentSection, componentType := findComponentSectionInCachedStacksWithType(stacks, args.Stack, args.Component)
+	args.componentType = componentType
 	targetUnavailable := providedComponentSection == nil
 	if targetUnavailable {
 		skip, err := skipUnavailableOptionalTarget(stacks, args)
@@ -280,7 +284,7 @@ func skipUnavailableOptionalTarget(stacks map[string]any, args *DescribeDependen
 	depIndex := args.DepIndex
 	if depIndex == nil {
 		var err error
-		depIndex, err = buildDependencyIndexWithError(stacks)
+		depIndex, err = buildDependencyIndexWithError(stacks, args.leftDelim)
 		if err != nil {
 			return false, err
 		}
@@ -427,13 +431,18 @@ func hasDependencyEntries(depsSection map[string]any) bool {
 // findComponentSectionInCachedStacks extracts a component section from pre-computed stacks.
 // Returns nil if the stack or component is not found (caller falls back to ExecuteDescribeComponent).
 func findComponentSectionInCachedStacks(stacks map[string]any, stackName, componentName string) map[string]any {
+	component, _ := findComponentSectionInCachedStacksWithType(stacks, stackName, componentName)
+	return component
+}
+
+func findComponentSectionInCachedStacksWithType(stacks map[string]any, stackName, componentName string) (map[string]any, string) {
 	stackSection, ok := stacks[stackName].(map[string]any)
 	if !ok {
-		return nil
+		return nil, ""
 	}
 	componentsSection, ok := stackSection["components"].(map[string]any)
 	if !ok {
-		return nil
+		return nil, ""
 	}
 	componentTypes := []string{
 		cfg.TerraformComponentType,
@@ -449,7 +458,7 @@ func findComponentSectionInCachedStacks(stacks map[string]any, stackName, compon
 	// Unknown component types are considered afterward in lexical order.
 	for _, componentType := range componentTypes {
 		if comp := findComponentSectionInCachedStacksByType(stacks, stackName, componentName, componentType); comp != nil {
-			return comp
+			return comp, componentType
 		}
 	}
 	knownTypes := make(map[string]struct{}, len(componentTypes))
@@ -465,10 +474,10 @@ func findComponentSectionInCachedStacks(stacks map[string]any, stackName, compon
 	sort.Strings(remainingTypes)
 	for _, componentType := range remainingTypes {
 		if comp := findComponentSectionInCachedStacksByType(stacks, stackName, componentName, componentType); comp != nil {
-			return comp
+			return comp, componentType
 		}
 	}
-	return nil
+	return nil, ""
 }
 
 func findComponentSectionInCachedStacksByType(stacks map[string]any, stackName, componentName, componentType string) map[string]any {
