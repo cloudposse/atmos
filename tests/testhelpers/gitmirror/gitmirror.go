@@ -111,7 +111,7 @@ func Build(root string) error {
 func gitStatus(dir string) string {
 	cmd := exec.Command("git", "status", "--short", "--branch")
 	cmd.Dir = dir
-	cmd.Env = gitEnv()
+	cmd.Env = buildEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "git status failed: " + err.Error()
@@ -148,12 +148,14 @@ func commitWorkingRepo(dir string) error {
 
 // runGit runs git with args in dir (the process's own directory when dir is
 // empty) and returns its combined output wrapped into the error on failure.
+// Every call site is mirror construction (init/config/commit/push), so it
+// always runs with buildEnv, never the caller's global/system git config.
 func runGit(dir string, args ...string) error {
 	cmd := exec.Command("git", args...)
 	if dir != "" {
 		cmd.Dir = dir
 	}
-	cmd.Env = gitEnv()
+	cmd.Env = buildEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("gitmirror: git %v failed: %w: %s", args, err, out)
@@ -178,6 +180,28 @@ func gitEnv() []string {
 		kept = append(kept, kv)
 	}
 	return kept
+}
+
+// buildEnv returns gitEnv, with the caller's global, system, and command-scope git configuration
+// stripped, for mirror construction (git init/config/commit/push, all run via runGit). Build runs
+// before TestMain points GIT_CONFIG_GLOBAL at the mirror's own generated config (see
+// cli_test.go), so without this, a developer's or CI image's ambient config -- e.g.
+// core.hooksPath or init.templateDir installing a hook -- could run arbitrary code during `git
+// commit`/`git init` or hang Build. GIT_CONFIG_NOSYSTEM similarly excludes the machine-wide
+// /etc/gitconfig, and dropping any ambient GIT_CONFIG_COUNT/KEY_n/VALUE_n prevents a stray
+// command-scope override from doing the same. Neither change affects gitEnv's own callers (client
+// clone verification in this package's tests), which construct their own environment.
+func buildEnv() []string {
+	env := gitEnv()
+	kept := make([]string, 0, len(env)+2)
+	for _, kv := range env {
+		key, _, _ := strings.Cut(kv, "=")
+		if key == "GIT_CONFIG_COUNT" || strings.HasPrefix(key, "GIT_CONFIG_KEY_") || strings.HasPrefix(key, "GIT_CONFIG_VALUE_") {
+			continue
+		}
+		kept = append(kept, kv)
+	}
+	return append(kept, "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
 }
 
 // FileURI converts a filesystem path into a file:// URI usable as a git remote or GIT_CONFIG
