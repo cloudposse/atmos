@@ -131,3 +131,47 @@ func (d *DefaultStacksProcessor) ExecuteDescribeStacksWithAuthDisabled(
 		authDisabled,
 	)
 }
+
+// ExecuteDescribeStacksWithEvalSections delegates to the package-level
+// ExecuteDescribeStacksWithEvalSections function. It is the optional, richer variant consumed by
+// callers (see pkg/list/list_instances.go's evalSectionsStacksProcessor type assertion) that need
+// the evaluation-sections gate on top of the auth-disabled + tags/labels-scoped behavior the other
+// methods on this type provide individually.
+//
+//nolint:revive // Signature matches ExecuteDescribeStacksWithEvalSections.
+func (d *DefaultStacksProcessor) ExecuteDescribeStacksWithEvalSections(
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+	ignoreMissingFiles bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	authDisabled bool,
+	tagsFilter []string,
+	labelsFilter map[string]string,
+	evalSections []string,
+) (map[string]any, error) {
+	return ExecuteDescribeStacksWithEvalSections(
+		atmosConfig,
+		filterByStack,
+		components,
+		componentTypes,
+		sections,
+		ignoreMissingFiles,
+		processTemplates,
+		processYamlFunctions,
+		includeEmptyStacks,
+		skip,
+		authManager,
+		authDisabled,
+		tagsFilter,
+		labelsFilter,
+		DescribeStacksErrorOptions{},
+		evalSections,
+	)
+}
