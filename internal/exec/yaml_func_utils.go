@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/emulator"
@@ -444,8 +445,7 @@ func processSimpleTags(
 		}
 		return res, true, nil
 	}
-	// !tags/!labels family - no arguments; check the longer .keys/.values
-	// suffixes before the bare !labels match.
+	// Check .keys/.values before !labels, which accepts an optional key and default.
 	if exactTagSkipped(input, u.AtmosYamlFuncTags, skip) {
 		return input, true, nil
 	}
@@ -464,11 +464,13 @@ func processSimpleTags(
 	if input == u.AtmosYamlFuncLabelsValues && !skipFunc(skip, u.AtmosYamlFuncLabelsValues) {
 		return processTagLabelsValues(atmosConfig, input, stackInfo), true, nil
 	}
-	if exactTagSkipped(input, u.AtmosYamlFuncLabels, skip) {
-		return input, true, nil
-	}
-	if input == u.AtmosYamlFuncLabels && !skipFunc(skip, u.AtmosYamlFuncLabels) {
-		return processTagLabels(atmosConfig, input, stackInfo), true, nil
+	labelArgs, isLabels := strings.CutPrefix(input, u.AtmosYamlFuncLabels)
+	if isLabels && (labelArgs == "" || strings.TrimLeftFunc(labelArgs, unicode.IsSpace) != labelArgs) {
+		if skipFunc(skip, u.AtmosYamlFuncLabels) {
+			return input, true, nil
+		}
+		result, err := processTagLabels(atmosConfig, input, stackInfo)
+		return result, true, err
 	}
 	return nil, false, nil
 }
