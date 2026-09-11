@@ -6,9 +6,43 @@ tests:
     description: "Ensure the !include function works with scalars, lists and objects."
     workdir: "fixtures/scenarios/atmos-include-yaml-function/"
     command: "atmos"
-    # Route the fixture's remote !include (a github.com blob URL) at the process-wide httpmock
-    # GitHub facade TestMain starts (ATMOS_TEST_GITHUB_MOCK_URL), instead of live GitHub. Values
-    # are expanded against the process environment by expandTestCaseEnv (tests/cli_test.go).
+    args:
+      - "describe"
+      - "component"
+      - "component-1"
+      - "-s"
+      - "nonprod"
+    expect:
+      valid:
+        - "yaml"
+      exit_code: 0
+      stdout:
+        - "string_var: abc"
+        - "boolean_var: true"
+      stderr:
+        - "Telemetry Enabled"
+
+  # Additional coverage alongside the live case above -- same assertions, but targeting a
+  # sibling fixture's github.com/.../blob/... !include form, routed at the process-wide httpmock
+  # GitHub facade TestMain starts (ATMOS_TEST_GITHUB_MOCK_URL) instead of live GitHub. Values are
+  # expanded against the process environment by expandTestCaseEnv (tests/cli_test.go). The case
+  # above still exercises the literal raw.githubusercontent.com URL form against live GitHub,
+  # unchanged.
+  #
+  # This is a SEPARATE fixture directory, not stacks/deploy/nonprod-mock.yaml alongside the live
+  # case: atmos's name_template-based stack resolution parses every manifest matched by
+  # included_paths whenever ANY stack in a fixture is resolved, not just the one requested via
+  # -s (verified: `atmos describe component component-6 -s extended` in the live fixture also
+  # touches nonprod.yaml's live !include). Co-locating the two would force the live fetch on
+  # every resolution regardless of which stack was asked for, defeating the mock. See
+  # atmos-include-yaml-function-mock/stacks/deploy/nonprod-mock.yaml's own comment.
+  - name: "!include function test (mock GitHub)"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Ensure the !include function works against a mocked GitHub Enterprise Server-shape raw fetch."
+    workdir: "fixtures/scenarios/atmos-include-yaml-function-mock/"
+    command: "atmos"
     env:
       GITHUB_SERVER_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}"
       GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
@@ -17,7 +51,7 @@ tests:
       - "component"
       - "component-1"
       - "-s"
-      - "nonprod"
+      - "nonprod-mock"
     expect:
       valid:
         - "yaml"

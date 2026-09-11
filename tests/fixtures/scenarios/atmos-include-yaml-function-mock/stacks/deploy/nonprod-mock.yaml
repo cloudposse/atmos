@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# This fixture is a deliberately isolated sibling of
+# tests/fixtures/scenarios/atmos-include-yaml-function/: atmos's name_template-based stack
+# resolution parses (and evaluates every custom YAML function in) every manifest matched by
+# included_paths whenever ANY stack in a fixture is resolved -- not just the one requested via
+# -s. That fixture's stacks/deploy/nonprod.yaml has a live, unconditional
+# https://raw.githubusercontent.com/... !include (see that file's own comment) which stays
+# untouched as a real-network case, so co-locating a mock-routed stack alongside it would still
+# force a live fetch on every resolution, network or not. This directory exists solely so the
+# mock-routed !include below is never forced to share a stack-manifest scan with that live file.
+import:
+  - mixins/stage/nonprod-mock
+
+# Download the remote file using `go-getter` and assign the `components.terraform.component-1.settings` section
+# from the file to the `settings` section` in the current stack.
+#
+# This is a github.com blob URL (not a literal raw.githubusercontent.com URL) so that
+# github.ConvertToRawURL (pkg/github/client.go, invoked by pkg/utils/yaml_include_by_extension.go's
+# processRemoteFile) routes it through pkg/github.Endpoints.RawURL. By default (GITHUB_SERVER_URL
+# unset) that resolves to the exact same raw.githubusercontent.com URL as the sibling fixture's
+# live case -- byte-identical behavior. When GITHUB_SERVER_URL/GITHUB_API_URL point at the mock
+# (see the "!include function test (mock GitHub)" case in
+# tests/test-cases/atmos-include-yaml-function.yaml), it resolves to the mock's GHES-shape
+# /raw/<owner>/<repo>/<ref>/<path> route instead, so this stack never depends on live GitHub when
+# exercised that way.
+settings: !include https://github.com/cloudposse/atmos/blob/main/tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml .components.terraform.component-1.settings
+
+components:
+  terraform:
+    component-1:
+      metadata:
+        component: yaml-functions
+      vars:
+        # The `config` folder is relative to the `base_path` setting in `atmos.yaml`
+        string_var: !include config/vars.json .string_var
+        boolean_var: !include config/vars.yaml .boolean_var
+        list_var: !include config/vars.tfvars .list_var
+        map_var: !include config/vars.tfvars .map_var
