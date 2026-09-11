@@ -512,8 +512,13 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 			// Identify the component/stack in the label itself — in a multi-component
 			// run (e.g. --all/--affected), this line prints once per component, so a
 			// bare "Completed" would be ambiguous once scrolled away from its own
-			// plan/apply output.
-			label := fmt.Sprintf("Completed %s -s %s", info.ComponentFromArg, info.Stack)
+			// plan/apply output. Plain "component (stack)" prose, not CLI flag syntax
+			// (e.g. not "-s stack") — this is a status line, not a command to copy/paste.
+			// Backticks render as inline code in the toast (ui.Info renders markdown;
+			// see pkg/ui/formatter.go's toastMarkdown), matching this repo's convention
+			// for identifiers in status messages (e.g. terraform_generate_varfile.go's
+			// "Generated varfile `%s`").
+			label := fmt.Sprintf("Completed `%s` (`%s`)", info.ComponentFromArg, info.Stack)
 			metricsprocess.DisplaySummary(label, combined, atmosConfig)
 		}
 	}

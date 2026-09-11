@@ -187,6 +187,13 @@ func metricsEnabled(atmosConfig *schema.AtmosConfiguration) bool {
 // DisplaySummary prints a one-line local resource-usage summary via
 // ui.Info, gated by settings.metrics.enabled (default true). Label
 // identifies the scope of the measurement (e.g. "Completed", "Total").
+// This message is rendered as markdown (see pkg/ui/formatter.go's
+// toastMarkdown), so the two numbers most relevant to sizing a CI runner —
+// wall time and peak memory — are bolded; CPU time is left plain as
+// supporting detail. Bold degrades to plain text with no stray "**" in
+// non-TTY/no-color output (confirmed via manual testing — Glamour strips
+// markdown syntax rather than emitting ANSI when color is unsupported), so
+// this has no effect on golden-snapshot output.
 func DisplaySummary(label string, m ProcessMetrics, atmosConfig *schema.AtmosConfiguration) { //nolint:gocritic // hugeParam: value type matches ProcessMetrics's other value-semantics functions (Combine); called once per command, not in a hot loop.
 	defer perf.Track(nil, "process.DisplaySummary")()
 
@@ -194,10 +201,10 @@ func DisplaySummary(label string, m ProcessMetrics, atmosConfig *schema.AtmosCon
 		return
 	}
 
-	msg := fmt.Sprintf("%s in %s | CPU: %s user, %s sys",
+	msg := fmt.Sprintf("%s in **%s** | CPU: %s user, %s sys",
 		label, FormatDuration(m.WallTime), FormatDuration(m.UserCPUTime), FormatDuration(m.SystemCPUTime))
 	if m.MaxRSSBytes > 0 {
-		msg += fmt.Sprintf(" | Peak memory: %s", FormatBytes(m.MaxRSSBytes))
+		msg += fmt.Sprintf(" | Peak memory: **%s**", FormatBytes(m.MaxRSSBytes))
 	}
 	ui.Info(msg)
 }

@@ -544,7 +544,7 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	result = anonymousGitHubAccessLogRegex.ReplaceAllString(result, "")
 
 	// 16a. Drop the resource-usage summary line settings.metrics.enabled prints locally
-	// ("Completed <component> -s <stack> in ..." after each terraform plan/apply/deploy,
+	// ("Completed <component> (<stack>) in ..." after each terraform plan/apply/deploy,
 	// "Total for this invocation in ..." once at the end of the whole invocation). Wall
 	// time, CPU time, and peak memory are inherently non-deterministic across
 	// runs/runners, so this line can never be part of a stable golden snapshot — strip

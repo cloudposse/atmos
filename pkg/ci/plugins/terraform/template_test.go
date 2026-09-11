@@ -441,10 +441,10 @@ func TestTemplateRendering(t *testing.T) {
 			},
 			wantContains: []string{
 				"Resource usage",
-				"45.2s wall",
+				"**45.2s** wall",
 				"12.3s user",
 				"4.1s sys CPU",
-				"512.0 MB peak memory",
+				"**512.0 MB** peak memory",
 			},
 		},
 		{
@@ -472,7 +472,7 @@ func TestTemplateRendering(t *testing.T) {
 			},
 			wantContains: []string{
 				"Resource usage",
-				"45.2s wall",
+				"**45.2s** wall",
 			},
 			wantNotContains: []string{
 				"peak memory",
@@ -526,10 +526,10 @@ func TestTemplateRendering(t *testing.T) {
 			},
 			wantContains: []string{
 				"Resource usage",
-				"45.2s wall",
+				"**45.2s** wall",
 				"12.3s user",
 				"4.1s sys CPU",
-				"512.0 MB peak memory",
+				"**512.0 MB** peak memory",
 			},
 		},
 		{
@@ -557,7 +557,7 @@ func TestTemplateRendering(t *testing.T) {
 			},
 			wantContains: []string{
 				"Resource usage",
-				"45.2s wall",
+				"**45.2s** wall",
 			},
 			wantNotContains: []string{
 				"peak memory",
