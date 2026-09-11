@@ -240,7 +240,11 @@ func getGlamourGoldmark(renderer *glamour.TermRenderer) goldmark.Markdown {
 // TestCustomRendererWritesNothingToStdout, which guards this reasoning
 // against a future glamour upgrade.
 func (r *CustomRenderer) Render(content string) (string, error) {
-	return r.glamour.Render(content)
+	rendered, err := r.glamour.Render(content)
+	if err != nil {
+		return rendered, err
+	}
+	return FixListHangingIndent(rendered), nil
 }
 
 // Close is a no-op for compatibility with glamour.TermRenderer interface.
