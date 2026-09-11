@@ -61,6 +61,11 @@ atmos lint changed     # Run golangci-lint on changed files
 atmos dev generate snapshots --filter 'TestCLICommands/check_atmos_--help_in_empty-dir'
 ```
 
+Use `atmos build --no-cache` (or `atmos build binary --no-cache`) to force
+recompilation of all Go packages, including dependencies. This passes `-a` to
+`go build`; it preserves the shared build cache and downloaded modules. Normal
+builds reuse cached packages, and `--no-cache=false` keeps that default.
+
 ## Pre-commit Hooks
 
 We use pre-commit hooks to ensure code quality. The following hooks run automatically on `git commit`:
