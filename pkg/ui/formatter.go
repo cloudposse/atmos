@@ -1205,6 +1205,11 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool
 		return content, err
 	}
 
+	// Fix glamour's missing hanging indent on wrapped list continuation
+	// lines (see markdown.FixListHangingIndent for why this is a
+	// post-process rather than a renderer/style option).
+	rendered = markdown.FixListHangingIndent(rendered)
+
 	// Remove trailing whitespace that glamour adds for padding.
 	return atmosansi.TrimLinesRight(rendered), nil
 }

@@ -224,6 +224,7 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 		useMocks bool,
 		tagsFilter []string,
 		labelsFilter map[string]string,
+		errOptions DescribeStacksErrorOptions,
 	) (map[string]any, error) {
 		described = true
 		require.NotNil(t, atmosConfig)
@@ -413,6 +414,7 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 		bool,
 		[]string,
 		map[string]string,
+		DescribeStacksErrorOptions,
 	) (map[string]any, error) {
 		return describedStacks, describeErr
 	})
@@ -457,7 +459,6 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 		defer func() {
 			authManagerFactory = oldAuthManagerFactory
 		}()
-
 		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
 		require.ErrorIs(t, err, expectedErr)
 	})
@@ -476,7 +477,6 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 		defer func() {
 			authManagerFactory = oldAuthManagerFactory
 		}()
-
 		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
 		require.ErrorIs(t, err, expectedErr)
 	})
