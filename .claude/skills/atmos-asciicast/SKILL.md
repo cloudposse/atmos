@@ -62,9 +62,9 @@ Atmos casts are product demos, regression evidence, and documentation examples a
 4. Review the cast as plain text for secrets, local paths, unstable timestamps, noisy logs, and shell complexity that distracts from Atmos.
 5. Embed it with the website `CastPlayer` component when the corresponding docs page can show it usefully, **and in the feature's changelog blog post** (see the `pull-request` skill's Blog post section) — new commands and features should ship their blog post with a working demo, not just prose. Use `CastEmbed` (which wraps `CastPlayer` with Download/Share controls) directly in blog posts, followed by a `[View the full example](/examples/<name>)` link; don't reach for `EmbedExample` there.
 
-   ```mdx
-   <CastEmbed src="/casts/cli/describe-component.cast" title="describe component" chrome controls scrubber />
-   ```
+    ```mdx
+    <CastEmbed src="/casts/cli/describe-component.cast" title="describe component" chrome controls scrubber />
+    ```
 
 6. Commit only `.cast` files: the website renders them client-side, so no display derivatives are needed. Commit GIF/MP4/PNG/JPEG derivatives only when a publishing target cannot consume the player.
 
