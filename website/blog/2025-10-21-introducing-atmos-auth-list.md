@@ -8,6 +8,8 @@ authors:
 tags:
   - feature
 release: v1.196.0
+cast: "/casts/examples/demo-auth/auth-list.cast"
+castTitle: "atmos auth identities"
 ---
 
 import CastEmbed from '@site/src/components/CastEmbed'
