@@ -309,6 +309,14 @@ type StringSliceFlag struct {
 	CompletionFunc          func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective)
 }
 
+// StringArrayFlag represents a repeatable string flag whose individual values
+// must remain untouched. Unlike StringSliceFlag, values containing commas are
+// not split by pflag. This is required by consumers such as Helm's --set,
+// where commas are part of the flag grammar.
+type StringArrayFlag struct {
+	StringSliceFlag
+}
+
 // GetName implements Flag.
 func (f *StringSliceFlag) GetName() string {
 	defer perf.Track(nil, "flags.StringSliceFlag.GetName")()
