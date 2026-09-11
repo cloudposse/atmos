@@ -63,7 +63,7 @@ func RepoEndpoints() Endpoints {
 	defer perf.Track(nil, "github.RepoEndpoints")()
 
 	serverURL := resolveEndpointURL("GITHUB_SERVER_URL", defaultGitHubServerURL)
-	apiURL := resolveEndpointURL("GITHUB_API_URL", defaultGitHubAPIURL)
+	apiURL := resolveEndpointURL("GITHUB_API_URL", defaultAPIURLFor(serverURL))
 
 	return newEndpoints(serverURL, apiURL)
 }
@@ -77,7 +77,7 @@ func ToolchainEndpoints() Endpoints {
 	defer perf.Track(nil, "github.ToolchainEndpoints")()
 
 	serverURL := resolveEndpointURL("ATMOS_TOOLCHAIN_GITHUB_URL", defaultGitHubServerURL)
-	apiURL := resolveEndpointURL("ATMOS_TOOLCHAIN_GITHUB_API_URL", defaultGitHubAPIURL)
+	apiURL := resolveEndpointURL("ATMOS_TOOLCHAIN_GITHUB_API_URL", defaultAPIURLFor(serverURL))
 
 	return newEndpoints(serverURL, apiURL)
 }
@@ -90,6 +90,24 @@ func AquaRegistryURL() string {
 	defer perf.Track(nil, "github.AquaRegistryURL")()
 
 	return resolveEndpointURL("ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL", defaultAquaRegistryURL)
+}
+
+// defaultAPIURLFor returns the API URL to fall back to when the caller's API-URL environment
+// variable is unset or invalid, given the already-resolved server URL. For the public
+// github.com server host this is the public API (api.github.com); for any other (GitHub
+// Enterprise Server) host it derives "<serverURL>/api/v3" instead of the public API. Falling
+// back to the public API for a GHES server host would be a token-exposure bug: an authenticated
+// client built from the resulting Endpoints would send the GHES-scoped token to
+// api.github.com. GHES's REST API is conventionally served at "/api/v3" under the same host as
+// the web UI, so this default matches GITHUB_SERVER_URL/GITHUB_API_URL as GitHub Actions itself
+// exports them on GHES runners.
+func defaultAPIURLFor(serverURL string) string {
+	defer perf.Track(nil, "github.defaultAPIURLFor")()
+
+	if hostOf(serverURL) == defaultGitHubServerHost {
+		return defaultGitHubAPIURL
+	}
+	return serverURL + "/api/v3"
 }
 
 // newEndpoints builds an Endpoints value from already-validated server/API URLs, deriving
