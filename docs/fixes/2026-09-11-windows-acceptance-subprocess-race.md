@@ -47,6 +47,19 @@ own file with `//go:build windows` / `//go:build !windows` instead of a runtime 
 - New `internal/ci/acceptance/subprocess_cap_other.go` (`//go:build !windows`): a single no-op
   `acquireSubprocessSlot` returning an empty release func and `nil` error, matching the minimal-stub pattern
   used by `trust_install_other.go`.
+- `internal/ci/acceptance/command.go`: added an `acquireSubprocessSlotFunc` package var (defaulting to
+  `acquireSubprocessSlot`) and routed `run`/`output` through it instead of calling `acquireSubprocessSlot`
+  directly. This is a test seam, not a behavior change — Codecov flagged the PR's patch coverage at 69.23%
+  because `run`/`output`'s `if slotErr != nil`/`if err != nil` branches around the subprocess-slot call are
+  only reachable when `acquireSubprocessSlot` returns an error, which the real implementation only does on
+  Windows (ctx done before a slot frees up); on every other platform `subprocess_cap_other.go`'s no-op always
+  returns `nil`, so those branches were structurally unreachable in a non-Windows test run. The seam lets a
+  test substitute a fake that returns an error on any platform, to assert the real
+  `run`/`output` error-wrapping behavior on that path.
+- `internal/ci/acceptance/command_test.go`: new `TestRunPropagatesSubprocessSlotError` and
+  `TestOutputPropagatesSubprocessSlotError`, each overriding `acquireSubprocessSlotFunc` (restored via
+  `t.Cleanup`) to return a sentinel error and asserting `run`/`output` propagate it (via `errors.Is`) without
+  ever invoking the underlying command.
 
 (Prior rounds of this fix, unchanged by this doc: `66e50d45f5` added the semaphore and cap; `72319350ae`
 scoped it to Windows via the runtime check this doc's changes now replace with build tags.)
@@ -58,10 +71,18 @@ scoped it to Windows via the runtime check this doc's changes now replace with b
   this sandbox can't run a Windows binary, so this is a cross-compile check only, not an execution check).
 - `go vet ./internal/ci/acceptance/...` — clean.
 - `gofumpt -l internal/ci/acceptance/*.go` — no output.
-- `go test ./internal/ci/acceptance/...` — `ok`, 62.8s.
-- `./custom-gcl run --new-from-rev=origin/main` — skipped: no prebuilt `custom-gcl` binary exists in this
-  worktree (per this repo's own convention, pre-commit hooks run a prebuilt binary rather than building it
-  in-hook, and none was available here to run standalone either).
+- `go test ./internal/ci/acceptance/...` — `ok`, 13.5s (re-run after adding the coverage-gap tests below;
+  62.8s the first time, before local build caches were warm).
+- `go test ./internal/ci/acceptance/... -run 'TestRunPropagatesSubprocessSlotError|TestOutputPropagatesSubprocessSlotError' -v`
+  — both pass.
+- `atmos fix coverage` (`.claude/skills/test-coverage/scripts/patch-test-coverage.sh` vs `origin/main`) — the
+  two previously-uncovered patch lines Codecov flagged (`run`'s and `output`'s `acquireSubprocessSlot` error
+  branches) now show a nonzero hit count in the coverage profile; the file's only remaining zero-count lines
+  (`writeStatus`'s `Fprintf` error branch, two spots in the retry loop) are pre-existing, outside this patch's
+  diff, and unchanged by this fix.
+- `./custom-gcl run --new-from-rev=origin/main` — 0 issues (built the missing binary first via
+  `go tool mage lint:customGCL`, run standalone rather than through the pre-commit hook, per this repo's
+  convention of never building it from inside the hook).
 - Not independently re-confirmed here: the `66e50d45f5`/`72319350ae` commit messages' own stated local
   Windows-crash reproduction and the ~15s→~11.7s macOS timing comparison — those are prior, already-landed
   validation, not re-run for this file-split refactor since it doesn't change runtime behavior on any

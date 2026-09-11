@@ -44,6 +44,11 @@ var (
 	errCommandFailed        = errors.New("command failed")
 )
 
+// acquireSubprocessSlotFunc is a seam over acquireSubprocessSlot so tests can simulate
+// its error path (real only on Windows, when ctx is done before a slot frees up) on any
+// platform, without depending on the Windows-only semaphore actually blocking.
+var acquireSubprocessSlotFunc = acquireSubprocessSlot
+
 type commandRunner struct {
 	stdout     io.Writer
 	stderr     io.Writer
@@ -115,7 +120,7 @@ func (r commandRunner) run(ctx context.Context, opts runOptions, name string, ar
 			cmd.Stderr = io.MultiWriter(r.stderr, detector)
 		}
 
-		release, slotErr := acquireSubprocessSlot(ctx)
+		release, slotErr := acquireSubprocessSlotFunc(ctx)
 		if slotErr != nil {
 			return fmt.Errorf("%w: run %s: %w", errCommandFailed, commandString(name, args), slotErr)
 		}
@@ -190,7 +195,7 @@ func (r commandRunner) output(ctx context.Context, dir string, env []string, nam
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	release, err := acquireSubprocessSlot(ctx)
+	release, err := acquireSubprocessSlotFunc(ctx)
 	if err != nil {
 		return "", fmt.Errorf("run %s: %w", commandString(name, args), err)
 	}
