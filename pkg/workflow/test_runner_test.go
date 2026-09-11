@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -49,7 +50,9 @@ steps:
 	assert.NotContains(t, output, "hidden-after")
 	assert.Equal(t, 1, strings.Count(output, "failure-output"))
 	assert.Equal(t, 1, strings.Count(output, "failure-stderr"))
-	assert.NotContains(t, output, "\x1b[")
+	// Forced color is valid in static output, but cursor and other terminal controls are not.
+	plain := regexp.MustCompile(`\x1b\[[0-9;:]*m`).ReplaceAllString(output, "")
+	assert.NotContains(t, plain, "\x1b")
 }
 
 func TestTestRunnerPolicies(t *testing.T) {

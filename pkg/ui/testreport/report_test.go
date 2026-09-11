@@ -3,14 +3,16 @@ package testreport
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/cloudposse/atmos/pkg/ui/tree"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/ui/tree"
 )
 
 func TestTreeCountsAndConnectivity(t *testing.T) {
@@ -73,7 +75,9 @@ func TestReporterResizeAndInterruption(t *testing.T) {
 	assert.Empty(t, m.View())
 	assert.Contains(t, r.View(80, "", true), "1 canceled")
 	assert.NoError(t, r.Finish())
-	assert.NotContains(t, output.String(), "\x1b[")
+	// Forced color is valid in static output, but cursor and other terminal controls are not.
+	plain := regexp.MustCompile(`\x1b\[[0-9;:]*m`).ReplaceAllString(output.String(), "")
+	assert.NotContains(t, plain, "\x1b")
 }
 
 func TestLiveReporterPreservesTallTree(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v3"
@@ -37,7 +38,7 @@ with:
 				assert.NoError(t, err)
 			}
 			assert.Contains(t, output.String(), "failed-hook-check")
-			assert.Contains(t, output.String(), "1 passed, 1 failed")
+			assert.Contains(t, ansi.Strip(output.String()), "1 passed, 1 failed")
 			assert.NotContains(t, output.String(), "hidden-hook-success")
 		})
 	}
@@ -64,5 +65,5 @@ with:
 	var output bytes.Buffer
 	_, err := kind.Engine.Run(&hooks.ExecContext{Hook: &hook, Kind: kind, Event: hooks.AfterTerraformApply, AtmosConfig: &schema.AtmosConfiguration{}, Info: &schema.ConfigAndStacksInfo{}, Stderr: &output})
 	require.NoError(t, err)
-	assert.Contains(t, output.String(), "2 passed, 0 failed")
+	assert.Contains(t, ansi.Strip(output.String()), "2 passed, 0 failed")
 }

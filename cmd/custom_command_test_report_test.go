@@ -3,10 +3,12 @@ package cmd
 import (
 	"testing"
 
-	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestCustomCommandTestFailureEndsWithReport(t *testing.T) {
@@ -24,7 +26,7 @@ func TestCustomCommandTestFailureEndsWithReport(t *testing.T) {
 	require.NoError(t, err)
 	_, stderr := captureStdoutStderr(t, func() { assert.PanicsWithValue(t, 1, func() { command.Run(command, nil) }) })
 	assert.Contains(t, stderr, "failure-detail")
-	assert.Contains(t, stderr, "1/1 · 0 passed, 1 failed, 0 skipped, 0 canceled")
+	assert.Contains(t, ansi.Strip(stderr), "1/1 · 0 passed, 1 failed, 0 skipped, 0 canceled")
 	assert.NotContains(t, stderr, "# Error")
 	assert.NotContains(t, stderr, "Workflow Error")
 }
