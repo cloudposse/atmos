@@ -1000,22 +1000,24 @@ func executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *s
 // providers-lock hook) once init has succeeded. It hands them a TerraformExecContext whose
 // runner reuses the same binary, env (incl. TF_CLI_CONFIG_FILE pointing at the live proxy),
 // and working directory as init, so a `providers lock` runs against the already-warm cache.
-// Lock completion is best-effort: a failure is logged, not propagated, so it never fails the
-// user's plan/apply.
+// The runner goes through executeStreamingOrShell (not a raw ExecuteShellCommand) so that,
+// under --ui, `providers lock`'s own provider-fetch/checksum output (e.g. when a registry
+// cache/mirror forces a cross-platform lock) is captured by the same init spinner instead of
+// leaking raw terraform/opentofu output between the "Init … completed" and
+// "Selected … workspace" lines. Lock completion is best-effort: a failure is logged, not
+// propagated, so it never fails the user's plan/apply.
 func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) {
 	execCtx := &provisioner.TerraformExecContext{
 		WorkingDir: componentPath,
 		Run: func(args []string) error {
-			return ExecuteShellCommand(
-				*atmosConfig,
-				info.Command,
-				args,
-				componentPath,
-				info.ComponentEnvList,
-				info.DryRun,
-				info.RedirectStdErr,
-				opts...,
-			)
+			return executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
+				componentPath:  componentPath,
+				args:           args,
+				gatePhase:      subcommandInit,
+				subCommand:     subcommandProvidersLock,
+				redirectStdErr: info.RedirectStdErr,
+				shellOpts:      opts,
+			})
 		},
 	}
 

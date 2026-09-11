@@ -51,6 +51,29 @@ const (
 	versionColumnMinWidth = 15
 	descColumnMinWidth    = 40
 
+	// Column layout for the interactive "Select a template" picker
+	// (huh.Select, see PromptForTemplate/buildEmbedsTemplateOptions/
+	// buildScaffoldDisplayText). Unlike the bubbles-table columns above,
+	// these options render as a single line of plain text, so the
+	// description column width is computed from the real terminal width
+	// (GetTerminalWidth) rather than hard-coded, and the description text
+	// itself is truncated at a word boundary to fit -- otherwise huh wraps
+	// the whole line as one blob and can split a word mid-character onto a
+	// stray partial second line.
+	embedsKeyColumnWidth    = 24
+	embedsNameColumnWidth   = 35
+	scaffoldNameColumnWidth = 20
+	// Literal separator between padded columns in the fmt.Sprintf format
+	// strings below ("   ", 3 spaces).
+	selectColumnGap = 3
+	// Reserves room for huh's cursor ("> ") and Select field padding (see
+	// huh.Select.renderOption/View in the huh library) so the computed
+	// description width doesn't overrun the real line width.
+	selectOverhead = 4
+	// Floors the description column so text (and its truncation ellipsis)
+	// stay legible even on very narrow terminals.
+	minDescriptionWidth = 20
+
 	// File permissions.
 	dirPermissions = 0o755
 
@@ -183,8 +206,41 @@ func calculateMaxColumnWidths(rows [][]string, nameWidth, sourceWidth, versionWi
 	return nameWidth, sourceWidth, versionWidth, descWidth
 }
 
-// buildEmbedsTemplateOptions builds huh options from embedded configuration map.
-func buildEmbedsTemplateOptions(configs map[string]tmpl.Configuration) []huh.Option[string] {
+// embedsColumnWidths computes the key/name/description column widths for the
+// "Select a template" picker from real content, bounded by embedsKeyColumnWidth
+// /embedsNameColumnWidth so a single unusually long key or name can't blow out
+// the whole row. The description column absorbs whatever's left of
+// terminalWidth after the key/name columns, their separators, and huh's own
+// rendering overhead (selectOverhead), always at least minDescriptionWidth so
+// descriptions stay legible on narrow terminals. Key/name widths are computed
+// the same way (rather than assumed constants) so the description budget
+// matches what buildEmbedsTemplateOptions actually renders; otherwise a
+// key/name longer than the assumed constant silently pushes the line past
+// terminalWidth and huh has to wrap it after all.
+func embedsColumnWidths(configs map[string]tmpl.Configuration, terminalWidth int) (keyWidth, nameWidth, descWidth int) {
+	for key := range configs {
+		if w := lipgloss.Width(key); w > keyWidth {
+			keyWidth = w
+		}
+		if w := lipgloss.Width(configs[key].Name); w > nameWidth {
+			nameWidth = w
+		}
+	}
+	keyWidth = min(max(keyWidth, 1), embedsKeyColumnWidth)
+	nameWidth = min(max(nameWidth, 1), embedsNameColumnWidth)
+
+	descWidth = terminalWidth - keyWidth - nameWidth - (selectColumnGap * 2) - selectOverhead
+	if descWidth < minDescriptionWidth {
+		descWidth = minDescriptionWidth
+	}
+	return keyWidth, nameWidth, descWidth
+}
+
+// buildEmbedsTemplateOptions builds huh options from embedded configuration
+// map, using terminalWidth (from InitUI.GetTerminalWidth) to size the
+// description column dynamically instead of letting huh wrap an oversized
+// line mid-word.
+func buildEmbedsTemplateOptions(configs map[string]tmpl.Configuration, terminalWidth int) []huh.Option[string] {
 	// Build config keys for consistent ordering.
 	var templateNames []string
 	for key := range configs {
@@ -192,17 +248,33 @@ func buildEmbedsTemplateOptions(configs map[string]tmpl.Configuration) []huh.Opt
 	}
 	sort.Strings(templateNames)
 
+	keyWidth, nameWidth, descWidth := embedsColumnWidths(configs, terminalWidth)
+
 	var options []huh.Option[string]
 	for _, key := range templateNames {
 		config := configs[key]
-		displayText := fmt.Sprintf("%-15s   %-35s   %s", key, config.Name, config.Description)
+		// Truncate the displayed key/name too (a no-op when already within
+		// budget): keyWidth/nameWidth are capped by embedsKeyColumnWidth/
+		// embedsNameColumnWidth, but fmt's "%-*s" only pads -- it never
+		// truncates -- so an entry whose key/name exceeds the cap would
+		// otherwise silently push the whole line past terminalWidth and
+		// force huh to wrap it despite the description budget below
+		// already accounting for that cap. The option's underlying value
+		// stays the untruncated key so template lookup after selection
+		// (configs[selectedName]) still works.
+		displayKey := truncateAtWordBoundary(key, keyWidth)
+		displayName := truncateAtWordBoundary(config.Name, nameWidth)
+		desc := truncateAtWordBoundary(config.Description, descWidth)
+		displayText := fmt.Sprintf("%-*s   %-*s   %s", keyWidth, displayKey, nameWidth, displayName, desc)
 		options = append(options, huh.NewOption(displayText, key))
 	}
 	return options
 }
 
-// buildScaffoldTemplateOptions builds huh options from scaffold templates in atmos.yaml.
-func buildScaffoldTemplateOptions(templates interface{}) ([]huh.Option[string], []string) {
+// buildScaffoldTemplateOptions builds huh options from scaffold templates in
+// atmos.yaml, using terminalWidth to size the description column the same
+// way buildEmbedsTemplateOptions does.
+func buildScaffoldTemplateOptions(templates interface{}, terminalWidth int) ([]huh.Option[string], []string) {
 	templatesMap, ok := templates.(map[string]interface{})
 	if !ok {
 		return nil, nil
@@ -219,7 +291,7 @@ func buildScaffoldTemplateOptions(templates interface{}) ([]huh.Option[string], 
 	var templateNames []string
 
 	for _, templateName := range sortedNames {
-		displayText, valid := buildScaffoldDisplayText(templateName, templatesMap[templateName])
+		displayText, valid := buildScaffoldDisplayText(templateName, templatesMap[templateName], terminalWidth)
 		if !valid {
 			continue
 		}
@@ -231,7 +303,11 @@ func buildScaffoldTemplateOptions(templates interface{}) ([]huh.Option[string], 
 }
 
 // buildScaffoldDisplayText constructs display text for a scaffold template.
-func buildScaffoldDisplayText(templateName string, templateConfig interface{}) (string, bool) {
+// The description is truncated at a word boundary to fit within
+// terminalWidth alongside the name column, gap, and (when present) the
+// " (from <source>)" suffix -- otherwise a long description plus a long
+// source URL can overrun the line and wrap mid-word.
+func buildScaffoldDisplayText(templateName string, templateConfig interface{}, terminalWidth int) (string, bool) {
 	templateMap, ok := templateConfig.(map[string]interface{})
 	if !ok {
 		return "", false
@@ -240,12 +316,70 @@ func buildScaffoldDisplayText(templateName string, templateConfig interface{}) (
 	description := getStringFromMap(templateMap, "description")
 	source := getStringFromMap(templateMap, "source")
 
-	displayText := fmt.Sprintf("%-20s   %s", templateName, description)
+	sourceSuffix := ""
 	if source != "" {
-		displayText += fmt.Sprintf(" (from %s)", source)
+		sourceSuffix = fmt.Sprintf(" (from %s)", source)
 	}
 
+	descWidth := terminalWidth - scaffoldNameColumnWidth - selectColumnGap - selectOverhead - lipgloss.Width(sourceSuffix)
+	if descWidth < minDescriptionWidth {
+		descWidth = minDescriptionWidth
+	}
+	description = truncateAtWordBoundary(description, descWidth)
+
+	// Truncate the displayed name too (a no-op when already within budget):
+	// "%-*s" only pads -- it never truncates -- so a scaffold key longer than
+	// scaffoldNameColumnWidth would otherwise silently push the whole line
+	// past the terminal-width budget descWidth above already assumed. The
+	// option's underlying value (set by the caller via huh.NewOption) stays
+	// the untruncated templateName, so selecting it still resolves correctly.
+	displayName := truncateAtWordBoundary(templateName, scaffoldNameColumnWidth)
+	displayText := fmt.Sprintf("%-*s   %s", scaffoldNameColumnWidth, displayName, description) + sourceSuffix
+
 	return displayText, true
+}
+
+// truncateAtWordBoundary shortens s to fit within maxWidth display columns,
+// breaking on the last whole word rather than splitting a word mid-character,
+// and appends an ellipsis to signal truncation. Unlike truncateString (a
+// byte-length-based helper used for short debug/error previews elsewhere in
+// this file), this is display-width aware via lipgloss.Width so multi-byte
+// characters (e.g. the "—" em dash used in template descriptions) are
+// measured correctly.
+func truncateAtWordBoundary(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+
+	const ellipsis = "…"
+	budget := maxWidth - lipgloss.Width(ellipsis)
+	if budget <= 0 {
+		return ellipsis
+	}
+
+	runes := []rune(s)
+	width := 0
+	cut := 0
+	for i, r := range runes {
+		w := lipgloss.Width(string(r))
+		if width+w > budget {
+			break
+		}
+		width += w
+		cut = i + 1
+	}
+
+	truncated := string(runes[:cut])
+	// Prefer breaking on the last whole word so a long description doesn't
+	// get sliced mid-word (e.g. "...end to end on t" continuing onto a
+	// stray partial line).
+	if idx := strings.LastIndexAny(truncated, " \t"); idx > 0 {
+		truncated = truncated[:idx]
+	}
+	return strings.TrimRight(truncated, " \t") + ellipsis
 }
 
 // getStringFromMap safely extracts a string value from a map.
@@ -1629,16 +1763,21 @@ func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 func (ui *InitUI) PromptForTemplate(templateType string, templates interface{}) (string, error) {
 	var options []huh.Option[string]
 
+	// Size the description column from the real terminal width instead of a
+	// hard-coded constant, so long descriptions truncate cleanly rather than
+	// wrapping mid-word (see buildEmbedsTemplateOptions/buildScaffoldDisplayText).
+	terminalWidth := ui.GetTerminalWidth()
+
 	switch templateType {
 	case "embeds":
 		// Handle tmpl.Configuration map.
 		if configs, ok := templates.(map[string]tmpl.Configuration); ok {
-			options = buildEmbedsTemplateOptions(configs)
+			options = buildEmbedsTemplateOptions(configs, terminalWidth)
 		}
 
 	case templateTypeScaffold:
 		// Handle scaffold templates from atmos.yaml.
-		scaffoldOptions, _ := buildScaffoldTemplateOptions(templates)
+		scaffoldOptions, _ := buildScaffoldTemplateOptions(templates, terminalWidth)
 		options = append(options, scaffoldOptions...)
 	}
 
