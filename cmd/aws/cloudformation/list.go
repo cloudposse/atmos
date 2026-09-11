@@ -41,6 +41,7 @@ in the given stack.`,
 
   # Only stacks currently in a *_COMPLETE status
   atmos aws cloudformation list --stack dev --status CREATE_COMPLETE,UPDATE_COMPLETE`,
+		Args: cobra.NoArgs,
 		RunE: runList,
 	}
 	parser.RegisterFlags(cmd)

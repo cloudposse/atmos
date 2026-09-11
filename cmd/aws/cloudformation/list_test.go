@@ -12,6 +12,25 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// newListCmd must reject unexpected positional arguments (e.g. a typo'd
+// component name) rather than silently ignoring them and running the
+// account-wide ListStacks request anyway.
+func TestNewListCmd_RejectsPositionalArgs(t *testing.T) {
+	cmd := newListCmd()
+	require.NotNil(t, cmd.Args, "list must set an Args validator")
+
+	err := cmd.Args(cmd, []string{"unexpected"})
+	require.Error(t, err)
+}
+
+// newListCmd must accept zero positional arguments — the common case.
+func TestNewListCmd_AcceptsNoArgs(t *testing.T) {
+	cmd := newListCmd()
+	require.NotNil(t, cmd.Args)
+
+	require.NoError(t, cmd.Args(cmd, []string{}))
+}
+
 // cloudFormationComponentStackName must extract
 // components.aws/cloudformation.<component>.stack_name, returning ("", false)
 // gracefully at every level where the expected shape is absent instead of

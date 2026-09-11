@@ -89,14 +89,39 @@ func TestListDeployedStacks_APIError(t *testing.T) {
 	assert.ErrorIs(t, err, sentinel)
 }
 
-// toStackStatuses must return nil for an empty filter (ListStacks defaults to
-// all non-deleted statuses in that case) and convert each string otherwise.
+// toStackStatuses must default an empty filter to every known status except DELETE_COMPLETE
+// (AWS retains DELETE_COMPLETE summaries for 90 days, which would otherwise surface deleted
+// stacks as live deployed ones), and must convert each string verbatim, unfiltered, when an
+// explicit filter is given — even if the caller explicitly asks for DELETE_COMPLETE.
 func TestToStackStatuses(t *testing.T) {
-	assert.Nil(t, toStackStatuses(nil))
-	assert.Nil(t, toStackStatuses([]string{}))
+	for _, empty := range [][]string{nil, {}} {
+		got := toStackStatuses(empty)
+		assert.NotEmpty(t, got, "an empty filter must default to a non-empty status allowlist")
+		assert.NotContains(t, got, cfntypes.StackStatusDeleteComplete, "the default allowlist must exclude DELETE_COMPLETE")
+		assert.Contains(t, got, cfntypes.StackStatusCreateComplete)
+		assert.Contains(t, got, cfntypes.StackStatusUpdateComplete)
+	}
 
 	got := toStackStatuses([]string{"CREATE_COMPLETE", "UPDATE_COMPLETE"})
 	assert.Equal(t, []cfntypes.StackStatus{cfntypes.StackStatusCreateComplete, cfntypes.StackStatusUpdateComplete}, got)
+
+	// An explicit request for DELETE_COMPLETE must pass through untouched — only the
+	// no-filter-given default excludes it.
+	explicit := toStackStatuses([]string{"DELETE_COMPLETE"})
+	assert.Equal(t, []cfntypes.StackStatus{cfntypes.StackStatusDeleteComplete}, explicit)
+}
+
+// defaultDeployedStackStatuses must track the SDK's own StackStatus.Values() (minus
+// DELETE_COMPLETE), not a hand-maintained literal count, so a future SDK-added status is
+// included automatically instead of silently missing from the default allowlist.
+func TestDefaultDeployedStackStatuses_TracksSDKValues(t *testing.T) {
+	got := defaultDeployedStackStatuses()
+	want := cfntypes.StackStatus("").Values()
+
+	assert.Len(t, got, len(want)-1, "must be every known status except DELETE_COMPLETE")
+	for _, s := range got {
+		assert.NotEqual(t, cfntypes.StackStatusDeleteComplete, s)
+	}
 }
 
 // annotateManagedStacks must set Managed=true only for stacks whose name is
