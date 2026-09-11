@@ -94,10 +94,31 @@ func annotateManagedStacks(stacks []cfntypes.StackSummary, configuredStackNames 
 	return summaries
 }
 
-// toStackStatuses converts CLI-provided status strings to the SDK's enum type.
+// defaultDeployedStackStatuses is used as ListStacks' StackStatusFilter when the caller doesn't
+// request one explicitly: every known StackStatus except DELETE_COMPLETE. AWS retains
+// DELETE_COMPLETE stack summaries for 90 days after deletion, so an empty/omitted
+// StackStatusFilter would otherwise surface deleted stacks as if they were still live deployed
+// stacks. Built from the SDK's own StackStatus.Values() (not a hand-maintained literal list) so
+// a future SDK-added status is included automatically. An explicit --status request is never
+// touched by this default — it always passes straight through toStackStatuses unchanged.
+func defaultDeployedStackStatuses() []cfntypes.StackStatus {
+	all := cfntypes.StackStatus("").Values()
+	statuses := make([]cfntypes.StackStatus, 0, len(all))
+	for _, s := range all {
+		if s == cfntypes.StackStatusDeleteComplete {
+			continue
+		}
+		statuses = append(statuses, s)
+	}
+	return statuses
+}
+
+// toStackStatuses converts CLI-provided status strings to the SDK's enum type, defaulting to
+// defaultDeployedStackStatuses (excludes DELETE_COMPLETE) when the caller didn't request an
+// explicit filter.
 func toStackStatuses(statusFilter []string) []cfntypes.StackStatus {
 	if len(statusFilter) == 0 {
-		return nil
+		return defaultDeployedStackStatuses()
 	}
 	statuses := make([]cfntypes.StackStatus, 0, len(statusFilter))
 	for _, s := range statusFilter {

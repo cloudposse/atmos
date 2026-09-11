@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -122,9 +123,25 @@ func runFmt(spec *stackSpec, flags map[string]any, summary map[string]any) (map[
 	if clean {
 		return summary, nil
 	}
-	if err := os.WriteFile(spec.TemplateAbsPath, []byte(formatted), templateFilePermissions); err != nil {
+	if err := writeTemplateAtomic(spec.TemplateAbsPath, formatted); err != nil {
 		return summary, fmt.Errorf("%w: %s: %w", errUtils.ErrAwsCloudFormationFmtWriteFailed, spec.TemplateAbsPath, err)
 	}
 	_ = data.Writeln(fmt.Sprintf("%s: formatted", spec.TemplateAbsPath))
 	return summary, nil
+}
+
+// writeTemplateAtomic writes the formatted template to a temp file in the same directory and
+// renames it over TemplateAbsPath (via pkg/filesystem's WriteFileAtomic), instead of truncating
+// the existing file in place with os.WriteFile. A disk-full or I/O error mid-write then leaves
+// the original template untouched rather than empty or partially overwritten. The original
+// file's mode is preserved when it can be read; templateFilePermissions is used as a fallback
+// (e.g. the file was somehow removed between load and format).
+func writeTemplateAtomic(path, formatted string) error {
+	defer perf.Track(nil, "cloudformation.writeTemplateAtomic")()
+
+	mode := os.FileMode(templateFilePermissions)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	}
+	return filesystem.NewOSFileSystem().WriteFileAtomic(path, []byte(formatted), mode)
 }

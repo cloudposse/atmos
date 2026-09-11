@@ -26,7 +26,7 @@ func processTagTerraformOutput(
 // trackOutputDependency records the dependency in the resolution context and returns a cleanup function.
 // It returns an error if cycle detection fails.
 //
-// functionType identifies the calling YAML function (e.g. "terraform.output",
+// The functionType parameter identifies the calling YAML function (e.g. "terraform.output",
 // "aws.cloudformation.output") for the pushed DependencyNode — shared by every
 // output-fetching YAML function that reuses this "component [stack] output"
 // grammar, so it must be threaded through rather than hardcoded, or cycle
