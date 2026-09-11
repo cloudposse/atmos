@@ -1,22 +1,16 @@
 package exec
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
-	"sync"
 	"text/template"
 	"text/template/parse"
 	"time"
 
-	"github.com/Masterminds/sprig/v3"
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/hairyhenderson/gomplate/v3"
-	"github.com/hairyhenderson/gomplate/v3/data"
-	_ "github.com/hairyhenderson/gomplate/v4"
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -24,33 +18,32 @@ import (
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/templating"
 	u "github.com/cloudposse/atmos/pkg/utils"
-)
-
-// Cache for sprig function maps to avoid repeated expensive allocations.
-// Sprig function maps are immutable once created, so caching is safe.
-// Note: Gomplate functions are NOT cached as they may have state and context dependencies.
-var (
-	sprigFuncMapCache     template.FuncMap
-	sprigFuncMapCacheOnce sync.Once
 )
 
 const (
 	logKeyTemplate = "template"
+
+	// Datasource timeout applied when neither `atmos.yaml` nor the stack
+	// manifest's `settings.templates.settings` sets `gomplate.timeout`.
+	defaultDatasourceTimeoutSeconds = 5
 )
 
-// getSprigFuncMap returns a cached copy of the sprig function map.
-// Sprig function maps are expensive to create (173MB+ allocations) and immutable,
-// so we cache and reuse them across template operations.
-// This optimization reduces heap allocations by ~3.76% (173MB) per profile run.
-func getSprigFuncMap() template.FuncMap {
-	sprigFuncMapCacheOnce.Do(func() {
-		sprigFuncMapCache = sprig.FuncMap()
-	})
-	return sprigFuncMapCache
+// missingKeyOption maps the "ignore missing template values" switch to the
+// text/template "missingkey" option. With it off, a template that indexes a map
+// with a key that is not present fails, e.g.:
+//
+//	template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:17:12: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.flavor>: map has no entry for key "flavor"
+func missingKeyOption(ignoreMissingTemplateValues bool) string {
+	if ignoreMissingTemplateValues {
+		return templating.MissingKeyDefault
+	}
+	return templating.MissingKeyError
 }
 
-// ProcessTmpl parses and executes Go templates.
+// ProcessTmpl parses and executes Go templates with the Gomplate, Sprig and
+// Atmos function sets.
 func ProcessTmpl(
 	atmosConfig *schema.AtmosConfiguration,
 	tmplName string,
@@ -60,41 +53,22 @@ func ProcessTmpl(
 ) (string, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmpl")()
 
-	d := data.Data{}
 	ctx := context.TODO()
 
-	// Add Gomplate, Sprig and Atmos template functions.
 	cfg := atmosConfig
 	if cfg == nil {
 		cfg = &schema.AtmosConfiguration{}
 	}
-	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
 
-	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
-	if err != nil {
-		return "", err
-	}
+	engine := templating.New()
 
-	// Control the behavior during execution if a map is indexed with a key that is not present in the map.
-	// If the template context (`tmplData`) does not provide all the required variables, the following errors would be thrown:
-	// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:17:12: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.flavor>: map has no entry for key "flavor"
-	// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:12:36: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.stage>: map has no entry for key "stage"
-
-	option := "missingkey=error"
-
-	if ignoreMissingTemplateValues {
-		option = "missingkey=default"
-	}
-
-	t.Option(option)
-
-	var res bytes.Buffer
-	err = t.Execute(&res, tmplData)
-	if err != nil {
-		return "", err
-	}
-
-	return res.String(), nil
+	return engine.Render(ctx, &templating.Request{
+		Name:       tmplName,
+		Text:       tmplValue,
+		Data:       tmplData,
+		Funcs:      FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, engine),
+		MissingKey: missingKeyOption(ignoreMissingTemplateValues),
+	})
 }
 
 // convertRawEnvToStringMap converts a raw env value (any) to map[string]string.
@@ -286,9 +260,6 @@ func ProcessTmplWithDatasources(
 		templateSettings.Env = mergedEnv
 	}
 
-	// Add Atmos, Gomplate and Sprig functions and datasources
-	funcs := make(map[string]any)
-
 	// Number of processing evaluations/passes
 	evaluations, _ := lo.Coalesce(atmosConfig.Templates.Settings.Evaluations, 1)
 	result := tmplValue
@@ -328,79 +299,21 @@ func ProcessTmplWithDatasources(
 	for i := 0; i < evaluations; i++ {
 		log.Trace("ProcessTmplWithDatasources", logKeyTemplate, tmplName, "evaluation", i+1)
 
-		d := data.Data{}
-
-		// Gomplate functions and datasources
-		if atmosConfig.Templates.Settings.Gomplate.Enabled {
-			// If timeout is not provided in `atmos.yaml` nor in `settings.templates.settings` stack manifest, use 5 seconds
-			timeoutSeconds, _ := lo.Coalesce(templateSettings.Gomplate.Timeout, 5)
-
-			ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
-			defer cancelFunc()
-
-			d = data.Data{}
-			d.Ctx = ctx
-
-			for k, v := range templateSettings.Gomplate.Datasources {
-				_, err := d.DefineDatasource(k, v.Url)
-				if err != nil {
-					return "", err
-				}
-
-				// Add datasource headers
-				if len(v.Headers) > 0 {
-					d.Sources[k].Header = v.Headers
-				}
-			}
-
-			funcs = lo.Assign(funcs, gomplate.CreateFuncs(ctx, &d))
-		}
-
-		// Sprig functions
-		if atmosConfig.Templates.Settings.Sprig.Enabled {
-			funcs = lo.Assign(funcs, getSprigFuncMap())
-		}
-
-		// Atmos functions
-		funcs = lo.Assign(funcs, FuncMap(atmosConfig, configAndStacksInfo, context.TODO(), &d))
-
-		// Process the template
-		t := template.New(tmplName).Funcs(funcs)
-
-		leftDelimiter, rightDelimiter, err := resolveTemplateDelimiters(effectiveDelimiters)
+		rendered, err := renderTemplatePass(&templatePass{
+			atmosConfig:                 atmosConfig,
+			configAndStacksInfo:         configAndStacksInfo,
+			templateSettings:            &templateSettings,
+			name:                        tmplName,
+			text:                        result,
+			data:                        tmplData,
+			delimiters:                  effectiveDelimiters,
+			ignoreMissingTemplateValues: ignoreMissingTemplateValues,
+		})
 		if err != nil {
 			return "", err
 		}
 
-		t.Delims(leftDelimiter, rightDelimiter)
-
-		// Control the behavior during execution if a map is indexed with a key that is not present in the map
-		// If the template context (`tmplData`) does not provide all the required variables, the following errors would be thrown:
-		// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:17:12: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.flavor>: map has no entry for key "flavor"
-		// template: catalog/terraform/eks_cluster_tmpl_hierarchical.yaml:12:36: executing "catalog/terraform/eks_cluster_tmpl_hierarchical.yaml" at <.stage>: map has no entry for key "stage"
-
-		option := "missingkey=error"
-
-		if ignoreMissingTemplateValues {
-			option = "missingkey=default"
-		}
-
-		t.Option(option)
-
-		// Parse the template
-		t, err = t.Parse(result)
-		if err != nil {
-			return "", err
-		}
-
-		// Execute the template
-		var res bytes.Buffer
-		err = t.Execute(&res, tmplData)
-		if err != nil {
-			return "", err
-		}
-
-		result = res.String()
+		result = rendered
 		resultMap, err := u.UnmarshalYAML[schema.AtmosSectionMapType](result)
 		if err != nil {
 			return "", err
@@ -461,6 +374,75 @@ func ProcessTmplWithDatasources(
 	log.Trace("ProcessTmplWithDatasources: processed", logKeyTemplate, tmplName)
 
 	return result, nil
+}
+
+// templatePass describes one evaluation pass of a stack manifest template.
+type templatePass struct {
+	atmosConfig                 *schema.AtmosConfiguration
+	configAndStacksInfo         *schema.ConfigAndStacksInfo
+	templateSettings            *schema.TemplatesSettings
+	name                        string
+	text                        string
+	data                        any
+	delimiters                  []string
+	ignoreMissingTemplateValues bool
+}
+
+// renderTemplatePass renders one evaluation pass of a stack manifest template
+// with the Gomplate (functions and datasources), Sprig and Atmos function sets,
+// honoring the `templates.settings` toggles from `atmos.yaml` and the merged
+// datasource definitions and timeout from the stack manifest.
+func renderTemplatePass(pass *templatePass) (string, error) {
+	gomplateEnabled := pass.atmosConfig.Templates.Settings.Gomplate.Enabled
+	sprigEnabled := pass.atmosConfig.Templates.Settings.Sprig.Enabled
+
+	ctx := context.TODO()
+	cancel := func() {}
+	var datasources map[string]templating.Datasource
+
+	if gomplateEnabled {
+		timeoutSeconds, _ := lo.Coalesce(pass.templateSettings.Gomplate.Timeout, defaultDatasourceTimeoutSeconds)
+		ctx, cancel = context.WithTimeout(ctx, time.Second*time.Duration(timeoutSeconds))
+		datasources = datasourcesFromSettings(pass.templateSettings.Gomplate.Datasources)
+	}
+	defer cancel()
+
+	leftDelimiter, rightDelimiter, err := resolveTemplateDelimiters(pass.delimiters)
+	if err != nil {
+		return "", err
+	}
+
+	engine := templating.New(
+		templating.WithGomplate(gomplateEnabled),
+		templating.WithSprig(sprigEnabled),
+	)
+
+	return engine.Render(ctx, &templating.Request{
+		Name:        pass.name,
+		Text:        pass.text,
+		Data:        pass.data,
+		Funcs:       FuncMap(pass.atmosConfig, pass.configAndStacksInfo, context.TODO(), engine),
+		LeftDelim:   leftDelimiter,
+		RightDelim:  rightDelimiter,
+		MissingKey:  missingKeyOption(pass.ignoreMissingTemplateValues),
+		Datasources: datasources,
+	})
+}
+
+// datasourcesFromSettings converts the `gomplate.datasources` configuration
+// into datasource definitions for the template engine.
+func datasourcesFromSettings(settings map[string]schema.TemplatesSettingsGomplateDatasource) map[string]templating.Datasource {
+	if len(settings) == 0 {
+		return nil
+	}
+	datasources := make(map[string]templating.Datasource, len(settings))
+	for alias, definition := range settings {
+		datasources[alias] = templating.Datasource{
+			URL:     definition.Url,
+			Headers: definition.Headers,
+		}
+	}
+	return datasources
 }
 
 // resolveTemplateDelimiters returns the effective left/right Go template
@@ -641,31 +623,18 @@ func ProcessTmplWithDatasourcesGomplate(
 		return "", err
 	}
 
-	// Construct Gomplate Options.
-	opts := gomplate.Options{
-		Context: map[string]gomplate.Datasource{
-			".": {
-				URL: finalTopLevelFileURL,
-			},
-			"config": {
-				URL: finalFileUrl,
-			},
+	// Render with gomplate's own context handling: the merged data is exposed
+	// on `.` (with the historical `.Env.README_YAML` helper) and as the
+	// `config` datasource. Only Gomplate functions are available here.
+	engine := templating.New(templating.WithSprig(false))
+
+	return engine.Render(context.Background(), &templating.Request{
+		Name:       tmplName,
+		Text:       tmplValue,
+		MissingKey: missingKeyOption(ignoreMissingTemplateValues),
+		ContextSources: map[string]templating.Datasource{
+			".":      {URL: finalTopLevelFileURL.String()},
+			"config": {URL: finalFileUrl.String()},
 		},
-		Funcs: template.FuncMap{},
-	}
-
-	// Render the template.
-	renderer := gomplate.NewRenderer(opts)
-	var buf bytes.Buffer
-	tpl := gomplate.Template{
-		Name:   tmplName,
-		Text:   tmplValue,
-		Writer: &buf,
-	}
-
-	if err := renderer.RenderTemplates(context.Background(), []gomplate.Template{tpl}); err != nil {
-		return "", fmt.Errorf("failed to render template: %w", err)
-	}
-
-	return buf.String(), nil
+	})
 }

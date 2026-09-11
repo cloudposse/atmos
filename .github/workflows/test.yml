@@ -850,6 +850,12 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+      # tools/gomodcheck is its own module too (see the noticegen note above),
+      # so its tests only run when invoked from inside that directory.
+      - name: Run tools/gomodcheck unit tests
+        run: go test -race ./...
+        working-directory: tools/gomodcheck
+
   # `-race` requires CGO_ENABLED=1 (the detector's runtime is itself a cgo
   # library), unlike every other Go build/test path in this repo (CGO_ENABLED=0).
   # Enabling cgo pulls in the cgo half of github.com/bearsh/hid (transitive, via
