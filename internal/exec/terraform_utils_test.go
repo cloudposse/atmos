@@ -224,6 +224,7 @@ func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
 		useMocks bool,
 		tagsFilter []string,
 		labelsFilter map[string]string,
+		errOptions DescribeStacksErrorOptions,
 	) (map[string]any, error) {
 		described = true
 		require.NotNil(t, atmosConfig)
@@ -453,6 +454,7 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 			bool,
 			[]string,
 			map[string]string,
+			DescribeStacksErrorOptions,
 		) (map[string]any, error) {
 			return nil, expectedErr
 		})
@@ -492,6 +494,7 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 			bool,
 			[]string,
 			map[string]string,
+			DescribeStacksErrorOptions,
 		) (map[string]any, error) {
 			return map[string]any{}, nil
 		})
