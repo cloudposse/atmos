@@ -67,25 +67,34 @@ func TestTestRaceMatrix(t *testing.T) {
 		require.ErrorIs(t, err, errMageRepoRootNotFound)
 	})
 
-	t.Run("missing RACE_SHARD_COUNT is an error", func(t *testing.T) {
+	t.Run("propagates package listing failure", func(t *testing.T) {
 		root := initGitRepoFixture(t)
 		t.Chdir(root)
 		setUpFakePathBinary(t, "go")
-		t.Setenv(raceShardCountEnv, "")
+		t.Setenv("ATMOS_MAGEFILES_FAKE_BIN_EXIT", "1")
 
 		err := Test{}.RaceMatrix()
-		require.ErrorIs(t, err, errInvalidRaceShardCount)
+		require.ErrorContains(t, err, "mage: go list ./...")
 	})
 
-	t.Run("invalid RACE_SHARD_COUNT is an error", func(t *testing.T) {
-		root := initGitRepoFixture(t)
-		t.Chdir(root)
-		setUpFakePathBinary(t, "go")
-		t.Setenv(raceShardCountEnv, "0")
+	invalidShardCounts := []struct {
+		name  string
+		value string
+	}{
+		{name: "missing RACE_SHARD_COUNT is an error", value: ""},
+		{name: "invalid RACE_SHARD_COUNT is an error", value: "0"},
+	}
+	for _, testCase := range invalidShardCounts {
+		t.Run(testCase.name, func(t *testing.T) {
+			root := initGitRepoFixture(t)
+			t.Chdir(root)
+			setUpFakePathBinary(t, "go")
+			t.Setenv(raceShardCountEnv, testCase.value)
 
-		err := Test{}.RaceMatrix()
-		require.ErrorIs(t, err, errInvalidRaceShardCount)
-	})
+			err := Test{}.RaceMatrix()
+			require.ErrorIs(t, err, errInvalidRaceShardCount)
+		})
+	}
 
 	t.Run("writes a shard/packages matrix to GITHUB_OUTPUT", func(t *testing.T) {
 		root := initGitRepoFixture(t)
