@@ -125,11 +125,18 @@ the shared step bridge.
 atmos scaffold generate terraform-component ./components/terraform/vpc
 atmos scaffold generate terraform-component ./components/terraform/vpc --update
 atmos scaffold generate terraform-component ./components/terraform/vpc --update --merge-strategy=theirs
+atmos scaffold generate terraform-component ./components/terraform/vpc --update --update-strategy=rendered
 ```
 
 `--update` uses the recorded base revision to perform an optimistic three-way merge. The default
 `manual` strategy surfaces real conflicts; `ours` keeps local changes and `theirs` applies the
 template side of a conflict.
+
+`--update-strategy` controls where the merge's *base* comes from, independently of `--merge-strategy`.
+`tracked` (the default) reads it from the target's own Git history. `rendered` instead re-renders
+the template at the ref that produced what's currently on disk, using that generation's recorded
+answers — no Git history dependency, but it requires the template to carry a `scaffold.yaml` (so
+those answers are recoverable from `.atmos/scaffold.yaml`).
 
 ## Project Initialization
 
