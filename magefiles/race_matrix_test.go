@@ -71,6 +71,7 @@ func TestTestRaceMatrix(t *testing.T) {
 		root := initGitRepoFixture(t)
 		t.Chdir(root)
 		setUpFakePathBinary(t, "go")
+		t.Setenv(raceShardCountEnv, "")
 
 		err := Test{}.RaceMatrix()
 		require.ErrorIs(t, err, errInvalidRaceShardCount)
