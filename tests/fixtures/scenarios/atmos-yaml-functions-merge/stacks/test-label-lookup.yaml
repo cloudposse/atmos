@@ -1,0 +1,69 @@
+vars:
+  stage: label-lookup
+
+metadata:
+  labels:
+    runner: ubuntu-latest
+
+settings:
+  pro:
+    pull_request:
+      merged:
+        workflows:
+          apply.yaml:
+            inputs:
+              component: "{{ .atmos_component }}"
+              stack: "{{ .stack }}"
+              runner: !labels runner fallback-runner
+              runner_template: "{{ .metadata.labels.runner }}"
+
+components:
+  terraform:
+    runner-base:
+      metadata:
+        type: abstract
+        component: yaml-function-test
+        labels:
+          runner: self-hosted-large
+          cost-center: platform
+      vars:
+        runner: !labels runner
+        fallback: !labels missing "default runner"
+        empty_fallback: !labels missing ""
+        cost_center: '{{ index .metadata.labels "cost-center" }}'
+        implementation: "{{ .component }}"
+      settings:
+        pro:
+          pull_request:
+            merged:
+              workflows:
+                apply.yaml:
+                  inputs:
+                    runner: !labels runner
+
+    runner-inherited:
+      metadata:
+        component: yaml-function-test
+        inherits: [runner-base]
+
+    runner-override:
+      metadata:
+        component: yaml-function-test
+        inherits: [runner-base]
+        labels:
+          runner: self-hosted-gpu
+
+    runner-empty:
+      metadata:
+        component: yaml-function-test
+        inherits: [runner-base]
+        labels:
+          runner: ""
+
+    runner-default:
+      metadata:
+        component: yaml-function-test
+
+    runner-mapping-only:
+      metadata:
+        component: runner-base
