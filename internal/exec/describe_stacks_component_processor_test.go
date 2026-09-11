@@ -1147,7 +1147,7 @@ func TestProcessComponentSectionTemplates_ConvertToYAMLError(t *testing.T) {
 		"key": yamlMarshalError{},
 	}
 
-	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{}, nil)
 	require.Error(t, err)
 }
 
@@ -1167,7 +1167,7 @@ func TestProcessComponentSectionTemplates_MapstructureDecodeError(t *testing.T) 
 		},
 	}
 
-	_, err := processComponentSectionTemplates(ac, info, componentSection, settingsSection)
+	_, err := processComponentSectionTemplates(ac, info, componentSection, settingsSection, nil)
 	require.Error(t, err)
 }
 
@@ -1192,7 +1192,7 @@ func TestProcessComponentSectionTemplates_ProcessTmplError(t *testing.T) {
 		},
 	}
 
-	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{}, nil)
 	require.Error(t, err)
 }
 
@@ -1223,7 +1223,7 @@ func TestProcessComponentSectionTemplates_UnmarshalYAMLError(t *testing.T) {
 		`{{ "\n- list_item" }}`: "value",
 	}
 
-	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{}, nil)
 	require.Error(t, err)
 }
 
@@ -1245,7 +1245,7 @@ func TestProcessComponentSectionTemplates_AddTemplateContextError(t *testing.T) 
 		},
 	}
 
-	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{}, nil)
 	require.Error(t, err)
 }
 
@@ -1341,7 +1341,7 @@ func TestProcessComponentSectionYAMLFunctions_Error(t *testing.T) {
 		},
 	}
 
-	_, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil, nil, false)
+	_, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil, nil, false, nil)
 	require.Error(t, err)
 }
 
@@ -1541,7 +1541,7 @@ func TestProcessComponentSectionTemplates_TemplatesDisabledSuccess(t *testing.T)
 		},
 	}
 
-	result, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	result, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{}, nil)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	vars, ok := result["vars"].(map[string]any)
@@ -1754,7 +1754,7 @@ func TestProcessComponentSectionYAMLFunctions_Lenient_Warn(t *testing.T) {
 	var warnings []DegradationWarning
 	result, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil, func(w DegradationWarning) {
 		warnings = append(warnings, w)
-	}, false)
+	}, false, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
