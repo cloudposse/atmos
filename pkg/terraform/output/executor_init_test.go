@@ -3,6 +3,7 @@ package output
 import (
 	"context"
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
@@ -14,6 +15,19 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
 )
+
+// outputCallsBeforeGivingUp returns how many times runOutput's retryOnWindows wrapper
+// (platform_windows.go) invokes a persistently-failing Output() before propagating the
+// error: 1 on non-Windows (no retry), or 3 on Windows (retryOnWindows's fixed retry
+// budget). A mock Output() expectation that always returns the same error must account
+// for this, or the retry silently consumes the recovery-triggering error before
+// runOutputWithInitRecovery's own Classify/ShouldRecover logic ever sees it.
+func outputCallsBeforeGivingUp() int {
+	if runtime.GOOS == "windows" {
+		return 3
+	}
+	return 1
+}
 
 // autoInitComponentConfig returns a ComponentConfig pointed at a fresh, real
 // temp directory (required so autoinit.Compute/Record can fingerprint and
@@ -161,7 +175,8 @@ func TestRunOutput_RecoversFromBackendInitRequired(t *testing.T) {
 	executor := &Executor{}
 
 	first := mockRunner.EXPECT().Output(gomock.Any()).
-		Return(nil, errors.New(`Backend initialization required, please run "terraform init"`))
+		Return(nil, errors.New(`Backend initialization required, please run "terraform init"`)).
+		Times(outputCallsBeforeGivingUp())
 	second := mockRunner.EXPECT().Output(gomock.Any()).Return(outputMetaFor(`"recovered"`), nil)
 	gomock.InOrder(first, second)
 
@@ -185,7 +200,8 @@ func TestRunOutput_RecoversWithUpgradeWhenDiagnosticAsks(t *testing.T) {
 	executor := &Executor{}
 
 	first := mockRunner.EXPECT().Output(gomock.Any()).
-		Return(nil, errors.New("Error: Inconsistent dependency lock file\n\nmust use terraform init -upgrade"))
+		Return(nil, errors.New("Error: Inconsistent dependency lock file\n\nmust use terraform init -upgrade")).
+		Times(outputCallsBeforeGivingUp())
 	second := mockRunner.EXPECT().Output(gomock.Any()).Return(outputMetaFor(`"recovered"`), nil)
 	gomock.InOrder(first, second)
 
@@ -216,7 +232,8 @@ func TestRunOutput_RecoversWithReconfigureOnBackendChanged(t *testing.T) {
 	executor := &Executor{}
 
 	first := mockRunner.EXPECT().Output(gomock.Any()).
-		Return(nil, errors.New("Error: Backend configuration changed"))
+		Return(nil, errors.New("Error: Backend configuration changed")).
+		Times(outputCallsBeforeGivingUp())
 	second := mockRunner.EXPECT().Output(gomock.Any()).Return(outputMetaFor(`"recovered"`), nil)
 	gomock.InOrder(first, second)
 
@@ -250,7 +267,7 @@ func TestRunOutput_NoRecoveryForUnrelatedError(t *testing.T) {
 	// Exactly one Output call: no diagnostic match means no recovery attempt,
 	// so a second Output call (and any Init/WorkspaceSelect call) would be
 	// unexpected -- no mock expectations are registered for them.
-	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, unrelatedErr).Times(1)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, unrelatedErr).Times(outputCallsBeforeGivingUp())
 
 	_, err := executor.runOutputWithInitRecovery(
 		context.Background(), atmosConfig, mockRunner, config, "comp", "stack", nil, tfplugin.Cache{}, map[string]string{}, false,
@@ -269,7 +286,7 @@ func TestRunOutput_NoRecoveryWhenSkipInit_ErrorWrapsInitRequired(t *testing.T) {
 	executor := &Executor{}
 
 	initRequiredErr := errors.New(`Backend initialization required, please run "terraform init"`)
-	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, initRequiredErr).Times(1)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, initRequiredErr).Times(outputCallsBeforeGivingUp())
 
 	// skipInit=true means the caller explicitly opted out of implicit init
 	// (the GetOutputSkipInit path); ShouldRecover must refuse to silently
@@ -293,7 +310,7 @@ func TestRunOutput_NoRecoveryWhenUpgradeNever_ErrorWrapsUpgradeRequired(t *testi
 	executor := &Executor{}
 
 	upgradeErr := errors.New("Error: Inconsistent dependency lock file\n\nmust use terraform init -upgrade")
-	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, upgradeErr).Times(1)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, upgradeErr).Times(outputCallsBeforeGivingUp())
 
 	_, err := executor.runOutputWithInitRecovery(
 		context.Background(), atmosConfig, mockRunner, config, "comp", "stack", nil, tfplugin.Cache{}, map[string]string{}, false,

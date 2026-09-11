@@ -10,6 +10,13 @@ import (
 // TestDataDir covers precedence between the subprocess-env lookup and the real process
 // environment, relative-vs-absolute resolution, and the default fallback.
 func TestDataDir(t *testing.T) {
+	// filepath.VolumeName is "" on Unix and a drive letter (e.g. "C:") on Windows; prefixing
+	// with it lets the "absolute value from lookup" case below build a path filepath.IsAbs
+	// recognizes as absolute on every platform -- a bare `\abs\data` is NOT absolute on
+	// Windows (it's rooted but drive-relative), unlike on Unix where a leading separator
+	// alone is sufficient.
+	absPath := filepath.Join(filepath.VolumeName(t.TempDir())+string(filepath.Separator), "abs", "data")
+
 	tests := []struct {
 		name          string
 		componentPath string
@@ -48,9 +55,9 @@ func TestDataDir(t *testing.T) {
 		{
 			name:          "absolute value from lookup is honored as-is",
 			componentPath: "component",
-			lookup:        func(string) string { return filepath.Join(string(filepath.Separator), "abs", "data") },
+			lookup:        func(string) string { return absPath },
 			osEnv:         "",
-			want:          func(string) string { return filepath.Join(string(filepath.Separator), "abs", "data") },
+			want:          func(string) string { return absPath },
 		},
 	}
 
