@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [feature, experimental]
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Atmos now treats Helm as a first-class component type. Define a Helm release —
 local chart, remote repository chart, or OCI chart — in your stack configuration,
@@ -74,7 +74,7 @@ atmos helm apply monitoring -s plat-ue2-dev
 
 Here's the full lifecycle end to end:
 
-<CastPlayer src="/casts/examples/helm/lifecycle.cast" title="atmos native helm lifecycle" chrome controls scrubber />
+<CastEmbed src="/casts/examples/helm/lifecycle.cast" title="atmos native helm lifecycle" chrome controls scrubber />
 
 [View the full example](/examples/helm)
 

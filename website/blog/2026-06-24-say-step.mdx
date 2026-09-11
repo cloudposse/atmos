@@ -6,7 +6,7 @@ authors: [osterman]
 tags: [feature]
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Workflows now have a `say` step type that speaks a message out loud using text-to-speech — an audible cue for when a long-running workflow finishes or needs your attention, even after you've switched to another window. When no speech engine is available (or you're in CI), it degrades gracefully and prints the message instead, so the same workflow works everywhere.
 
@@ -76,7 +76,7 @@ atmos workflow pipeline -f say      # announce each build milestone
 
 Here's the build pipeline announcing its milestones end to end:
 
-<CastPlayer src="/casts/examples/say-something/pipeline.cast" title="atmos say steps" chrome controls scrubber />
+<CastEmbed src="/casts/examples/say-something/pipeline.cast" title="atmos say steps" chrome controls scrubber />
 
 [View the full example](/examples/say-something)
 
