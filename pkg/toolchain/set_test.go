@@ -1007,8 +1007,12 @@ func TestFetchGitHubVersionsNetworkEdgeCases(t *testing.T) {
 // "github-token" as a Bearer credential to a plain-http apiURL: ATMOS_TOOLCHAIN_GITHUB_API_URL
 // can resolve to a non-https scheme, and doing so would leak the token in cleartext.
 func TestMakeGitHubRequestOmitsTokenOverHTTP(t *testing.T) {
+	// Isolate the global viper instance like this package's other tests do: Reset before, and
+	// Reset plus re-bind after, so no override of "github-token" leaks into sibling tests that
+	// expect the env binding (TestGitHubTokenEnvBinding) -- order is randomized under -shuffle.
+	setupTest()
+	t.Cleanup(teardownTest)
 	viper.Set("github-token", "test-token")
-	defer viper.Set("github-token", "")
 
 	var gotAuth string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
