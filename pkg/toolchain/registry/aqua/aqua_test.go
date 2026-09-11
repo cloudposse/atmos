@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	github "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry/cache"
 )
@@ -34,6 +35,24 @@ func TestNewAquaRegistry(t *testing.T) {
 	assert.NotNil(t, ar.cache)
 	// Cache should be in XDG-compliant path: ~/.cache/atmos/toolchain/registry
 	assert.Contains(t, ar.cache.baseDir, filepath.Join("atmos", "toolchain", "registry"))
+}
+
+// TestToolchainHostMatcher_DifferentAPIHost pins that a corporate mirror whose API host
+// differs from its web/clone host (ATMOS_TOOLCHAIN_GITHUB_API_URL pointing at a different
+// domain than ATMOS_TOOLCHAIN_GITHUB_URL) still receives the GitHub token on requests to
+// ar.client, which is built from the API host (githubBaseURL).
+func TestToolchainHostMatcher_DifferentAPIHost(t *testing.T) {
+	endpoints := github.Endpoints{
+		ServerURL: "https://mirror.example.com",
+		APIURL:    "https://api-mirror.example.com",
+		Host:      "mirror.example.com",
+	}
+	matcher := toolchainHostMatcher(endpoints)
+
+	assert.True(t, matcher("api-mirror.example.com"), "matcher should authenticate requests to the resolved API host")
+	assert.True(t, matcher("mirror.example.com"), "matcher should still authenticate requests to the resolved web/clone host")
+	assert.True(t, matcher("api.github.com"), "matcher should still authenticate the default public GitHub API host")
+	assert.False(t, matcher("attacker.example.com"), "matcher should reject unrelated hosts")
 }
 
 func TestAquaRegistry_LoadLocalConfig(t *testing.T) {

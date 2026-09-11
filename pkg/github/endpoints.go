@@ -171,6 +171,18 @@ func (e Endpoints) IsHost(host string) bool {
 	return normalizeHost(host) == e.Host
 }
 
+// IsAPIHost reports whether host (case-insensitive, with port and trailing dot normalized)
+// matches this Endpoints value's API host (derived from APIURL). This can differ from IsHost
+// (ServerURL's host) for a corporate mirror that fronts the web/clone host and the API host
+// separately, e.g. ATMOS_TOOLCHAIN_GITHUB_URL and ATMOS_TOOLCHAIN_GITHUB_API_URL pointing at
+// different hosts. Callers that authenticate requests sent to APIURL (rather than ServerURL)
+// should check this in addition to IsHost.
+func (e Endpoints) IsAPIHost(host string) bool {
+	defer perf.Track(nil, "github.Endpoints.IsAPIHost")()
+
+	return normalizeHost(host) == hostOf(e.APIURL)
+}
+
 // isDefaultGitHubCom reports whether these endpoints point at public GitHub.com.
 func (e Endpoints) isDefaultGitHubCom() bool {
 	return e.Host == defaultGitHubServerHost

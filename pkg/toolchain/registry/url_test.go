@@ -313,6 +313,22 @@ func TestApplyGitHubRef_GHESHost(t *testing.T) {
 		applyGitHubRef("https://unrelated.example.com/registry.yaml", "v1.2.3"))
 }
 
+// TestApplyGitHubRef_HostNormalization verifies that matchGitHubEndpoints (used by
+// applyGitHubRef) normalizes case and strips the default HTTPS port before comparing hosts, so
+// a case variant or an explicit ":443" still resolves to the public github.com shape instead of
+// silently leaving ref unapplied.
+func TestApplyGitHubRef_HostNormalization(t *testing.T) {
+	assert.Equal(t,
+		"https://raw.githubusercontent.com/owner/repo/v1.2.3/registry.yaml",
+		applyGitHubRef("https://GitHub.Com/owner/repo", "v1.2.3"),
+		"a case-variant github.com host must still resolve to raw.githubusercontent.com")
+
+	assert.Equal(t,
+		"https://raw.githubusercontent.com/owner/repo/v1.2.3/registry.yaml",
+		applyGitHubRef("https://github.com:443/owner/repo", "v1.2.3"),
+		"an explicit default HTTPS port must not prevent host matching")
+}
+
 // TestURLRegistry_WithRef tests that ref is properly applied when creating a URLRegistry.
 func TestURLRegistry_WithRef(t *testing.T) {
 	// Track which URL was requested.
