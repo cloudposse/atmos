@@ -48,8 +48,13 @@ concurrency:
 
 jobs:
   summarize:
-    # Closed-PR cleanup and non-PR invocations are intentionally not included.
-    if: github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'pull_request_target'
+    # Admit runs explicitly associated with a PR even when their original event
+    # was workflow_dispatch or another non-PR event. The action still verifies
+    # that the open PR points at the triggering run's exact head SHA.
+    if: >-
+      github.event.workflow_run.event == 'pull_request' ||
+      github.event.workflow_run.event == 'pull_request_target' ||
+      github.event.workflow_run.pull_requests[0].number > 0
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

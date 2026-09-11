@@ -20,6 +20,10 @@ The companion `ci-timing-summary.yml` workflow runs from the default branch on
 checks out or executes pull-request code. The workflow's trigger list must stay in
 sync with workflows that can run for an open pull request.
 
+Sticky-comment lookup requires both the hidden marker and the comment author's
+login. The default author is `github-actions[bot]`; set the `comment-author`
+input when the action runs with a personal access token or GitHub App token.
+
 ## Development
 
 ```shell

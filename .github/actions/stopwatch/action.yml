@@ -17,6 +17,10 @@ inputs:
     description: Hidden marker used to find and update the sticky comment.
     required: false
     default: "<!-- atmos-stopwatch -->"
+  comment-author:
+    description: Login expected to own the sticky comment; override when using a PAT or GitHub App token.
+    required: false
+    default: "github-actions[bot]"
 
 outputs:
   published:

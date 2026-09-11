@@ -48,6 +48,7 @@ export interface TimingSummary {
   jobs: TimedJob[];
 }
 
+/** Parses an ISO timestamp and rejects invalid input. */
 function timestamp(value: string): number {
   const parsed = Date.parse(value);
   if (!Number.isFinite(parsed)) {
@@ -56,10 +57,12 @@ function timestamp(value: string): number {
   return parsed;
 }
 
+/** Calculates rounded non-negative elapsed seconds between timestamps. */
 function elapsedSeconds(start: string, end: string): number {
   return Math.max(0, Math.round((timestamp(end) - timestamp(start)) / 1000));
 }
 
+/** Selects the latest relevant run for each workflow on the current PR head. */
 export function selectLatestRuns(
   runs: WorkflowRun[],
   headSha: string,
@@ -95,6 +98,7 @@ export function selectLatestRuns(
   );
 }
 
+/** Aggregates wall-clock, workflow, and runner timings from completed jobs. */
 export function calculateTimingSummary(
   runs: WorkflowRun[],
   jobsByRun: ReadonlyMap<number, WorkflowJob[]>,
@@ -154,6 +158,7 @@ export function calculateTimingSummary(
   };
 }
 
+/** Formats a duration as compact hours, minutes, and seconds. */
 export function formatDuration(totalSeconds: number): string {
   const seconds = Math.max(0, Math.round(totalSeconds));
   const hours = Math.floor(seconds / 3600);
@@ -169,6 +174,7 @@ export function formatDuration(totalSeconds: number): string {
   return `${remainder}s`;
 }
 
+/** Escapes untrusted text for safe display inside a Markdown table cell. */
 function escapeCell(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -178,6 +184,7 @@ function escapeCell(value: string): string {
     .replace(/[\r\n]+/g, " ");
 }
 
+/** Maps a GitHub conclusion to a compact status icon. */
 function conclusionIcon(conclusion: string | null): string {
   switch (conclusion) {
     case "success":
@@ -196,6 +203,7 @@ function conclusionIcon(conclusion: string | null): string {
   }
 }
 
+/** Renders the sticky Markdown comment for one PR head commit. */
 export function renderComment(marker: string, headSha: string, summary: TimingSummary): string {
   const workflowRows = summary.workflows.map(({ run, elapsedSeconds, runnerSeconds, jobCount }) =>
     `| ${conclusionIcon(run.conclusion)} [${escapeCell(run.name)}](${run.htmlUrl}) | ${formatDuration(elapsedSeconds)} | ${formatDuration(runnerSeconds)} | ${jobCount} |`,

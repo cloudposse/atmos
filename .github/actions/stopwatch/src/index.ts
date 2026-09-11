@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { appendFile } from "node:fs/promises";
 
+import { GitHubClient } from "./github";
 import {
   calculateTimingSummary,
   renderComment,
@@ -10,7 +11,6 @@ import {
 } from "./metrics";
 
 const COORDINATOR_WORKFLOW_NAME = "CI Timing Summary";
-const API_VERSION = "2022-11-28";
 
 interface ApiPullRequest {
   number: number;
@@ -51,6 +51,7 @@ interface ApiComment {
   user: { login: string } | null;
 }
 
+/** Reads a required action input from the environment. */
 function getInput(name: string): string {
   const key = `INPUT_${name.replaceAll(" ", "_").toUpperCase()}`;
   const value = process.env[key]?.trim();
@@ -60,6 +61,7 @@ function getInput(name: string): string {
   return value;
 }
 
+/** Parses and validates an integer action input. */
 function parseIntegerInput(name: string, minimum: number, maximum = Number.MAX_SAFE_INTEGER): number {
   const value = Number.parseInt(getInput(name), 10);
   if (!Number.isInteger(value) || value < minimum || value > maximum) {
@@ -68,6 +70,7 @@ function parseIntegerInput(name: string, minimum: number, maximum = Number.MAX_S
   return value;
 }
 
+/** Writes a multiline-safe GitHub Actions output. */
 async function setOutput(name: string, value: string | number | boolean): Promise<void> {
   const outputFile = process.env.GITHUB_OUTPUT;
   if (outputFile === undefined || outputFile === "") {
@@ -79,11 +82,13 @@ async function setOutput(name: string, value: string | number | boolean): Promis
   await appendFile(outputFile, `${name}<<${delimiter}\n${value}\n${delimiter}\n`, "utf8");
 }
 
+/** Records whether the action published a timing summary and why. */
 async function setResult(published: boolean, reason: string): Promise<void> {
   await setOutput("published", published);
   await setOutput("reason", reason);
 }
 
+/** Converts a GitHub workflow-run response to the metrics model. */
 function toWorkflowRun(data: ApiWorkflowRun): WorkflowRun {
   return {
     id: data.id,
@@ -100,6 +105,7 @@ function toWorkflowRun(data: ApiWorkflowRun): WorkflowRun {
   };
 }
 
+/** Converts a GitHub workflow-job response to the metrics model. */
 function toWorkflowJob(runId: number, data: ApiWorkflowJob): WorkflowJob {
   return {
     id: data.id,
@@ -113,49 +119,7 @@ function toWorkflowJob(runId: number, data: ApiWorkflowJob): WorkflowJob {
   };
 }
 
-class GitHubClient {
-  readonly #baseUrl: string;
-  readonly #token: string;
-
-  constructor(token: string) {
-    this.#token = token;
-    this.#baseUrl = (process.env.GITHUB_API_URL ?? "https://api.github.com").replace(/\/$/, "");
-  }
-
-  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const response = await fetch(`${this.#baseUrl}${path}`, {
-      method,
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${this.#token}`,
-        "Content-Type": "application/json",
-        "User-Agent": "atmos-stopwatch",
-        "X-GitHub-Api-Version": API_VERSION,
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const responseBody = (await response.text()).slice(0, 2_000);
-      throw new Error(`GitHub API ${method} ${path} returned ${response.status}: ${responseBody}`);
-    }
-
-    return await response.json() as T;
-  }
-
-  async paginate<T>(pathForPage: (page: number) => string, unwrap: (response: unknown) => T[]): Promise<T[]> {
-    const results: T[] = [];
-    for (let page = 1; ; page += 1) {
-      const response = await this.request<unknown>("GET", pathForPage(page));
-      const pageResults = unwrap(response);
-      results.push(...pageResults);
-      if (pageResults.length < 100) {
-        return results;
-      }
-    }
-  }
-}
-
+/** Validates and unwraps a top-level paginated array. */
 function unwrapArray<T>(response: unknown): T[] {
   if (!Array.isArray(response)) {
     throw new Error("GitHub API returned an unexpected paginated response");
@@ -163,6 +127,7 @@ function unwrapArray<T>(response: unknown): T[] {
   return response as T[];
 }
 
+/** Builds an unwrapping function for a paginated response property. */
 function unwrapProperty<T>(property: string): (response: unknown) => T[] {
   return (response: unknown): T[] => {
     if (typeof response !== "object" || response === null || !Array.isArray(Reflect.get(response, property))) {
@@ -172,6 +137,7 @@ function unwrapProperty<T>(property: string): (response: unknown) => T[] {
   };
 }
 
+/** Collects completed PR workflow timings and publishes the sticky comment. */
 async function run(): Promise<void> {
   await setResult(false, "Action has not completed");
 
@@ -179,6 +145,7 @@ async function run(): Promise<void> {
   const workflowRunId = parseIntegerInput("workflow-run-id", 1);
   const settleSeconds = parseIntegerInput("settle-seconds", 0, 120);
   const marker = getInput("comment-marker");
+  const commentAuthor = getInput("comment-author");
   const repository = process.env.GITHUB_REPOSITORY?.split("/");
   if (repository?.length !== 2 || repository[0] === "" || repository[1] === "") {
     throw new Error("GITHUB_REPOSITORY must contain owner/repository");
@@ -281,7 +248,7 @@ async function run(): Promise<void> {
     unwrapArray<ApiComment>,
   );
   const existingComment = comments.find(
-    (comment) => comment.user?.login === "github-actions[bot]" && comment.body?.includes(marker),
+    (comment) => comment.user?.login === commentAuthor && comment.body?.includes(marker),
   );
 
   let comment: ApiComment;
