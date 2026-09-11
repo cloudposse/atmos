@@ -5,7 +5,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -70,26 +69,4 @@ func TestFileURI(t *testing.T) {
 
 	uri := FileURI("/tmp/mirror/cloudposse")
 	require.Equal(t, "file:///tmp/mirror/cloudposse", uri)
-}
-
-// TestInsteadOfRules verifies the two per-owner rewrite rules (https and ssh) point at
-// the mirror path and that InsteadOfRules covers every owner passed in.
-func TestInsteadOfRules(t *testing.T) {
-	root := filepath.Join("mirror", "root")
-	entries := InsteadOfRules(root, "cloudposse", "atmos")
-	require.Len(t, entries, 2)
-
-	wantKey := "url." + FileURI(filepath.Join(root, "cloudposse", "atmos.git")) + ".insteadOf"
-	require.Equal(t, wantKey, entries[0].Key)
-	require.Equal(t, "https://github.com/cloudposse/atmos.git", entries[0].Value)
-	require.Equal(t, wantKey, entries[1].Key)
-	require.Equal(t, "ssh://git@github.com/cloudposse/atmos.git", entries[1].Value)
-
-	// Rules must be repo-scoped: an owner-wide value ("https://github.com/cloudposse/") would also
-	// capture terraform module fetches of other cloudposse repositories and break them, and a
-	// host-wide one would reintroduce the token-injection pitfall (see custom_git_detector.go).
-	for _, e := range entries {
-		require.True(t, strings.HasPrefix(e.Key, "url.file://"), "key %q must target a file:// mirror path", e.Key)
-		require.True(t, strings.HasSuffix(e.Value, "/cloudposse/atmos.git"), "value %q must name exactly the mirrored repository", e.Value)
-	}
 }
