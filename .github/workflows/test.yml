@@ -880,12 +880,19 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        with:
+          # Planning only runs `go list`; downloading the multi-gigabyte race
+          # build cache here costs more than it saves. The race shards below
+          # still restore the warmed cache before compiling and testing.
+          cache: false
 
       - name: Plan race shards
         id: plan
         env:
           ATMOS_TEST_RACE_SHARD_SEED: ${{ github.run_id }}
-        run: go tool mage test:racematrix
+        run: |
+          echo "::notice title=Race shard seed::Reproduce locally with ATMOS_TEST_RACE_SHARD_SEED=${ATMOS_TEST_RACE_SHARD_SEED} RACE_SHARD_COUNT=${RACE_SHARD_COUNT} go tool mage test:racematrix"
+          go tool mage test:racematrix
 
   # `-race` requires CGO_ENABLED=1 (the detector's runtime is itself a cgo
   # library), unlike every other Go build/test path in this repo (CGO_ENABLED=0).
@@ -909,8 +916,7 @@ jobs:
     needs: [race-plan]
     strategy:
       fail-fast: false
-      matrix:
-        include: ${{ fromJson(needs.race-plan.outputs.matrix) }}
+      matrix: ${{ fromJson(needs.race-plan.outputs.matrix) }}
     # Plain hosted ubuntu-latest, not RunsOn: this is the same image lineage
     # setup-go-cache-warmup.yml's linux leg writes the race-instrumented
     # (-race, CGO_ENABLED=1) Go build cache on, and the same runner the 10

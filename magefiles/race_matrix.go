@@ -48,7 +48,7 @@ type raceShardEntry struct {
 // RACE_SHARD_COUNT shards, shuffled first (raceShardSeedEnv) so package
 // order doesn't pin the same slow cluster to the same shard every run. This
 // backs the `[race] plan shards` CI job (test.yml), whose output feeds the
-// `race` job's `strategy.matrix.include`.
+// `race` job's `strategy.matrix`.
 func (Test) RaceMatrix() error {
 	root, err := mageRepoRoot()
 	if err != nil {
