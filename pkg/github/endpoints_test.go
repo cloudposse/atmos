@@ -239,3 +239,21 @@ func TestHostOf_InvalidURL(t *testing.T) {
 	// A control character makes url.Parse fail outright, exercising the error branch.
 	require.Empty(t, hostOf("http://\x7f"))
 }
+
+// TestRepoEndpoints_NonDefaultPortPreserved verifies that a GITHUB_SERVER_URL on a non-default
+// port (e.g. a corporate GHES mirror behind a custom port, or a test's httptest.NewServer) keeps
+// that port in Endpoints.Host, so the endpoint can recognize its own URLs via IsHost. Before
+// this, hostOf built Endpoints.Host from url.URL.Hostname() (which always drops the port), while
+// IsHost/normalizeHost preserve a non-default port on the candidate side -- so an Endpoints value
+// for a host on a non-default port could never match even its own configured URL.
+func TestRepoEndpoints_NonDefaultPortPreserved(t *testing.T) {
+	clearGitHubEndpointEnv(t)
+	t.Setenv("GITHUB_SERVER_URL", "http://127.0.0.1:19199")
+	t.Setenv("GITHUB_API_URL", "http://127.0.0.1:19199/api/v3")
+
+	e := RepoEndpoints()
+
+	assert.Equal(t, "127.0.0.1:19199", e.Host)
+	assert.True(t, e.IsHost("127.0.0.1:19199"))
+	assert.False(t, e.IsHost("127.0.0.1"))
+}
