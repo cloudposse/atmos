@@ -71,6 +71,32 @@ func TestRepoEndpoints_InvalidURLFallsBackToDefault(t *testing.T) {
 	assert.Equal(t, "github.com", e.Host)
 }
 
+// TestRepoEndpoints_GHESWithoutAPIURLDerivesAPIv3 pins that a GHES server host with no
+// GITHUB_API_URL override derives "<server>/api/v3" as its API endpoint, instead of silently
+// falling back to the public api.github.com -- doing the latter would send the GHES-scoped
+// token to the public GitHub API (a sensitive-data-exposure bug).
+func TestRepoEndpoints_GHESWithoutAPIURLDerivesAPIv3(t *testing.T) {
+	clearGitHubEndpointEnv(t)
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+	e := RepoEndpoints()
+
+	assert.Equal(t, "https://ghes.example.com/api/v3", e.APIURL)
+	assert.NotEqual(t, defaultGitHubAPIURL, e.APIURL)
+}
+
+// TestRepoEndpoints_GHESWithInvalidAPIURLDerivesAPIv3 verifies the same fallback applies when
+// GITHUB_API_URL is set but fails to parse, rather than falling back to the public default.
+func TestRepoEndpoints_GHESWithInvalidAPIURLDerivesAPIv3(t *testing.T) {
+	clearGitHubEndpointEnv(t)
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+	t.Setenv("GITHUB_API_URL", "not a url")
+
+	e := RepoEndpoints()
+
+	assert.Equal(t, "https://ghes.example.com/api/v3", e.APIURL)
+}
+
 func TestRepoEndpoints_SchemelessURLFallsBackToDefault(t *testing.T) {
 	clearGitHubEndpointEnv(t)
 	// A bare host with no scheme parses as a path under url.ParseRequestURI, not a host,
@@ -107,6 +133,19 @@ func TestToolchainEndpoints_CorporateMirror(t *testing.T) {
 	assert.Equal(t, "https://releases.corp.example.com", e.ServerURL)
 	assert.Equal(t, "https://releases.corp.example.com/api/v3", e.APIURL)
 	assert.Equal(t, "releases.corp.example.com", e.Host)
+}
+
+// TestToolchainEndpoints_MirrorWithoutAPIURLDerivesAPIv3 mirrors
+// TestRepoEndpoints_GHESWithoutAPIURLDerivesAPIv3 for ToolchainEndpoints: a corporate mirror
+// configured only via ATMOS_TOOLCHAIN_GITHUB_URL (no API URL override) must not silently send
+// its token to the public api.github.com.
+func TestToolchainEndpoints_MirrorWithoutAPIURLDerivesAPIv3(t *testing.T) {
+	clearGitHubEndpointEnv(t)
+	t.Setenv("ATMOS_TOOLCHAIN_GITHUB_URL", "https://releases.corp.example.com")
+
+	e := ToolchainEndpoints()
+
+	assert.Equal(t, "https://releases.corp.example.com/api/v3", e.APIURL)
 }
 
 func TestAquaRegistryURL_Default(t *testing.T) {

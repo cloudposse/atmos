@@ -88,6 +88,17 @@ func applyGitHubRef(baseURL string, ref string) string {
 		return baseURL
 	}
 
+	// Already a raw URL under the configured GitHub Enterprise Server host's own /raw/ path:
+	// GHES serves raw content from the same host instead of a separate raw.githubusercontent.com
+	// subdomain (see github.Endpoints.RawURL), so this can't be caught by the
+	// raw.githubusercontent.com check above. Return it unchanged -- parsing it as an owner/repo
+	// web URL below would treat the leading "raw" path segment as the owner and the real owner
+	// as the repo (e.g. ".../raw/owner/repo/main/registry.yaml" would become owner="raw",
+	// repo="owner", producing a doubled ".../raw/raw/owner/<ref>/repo/main/registry.yaml").
+	if endpoints := github.RepoEndpoints(); endpoints.Host != "github.com" && endpoints.IsHost(parsed.Host) && strings.HasPrefix(parsed.Path, "/raw/") {
+		return baseURL
+	}
+
 	target, ok := matchGitHubEndpoints(parsed.Host)
 	if !ok {
 		// Not a GitHub URL.

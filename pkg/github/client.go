@@ -110,11 +110,14 @@ func newGitHubClientForEndpoints(ctx context.Context, token string, endpoints En
 }
 
 // newScopedClient builds a *github.Client from httpClient, pointed at GitHub.com by default or
-// at a GitHub Enterprise Server instance when endpoints resolves one. An error building the
-// enterprise client (malformed URL) falls back to the public client rather than failing the
-// caller outright, matching Endpoints' own fail-open behavior for invalid endpoint URLs.
+// at a GitHub Enterprise Server instance when endpoints resolves a non-default server host or
+// API URL. Checking APIURL in addition to Host honors an API-only override (e.g.
+// ATMOS_TOOLCHAIN_GITHUB_API_URL pointed at a corporate API proxy while the server/web host
+// stays github.com) that would otherwise be silently ignored. An error building the enterprise
+// client (malformed URL) falls back to the public client rather than failing the caller
+// outright, matching Endpoints' own fail-open behavior for invalid endpoint URLs.
 func newScopedClient(httpClient *http.Client, endpoints Endpoints) *github.Client {
-	if endpoints.Host == defaultGitHubServerHost {
+	if endpoints.isDefaultGitHubCom() && endpoints.APIURL == defaultGitHubAPIURL {
 		return github.NewClient(httpClient)
 	}
 

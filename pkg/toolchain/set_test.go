@@ -1025,6 +1025,35 @@ func TestMakeGitHubRequestOmitsTokenOverHTTP(t *testing.T) {
 	assert.Empty(t, gotAuth, "expected no Authorization header sent to a plain-http endpoint")
 }
 
+// TestStripAuthOnNonHTTPSRedirect pins the CheckRedirect callback installed on
+// makeGitHubRequest's http.Client: net/http's default redirect policy preserves the
+// Authorization header across same-host redirects even when the scheme downgrades from
+// https to http, which would leak the token in cleartext. The callback must strip it whenever
+// the (redirect target) request is not https, and leave it alone otherwise.
+func TestStripAuthOnNonHTTPSRedirect(t *testing.T) {
+	t.Run("removes Authorization when redirect target is not https", func(t *testing.T) {
+		req, err := http.NewRequest(http.MethodGet, "http://ghes.example.com/api/v3/repos/owner/repo/releases", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer leaked-token")
+
+		err = stripAuthOnNonHTTPSRedirect(req, nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, req.Header.Get("Authorization"))
+	})
+
+	t.Run("preserves Authorization when redirect target is https", func(t *testing.T) {
+		req, err := http.NewRequest(http.MethodGet, "https://ghes.example.com/api/v3/repos/owner/repo/releases", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer valid-token")
+
+		err = stripAuthOnNonHTTPSRedirect(req, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "Bearer valid-token", req.Header.Get("Authorization"))
+	})
+}
+
 // TestMakeGitHubRequestRetry covers the retry behavior added to recover from
 // transient failures (network hiccups, rate limiting, server errors) the kind
 // CI runners occasionally hit — without retrying deterministic client errors
