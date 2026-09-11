@@ -105,11 +105,18 @@ with `--update` to bring an existing project forward using an optimistic three-w
 cd my-project
 atmos init --update
 atmos init --update --merge-strategy=theirs
+atmos init --update --update-strategy=rendered
 ```
 
 `manual` is the default merge strategy and surfaces conflicts. `ours` preserves local changes;
 `theirs` applies the template side of a conflict. `atmos init` creates Git history by default; pass
 `--no-git` when that is not wanted.
+
+`--update-strategy` controls where the merge's *base* comes from — an independent choice from
+`--merge-strategy`. `tracked` (the default) reads it from the project's own Git history at
+`--base-ref`. `rendered` instead re-renders the template at the ref that produced what's currently
+on disk, using that generation's recorded answers from `.atmos/scaffold.yaml`, with no dependency
+on Git history at all — it requires the project's template to carry a `scaffold.yaml`.
 
 ## Flags and Automation
 
@@ -127,7 +134,19 @@ atmos init --update --merge-strategy=theirs
   <dd>Merge a generated project with its template's newer revision.</dd>
 
   <dt>`--base-ref`</dt>
-  <dd>Override the recorded merge base.</dd>
+  <dd>
+    Override the recorded merge base. Only applies to `--update-strategy=tracked` — `rendered`'s
+    base comes from the project's own recorded `.atmos/scaffold.yaml`, not `--base-ref`.
+  </dd>
+
+  <dt>`--update-strategy` (default `tracked`)</dt>
+  <dd>
+    Choose where `--update`'s three-way merge base comes from. `tracked` reads it from the
+    project's own Git history at `--base-ref`. `rendered` instead re-renders the template at the
+    ref that produced what's currently on disk, using that generation's recorded answers, with no
+    dependency on Git history at all — it requires a prior generation's `.atmos/scaffold.yaml`
+    record (so the original answers are recoverable).
+  </dd>
 
   <dt>`--merge-driver` (default `auto`)</dt>
   <dd>

@@ -67,6 +67,19 @@ and `pkg/generator/` for the source of truth on current behavior.
   registry reference, pulled via the same `pkg/oci` client `atmos vendor
   pull` and JIT component-source provisioning use. See "Phase 3: Remote
   Templates" below.
+- `--update-strategy=tracked|rendered` — controls where `--update`'s 3-way
+  merge *base* comes from, independently of `--merge-strategy`/`--merge-driver`.
+  `tracked` (default, unchanged) reads it from the target's own Git history at
+  `--base-ref`. `rendered` instead re-renders the template at the ref that
+  produced what's currently on disk (recorded in `.atmos/scaffold.yaml`, along
+  with that generation's own answers), so `--update` works with no dependency
+  on the target being a Git repository at all. `rendered` requires the
+  template to carry a `scaffold.yaml` (so its answers are recoverable) —
+  plain `--set`-only templates aren't supported yet, since there's no
+  persisted record of what values a prior generation used. See
+  [PR #2989](https://github.com/cloudposse/atmos/pull/2989) for the base-ref
+  pinning this builds on and [PR #3047](https://github.com/cloudposse/atmos/pull/3047)
+  for the conflict-marker correctness fixes it depends on.
 
 **Still not implemented** (see "Future Enhancements" below):
 - ❌ Remote-template caching/version pinning beyond a single `--ref`

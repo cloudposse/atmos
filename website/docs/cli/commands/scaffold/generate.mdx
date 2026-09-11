@@ -44,6 +44,10 @@ atmos scaffold generate terraform-component ./components/terraform/vpc \
 # Force line-oriented text merging so YAML formatting (e.g. blank lines) survives an update.
 atmos scaffold generate terraform-component ./components/terraform/vpc \
   --update --merge-driver=text
+
+# Update without relying on the target's own Git history for the merge base.
+atmos scaffold generate terraform-component ./components/terraform/vpc \
+  --update --update-strategy=rendered
 ```
 
 ## Template Sources
@@ -350,6 +354,22 @@ stores, Git, and CI integrations.
 
   <dt>`--update`</dt>
   <dd>Apply an optimistic three-way merge using the recorded source/base revision.</dd>
+
+  <dt>`--base-ref`</dt>
+  <dd>
+    Override the recorded merge base (used with `--update`; defaults to `HEAD`). Only applies to
+    `--update-strategy=tracked` — `rendered`'s base comes from the target's own recorded
+    `.atmos/scaffold.yaml`, not `--base-ref`.
+  </dd>
+
+  <dt>`--update-strategy` (default `tracked`)</dt>
+  <dd>
+    Choose where `--update`'s three-way merge base comes from. `tracked` reads it from the
+    target's own Git history at `--base-ref`. `rendered` instead re-renders the template at the
+    ref that produced what's currently on disk, using that generation's recorded answers, with no
+    dependency on the target being a Git repository at all — it requires a prior generation's
+    `.atmos/scaffold.yaml` record (so the original answers are recoverable).
+  </dd>
 
   <dt>`--merge-driver` (default `auto`)</dt>
   <dd>
