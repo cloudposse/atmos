@@ -30,11 +30,11 @@ commands:
           - type: simulate
             text: '# Passing logs stay hidden; a failed check reveals its output'
           - type: simulate
-            text: atmos workflow demo -f tests
+            text: atmos test demo
           - name: demo
             type: shell
             command: |
-              atmos workflow demo -f tests
+              atmos test demo
               result=$?
               test "$result" -eq 1
       - name: validate

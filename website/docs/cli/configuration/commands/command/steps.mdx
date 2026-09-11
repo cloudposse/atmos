@@ -464,3 +464,25 @@ commands:
           Title: {{ .steps.title.value }}
           Priority: {{ .steps.priority.value }}
 ```
+
+## Output viewport
+
+Use `output: viewport` on a shell step to follow build logs in a small live window:
+
+```yaml
+commands:
+  - name: build
+    steps:
+      - name: compile
+        type: shell
+        command: go build -v ./...
+        output: viewport
+        viewport:
+          height: 4
+          padding: 2
+```
+
+The four-line window contains up to three recent stdout/stderr lines and a status
+row. It follows new output automatically, collapses on success, and expands to
+show the full captured output on failure. CI and redirected output stream normally.
+See [live viewport](/workflows/output#live-viewport) for sizing and terminal behavior.

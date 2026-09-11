@@ -83,6 +83,9 @@ func (testBridge) RunTest(ctx context.Context, parent *schema.WorkflowStep, vars
 		run.report.Update("", testreport.Failed, 0, err.Error())
 	}
 	renderErr := run.report.Finish()
+	if err != nil && renderErr == nil {
+		err = &step.TestFailureError{Err: err}
+	}
 	return testRunResult(run.report, vars, local), errors.Join(err, renderErr)
 }
 

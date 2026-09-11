@@ -3,15 +3,17 @@
 Run these commands from this directory. No cloud credentials or deployment are needed.
 
 ```shell
-atmos workflow passing -f tests
-atmos workflow demo -f tests
-atmos workflow verbose -f tests
 atmos test
+atmos test demo
+atmos test verbose
 ```
 
-`demo` deliberately fails its authentication check and exits nonzero. Its output
+`atmos test demo` deliberately fails its authentication check and exits nonzero. Its output
 appears immediately; the regional matrix still runs. The default report hides
-successful logs. `verbose` uses `output: all` to display them.
+successful logs. `atmos test verbose` uses `output: all` to display them.
+
+`atmos test` and `atmos test verbose` announce "Tests passed" with a `say` step
+only after the suite succeeds. When speech is unavailable, the message is printed.
 
 The test tree uses green/red dots, per-check durations, and a bottom progress bar
 in a terminal. CI receives a static tree and the same failure details.

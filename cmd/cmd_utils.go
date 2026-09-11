@@ -1027,6 +1027,7 @@ func executeCustomCommand(
 
 	// Execute custom command's steps
 	var commandErr error
+	commandErrorsReported := true
 	conditionStatus := schema.ConditionPredicateSuccess
 	for i, step := range commandConfig.Steps {
 		// Resolved ahead of the when: check (non-fatally -- an invalid working_directory on a
@@ -1391,21 +1392,19 @@ func executeCustomCommand(
 						TTY:         step.Tty,
 						Interactive: step.Interactive,
 					}, func() error {
-						stdout := ioLayer.MaskWriter(os.Stdout)
-						stderr := ioLayer.MaskWriter(os.Stderr)
-						if step.Output == string(stepPkg.OutputModeNone) {
-							stdout = io.Discard
-							stderr = io.Discard
-						}
-						return e.ExecuteShellWithWriters(&e.ExecuteShellSpec{
-							Context: executionCtx,
-							Command: commandToRun,
-							Name:    commandName,
-							Dir:     stepWorkDir,
-							EnvVars: env,
-							Stdout:  io.MultiWriter(stdout, stdoutCapture),
-							Stderr:  io.MultiWriter(stderr, stderrCapture),
+						writer := customCommandOutputWriter(&step, commandName)
+						_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+							return e.ExecuteShellWithWriters(&e.ExecuteShellSpec{
+								Context: executionCtx,
+								Command: commandToRun,
+								Name:    commandName,
+								Dir:     stepWorkDir,
+								EnvVars: env,
+								Stdout:  io.MultiWriter(ioLayer.MaskWriter(stdout), stdoutCapture),
+								Stderr:  io.MultiWriter(ioLayer.MaskWriter(stderr), stderrCapture),
+							})
 						})
+						return runErr
 					})
 				})
 			case schema.TaskTypeScript:
@@ -1435,29 +1434,16 @@ func executeCustomCommand(
 				if execErr != nil {
 					return execErr
 				}
-				return runCommandStep(func(stdout, stderr io.Writer) error {
-					execOpts := []e.ShellCommandOption{
-						e.WithProcessContext(executionCtx),
-						e.WithStdoutCapture(stdout),
-						e.WithStderrCapture(stderr),
-					}
-					if step.Output == string(stepPkg.OutputModeNone) {
-						execOpts = append(execOpts, e.WithProcessStreams(process.Streams{
-							Stdin:  os.Stdin,
-							Stdout: io.Discard,
-							Stderr: io.Discard,
-						}))
-					}
-					return e.ExecuteShellCommand(
-						atmosConfig,
-						execPath,
-						args,
-						stepWorkDir,
-						env,
-						false,
-						"",
-						execOpts...,
-					)
+				return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
+					writer := customCommandOutputWriter(&step, commandConfig.Name)
+					_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+						return e.ExecuteShellCommand(
+							atmosConfig, execPath, args, stepWorkDir, env, false, "",
+							e.WithProcessContext(executionCtx), e.WithStdoutCapture(stdoutCapture), e.WithStderrCapture(stderrCapture),
+							e.WithProcessStreams(process.Streams{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr}),
+						)
+					})
+					return runErr
 				})
 			case schema.TaskTypeParallel, schema.TaskTypeMatrix:
 				// Route through the same control-step engine workflows use, so `needs:`,
@@ -1527,6 +1513,8 @@ func executeCustomCommand(
 				continue
 			}
 
+			var reported *stepPkg.TestFailureError
+			commandErrorsReported = commandErrorsReported && errors.As(err, &reported)
 			if commandErr == nil {
 				commandErr = err
 			} else {
@@ -1543,6 +1531,9 @@ func executeCustomCommand(
 				log.Debug("Failed to record freshness state for custom command step", customCommandKeyCommand, commandConfig.Name, customCommandKeyStep, i, "error", recErr)
 			}
 		}
+	}
+	if commandErr != nil && commandErrorsReported && !adapters.DependenciesAlreadyResolved(cmd) {
+		commandErr = errUtils.ExitCodeError{Code: 1, Silent: true}
 	}
 	exitOrRecordDependencyErr(cmd, commandErr, "", "")
 }

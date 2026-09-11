@@ -139,8 +139,8 @@ func (r *Reporter) failureBlock(id, status, logs string) string {
 		heading = id
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "     %s\n", iolib.MaskString(heading))
-	fmt.Fprintf(&b, "  %s  └── %s\n", r.symbol(status, ""), iolib.MaskString(label))
+	fmt.Fprintf(&b, "     %s\n", theme.GetCurrentStyles().Body.Bold(true).Render(iolib.MaskString(heading)))
+	fmt.Fprintf(&b, "  %s  %s%s\n", r.symbol(status, ""), theme.GetCurrentStyles().Muted.Render("└── "), iolib.MaskString(label))
 	for _, line := range strings.Split(strings.TrimRight(iolib.MaskString(logs), newline), newline) {
 		fmt.Fprintf(&b, "             %s\n", ansi.Strip(line))
 	}
@@ -186,20 +186,21 @@ func (r *Reporter) View(width int, spinning string, final bool) string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var b strings.Builder
-	fmt.Fprintf(&b, "     %s\n", iolib.MaskString(r.title))
+	styles := theme.GetCurrentStyles()
+	fmt.Fprintf(&b, "     %s\n", styles.Body.Bold(true).Render(iolib.MaskString(r.title)))
 	var render func([]*Node, tree.Path)
 	render = func(nodes []*Node, path tree.Path) {
 		for i, n := range nodes {
 			p := append(append(tree.Path{}, path...), i == len(nodes)-1)
-			label := iolib.MaskString(n.Name)
+			label := styles.Body.Render(iolib.MaskString(n.Name))
 			if n.Duration > 0 {
-				label += fmt.Sprintf(" (%.1fs)", n.Duration.Seconds())
+				label += styles.Muted.Render(fmt.Sprintf(" (%.1fs)", n.Duration.Seconds()))
 			}
 			status := nodeStatus(n)
 			if final || spinning == "" {
-				label += " [" + status + "]"
+				label += styles.Muted.Render(" [" + status + "]")
 			}
-			prefix := "  " + r.symbol(status, spinning) + "  " + tree.Connector(p)
+			prefix := "  " + r.symbol(status, spinning) + "  " + styles.Muted.Render(tree.Connector(p))
 			fmt.Fprintln(&b, prefix+ansi.Truncate(label, max(8, width-lipgloss.Width(prefix)-1), "…"))
 			render(n.Children, p)
 		}
@@ -216,8 +217,29 @@ func (r *Reporter) View(width int, spinning string, final bool) string {
 		}
 		fmt.Fprintf(&b, "     %s\n", bar.ViewAs(fraction))
 	}
-	fmt.Fprintf(&b, "     %d/%d · %d passed, %d failed, %d skipped, %d canceled\n", complete, c["total"], c[Passed], c[Failed], c[Skipped], c[Canceled])
+	fmt.Fprintf(&b, "     %s%s%s\n",
+		styles.Body.Bold(true).Render(fmt.Sprintf("%d/%d", complete, c["total"])),
+		styles.Muted.Render(" · "), renderCounts(c))
 	return b.String()
+}
+
+// renderCounts emphasizes nonzero outcomes while keeping empty categories quiet.
+func renderCounts(counts map[string]int) string {
+	styles := theme.GetCurrentStyles()
+	parts := make([]string, 0, 4)
+	for _, status := range []string{Passed, Failed, Skipped, Canceled} {
+		style := styles.Muted
+		if counts[status] > 0 {
+			switch status {
+			case Passed:
+				style = styles.Success
+			case Failed:
+				style = styles.Error
+			}
+		}
+		parts = append(parts, style.Render(fmt.Sprintf("%d %s", counts[status], status)))
+	}
+	return strings.Join(parts, styles.Muted.Render(", "))
 }
 
 func nodeStatus(n *Node) string {
@@ -242,16 +264,16 @@ func nodeStatus(n *Node) string {
 func (r *Reporter) symbol(status, spin string) string {
 	switch status {
 	case Passed:
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen)).Render("●")
+		return theme.GetCurrentStyles().Success.Render("●")
 	case Failed:
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed)).Render("●")
+		return theme.GetCurrentStyles().Error.Render("●")
 	case Running:
 		if spin != "" {
 			return strings.TrimSpace(spin)
 		}
 		return "◌"
 	default:
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)).Render("○")
+		return theme.GetCurrentStyles().Muted.Render("○")
 	}
 }
 

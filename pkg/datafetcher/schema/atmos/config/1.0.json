@@ -14541,6 +14541,21 @@
     },
     "ViewportConfig": {
       "properties": {
+        "padding": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Horizontal padding on each side, in columns."
+        },
         "height": {
           "anyOf": [
             {

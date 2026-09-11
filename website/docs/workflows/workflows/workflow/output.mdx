@@ -32,10 +32,48 @@ workflows:
   <dd>Display grouped output with step headers.</dd>
 
   <dt>`viewport`</dt>
-  <dd>Display output in a scrollable viewport.</dd>
+  <dd>Show a live window of recent stdout and stderr while the step runs, collapse it on success, and reveal the full captured output on failure.</dd>
 
   <dt>`none`</dt>
   <dd>Suppress command output and rely on the exit code.</dd>
 </dl>
 
 Step-level `output` overrides the workflow-level default for that step.
+
+## Live viewport
+
+Use `output: viewport` to follow a noisy command in a bounded terminal window:
+
+```yaml
+workflows:
+  build:
+    steps:
+      - name: compile
+        type: shell
+        command: go build -v ./...
+        output: viewport
+        viewport:
+          height: 4
+          padding: 2
+```
+
+`viewport.height` caps the total window height, including its status row. A height
+of `4` shows up to three recent output lines and one status row. `viewport.width`
+optionally caps the width; long lines are truncated in the live display. Without
+these settings, the window uses the terminal dimensions and adjusts on resize.
+
+`viewport.padding` adds that many blank columns on both sides of the live output
+and status row. It defaults to `0`; use `2` for a two-character inset. Padding is
+included within the width and shrinks automatically in very narrow terminals.
+
+The window follows new output automatically and closes when the command finishes;
+it does not wait for a keypress. Successful output collapses to a completion line.
+Failures reveal the full captured stdout and stderr after clearing the live window.
+Captured step results retain the complete output, and secret masking still applies.
+
+In CI or when terminal output is redirected, output streams normally without cursor
+controls. Terminal sessions (`tty`, `interactive`, and `exec`) own their output and
+bypass the viewport.
+
+Custom-command shell steps support the same settings; see
+[custom command steps](/cli/configuration/commands/steps#output-viewport).

@@ -85,7 +85,7 @@ steps:
  - {name: tolerated, type: shell, command: 'echo tolerated-failure; exit 1', continue: always}
  - {name: skipped, type: shell, command: 'echo never-run; exit 1', when: never}
  - {name: passing, type: shell, command: 'echo debug-success'}
- - {name: message, type: say, content: debug-message}
+ - {name: message, type: log, content: captured-test-message}
 `)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Metadata["failed"])
@@ -93,7 +93,7 @@ steps:
 	assert.Equal(t, 2, result.Metadata["passed"])
 	assert.Contains(t, output, "tolerated-failure")
 	assert.Contains(t, output, "debug-success")
-	assert.Equal(t, 1, strings.Count(output, "debug-message"))
+	assert.Equal(t, 1, strings.Count(output, "captured-test-message"))
 	assert.NotContains(t, output, "never-run")
 }
 

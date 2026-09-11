@@ -8,6 +8,20 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestFailureError preserves a failure already displayed by a completed test report.
+// Callers can avoid an additional error box while retaining failure policies.
+type TestFailureError struct{ Err error }
+
+func (e *TestFailureError) Error() string {
+	defer perf.Track(nil, "step.TestFailureError.Error")()
+	return e.Err.Error()
+}
+
+func (e *TestFailureError) Unwrap() error {
+	defer perf.Track(nil, "step.TestFailureError.Unwrap")()
+	return e.Err
+}
+
 // TestRunner connects the shared registry to the workflow scheduler.
 type TestRunner interface {
 	RunTest(context.Context, *schema.WorkflowStep, *Variables, *schema.WorkflowDefinition) (*StepResult, error)

@@ -24,8 +24,9 @@ type DescribeWorkflowsItem struct {
 
 // ViewportConfig configures viewport display settings.
 type ViewportConfig struct {
-	Height int `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"` // Lines.
-	Width  int `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`    // Columns.
+	Padding int `yaml:"padding,omitempty" json:"padding,omitempty" mapstructure:"padding" jsonschema:"minimum=0"` // Horizontal padding on each side, in columns.
+	Height  int `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`                           // Lines.
+	Width   int `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`                              // Columns.
 }
 
 // ShowConfig configures automatic display features for workflows.

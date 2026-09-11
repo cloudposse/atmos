@@ -16,3 +16,16 @@ func TestManifestSchemaTestSteps(t *testing.T) {
 		})
 	}
 }
+
+func TestManifestSchemaViewportPadding(t *testing.T) {
+	schema := loadEmbeddedSchemaBytes(t)
+	for _, padding := range []int{0, 2, -1} {
+		step := map[string]any{"type": "shell", "command": "echo hello", "output": "viewport", "viewport": map[string]any{"height": 4, "padding": padding}}
+		manifest := map[string]any{"workflows": map[string]any{"build": map[string]any{"steps": []any{step}}}}
+		if padding < 0 {
+			assertSchemaInvalid(t, schema, manifest)
+		} else {
+			assertSchemaValid(t, schema, manifest)
+		}
+	}
+}

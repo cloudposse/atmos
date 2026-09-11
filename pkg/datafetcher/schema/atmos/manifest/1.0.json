@@ -3074,6 +3074,11 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "padding": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Horizontal padding on each side, in columns."
+            },
             "height": {
               "type": "integer",
               "description": "Viewport height in lines."

@@ -66,6 +66,10 @@ recompilation of all Go packages, including dependencies. This passes `-a` to
 `go build`; it preserves the shared build cache and downloaded modules. Normal
 builds reuse cached packages, and `--no-cache=false` keeps that default.
 
+Build output appears in a live four-line viewport (three recent log lines and a
+status row), which collapses when the build succeeds and reveals full logs on
+failure. CI and redirected output stream normally.
+
 ## Pre-commit Hooks
 
 We use pre-commit hooks to ensure code quality. The following hooks run automatically on `git commit`:
