@@ -1132,27 +1132,37 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// here would silently discard slots another producer already claimed. (The git mirror's own
 	// insteadOf rules live in a GIT_CONFIG_GLOBAL file set once in TestMain, not in this
 	// per-test env-based protocol -- see gitmirror.WriteGitConfig.)
-	if _, exists := tc.Env["GIT_CONFIG_COUNT"]; !exists {
-		entries := []gitconfigenv.GitConfigEntry{
-			// Disable credential helper (prevents osxkeychain hangs/popups).
-			{Key: "credential.helper", Value: ""},
-		}
-		if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
-			// Inject token directly instead of relying on a credential helper.
-			gitBasicAuthCredential := "x-access-token:" + githubToken
-			basicAuth := base64.StdEncoding.EncodeToString([]byte(gitBasicAuthCredential))
-			// pkg/io's masker auto-registers plain GITHUB_TOKEN and base64(GITHUB_TOKEN), but
-			// the extraheader value below embeds base64("x-access-token:"+GITHUB_TOKEN) -- a
-			// different byte sequence the prefix changes the encoding of, so it needs its own
-			// registration or redactAndCapDiagOutput can't catch it in captured child output.
-			iolib.RegisterSecret(gitBasicAuthCredential)
-			entries = append(entries, gitconfigenv.GitConfigEntry{
-				Key:   "http.https://github.com/.extraheader",
-				Value: "AUTHORIZATION: basic " + basicAuth,
-			})
-		}
-		gitconfigenv.Append(tc.Env, os.Environ(), entries...)
+	//
+	// Build entries unconditionally: a test case that already set GIT_CONFIG_COUNT in tc.Env
+	// still needs credential.helper disabled and, when applicable, the token header injected --
+	// Append merges with whatever is already present instead of overwriting it, so the case's
+	// own entries are preserved (they take precedence over the ambient process environment via
+	// envBase below).
+	entries := []gitconfigenv.GitConfigEntry{
+		// Disable credential helper (prevents osxkeychain hangs/popups).
+		{Key: "credential.helper", Value: ""},
 	}
+	if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
+		// Inject token directly instead of relying on a credential helper.
+		gitBasicAuthCredential := "x-access-token:" + githubToken
+		basicAuth := base64.StdEncoding.EncodeToString([]byte(gitBasicAuthCredential))
+		// pkg/io's masker auto-registers plain GITHUB_TOKEN and base64(GITHUB_TOKEN), but
+		// the extraheader value below embeds base64("x-access-token:"+GITHUB_TOKEN) -- a
+		// different byte sequence the prefix changes the encoding of, so it needs its own
+		// registration or redactAndCapDiagOutput can't catch it in captured child output.
+		iolib.RegisterSecret(gitBasicAuthCredential)
+		entries = append(entries, gitconfigenv.GitConfigEntry{
+			Key:   "http.https://github.com/.extraheader",
+			Value: "AUTHORIZATION: basic " + basicAuth,
+		})
+	}
+	// envBase layers tc.Env's own GIT_CONFIG_* entries (if any) on top of the ambient process
+	// environment, so Append reads and preserves them instead of only seeing os.Environ().
+	envBase := os.Environ()
+	for key, value := range tc.Env {
+		envBase = append(envBase, key+"="+value)
+	}
+	gitconfigenv.Append(tc.Env, envBase, entries...)
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
