@@ -38,7 +38,7 @@ func TestResolveDeferredYamlFunctions_NoDeferredContexts(t *testing.T) {
 			}
 			settingsStruct := &schema.Settings{}
 
-			err := resolveDeferredYamlFunctions(atmosConfig, info, settingsStruct, nil, nil)
+			err := resolveDeferredYamlFunctions(atmosConfig, info, settingsStruct, nil, nil, nil)
 
 			require.NoError(t, err)
 			vars, ok := info.ComponentSection[cfg.VarsSectionName].(map[string]any)
@@ -76,7 +76,7 @@ func TestResolveDeferredYamlFunctions_SkipsSectionMissingFromComponentSection(t 
 	}
 	settingsStruct := &schema.Settings{}
 
-	err := resolveDeferredYamlFunctions(atmosConfig, info, settingsStruct, map[string]any{}, nil)
+	err := resolveDeferredYamlFunctions(atmosConfig, info, settingsStruct, map[string]any{}, nil, nil)
 	require.NoError(t, err)
 
 	vars, ok := info.ComponentSection[cfg.VarsSectionName].(map[string]any)
