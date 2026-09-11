@@ -7,9 +7,10 @@
 `internal/ci/acceptance`'s own acceptance-test suite runs ~90 `t.Parallel()` subtests that each shell out to
 `go build`/`go test -c`/`go test`/precompiled `*.test.exe` binaries. On a wide Windows CI runner, letting that
 many real `go` toolchain subprocesses launch fully concurrently triggered a Windows-only Go runtime
-GC/allocator crash. Fixed by capping concurrent subprocess launches to 4 on Windows, then moving that
-Windows-only logic into a build-tagged file (`//go:build windows` / `//go:build !windows`) to match this
-codebase's established platform-split convention instead of a runtime `GOOS` check in shared code.
+GC/allocator crash. Fixed by capping concurrent subprocess launches to 4 on Windows and routing every
+test-only toolchain launch through that shared cap, then moving the Windows-only logic into a build-tagged
+file (`//go:build windows` / `//go:build !windows`) to match this codebase's established platform-split
+convention instead of a runtime `GOOS` check in shared code.
 
 ## Context
 
@@ -60,6 +61,11 @@ own file with `//go:build windows` / `//go:build !windows` instead of a runtime 
   `TestOutputPropagatesSubprocessSlotError`, each overriding `acquireSubprocessSlotFunc` (restored via
   `t.Cleanup`) to return a sentinel error and asserting `run`/`output` propagate it (via `errors.Is`) without
   ever invoking the underlying command.
+- `internal/ci/acceptance/coverage_test.go`: routed `generateCoverageFixture`'s nested `go test` invocation
+  through `commandRunner.output`. It was the remaining bare `exec.Command` in this package and could launch a
+  fifth toolchain process alongside the four semaphore-managed launches, recreating the Windows runtime crash
+  condition. The helper now returns an error so `TestGenerateCoverageFixturePropagatesSubprocessSlotError` can
+  prove it honors the shared slot without starting a child process.
 
 (Prior rounds of this fix, unchanged by this doc: `66e50d45f5` added the semaphore and cap; `72319350ae`
 scoped it to Windows via the runtime check this doc's changes now replace with build tags.)
@@ -75,6 +81,15 @@ scoped it to Windows via the runtime check this doc's changes now replace with b
   62.8s the first time, before local build caches were warm).
 - `go test ./internal/ci/acceptance/... -run 'TestRunPropagatesSubprocessSlotError|TestOutputPropagatesSubprocessSlotError' -v`
   — both pass.
+- `go test ./internal/ci/acceptance -run TestGenerateCoverageFixturePropagatesSubprocessSlotError -count=1`
+  — passes (first ran red at compile time before the helper exposed its runner-backed error path).
+- `go test ./internal/ci/acceptance -count=1` — passes, 23.8s.
+- `atmos lint --changed` — 0 issues.
+- `bash .claude/skills/fix-log/scripts/validate-fix-doc.sh docs/fixes/2026-09-11-windows-acceptance-subprocess-race.md`
+  — passes.
+- `atmos test` — unable to complete: `tests/TestCLICommands` timed out after five minutes while its fixture
+  cleanup walked the worktree. The modified `internal/ci/acceptance` package completed successfully in that
+  same invocation; this is not a failure of the focused regression.
 - `atmos fix coverage` (`.claude/skills/test-coverage/scripts/patch-test-coverage.sh` vs `origin/main`) — the
   two previously-uncovered patch lines Codecov flagged (`run`'s and `output`'s `acquireSubprocessSlot` error
   branches) now show a nonzero hit count in the coverage profile; the file's only remaining zero-count lines
