@@ -151,6 +151,36 @@ func TestIsInsteadOfEntry(t *testing.T) {
 	}
 }
 
+func TestIsExtraHeaderEntry(t *testing.T) {
+	tests := []struct {
+		name  string
+		entry GitConfigEntry
+		want  bool
+	}{
+		{
+			name:  "github extraheader",
+			entry: GitConfigEntry{Key: "http.https://github.com/.extraheader", Value: "AUTHORIZATION: basic dGVzdA=="},
+			want:  true,
+		},
+		{
+			name:  "credential.helper is not an extraheader",
+			entry: GitConfigEntry{Key: "credential.helper", Value: ""},
+			want:  false,
+		},
+		{
+			name:  "insteadOf is not an extraheader",
+			entry: GitConfigEntry{Key: "url.file:///mirror/cloudposse/.insteadOf", Value: "https://github.com/cloudposse/"},
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, IsExtraHeaderEntry(tt.entry))
+		})
+	}
+}
+
 // TestWithout verifies Without removes only entries matching predicate, preserving order and
 // the rest of the entries untouched -- e.g. stripping the mirror's insteadOf rules from a
 // live-GitHub canary's git config while keeping credential.helper/extraheader entries.

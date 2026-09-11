@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/tests/testhelpers/gitconfigenv"
 )
 
 // TestClassifyLiveGitHubFailure covers every transient signature the live-GitHub canaries treat
@@ -48,6 +50,21 @@ func TestClassifyLiveGitHubFailure(t *testing.T) {
 			wantTransient: false,
 		},
 		{name: "empty stderr is not transient", stderr: "", wantTransient: false},
+		{
+			name:          "near-miss: bare tls word in a semantic atmos error is not transient",
+			stderr:        "Error: variable \"tls\" is not defined in stack \"nonprod\"",
+			wantTransient: false,
+		},
+		{
+			name:          "near-miss: bare timeout word in a semantic atmos error is not transient",
+			stderr:        "Error: hook \"timeout\" must be a positive duration in stack \"nonprod\"",
+			wantTransient: false,
+		},
+		{
+			name:          "near-miss: bare 500-509 identifier in a semantic atmos error is not transient",
+			stderr:        "Error: line 500: unexpected token in stack \"nonprod\"",
+			wantTransient: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -179,12 +196,13 @@ func TestGithubCanaryEnv_Authenticated(t *testing.T) {
 	assertMirrorRulesDisabled(t, env)
 
 	found := false
-	for _, kv := range env {
-		if kv == "GIT_CONFIG_KEY_0=credential.helper" || kv == "GIT_CONFIG_KEY_1=http.https://github.com/.extraheader" || kv == "GIT_CONFIG_KEY_0=http.https://github.com/.extraheader" {
+	for _, entry := range gitconfigenv.ReadEntries(env) {
+		if entry.Key == "http.https://github.com/.extraheader" {
 			found = true
+			break
 		}
 	}
-	require.True(t, found, "expected an extraheader git config key in %v", env)
+	require.True(t, found, "expected an http.https://github.com/.extraheader git config entry in %v", env)
 }
 
 func assertEnvContains(t *testing.T, env []string, want string) {

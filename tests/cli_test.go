@@ -1196,7 +1196,19 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	for key, value := range tc.Env {
 		envBase = append(envBase, key+"="+value)
 	}
-	gitconfigenv.AppendEntries(tc.Env, gitconfigenv.ReadEntries(envBase), entries...)
+	existingEntries := gitconfigenv.ReadEntries(envBase)
+	if liveGitHub || liveGitHubAuthenticated {
+		// A live-GitHub canary must ignore any url.*.insteadOf redirect rule inherited from the
+		// host/CI environment (e.g. a developer's own git mirror setup) so it always reaches
+		// real, live github.com.
+		existingEntries = gitconfigenv.Without(existingEntries, gitconfigenv.IsInsteadOfEntry)
+	}
+	if liveGitHub {
+		// An unauthenticated canary must also ignore any inherited GitHub authorization
+		// extraheader -- otherwise it would silently run authenticated.
+		existingEntries = gitconfigenv.Without(existingEntries, gitconfigenv.IsExtraHeaderEntry)
+	}
+	gitconfigenv.AppendEntries(tc.Env, existingEntries, entries...)
 
 	if liveGitHub || liveGitHubAuthenticated {
 		// A live-GitHub canary must reach the real github.com, not the local git mirror. TestMain

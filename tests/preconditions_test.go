@@ -698,9 +698,15 @@ func TestRequireLiveGitHubAuthenticated_Offline(t *testing.T) {
 }
 
 // TestRequireLiveGitHubAuthenticated_NoToken verifies RequireLiveGitHubAuthenticated skips when
-// GITHUB_TOKEN is unset, independent of live GitHub reachability.
+// GITHUB_TOKEN is unset, independent of live GitHub reachability. Precondition checks are
+// disabled (ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true) so RequireGitHubAccess's connectivity/rate
+// limit probe never runs: without that, an unreachable github.com would make this test pass for
+// the wrong reason (an earlier skip) even if the no-token gate itself were broken.
+// ATMOS_TEST_OFFLINE is explicitly set to false so the same is true regardless of the ambient
+// environment.
 func TestRequireLiveGitHubAuthenticated_NoToken(t *testing.T) {
-	enablePreconditionChecks(t)
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+	t.Setenv("ATMOS_TEST_OFFLINE", "false")
 	t.Setenv("GITHUB_TOKEN", "")
 
 	RequireLiveGitHubAuthenticated(t)
