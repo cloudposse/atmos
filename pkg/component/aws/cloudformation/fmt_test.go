@@ -3,6 +3,7 @@ package cloudformation
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -147,6 +148,33 @@ func TestRunFmt_FormatTemplateError(t *testing.T) {
 	onDisk, readErr := os.ReadFile(templatePath)
 	require.NoError(t, readErr)
 	assert.Equal(t, malformed, string(onDisk), "a formatTemplate failure must never write to disk")
+}
+
+// runFmt writes atomically (temp file + rename, via pkg/filesystem.WriteFileAtomic) rather than
+// truncating in place with os.WriteFile, so a disk-full/I/O error mid-write can never leave the
+// source template empty or partially overwritten. This also must preserve the original file's
+// mode instead of resetting it to templateFilePermissions.
+func TestRunFmt_NonCheck_Dirty_PreservesOriginalFileMode(t *testing.T) {
+	tempDir := t.TempDir()
+	templatePath := filepath.Join(tempDir, "template.yaml")
+	dirty := "AWSTemplateFormatVersion:   '2010-09-09'\nResources: {}\n"
+	require.NoError(t, os.WriteFile(templatePath, []byte(dirty), 0o600))
+
+	spec := &stackSpec{TemplateBody: dirty, TemplateAbsPath: templatePath}
+	_, err := runFmt(spec, map[string]any{}, map[string]any{})
+	require.NoError(t, err)
+
+	info, statErr := os.Stat(templatePath)
+	require.NoError(t, statErr)
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "the original file's mode must be preserved, not reset to templateFilePermissions")
+	}
+
+	onDisk, readErr := os.ReadFile(templatePath)
+	require.NoError(t, readErr)
+	wantFormatted, err := formatTemplate(dirty)
+	require.NoError(t, err)
+	assert.Equal(t, wantFormatted, string(onDisk))
 }
 
 // runFmt must propagate a write failure (e.g. the resolved path's parent
