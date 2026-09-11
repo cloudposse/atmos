@@ -1,0 +1,42 @@
+---
+title: atmos helm values
+sidebar_label: values
+sidebar_class_name: command
+id: values
+---
+
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  Print the final values for one native Helm component as formatted YAML. The
+  output includes inherited stack values, component <code>values_files</code>,
+  inline <code>values</code>, and any invocation-only Helm value overrides.
+</Intro>
+
+## Usage
+
+```shell
+atmos helm values <component> --stack <stack> [options]
+
+# Show stack-resolved values.
+atmos helm values monitoring -s plat-ue2-dev
+
+# Inspect the exact values used by a preview or deployment.
+atmos helm values monitoring -s plat-ue2-dev \
+  -f incident-values.yaml \
+  --set image.tag=2026.09.09
+```
+
+Values are written as masked YAML to stdout, making the command suitable for
+inspection or piping into a YAML-aware tool. It does not contact Kubernetes,
+resolve chart repositories, or modify component configuration.
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`-f` / `--values`, `--set`, `--set-string`, `--set-file`, `--set-json`, `--set-literal` <em>(optional)</em></dt>
+  <dd>Repeatable Helm-compatible value overrides. They affect only this invocation. See <a href="/cli/commands/helm/usage#runtime-value-overrides">runtime value overrides</a> for precedence.</dd>
+</dl>

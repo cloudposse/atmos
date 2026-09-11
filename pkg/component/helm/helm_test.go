@@ -26,7 +26,7 @@ func TestComponentProvider_Identity(t *testing.T) {
 	p := &ComponentProvider{}
 	assert.Equal(t, cfg.HelmComponentType, p.GetType())
 	assert.Equal(t, "Kubernetes", p.GetGroup())
-	assert.Equal(t, []string{"template", "diff", "plan", "apply", "deploy", "delete"}, p.GetAvailableCommands())
+	assert.Equal(t, []string{"template", "diff", "plan", "values", "apply", "deploy", "delete"}, p.GetAvailableCommands())
 }
 
 func TestComponentProvider_RegisteredInRegistry(t *testing.T) {
@@ -107,6 +107,7 @@ func TestExecute_DispatchesToOperation(t *testing.T) {
 		"render":   OperationTemplate,
 		"diff":     OperationDiff,
 		"plan":     OperationDiff,
+		"values":   OperationValues,
 		"apply":    OperationApply,
 		"deploy":   OperationApply,
 		"delete":   OperationDelete,
