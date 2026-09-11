@@ -25,6 +25,13 @@ function clientFor(responses: Response[], delays: number[]): { client: GitHubCli
   };
 }
 
+test("rejects API base URLs that do not use HTTPS", () => {
+  assert.throws(
+    () => new GitHubClient("test-token", { baseUrl: "http://api.example.test" }),
+    /GitHub API base URL must use HTTPS/,
+  );
+});
+
 test("GET retries transient server errors and applies a timeout", async () => {
   const delays: number[] = [];
   const { client, calls } = clientFor([
@@ -35,6 +42,22 @@ test("GET retries transient server errors and applies a timeout", async () => {
   assert.deepEqual(await client.request("GET", "/resource"), { ok: true });
   assert.equal(calls.length, 2);
   assert.ok(calls.every((call) => call.signal instanceof AbortSignal));
+  assert.deepEqual(delays, [1_000]);
+});
+
+test("GET retries response body failures", async () => {
+  const interruptedResponse = Response.json({ ignored: true });
+  interruptedResponse.json = async (): Promise<never> => {
+    throw new Error("response body interrupted");
+  };
+  const delays: number[] = [];
+  const { client, calls } = clientFor([
+    interruptedResponse,
+    Response.json({ ok: true }),
+  ], delays);
+
+  assert.deepEqual(await client.request("GET", "/interrupted"), { ok: true });
+  assert.equal(calls.length, 2);
   assert.deepEqual(delays, [1_000]);
 });
 

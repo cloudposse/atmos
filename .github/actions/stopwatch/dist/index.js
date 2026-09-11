@@ -53,8 +53,13 @@ class GitHubClient {
     #token;
     /** Creates a client whose transport options can be replaced by unit tests. */
     constructor(token, options = {}) {
+        const configuredBaseUrl = options.baseUrl ?? process.env.GITHUB_API_URL ?? "https://api.github.com";
+        const baseUrl = new URL(configuredBaseUrl);
+        if (baseUrl.protocol !== "https:") {
+            throw new Error("GitHub API base URL must use HTTPS");
+        }
         this.#token = token;
-        this.#baseUrl = (options.baseUrl ?? process.env.GITHUB_API_URL ?? "https://api.github.com").replace(/\/$/, "");
+        this.#baseUrl = baseUrl.toString().replace(/\/$/, "");
         this.#fetch = options.fetch ?? fetch;
         this.#sleep = options.sleep ?? sleep;
         this.#requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
@@ -89,7 +94,18 @@ class GitHubClient {
                 continue;
             }
             if (response.ok) {
-                return await response.json();
+                try {
+                    return await response.json();
+                }
+                catch (error) {
+                    if (method !== "GET" || attempt === maxAttempts) {
+                        throw error;
+                    }
+                    const delay = retryDelayMilliseconds(undefined, attempt);
+                    console.log(`GitHub API GET ${path} response body failed; retrying in ${delay}ms (${attempt + 1}/${maxAttempts})`);
+                    await this.#sleep(delay);
+                    continue;
+                }
             }
             if (method === "GET" && attempt < maxAttempts && isRetryableResponse(response)) {
                 const delay = retryDelayMilliseconds(response, attempt);
