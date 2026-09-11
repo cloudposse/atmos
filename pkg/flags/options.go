@@ -112,6 +112,23 @@ func WithStringSliceFlag(name, shorthand string, defaultValue []string, descript
 	}
 }
 
+// WithStringArrayFlag adds a repeatable string flag whose values are preserved
+// verbatim. Use it for flag grammars that handle commas themselves.
+func WithStringArrayFlag(name, shorthand string, defaultValue []string, description string) Option {
+	defer perf.Track(nil, "flags.WithStringArrayFlag")()
+
+	return func(cfg *parserConfig) {
+		cfg.registry.Register(&StringArrayFlag{
+			StringSliceFlag: StringSliceFlag{
+				Name:        name,
+				Shorthand:   shorthand,
+				Default:     defaultValue,
+				Description: description,
+			},
+		})
+	}
+}
+
 // WithStringMapFlag adds a string map flag for key=value pairs.
 //
 // Parameters:
@@ -271,6 +288,8 @@ func WithEnvVars(flagName string, envVars ...string) Option {
 			f.EnvVars = envVars
 		case *StringSliceFlag:
 			f.EnvVars = envVars
+		case *StringArrayFlag:
+			f.EnvVars = envVars
 		case *StringMapFlag:
 			f.EnvVars = envVars
 		}
@@ -296,6 +315,8 @@ func WithNoOptDefVal(flagName, value string) Option {
 		case *StringSliceFlag:
 			f.NoOptDefVal = value
 			// Note: No need to re-register - we're just updating the field in place.
+		case *StringArrayFlag:
+			f.NoOptDefVal = value
 		}
 	}
 }
@@ -313,6 +334,9 @@ func WithNoOptDefValNoSpaceValue(flagName, value string) Option {
 			f.NoOptDefVal = value
 			f.NoOptDefValNoSpaceValue = true
 		case *StringSliceFlag:
+			f.NoOptDefVal = value
+			f.NoOptDefValNoSpaceValue = true
+		case *StringArrayFlag:
 			f.NoOptDefVal = value
 			f.NoOptDefValNoSpaceValue = true
 		}
@@ -342,6 +366,8 @@ func WithValidValues(flagName string, validValues ...string) Option {
 		case *StringSliceFlag:
 			f.ValidValues = validValues
 			// Note: No need to re-register - we're just updating the field in place.
+		case *StringArrayFlag:
+			f.ValidValues = validValues
 		}
 	}
 }
