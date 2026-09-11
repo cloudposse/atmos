@@ -47,9 +47,13 @@ func componentNodeID(component, stack, componentType string) string {
 // `settings.depends_on`. Edges to targets that are not present in the graph
 // (e.g. disabled or filtered-out components) are skipped when optional or
 // when called by scoped structural discovery; required targets otherwise fail.
-func BuildGraph(stacks map[string]any) (*dependency.Graph, error) {
+func BuildGraph(stacks map[string]any, leftDelims ...string) (*dependency.Graph, error) {
 	defer perf.Track(nil, "dependencies.BuildGraph")()
-	return buildGraph(stacks, nil, "")
+	leftDelim := ""
+	if len(leftDelims) > 0 {
+		leftDelim = leftDelims[0]
+	}
+	return buildGraph(stacks, nil, leftDelim)
 }
 
 // buildGraph constructs a graph and validates required targets declared by

@@ -306,6 +306,28 @@ func TestAddTerraformDependenciesOptionalUnresolvedTargetWithCustomDelimiterFail
 	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
 }
 
+func TestDiscoverTerraformGraphRetainsValidDependenciesAfterUnresolvedDeclaration(t *testing.T) {
+	graph := discoverTerraformGraph(map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformComponentType: map[string]any{
+					"vpc": map[string]any{},
+					"app": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{
+							"components": []any{
+								map[string]any{"name": "{{ .missing }}", "required": false},
+								map[string]any{"name": "vpc"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}, "")
+
+	require.Contains(t, graph.Nodes[terraformNodeID("app", "dev")].Dependencies, terraformNodeID("vpc", "dev"))
+}
+
 func TestExecuteTerraformClosesSharedRegistryCacheOnFailureAndCancellation(t *testing.T) {
 	tests := []struct {
 		name     string

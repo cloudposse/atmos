@@ -253,7 +253,8 @@ func buildDependencyGraphForCommand(cmd *cobra.Command, args []string, opts *Dep
 		if err != nil {
 			return nil, nil, err
 		}
-		graph, err := dependencies.BuildGraph(stacksMap)
+		leftDelim, _ := describeCtx.delims()
+		graph, err := dependencies.BuildGraph(stacksMap, leftDelim)
 		return graph, describeCtx, err
 	}
 

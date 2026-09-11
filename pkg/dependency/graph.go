@@ -78,6 +78,9 @@ func (g *Graph) AddDependencyWithOptional(fromID, toID string, optional bool) er
 	if !toExists {
 		return fmt.Errorf(errWithContextFormat, ErrNodeNotFound, toID)
 	}
+	if fromNode.OptionalDependencies == nil {
+		fromNode.OptionalDependencies = make(map[string]bool)
+	}
 
 	for _, dep := range fromNode.Dependencies {
 		if dep == toID {

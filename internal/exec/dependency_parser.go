@@ -73,7 +73,7 @@ func (p *DependencyParser) ParseComponentDependencies(
 	if dependenciesSection, ok := componentSection[cfg.DependenciesSectionName]; ok {
 		depsMap, ok := dependenciesSection.(map[string]any)
 		if !ok {
-			return fmt.Errorf("%w: dependencies must be a map", errUtils.ErrUnsupportedDependencyType)
+			return fmt.Errorf("%w: dependencies must be a map", errUtils.ErrInvalidDependenciesSection)
 		}
 		if _, modern := depsMap["components"]; modern {
 			dependencies, err := schema.ParseComponentDependencies(depsMap, cfg.TerraformComponentType, stackName)

@@ -35,6 +35,8 @@ import (
 
 const (
 	terraformDefaultCommand    = "terraform"
+	terraformLogFieldComponent = "component"
+	terraformLogFieldStack     = "stack"
 	terraformNodeIDFormat      = "%s-%s"
 	terraformSubCommandPlan    = "plan"
 	terraformSubCommandApply   = "apply"
@@ -1048,7 +1050,12 @@ func addTerraformDependencies(
 			continue
 		}
 		if modern && (tags.SelectorUnresolved(dep.Component, leftDelim) || tags.SelectorUnresolved(dep.Stack, leftDelim)) {
-			return fmt.Errorf("%w: from=%s component=%s stack=%s", errUtils.ErrDependencyResolution, fromID, dep.Component, dep.Stack)
+			err := fmt.Errorf("%w: from=%s component=%s stack=%s", errUtils.ErrDependencyResolution, fromID, dep.Component, dep.Stack)
+			if shouldValidateTerraformDependencyTarget(fromID, validationSources) {
+				return err
+			}
+			log.Debug("Terraform dependency discovery skipped unresolved declaration", "error", err, terraformLogFieldComponent, componentName, terraformLogFieldStack, stackName)
+			continue
 		}
 		depStack := dep.Stack
 		if depStack == "" {

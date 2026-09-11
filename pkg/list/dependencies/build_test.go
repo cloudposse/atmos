@@ -58,6 +58,25 @@ func TestBuildGraph_SettingsDependsOn(t *testing.T) {
 	assert.Equal(t, []string{NodeID("app", "dev")}, vpc.Dependents)
 }
 
+func TestBuildGraphDefersRequiredValuesWithConfiguredDelimiter(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": {},
+			"app": {
+				"dependencies": map[string]any{
+					"components": []any{
+						map[string]any{"name": "vpc", "required": "[[ .dependencyRequired ]]"},
+					},
+				},
+			},
+		},
+	})
+
+	graph, err := BuildGraph(stacks, "[[")
+	require.NoError(t, err)
+	assert.Contains(t, graph.Nodes[NodeID("app", "dev")].Dependencies, NodeID("vpc", "dev"))
+}
+
 func TestBuildGraph_DependenciesComponents(t *testing.T) {
 	stacks := terraformStacks(map[string]map[string]map[string]any{
 		"dev": {
