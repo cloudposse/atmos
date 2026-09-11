@@ -251,11 +251,21 @@
   background: #d4d4d8;
 }
 
-/* Static frame: show the entire final terminal content at natural height
-   instead of clipping to the 16:9 playback viewport. */
+/* staticSizer establishes a container-query context sized to the frame's own
+   rendered width, so .staticFrame can cap its height relative to its own
+   width (never taller than it is wide) without a fixed px breakpoint table. */
+.staticSizer {
+  container-type: inline-size;
+}
+
+/* Static frame: show terminal content at its natural height instead of
+   clipping to the 16:9 playback viewport, but never taller than the frame
+   is wide - long --help output scrolls internally past that cap instead of
+   growing the box without bound. */
 .staticFrame {
   aspect-ratio: auto;
-  overflow: visible;
+  max-height: 100cqi;
+  overflow: hidden;
 }
 
 .staticFrame .screen {
@@ -265,7 +275,7 @@
      horizontally instead when the viewport is narrower than the cast. */
   white-space: pre;
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: auto;
 }
 
 .thumbnail {

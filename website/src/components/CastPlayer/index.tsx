@@ -294,7 +294,7 @@ export default function CastPlayer({
     .join(" ");
   const showControls = staticFrame ? false : (controls ?? !thumbnail);
 
-  return (
+  const frame = (
     <div className={rootClassName} ref={containerRef}>
       {chrome && (
         <div className={styles.titlebar}>
@@ -344,6 +344,15 @@ export default function CastPlayer({
         </div>
       )}
     </div>
+  );
+
+  // staticFrame needs a sizing ancestor: .staticSizer's container-query
+  // context lets .staticFrame cap its own height relative to its own
+  // rendered width (see styles.module.css) without a fixed px breakpoint.
+  return staticFrame ? (
+    <div className={styles.staticSizer}>{frame}</div>
+  ) : (
+    frame
   );
 }
 

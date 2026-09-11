@@ -214,38 +214,6 @@ func TestRenderCommand(t *testing.T) {
 	}
 }
 
-func TestFormatStepFooter(t *testing.T) {
-	writer := NewOutputModeWriter(OutputModeLog, "my_step", nil)
-
-	t.Run("success footer", func(t *testing.T) {
-		footer := writer.formatStepFooter(nil)
-		assert.Contains(t, footer, "my_step")
-		assert.Contains(t, footer, "completed")
-	})
-
-	t.Run("failed footer", func(t *testing.T) {
-		footer := writer.formatStepFooter(assert.AnError)
-		assert.Contains(t, footer, "my_step")
-		assert.Contains(t, footer, "failed")
-	})
-}
-
-func TestFormatSuccessFooter(t *testing.T) {
-	writer := NewOutputModeWriter(OutputModeLog, "deploy", nil)
-
-	// Test without styles (nil styles).
-	footer := writer.formatSuccessFooter(nil)
-	assert.Contains(t, footer, "✓")
-	assert.Contains(t, footer, "deploy")
-	assert.Contains(t, footer, "completed")
-}
-
-func TestFormatFailedFooter(t *testing.T) {
-	writer := NewOutputModeWriter(OutputModeLog, "build", nil)
-
-	// Test without styles (nil styles).
-	footer := writer.formatFailedFooter(nil)
-	assert.Contains(t, footer, "✗")
-	assert.Contains(t, footer, "build")
-	assert.Contains(t, footer, "failed")
-}
+// writeStepHeader and writeStepFooter are covered by the behavior-level
+// tests in output_mode_execution_test.go (they now delegate to the shared
+// ui.Info/ui.Success/ui.Error pipeline rather than returning a string).

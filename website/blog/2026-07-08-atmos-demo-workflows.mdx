@@ -39,6 +39,8 @@ The plan cast starts the set. The next two show the follow-up runs:
 
 <CastPlayer src="/casts/demo/fixtures/native-terraform/deploy.cast" title="atmos terraform deploy" chrome controls scrubber />
 
+Once the deploy finishes, the next question is usually what values it produced:
+
 <CastPlayer src="/casts/demo/fixtures/native-terraform/output.cast" title="atmos terraform output" chrome controls scrubber />
 
 Together, they show the basic path from preview to apply to result.
@@ -57,7 +59,11 @@ Sometimes the next step is to inspect the project before changing anything.
 
 <CastPlayer src="/casts/demo/fixtures/basic/list-stacks.cast" title="atmos list stacks" chrome controls scrubber />
 
+Once you know which stack you care about, drill into a single component's configuration:
+
 <CastPlayer src="/casts/demo/fixtures/basic/describe-component.cast" title="atmos describe component" chrome controls scrubber />
+
+Or zoom back out to see the deep-merged configuration for every stack at once:
 
 <CastPlayer src="/casts/demo/fixtures/basic/describe-stacks.cast" title="atmos describe stacks" chrome controls scrubber />
 

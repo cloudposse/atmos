@@ -45,18 +45,18 @@ Infrastructure automation should not force a choice between "simple but slow" an
 4. Make failure behavior part of the workflow contract, not buried in scripts. *(Shipped)*
 5. Fan a single step template across a matrix of axes. *(Shipped)*
 6. Start a step in the background, continue the workflow, and later synchronize on it (`wait`) or
-   tear it down (`cancel`) — enabling long-running local services (emulators, registries, k3s,
-   devcontainers) inside a workflow. *(Proposed)*
+    tear it down (`cancel`) — enabling long-running local services (emulators, registries, k3s,
+    devcontainers) inside a workflow. *(Proposed)*
 
 ## Non-Goals
 
 1. **GitHub Actions `parallel`-as-sugar.** Atmos `parallel` is a structured DAG block, not syntactic
-   sugar for "background a group + wait-all." See [Relationship to GitHub Actions](#relationship-to-github-actions).
+    sugar for "background a group + wait-all." See [Relationship to GitHub Actions](#relationship-to-github-actions).
 2. **A new readiness mechanism.** Container readiness reuses the existing `healthcheck:` +
-   `container.WaitHealthy`; v1 adds no `ready:` field. A non-Docker readiness probe (tcp/http/log) is
-   deferred until the non-container (shell/atmos) background `Runner` lands.
+    `container.WaitHealthy`; v1 adds no `ready:` field. A non-Docker readiness probe (tcp/http/log) is
+    deferred until the non-container (shell/atmos) background `Runner` lands.
 3. **Interactive child steps inside concurrent groups.** Prompts, pagers, spinners, editors, and
-   terminal-owning renderers stay outside concurrent groups for now.
+    terminal-owning renderers stay outside concurrent groups for now.
 4. **Conditional branching.** No if/else in workflows (use `when` / shell).
 
 ---
@@ -132,12 +132,16 @@ output:
   prefix: "{{ .step.name }}"
 ```
 
-- **`grouped`** (default) — capture each child's output and print it as a labeled block when the child
-  finishes. `order` is `completion` (as children finish) or `definition` (declared order).
-- **`prefixed`** — stream child output live, prefixing every complete line with the child's label.
+- **`grouped`** (default) — announce each child with a `Running` banner live, the moment it starts, then
+  capture its output and print it as a labeled block with a completion banner. Under `order: completion`
+  (the default), that block prints live, the instant the child finishes; under `order: definition`,
+  completion blocks are held back and printed together, in declared order, once every child in the group
+  has finished (start banners still stream live either way).
+- **`prefixed`** — stream child output live, prefixing every complete line with the child's label. No
+  start/completion banners are printed in this mode.
 - **`none`** — suppress child output (metadata still captured).
 - **`show_summary`** — print a summary line, e.g.
-  `[checks] summary: 2 succeeded, 0 failed, 0 skipped, 0 canceled`.
+  `` `checks` summary: 2 succeeded, 0 failed, 0 skipped, 0 canceled ``.
 - **`prefix`** — Go template for the per-child label, evaluated with the child step context.
 
 ---

@@ -106,14 +106,16 @@ output:
   <dd>
     Rendering mode:
     <ul>
-      <li><code>grouped</code> (default): capture each child's output and print it in a labeled block once the child finishes.</li>
-      <li><code>prefixed</code>: stream child output live, prefixing every line with the child's label.</li>
+      <li><code>grouped</code> (default): announce each child with a `Running` banner the moment it starts, then capture its output and print it in a labeled block along with a completion banner once the child finishes.</li>
+      <li><code>prefixed</code>: stream child output live, prefixing every line with the child's label. No start/completion banners are printed in this mode.</li>
       <li><code>none</code>: suppress child output.</li>
     </ul>
   </dd>
 
   <dt>`order`</dt>
-  <dd>For `grouped` mode, the order blocks are printed: `completion` (as children finish) or `definition` (in declared order).</dd>
+  <dd>
+    For `grouped` mode, the order completion blocks are printed: `completion` (each child's output and completion banner appear live, the instant that child finishes) or `definition` (in declared order — completion blocks are held back and printed together once every child in the group has finished). Start banners always stream live as each child begins, regardless of `order`.
+  </dd>
 
   <dt>`show_summary`</dt>
   <dd>Print a summary line with success, failed, skipped, and canceled counts after the group completes.</dd>
