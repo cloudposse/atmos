@@ -1456,7 +1456,7 @@ jobs:
           - flavor: { os: "macos-15-intel", target: macos, artifact: macos-intel }
             fixture: { name: helm-lifecycle, path: tests/fixtures/scenarios/helm-lifecycle }
 
-    # The macOS matrix may spend up to 45 minutes starting Colima, followed by
+    # The macOS matrix may spend up to 55 minutes starting Colima, followed by
     # two bounded 45-minute test attempts. Keep the job ceiling above those
     # nested budgets so the second retry can finish and emit diagnostics.
     timeout-minutes: 180
@@ -1528,18 +1528,13 @@ jobs:
 
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
-        # setup-colima is vz-only: qemu never came up on this Intel runner
-        # (usernet failure, docs/fixes/2026-07-01-macos-k3s-runner-research.md),
-        # and a green run shows vz starting on the first attempt with the whole
-        # step under 6 minutes. Caps: brew 7m + initial cleanup 1.5m + two vz
-        # start/info attempts 10m each + bounded diagnostics and intermediate
-        # cleanup ~3m + verify 1m + two 5m pull attempts with backoff. Every
-        # cap hit simultaneously sums to ~43m; 40 deliberately undercuts that.
-        # The recovery path fits when the final image pull completes normally;
-        # anything past 40 is treated as pathological. The job-level 180m cap
-        # leaves room for a roughly 45-minute Colima startup plus both bounded
-        # 45-minute test attempts and diagnostics.
-        timeout-minutes: 40
+        # setup-colima is vz-only; qemu failed on this Intel runner (see
+        # docs/fixes/2026-07-01-macos-k3s-runner-research.md). Budget for brew
+        # (7m), cleanup (1.5m), two start/info attempts (14m each), diagnostics
+        # and intermediate cleanup (~4m), verification (1m), and two image
+        # pulls with backoff (10.5m). The 55m step cap covers these ~52m of
+        # nested budgets; the 180m job cap also covers both 45m test attempts.
+        timeout-minutes: 55
         uses: ./.github/actions/setup-colima
 
       - name: Configure Docker Hub mirror on Linux
