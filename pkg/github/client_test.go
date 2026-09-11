@@ -152,3 +152,37 @@ func TestNewGitHubClientWithToken(t *testing.T) {
 		assert.NotNil(t, client.Repositories)
 	})
 }
+
+// TestNewScopedClient_APIOnlyOverride pins that an API-only override (Host still github.com,
+// but APIURL points elsewhere -- e.g. ATMOS_TOOLCHAIN_GITHUB_API_URL set to a corporate API
+// proxy while ATMOS_TOOLCHAIN_GITHUB_URL is left at its public default) is honored rather than
+// silently ignored in favor of the default github.com client.
+func TestNewScopedClient_APIOnlyOverride(t *testing.T) {
+	endpoints := Endpoints{
+		ServerURL: defaultGitHubServerURL,
+		APIURL:    "https://api.proxy.example.com",
+		UploadURL: defaultGitHubUploadURL,
+		Host:      defaultGitHubServerHost,
+	}
+
+	client := newScopedClient(&http.Client{}, endpoints)
+
+	require.NotNil(t, client)
+	assert.Equal(t, "https://api.proxy.example.com/", client.BaseURL.String())
+}
+
+// TestNewScopedClient_PublicDefaults pins that fully-default endpoints (both Host and APIURL
+// at their public github.com values) still return the plain default client.
+func TestNewScopedClient_PublicDefaults(t *testing.T) {
+	endpoints := Endpoints{
+		ServerURL: defaultGitHubServerURL,
+		APIURL:    defaultGitHubAPIURL,
+		UploadURL: defaultGitHubUploadURL,
+		Host:      defaultGitHubServerHost,
+	}
+
+	client := newScopedClient(&http.Client{}, endpoints)
+
+	require.NotNil(t, client)
+	assert.Equal(t, "https://api.github.com/", client.BaseURL.String())
+}

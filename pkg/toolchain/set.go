@@ -437,7 +437,8 @@ func githubBackoffDelay(attempt int) time.Duration {
 func makeGitHubRequest(apiURL string) (*http.Response, error) {
 	token := viper.GetString("github-token")
 	client := &http.Client{
-		Timeout: defaultHTTPTimeout,
+		Timeout:       defaultHTTPTimeout,
+		CheckRedirect: stripAuthOnNonHTTPSRedirect,
 	}
 
 	var lastErr error
@@ -484,6 +485,19 @@ func makeGitHubRequest(apiURL string) (*http.Response, error) {
 		time.Sleep(wait)
 	}
 	return nil, lastErr
+}
+
+// stripAuthOnNonHTTPSRedirect removes the Authorization header from req when its (redirect
+// target) URL scheme is not https. Installed as makeGitHubRequest's http.Client.CheckRedirect
+// so an HTTPS-to-HTTP downgrade during a redirect (e.g. a compromised or misconfigured
+// ATMOS_TOOLCHAIN_GITHUB_API_URL endpoint) never forwards the token in cleartext: net/http's
+// default redirect policy otherwise preserves Authorization across same-host redirects
+// regardless of scheme change.
+func stripAuthOnNonHTTPSRedirect(req *http.Request, _ []*http.Request) error {
+	if !strings.EqualFold(req.URL.Scheme, "https") {
+		req.Header.Del("Authorization")
+	}
+	return nil
 }
 
 type release struct {
