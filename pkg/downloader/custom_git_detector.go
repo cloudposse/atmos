@@ -244,19 +244,21 @@ func (d *CustomGitDetector) normalizeRepositorySubdirPath(parsedURL *url.URL) {
 // injectToken injects a token into the URL if available.
 // User-specified credentials in the URL always take precedence over automatic injection.
 func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
+	// If URL already has user credentials, respect them and skip injection. This is checked
+	// first: it is the most specific condition and applies regardless of scheme (an
+	// "ssh://git@..." source carries its own user, for example).
+	if !needsTokenInjection(parsedURL) {
+		maskedURL, _ := maskBasicAuth(parsedURL.String())
+		log.Debug("Skipping token injection: URL already has user credentials", keyURL, maskedURL)
+		return
+	}
+
 	// Only inject over HTTPS: the token is embedded as URL userinfo, so an "http://" (or any
 	// other non-https) scheme would send it in cleartext. This matters most for a
 	// GITHUB_SERVER_URL/GHES host explicitly configured with a non-https scheme, but applies
 	// equally to any manually-typed "http://" source for github.com, gitlab.com, or bitbucket.org.
 	if parsedURL.Scheme != "https" {
 		log.Debug("Skipping token injection: URL scheme is not https", "scheme", parsedURL.Scheme, keyHost, host)
-		return
-	}
-
-	// If URL already has user credentials, respect them and skip injection.
-	if !needsTokenInjection(parsedURL) {
-		maskedURL, _ := maskBasicAuth(parsedURL.String())
-		log.Debug("Skipping token injection: URL already has user credentials", keyURL, maskedURL)
 		return
 	}
 
