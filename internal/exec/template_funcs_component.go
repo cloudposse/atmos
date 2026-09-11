@@ -182,7 +182,7 @@ func authCacheKeySuffix(authContext *schema.AuthContext) string {
 	}
 	switch {
 	case authContext.AWS != nil:
-		return fmt.Sprintf("aws:%s:%s", authContext.AWS.Profile, authContext.AWS.Region)
+		return fmt.Sprintf("aws:%q:%q:%q", authContext.AWS.Profile, authContext.AWS.Region, authContext.AWS.EndpointURL)
 	case authContext.Azure != nil:
 		return fmt.Sprintf("azure:%s:%s", authContext.Azure.Profile, authContext.Azure.SubscriptionID)
 	case authContext.GCP != nil:
