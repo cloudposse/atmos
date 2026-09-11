@@ -137,6 +137,30 @@ func TestConvertToRawURL(t *testing.T) {
 	}
 }
 
+// TestConvertToRawURL_ExplicitGitHubComWithGHESConfigured verifies that an explicit
+// github.com URL always converts to raw.githubusercontent.com, even when GITHUB_SERVER_URL
+// points at a different GitHub Enterprise Server host. Before this, an explicit github.com URL
+// was routed through the GHES endpoint's own "/raw/" path instead of the public one.
+func TestConvertToRawURL_ExplicitGitHubComWithGHESConfigured(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+	t.Setenv("GITHUB_API_URL", "https://ghes.example.com/api/v3")
+
+	result, err := ConvertToRawURL("https://github.com/owner/repo/blob/main/path/to/file.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, "https://raw.githubusercontent.com/owner/repo/main/path/to/file.yaml", result)
+}
+
+// TestConvertToRawURL_ConfiguredGHESHost verifies that a URL on the configured GitHub
+// Enterprise Server host converts to that host's own "/raw/" path.
+func TestConvertToRawURL_ConfiguredGHESHost(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+	t.Setenv("GITHUB_API_URL", "https://ghes.example.com/api/v3")
+
+	result, err := ConvertToRawURL("https://ghes.example.com/owner/repo/blob/main/path/to/file.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, "https://ghes.example.com/raw/owner/repo/main/path/to/file.yaml", result)
+}
+
 func TestConvertToRawURL_RealWorldExamples(t *testing.T) {
 	tests := []struct {
 		name     string
