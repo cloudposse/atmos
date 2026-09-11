@@ -891,7 +891,7 @@ jobs:
         env:
           ATMOS_TEST_RACE_SHARD_SEED: ${{ github.run_id }}
         run: |
-          echo "::notice title=Race shard seed::Reproduce locally with ATMOS_TEST_RACE_SHARD_SEED=${ATMOS_TEST_RACE_SHARD_SEED} RACE_SHARD_COUNT=${RACE_SHARD_COUNT} go tool mage test:racematrix"
+          echo "::notice title=Race shard seed::Reproduce locally with GITHUB_OUTPUT=/dev/stdout ATMOS_TEST_RACE_SHARD_SEED=${ATMOS_TEST_RACE_SHARD_SEED} RACE_SHARD_COUNT=${RACE_SHARD_COUNT} go tool mage test:racematrix"
           go tool mage test:racematrix
 
   # `-race` requires CGO_ENABLED=1 (the detector's runtime is itself a cgo
