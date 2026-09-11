@@ -66,8 +66,9 @@ func TestResolveS3BackendTarget(t *testing.T) {
 func TestFindS3BackendTargets(t *testing.T) {
 	provision := map[string]any{
 		"targets": map[string]any{
-			"good":          map[string]any{"kind": kindAwsS3, "bucket": "good-bucket", "prefix": "templates"},
-			"missingBucket": map[string]any{"kind": kindAwsS3},
+			"good":          map[string]any{"kind": kindAwsS3, "bucket": "good-bucket", "prefix": "templates", "region": "us-east-1"},
+			"missingBucket": map[string]any{"kind": kindAwsS3, "region": "us-east-1"},
+			"missingRegion": map[string]any{"kind": kindAwsS3, "bucket": "no-region-bucket"},
 			"other":         map[string]any{"kind": "git"},
 		},
 	}
@@ -77,6 +78,7 @@ func TestFindS3BackendTargets(t *testing.T) {
 	require.Contains(t, got, "good")
 	assert.Equal(t, "good-bucket", got["good"].Bucket)
 	assert.Equal(t, "templates", got["good"].Prefix)
+	assert.Equal(t, "us-east-1", got["good"].Region)
 }
 
 func TestFindS3BackendTargets_Empty(t *testing.T) {

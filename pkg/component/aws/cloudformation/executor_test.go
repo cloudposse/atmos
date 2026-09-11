@@ -348,7 +348,8 @@ func TestRunApply_RenderOutputsError(t *testing.T) {
 
 	_, err := runApply(octx, client, spec, map[string]any{"stack_name": "vpc"})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "format CloudFormation outputs")
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "failed to format outputs")
 }
 
 // runApply must apply the stack policy after a successful deploy when
@@ -676,7 +677,7 @@ func TestResolveSpecAndTemplate_OutputSkipsProvisioning(t *testing.T) {
 	stubProvisionAndResolveComponentPath(t, "", errors.New("provisioning must not be attempted for output"))
 
 	info := &schema.ConfigAndStacksInfo{
-		ComponentSection: map[string]any{"stack_name": "vpc", "template": "template.yaml"},
+		ComponentSection: map[string]any{"stack_name": "vpc", "path": "template.yaml"},
 	}
 	spec, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, OperationOutput)
 	require.NoError(t, err)
