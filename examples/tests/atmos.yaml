@@ -1,0 +1,18 @@
+base_path: ./
+workflows:
+  base_path: workflows
+logs:
+  level: Warning
+commands:
+  - name: test
+    description: Run the local smoke-test suite
+    steps:
+      - type: test
+        name: local-checks
+        steps:
+          - name: fixtures
+            type: require
+            files: [checks/passing.sh, checks/failing.sh]
+          - name: smoke
+            type: shell
+            command: sh checks/passing.sh

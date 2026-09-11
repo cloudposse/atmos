@@ -1,0 +1,96 @@
+---
+title: test
+sidebar_label: test
+slug: /workflows/steps/type/test
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+
+The `test` step runs checks and displays their results as an Atmos tree. Successful
+output stays hidden. When a check fails, its buffered output and error appear as
+soon as it finishes. The remaining independent tests continue by default.
+
+<CastPlayer src="/casts/examples/tests/tests.cast" title="Post-deployment tests" chrome controls scrubber />
+
+[View the full example](/examples/tests)
+
+```yaml
+- name: smoke-tests
+  type: test
+  title: Post-deployment tests
+  output: failures
+  fail:
+    mode: wait_all
+  steps:
+    - name: health
+      type: http
+      url: https://example.com/health
+      expect:
+        status: [200]
+    - name: endpoints
+      type: parallel
+      max_concurrency: 2
+      steps:
+        - name: homepage
+          type: shell
+          command: ./check-homepage.sh
+        - name: authentication
+          type: shell
+          command: ./check-authentication.sh
+```
+
+## Execution and output
+
+Direct children run in declaration order. Nest `parallel` or `matrix` to run
+checks concurrently using their existing `max_concurrency` and `needs` settings.
+Matrix combinations have their own branches. Each leaf contributes once to the
+progress total; container nodes do not increase the count.
+
+Green dots mean passed, red dots mean failed, and spinners identify running tests.
+Skipped and canceled tests have muted markers. The final summary includes all
+four outcomes. In CI or redirected output, Atmos prints static results without
+terminal cursor controls. Failure details remain in scrollback.
+
+| Field | Default | Behavior |
+| --- | --- | --- |
+| `steps` | Required | Nonempty list of checks or parallel/matrix groups. |
+| `title` | Step name | Heading for the test tree. |
+| `output` | `failures` | `all` also displays successful logs when each check finishes. |
+| `fail.mode` | `wait_all` | Continue independent tests, then fail if unhandled failures remain. |
+| `fail.max_failures` | `0` | Existing control-step failure threshold; fail-fast defaults to stopping at the first failure. |
+
+`fail_fast` cancels remaining work. `best_effort` records failures but allows the
+group to succeed. Explicit child `continue` conditions and nested group failure
+policies are honored; tolerated failures still appear red. Failed dependencies
+skip their dependents. An unset `when` runs a test even after an earlier failure;
+explicit conditions can select success, failure, or other existing step facts.
+Retries count as one test, with the final attempt determining the result.
+
+Noninteractive registered steps such as `shell`, `script`, `atmos`, `http`, and
+`require` work as checks. Interactive steps, process replacement, background
+services, recording/emulator sessions, and nested `test` groups are unsupported.
+Parallel and matrix groups retain their existing one-level nesting restriction.
+
+## After deployment
+
+Use an existing lifecycle hook; no separate test command or trigger is required.
+Set `on_failure: fail` explicitly because step hooks otherwise default to warning.
+
+```yaml
+hooks:
+  smoke-tests:
+    events: [after.terraform.apply]
+    kind: step
+    type: test
+    on_failure: fail
+    with:
+      steps:
+        - name: health
+          type: http
+          url: https://example.com/health
+          expect:
+            status: [200]
+```
+
+Test steps also work in custom commands. Their result metadata exposes `total`,
+`passed`, `failed`, `skipped`, and `canceled` counts.

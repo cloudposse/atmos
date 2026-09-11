@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -51,7 +50,7 @@ func (h *TableHandler) executeContentTable(ctx context.Context, step *schema.Wor
 	if err != nil {
 		return nil, err
 	}
-	if err := data.Writeln(content); err != nil {
+	if err := vars.WriteDataLine(content); err != nil {
 		return nil, err
 	}
 	return NewStepResult(content), nil
@@ -74,7 +73,7 @@ func (h *TableHandler) executeDataTable(step *schema.WorkflowStep, vars *Variabl
 		return nil, err
 	}
 
-	if err := data.Writeln(output); err != nil {
+	if err := vars.WriteDataLine(output); err != nil {
 		return nil, err
 	}
 

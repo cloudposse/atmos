@@ -76,7 +76,7 @@ type CastSimulateDefaults struct {
 	Interval string          `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`
 }
 
-// ParallelFailConfig configures failure behavior for parallel and matrix steps.
+// ParallelFailConfig configures failure behavior for parallel, matrix, and test steps.
 type ParallelFailConfig struct {
 	Mode        string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
 	MaxFailures int    `yaml:"max_failures,omitempty" json:"max_failures,omitempty" mapstructure:"max_failures"`
@@ -379,7 +379,7 @@ type WorkflowStep struct {
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
 	// Display configuration.
-	Output         string                `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
+	Output         string                `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none; test groups use failures (default) or all.
 	CastOutput     *CastOutput           `yaml:"-" json:"cast_output,omitempty" mapstructure:"cast_output"`            // Structured output for cast artifacts.
 	ParallelOutput *ParallelOutputConfig `yaml:"-" json:"parallel_output,omitempty" mapstructure:"parallel_output"`    // Structured output for parallel/matrix.
 	Height         int                   `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).

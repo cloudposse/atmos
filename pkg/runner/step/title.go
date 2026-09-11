@@ -31,6 +31,9 @@ func (h *TitleHandler) Validate(step *schema.WorkflowStep) error {
 func (h *TitleHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.TitleHandler.Execute")()
 
+	if OutputSuppressed(ctx) {
+		return NewStepResult(step.Content), nil
+	}
 	term := terminal.New()
 
 	if step.Content == "" {

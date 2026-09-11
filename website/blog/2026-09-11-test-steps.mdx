@@ -1,0 +1,48 @@
+---
+title: Test Your Infrastructure After Deployment
+description: Run post-deployment checks with a test tree, progress, and failure-only output.
+slug: test-steps
+authors: [osterman]
+tags: [feature]
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+
+A successful deployment still needs checks that the application is healthy.
+Running those checks as ordinary commands can bury failures in successful logs
+or stop before the remaining tests run. The new [test step](/workflows/steps/type/test)
+collects the results, keeps passing output quiet, and reveals each failed check's logs.
+
+<!--truncate-->
+
+<CastPlayer src="/casts/examples/tests/tests.cast" title="Post-deployment tests" chrome controls scrubber />
+
+[View the full example](/examples/tests)
+
+## The Problem
+
+Post-deployment checks need a clear result for every test, including independent
+checks that can still run after another fails. Shell wrappers and CI-specific
+reporting make that behavior harder to reuse locally and across deployments.
+
+## The Fix
+
+Atmos supports `type: test` in workflows, custom commands, and lifecycle hooks.
+Tests continue by default, while a tree with green/red dots and a bottom progress
+bar shows the results. Nested [parallel](/workflows/steps/type/parallel) and
+[matrix](/workflows/steps/type/matrix) groups share the same report.
+
+## How to Use It
+
+Attach a test step to an `after.terraform.apply` hook with `kind: step` and
+`on_failure: fail` to make checks part of the deployment result. Use `output: all`
+when debugging, or `fail.mode: fail_fast` when remaining checks should stop after
+an error. CI receives a static tree with the same failure details.
+
+See the [test step reference](/workflows/steps/type/test) for configuration and
+failure behavior.
+
+## Get Involved
+
+Try the [local example](/examples/tests) and share feedback in
+[GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

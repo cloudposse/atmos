@@ -11,7 +11,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // validateRunAction checks the configuration of a `run` container step.
@@ -44,7 +43,7 @@ func (h *ContainerHandler) executeRun(ctx context.Context, step *schema.Workflow
 	runtimeName := strings.TrimSpace(run.Provider)
 	if step.DryRun {
 		preview := container.BuildEphemeralPreview(runtimeName, config)
-		ui.Writeln(preview)
+		vars.UI().Writeln(preview)
 		return NewStepResult(preview).WithMetadata(exitCodeMetadata, 0), nil
 	}
 
