@@ -4,9 +4,11 @@ title: "Atmos Can Finally Speak for Itself"
 date: 2026-06-24T12:00:00.000Z
 authors: [osterman]
 tags: [feature]
+cast: "/casts/examples/say-something/pipeline.cast"
+castTitle: "atmos say steps"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Workflows now have a `say` step type that speaks a message out loud using text-to-speech — an audible cue for when a long-running workflow finishes or needs your attention, even after you've switched to another window. When no speech engine is available (or you're in CI), it degrades gracefully and prints the message instead, so the same workflow works everywhere.
 
@@ -76,11 +78,13 @@ atmos workflow pipeline -f say      # announce each build milestone
 
 Here's the build pipeline announcing its milestones end to end:
 
-<CastPlayer src="/casts/examples/say-something/pipeline.cast" title="atmos say steps" chrome controls scrubber />
+<CastEmbed src="/casts/examples/say-something/pipeline.cast" title="atmos say steps" chrome controls scrubber />
 
 [View the full example](/examples/say-something)
 
 The cross-platform plumbing lives in a reusable `pkg/say` package, mirroring the existing browser-opening abstraction, so other parts of Atmos can adopt audible notifications too.
+
+For usage and configuration, see [say](/workflows/steps/type/say).
 
 ## Get Involved
 

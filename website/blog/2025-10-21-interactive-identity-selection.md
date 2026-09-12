@@ -10,7 +10,7 @@ tags:
 release: v1.196.0
 ---
 
-Running `atmos auth login` without specifying an identity is now more user-friendly. When no `--identity` flag is provided, Atmos presents an interactive selector to choose from your configured identities.
+Running [`atmos auth login`](/cli/commands/auth/login) without specifying an identity is now more user-friendly. When no [`--identity`](/cli/commands/auth/login#flags) flag is provided, Atmos presents an interactive selector to choose from your configured identities.
 
 <!--truncate-->
 

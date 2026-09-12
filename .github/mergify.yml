@@ -32,6 +32,8 @@ pull_request_rules:
       - and: *is_dependency_bot
       - "-conflict"
       - "#commits-behind>0"
+      # Approval is required to enter the merge queue, and queued branches can't be updated.
+      - "#approved-reviews-by=0"
     actions:
       update:
 

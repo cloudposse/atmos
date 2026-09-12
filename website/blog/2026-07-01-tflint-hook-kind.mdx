@@ -35,8 +35,8 @@ components:
           kind: tflint
 ```
 
-For CI workflows that only run `atmos terraform plan`, `apply`, or `deploy`
-and do not call `atmos terraform init` explicitly, use that command's before
+For CI workflows that only run [`atmos terraform plan`](/cli/commands/terraform/plan), `apply`, or `deploy`
+and do not call [`atmos terraform init`](/cli/commands/terraform/init) explicitly, use that command's before
 event instead (for example `before.terraform.plan`) so the lint summary is
 written in the same job.
 

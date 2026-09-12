@@ -1,0 +1,54 @@
+---
+slug: label-value-lookup
+title: "Read One Component Label with an Optional Default"
+authors: [osterman]
+tags: [enhancement]
+---
+
+A component can have several labels, while a variable may need only one value.
+The [`!labels` function](/functions/yaml/labels) now accepts a key to read a single
+component label, with an optional fallback when that label is absent.
+
+<!--truncate-->
+
+## The Problem
+
+Individual labels are already accessible through Go templates, such as
+`{{ .metadata.labels.owner }}`. The [`!labels` function](/functions/yaml/labels)
+previously returned only the full map and accepted no key or fallback argument.
+
+## The Fix
+
+Use [`!labels key [default]`](/functions/yaml/labels#single-label-lookup) to retrieve a string
+from the component’s resolved [metadata labels](/stacks/components/component-metadata#labels).
+An absent key uses the explicit default or produces an error if none was supplied.
+Existing empty-string values are preserved. Bare `!labels` continues to return the full map.
+
+## How to Use It
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          cost-center: platform
+      vars:
+        cost_center: !labels cost-center
+        owner: !labels owner "Platform Team"
+```
+
+Here `cost_center` resolves to `platform`. If the resolved metadata has no `owner` label
+after stack defaults and component inheritance, `owner` resolves to the explicit fallback,
+`Platform Team`. An inherited `owner` label supplies its value instead.
+
+Keys are literal, including dots, slashes, and hyphens. Quote fallback values containing spaces;
+use `""` when the fallback should be an empty string. Values reflect
+[stack defaults and component inheritance](/stacks/components/component-metadata#global-stack-wide-metadata).
+
+See the [label lookup reference](/functions/yaml/labels) for full-map access and
+Go template equivalents.
+
+## Get Involved
+
+Share your label lookup use cases in [Atmos discussions](https://github.com/orgs/cloudposse/discussions).

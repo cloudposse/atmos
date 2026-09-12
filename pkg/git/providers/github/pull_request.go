@@ -18,6 +18,20 @@ import (
 // ProviderName identifies the GitHub pull request publisher.
 const ProviderName = "github"
 
+// prBodyBadge is the responsive light/dark "Atmos CI" badge used in native CI plan/apply summary
+// comments (pkg/ci/plugins/terraform), reused here (via PullRequestBodyBadge) so an automated
+// component-update pull request is recognizable as Atmos-generated at a glance, not just a bare,
+// unexplained diff. GitHub renders raw HTML (<picture>/<source>/srcset) inline, letting it switch
+// images based on the viewer's OS/browser color scheme -- a capability with no plain-markdown
+// equivalent, and not guaranteed to render on every forge's own pull request markdown (see
+// atmosgit.PullRequestBodyBadger).
+const prBodyBadge = `<a href="https://atmos.tools/ci"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg">
+  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" height="32" align="right">
+</picture></a>
+`
+
 type client interface {
 	GitHub() *gh.Client
 }
@@ -55,6 +69,13 @@ func (p *Provider) Reconcile(ctx context.Context, options *atmosgit.PullRequestO
 	}
 	if options.Owner == "" || options.Repository == "" || options.Base == "" || options.Head == "" {
 		return nil, fmt.Errorf("%w: owner, repository, base, and head are required", errUtils.ErrComponentUpdaterConfig)
+	}
+	if len(options.Namespace) > 0 {
+		// GitHub addresses repositories with exactly two segments (owner/repository); a non-empty
+		// Namespace means the caller built options for a forge that needs a third segment (e.g.
+		// Azure DevOps' project) and pointed it at the wrong provider. Reject outright rather than
+		// silently ignoring Namespace and resolving to the wrong repository.
+		return nil, fmt.Errorf("%w: github does not support a pull request namespace (got %v); GitHub repositories are addressed as owner/repository", errUtils.ErrComponentUpdaterConfig, options.Namespace)
 	}
 	c, err := p.newClient()
 	if err != nil {
@@ -111,6 +132,11 @@ func (p *Provider) Reconcile(ctx context.Context, options *atmosgit.PullRequestO
 	}
 
 	return result, nil
+}
+
+// PullRequestBodyBadge implements atmosgit.PullRequestBodyBadger.
+func (p *Provider) PullRequestBodyBadge() string {
+	return prBodyBadge
 }
 
 func githubError(err error, response *gh.Response) error {

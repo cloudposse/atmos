@@ -4,9 +4,11 @@ title: "Background Container Services in Atmos Workflows"
 authors: [osterman]
 tags: [feature, dx]
 date: 2026-06-29T12:00:00.000Z
+cast: "/casts/examples/background-steps/service.cast"
+castTitle: "atmos background service"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Atmos workflows can now start long-running container services in the background, wait for them to become healthy, and tear them down automatically. Bring up an emulator, database, or registry with `background: true`, gate the next step on its container health check, and stop it with a `cancel` step — no shell scripts, no background jobs, no orphaned containers.
 
@@ -77,7 +79,7 @@ Atmos starts the emulator, blocks until its health check reports healthy, runs `
 
 Here it is running end to end:
 
-<CastPlayer src="/casts/examples/background-steps/service.cast" title="atmos background service" chrome controls scrubber />
+<CastEmbed src="/casts/examples/background-steps/service.cast" title="atmos background service" chrome controls scrubber />
 
 [View the full example](/examples/background-steps)
 
@@ -127,6 +129,8 @@ GCP (`floci/gcp`), Azure (`floci/az`), Kubernetes (`k3s`), Vault/OpenBao (`openb
 `vault`), OCI/Terraform registries (`registry`), and a Mockoon-backed 1Password Connect server
 (`mockoon/1password-connect`). See the [emulator component reference](/stacks/components/emulator#supported-drivers--targets)
 for the current driver and target list.
+
+For usage and configuration, see [Using Containers](/components/container).
 
 ## Get Involved
 
