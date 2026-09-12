@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestAppend verifies Append merges base GIT_CONFIG_* entries with new entries into the target map, including handling of missing, malformed, or empty existing counts.
 func TestAppend(t *testing.T) {
 	tests := []struct {
 		name          string
