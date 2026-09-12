@@ -7,6 +7,9 @@ commands:
         name: emulator-aws-lifecycle
         command: atmos casts generate examples emulator-aws lifecycle
       - type: shell
+        name: cloudformation-lifecycle
+        command: atmos casts generate examples cloudformation lifecycle
+      - type: shell
         name: quick-start-simple-list-and-plan
         command: atmos casts generate examples quick-start-simple list-and-plan
       - type: shell
@@ -195,6 +198,9 @@ commands:
       - type: shell
         name: emulator-aws-lifecycle
         command: atmos casts validate examples emulator-aws lifecycle
+      - type: shell
+        name: cloudformation-lifecycle
+        command: atmos casts validate examples cloudformation lifecycle
       - type: shell
         name: quick-start-simple-list-and-plan
         command: atmos casts validate examples quick-start-simple list-and-plan
