@@ -60,6 +60,32 @@ func TestCommandProviderMetadata(t *testing.T) {
 	assert.ElementsMatch(t, []string{"render", "diff", "plan", "apply", "deploy", "delete", "validate"}, subcommands)
 }
 
+// kubernetesCmd must not re-register the global flag set as its own local
+// persistent flags — see the identical fix/rationale on CloudFormationCmd
+// (cmd/aws/cloudformation/cloudformation_test.go's
+// TestCloudFormationCmd_DoesNotDuplicateGlobalFlags) and helmCmd
+// (cmd/helm/helm_test.go's TestHelmCmd_DoesNotDuplicateGlobalFlags). All
+// three command families previously used flags.WithCommonFlags(), which
+// pulls in the entire flags.GlobalFlagsRegistry() (already registered
+// persistently on RootCmd and inherited by every subcommand) as a second,
+// separately-viper-bound local copy.
+func TestKubernetesCmd_DoesNotDuplicateGlobalFlags(t *testing.T) {
+	globalOnlyFlags := []string{
+		"base-path", "chdir", "config", "config-path", "cast", "ai",
+		"force-color", "force-tty", "heatmap", "heatmap-mode", "logs-file",
+		"logs-level", "mask", "no-color", "pager", "profile", "profiler-host",
+		"profiler-port", "redirect-stderr", "settings-list-merge-strategy",
+		"skill", "edition", "identity",
+	}
+	for _, name := range globalOnlyFlags {
+		assert.Nil(t, kubernetesCmd.PersistentFlags().Lookup(name),
+			"%q must not be locally registered on kubernetesCmd — it is already a global RootCmd persistent flag", name)
+	}
+
+	assert.NotNil(t, kubernetesCmd.PersistentFlags().Lookup("stack"), "expected --stack to remain a local persistent flag")
+	assert.NotNil(t, kubernetesCmd.PersistentFlags().Lookup("dry-run"), "expected --dry-run to remain a local persistent flag")
+}
+
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	renderCmd := newOperationCommand("render", "Render")
 	for _, name := range []string{"all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels"} {
@@ -173,6 +199,20 @@ func TestBuildConfigAndStacksInfoPopulatesTagsAndLabels(t *testing.T) {
 
 	assert.Equal(t, []string{"production", "tier-1"}, info.Tags)
 	assert.Equal(t, map[string]string{"cost-center": "platform", "compliance": "sox"}, info.Labels)
+}
+
+// TestBuildConfigAndStacksInfoLabelsRepeatAccumulates proves --labels is repeatable end-to-end
+// through real cobra flag parsing: `--labels a=1 --labels b=2` must accumulate both pairs, not
+// have the second occurrence silently overwrite the first (the bug this flag's StringSlice type
+// fixes -- it used to be a plain string flag where repeating it just kept the last value).
+func TestBuildConfigAndStacksInfoLabelsRepeatAccumulates(t *testing.T) {
+	cmd := newOperationCommand("apply", "Apply")
+	require.NoError(t, cmd.ParseFlags([]string{"--labels", "cost-center=platform", "--labels", "compliance=sox"}))
+
+	info := buildConfigAndStacksInfo(cmd)
+
+	assert.Equal(t, map[string]string{"cost-center": "platform", "compliance": "sox"}, info.Labels,
+		"both --labels occurrences must be present, not just the last one")
 }
 
 func TestBuildConfigAndStacksInfoWithNoTagsOrLabels(t *testing.T) {

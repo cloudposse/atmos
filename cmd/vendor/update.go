@@ -79,7 +79,7 @@ what's already on disk matches vendor.lock.yaml — see 'atmos vendor verify' fo
 		typeChanged := cmd.Flags().Changed("type")
 
 		stack := v.GetString("stack")
-		labels, labelsErr := pkgtags.ParseLabelsFlag(v.GetString(vendorLabelsViperKey))
+		labels, labelsErr := pkgtags.ParseLabelsFlag(v.GetStringSlice(vendorLabelsViperKey))
 		if labelsErr != nil {
 			return labelsErr
 		}
@@ -405,7 +405,7 @@ func init() {
 		flags.WithEnvVars(vendorTagsFlagName, envVendorTags),
 		flags.WithViperKey(vendorTagsFlagName, vendorTagsViperKey),
 		flags.WithStringFlag("stack", "s", "", "Update only components belonging to the specified stack"),
-		flags.WithStringFlag(vendorLabelsFlagName, "", "", vendorLabelsFlagHelp),
+		flags.WithStringSliceFlag(vendorLabelsFlagName, "", nil, vendorLabelsFlagHelp),
 		flags.WithEnvVars(vendorLabelsFlagName, envVendorLabels),
 		flags.WithViperKey(vendorLabelsFlagName, vendorLabelsViperKey),
 		flags.WithBoolFlag("check", "", false, "Dry run: show available updates without modifying files"),

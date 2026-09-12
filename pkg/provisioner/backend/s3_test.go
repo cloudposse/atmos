@@ -940,7 +940,7 @@ func TestListAllObjects_EmptyBucket(t *testing.T) {
 		},
 	}
 
-	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket")
+	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket", defaultStateFileSuffix)
 	require.NoError(t, err)
 	assert.Equal(t, 0, totalObjects)
 	assert.Equal(t, 0, stateFiles)
@@ -964,7 +964,7 @@ func TestListAllObjects_WithObjects(t *testing.T) {
 		},
 	}
 
-	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket")
+	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket", defaultStateFileSuffix)
 	require.NoError(t, err)
 	assert.Equal(t, 4, totalObjects) // 3 versions + 1 delete marker.
 	assert.Equal(t, 2, stateFiles)   // 2 files ending with .tfstate.
@@ -997,7 +997,7 @@ func TestListAllObjects_Pagination(t *testing.T) {
 		},
 	}
 
-	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket")
+	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket", defaultStateFileSuffix)
 	require.NoError(t, err)
 	assert.Equal(t, 2, totalObjects)
 	assert.Equal(t, 0, stateFiles)
@@ -1068,7 +1068,7 @@ func TestDeleteBackendContents_EmptyBucket(t *testing.T) {
 	mockClient := &mockS3Client{}
 
 	// With objectCount=0, function should return nil without doing anything.
-	err := deleteBackendContents(ctx, mockClient, "test-bucket", 0, 0)
+	err := deleteBackendContents(ctx, mockClient, "test-bucket", deletionCounts{Objects: 0, StateFiles: 0, StateFileLabel: defaultStateFileLabel})
 	require.NoError(t, err)
 }
 
@@ -1113,7 +1113,7 @@ func TestDeleteBackendContents_Success(t *testing.T) {
 				},
 			}
 
-			err := deleteBackendContents(ctx, mockClient, "test-bucket", tt.objectCount, tt.stateFileCount)
+			err := deleteBackendContents(ctx, mockClient, "test-bucket", deletionCounts{Objects: tt.objectCount, StateFiles: tt.stateFileCount, StateFileLabel: defaultStateFileLabel})
 			require.NoError(t, err)
 		})
 	}
@@ -1135,7 +1135,7 @@ func TestDeleteBackendContents_DeleteError(t *testing.T) {
 		},
 	}
 
-	err := deleteBackendContents(ctx, mockClient, "test-bucket", 1, 0)
+	err := deleteBackendContents(ctx, mockClient, "test-bucket", deletionCounts{Objects: 1, StateFiles: 0, StateFileLabel: defaultStateFileLabel})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrDeleteObjects)
 }
@@ -1144,12 +1144,40 @@ func TestDeleteBackendContents_DeleteError(t *testing.T) {
 
 func TestShowDeletionWarning_WithoutStateFiles(t *testing.T) {
 	// This function only produces UI output, so we just verify it doesn't panic.
-	showDeletionWarning("test-bucket", 5, 0)
+	showDeletionWarning("test-bucket", deletionCounts{Objects: 5, StateFiles: 0, StateFileLabel: defaultStateFileLabel})
 }
 
 func TestShowDeletionWarning_WithStateFiles(t *testing.T) {
 	// This function only produces UI output, so we just verify it doesn't panic.
-	showDeletionWarning("test-bucket", 10, 3)
+	showDeletionWarning("test-bucket", deletionCounts{Objects: 10, StateFiles: 3, StateFileLabel: defaultStateFileLabel})
+}
+
+// A caller (e.g. CloudFormation's BuildSyntheticBackendConfig) that overrides
+// state_file_label to "" must suppress the parenthetical entirely, even when
+// stateFileCount is non-zero — this function only produces UI output, so we
+// just verify it doesn't panic with the empty-label branch taken.
+func TestShowDeletionWarning_EmptyLabelSuppressesStateFileMention(t *testing.T) {
+	showDeletionWarning("test-bucket", deletionCounts{Objects: 10, StateFiles: 3, StateFileLabel: ""})
+}
+
+// stateFileMarkers must fall back to Terraform's own convention when the
+// backend_config carries neither override key — every existing Terraform
+// caller of DeleteS3Backend.
+func TestStateFileMarkers_DefaultsWhenAbsent(t *testing.T) {
+	tagging := stateFileMarkers(map[string]any{"backend_type": backendTypeS3})
+	assert.Equal(t, defaultStateFileSuffix, tagging.Suffix)
+	assert.Equal(t, defaultStateFileLabel, tagging.Label)
+}
+
+// stateFileMarkers must use a caller's override, including an explicit empty
+// string (CloudFormation's case: disable the sub-count/mention entirely).
+func TestStateFileMarkers_CallerOverride(t *testing.T) {
+	tagging := stateFileMarkers(map[string]any{
+		"state_file_suffix": "",
+		"state_file_label":  "",
+	})
+	assert.Equal(t, "", tagging.Suffix)
+	assert.Equal(t, "", tagging.Label)
 }
 
 // The tests above provide comprehensive unit test coverage using mocked S3 client.
@@ -1239,7 +1267,7 @@ func TestListAllObjects_ListError(t *testing.T) {
 		},
 	}
 
-	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket")
+	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket", defaultStateFileSuffix)
 	require.Error(t, err)
 	assert.Equal(t, 0, totalObjects)
 	assert.Equal(t, 0, stateFiles)
@@ -1331,7 +1359,7 @@ func TestListAllObjects_NilKeyHandling(t *testing.T) {
 		},
 	}
 
-	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket")
+	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket", defaultStateFileSuffix)
 	require.NoError(t, err)
 	assert.Equal(t, 2, totalObjects)
 	assert.Equal(t, 1, stateFiles) // Only the non-nil key ending with .tfstate.

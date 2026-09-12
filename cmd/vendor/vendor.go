@@ -41,7 +41,7 @@ const (
 // `atmos list components --labels` (see docs/prd/tags-and-labels-standard.md). The two flags query
 // different things and compose: --labels selects stack components, while --tags filters their
 // declared vendor sources.
-const vendorLabelsFlagHelp = "Only act on components whose stack metadata.labels match ALL of these (comma-separated key=value or key:value pairs): --labels=tier=1,cost-center:platform"
+const vendorLabelsFlagHelp = "Only act on components whose stack metadata.labels match ALL of these (comma-separated key=value or key:value pairs within an occurrence, and/or repeated): --labels=tier=1,cost-center:platform or --labels tier=1 --labels cost-center:platform"
 
 // vendorCmd executes 'atmos vendor' CLI commands.
 var vendorCmd = &cobra.Command{
@@ -82,7 +82,7 @@ func init() {
 		// vendor pull reads --tags/--labels straight from its Cobra flags (internal/exec), so only the
 		// Viper key is namespaced here; the ATMOS_VENDOR_* variables apply to update, diff, and verify.
 		flags.WithViperKey(vendorTagsFlagName, vendorTagsViperKey),
-		flags.WithStringFlag(vendorLabelsFlagName, "", "", vendorLabelsFlagHelp),
+		flags.WithStringSliceFlag(vendorLabelsFlagName, "", nil, vendorLabelsFlagHelp),
 		flags.WithViperKey(vendorLabelsFlagName, vendorLabelsViperKey),
 		flags.WithBoolFlag("everything", "", false, "Vendor all components"),
 		flags.WithBoolFlag("refresh-lock", "", false, "Refresh immutable vendor lock entries from declared sources"),

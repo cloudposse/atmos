@@ -35,10 +35,10 @@ type DependenciesOptions struct {
 	Skip             []string
 	// Tags filters top-level entries by metadata.tags (any-match).
 	Tags []string
-	// LabelsRaw is the raw --labels flag value (comma-separated key=value or
-	// key:value pairs, all-match), parsed in the RunE closure so an invalid
-	// value errors early.
-	LabelsRaw string
+	// LabelsRaw is the raw --labels flag value (one element per pflag StringSlice
+	// occurrence/comma-split entry -- key=value or key:value pairs, all-match),
+	// parsed in the RunE closure so an invalid value errors early.
+	LabelsRaw []string
 	// Labels holds the parsed form of LabelsRaw; populated from LabelsRaw in
 	// the RunE closure after parseDependenciesOptions returns.
 	Labels map[string]string
@@ -105,7 +105,7 @@ func parseDependenciesOptions(cmd *cobra.Command, v *viper.Viper, args []string)
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		Tags:             tags.ParseTagsFlag(v.GetString(tagsViperKey)),
-		LabelsRaw:        v.GetString(labelsViperKey),
+		LabelsRaw:        v.GetStringSlice(labelsViperKey),
 	}
 }
 

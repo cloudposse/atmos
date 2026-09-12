@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
@@ -21,69 +22,54 @@ type deleteOptions struct {
 }
 
 // deleteStack deletes the stack, respecting termination protection: deleting a
-// stack with termination_protection: true fails with an actionable hint unless
+// protected stack fails with an actionable hint unless
 // --disable-termination-protection is passed (which calls
 // UpdateTerminationProtection first) — silent auto-disable would defeat the
 // point of the setting.
+//
+// The local, resolved `termination_protection:` config value can legitimately
+// drift from the stack's actual live AWS state: applyTerminationProtection
+// only ever turns protection ON during apply, never OFF, so a component whose
+// config was edited to `termination_protection: false` (without ever calling
+// delete with --disable-termination-protection) can still be protected in AWS.
+// Trusting the local value alone for this gate would let that drift silently
+// defeat the safety net, so a local `false` is verified against the stack's
+// live EnableTerminationProtection before the gate is skipped. A local `true`
+// still short-circuits without an extra API call, and
+// --disable-termination-protection skips the live lookup entirely since
+// UpdateTerminationProtection(false) is unconditionally issued regardless of
+// what triggered detection of protection being on.
 func deleteStack(ctx context.Context, client CloudFormationClient, spec *stackSpec, opts deleteOptions) error {
 	defer perf.Track(nil, "cloudformation.deleteStack")()
 
-	// guardRetainResources MUST run before guardTerminationProtection: the
-	// termination-protection guard can call UpdateTerminationProtection(false)
+	// checkRetainResourcesGate MUST run before checkTerminationProtectionGate:
+	// the termination-protection gate can call UpdateTerminationProtection(false)
 	// as a side effect of --disable-termination-protection, and that call has
 	// no automatic rollback unless the subsequent DeleteStack call itself
-	// fails (see handleDeleteStackError). If guardRetainResources ran second
-	// and rejected the request (e.g. stack not in DELETE_FAILED), termination
-	// protection would already be disabled with nothing to restore it.
-	if err := guardRetainResources(ctx, client, spec, opts); err != nil {
-		return err
+	// fails (see handleDeleteStackError). If the retain-resources gate ran
+	// second and rejected the request (e.g. stack not in DELETE_FAILED),
+	// termination protection would already be disabled with nothing to
+	// restore it. describedStack is populated by the retain-resources gate
+	// when it runs a live DescribeStacks lookup, and reused by the
+	// termination-protection gate if it also needs one — so a single delete
+	// call never issues more than one DescribeStacks request even when both
+	// checks apply.
+	var describedStack *cfntypes.Stack
+	if len(opts.RetainResources) > 0 {
+		stack, err := checkRetainResourcesGate(ctx, client, spec)
+		if err != nil {
+			return err
+		}
+		describedStack = stack
 	}
-	if err := guardTerminationProtection(ctx, client, spec, opts); err != nil {
+
+	if err := checkTerminationProtectionGate(ctx, client, spec, opts, describedStack); err != nil {
 		return err
 	}
 
 	input := deleteStackInput(spec, opts)
 	if _, err := client.DeleteStack(ctx, input); err != nil {
 		return handleDeleteStackError(ctx, client, spec, opts, err)
-	}
-	return nil
-}
-
-// guardTerminationProtection enforces the termination_protection gate: delete
-// a protected stack fails with an actionable hint unless
-// --disable-termination-protection is passed (which calls
-// UpdateTerminationProtection first) — silent auto-disable would defeat the
-// point of the setting.
-func guardTerminationProtection(ctx context.Context, client CloudFormationClient, spec *stackSpec, opts deleteOptions) error {
-	if !spec.TerminationProtection {
-		return nil
-	}
-	if !opts.DisableTerminationProtection {
-		return errUtils.Build(errUtils.ErrAwsCloudFormationChangeSetFailed).
-			WithExplanationf("Stack %q has termination_protection enabled.", spec.StackName).
-			WithHint("Set termination_protection: false in the component config and re-apply, " +
-				"or pass --disable-termination-protection to delete it anyway.").
-			Err()
-	}
-	return disableTerminationProtection(ctx, client, spec.StackName)
-}
-
-// guardRetainResources enforces that --retain-resources is only used against
-// a stack already in DELETE_FAILED status (the only status AWS accepts it
-// for).
-func guardRetainResources(ctx context.Context, client CloudFormationClient, spec *stackSpec, opts deleteOptions) error {
-	if len(opts.RetainResources) == 0 {
-		return nil
-	}
-	status, err := currentStackStatus(ctx, client, spec.StackName)
-	if err != nil {
-		return err
-	}
-	if !isDeleteFailedStack(status) {
-		return errUtils.Build(errUtils.ErrAwsCloudFormationChangeSetFailed).
-			WithExplanationf("--retain-resources is only valid for a stack in DELETE_FAILED status; %s is currently %s.", spec.StackName, status).
-			WithHint("Retry the delete without --retain-resources, or wait for the stack to reach DELETE_FAILED.").
-			Err()
 	}
 	return nil
 }
@@ -103,20 +89,83 @@ func deleteStackInput(spec *stackSpec, opts deleteOptions) *cloudformation.Delet
 }
 
 // handleDeleteStackError wraps a DeleteStack failure and, when
-// guardTerminationProtection disabled termination protection above (only in
+// checkTerminationProtectionGate disabled termination protection above (in
 // direct response to the user's explicit --disable-termination-protection
-// flag), attempts to restore it before returning -- otherwise a failed
-// delete attempt would silently leave a previously-protected stack
-// unprotected.
+// flag — checkTerminationProtectionGate calls disableTerminationProtection
+// unconditionally whenever that flag is set, regardless of what
+// spec.TerminationProtection's local, possibly-drifted value says), attempts
+// to restore it before returning -- otherwise a failed delete attempt would
+// silently leave a previously-protected stack unprotected.
 func handleDeleteStackError(ctx context.Context, client CloudFormationClient, spec *stackSpec, opts deleteOptions, deleteAPIErr error) error {
 	deleteErr := fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, deleteAPIErr)
-	if !spec.TerminationProtection || !opts.DisableTerminationProtection {
+	if !opts.DisableTerminationProtection {
 		return deleteErr
 	}
 	if restoreErr := restoreTerminationProtectionAfterFailedDelete(ctx, client, spec.StackName); restoreErr != nil {
 		return errors.Join(deleteErr, restoreErr)
 	}
 	return deleteErr
+}
+
+// checkTerminationProtectionGate enforces the termination-protection gate.
+// When --disable-termination-protection is set, protection is disabled
+// unconditionally via UpdateTerminationProtection — no live lookup is needed
+// first, regardless of which signal (local config or live AWS state) would
+// otherwise have reported protection on. Otherwise, a local `true` short-
+// circuits without an API call; a local `false` is verified against the
+// stack's live EnableTerminationProtection, since local config can drift
+// (apply only ever turns protection on, never off). describedStack, when
+// non-nil, is an already-fetched stack description from checkRetainResourcesGate
+// (which always runs first -- see deleteStack), reused here instead of
+// issuing a second DescribeStacks call.
+func checkTerminationProtectionGate(ctx context.Context, client CloudFormationClient, spec *stackSpec, opts deleteOptions, describedStack *cfntypes.Stack) error {
+	defer perf.Track(nil, "cloudformation.checkTerminationProtectionGate")()
+
+	if opts.DisableTerminationProtection {
+		return disableTerminationProtection(ctx, client, spec.StackName)
+	}
+
+	protected := spec.TerminationProtection
+	if !protected {
+		if describedStack == nil {
+			var err error
+			describedStack, err = describeStack(ctx, client, spec.StackName)
+			if err != nil {
+				return err
+			}
+		}
+		protected = aws.ToBool(describedStack.EnableTerminationProtection)
+	}
+	if protected {
+		return errUtils.Build(errUtils.ErrAwsCloudFormationChangeSetFailed).
+			WithExplanationf("Stack %q has termination_protection enabled.", spec.StackName).
+			WithHint("Pass --disable-termination-protection to delete it anyway. " +
+				"Setting termination_protection: false and re-applying does not disable " +
+				"protection on the stack; apply only ever turns protection on, never off.").
+			Err()
+	}
+	return nil
+}
+
+// checkRetainResourcesGate enforces that --retain-resources is only used
+// against a stack in DELETE_FAILED status (AWS semantics). Always runs before
+// checkTerminationProtectionGate (see deleteStack), so it always issues its
+// own live DescribeStacks lookup; returns the described stack so
+// checkTerminationProtectionGate can reuse it instead of issuing a second one.
+func checkRetainResourcesGate(ctx context.Context, client CloudFormationClient, spec *stackSpec) (*cfntypes.Stack, error) {
+	defer perf.Track(nil, "cloudformation.checkRetainResourcesGate")()
+
+	describedStack, err := describeStack(ctx, client, spec.StackName)
+	if err != nil {
+		return nil, err
+	}
+	if !isDeleteFailedStack(describedStack.StackStatus) {
+		return nil, errUtils.Build(errUtils.ErrAwsCloudFormationChangeSetFailed).
+			WithExplanationf("--retain-resources is only valid for a stack in DELETE_FAILED status; %s is currently %s.", spec.StackName, describedStack.StackStatus).
+			WithHint("Retry the delete without --retain-resources, or wait for the stack to reach DELETE_FAILED.").
+			Err()
+	}
+	return describedStack, nil
 }
 
 // disableTerminationProtection calls UpdateTerminationProtection to clear the
@@ -177,14 +226,19 @@ func isDeleteFailedStack(status cfntypes.StackStatus) bool {
 	return status == cfntypes.StackStatusDeleteFailed
 }
 
-// currentStackStatus fetches the stack's current status.
-func currentStackStatus(ctx context.Context, client CloudFormationClient, stackName string) (cfntypes.StackStatus, error) {
+// describeStack fetches the stack's full live description (status,
+// termination protection, etc.) via a single DescribeStacks call, shared by
+// deleteStack's termination-protection and --retain-resources gates so both
+// can be answered from the same live lookup.
+func describeStack(ctx context.Context, client CloudFormationClient, stackName string) (*cfntypes.Stack, error) {
+	defer perf.Track(nil, "cloudformation.describeStack")()
+
 	out, err := client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: awsString(stackName)})
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsCloudFormationAPICallFailed, err)
 	}
 	if len(out.Stacks) == 0 {
-		return "", fmt.Errorf("%w: stack %s not found", errUtils.ErrAwsCloudFormationChangeSetFailed, stackName)
+		return nil, fmt.Errorf("%w: stack %s not found", errUtils.ErrAwsCloudFormationChangeSetFailed, stackName)
 	}
-	return out.Stacks[0].StackStatus, nil
+	return &out.Stacks[0], nil
 }
