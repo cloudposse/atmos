@@ -35,15 +35,21 @@ func (m *GitHubMockServer) SetRateLimit(remaining int, reset time.Time) {
 	m.rateLimit = &rateLimitState{limit: defaultRateLimitLimit, remaining: remaining, reset: reset}
 }
 
-// currentRateLimit returns the mock's configured rate-limit state, defaulting to a full,
-// unthrottled budget when SetRateLimit has never been called.
+// defaultRateLimitState returns a full, unthrottled 5,000/hour authenticated budget, matching
+// GitHub's real default. Computed once at server construction -- rather than freshly on every
+// call -- so a default (never-SetRateLimit'd) server always reports the same reset instant:
+// recomputing time.Now().Add(time.Hour) separately for the X-RateLimit-Reset header and the
+// JSON body's resources.core.reset let the two straddle a second boundary and disagree.
+func defaultRateLimitState() *rateLimitState {
+	return &rateLimitState{limit: defaultRateLimitLimit, remaining: defaultRateLimitRemaining, reset: time.Now().Add(time.Hour)}
+}
+
+// currentRateLimit returns the mock's configured rate-limit state, which is always set --
+// either by SetRateLimit or, by default, at server construction (see defaultRateLimitState).
 func (m *GitHubMockServer) currentRateLimit() rateLimitState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.rateLimit != nil {
-		return *m.rateLimit
-	}
-	return rateLimitState{limit: defaultRateLimitLimit, remaining: defaultRateLimitRemaining, reset: time.Now().Add(time.Hour)}
+	return *m.rateLimit
 }
 
 // Base for formatting the X-RateLimit-Reset Unix-seconds timestamp.

@@ -304,5 +304,5 @@ func TestWaitForRateLimit_ExhaustedButAlreadyReset_ViaMock(t *testing.T) {
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
-	assert.Less(t, elapsed, 5*time.Second, "an already-passed reset must not block")
+	assert.Less(t, elapsed, 2*time.Second, "an already-passed reset must not block")
 }
