@@ -47,8 +47,8 @@ atmos aws cloudformation fmt --affected --base origin/main --check
 ## Flags
 
 <dl>
-  <dt>`--stack`, `-s` <em>(required)</em></dt>
-  <dd>Atmos stack.</dd>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
 
   <dt>`--check` <em>(optional)</em></dt>
   <dd>Report whether the template is formatted without writing changes. Exits non-zero if the template is not formatted — use this in CI instead of the default write-in-place behavior.</dd>

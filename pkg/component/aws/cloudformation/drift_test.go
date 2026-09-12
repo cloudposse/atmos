@@ -30,6 +30,18 @@ func shrinkDriftTiming(t *testing.T, interval, timeout time.Duration) {
 	})
 }
 
+// pollDriftDetectionCtxs builds the (ctx, timeoutCtx) pair pollDriftDetection
+// now takes as separate parameters, mirroring what detectDrift constructs
+// once before its initial DetectStackDrift call and shares with the poll
+// loop. Tests exercising pollDriftDetection directly (bypassing detectDrift)
+// use this helper so they compose the same way the real caller does.
+func pollDriftDetectionCtxs(t *testing.T, ctx context.Context) (context.Context, context.Context) {
+	t.Helper()
+	timeoutCtx, cancel := context.WithTimeout(ctx, driftDetectionTimeout)
+	t.Cleanup(cancel)
+	return ctx, timeoutCtx
+}
+
 // detectDrift's happy path: start detection, then poll once to DETECTION_COMPLETE.
 func TestDetectDrift_Success(t *testing.T) {
 	shrinkDriftTiming(t, time.Millisecond, time.Minute)
@@ -66,13 +78,51 @@ func TestDetectDrift_StartError(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
 
+// detectDrift must enforce driftDetectionTimeout on the initial DetectStackDrift call itself, not
+// only on the DescribeStackDriftDetectionStatus polling that follows it: a DetectStackDrift call
+// that never returns on its own must still unblock once the shared timeout budget's deadline
+// passes, instead of hanging the command indefinitely.
+func TestDetectDrift_TimeoutEnforcedOnInitialCall(t *testing.T) {
+	shrinkDriftTiming(t, time.Minute, 10*time.Millisecond)
+
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DetectStackDrift(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, _ *cloudformation.DetectStackDriftInput, _ ...func(*cloudformation.Options)) (*cloudformation.DetectStackDriftOutput, error) {
+			// Simulate a stalled request: block until the request-scoped context (not a
+			// fixed sleep) is what ends the call, proving detectDrift bounds this call
+			// with driftDetectionTimeout before ever reaching pollDriftDetection.
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	)
+
+	done := make(chan struct{})
+	var err error
+	go func() {
+		_, err = detectDrift(context.Background(), client, "vpc")
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("detectDrift did not return within the timeout budget for its initial DetectStackDrift call")
+	}
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+	assert.Contains(t, err.Error(), "timed out")
+}
+
 // pollDriftDetection must wrap a DescribeStackDriftDetectionStatus API error.
 func TestPollDriftDetection_APIError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().DescribeStackDriftDetectionStatus(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
 
-	_, err := pollDriftDetection(context.Background(), client, "detection-1")
+	ctx, timeoutCtx := pollDriftDetectionCtxs(t, context.Background())
+	_, err := pollDriftDetection(ctx, timeoutCtx, client, "detection-1")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 }
@@ -87,7 +137,8 @@ func TestPollDriftDetection_DetectionFailed(t *testing.T) {
 		DetectionStatusReason: awsString("internal failure"),
 	}, nil)
 
-	result, err := pollDriftDetection(context.Background(), client, "detection-1")
+	ctx, timeoutCtx := pollDriftDetectionCtxs(t, context.Background())
+	result, err := pollDriftDetection(ctx, timeoutCtx, client, "detection-1")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 	assert.Contains(t, err.Error(), "internal failure")
@@ -111,7 +162,8 @@ func TestPollDriftDetection_ContinuesUntilComplete(t *testing.T) {
 		}, nil),
 	)
 
-	result, err := pollDriftDetection(context.Background(), client, "detection-1")
+	ctx, timeoutCtx := pollDriftDetectionCtxs(t, context.Background())
+	result, err := pollDriftDetection(ctx, timeoutCtx, client, "detection-1")
 	require.NoError(t, err)
 	assert.True(t, result.DetectionDone)
 	assert.Equal(t, cfntypes.StackDriftStatusInSync, result.StackStatus)
@@ -129,7 +181,8 @@ func TestPollDriftDetection_Timeout(t *testing.T) {
 		DetectionStatus: cfntypes.StackDriftDetectionStatusDetectionInProgress,
 	}, nil).AnyTimes()
 
-	_, err := pollDriftDetection(context.Background(), client, "detection-1")
+	ctx, timeoutCtx := pollDriftDetectionCtxs(t, context.Background())
+	_, err := pollDriftDetection(ctx, timeoutCtx, client, "detection-1")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
 	assert.Contains(t, err.Error(), "timed out")
@@ -146,10 +199,11 @@ func TestPollDriftDetection_ContextCancelled(t *testing.T) {
 		DetectionStatus: cfntypes.StackDriftDetectionStatusDetectionInProgress,
 	}, nil)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	parentCtx, cancel := context.WithCancel(context.Background())
 	cancel()
+	ctx, timeoutCtx := pollDriftDetectionCtxs(t, parentCtx)
 
-	_, err := pollDriftDetection(ctx, client, "detection-1")
+	_, err := pollDriftDetection(ctx, timeoutCtx, client, "detection-1")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled)
 }
@@ -173,10 +227,11 @@ func TestPollDriftDetection_TimeoutEnforcedPerRequest(t *testing.T) {
 		},
 	)
 
+	ctx, timeoutCtx := pollDriftDetectionCtxs(t, context.Background())
 	done := make(chan struct{})
 	var err error
 	go func() {
-		_, err = pollDriftDetection(context.Background(), client, "detection-1")
+		_, err = pollDriftDetection(ctx, timeoutCtx, client, "detection-1")
 		close(done)
 	}()
 
