@@ -208,19 +208,36 @@ func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConf
 	octx := &opContext{Ctx: ctx.GoContext(), AtmosConfig: atmosConfig, Info: info, Flags: ctx.Flags}
 	summary, opErr := runOperation(octx, operation, spec)
 
+	// The outcome status describes the CloudFormation operation, not the
+	// after-hooks: a failed apply must let `when: failure`/`always` hooks run
+	// and see the right status, mirroring runUserHooks in cmd/terraform/utils.go.
+	outcome := hooks.Outcome{Status: hooks.RunSuccess}
+	if opErr != nil {
+		outcome = hooks.Outcome{Status: hooks.RunFailure, Err: opErr, ExitCode: errUtils.GetExitCode(opErr)}
+	}
+	hookSet.SetOutcome(outcome)
+
 	// User-defined `hooks:` blocks run first, then the CI summary dispatch —
 	// matching the ordering Kubernetes's executor uses between its own
 	// user-hook and CI-hook calls. The CI hook is fire-and-forget (errors are
 	// logged, not returned; see runCIHook), so it never masks opErr or the
 	// after-hooks error below.
 	afterErr := hookSet.RunAll(after, atmosConfig, info, nil, nil)
+	// opErr takes precedence (it's the more actionable failure, matching the
+	// return below), but when the operation succeeded and only the after-hook
+	// failed, the CI summary must still reflect that failure rather than
+	// silently reporting success.
+	ciErr := opErr
+	if ciErr == nil {
+		ciErr = afterErr
+	}
 	runCIHook(ciHookParams{
 		event:       after,
 		flags:       ctx.Flags,
 		atmosConfig: atmosConfig,
 		info:        info,
 		summary:     summary,
-		commandErr:  opErr,
+		commandErr:  ciErr,
 	})
 
 	// The underlying operation's own error takes priority: a failed apply is
