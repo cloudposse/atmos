@@ -226,7 +226,7 @@ This is useful when:
 
 ### Writing Tests with Preconditions
 
-When writing new tests, use the helper functions from `tests/test_preconditions.go`:
+When writing new tests, use the helper functions from `tests/preconditions.go`:
 
 ```go
 import "github.com/cloudposse/atmos/tests"

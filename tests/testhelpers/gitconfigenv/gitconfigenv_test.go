@@ -120,3 +120,151 @@ func TestAppend_SourceIsolation(t *testing.T) {
 
 	require.Equal(t, "", target["GIT_CONFIG_VALUE_0"], "target must not observe post-call mutation of caller's entries slice")
 }
+
+func TestIsInsteadOfEntry(t *testing.T) {
+	tests := []struct {
+		name  string
+		entry GitConfigEntry
+		want  bool
+	}{
+		{
+			name:  "mirror insteadOf rule",
+			entry: GitConfigEntry{Key: "url.file:///mirror/cloudposse/.insteadOf", Value: "https://github.com/cloudposse/"},
+			want:  true,
+		},
+		{
+			name:  "credential.helper is not an insteadOf rule",
+			entry: GitConfigEntry{Key: "credential.helper", Value: ""},
+			want:  false,
+		},
+		{
+			name:  "extraheader is not an insteadOf rule",
+			entry: GitConfigEntry{Key: "http.https://github.com/.extraheader", Value: "AUTHORIZATION: basic dGVzdA=="},
+			want:  false,
+		},
+		{
+			// Git config variable names are case-insensitive; the key's variable-name segment
+			// (here "insteadof") must still match regardless of how it was cased when written.
+			name:  "lowercase insteadof still matches (git config keys are case-insensitive)",
+			entry: GitConfigEntry{Key: "url.file:///mirror/cloudposse/.insteadof", Value: "https://github.com/cloudposse/"},
+			want:  true,
+		},
+		{
+			name:  "mixed-case InsteadOf still matches (git config keys are case-insensitive)",
+			entry: GitConfigEntry{Key: "url.file:///mirror/cloudposse/.InsteadOf", Value: "https://github.com/cloudposse/"},
+			want:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, IsInsteadOfEntry(tt.entry))
+		})
+	}
+}
+
+func TestIsExtraHeaderEntry(t *testing.T) {
+	tests := []struct {
+		name  string
+		entry GitConfigEntry
+		want  bool
+	}{
+		{
+			name:  "github extraheader",
+			entry: GitConfigEntry{Key: "http.https://github.com/.extraheader", Value: "AUTHORIZATION: basic dGVzdA=="},
+			want:  true,
+		},
+		{
+			name:  "credential.helper is not an extraheader",
+			entry: GitConfigEntry{Key: "credential.helper", Value: ""},
+			want:  false,
+		},
+		{
+			name:  "insteadOf is not an extraheader",
+			entry: GitConfigEntry{Key: "url.file:///mirror/cloudposse/.insteadOf", Value: "https://github.com/cloudposse/"},
+			want:  false,
+		},
+		{
+			// Git config variable names are case-insensitive; the key's variable-name segment
+			// (here "extraheader") must still match regardless of how it was cased when written.
+			name:  "mixed-case extraHeader still matches (git config keys are case-insensitive)",
+			entry: GitConfigEntry{Key: "http.https://github.com/.extraHeader", Value: "AUTHORIZATION: basic dGVzdA=="},
+			want:  true,
+		},
+		{
+			name:  "uppercase EXTRAHEADER still matches (git config keys are case-insensitive)",
+			entry: GitConfigEntry{Key: "http.https://github.com/.EXTRAHEADER", Value: "AUTHORIZATION: basic dGVzdA=="},
+			want:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, IsExtraHeaderEntry(tt.entry))
+		})
+	}
+}
+
+// TestWithout verifies Without removes only entries matching predicate, preserving order and
+// the rest of the entries untouched -- e.g. stripping the mirror's insteadOf rules from a
+// live-GitHub canary's git config while keeping credential.helper/extraheader entries.
+func TestWithout(t *testing.T) {
+	entries := []GitConfigEntry{
+		{Key: "url.file:///mirror/cloudposse/.insteadOf", Value: "https://github.com/cloudposse/"},
+		{Key: "credential.helper", Value: ""},
+		{Key: "url.file:///mirror/cloudposse/.insteadOf", Value: "ssh://git@github.com/cloudposse/"},
+		{Key: "http.https://github.com/.extraheader", Value: "AUTHORIZATION: basic dGVzdA=="},
+	}
+
+	got := Without(entries, IsInsteadOfEntry)
+
+	require.Len(t, got, 2)
+	require.Equal(t, GitConfigEntry{Key: "credential.helper", Value: ""}, got[0])
+	require.Equal(t, GitConfigEntry{Key: "http.https://github.com/.extraheader", Value: "AUTHORIZATION: basic dGVzdA=="}, got[1])
+}
+
+// TestWithout_NoMatches verifies Without leaves entries unchanged (as a distinct slice) when
+// nothing matches the predicate.
+func TestWithout_NoMatches(t *testing.T) {
+	entries := []GitConfigEntry{{Key: "credential.helper", Value: ""}}
+
+	got := Without(entries, IsInsteadOfEntry)
+
+	require.Equal(t, entries, got)
+}
+
+// TestReadEntries_RoundTrip verifies ReadEntries correctly parses back what AppendEntries wrote,
+// including preserving order across a mix of pre-existing and newly appended entries.
+func TestReadEntries_RoundTrip(t *testing.T) {
+	target := map[string]string{}
+	AppendEntries(target, []GitConfigEntry{
+		{Key: "url.file:///mirror/cloudposse/.insteadOf", Value: "https://github.com/cloudposse/"},
+	}, GitConfigEntry{Key: "credential.helper", Value: ""})
+
+	env := make([]string, 0, len(target))
+	for k, v := range target {
+		env = append(env, k+"="+v)
+	}
+
+	got := ReadEntries(env)
+	require.Len(t, got, 2)
+	require.Equal(t, GitConfigEntry{Key: "url.file:///mirror/cloudposse/.insteadOf", Value: "https://github.com/cloudposse/"}, got[0])
+	require.Equal(t, GitConfigEntry{Key: "credential.helper", Value: ""}, got[1])
+}
+
+// TestAppendEntries_SourceIsolation mirrors TestAppend_SourceIsolation for the lower-level
+// AppendEntries entry point: mutating the existing/entries slices after the call must not affect
+// the already-written target.
+func TestAppendEntries_SourceIsolation(t *testing.T) {
+	existing := []GitConfigEntry{{Key: "url.file:///mirror/cloudposse/.insteadOf", Value: "https://github.com/cloudposse/"}}
+	entries := []GitConfigEntry{{Key: "credential.helper", Value: ""}}
+
+	target := map[string]string{}
+	AppendEntries(target, existing, entries...)
+
+	existing[0].Value = "mutated-existing"
+	entries[0].Value = "mutated-entries"
+
+	require.Equal(t, "https://github.com/cloudposse/", target["GIT_CONFIG_VALUE_0"])
+	require.Equal(t, "", target["GIT_CONFIG_VALUE_1"])
+}

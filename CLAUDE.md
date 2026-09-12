@@ -240,7 +240,7 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 
 ## Testing
 
-**Preconditions**: Tests skip gracefully with helpers from `tests/test_preconditions.go`. See `docs/prd/testing-strategy.md`.
+**Preconditions**: Tests skip gracefully with helpers from `tests/preconditions.go`. See `docs/prd/testing-strategy.md`.
 
 **Commands**: `atmos test` (quick), `atmos test --full` (all), `atmos test --coverage` (coverage)
 

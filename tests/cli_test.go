@@ -978,13 +978,15 @@ func checkPreconditions(t *testing.T, preconditions []string) {
 
 	// Map of precondition names to their check functions
 	preconditionChecks := map[string]func(*testing.T){
-		"github_token":      RequireOCIAuthentication,
-		"aws_credentials":   RequireAWSCredentials,
-		"terraform":         RequireTerraform,
-		"tofu":              RequireTofu,
-		"terraform_or_tofu": RequireTerraformOrTofu,
-		"packer":            RequirePacker,
-		"helmfile":          RequireHelmfile,
+		"github_token":              RequireOCIAuthentication,
+		"aws_credentials":           RequireAWSCredentials,
+		"terraform":                 RequireTerraform,
+		"tofu":                      RequireTofu,
+		"terraform_or_tofu":         RequireTerraformOrTofu,
+		"packer":                    RequirePacker,
+		"helmfile":                  RequireHelmfile,
+		"live_github":               func(t *testing.T) { RequireLiveGitHub(t) },
+		"live_github_authenticated": func(t *testing.T) { RequireLiveGitHubAuthenticated(t) },
 	}
 
 	// Check each precondition
@@ -995,6 +997,49 @@ func checkPreconditions(t *testing.T, preconditions []string) {
 		}
 		checkFunc(t)
 	}
+}
+
+// hasPrecondition reports whether name is present in preconditions.
+func hasPrecondition(preconditions []string, name string) bool {
+	for _, p := range preconditions {
+		if p == name {
+			return true
+		}
+	}
+	return false
+}
+
+// scrubGitHubAuth defeats every source of GitHub authentication for a genuinely unauthenticated
+// live-GitHub canary (the "live_github" precondition, as opposed to "live_github_authenticated",
+// which keeps its token): it blanks the token environment variables atmos's git/HTTP clients
+// read, and points GH_CONFIG_DIR at an empty temp directory so the `gh auth token` CLI fallback
+// (pkg/downloader/custom_git_detector.go resolveToken) can't silently supply one either. Removing
+// the mirror's insteadOf rules from GIT_CONFIG_* happens separately, in runCLICommandTest's
+// GIT_CONFIG_COUNT block, since "live_github_authenticated" needs that too but must not call this
+// function (it keeps its token).
+func scrubGitHubAuth(t *testing.T, tc *TestCase) {
+	t.Helper()
+
+	if tc.Env == nil {
+		tc.Env = make(map[string]string)
+	}
+	for _, key := range []string{"GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "ATMOS_PRO_GITHUB_TOKEN", "GH_TOKEN"} {
+		tc.Env[key] = ""
+	}
+	tc.Env["GH_CONFIG_DIR"] = t.TempDir()
+}
+
+// emptyGitConfigFile creates an empty gitconfig in a per-test temp dir and returns its path, for
+// use as GIT_CONFIG_GLOBAL when a test must run git WITHOUT the mirror rewrite rules TestMain
+// exports process-wide (see the live_github preconditions and tests/live_github_canary_test.go).
+func emptyGitConfigFile(t *testing.T) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatalf("failed to create empty gitconfig %s: %v", path, err)
+	}
+	return path
 }
 
 // prepareAtmosCommand prepares an atmos command with coverage support if enabled.
@@ -1032,6 +1077,16 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Check preconditions before running the test
 	checkPreconditions(t, tc.Preconditions)
+
+	// A "live_github" test case must reach the real github.com, unauthenticated, instead of the
+	// acceptance suite's local git mirror (TestMain's gitmirror rules) or any ambient GitHub
+	// credential; "live_github_authenticated" keeps the token but still must not be redirected to
+	// the mirror. See scrubGitHubAuth and the GIT_CONFIG_* block below.
+	liveGitHub := hasPrecondition(tc.Preconditions, "live_github")
+	liveGitHubAuthenticated := hasPrecondition(tc.Preconditions, "live_github_authenticated")
+	if liveGitHub {
+		scrubGitHubAuth(t, &tc)
+	}
 
 	// Initialize AtmosRunner early, before any directory changes, so it can build from the git repo
 	if tc.Command == "atmos" {
@@ -1108,34 +1163,61 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	//
 	// Build entries unconditionally: a test case that already set GIT_CONFIG_COUNT in tc.Env
 	// still needs credential.helper disabled and, when applicable, the token header injected --
-	// Append merges with whatever is already present instead of overwriting it, so the case's
-	// own entries are preserved (they take precedence over the ambient process environment via
-	// envBase below).
+	// the merge below preserves whatever is already present instead of overwriting it, so the
+	// case's own entries are preserved (they take precedence over the ambient process
+	// environment via envBase below).
 	entries := []gitconfigenv.GitConfigEntry{
 		// Disable credential helper (prevents osxkeychain hangs/popups).
 		{Key: "credential.helper", Value: ""},
 	}
-	if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
-		// Inject token directly instead of relying on a credential helper.
-		gitBasicAuthCredential := "x-access-token:" + githubToken
-		basicAuth := base64.StdEncoding.EncodeToString([]byte(gitBasicAuthCredential))
-		// pkg/io's masker auto-registers plain GITHUB_TOKEN and base64(GITHUB_TOKEN), but
-		// the extraheader value below embeds base64("x-access-token:"+GITHUB_TOKEN) -- a
-		// different byte sequence the prefix changes the encoding of, so it needs its own
-		// registration or redactAndCapDiagOutput can't catch it in captured child output.
-		iolib.RegisterSecret(gitBasicAuthCredential)
-		entries = append(entries, gitconfigenv.GitConfigEntry{
-			Key:   "http.https://github.com/.extraheader",
-			Value: "AUTHORIZATION: basic " + basicAuth,
-		})
+	// A "live_github" canary must not have a token injected even if the host/CI environment
+	// happens to export GITHUB_TOKEN: scrubGitHubAuth already blanked it in tc.Env above, but
+	// that only takes effect once t.Setenv runs below -- os.Getenv here still sees the real
+	// ambient value, so the check is skipped outright for this case.
+	if !liveGitHub {
+		if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
+			// Inject token directly instead of relying on a credential helper.
+			gitBasicAuthCredential := "x-access-token:" + githubToken
+			basicAuth := base64.StdEncoding.EncodeToString([]byte(gitBasicAuthCredential))
+			// pkg/io's masker auto-registers plain GITHUB_TOKEN and base64(GITHUB_TOKEN), but
+			// the extraheader value below embeds base64("x-access-token:"+GITHUB_TOKEN) -- a
+			// different byte sequence the prefix changes the encoding of, so it needs its own
+			// registration or redactAndCapDiagOutput can't catch it in captured child output.
+			iolib.RegisterSecret(gitBasicAuthCredential)
+			entries = append(entries, gitconfigenv.GitConfigEntry{
+				Key:   "http.https://github.com/.extraheader",
+				Value: "AUTHORIZATION: basic " + basicAuth,
+			})
+		}
 	}
 	// envBase layers tc.Env's own GIT_CONFIG_* entries (if any) on top of the ambient process
-	// environment, so Append reads and preserves them instead of only seeing os.Environ().
+	// environment, so the merge reads and preserves them instead of only seeing os.Environ().
 	envBase := os.Environ()
 	for key, value := range tc.Env {
 		envBase = append(envBase, key+"="+value)
 	}
-	gitconfigenv.Append(tc.Env, envBase, entries...)
+	existingEntries := gitconfigenv.ReadEntries(envBase)
+	if liveGitHub || liveGitHubAuthenticated {
+		// A live-GitHub canary must ignore any url.*.insteadOf redirect rule inherited from the
+		// host/CI environment (e.g. a developer's own git mirror setup) so it always reaches
+		// real, live github.com.
+		existingEntries = gitconfigenv.Without(existingEntries, gitconfigenv.IsInsteadOfEntry)
+	}
+	if liveGitHub {
+		// An unauthenticated canary must also ignore any inherited GitHub authorization
+		// extraheader -- otherwise it would silently run authenticated.
+		existingEntries = gitconfigenv.Without(existingEntries, gitconfigenv.IsExtraHeaderEntry)
+	}
+	gitconfigenv.AppendEntries(tc.Env, existingEntries, entries...)
+
+	if liveGitHub || liveGitHubAuthenticated {
+		// A live-GitHub canary must reach the real github.com, not the local git mirror. TestMain
+		// delivers the mirror's url.*.insteadOf rules through GIT_CONFIG_GLOBAL
+		// (tests/testhelpers/gitmirror.WriteGitConfig), so point this case's GIT_CONFIG_GLOBAL at an
+		// empty file instead: git then sees no rewrite rules at all, and atmos -- which never reads
+		// that variable -- behaves exactly as it does for any other case.
+		tc.Env["GIT_CONFIG_GLOBAL"] = emptyGitConfigFile(t)
+	}
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions

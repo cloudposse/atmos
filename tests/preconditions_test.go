@@ -1,12 +1,15 @@
 package tests
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func enablePreconditionChecks(t *testing.T) {
@@ -613,4 +616,188 @@ func TestRequireAzureCredentials(t *testing.T) {
 	// Just call it to ensure it doesn't panic
 	// Will skip if Azure credentials not available
 	RequireAzureCredentials(t)
+}
+
+// TestOffline is a table-driven test for the ATMOS_TEST_OFFLINE switch. It follows the same
+// "== true" exact-match convention as ShouldCheckPreconditions (see TestShouldCheckPreconditions)
+// rather than a general truthy parse.
+func TestOffline(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		unset    bool
+		want     bool
+	}{
+		{name: "unset", unset: true, want: false},
+		{name: "true", envValue: "true", want: true},
+		{name: "TRUE (case sensitive)", envValue: "TRUE", want: false},
+		{name: "numeric 1 is not truthy", envValue: "1", want: false},
+		{name: "false", envValue: "false", want: false},
+		{name: "random value", envValue: "random", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.unset {
+				orig := os.Getenv("ATMOS_TEST_OFFLINE")
+				os.Unsetenv("ATMOS_TEST_OFFLINE")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("ATMOS_TEST_OFFLINE", orig)
+					}
+				})
+			} else {
+				t.Setenv("ATMOS_TEST_OFFLINE", tt.envValue)
+			}
+
+			assert.Equal(t, tt.want, Offline())
+		})
+	}
+}
+
+// TestRequireGitHubAccess_OfflineNotOverridableByPreconditionChecks regression-tests that
+// ATMOS_TEST_OFFLINE always skips RequireGitHubAccess even when
+// ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true (the flag CI sets to bypass the connectivity *probe* --
+// it must never be read as "run live network calls anyway").
+func TestRequireGitHubAccess_OfflineNotOverridableByPreconditionChecks(t *testing.T) {
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+	t.Setenv("ATMOS_TEST_OFFLINE", "true")
+
+	RequireGitHubAccess(t)
+
+	t.Fatal("expected RequireGitHubAccess to skip under ATMOS_TEST_OFFLINE even with precondition checks disabled")
+}
+
+// TestRequireNetworkAccess_OfflineNotOverridableByPreconditionChecks mirrors
+// TestRequireGitHubAccess_OfflineNotOverridableByPreconditionChecks for RequireNetworkAccess.
+func TestRequireNetworkAccess_OfflineNotOverridableByPreconditionChecks(t *testing.T) {
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+	t.Setenv("ATMOS_TEST_OFFLINE", "true")
+
+	RequireNetworkAccess(t, "https://github.com")
+
+	t.Fatal("expected RequireNetworkAccess to skip under ATMOS_TEST_OFFLINE even with precondition checks disabled")
+}
+
+// TestRequireLiveGitHub_Offline verifies RequireLiveGitHub delegates to RequireGitHubAccess's
+// offline gate.
+func TestRequireLiveGitHub_Offline(t *testing.T) {
+	t.Setenv("ATMOS_TEST_OFFLINE", "true")
+
+	RequireLiveGitHub(t)
+
+	t.Fatal("expected RequireLiveGitHub to skip under ATMOS_TEST_OFFLINE")
+}
+
+// TestRequireLiveGitHubAuthenticated_Offline verifies the offline gate is checked before the
+// GITHUB_TOKEN requirement.
+func TestRequireLiveGitHubAuthenticated_Offline(t *testing.T) {
+	t.Setenv("ATMOS_TEST_OFFLINE", "true")
+	t.Setenv("GITHUB_TOKEN", "")
+
+	RequireLiveGitHubAuthenticated(t)
+
+	t.Fatal("expected RequireLiveGitHubAuthenticated to skip under ATMOS_TEST_OFFLINE")
+}
+
+// TestRequireLiveGitHubAuthenticated_NoToken verifies RequireLiveGitHubAuthenticated skips when
+// GITHUB_TOKEN is unset, independent of live GitHub reachability. Precondition checks are
+// disabled (ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true) so RequireGitHubAccess's connectivity/rate
+// limit probe never runs: without that, an unreachable github.com would make this test pass for
+// the wrong reason (an earlier skip) even if the no-token gate itself were broken.
+// ATMOS_TEST_OFFLINE is explicitly set to false so the same is true regardless of the ambient
+// environment.
+func TestRequireLiveGitHubAuthenticated_NoToken(t *testing.T) {
+	t.Setenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS", "true")
+	t.Setenv("ATMOS_TEST_OFFLINE", "false")
+	t.Setenv("GITHUB_TOKEN", "")
+
+	RequireLiveGitHubAuthenticated(t)
+
+	t.Fatal("expected RequireLiveGitHubAuthenticated to skip without GITHUB_TOKEN")
+}
+
+// TestProbeGitHubRateLimit_SendsAuthorizationHeaderWhenTokenSet verifies probeGitHubRateLimit
+// attaches "Authorization: Bearer <token>" when a token is given, and omits it entirely for an
+// unauthenticated probe -- the fix for RequireLiveGitHubAuthenticated gating on the anonymous
+// rate limit depends on this header actually reaching the request.
+func TestProbeGitHubRateLimit_SendsAuthorizationHeaderWhenTokenSet(t *testing.T) {
+	tests := []struct {
+		name      string
+		token     string
+		wantAuth  string
+		wantEmpty bool
+	}{
+		{name: "authenticated", token: "test-token-value", wantAuth: "Bearer test-token-value"},
+		{name: "unauthenticated", token: "", wantEmpty: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotAuth []string
+			var sawAuthHeader bool
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotAuth, sawAuthHeader = r.Header["Authorization"], r.Header.Get("Authorization") != ""
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"rate":{"limit":60,"remaining":42,"reset":1893456000}}`))
+			}))
+			defer server.Close()
+
+			client := server.Client()
+			info, err := probeGitHubRateLimit(client, server.URL, tt.token)
+			require.NoError(t, err)
+			require.NotNil(t, info)
+			assert.Equal(t, 42, info.Remaining)
+
+			if tt.wantEmpty {
+				assert.False(t, sawAuthHeader, "expected no Authorization header, got %v", gotAuth)
+				return
+			}
+			assert.True(t, sawAuthHeader, "expected an Authorization header")
+			require.Len(t, gotAuth, 1)
+			assert.Equal(t, tt.wantAuth, gotAuth[0])
+		})
+	}
+}
+
+// TestCheckGitHubRateLimit_SkipsWhenRemainingIsZero verifies checkGitHubRateLimit itself (not
+// just probeGitHubRateLimit) skips the test when the quota is exhausted, by pointing it at an
+// httptest server instead of the real api.github.com.
+func TestCheckGitHubRateLimit_SkipsWhenRemainingIsZero(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"rate":{"limit":60,"remaining":0,"reset":9999999999}}`))
+	}))
+	defer server.Close()
+
+	client := server.Client()
+
+	var ranPastSkip bool
+	t.Run("sub", func(t *testing.T) {
+		checkGitHubRateLimit(t, client, server.URL, "")
+		ranPastSkip = true
+	})
+	assert.False(t, ranPastSkip, "expected checkGitHubRateLimit to skip the subtest on an exhausted quota")
+}
+
+// TestCheckGitHubRateLimit_ReturnsInfoWhenRemaining verifies checkGitHubRateLimit returns the
+// decoded rate-limit info (rather than skipping or nil) when quota remains, for both an
+// unauthenticated and an authenticated probe.
+func TestCheckGitHubRateLimit_ReturnsInfoWhenRemaining(t *testing.T) {
+	var gotAuth string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"rate":{"limit":5000,"remaining":4999,"reset":9999999999}}`))
+	}))
+	defer server.Close()
+
+	client := server.Client()
+
+	info := checkGitHubRateLimit(t, client, server.URL, "authed-token")
+	require.NotNil(t, info)
+	assert.Equal(t, 4999, info.Remaining)
+	assert.Equal(t, "Bearer authed-token", gotAuth)
 }
