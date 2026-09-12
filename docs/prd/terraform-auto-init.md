@@ -108,11 +108,21 @@ components:
     init:
       mode: auto         # auto | always | never
       reconfigure: auto  # auto | always | never
-      upgrade: auto       # auto | always | never
+      upgrade: never      # auto | always | never
       pass_vars: false    # existing setting, unchanged
 ```
 
-All three new settings default to `auto`.
+`init.mode` and `init.reconfigure` default to `auto`. `init.upgrade` defaults to `never`: unlike
+mode/reconfigure, which only make an already-unconditional prior behavior (init always ran,
+`-reconfigure` was always added) conditional, Atmos never passed `-upgrade` automatically before
+this setting existed — defaulting it to `auto` would introduce a genuinely new automatic behavior
+(mutating `.terraform.lock.hcl` to resolve a newer provider version) for every project with zero
+opt-in, rather than a smarter version of something Atmos already did. `never` preserves exactly
+what Atmos always did: `-upgrade` only happens when a user types it explicitly. This also means a
+component whose provider constraint changed enough to need `-upgrade` surfaces that as an explicit
+error with a hint (per [Auto-Recovery Contract](#auto-recovery-contract)'s `never`-is-never-
+overridden rule), rather than Atmos silently resolving a new provider version on its own. Set
+`init.upgrade: auto` to opt into issue #1263's automatic behavior.
 
 <dl>
   <dt><code>init.mode</code></dt>
@@ -135,9 +145,10 @@ All three new settings default to `auto`.
   </dd>
   <dt><code>init.upgrade</code></dt>
   <dd>
-    <code>auto</code> adds <code>-upgrade</code> only when Terraform/OpenTofu reports that an upgrade is
-    required (e.g. a provider version constraint was raised beyond the locked version). <code>always</code>
-    adds it to every init. <code>never</code> never adds it.<br/>
+    <code>never</code> (default) never adds <code>-upgrade</code> — the same behavior Atmos always had, since
+    it never passed this flag automatically before this setting existed. <code>auto</code> adds it only when
+    Terraform/OpenTofu reports that an upgrade is required (e.g. a provider version constraint was raised
+    beyond the locked version). <code>always</code> adds it to every init.<br/>
     <strong>Environment variable:</strong> <code>ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE</code><br/>
     <strong>Command-line flag:</strong> <code>--init-upgrade</code>
   </dd>
@@ -318,7 +329,7 @@ requires state migration is a decision a human should make explicitly.
 |---|---|---|---|
 | Skip unchanged init | Yes, fingerprint-based | Yes, similar heuristic (source/backend hash) | No built-in auto-init; users script it |
 | Adds `-reconfigure` conditionally | Yes (`auto`) | Partial — reconfigures on detected backend change | N/A |
-| Adds `-upgrade` conditionally | Yes (`auto`), based on provider-constraint diagnostics | No — requires explicit `--terragrunt-source-update` or similar | N/A |
+| Adds `-upgrade` conditionally | Yes (opt-in via `init.upgrade: auto`), based on provider-constraint diagnostics | No — requires explicit `--terragrunt-source-update` or similar | N/A |
 | Auto-recovers from a wrong skip | Yes, via a closed diagnostic table and one retry | Partial — re-runs init on specific known failures | N/A |
 | Nested module changes tracked | No (known gap, shared with Terragrunt) | No (same limitation) | N/A |
 
@@ -342,8 +353,9 @@ invoke explicitly.
 
 - Running `atmos terraform apply <component> -s <stack>` followed immediately by
   `atmos terraform output <component> -s <stack>` performs exactly one `terraform init` for the pair, not two.
-- Bumping a provider version constraint and re-running `plan` triggers exactly one init with `-upgrade`
-  (`init.upgrade: auto`), with no manual `-upgrade` flag needed.
+- With `init.upgrade: auto` set, bumping a provider version constraint and re-running `plan` triggers
+  exactly one init with `-upgrade`, with no manual `-upgrade` flag needed. With the `init.upgrade: never`
+  default, the same scenario surfaces an explicit error with a hint instead of upgrading silently.
 - A user who sets `init.mode: always` and `init.reconfigure: always` observes byte-for-byte the same init
   behavior Atmos had before this change.
 - Deleting part of `.terraform` by hand, or a change inside a nested local module, is recovered automatically

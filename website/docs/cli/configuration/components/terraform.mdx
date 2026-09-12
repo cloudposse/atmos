@@ -55,7 +55,7 @@ components:
       # Add -reconfigure only when the backend changed (auto | always | never)
       reconfigure: auto
       # Add -upgrade only when Terraform/OpenTofu says it's required (auto | always | never)
-      upgrade: auto
+      upgrade: never
       pass_vars: false
 
     # Plan command options
@@ -171,11 +171,11 @@ components:
 
   <dt>`init.mode`, `init.reconfigure`, `init.upgrade`</dt>
   <dd>
-    Control whether and how Atmos runs `terraform init` automatically before other commands, before `deploy` (when `deploy_run_init` is enabled), and before resolving [`!terraform.output`](/functions/yaml/terraform.output) or [`atmos.Component`](/functions/template/atmos.Component). All three accept `auto`, `always`, or `never`, and all default to `auto`.
+    Control whether and how Atmos runs `terraform init` automatically before other commands, before `deploy` (when `deploy_run_init` is enabled), and before resolving [`!terraform.output`](/functions/yaml/terraform.output) or [`atmos.Component`](/functions/template/atmos.Component). All three accept `auto`, `always`, or `never`. `init.mode` and `init.reconfigure` default to `auto`; `init.upgrade` defaults to `never` — Atmos never passed `-upgrade` automatically before this setting existed, so the default preserves that instead of introducing new automatic behavior (mutating `.terraform.lock.hcl` to resolve a newer provider version) with no opt-in.
 
     - **`init.mode`** — `auto` skips `terraform init` when nothing that affects it (root `.tf`/`.tofu` files, `.terraform.lock.hcl`, the CLI configuration, the resolved binary, relevant environment variables, and — when `init.pass_vars` is `true` — the varfile) has changed since the last successful init, and the working directory still looks initialized. `always` restores the previous unconditional behavior. `never` never runs init implicitly, the same effect as `--skip-init` on every invocation.
     - **`init.reconfigure`** — `auto` adds `-reconfigure` only when the backend configuration changed since the last init, on the first init, after a JIT working directory is re-provisioned, or for [`atmos terraform workspace`](/cli/commands/terraform/workspace). `always` adds it to every init. `never` never adds it.
-    - **`init.upgrade`** — `auto` adds `-upgrade` only when Terraform or OpenTofu reports that an upgrade is required (for example, a provider version constraint was raised beyond the locked version). `always` adds it to every init. `never` never adds it.
+    - **`init.upgrade`** — `never` (default) never adds `-upgrade`. `auto` adds it only when Terraform or OpenTofu reports that an upgrade is required (for example, a provider version constraint was raised beyond the locked version) — set this to opt into automatic upgrades. `always` adds it to every init.
 
     If a skipped init turns out to have been wrong — a nested module changed, or `.terraform` was altered by hand — Terraform/OpenTofu fails with a diagnostic (e.g. *"Backend initialization required"*, *"Required plugins are not installed"*) before touching state. Atmos recognizes these diagnostics, runs the init it should have run (adding `-reconfigure`/`-upgrade` when the diagnostic calls for it and the setting isn't `never`), and retries the command once. No retry happens when init was explicitly disabled (`--skip-init`, `init.mode: never`, `deploy_run_init: false`). Atmos never runs `-migrate-state` as part of this recovery. See [Automatic Initialization](/cli/commands/terraform/init#automatic-initialization) for the full behavior.
 

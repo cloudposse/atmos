@@ -135,7 +135,7 @@ func TestTerraform_EffectiveInitUpgrade(t *testing.T) {
 		tf   Terraform
 		want TerraformInitUpgrade
 	}{
-		{"unset defaults to auto", Terraform{}, TerraformInitUpgradeAuto},
+		{"unset defaults to never", Terraform{}, TerraformInitUpgradeNever},
 		{"explicit auto", Terraform{Init: TerraformInit{Upgrade: TerraformInitUpgradeAuto}}, TerraformInitUpgradeAuto},
 		{"explicit always", Terraform{Init: TerraformInit{Upgrade: TerraformInitUpgradeAlways}}, TerraformInitUpgradeAlways},
 		{"explicit never", Terraform{Init: TerraformInit{Upgrade: TerraformInitUpgradeNever}}, TerraformInitUpgradeNever},

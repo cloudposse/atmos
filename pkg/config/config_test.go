@@ -13,12 +13,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestDefaultConfig_TerraformInit verifies that the default config resolves
-// init.mode/init.reconfigure/init.upgrade to "auto" when unset in atmos.yaml.
+// TestDefaultConfig_TerraformInit verifies that the default config resolves init.mode and
+// init.reconfigure to "auto" when unset in atmos.yaml, while init.upgrade defaults to "never".
+// Unlike mode/reconfigure, which only make an already-unconditional prior behavior conditional,
+// Atmos never passed -upgrade automatically before this setting existed, so "auto" would be a
+// new automatic behavior rather than a smarter version of an existing one (see
+// schema.Terraform.EffectiveInitUpgrade's doc comment and docs/prd/editions.md's Roadmap).
 func TestDefaultConfig_TerraformInit(t *testing.T) {
 	assert.Equal(t, schema.TerraformInitModeAuto, defaultCliConfig.Components.Terraform.Init.Mode)
 	assert.Equal(t, schema.TerraformInitReconfigureAuto, defaultCliConfig.Components.Terraform.Init.Reconfigure)
-	assert.Equal(t, schema.TerraformInitUpgradeAuto, defaultCliConfig.Components.Terraform.Init.Upgrade)
+	assert.Equal(t, schema.TerraformInitUpgradeNever, defaultCliConfig.Components.Terraform.Init.Upgrade)
 	assert.False(t, defaultCliConfig.Components.Terraform.Init.PassVars)
 }
 

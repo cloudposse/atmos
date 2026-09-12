@@ -50,7 +50,7 @@ var (
 					PassVars:    false,
 					Mode:        schema.TerraformInitModeAuto,
 					Reconfigure: schema.TerraformInitReconfigureAuto,
-					Upgrade:     schema.TerraformInitUpgradeAuto,
+					Upgrade:     schema.TerraformInitUpgradeNever,
 				},
 				Plan: schema.TerraformPlan{
 					SkipPlanfile: false,

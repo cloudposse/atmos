@@ -24,15 +24,15 @@ atmos terraform init <component> -s <stack> [flags]
 
 Atmos enhancements: cleans `.terraform/environment`; runs automatically before plan/apply/deploy/shell/destroy
 only when needed (`init.mode: auto` skips it when nothing relevant changed since the last init); adds
-`-reconfigure`/`-upgrade` only when required (`init.reconfigure`/`init.upgrade`, both `auto` by default);
-supports `--init-pass-vars` for OpenTofu. `init_run_reconfigure` is deprecated in favor of
-`init.reconfigure`.
+`-reconfigure`/`-upgrade` only when required (`init.reconfigure`, `auto` by default; `init.upgrade`, `never`
+by default since Atmos never passed `-upgrade` automatically before this setting existed); supports
+`--init-pass-vars` for OpenTofu. `init_run_reconfigure` is deprecated in favor of `init.reconfigure`.
 
 Key flags:
 - `--skip-init` -- Disables auto-init entirely for this invocation (same as `--init-mode=never`)
 - `--init-mode` -- Override `init.mode` for this invocation: `auto` (default), `always`, `never`
 - `--init-reconfigure` -- Override `init.reconfigure` for this invocation: `auto` (default), `always`, `never`
-- `--init-upgrade` -- Override `init.upgrade` for this invocation: `auto` (default), `always`, `never`
+- `--init-upgrade` -- Override `init.upgrade` for this invocation: `never` (default), `auto`, `always`
 - `--init-pass-vars` -- Pass generated varfile to init (OpenTofu feature)
 - Native: `-reconfigure`, `-upgrade`, `-migrate-state`, `-backend=false`, `-backend-config=PATH`,
   `-force-copy`, `-get=false`, `-input=false`, `-lock=false`, `-lock-timeout=DURATION`, `-plugin-dir=PATH`

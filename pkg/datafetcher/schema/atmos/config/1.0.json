@@ -12341,7 +12341,7 @@
               "type": "null"
             }
           ],
-          "description": "Upgrade controls when `-upgrade` is added to `terraform init`: `auto`\n(default) adds it only when terraform/tofu reports that an upgrade is\nrequired, `always` adds it on every init, and `never` never adds it."
+          "description": "Upgrade controls when `-upgrade` is added to `terraform init`: `auto` adds\nit only when terraform/tofu reports that an upgrade is required, `always`\nadds it on every init, and `never` (default) never adds it -- unlike\nmode/reconfigure, Atmos never passed -upgrade automatically before this\nsetting existed, so the default preserves that rather than introducing new\nautomatic behavior. Set to `auto` to opt in."
         }
       },
       "type": "object",

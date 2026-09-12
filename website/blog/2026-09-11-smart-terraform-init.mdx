@@ -52,7 +52,9 @@ performs two full inits.
 `-reconfigure` only goes on when the backend configuration actually changed (or on the first
 init, or after a working directory is re-provisioned), and `-upgrade` only goes on when Terraform
 or OpenTofu itself reports that an upgrade is required — the behavior [#1263](https://github.com/cloudposse/atmos/issues/1263)
-asked for.
+asked for. Unlike `-reconfigure`, `-upgrade` is opt-in: Atmos never added it automatically before,
+so `init.upgrade` defaults to `never` rather than `auto` — set it to `auto` to get the behavior
+above.
 
 None of this trusts the fingerprint blindly. If a skip turns out to have been wrong — a nested
 module changed, or `.terraform` was altered by hand — Terraform or OpenTofu fails with a
@@ -67,7 +69,9 @@ want the previous, unconditional behavior can opt back in explicitly.
 
 ## How to Use It
 
-Three new settings under `components.terraform.init`, all defaulting to `auto`:
+Three new settings under `components.terraform.init`. `mode` and `reconfigure` default to `auto`;
+`upgrade` defaults to `never`, since Atmos never added `-upgrade` automatically before this
+setting existed:
 
 ```yaml
 components:
@@ -75,12 +79,13 @@ components:
     init:
       mode: auto         # auto | always | never
       reconfigure: auto  # auto | always | never
-      upgrade: auto      # auto | always | never
+      upgrade: never      # auto | always | never
 ```
 
 `mode` controls whether init runs at all: `auto` skips it when nothing relevant changed, `always`
 restores the previous behavior, `never` disables it entirely (the same effect as `--skip-init` on
-every invocation). `reconfigure` and `upgrade` control the two flags the same way, independently.
+every invocation). `reconfigure` and `upgrade` control the two flags the same way, independently —
+set `upgrade: auto` to opt into the automatic-upgrade behavior described above.
 
 Each setting also has a matching flag and environment variable for one-off overrides:
 

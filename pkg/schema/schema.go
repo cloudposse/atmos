@@ -864,9 +864,12 @@ type TerraformInit struct {
 	// the last init, `always` adds it on every init, and `never` never adds it.
 	// Takes precedence over the deprecated `init_run_reconfigure`.
 	Reconfigure TerraformInitReconfigure `yaml:"reconfigure,omitempty" json:"reconfigure,omitempty" mapstructure:"reconfigure"`
-	// Upgrade controls when `-upgrade` is added to `terraform init`: `auto`
-	// (default) adds it only when terraform/tofu reports that an upgrade is
-	// required, `always` adds it on every init, and `never` never adds it.
+	// Upgrade controls when `-upgrade` is added to `terraform init`: `auto` adds
+	// it only when terraform/tofu reports that an upgrade is required, `always`
+	// adds it on every init, and `never` (default) never adds it -- unlike
+	// mode/reconfigure, Atmos never passed -upgrade automatically before this
+	// setting existed, so the default preserves that rather than introducing new
+	// automatic behavior. Set to `auto` to opt in.
 	Upgrade TerraformInitUpgrade `yaml:"upgrade,omitempty" json:"upgrade,omitempty" mapstructure:"upgrade"`
 }
 
@@ -957,10 +960,18 @@ func (t *Terraform) EffectiveInitReconfigure() TerraformInitReconfigure {
 	return TerraformInitReconfigureAuto
 }
 
-// EffectiveInitUpgrade returns the configured upgrade policy, defaulting to auto when unset.
+// EffectiveInitUpgrade returns the configured upgrade policy, defaulting to never when unset.
+//
+// Unlike init.mode/init.reconfigure -- which only make an already-unconditional prior behavior
+// (init always ran, -reconfigure was always added) conditional -- Atmos never passed -upgrade
+// automatically before this setting existed. Defaulting it to auto would introduce a genuinely
+// new automatic behavior (mutating .terraform.lock.hcl to resolve a newer provider version) for
+// every project with zero opt-in. Defaulting to never preserves exactly what Atmos always did:
+// -upgrade only happens when a user types it explicitly. See docs/prd/editions.md's Roadmap for
+// why this distinction matters even for a same-PR, not-yet-released default.
 func (t *Terraform) EffectiveInitUpgrade() TerraformInitUpgrade {
 	if t.Init.Upgrade == "" {
-		return TerraformInitUpgradeAuto
+		return TerraformInitUpgradeNever
 	}
 	return t.Init.Upgrade
 }

@@ -170,7 +170,7 @@ These environment variables configure Atmos behavior and can override settings i
 
   <dt>`ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE`</dt>
   <dd>
-    Controls when Atmos adds `-upgrade` to an automatic `terraform init`: `auto` (default, only when Terraform/OpenTofu reports it's required), `always`, or `never`.
+    Controls when Atmos adds `-upgrade` to an automatic `terraform init`: `never` (default), `auto` (only when Terraform/OpenTofu reports it's required), or `always`.
 
     - **YAML Path:** `components.terraform.init.upgrade`
   </dd>
@@ -680,7 +680,7 @@ These environment variables configure Atmos behavior and can override settings i
 
   <dt>`ATMOS_INIT_UPGRADE`</dt>
   <dd>
-    Override the `--init-upgrade` flag / `components.terraform.init.upgrade` setting: `auto` (default), `always`, or `never`.
+    Override the `--init-upgrade` flag / `components.terraform.init.upgrade` setting: `never` (default), `auto`, or `always`.
   </dd>
 
   <dt>`ATMOS_TERRAFORM_VERIFY_PLAN`</dt>
