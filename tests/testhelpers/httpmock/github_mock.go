@@ -51,7 +51,7 @@ type GitHubMockServer struct {
 	assets     map[string][]byte // "owner/repo/tag/asset" -> bytes.
 	archives   map[string][]byte // "owner/repo/tag" -> tar.gz bytes.
 	rawFiles   map[string]string // "owner/repo/ref/path" -> content (GHES raw shape, exact match).
-	rateLimit  *rateLimitState   // nil = default full, unthrottled budget. See SetRateLimit.
+	rateLimit  *rateLimitState   // Set to a default full, unthrottled budget at construction. See SetRateLimit.
 	failures   []*failureRule
 	requests   []RequestLogEntry
 }
@@ -95,6 +95,7 @@ func NewGitHubMockServerStandalone() (mock *GitHubMockServer, closeServer func()
 		assets:     make(map[string][]byte),
 		archives:   make(map[string][]byte),
 		rawFiles:   make(map[string]string),
+		rateLimit:  defaultRateLimitState(),
 	}
 
 	mock.Server = httptest.NewServer(http.HandlerFunc(mock.handle))

@@ -100,8 +100,9 @@ func (m *GitHubMockServer) RegisterAquaTool(tool *AquaTool) {
 // GET {aquaPrefix}/pkgs/{path}/registry.yaml. Returns false (unhandled) for any other path.
 func (m *GitHubMockServer) tryAqua(w http.ResponseWriter, r *http.Request) bool {
 	m.mu.Lock()
-	prefix := m.aquaPrefix + "/"
+	aquaPrefix := m.aquaPrefix
 	m.mu.Unlock()
+	prefix := aquaPrefix + "/"
 
 	if !strings.HasPrefix(r.URL.Path, prefix) {
 		return false
@@ -126,6 +127,14 @@ func (m *GitHubMockServer) tryAqua(w http.ResponseWriter, r *http.Request) bool 
 		}
 		writeYAML(w, aquaRegistryYAML{Packages: []aquaPackageYAML{toAquaPackageYAML(tool)}})
 		return true
+	}
+
+	if aquaPrefix == "" {
+		// An empty aqua prefix makes prefix just "/", which every request path starts with.
+		// Without this guard, an unrecognized path under an empty prefix would be claimed here
+		// and answered with a 404 instead of falling through to the other route handlers
+		// (release downloads, archives, the legacy raw-file fallback, etc.).
+		return false
 	}
 
 	http.NotFound(w, r)

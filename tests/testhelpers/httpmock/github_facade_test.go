@@ -246,6 +246,49 @@ func TestGitHubMockServer_AquaRegistry_IndexAndPackage(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, missResp.StatusCode)
 }
 
+func TestGitHubMockServer_AquaRegistry_EmptyPrefix_DoesNotShadowOtherRoutes(t *testing.T) {
+	mock := NewGitHubMockServer(t)
+	mock.SetAquaPrefix("")
+	mock.RegisterAquaTool(&AquaTool{Owner: "jqlang", Repo: "jq"})
+	mock.RegisterReleaseAsset("jqlang", "jq", "jq-1.7.1", "jq-linux-amd64", []byte("fake-binary"))
+	archive := BuildTarGz(map[string]string{"tool-1.0.0/tool": "#!/bin/sh\necho fake\n"})
+	mock.RegisterArchive("owner", "repo", "v1.0.0", archive)
+	mock.RegisterFile("bar.yaml", "legacy: content")
+
+	// The aqua-registry root ("/registry.yaml") is still served under the empty prefix.
+	indexResp, err := http.Get(mock.URL() + "/registry.yaml")
+	require.NoError(t, err)
+	defer indexResp.Body.Close()
+	assert.Equal(t, http.StatusOK, indexResp.StatusCode)
+
+	// Release downloads must not be swallowed by tryAqua's now-universal "/" prefix match.
+	assetResp, err := http.Get(mock.URL() + "/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64")
+	require.NoError(t, err)
+	defer assetResp.Body.Close()
+	require.Equal(t, http.StatusOK, assetResp.StatusCode)
+	assetBody, err := io.ReadAll(assetResp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, "fake-binary", string(assetBody))
+
+	// Archive downloads must likewise still be reachable.
+	archiveResp, err := http.Get(mock.URL() + "/owner/repo/archive/refs/tags/v1.0.0.tar.gz")
+	require.NoError(t, err)
+	defer archiveResp.Body.Close()
+	require.Equal(t, http.StatusOK, archiveResp.StatusCode)
+	archiveBody, err := io.ReadAll(archiveResp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, archive, archiveBody)
+
+	// The legacy suffix-matched file fallback must also still be reachable.
+	legacyResp, err := http.Get(mock.URL() + "/raw/cloudposse/atmos/main/tests/fixtures/scenarios/foo/bar.yaml")
+	require.NoError(t, err)
+	defer legacyResp.Body.Close()
+	require.Equal(t, http.StatusOK, legacyResp.StatusCode)
+	legacyBody, err := io.ReadAll(legacyResp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, "legacy: content", string(legacyBody))
+}
+
 func TestGitHubMockServer_FailWith_Persistent(t *testing.T) {
 	mock := NewGitHubMockServer(t)
 	mock.RegisterReleaseAsset("owner", "repo", "v1", "asset", []byte("data"))
