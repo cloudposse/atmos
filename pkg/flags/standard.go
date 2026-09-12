@@ -1057,13 +1057,24 @@ func (p *StandardFlagParser) handleInteractivePrompts(result *ParsedConfig, comb
 		return err
 	}
 
-	// Use Case 1: Handle missing required flags.
-	if err := p.promptForMissingRequiredFlags(result, combinedFlags); err != nil {
+	// Use Case 3: Handle missing required positional arguments BEFORE Use Case 1's
+	// flag prompts. A missing required flag's completion function (e.g. a "Choose a
+	// stack" selector) is often filtered by an already-selected positional arg (e.g.
+	// the component the user is targeting) -- see cmd/terraform/shared.StackFlagCompletion
+	// and cmd/aws/cloudformation's stackFlagCompletion, both of which filter stacks by
+	// result.PositionalArgs[0] when present. If the required-flag prompt ran first while
+	// the positional arg was still unresolved, its completion function would always see
+	// an empty args slice and fall back to an unfiltered "list everything" result (e.g.
+	// every stack across every account/region in the org) instead of waiting for the
+	// positional arg to be resolved. Resolving positional args first lets that filtering
+	// benefit from the freshly-selected value the vast majority of the time a command
+	// combines both (a required flag + a required positional arg).
+	if err := p.promptForMissingPositionalArgs(result); err != nil {
 		return err
 	}
 
-	// Use Case 3: Handle missing required positional arguments.
-	if err := p.promptForMissingPositionalArgs(result); err != nil {
+	// Use Case 1: Handle missing required flags.
+	if err := p.promptForMissingRequiredFlags(result, combinedFlags); err != nil {
 		return err
 	}
 
