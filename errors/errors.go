@@ -78,6 +78,7 @@ var (
 	ErrInvalidTemplateSettings               = errors.New("invalid template settings")
 	ErrTemplateEvaluation                    = errors.New("template evaluation failed")
 	ErrCommandEnvDecodeFailed                = schemaPkg.ErrCommandEnvDecodeFailed
+	ErrComponentDependencyMissingComponent   = schemaPkg.ErrComponentDependencyMissingComponent
 	ErrCastStepRequiresSteps                 = errors.New("cast step requires nested steps")
 	ErrCastSessionRequiresActions            = errors.New("cast session step requires session actions")
 	ErrInvalidCastMode                       = errors.New("cast step has invalid mode")
@@ -873,9 +874,10 @@ var (
 	ErrProcessStack              = errors.New("error processing stack")
 
 	// Dependency errors.
-	ErrUnsupportedDependencyType = errors.New("unsupported dependency type")
-	ErrMissingDependencyField    = errors.New("dependency missing required field")
-	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
+	ErrUnsupportedDependencyType   = errors.New("unsupported dependency type")
+	ErrMissingDependencyField      = errors.New("dependency missing required field")
+	ErrDependencyTargetNotFound    = errors.New("dependency target not found")
+	ErrDependencyTargetUnavailable = errors.New("dependency target unavailable")
 	// ErrCustomCommandDependencyNotRegistered is returned when a dependencies.commands entry
 	// names a command that isn't registered under the custom-command cobra tree.
 	ErrCustomCommandDependencyNotRegistered = errors.New("dependency command is not registered")

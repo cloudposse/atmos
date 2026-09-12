@@ -171,6 +171,22 @@ func TestGenerateAllowsYamlFunctions(t *testing.T) {
 		"object-typed sections must carry a yamlFunction anyOf alternative")
 }
 
+func TestGenerateAllowsUnrestrictedComponentDependencyRequiredStrings(t *testing.T) {
+	defs := definitions(t)
+	componentDependency, ok := defs["ComponentDependency"].(map[string]any)
+	require.True(t, ok, "ComponentDependency definition must exist")
+	properties, ok := componentDependency["properties"].(map[string]any)
+	require.True(t, ok, "ComponentDependency definition must have properties")
+	required, ok := properties["required"].(map[string]any)
+	require.True(t, ok, "ComponentDependency.required property must exist")
+	variants, ok := required["anyOf"].([]any)
+	require.True(t, ok, "ComponentDependency.required must allow multiple authored forms")
+
+	// A template is rendered before required is parsed as a boolean, so any
+	// string is a valid authored value rather than only a YAML function.
+	assert.Contains(t, variants, map[string]any{"type": "string"})
+}
+
 func TestGenerateHasNoRequiredFields(t *testing.T) {
 	// Partial configs (atmos.d fragments, profile files, imports) must validate
 	// on their own, so nothing anywhere in the schema may use the `required`

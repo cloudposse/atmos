@@ -179,6 +179,11 @@ func applyPolymorphicOverrides(root *jsonschema.Schema) {
 			// accepted and coerced (Terminal.IsPagerEnabled).
 			"pager": {{Type: typeBoolean}},
 		},
+		"ComponentDependency": {
+			// required values are rendered before they are parsed as booleans, so
+			// templates and their resulting strings must be accepted.
+			"required": {{Type: typeString}},
+		},
 	}
 	for defName, alternativesByProperty := range propertyAlternatives {
 		def, ok := root.Definitions[defName]

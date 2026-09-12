@@ -53,7 +53,9 @@ var dependenciesCmd = &cobra.Command{
 
 By default the output is a tree showing both dependency directions. Use
 --direction to show one side. Use --format=levels to list dependency distance
-from selected roots.`,
+from selected roots. Optional component dependencies declared with
+required: false are included when their targets are available and skipped when
+targets are missing or disabled. See https://atmos.tools/stacks/dependencies/components.`,
 	Aliases:            []string{"deps"},
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.MaximumNArgs(1),
@@ -212,7 +214,7 @@ func (c *dependenciesDescribeContext) describeStacks(filterByStack string, compo
 		&c.atmosConfig,
 		filterByStack,
 		components,
-		[]string{cfg.TerraformComponentType},
+		nil,
 		nil,
 		false, // ignoreMissingFiles
 		processTemplates,
@@ -251,7 +253,8 @@ func buildDependencyGraphForCommand(cmd *cobra.Command, args []string, opts *Dep
 		if err != nil {
 			return nil, nil, err
 		}
-		graph, err := dependencies.BuildGraph(stacksMap)
+		leftDelim, _ := describeCtx.delims()
+		graph, err := dependencies.BuildGraph(stacksMap, leftDelim)
 		return graph, describeCtx, err
 	}
 

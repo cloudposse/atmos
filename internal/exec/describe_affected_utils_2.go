@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -639,7 +640,11 @@ func addDependentsToAffected(
 	}
 
 	// Build the reverse dependency index once from the cached stacks.
-	depIdx := buildDependencyIndex(stacks)
+	leftDelim, _ := tags.TemplateDelims(atmosConfig.Templates.Settings.Delimiters)
+	depIdx, err := buildDependencyIndexWithError(stacks, leftDelim)
+	if err != nil {
+		return err
+	}
 
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]

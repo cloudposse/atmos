@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -19,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 func TestBuildTerraformDependencyGraph(t *testing.T) {
@@ -181,6 +183,203 @@ func TestBuildTerraformDependencyGraph_WithDisabledComponents(t *testing.T) {
 	enabledNode, exists := graph.GetNode("enabled-dev")
 	assert.True(t, exists)
 	assert.Equal(t, "enabled", enabledNode.Component)
+}
+
+func TestBuildTerraformDependencyGraphModernDependencies(t *testing.T) {
+	tests := []struct {
+		name       string
+		dependency map[string]any
+		target     map[string]any
+		wantErr    error
+		wantEdge   bool
+	}{
+		{
+			name:       "optional present",
+			dependency: map[string]any{"name": "vpc", "required": false},
+			target:     map[string]any{},
+			wantEdge:   true,
+		},
+		{
+			name:       "optional missing",
+			dependency: map[string]any{"name": "missing", "required": false},
+		},
+		{
+			name:       "optional disabled",
+			dependency: map[string]any{"name": "disabled", "required": false},
+			target:     map[string]any{"metadata": map[string]any{"enabled": false}},
+		},
+		{
+			name:       "required missing",
+			dependency: map[string]any{"name": "missing"},
+			wantErr:    errUtils.ErrDependencyTargetNotFound,
+		},
+		{
+			name:       "required disabled",
+			dependency: map[string]any{"name": "disabled"},
+			target:     map[string]any{"metadata": map[string]any{"enabled": false}},
+			wantErr:    errUtils.ErrDependencyTargetUnavailable,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			terraform := map[string]any{
+				"app": map[string]any{
+					"dependencies": map[string]any{
+						"components": []any{test.dependency},
+					},
+				},
+				"vpc": map[string]any{},
+			}
+			if test.target != nil {
+				terraform["disabled"] = test.target
+			}
+			stacks := map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{"terraform": terraform},
+				},
+			}
+
+			graph, err := buildTerraformDependencyGraph(&schema.AtmosConfiguration{}, stacks, &schema.ConfigAndStacksInfo{})
+			if test.wantErr != nil {
+				require.ErrorIs(t, err, test.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			app, exists := graph.GetNode("app-dev")
+			require.True(t, exists)
+			if test.wantEdge {
+				require.Equal(t, []string{"vpc-dev"}, app.Dependencies)
+				require.True(t, app.OptionalDependencies["vpc-dev"])
+			} else {
+				require.Empty(t, app.Dependencies)
+			}
+		})
+	}
+}
+
+func TestBuildTerraformDependencyGraphModernDependencyCustomDelimiter(t *testing.T) {
+	manifest := map[string]any{}
+	require.NoError(t, yaml.Unmarshal([]byte(`
+settings:
+  templates:
+    settings:
+      enabled: true
+      delimiters: ["[[", "]]"]
+components:
+  terraform:
+    app:
+      dependencies:
+        components:
+          - name: monitoring
+            required: "[[ .dependencyRequired ]]"
+`), &manifest))
+
+	settingsYAML, err := yaml.Marshal(manifest["settings"])
+	require.NoError(t, err)
+	var settings schema.Settings
+	require.NoError(t, yaml.Unmarshal(settingsYAML, &settings))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: settings.Templates,
+	}
+	components, ok := manifest["components"].(map[string]any)
+	require.True(t, ok)
+	terraformComponents, ok := components["terraform"].(map[string]any)
+	require.True(t, ok)
+	componentSection, ok := terraformComponents["app"].(map[string]any)
+	require.True(t, ok)
+	componentSectionYAML, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
+		componentSection,
+		atmosConfig.Templates.Settings.Delimiters,
+	)
+	require.NoError(t, err)
+	rendered, err := ProcessTmplWithDatasources(
+		atmosConfig,
+		&schema.ConfigAndStacksInfo{},
+		settings,
+		"component.yaml",
+		componentSectionYAML,
+		map[string]any{"dependencyRequired": false},
+		false,
+	)
+	require.NoError(t, err)
+
+	var app map[string]any
+	require.NoError(t, yaml.Unmarshal([]byte(rendered), &app))
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"app":        app,
+					"monitoring": map[string]any{},
+				},
+			},
+		},
+	}
+
+	graph, err := buildTerraformDependencyGraph(atmosConfig, stacks, &schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+	node, exists := graph.GetNode("app-dev")
+	require.True(t, exists)
+	require.Equal(t, []string{"monitoring-dev"}, node.Dependencies)
+	require.True(t, node.OptionalDependencies["monitoring-dev"])
+}
+
+func TestBuildTerraformDependencyGraphModernCrossStackDependency(t *testing.T) {
+	stacks := map[string]any{
+		"core": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{"vpc": map[string]any{}},
+			},
+		},
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"app": map[string]any{
+						"dependencies": map[string]any{
+							"components": []any{
+								map[string]any{"name": "vpc", "stack": "core", "required": false},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := buildTerraformDependencyGraph(&schema.AtmosConfiguration{}, stacks, &schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+	app, exists := graph.GetNode("app-dev")
+	require.True(t, exists)
+	require.Equal(t, []string{"vpc-core"}, app.Dependencies)
+	require.True(t, app.OptionalDependencies["vpc-core"])
+}
+
+func TestBuildTerraformDependencyGraphModernEmptyPreventsLegacyFallback(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{},
+					"app": map[string]any{
+						"dependencies": map[string]any{
+							"components": []any{},
+						},
+						"settings": map[string]any{
+							"depends_on": []any{"vpc"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := buildTerraformDependencyGraph(&schema.AtmosConfiguration{}, stacks, &schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+	app, exists := graph.GetNode("app-dev")
+	require.True(t, exists)
+	require.Empty(t, app.Dependencies)
 }
 
 func TestApplyFiltersToGraph(t *testing.T) {
