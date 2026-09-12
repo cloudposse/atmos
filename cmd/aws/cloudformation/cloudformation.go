@@ -152,13 +152,6 @@ func newStackSetCmd() *cobra.Command {
 	return cmd
 }
 
-// newOperationCommand builds an `atmos aws cloudformation <use> [component]`
-// command (optionally nested under a verb group, e.g. `changeset create`).
-// Use is the cobra command name (what the user types); subCommand is the
-// internal Operation-dispatch identifier passed to provider.Execute (e.g.
-// "changeset-create") and to operationFlagOptions/getOperationFlags — they
-// differ for grouped verbs, where the same subCommand can be reached under a
-// friendlier use (e.g. "plan" and "diff" both dispatch as "diff").
 // An operationHelpEntry holds a command's Long help text and Example block,
 // mirroring the corresponding website/docs/cli/commands/aws/cloudformation/*.mdx
 // page so `--help` output and the docs stay consistent.
@@ -172,6 +165,70 @@ type operationHelpEntry struct {
 // have one use; "apply" (apply/deploy) and "diff" (diff/plan) are aliased and
 // get a use-specific override in operationHelpText.
 var operationHelpBySubCommand = map[string]operationHelpEntry{
+	"stackset-create": {
+		long: "Create a CloudFormation StackSet (CreateStackSet) from the resolved\n" +
+			"kind: aws/stackset provision target's accounts/regions/permission_model/role\n" +
+			"settings, plus the component's own template/parameters/capabilities/tags.\n" +
+			"When the target declares both accounts and regions, stackset create also\n" +
+			"creates the initial stack instances (CreateStackInstances) across that\n" +
+			"account/region matrix and waits for the operation to finish -- the only\n" +
+			"verb that creates instances.",
+		example: "  atmos aws cloudformation stackset create vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation stackset create vpc --stack plat-ue2-dev --auto-approve\n" +
+			"  atmos aws cloudformation stackset create vpc --stack plat-ue2-dev --target multi-account",
+	},
+	"stackset-update": {
+		long: "Update a CloudFormation StackSet's template, parameters, and capabilities\n" +
+			"(UpdateStackSet) from the component's current configuration, and wait for\n" +
+			"the update to propagate to every existing stack instance. stackset update\n" +
+			"never changes which accounts/regions have instances -- that set is fixed at\n" +
+			"stackset create time.",
+		example: "  atmos aws cloudformation stackset update vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation stackset update vpc --stack plat-ue2-dev --auto-approve\n" +
+			"  atmos aws cloudformation stackset update vpc --stack plat-ue2-dev --target multi-account",
+	},
+	"stackset-delete": {
+		long: "Delete a CloudFormation StackSet. CloudFormation requires every stack\n" +
+			"instance to be removed before the StackSet itself can be deleted, so\n" +
+			"stackset delete lists the StackSet's current instances, deletes them all\n" +
+			"(DeleteStackInstances, retaining no resources) if any exist, waits for that\n" +
+			"operation to finish, and only then deletes the StackSet (DeleteStackSet).",
+		example: "  atmos aws cloudformation stackset delete vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation stackset delete vpc --stack plat-ue2-dev --auto-approve\n" +
+			"  atmos aws cloudformation stackset delete --all --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation stackset delete --affected --base origin/main",
+	},
+	"stackset-instances": {
+		long: "List a CloudFormation StackSet's stack instances (ListStackInstances) --\n" +
+			"each instance's account, region, status, and stack ID.",
+		example: "  atmos aws cloudformation stackset instances vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation stackset instances --all --stack plat-ue2-dev",
+	},
+	"tree": {
+		long: "Render the deployed stack's nested-stack dependency tree: walk the stack's\n" +
+			"resources, recursing into every AWS::CloudFormation::Stack resource, up to\n" +
+			"10 levels deep.",
+		example: "  atmos aws cloudformation tree vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation tree --all --stack plat-ue2-dev",
+	},
+	"logs": {
+		long: "Show the combined CloudFormation event log across a stack and every nested\n" +
+			"stack beneath it (up to 10 levels deep), merged into a single chronological\n" +
+			"timeline -- instead of having to check each nested stack's events\n" +
+			"separately.",
+		example: "  atmos aws cloudformation logs vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation logs vpc --stack plat-ue2-dev --chart",
+	},
+	"watch": {
+		long: "Attach to a stack's operation and stream its events until the stack reaches\n" +
+			"a terminal status -- whether that operation is currently in progress,\n" +
+			"already finished, or was started outside Atmos entirely (the AWS Console, a\n" +
+			"CI pipeline running raw aws cloudformation, another teammate's terminal).\n" +
+			"This is distinct from apply/deploy/delete's automatic inline streaming,\n" +
+			"which only covers the operation that command itself just started.",
+		example: "  atmos aws cloudformation watch vpc --stack plat-ue2-dev\n" +
+			"  atmos aws cloudformation watch --all --stack plat-ue2-dev",
+	},
 	"render": {
 		long: "Render the component's local template -- resolved from `template:` and, when\n" +
 			"`source:` is set, JIT-provisioned first -- without calling any AWS API.\n" +
@@ -311,6 +368,13 @@ func operationHelpText(use, subCommand string) (string, string) {
 	}
 }
 
+// newOperationCommand builds an `atmos aws cloudformation <use> [component]`
+// command (optionally nested under a verb group, e.g. `changeset create`).
+// Use is the cobra command name (what the user types); subCommand is the
+// internal Operation-dispatch identifier passed to provider.Execute (e.g.
+// "changeset-create") and to operationFlagOptions/getOperationFlags — they
+// differ for grouped verbs, where the same subCommand can be reached under a
+// friendlier use (e.g. "plan" and "diff" both dispatch as "diff").
 func newOperationCommand(use, subCommand, short string) *cobra.Command {
 	var parser *flags.StandardParser
 	long, example := operationHelpText(use, subCommand)
