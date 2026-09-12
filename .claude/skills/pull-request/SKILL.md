@@ -92,25 +92,25 @@ Get this right the first time:
 
 1. Verify your local git is configured to sign automatically before your first commit:
 
-   ```bash
-   git config --get commit.gpgsign       # should print: true
-   git config --get gpg.format            # "openpgp" or "ssh"
-   git config --get user.signingkey       # your signing key
-   ```
+    ```bash
+    git config --get commit.gpgsign       # should print: true
+    git config --get gpg.format            # "openpgp" or "ssh"
+    git config --get user.signingkey       # your signing key
+    ```
 
-   If `commit.gpgsign` is not `true`, set it for the repo:
+    If `commit.gpgsign` is not `true`, set it for the repo:
 
-   ```bash
-   git config commit.gpgsign true
-   ```
+    ```bash
+    git config commit.gpgsign true
+    ```
 
 2. After your first commit, verify it's signed:
 
-   ```bash
-   git log --show-signature -1
-   ```
+    ```bash
+    git log --show-signature -1
+    ```
 
-   Look for `gpg: Good signature from ...` or `Good "git" signature for ...`. If you see "no signature found", **stop and fix your git config before pushing**.
+    Look for `gpg: Good signature from ...` or `Good "git" signature for ...`. If you see "no signature found", **stop and fix your git config before pushing**.
 
 3. **Never bypass signing with `--no-gpg-sign` or `-c commit.gpgsign=false`** even temporarily. The CLAUDE.md rules forbid this, and the resulting commit cannot be merged.
 
@@ -131,11 +131,11 @@ Run through these in order before `git push`. Every item has burned someone befo
 1. **Identify the smallest accurate label.** Use the decision tree above. Default to `no-release` for plumbing.
 2. **Confirm commit signing is on** (see above). One unsigned commit blocks the entire PR from merging.
 3. **If `minor` or `major`:**
-   - Create a blog post at `website/blog/YYYY-MM-DD-<slug>.mdx`.
-   - Read `website/blog/tags.yml` and pick a defined tag.
-   - Check `website/blog/authors.yml` for your handle; add yourself if missing.
-   - Embed the feature's cast (`CastPlayer`) if one exists or was recorded for this PR.
-   - Delegate the roadmap update to the `roadmap` skill (do not touch `featured[]`).
+    - Create a blog post at `website/blog/YYYY-MM-DD-<slug>.mdx`.
+    - Read `website/blog/tags.yml` and pick a defined tag.
+    - Check `website/blog/authors.yml` for your handle; add yourself if missing.
+    - Embed the feature's cast (`CastEmbed`) if one exists or was recorded for this PR.
+    - Delegate the roadmap update to the `roadmap` skill (do not touch `featured[]`).
 4. **Build the website** to verify MDX renders: `cd website && npm run build`.
 5. **Commit and push.**
 
@@ -181,15 +181,15 @@ If a PR has already been opened without a label, or with the wrong one:
 2. Apply the decision tree to pick the correct label.
 3. **If the PR has no semver label yet:** add it.
 
-   ```bash
-   gh pr edit <num> --add-label <label>
-   ```
+    ```bash
+    gh pr edit <num> --add-label <label>
+    ```
 
 4. **If the PR has a different semver label already:** remove the old one and add the new one in a single invocation, so you never have two semver labels at once (which fails CI):
 
-   ```bash
-   gh pr edit <num> --remove-label <old-label> --add-label <new-label>
-   ```
+    ```bash
+    gh pr edit <num> --remove-label <old-label> --add-label <new-label>
+    ```
 
 5. If you changed from `no-release`/`patch` to `minor`/`major`, you now owe a blog post and roadmap update — add them in a new commit on the same branch.
 6. If you changed from `minor`/`major` to a lower label, you can (optionally) remove the blog post and roadmap update in a new commit, but it's also fine to leave them.
