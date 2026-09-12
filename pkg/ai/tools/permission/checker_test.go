@@ -1002,3 +1002,34 @@ func TestCLIPrompter_handleCachedResponse_AddAllow_Duplicate(t *testing.T) {
 	}
 	assert.Equal(t, 1, count)
 }
+
+// TestNonInteractivePrompter_AlwaysDenies tests that NonInteractivePrompter always denies permission.
+func TestNonInteractivePrompter_AlwaysDenies(t *testing.T) {
+	p := NewNonInteractivePrompter()
+	tool := &MockTool{name: "test_tool", description: "A test tool."}
+	ctx := context.Background()
+
+	allowed, err := p.Prompt(ctx, tool, nil)
+
+	assert.Error(t, err)
+	assert.False(t, allowed)
+	assert.ErrorIs(t, err, errUtils.ErrAINoPrompter)
+	assert.Contains(t, err.Error(), "test_tool")
+	assert.Contains(t, err.Error(), "non-interactive mode")
+}
+
+// TestNonInteractivePrompter_WithParams tests that NonInteractivePrompter denies regardless of params.
+func TestNonInteractivePrompter_WithParams(t *testing.T) {
+	p := NewNonInteractivePrompter()
+	tool := &MockTool{name: "execute_bash_command", description: "Execute bash command."}
+	ctx := context.Background()
+	params := map[string]interface{}{
+		"command": "ls -la",
+	}
+
+	allowed, err := p.Prompt(ctx, tool, params)
+
+	assert.Error(t, err)
+	assert.False(t, allowed)
+	assert.ErrorIs(t, err, errUtils.ErrAINoPrompter)
+}
