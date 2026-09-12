@@ -4,9 +4,11 @@ title: "Record and Render Terminal Sessions with Atmos Cast"
 authors: [osterman]
 tags: [feature, dx]
 date: 2026-07-07T12:00:00.000Z
+cast: "/casts/cli/commands/cast/render.cast"
+castTitle: "atmos cast render"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Atmos can now record terminal sessions as asciicast files and render them into
 shareable formats for documentation, demos, and CI artifacts.
@@ -19,15 +21,15 @@ atmos cast render demo.cast --output=demo.out --format=html
 
 The `render` command turns a recording into a rendered artifact — here it's converted straight to a GIF:
 
-<CastPlayer src="/casts/cli/commands/cast/render.cast" title="atmos cast render" chrome controls scrubber />
+<CastEmbed src="/casts/cli/commands/cast/render.cast" title="atmos cast render" chrome controls scrubber />
 
 Replaying a recording in the terminal with `play` reproduces it exactly as it was captured:
 
-<CastPlayer src="/casts/cli/commands/cast/play.cast" title="atmos cast play" chrome controls scrubber />
+<CastEmbed src="/casts/cli/commands/cast/play.cast" title="atmos cast play" chrome controls scrubber />
 
 And any command can capture its own session as it runs with `--cast`, no separate recording step required:
 
-<CastPlayer src="/casts/cli/commands/cast/usage.cast" title="record a cast with --cast" chrome controls scrubber />
+<CastEmbed src="/casts/cli/commands/cast/usage.cast" title="record a cast with --cast" chrome controls scrubber />
 
 <!--truncate-->
 

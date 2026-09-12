@@ -4,9 +4,11 @@ title: "Terraform state migrations with tfmigrate"
 date: 2026-07-24T12:00:00.000Z
 authors: [osterman]
 tags: [feature, dx]
+cast: "/casts/examples/hooks-tfmigrate/tfmigrate-example.cast"
+castTitle: "atmos terraform migrate"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Refactoring Terraform code leaves state behind. Rename a resource, or move it between root modules, and every plan shows a destroy-and-recreate for infrastructure that never changed. You can fix this by hand with `terraform state mv`, but that command only fixes one workspace at a time. It is easy to get wrong, and no one can review it before it runs.
 
@@ -19,7 +21,7 @@ atmos terraform migrate apply s3-bucket -s plat-ue2-dev
 
 <!--truncate-->
 
-<CastPlayer src="/casts/examples/hooks-tfmigrate/tfmigrate-example.cast" title="atmos terraform migrate" chrome controls scrubber />
+<CastEmbed src="/casts/examples/hooks-tfmigrate/tfmigrate-example.cast" title="atmos terraform migrate" chrome controls scrubber />
 
 ## What Changed
 
