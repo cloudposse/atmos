@@ -9,10 +9,105 @@ components:
       # No per-component identity binding: `local-aws` is the default identity
       # (auth.identities in atmos.yaml, `default: true`), so the component
       # deploys against the local sandbox automatically.
-      template: template.yaml
+      path: template.yaml
       stack_name: "atmos-cfn-demo-{{ .vars.stage }}"
       parameters:
         Stage: "{{ .vars.stage }}"
+      # Live-verifies which aws/cloudformation verbs actually fire hook
+      # events: only diff/apply/delete (and their plan/deploy aliases) do,
+      # per eventsFor() in pkg/component/aws/cloudformation/executor.go —
+      # every other verb dispatches through runOperation without ever
+      # calling runWithHooks. Each entry appends its event name to
+      # $ATMOS_HOOK_MARKER_FILE via scripts/hook_marker.py.
+      hooks:
+        mark-before-diff:
+          events: ["before.aws/cloudformation.diff"]
+          kind: command
+          command: python3
+          args: ["scripts/hook_marker.py", "before.aws/cloudformation.diff"]
+        mark-after-diff:
+          events: ["after.aws/cloudformation.diff"]
+          kind: command
+          command: python3
+          args: ["scripts/hook_marker.py", "after.aws/cloudformation.diff"]
+        mark-before-apply:
+          events: ["before.aws/cloudformation.apply"]
+          kind: command
+          command: python3
+          args: ["scripts/hook_marker.py", "before.aws/cloudformation.apply"]
+        mark-after-apply:
+          events: ["after.aws/cloudformation.apply"]
+          kind: command
+          command: python3
+          args: ["scripts/hook_marker.py", "after.aws/cloudformation.apply"]
+        mark-before-delete:
+          events: ["before.aws/cloudformation.delete"]
+          kind: command
+          command: python3
+          args: ["scripts/hook_marker.py", "before.aws/cloudformation.delete"]
+        mark-after-delete:
+          events: ["after.aws/cloudformation.delete"]
+          kind: command
+          command: python3
+          args: ["scripts/hook_marker.py", "after.aws/cloudformation.delete"]
+      settings:
+        aws_cloudformation:
+          region: us-east-1
+      provision:
+        backend:
+          enabled: true
+        targets:
+          artifacts:
+            kind: aws/s3
+            bucket: "atmos-cfn-demo-artifacts-local"
+            region: us-east-1
+          fleet:
+            kind: aws/stackset
+            accounts: ["123456789012"]
+            regions: ["us-east-1"]
+            permission_model: SELF_MANAGED
+          fleet-no-regions:
+            kind: aws/stackset
+            accounts: ["123456789012"]
+            permission_model: SELF_MANAGED
+          fleet-bad-model:
+            kind: aws/stackset
+            accounts: ["123456789012"]
+            regions: ["us-east-1"]
+            permission_model: SELF_MANEGED
+    demo-broken:
+      metadata:
+        type: abstract
+        component: demo-broken
+      path: template.yaml
+      stack_name: "atmos-cfn-demo-broken-{{ .vars.stage }}"
+      parameters:
+        Stage: "{{ .vars.stage }}"
+      settings:
+        aws_cloudformation:
+          region: us-east-1
+    demo-inline:
+      metadata:
+        type: abstract
+        component: demo-inline
+      # Inline `template:` (a literal string body, not a file) — unlike
+      # `path:`, this flows through Atmos's own `{{ }}` templating pipeline,
+      # so `{{ .vars.stage }}` below is resolved by Atmos itself before the
+      # body is ever sent to CloudFormation.
+      template: |
+        AWSTemplateFormatVersion: '2010-09-09'
+        Description: Inline aws/cloudformation template — no on-disk template.yaml.
+        Resources:
+          Marker:
+            Type: AWS::SSM::Parameter
+            Properties:
+              Name: "/atmos/demo-inline/{{ .vars.stage }}/marker"
+              Type: String
+              Value: "hello inline from {{ .vars.stage }}"
+        Outputs:
+          ParameterName:
+            Value: !Ref Marker
+      stack_name: "atmos-cfn-demo-inline-{{ .vars.stage }}"
       settings:
         aws_cloudformation:
           region: us-east-1
