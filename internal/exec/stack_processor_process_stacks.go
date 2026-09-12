@@ -1401,9 +1401,9 @@ func ProcessStackConfig(
 	}
 
 	// Process all aws/cloudformation components in parallel.
-	//nolint:dupl // Each built-in component type builds its own component-processing block with
-	// the same shape by design — they're independently maintained per type (not all types set
-	// every Global* field, e.g. GlobalDependencies), and extracting a shared builder would need a
+	// Each built-in component type builds its own component-processing block with the same shape
+	// by design — they're independently maintained per type (not all types set every Global*
+	// field, e.g. GlobalDependencies), and extracting a shared builder would need a
 	// variadic/options mechanism that doesn't exist here and isn't worth introducing for this.
 	if componentTypeFilter == "" || componentTypeFilter == cfg.CloudFormationComponentType {
 		if allCloudFormationComponents, ok := globalComponentsSection[cfg.CloudFormationComponentType]; ok {

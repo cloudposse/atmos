@@ -31,12 +31,55 @@ func TestValidateComponentConfig(t *testing.T) {
 		},
 		{
 			name:    "missing stack_name",
-			config:  map[string]any{"template": "template.yaml"},
+			config:  map[string]any{"path": "template.yaml"},
 			wantErr: errUtils.ErrMissingAwsCloudFormationStackName,
 		},
 		{
-			name:   "valid",
-			config: map[string]any{"template": "template.yaml", "stack_name": "vpc"},
+			name:   "valid with path",
+			config: map[string]any{"path": "template.yaml", "stack_name": "vpc"},
+		},
+		{
+			name: "valid with inline string template",
+			config: map[string]any{
+				"template":   "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n",
+				"stack_name": "vpc",
+			},
+		},
+		{
+			name: "valid with inline map template",
+			config: map[string]any{
+				"template": map[string]any{
+					"Resources": map[string]any{
+						"Bucket": map[string]any{"Type": "AWS::S3::Bucket"},
+					},
+				},
+				"stack_name": "vpc",
+			},
+		},
+		{
+			name: "template and path both set",
+			config: map[string]any{
+				"template":   "Resources: {}\n",
+				"path":       "template.yaml",
+				"stack_name": "vpc",
+			},
+			wantErr: errUtils.ErrAwsCloudFormationTemplateAndPathMutuallyExclusive,
+		},
+		{
+			name: "inline template invalid yaml",
+			config: map[string]any{
+				"template":   "template.yaml",
+				"stack_name": "vpc",
+			},
+			wantErr: errUtils.ErrInvalidAwsCloudFormationSettings,
+		},
+		{
+			name: "inline template missing Resources",
+			config: map[string]any{
+				"template":   "AWSTemplateFormatVersion: '2010-09-09'\n",
+				"stack_name": "vpc",
+			},
+			wantErr: errUtils.ErrAwsCloudFormationTemplateMissingResources,
 		},
 	}
 
@@ -52,13 +95,20 @@ func TestValidateComponentConfig(t *testing.T) {
 	}
 }
 
+// validateTemplate must print a success confirmation naming the stack — a
+// successful validation otherwise produced zero output, indistinguishable
+// from a hang short of checking the exit code.
 func TestValidateTemplate(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().ValidateTemplate(gomock.Any(), gomock.Any()).Return(&cloudformation.ValidateTemplateOutput{}, nil)
 
-	err := validateTemplate(context.Background(), client, "AWSTemplateFormatVersion: '2010-09-09'")
-	require.NoError(t, err)
+	out := normalizeUIOutput(captureStderr(t, func() {
+		err := validateTemplate(context.Background(), client, "vpc", "AWSTemplateFormatVersion: '2010-09-09'")
+		require.NoError(t, err)
+	}))
+	assert.Contains(t, out, "vpc")
+	assert.Contains(t, out, "template is valid")
 }
 
 func TestValidateTemplate_Error(t *testing.T) {
@@ -66,7 +116,7 @@ func TestValidateTemplate_Error(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().ValidateTemplate(gomock.Any(), gomock.Any()).Return(nil, errors.New("invalid template"))
 
-	err := validateTemplate(context.Background(), client, "not a template")
+	err := validateTemplate(context.Background(), client, "vpc", "not a template")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidSpecificAwsCloudFormationComponent)
 }
@@ -87,10 +137,10 @@ func TestSetStackPolicy(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// applyTerminationProtection must reconcile the stack's actual termination-protection
-// state with spec.TerminationProtection on every apply — CreateChangeSet/ExecuteChangeSet
-// have no termination-protection parameter, so this is a follow-up UpdateTerminationProtection
-// call, the same shape setStackPolicy already uses for stack policy.
+// applyTerminationProtection must enable termination protection via a follow-up
+// UpdateTerminationProtection call when the component opts in — CreateChangeSet/
+// ExecuteChangeSet have no termination-protection parameter, the same shape
+// setStackPolicy already uses for stack policy.
 func TestApplyTerminationProtection_Enables(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
@@ -107,20 +157,16 @@ func TestApplyTerminationProtection_Enables(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// applyTerminationProtection must also actively disable protection when config no
-// longer requests it — config is always the source of truth, so removing
-// termination_protection: true from a component must take effect on the next apply,
-// not just stop being enforced by Atmos's own `delete` command.
-func TestApplyTerminationProtection_Disables(t *testing.T) {
+// applyTerminationProtection must be a no-op — no client call at all — for a
+// component that never opted in via termination_protection: true, so targets
+// that don't implement UpdateTerminationProtection (e.g. an AWS emulator) are
+// never touched by components that don't use the feature. Disabling protection
+// is handled only by the explicit --disable-termination-protection delete flag,
+// never reconciled here.
+func TestApplyTerminationProtection_SkipsWhenNotEnabled(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
-	client.EXPECT().UpdateTerminationProtection(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, input *cloudformation.UpdateTerminationProtectionInput, _ ...func(*cloudformation.Options)) (*cloudformation.UpdateTerminationProtectionOutput, error) {
-			assert.Equal(t, "vpc", *input.StackName)
-			assert.False(t, *input.EnableTerminationProtection)
-			return &cloudformation.UpdateTerminationProtectionOutput{}, nil
-		},
-	)
+	// No UpdateTerminationProtection expectation: gomock fails the test if it's called.
 
 	spec := &stackSpec{StackName: "vpc", TerminationProtection: false}
 	err := applyTerminationProtection(context.Background(), client, spec)

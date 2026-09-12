@@ -1,6 +1,6 @@
 ---
 title: Terraform Tests
-tags: [Components]
+tags: [Terraform]
 cast:
   file: /casts/examples/terraform-tests/stack-discovery.cast
   title: atmos terraform tests

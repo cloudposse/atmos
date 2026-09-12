@@ -52,27 +52,8 @@ func deliverApply(octx *opContext, client CloudFormationClient, spec *stackSpec)
 		summary[targetKey] = selected.Kind
 	}
 
-	// Package before delivery whenever the template needs it (exceeds
-	// CloudFormation's inline TemplateBody limit) or an aws/s3 target was
-	// selected directly -- regardless of which kind ultimately receives it.
-	// A direct-deploy target (kind: aws/cloudformation) needs the resulting
-	// TemplateURL just as much as an external (e.g. git) target needs the
-	// packaged reference: CreateChangeSet rejects a TemplateBody over 51,200
-	// bytes just as surely as embedding that same oversized body verbatim in
-	// a delivered artifact would be wasteful and duplicate the packaging this
-	// step already did.
-	if needsPackaging(spec.TemplateBody) || selected.Kind == kindAwsS3 {
-		s3Target, err := resolvePackagingTarget(provisionSection, selected)
-		if err != nil {
-			return summary, nil, err
-		}
-		pkg, err := uploadPackage(octx.Ctx, octx.AtmosConfig, octx.Info, s3Target, spec.TemplateBody)
-		if err != nil {
-			return summary, nil, err
-		}
-		summary["package_url"] = pkg.URL
-		summary["package_sha256"] = pkg.SHA256
-		spec.TemplateURL = pkg.URL
+	if err := packageIfNeeded(octx, provisionSection, selected, spec, summary); err != nil {
+		return summary, nil, err
 	}
 
 	if selected.Kind == cfg.CloudFormationComponentType {
@@ -87,6 +68,46 @@ func deliverApply(octx *opContext, client CloudFormationClient, spec *stackSpec)
 
 	// Any other kind (e.g. git): deliver the packaged reference generically.
 	return summary, nil, deliverToExternalTarget(octx, selected, spec, summary)
+}
+
+// packageIfNeeded uploads spec's template through a `kind: aws/s3` target and records the
+// resulting package_url/package_sha256 in summary, when the template needs it (exceeds
+// CloudFormation's inline TemplateBody limit) or an aws/s3 target was selected directly --
+// regardless of which kind ultimately receives it. A direct-deploy target (kind:
+// aws/cloudformation) needs the resulting TemplateURL just as much as an external (e.g. git)
+// target needs the packaged reference: CreateChangeSet rejects a TemplateBody over 51,200 bytes
+// just as surely as embedding that same oversized body verbatim in a delivered artifact would be
+// wasteful and duplicate the packaging this step already did. Split out of deliverApply to keep
+// it under the function-length limit.
+func packageIfNeeded(octx *opContext, provisionSection map[string]any, selected *target.SelectedTarget, spec *stackSpec, summary map[string]any) error {
+	if !needsPackaging(spec.TemplateBody) && selected.Kind != kindAwsS3 {
+		return nil
+	}
+
+	s3Target, err := resolvePackagingTarget(provisionSection, selected)
+	if err != nil {
+		return err
+	}
+
+	if err := autoProvisionBackendIfEnabled(octx.Ctx, autoProvisionArgs{
+		AtmosConfig:     octx.AtmosConfig,
+		S3Target:        s3Target,
+		ComponentConfig: octx.Info.ComponentSection,
+		AuthContext:     octx.Info.AuthContext,
+		Component:       octx.Info.ComponentFromArg,
+		Stack:           octx.Info.Stack,
+	}); err != nil {
+		return err
+	}
+
+	pkg, err := uploadPackage(octx.Ctx, octx.AtmosConfig, octx.Info, s3Target, spec.TemplateBody)
+	if err != nil {
+		return err
+	}
+	summary["package_url"] = pkg.URL
+	summary["package_sha256"] = pkg.SHA256
+	spec.TemplateURL = pkg.URL
+	return nil
 }
 
 // deployDirect executes the direct-deploy path: create (or reuse) a changeset
@@ -109,7 +130,7 @@ func deployDirect(ctx context.Context, client CloudFormationClient, spec *stackS
 		return result, err
 	}
 	if isFailedStackStatus(status) {
-		return result, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationChangeSetFailed, spec.StackName, status)
+		return result, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationOperationFailed, spec.StackName, status)
 	}
 	return result, nil
 }

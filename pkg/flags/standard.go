@@ -1142,6 +1142,12 @@ func (p *StandardFlagParser) promptForSingleMissingFlag(flagName string, result 
 		return nil // User explicitly set the value (even if empty), don't prompt.
 	}
 
+	// Skip the prompt when the caller's shouldPrompt gate returns false (e.g. a
+	// bulk/selection mode like --all or --affected where no single value applies).
+	if promptConfig.ShouldPrompt != nil && !promptConfig.ShouldPrompt(result) {
+		return nil
+	}
+
 	// Prompt for missing required flag.
 	selectedValue, err := PromptForMissingRequired(
 		flagName,
@@ -1157,6 +1163,17 @@ func (p *StandardFlagParser) promptForSingleMissingFlag(flagName string, result 
 	if selectedValue != "" {
 		result.Flags[flagName] = selectedValue
 		markFieldPrompted(result, flagName)
+
+		// Persist the selection onto the underlying Cobra flag too. Callers that
+		// read cmd.Flag(name) directly after Parse() (rather than exclusively
+		// through the returned ParsedConfig/StandardOptions) must observe the
+		// prompted value — mirroring cmd/terraform/shared.PromptForStack's
+		// existing cmd.Flag("stack").Value.Set(...) write-back.
+		if cobraFlag != nil {
+			if setErr := cobraFlag.Value.Set(selectedValue); setErr == nil {
+				cobraFlag.Changed = true
+			}
+		}
 	}
 
 	return nil

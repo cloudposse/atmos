@@ -250,7 +250,7 @@ func TestRunChangesetExecute_FailedStatus(t *testing.T) {
 	spec := &stackSpec{StackName: "vpc"}
 	_, err := runChangesetExecute(context.Background(), client, spec, "cs-1", map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 }
 
 // runChangesetList must render a "no changesets" line and leave summary's

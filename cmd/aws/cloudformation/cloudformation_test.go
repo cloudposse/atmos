@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -67,7 +68,7 @@ func TestCloudFormationCmdAttributes(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"render", "plan", "diff", "apply", "deploy", "delete", "validate", "output",
 		"changeset", "drift", "fmt", "get", "list", "source",
-		"logs", "stackset", "tree", "watch",
+		"backend", "logs", "stackset", "tree", "watch",
 	}, subcommands)
 
 	// "output" registers the "outputs" alias.
@@ -85,7 +86,7 @@ func TestCloudFormationCmdRunEShowsUsage(t *testing.T) {
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	renderCmd := newOperationCommand("render", "render", "Render")
 	for _, name := range []string{
-		"all", "affected", "include-dependents", "repo-path", "base", "ref", "sha",
+		"stack", "all", "affected", "include-dependents", "repo-path", "base", "ref", "sha",
 		"ssh-key", "ssh-key-password", "clone-target-ref", "tags", "labels",
 	} {
 		assert.NotNil(t, renderCmd.Flag(name), "expected render flag %q", name)
@@ -363,7 +364,10 @@ func TestBuildConfigAndStacksInfoWithNoTagsOrLabels(t *testing.T) {
 
 func TestApplySelectionFlagsReadsStackDryRunAllAffected(t *testing.T) {
 	cmd := newOperationCommand("apply", "apply", "Apply")
-	cmd.Flags().String("stack", "", "")
+	// --stack is now registered locally by newOperationCommand itself (see
+	// flags.WithStackFlag() in operationFlagOptions) so the missing-stack
+	// interactive prompt can populate it; re-registering it here would panic
+	// with "flag redefined: stack".
 	cmd.Flags().Bool("dry-run", false, "")
 	require.NoError(t, cmd.Flags().Set("stack", "tenant-env-stage"))
 	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
@@ -380,7 +384,10 @@ func TestApplySelectionFlagsReadsStackDryRunAllAffected(t *testing.T) {
 func TestInitConfigAndStacksInfo(t *testing.T) {
 	t.Setenv("ATMOS_IDENTITY", "dev-admin")
 	cmd := configuredOperationCommand(t, "apply", map[string]string{"all": "true"})
-	cmd.Flags().String("stack", "", "")
+	// --stack is now registered locally by newOperationCommand itself (see
+	// flags.WithStackFlag() in operationFlagOptions) so the missing-stack
+	// interactive prompt can populate it; re-registering it here would panic
+	// with "flag redefined: stack".
 	cmd.Flags().Bool("dry-run", false, "")
 	require.NoError(t, cmd.Flags().Set("stack", "tenant-env-stage"))
 	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
@@ -416,7 +423,10 @@ func TestInitConfigAndStacksInfoNoArgs(t *testing.T) {
 
 func TestApplySelectionFlagsReadsAffected(t *testing.T) {
 	cmd := newOperationCommand("apply", "apply", "Apply")
-	cmd.Flags().String("stack", "", "")
+	// --stack is now registered locally by newOperationCommand itself (see
+	// flags.WithStackFlag() in operationFlagOptions) so the missing-stack
+	// interactive prompt can populate it; re-registering it here would panic
+	// with "flag redefined: stack".
 	cmd.Flags().Bool("dry-run", false, "")
 	require.NoError(t, cmd.Flags().Set("affected", "true"))
 
@@ -444,6 +454,66 @@ func TestNewOperationCommandRunEInvokesRunOperation(t *testing.T) {
 	assert.Equal(t, "app", fake.executed[0].Component)
 	assert.Equal(t, "apply", fake.executed[0].SubCommand)
 }
+
+// Regression test for the bug where `atmos aws cloudformation apply <component>`
+// (and every other operation verb) hard-errored with "stack is required" instead
+// of interactively prompting, because --stack was only ever registered as a
+// persistent flag on CloudFormationCmd (the parent), never on
+// newOperationCommand's own per-command parser — and flags.WithCompletionPrompt
+// only takes effect for a flag registered on the SAME parser (see
+// promptForSingleMissingFlag in pkg/flags/standard.go). Before the fix, --stack
+// was not a local flag on newOperationCommand's cmd at all, so setting it below
+// on an unmounted command (as it is here, and as every other test in this file
+// constructs it) would fail with "unknown flag: --stack" — the local
+// registration only existed transitively via CloudFormationCmd.AddCommand's
+// parent/InheritedFlags() wiring in production.
+func TestNewOperationCommandRegistersStackFlagLocally(t *testing.T) {
+	original, hadOriginal := component.GetProvider(cfg.CloudFormationComponentType)
+	fake := &recordingProvider{}
+	require.NoError(t, component.Register(fake))
+	t.Cleanup(func() {
+		if hadOriginal {
+			require.NoError(t, component.Register(original))
+		}
+	})
+
+	cmd := newOperationCommand("apply", "apply", "Apply")
+	require.NotNil(t, cmd.Flag("stack"),
+		"expected apply to register --stack locally (flags.WithStackFlag() in operationFlagOptions) "+
+			"so the missing-stack interactive prompt (flags.WithConditionalCompletionPrompt in newOperationCommand) can populate it")
+
+	// --stack must actually flow through to the ExecutionContext.
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	require.NoError(t, cmd.RunE(cmd, []string{"demo"}))
+	require.Len(t, fake.executed, 1)
+	assert.Equal(t, "dev", fake.executed[0].Stack)
+}
+
+// Companion to TestNewOperationCommandRegistersStackFlagLocally: in a
+// non-interactive environment (the default for `go test`, with no TTY), the
+// missing-stack prompt must gracefully no-op rather than panic or hang, letting
+// the component still execute (downstream stack-required validation is the real
+// aws/cloudformation provider's responsibility, not exercised via this fake).
+func TestNewOperationCommandRunEWithoutStackDoesNotPanicNonInteractively(t *testing.T) {
+	original, hadOriginal := component.GetProvider(cfg.CloudFormationComponentType)
+	fake := &recordingProvider{}
+	require.NoError(t, component.Register(fake))
+	t.Cleanup(func() {
+		if hadOriginal {
+			require.NoError(t, component.Register(original))
+		}
+	})
+
+	cmd := newOperationCommand("apply", "apply", "Apply")
+	require.NoError(t, cmd.RunE(cmd, []string{"demo"}))
+	require.Len(t, fake.executed, 1)
+	assert.Empty(t, fake.executed[0].Stack, "non-interactive test environment must not hang or fabricate a stack")
+}
+
+// hasSelectionFlags gates both the component (Use Case 3) and stack (Use Case
+// 1) prompts in newOperationCommand; the stack prompt reuses the identical
+// closure already proven by TestSelectionFlagsAndComponentCompletion, so no
+// separate coverage is needed for the gating condition itself.
 
 func TestRunOperationDelegatesToRegisteredProvider(t *testing.T) {
 	original, hadOriginal := component.GetProvider(cfg.CloudFormationComponentType)
@@ -527,6 +597,35 @@ func TestCloudFormationCmd_RegistersStackSetSubcommand(t *testing.T) {
 		names = append(names, sub.Name())
 	}
 	assert.ElementsMatch(t, []string{"create", "update", "delete", "instances"}, names)
+}
+
+// CloudFormationCmd must not re-register the global flag set (--base-path,
+// --chdir, --config, --cast, --ai, --mask, --no-color, --profile,
+// --profiler-*, --redirect-stderr, --settings-list-merge-strategy, --skill,
+// --identity) as its own local persistent flags — those are already
+// registered persistently on RootCmd (cmd/root.go) and inherited by every
+// subcommand automatically. Duplicating them here (previously via
+// flags.WithCommonFlags(), which pulls in the entire
+// flags.GlobalFlagsRegistry()) shadowed the global registration with a
+// second, separately-viper-bound copy and made `atmos aws cfn --help` show
+// every global flag instead of just this command family's own. --stack and
+// --dry-run are the two flags this command family genuinely needs locally
+// (subcommands read them), matching terraform's own local-flag scope.
+func TestCloudFormationCmd_DoesNotDuplicateGlobalFlags(t *testing.T) {
+	globalOnlyFlags := []string{
+		"base-path", "chdir", "config", "config-path", "cast", "ai",
+		"force-color", "force-tty", "heatmap", "heatmap-mode", "logs-file",
+		"logs-level", "mask", "no-color", "pager", "profile", "profiler-host",
+		"profiler-port", "redirect-stderr", "settings-list-merge-strategy",
+		"skill", "edition", "identity",
+	}
+	for _, name := range globalOnlyFlags {
+		assert.Nil(t, CloudFormationCmd.PersistentFlags().Lookup(name),
+			"%q must not be locally registered on CloudFormationCmd — it is already a global RootCmd persistent flag", name)
+	}
+
+	assert.NotNil(t, CloudFormationCmd.PersistentFlags().Lookup("stack"), "expected --stack to remain a local persistent flag")
+	assert.NotNil(t, CloudFormationCmd.PersistentFlags().Lookup("dry-run"), "expected --dry-run to remain a local persistent flag")
 }
 
 // CloudFormationCmd must mount tree/logs/watch as top-level subcommands.
@@ -613,4 +712,95 @@ func TestGetOperationFlags_IncludesChart(t *testing.T) {
 	logsCmdDefault := newOperationCommand("logs", "logs", "Show the combined event log")
 	flags = getOperationFlags(logsCmdDefault)
 	assert.Equal(t, false, flags["chart"])
+}
+
+// The logs operation command must register the logs-only --follow/-f flag,
+// defaulting to false; an unrelated operation must not pick it up.
+func TestOperationSpecificFlagOptions_Logs_RegistersFollowFlag(t *testing.T) {
+	logsCmd := newOperationCommand("logs", "logs", "Show the combined event log")
+
+	followFlag := logsCmd.Flag("follow")
+	require.NotNil(t, followFlag, "expected logs to register --follow")
+	assert.Equal(t, "false", followFlag.DefValue)
+	assert.Equal(t, "f", followFlag.Shorthand)
+
+	applyCmd := newOperationCommand("apply", subCommandApply, "Create or update the stack")
+	assert.Nil(t, applyCmd.Flag("follow"), "--follow must be logs-only")
+}
+
+// getOperationFlags must surface logs' --follow flag as a bool, both when set
+// and when left at its default.
+func TestGetOperationFlags_IncludesFollow(t *testing.T) {
+	logsCmd := newOperationCommand("logs", "logs", "Show the combined event log")
+	require.NoError(t, logsCmd.Flags().Set("follow", "true"))
+
+	flags := getOperationFlags(logsCmd)
+	assert.Equal(t, true, flags["follow"])
+
+	logsCmdDefault := newOperationCommand("logs", "logs", "Show the combined event log")
+	flags = getOperationFlags(logsCmdDefault)
+	assert.Equal(t, false, flags["follow"])
+}
+
+// validateOperationArgs must reject --follow combined with --chart on logs,
+// with a clear (not silently-ignored) error.
+func TestValidateOperationArgs_RejectsFollowWithChart(t *testing.T) {
+	logsCmd := newOperationCommand("logs", "logs", "Show the combined event log")
+	require.NoError(t, logsCmd.Flags().Set("follow", "true"))
+	require.NoError(t, logsCmd.Flags().Set("chart", "true"))
+
+	err := validateOperationArgs(logsCmd, []string{"demo"})
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationLogsFollowChartExclusive)
+}
+
+// --labels must be repeatable (like --tags), accumulating across occurrences
+// via pflag's StringSlice type, rather than the last one winning.
+func TestApplyTagsAndLabelsFlags_LabelsRepeatAccumulates(t *testing.T) {
+	applyCmd := newOperationCommand("apply", subCommandApply, "Create or update the stack")
+	require.NoError(t, applyCmd.Flags().Set(flagLabels, "cost-center=platform"))
+	require.NoError(t, applyCmd.Flags().Set(flagLabels, "compliance=sox"))
+
+	info := &schema.ConfigAndStacksInfo{}
+	applyTagsAndLabelsFlags(applyCmd, info)
+
+	assert.Equal(t, map[string]string{"cost-center": "platform", "compliance": "sox"}, info.Labels)
+}
+
+// validateOperationArgs must accept --follow alone (no --chart) on logs.
+func TestValidateOperationArgs_AcceptsFollowAlone(t *testing.T) {
+	logsCmd := newOperationCommand("logs", "logs", "Show the combined event log")
+	require.NoError(t, logsCmd.Flags().Set("follow", "true"))
+
+	err := validateOperationArgs(logsCmd, []string{"demo"})
+	require.NoError(t, err)
+}
+
+// validateOperationArgs must be a no-op for the --follow/--chart check on
+// commands that don't register those flags at all (every verb except logs).
+func TestValidateOperationArgs_FollowChartCheckIsNoOpOnOtherCommands(t *testing.T) {
+	applyCmd := newOperationCommand("apply", subCommandApply, "Create or update the stack")
+	err := validateOperationArgs(applyCmd, []string{"demo"})
+	require.NoError(t, err)
+}
+
+// validateOperationArgs must reject --include-dependents without --affected —
+// graphSelectionForBulk only reads it inside the --affected branch, so passing
+// it with --all (or bare) would otherwise silently do nothing.
+func TestValidateOperationArgs_RejectsIncludeDependentsWithoutAffected(t *testing.T) {
+	applyCmd := newOperationCommand("apply", subCommandApply, "Create or update the stack")
+	require.NoError(t, applyCmd.Flags().Set("include-dependents", "true"))
+	require.NoError(t, applyCmd.Flags().Set(flagAll, "true"))
+
+	err := validateOperationArgs(applyCmd, nil)
+	require.ErrorIs(t, err, errUtils.ErrAwsCloudFormationIncludeDependentsRequiresAffected)
+}
+
+// validateOperationArgs must accept --include-dependents when --affected is set.
+func TestValidateOperationArgs_AcceptsIncludeDependentsWithAffected(t *testing.T) {
+	applyCmd := newOperationCommand("apply", subCommandApply, "Create or update the stack")
+	require.NoError(t, applyCmd.Flags().Set("include-dependents", "true"))
+	require.NoError(t, applyCmd.Flags().Set(flagAffected, "true"))
+
+	err := validateOperationArgs(applyCmd, nil)
+	require.NoError(t, err)
 }

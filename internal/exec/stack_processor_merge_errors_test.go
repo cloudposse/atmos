@@ -333,6 +333,8 @@ func TestMergeComponentConfigurations_HelmMergeErrors(t *testing.T) {
 // failures, mirroring TestMergeComponentConfigurations_HelmMergeErrors for
 // the aws/cloudformation type.
 func TestMergeComponentConfigurations_CloudFormationMergeError(t *testing.T) {
+	t.Parallel()
+
 	atmosCfg := &schema.AtmosConfiguration{}
 	opts := ComponentProcessorOptions{
 		ComponentType:  cfg.CloudFormationComponentType,
