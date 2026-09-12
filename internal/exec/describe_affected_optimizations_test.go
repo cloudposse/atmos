@@ -2198,6 +2198,8 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 	})
 
 	t.Run("helm component changed", func(t *testing.T) {
+		t.Parallel()
+
 		helmPath := filepath.Join(tempDir, "components/helm/nginx-ingress")
 		err := os.MkdirAll(helmPath, 0o755)
 		require.NoError(t, err)

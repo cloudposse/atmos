@@ -614,6 +614,8 @@ func cfnAtmosConfig() *schema.AtmosConfiguration {
 // to stack_name retargets the deployed CloudFormation stack entirely, so it must be
 // detected the same as template/parameters/etc.
 func TestAddCloudFormationSectionAffected(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		section    string
@@ -636,6 +638,8 @@ func TestAddCloudFormationSectionAffected(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			componentSection := map[string]any{tt.section: tt.localVal}
 			remoteStacks := cfnRemoteStacksWith(map[string]any{tt.section: tt.remoteVal})
 
@@ -656,6 +660,8 @@ func TestAddCloudFormationSectionAffected(t *testing.T) {
 }
 
 func TestAddCloudFormationSectionAffected_NoFalsePositives(t *testing.T) {
+	t.Parallel()
+
 	componentSection := map[string]any{sectionNameStackName: "vpc-prod"}
 	remoteStacks := cfnRemoteStacksWith(map[string]any{sectionNameStackName: "vpc-prod"})
 
@@ -760,6 +766,8 @@ func TestAddCloudFormationSectionAffected_SectionAdded(t *testing.T) {
 // a metadata change, a first-class section change (stack_name), and a settings
 // change must all surface as distinct affected reasons for the same component.
 func TestProcessCloudFormationComponentsIndexed(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := cfnAtmosConfig()
 	cloudFormationSection := map[string]any{
 		cfnTestComponent: map[string]any{
@@ -793,6 +801,8 @@ func TestProcessCloudFormationComponentsIndexed(t *testing.T) {
 }
 
 func TestProcessCloudFormationComponentsIndexed_NotAffected(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := cfnAtmosConfig()
 	identical := map[string]any{
 		sectionNameMetadata:  map[string]any{"component": "vpc-v1"},
@@ -816,7 +826,10 @@ func TestProcessCloudFormationComponentsIndexed_NotAffected(t *testing.T) {
 	assert.Empty(t, affected)
 }
 
+//nolint:dupl // Test logic is intentionally similar across component types (mirrors TestProcessHelmComponentsIndexed_FolderChanged) for consistency.
 func TestProcessCloudFormationComponentsIndexed_FolderChanged(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := cfnAtmosConfig()
 	cloudFormationSection := map[string]any{
 		cfnTestComponent: map[string]any{
@@ -846,7 +859,10 @@ func TestProcessCloudFormationComponentsIndexed_FolderChanged(t *testing.T) {
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonComponent)
 }
 
+//nolint:dupl // Test logic is intentionally similar across component types (mirrors TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections) for consistency.
 func TestProcessCloudFormationComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := cfnAtmosConfig()
 	remoteStacks := cfnRemoteStacksWith(map[string]any{
 		sectionNameStackName: "vpc-staging",
@@ -855,6 +871,8 @@ func TestProcessCloudFormationComponentsIndexed_SkipsAbstractLockedAndInvalidSec
 	patternCache := newComponentPathPatternCache()
 
 	t.Run("abstract skipped", func(t *testing.T) {
+		t.Parallel()
+
 		cloudFormationSection := map[string]any{
 			cfnTestComponent: map[string]any{
 				sectionNameMetadata:  map[string]any{"type": "abstract"},
@@ -872,6 +890,8 @@ func TestProcessCloudFormationComponentsIndexed_SkipsAbstractLockedAndInvalidSec
 	})
 
 	t.Run("locked skipped when excluded", func(t *testing.T) {
+		t.Parallel()
+
 		cloudFormationSection := map[string]any{
 			cfnTestComponent: map[string]any{
 				sectionNameMetadata:  map[string]any{"locked": true},
@@ -889,6 +909,8 @@ func TestProcessCloudFormationComponentsIndexed_SkipsAbstractLockedAndInvalidSec
 	})
 
 	t.Run("non-map component section skipped", func(t *testing.T) {
+		t.Parallel()
+
 		affected, err := processCloudFormationComponentsIndexed(
 			cfnTestStack, map[string]any{cfnTestComponent: "invalid"}, &remoteStacks, &remoteStacks,
 			atmosConfig, filesIndex, patternCache,
@@ -905,6 +927,8 @@ func TestProcessCloudFormationComponentsIndexed_SkipsAbstractLockedAndInvalidSec
 // processCloudFormationComponentsIndexed alongside terraform/helmfile/packer/
 // ansible/kubernetes/helm.
 func TestProcessStackAffected_CloudFormationSection(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := cfnAtmosConfig()
 
 	stackSection := map[string]any{

@@ -284,25 +284,32 @@ func componentTypeHasExplicitBasePath(atmosConfig *schema.AtmosConfiguration, co
 		return true
 	}
 
+	return configuredBasePathForComponentType(atmosConfig, componentType) != ""
+}
+
+// configuredBasePathForComponentType returns the raw base_path configured for componentType,
+// or an empty string if componentType is unknown or has no configured base_path. Split out of
+// componentTypeHasExplicitBasePath to keep cyclomatic complexity within the linter's limit.
+func configuredBasePathForComponentType(atmosConfig *schema.AtmosConfiguration, componentType string) string {
 	switch componentType {
 	case "terraform":
-		return atmosConfig.Components.Terraform.BasePath != ""
+		return atmosConfig.Components.Terraform.BasePath
 	case "helmfile":
-		return atmosConfig.Components.Helmfile.BasePath != ""
+		return atmosConfig.Components.Helmfile.BasePath
 	case "packer":
-		return atmosConfig.Components.Packer.BasePath != ""
+		return atmosConfig.Components.Packer.BasePath
 	case "ansible":
-		return atmosConfig.Components.Ansible.BasePath != ""
+		return atmosConfig.Components.Ansible.BasePath
 	case "kubernetes":
-		return atmosConfig.Components.Kubernetes.BasePath != ""
+		return atmosConfig.Components.Kubernetes.BasePath
 	case "helm":
-		return atmosConfig.Components.Helm.BasePath != ""
+		return atmosConfig.Components.Helm.BasePath
 	case "container":
-		return atmosConfig.Components.Container.BasePath != ""
+		return atmosConfig.Components.Container.BasePath
 	case "aws/cloudformation":
-		return atmosConfig.Components.CloudFormation.BasePath != ""
+		return atmosConfig.Components.CloudFormation.BasePath
 	default:
-		return false
+		return ""
 	}
 }
 
