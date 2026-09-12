@@ -363,6 +363,56 @@ func TestRunLogs_MergesAndSortsAcrossStacks(t *testing.T) {
 	assert.Less(t, childIdx, rootIdx, "events must be merged in chronological order")
 }
 
+// runLogs must use a stable sort: when the root and a nested stack's events
+// share the exact same timestamp, the API-provided order (root's events
+// before its nested stack's, per flattenStackNames) must be preserved instead
+// of sort.Slice's unspecified tie-breaking, which could reorder them
+// differently across otherwise-identical runs.
+func TestRunLogs_StableSortPreservesOrderForEqualTimestamps(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	tied := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	gomock.InOrder(
+		client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString("root")}).Return(&cloudformation.ListStackResourcesOutput{
+			StackResourceSummaries: []cfntypes.StackResourceSummary{
+				{ResourceType: awsString(nestedStackResourceType), PhysicalResourceId: awsString("child")},
+			},
+		}, nil),
+		client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString("child")}).Return(&cloudformation.ListStackResourcesOutput{}, nil),
+	)
+
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("root-1"), LogicalResourceId: awsString("RootResource"), Timestamp: &tied},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("child-1"), LogicalResourceId: awsString("ChildResource"), Timestamp: &tied},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+
+	out := captureStderr(t, func() {
+		summary, err := runLogs(context.Background(), client, "root", false, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, 2, summary["event_count"])
+	})
+
+	// With equal timestamps, the root's event (collected first, per
+	// flattenStackNames' root-before-children order) must still print first.
+	rootIdx := indexOf(t, out, "RootResource")
+	childIdx := indexOf(t, out, "ChildResource")
+	assert.Less(t, rootIdx, childIdx, "a stable sort must preserve API order for equal-timestamp events")
+}
+
 // indexOf is a small test helper returning the index of substr in s, failing
 // the test if it's not found.
 func indexOf(t *testing.T, s, substr string) int {

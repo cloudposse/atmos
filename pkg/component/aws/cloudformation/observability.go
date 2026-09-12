@@ -145,7 +145,11 @@ func runLogs(ctx context.Context, client CloudFormationClient, stackName string,
 		}
 		allEvents = append(allEvents, events...)
 	}
-	sort.Slice(allEvents, func(i, j int) bool {
+	// SliceStable (not Slice): preserves the per-nested-stack API order for events
+	// with equal timestamps, so the flat log and resource timeline render
+	// deterministically instead of varying whenever the API returns equal-timestamp
+	// events in a different order across runs.
+	sort.SliceStable(allEvents, func(i, j int) bool {
 		return timeValue(allEvents[i].Timestamp).Before(timeValue(allEvents[j].Timestamp))
 	})
 	summary["event_count"] = len(allEvents)
