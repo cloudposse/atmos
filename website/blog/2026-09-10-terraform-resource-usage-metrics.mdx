@@ -1,0 +1,71 @@
+---
+slug: terraform-resource-usage-metrics
+title: "Right-size CI runners with real Terraform resource data"
+date: 2026-09-10T13:00:00.000Z
+authors: [osterman]
+tags: [feature]
+---
+
+Every CI runner — a GitHub-hosted tier or a self-hosted pool — has to be sized before a single job runs
+on it. Get it wrong small and jobs queue or get OOM-killed on a memory-hungry provider plugin; get it
+wrong large and every job pays for idle capacity it never touches. Nothing in a pipeline's output tells
+you which side of that line you're on.
+
+<!--truncate-->
+
+## The Problem
+
+Right-sizing a runner pool means knowing what a job actually costs to run, and Terraform is usually the
+most expensive step in the pipeline. But teams size runners by guessing, then watching for OOM kills or
+timeouts and bumping the tier — because nothing reports what a `plan` or `apply` actually consumed. That
+guessing game repeats for every new component, every provider version bump, and every runner generation,
+whether the pipeline runs on plain GitHub Actions, Atmos alone, or Atmos Pro.
+
+## The Fix
+
+`terraform plan`, `apply`, and `deploy` now measure the actual resource cost of the run: the terraform
+process itself and everything it spawns — provider plugins and any other child processes — not just the
+negligible overhead of the Atmos CLI wrapper around it. When each component's command finishes, Atmos
+prints a one-line summary identifying which component and stack it covers — important in a
+multi-component `--all`/`--affected` run, where this line prints once per component:
+
+```
+▶ Completed vpc (dev) in 45.2s | CPU: 12.3s user, 4.1s sys | Peak memory: 512 MB
+```
+
+At the end of the whole invocation, Atmos also prints one aggregate summary covering everything that ran:
+
+```
+▶ Total for this invocation in 3m12.4s | CPU: 48.9s user, 16.2s sys | Peak memory: 780 MB
+```
+
+The same, more accurate numbers now flow into the execution data Atmos Pro receives for CI runs, and — when
+[Native CI](/cli/configuration/ci) is active — into the GitHub Actions job summary itself, right next to the
+resource-change badges:
+
+```
+📊 Resource usage: 45.2s wall · 12.3s user / 4.1s sys CPU · 512.0 MB peak memory
+```
+
+Instead of guessing at a runner tier and adjusting after the fact, size a pool from real peak-memory and
+CPU-time numbers per component, visible directly in the run UI — and re-check that sizing whenever a
+provider version bump or a new component changes the actual footprint.
+
+## How to Use It
+
+Both summary lines are on by default — no setup required. If you'd rather not see them (for example, in
+a scripted context where you don't want the extra output), turn them off with one setting:
+
+```yaml
+settings:
+  metrics:
+    enabled: false
+```
+
+This only controls local terminal output; it never affects what Atmos Pro receives. See the
+[Metrics settings](/cli/configuration/settings/metrics) docs for details.
+
+## Get Involved
+
+Have feedback on this feature? [Open an issue](https://github.com/cloudposse/atmos/issues) or join the
+conversation in the [Cloud Posse community Slack](https://cloudposse.com/slack).

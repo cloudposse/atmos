@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 
@@ -151,6 +152,14 @@ func (p *Plugin) buildTemplateContext(
 	// Return extended context with terraform-specific fields.
 	tfCtx := NewTemplateContext(baseCtx, tfData)
 	tfCtx.TestResult = testData
+
+	// info.ExecMetadataRawMetrics is typed `any` (not *metricsprocess.ProcessMetrics)
+	// to avoid an import cycle (pkg/metrics/process imports pkg/schema for its own
+	// settings gate) — same type-assertion pattern as internal/exec/terraform.go's
+	// captureExecMetadataSync. A nil or mistyped value just means no summary line.
+	rawMetrics, _ := info.ExecMetadataRawMetrics.(*metricsprocess.ProcessMetrics)
+	tfCtx.Metrics = newTerraformMetricsSummary(rawMetrics)
+
 	return tfCtx, nil
 }
 

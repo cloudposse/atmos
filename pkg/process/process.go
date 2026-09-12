@@ -10,6 +10,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 )
 
 // Runner executes a task and returns the observed process result.
@@ -47,6 +48,11 @@ type Result struct {
 	SignalNumber int
 	StartedAt    time.Time
 	FinishedAt   time.Time
+	// Metrics captures the subprocess tree's (this command plus any children,
+	// e.g. terraform plus its provider plugins) resource usage, collected
+	// from cmd.ProcessState once cmd.Wait() returns. Nil when the process
+	// never started (e.g. cmd.Start() failed or DryRun was set).
+	Metrics *metricsprocess.ProcessMetrics
 }
 
 // Success reports whether the subprocess completed with exit code 0.
@@ -100,6 +106,14 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 	result.StartedAt = time.Now()
 
 	err := cmd.Wait()
+	// Collect subprocess-tree metrics unconditionally, once, regardless of
+	// success/failure — cmd.ProcessState is populated by Wait() either way,
+	// and callers (e.g. the exec-metadata upload) need usage data even for a
+	// failed run. Accumulate into the process-wide running total so the
+	// end-of-invocation aggregate summary (DisplayFinalSummary) covers every
+	// subprocess spawned during the whole atmos run, not just the last one.
+	result.Metrics = metricsprocess.CollectFromProcessState(cmd, time.Since(result.StartedAt))
+	metricsprocess.Accumulate(result.Metrics)
 	if err == nil {
 		return result
 	}

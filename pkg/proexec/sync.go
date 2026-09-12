@@ -46,8 +46,7 @@ func CaptureSync(atmosConfig *schema.AtmosConfiguration, in *ExecRecordInput) er
 			return
 		}
 
-		metrics := processBaseline.Since()
-		req, buildErr := buildRecord(in, &metrics, git.NewDefaultGitRepo())
+		req, buildErr := buildRecord(in, git.NewDefaultGitRepo())
 		if buildErr != nil {
 			resultCh <- buildErr
 			return

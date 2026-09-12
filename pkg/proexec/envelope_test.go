@@ -63,7 +63,7 @@ func TestBuildRecord_FieldPopulation(t *testing.T) {
 		sha: "deadbeef",
 	}
 
-	req, err := buildRecord(&ExecRecordInput{Command: "terraform plan"}, testMetrics(), repo)
+	req, err := buildRecord(&ExecRecordInput{Command: "terraform plan", Metrics: testMetrics()}, repo)
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
@@ -90,9 +90,9 @@ func TestBuildRecord_FieldPopulation(t *testing.T) {
 func TestBuildRecord_ExecutionIDIsFreshUUIDPerCall(t *testing.T) {
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
 
-	req1, err := buildRecord(&ExecRecordInput{Command: "terraform plan"}, testMetrics(), repo)
+	req1, err := buildRecord(&ExecRecordInput{Command: "terraform plan", Metrics: testMetrics()}, repo)
 	require.NoError(t, err)
-	req2, err := buildRecord(&ExecRecordInput{Command: "terraform plan"}, testMetrics(), repo)
+	req2, err := buildRecord(&ExecRecordInput{Command: "terraform plan", Metrics: testMetrics()}, repo)
 	require.NoError(t, err)
 
 	require.NotEmpty(t, req1.ExecutionID)
@@ -117,7 +117,8 @@ func TestBuildRecord_ArgsAndFlagsShape(t *testing.T) {
 		Command: "terraform plan",
 		Args:    []string{"cdn"},
 		Flags:   []string{"-s", "plat-use2-dev", "--upload-status"},
-	}, testMetrics(), repo)
+		Metrics: testMetrics(),
+	}, repo)
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
@@ -131,7 +132,7 @@ func TestBuildRecord_ArgsAndFlagsShape(t *testing.T) {
 func TestBuildRecord_NilDataOmittedFromJSON(t *testing.T) {
 	repo := &fakeGitRepo{info: &git.RepoInfo{}}
 
-	req, err := buildRecord(&ExecRecordInput{Command: "atmos list components"}, testMetrics(), repo)
+	req, err := buildRecord(&ExecRecordInput{Command: "atmos list components", Metrics: testMetrics()}, repo)
 	require.NoError(t, err)
 
 	b, err := json.Marshal(req)
@@ -151,7 +152,7 @@ func TestBuildRecord_DataPresentWhenGiven(t *testing.T) {
 		Foo string `json:"foo"`
 	}
 
-	req, err := buildRecord(&ExecRecordInput{Command: "atmos terraform plan", Data: sample{Foo: "bar"}}, testMetrics(), repo)
+	req, err := buildRecord(&ExecRecordInput{Command: "atmos terraform plan", Data: sample{Foo: "bar"}, Metrics: testMetrics()}, repo)
 	require.NoError(t, err)
 
 	b, err := json.Marshal(req)
@@ -184,7 +185,7 @@ func TestBuildRecord_DataAsArrayWhenGiven(t *testing.T) {
 		{Action: "updated", Address: "aws_iam_role.example"},
 	}
 
-	req, err := buildRecord(&ExecRecordInput{Command: "atmos terraform plan", Data: items}, testMetrics(), repo)
+	req, err := buildRecord(&ExecRecordInput{Command: "atmos terraform plan", Data: items, Metrics: testMetrics()}, repo)
 	require.NoError(t, err)
 	require.NotNil(t, req.Data)
 
@@ -209,7 +210,8 @@ func TestBuildRecord_SecretMaskingAppliedToData(t *testing.T) {
 	req, err := buildRecord(&ExecRecordInput{
 		Command: "atmos terraform plan",
 		Data:    sample{AWSKey: "AKIAIOSFODNN7EXAMPLE"},
-	}, testMetrics(), repo)
+		Metrics: testMetrics(),
+	}, repo)
 	require.NoError(t, err)
 	require.NotNil(t, req.Data)
 	var decoded map[string]any
@@ -247,7 +249,8 @@ func TestBuildRecord_BothMaskingLayersRunIndependently(t *testing.T) {
 	req, err := buildRecord(&ExecRecordInput{
 		Command: "atmos terraform apply",
 		Data:    data,
-	}, testMetrics(), repo)
+		Metrics: testMetrics(),
+	}, repo)
 	require.NoError(t, err)
 	require.NotNil(t, req.Data)
 
@@ -274,7 +277,7 @@ func TestBuildRecord_GitInfoErrorsAreNonFatal(t *testing.T) {
 		shaErr:  assertError("no sha"),
 	}
 
-	req, err := buildRecord(&ExecRecordInput{Command: "atmos version"}, testMetrics(), repo)
+	req, err := buildRecord(&ExecRecordInput{Command: "atmos version", Metrics: testMetrics()}, repo)
 	require.NoError(t, err)
 	assert.Equal(t, "", req.GitSHA)
 	assert.Equal(t, "", req.RepoURL)
