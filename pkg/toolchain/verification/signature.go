@@ -10,6 +10,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
@@ -482,7 +483,9 @@ func sidecarURL(tool *registry.Tool, version, assetURL string, sidecar *registry
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", repoOwner, repoName, releaseVersion, sidecarAsset), nil
+	// Signature sidecars live alongside the tool's own release asset; see the equivalent
+	// comment in verification/checksum.go for why this uses the toolchain endpoints.
+	return ghtoken.ToolchainEndpoints().ReleaseAssetURL(repoOwner, repoName, releaseVersion, sidecarAsset), nil
 }
 
 func sidecarReleaseVersion(tool *registry.Tool, version, assetURL, assetName string) (string, error) {

@@ -148,6 +148,22 @@ func defaultArtifactFetcherWithToken(ctx context.Context, token string) *Artifac
 	}
 }
 
+// NewToolchainArtifactFetcher returns an ArtifactFetcher backed by a GitHub client scoped to
+// ToolchainEndpoints rather than RepoEndpoints. Use this (instead of the free GetPRArtifactInfo/
+// GetPRHeadSHA/GetSHAArtifactInfo/GetRefSHA functions) when fetching build artifacts of a
+// toolchain-managed repository -- e.g. atmos's own PR/SHA/ref build artifacts for self-install --
+// which live on public github.com by default even for GHES users.
+func NewToolchainArtifactFetcher(ctx context.Context) *ArtifactFetcher {
+	defer perf.Track(nil, "github.NewToolchainArtifactFetcher")()
+
+	client := newToolchainGitHubClient(ctx)
+	return &ArtifactFetcher{
+		pullRequests: client.PullRequests,
+		actions:      client.Actions,
+		repositories: client.Repositories,
+	}
+}
+
 // GetPRArtifactInfo retrieves build artifact information for a PR.
 // This finds the latest successful workflow run for the PR and locates
 // the artifact matching the current platform.

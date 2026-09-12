@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -58,10 +59,32 @@ func newGitHubClient(ctx context.Context) *github.Client {
 	return newGitHubClientWithToken(ctx, githubToken)
 }
 
-// newGitHubClientWithToken creates a new GitHub client with an explicit token.
-// If token is empty, it returns an unauthenticated client.
+// newGitHubClientWithToken creates a new GitHub client with an explicit token, scoped to
+// RepoEndpoints (the user's own repositories: GITHUB_SERVER_URL/GITHUB_API_URL). If token is
+// empty, it returns an unauthenticated client. When RepoEndpoints resolves to a GitHub
+// Enterprise Server host, the client is pointed at that instance via go-github's
+// WithEnterpriseURLs instead of public github.com.
 func newGitHubClientWithToken(ctx context.Context, token string) *github.Client {
 	defer perf.Track(nil, "github.newGitHubClientWithToken")()
+
+	return newGitHubClientForEndpoints(ctx, token, RepoEndpoints())
+}
+
+// newToolchainGitHubClient creates a new GitHub client scoped to ToolchainEndpoints instead of
+// RepoEndpoints. Toolchain-managed repositories (e.g. atmos's own PR/SHA/ref build artifacts
+// used for self-install, or an arbitrary tool's release versions) live on public github.com by
+// default even for GHES users, which is a separate concern from where the user's own
+// repositories live -- see ToolchainEndpoints' doc comment.
+func newToolchainGitHubClient(ctx context.Context) *github.Client {
+	defer perf.Track(nil, "github.newToolchainGitHubClient")()
+
+	return newGitHubClientForEndpoints(ctx, GetGitHubToken(), ToolchainEndpoints())
+}
+
+// newGitHubClientForEndpoints builds an authenticated (or, if token is empty, unauthenticated)
+// *github.Client with an HTTP timeout, pointed at endpoints.
+func newGitHubClientForEndpoints(ctx context.Context, token string, endpoints Endpoints) *github.Client {
+	defer perf.Track(nil, "github.newGitHubClientForEndpoints")()
 
 	// Create HTTP client with timeout to prevent hangs in CI environments
 	// when network is unavailable or DNS resolution fails.
@@ -69,19 +92,42 @@ func newGitHubClientWithToken(ctx context.Context, token string) *github.Client 
 		Timeout: defaultHTTPTimeout,
 	}
 
+	var httpClient *http.Client
 	if token == "" {
-		return github.NewClient(baseClient)
+		httpClient = baseClient
+	} else {
+		// Token found, create an authenticated client with timeout.
+		ts := oauth2.StaticTokenSource(
+			&oauth2.Token{AccessToken: token},
+		)
+		// Create oauth2 client with our timeout-configured base transport.
+		tc := oauth2.NewClient(ctx, ts)
+		tc.Timeout = defaultHTTPTimeout
+		httpClient = tc
 	}
 
-	// Token found, create an authenticated client with timeout.
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: token},
-	)
-	// Create oauth2 client with our timeout-configured base transport.
-	tc := oauth2.NewClient(ctx, ts)
-	tc.Timeout = defaultHTTPTimeout
+	return newScopedClient(httpClient, endpoints)
+}
 
-	return github.NewClient(tc)
+// newScopedClient builds a *github.Client from httpClient, pointed at GitHub.com by default or
+// at a GitHub Enterprise Server instance when endpoints resolves a non-default server host or
+// API URL. Checking APIURL in addition to Host honors an API-only override (e.g.
+// ATMOS_TOOLCHAIN_GITHUB_API_URL pointed at a corporate API proxy while the server/web host
+// stays github.com) that would otherwise be silently ignored. An error building the enterprise
+// client (malformed URL) falls back to the public client rather than failing the caller
+// outright, matching Endpoints' own fail-open behavior for invalid endpoint URLs.
+func newScopedClient(httpClient *http.Client, endpoints Endpoints) *github.Client {
+	if endpoints.isDefaultGitHubCom() && endpoints.APIURL == defaultGitHubAPIURL {
+		return github.NewClient(httpClient)
+	}
+
+	client, err := github.NewClient(httpClient).WithEnterpriseURLs(endpoints.APIURL, endpoints.UploadURL)
+	if err != nil {
+		log.Debug("Failed to build GitHub Enterprise Server client; falling back to github.com client",
+			"apiURL", endpoints.APIURL, "uploadURL", endpoints.UploadURL, "error", err)
+		return github.NewClient(httpClient)
+	}
+	return client
 }
 
 // handleGitHubAPIError converts GitHub API errors to more descriptive error messages,
@@ -135,9 +181,12 @@ func handleGitHubAPIError(err error, resp *github.Response) error {
 }
 
 // ConvertToRawURL converts a GitHub repository URL to its raw content URL.
-// Supports various GitHub URL formats and converts them to raw.githubusercontent.com URLs.
+// Supports various GitHub URL formats and converts them to raw content URLs: on
+// github.com that is raw.githubusercontent.com; on a GitHub Enterprise Server host
+// configured via RepoEndpoints (GITHUB_SERVER_URL/GITHUB_API_URL), raw content is served
+// from the same host under /raw/ instead.
 //
-// Examples:
+// Examples (github.com):
 //   - https://github.com/owner/repo/blob/main/path/file.yaml
 //     → https://raw.githubusercontent.com/owner/repo/main/path/file.yaml
 //   - https://github.com/owner/repo/tree/v1.0.0/path
@@ -160,21 +209,29 @@ func ConvertToRawURL(githubURL string) (string, error) {
 		return "", fmt.Errorf("%w: %w", ErrInvalidGitHubURL, err)
 	}
 
-	// Already a raw URL.
-	if u.Host == "raw.githubusercontent.com" {
+	// Already a raw URL (github.com's raw.githubusercontent.com, or a GHES host's own /raw/ path).
+	endpoints := RepoEndpoints()
+	if u.Host == "raw.githubusercontent.com" || (endpoints.Host != defaultGitHubServerHost && endpoints.IsHost(u.Host) && strings.HasPrefix(u.Path, "/raw/")) {
 		return githubURL, nil
 	}
 
-	// Must be github.com.
-	if u.Host != "github.com" {
-		return "", fmt.Errorf("%w: %s (expected github.com)", ErrUnsupportedGitHubHost, u.Host)
+	// Select the endpoints matching this URL's host: an explicit github.com URL always resolves
+	// against the public endpoints, even when RepoEndpoints (GITHUB_SERVER_URL) points at a
+	// different GitHub Enterprise Server host -- otherwise a literal github.com link would be
+	// rewritten to "<GHES>/raw/..." instead of raw.githubusercontent.com. Only URLs on the
+	// configured GHES host use RepoEndpoints.
+	switch {
+	case u.Host == defaultGitHubServerHost:
+		return parseGitHubDotComURL(newEndpoints(defaultGitHubServerURL, defaultGitHubAPIURL), u.Path)
+	case endpoints.IsHost(u.Host):
+		return parseGitHubDotComURL(endpoints, u.Path)
+	default:
+		return "", fmt.Errorf("%w: %s (expected github.com or the configured GitHub Enterprise Server host)", ErrUnsupportedGitHubHost, u.Host)
 	}
-
-	return parseGitHubDotComURL(u.Path)
 }
 
-// parseGitHubDotComURL parses a github.com URL path and converts it to raw URL.
-func parseGitHubDotComURL(path string) (string, error) {
+// parseGitHubDotComURL parses a github.com (or GHES) URL path and converts it to a raw URL.
+func parseGitHubDotComURL(endpoints Endpoints, path string) (string, error) {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	if len(parts) < 2 {
 		return "", fmt.Errorf("%w: path %s (expected at least owner/repo)", ErrInvalidGitHubURL, path)
@@ -185,14 +242,14 @@ func parseGitHubDotComURL(path string) (string, error) {
 
 	// Default to main branch if no additional parts.
 	if len(parts) == 2 {
-		return fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/main", owner, repo), nil
+		return endpoints.RawURL(owner, repo, "main", ""), nil
 	}
 
-	return parseGitHubPathWithRef(owner, repo, parts[2:], path)
+	return parseGitHubPathWithRef(endpoints, owner, repo, parts[2:], path)
 }
 
 // parseGitHubPathWithRef parses a GitHub path with blob/tree and ref components.
-func parseGitHubPathWithRef(owner, repo string, pathParts []string, originalPath string) (string, error) {
+func parseGitHubPathWithRef(endpoints Endpoints, owner, repo string, pathParts []string, originalPath string) (string, error) {
 	if len(pathParts) < 2 {
 		return "", fmt.Errorf("%w: path %s (expected owner/repo/blob|tree/ref)", ErrInvalidGitHubURL, originalPath)
 	}
@@ -205,16 +262,7 @@ func parseGitHubPathWithRef(owner, repo string, pathParts []string, originalPath
 	ref := pathParts[1]
 	fileParts := pathParts[2:]
 
-	return buildRawURL(owner, repo, ref, fileParts), nil
-}
-
-// buildRawURL constructs a raw.githubusercontent.com URL.
-func buildRawURL(owner, repo, ref string, pathParts []string) string {
-	rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s", owner, repo, ref)
-	if len(pathParts) > 0 {
-		rawURL = fmt.Sprintf("%s/%s", rawURL, strings.Join(pathParts, "/"))
-	}
-	return rawURL
+	return endpoints.RawURL(owner, repo, ref, strings.Join(fileParts, "/")), nil
 }
 
 // convertGitHubSchemeToRaw converts github:// scheme URLs to raw content URLs.
@@ -244,8 +292,8 @@ func convertGitHubSchemeToRaw(githubURL string) (string, error) {
 	repo := pathComponents[1]
 	filePath := ""
 	if len(pathComponents) > 2 {
-		filePath = "/" + strings.Join(pathComponents[2:], "/")
+		filePath = strings.Join(pathComponents[2:], "/")
 	}
 
-	return fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s%s", owner, repo, ref, filePath), nil
+	return RepoEndpoints().RawURL(owner, repo, ref, filePath), nil
 }

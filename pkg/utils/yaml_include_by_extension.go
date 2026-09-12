@@ -242,11 +242,18 @@ func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile strin
 	return dl.FetchAndParseByExtension(downloadURL)
 }
 
-// isGitHubURL checks if the URL is a GitHub URL that needs conversion.
+// isGitHubURL checks if the URL is a GitHub (or configured GitHub Enterprise Server) URL that
+// needs conversion to raw content via github.ConvertToRawURL.
 func isGitHubURL(url string) bool {
-	return strings.HasPrefix(url, "https://github.com/") ||
+	if strings.HasPrefix(url, "https://github.com/") ||
 		strings.HasPrefix(url, "http://github.com/") ||
-		strings.HasPrefix(url, "github://")
+		strings.HasPrefix(url, "github://") {
+		return true
+	}
+	if host := github.RepoEndpoints().Host; host != "github.com" {
+		return strings.HasPrefix(url, "https://"+host+"/") || strings.HasPrefix(url, "http://"+host+"/")
+	}
+	return false
 }
 
 // handleCommentString updates the node for string values that start with '#'.

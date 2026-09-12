@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -368,8 +369,10 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 }
 
 // fetchGitHubVersions fetches available versions and titles from GitHub releases.
+// Uses the toolchain endpoints (ATMOS_TOOLCHAIN_GITHUB_API_URL), not the repo endpoints:
+// aqua-registry tool releases live on public github.com even for GHES users, by default.
 func fetchGitHubVersions(owner, repo string) ([]versionItem, error) {
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", owner, repo)
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=100", github.ToolchainEndpoints().APIURL, owner, repo)
 
 	resp, err := makeGitHubRequest(apiURL)
 	if err != nil {
@@ -434,7 +437,8 @@ func githubBackoffDelay(attempt int) time.Duration {
 func makeGitHubRequest(apiURL string) (*http.Response, error) {
 	token := viper.GetString("github-token")
 	client := &http.Client{
-		Timeout: defaultHTTPTimeout,
+		Timeout:       defaultHTTPTimeout,
+		CheckRedirect: stripAuthOnNonHTTPSRedirect,
 	}
 
 	var lastErr error
@@ -443,11 +447,15 @@ func makeGitHubRequest(apiURL string) (*http.Response, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToCreateRequest, err)
 		}
-		if token != "" {
+		// Only send the token over https: ATMOS_TOOLCHAIN_GITHUB_API_URL can resolve to a
+		// non-https scheme (resolveEndpointURL accepts it as a fallback-safe default), and
+		// sending "Authorization: Bearer <token>" to a plain-http endpoint would leak it in
+		// cleartext.
+		if token != "" && strings.EqualFold(req.URL.Scheme, "https") {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
 
-		r, err := client.Do(req) //nolint:gosec // Scheme+host (api.github.com) is a hardcoded literal; owner/repo only ever substitute into the path, so they cannot redirect the request to a different host.
+		r, err := client.Do(req) //nolint:gosec // Scheme+host come from the trusted ToolchainEndpoints resolver (env-configured, not request data); owner/repo only ever substitute into the path, so they cannot redirect the request to a different host.
 		if err != nil {
 			lastErr = fmt.Errorf("%w: failed to fetch releases from GitHub: %w", errUtils.ErrHTTPRequestFailed, err)
 			if attempt == githubRequestRetryMaxAttempts {
@@ -477,6 +485,19 @@ func makeGitHubRequest(apiURL string) (*http.Response, error) {
 		time.Sleep(wait)
 	}
 	return nil, lastErr
+}
+
+// stripAuthOnNonHTTPSRedirect removes the Authorization header from req when its (redirect
+// target) URL scheme is not https. Installed as makeGitHubRequest's http.Client.CheckRedirect
+// so an HTTPS-to-HTTP downgrade during a redirect (e.g. a compromised or misconfigured
+// ATMOS_TOOLCHAIN_GITHUB_API_URL endpoint) never forwards the token in cleartext: net/http's
+// default redirect policy otherwise preserves Authorization across same-host redirects
+// regardless of scheme change.
+func stripAuthOnNonHTTPSRedirect(req *http.Request, _ []*http.Request) error {
+	if !strings.EqualFold(req.URL.Scheme, "https") {
+		req.Header.Del("Authorization")
+	}
+	return nil
 }
 
 type release struct {

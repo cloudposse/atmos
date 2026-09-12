@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/duration"
+	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -429,6 +431,12 @@ func isZeroTTL(ttl string) bool {
 	return duration.IsZeroTTL(ttl)
 }
 
+// scpStyleHostPattern extracts the host from an SCP-style Git URI (e.g.
+// "git@ghe.example.com:org/repo.git"). Unlike a bare hostname, the "user@host:" prefix already
+// disambiguates this from a local path, so (unlike the deliberately github.com-only shorthand
+// detection below) it's safe to also recognize the configured GitHub Enterprise Server host here.
+var scpStyleHostPattern = regexp.MustCompile(`^[\w.-]+@([\w.-]+\.[\w.-]+):`)
+
 // isLocalSource determines if a source URI refers to a local path.
 // Local sources start with ".", absolute paths (OS-specific), or are relative paths without remote indicators.
 func isLocalSource(uri string) bool {
@@ -444,7 +452,16 @@ func isLocalSource(uri string) bool {
 	if strings.HasPrefix(uri, "file://") {
 		return true
 	}
-	// Remote indicators - if any of these are present, it's remote.
+	// SCP-style Git URI (git@host:org/repo.git) naming the configured GitHub Enterprise
+	// Server host. Checked before the remoteIndicators loop below because SCP syntax has no
+	// "://" separator, and the GHES host itself isn't in that literal list.
+	if m := scpStyleHostPattern.FindStringSubmatch(uri); m != nil && github.RepoEndpoints().IsHost(m[1]) {
+		return false
+	}
+	// Remote indicators - if any of these are present, it's remote. Deliberately
+	// github.com-only (see the equivalent knownHosts comment in pkg/stack/imports/uri.go): a
+	// bare hostname can't guess a GitHub Enterprise Server host, and any URI naming one already
+	// matches the "://" scheme indicator above.
 	remoteIndicators := []string{
 		"://",        // Any URL scheme (https://, git://, s3://, etc.).
 		"github.com", // GitHub.

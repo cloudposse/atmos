@@ -110,8 +110,9 @@ func InstallFromSHA(sha string, showProgress bool) (string, error) {
 		ui.Infof("Installing Atmos from SHA `%s`...", shortSHA)
 	}
 
-	// Get artifact info.
-	artifactInfo, err := github.GetSHAArtifactInfo(ctx, atmosOwner, atmosRepo, sha)
+	// Get artifact info. Toolchain-scoped fetcher: atmos's own build artifacts live on public
+	// github.com by default even for GHES users (see ToolchainEndpoints).
+	artifactInfo, err := github.NewToolchainArtifactFetcher(ctx).GetSHAArtifactInfo(ctx, atmosOwner, atmosRepo, sha)
 	if err != nil {
 		return "", handleSHAArtifactError(err, sha)
 	}
@@ -159,7 +160,7 @@ func handleSHAArtifactError(err error, sha string) error {
 		shortSHA = shortSHA[:shortSHALength]
 	}
 
-	commitURL := fmt.Sprintf("https://github.com/%s/%s/commit/%s", atmosOwner, atmosRepo, sha)
+	commitURL := fmt.Sprintf("%s/%s/%s/commit/%s", github.ToolchainEndpoints().ServerURL, atmosOwner, atmosRepo, sha)
 
 	// Check for specific error types.
 	if isNotFoundError(err) {

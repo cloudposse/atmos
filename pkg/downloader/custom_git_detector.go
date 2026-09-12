@@ -120,21 +120,38 @@ const (
 
 const GitPrefix = "git::"
 
+// isConfiguredGitHubHost reports whether host is public github.com or the GitHub Enterprise
+// Server host configured via GITHUB_SERVER_URL, so token injection, default-username
+// selection, and host support all recognize a GHES host exactly like github.com. Callers of
+// this function all receive an already-lowercased host (see Detect's strings.ToLower), so the
+// literal "github.com" comparison is intentionally case-sensitive, matching isSupportedHost's
+// existing contract. RepoEndpoints is only consulted when GHES is actually configured
+// (endpoints.Host differs from the default): RepoEndpoints.IsHost normalizes case internally,
+// and since it defaults to "github.com" when unset, calling it unconditionally would silently
+// make the literal comparison case-insensitive too, which the pinned tests below reject.
+func isConfiguredGitHubHost(host string) bool {
+	if host == hostGitHub {
+		return true
+	}
+	endpoints := github.RepoEndpoints()
+	return endpoints.Host != hostGitHub && endpoints.IsHost(host)
+}
+
 // isSupportedHost checks if the host is a supported Git hosting provider.
 // This is a pure function that can be easily tested.
 func isSupportedHost(host string) bool {
-	return host == hostGitHub || host == hostBitbucket || host == hostGitLab
+	return isConfiguredGitHubHost(host) || host == hostBitbucket || host == hostGitLab
 }
 
 // shouldInjectTokenForHost checks if token injection is enabled for the given host.
 // This is a pure function that encapsulates the logic of checking inject settings per host.
 func shouldInjectTokenForHost(host string, settings *schema.AtmosSettings) bool {
-	switch host {
-	case hostGitHub:
+	switch {
+	case isConfiguredGitHubHost(host):
 		return settings.InjectGithubToken
-	case hostBitbucket:
+	case host == hostBitbucket:
 		return settings.InjectBitbucketToken
-	case hostGitLab:
+	case host == hostGitLab:
 		return settings.InjectGitlabToken
 	default:
 		return false
@@ -175,8 +192,11 @@ func rewriteSCPURL(src string) (string, bool) {
 		newSrc := "ssh://"
 		user := matches[matchIndexUser] // This includes the "@" if present.
 		host := matches[matchIndexHost]
-		// Only for SSH vendoring (i.e. when rewriting an SCP URL), inject default username (git) for known hosts.
-		if user == "" && (strings.EqualFold(host, hostGitHub) ||
+		// Only for SSH vendoring (i.e. when rewriting an SCP URL), inject default username (git)
+		// for known hosts. Unlike isConfiguredGitHubHost's other call sites, host here comes
+		// straight from the regex match (not pre-lowercased), so the github.com comparison
+		// stays case-insensitive via EqualFold; RepoEndpoints.IsHost normalizes case itself.
+		if user == "" && (strings.EqualFold(host, hostGitHub) || github.RepoEndpoints().IsHost(host) ||
 			strings.EqualFold(host, hostGitLab) ||
 			strings.EqualFold(host, hostBitbucket)) {
 			user = "git@"
@@ -224,10 +244,21 @@ func (d *CustomGitDetector) normalizeRepositorySubdirPath(parsedURL *url.URL) {
 // injectToken injects a token into the URL if available.
 // User-specified credentials in the URL always take precedence over automatic injection.
 func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
-	// If URL already has user credentials, respect them and skip injection.
+	// If URL already has user credentials, respect them and skip injection. This is checked
+	// first: it is the most specific condition and applies regardless of scheme (an
+	// "ssh://git@..." source carries its own user, for example).
 	if !needsTokenInjection(parsedURL) {
 		maskedURL, _ := maskBasicAuth(parsedURL.String())
 		log.Debug("Skipping token injection: URL already has user credentials", keyURL, maskedURL)
+		return
+	}
+
+	// Only inject over HTTPS: the token is embedded as URL userinfo, so an "http://" (or any
+	// other non-https) scheme would send it in cleartext. This matters most for a
+	// GITHUB_SERVER_URL/GHES host explicitly configured with a non-https scheme, but applies
+	// equally to any manually-typed "http://" source for github.com, gitlab.com, or bitbucket.org.
+	if parsedURL.Scheme != "https" {
+		log.Debug("Skipping token injection: URL scheme is not https", "scheme", parsedURL.Scheme, keyHost, host)
 		return
 	}
 
@@ -370,8 +401,8 @@ func firstPathSegment(path string) string {
 // resolveToken returns the token and its source based on the host.
 // It prefers ATMOS_* prefixed tokens but falls back to standard tokens if not set.
 func (d *CustomGitDetector) resolveToken(host string) (string, string) {
-	switch host {
-	case hostGitHub:
+	switch {
+	case isConfiguredGitHubHost(host):
 		// Prefer ATMOS_PRO_GITHUB_TOKEN (Atmos Pro-brokered), then ATMOS_GITHUB_TOKEN, then GITHUB_TOKEN.
 		if d.atmosConfig.Settings.AtmosProGithubToken != "" {
 			return d.atmosConfig.Settings.AtmosProGithubToken, "ATMOS_PRO_GITHUB_TOKEN"
@@ -395,13 +426,13 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 			return token, "GH_CLI"
 		}
 		return "", ""
-	case hostBitbucket:
+	case host == hostBitbucket:
 		// Try ATMOS_BITBUCKET_TOKEN first, fall back to BITBUCKET_TOKEN
 		if d.atmosConfig.Settings.AtmosBitbucketToken != "" {
 			return d.atmosConfig.Settings.AtmosBitbucketToken, "ATMOS_BITBUCKET_TOKEN"
 		}
 		return d.atmosConfig.Settings.BitbucketToken, "BITBUCKET_TOKEN"
-	case hostGitLab:
+	case host == hostGitLab:
 		// Try ATMOS_GITLAB_TOKEN first, fall back to GITLAB_TOKEN
 		if d.atmosConfig.Settings.AtmosGitlabToken != "" {
 			return d.atmosConfig.Settings.AtmosGitlabToken, "ATMOS_GITLAB_TOKEN"
@@ -413,12 +444,12 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 
 // getDefaultUsername returns the default username for token injection based on the host.
 func (d *CustomGitDetector) getDefaultUsername(host string) string {
-	switch host {
-	case hostGitHub:
+	switch {
+	case isConfiguredGitHubHost(host):
 		return "x-access-token"
-	case hostGitLab:
+	case host == hostGitLab:
 		return "oauth2"
-	case hostBitbucket:
+	case host == hostBitbucket:
 		defaultUsername := d.atmosConfig.Settings.BitbucketUsername
 		if defaultUsername == "" {
 			return "x-token-auth"

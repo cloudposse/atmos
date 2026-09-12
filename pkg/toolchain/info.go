@@ -19,6 +19,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates"
+	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -150,9 +151,10 @@ func displayToolHeader(ctx *toolContext) {
 	ui.Writef("Type: %s", ctx.Tool.Type)
 	ui.Writeln("")
 
-	// Repository link.
+	// Repository link. Toolchain-scoped: tool sources live on public github.com by default
+	// even for GHES users (see ToolchainEndpoints).
 	if ctx.Tool.RepoOwner != "" && ctx.Tool.RepoName != "" {
-		ui.Writef("Repository: https://github.com/%s/%s", ctx.Tool.RepoOwner, ctx.Tool.RepoName)
+		ui.Writef("Repository: %s/%s/%s", github.ToolchainEndpoints().ServerURL, ctx.Tool.RepoOwner, ctx.Tool.RepoName)
 		ui.Writeln("")
 	}
 }

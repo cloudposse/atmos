@@ -206,7 +206,32 @@ Configure toolchain behavior via environment variables:
     - Access to private repositories
     - Better reliability during bulk operations
   </dd>
+
+  <dt>`ATMOS_TOOLCHAIN_GITHUB_URL` / `ATMOS_TOOLCHAIN_GITHUB_API_URL` / `ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL`</dt>
+  <dd>
+    Override the hosts used for toolchain release assets, repository API calls, and the
+    aqua-registry mirror — see [GitHub Enterprise Server](#github-enterprise-server-ghes) below.
+  </dd>
 </dl>
+
+## GitHub Enterprise Server (GHES) {#github-enterprise-server-ghes}
+
+If your own repositories live on a GitHub Enterprise Server instance, Atmos honors
+`GITHUB_SERVER_URL` / `GITHUB_API_URL` for imports, vendoring, and the CI provider (see
+[Environment Variables](/cli/environment-variables#github-enterprise-server-ghes)). The
+toolchain deliberately does **not** follow those variables: aqua-registry tools and their
+release assets are hosted on public `github.com` regardless of where your own repositories
+live, so pointing `GITHUB_SERVER_URL` at a GHES instance must never break `atmos toolchain
+install` on a GHES-hosted CI runner.
+
+If you mirror or proxy GitHub releases through a corporate artifact repository, use the
+toolchain-specific variables instead:
+
+```shell
+ATMOS_TOOLCHAIN_GITHUB_URL=https://releases.corp.example.com
+ATMOS_TOOLCHAIN_GITHUB_API_URL=https://releases.corp.example.com/api/v3
+ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL=https://releases.corp.example.com/aqua-registry/main
+```
 
 ## CLI Precedence
 

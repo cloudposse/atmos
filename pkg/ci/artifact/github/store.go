@@ -19,6 +19,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -225,8 +226,11 @@ func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 	httpClient.Timeout = httpTimeout
 
 	return &Store{
-		httpClient:    httpClient,
-		baseURL:       "https://api.github.com",
+		httpClient: httpClient,
+		// RepoEndpoints resolves GITHUB_API_URL (defaulting to api.github.com), so artifact
+		// list/download work against a GitHub Enterprise Server instance the same way they
+		// do against github.com.
+		baseURL:       ghtoken.RepoEndpoints().APIURL,
 		uploader:      uploader,
 		downloader:    downloader,
 		owner:         owner,
