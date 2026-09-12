@@ -60,9 +60,9 @@ atmos kubernetes plan --affected --labels cost-center=platform --labels complian
 
 <dl>
   <dt>
-    `--stack`, `-s` <em>(required)</em>
+    `--stack`, `-s` <em>(optional)</em>
   </dt>
-  <dd>Atmos stack.</dd>
+  <dd>Atmos stack. Required when planning a named component; not required with `--all`/`--affected`/`--tags`/`--labels` bulk selection.</dd>
 
 <dt>
   `--all` <em>(optional)</em>
