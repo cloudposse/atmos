@@ -232,6 +232,33 @@ atmos terraform apply vpc -s dev
         ```
     </dd>
 
+    <dt>`--init-mode` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.mode`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default, skip init when nothing relevant changed), `always`, or `never` (same as `--skip-init`).
+
+        ```shell
+        atmos terraform apply vpc -s dev --init-mode=always
+        ```
+    </dd>
+
+    <dt>`--init-reconfigure` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.reconfigure`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never`.
+
+        ```shell
+        atmos terraform apply vpc -s dev --init-reconfigure=always
+        ```
+    </dd>
+
+    <dt>`--init-upgrade` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.upgrade`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `never` (default), `auto`, or `always`.
+
+        ```shell
+        atmos terraform apply vpc -s dev --init-upgrade=always
+        ```
+    </dd>
+
     <dt>`--process-templates` <em>(optional)</em></dt>
     <dd>
         Enable/disable Go template processing in Atmos stack manifests.

@@ -559,27 +559,20 @@ func (e *Executor) execute(
 		}
 	}
 
-	// Step 9: Clean workspace and run terraform init (skipped when SkipInit is set).
-	// SkipInit is used when the component was just applied and .terraform/ state
-	// is already correct — re-initializing would require auth credentials that
+	// Steps 9-10: Decide whether terraform init needs to run at all ("smart
+	// init" — see pkg/terraform/autoinit), run it with the right flags when it
+	// does, and ensure the workspace is selected. Skipped entirely when
+	// SkipInit is set: the component was just applied and .terraform/ state is
+	// already correct — re-initializing would require auth credentials that
 	// may not be available in PostRunE context.
 	skipInit := opts != nil && opts.SkipInit
-	if !skipInit {
-		workspaceMgr := &defaultWorkspaceManager{}
-		workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
-
-		if err := e.runInit(ctx, runner, config, component, stack, stderrCapture, pluginCache); err != nil {
-			return nil, err
-		}
-
-		// Step 10: Ensure workspace exists and is selected.
-		if err := workspaceMgr.EnsureWorkspace(ctx, runner, config.Workspace, config.BackendType, component, stack, stderrCapture); err != nil {
-			return nil, err
-		}
+	if err := e.ensureInitialized(ctx, atmosConfig, runner, config, component, stack, stderrCapture, pluginCache, environMap, skipInit); err != nil {
+		return nil, err
 	}
 
-	// Step 11: Execute terraform output.
-	outputMeta, err := e.runOutput(ctx, runner, component, stack, stderrCapture)
+	// Step 11: Execute terraform output, recovering automatically if
+	// terraform/tofu reports afterward that init was in fact required.
+	outputMeta, err := e.runOutputWithInitRecovery(ctx, atmosConfig, runner, config, component, stack, stderrCapture, pluginCache, environMap, skipInit)
 	if err != nil {
 		return nil, err
 	}

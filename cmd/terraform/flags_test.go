@@ -55,12 +55,16 @@ func TestBackendExecutionFlags(t *testing.T) {
 
 	registry := BackendExecutionFlags()
 
-	// Should have 2 backend execution flags.
-	assert.Equal(t, 2, registry.Count())
+	// Should have 5 backend execution flags: auto-generate-backend-file, init-run-reconfigure,
+	// plus the tri-state init-mode/init-reconfigure/init-upgrade overrides.
+	assert.Equal(t, 5, registry.Count())
 
 	// Should include backend execution flags.
 	assert.True(t, registry.Has("auto-generate-backend-file"), "auto-generate-backend-file should be in BackendExecutionFlags")
 	assert.True(t, registry.Has("init-run-reconfigure"), "init-run-reconfigure should be in BackendExecutionFlags")
+	assert.True(t, registry.Has("init-mode"), "init-mode should be in BackendExecutionFlags")
+	assert.True(t, registry.Has("init-reconfigure"), "init-reconfigure should be in BackendExecutionFlags")
+	assert.True(t, registry.Has("init-upgrade"), "init-upgrade should be in BackendExecutionFlags")
 
 	// Check auto-generate-backend-file flag.
 	autoGenFlag := registry.Get("auto-generate-backend-file")
@@ -77,6 +81,28 @@ func TestBackendExecutionFlags(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "", strFlag.Default)
 	assert.Equal(t, []string{"ATMOS_INIT_RUN_RECONFIGURE"}, strFlag.EnvVars)
+
+	// Check the three tri-state init override flags.
+	initModeFlag := registry.Get("init-mode")
+	require.NotNil(t, initModeFlag)
+	strFlag, ok = initModeFlag.(*flags.StringFlag)
+	require.True(t, ok)
+	assert.Equal(t, "", strFlag.Default)
+	assert.Equal(t, []string{"ATMOS_INIT_MODE"}, strFlag.EnvVars)
+
+	initReconfigureFlag := registry.Get("init-reconfigure")
+	require.NotNil(t, initReconfigureFlag)
+	strFlag, ok = initReconfigureFlag.(*flags.StringFlag)
+	require.True(t, ok)
+	assert.Equal(t, "", strFlag.Default)
+	assert.Equal(t, []string{"ATMOS_INIT_RECONFIGURE"}, strFlag.EnvVars)
+
+	initUpgradeFlag := registry.Get("init-upgrade")
+	require.NotNil(t, initUpgradeFlag)
+	strFlag, ok = initUpgradeFlag.(*flags.StringFlag)
+	require.True(t, ok)
+	assert.Equal(t, "", strFlag.Default)
+	assert.Equal(t, []string{"ATMOS_INIT_UPGRADE"}, strFlag.EnvVars)
 }
 
 func TestTerraformAffectedFlags(t *testing.T) {
@@ -144,10 +170,14 @@ func TestWithBackendExecutionFlags(t *testing.T) {
 
 	registry := parser.Registry()
 
-	// Should have backend execution flags.
-	assert.Equal(t, 2, registry.Count())
+	// Should have backend execution flags: auto-generate-backend-file, init-run-reconfigure,
+	// plus the tri-state init-mode/init-reconfigure/init-upgrade overrides.
+	assert.Equal(t, 5, registry.Count())
 	assert.True(t, registry.Has("auto-generate-backend-file"))
 	assert.True(t, registry.Has("init-run-reconfigure"))
+	assert.True(t, registry.Has("init-mode"))
+	assert.True(t, registry.Has("init-reconfigure"))
+	assert.True(t, registry.Has("init-upgrade"))
 }
 
 func TestWithTerraformAffectedFlags(t *testing.T) {

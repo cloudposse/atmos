@@ -28,7 +28,7 @@ atmos terraform output <component> -s <stack> [options]
 This command reads output values from the Terraform state file and prints them. Output values are useful for passing information between different Terraform configurations or to external systems.
 
 :::info Atmos Behavior
-Atmos provides standard setup for this command including automatic `terraform init`, workspace selection, and variable file generation. The output retrieval itself is handled by native Terraform.
+Atmos provides standard setup for this command including automatic `terraform init` (skipped when nothing relevant has changed since the last init — see [Automatic Initialization](/cli/commands/terraform/init#automatic-initialization)), workspace selection, and variable file generation. The output retrieval itself is handled by native Terraform.
 :::
 
 ## Configuration
@@ -275,6 +275,33 @@ Scalar-only formats (`env`, `dotenv`, `bash`, `csv`, `tsv`) will return an error
 
         ```shell
         atmos terraform output vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--init-mode` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.mode`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default, skip init when nothing relevant changed), `always`, or `never` (same as `--skip-init`).
+
+        ```shell
+        atmos terraform output vpc -s dev --init-mode=always
+        ```
+    </dd>
+
+    <dt>`--init-reconfigure` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.reconfigure`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never`.
+
+        ```shell
+        atmos terraform output vpc -s dev --init-reconfigure=always
+        ```
+    </dd>
+
+    <dt>`--init-upgrade` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.upgrade`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `never` (default), `auto`, or `always`.
+
+        ```shell
+        atmos terraform output vpc -s dev --init-upgrade=always
         ```
     </dd>
 

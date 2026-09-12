@@ -34,14 +34,14 @@ This command performs several initialization steps:
 :::info Atmos Enhancements
 Atmos enhances the init command with:
 - Cleans `.terraform/environment` file before running
-- Can add `-reconfigure` flag based on configuration
+- Skips init automatically before other commands when nothing relevant has changed (see [Automatic Initialization](#automatic-initialization))
+- Adds `-reconfigure`/`-upgrade` only when needed, or on every init if configured
 - Supports passing varfile to init (OpenTofu feature) via `--init-pass-vars` flag
-- Can be skipped with `--skip-init` flag for other commands
-- Automatically runs before plan/apply/destroy commands unless skipped
+- Can be forced off entirely with `--skip-init` or `init.mode: never`
 :::
 
 :::tip
-Atmos automatically runs `terraform init` before executing `plan` and `apply` commands, so you typically don't need to run this manually unless you want to reinitialize with different options.
+Atmos automatically runs `terraform init` before executing `plan` and `apply` commands, but only when it's actually needed — running the same commands back-to-back doesn't pay for a redundant init. You typically don't need to run this manually unless you want to reinitialize with different options.
 :::
 
 ## Examples
@@ -110,13 +110,42 @@ Use `--failure-mode keep-going` to continue independent graph branches after one
 
 ## Automatic Initialization
 
-Atmos automatically runs `terraform init` in these scenarios:
+Atmos runs `terraform init` automatically before `plan`, `apply`, `destroy`, `shell`, `deploy` (when
+`deploy_run_init` is enabled), and before resolving [`!terraform.output`](/functions/yaml/terraform.output) or
+[`atmos.Component`](/functions/template/atmos.Component) — but only when init is actually needed.
 
-1. **Before `terraform plan`** - Ensures the working directory is initialized
-2. **Before `terraform apply`** - Ensures providers and modules are available
-3. **Before `terraform deploy`** - Part of the deployment process
+By default (`init.mode: auto`), Atmos fingerprints the inputs that affect `terraform init` — the component's
+root `.tf`/`.tf.json`/`.tofu`/`.tofu.json` files, `.terraform.lock.hcl`, the Terraform CLI configuration, the
+resolved binary, relevant environment variables, and (when `init.pass_vars` is `true`) the varfile — and
+compares it against the fingerprint recorded after the last successful init. If nothing has changed, and the
+working directory still looks initialized (provider plugins present, modules downloaded, backend state
+present as applicable), Atmos skips init entirely. Running `atmos terraform apply` followed by
+`atmos terraform output` on the same component no longer pays for two full inits.
 
-You can skip automatic initialization using the `--skip-init` flag:
+Atmos also decides `-reconfigure` and `-upgrade` per invocation instead of adding them unconditionally:
+
+- `init.reconfigure: auto` (default) adds `-reconfigure` only when the backend configuration changed, on the
+  first init, after a JIT working directory is re-provisioned, or for `atmos terraform workspace`.
+- `init.upgrade: never` (default) never adds `-upgrade` — Atmos never passed this flag automatically before
+  the setting existed, so the default preserves that. Set `init.upgrade: auto` to have Atmos add `-upgrade`
+  automatically when Terraform/OpenTofu reports that one is required — for example, after a provider version
+  constraint was raised beyond the locked version.
+
+Set `init.mode` or `init.reconfigure` to `always` to force Atmos to add the corresponding behavior to every
+automatic init (the previous default), or to `never` to disable it entirely. `init.upgrade` follows the same
+`auto`/`always`/`never` pattern, just with a `never` default instead of `auto`. See
+[Terraform Configuration](/cli/configuration/components/terraform#configuration-reference) for the full
+setting reference, environment variables, and flags.
+
+**If a skipped init turns out to have been necessary** — for example a nested module changed, or part of
+`.terraform` was deleted by hand — Terraform/OpenTofu fails with a diagnostic such as *"Backend
+initialization required"* or *"Required plugins are not installed"* before touching any state. Atmos
+recognizes these diagnostics, runs the init that was skipped, and retries the command once. Atmos never runs
+`-migrate-state` as part of this recovery; a backend change requiring state migration always surfaces for you
+to handle explicitly.
+
+You can force init off entirely for one invocation using the `--skip-init` flag, equivalent to
+`--init-mode=never` for that run:
 
 ```shell
 atmos terraform plan vpc -s dev --skip-init
@@ -178,6 +207,33 @@ Atmos will:
 
         ```shell
         atmos terraform init vpc -s dev --init-pass-vars
+        ```
+    </dd>
+
+    <dt>`--init-mode` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.mode`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default, skip when nothing relevant changed), `always` (init before every command), or `never` (same as `--skip-init`).
+
+        ```shell
+        atmos terraform plan vpc -s dev --init-mode=always
+        ```
+    </dd>
+
+    <dt>`--init-reconfigure` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.reconfigure`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default, add `-reconfigure` only when the backend changed), `always`, or `never`. Supersedes `--init-run-reconfigure` when both are set.
+
+        ```shell
+        atmos terraform plan vpc -s dev --init-reconfigure=always
+        ```
+    </dd>
+
+    <dt>`--init-upgrade` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.upgrade`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `never` (default), `auto` (add `-upgrade` only when Terraform/OpenTofu reports it's required), or `always`.
+
+        ```shell
+        atmos terraform plan vpc -s dev --init-upgrade=always
         ```
     </dd>
 
@@ -427,11 +483,14 @@ Configure default behavior for `terraform init` in your `atmos.yaml`:
 ```yaml
 components:
   terraform:
-    # Run 'terraform init -reconfigure' by default
-    init_run_reconfigure: true
-
-    # Pass varfile to init (OpenTofu feature)
     init:
+      # Skip init when nothing relevant changed (auto | always | never)
+      mode: auto
+      # Add -reconfigure only when the backend changed (auto | always | never)
+      reconfigure: auto
+      # Add -upgrade only when required (auto | always | never)
+      upgrade: never
+      # Pass varfile to init (OpenTofu feature)
       pass_vars: true
 
     # Auto-generate backend configuration
@@ -440,10 +499,15 @@ components:
 
 These settings can also be controlled via environment variables:
 ```shell
-export ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=true
+export ATMOS_COMPONENTS_TERRAFORM_INIT_MODE=auto
+export ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE=auto
+export ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE=never
 export ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS=true
 export ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=true
 ```
+
+See [Terraform Configuration](/cli/configuration/components/terraform#configuration-reference) for the
+deprecated `init_run_reconfigure` boolean and its mapping onto `init.reconfigure`.
 
 ## Common Use Cases
 

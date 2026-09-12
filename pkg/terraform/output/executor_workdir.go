@@ -23,10 +23,23 @@ import (
 // atmos describe stacks), singleflight ensures Provision is called exactly once per key.
 var workdirProvisionGroup singleflight.Group
 
-// workdirProvisionCache records successfully provisioned (stack, component) pairs.
-// Checked inside workdirProvisionGroup.Do to short-circuit subsequent calls after
-// the first in-flight call completes.
+// workdirProvisionCache records (stack, component) pairs that have been successfully
+// provisioned before -- nothing more. It is checked inside workdirProvisionGroup.Do to
+// short-circuit re-running Provision on a later, separate call for a key a prior generation
+// already provisioned. It deliberately does NOT record whether that provisioning was "fresh":
+// freshness (config.WorkdirReprovisioned) is a one-time signal scoped to the single
+// provisioning generation that actually ran -- see ensureWorkdirProvisioned's closure, which
+// returns freshlyProvisioned directly to that generation's callers instead of persisting it
+// here, so a later call reusing an already-provisioned workdir doesn't inherit stale freshness
+// and force a full re-init on every subsequent `terraform output`.
 var workdirProvisionCache sync.Map
+
+// doChanEntryHook, when non-nil, is called immediately before every
+// workdirProvisionGroup.DoChan call -- a test-only seam letting a concurrency test
+// deterministically confirm a caller has reached singleflight registration, instead of
+// inferring it from scheduling behavior (e.g. runtime.Gosched()) that proves nothing about
+// which goroutine the runtime actually chose to run next.
+var doChanEntryHook func()
 
 // ResetWorkdirProvisionCache clears the workdir provision cache.
 // Exported for use in tests to ensure cache isolation between test functions.
@@ -91,9 +104,11 @@ func (d *defaultWorkdirProvisioner) Provision(
 // and atmos.Component calls against JIT components fail with an empty-directory
 // error from terraform init.
 //
-// config must be passed by pointer — this function may set config.InitRunReconfigure
-// to true when a fresh provision occurs, which must be visible to the subsequent
-// runInit call.
+// The config argument must be passed by pointer — this function may set
+// config.WorkdirReprovisioned to true when a fresh provision occurs, which
+// must be visible to the subsequent autoinit.Decide call (ensureInitialized
+// forces init via Request.Force when set, since a brand-new workdir has no
+// .terraform/ directory to fingerprint against).
 func (e *Executor) ensureWorkdirProvisioned(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
@@ -114,6 +129,10 @@ func (e *Executor) ensureWorkdirProvisioned(
 
 	cacheKey := stackComponentKey(stack, component)
 
+	if doChanEntryHook != nil {
+		doChanEntryHook()
+	}
+
 	resultCh := workdirProvisionGroup.DoChan(cacheKey, func() (any, error) {
 		// LoadOrStore at the TOP of the closure: atomically claim the key before
 		// Provision runs. This closes the TOCTOU window — any goroutine arriving
@@ -121,16 +140,16 @@ func (e *Executor) ensureWorkdirProvisioned(
 		// NOTE: must be inside DoChan (not outside) so that concurrent callers still
 		// wait via singleflight rather than returning nil before provisioning completes.
 		//
-		// We store a bool placeholder (false) now and update it to the actual
-		// freshlyProvisioned value after Provision succeeds. Late-arriving goroutines
-		// that call DoChan after the leader's call completes will read the final stored
-		// value (not the placeholder) because the leader's closure completes — including
-		// the Store below — before singleflight releases any waiting callers, and
-		// before any new DoChan call can observe the key.
-		if actual, loaded := workdirProvisionCache.LoadOrStore(cacheKey, false); loaded {
-			// Key was already present: return the stored freshness value so every
-			// goroutine (including late arrivals) can set InitRunReconfigure correctly.
-			return actual, nil
+		// The stored value is a constant `true` ("has been provisioned before"), never the
+		// freshness bool: singleflight already serializes concurrent callers of a single
+		// provisioning generation onto this one closure execution, which returns
+		// freshlyProvisioned directly to every caller of THAT generation below. A `loaded`
+		// hit here only ever means a *later, separate* generation (this closure runs again
+		// only after the prior one fully completed) is reusing an already-provisioned
+		// workdir — it must report false, or every later call would keep inheriting the
+		// one-time freshness signal and force a full re-init on every subsequent call.
+		if _, loaded := workdirProvisionCache.LoadOrStore(cacheKey, true); loaded {
+			return false, nil
 		}
 
 		log.Debug("Auto-provisioning JIT workdir for output fetch", "component", component, "stack", stack)
@@ -155,14 +174,11 @@ func (e *Executor) ensureWorkdirProvisioned(
 		// If the provisioner freshly synced files, it sets WorkdirReprovisionedKey.
 		// A new workdir has no .terraform/ directory — terraform init must run with -reconfigure
 		// to avoid an interactive "migrate workspaces?" prompt that would hang the process.
-		// Return the bool so every waiting goroutine (not just the leader) can apply it
-		// to its own config pointer after DoChan returns.
+		// Returned directly (never persisted to workdirProvisionCache) so every waiting
+		// goroutine in THIS provisioning generation (not just the leader) can apply it to its
+		// own config pointer after DoChan returns, while later, separate generations that reuse
+		// this already-provisioned workdir correctly get false via the `loaded` branch above.
 		_, freshlyProvisioned := sections[provWorkdir.WorkdirReprovisionedKey]
-
-		// Update the cache entry from the placeholder (false) to the actual freshness
-		// value. Late-arriving goroutines that start a new DoChan after this Store will
-		// read freshlyProvisioned from the cache and set InitRunReconfigure correctly.
-		workdirProvisionCache.Store(cacheKey, freshlyProvisioned)
 
 		writeVisibleOutput(func() {
 			ui.ClearLine()
@@ -185,8 +201,8 @@ func (e *Executor) ensureWorkdirProvisioned(
 		if res.Err != nil {
 			return res.Err
 		}
-		if reconfigure, _ := res.Val.(bool); reconfigure {
-			config.InitRunReconfigure = true
+		if reprovisioned, _ := res.Val.(bool); reprovisioned {
+			config.WorkdirReprovisioned = true
 		}
 		return nil
 	case <-ctx.Done():

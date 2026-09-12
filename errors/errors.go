@@ -232,6 +232,16 @@ var (
 	ErrTerraformInit          = errors.New("terraform init failed")
 	ErrTerraformWorkspaceOp   = errors.New("terraform workspace operation failed")
 
+	// Terraform auto-init errors.
+	ErrTerraformInitRequired            = errors.New("terraform reports the working directory must be initialized")
+	ErrTerraformInitReconfigureRequired = errors.New("terraform init -reconfigure is required because the backend configuration changed")
+	ErrTerraformInitUpgradeRequired     = errors.New("terraform init -upgrade is required to satisfy provider or module constraints")
+	ErrInitFingerprint                  = errors.New("failed to compute terraform init fingerprint")
+	ErrInitMarker                       = errors.New("failed to read or write terraform init marker")
+	ErrInvalidInitMode                  = errors.New("invalid components.terraform.init.mode (expected auto, always, or never)")
+	ErrInvalidInitReconfigure           = errors.New("invalid components.terraform.init.reconfigure (expected auto, always, or never)")
+	ErrInvalidInitUpgrade               = errors.New("invalid components.terraform.init.upgrade (expected auto, always, or never)")
+
 	// Terraform lint errors.
 	ErrTerraformLint             = errors.New("terraform lint failed")
 	ErrTerraformLintAuth         = errors.New("failed to initialize authentication for terraform lint")

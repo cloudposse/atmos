@@ -129,7 +129,7 @@ See individual command pages for detailed multi-component examples and flags: [p
 
 Atmos enhances the standard Terraform CLI with several conveniences:
 
-- **Automatic initialization**: Atmos runs `terraform init` before executing other commands. Use `--skip-init` to skip this step.
+- **Automatic initialization**: Atmos runs `terraform init` before executing other commands, but only when needed — it's skipped automatically once nothing that affects init has changed since the last run. See [Automatic Initialization](/cli/commands/terraform/init#automatic-initialization). Use `--skip-init` to disable it for one invocation.
 
 - **Deploy command**: `atmos terraform deploy` executes `terraform apply -auto-approve` for automated deployments.
 

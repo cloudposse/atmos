@@ -1,0 +1,116 @@
+---
+slug: smart-terraform-init
+title: "Terraform init now runs only when it needs to"
+date: 2026-09-11T12:00:00.000Z
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Running `terraform init` is necessary the first time you touch a working directory, and again
+after a real change — a new provider, an updated module, a different backend. Repeating that same
+work before every single command, whether or not anything changed, adds real time to a workflow:
+provider downloads, backend re-initialization, module resolution, all over again for a component
+that's identical to how it was a few seconds ago.
+
+<!--truncate-->
+
+## The Problem
+
+That's exactly what Atmos did. Every Terraform subcommand — `plan`, `apply`, `shell`, `destroy`,
+and even the read path behind `!terraform.output` and `atmos.Component` — started with a full
+`terraform init -reconfigure`, unconditionally:
+
+```shell
+atmos terraform apply demo -s dev
+# Initializing provider plugins...
+# Initializing the backend...
+# ...apply completes...
+
+atmos terraform output demo -s dev
+# Initializing provider plugins...   <- nothing changed, but init runs again
+# Initializing the backend...
+```
+
+Nothing about `demo` changed between those two commands, but the second one pays the full init
+cost anyway. On a slow connection, or with a component that pulls in a lot of providers, that
+turns a fast edit-plan-apply loop into a slow one. [Issue #620](https://github.com/cloudposse/atmos/issues/620)
+asked Atmos to be smarter about this — Terragrunt-style Auto-Init, where init only re-runs when it
+actually needs to. [Issue #1263](https://github.com/cloudposse/atmos/issues/1263) asked for
+something related: a way to have Atmos run `init -upgrade` automatically when a provider
+constraint changes, instead of requiring `-upgrade` to be typed by hand after every version bump.
+
+## The Fix
+
+Atmos now fingerprints the inputs that actually affect `terraform init` — the component's root
+Terraform/OpenTofu files, the lock file, the CLI configuration, the resolved binary, and relevant
+environment variables — and compares that fingerprint against the one recorded after the last
+successful init. When nothing has changed, and the working directory still looks initialized,
+Atmos skips init entirely. Applying a component and then reading one of its outputs no longer
+performs two full inits.
+
+`-reconfigure` and `-upgrade` get the same treatment instead of being added unconditionally:
+`-reconfigure` only goes on when the backend configuration actually changed (or on the first
+init, or after a working directory is re-provisioned), and `-upgrade` only goes on when Terraform
+or OpenTofu itself reports that an upgrade is required — the behavior [#1263](https://github.com/cloudposse/atmos/issues/1263)
+asked for.
+
+None of this trusts the fingerprint blindly. If a skip turns out to have been wrong — a nested
+module changed, or `.terraform` was altered by hand — Terraform or OpenTofu fails with a
+diagnostic like *"Backend initialization required"* or *"Required plugins are not installed"*
+before it ever touches state. Atmos recognizes that class of diagnostic, runs the init that should
+have run, and retries the command once. The one gap this doesn't close is a change inside a
+nested local module, which isn't part of the fingerprint — that's caught by the same retry path
+rather than avoided up front, and it's a limitation Terragrunt's own Auto-Init shares.
+
+**Behavior change, automatically protected by [editions](/cli/configuration/edition):** init no
+longer runs unconditionally, and `-reconfigure`/`-upgrade` are no longer added to every init, by
+default. If your project is pinned to an [edition](/cli/configuration/edition) from before
+2026-09-12, you see byte-for-byte the same behavior Atmos always had — no config changes needed.
+Unpinned projects, and anything pinned on or after that date, get the new defaults automatically.
+See [Config Editions](/changelog/config-editions) for how pinning works.
+
+## How to Use It
+
+Three new settings under `components.terraform.init`, all defaulting to `auto`:
+
+```yaml
+components:
+  terraform:
+    init:
+      mode: auto         # auto | always | never
+      reconfigure: auto  # auto | always | never
+      upgrade: auto       # auto | always | never
+```
+
+`mode` controls whether init runs at all: `auto` skips it when nothing relevant changed, `always`
+restores the previous behavior, `never` disables it entirely (the same effect as `--skip-init` on
+every invocation). `reconfigure` and `upgrade` control the two flags the same way, independently.
+
+`mode` and `upgrade` are [edition](/cli/configuration/edition)-protected: pin `edition:
+"2026-09-11"` or earlier and both roll back to their pre-this-PR behavior (`always` and `never`
+respectively) with no other config changes. `reconfigure` isn't — see the note on
+`init_run_reconfigure` below.
+
+Each setting also has a matching flag and environment variable for one-off overrides:
+
+```shell
+atmos terraform plan vpc -s dev --init-mode=always
+atmos terraform apply vpc -s dev --init-reconfigure=always
+atmos terraform plan vpc -s dev --init-upgrade=always
+```
+
+The existing `init_run_reconfigure` boolean keeps working: `false` maps to `init.reconfigure:
+never`, and the previous default `true` now maps to `init.reconfigure: auto` rather than
+`always`. Unlike `mode`/`upgrade`, this one isn't edition-protected — pinning an earlier edition
+doesn't restore it, because `init.reconfigure` has to stay unset internally for the legacy
+`init_run_reconfigure` mapping to keep working at all. Set `init.reconfigure: always` explicitly
+to keep the exact previous behavior.
+
+See [Terraform Configuration](/cli/configuration/components/terraform#configuration-reference) for
+the full setting reference, and [Automatic Initialization](/cli/commands/terraform/init#automatic-initialization)
+for how the skip decision and recovery path work.
+
+## Get Involved
+
+Have feedback on this feature? [Open an issue](https://github.com/cloudposse/atmos/issues) or join
+the conversation in the [Cloud Posse community Slack](https://cloudposse.com/slack).

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -48,6 +49,11 @@ const (
 //	_ATMOS_TEST_EXIT_CODE=<N>        — if set to a valid integer, exit N immediately
 //	                                   (for exit-code-neutralization tests needing a
 //	                                   code other than 0/1, e.g. -detailed-exitcode's 2).
+//	_ATMOS_TEST_REQUIRE_ARG=<flag>   — if set, exit 0 only when <flag> is present in argv;
+//	                                   otherwise write _ATMOS_TEST_STDOUT (if set) and exit 1
+//	                                   (for smart-init recovery tests simulating terraform/tofu's
+//	                                   own "init is required" diagnostics until a retry adds the
+//	                                   missing flag).
 func TestMain(m *testing.M) {
 	// Initialize the I/O writer and ui formatter so data.Write*/ui.Write* calls
 	// (used throughout internal/exec and its pkg/ci dependency, e.g. CI log
@@ -101,6 +107,22 @@ func TestMain(m *testing.M) {
 		}
 		if stderr := os.Getenv("_ATMOS_TEST_STDERR"); stderr != "" {
 			_, _ = os.Stderr.WriteString(stderr)
+		}
+		os.Exit(1)
+	}
+
+	// Subprocess helper: when _ATMOS_TEST_REQUIRE_ARG=<flag> is set, the subprocess inspects its
+	// own argv: if <flag> is present, it exits 0; otherwise it writes _ATMOS_TEST_STDOUT (if set)
+	// to stdout and exits 1. Used to simulate terraform/tofu's own "init is required" diagnostics
+	// for smart-init recovery tests: the fake subprocess "fails" (asking for -upgrade /
+	// -reconfigure) until the caller's retry actually adds the missing flag, at which point it
+	// succeeds -- without needing a real terraform/tofu binary.
+	if requireArg := os.Getenv("_ATMOS_TEST_REQUIRE_ARG"); requireArg != "" {
+		if slices.Contains(os.Args[1:], requireArg) {
+			os.Exit(0)
+		}
+		if stdout := os.Getenv("_ATMOS_TEST_STDOUT"); stdout != "" {
+			_, _ = os.Stdout.WriteString(stdout)
 		}
 		os.Exit(1)
 	}

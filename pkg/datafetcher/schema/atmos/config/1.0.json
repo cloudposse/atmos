@@ -12309,9 +12309,43 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Mode controls whether Atmos runs `terraform init` before a subcommand:\n`auto` (default since 2026-09-12; a project pinned to an earlier edition gets `always`\nrestored) skips it when the init fingerprint recorded after the last successful init is\nunchanged, `always` runs it on every invocation, and `never` never runs it (the same as\n`--skip-init`)."
+        },
+        "reconfigure": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Reconfigure controls when `-reconfigure` is added to `terraform init`:\n`auto` (default) adds it only when the backend configuration changed since\nthe last init, `always` adds it on every init, and `never` never adds it.\nTakes precedence over the deprecated `init_run_reconfigure`. Unlike Mode/Upgrade, this\ndefault is NOT edition-pin-protected (see EffectiveInitReconfigure's doc comment): its\nlegacy-boolean fallback makes the standard journal mechanism unsafe to apply here."
+        },
+        "upgrade": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Upgrade controls when `-upgrade` is added to `terraform init`: `auto` (default since\n2026-09-12; a project pinned to an earlier edition gets `never` restored) adds it only\nwhen terraform/tofu reports that an upgrade is required, `always` adds it on every init,\nand `never` never adds it."
         }
       },
-      "type": "object"
+      "type": "object",
+      "description": "TerraformInit configures the `terraform init` that Atmos runs before other\nterraform subcommands (and while resolving !terraform.output)."
     },
     "TerraformLint": {
       "properties": {

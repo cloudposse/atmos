@@ -850,8 +850,151 @@ type TerraformCI struct {
 	ExitCodes map[int]bool `yaml:"exit_codes,omitempty" json:"exit_codes,omitempty" mapstructure:"exit_codes"`
 }
 
+// TerraformInit configures the `terraform init` that Atmos runs before other
+// terraform subcommands (and while resolving !terraform.output).
 type TerraformInit struct {
 	PassVars bool `yaml:"pass_vars" json:"pass_vars" mapstructure:"pass_vars"`
+	// Mode controls whether Atmos runs `terraform init` before a subcommand:
+	// `auto` (default since 2026-09-12; a project pinned to an earlier edition gets `always`
+	// restored) skips it when the init fingerprint recorded after the last successful init is
+	// unchanged, `always` runs it on every invocation, and `never` never runs it (the same as
+	// `--skip-init`).
+	Mode TerraformInitMode `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+	// Reconfigure controls when `-reconfigure` is added to `terraform init`:
+	// `auto` (default) adds it only when the backend configuration changed since
+	// the last init, `always` adds it on every init, and `never` never adds it.
+	// Takes precedence over the deprecated `init_run_reconfigure`. Unlike Mode/Upgrade, this
+	// default is NOT edition-pin-protected (see EffectiveInitReconfigure's doc comment): its
+	// legacy-boolean fallback makes the standard journal mechanism unsafe to apply here.
+	Reconfigure TerraformInitReconfigure `yaml:"reconfigure,omitempty" json:"reconfigure,omitempty" mapstructure:"reconfigure"`
+	// Upgrade controls when `-upgrade` is added to `terraform init`: `auto` (default since
+	// 2026-09-12; a project pinned to an earlier edition gets `never` restored) adds it only
+	// when terraform/tofu reports that an upgrade is required, `always` adds it on every init,
+	// and `never` never adds it.
+	Upgrade TerraformInitUpgrade `yaml:"upgrade,omitempty" json:"upgrade,omitempty" mapstructure:"upgrade"`
+}
+
+// TerraformInitMode controls whether Atmos runs `terraform init` before a subcommand.
+type TerraformInitMode string
+
+const (
+	// TerraformInitModeAuto runs init only when the recorded init fingerprint is stale or missing.
+	TerraformInitModeAuto TerraformInitMode = "auto"
+	// TerraformInitModeAlways runs init before every subcommand.
+	TerraformInitModeAlways TerraformInitMode = "always"
+	// TerraformInitModeNever never runs init implicitly.
+	TerraformInitModeNever TerraformInitMode = "never"
+)
+
+// IsValid reports whether the mode is empty (unset) or one of the known values.
+func (m TerraformInitMode) IsValid() bool {
+	switch m {
+	case "", TerraformInitModeAuto, TerraformInitModeAlways, TerraformInitModeNever:
+		return true
+	default:
+		return false
+	}
+}
+
+// TerraformInitReconfigure controls when `-reconfigure` is passed to `terraform init`.
+type TerraformInitReconfigure string
+
+const (
+	// TerraformInitReconfigureAuto adds -reconfigure only when the backend configuration changed.
+	TerraformInitReconfigureAuto TerraformInitReconfigure = "auto"
+	// TerraformInitReconfigureAlways adds -reconfigure to every init.
+	TerraformInitReconfigureAlways TerraformInitReconfigure = "always"
+	// TerraformInitReconfigureNever never adds -reconfigure.
+	TerraformInitReconfigureNever TerraformInitReconfigure = "never"
+)
+
+// IsValid reports whether the value is empty (unset) or one of the known values.
+func (r TerraformInitReconfigure) IsValid() bool {
+	switch r {
+	case "", TerraformInitReconfigureAuto, TerraformInitReconfigureAlways, TerraformInitReconfigureNever:
+		return true
+	default:
+		return false
+	}
+}
+
+// TerraformInitUpgrade controls when `-upgrade` is passed to `terraform init`.
+type TerraformInitUpgrade string
+
+const (
+	// TerraformInitUpgradeAuto adds -upgrade only when terraform/tofu reports it is required.
+	TerraformInitUpgradeAuto TerraformInitUpgrade = "auto"
+	// TerraformInitUpgradeAlways adds -upgrade to every init.
+	TerraformInitUpgradeAlways TerraformInitUpgrade = "always"
+	// TerraformInitUpgradeNever never adds -upgrade.
+	TerraformInitUpgradeNever TerraformInitUpgrade = "never"
+)
+
+// IsValid reports whether the value is empty (unset) or one of the known values.
+func (u TerraformInitUpgrade) IsValid() bool {
+	switch u {
+	case "", TerraformInitUpgradeAuto, TerraformInitUpgradeAlways, TerraformInitUpgradeNever:
+		return true
+	default:
+		return false
+	}
+}
+
+// EffectiveInitMode returns the configured init mode, defaulting to auto when unset.
+//
+// For any config loaded through LoadConfig, "unset" is resolved by Viper's defaults layer
+// (pkg/config/load.go's setDefaultConfiguration sets "auto") before this method ever sees it,
+// with a project pinned to an edition before 2026-09-12 getting "always" restored instead --
+// byte-for-byte the unconditional-init behavior Atmos always had before this key existed (see
+// pkg/edition/journal.go and docs/prd/editions.md's Roadmap). The literal "auto" fallback below
+// only matters for a Terraform struct built directly in Go, bypassing config loading entirely.
+func (t *Terraform) EffectiveInitMode() TerraformInitMode {
+	if t.Init.Mode == "" {
+		return TerraformInitModeAuto
+	}
+	return t.Init.Mode
+}
+
+// EffectiveInitReconfigure resolves the reconfigure policy: an explicit
+// `init.reconfigure` wins; otherwise the deprecated `init_run_reconfigure: false`
+// maps to never, and anything else (including the legacy default true) maps to auto.
+//
+// Unlike EffectiveInitMode/EffectiveInitUpgrade, this default is deliberately NOT given a Viper
+// SetDefault in pkg/config/load.go, so it stays edition-pin-unaware: t.Init.Reconfigure must
+// remain genuinely empty ("") when the user hasn't set it explicitly, or this method's legacy
+// fallback below (deprecated init_run_reconfigure) would never run, silently breaking
+// init_run_reconfigure: false's "never" mapping for any project that set it. The
+// init_run_reconfigure: true -> auto reinterpretation this creates for anyone who never
+// migrates is a real, undocumented-by-editions default-behavior change -- it's the
+// KindBehavior gap tracked in docs/prd/editions.md's Roadmap (reinterpreting what an existing
+// stored value means, not changing a default the journal can overlay), not something this
+// method can route around given the legacy field it must keep honoring.
+func (t *Terraform) EffectiveInitReconfigure() TerraformInitReconfigure {
+	if t.Init.Reconfigure != "" {
+		return t.Init.Reconfigure
+	}
+	if !t.InitRunReconfigure {
+		return TerraformInitReconfigureNever
+	}
+	return TerraformInitReconfigureAuto
+}
+
+// EffectiveInitUpgrade returns the configured upgrade policy, defaulting to auto when unset.
+//
+// For any config loaded through LoadConfig, "unset" is resolved by Viper's defaults layer
+// (pkg/config/load.go's setDefaultConfiguration sets "auto") before this method ever sees it,
+// with a project pinned to an edition before 2026-09-12 getting "never" restored instead (see
+// pkg/edition/journal.go and docs/prd/editions.md's Roadmap for why this key -- unlike
+// init.mode/init.reconfigure, which only make an already-unconditional prior behavior conditional
+// -- needed a journal entry despite being a brand-new key: Atmos never passed -upgrade
+// automatically before this setting existed, so an unpinned/pre-release project must not inherit
+// the new automatic behavior without having agreed to it). The literal "auto" fallback below only
+// matters for a Terraform struct built directly in Go, bypassing config loading entirely.
+func (t *Terraform) EffectiveInitUpgrade() TerraformInitUpgrade {
+	if t.Init.Upgrade == "" {
+		return TerraformInitUpgradeAuto
+	}
+	return t.Init.Upgrade
 }
 
 type TerraformPlan struct {
@@ -1507,27 +1650,34 @@ type DocsGenerate struct {
 }
 
 type ArgsAndFlagsInfo struct {
-	AdditionalArgsAndFlags    []string
-	SubCommand                string
-	SubCommand2               string
-	ComponentFromArg          string
-	GlobalOptions             []string
-	TerraformCommand          string
-	TerraformDir              string
-	HelmfileCommand           string
-	HelmfileDir               string
-	PackerCommand             string
-	PackerDir                 string
-	AnsibleCommand            string
-	AnsibleDir                string
-	ConfigDir                 string
-	StacksDir                 string
-	WorkflowsDir              string
-	BasePath                  string
-	VendorBasePath            string
-	DeployRunInit             string
-	InitRunReconfigure        string
-	InitPassVars              string
+	AdditionalArgsAndFlags []string
+	SubCommand             string
+	SubCommand2            string
+	ComponentFromArg       string
+	GlobalOptions          []string
+	TerraformCommand       string
+	TerraformDir           string
+	HelmfileCommand        string
+	HelmfileDir            string
+	PackerCommand          string
+	PackerDir              string
+	AnsibleCommand         string
+	AnsibleDir             string
+	ConfigDir              string
+	StacksDir              string
+	WorkflowsDir           string
+	BasePath               string
+	VendorBasePath         string
+	DeployRunInit          string
+	InitRunReconfigure     string
+	InitPassVars           string
+	// InitMode overrides components.terraform.init.mode from atmos.yaml (auto, always, never).
+	InitMode string
+	// InitReconfigure overrides components.terraform.init.reconfigure from atmos.yaml
+	// (auto, always, never); supersedes the deprecated InitRunReconfigure.
+	InitReconfigure string
+	// InitUpgrade overrides components.terraform.init.upgrade from atmos.yaml (auto, always, never).
+	InitUpgrade               string
 	PlanSkipPlanfile          string
 	AutoGenerateBackendFile   string
 	AppendUserAgent           string
@@ -1768,27 +1918,34 @@ type ConfigAndStacksInfo struct {
 	// RequiredProviders maps provider names to their configuration.
 	// Example: {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}}.
 	// This is extracted from terraform.required_providers or components.terraform.<name>.required_providers.
-	RequiredProviders       map[string]map[string]any
-	AdditionalArgsAndFlags  []string
-	GlobalOptions           []string
-	BasePath                string
-	VendorBasePathFlag      string
-	TerraformCommand        string
-	TerraformDir            string
-	HelmfileCommand         string
-	HelmfileDir             string
-	PackerCommand           string
-	PackerDir               string
-	AnsibleCommand          string
-	AnsibleDir              string
-	ConfigDir               string
-	StacksDir               string
-	WorkflowsDir            string
-	Context                 Context
-	ContextPrefix           string
-	DeployRunInit           string
-	InitRunReconfigure      string
-	InitPassVars            string
+	RequiredProviders      map[string]map[string]any
+	AdditionalArgsAndFlags []string
+	GlobalOptions          []string
+	BasePath               string
+	VendorBasePathFlag     string
+	TerraformCommand       string
+	TerraformDir           string
+	HelmfileCommand        string
+	HelmfileDir            string
+	PackerCommand          string
+	PackerDir              string
+	AnsibleCommand         string
+	AnsibleDir             string
+	ConfigDir              string
+	StacksDir              string
+	WorkflowsDir           string
+	Context                Context
+	ContextPrefix          string
+	DeployRunInit          string
+	InitRunReconfigure     string
+	InitPassVars           string
+	// InitMode overrides components.terraform.init.mode from atmos.yaml (auto, always, never).
+	InitMode string
+	// InitReconfigure overrides components.terraform.init.reconfigure from atmos.yaml
+	// (auto, always, never); supersedes the deprecated InitRunReconfigure.
+	InitReconfigure string
+	// InitUpgrade overrides components.terraform.init.upgrade from atmos.yaml (auto, always, never).
+	InitUpgrade             string
 	PlanSkipPlanfile        string
 	AutoGenerateBackendFile string
 	UseTerraformPlan        bool
@@ -1928,6 +2085,10 @@ type ConfigAndStacksInfo struct {
 	// plan/apply's own output (FR-006f, research.md Decision 32). Transient
 	// runtime state — not serialized.
 	ExecMetadataRawOutput string `yaml:"-" json:"-" mapstructure:"-"`
+
+	// InitSkipped records that the implicit terraform init was skipped this
+	// invocation because the init fingerprint was up to date.
+	InitSkipped bool `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // GetComponentEnvSection returns the component's env section map.

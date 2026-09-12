@@ -163,6 +163,34 @@ var journal = []Entry{
 		Description: "The toolchain writes toolchain.lock.yaml by default, pinning resolved tool versions and checksums for reproducible installs across platforms and CI.",
 		Ref:         "https://atmos.tools/changelog/toolchain-lockfile-default",
 	},
+	{
+		// components.terraform.init.mode is a brand-new key (PR #3127), which would normally
+		// need no entry at all -- new keys are never journal-gated. It gets one anyway because,
+		// unlike a truly new key, it governs behavior (whether init runs at all) that Atmos
+		// always had a fixed answer for (always, unconditionally), just not a configurable one;
+		// treating its ship-day default as journaled means a project pinned before this date
+		// observes byte-for-byte the same unconditional-init behavior it always had, with no
+		// explicit init.mode: always needed. init.upgrade below gets the identical treatment;
+		// init.reconfigure does NOT (see its comment at the SetDefault call site in
+		// pkg/config/load.go) because its legacy-boolean interaction makes the same mechanism
+		// unsafe -- it remains a documented KindBehavior gap instead.
+		Date:        "2026-09-12",
+		Key:         "components.terraform.init.mode",
+		Kind:        KindValue,
+		Old:         "always",
+		New:         "auto",
+		Description: "terraform init only runs when something that affects it changed, instead of unconditionally before every command.",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3127",
+	},
+	{
+		Date:        "2026-09-12",
+		Key:         "components.terraform.init.upgrade",
+		Kind:        KindValue,
+		Old:         "never",
+		New:         "auto",
+		Description: "Atmos adds -upgrade to terraform init automatically when Terraform/OpenTofu reports one is required, instead of requiring it to be typed by hand.",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3127",
+	},
 }
 
 // Journal returns a copy of the journal sorted by date (oldest first), then key.
