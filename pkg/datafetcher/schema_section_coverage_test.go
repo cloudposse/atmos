@@ -112,6 +112,7 @@ var nonManifestSections = map[string]struct{}{
 	"chart_hooks":        {}, // Native Helm chart-hook policy.
 	"crds":               {}, // Native Helm CRD policy.
 	"dependency_update":  {}, // Native Helm invocation summary field; not stack-authored.
+	"create_namespace":   {}, // Native Helm component sub-field (modeled in helm_component_manifest); not a standalone section.
 	"workspace":          {}, // Terraform workspace (derived/metadata).
 	"inheritance":        {}, // Describe output.
 	"integrations":       {}, // atmos.yaml / describe output.
