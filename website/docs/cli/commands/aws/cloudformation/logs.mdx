@@ -1,0 +1,87 @@
+---
+title: atmos aws cloudformation logs
+sidebar_label: logs
+sidebar_class_name: command
+id: logs
+description: Show the combined event log across a stack and its nested stacks.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Show the combined CloudFormation event log across a stack and every nested
+  stack beneath it (up to 10 levels deep), merged into a single chronological
+  timeline — instead of having to check each nested stack's events separately.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation logs --help" src="/casts/screengrabs/atmos-aws-cloudformation-logs--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation logs <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation logs vpc -s plat-ue2-dev
+```
+
+Render a per-resource timeline instead of a flat chronological list:
+
+```shell
+atmos aws cloudformation logs vpc -s plat-ue2-dev --chart
+```
+
+Show logs for all or affected components in dependency order:
+
+```shell
+atmos aws cloudformation logs --all -s plat-ue2-dev
+atmos aws cloudformation logs --affected --base origin/main
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--chart` <em>(optional)</em></dt>
+  <dd>Render a per-resource timeline (one line per logical resource ID, showing its status transitions in order) instead of a flat chronological event list.</dd>
+
+  <dt>`--all` <em>(optional)</em></dt>
+  <dd>Show logs for all `aws/cloudformation` components in dependency order.</dd>
+
+  <dt>`--affected` <em>(optional)</em></dt>
+  <dd>Show logs for affected `aws/cloudformation` components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+</dl>
+
+## Output
+
+By default, every event from the stack and its nested stacks is printed in
+timestamp order, the same as a single stack's event stream. With `--chart`,
+events are grouped by logical resource ID instead, one line per resource
+showing its status transitions in order:
+
+```
+NatGateway                    CREATE_IN_PROGRESS -> CREATE_COMPLETE
+SubnetsStack                  CREATE_IN_PROGRESS -> CREATE_COMPLETE
+```
+
+:::note
+`logs` does not fire `before`/`after` hook events — only
+[`apply`](/cli/commands/aws/cloudformation/apply),
+[`diff`](/cli/commands/aws/cloudformation/diff), and
+[`delete`](/cli/commands/aws/cloudformation/delete) do.
+:::

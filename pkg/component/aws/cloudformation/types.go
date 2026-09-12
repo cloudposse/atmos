@@ -34,4 +34,19 @@ const (
 	OperationGetPolicy Operation = "get-policy"
 	// OperationFmt formats the local template in place (or checks formatting with --check).
 	OperationFmt Operation = "fmt"
+	// OperationStackSetCreate creates a StackSet and, when accounts/regions are
+	// configured on the selected target, its initial stack instances.
+	OperationStackSetCreate Operation = "stackset-create"
+	// OperationStackSetUpdate updates a StackSet's template/parameters/capabilities.
+	OperationStackSetUpdate Operation = "stackset-update"
+	// OperationStackSetDelete deletes every stack instance, then the StackSet itself.
+	OperationStackSetDelete Operation = "stackset-delete"
+	// OperationStackSetInstances lists a StackSet's stack instances.
+	OperationStackSetInstances Operation = "stackset-instances"
+	// OperationTree renders the nested-stack dependency tree for a component.
+	OperationTree Operation = "tree"
+	// OperationLogs renders the combined event log across a stack and its nested stacks.
+	OperationLogs Operation = "logs"
+	// OperationWatch attaches to a stack's in-progress (or already-terminal) operation and streams events.
+	OperationWatch Operation = "watch"
 )

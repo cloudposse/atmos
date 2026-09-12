@@ -331,6 +331,13 @@ func stringValue(s *string) string {
 	return *s
 }
 
+func timeValue(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
+}
+
 func awsBool(b bool) *bool {
 	return &b
 }
