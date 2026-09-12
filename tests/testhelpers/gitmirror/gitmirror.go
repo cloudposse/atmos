@@ -169,11 +169,19 @@ func runGit(dir string, args ...string) error {
 // from throwaway directories, and any of those leaking in from the caller's environment would
 // silently redirect the scratch repo's objects or refs elsewhere.
 func gitEnv() []string {
-	env := os.Environ()
+	return filterGitDirEnv(os.Environ())
+}
+
+// filterGitDirEnv is the pure filtering logic behind gitEnv, split out so it can be unit tested
+// without touching the real process environment. Env variable names are matched
+// case-insensitively (via strings.ToUpper) because Windows resolves environment variable names
+// case-insensitively, so a lower/mixed-case GIT_DIR (etc.) would otherwise slip through untouched
+// and stay active for git.
+func filterGitDirEnv(env []string) []string {
 	kept := make([]string, 0, len(env))
 	for _, kv := range env {
 		key, _, _ := strings.Cut(kv, "=")
-		switch key {
+		switch strings.ToUpper(key) {
 		case "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES":
 			continue
 		}
@@ -193,19 +201,29 @@ func gitEnv() []string {
 // regardless of the COUNT/KEY/VALUE form) prevents a stray command-scope override from doing the
 // same. Neither change affects gitEnv's own callers, which construct their own environment.
 func buildEnv() []string {
-	env := gitEnv()
+	kept := filterGitConfigEnv(gitEnv())
+	return append(kept, "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
+}
+
+// filterGitConfigEnv is the pure filtering logic behind buildEnv's ambient git-config stripping,
+// split out so it can be unit tested without touching the real process environment. Env variable
+// names are matched case-insensitively (via strings.ToUpper) because Windows resolves environment
+// variable names case-insensitively, so a lower/mixed-case GIT_CONFIG_COUNT/KEY_n/VALUE_n/
+// PARAMETERS entry would otherwise slip through untouched and stay active for git.
+func filterGitConfigEnv(env []string) []string {
 	kept := make([]string, 0, len(env)+2)
 	for _, kv := range env {
 		key, _, _ := strings.Cut(kv, "=")
+		upper := strings.ToUpper(key)
 		switch {
-		case key == "GIT_CONFIG_COUNT", key == "GIT_CONFIG_PARAMETERS":
+		case upper == "GIT_CONFIG_COUNT", upper == "GIT_CONFIG_PARAMETERS":
 			continue
-		case strings.HasPrefix(key, "GIT_CONFIG_KEY_"), strings.HasPrefix(key, "GIT_CONFIG_VALUE_"):
+		case strings.HasPrefix(upper, "GIT_CONFIG_KEY_"), strings.HasPrefix(upper, "GIT_CONFIG_VALUE_"):
 			continue
 		}
 		kept = append(kept, kv)
 	}
-	return append(kept, "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
+	return kept
 }
 
 // FileURI converts a filesystem path into a file:// URI usable as a git remote or GIT_CONFIG

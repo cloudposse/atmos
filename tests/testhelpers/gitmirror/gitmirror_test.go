@@ -69,6 +69,50 @@ func TestBuild(t *testing.T) {
 	}))
 }
 
+// TestFilterGitDirEnvCaseInsensitive verifies filterGitDirEnv drops GIT_DIR-family variables
+// regardless of the casing the environment happens to carry them in. Windows resolves
+// environment variable names case-insensitively, so a lower/mixed-case entry (e.g. from a
+// caller's shell profile) must be stripped exactly like the canonical uppercase form, and an
+// unrelated variable like PATH must survive untouched.
+func TestFilterGitDirEnvCaseInsensitive(t *testing.T) {
+	env := []string{
+		"git_dir=/some/repo/.git",
+		"Git_Work_Tree=/some/repo",
+		"GIT_INDEX_FILE=/some/repo/.git/index",
+		"PATH=/usr/bin:/bin",
+	}
+
+	kept := filterGitDirEnv(env)
+
+	require.NotContains(t, kept, "git_dir=/some/repo/.git")
+	require.NotContains(t, kept, "Git_Work_Tree=/some/repo")
+	require.NotContains(t, kept, "GIT_INDEX_FILE=/some/repo/.git/index")
+	require.Contains(t, kept, "PATH=/usr/bin:/bin")
+}
+
+// TestFilterGitConfigEnvCaseInsensitive verifies filterGitConfigEnv drops all the
+// GIT_CONFIG_COUNT/KEY_n/VALUE_n/PARAMETERS forms of ambient git configuration regardless of
+// casing, since Windows resolves environment variable names case-insensitively and a
+// lower/mixed-case entry would otherwise slip through and stay active for git. It is pure (no
+// git invocation) and runs identically on every OS.
+func TestFilterGitConfigEnvCaseInsensitive(t *testing.T) {
+	env := []string{
+		"git_config_count=1",
+		"Git_Config_Key_0=user.name",
+		"git_config_value_0=Someone",
+		"GIT_CONFIG_PARAMETERS='user.name=Someone'",
+		"PATH=/usr/bin:/bin",
+	}
+
+	kept := filterGitConfigEnv(env)
+
+	require.NotContains(t, kept, "git_config_count=1")
+	require.NotContains(t, kept, "Git_Config_Key_0=user.name")
+	require.NotContains(t, kept, "git_config_value_0=Someone")
+	require.NotContains(t, kept, "GIT_CONFIG_PARAMETERS='user.name=Someone'")
+	require.Contains(t, kept, "PATH=/usr/bin:/bin")
+}
+
 // TestFileURI verifies FileURI produces a well-formed file:// URI, including the
 // Windows volume-name case (file:///C:/...).
 func TestFileURI(t *testing.T) {
