@@ -1,0 +1,47 @@
+name: Stopwatch
+description: Publish a sticky pull-request comment summarizing all GitHub Actions workflow and job timings for a commit.
+author: Cloud Posse
+
+inputs:
+  github-token:
+    description: GitHub token with actions:read, pull-requests:read, and issues:write permissions.
+    required: true
+  workflow-run-id:
+    description: ID of the completed workflow_run that triggered the coordinator.
+    required: true
+  settle-seconds:
+    description: Time to wait for GitHub to finish creating and indexing sibling workflow runs.
+    required: false
+    default: "30"
+  comment-marker:
+    description: Hidden marker used to find and update the sticky comment.
+    required: false
+    default: "<!-- atmos-stopwatch -->"
+  comment-author:
+    description: Login expected to own the sticky comment; override when using a PAT or GitHub App token.
+    required: false
+    default: "github-actions[bot]"
+
+outputs:
+  published:
+    description: Whether the sticky comment was created or updated.
+  reason:
+    description: Why the action published or skipped the comment.
+  workflow-count:
+    description: Number of latest workflow runs included.
+  job-count:
+    description: Number of jobs included, including every matrix expansion.
+  wall-clock-seconds:
+    description: Elapsed seconds from the earliest workflow creation to the latest completion.
+  runner-seconds:
+    description: Sum of every included job's execution time in seconds.
+  comment-url:
+    description: URL of the sticky pull-request comment when published.
+
+runs:
+  using: node24
+  main: dist/index.js
+
+branding:
+  icon: clock
+  color: blue

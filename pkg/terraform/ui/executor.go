@@ -319,11 +319,12 @@ func showPlanTree(ctx context.Context, opts *ExecuteOptions, planFile string) {
 	}
 
 	add, change, remove := tree.GetChangeSummary()
-	// Only render tree if there are changes; otherwise just show badge.
-	if add > 0 || change > 0 || remove > 0 {
+	hasOutputChanges := tree.HasOutputChanges()
+	// Only render tree if there are changes (resource or output); otherwise just show badge.
+	if add > 0 || change > 0 || remove > 0 || hasOutputChanges {
 		ui.Writef(fmtNewlineStr, tree.RenderTreeWithConfig(opts.RenderConfig))
 	}
-	ui.Write(RenderChangeSummaryBadges(add, change, remove))
+	ui.Write(RenderChangeSummaryBadges(add, change, remove, hasOutputChanges))
 }
 
 // executePlanWithUserFile runs plan using the caller-provided -out planfile, then
@@ -621,15 +622,16 @@ func showTwoPhasePlanTree(ctx context.Context, opts *ExecuteOptions, planFile st
 	}
 
 	add, change, remove := tree.GetChangeSummary()
-	if add == 0 && change == 0 && remove == 0 {
+	hasOutputChanges := tree.HasOutputChanges()
+	if add == 0 && change == 0 && remove == 0 && !hasOutputChanges {
 		// No changes to apply - show badge only.
-		ui.Write(RenderChangeSummaryBadges(add, change, remove))
+		ui.Write(RenderChangeSummaryBadges(add, change, remove, hasOutputChanges))
 		return true
 	}
 
 	// Display the dependency tree and badge summary.
 	ui.Writef(fmtNewlineStr, tree.RenderTreeWithConfig(opts.RenderConfig))
-	ui.Write(RenderChangeSummaryBadges(add, change, remove))
+	ui.Write(RenderChangeSummaryBadges(add, change, remove, hasOutputChanges))
 	return false
 }
 
@@ -737,15 +739,16 @@ func executeWithPlanFile(ctx context.Context, opts *ExecuteOptions, planFile str
 	if err == nil {
 		// Check if there are any changes.
 		add, change, remove := tree.GetChangeSummary()
-		if add == 0 && change == 0 && remove == 0 {
+		hasOutputChanges := tree.HasOutputChanges()
+		if add == 0 && change == 0 && remove == 0 && !hasOutputChanges {
 			// No changes to apply - show badge, outputs, and exit.
-			ui.Write(RenderChangeSummaryBadges(add, change, remove))
+			ui.Write(RenderChangeSummaryBadges(add, change, remove, hasOutputChanges))
 			fetchAndDisplayOutputs(opts.Command, opts.WorkingDir, opts.Env)
 			return nil
 		}
 		// Display the dependency tree and badge summary.
 		ui.Writef(fmtNewlineStr, tree.RenderTreeWithConfig(opts.RenderConfig))
-		ui.Write(RenderChangeSummaryBadges(add, change, remove))
+		ui.Write(RenderChangeSummaryBadges(add, change, remove, hasOutputChanges))
 	}
 
 	// Confirm.
