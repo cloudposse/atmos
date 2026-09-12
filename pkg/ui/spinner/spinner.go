@@ -471,6 +471,16 @@ func (s *Spinner) Update(message string) {
 	s.program.Send(manualUpdateMsg{message: message})
 }
 
+// Println prints a line above the live spinner line, permanently, without
+// interrupting the spinner. In non-interactive output it's just ui.Writeln.
+func (s *Spinner) Println(line string) {
+	if !s.isTTY || s.program == nil {
+		ui.Writeln(line)
+		return
+	}
+	s.program.Send(manualPrintMsg{line: line})
+}
+
 // Stop stops the spinner without displaying a completion message.
 // Use Success() or Error() instead to show a completion status.
 // Stop is idempotent and safe to call multiple times.
@@ -534,6 +544,12 @@ type manualUpdateMsg struct {
 	message string
 }
 
+// manualPrintMsg carries a line to be printed permanently above the live
+// spinner line via tea.Println, without disturbing the spinner itself.
+type manualPrintMsg struct {
+	line string
+}
+
 func newManualSpinnerModel(progressMsg string) manualSpinnerModel {
 	s := newDotSpinner()
 	return manualSpinnerModel{
@@ -572,6 +588,8 @@ func (m manualSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case manualUpdateMsg:
 		m.progressMsg = msg.message
 		return m, nil
+	case manualPrintMsg:
+		return m, tea.Println(msg.line)
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)

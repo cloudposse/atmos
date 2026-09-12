@@ -1,6 +1,6 @@
 ---
 title: GitOps with Flux
-tags: [Emulators, Kubernetes, Automation]
+tags: [Kubernetes, Emulators, Automation]
 cast:
   file: /casts/examples/local-gitops/lifecycle.cast
   title: atmos gitops with flux lifecycle
@@ -13,8 +13,8 @@ cluster, no cloud credentials — and watch a change travel all the way around:
 
 ```
 atmos render  ─push─▶  Gitea (Git server emulator)  ─watch─▶  Flux  ─apply─▶  k3s (Kubernetes emulator)
-     ▲                                                                              │
-     └──────────────────────────  you observe it running  ◀───────────────────────┘
+      ▲                                                                              │
+      └──────────────────────────  you observe it running  ◀───────────────────────┘
 ```
 
 Two local emulators do the heavy lifting:

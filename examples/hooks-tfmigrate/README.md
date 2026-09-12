@@ -1,3 +1,11 @@
+---
+title: TFMigrate Hook
+tags: [Hooks]
+cast:
+  file: /casts/examples/hooks-tfmigrate/tfmigrate-example.cast
+  title: atmos tfmigrate hook
+---
+
 # `hooks-tfmigrate`
 
 Demonstrates the **`tfmigrate`** hook kind. This hook runs a Terraform state

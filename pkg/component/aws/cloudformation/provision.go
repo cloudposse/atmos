@@ -80,10 +80,23 @@ func packageIfNeeded(octx *opContext, provisionSection map[string]any, selected 
 	if !needsPackaging(spec.TemplateBody) && selected.Kind != kindAwsS3 {
 		return nil
 	}
+
 	s3Target, err := resolvePackagingTarget(provisionSection, selected)
 	if err != nil {
 		return err
 	}
+
+	if err := autoProvisionBackendIfEnabled(octx.Ctx, autoProvisionArgs{
+		AtmosConfig:     octx.AtmosConfig,
+		S3Target:        s3Target,
+		ComponentConfig: octx.Info.ComponentSection,
+		AuthContext:     octx.Info.AuthContext,
+		Component:       octx.Info.ComponentFromArg,
+		Stack:           octx.Info.Stack,
+	}); err != nil {
+		return err
+	}
+
 	pkg, err := uploadPackage(octx.Ctx, octx.AtmosConfig, octx.Info, s3Target, spec.TemplateBody)
 	if err != nil {
 		return err
@@ -139,7 +152,7 @@ func deployDirect(ctx context.Context, client CloudFormationClient, spec *stackS
 		return result, err
 	}
 	if isFailedStackStatus(status) {
-		return result, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationChangeSetFailed, spec.StackName, status)
+		return result, fmt.Errorf("%w: stack %s ended in status %s", errUtils.ErrAwsCloudFormationOperationFailed, spec.StackName, status)
 	}
 	return result, nil
 }

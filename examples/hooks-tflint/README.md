@@ -1,3 +1,8 @@
+---
+title: TFLint Hook
+tags: [Hooks]
+---
+
 # `hooks-tflint`
 
 Demonstrates the **`tflint`** hook kind: a `before.terraform.init` hook that
