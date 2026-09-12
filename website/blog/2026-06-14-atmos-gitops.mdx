@@ -4,9 +4,11 @@ title: "Atmos Git: A Foundational Capability for GitOps Pipelines"
 date: 2026-06-14T12:00:00.000Z
 authors: [osterman]
 tags: [feature]
+cast: "/casts/examples/gitops/reconcile.cast"
+castTitle: "atmos gitops reconcile"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Atmos now treats Git as a foundational platform capability — on par with Toolchain, Auth, and Hooks — built to enable GitOps workflows where you need to commit artifacts to a source of truth: deployment repos consumed by Argo CD or Flux, provider lock files, rendered manifests. Define managed repositories once in `atmos.yaml`, then clone, inspect, diff, commit, and push them through a new [`atmos git`](/cli/commands/git/usage) command group, or publish generated artifacts automatically on lifecycle events with the new `git` hook kind.
 
@@ -88,7 +90,7 @@ atmos git push flux-deploy
 
 Here's what reconciling a configured repository looks like end to end:
 
-<CastPlayer src="/casts/examples/gitops/reconcile.cast" title="atmos gitops reconcile" chrome controls scrubber />
+<CastEmbed src="/casts/examples/gitops/reconcile.cast" title="atmos gitops reconcile" chrome controls scrubber />
 
 [View the full example](/examples/gitops)
 

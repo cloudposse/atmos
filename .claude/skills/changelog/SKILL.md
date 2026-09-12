@@ -17,7 +17,7 @@ skill all point here instead of restating these rules. Don't re-duplicate them e
 Only non-draft PRs targeting `main`, labeled `minor` or `major`, need one — see the `pull-request` skill's
 label decision tree. CI enforces this via `.github/workflows/changelog-check.yml`, which checks for a new
 `website/blog/*.md` or `*.mdx` file (draft PRs, and PRs targeting a branch other than `main`, are exempt
-entirely). Write posts as `.mdx` regardless — Rule 3 below embeds `<CastPlayer>` as real JSX, which only
+entirely). Write posts as `.mdx` regardless — Rule 3 below embeds `<CastEmbed>` as real JSX, which only
 `.mdx` renders; CI accepts `.md` but that's not this repo's convention.
 If a change is genuinely internal-only with zero user-visible effect, it doesn't get a post at all — that
 invariant belongs to the `roadmap` skill ("no changelog post for internal-only refactors"); don't work around
@@ -126,14 +126,18 @@ block a post. When a recorded demo exists (or is worth recording) under `example
 per the `atmos-asciicast` skill, embed it near the top of the post, after the intro/truncate:
 
 ```mdx
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
-<CastPlayer src="/casts/examples/demo-component-versions/vendor-versions.cast" title="atmos component version vendoring" chrome controls scrubber />
+<CastEmbed src="/casts/examples/demo-component-versions/vendor-versions.cast" title="atmos component version vendoring" chrome controls scrubber />
 ```
 
 - `src` points under `website/static/casts/{examples,demo}/...`.
 - Always carry the `chrome controls scrubber` flags.
-- Multiple `<CastPlayer>` tags are fine in one post if there are multiple relevant recordings.
+- Multiple `<CastEmbed>` tags are fine in one post if there are multiple relevant recordings.
+- `CastEmbed` wraps `CastPlayer` and adds Download (rendered GIF/MP4/SVG/WEBM via Atmos Pro) and Share controls,
+  on by default against `cloudposse/atmos` @ `main`. If the `.cast` file isn't committed to `main` yet (e.g. it
+  ships in the same PR as the post), pass `download={false}` and/or `share={false}` to suppress the controls
+  until it lands.
 - Follow it with a plain link to the full example when one exists: `[View the full example](/examples/<name>)`.
 - Don't use `EmbedExample` in blog posts — that component's README/file-listing duplicates content the post's
   own prose already covers; it's for docs pages that need the "browse the full example" callout instead.

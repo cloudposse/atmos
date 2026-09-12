@@ -154,6 +154,18 @@ jobs:
       - name: Get deps
         uses: ./.github/actions/go-mod-download-retry
 
+      # Keep the race planner's small GOCACHE namespace separate from the
+      # full build/race cache below. Consumers restore this before running
+      # `test:racematrix`, avoiding both a cold Mage compile and the full
+      # multi-gigabyte race cache download on the suite's startup path.
+      - name: Warm the race planner cache
+        if: matrix.target == 'linux'
+        env:
+          GOCACHE: ${{ runner.temp }}/race-plan-go-build
+          RACE_SHARD_COUNT: "4"
+          ATMOS_TEST_RACE_SHARD_SEED: ${{ github.run_id }}
+        run: go tool mage test:racematrix
+
       # Warm the same cache namespaces the real jobs compile in. Flags must
       # match the real invocations or Go's action IDs differ and the warm
       # entries go unused: atmos builds with CGO_ENABLED=0 + GOFIPS140=latest
@@ -213,3 +225,12 @@ jobs:
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
           key: ${{ steps.go.outputs.cache-primary-key }}-${{ github.run_id }}
+
+      - name: Save the race planner build and module caches
+        if: matrix.target == 'linux'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ${{ runner.temp }}/race-plan-go-build
+            ${{ env.GOMODCACHE }}
+          key: race-plan-go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
