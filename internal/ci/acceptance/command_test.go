@@ -3,6 +3,7 @@ package acceptance
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -351,5 +352,55 @@ func TestRunDoesNotRetryWhenNotRetryTransient(t *testing.T) {
 	}
 	if string(remaining) != "0" {
 		t.Fatalf("fail count = %q, want %q (run() must invoke the command exactly once)", remaining, "0")
+	}
+}
+
+// errStubSubprocessSlot is a sentinel injected via acquireSubprocessSlotFunc to
+// simulate the real (Windows-only) semaphore's error path -- ctx done before a slot
+// frees up -- on any platform.
+var errStubSubprocessSlot = errors.New("stub subprocess slot error")
+
+// stubAcquireSubprocessSlotError overrides acquireSubprocessSlotFunc for the duration
+// of the test to always fail, restoring the real acquireSubprocessSlot afterward.
+func stubAcquireSubprocessSlotError(t *testing.T) {
+	t.Helper()
+	acquireSubprocessSlotFunc = func(context.Context) (func(), error) { return nil, errStubSubprocessSlot }
+	t.Cleanup(func() { acquireSubprocessSlotFunc = acquireSubprocessSlot })
+}
+
+// TestRunPropagatesSubprocessSlotError covers run's acquireSubprocessSlotFunc error
+// path (command.go), which the real acquireSubprocessSlot can only take on Windows --
+// see subprocess_cap_windows.go/subprocess_cap_other.go.
+func TestRunPropagatesSubprocessSlotError(t *testing.T) {
+	stubAcquireSubprocessSlotError(t)
+
+	runner := newHelperRunner(t)
+	err := runner.run(context.Background(), runOptions{dir: t.TempDir()}, "go", "version")
+	if err == nil {
+		t.Fatal("expected run() to fail when acquireSubprocessSlotFunc fails")
+	}
+	if !errors.Is(err, errCommandFailed) {
+		t.Fatalf("run() error = %v, want it to wrap errCommandFailed", err)
+	}
+	if !errors.Is(err, errStubSubprocessSlot) {
+		t.Fatalf("run() error = %v, want it to wrap the subprocess slot error", err)
+	}
+}
+
+// TestOutputPropagatesSubprocessSlotError is output's counterpart to
+// TestRunPropagatesSubprocessSlotError.
+func TestOutputPropagatesSubprocessSlotError(t *testing.T) {
+	stubAcquireSubprocessSlotError(t)
+
+	runner := newHelperRunner(t)
+	out, err := runner.output(context.Background(), t.TempDir(), nil, "go", "version")
+	if err == nil {
+		t.Fatal("expected output() to fail when acquireSubprocessSlotFunc fails")
+	}
+	if !errors.Is(err, errStubSubprocessSlot) {
+		t.Fatalf("output() error = %v, want it to wrap the subprocess slot error", err)
+	}
+	if out != "" {
+		t.Fatalf("output() = %q, want empty output on a subprocess-slot failure", out)
 	}
 }

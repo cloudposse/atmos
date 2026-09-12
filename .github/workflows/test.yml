@@ -63,6 +63,12 @@ env:
   # OS (see tests/cli_test.go's testShard/testCaseShard and the `test` job's
   # matrix.shard list below, which must stay in sync with this count).
   TEST_SHARD_COUNT: "10"
+  # Number of parallel shards the `race` job's package list is split into
+  # (see magefiles/race_matrix.go's Test.RaceMatrix and the `race` job's
+  # hardcoded "shard N/4" name below, which must stay in sync with this
+  # count -- the job `name:` context can't read workflow `env`, same reason
+  # TEST_SHARD_COUNT above needs its own comment).
+  RACE_SHARD_COUNT: "4"
   # No `|direct` fallback: every job here runs under harden-runner's block
   # mode, where a direct fetch fans out to ~25 vanity-import hosts (k8s.io,
   # go.uber.org, gopkg.in, helm.sh, ...) that are not allowlisted, so the
@@ -850,6 +856,44 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+  # Computes the `race` job's shard matrix once, upstream of the matrix
+  # itself: `go list ./...` order is stable (sorted by import path), so a
+  # naive round-robin split-per-shard-job would pin the same cluster of
+  # packages to the same shard on every run. Doing the split in one place
+  # lets it shuffle the full list first (magefiles/race_matrix.go's
+  # Test.RaceMatrix, seeded from github.run_id so the assignment still
+  # varies run to run) and hand each shard its own package list directly,
+  # rather than trusting N independent jobs to recompute an identical split.
+  # Emits the same GitHub Actions matrix JSON convention `atmos describe
+  # affected`/`atmos list instances --format=matrix` use (see pkg/matrix).
+  race-plan:
+    name: "[race] plan shards"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-cache
+        with:
+          # Planning only needs Mage and `go list`; restore its dedicated
+          # nightly-warmed cache instead of the multi-gigabyte race archive.
+          # The race shards below still restore the full warmed cache.
+          cache: race-plan
+
+      - name: Plan race shards
+        id: plan
+        env:
+          ATMOS_TEST_RACE_SHARD_SEED: ${{ github.run_id }}
+        run: |
+          echo "::notice title=Race shard seed::Reproduce locally with GITHUB_OUTPUT=/dev/stdout ATMOS_TEST_RACE_SHARD_SEED=${ATMOS_TEST_RACE_SHARD_SEED} RACE_SHARD_COUNT=${RACE_SHARD_COUNT} go tool mage test:racematrix"
+          go tool mage test:racematrix
+
   # `-race` requires CGO_ENABLED=1 (the detector's runtime is itself a cgo
   # library), unlike every other Go build/test path in this repo (CGO_ENABLED=0).
   # Enabling cgo pulls in the cgo half of github.com/bearsh/hid (transitive, via
@@ -864,41 +908,32 @@ jobs:
   # GOFIPS140=latest (set inside the `race` command itself, .atmos.d/test.yaml)
   # is unaffected by CGO_ENABLED: Go's FIPS 140-3 module is pure Go, no cgo.
   race:
-    name: "[race] non-acceptance test suite"
-    # `go test`'s package-level concurrency scales with available cores, and
-    # this job compiles+runs ~400 race-instrumented packages -- the standard
-    # ubuntu-latest runner's ~4 cores were the bottleneck (this job became
-    # the slowest check once every other job's own timeout issues were
-    # fixed). The RunsOn "terraform" family used elsewhere in this file for
-    # Go work (the build job's linux leg) turned out to be an i4i.large: 2
-    # cores, 15.7GB RAM -- fewer cores than ubuntu-latest, a downgrade for
-    # this CPU/memory-bound workload. "large" (4 cores/~32GB) was a real
-    # upgrade, but this job stayed the workflow's longest pole at ~27 minutes
-    # of pure test execution, so it now gets "xlarge" (8+ cores/~64GB, per
-    # .github's runs-on.yml): `go test` runs packages concurrently up to
-    # GOMAXPROCS, and -race's per-test memory overhead is what the extra RAM
-    # absorbs.
-    #
-    # No extras=s3-cache: the Go cache restore (setup-go-cache below) must
-    # read the GitHub Actions cache backend, where the warmup workflow saves
-    # a race-instrumented (-race, CGO_ENABLED=1) build cache on main's scope.
-    runs-on: "runs-on=${{github.run_id}}/runner=xlarge/tag=atmos/private=false"
-    # Race-instrumented binaries run several times slower and use substantially
-    # more memory than normal test binaries; this runs the entire `./...` suite
-    # unsharded (unlike the `test` job's acceptance+unit sweep), so budget
-    # generously. `./cmd/...` alone -- one subtree out of the full package set
-    # this job actually runs -- took ~45 minutes locally in isolation (see
-    # docs/fixes/2026-09-01-race-detector-ci-job-timeouts.md); real runs on
-    # this runner have finished within a few minutes of the previous 45-minute
-    # budget, leaving too little slack for checkout/setup/apt overhead plus
-    # natural runner variance.
-    timeout-minutes: 75
+    # RACE_SHARD_COUNT (workflow env) is the source of truth for the shard
+    # count; the "/4" here is hardcoded because the job `name:` context
+    # can't read workflow `env` (same reason the acceptance job's name below
+    # hardcodes "/10").
+    name: "[race] non-acceptance test suite (shard ${{ matrix.shard }}/4)"
+    needs: [race-plan]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.race-plan.outputs.matrix) }}
+    # Plain hosted ubuntu-latest, not RunsOn: this is the same image lineage
+    # setup-go-cache-warmup.yml's linux leg writes the race-instrumented
+    # (-race, CGO_ENABLED=1) Go build cache on, and the same runner the 10
+    # hosted acceptance shards already use -- so this job reads that cache
+    # directly instead of relying on the ImageOS-excluded-from-key workaround
+    # RunsOn legs needed. Splitting the suite across RACE_SHARD_COUNT shards
+    # (above) gives more total cores across the matrix than one big runner
+    # would, without paying for oversized single instances.
+    runs-on: ubuntu-latest
+    # Each shard now runs roughly 1/4 of the package list rather than the
+    # unsharded ~27-minute-plus suite, but every shard still pays the same
+    # fixed per-job overhead (checkout, toolchain installs, apt-get, cache
+    # restore) that used to be amortized over one long-running job -- so this
+    # is generous headroom above that fraction, not a straight 75÷4 division
+    # (the acceptance shard matrix above budgets the same way).
+    timeout-minutes: 30
     steps:
-      # Harden Runner doesn't cover RunsOn self-hosted runners (see the build
-      # job's linux leg, which skips it the same way); runs-on/action sets up
-      # this job's runner metadata/labels instead.
-      - uses: runs-on/action@efac073ea2507ec18797de3a81704201ade11d9d # v2.3.1
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -928,12 +963,9 @@ jobs:
       - name: Install Linux build dependencies (libudev-dev for CGO_ENABLED=1 -- see comment above)
         run: |
           # The DEB822 /etc/apt/sources.list.d/ubuntu.sources file (and the
-          # Azure mirror it points at) is a GitHub-hosted-runner-image thing
-          # (Ubuntu 24.04+); this job now runs on the RunsOn "terraform"
-          # runner (Ubuntu 22.04, no DEB822 sources file at all -- see
-          # docs/fixes for the incident where this sed failed outright with
-          # "No such file or directory"). Only rewrite the mirror if that
-          # file actually exists, so this step works on either runner image.
+          # Azure mirror it points at) is a GitHub-hosted-runner-image thing;
+          # only rewrite the mirror if that file actually exists, so this
+          # step works across runner image variations.
           if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
             sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
           fi
@@ -949,10 +981,10 @@ jobs:
         # Unlike the `test`/`build` jobs, this job never ran this step, so
         # tests needing these binaries (e.g. cmd/terraform/migrate,
         # TestPackerValidateCmd) fell back to Atmos's own lazy/auto-install
-        # path -- unreliable here since `go test ./...` runs ~400 packages as
-        # separate concurrent processes, and nothing serializes a shared
-        # install across them. Pre-installing once, before any test process
-        # starts, removes that race entirely (see docs/fixes for the
+        # path -- unreliable here since `go test ./...` runs each shard's
+        # packages as separate concurrent processes, and nothing serializes a
+        # shared install across them. Pre-installing once, before any test
+        # process starts, removes that race entirely (see docs/fixes for the
         # incident this closes).
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -972,6 +1004,10 @@ jobs:
           # job's acceptance steps, which already set this for the same
           # reason (see their own "Use the GitHub token" comment).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This shard's package list, precomputed by race-plan above.
+          # racePackagesFromEnv (magefiles/test_race.go) treats a non-empty
+          # TEST the same as every other manual TEST override in this repo.
+          TEST: ${{ matrix.packages }}
         run: atmos test race
 
   # Sharding the `test` job fans it out into TEST_SHARD_COUNT x 3 per-leg checks.
@@ -1327,17 +1363,17 @@ jobs:
     services:
       floci:
         # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
-        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2 # 1.5.23
+        image: floci/floci@sha256:d2ecc8035822b23b8587a56eab15edd825f41d3fb80d93e8e66680410beddc08 # 1.5.23
         ports:
           - 4566:4566
       floci-gcp:
         # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
-        image: floci/floci-gcp@sha256:a6420f308ad721fa4a203b70658563eab9c8fbc8d091feca2d95016239f5854a # latest
+        image: floci/floci-gcp@sha256:102db655af6facdcd1ec621e108558aafc46c817eaada63236d3acf3c5e92aaa # latest
         ports:
           - 4588:4588
       floci-az:
         # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
-        image: floci/floci-az@sha256:1e514c57db14dc41938f7925bbc1aca0293aa4da272c7014d98f1fba378cedb2 # latest
+        image: floci/floci-az@sha256:5e403a7d788c24ab2d1dc03d4803ef2d3962ca01522abba65ed86f221ae87ac0 # latest
         env:
           FLOCI_AZ_TLS_ENABLED: "true"
         ports:

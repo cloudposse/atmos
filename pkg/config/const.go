@@ -151,6 +151,7 @@ const (
 	HelmChartHooksSectionName         = "chart_hooks"
 	HelmCRDsSectionName               = "crds"
 	HelmDependencyUpdateSectionName   = "dependency_update"
+	HelmCreateNamespaceSectionName    = "create_namespace"
 	HelmDefaultMaxHistory             = 10
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"

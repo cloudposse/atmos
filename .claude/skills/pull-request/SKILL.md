@@ -134,7 +134,7 @@ Run through these in order before `git push`. Every item has burned someone befo
     - Create a blog post at `website/blog/YYYY-MM-DD-<slug>.mdx`.
     - Read `website/blog/tags.yml` and pick a defined tag.
     - Check `website/blog/authors.yml` for your handle; add yourself if missing.
-    - Embed the feature's cast (`CastPlayer`) if one exists or was recorded for this PR.
+    - Embed the feature's cast (`CastEmbed`) if one exists or was recorded for this PR.
     - Delegate the roadmap update to the `roadmap` skill (do not touch `featured[]`).
 4. **Build the website** to verify MDX renders: `cd website && npm run build`.
 5. **Commit and push.**

@@ -32,17 +32,17 @@ func TestCommandProviderMetadata(t *testing.T) {
 	for _, cmd := range provider.GetCommand().Commands() {
 		subcommands = append(subcommands, cmd.Name())
 	}
-	assert.ElementsMatch(t, []string{"template", "diff", "plan", "apply", "deploy", "delete", "plugin", "repo"}, subcommands)
+	assert.ElementsMatch(t, []string{"template", "diff", "plan", "values", "apply", "deploy", "delete", "plugin", "repo"}, subcommands)
 }
 
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	templateCmd := newOperationCommand("template", "Render")
-	for _, name := range []string{"namespace", "all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels", "dependency-update"} {
+	for _, name := range []string{"namespace", "all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels", "dependency-update", "values", "set", "set-string", "set-file", "set-json", "set-literal"} {
 		assert.NotNil(t, templateCmd.Flag(name), "expected template flag %q", name)
 	}
 
 	applyCmd := newOperationCommand("apply", "Apply")
-	for _, name := range []string{"namespace", "target", "on-failure", "cleanup-on-failure", "wait", "wait-for-jobs", "timeout", "history-max", "no-hooks", "skip-crds", "dependency-update"} {
+	for _, name := range []string{"namespace", "target", "on-failure", "cleanup-on-failure", "wait", "wait-for-jobs", "timeout", "history-max", "no-hooks", "skip-crds", "dependency-update", "values", "set", "set-string", "set-file", "set-json", "set-literal"} {
 		assert.NotNil(t, applyCmd.Flag(name), "expected apply flag %q", name)
 	}
 	assert.Equal(t, "watcher", applyCmd.Flag("wait").NoOptDefVal)
@@ -62,6 +62,9 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	}
 	assert.Nil(t, deleteCmd.Flag("on-failure"))
 	assert.Nil(t, deleteCmd.Flag("dependency-update"))
+	for _, name := range helmValueOverrideFlags {
+		assert.Nil(t, deleteCmd.Flag(name), "delete must not accept Helm value override flag %q", name)
+	}
 
 	// diff/plan get the baseline-selection flags; other operations do not.
 	for _, opName := range []string{"diff", "plan"} {
@@ -70,9 +73,35 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 			assert.NotNil(t, opCmd.Flag(name), "expected %q flag on %q", name, opName)
 		}
 		assert.NotNil(t, opCmd.Flag("dependency-update"))
+		for _, name := range helmValueOverrideFlags {
+			assert.NotNil(t, opCmd.Flag(name), "expected %q flag on %q", name, opName)
+		}
 	}
 	assert.Nil(t, applyCmd.Flag("against"))
 	assert.Nil(t, templateCmd.Flag("from-manifest"))
+
+	valuesCmd := newOperationCommand("values", "Values")
+	assert.NotNil(t, valuesCmd.Flag("stack"))
+	assert.Nil(t, valuesCmd.Flag("namespace"))
+	assert.Nil(t, valuesCmd.Flag("dependency-update"))
+	assert.Nil(t, valuesCmd.Flag("all"))
+	assert.Nil(t, valuesCmd.Flag("affected"))
+	assert.Contains(t, valuesCmd.Example, "atmos helm values monitoring -s plat-ue2-dev --set image.tag=2026.09.09")
+	for _, name := range helmValueOverrideFlags {
+		assert.NotNil(t, valuesCmd.Flag(name), "expected %q flag on values", name)
+	}
+}
+
+func TestHelmValueOverrideFlagsPreserveRepeatedRawValues(t *testing.T) {
+	cmd := newOperationCommand("apply", "Apply")
+	require.NoError(t, cmd.Flags().Set("set", `labels=one,two`))
+	require.NoError(t, cmd.Flags().Set("set", `image.tag=1.2.3`))
+	require.NoError(t, cmd.Flags().Set("values", "first.yaml"))
+	require.NoError(t, cmd.Flags().Set("values", "second.yaml"))
+
+	assert.Equal(t, "stringArray", cmd.Flag("set").Value.Type())
+	assert.Equal(t, []string{`labels=one,two`, `image.tag=1.2.3`}, getOperationFlags(cmd)["set"])
+	assert.Equal(t, []string{"first.yaml", "second.yaml"}, getOperationFlags(cmd)["values"])
 }
 
 func TestBareWaitDoesNotConsumeComponentArgument(t *testing.T) {
