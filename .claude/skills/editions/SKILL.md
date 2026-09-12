@@ -25,10 +25,10 @@ Ask these in order. Stop at the first "yes."
 → **Yes: `KindValue` journal entry required.** Follow `docs/prd/editions.md`'s "Contributor
 workflow" exactly:
 1. Change the literal in `setDefaultConfiguration` (`pkg/config/load.go`), and in
-   `defaultCliConfig` (`pkg/config/default.go`) if that struct also carries the field. Confirm the
-   key isn't set in the embedded `atmos.yaml` (layer (b) must stay journaled-key-free).
+    `defaultCliConfig` (`pkg/config/default.go`) if that struct also carries the field. Confirm the
+    key isn't set in the embedded `atmos.yaml` (layer (b) must stay journaled-key-free).
 2. Append a dated `Entry{Date, Key, Kind: KindValue, Old, New, Description, Ref}` to
-   `pkg/edition/journal.go` — `Ref` is the PR URL, `Old`/`New` typed as the field is typed today.
+    `pkg/edition/journal.go` — `Ref` is the PR URL, `Old`/`New` typed as the field is typed today.
 3. Regenerate the snapshot: `ATMOS_REGENERATE_DEFAULTS_SNAPSHOT=true go test ./pkg/config -run TestDefaultConfigurationSnapshot`.
 
 Skipping this is not optional — `pkg/config/default_snapshot_test.go` fails the build on an
@@ -78,16 +78,16 @@ changed from "always add `-reconfigure`" to "add it only when the backend change
 `docs/prd/editions.md`'s Roadmap). You cannot mechanically gate this today. What you **can** and
 **must** do:
 1. State the reinterpretation explicitly in the PR's PRD (Goals or a dedicated Migration section)
-   — don't let it hide inside a generic "behavior change" bullet. Say precisely what the old value
-   used to cause and what it causes now.
+    — don't let it hide inside a generic "behavior change" bullet. Say precisely what the old value
+    used to cause and what it causes now.
 2. Add a bullet to `docs/prd/editions.md`'s Roadmap → "Behavior gating" seed-entry list, dated to
-   this PR's merge date, with a PR link and one sentence describing the reinterpretation — same
-   format as the existing 9 seed entries. If this is the first such entry to ship *after* editions
-   itself existed (check the entry dates against `docs/prd/editions.md`'s own PRD changelog date),
-   say so explicitly, the way the "First post-editions candidate" paragraph does — it's a
-   different situation from the pre-editions historical sweep and worth flagging as such.
+    this PR's merge date, with a PR link and one sentence describing the reinterpretation — same
+    format as the existing 9 seed entries. If this is the first such entry to ship *after* editions
+    itself existed (check the entry dates against `docs/prd/editions.md`'s own PRD changelog date),
+    say so explicitly, the way the "First post-editions candidate" paragraph does — it's a
+    different situation from the pre-editions historical sweep and worth flagging as such.
 3. Bump `docs/prd/editions.md`'s own Changelog table with a new dated row noting the addition (no
-   version-number bump needed for a docs-only Roadmap addition; use the next minor, e.g. 1.0 → 1.1).
+    version-number bump needed for a docs-only Roadmap addition; use the next minor, e.g. 1.0 → 1.1).
 
 ## What NOT to do
 
