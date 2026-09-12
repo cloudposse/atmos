@@ -19,6 +19,7 @@ func ValidateTestStep(s *WorkflowStep) error {
 	return validateTestChildren(s.Steps, false, s.Name)
 }
 
+// validateTestChildren checks dependency structure and validates every test child.
 func validateTestChildren(steps []WorkflowStep, concurrent bool, parent string) error {
 	names, err := collectWorkflowStepNames(steps, parent)
 	if err != nil {
@@ -36,6 +37,7 @@ func validateTestChildren(steps []WorkflowStep, concurrent bool, parent string) 
 	return nil
 }
 
+// validateTestChild enforces test restrictions and the leaf's execution contract.
 func validateTestChild(s *WorkflowStep, index int, concurrent bool) error {
 	if s.Tty || s.Interactive || s.BackgroundAsync {
 		return fmt.Errorf("%w: test child %q must run in the foreground without a terminal", ErrWorkflowControlStepInvalid, s.Name)
@@ -51,11 +53,12 @@ func validateTestChild(s *WorkflowStep, index int, concurrent bool) error {
 		if len(s.Steps) > 0 {
 			return fmt.Errorf("%w: test leaf %q cannot contain steps", ErrWorkflowControlStepInvalid, s.Name)
 		}
-		return nil
+		return ValidateExecWorkflowSteps([]WorkflowStep{*s})
 	}
 	return validateTestControl(s, index, concurrent)
 }
 
+// validateTestControl validates a concurrent group and its leaf children.
 func validateTestControl(s *WorkflowStep, index int, concurrent bool) error {
 	if concurrent {
 		return fmt.Errorf("%w: parallel/matrix groups cannot be nested inside each other", ErrWorkflowControlStepInvalid)

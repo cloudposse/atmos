@@ -403,6 +403,7 @@ func verifyStepsHookTypes(name string, hook *Hook) error {
 
 func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	vars := runnerstep.NewVariables()
+	vars.SetAtmosConfig(ctx.AtmosConfig)
 	for k, v := range BuildAtmosEnv(ctx, "", "") {
 		vars.SetEnv(k, v)
 	}
@@ -533,6 +534,11 @@ func resolveTestHookStep(ctx *ExecContext, s *schema.WorkflowStep, vars *runners
 	var payload map[string]any
 	if err = yaml.Unmarshal(data, &payload); err != nil {
 		return nil, err
+	}
+	// Generic handler parameters are excluded from WorkflowStep's YAML fields.
+	// Restore them before rendering so expanded matrix and hook variables apply.
+	if copy.With != nil {
+		payload["with"] = copy.With
 	}
 	rendered, err := processHookExecutionValue(ctx.AtmosConfig, payload, hookStepTemplateInfo(ctx, vars))
 	if err != nil {

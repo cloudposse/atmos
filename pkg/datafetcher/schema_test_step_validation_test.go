@@ -29,3 +29,20 @@ func TestManifestSchemaViewportPadding(t *testing.T) {
 		}
 	}
 }
+
+func TestManifestSchemaTestStepStructure(t *testing.T) {
+	schema := loadEmbeddedSchemaBytes(t)
+	for _, tc := range []struct {
+		name  string
+		check map[string]any
+	}{
+		{"omitted steps", map[string]any{"type": "test"}},
+		{"empty steps", map[string]any{"type": "test", "steps": []any{}}},
+		{"concurrency belongs on nested groups", map[string]any{"type": "test", "max_concurrency": 1, "steps": []any{map[string]any{"type": "shell", "command": "echo hello"}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := map[string]any{"workflows": map[string]any{"checks": map[string]any{"steps": []any{tc.check}}}}
+			assertSchemaInvalid(t, schema, manifest)
+		})
+	}
+}

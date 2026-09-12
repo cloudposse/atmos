@@ -44,6 +44,7 @@ type testRun struct {
 	failures atomic.Int64
 }
 
+// RunTest expands and runs an isolated test suite, then publishes its report and results.
 func (testBridge) RunTest(ctx context.Context, parent *schema.WorkflowStep, vars *step.Variables, workflow *schema.WorkflowDefinition) (*step.StepResult, error) {
 	// Copy the tree before assigning names or applying inherited defaults.
 	s := *parent
@@ -89,6 +90,7 @@ func (testBridge) RunTest(ctx context.Context, parent *schema.WorkflowStep, vars
 	return testRunResult(run.report, vars, local), errors.Join(err, renderErr)
 }
 
+// testReportOutput selects the execution writer and enables live rendering only for an owned terminal.
 func testReportOutput(ctx context.Context, vars *step.Variables) (io.Writer, bool) {
 	output := vars.OutputWriters.Stderr
 	live := output == nil && !step.OutputSuppressed(ctx) && !ci.IsCI() && terminal.New().IsTTY(terminal.Stderr)
@@ -101,6 +103,7 @@ func testReportOutput(ctx context.Context, vars *step.Variables) (io.Writer, boo
 	return output, false
 }
 
+// testRunResult exposes leaf totals and completed step values to the calling execution.
 func testRunResult(report *testreport.Reporter, vars, local *step.Variables) *step.StepResult {
 	counts := report.Counts()
 	result := step.NewStepResult(fmt.Sprintf("%d passed, %d failed", counts[testreport.Passed], counts[testreport.Failed]))
@@ -113,6 +116,7 @@ func testRunResult(report *testreport.Reporter, vars, local *step.Variables) *st
 	return result
 }
 
+// copyTestSteps copies nested slices so naming and inherited defaults cannot mutate the source workflow.
 func copyTestSteps(steps []schema.WorkflowStep) []schema.WorkflowStep {
 	out := append([]schema.WorkflowStep(nil), steps...)
 	for i := range out {
@@ -121,6 +125,7 @@ func copyTestSteps(steps []schema.WorkflowStep) []schema.WorkflowStep {
 	return out
 }
 
+// buildTree creates reporter nodes and expands concurrent groups before execution starts.
 func (r *testRun) buildTree(s *schema.WorkflowStep) ([]*testreport.Node, error) {
 	roots := make([]*testreport.Node, 0, len(s.Steps))
 	for i := range s.Steps {
@@ -136,10 +141,12 @@ func (r *testRun) buildTree(s *schema.WorkflowStep) ([]*testreport.Node, error) 
 	return roots, nil
 }
 
+// isTestControl identifies groups whose children use the dependency scheduler.
 func isTestControl(s *schema.WorkflowStep) bool {
 	return s.Type == schema.TaskTypeParallel || s.Type == schema.TaskTypeMatrix
 }
 
+// buildGroupTree assigns stable report IDs to each expanded scheduler case.
 func (r *testRun) buildGroupTree(s *schema.WorkflowStep, root *testreport.Node) error {
 	graph, order, err := buildControlGraph(s)
 	if err != nil {
@@ -162,6 +169,7 @@ func (r *testRun) buildGroupTree(s *schema.WorkflowStep, root *testreport.Node) 
 	return nil
 }
 
+// addMatrixTestLeaf groups expanded cases beneath readable matrix-axis labels.
 func addMatrixTestLeaf(s *schema.WorkflowStep, root, leaf *testreport.Node, rows map[string]*testreport.Node, cn *controlNode) {
 	label := matrixTestLabel(cn.matrix)
 	row := rows[label]
@@ -180,6 +188,7 @@ func addMatrixTestLeaf(s *schema.WorkflowStep, root, leaf *testreport.Node, rows
 	row.Children = append(row.Children, leaf)
 }
 
+// testLabel prefers an explicit display title over the execution name.
 func testLabel(s *schema.WorkflowStep) string {
 	if s.Title != "" {
 		return s.Title
@@ -187,6 +196,7 @@ func testLabel(s *schema.WorkflowStep) string {
 	return s.Name
 }
 
+// matrixTestLabel sorts axis names to keep row labels deterministic.
 func matrixTestLabel(row map[string]string) string {
 	keys := make([]string, 0, len(row))
 	for k := range row {
@@ -200,6 +210,7 @@ func matrixTestLabel(row map[string]string) string {
 	return strings.Join(values, ", ")
 }
 
+// sequence runs direct children in order, retaining failures while honoring suite cancellation.
 func (r *testRun) sequence(ctx context.Context, parent *schema.WorkflowStep, vars *step.Variables) error {
 	var combined error
 	status := schema.ConditionPredicateSuccess
@@ -225,6 +236,7 @@ func (r *testRun) sequence(ctx context.Context, parent *schema.WorkflowStep, var
 	return combined
 }
 
+// runChild evaluates group conditions or runs a leaf and applies its continuation policy.
 func (r *testRun) runChild(ctx context.Context, s *schema.WorkflowStep, vars *step.Variables, status string) error {
 	group := r.groups[s.Name]
 	if group == nil {
@@ -260,6 +272,7 @@ func (r *testRun) runChild(ctx context.Context, s *schema.WorkflowStep, vars *st
 	return err
 }
 
+// skipStep marks every leaf in a skipped or canceled group without changing progress totals.
 func (r *testRun) skipStep(s *schema.WorkflowStep, status string) {
 	if g := r.groups[s.Name]; g != nil {
 		for _, id := range g.order {
@@ -281,6 +294,7 @@ type testGroupExecutor struct {
 	cancel   context.CancelFunc
 }
 
+// group schedules isolated children with the group concurrency and failure policies.
 func (r *testRun) group(ctx context.Context, s *schema.WorkflowStep, g *testGroup, vars *step.Variables) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -313,6 +327,7 @@ func (r *testRun) group(ctx context.Context, s *schema.WorkflowStep, g *testGrou
 	return combined
 }
 
+// Dispatch executes one scheduled case and records its result before applying group cancellation.
 func (e *testGroupExecutor) Dispatch(ctx context.Context, node *dependency.Node) (scheduler.Result, error) {
 	cn := node.Metadata["child"].(controlNode)
 	local := e.branchVariables(cn.matrix)
@@ -347,6 +362,7 @@ func (e *testGroupExecutor) accountFailure(vars *step.Variables) bool {
 	return err != nil || !forgiven
 }
 
+// branchVariables isolates mutable state and exposes prior results from the same matrix row.
 func (e *testGroupExecutor) branchVariables(matrix map[string]string) *step.Variables {
 	e.mu.Lock()
 	local := e.vars.Clone()
@@ -365,6 +381,7 @@ func (e *testGroupExecutor) branchVariables(matrix map[string]string) *step.Vari
 	return local
 }
 
+// reportSkipped distinguishes dependency skips from cancellation in scheduler results.
 func (r *testRun) reportSkipped(g *testGroup, aggregate *scheduler.AggregateResult) {
 	for i := range aggregate.Results {
 		result := &aggregate.Results[i]
@@ -379,6 +396,7 @@ func (r *testRun) reportSkipped(g *testGroup, aggregate *scheduler.AggregateResu
 	}
 }
 
+// inheritTestStep fills unset execution defaults without replacing explicit child values.
 func inheritTestStep(s, parent *schema.WorkflowStep, workflow *schema.WorkflowDefinition) {
 	if parent != nil {
 		if s.WorkingDirectory == "" {
@@ -402,6 +420,7 @@ func inheritTestStep(s, parent *schema.WorkflowStep, workflow *schema.WorkflowDe
 	}
 }
 
+// applyTestEnv resolves suite or group environment entries into its local variables.
 func applyTestEnv(s *schema.WorkflowStep, vars *step.Variables) error {
 	for k, v := range s.Env {
 		resolved, err := vars.Resolve(v)

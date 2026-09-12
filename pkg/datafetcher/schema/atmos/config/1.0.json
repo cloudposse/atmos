@@ -16315,7 +16315,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Control step fields."
+          "description": "Control step fields for parallel, matrix, and test groups."
         },
         "max_concurrency": {
           "anyOf": [

@@ -96,3 +96,21 @@ func TestLiveReporterPreservesTallTree(t *testing.T) {
 	}
 	assert.Contains(t, output.String(), "80/80")
 }
+
+func TestReporterFailureLabels(t *testing.T) {
+	for _, tc := range []struct{ name, id, heading, label string }{
+		{"suite setup", "", "Post-deployment tests", "Setup"},
+		{"known case", "check", "Health", "Health"},
+		{"unknown case", "unknown", "unknown", "unknown"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			r := New("Post-deployment tests", []*Node{{ID: "check", Name: "Health"}}, &output)
+			r.Update(tc.id, Failed, 0, "setup failed")
+			plain := ansi.Strip(output.String())
+			assert.Contains(t, plain, "     "+tc.heading+"\n")
+			assert.Contains(t, plain, "└── "+tc.label+"\n")
+			assert.Equal(t, 1, strings.Count(plain, "setup failed"))
+		})
+	}
+}

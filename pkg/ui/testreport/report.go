@@ -119,6 +119,7 @@ func (r *Reporter) Update(id, status string, duration time.Duration, logs string
 	}
 }
 
+// failureBlock labels and masks a completed case or suite setup failure for permanent output.
 func (r *Reporter) failureBlock(id, status, logs string) string {
 	label := id
 	if n := r.nodes[id]; n != nil {
@@ -140,6 +141,10 @@ func (r *Reporter) failureBlock(id, status, logs string) string {
 	heading := strings.Join(locate(r.roots, nil), " / ")
 	if heading == "" {
 		heading = id
+	}
+	if id == "" {
+		heading = r.title
+		label = "Setup"
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "     %s\n", theme.GetCurrentStyles().Body.Bold(true).Render(iolib.MaskString(heading)))
@@ -179,6 +184,7 @@ func (r *Reporter) Counts() map[string]int {
 	return r.counts()
 }
 
+// counts aggregates leaf states while the caller holds the reporter lock.
 func (r *Reporter) counts() map[string]int {
 	c := map[string]int{Passed: 0, Failed: 0, Skipped: 0, Canceled: 0, "total": 0}
 	for _, n := range r.nodes {
@@ -256,6 +262,7 @@ func renderCounts(counts map[string]int) string {
 	return strings.Join(parts, styles.Muted.Render(", "))
 }
 
+// nodeStatus derives group status from its children while preserving explicit group failures.
 func nodeStatus(n *Node) string {
 	if len(n.Children) == 0 || n.Status == Failed {
 		if n.Status == "" {
@@ -275,6 +282,7 @@ func nodeStatus(n *Node) string {
 	return Pending
 }
 
+// symbol selects the themed outcome marker or current spinner frame.
 func (r *Reporter) symbol(status, spin string) string {
 	switch status {
 	case Passed:
@@ -302,7 +310,10 @@ type (
 	}
 )
 
+// Init starts the spinner that refreshes the live suite view.
 func (m *model) Init() tea.Cmd { return m.spinner.Tick }
+
+// Update handles resizing, cancellation, and publishing the complete final tree to scrollback.
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -325,6 +336,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View hides the live frame after its final results have been printed.
 func (m *model) View() string {
 	if m.done {
 		return ""

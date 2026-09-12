@@ -44,7 +44,11 @@ func (h *LogHandler) Execute(ctx context.Context, step *schema.WorkflowStep, var
 	keyvals := h.buildKeyvals(step, vars)
 
 	if vars.OutputWriters.Stderr != nil {
-		vars.UI().Writef("%s %s %v\n", step.Level, content, keyvals)
+		if len(keyvals) == 0 {
+			vars.UI().Writef("%s %s\n", log.LevelToString(level), content)
+		} else {
+			vars.UI().Writef("%s %s %v\n", log.LevelToString(level), content, keyvals)
+		}
 		return NewStepResult(content), nil
 	}
 	// Log at the appropriate level with structured fields.

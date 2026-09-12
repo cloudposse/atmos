@@ -32,6 +32,7 @@ type testLeafOptions struct {
 	accountFailure bool
 }
 
+// leaf captures one test case, publishes its actual outcome, and accounts for unhandled failures.
 func (r *testRun) leaf(ctx context.Context, s *schema.WorkflowStep, vars *step.Variables, opts testLeafOptions) (*step.StepResult, error) {
 	started := time.Now()
 	execution := newTestLeaf(s, vars, opts.matrix, opts.status)
@@ -55,6 +56,7 @@ func (r *testRun) leaf(ctx context.Context, s *schema.WorkflowStep, vars *step.V
 	return execution.result, err
 }
 
+// newTestLeaf resolves deferred hook parameters before evaluating the case condition.
 func newTestLeaf(s *schema.WorkflowStep, vars *step.Variables, matrix map[string]string, status string) *testLeafExecution {
 	execution := &testLeafExecution{step: s, vars: vars}
 	if vars.ResolveTestStep != nil {
@@ -74,6 +76,7 @@ func newTestLeaf(s *schema.WorkflowStep, vars *step.Variables, matrix map[string
 	return execution
 }
 
+// prepareCommand builds a capture-only child with the effective directory, environment, and identity.
 func (e *testLeafExecution) prepareCommand() (*schema.WorkflowStep, error) {
 	child := *e.step
 	base := step.NewBaseHandler("test", step.CategoryCommand, false)
@@ -98,6 +101,7 @@ func (e *testLeafExecution) prepareCommand() (*schema.WorkflowStep, error) {
 	return &child, nil
 }
 
+// execute runs a prepared leaf, leaving HTTP retries to their handler and retrying other types here.
 func (e *testLeafExecution) execute(ctx context.Context) {
 	if e.err != nil || e.step.DryRun {
 		return
@@ -127,6 +131,7 @@ func (e *testLeafExecution) execute(ctx context.Context) {
 	e.err = retry.Do(ctx, e.step.Retry, run)
 }
 
+// captureResult copies returned streams only when the handler has not already written them.
 func (e *testLeafExecution) captureResult(outLen, errLen int) {
 	if e.result == nil {
 		return
@@ -139,6 +144,7 @@ func (e *testLeafExecution) captureResult(outLen, errLen int) {
 	}
 }
 
+// outcome records the actual result before any continuation policy tolerates its failure.
 func (e *testLeafExecution) outcome(ctx context.Context) string {
 	if e.result == nil {
 		e.result = step.NewStepResult("")
@@ -161,6 +167,7 @@ func (e *testLeafExecution) outcome(ctx context.Context) string {
 	return testreport.Passed
 }
 
+// logs selects buffered output and error details according to the suite output policy.
 func (e *testLeafExecution) logs(all bool) string {
 	if e.err == nil && !all {
 		return ""
@@ -178,6 +185,7 @@ func (e *testLeafExecution) logs(all bool) string {
 	return logs + e.err.Error()
 }
 
+// unhandledError applies continuation policies without hiding cancellation or evaluation failures.
 func (e *testLeafExecution) unhandledError(ctx context.Context) error {
 	if e.err == nil || ctx.Err() != nil {
 		return e.err
@@ -193,6 +201,7 @@ func (e *testLeafExecution) unhandledError(ctx context.Context) error {
 	return e.err
 }
 
+// testCondition exposes the current case, matrix row, flags, and environment to conditions.
 func testCondition(s *schema.WorkflowStep, vars *step.Variables, matrix map[string]string, status string) schema.ConditionContext {
 	flags := map[string]any{}
 	for k, v := range vars.Flags {

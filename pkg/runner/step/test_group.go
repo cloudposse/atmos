@@ -12,11 +12,13 @@ import (
 // Callers can avoid an additional error box while retaining failure policies.
 type TestFailureError struct{ Err error }
 
+// Error returns the underlying failure already shown by the test reporter.
 func (e *TestFailureError) Error() string {
 	defer perf.Track(nil, "step.TestFailureError.Error")()
 	return e.Err.Error()
 }
 
+// Unwrap preserves error matching through the displayed-failure marker.
 func (e *TestFailureError) Unwrap() error {
 	defer perf.Track(nil, "step.TestFailureError.Unwrap")()
 	return e.Err
@@ -52,6 +54,7 @@ func (h *TestHandler) Validate(s *schema.WorkflowStep) error {
 	return validateTestHandlers(s.Steps)
 }
 
+// validateTestHandlers rejects unregistered and interactive handlers before running any test.
 func validateTestHandlers(steps []schema.WorkflowStep) error {
 	for i := range steps {
 		s := &steps[i]

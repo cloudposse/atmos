@@ -34,6 +34,7 @@ func (v *Variables) UI() *scopedUI {
 
 type scopedUI struct{ writer io.Writer }
 
+// Write sends masked text to the execution writer or the default UI.
 func (s *scopedUI) Write(content string) {
 	defer perf.Track(nil, "step.scopedUI.Write")()
 
@@ -44,16 +45,19 @@ func (s *scopedUI) Write(content string) {
 	ui.Write(content)
 }
 
+// Writeln appends a newline to execution-scoped UI text.
 func (s *scopedUI) Writeln(content string) {
 	defer perf.Track(nil, "step.scopedUI.Writeln")()
 	s.Write(content + "\n")
 }
 
+// Writef formats a message before masking and routing it to the execution writer.
 func (s *scopedUI) Writef(format string, args ...any) {
 	defer perf.Track(nil, "step.scopedUI.Writef")()
 	s.Write(fmt.Sprintf(format, args...))
 }
 
+// Info preserves informational styling outside captures and plain text inside them.
 func (s *scopedUI) Info(content string) {
 	defer perf.Track(nil, "step.scopedUI.Info")()
 
@@ -64,11 +68,13 @@ func (s *scopedUI) Info(content string) {
 	}
 }
 
+// Infof formats an informational message for the scoped UI.
 func (s *scopedUI) Infof(format string, args ...any) {
 	defer perf.Track(nil, "step.scopedUI.Infof")()
 	s.Info(fmt.Sprintf(format, args...))
 }
 
+// Success emits a success message through the execution writer or default UI.
 func (s *scopedUI) Success(content string) {
 	defer perf.Track(nil, "step.scopedUI.Success")()
 
@@ -79,6 +85,7 @@ func (s *scopedUI) Success(content string) {
 	}
 }
 
+// Warning emits a warning through the execution writer or default UI.
 func (s *scopedUI) Warning(content string) {
 	defer perf.Track(nil, "step.scopedUI.Warning")()
 
@@ -89,6 +96,7 @@ func (s *scopedUI) Warning(content string) {
 	}
 }
 
+// Error emits an error message through the execution writer or default UI.
 func (s *scopedUI) Error(content string) {
 	defer perf.Track(nil, "step.scopedUI.Error")()
 
@@ -99,6 +107,7 @@ func (s *scopedUI) Error(content string) {
 	}
 }
 
+// Hint keeps captured guidance in the current test output buffer.
 func (s *scopedUI) Hint(content string) {
 	defer perf.Track(nil, "step.scopedUI.Hint")()
 
@@ -109,6 +118,7 @@ func (s *scopedUI) Hint(content string) {
 	}
 }
 
+// Markdown retains source text during capture and renders it in the default UI otherwise.
 func (s *scopedUI) Markdown(content string) {
 	defer perf.Track(nil, "step.scopedUI.Markdown")()
 
@@ -119,6 +129,7 @@ func (s *scopedUI) Markdown(content string) {
 	}
 }
 
+// MarkdownMessage routes a Markdown message through the current execution.
 func (s *scopedUI) MarkdownMessage(content string) {
 	defer perf.Track(nil, "step.scopedUI.MarkdownMessage")()
 

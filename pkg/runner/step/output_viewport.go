@@ -32,6 +32,7 @@ type viewportTail struct {
 	text string
 }
 
+// Write appends output under a lock and bounds the text retained for the live viewport.
 func (b *viewportTail) Write(p []byte) (int, error) {
 	defer perf.Track(nil, "step.viewportTail.Write")()
 
@@ -44,6 +45,7 @@ func (b *viewportTail) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// snapshot returns a consistent copy of the recent output for rendering.
 func (b *viewportTail) snapshot() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -65,16 +67,19 @@ type outputViewportModel struct {
 	done                bool
 }
 
+// Init starts spinner animation and periodic output refreshes.
 func (m *outputViewportModel) Init() tea.Cmd {
 	defer perf.Track(nil, "step.outputViewportModel.Init")()
 
 	return tea.Batch(m.spinner.Tick, m.refresh())
 }
 
+// refresh schedules the next viewport redraw while the subprocess runs.
 func (m *outputViewportModel) refresh() tea.Cmd {
 	return tea.Tick(viewportRefresh, func(time.Time) tea.Msg { return viewportRefreshMsg{} })
 }
 
+// Update handles terminal resizing, animation, and clearing the completed viewport.
 func (m *outputViewportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	defer perf.Track(nil, "step.outputViewportModel.Update")()
 
@@ -99,6 +104,7 @@ func (m *outputViewportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View renders the newest output rows within the configured size and padding.
 func (m *outputViewportModel) View() string {
 	defer perf.Track(nil, "step.outputViewportModel.View")()
 
@@ -137,6 +143,7 @@ func (m *outputViewportModel) View() string {
 	return view.String()
 }
 
+// executeViewportWithIO captures masked streams, shows their live tail, and reveals full logs on failure.
 func (w *OutputModeWriter) executeViewportWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
 	term := terminal.New()
 	if !term.IsTTY(terminal.Stderr) {
