@@ -3,6 +3,7 @@ package cloudformation
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -202,17 +203,7 @@ func runStackSetDelete(ctx context.Context, client CloudFormationClient, stackSe
 		return summary, err
 	}
 	if len(instances) > 0 {
-		accounts, regions := instanceAccountsRegions(instances)
-		out, err := client.DeleteStackInstances(ctx, &cloudformation.DeleteStackInstancesInput{
-			StackSetName: awsString(stackSetName),
-			Accounts:     accounts,
-			Regions:      regions,
-			RetainStacks: awsBool(false),
-		})
-		if err != nil {
-			return summary, fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
-		}
-		if _, err := pollStackSetOperation(ctx, client, stackSetName, stringValue(out.OperationId)); err != nil {
+		if err := deleteStackSetInstancesByRegion(ctx, client, stackSetName, instances); err != nil {
 			return summary, err
 		}
 	}
@@ -265,25 +256,63 @@ func listStackSetInstances(ctx context.Context, client CloudFormationClient, sta
 	}
 }
 
-// instanceAccountsRegions extracts the unique account/region sets covered by a
-// list of stack instances, for a full DeleteStackInstances call.
-func instanceAccountsRegions(instances []cfntypes.StackInstanceSummary) ([]string, []string) {
-	accountSet := map[string]bool{}
-	regionSet := map[string]bool{}
-	for i := range instances {
-		accountSet[stringValue(instances[i].Account)] = true
-		regionSet[stringValue(instances[i].Region)] = true
+// deleteStackSetInstancesByRegion groups instances by region and issues one
+// DeleteStackInstances request per region — each scoped to only the accounts
+// that actually have an instance in that region — polling each region's
+// operation to completion before starting the next. Passing the full,
+// independent account and region lists to a single DeleteStackInstances call
+// instead evaluates their Cartesian product: for a sparse StackSet (e.g.
+// account A only in us-east-1, account B only in us-west-2), that product
+// includes account/region pairs with no actual instance, and CloudFormation
+// rejects the whole request with StackInstanceNotFoundException before
+// DeleteStackSet is ever reached.
+func deleteStackSetInstancesByRegion(ctx context.Context, client CloudFormationClient, stackSetName string, instances []cfntypes.StackInstanceSummary) error {
+	accountsByRegion := instanceAccountsByRegion(instances)
+	regions := make([]string, 0, len(accountsByRegion))
+	for region := range accountsByRegion {
+		regions = append(regions, region)
 	}
-	return mapKeys(accountSet), mapKeys(regionSet)
+	sort.Strings(regions) // deterministic call order across otherwise-identical runs.
+
+	for _, region := range regions {
+		out, err := client.DeleteStackInstances(ctx, &cloudformation.DeleteStackInstancesInput{
+			StackSetName: awsString(stackSetName),
+			Accounts:     accountsByRegion[region],
+			Regions:      []string{region},
+			RetainStacks: awsBool(false),
+		})
+		if err != nil {
+			return fmt.Errorf(errWrapFmt, errUtils.ErrAwsCloudFormationStackSetFailed, err)
+		}
+		if _, err := pollStackSetOperation(ctx, client, stackSetName, stringValue(out.OperationId)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// mapKeys returns the keys of a map[string]bool as a slice.
-func mapKeys(m map[string]bool) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+// instanceAccountsByRegion groups stack instances by region, returning each
+// region's unique accounts as a sorted slice.
+func instanceAccountsByRegion(instances []cfntypes.StackInstanceSummary) map[string][]string {
+	accountSetByRegion := map[string]map[string]bool{}
+	for i := range instances {
+		region := stringValue(instances[i].Region)
+		if accountSetByRegion[region] == nil {
+			accountSetByRegion[region] = map[string]bool{}
+		}
+		accountSetByRegion[region][stringValue(instances[i].Account)] = true
 	}
-	return keys
+
+	result := make(map[string][]string, len(accountSetByRegion))
+	for region, accountSet := range accountSetByRegion {
+		accounts := make([]string, 0, len(accountSet))
+		for account := range accountSet {
+			accounts = append(accounts, account)
+		}
+		sort.Strings(accounts)
+		result[region] = accounts
+	}
+	return result
 }
 
 // pollStackSetOperation polls DescribeStackSetOperation until the operation
