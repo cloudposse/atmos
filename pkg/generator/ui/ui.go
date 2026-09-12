@@ -427,16 +427,19 @@ func (m spinnerModel) View() string {
 
 // InitUI handles the user interface for the init command.
 type InitUI struct {
-	checkmark    string
-	xMark        string
-	grayStyle    lipgloss.Style
-	successStyle lipgloss.Style
-	errorStyle   lipgloss.Style
-	output       strings.Builder
-	processor    *engine.Processor
-	ioCtx        iolib.Context
-	term         terminal.Terminal
-	skipHooks    func(string) bool
+	checkmark          string
+	xMark              string
+	grayStyle          lipgloss.Style
+	successStyle       lipgloss.Style
+	errorStyle         lipgloss.Style
+	output             strings.Builder
+	processor          *engine.Processor
+	ioCtx              iolib.Context
+	term               terminal.Terminal
+	skipHooks          func(string) bool
+	updateStrategy     engine.UpdateStrategy
+	renderedBaseConfig *tmpl.Configuration
+	renderedBaseValues map[string]interface{}
 }
 
 // NewInitUI creates a new InitUI instance.
@@ -536,6 +539,30 @@ func (ui *InitUI) ExecuteWithBaseRef(embedsConfig *tmpl.Configuration, targetPat
 	return ui.ExecuteWithDelimiters(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues, []string{"{{", "}}"})
 }
 
+// setupUpdateBase configures the Processor's 3-way merge base for --update,
+// per ui.updateStrategy: UpdateStrategyRendered renders a pristine old-ref
+// copy of the template (see renderPristineBase) and points the merge base at
+// it; UpdateStrategyTracked (the default) sets up git-history-backed storage
+// when baseRef is known. The returned cleanup is always safe to call (a
+// no-op under UpdateStrategyTracked) and must be deferred by the caller.
+func (ui *InitUI) setupUpdateBase(targetPath, baseRef string) (cleanup func(), err error) {
+	if ui.updateStrategy == engine.UpdateStrategyRendered {
+		renderedTempDir, cleanupRenderedBase, err := ui.renderPristineBase(ui.renderedBaseConfig, ui.renderedBaseValues)
+		if err != nil {
+			return func() {}, fmt.Errorf("failed to render the update-strategy=rendered base: %w", err)
+		}
+		ui.processor.SetupRenderedBaseStorage(targetPath, renderedTempDir)
+		return cleanupRenderedBase, nil
+	}
+
+	if baseRef != "" {
+		if err := ui.processor.SetupGitStorage(targetPath, baseRef); err != nil {
+			return func() {}, fmt.Errorf("failed to setup git storage: %w", err)
+		}
+	}
+	return func() {}, nil
+}
+
 // ExecuteWithDelimiters runs the initialization process with UI and custom delimiters.
 //
 //nolint:revive // argument-limit: public API maintains compatibility
@@ -553,11 +580,16 @@ func (ui *InitUI) ExecuteWithDelimiters(embedsConfig *tmpl.Configuration, target
 		return err
 	}
 
-	// Setup git storage for update mode
-	if update && baseRef != "" {
-		if err := ui.processor.SetupGitStorage(targetPath, baseRef); err != nil {
-			return fmt.Errorf("failed to setup git storage: %w", err)
+	// Setup the 3-way merge base for update mode. UpdateStrategyRendered's
+	// base comes from a pristine re-render of the template (no baseRef/git
+	// dependency, see renderPristineBase); UpdateStrategyTracked (the
+	// default) is today's existing git-history-backed behavior.
+	if update {
+		cleanupUpdateBase, err := ui.setupUpdateBase(targetPath, baseRef)
+		if err != nil {
+			return err
 		}
+		defer cleanupUpdateBase()
 	}
 
 	ui.writeOutput("Generating %s in %s\n\n", embedsConfig.Name, targetPath)

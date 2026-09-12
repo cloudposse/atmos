@@ -66,7 +66,7 @@ func (p *Processor) SetDryRun(dryRun bool) {
 func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
 	defer perf.Track(nil, "engine.Processor.SetupGitStorage")()
 
-	// Validate everything into locals first; only mutate p.targetPath/p.gitStorage
+	// Validate everything into locals first; only mutate p.targetPath/p.baseStorage
 	// once every validation step has succeeded. A failed call must leave the
 	// Processor's existing state untouched rather than half-updated.
 	repo, err := git.PlainOpenWithOptions(targetPath, &git.PlainOpenOptions{
@@ -104,9 +104,29 @@ func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
 	}
 
 	p.targetPath = targetPath
-	p.gitStorage = gitStorage
+	p.baseStorage = gitStorage
 
 	return nil
+}
+
+// SetupRenderedBaseStorage points the 3-way merge base at a pristine
+// re-render of the template (UpdateStrategyRendered) instead of the target's
+// own git history.
+//
+// Note: oldRenderRoot is the root of an already-fully-rendered copy of the
+// template at the ref that produced what's currently on disk (see
+// pkg/generator/ui's renderPristineBase) -- unlike SetupGitStorage, there is
+// no repository to open or ref to validate here, since the caller already
+// did the rendering.
+//
+// Note: targetPath is still required: determineBaseContent uses it (via
+// p.targetPath) to compute each file's base-storage-relative path
+// regardless of which base storage backs it.
+func (p *Processor) SetupRenderedBaseStorage(targetPath, oldRenderRoot string) {
+	defer perf.Track(nil, "engine.Processor.SetupRenderedBaseStorage")()
+
+	p.targetPath = targetPath
+	p.baseStorage = storage.NewRenderedBaseStorage(oldRenderRoot)
 }
 
 // Merge performs a 3-way merge using the internal merger.
@@ -273,7 +293,7 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 // silently turning the merge into a no-op that keeps the user's file and
 // drops template updates. Such cases return an error instead.
 func (p *Processor) determineBaseContent(file File, existingPath string) (string, bool, error) {
-	if p.gitStorage == nil {
+	if p.baseStorage == nil {
 		// Callers guard against this, but never silently degrade.
 		return "", false, errUtils.Build(errUtils.ErrThreeWayMerge).
 			WithExplanationf("Cannot determine the merge base for `%s` without a git repository", file.Path).
@@ -284,18 +304,21 @@ func (p *Processor) determineBaseContent(file File, existingPath string) (string
 			Err()
 	}
 
-	// Try to load base content from git.
+	// Try to load base content. relativePath is relative to the merge
+	// target's own root -- for GitBaseStorage that's the target's git
+	// working tree, for RenderedBaseStorage it's the pristine re-render's
+	// root -- both are file-tree-relative, so the same computation applies.
 	relativePath, err := filepath.Rel(p.targetPath, existingPath)
 	if err != nil {
 		relativePath = file.Path // Fallback to template path.
 	}
 
-	gitBase, found, err := p.gitStorage.LoadBase(relativePath)
+	base, found, err := p.baseStorage.LoadBase(relativePath)
 	switch {
 	case err != nil:
 		return "", false, errUtils.Build(errUtils.ErrThreeWayMerge).
 			WithCause(err).
-			WithExplanationf("Failed to load the merge base for `%s` from git", file.Path).
+			WithExplanationf("Failed to load the merge base for `%s`", file.Path).
 			WithHint("Verify the base ref exists: `git show <base-ref>`").
 			WithHint("Or drop `--update` and use `--force` alone to overwrite the file").
 			WithContext("file_path", file.Path).
@@ -303,11 +326,11 @@ func (p *Processor) determineBaseContent(file File, existingPath string) (string
 			WithExitCode(2).
 			Err()
 	case found:
-		// Use git version as base.
-		return gitBase, false, nil
+		// Use the loaded version as base.
+		return base, false, nil
 	default:
-		// File doesn't exist in base ref.
-		// This is a user-added file - skip merge, don't touch it.
+		// File doesn't exist at the base. This is a user-added file - skip
+		// merge, don't touch it.
 		return "", true, nil
 	}
 }
