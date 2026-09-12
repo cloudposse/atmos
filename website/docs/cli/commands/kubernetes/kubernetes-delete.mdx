@@ -67,9 +67,9 @@ atmos kubernetes delete --affected --labels cost-center=platform --labels compli
 
 <dl>
   <dt>
-    `--stack`, `-s` <em>(required)</em>
+    `--stack`, `-s` <em>(optional)</em>
   </dt>
-  <dd>Atmos stack.</dd>
+  <dd>Atmos stack. Required when deleting a named component; not required with `--all`/`--affected`/`--tags`/`--labels` bulk selection.</dd>
 
 <dt>
   `--all` <em>(optional)</em>
