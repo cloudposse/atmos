@@ -783,23 +783,53 @@ func TestCheckGitHubRateLimit_SkipsWhenRemainingIsZero(t *testing.T) {
 
 // TestCheckGitHubRateLimit_ReturnsInfoWhenRemaining verifies checkGitHubRateLimit returns the
 // decoded rate-limit info (rather than skipping or nil) when quota remains, for both an
-// unauthenticated and an authenticated probe.
+// unauthenticated and an authenticated probe, and that the Authorization header is only ever
+// sent on the authenticated path.
 func TestCheckGitHubRateLimit_ReturnsInfoWhenRemaining(t *testing.T) {
-	var gotAuth string
+	tests := []struct {
+		name      string
+		token     string
+		wantAuth  string
+		wantEmpty bool
+	}{
+		{
+			name:      "anonymous",
+			token:     "",
+			wantEmpty: true,
+		},
+		{
+			name:     "authenticated",
+			token:    "authed-token",
+			wantAuth: "Bearer authed-token",
+		},
+	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"rate":{"limit":5000,"remaining":4999,"reset":9999999999}}`))
-	}))
-	defer server.Close()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotAuth string
+			var sawAuthHeader bool
 
-	client := server.Client()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotAuth = r.Header.Get("Authorization")
+				_, sawAuthHeader = r.Header["Authorization"]
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"rate":{"limit":5000,"remaining":4999,"reset":9999999999}}`))
+			}))
+			defer server.Close()
 
-	info := checkGitHubRateLimit(t, client, server.URL, "authed-token")
-	require.NotNil(t, info)
-	assert.Equal(t, 4999, info.Remaining)
-	assert.Equal(t, "Bearer authed-token", gotAuth)
+			client := server.Client()
+
+			info := checkGitHubRateLimit(t, client, server.URL, tt.token)
+			require.NotNil(t, info)
+			assert.Equal(t, 4999, info.Remaining)
+
+			if tt.wantEmpty {
+				assert.False(t, sawAuthHeader, "anonymous probe must not send an Authorization header")
+			} else {
+				assert.Equal(t, tt.wantAuth, gotAuth)
+			}
+		})
+	}
 }
 
 // TestProbeGitHubRateLimit_DoesNotFollowRedirectWhenAuthenticated verifies that an authenticated
