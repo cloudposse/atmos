@@ -1,6 +1,6 @@
 ---
 title: Terraform Registry Cache
-tags: [Components]
+tags: [Terraform]
 cast:
   file: /casts/examples/caching/registry-cache.cast
   title: atmos terraform registry cache

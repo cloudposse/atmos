@@ -28,7 +28,7 @@ func newVendorVerifyTestCmd() *cobra.Command {
 	c.Flags().String("file", "", "")
 	c.Flags().String("tags", "", "")
 	c.Flags().StringP("stack", "s", "", "")
-	c.Flags().String("labels", "", "")
+	c.Flags().StringSlice("labels", nil, "")
 	c.Flags().String("format", "table", "")
 	c.Flags().String("base-path", "", "")
 	c.Flags().StringSlice("config", nil, "")

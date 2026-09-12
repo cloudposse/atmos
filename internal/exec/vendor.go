@@ -140,8 +140,8 @@ func PlanVendorPull(cmd *cobra.Command, args []string) (*VendorPullPlan, error) 
 	// need processStacks=true. A cheap presence check (not the authoritative parse, which
 	// parseVendorFlags still does below) is enough to decide.
 	stackFlagVal, _ := flags.GetString("stack")
-	labelsFlagVal, _ := flags.GetString("labels")
-	needsStackProcessing := stackFlagVal != "" || labelsFlagVal != ""
+	labelsFlagVal, _ := flags.GetStringSlice("labels")
+	needsStackProcessing := stackFlagVal != "" || len(labelsFlagVal) > 0
 
 	atmosConfig, err := cfg.InitCliConfig(info, needsStackProcessing)
 	if err != nil {
@@ -266,11 +266,11 @@ func parseOptionalLabelsFlag(flags *pflag.FlagSet) (map[string]string, error) {
 	if flags.Lookup("labels") == nil {
 		return nil, nil
 	}
-	labelsCsv, err := flags.GetString("labels")
+	labelsSlice, err := flags.GetStringSlice("labels")
 	if err != nil {
 		return nil, err
 	}
-	return tags.ParseLabelsFlag(labelsCsv)
+	return tags.ParseLabelsFlag(labelsSlice)
 }
 
 // parseOptionalBoolFlag reads a bool flag that isn't registered on every cmd.Flags() this is
