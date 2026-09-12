@@ -69,6 +69,9 @@ atmos aws cloudformation apply --affected --labels cost-center=platform
   <dt>`--affected` <em>(optional)</em></dt>
   <dd>Apply affected `aws/cloudformation` components and their dependencies.</dd>
 
+  <dt>`--base` <em>(optional)</em></dt>
+  <dd>Git base ref or SHA to compare against for affected detection. Used with `--affected`.</dd>
+
   <dt>`--include-dependents` <em>(optional)</em></dt>
   <dd>With `--affected`, include dependent `aws/cloudformation` components.</dd>
 

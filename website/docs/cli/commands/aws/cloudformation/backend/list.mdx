@@ -1,0 +1,55 @@
+---
+title: atmos aws cloudformation backend list
+sidebar_label: list
+sidebar_class_name: command
+id: list
+description: List the component's template-packaging backend targets and whether each exists.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  List every `kind: aws/s3` provision target declared on the component, and
+  whether each one's bucket currently exists.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation backend list --help" src="/casts/screengrabs/atmos-aws-cloudformation-backend-list--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation backend list <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation backend list vpc -s plat-ue2-dev
+atmos aws cloudformation backend list vpc -s plat-ue2-dev --format json
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--format`, `-f` <em>(optional)</em></dt>
+  <dd>Output format: `table` (default), `yaml`, or `json`.</dd>
+
+  <dt>`--identity`, `-i` <em>(optional)</em></dt>
+  <dd>Atmos identity to authenticate with.</dd>
+</dl>
+
+## Behavior
+
+Unlike [`atmos terraform
+backend`](/cli/commands/terraform/terraform-backend)'s own `list` verb (which
+lists every backend across a whole stack, with no component argument),
+`backend list` is scoped
+to one component: CloudFormation's provision-target model declares `kind:
+aws/s3` targets per-component under `provision.targets`, not once per stack,
+so there is no component-independent, stack-wide backend inventory to list.
+`backend list` never needs `--target` — it always shows every declared target
+at once.

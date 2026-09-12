@@ -54,6 +54,9 @@ Deploy components filtered by tags or labels (composes with `--all`/`--affected`
 ```shell
 atmos kubernetes deploy --all --tags production,tier-1
 atmos kubernetes deploy --affected --labels cost-center=platform
+
+# Repeat --labels to combine multiple selectors across occurrences
+atmos kubernetes deploy --affected --labels cost-center=platform --labels compliance=sox
 ```
 
 ## Deployment repositories (GitOps)
@@ -172,6 +175,6 @@ for a complete walkthrough of this pattern.
   `--labels` <em>(optional)</em>
 </dt>
 <dd>
-  Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
+  Filter by labels (comma-separated `key=value` or `key:value` pairs within one occurrence, and/or repeated for more, matches all): `--labels=cost-center=platform,compliance=sox` or `--labels cost-center=platform --labels compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
 </dd>
 </dl>
