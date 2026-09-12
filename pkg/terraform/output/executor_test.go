@@ -2327,7 +2327,15 @@ func TestEnsureWorkdirProvisioned_CachePreventsDoubleProvision(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestEnsureWorkdirProvisioned_LateArrivalGetsReconfigureFromCache(t *testing.T) {
+// TestEnsureWorkdirProvisioned_LaterGenerationDoesNotInheritStaleFreshness guards against a
+// regression where workdirProvisionCache stored the freshness bool permanently: a later,
+// separate call (not a concurrent singleflight waiter of the SAME provisioning generation --
+// see TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure for that case) for a
+// component whose workdir was already provisioned in a PRIOR generation must NOT inherit that
+// prior generation's freshness. Inheriting it would force a full re-init (-reconfigure) on every
+// subsequent `terraform output` call for the component's remaining process lifetime, defeating
+// smart-init entirely for workdir-based components.
+func TestEnsureWorkdirProvisioned_LaterGenerationDoesNotInheritStaleFreshness(t *testing.T) {
 	ResetWorkdirProvisionCache()
 	defer ResetWorkdirProvisionCache()
 
@@ -2352,13 +2360,14 @@ func TestEnsureWorkdirProvisioned_LateArrivalGetsReconfigureFromCache(t *testing
 	require.NoError(t, err)
 	require.True(t, config1.WorkdirReprovisioned, "first call: fresh provision must set InitRunReconfigure")
 
-	// Late arrival: Provision must NOT be called again (mock expects Times(1)).
-	// The cache must return freshlyProvisioned=true so this caller also sets InitRunReconfigure.
+	// A later, separate call (this first call has already fully returned -- it is not a
+	// concurrent singleflight waiter): Provision must NOT be called again (mock expects
+	// Times(1)), but this caller must NOT inherit the first generation's freshness either.
 	config2 := &ComponentConfig{AutoProvisionWorkdirForOutputs: true}
 	err = executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config2)
 	require.NoError(t, err)
-	assert.True(t, config2.WorkdirReprovisioned,
-		"late arrival must read freshlyProvisioned=true from cache and set InitRunReconfigure")
+	assert.False(t, config2.WorkdirReprovisioned,
+		"a later, separate call reusing an already-provisioned workdir must not inherit a prior generation's freshness")
 }
 
 func TestEnsureWorkdirProvisioned_ConcurrentCallsBlockUntilComplete(t *testing.T) {
@@ -2451,23 +2460,48 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure(t *testing.T)
 	}
 	errs := make([]error, 2)
 
-	for i := range 2 {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			// Each goroutine gets its own sections map to avoid a data race between
-			// IsWorkdirEnabled reads and the singleflight leader writing
-			// WorkdirReprovisionedKey into the map via Provision.
-			// InitRunReconfigure is propagated via the singleflight return value,
-			// not via the sections map, so per-goroutine maps are correct.
-			localSections := jitSections()
-			errs[idx] = executor.ensureWorkdirProvisioned(
-				context.Background(), cfg, localSections, nil, "vpc", "dev", configs[idx],
-			)
-		}(i)
+	call := func(idx int) {
+		defer wg.Done()
+		// Each goroutine gets its own sections map to avoid a data race between
+		// IsWorkdirEnabled reads and the singleflight leader writing
+		// WorkdirReprovisionedKey into the map via Provision.
+		// InitRunReconfigure is propagated via the singleflight return value,
+		// not via the sections map, so per-goroutine maps are correct.
+		localSections := jitSections()
+		errs[idx] = executor.ensureWorkdirProvisioned(
+			context.Background(), cfg, localSections, nil, "vpc", "dev", configs[idx],
+		)
 	}
 
+	// Launch the leader alone first and wait for <-entered: this guarantees
+	// singleflight has already registered the in-flight call for this cache key
+	// (LoadOrStore happens, and Provision starts running, strictly before the
+	// closure calls close(entered)) before the follower makes its own call.
+	// Racing both goroutines' starts against each other (the previous approach)
+	// only synchronized "about to call ensureWorkdirProvisioned", not "actually
+	// registered with singleflight" -- since DoChan's closure runs on a runtime
+	// -spawned goroutine independent of the caller, a slow-to-schedule follower
+	// could still lose to that internal goroutine reaching close(entered) first,
+	// making the follower a genuinely later, separate generation and flaking
+	// this assertion. Starting the follower only after the leader is a
+	// confirmed, in-flight singleflight call removes that race entirely: any
+	// DoChan call for this key from this point until close(gate) is guaranteed
+	// to join the same in-flight call, never start a new one.
+	wg.Add(1)
+	go call(0)
 	<-entered
+
+	wg.Add(1)
+	go call(1)
+	// The follower's remaining path to its own DoChan call (IsWorkdirEnabled,
+	// stackComponentKey, the DoChan call itself) is a handful of non-blocking
+	// statements with no competing goroutine left to lose a scheduling race
+	// against -- yield generously so it's scheduled and reaches that call
+	// before the leader is released.
+	for range 1000 {
+		runtime.Gosched()
+	}
+
 	close(gate)
 	wg.Wait()
 

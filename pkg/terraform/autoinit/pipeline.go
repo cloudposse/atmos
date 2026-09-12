@@ -11,7 +11,6 @@ package autoinit
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -25,29 +24,33 @@ import (
 )
 
 // lookupEnvList returns the value of key from list (a "KEY=value" slice, typically
-// info.ComponentEnvList), or "" if absent. The last matching entry wins, matching
-// os/exec.Cmd.Env semantics for duplicate keys.
-func lookupEnvList(list []string, key string) string {
+// info.ComponentEnvList) and whether key was found at all. The last matching entry wins,
+// matching os/exec.Cmd.Env semantics for duplicate keys. The found return value lets callers
+// distinguish an explicit `KEY=` entry (found=true, value="") from key simply not being in list
+// (found=false) -- collapsing both to "" would make an explicit empty-value override
+// indistinguishable from "not configured here, check elsewhere".
+func lookupEnvList(list []string, key string) (string, bool) {
 	prefix := key + "="
 	result := ""
+	found := false
 	for _, e := range list {
 		if strings.HasPrefix(e, prefix) {
 			result = e[len(prefix):]
+			found = true
 		}
 	}
-	return result
+	return result, found
 }
 
 // componentEnvLookup returns a lookup function modeling the subprocess environment a caller is
-// about to launch terraform/tofu with: envList (typically info.ComponentEnvList) first, falling
-// back to the current process environment.
-func componentEnvLookup(envList []string) func(string) string {
-	return func(key string) string {
-		if v := lookupEnvList(envList, key); v != "" {
-			return v
-		}
-		//nolint:forbidigo // key is a Terraform env var (e.g. TF_CLI_ARGS), not an Atmos config var.
-		return os.Getenv(key)
+// about to launch terraform/tofu with: envList (typically info.ComponentEnvList). It reports
+// found=false when key isn't in envList at all, leaving the current-process-environment fallback
+// to envLookup (datadir.go), which every Inputs.EnvLookup consumer already goes through -- see
+// lookupEnvList and Inputs.EnvLookup's doc comment for why an explicit empty-value entry in
+// envList must be honored (found=true, value="") rather than treated as a miss.
+func componentEnvLookup(envList []string) func(string) (string, bool) {
+	return func(key string) (string, bool) {
+		return lookupEnvList(envList, key)
 	}
 }
 

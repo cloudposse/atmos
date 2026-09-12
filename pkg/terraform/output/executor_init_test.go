@@ -276,6 +276,41 @@ func TestRunOutput_NoRecoveryForUnrelatedError(t *testing.T) {
 	assert.ErrorIs(t, err, unrelatedErr)
 }
 
+// TestRunOutput_ClassificationIgnoresLeftoverStderrFromEarlierSuccessfulStep guards against a
+// regression where stderrCapture -- shared across every terraform-exec call within a single
+// execute() invocation (init, workspace select, output) since runner.SetStderr is only called
+// once -- carried stderr from an earlier, already-succeeded step (e.g. init) into the failed
+// output's diagnosticText/Classify call, triggering an unwarranted recovery for an unrelated
+// output failure. The fix resets the capture before runOutput's own attempt, so a stale
+// diagnostic substring left over from a prior successful step never pollutes this classification.
+func TestRunOutput_ClassificationIgnoresLeftoverStderrFromEarlierSuccessfulStep(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockTerraformRunner(ctrl)
+	config := autoInitComponentConfig(t)
+	atmosConfig := &schema.AtmosConfiguration{}
+	executor := &Executor{}
+
+	stderrCapture := newQuietModeWriter()
+	// Simulate leftover stderr from an earlier, already-succeeded init in this same
+	// execute() invocation -- terraform prints this string even on a successful reconfigure.
+	stderrCapture.buffer.WriteString("Backend configuration changed\n")
+
+	unrelatedErr := errors.New("dial tcp: connection refused")
+	// Exactly one Output call: with the stale "Backend configuration changed" text excluded
+	// (via Reset), Classify sees only this unrelated error and must not trigger recovery -- no
+	// Init/WorkspaceSelect expectations are registered, so an unexpected recovery attempt would
+	// fail the test via gomock's strict mode.
+	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, unrelatedErr).Times(outputCallsBeforeGivingUp())
+
+	_, err := executor.runOutputWithInitRecovery(
+		context.Background(), atmosConfig, mockRunner, config, "comp", "stack", stderrCapture, tfplugin.Cache{}, map[string]string{}, false,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, unrelatedErr)
+}
+
 func TestRunOutput_NoRecoveryWhenSkipInit_ErrorWrapsInitRequired(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

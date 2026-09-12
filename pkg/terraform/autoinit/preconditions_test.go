@@ -175,6 +175,17 @@ func TestBackendStateMissing(t *testing.T) {
 			statePresent:  false,
 			want:          true,
 		},
+		{
+			// Regression test: componentDeclaresBackend previously only checked backend.tf.json
+			// and HCL (.tf/.tofu) files, missing a backend block declared in a root *.tf.json
+			// file -- which would make backendStateMissing wrongly report false (no backend
+			// configured) when no local terraform.tfstate exists yet.
+			name:          "backend block in main.tf.json, no state",
+			configFile:    "main.tf.json",
+			configContent: `{"terraform":{"backend":{"s3":{}}}}`,
+			statePresent:  false,
+			want:          true,
+		},
 	}
 
 	for _, tt := range tests {

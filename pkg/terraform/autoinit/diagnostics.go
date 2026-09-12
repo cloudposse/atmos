@@ -29,8 +29,9 @@ type signature struct {
 	diag Diagnosis
 }
 
-// signatures is checked in order; the first match wins. Reconfigure/upgrade signatures also imply
-// InitRequired, since resolving either requires running init again.
+// signatures is scanned in full by Classify -- every matching entry contributes its flags, not
+// just the first. Reconfigure/upgrade signatures also imply InitRequired, since resolving either
+// requires running init again.
 var signatures = []signature{
 	{"must use terraform init -upgrade", Diagnosis{InitRequired: true, UpgradeRequired: true}},
 	{"must use tofu init -upgrade", Diagnosis{InitRequired: true, UpgradeRequired: true}},
@@ -44,21 +45,33 @@ var signatures = []signature{
 	{"Module version requirements have changed", Diagnosis{InitRequired: true}},
 }
 
-// Classify inspects raw terraform/tofu output for a known init-related diagnostic and returns the
-// corresponding Diagnosis; output is ANSI-stripped first, since captured subprocess output may
-// still carry color codes. Returns a zero Diagnosis when nothing matches.
+// Classify inspects raw terraform/tofu output for known init-related diagnostics and returns the
+// combined Diagnosis; output is ANSI-stripped first, since captured subprocess output may still
+// carry color codes. Every matching signature is scanned (not just the first) and their flags are
+// OR'd together, since a single failure can legitimately surface more than one diagnostic (e.g.
+// both "Backend configuration changed" and a "-upgrade" notice) and recovery needs to know about
+// all of them to run a single init with every required flag. Matched joins every matching
+// signature's text (comma-separated) for debug logging. Returns a zero Diagnosis when nothing
+// matches.
 func Classify(output string) Diagnosis {
 	defer perf.Track(nil, "autoinit.Classify")()
 
 	plain := atmosansi.Strip(output)
+	var d Diagnosis
+	var matched []string
 	for _, sig := range signatures {
-		if strings.Contains(plain, sig.text) {
-			d := sig.diag
-			d.Matched = sig.text
-			return d
+		if !strings.Contains(plain, sig.text) {
+			continue
 		}
+		d.InitRequired = d.InitRequired || sig.diag.InitRequired
+		d.ReconfigureRequired = d.ReconfigureRequired || sig.diag.ReconfigureRequired
+		d.UpgradeRequired = d.UpgradeRequired || sig.diag.UpgradeRequired
+		matched = append(matched, sig.text)
 	}
-	return Diagnosis{}
+	if len(matched) > 0 {
+		d.Matched = strings.Join(matched, ", ")
+	}
+	return d
 }
 
 // Recovery describes the init recovery Atmos should perform after Classify reports a Diagnosis.

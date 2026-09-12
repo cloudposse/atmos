@@ -64,6 +64,23 @@ func (w *quietModeWriter) String() string {
 	return w.buffer.String()
 }
 
+// Reset clears any output captured so far. The same *quietModeWriter is reused across every
+// terraform-exec call within a single execute() invocation (init, workspace select, output, and
+// any recovery re-runs of those), since runner.SetStderr is only called once. Without resetting
+// between attempts, a later failed command's diagnosticText/autoinit.Classify call would also see
+// leftover stderr from an earlier, unrelated, already-successful (or already-classified) command
+// sharing this writer -- corrupting the diagnostic classification. Callers reset immediately
+// before any subprocess call whose failure will be classified. A nil receiver is a no-op, since
+// stderrCapture is nil whenever quiet mode isn't enabled.
+func (w *quietModeWriter) Reset() {
+	defer perf.Track(nil, "output.quietModeWriter.Reset")()
+
+	if w == nil {
+		return
+	}
+	w.buffer.Reset()
+}
+
 // wrapErrorWithStderr wraps an error with captured stderr output if available.
 // Used in quiet mode to include terraform output in error messages on failure.
 func wrapErrorWithStderr(err error, capture *quietModeWriter) error {

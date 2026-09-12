@@ -82,18 +82,28 @@ func backendStateMissing(dataDir, componentPath string) bool {
 }
 
 // componentDeclaresBackend reports whether componentPath has an auto-generated backend.tf.json,
-// or any root HCL file (.tf / .tofu) declares a backend or cloud block.
+// or any root Terraform/OpenTofu configuration file (.tf / .tf.json / .tofu / .tofu.json)
+// declares a backend or cloud block. Discovery and JSON-vs-HCL detection reuse
+// collectRootConfigFiles / isBackendConfigFile (fingerprint.go) so this agrees with what the
+// fingerprint itself considers backend-relevant -- a narrower, HCL-only check here previously
+// missed backend/cloud blocks declared in root *.tf.json / *.tofu.json files, which could make
+// backendStateMissing wrongly report "no backend configured" (and Decide wrongly skip init) when
+// no local terraform.tfstate exists yet.
 func componentDeclaresBackend(componentPath string) bool {
 	if fileExists(filepath.Join(componentPath, clean.BackendConfigFile)) {
 		return true
 	}
-	for _, pattern := range []string{"*.tf", "*.tofu"} {
-		matches, _ := filepath.Glob(filepath.Join(componentPath, pattern))
-		for _, f := range matches {
-			content, err := os.ReadFile(f)
-			if err == nil && backendHCLPattern.Match(content) {
-				return true
-			}
+	files, err := collectRootConfigFiles(componentPath)
+	if err != nil {
+		return false
+	}
+	for _, f := range files {
+		content, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		if isBackendConfigFile(filepath.Base(f), string(content)) {
+			return true
 		}
 	}
 	return false

@@ -58,8 +58,10 @@ type Inputs struct {
 	// exec.LookPath; on failure only the name itself is recorded.
 	Binary string
 	// EnvLookup models the subprocess environment Atmos is about to launch terraform/tofu with.
-	// A nil EnvLookup, or one that returns "", falls back to os.Getenv.
-	EnvLookup func(key string) string
+	// Its second return value distinguishes "key present with this value" (honored as-is, even
+	// when the value is "") from "key absent" (falls back to os.Getenv). A nil EnvLookup falls
+	// back to os.Getenv unconditionally.
+	EnvLookup func(key string) (string, bool)
 	// Extra holds caller-supplied records (e.g. TF_VAR_* values when PassVars is true) that
 	// should participate in the fingerprint.
 	Extra map[string]string
@@ -155,8 +157,17 @@ func collectFiles(in *Inputs) (collectedFiles, error) {
 	return collectedFiles{named: named, backendNamed: backendNamed, names: names}, nil
 }
 
+// explicitVarFileKeyPrefix namespaces in.VarFile's fingerprint record key so it can never collide
+// with a component-local *.tfvars file that happens to share the same base name (e.g. an external
+// `-var-file ../shared/terraform.tfvars` and a component-local terraform.tfvars). Without this,
+// collectVarFiles' map (keyed only by filepath.Base) would silently drop one of the two entries,
+// and edits to the dropped file would never change the fingerprint. ":" is invalid in filenames on
+// Windows, so this prefix can never collide with a real base name.
+const explicitVarFileKeyPrefix = "explicit-var-file:"
+
 // collectVarFiles resolves in.VarFile (if set) plus any root *.tfvars / *.tfvars.json files,
-// keyed by base name.
+// keyed by base name. The explicit var file is keyed separately (see explicitVarFileKeyPrefix)
+// so it never collides with a component-local var file of the same base name.
 func collectVarFiles(in *Inputs) (map[string]string, error) {
 	files := map[string]string{}
 
@@ -166,7 +177,7 @@ func collectVarFiles(in *Inputs) (map[string]string, error) {
 			path = filepath.Join(in.ComponentPath, path)
 		}
 		if fileExists(path) {
-			files[filepath.Base(path)] = path
+			files[explicitVarFileKeyPrefix+filepath.Base(path)] = path
 		}
 	}
 
@@ -261,12 +272,16 @@ func isBareName(binary string) bool {
 	return binary != "" && filepath.Base(binary) == binary
 }
 
-// cliConfigRecord returns a fingerprint record over the *content* (never the path) of whichever
-// CLI config file is configured via TF_CLI_CONFIG_FILE or TOFU_CLI_CONFIG_FILE, since Atmos
-// writes that file to a fresh temporary path on every run -- hashing the path would make the
-// fingerprint change on every invocation regardless of whether the content actually changed.
-// Returns "" when neither variable is set or the configured file cannot be read.
-func cliConfigRecord(lookup func(key string) string) string {
+// cliConfigRecord returns a fingerprint record over the *content* (never the path) of the
+// configured CLI config file(s), since Atmos writes that file to a fresh temporary path on every
+// run -- hashing the path would make the fingerprint change on every invocation regardless of
+// whether the content actually changed. Both TF_CLI_CONFIG_FILE and TOFU_CLI_CONFIG_FILE are
+// included (each under its own key) whenever set and readable, rather than only the first one
+// found: which variable OpenTofu actually honors depends on its own precedence rules (it prefers
+// TOFU_CLI_CONFIG_FILE over TF_CLI_CONFIG_FILE), and hashing only one risks missing a change to
+// whichever file is actually in effect. Returns "" when neither variable is set or readable.
+func cliConfigRecord(lookup func(key string) (string, bool)) string {
+	var parts []string
 	for _, key := range []string{envTFCLIConfigFile, envTofuCLIConfigFile} {
 		path := envLookup(lookup, key)
 		if path == "" {
@@ -277,9 +292,12 @@ func cliConfigRecord(lookup func(key string) string) string {
 			log.Debug("autoinit: cli config file not readable, excluding from fingerprint", "path", path, "error", err)
 			continue
 		}
-		return "cli_config:" + string(content)
+		parts = append(parts, fmt.Sprintf("%s:%s", key, string(content)))
 	}
-	return ""
+	if len(parts) == 0 {
+		return ""
+	}
+	return "cli_config:" + strings.Join(parts, "|")
 }
 
 // fileExists reports whether path exists and is a regular file (not a directory).

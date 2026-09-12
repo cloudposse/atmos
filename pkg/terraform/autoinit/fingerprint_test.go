@@ -160,6 +160,77 @@ func TestCompute_VarFileOnlyHashedWhenPassVars(t *testing.T) {
 	assert.NotEqual(t, fp3.Hash, fp4.Hash, "varfile edits must affect the fingerprint when PassVars is true")
 }
 
+// TestCompute_ExplicitVarFileDoesNotCollideWithComponentLocalVarFile guards against a regression
+// where an external, explicit -var-file (in.VarFile) and a component-local terraform.tfvars with
+// the same base name would collide on the same fingerprint record key (filepath.Base), silently
+// dropping one of them -- so an edit to the dropped file would leave the fingerprint unchanged.
+// Both files must independently affect the fingerprint.
+func TestCompute_ExplicitVarFileDoesNotCollideWithComponentLocalVarFile(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "main.tf", "v1")
+	// Component-local var file, same base name ("terraform.tfvars") as the explicit one below.
+	writeFile(t, dir, "terraform.tfvars", "local-v1")
+
+	// Explicit var file lives outside the component directory but shares the same base name.
+	externalDir := t.TempDir()
+	explicitVarFile := writeFile(t, externalDir, "terraform.tfvars", "explicit-v1")
+
+	in := baseInputs(dir)
+	in.PassVars = true
+	in.VarFile = explicitVarFile
+
+	fp1, err := Compute(in)
+	require.NoError(t, err)
+
+	// Editing the explicit var file alone must change the fingerprint.
+	writeFile(t, externalDir, "terraform.tfvars", "explicit-v2")
+	fp2, err := Compute(in)
+	require.NoError(t, err)
+	assert.NotEqual(t, fp1.Hash, fp2.Hash, "editing the explicit var file must change the fingerprint")
+
+	// Editing the component-local var file alone must also change the fingerprint.
+	writeFile(t, dir, "terraform.tfvars", "local-v2")
+	fp3, err := Compute(in)
+	require.NoError(t, err)
+	assert.NotEqual(t, fp2.Hash, fp3.Hash, "editing the component-local var file must change the fingerprint")
+}
+
+// TestCompute_CLIConfigFileHashesBothTFAndTofuVars guards against a regression where
+// cliConfigRecord only ever hashed TF_CLI_CONFIG_FILE, even when TOFU_CLI_CONFIG_FILE (the
+// variable OpenTofu actually prefers) points at a different, readable file -- a change to the
+// TOFU_CLI_CONFIG_FILE content would then leave the fingerprint unchanged.
+func TestCompute_CLIConfigFileHashesBothTFAndTofuVars(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "main.tf", "v1")
+
+	tfConfigDir := t.TempDir()
+	tofuConfigDir := t.TempDir()
+	tfConfigPath := writeFile(t, tfConfigDir, "tf.tfrc", "tf-content-v1")
+	tofuConfigPath := writeFile(t, tofuConfigDir, "tofu.tfrc", "tofu-content-v1")
+
+	in := baseInputs(dir)
+	in.EnvLookup = func(key string) (string, bool) {
+		switch key {
+		case envTFCLIConfigFile:
+			return tfConfigPath, true
+		case envTofuCLIConfigFile:
+			return tofuConfigPath, true
+		default:
+			return "", false
+		}
+	}
+
+	fp1, err := Compute(in)
+	require.NoError(t, err)
+
+	// Changing only the TOFU_CLI_CONFIG_FILE content must change the fingerprint, even though
+	// TF_CLI_CONFIG_FILE is also set and unchanged.
+	writeFile(t, tofuConfigDir, "tofu.tfrc", "tofu-content-v2")
+	fp2, err := Compute(in)
+	require.NoError(t, err)
+	assert.NotEqual(t, fp1.Hash, fp2.Hash, "a TOFU_CLI_CONFIG_FILE content change must change the fingerprint even when TF_CLI_CONFIG_FILE is also set")
+}
+
 func TestCompute_CLIConfigFileContentNotPath(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "main.tf", "v1")
@@ -168,18 +239,18 @@ func TestCompute_CLIConfigFileContentNotPath(t *testing.T) {
 	path2 := writeFile(t, t.TempDir(), "cli-config-2.tfrc", "same content")
 
 	in1 := baseInputs(dir)
-	in1.EnvLookup = func(key string) string {
+	in1.EnvLookup = func(key string) (string, bool) {
 		if key == "TF_CLI_CONFIG_FILE" {
-			return path1
+			return path1, true
 		}
-		return ""
+		return "", false
 	}
 	in2 := baseInputs(dir)
-	in2.EnvLookup = func(key string) string {
+	in2.EnvLookup = func(key string) (string, bool) {
 		if key == "TF_CLI_CONFIG_FILE" {
-			return path2
+			return path2, true
 		}
-		return ""
+		return "", false
 	}
 
 	fp1, err := Compute(in1)
@@ -230,20 +301,20 @@ func TestCompute_EnvVarsChangeFingerprint(t *testing.T) {
 			writeFile(t, dir, "main.tf", "v1")
 
 			in := baseInputs(dir)
-			in.EnvLookup = func(k string) string {
+			in.EnvLookup = func(k string) (string, bool) {
 				if k == key {
-					return "v1"
+					return "v1", true
 				}
-				return ""
+				return "", false
 			}
 			fp1, err := Compute(in)
 			require.NoError(t, err)
 
-			in.EnvLookup = func(k string) string {
+			in.EnvLookup = func(k string) (string, bool) {
 				if k == key {
-					return "v2"
+					return "v2", true
 				}
-				return ""
+				return "", false
 			}
 			fp2, err := Compute(in)
 			require.NoError(t, err)
@@ -251,6 +322,37 @@ func TestCompute_EnvVarsChangeFingerprint(t *testing.T) {
 			assert.NotEqual(t, fp1.Hash, fp2.Hash, "changing %s must change the fingerprint", key)
 		})
 	}
+}
+
+// TestCompute_EnvLookupExplicitEmptyValueIsHonored guards against a regression where an
+// EnvLookup reporting a key present with an explicit empty value ("", true) was treated the same
+// as the key being absent, silently falling back to this process's own os.Getenv value instead of
+// the explicit override the subprocess will actually see. A change to the *ambient* process env
+// var must NOT affect the fingerprint once EnvLookup explicitly reports the key as overridden to
+// "".
+func TestCompute_EnvLookupExplicitEmptyValueIsHonored(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "main.tf", "v1")
+
+	t.Setenv("TF_CLI_ARGS", "ambient-value-v1")
+
+	in := baseInputs(dir)
+	in.EnvLookup = func(k string) (string, bool) {
+		if k == "TF_CLI_ARGS" {
+			return "", true
+		}
+		return "", false
+	}
+
+	fp1, err := Compute(in)
+	require.NoError(t, err)
+
+	// Changing only the ambient process env var (which EnvLookup explicitly overrides to "")
+	// must NOT change the fingerprint: the explicit override always wins.
+	t.Setenv("TF_CLI_ARGS", "ambient-value-v2")
+	fp2, err := Compute(in)
+	require.NoError(t, err)
+	assert.Equal(t, fp1.Hash, fp2.Hash, "an explicit empty EnvLookup override must not fall back to the ambient os.Getenv value")
 }
 
 func TestCompute_ExtraChangesFingerprint(t *testing.T) {

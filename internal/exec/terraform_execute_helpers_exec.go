@@ -752,19 +752,29 @@ func ExecuteShellCommandWithRetry(
 // io.MultiWriter teeing into both buf and the caller's writer when it does — so a caller's
 // own capture (e.g. helmfile's NodeHooks.After output) keeps receiving output instead of
 // being silently replaced by the retry buffer.
+//
+// Buf is wrapped in a syncWriter (see terraform_streaming_ui.go) because the returned
+// stdout/stderr writers can end up being invoked concurrently: when the caller streams through
+// the TUI (executeStreamingOrShell -> pkg/terraform/ui's newInitCommand), stdout and stderr are
+// set to two distinct io.Writer values even though both ultimately tee into this same buf, and
+// os/exec.Cmd copies each stream in its own goroutine whenever Stdout and Stderr aren't the
+// exact same Writer value — so without synchronization, concurrent Write calls into buf would
+// race (bytes.Buffer is not safe for concurrent use).
 func composeRetryCaptureWriters(baseOpts []ShellCommandOption, buf *bytes.Buffer) (stdout, stderr io.Writer) {
 	var probe shellCommandConfig
 	for _, opt := range baseOpts {
 		opt(&probe)
 	}
 
-	stdout = buf
+	safeBuf := &syncWriter{w: buf}
+
+	stdout = safeBuf
 	if probe.stdoutCapture != nil {
-		stdout = io.MultiWriter(probe.stdoutCapture, buf)
+		stdout = io.MultiWriter(probe.stdoutCapture, safeBuf)
 	}
-	stderr = buf
+	stderr = safeBuf
 	if probe.stderrCapture != nil {
-		stderr = io.MultiWriter(probe.stderrCapture, buf)
+		stderr = io.MultiWriter(probe.stderrCapture, safeBuf)
 	}
 	return stdout, stderr
 }

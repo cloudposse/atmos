@@ -9,13 +9,36 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfui "github.com/cloudposse/atmos/pkg/terraform/ui"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// syncWriter serializes concurrent Write calls into the wrapped writer. Used by
+// composeRetryCaptureWriters (terraform_execute_helpers_exec.go) because exec.Cmd can copy
+// stdout and stderr into their respective writers from two separate goroutines whenever
+// Cmd.Stdout and Cmd.Stderr are different Writer values, even if those writers both ultimately
+// target the same buffer -- see executeStreamingOrShell / newInitCommand (pkg/terraform/ui)
+// above, which is exactly the streaming path that sets Stdout/Stderr to two distinct
+// io.MultiWriter values teeing into the same capture buffer.
+type syncWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+// Write implements io.Writer, guarding the wrapped writer with a mutex.
+func (s *syncWriter) Write(p []byte) (int, error) {
+	defer perf.Track(nil, "exec.syncWriter.Write")()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.w.Write(p)
+}
 
 // streamingExecRequest bundles the arguments executeStreamingOrShell needs beyond
 // atmosConfig/info, keeping the function's own argument count within lint limits.

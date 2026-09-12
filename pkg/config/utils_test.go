@@ -631,6 +631,13 @@ func TestProcessEnvVars_TerraformFlags(t *testing.T) {
 // RECONFIGURE,UPGRADE} env vars: valid values, case-insensitive normalization, and
 // invalid values wrapping the matching sentinel error (errors.Is-checked per CLAUDE.md).
 func TestProcessEnvVars_TerraformInit(t *testing.T) {
+	// Isolate from the parent environment: clear all three init env vars before any subtest
+	// sets its own value, so a stray ATMOS_COMPONENTS_TERRAFORM_INIT_* var in the ambient
+	// environment (e.g. a developer's shell) can't leak into subtests that expect them unset.
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_MODE", "")
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE", "")
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE", "")
+
 	t.Run("valid values are applied", func(t *testing.T) {
 		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_MODE", "never")
 		t.Setenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE", "always")

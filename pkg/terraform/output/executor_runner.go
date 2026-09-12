@@ -76,6 +76,11 @@ func (e *Executor) runInitOnce(
 ) error {
 	log.Debug("Executing terraform init", "component", component, "stack", stack, "reconfigure", reconfigure, "upgrade", upgrade)
 
+	// Reset before this attempt: stderrCapture is shared across every terraform-exec call in
+	// this execute() invocation, and diagnosticText below classifies this init's own failure --
+	// it must not see leftover stderr from an earlier, already-handled command (e.g. a prior
+	// successful init/workspace-select, or a prior failed `output` this init is recovering from).
+	stderrCapture.Reset()
 	err := runner.Init(ctx, buildInitOptions(reconfigure, upgrade)...)
 	if err == nil {
 		log.Debug("Completed terraform init", "component", component, "stack", stack)
@@ -125,6 +130,12 @@ func (e *Executor) runOutput(ctx context.Context, runner TerraformRunner, compon
 
 	// Add small delay on Windows to prevent file locking issues.
 	windowsFileDelay()
+
+	// Reset before this attempt: see runInitOnce's comment on stderrCapture.Reset() -- a failed
+	// output's diagnosticText (used by runOutputWithInitRecovery's Classify call) must reflect
+	// only this output call's own stderr, not leftover output from the init/workspace-select
+	// calls that already succeeded earlier in this same execute() invocation.
+	stderrCapture.Reset()
 
 	var outputMeta map[string]tfexec.OutputMeta
 	err := retryOnWindows(func() error {

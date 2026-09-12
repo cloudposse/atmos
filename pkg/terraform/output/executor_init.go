@@ -140,11 +140,17 @@ func buildAutoInitInputs(config *ComponentConfig, environMap map[string]string) 
 		ComponentPath: config.ComponentPath,
 		PassVars:      config.PassVars,
 		Binary:        config.Executable,
-		// A miss (empty string) here falls back to os.Getenv inside autoinit
-		// itself (see Inputs.EnvLookup's doc comment), so there is no need to
-		// duplicate that fallback here.
-		EnvLookup: func(key string) string {
-			return environMap[key]
+		// The map's own "comma ok" lookup distinguishes an explicit override (e.g. a component
+		// `env:` entry that clears an inherited value to "") from the key simply not being in
+		// environMap at all; a miss falls back to os.Getenv inside autoinit itself (see
+		// Inputs.EnvLookup's doc comment), so there is no need to duplicate that fallback here.
+		// This must reflect exactly what runner.SetEnv(environMap) hands to the terraform/tofu
+		// subprocess -- otherwise the fingerprint can record a stale inherited value while
+		// terraform actually receives an explicit empty override, and smart init would then
+		// wrongly skip a required re-init.
+		EnvLookup: func(key string) (string, bool) {
+			v, ok := environMap[key]
+			return v, ok
 		},
 	}
 	if config.PassVars {

@@ -87,6 +87,23 @@ func TestClassify_Signatures(t *testing.T) {
 	}
 }
 
+// TestClassify_CombinesMultipleSignatures verifies that when output contains more than one
+// matching signature (e.g. both a backend change and an upgrade requirement), Classify combines
+// their flags instead of stopping at the first match -- a single recovery init then requests both
+// -upgrade and -reconfigure instead of only whichever signature happened to appear first.
+func TestClassify_CombinesMultipleSignatures(t *testing.T) {
+	output := "Error: Backend configuration changed\n\n" +
+		"Error: this configuration must use terraform init -upgrade"
+
+	got := Classify(output)
+
+	assert.True(t, got.InitRequired)
+	assert.True(t, got.ReconfigureRequired)
+	assert.True(t, got.UpgradeRequired)
+	assert.Contains(t, got.Matched, "Backend configuration changed")
+	assert.Contains(t, got.Matched, "must use terraform init -upgrade")
+}
+
 func TestClassify_ANSIWrapped(t *testing.T) {
 	output := "\x1b[31mError:\x1b[0m Backend configuration changed\x1b[0m"
 

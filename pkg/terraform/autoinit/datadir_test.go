@@ -20,14 +20,14 @@ func TestDataDir(t *testing.T) {
 	tests := []struct {
 		name          string
 		componentPath string
-		lookup        func(key string) string
+		lookup        func(key string) (string, bool)
 		osEnv         string
 		want          func(componentPath string) string
 	}{
 		{
 			name:          "lookup wins over os env",
 			componentPath: "component",
-			lookup:        func(string) string { return "from-lookup" },
+			lookup:        func(string) (string, bool) { return "from-lookup", true },
 			osEnv:         "from-os-env",
 			want:          func(cp string) string { return filepath.Join(cp, "from-lookup") },
 		},
@@ -39,11 +39,18 @@ func TestDataDir(t *testing.T) {
 			want:          func(cp string) string { return filepath.Join(cp, "from-os-env") },
 		},
 		{
-			name:          "lookup returning empty falls back to os env",
+			name:          "lookup reporting the key absent falls back to os env",
 			componentPath: "component",
-			lookup:        func(string) string { return "" },
+			lookup:        func(string) (string, bool) { return "", false },
 			osEnv:         "from-os-env",
 			want:          func(cp string) string { return filepath.Join(cp, "from-os-env") },
+		},
+		{
+			name:          "lookup reporting an explicit empty value is honored, not falling back to os env",
+			componentPath: "component",
+			lookup:        func(string) (string, bool) { return "", true },
+			osEnv:         "from-os-env",
+			want:          func(cp string) string { return filepath.Join(cp, ".terraform") },
 		},
 		{
 			name:          "no lookup, no os env, defaults to .terraform",
@@ -55,7 +62,7 @@ func TestDataDir(t *testing.T) {
 		{
 			name:          "absolute value from lookup is honored as-is",
 			componentPath: "component",
-			lookup:        func(string) string { return absPath },
+			lookup:        func(string) (string, bool) { return absPath, true },
 			osEnv:         "",
 			want:          func(string) string { return absPath },
 		},

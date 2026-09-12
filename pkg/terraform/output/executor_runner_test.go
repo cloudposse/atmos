@@ -176,6 +176,34 @@ func TestRunInit_UpgradeWhenDecided(t *testing.T) {
 	assert.Equal(t, "&{upgrade:true}", initOptionString(captured[0]))
 }
 
+// TestRunInitOnce_ClassificationIgnoresLeftoverStderrFromEarlierCommand guards against a
+// regression where stderrCapture -- shared across every terraform-exec call within a single
+// execute() invocation -- carried leftover stderr from an earlier, already-succeeded command
+// (e.g. a workspace select, or a prior recovered `output` call) into diagnosticText/Classify for
+// THIS init's own failure, potentially triggering the wrong recovery. The fix resets the capture
+// before runInitOnce classifies its own failure, so only its own stderr is considered.
+func TestRunInitOnce_ClassificationIgnoresLeftoverStderrFromEarlierCommand(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockTerraformRunner(ctrl)
+	// Init fails with a plain (non-diagnostic) error; if leftover stderr from an earlier
+	// command were still in the capture, Classify could wrongly diagnose an upgrade/reconfigure
+	// requirement that this failure never actually reported.
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(errors.New("permission denied"))
+
+	stderrCapture := newQuietModeWriter()
+	// Simulate leftover stderr from an earlier, already-succeeded command sharing this writer.
+	stderrCapture.buffer.WriteString("Error: Backend configuration changed\nmust use terraform init -upgrade")
+
+	executor := &Executor{}
+	config := &ComponentConfig{ComponentPath: t.TempDir()}
+	err := executor.runInit(context.Background(), mockRunner, config, "c", "s", stderrCapture, tfplugin.Cache{}, false, false)
+
+	require.Error(t, err, "a plain init failure must not be swallowed by a stale diagnostic match")
+	assert.True(t, errors.Is(err, errUtils.ErrTerraformInit))
+}
+
 func TestRunInit_RetriesWithUpgradeOnDiagnostic(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
