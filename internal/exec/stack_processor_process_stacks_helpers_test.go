@@ -795,6 +795,83 @@ func TestExtractHelmSectionsIgnoreBareNullValues(t *testing.T) {
 	assert.NotContains(t, extractHelmOverrideSection(section), cfg.ValuesSectionName)
 }
 
+// TestExtractHelmComponentSectionCreateNamespace is a regression test for the
+// native-Helm `create_namespace` toggle being silently dropped by the stack
+// processor. The toggle is read downstream in pkg/component/helm, but the stack
+// processor only carries a whitelist of Helm fields into the final component
+// config, so before the fix `create_namespace` never reached the executor and
+// the default of true always won (see docs/fixes for details).
+func TestExtractHelmComponentSectionCreateNamespace(t *testing.T) {
+	// Compile-time guard: a rename of the constant fails the build.
+	_ = cfg.HelmCreateNamespaceSectionName
+
+	t.Run("explicit-false-survives-extraction", func(t *testing.T) {
+		section := map[string]any{
+			cfg.ChartSectionName:               ".",
+			"namespace":                        "lakehouse-api",
+			cfg.HelmCreateNamespaceSectionName: false,
+		}
+
+		component := extractHelmComponentSection(section)
+		require.Contains(t, component, cfg.HelmCreateNamespaceSectionName,
+			"create_namespace must be carried through to the final component config")
+		assert.Equal(t, false, component[cfg.HelmCreateNamespaceSectionName])
+	})
+
+	t.Run("explicit-true-survives-extraction", func(t *testing.T) {
+		section := map[string]any{
+			cfg.ChartSectionName:               ".",
+			cfg.HelmCreateNamespaceSectionName: true,
+		}
+
+		component := extractHelmComponentSection(section)
+		require.Contains(t, component, cfg.HelmCreateNamespaceSectionName)
+		assert.Equal(t, true, component[cfg.HelmCreateNamespaceSectionName])
+	})
+
+	t.Run("absent-key-left-unset-so-reader-default-applies", func(t *testing.T) {
+		section := map[string]any{
+			cfg.ChartSectionName: ".",
+		}
+
+		component := extractHelmComponentSection(section)
+		assert.NotContains(t, component, cfg.HelmCreateNamespaceSectionName)
+	})
+
+	t.Run("survives-full-component-extraction", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.HelmComponentType,
+			Component:     "api",
+			StackName:     "dev",
+			ComponentMap: map[string]any{
+				cfg.ChartSectionName:               ".",
+				"name":                             "api",
+				"namespace":                        "lakehouse-api",
+				cfg.HelmCreateNamespaceSectionName: false,
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+
+		require.Contains(t, result.ComponentHelm, cfg.HelmCreateNamespaceSectionName,
+			"create_namespace must reach result.ComponentHelm to flow into the final component config")
+		assert.Equal(t, false, result.ComponentHelm[cfg.HelmCreateNamespaceSectionName])
+	})
+
+	t.Run("carried-as-stack-level-helm-lifecycle-default", func(t *testing.T) {
+		section := map[string]any{
+			cfg.ValuesSectionName:              map[string]any{"cluster": "shared"},
+			cfg.HelmCreateNamespaceSectionName: false,
+		}
+
+		defaults := extractHelmLifecycleSection(section)
+		require.Contains(t, defaults, cfg.HelmCreateNamespaceSectionName,
+			"create_namespace set on stack-level helm defaults must apply to every helm component")
+		assert.Equal(t, false, defaults[cfg.HelmCreateNamespaceSectionName])
+	})
+}
+
 // Compile-time guard: a rename of the schema Plugins fields fails the build.
 var (
 	_ = schema.Helm{Plugins: []string{"diff@v3.9.4"}}

@@ -348,12 +348,14 @@ var helmComponentSectionKeys = []string{
 	"namespace",
 	"name",
 	cfg.HelmReleaseSectionName,
+	cfg.HelmCreateNamespaceSectionName,
 }
 
 var helmLifecycleSectionKeys = []string{
 	cfg.ValuesSectionName,
 	cfg.RepositoriesSectionName,
 	cfg.HelmReleaseSectionName,
+	cfg.HelmCreateNamespaceSectionName,
 }
 
 // helmOverrideSectionKeys are native Helm fields accepted in a component or
