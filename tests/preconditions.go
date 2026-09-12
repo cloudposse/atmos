@@ -262,11 +262,21 @@ func probeGitHubRateLimit(client *http.Client, requestURL, token string) (*GitHu
 	if err != nil {
 		return nil, err
 	}
+
+	doer := client
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+		// Go's http.Client preserves the Authorization header across same-host redirects,
+		// including an HTTPS->HTTP downgrade. Never follow a redirect on the authenticated path,
+		// so the bearer token can only ever be sent to the exact requestURL we built above.
+		noRedirect := *client
+		noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+		doer = &noRedirect
 	}
 
-	apiResp, err := client.Do(req) //nolint:gosec // requestURL is always either the hardcoded githubRateLimitURL constant or a test-controlled httptest server URL, never external/user input.
+	apiResp, err := doer.Do(req) //nolint:gosec // requestURL is always either the hardcoded githubRateLimitURL constant or a test-controlled httptest server URL, never external/user input.
 	if err != nil {
 		return nil, err
 	}

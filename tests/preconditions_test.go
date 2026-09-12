@@ -801,3 +801,54 @@ func TestCheckGitHubRateLimit_ReturnsInfoWhenRemaining(t *testing.T) {
 	assert.Equal(t, 4999, info.Remaining)
 	assert.Equal(t, "Bearer authed-token", gotAuth)
 }
+
+// TestProbeGitHubRateLimit_DoesNotFollowRedirectWhenAuthenticated verifies that an authenticated
+// probe (token != "") never follows a redirect: Go's http.Client would otherwise carry the
+// Authorization header across a same-host redirect, including an HTTPS->HTTP downgrade. The
+// redirect target's handler fails the test if it is ever hit, and probeGitHubRateLimit must
+// return (nil, nil) for the 302 response instead, matching its non-200 -> (nil, nil) contract.
+func TestProbeGitHubRateLimit_DoesNotFollowRedirectWhenAuthenticated(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/redirect-target", func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("redirect target must never be hit by an authenticated probe, got request: %s %s", r.Method, r.URL)
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/rate_limit", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/redirect-target", http.StatusFound)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := server.Client()
+
+	info, err := probeGitHubRateLimit(client, server.URL+"/rate_limit", "test-token-value")
+	require.NoError(t, err)
+	assert.Nil(t, info, "expected a redirected authenticated probe to return nil info, not follow the redirect")
+}
+
+// TestProbeGitHubRateLimit_UnauthenticatedFollowsRedirectAsBefore verifies the unauthenticated
+// path (token == "") is unaffected by the redirect fix: it still follows the redirect exactly as
+// http.Client's default behavior did before this change.
+func TestProbeGitHubRateLimit_UnauthenticatedFollowsRedirectAsBefore(t *testing.T) {
+	var redirectTargetHit bool
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/redirect-target", func(w http.ResponseWriter, r *http.Request) {
+		redirectTargetHit = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"rate":{"limit":60,"remaining":42,"reset":1893456000}}`))
+	})
+	mux.HandleFunc("/rate_limit", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/redirect-target", http.StatusFound)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := server.Client()
+
+	info, err := probeGitHubRateLimit(client, server.URL+"/rate_limit", "")
+	require.NoError(t, err)
+	require.NotNil(t, info)
+	assert.True(t, redirectTargetHit, "expected the unauthenticated probe to follow the redirect as before")
+	assert.Equal(t, 42, info.Remaining)
+}
