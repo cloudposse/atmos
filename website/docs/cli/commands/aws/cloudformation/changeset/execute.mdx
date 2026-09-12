@@ -41,8 +41,8 @@ atmos aws cloudformation changeset execute vpc -s plat-ue2-dev --changeset-name 
 ## Flags
 
 <dl>
-  <dt>`--stack`, `-s` <em>(required)</em></dt>
-  <dd>Atmos stack.</dd>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
 
   <dt>`--changeset-name` <em>(required)</em></dt>
   <dd>Name of the changeset to execute.</dd>

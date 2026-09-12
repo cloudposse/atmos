@@ -33,8 +33,8 @@ atmos aws cloudformation drift describe vpc -s plat-ue2-dev
 ## Flags
 
 <dl>
-  <dt>`--stack`, `-s` <em>(required)</em></dt>
-  <dd>Atmos stack.</dd>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
 
   <dt>`--all` <em>(optional)</em></dt>
   <dd>Describe drift for all `aws/cloudformation` components in dependency order.</dd>

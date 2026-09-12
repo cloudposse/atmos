@@ -64,7 +64,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 	}
 	e.PropagateAuth(&info, authManager)
 
-	configuredStackNames, err := configuredCloudFormationStackNames(&atmosConfig, info.Stack, authManager)
+	configuredStackNames, err := configuredCloudFormationStackNames(cmd.Context(), &atmosConfig, info.Stack, authManager)
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 	statusFilter, _ := cmd.Flags().GetStringSlice("status")
 	region, _ := cmd.Flags().GetString("region")
 
-	stacks, err := pkgcfn.ListDeployedStacks(context.Background(), &info, region, statusFilter, configuredStackNames)
+	stacks, err := pkgcfn.ListDeployedStacks(cmd.Context(), &info, region, statusFilter, configuredStackNames)
 	if err != nil {
 		return err
 	}
@@ -86,12 +86,12 @@ func runList(cmd *cobra.Command, _ []string) error {
 // processed (so a component's stack_name may reference {{ .vars.stage }}) but
 // YAML functions are not — they aren't needed to resolve stack_name and some
 // require their own authentication, which would slow this down unnecessarily.
-func configuredCloudFormationStackNames(atmosConfig *schema.AtmosConfiguration, stack string, authManager auth.AuthManager) (map[string]bool, error) {
+func configuredCloudFormationStackNames(ctx context.Context, atmosConfig *schema.AtmosConfiguration, stack string, authManager auth.AuthManager) (map[string]bool, error) {
 	stacksMap, err := cfnDescribeStacks(atmosConfig, stack, nil, []string{cfg.CloudFormationComponentType}, nil, false, true, false, false, nil, authManager)
 	if err != nil {
 		return nil, err
 	}
-	componentNames, err := cfnListAllComponents(context.Background(), cfg.CloudFormationComponentType, stacksMap)
+	componentNames, err := cfnListAllComponents(ctx, cfg.CloudFormationComponentType, stacksMap)
 	if err != nil {
 		return nil, err
 	}
