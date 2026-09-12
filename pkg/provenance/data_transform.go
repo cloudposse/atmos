@@ -2,8 +2,10 @@ package provenance
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -65,9 +67,28 @@ func renameImportsToImport(data any, ctx *m.MergeContext) any {
 	return newMap
 }
 
-// filterEmptySections removes top-level sections that have no provenance.
-// This prevents displaying sections like "backend: {}" or "overrides: {}" when they
-// weren't explicitly defined in any file and are just generated placeholders.
+// filterEmptySections removes top-level sections that are both empty and have
+// no recorded provenance. This prevents displaying sections like "backend: {}"
+// or "overrides: {}" when they weren't explicitly defined in any file and are
+// just generated placeholders.
+//
+// A section is kept if it has recorded provenance OR its value is genuinely
+// non-empty. The "OR non-empty" half matters because many component sections
+// (e.g. aws/cloudformation's path/stack_name/parameters/hooks/settings, which
+// are copied into the final component map as plain values rather than merged
+// key-by-key through the provenance-tracked merge path) never get a per-key
+// provenance entry recorded at all, even though they carry real, non-empty
+// data. Treating "no provenance" as "must be empty" silently dropped those
+// populated sections from `describe component --provenance` output — see
+// docs/fixes/2026-09-09-cfn-describe-component-missing-fields.md.
+//
+// The cfg.ComponentSectionName key ("component") is excluded from the "OR
+// non-empty" escape hatch: stack_processor_process_stacks.go unconditionally
+// sets it to the component's own name on every component, purely for the
+// template system's consumption, regardless of whether the user ever wrote a
+// `component:` attribute. It is therefore always non-empty but never
+// meaningfully "configured" unless it actually has recorded provenance (i.e.
+// a user explicitly set it), so it must stay gated on provenance alone.
 func filterEmptySections(data any, ctx *m.MergeContext) any {
 	defer perf.Track(nil, "provenance.filterEmptySections")()
 
@@ -80,12 +101,39 @@ func filterEmptySections(data any, ctx *m.MergeContext) any {
 	filtered := make(map[string]any)
 
 	for key, value := range dataMap {
-		if hasSectionProvenance(ctx, key) {
+		revivableByNonEmpty := key != cfg.ComponentSectionName && !isEmptyValue(value)
+		if hasSectionProvenance(ctx, key) || revivableByNonEmpty {
 			filtered[key] = value
 		}
 	}
 
 	return filtered
+}
+
+// isEmptyValue reports whether value is a shape Atmos uses for generated
+// placeholder sections that were never configured: nil, an empty or nil map,
+// or an empty or nil slice of any element type. Scalars (including the empty
+// string) are never considered empty here, since a deliberately-set empty
+// string is real data, not a placeholder.
+//
+// Kind-based reflection (rather than a type switch on map[string]any/[]any)
+// is required because some sections -- e.g. ComponentImportsSection, always
+// assigned into the component map as []string -- carry a typed nil or empty
+// slice of a concrete element type. A type switch would fall through to the
+// default case and treat that placeholder as non-empty, resurrecting an
+// unprovenanced, genuinely-empty "import: []" section.
+func isEmptyValue(value any) bool {
+	if value == nil {
+		return true
+	}
+
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Map, reflect.Slice:
+		return rv.IsNil() || rv.Len() == 0
+	default:
+		return false
+	}
 }
 
 // hasSectionProvenance reports whether any recorded provenance path belongs to
