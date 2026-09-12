@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/ui/tree"
 )
@@ -225,7 +226,11 @@ func (r *Reporter) View(width int, spinning string, final bool) string {
 	complete := c[Passed] + c[Failed] + c[Skipped] + c[Canceled]
 	fmt.Fprintln(&b)
 	if !final {
-		bar := progress.New(progress.WithDefaultGradient(), progress.WithWidth(max(4, min(progressWidth, width-20))))
+		bar := progress.New(
+			progress.WithDefaultGradient(),
+			progress.WithWidth(max(4, min(progressWidth, width-20))),
+			progress.WithColorProfile(ui.GetColorProfile()),
+		)
 		fraction := 0.0
 		if c["total"] > 0 {
 			fraction = float64(complete) / float64(c["total"])
