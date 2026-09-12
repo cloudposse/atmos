@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/tests/testhelpers/gitconfigenv"
 )
 
@@ -180,7 +181,8 @@ func TestGithubCanaryEnv_Unauthenticated(t *testing.T) {
 }
 
 // TestGithubCanaryEnv_Authenticated verifies the authenticated branch keeps GITHUB_TOKEN, adds
-// the extraheader entry, and still disables the mirror's insteadOf rules.
+// the extraheader entry, forces GIT_TRACE_REDACT=true, and still disables the mirror's insteadOf
+// rules.
 func TestGithubCanaryEnv_Authenticated(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "ghp_test_token")
 
@@ -193,6 +195,7 @@ func TestGithubCanaryEnv_Authenticated(t *testing.T) {
 	env := githubCanaryEnv(t, base, true)
 
 	assertEnvContains(t, env, "GITHUB_TOKEN=ghp_test_token")
+	assertEnvContains(t, env, "GIT_TRACE_REDACT=true")
 	assertMirrorRulesDisabled(t, env)
 
 	found := false
@@ -203,6 +206,36 @@ func TestGithubCanaryEnv_Authenticated(t *testing.T) {
 		}
 	}
 	require.True(t, found, "expected an http.https://github.com/.extraheader git config entry in %v", env)
+}
+
+// TestGithubCanaryEnv_Authenticated_RegistersTokenForMasking verifies that the authenticated
+// branch registers the injected credential with the global masker, so
+// skipOrFailLiveGitHubCanary's iolib.MaskString call actually redacts the token (and its
+// basic-auth encoding) from captured stderr before it is classified or logged.
+func TestGithubCanaryEnv_Authenticated_RegistersTokenForMasking(t *testing.T) {
+	const token = "ghp_super_secret_test_token"
+	t.Setenv("GITHUB_TOKEN", token)
+
+	base := []string{"PATH=/usr/bin", "GITHUB_TOKEN=" + token, mirrorGitConfigEnv}
+
+	env := githubCanaryEnv(t, base, true)
+
+	var basicAuth string
+	for _, entry := range gitconfigenv.ReadEntries(env) {
+		if entry.Key == "http.https://github.com/.extraheader" {
+			basicAuth = strings.TrimPrefix(entry.Value, "AUTHORIZATION: basic ")
+			break
+		}
+	}
+	require.NotEmpty(t, basicAuth, "expected an http.https://github.com/.extraheader entry in %v", env)
+
+	stderr := "fatal: unable to access 'https://x-access-token:" + token + "@github.com/x/y.git/': " +
+		"The requested URL returned error: 401\nAuthorization: basic " + basicAuth
+	require.Contains(t, stderr, token, "sanity check: fixture stderr should contain the raw token before masking")
+
+	masked := iolib.MaskString(stderr)
+	assert.NotContains(t, masked, token, "masked stderr must not contain the raw token")
+	assert.NotContains(t, masked, basicAuth, "masked stderr must not contain the base64-encoded credential")
 }
 
 func assertEnvContains(t *testing.T, env []string, want string) {
