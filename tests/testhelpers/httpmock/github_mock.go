@@ -5,6 +5,7 @@ package httpmock
 
 import (
 	"errors"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -293,10 +294,14 @@ func (m *GitHubMockServer) FailWithTimes(pathPrefix string, status, times int) {
 // limit, which signals via `Retry-After` rather than `X-RateLimit-Remaining: 0`:
 //
 //	mock.FailWithHeaders("/api/v3/repos/owner/repo", http.StatusForbidden, map[string]string{"Retry-After": "30"})
+//
+// A copy of headers is stored, not the caller-owned map: matchFailure/applyFailureInjection
+// read it later, outside any lock the caller might (or might not) hold, so mutating the map
+// after registration must never change the response or race with a request being served.
 func (m *GitHubMockServer) FailWithHeaders(pathPrefix string, status int, headers map[string]string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.failures = append(m.failures, &failureRule{prefix: pathPrefix, status: status, remaining: -1, headers: headers})
+	m.failures = append(m.failures, &failureRule{prefix: pathPrefix, status: status, remaining: -1, headers: maps.Clone(headers)})
 }
 
 // matchFailure returns the status and extra headers of the longest-prefix-matching,

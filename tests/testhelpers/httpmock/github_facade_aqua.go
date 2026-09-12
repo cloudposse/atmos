@@ -90,10 +90,17 @@ func toAquaPackageYAML(tool *AquaTool) aquaPackageYAML {
 // RegisterAquaTool registers a fake aqua-registry package, servable at both
 // {aquaPrefix}/registry.yaml (as one index entry) and
 // {aquaPrefix}/pkgs/{path}/registry.yaml (the full per-package file).
+//
+// A copy of tool is stored (including its SupportedEnvs slice), not the caller-owned pointer:
+// mutating the struct or slice the caller passed in after registration must never change what
+// the mock serves, and must never race with the handler goroutine reading it.
 func (m *GitHubMockServer) RegisterAquaTool(tool *AquaTool) {
+	registered := *tool
+	registered.SupportedEnvs = append([]string(nil), tool.SupportedEnvs...)
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.aquaTools[tool.path()] = tool
+	m.aquaTools[registered.path()] = &registered
 }
 
 // tryAqua handles GET {aquaPrefix}/registry.yaml and

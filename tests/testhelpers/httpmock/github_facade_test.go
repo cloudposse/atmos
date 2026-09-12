@@ -90,6 +90,20 @@ func TestGitHubMockServer_ReleasesList_Pagination(t *testing.T) {
 	require.NoError(t, decodeJSON(resp2.Body, &page2))
 	require.Len(t, page2, 1)
 	assert.Equal(t, "v1", page2[0].TagName)
+
+	// A page beyond the last must serve an empty list, not silently re-serve the last page --
+	// otherwise a caller walking pages past the end would loop forever believing more remain.
+	resp3, err := http.Get(mock.URL() + "/api/v3/repos/owner/repo/releases?per_page=2&page=3")
+	require.NoError(t, err)
+	defer resp3.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp3.StatusCode)
+	assert.Empty(t, resp3.Header.Get("Link"), "an oversized page must not carry a next Link header")
+	var page3 []struct {
+		TagName string `json:"tag_name"`
+	}
+	require.NoError(t, decodeJSON(resp3.Body, &page3))
+	assert.Empty(t, page3)
 }
 
 func TestGitHubMockServer_Tags(t *testing.T) {
@@ -245,6 +259,43 @@ func TestGitHubMockServer_AquaRegistry_IndexAndPackage(t *testing.T) {
 	require.NoError(t, err)
 	defer missResp.Body.Close()
 	assert.Equal(t, http.StatusNotFound, missResp.StatusCode)
+}
+
+func TestGitHubMockServer_AquaRegistry_RegisterCopiesTool(t *testing.T) {
+	mock := NewGitHubMockServer(t)
+	tool := &AquaTool{
+		Owner:         "jqlang",
+		Repo:          "jq",
+		Asset:         "jq-{{.OS}}-{{.Arch}}",
+		SupportedEnvs: []string{"darwin", "linux"},
+	}
+	mock.RegisterAquaTool(tool)
+
+	// Mutating the caller's struct (and its slice) after registration must not change what the
+	// mock serves: RegisterAquaTool must have stored an independent copy.
+	tool.Owner = "mutated-owner"
+	tool.Repo = "mutated-repo"
+	tool.SupportedEnvs[0] = "mutated-env"
+
+	pkgResp, err := http.Get(mock.URL() + "/aqua/pkgs/jqlang/jq/registry.yaml")
+	require.NoError(t, err)
+	defer pkgResp.Body.Close()
+	require.Equal(t, http.StatusOK, pkgResp.StatusCode)
+
+	var pkg struct {
+		Packages []struct {
+			RepoOwner     string   `yaml:"repo_owner"`
+			RepoName      string   `yaml:"repo_name"`
+			SupportedEnvs []string `yaml:"supported_envs"`
+		} `yaml:"packages"`
+	}
+	pkgBody, err := io.ReadAll(pkgResp.Body)
+	require.NoError(t, err)
+	require.NoError(t, yaml.Unmarshal(pkgBody, &pkg))
+	require.Len(t, pkg.Packages, 1)
+	assert.Equal(t, "jqlang", pkg.Packages[0].RepoOwner)
+	assert.Equal(t, "jq", pkg.Packages[0].RepoName)
+	assert.Equal(t, []string{"darwin", "linux"}, pkg.Packages[0].SupportedEnvs)
 }
 
 func TestGitHubMockServer_AquaRegistry_EmptyPrefix_DoesNotShadowOtherRoutes(t *testing.T) {
