@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -15,7 +14,8 @@ func TestCustomCommandShellViewport(t *testing.T) {
 	for _, live := range []bool{false, true} {
 		t.Run(fmt.Sprint(live), func(t *testing.T) {
 			_ = NewTestKit(t)
-			viper.Set("force-tty", live)
+			// Scope terminal overrides to the subtest; Viper overrides outlive TestKit.
+			t.Setenv("ATMOS_FORCE_TTY", fmt.Sprint(live))
 			config := schema.AtmosConfiguration{
 				BasePath: t.TempDir(),
 				Commands: []schema.Command{{Name: "viewport-check", Steps: schema.Tasks{{
