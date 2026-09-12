@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Terragrunt, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration; also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos toolchain."
+description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Terragrunt, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration; also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos toolchain, and migrating AWS/GCP/Azure CLI configs, Leapp, Granted, saml2aws, and okta-aws-cli into atmos auth."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -17,6 +17,13 @@ references:
   - references/from-terragrunt.md
   - references/from-mise.md
   - references/from-aqua.md
+  - references/from-aws-config.md
+  - references/from-gcp-config.md
+  - references/from-azure-config.md
+  - references/from-leapp.md
+  - references/from-granted.md
+  - references/from-aws2saml.md
+  - references/from-okta-cli.md
 ---
 
 # Migrating to Atmos
@@ -114,40 +121,49 @@ the user has existing Terraform state that a new Atmos component must read.
 
 ### Common Problems in Task-Runner Migration
 
-These behaviors apply to every task runner. Check them before you open a reference file:
+Check these before you open a reference file; each reference file's own "Common Problems" section
+has the exact field names and steps.
 
-- **The default order can change, and it differs by source tool.** Task runs `deps:` at the same
-  time by default, so command-level `dependencies.commands`/`dependencies.workflows` -- also
-  concurrent by default -- is its direct match. Make and Just run dependencies one after another
-  by default; `make -j` is required for concurrency. Do not describe `dependencies.commands` as
-  matching Make's/Just's *default* -- it changes the order, and can introduce a race between
-  prerequisites that were only ever sequential by accident, not by a declared dependency. For an
-  ordinary Make/Just chain, ordered steps preserve the default; reach for `dependencies.commands`
-  there only when the source used `-j`, the prerequisites are genuinely independent, or a
-  prerequisite is shared by more than one caller (it dedups a shared dependency to a single run
-  regardless of concurrency -- true for every one of these tools). Check the source tool's real
-  default before you move it.
-- **Freshness checks map to `inputs`/`artifacts`, not to plain steps -- and the scope is per
-  step.** Task's `sources:`/`generates:` fields and non-`.PHONY` Make targets both skip the
-  *entire* recipe/task when a file has not changed. Atmos's step-level `inputs.sources`/
-  `artifacts.paths` fields are the direct match: with no explicit `when:`, declaring them
-  implicitly means `when: checksum.changed`, and *that one step* is skipped when nothing has
-  changed since its last successful run -- later steps in the same command still run regardless.
-  If the source recipe/task runs more than one command and the freshness decision must gate all
-  of them together, combine them into a single `shell`/`script` step rather than spreading
-  `inputs`/`artifacts` across several steps. This does not carry over on its own -- add
-  `inputs`/`artifacts` to the migrated step yourself. The `require`/`assert` step type does not
-  replace this. It only checks that a file exists, not whether it is fresh.
-- **`workflows.base_path` needs to be set explicitly once the user has their own `atmos.yaml`.**
-  Only fixed, multi-step orchestration across more than one component becomes an Atmos workflow
-  (Principle 7) -- most target chains stay a custom command with `dependencies.commands` instead.
-  `atmos workflow <name>` fails with
-  `'workflows.base_path' must be configured in 'atmos.yaml'` until you add it (for example,
-  `workflows.base_path: "stacks/workflows"`). None of this skill's `atmos.yaml` snippets show it
-  by default -- add it the moment the user's migration reaches its first workflow.
+- **Default order differs by source tool.** Task's `deps:` runs concurrently by default, matching
+  `dependencies.commands`/`dependencies.workflows` directly. Make and Just run dependencies
+  sequentially by default (`make -j` is required for concurrency) -- moving an ordinary Make/Just
+  chain to `dependencies.commands` changes the order and can introduce a race. Preserve ordered
+  steps for a sequential source chain; reach for `dependencies.commands` only when the source used
+  `-j`, the prerequisites are genuinely independent, or a prerequisite is shared by more than one
+  caller (deduped to a single run regardless of concurrency, true for every one of these tools).
+- **Freshness checks map to `inputs`/`artifacts` at the step level, not to a whole recipe/task.**
+  Task's `sources:`/`generates:` and non-`.PHONY` Make targets skip the *entire* recipe when
+  nothing changed. Atmos's step-level `inputs.sources`/`artifacts.paths` (implicitly
+  `when: checksum.changed`) only skip *that step* -- later steps in the same command still run.
+  Combine multi-command recipes into one `shell`/`script` step if the freshness gate must cover
+  all of them together; this doesn't carry over automatically. `require`/`assert` only checks
+  existence, not freshness.
+- **`workflows.base_path` must be set explicitly** once the user has their own `atmos.yaml`
+  (`atmos workflow <name>` fails without it) -- add it the moment migration reaches its first
+  workflow. Most target chains stay a custom command (Principle 7); only fixed multi-step
+  orchestration across more than one component becomes a workflow.
 
-Each reference file has its own "Common Problems" section with the exact field names and steps
-for that tool. This section is only a short summary.
+## Migrating Authentication
+
+Authentication is an orthogonal migration axis from IaC -- a user may migrate their Terraform code,
+their auth setup, both, or neither in a given session. Don't conflate the two. Identify which
+credential tooling the user has today and route to the matching reference:
+
+| User has...                                            | Use reference                                    |
+|------------------------------------------------------------|----------------------------------------------------|
+| `~/.aws/config`/`~/.aws/credentials` profiles               | [from-aws-config.md](references/from-aws-config.md) |
+| `gcloud` CLI config, ADC, or service-account keys            | [from-gcp-config.md](references/from-gcp-config.md) |
+| `az` CLI config, service principals, or Managed Identity     | [from-azure-config.md](references/from-azure-config.md) |
+| Leapp (desktop credential manager)                           | [from-leapp.md](references/from-leapp.md)           |
+| Granted (the `assume` CLI)                                   | [from-granted.md](references/from-granted.md)       |
+| saml2aws                                                      | [from-aws2saml.md](references/from-aws2saml.md)     |
+| okta-aws-cli                                                   | [from-okta-cli.md](references/from-okta-cli.md) -- **partial support only, read the gap callouts** |
+
+All are pure config-translation guides -- there is no `atmos auth import`/`migrate` command.
+None of them require touching the user's IaC migration path; they can run before, after, or
+independently of one. `from-okta-cli.md` is the one exception to "full mapping exists": whether it
+works depends on the org's Okta auth policy, not on a different AWS app type -- read it fully
+before promising a user anything.
 
 ## The Minimum-Viable Migration
 
@@ -234,7 +250,10 @@ to the correct skill:
   [atmos-components](../atmos-components/SKILL.md).
 - **Use deep merging, imports, or overrides.** Use [atmos-stacks](../atmos-stacks/SKILL.md).
 - **Vendor third-party components.** Use [atmos-vendoring](../atmos-vendoring/SKILL.md).
-- **Set up authentication or provider credentials.** Use [atmos-auth](../atmos-auth/SKILL.md).
+- **Migrate an existing AWS/GCP/Azure CLI config, Leapp, Granted, saml2aws, or okta-aws-cli
+  setup.** Start with the matching reference in
+  [Migrating Authentication](#migrating-authentication) above. For authoring new auth config
+  beyond a migration, go straight to [atmos-auth](../atmos-auth/SKILL.md).
 - **Add validation policies, such as OPA or JSON Schema.** Use
   [atmos-validation](../atmos-validation/SKILL.md).
 - **Set up CI/CD with affected-component detection.** Use [atmos-ci](../atmos-ci/SKILL.md).
@@ -257,36 +276,10 @@ Push back if a user or another agent proposes one of these methods during migrat
 - **"Adopt the full multi-account organization hierarchy on day one."** This is false. Start
   with one stack file.
 - **"Wrap atmos commands in a Makefile, Justfile, or Taskfile forever."** This is false. A
-  wrapper is a good bridge while the user builds trust in Atmos. But it is not the final state.
-  Change each leaf target to a custom command. An ordinary Make or Just dependency chain (for
-  example, `deploy: build test`) stays a custom command with ordered steps or
-  `dependencies.commands` -- it does not need a workflow. A Taskfile's `deps:` is different: Task
-  runs `deps:` concurrently by default, so it maps directly onto `dependencies.commands` (also
-  concurrent by default) on the custom command -- reach for ordered steps instead only when the
-  user's dependency chain actually requires serial execution. Reserve workflows for fixed,
-  multi-step orchestration across more than one component, not for an ordinary target chain.
+  wrapper is a good bridge while the user builds trust in Atmos, not the final state -- change
+  each leaf target to a custom command (see Principle 7 and "Common Problems in Task-Runner
+  Migration" above for the concurrency/ordering details per source tool).
 
-## Additional Resources
-
-- [References/from-native-terraform.md](references/from-native-terraform.md): steps for a plain
-  Terraform migration, matched to each shape.
-- [References/from-terraform-workspaces.md](references/from-terraform-workspaces.md): how to map
-  workspaces to stacks without losing state.
-- [References/remote-state-bridge.md](references/remote-state-bridge.md): the dummy-component and
-  abstract-component patterns. Use them to read state from Terraform that is not yet migrated, or
-  from an external repository.
-- [References/from-terramate.md](references/from-terramate.md): construct-by-construct mapping
-  from Terramate (`stack.tm.hcl`, globals, `generate_hcl`, `script{}`, tags/labels) to Atmos,
-  including the one remaining known gap (`.tmtriggers`).
-- [references/from-terragrunt.md](references/from-terragrunt.md) -- concept mapping and migration
-  workflow for classic Terragrunt and Terragrunt Stacks.
-- [References/from-makefile.md](references/from-makefile.md): steps for a Makefile, matched to
-  each shape.
-- [References/from-justfile.md](references/from-justfile.md): steps for a Justfile, matched to
-  each shape.
-- [References/from-taskfile.md](references/from-taskfile.md): steps for a Taskfile.yml (go-task)
-  file, matched to each shape.
-- [References/from-mise.md](references/from-mise.md) -- migrating tool versions, tasks, and env
-  vars from mise to the Atmos toolchain.
-- [References/from-aqua.md](references/from-aqua.md) -- migrating tool versions from Aqua CLI's
-  `aqua.yaml` to the Atmos toolchain.
+Every reference file is already linked, with its routing condition, from the "Decide the
+Migration Shape First" and "Migrating Authentication" tables above -- load a reference directly
+from there rather than a separate resource list.
