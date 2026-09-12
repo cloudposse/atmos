@@ -45,6 +45,41 @@ func TestPackageURL_UsesConfiguredRegion(t *testing.T) {
 	assert.Equal(t, "https://my-bucket.s3.eu-west-1.amazonaws.com/dev/vpc/template-abc.yaml", url)
 }
 
+// A bucket name containing dots is legal in S3 but breaks TLS certificate
+// validation under virtual-hosted-style addressing: the wildcard cert for
+// *.s3.<region>.amazonaws.com covers exactly one label, not the multi-label
+// host "my.bucket.name.s3.<region>.amazonaws.com" that virtual-hosted-style
+// would produce, so packageURL must switch to regional path-style addressing
+// (bucket in the path, not the host) specifically for this case.
+func TestPackageURL_DottedBucketUsesPathStyle(t *testing.T) {
+	url := packageURL(&targetS3Config{Bucket: "my.bucket.name", Region: "us-east-1"}, "dev/vpc/template-abc.yaml")
+	assert.Equal(t, "https://s3.us-east-1.amazonaws.com/my.bucket.name/dev/vpc/template-abc.yaml", url)
+}
+
+// A non-dotted bucket name must keep using virtual-hosted-style addressing
+// (AWS's preferred default) -- the dotted-bucket path-style switch in
+// packageURL must not apply blanket path-style addressing to every bucket.
+func TestPackageURL_NonDottedBucketUsesVirtualHostedStyle(t *testing.T) {
+	url := packageURL(&targetS3Config{Bucket: "my-bucket", Region: "us-east-1"}, "dev/vpc/template-abc.yaml")
+	assert.Equal(t, "https://my-bucket.s3.us-east-1.amazonaws.com/dev/vpc/template-abc.yaml", url)
+}
+
+// Object key segments containing characters that are not valid unescaped in
+// a URL (spaces, "#", "?") must be percent-escaped, while the "/" path
+// separators between the key's own directory segments (stack/component/
+// template) must be preserved rather than escaped into "%2F".
+func TestPackageURL_EscapesKeyCharactersNeedingEscaping(t *testing.T) {
+	url := packageURL(&targetS3Config{Bucket: "my-bucket", Region: "us-east-1"}, "dev prod/vpc#1/template abc.yaml")
+	assert.Equal(t, "https://my-bucket.s3.us-east-1.amazonaws.com/dev%20prod/vpc%231/template%20abc.yaml", url)
+}
+
+// The same escaping must also apply under path-style addressing for a
+// dotted bucket name, since the object key still lands in the URL path.
+func TestPackageURL_DottedBucketEscapesKeyCharacters(t *testing.T) {
+	url := packageURL(&targetS3Config{Bucket: "my.bucket.name", Region: "us-east-1"}, "dev prod/vpc#1/template abc.yaml")
+	assert.Equal(t, "https://s3.us-east-1.amazonaws.com/my.bucket.name/dev%20prod/vpc%231/template%20abc.yaml", url)
+}
+
 // newS3Backend must construct a real backend for the default (no-identity)
 // credential chain — this exercises the artifact.StoreOptions plumbing
 // without making any network call (constructing the AWS config is local; see

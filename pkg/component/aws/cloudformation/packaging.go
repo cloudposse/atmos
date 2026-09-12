@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -183,14 +184,40 @@ func packageObjectName(prefix string, info *schema.ConfigAndStacksInfo, digest s
 	return strings.TrimSuffix(prefix, "/") + "/" + name
 }
 
-// packageURL constructs the virtual-hosted-style https:// URL CreateChangeSet's
-// TemplateURL parameter requires. AWS rejects a bare s3:// URI here (TemplateURL
-// must be an S3 or Systems Manager document URL starting with https://), so a
-// region is mandatory -- s3ConfigFromTarget enforces that before this is ever
+// packageURL constructs the https:// URL CreateChangeSet's TemplateURL
+// parameter requires. AWS rejects a bare s3:// URI here (TemplateURL must be
+// an S3 or Systems Manager document URL starting with https://), so a region
+// is mandatory -- s3ConfigFromTarget enforces that before this is ever
 // called. GovCloud/China partitions (a different DNS suffix than
 // amazonaws.com) aren't handled: nothing else in this codebase resolves AWS
 // partition yet, so extending that is left to a future change if/when it's
 // needed rather than guessed at here.
+//
+// Addressing style: virtual-hosted-style (https://<bucket>.s3.<region>.amazonaws.com/<key>)
+// is used by default, per AWS's own current guidance. But a bucket name
+// containing dots (a legal S3 bucket name, e.g. "my.bucket.name") breaks TLS
+// certificate validation under virtual-hosted-style addressing -- the
+// wildcard cert for *.s3.<region>.amazonaws.com covers exactly one label, not
+// the multi-label "my.bucket.name.s3.<region>.amazonaws.com" host that would
+// result. Path-style addressing (https://s3.<region>.amazonaws.com/<bucket>/<key>)
+// sidesteps that by keeping the bucket out of the hostname entirely, so it's
+// used specifically -- and only -- for dotted bucket names.
+//
+// The object key is percent-escaped via net/url rather than interpolated
+// raw: name can contain characters from the stack/component/prefix (spaces,
+// "#", "?", etc.) that are otherwise not valid unescaped in a URL, or that
+// would silently point CreateChangeSet at the wrong object (e.g. an
+// unescaped "#" truncates the path at a URL fragment). The url.URL type's
+// Path field escapes each path segment while leaving the "/" separators
+// intact, which is exactly the key's own directory structure
+// (stack/component/template).
 func packageURL(s3Target *targetS3Config, name string) string {
-	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", s3Target.Bucket, s3Target.Region, name)
+	u := url.URL{Scheme: "https", Path: "/" + name}
+	if strings.Contains(s3Target.Bucket, ".") {
+		u.Host = fmt.Sprintf("s3.%s.amazonaws.com", s3Target.Region)
+		u.Path = "/" + s3Target.Bucket + "/" + name
+	} else {
+		u.Host = fmt.Sprintf("%s.s3.%s.amazonaws.com", s3Target.Bucket, s3Target.Region)
+	}
+	return u.String()
 }
