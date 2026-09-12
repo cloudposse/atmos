@@ -19,7 +19,7 @@ anchors, and Go templates such as `{{.Version}}` in source URLs.
 ## Usage
 
 ```shell
-atmos vendor update [--check] [--pull] [--pull-request] [--group <name>] [--component <name>]... [--tags <a,b>] [--stack <stack>] [--labels <k>=<v>] [--outdated] [--component-manifests]
+atmos vendor update [--check] [--pull] [--pull-request] [--group <name>] [--component <name>]... [--tags <a,b>] [--stack <stack>] [--labels <k>=<v>]... [--outdated] [--component-manifests]
 ```
 
 Sources whose version is templated (`{{...}}`) or whose source is not a Git repository
@@ -65,6 +65,9 @@ atmos vendor update --stack dev-us-west-2
 atmos vendor update --labels tier=1
 atmos vendor update --stack dev-us-west-2 --labels tier=1
 atmos vendor update --stack dev-us-west-2 --tags networking
+
+# Repeat --labels to combine multiple selectors across occurrences.
+atmos vendor update --labels tier=1 --labels cost-center=platform
 
 # Show only sources with an available update.
 atmos vendor update --check --outdated
@@ -115,8 +118,8 @@ sources:
   <dd>Update only components whose `vendor.yaml` source declares any of these comma-separated tags. An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.</dd>
   <dt>`--stack` / `-s` (string)</dt>
   <dd>Update only components belonging to the specified stack. Composes with `--labels` to narrow further, and with `--tags` to filter by declared source tags. Cannot be combined with an explicit `--component`.</dd>
-  <dt>`--labels` (string)</dt>
-  <dd>Update only components whose stack `metadata.labels` match ALL of these comma-separated `key=value` or `key:value` pairs (resolved the same way as `--stack`). Composes with `--stack` and `--tags`. Cannot be combined with an explicit `--component`.</dd>
+  <dt>`--labels` (string, repeatable)</dt>
+  <dd>Update only components whose stack `metadata.labels` match ALL of these `key=value` or `key:value` pairs — comma-separated within one occurrence, and/or repeated for more (`--labels tier=1 --labels cost-center=platform`), resolved the same way as `--stack`. Composes with `--stack` and `--tags`. Cannot be combined with an explicit `--component`.</dd>
   <dt>`--group` (string)</dt>
   <dd>Update only the named `vendor.update.groups` selection.</dd>
   <dt>`--pull-request`</dt>

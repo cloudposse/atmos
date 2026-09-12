@@ -1,0 +1,60 @@
+---
+title: atmos aws cloudformation backend describe
+sidebar_label: describe
+sidebar_class_name: command
+id: describe
+description: Show whether the component's template-packaging backend bucket currently exists.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Show whether the S3 bucket referenced by the component's resolved `kind:
+  aws/s3` provision target currently exists, along with its resolved
+  bucket/region — a real, non-stub `HeadBucket` check, not a description of
+  the declared configuration alone.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos aws cloudformation backend describe --help" src="/casts/screengrabs/atmos-aws-cloudformation-backend-describe--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation backend describe <component> --stack <stack> [options]
+```
+
+```shell
+atmos aws cloudformation backend describe vpc -s plat-ue2-dev
+atmos aws cloudformation backend describe vpc -s plat-ue2-dev --format json
+```
+
+Disambiguate when the component declares more than one `kind: aws/s3` target:
+
+```shell
+atmos aws cloudformation backend describe vpc -s plat-ue2-dev --target artifacts
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--target` <em>(optional)</em></dt>
+  <dd>The `kind: aws/s3` provision target to use. Required when more than one is declared.</dd>
+
+  <dt>`--format`, `-f` <em>(optional)</em></dt>
+  <dd>Output format: `table` (default), `yaml`, or `json`.</dd>
+
+  <dt>`--identity`, `-i` <em>(optional)</em></dt>
+  <dd>Atmos identity to authenticate with.</dd>
+</dl>
+
+## Behavior
+
+`backend describe` calls the same S3 `HeadBucket` existence check the
+provisioner uses internally to decide whether to create or reuse a bucket
+during `backend create`/`backend update`.

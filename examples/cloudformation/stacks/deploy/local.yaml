@@ -12,3 +12,11 @@ components:
     demo:
       metadata:
         type: real
+        tags: ["group-a"]
+    demo-broken:
+      metadata:
+        type: real
+        tags: ["group-b"]
+    demo-inline:
+      metadata:
+        type: real
