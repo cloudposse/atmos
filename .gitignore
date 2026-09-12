@@ -102,6 +102,9 @@ tests/fixtures/scenarios/vendor-globs/components/**
 tests/fixtures/scenarios/vendor/components/**
 tests/fixtures/scenarios/vendor-simple-excludes/components/**
 tests/fixtures/scenarios/vendor-simple-excludes/vendor.lock.yaml
+examples/demo-vendoring/vendor.lock.yaml
+tests/fixtures/scenarios/vendor-globs/vendor.lock.yaml
+tests/fixtures/scenarios/vendor/vendor.lock.yaml
 # vendor-stack-labels's vendored output (main.tf/README.md/vendor.lock.yaml, alongside the tracked
 # component.yaml manifests) is intentionally NOT gitignored here: the atmos_vendor_pull_stack and
 # atmos_vendor_pull_labels test cases share this fixture and rely on the test harness's `clean: true`
