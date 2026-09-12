@@ -8,9 +8,11 @@ authors:
 tags:
   - feature
 release: v1.196.0
+cast: "/casts/examples/demo-auth/auth-list.cast"
+castTitle: "atmos auth identities"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 We're excited to announce a powerful new command for managing authentication in Atmos: [`atmos auth list`](/cli/commands/auth/list). This command provides comprehensive visibility into your authentication configuration, making it easier than ever to understand and manage complex authentication chains across multiple cloud providers and identities.
 
@@ -18,7 +20,7 @@ We're excited to announce a powerful new command for managing authentication in 
 
 See it in action:
 
-<CastPlayer src="/casts/examples/demo-auth/auth-list.cast" title="atmos auth identities" chrome controls scrubber />
+<CastEmbed src="/casts/examples/demo-auth/auth-list.cast" title="atmos auth identities" chrome controls scrubber />
 
 [View the full example](/examples/demo-auth)
 
