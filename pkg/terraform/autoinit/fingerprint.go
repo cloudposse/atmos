@@ -161,9 +161,11 @@ func collectFiles(in *Inputs) (collectedFiles, error) {
 // with a component-local *.tfvars file that happens to share the same base name (e.g. an external
 // `-var-file ../shared/terraform.tfvars` and a component-local terraform.tfvars). Without this,
 // collectVarFiles' map (keyed only by filepath.Base) would silently drop one of the two entries,
-// and edits to the dropped file would never change the fingerprint. ":" is invalid in filenames on
-// Windows, so this prefix can never collide with a real base name.
-const explicitVarFileKeyPrefix = "explicit-var-file:"
+// and edits to the dropped file would never change the fingerprint. The prefix leads with a NUL
+// byte, which no filesystem permits in a filename (unlike ":", which is valid on Unix and would
+// let a component-local file named e.g. "explicit-var-file:terraform.tfvars" collide with this
+// prefix), so this key can never collide with a real base name on any platform.
+const explicitVarFileKeyPrefix = "\x00explicit-var-file:"
 
 // collectVarFiles resolves in.VarFile (if set) plus any root *.tfvars / *.tfvars.json files,
 // keyed by base name. The explicit var file is keyed separately (see explicitVarFileKeyPrefix)

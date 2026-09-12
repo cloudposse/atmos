@@ -195,6 +195,50 @@ func TestCompute_ExplicitVarFileDoesNotCollideWithComponentLocalVarFile(t *testi
 	assert.NotEqual(t, fp2.Hash, fp3.Hash, "editing the component-local var file must change the fingerprint")
 }
 
+// TestCompute_ExplicitVarFileKeyDoesNotCollideWithLiteralPrefixedFilename guards against a
+// narrower regression than TestCompute_ExplicitVarFileDoesNotCollideWithComponentLocalVarFile:
+// a component-local file literally named "explicit-var-file:terraform.tfvars" -- valid on Unix,
+// where ":" is a legal filename character -- must not collide with explicitVarFileKeyPrefix's
+// own key for an unrelated explicit var file. This is exactly the collision the previous
+// ":"-only prefix (valid only as a Windows-filename guard) permitted; the current NUL-led prefix
+// closes it on every platform.
+func TestCompute_ExplicitVarFileKeyDoesNotCollideWithLiteralPrefixedFilename(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("':' is not a valid filename character on Windows; this collision is Unix-only")
+	}
+
+	dir := t.TempDir()
+	writeFile(t, dir, "main.tf", "v1")
+	// A component-local file whose base name literally matches explicitVarFileKeyPrefix plus a
+	// base name -- this is the exact string the old ":"-based prefix would have produced as a
+	// map key for an explicit var file named "terraform.tfvars", so if this component-local file
+	// existed, the old prefix could not tell the two entries apart.
+	writeFile(t, dir, "explicit-var-file:terraform.tfvars", "local-v1")
+
+	externalDir := t.TempDir()
+	explicitVarFile := writeFile(t, externalDir, "terraform.tfvars", "explicit-v1")
+
+	in := baseInputs(dir)
+	in.PassVars = true
+	in.VarFile = explicitVarFile
+
+	fp1, err := Compute(in)
+	require.NoError(t, err)
+
+	// Editing the explicit var file alone must change the fingerprint.
+	writeFile(t, externalDir, "terraform.tfvars", "explicit-v2")
+	fp2, err := Compute(in)
+	require.NoError(t, err)
+	assert.NotEqual(t, fp1.Hash, fp2.Hash, "editing the explicit var file must change the fingerprint")
+
+	// Editing the literally-prefixed component-local file alone must also change the fingerprint.
+	writeFile(t, dir, "explicit-var-file:terraform.tfvars", "local-v2")
+	fp3, err := Compute(in)
+	require.NoError(t, err)
+	assert.NotEqual(t, fp2.Hash, fp3.Hash,
+		"editing the literally-prefixed component-local file must change the fingerprint")
+}
+
 // TestCompute_CLIConfigFileHashesBothTFAndTofuVars guards against a regression where
 // cliConfigRecord only ever hashed TF_CLI_CONFIG_FILE, even when TOFU_CLI_CONFIG_FILE (the
 // variable OpenTofu actually prefers) points at a different, readable file -- a change to the

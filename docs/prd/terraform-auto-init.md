@@ -80,8 +80,9 @@ between "always re-init" and "the user manually judges when it's safe to skip."
 - **Apply uniformly** across explicit CLI commands and the implicit init that
   `!terraform.output`/`atmos.Component` evaluation performs.
 - **Preserve exact backward compatibility** for anyone who sets `init.mode: always` and
-  `init.reconfigure: always` (or leaves the legacy `init_run_reconfigure: true` default, which now maps to
-  `auto`, not `always` — see [Migration](#migration-from-init_run_reconfigure)).
+  `init.reconfigure: always`. Leaving the legacy `init_run_reconfigure: true` default does **not**
+  preserve unconditional `-reconfigure` — it now maps to `init.reconfigure: auto` — see
+  [Migration](#migration-from-init_run_reconfigure).
 
 ## Non-Goals
 

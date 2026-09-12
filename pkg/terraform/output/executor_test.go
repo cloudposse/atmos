@@ -2477,7 +2477,7 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure(t *testing.T)
 	// singleflight has already registered the in-flight call for this cache key
 	// (LoadOrStore happens, and Provision starts running, strictly before the
 	// closure calls close(entered)) before the follower makes its own call.
-	// Racing both goroutines' starts against each other (the previous approach)
+	// Racing both goroutines' starts against each other (an earlier approach)
 	// only synchronized "about to call ensureWorkdirProvisioned", not "actually
 	// registered with singleflight" -- since DoChan's closure runs on a runtime
 	// -spawned goroutine independent of the caller, a slow-to-schedule follower
@@ -2491,16 +2491,19 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure(t *testing.T)
 	go call(0)
 	<-entered
 
+	// followerJoined is closed by doChanEntryHook the instant the follower's own call
+	// reaches workdirProvisionGroup.DoChan -- a deterministic proof that the follower has
+	// registered with singleflight, unlike scheduler-yielding tricks (e.g. a
+	// runtime.Gosched loop), which only make losing the race less likely, never
+	// impossible: they prove nothing about which goroutine the runtime actually chose to
+	// run next.
+	followerJoined := make(chan struct{})
+	doChanEntryHook = func() { close(followerJoined) }
+	defer func() { doChanEntryHook = nil }()
+
 	wg.Add(1)
 	go call(1)
-	// The follower's remaining path to its own DoChan call (IsWorkdirEnabled,
-	// stackComponentKey, the DoChan call itself) is a handful of non-blocking
-	// statements with no competing goroutine left to lose a scheduling race
-	// against -- yield generously so it's scheduled and reaches that call
-	// before the leader is released.
-	for range 1000 {
-		runtime.Gosched()
-	}
+	<-followerJoined
 
 	close(gate)
 	wg.Wait()
