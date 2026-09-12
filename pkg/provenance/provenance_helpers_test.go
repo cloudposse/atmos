@@ -428,16 +428,18 @@ func TestRenderInlineProvenance_DifferentProvenanceTypes(t *testing.T) {
 }
 
 func TestRenderInlineProvenance_YAMLMarshallingError(t *testing.T) {
-	// Test that non-serializable values are handled gracefully.
-	// Note: gopkg.in/yaml.v3 has internal panic recovery that converts
-	// unmarshallable types (like functions, channels) to `{}` instead of
-	// propagating the panic. This test documents the behavior and ensures
-	// panic recovery is in place for any future YAML library changes.
+	// Test that non-serializable values are handled gracefully (no panic).
 	//
-	// The panic recovery in RenderInlineProvenanceWithStackFile exists as
-	// defensive programming to handle edge cases, but current yaml.v3 behavior
-	// makes it difficult to trigger via test data without directly invoking
-	// the low-level encoder.
+	// filterEmptySections only drops a section when it is BOTH unprovenanced
+	// AND empty (nil, an empty map, or an empty slice) -- see
+	// docs/fixes/2026-09-09-cfn-describe-component-missing-fields.md for why:
+	// dropping any unprovenanced section, empty or not, silently hid real,
+	// non-empty component data (e.g. aws/cloudformation's path/stack_name/
+	// hooks/settings) that never gets per-key provenance recorded. A `func`/
+	// `chan` value is neither empty nor provenanced, so it now survives
+	// filtering and reaches the YAML encoder, which reports a marshal error
+	// instead of silently producing `{}`. RenderInlineProvenanceWithStackFile
+	// surfaces that error as plain text rather than panicking.
 	data := map[string]any{
 		"func": func() {},
 		"chan": make(chan int),
@@ -449,11 +451,7 @@ func TestRenderInlineProvenance_YAMLMarshallingError(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	result := RenderInlineProvenanceWithStackFile(data, ctx, atmosConfig, "broken.yaml")
 
-	// yaml.v3 marshals these as `{}` instead of panicking.
-	// Since the values have no provenance, they're filtered out by filterEmptySections,
-	// resulting in an empty top-level map `{}`.
-	// Verify the function doesn't panic and returns valid output.
+	// Verify the function doesn't panic and returns a graceful error message.
 	assert.NotEmpty(t, result)
-	assert.Contains(t, result, "Provenance Legend")
-	assert.Contains(t, result, "{}")
+	assert.Contains(t, result, "Error rendering YAML")
 }

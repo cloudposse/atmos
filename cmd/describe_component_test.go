@@ -1,19 +1,26 @@
 package cmd
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 func TestDescribeComponentCmd_Error(t *testing.T) {
@@ -23,6 +30,232 @@ func TestDescribeComponentCmd_Error(t *testing.T) {
 	// The command requires exactly one argument (the component name).
 	err := describeComponentCmd.RunE(describeComponentCmd, []string{})
 	assert.Error(tk, err, "describe component command should return an error when called with no parameters")
+}
+
+// TestDescribeComponentCmd_StackNotCobraRequired is a regression test for the
+// missing-stack interactive prompt never firing: describe_component.go used to call
+// describeComponentCmd.MarkPersistentFlagRequired("stack"), which is Cobra's own
+// required-flag validation and runs BEFORE RunE -- unconditionally producing
+// Cobra's generic "required flag(s) \"stack\" not set" error and never giving
+// resolveDescribeComponentStack's interactive prompt a chance to run, even in a
+// real terminal. This asserts the "stack" flag no longer carries Cobra's
+// required-flag annotation.
+func TestDescribeComponentCmd_StackNotCobraRequired(t *testing.T) {
+	stackFlag := describeComponentCmd.PersistentFlags().Lookup("stack")
+	require.NotNil(t, stackFlag, "stack flag should be registered")
+
+	required, ok := stackFlag.Annotations[cobra.BashCompOneRequiredFlag]
+	if ok {
+		assert.NotEqual(t, []string{"true"}, required,
+			"stack flag must not be marked Cobra-required, or the interactive "+
+				"missing-stack prompt never gets a chance to run before Cobra's own "+
+				"required-flag validation rejects the command")
+	}
+}
+
+// TestGetRunnableDescribeComponentCmd_MissingStackTriggersPrompt is a regression
+// test proving `atmos describe component <name>` with no --stack, in a
+// mocked-interactive context, attempts the interactive "Choose a stack" prompt
+// path (resolveDescribeComponentStack -> flags.PromptForMissingRequired ->
+// describeComponentStackCompletion) instead of failing before ever reaching RunE.
+// It also proves that when the prompt yields no selection (e.g. no matching
+// stacks), the command still fails clearly via errUtils.ErrMissingStack rather
+// than silently proceeding with an empty stack.
+func TestGetRunnableDescribeComponentCmd_MissingStackTriggersPrompt(t *testing.T) {
+	tk := NewTestKit(t)
+	viper.Reset()
+
+	preserved := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(preserved)
+	tk.Setenv("ATMOS_FORCE_TTY", "true")
+	viper.Set("interactive", true)
+
+	testCmd := &cobra.Command{Use: "component"}
+	testCmd.Flags().String("stack", "", "")
+	testCmd.Flags().String("format", "yaml", "")
+	testCmd.Flags().String("file", "", "")
+	testCmd.Flags().Bool("process-templates", true, "")
+	testCmd.Flags().Bool("process-functions", true, "")
+	testCmd.Flags().Bool("use-mocks", false, "")
+	testCmd.Flags().String("query", "", "")
+	testCmd.Flags().StringSlice("skip", nil, "")
+	testCmd.Flags().Bool("provenance", false, "")
+
+	var capturedFlagName string
+	var capturedArgs []string
+	originalCompletion := describeComponentStackCompletion
+	describeComponentStackCompletion = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		capturedFlagName = "stack"
+		capturedArgs = append([]string{}, args...)
+		// No matching stacks -- forces the graceful "let the caller validate"
+		// fallback instead of needing a real TTY form to complete a selection.
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	defer func() { describeComponentStackCompletion = originalCompletion }()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).Times(0)
+
+	run := getRunnableDescribeComponentCmd(getRunnableDescribeComponentCmdProps{
+		checkAtmosConfigE: func(opts ...AtmosValidateOption) error { return nil },
+		initCliConfig: func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		isExplicitComponentPath: func(component string) bool { return false },
+		resolveComponentFromPath: func(atmosConfig *schema.AtmosConfiguration, component, stack string) (string, error) {
+			return component, nil
+		},
+		executeDescribeComponent: func(params *exec.ExecuteDescribeComponentParams) (map[string]any, error) {
+			return nil, nil
+		},
+		newDescribeComponentExec: mockExec,
+	})
+
+	err := run(testCmd, []string{"vpc"})
+
+	assert.Equal(tk, "stack", capturedFlagName, "the missing-stack prompt path must be attempted (completion function invoked)")
+	assert.Equal(tk, []string{"vpc"}, capturedArgs, "the completion function must receive the component positional arg for filtering")
+	require.ErrorIs(tk, err, errUtils.ErrMissingStack,
+		"a still-missing stack after the prompt attempt must fail with the standard ErrMissingStack, not a Cobra required-flag error or a silent empty-stack execution")
+}
+
+// TestResolveDescribeComponentStack_PromptSelectsStack drives resolveDescribeComponentStack's
+// real success path: PromptForMissingRequired -> flags.PromptForValue -> the actual Huh form
+// body (title, options), run in accessible mode via flags.SetFormRunnerForTest so it doesn't
+// need a live TTY. This covers the `return stackFlag.Value.Set(selected)` line -- proving a
+// selection made through the real prompt is written back onto the command's own "stack" flag.
+func TestResolveDescribeComponentStack_PromptSelectsStack(t *testing.T) {
+	originalInteractive := viper.GetBool("interactive")
+	defer viper.Set("interactive", originalInteractive)
+
+	preserved := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(preserved)
+	t.Setenv("ATMOS_FORCE_TTY", "true")
+	viper.Set("interactive", true)
+	require.True(t, flags.IsInteractive(), "test setup must actually reach the interactive branch")
+
+	restoreRunner := flags.SetFormRunnerForTest(func(f *huh.Form) error {
+		// "1\n" selects the first listed option ("dev") via Huh's accessible-mode
+		// numbered prompt -- this exercises the real title/options rendering and
+		// selection logic, not a stub.
+		return f.WithAccessible(true).WithInput(strings.NewReader("1\n")).WithOutput(io.Discard).Run()
+	})
+	defer restoreRunner()
+
+	originalCompletion := describeComponentStackCompletion
+	var capturedArgs []string
+	describeComponentStackCompletion = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		capturedArgs = append([]string{}, args...)
+		return []string{"dev", "staging"}, cobra.ShellCompDirectiveNoFileComp
+	}
+	defer func() { describeComponentStackCompletion = originalCompletion }()
+
+	cmd := &cobra.Command{Use: "component"}
+	cmd.Flags().String("stack", "", "")
+
+	err := resolveDescribeComponentStack(cmd, []string{"vpc"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vpc"}, capturedArgs, "completion function must receive the component positional arg")
+	assert.Equal(t, "dev", cmd.Flags().Lookup("stack").Value.String(),
+		"the selection made through the real prompt must be written back onto the stack flag")
+}
+
+// TestResolveDescribeComponentStack_PromptFormError covers resolveDescribeComponentStack's
+// error-wrapping branch: when the underlying prompt fails (e.g. the Huh form itself errors),
+// resolveDescribeComponentStack must wrap it with "prompt for --stack" context rather than
+// silently discarding it or panicking.
+func TestResolveDescribeComponentStack_PromptFormError(t *testing.T) {
+	originalInteractive := viper.GetBool("interactive")
+	defer viper.Set("interactive", originalInteractive)
+
+	preserved := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(preserved)
+	t.Setenv("ATMOS_FORCE_TTY", "true")
+	viper.Set("interactive", true)
+	require.True(t, flags.IsInteractive(), "test setup must actually reach the interactive branch")
+
+	boom := errors.New("form boom")
+	restoreRunner := flags.SetFormRunnerForTest(func(*huh.Form) error { return boom })
+	defer restoreRunner()
+
+	originalCompletion := describeComponentStackCompletion
+	describeComponentStackCompletion = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"dev", "staging"}, cobra.ShellCompDirectiveNoFileComp
+	}
+	defer func() { describeComponentStackCompletion = originalCompletion }()
+
+	cmd := &cobra.Command{Use: "component"}
+	cmd.Flags().String("stack", "", "")
+
+	err := resolveDescribeComponentStack(cmd, []string{"vpc"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, boom)
+	assert.Contains(t, err.Error(), "prompt for --stack", "error must be wrapped with the --stack prompt context")
+}
+
+// TestGetRunnableDescribeComponentCmd_StackPromptErrorPropagates covers the early-return
+// branch in getRunnableDescribeComponentCmd's RunE closure: when resolveDescribeComponentStack
+// itself fails (as opposed to yielding no selection), the command must return that error
+// immediately rather than continuing on to parse flags or execute the describe.
+func TestGetRunnableDescribeComponentCmd_StackPromptErrorPropagates(t *testing.T) {
+	tk := NewTestKit(t)
+	viper.Reset()
+
+	preserved := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(preserved)
+	tk.Setenv("ATMOS_FORCE_TTY", "true")
+	viper.Set("interactive", true)
+
+	testCmd := &cobra.Command{Use: "component"}
+	testCmd.Flags().String("stack", "", "")
+	testCmd.Flags().String("format", "yaml", "")
+	testCmd.Flags().String("file", "", "")
+	testCmd.Flags().Bool("process-templates", true, "")
+	testCmd.Flags().Bool("process-functions", true, "")
+	testCmd.Flags().Bool("use-mocks", false, "")
+	testCmd.Flags().String("query", "", "")
+	testCmd.Flags().StringSlice("skip", nil, "")
+	testCmd.Flags().Bool("provenance", false, "")
+
+	boom := errors.New("form boom")
+	restoreRunner := flags.SetFormRunnerForTest(func(*huh.Form) error { return boom })
+	defer restoreRunner()
+
+	originalCompletion := describeComponentStackCompletion
+	describeComponentStackCompletion = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"dev", "staging"}, cobra.ShellCompDirectiveNoFileComp
+	}
+	defer func() { describeComponentStackCompletion = originalCompletion }()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).Times(0)
+
+	run := getRunnableDescribeComponentCmd(getRunnableDescribeComponentCmdProps{
+		checkAtmosConfigE: func(opts ...AtmosValidateOption) error { return nil },
+		initCliConfig: func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		isExplicitComponentPath: func(component string) bool { return false },
+		resolveComponentFromPath: func(atmosConfig *schema.AtmosConfiguration, component, stack string) (string, error) {
+			return component, nil
+		},
+		executeDescribeComponent: func(params *exec.ExecuteDescribeComponentParams) (map[string]any, error) {
+			return nil, nil
+		},
+		newDescribeComponentExec: mockExec,
+	})
+
+	err := run(testCmd, []string{"vpc"})
+
+	require.Error(tk, err)
+	assert.ErrorIs(tk, err, boom, "the underlying form error must propagate unwrapped through errors.Is")
+	assert.Contains(tk, err.Error(), "prompt for --stack",
+		"a failing stack prompt must short-circuit RunE with the prompt's own wrapped error, "+
+			"not continue on to flag parsing or execution")
 }
 
 func TestDescribeComponentCmd_ProvenanceFlag(t *testing.T) {

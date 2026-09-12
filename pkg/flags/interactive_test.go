@@ -36,6 +36,63 @@ func TestIsInteractive(t *testing.T) {
 	})
 }
 
+// TestIsInteractive_DefaultsTrueWithoutExplicitFlag is a regression test for the
+// missing-required-flag/positional-arg prompts (PromptForMissingRequired,
+// PromptForOptionalValue, PromptForPositionalArg) requiring an undiscoverable
+// --interactive opt-in before they would ever fire. It proves isInteractive()
+// returns true in a genuinely interactive context (real TTY, not CI) using ONLY
+// the --interactive flag's registered DEFAULT -- the same way a real invocation of
+// `atmos describe component vpc` (no --interactive passed) resolves it end to end
+// via GlobalOptionsBuilder -> RegisterPersistentFlags -> BindToViper -- and that it
+// still correctly returns false outside a genuine interactive context (CI, or no
+// TTY), so this isn't loosening the safety gate, only removing a redundant opt-in.
+func TestIsInteractive_DefaultsTrueWithoutExplicitFlag(t *testing.T) {
+	// Other tests in this package call viper.Set("interactive", ...), which installs
+	// a permanent override that outranks any later pflag binding in Viper's
+	// precedence order -- restoring the "original" value on cleanup isn't enough to
+	// undo that override if it was never true to begin with. Reset clears it so this
+	// test genuinely observes the registered flag DEFAULT, not another test's leaked
+	// override.
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	// Build and bind the real global flag set -- the same path cmd/root.go's init()
+	// uses -- onto a fresh, unparsed command so "interactive" is left at its
+	// registered default (no --interactive/ATMOS_INTERACTIVE involved at all).
+	cmd := &cobra.Command{Use: "test"}
+	parser := NewGlobalOptionsBuilder().Build()
+	parser.RegisterPersistentFlags(cmd)
+	require.NoError(t, parser.BindToViper(viper.GetViper()))
+
+	t.Run("true in a real TTY, non-CI context", func(t *testing.T) {
+		preserved := telemetry.PreserveCIEnvVars()
+		defer telemetry.RestoreCIEnvVars(preserved)
+		t.Setenv("ATMOS_FORCE_TTY", "true")
+
+		assert.True(t, viper.GetBool("interactive"),
+			"the interactive flag's registered default must be true without an explicit --interactive/ATMOS_INTERACTIVE")
+		assert.True(t, isInteractive(),
+			"isInteractive() must return true by default in a real TTY, non-CI context -- no --interactive opt-in should be required")
+	})
+
+	t.Run("still false in CI even with the default TTY-true setup", func(t *testing.T) {
+		t.Setenv("ATMOS_FORCE_TTY", "true")
+		t.Setenv("CI", "true")
+
+		assert.False(t, isInteractive(), "isInteractive() must remain false in CI regardless of the interactive default")
+	})
+
+	t.Run("still false without a TTY even with the default", func(t *testing.T) {
+		preserved := telemetry.PreserveCIEnvVars()
+		defer telemetry.RestoreCIEnvVars(preserved)
+		// Explicitly ensure ATMOS_FORCE_TTY is unset so isTTYForPromptInput() falls
+		// through to the real (non-TTY, in a test binary) stdin check.
+		t.Setenv("ATMOS_FORCE_TTY", "false")
+
+		assert.False(t, isInteractive(), "isInteractive() must remain false without a TTY regardless of the interactive default")
+	})
+}
+
 // TestPromptForValue tests the PromptForValue function.
 func TestPromptForValue(t *testing.T) {
 	// Save original viper state.
