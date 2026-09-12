@@ -11,10 +11,8 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
-	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -81,81 +79,12 @@ func (w *OutputModeWriter) ExecuteWithIO(runner func(stdout, stderr io.Writer) e
 	}
 }
 
-// executeViewport captures output and displays in pager.
+// executeViewport runs a subprocess with the shared live output window.
 func (w *OutputModeWriter) executeViewport(cmd *exec.Cmd) (string, string, error) {
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	if err != nil {
-		// Fall back to log mode on error to ensure output is visible.
-		return w.fallbackToLog(stdout.String(), stderr.String(), err)
-	}
-
-	// Check if terminal is available for viewport.
-	term := terminal.New()
-	if !term.IsTTY(terminal.Stdout) {
-		// Fall back to log mode.
-		return w.fallbackToLog(stdout.String(), stderr.String(), nil)
-	}
-
-	// Display in pager.
-	content := stdout.String()
-	if stderr.Len() > 0 {
-		content += "\n--- stderr ---\n" + stderr.String()
-	}
-
-	// Use viewport config if available, otherwise use terminal dimensions.
-	height, width := 0, 0
-	if w.viewport != nil {
-		height = w.viewport.Height
-		width = w.viewport.Width
-	}
-
-	p := pager.NewWithViewport(true, height, width)
-	if pagerErr := p.Run(w.stepName, content); pagerErr != nil {
-		// Pager failed, fall back to raw output.
-		if writeErr := data.Write(content); writeErr != nil {
-			return stdout.String(), stderr.String(), writeErr
-		}
-	}
-
-	return stdout.String(), stderr.String(), nil
-}
-
-func (w *OutputModeWriter) executeViewportWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
-	var stdout, stderr bytes.Buffer
-
-	err := runner(&stdout, &stderr)
-	if err != nil {
-		return w.fallbackToLog(stdout.String(), stderr.String(), err)
-	}
-
-	term := terminal.New()
-	if !term.IsTTY(terminal.Stdout) {
-		return w.fallbackToLog(stdout.String(), stderr.String(), nil)
-	}
-
-	content := stdout.String()
-	if stderr.Len() > 0 {
-		content += "\n--- stderr ---\n" + stderr.String()
-	}
-
-	height, width := 0, 0
-	if w.viewport != nil {
-		height = w.viewport.Height
-		width = w.viewport.Width
-	}
-
-	p := pager.NewWithViewport(true, height, width)
-	if pagerErr := p.Run(w.stepName, content); pagerErr != nil {
-		if writeErr := data.Write(content); writeErr != nil {
-			return stdout.String(), stderr.String(), writeErr
-		}
-	}
-
-	return stdout.String(), stderr.String(), nil
+	return w.executeViewportWithIO(func(stdout, stderr io.Writer) error {
+		cmd.Stdout, cmd.Stderr = stdout, stderr
+		return cmd.Run()
+	})
 }
 
 // executeRaw passes output directly to stdout/stderr.
@@ -286,6 +215,21 @@ func (w *OutputModeWriter) executeNoneWithIO(runner func(stdout, stderr io.Write
 
 	err := runner(&stdout, &stderr)
 	return stdout.String(), stderr.String(), err
+}
+
+// NewCommandOutputWriter honors step/workflow output settings while retaining
+// the unadorned streaming default of legacy command execution.
+func NewCommandOutputWriter(step *schema.WorkflowStep, workflow *schema.WorkflowDefinition) *OutputModeWriter {
+	defer perf.Track(nil, "step.NewCommandOutputWriter")()
+	mode := GetOutputMode(step, workflow)
+	if step.Output == "" && (workflow == nil || workflow.Output == "") && !envPagerEnabled() {
+		mode = OutputModeRaw
+	}
+	show := GetShowConfig(step, workflow)
+	if show.Labels == nil {
+		show.Labels = BoolPtr(false)
+	}
+	return NewOutputModeWriter(mode, step.Name, GetViewportConfig(step, workflow), show)
 }
 
 // GetOutputMode returns the effective output mode for a step.

@@ -1,0 +1,63 @@
+commands:
+  - name: casts generate demo fixtures tests
+    description: Record the test step tree, failure logs, and parallel/matrix checks
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - name: fixture
+        type: workdir
+        source: fixtures/tests
+        path: ../../.context/cast-fixtures/tests
+        reset: true
+      - name: build
+        type: shell
+        output: none
+        command: go build -o ../../.context/bin/atmos ../..
+      - name: tests
+        type: cast
+        working_directory: ../../.context/cast-fixtures/tests
+        title: Post-deployment test steps
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: ../../website/static/casts/examples/tests/tests.cast
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: '# Easily run smoke tests to validate your stacks, or run other integration tests.'
+          - type: simulate
+            text: atmos test demo
+          - name: demo
+            type: shell
+            command: |
+              atmos test demo
+              result=$?
+              test "$result" -eq 1
+      - name: validate
+        type: shell
+        command: atmos casts validate demo fixtures tests
+  - name: casts validate demo fixtures tests
+    description: Validate the recorded test report
+    steps:
+      - name: validate
+        type: script
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_local_paths, assert_body_color
+          text = load_text('../../website/static/casts/examples/tests/tests.cast')
+          plain = strip_ansi(text)
+          assert_no_local_paths(text)
+          assert_body_color(text)
+          bars = [line for line in text.splitlines() if '█' in line or '░' in line]
+          assert bars, 'Missing live progress bar'
+          assert all('\x1b[38;2;' in line for line in bars), 'Progress bar lost its TrueColor output'
+          for expected in ['Post-deployment tests', 'Expected HTTP 200; received HTTP 503.', 'region=us-east-1', 'region=eu-west-1', '5/5', '4 passed, 1 failed', 's elapsed']:
+              assert expected in plain, f'Missing test report evidence: {expected}'
+          for hidden in ['Health check passed', 'Homepage returned HTTP 200', 'panic:', 'unknown flag']:
+              assert hidden not in plain, f'Unexpected output: {hidden}'

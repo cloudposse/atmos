@@ -145,6 +145,7 @@ commands:
 | Complete command schema and examples | [references/command-syntax.md](references/command-syntax.md) |
 | Reusable multi-step orchestration | `atmos-workflows` |
 | Shared step fields and step types | `atmos-steps` |
+| Smoke tests, integration tests, and test groups | `atmos-tests` |
 | Tool versions and PATH behavior | `atmos-toolchain` |
 | Auth providers, identities, assume role/root, OIDC | `atmos-auth` |
 | Components and component inheritance | `atmos-components` |

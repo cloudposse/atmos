@@ -11,7 +11,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -72,7 +71,7 @@ func (h *StyleHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	// Render the styled content.
 	output := style.Render(content)
 
-	ui.Writeln(output)
+	vars.UI().Writeln(output)
 
 	return NewStepResult(content), nil
 }

@@ -8,6 +8,7 @@ import {
   resolvePlaybackSpeed,
 } from "./playback.mjs";
 import { CURSOR_MARKER, replayTerminal } from "./terminal.mjs";
+import renderTerminalText from "./terminal-text";
 
 type CastEvent = [number, string, string];
 
@@ -213,8 +214,7 @@ export default function CastPlayer({
       return;
     }
 
-    const startedAt =
-      performance.now() - (position * 1000) / effectiveSpeed;
+    const startedAt = performance.now() - (position * 1000) / effectiveSpeed;
     const tick = (now: number) => {
       const nextPosition = Math.min(
         duration,
@@ -420,7 +420,7 @@ function renderAnsi(input: string) {
       <span key={index} className={styles.cursor} aria-hidden="true" />
     ) : (
       <span key={index} style={segment.style}>
-        {segment.text}
+        {renderTerminalText(segment.text)}
       </span>
     ),
   );

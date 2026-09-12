@@ -5,7 +5,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // MarkdownHandler renders and displays markdown content.
@@ -36,7 +35,7 @@ func (h *MarkdownHandler) Execute(ctx context.Context, step *schema.WorkflowStep
 	}
 
 	// Use MarkdownMessage to render to stderr (UI channel).
-	ui.MarkdownMessage(content)
+	vars.UI().MarkdownMessage(content)
 
 	return NewStepResult(content), nil
 }

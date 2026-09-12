@@ -260,12 +260,26 @@ func stepFromHookWithVariables(ctx *ExecContext, vars *runnerstep.Variables) (*s
 // hook template context plus the current step template environment, then
 // decodes it through WorkflowStep's normal YAML unmarshaler.
 func workflowStepFromHookPayload(ctx *ExecContext, vars *runnerstep.Variables, payload any) (*schema.WorkflowStep, error) {
+	// Test children are rendered after matrix expansion and prior steps have results.
+	// Rendering the entire tree here would evaluate .matrix/.steps before they exist.
+	nested, deferred := deferredTestPayload(ctx, payload)
+	if deferred != nil {
+		payload = deferred
+		vars.ResolveTestStep = func(s *schema.WorkflowStep, local *runnerstep.Variables) (*schema.WorkflowStep, error) {
+			return resolveTestHookStep(ctx, s, local)
+		}
+	}
 	processed, err := processHookExecutionValue(ctx.AtmosConfig, payload, hookStepTemplateInfo(ctx, vars))
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrInvalidConfig).
 			WithCause(err).
 			WithExplanation("Failed to render a step hook payload").
 			Err()
+	}
+	if deferred != nil {
+		if m, ok := processed.(map[string]any); ok {
+			m["steps"] = nested
+		}
 	}
 	data, err := yaml.Marshal(processed)
 	if err != nil {
@@ -325,8 +339,9 @@ func hookStepTemplateInfo(ctx *ExecContext, vars *runnerstep.Variables) *schema.
 		section[key] = value
 	}
 	templateData := vars.TemplateData()
-	section["env"] = templateData["env"]
-	section["Env"] = templateData["Env"]
+	for key, value := range templateData {
+		section[key] = value
+	}
 	clone.ComponentSection = section
 	return &clone
 }
@@ -388,6 +403,7 @@ func verifyStepsHookTypes(name string, hook *Hook) error {
 
 func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	vars := runnerstep.NewVariables()
+	vars.SetAtmosConfig(ctx.AtmosConfig)
 	for k, v := range BuildAtmosEnv(ctx, "", "") {
 		vars.SetEnv(k, v)
 	}
@@ -483,4 +499,60 @@ func stepsSummary(result *runnerstep.StepResult, runErr error) *Output {
 	}
 	log.Debug("Steps hook finished", logKeyKind, stepsKindName, "status", summary.Status)
 	return &Output{Summary: summary}
+}
+
+// deferredTestPayload extracts test children without mutating the hook payload.
+func deferredTestPayload(ctx *ExecContext, payload any) (any, map[string]any) {
+	data, err := yaml.Marshal(payload)
+	if err != nil {
+		return nil, nil
+	}
+	var m map[string]any
+	if yaml.Unmarshal(data, &m) != nil {
+		return nil, nil
+	}
+	kind, _ := m["type"].(string)
+	if kind != "test" && ctx.Hook.Type != "test" {
+		return nil, nil
+	}
+	nested, ok := m["steps"]
+	if !ok {
+		return nil, nil
+	}
+	delete(m, "steps")
+	return nested, m
+}
+
+// resolveTestHookStep applies hook YAML functions and templates to one expanded leaf.
+func resolveTestHookStep(ctx *ExecContext, s *schema.WorkflowStep, vars *runnerstep.Variables) (*schema.WorkflowStep, error) {
+	copy := *s
+	copy.Steps = nil
+	data, err := yaml.Marshal(&copy)
+	if err != nil {
+		return nil, err
+	}
+	var payload map[string]any
+	if err = yaml.Unmarshal(data, &payload); err != nil {
+		return nil, err
+	}
+	// Generic handler parameters are excluded from WorkflowStep's YAML fields.
+	// Restore them before rendering so expanded matrix and hook variables apply.
+	if copy.With != nil {
+		payload["with"] = copy.With
+	}
+	rendered, err := processHookExecutionValue(ctx.AtmosConfig, payload, hookStepTemplateInfo(ctx, vars))
+	if err != nil {
+		return nil, err
+	}
+	data, err = yaml.Marshal(rendered)
+	if err != nil {
+		return nil, err
+	}
+	var result schema.WorkflowStep
+	if err = yaml.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+	result.Steps = s.Steps
+	result.DryRun = s.DryRun
+	return &result, nil
 }
