@@ -155,28 +155,68 @@ func TestPlugin_BuildTemplateContext_DriftFields(t *testing.T) {
 }
 
 func TestAggregateResult_HandlesValuePointerAndMissing(t *testing.T) {
-	result := aggregateResult(&plugin.HookContext{Aggregate: &schema.CloudFormationCIResult{StackName: "s1"}})
-	assert.Equal(t, "s1", result.StackName)
+	tests := []struct {
+		name     string
+		ctx      *plugin.HookContext
+		expected *schema.CloudFormationCIResult
+	}{
+		{
+			name:     "pointer value returned as-is",
+			ctx:      &plugin.HookContext{Aggregate: &schema.CloudFormationCIResult{StackName: "s1"}},
+			expected: &schema.CloudFormationCIResult{StackName: "s1"},
+		},
+		{
+			name:     "non-pointer value copied into a pointer",
+			ctx:      &plugin.HookContext{Aggregate: schema.CloudFormationCIResult{StackName: "s2"}},
+			expected: &schema.CloudFormationCIResult{StackName: "s2"},
+		},
+		{
+			name:     "nil aggregate returns empty result",
+			ctx:      &plugin.HookContext{Aggregate: nil},
+			expected: &schema.CloudFormationCIResult{},
+		},
+		{
+			name:     "unexpected type returns empty result",
+			ctx:      &plugin.HookContext{Aggregate: "not-a-result"},
+			expected: &schema.CloudFormationCIResult{},
+		},
+	}
 
-	result = aggregateResult(&plugin.HookContext{Aggregate: schema.CloudFormationCIResult{StackName: "s2"}})
-	assert.Equal(t, "s2", result.StackName)
-
-	result = aggregateResult(&plugin.HookContext{Aggregate: nil})
-	assert.Equal(t, &schema.CloudFormationCIResult{}, result)
-
-	result = aggregateResult(&plugin.HookContext{Aggregate: "not-a-result"})
-	assert.Equal(t, &schema.CloudFormationCIResult{}, result)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, aggregateResult(tt.ctx))
+		})
+	}
 }
 
 func TestIsSummaryEnabled(t *testing.T) {
-	assert.True(t, isSummaryEnabled(nil))
-	assert.True(t, isSummaryEnabled(&schema.AtmosConfiguration{}))
-
 	enabled := true
-	assert.True(t, isSummaryEnabled(&schema.AtmosConfiguration{CI: schema.CIConfig{Summary: schema.CISummaryConfig{Enabled: &enabled}}}))
-
 	disabled := false
-	assert.False(t, isSummaryEnabled(&schema.AtmosConfiguration{CI: schema.CIConfig{Summary: schema.CISummaryConfig{Enabled: &disabled}}}))
+
+	tests := []struct {
+		name     string
+		config   *schema.AtmosConfiguration
+		expected bool
+	}{
+		{name: "nil config defaults to enabled", config: nil, expected: true},
+		{name: "zero-value config defaults to enabled", config: &schema.AtmosConfiguration{}, expected: true},
+		{
+			name:     "explicitly enabled",
+			config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Summary: schema.CISummaryConfig{Enabled: &enabled}}},
+			expected: true,
+		},
+		{
+			name:     "explicitly disabled",
+			config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Summary: schema.CISummaryConfig{Enabled: &disabled}}},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isSummaryEnabled(tt.config))
+		})
+	}
 }
 
 func TestTemplateRendering_Diff(t *testing.T) {

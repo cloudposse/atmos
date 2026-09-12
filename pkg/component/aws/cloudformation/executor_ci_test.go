@@ -13,23 +13,30 @@ import (
 )
 
 func TestCloudformationCIModeEnabled(t *testing.T) {
-	t.Setenv("ATMOS_CI", "")
-	t.Setenv("CI", "")
+	tests := []struct {
+		name     string
+		atmosCI  string
+		ci       string
+		settings map[string]any
+		expected bool
+	}{
+		{name: "settings ci true", atmosCI: "", ci: "", settings: map[string]any{"ci": true}, expected: true},
+		{name: "settings ci false", atmosCI: "", ci: "", settings: map[string]any{"ci": false}, expected: false},
+		{name: "empty settings, no env", atmosCI: "", ci: "", settings: map[string]any{}, expected: false},
+		{name: "nil settings, no env", atmosCI: "", ci: "", settings: nil, expected: false},
+		{name: "ATMOS_CI=1 overrides empty settings", atmosCI: "1", ci: "", settings: map[string]any{}, expected: true},
+		{name: "CI=yes overrides ATMOS_CI=false", atmosCI: "false", ci: "yes", settings: map[string]any{}, expected: true},
+		{name: "CI=0, no ATMOS_CI", atmosCI: "", ci: "0", settings: map[string]any{}, expected: false},
+	}
 
-	assert.True(t, cloudformationCIModeEnabled(map[string]any{"ci": true}))
-	assert.False(t, cloudformationCIModeEnabled(map[string]any{"ci": false}))
-	assert.False(t, cloudformationCIModeEnabled(map[string]any{}))
-	assert.False(t, cloudformationCIModeEnabled(nil))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_CI", tt.atmosCI)
+			t.Setenv("CI", tt.ci)
 
-	t.Setenv("ATMOS_CI", "1")
-	assert.True(t, cloudformationCIModeEnabled(map[string]any{}))
-
-	t.Setenv("ATMOS_CI", "false")
-	t.Setenv("CI", "yes")
-	assert.True(t, cloudformationCIModeEnabled(map[string]any{}))
-
-	t.Setenv("CI", "0")
-	assert.False(t, cloudformationCIModeEnabled(map[string]any{}))
+			assert.Equal(t, tt.expected, cloudformationCIModeEnabled(tt.settings))
+		})
+	}
 }
 
 func TestRunCIHook_ApplySuccess(t *testing.T) {
