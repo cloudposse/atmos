@@ -1327,17 +1327,17 @@ jobs:
     services:
       floci:
         # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
-        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2 # 1.5.23
+        image: floci/floci@sha256:d2ecc8035822b23b8587a56eab15edd825f41d3fb80d93e8e66680410beddc08 # 1.5.23
         ports:
           - 4566:4566
       floci-gcp:
         # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
-        image: floci/floci-gcp@sha256:a6420f308ad721fa4a203b70658563eab9c8fbc8d091feca2d95016239f5854a # latest
+        image: floci/floci-gcp@sha256:102db655af6facdcd1ec621e108558aafc46c817eaada63236d3acf3c5e92aaa # latest
         ports:
           - 4588:4588
       floci-az:
         # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
-        image: floci/floci-az@sha256:1e514c57db14dc41938f7925bbc1aca0293aa4da272c7014d98f1fba378cedb2 # latest
+        image: floci/floci-az@sha256:5e403a7d788c24ab2d1dc03d4803ef2d3962ca01522abba65ed86f221ae87ac0 # latest
         env:
           FLOCI_AZ_TLS_ENABLED: "true"
         ports:
