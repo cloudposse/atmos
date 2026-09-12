@@ -18,7 +18,6 @@ func clearGitHubEndpointEnv(t *testing.T) {
 		"GITHUB_API_URL",
 		"ATMOS_TOOLCHAIN_GITHUB_URL",
 		"ATMOS_TOOLCHAIN_GITHUB_API_URL",
-		"ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL",
 	} {
 		t.Setenv(envVar, "")
 	}
@@ -146,19 +145,6 @@ func TestToolchainEndpoints_MirrorWithoutAPIURLDerivesAPIv3(t *testing.T) {
 	e := ToolchainEndpoints()
 
 	assert.Equal(t, "https://releases.corp.example.com/api/v3", e.APIURL)
-}
-
-func TestAquaRegistryURL_Default(t *testing.T) {
-	clearGitHubEndpointEnv(t)
-
-	assert.Equal(t, "https://raw.githubusercontent.com/aquaproj/aqua-registry/main", AquaRegistryURL())
-}
-
-func TestAquaRegistryURL_Override(t *testing.T) {
-	clearGitHubEndpointEnv(t)
-	t.Setenv("ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL", "https://mirror.corp.example.com/aqua-registry/")
-
-	assert.Equal(t, "https://mirror.corp.example.com/aqua-registry", AquaRegistryURL())
 }
 
 func TestEndpoints_IsHost(t *testing.T) {

@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
+	"github.com/cloudposse/atmos/pkg/toolchain/registry/aqua"
 	"github.com/cloudposse/atmos/pkg/toolchain/verification"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -329,10 +330,10 @@ func New(opts ...Option) *Installer {
 		registryPath: "./tool-registry",
 		cacheDir:     cacheDir,
 		registries: []string{
-			// Overridable via ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL (see github.AquaRegistryURL);
+			// Overridable via ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL (see aqua.RegistryBaseURL);
 			// this is a separate concern from the repo endpoints (GITHUB_SERVER_URL), since
 			// aqua-registry tools live on public github.com even for GHES users, by default.
-			github.AquaRegistryURL() + "/pkgs",
+			aqua.RegistryBaseURL() + "/pkgs",
 			"./tool-registry",
 		},
 		registryFactory:    &defaultRegistryFactory{},

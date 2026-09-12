@@ -47,6 +47,10 @@ const (
 	scoreRepoContainsMatch  = 50
 	scoreOwnerPrefixMatch   = 40
 	scoreOwnerContainsMatch = 20
+
+	// Upstream aqua-registry raw content base URL, used as the default when
+	// ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL is unset. See RegistryBaseURL.
+	defaultAquaRegistryBaseURL = "https://raw.githubusercontent.com/aquaproj/aqua-registry/main"
 )
 
 // init registers the Aqua registry as the default registry.
@@ -63,7 +67,7 @@ type AquaRegistry struct {
 	cacheStore      cache.Store
 	githubToken     string
 	githubBaseURL   string
-	registryBaseURL string // Base URL of the aqua-registry repo (raw content). Default resolved via github.AquaRegistryURL.
+	registryBaseURL string // Base URL of the aqua-registry repo (raw content). Default resolved via RegistryBaseURL.
 	lastSearchTotal int    // Total number of search results before pagination.
 	pathIndexMu     sync.RWMutex
 	pathIndex       map[string]string  // "owner/repo" -> registry path of one package under that owner/repo. Monorepo packages (e.g., kubernetes/kubernetes/{kubectl,kubeadm,...}) collide here — last wins. Use packageList for full enumeration.
@@ -121,6 +125,16 @@ func WithGitHubBaseURL(url string) RegistryOption {
 	}
 }
 
+// RegistryBaseURL resolves the base URL of the aqua-registry raw content mirror from
+// ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL, defaulting to the upstream aquaproj/aqua-registry
+// repository on raw.githubusercontent.com. It serves the top-level registry.yaml index and
+// the per-package pkgs/<name>/registry.yaml files.
+func RegistryBaseURL() string {
+	defer perf.Track(nil, "aqua.RegistryBaseURL")()
+
+	return github.ResolveEndpointURL("ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL", defaultAquaRegistryBaseURL)
+}
+
 // WithRegistryBaseURL sets the aqua-registry raw content base URL (primarily for testing).
 // The URL must serve registry.yaml at its root and per-package files under pkgs/<name>/registry.yaml.
 func WithRegistryBaseURL(url string) RegistryOption {
@@ -162,7 +176,7 @@ func NewAquaRegistry(opts ...RegistryOption) *AquaRegistry {
 		cacheStore:      cache.NewFileStore(cacheBaseDir),
 		githubToken:     githubToken,
 		githubBaseURL:   toolchainEndpoints.APIURL,
-		registryBaseURL: github.AquaRegistryURL(),
+		registryBaseURL: RegistryBaseURL(),
 	}
 
 	// Apply options.

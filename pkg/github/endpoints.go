@@ -19,12 +19,6 @@ const (
 	defaultGitHubAPIURL     = "https://api.github.com"
 	defaultGitHubUploadURL  = "https://uploads.github.com"
 	defaultGitHubServerHost = "github.com"
-
-	// This mirrors defaultAquaRegistryBaseURL in pkg/toolchain/registry/aqua/aqua.go. It is
-	// duplicated here (rather than imported) because pkg/toolchain/registry/aqua already
-	// imports this package, and importing it back would create a cycle. Keep both literals in
-	// sync if the upstream registry moves.
-	defaultAquaRegistryURL = "https://raw.githubusercontent.com/aquaproj/aqua-registry/main"
 )
 
 // Endpoints describes where a set of GitHub (or GitHub Enterprise Server) resources live:
@@ -35,10 +29,10 @@ const (
 //     repositories live (CI provider, imports/vendoring, releases/tags/artifacts API,
 //     token host allowlist).
 //   - ToolchainEndpoints reads ATMOS_TOOLCHAIN_GITHUB_URL / ATMOS_TOOLCHAIN_GITHUB_API_URL —
-//     where toolchain release assets and the aqua-registry mirror live. These are
-//     deliberately separate: aqua-registry tools live on public github.com even for GHES
-//     users, so the toolchain must not follow the repo vars (doing so would break
-//     `atmos toolchain install` on every GHES runner).
+//     where toolchain release assets live. This is deliberately separate: toolchain assets
+//     (and the aqua-registry mirror, resolved independently by the aqua package) live on
+//     public github.com even for GHES users, so the toolchain must not follow the repo vars
+//     (doing so would break `atmos toolchain install` on every GHES runner).
 //
 // Both env vars, on both constructors, default to public GitHub.com so behavior is
 // byte-identical to today when unset.
@@ -62,8 +56,8 @@ type Endpoints struct {
 func RepoEndpoints() Endpoints {
 	defer perf.Track(nil, "github.RepoEndpoints")()
 
-	serverURL := resolveEndpointURL("GITHUB_SERVER_URL", defaultGitHubServerURL)
-	apiURL := resolveEndpointURL("GITHUB_API_URL", defaultAPIURLFor(serverURL))
+	serverURL := ResolveEndpointURL("GITHUB_SERVER_URL", defaultGitHubServerURL)
+	apiURL := ResolveEndpointURL("GITHUB_API_URL", defaultAPIURLFor(serverURL))
 
 	return newEndpoints(serverURL, apiURL)
 }
@@ -76,20 +70,10 @@ func RepoEndpoints() Endpoints {
 func ToolchainEndpoints() Endpoints {
 	defer perf.Track(nil, "github.ToolchainEndpoints")()
 
-	serverURL := resolveEndpointURL("ATMOS_TOOLCHAIN_GITHUB_URL", defaultGitHubServerURL)
-	apiURL := resolveEndpointURL("ATMOS_TOOLCHAIN_GITHUB_API_URL", defaultAPIURLFor(serverURL))
+	serverURL := ResolveEndpointURL("ATMOS_TOOLCHAIN_GITHUB_URL", defaultGitHubServerURL)
+	apiURL := ResolveEndpointURL("ATMOS_TOOLCHAIN_GITHUB_API_URL", defaultAPIURLFor(serverURL))
 
 	return newEndpoints(serverURL, apiURL)
-}
-
-// AquaRegistryURL resolves the base URL of the aqua-registry raw content mirror from
-// ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL, defaulting to the upstream aquaproj/aqua-registry
-// repository on raw.githubusercontent.com. It serves the top-level registry.yaml index and
-// the per-package pkgs/<name>/registry.yaml files.
-func AquaRegistryURL() string {
-	defer perf.Track(nil, "github.AquaRegistryURL")()
-
-	return resolveEndpointURL("ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL", defaultAquaRegistryURL)
 }
 
 // defaultAPIURLFor returns the API URL to fall back to when the caller's API-URL environment
@@ -128,14 +112,16 @@ func newEndpoints(serverURL, apiURL string) Endpoints {
 	}
 }
 
-// resolveEndpointURL reads envVar and returns its value trimmed of a trailing slash, or
+// ResolveEndpointURL reads envVar and returns its value trimmed of a trailing slash, or
 // fallback when the variable is unset or its value fails to parse as an absolute HTTP(S)
 // URL. Invalid values are never fatal: they are logged at debug level and the caller falls
 // back to the default endpoint, matching today's behavior for anyone not opting into GHES.
+// Exported because it is shared by the toolchain registries (e.g. the aqua package's
+// RegistryBaseURL) in addition to RepoEndpoints and ToolchainEndpoints above.
 //
 //nolint:forbidigo // Direct env lookup required to resolve GitHub/GHES/toolchain endpoints; mirrors pkg/http/client.go's justification for the same variables.
-func resolveEndpointURL(envVar, fallback string) string {
-	defer perf.Track(nil, "github.resolveEndpointURL")()
+func ResolveEndpointURL(envVar, fallback string) string {
+	defer perf.Track(nil, "github.ResolveEndpointURL")()
 
 	value := os.Getenv(envVar)
 	if value == "" {
