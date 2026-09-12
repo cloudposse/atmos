@@ -1,6 +1,6 @@
 ---
 name: atmos-migration
-description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Terragrunt, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration; also covers migrating CLI tool-version management from mise or Aqua CLI to the Atmos toolchain."
+description: "This skill helps you migrate a repository to Atmos. It covers native Terraform, Terraform Workspaces, Terramate, Terragrunt, Makefiles, Justfiles, and Taskfiles. It gives minimum-disruption paths, file-layout options, workspace mapping, task-to-command mapping, generate_hcl/script decomposition, and the remote-state bridge for a step-by-step migration; also covers moving Atlantis-driven CI to Atmos Native CI, and migrating CLI tool-version management from mise or Aqua CLI to the Atmos toolchain."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -13,6 +13,7 @@ references:
   - references/from-makefile.md
   - references/from-justfile.md
   - references/from-taskfile.md
+  - references/from-atlantis.md
   - references/from-component-updater.md
   - references/from-terragrunt.md
   - references/from-mise.md
@@ -103,6 +104,7 @@ reference file:
 | User has a Makefile driving builds/tests/deploys                     | [from-makefile.md](references/from-makefile.md) |
 | User has a Justfile (`just` command runner)                          | [from-justfile.md](references/from-justfile.md) |
 | User has a Taskfile.yml (go-task)                                    | [from-taskfile.md](references/from-taskfile.md) |
+| Atlantis runs `terraform plan`/`apply` today (with or without Atmos already)  | [from-atlantis.md](references/from-atlantis.md) |
 | `cloudposse/github-action-atmos-component-updater`                   | [from-component-updater.md](references/from-component-updater.md) |
 | Terragrunt (`terragrunt.hcl` or `terragrunt.stack.hcl`)               | [from-terragrunt.md](references/from-terragrunt.md) |
 | mise config (`mise.toml`, `.mise.toml`, `.mise/config.toml`, `.tool-versions`) for tool versions | [from-mise.md](references/from-mise.md) |
@@ -238,6 +240,8 @@ to the correct skill:
 - **Add validation policies, such as OPA or JSON Schema.** Use
   [atmos-validation](../atmos-validation/SKILL.md).
 - **Set up CI/CD with affected-component detection.** Use [atmos-ci](../atmos-ci/SKILL.md).
+- **Move from Atlantis to Native CI.** Read [from-atlantis.md](references/from-atlantis.md)
+  first, then use [atmos-ci](../atmos-ci/SKILL.md).
 - **Share data between components through a store.** Use
   [atmos-stores](../atmos-stores/SKILL.md).
 
@@ -286,6 +290,8 @@ Push back if a user or another agent proposes one of these methods during migrat
   each shape.
 - [References/from-taskfile.md](references/from-taskfile.md): steps for a Taskfile.yml (go-task)
   file, matched to each shape.
+- [References/from-atlantis.md](references/from-atlantis.md): steps to move Atlantis-driven CI
+  (autoplan, PR comments, apply gating, locks) to Atmos Native CI.
 - [References/from-mise.md](references/from-mise.md) -- migrating tool versions, tasks, and env
   vars from mise to the Atmos toolchain.
 - [References/from-aqua.md](references/from-aqua.md) -- migrating tool versions from Aqua CLI's

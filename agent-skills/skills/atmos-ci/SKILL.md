@@ -325,7 +325,9 @@ components:
 
 Atlantis remains a supported integration target, but keep Atmos as the source of truth. For Atlantis,
 generate repo configuration with Atmos and keep generated files out of hand-edited skill examples
-unless the user is specifically asking about Atlantis.
+unless the user is specifically asking about Atlantis. To move a project from Atlantis to Native
+CI, read
+[atmos-migration references/from-atlantis.md](../atmos-migration/references/from-atlantis.md).
 
 ## Deprecated Patterns
 

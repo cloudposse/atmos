@@ -1,0 +1,5 @@
+# Documentation examples that gitleaks flags as secrets but are not real credentials.
+# Format: <path>:<rule-id>:<line> (see https://github.com/gitleaks/gitleaks#gitleaksignore)
+
+# Truncated example JWT in ExecCredential output sample (already public on main, PR #2790).
+website/docs/cli/commands/azure/azure-aks-token.mdx:generic-api-key:84
