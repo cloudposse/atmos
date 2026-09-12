@@ -27,7 +27,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - cloud.google.com/go/auth
     License: Apache-2.0
-    URL: https://github.com/googleapis/google-cloud-go/blob/auth/v0.22.0/auth/LICENSE
+    URL: https://github.com/googleapis/google-cloud-go/blob/auth/v0.23.2/auth/LICENSE
 
   - cloud.google.com/go/auth/oauth2adapt
     License: Apache-2.0
@@ -59,7 +59,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - cloud.google.com/go/storage
     License: Apache-2.0
-    URL: https://github.com/googleapis/google-cloud-go/blob/storage/v1.63.1/storage/LICENSE
+    URL: https://github.com/googleapis/google-cloud-go/blob/storage/v1.65.1/storage/LICENSE
 
   - cuelang.org/go
     License: Apache-2.0
@@ -431,7 +431,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/googleapis/enterprise-certificate-proxy/client
     License: Apache-2.0
-    URL: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.18/LICENSE
+    URL: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.20/LICENSE
 
   - github.com/gosimple/unidecode
     License: Apache-2.0
@@ -459,7 +459,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/klauspost/compress
     License: Apache-2.0
-    URL: https://github.com/klauspost/compress/blob/v1.19.1/LICENSE
+    URL: https://github.com/klauspost/compress/blob/v1.19.2/LICENSE
 
   - github.com/kubescape/go-git-url
     License: Apache-2.0
@@ -715,7 +715,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - google.golang.org/genproto/googleapis/rpc
     License: Apache-2.0
-    URL: https://github.com/googleapis/go-genproto/blob/e059f2f05d78/googleapis/rpc/LICENSE
+    URL: https://github.com/googleapis/go-genproto/blob/08b0e4226688/googleapis/rpc/LICENSE
 
   - google.golang.org/grpc
     License: Apache-2.0
@@ -968,7 +968,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/googleapis/gax-go/v2
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/gax-go/blob/v2.23.0/v2/LICENSE
+    URL: https://github.com/googleapis/gax-go/blob/v2.24.0/v2/LICENSE
 
   - github.com/gorilla/css/scanner
     License: BSD-3-Clause
@@ -996,7 +996,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/klauspost/compress/internal/snapref
     License: BSD-3-Clause
-    URL: https://github.com/klauspost/compress/blob/v1.19.1/internal/snapref/LICENSE
+    URL: https://github.com/klauspost/compress/blob/v1.19.2/internal/snapref/LICENSE
 
   - github.com/liggitt/tabwriter
     License: BSD-3-Clause
@@ -1068,7 +1068,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/ulikunitz/xz
     License: BSD-3-Clause
-    URL: https://github.com/ulikunitz/xz/blob/v0.5.15/LICENSE
+    URL: https://github.com/ulikunitz/xz/blob/v0.5.16/LICENSE
 
   - github.com/virtuald/go-ordered-json
     License: BSD-3-Clause
@@ -1140,15 +1140,15 @@ BSD LICENSED DEPENDENCIES
 
   - google.golang.org/api
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/google-api-go-client/blob/v0.289.0/LICENSE
+    URL: https://github.com/googleapis/google-api-go-client/blob/v0.294.0/LICENSE
 
   - google.golang.org/api/internal/third_party/uritemplates
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/google-api-go-client/blob/v0.289.0/internal/third_party/uritemplates/LICENSE
+    URL: https://github.com/googleapis/google-api-go-client/blob/v0.294.0/internal/third_party/uritemplates/LICENSE
 
   - google.golang.org/protobuf
     License: BSD-3-Clause
-    URL: https://github.com/protocolbuffers/protobuf-go/blob/f2248ac996af/LICENSE
+    URL: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.12/LICENSE
 
   - gopkg.in/evanphx/json-patch.v4
     License: BSD-3-Clause
@@ -1225,7 +1225,7 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
   - github.com/hashicorp/aws-sdk-go-base/v2/endpoints
     License: MPL-2.0
-    URL: https://github.com/hashicorp/aws-sdk-go-base/blob/v2.0.0-beta.72/LICENSE
+    URL: https://github.com/hashicorp/aws-sdk-go-base/blob/v2.0.0-beta.74/LICENSE
 
   - github.com/hashicorp/consul/api
     License: MPL-2.0
@@ -1241,7 +1241,7 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
   - github.com/hashicorp/go-getter
     License: MPL-2.0
-    URL: https://github.com/hashicorp/go-getter/blob/v1.8.6/LICENSE
+    URL: https://github.com/hashicorp/go-getter/blob/v1.8.9/LICENSE
 
   - github.com/hashicorp/go-immutable-radix
     License: MPL-2.0
@@ -1898,7 +1898,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/klauspost/compress/zstd/internal/xxhash
     License: MIT
-    URL: https://github.com/klauspost/compress/blob/v1.19.1/zstd/internal/xxhash/LICENSE.txt
+    URL: https://github.com/klauspost/compress/blob/v1.19.2/zstd/internal/xxhash/LICENSE.txt
 
   - github.com/klauspost/cpuid/v2
     License: MIT
