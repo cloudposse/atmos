@@ -47,6 +47,7 @@ import (
 	"github.com/cloudposse/atmos/tests/testhelpers"
 	"github.com/cloudposse/atmos/tests/testhelpers/gitconfigenv"
 	"github.com/cloudposse/atmos/tests/testhelpers/gitmirror"
+	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
 // Command-line flag for regenerating snapshots.
@@ -63,6 +64,7 @@ var (
 	gitMirrorRoot       string            // Root of the local git mirror built in TestMain (see gitmirror).
 	gitMirrorServer     *gitmirror.Server // HTTP server serving the mirror over git's smart-HTTP protocol (see gitmirror.Serve).
 	gitMirrorConfigPath string            // Temp file holding the GIT_CONFIG_GLOBAL insteadOf rules for the mirror (see gitmirror.WriteGitConfig).
+	githubMockClose     func()            // Closes the process-wide httpmock GitHub facade built in TestMain.
 	sandboxRegistry     = make(map[string]*testhelpers.SandboxEnvironment)
 	sandboxMutex        sync.RWMutex
 )
@@ -244,9 +246,24 @@ func loadTestSuite(filePath string) (*TestSuite, error) {
 			// Set TTY-specific environment variables
 			testCase.Env["TERM"] = "xterm-256color" // Simulates terminal support
 		}
+
+		// Expand ${VAR}/$VAR references against the current process environment. Test-case
+		// YAML only supports static string values otherwise, so a case that needs a value
+		// TestMain computed at runtime (e.g. ATMOS_TEST_GITHUB_MOCK_URL, the dynamic port of
+		// the process-wide httpmock GitHub facade) can only reference it this way.
+		expandTestCaseEnv(testCase.Env)
 	}
 
 	return &suite, nil
+}
+
+// expandTestCaseEnv expands ${VAR} and $VAR references in every value of env, in place,
+// against the current process environment (os.ExpandEnv). A reference to an unset variable
+// expands to the empty string, matching os.ExpandEnv's own documented behavior.
+func expandTestCaseEnv(env map[string]string) {
+	for key, value := range env {
+		env[key] = os.ExpandEnv(value)
+	}
 }
 
 func init() {
@@ -905,6 +922,30 @@ func TestMain(m *testing.M) {
 	os.Setenv("GIT_CONFIG_GLOBAL", gitMirrorConfigPath) //nolint:lintroller // Set before m.Run(); no *testing.T available in TestMain; must persist process-wide for every subtest.
 	logger.Info("serving local git mirror for cloudposse/atmos", "url", gitMirrorServer.URL())
 
+	// Start one process-wide httpmock GitHub facade and export its URL as
+	// ATMOS_TEST_GITHUB_MOCK_URL, so individual test-cases can opt in to routing GitHub/
+	// toolchain/aqua-registry traffic at it (e.g. tests/test-cases/atmos-include-yaml-function.yaml
+	// sets env: {GITHUB_SERVER_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}", ...}, expanded by
+	// expandTestCaseEnv). Deliberately NOT the five GITHUB_SERVER_URL/GITHUB_API_URL/
+	// ATMOS_TOOLCHAIN_* routing vars themselves: those stay opt-in per test case so
+	// testhelpers.ProvisionToolchain's real toolchain bootstrap above and the live_github
+	// canaries are unaffected.
+	var githubMock *httpmock.GitHubMockServer
+	githubMock, githubMockClose = httpmock.NewGitHubMockServerStandalone()
+	os.Setenv("ATMOS_TEST_GITHUB_MOCK_URL", githubMock.URL()) //nolint:lintroller // Set before m.Run(); no *testing.T available in TestMain; must persist process-wide for every subtest.
+
+	// Register the one raw-content fixture tests/test-cases/atmos-include-yaml-function.yaml's
+	// !include points at (see the comment on that fixture's settings: line), so the case that
+	// opts into ATMOS_TEST_GITHUB_MOCK_URL gets real, checked-in content back instead of a 404.
+	includeFixturePath := filepath.Join(repoRoot, "tests", "fixtures", "scenarios",
+		"stack-templates-2", "stacks", "deploy", "nonprod.yaml")
+	if includeFixtureContent, readErr := os.ReadFile(includeFixturePath); readErr == nil {
+		githubMock.RegisterRawFile("cloudposse", "atmos", "main",
+			"tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml", string(includeFixtureContent))
+	} else {
+		logger.Warn("failed to read atmos-include-yaml-function raw-fetch fixture; that test-case's mock route will 404", "path", includeFixturePath, "error", readErr)
+	}
+
 	// Auto-start the Floci cloud emulators for the opt-in Floci E2E tests. This is a
 	// no-op unless ATMOS_TEST_FLOCI=true and the FLOCI_* endpoint env vars are unset,
 	// so CI (which pre-sets them to its service containers) is unaffected. On machines
@@ -966,6 +1007,11 @@ func TestMain(m *testing.M) {
 	}
 	if gitMirrorRoot != "" {
 		os.RemoveAll(gitMirrorRoot)
+	}
+
+	// Close the process-wide httpmock GitHub facade.
+	if githubMockClose != nil {
+		githubMockClose()
 	}
 
 	errUtils.Exit(exitCode)

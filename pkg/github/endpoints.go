@@ -139,13 +139,18 @@ func ResolveEndpointURL(envVar, fallback string) string {
 	return trimmed
 }
 
-// hostOf returns the normalized hostname of rawURL, or "" if rawURL cannot be parsed.
+// hostOf returns the normalized host (hostname, plus a non-default port when present) of
+// rawURL, or "" if rawURL cannot be parsed. Uses parsed.Host (not Hostname()) so a non-default
+// port configured on GITHUB_SERVER_URL/ATMOS_TOOLCHAIN_GITHUB_URL etc. survives into the
+// resulting Endpoints.Host: otherwise a GHES host (or test mock) reachable only on a
+// non-default port could never match its own URLs via IsHost/IsAPIHost, since normalizeHost
+// only strips the default 80/443 ports.
 func hostOf(rawURL string) string {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return ""
 	}
-	return normalizeHost(parsed.Hostname())
+	return normalizeHost(parsed.Host)
 }
 
 // normalizeHost canonicalizes a hostname for allowlist/equality comparison: it lower-cases

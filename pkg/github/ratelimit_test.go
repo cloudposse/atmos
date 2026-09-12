@@ -8,7 +8,10 @@ import (
 
 	"github.com/google/go-github/v59/github"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
 func TestCheckRateLimitWithService_Success(t *testing.T) {
@@ -240,40 +243,33 @@ func TestCheckRateLimitWithService_ZeroRemaining(t *testing.T) {
 	assert.Equal(t, 5000, status.Limit)
 }
 
-// Integration tests (require network, skip in short mode).
+// The three tests below used to be live-network "_Integration" tests gated on
+// testing.Short(), hitting the real github.com rate_limit endpoint through CheckRateLimit's
+// default client (newGitHubClient -> RepoEndpoints). They now point RepoEndpoints at the
+// httpmock GitHub facade via GITHUB_SERVER_URL/GITHUB_API_URL (t.Setenv), so they exercise the
+// exact same production code path deterministically, in-process, on every PR, with no live
+// GitHub dependency.
 
-func TestCheckRateLimit_Integration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping rate limit API test in short mode")
-	}
+func TestCheckRateLimit_ViaMock(t *testing.T) {
+	mock := httpmock.NewGitHubMockServer(t)
+	mock.Setenv(t)
+	resetAt := time.Now().Add(time.Hour).Truncate(time.Second)
+	mock.SetRateLimit(4321, resetAt)
 
 	ctx := context.Background()
 	status, err := CheckRateLimit(ctx)
-	// The function may return nil, nil if the API call fails (e.g., rate limited).
-	// This is by design to avoid blocking operations.
-	if err != nil {
-		t.Logf("Rate limit check returned error (expected in some environments): %v", err)
-		return
-	}
 
-	if status == nil {
-		t.Log("Rate limit check returned nil status (expected in some environments)")
-		return
-	}
-
-	// If we got a status, validate it.
-	assert.GreaterOrEqual(t, status.Limit, 0, "Limit should be non-negative")
-	assert.GreaterOrEqual(t, status.Remaining, 0, "Remaining should be non-negative")
-	assert.False(t, status.ResetAt.IsZero(), "ResetAt should not be zero")
-
-	t.Logf("Rate limit status: %d/%d remaining, resets at %s",
-		status.Remaining, status.Limit, status.ResetAt)
+	require.NoError(t, err)
+	require.NotNil(t, status)
+	assert.Equal(t, 4321, status.Remaining)
+	assert.Equal(t, 5000, status.Limit)
+	assert.Equal(t, resetAt.Unix(), status.ResetAt.Unix())
 }
 
-func TestWaitForRateLimit_SufficientRemaining_Integration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping rate limit API test in short mode")
-	}
+func TestWaitForRateLimit_SufficientRemaining_ViaMock(t *testing.T) {
+	mock := httpmock.NewGitHubMockServer(t)
+	mock.Setenv(t)
+	mock.SetRateLimit(5000, time.Now().Add(time.Hour))
 
 	ctx := context.Background()
 
@@ -282,14 +278,31 @@ func TestWaitForRateLimit_SufficientRemaining_Integration(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestShouldWaitForRateLimit_Integration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping rate limit API test in short mode")
-	}
+func TestShouldWaitForRateLimit_ViaMock(t *testing.T) {
+	mock := httpmock.NewGitHubMockServer(t)
+	mock.Setenv(t)
+	mock.SetRateLimit(5000, time.Now().Add(time.Hour))
 
 	ctx := context.Background()
 
 	// With threshold of 0, should never need to wait.
 	shouldWait := ShouldWaitForRateLimit(ctx, 0)
 	assert.False(t, shouldWait)
+}
+
+// TestWaitForRateLimit_ExhaustedButAlreadyReset_ViaMock asserts the current behavior of
+// waitForRateLimitImpl (pkg/github/ratelimit.go) when remaining is 0 but the reset time has
+// already passed: it returns immediately without blocking, rather than computing a negative
+// wait duration.
+func TestWaitForRateLimit_ExhaustedButAlreadyReset_ViaMock(t *testing.T) {
+	mock := httpmock.NewGitHubMockServer(t)
+	mock.Setenv(t)
+	mock.SetRateLimit(0, time.Now().Add(-time.Minute))
+
+	start := time.Now()
+	err := WaitForRateLimit(context.Background(), 5)
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	assert.Less(t, elapsed, 2*time.Second, "an already-passed reset must not block")
 }
