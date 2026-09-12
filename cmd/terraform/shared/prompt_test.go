@@ -249,6 +249,44 @@ func TestStackContainsComponent(t *testing.T) {
 			component: "vpc",
 			expected:  true,
 		},
+		{
+			// Regression test: stackContainsComponent must not assume terraform is
+			// the only component type. StackFlagCompletion is reused by non-terraform
+			// callers (e.g. `atmos aws cloudformation`), whose components live under
+			// "aws/cloudformation", not "terraform". Before this fix, a
+			// aws/cloudformation component would never match here, so
+			// listStacksForComponent always returned zero stacks for it and the
+			// missing-stack interactive prompt silently fell through to a hard
+			// "stack is required" error instead of showing a filtered picker.
+			name: "component found under a non-terraform component type",
+			stackData: map[string]any{
+				"components": map[string]any{
+					"aws/cloudformation": map[string]any{
+						"vpc": map[string]any{"stack_name": "test-vpc"},
+					},
+				},
+			},
+			component: "vpc",
+			expected:  true,
+		},
+		{
+			name: "component found under a non-terraform type among several types",
+			stackData: map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"eks": map[string]any{},
+					},
+					"helmfile": map[string]any{
+						"nginx": map[string]any{},
+					},
+					"aws/cloudformation": map[string]any{
+						"vpc": map[string]any{},
+					},
+				},
+			},
+			component: "vpc",
+			expected:  true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -995,6 +1033,35 @@ func TestListStacksForComponent(t *testing.T) {
 			mockStacksMap:   map[string]any{},
 			expectedStacks:  nil,
 			expectedError:   false,
+		},
+		{
+			// Regression test for the missing-stack interactive prompt showing every
+			// stack in the org unfiltered for a non-terraform component (e.g.
+			// `atmos aws cloudformation apply <component>`): listStacksForComponent
+			// (via StackFlagCompletion) must find stacks whose component lives under
+			// a non-"terraform" component type section.
+			name:            "success with non-terraform component type (aws/cloudformation)",
+			component:       "vpc",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"prod": map[string]any{
+					"components": map[string]any{
+						"aws/cloudformation": map[string]any{
+							"vpc": map[string]any{"stack_name": "prod-vpc"},
+						},
+					},
+				},
+				"unrelated": map[string]any{
+					"components": map[string]any{
+						"aws/cloudformation": map[string]any{
+							"rds": map[string]any{},
+						},
+					},
+				},
+			},
+			expectedStacks: []string{"prod"},
+			expectedError:  false,
 		},
 		{
 			name:            "results are sorted alphabetically",
