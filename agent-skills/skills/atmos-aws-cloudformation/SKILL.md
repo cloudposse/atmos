@@ -395,10 +395,10 @@ Terraform-only). See [atmos-ci](../atmos-ci/SKILL.md) for the native-CI plumbing
 
 ## Hooks
 
-Only three lifecycle pairs fire hook events: `before`/`after` × `diff` (`plan` normalizes to `diff`),
-`apply` (`deploy` normalizes to `apply`), and `delete`. Every other verb — `render`, `validate`,
-`output`, `fmt`, `tree`, `logs`, `watch`, `changeset *`, `drift *`, `get *`, `stackset *`, `list`,
-`backend *`, and `source *` — does not fire hook events.
+Five lifecycle pairs fire hook events: `before`/`after` × `diff` (`plan` normalizes to `diff`),
+`apply` (`deploy` normalizes to `apply`), `delete`, `drift detect`, and `drift describe`. Every
+other verb — `render`, `validate`, `output`, `fmt`, `tree`, `logs`, `watch`, `changeset *`, `get *`,
+`stackset *`, `list`, `backend *`, and `source *` — does not fire hook events.
 
 ```yaml
 components:
