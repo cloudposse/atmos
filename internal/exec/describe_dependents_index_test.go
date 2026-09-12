@@ -40,9 +40,9 @@ func (f *fakeComponentProvider) GetAvailableCommands() []string { return nil }
 
 // registerFakeComponentTypes registers a fake provider for each given type in
 // the shared component registry, and restores an empty registry via
-// t.Cleanup. Callers must not run in parallel with other tests that touch
-// the registry (none in this package call t.Parallel(), so sequential
-// per-package test execution keeps this safe).
+// t.Cleanup. Callers must not call t.Parallel(): the registry is shared,
+// mutable, global state, so any two callers running concurrently would race.
+// Every caller is marked //nolint:paralleltest for this reason.
 func registerFakeComponentTypes(t *testing.T, types ...string) {
 	t.Helper()
 	comp.Reset()
@@ -282,6 +282,8 @@ func TestFindComponentSectionInCachedStacks_Helmfile(t *testing.T) {
 // against a dependency resolving to nothing for any component type
 // registered via the component-provider registry (previously only
 // terraform/helmfile were checked here).
+//
+//nolint:paralleltest // mutates the shared global component registry via registerFakeComponentTypes; see its doc comment.
 func TestFindComponentSectionInCachedStacks_RegisteredProviderTypes(t *testing.T) {
 	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType)
 	require.NotEmpty(t, comp.ListTypes(), "test setup should have registered fake provider types")
@@ -305,6 +307,7 @@ func TestFindComponentSectionInCachedStacks_RegisteredProviderTypes(t *testing.T
 	}
 }
 
+//nolint:paralleltest // mutates the shared global component registry via registerFakeComponentTypes; see its doc comment.
 func TestComponentSectionSearchOrder_IncludesLegacyAndRegisteredTypes(t *testing.T) {
 	registerFakeComponentTypes(t, cfg.HelmComponentType, cfg.KubernetesComponentType)
 	require.NotEmpty(t, comp.ListTypes(), "test setup should have registered fake provider types")

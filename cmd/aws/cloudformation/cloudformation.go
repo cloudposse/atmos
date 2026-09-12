@@ -9,7 +9,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/aws/cloudformation/backend"
 	"github.com/cloudposse/atmos/cmd/aws/cloudformation/source"
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -43,6 +45,13 @@ const (
 
 var cloudFormationParser *flags.StandardParser
 
+// stackFlagCompletion reuses cmd/terraform/shared's generic stack-name
+// completion (component/stack listing is not terraform-specific despite the
+// package's name — cmd/aws/cloudformation/backend already reuses it verbatim
+// for the same reason). Package-local alias: cloudformation.go lives in
+// package cloudformation, a different package than cmd/aws/cloudformation/backend.
+var stackFlagCompletion = shared.StackFlagCompletion
+
 var (
 	cfnInitCliConfig     = cfg.InitCliConfig
 	cfnDescribeStacks    = e.ExecuteDescribeStacks
@@ -68,7 +77,7 @@ var CloudFormationCmd = &cobra.Command{
 }
 
 func init() {
-	cloudFormationParser = flags.NewStandardParser(flags.WithCommonFlags())
+	cloudFormationParser = flags.NewStandardParser(flags.WithStackFlag(), flags.WithDryRunFlag())
 	cloudFormationParser.RegisterPersistentFlags(CloudFormationCmd)
 
 	if err := cloudFormationParser.BindToViper(viper.GetViper()); err != nil {
@@ -95,6 +104,7 @@ func init() {
 	CloudFormationCmd.AddCommand(newOperationCommand("watch", "watch", "Attach to a stack's in-progress (or already-terminal) operation and stream events"))
 	CloudFormationCmd.AddCommand(newListCmd())
 	CloudFormationCmd.AddCommand(source.GetSourceCommand())
+	CloudFormationCmd.AddCommand(backend.GetBackendCommand())
 }
 
 // newChangesetCmd is the `atmos aws cloudformation changeset` verb group: manual
@@ -393,6 +403,12 @@ func newOperationCommand(use, subCommand, short string) *cobra.Command {
 	}
 
 	options := operationFlagOptions(use, subCommand)
+	options = append(options, flags.WithConditionalCompletionPrompt(
+		"stack",
+		"Choose a stack",
+		stackFlagCompletion,
+		func(_ *flags.ParsedConfig) bool { return !hasSelectionFlags(cmd) },
+	))
 	options = append(options, flags.WithConditionalPositionalArgPrompt(
 		"component",
 		"Choose an aws/cloudformation component",
@@ -426,6 +442,11 @@ func newOperationCommand(use, subCommand, short string) *cobra.Command {
 // `delete` and `changeset delete`).
 func operationFlagOptions(use, subCommand string) []flags.Option {
 	options := []flags.Option{
+		// Registered locally (not just inherited from CloudFormationCmd's
+		// persistent --stack) so the missing-stack interactive prompt below can
+		// populate it: WithConditionalCompletionPrompt only takes effect for a
+		// flag registered on this same parser (see promptForSingleMissingFlag).
+		flags.WithStackFlag(),
 		flags.WithBoolFlag(flagAll, "", false, "Process all aws/cloudformation components in dependency order."),
 		flags.WithBoolFlag(flagAffected, "", false, "Process affected aws/cloudformation components in dependency order."),
 		flags.WithBoolFlag("include-dependents", "", false, "Include dependent components when processing affected aws/cloudformation components."),
@@ -437,7 +458,7 @@ func operationFlagOptions(use, subCommand string) []flags.Option {
 		flags.WithStringFlag("ssh-key-password", "", "", "Password for the SSH private key used to clone the target ref for affected detection."),
 		flags.WithBoolFlag("clone-target-ref", "", false, "Clone the target ref instead of checking it out in the current repository for affected detection."),
 		flags.WithStringSliceFlag(flagTags, "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
-		flags.WithStringFlag(flagLabels, "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+		flags.WithStringSliceFlag(flagLabels, "", nil, "Filter by labels (repeatable and/or comma-separated key=value or key:value pairs, matches all): --labels cost-center=platform --labels compliance=sox"),
 	}
 	options = append(options, operationSpecificFlagOptions(use, subCommand)...)
 	return options
@@ -473,6 +494,7 @@ func operationSpecificFlagOptions(use, subCommand string) []flags.Option {
 	case "changeset-delete":
 		return []flags.Option{
 			flags.WithRequiredStringFlag("changeset-name", "", "Name of the changeset to delete."),
+			flags.WithBoolFlag(flagAutoApprove, "", false, msgSkipConfirmation),
 		}
 	case "drift-detect":
 		return []flags.Option{
@@ -508,10 +530,46 @@ func phase3FlagOptions(subCommand string) []flags.Option {
 	case "logs":
 		return []flags.Option{
 			flags.WithBoolFlag("chart", "", false, "Render a per-resource timeline instead of a flat chronological event list."),
+			flags.WithBoolFlag("follow", "f", false, "Continuously stream new events until interrupted (tail -f style)."),
 		}
 	default:
 		return nil
 	}
+}
+
+// validateLogsFollowChart rejects --follow combined with --chart. Only "logs"
+// registers either flag; on every other verb both resolve to false and this is
+// a no-op.
+func validateLogsFollowChart(cmd *cobra.Command) error {
+	follow, _ := cmd.Flags().GetBool("follow")
+	chart, _ := cmd.Flags().GetBool("chart")
+	if follow && chart {
+		return errUtils.ErrAwsCloudFormationLogsFollowChartExclusive
+	}
+	return nil
+}
+
+// validateIncludeDependents rejects --include-dependents when --affected isn't
+// also set. GraphSelectionForBulk only ever reads --include-dependents inside
+// its --affected branch, so passing it with --all or --tags/--labels-only
+// silently does nothing today — reject rather than let it look like it worked.
+func validateIncludeDependents(cmd *cobra.Command) error {
+	includeDependents, _ := cmd.Flags().GetBool("include-dependents")
+	affected, _ := cmd.Flags().GetBool(flagAffected)
+	if includeDependents && !affected {
+		return errUtils.ErrAwsCloudFormationIncludeDependentsRequiresAffected
+	}
+	return nil
+}
+
+// validateFlagCombinations rejects invalid flag combinations that aren't the
+// --all/--affected mutual-exclusion check (kept separate in validateOperationArgs
+// since it needs the already-parsed all/affected values).
+func validateFlagCombinations(cmd *cobra.Command) error {
+	if err := validateLogsFollowChart(cmd); err != nil {
+		return err
+	}
+	return validateIncludeDependents(cmd)
 }
 
 func validateOperationArgs(cmd *cobra.Command, args []string) error {
@@ -520,13 +578,16 @@ func validateOperationArgs(cmd *cobra.Command, args []string) error {
 	if all && affected {
 		return errUtils.ErrAwsCloudFormationFlagsMutuallyExclusive
 	}
+	if err := validateFlagCombinations(cmd); err != nil {
+		return err
+	}
 
 	tagsFlag, _ := cmd.Flags().GetStringSlice(flagTags)
-	labelsFlag, _ := cmd.Flags().GetString(flagLabels)
+	labelsFlag, _ := cmd.Flags().GetStringSlice(flagLabels)
 	if _, err := tags.ParseLabelsFlag(labelsFlag); err != nil {
 		return err
 	}
-	hasTagsOrLabels := len(tagsFlag) > 0 || labelsFlag != ""
+	hasTagsOrLabels := len(tagsFlag) > 0 || len(labelsFlag) > 0
 
 	if all || affected || hasTagsOrLabels {
 		return validateSelectionFlags(args)
@@ -541,8 +602,8 @@ func hasSelectionFlags(cmd *cobra.Command) bool {
 	all, _ := cmd.Flags().GetBool(flagAll)
 	affected, _ := cmd.Flags().GetBool(flagAffected)
 	tagsFlag, _ := cmd.Flags().GetStringSlice(flagTags)
-	labelsFlag, _ := cmd.Flags().GetString(flagLabels)
-	return all || affected || len(tagsFlag) > 0 || labelsFlag != ""
+	labelsFlag, _ := cmd.Flags().GetStringSlice(flagLabels)
+	return all || affected || len(tagsFlag) > 0 || len(labelsFlag) > 0
 }
 
 func validateSelectionFlags(args []string) error {
@@ -593,7 +654,7 @@ func runOperation(cmd *cobra.Command, subCommand string, args []string) error {
 
 func getOperationFlags(cmd *cobra.Command) map[string]any {
 	result := make(map[string]any)
-	for _, name := range []string{flagAll, flagAffected, "include-dependents", "clone-target-ref", flagAutoApprove, "disable-termination-protection", "flatten", "uppercase", "fail-on-drift", "original", "check", "chart"} {
+	for _, name := range []string{flagAll, flagAffected, "include-dependents", "clone-target-ref", flagAutoApprove, "disable-termination-protection", "flatten", "uppercase", "fail-on-drift", "original", "check", "chart", "follow"} {
 		if flag := cmd.Flag(name); flag != nil {
 			result[name] = flag.Value.String() == valueTrue
 		}
@@ -651,9 +712,9 @@ func applyTagsAndLabelsFlags(cmd *cobra.Command, info *schema.ConfigAndStacksInf
 	if tagsSlice, err := cmd.Flags().GetStringSlice(flagTags); err == nil {
 		info.Tags = tags.ParseTagsFlag(strings.Join(tagsSlice, ","))
 	}
-	if labelsFlag := cmd.Flag(flagLabels); labelsFlag != nil {
+	if labelsSlice, err := cmd.Flags().GetStringSlice(flagLabels); err == nil {
 		// Error ignored: validateOperationArgs already rejected malformed --labels before RunE.
-		info.Labels, _ = tags.ParseLabelsFlag(labelsFlag.Value.String())
+		info.Labels, _ = tags.ParseLabelsFlag(labelsSlice)
 	}
 }
 

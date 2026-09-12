@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // captureStderr redirects os.Stderr for the duration of fn and returns
@@ -130,6 +132,43 @@ func TestPrintStackEvent_FailedStatusWithReason(t *testing.T) {
 	assert.Contains(t, out, "Bucket already exists")
 }
 
+// formatStackEventLine(markdown=true) must bold the logical ID and code-span
+// the resource type, for dispatchStackEvent's TTY line (which flows into
+// ui.FormatSuccess/FormatError/FormatInline — renderers that actually process
+// markdown, see the function's own doc comment).
+func TestFormatStackEventLine_MarkdownWrapsIdentifiers(t *testing.T) {
+	logicalID := "MyBucket"
+	resourceType := "AWS::S3::Bucket"
+	event := &cfntypes.StackEvent{
+		LogicalResourceId: &logicalID,
+		ResourceType:      &resourceType,
+		ResourceStatus:    cfntypes.ResourceStatusCreateComplete,
+	}
+
+	line, failed := formatStackEventLine(event, true)
+	assert.False(t, failed)
+	assert.Contains(t, line, "**MyBucket**")
+	assert.Contains(t, line, "`AWS::S3::Bucket`")
+}
+
+// formatStackEventLine(markdown=false) must never contain markdown syntax —
+// printStackEvent and writeLogLine route this straight to ui.Writeln/
+// data.Writeln, which write raw text with no markdown rendering; leaking "**"
+// or backticks there would corrupt piped/CI output.
+func TestFormatStackEventLine_PlainHasNoMarkdown(t *testing.T) {
+	logicalID := "MyBucket"
+	resourceType := "AWS::S3::Bucket"
+	event := &cfntypes.StackEvent{
+		LogicalResourceId: &logicalID,
+		ResourceType:      &resourceType,
+		ResourceStatus:    cfntypes.ResourceStatusCreateComplete,
+	}
+
+	line, _ := formatStackEventLine(event, false)
+	assert.NotContains(t, line, "**")
+	assert.NotContains(t, line, "`")
+}
+
 // pollStackEvents must propagate a non-"not found" DescribeStackEvents error
 // rather than treating it as a deleted stack.
 func TestPollStackEvents_DescribeStackEventsError(t *testing.T) {
@@ -190,6 +229,182 @@ func TestStreamStackEvents_ContextCancelled(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, cfntypes.StackStatusCreateInProgress, status, "the last-observed (non-terminal) status must still be returned")
+}
+
+// followLogs must propagate a pollStackEvents failure immediately, the same
+// as streamStackEvents.
+func TestFollowLogs_PollError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
+
+	_, err := followLogs(context.Background(), client, []string{"vpc"}, map[string]any{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "access denied")
+}
+
+// followLogs must return a nil error (not ctx.Err()) on cancellation — unlike
+// streamStackEvents, --follow's ctx.Done() is the expected tail -f style exit
+// (Ctrl+C), not an abnormal interruption of an in-progress operation.
+func TestFollowLogs_ContextCancelledReturnsNilAfterOnePoll(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("vpc")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("e1"), LogicalResourceId: awsString("Vpc"), ResourceStatus: cfntypes.ResourceStatusCreateComplete},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("vpc")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Already cancelled: one poll round happens, then the select must take ctx.Done().
+
+	out := captureStdout(t, func() {
+		summary, err := followLogs(ctx, client, []string{"vpc"}, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, 1, summary["event_count"])
+	})
+	// logs is a data command (docs/io-and-ui-output.md): --follow must write to
+	// stdout the same as the one-shot path, never stderr.
+	assert.Contains(t, out, "Vpc")
+}
+
+// followLogs must poll every stack in names independently, each with its own
+// dedup set, and merge the event count across all of them.
+func TestFollowLogs_PollsEveryStackIndependently(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("r1"), LogicalResourceId: awsString("RootResource"), ResourceStatus: cfntypes.ResourceStatusCreateComplete},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("c1"), LogicalResourceId: awsString("ChildResource"), ResourceStatus: cfntypes.ResourceStatusCreateComplete},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	out := captureStdout(t, func() {
+		summary, err := followLogs(ctx, client, []string{"root", "child"}, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, 2, summary["event_count"])
+	})
+	assert.Contains(t, out, "RootResource")
+	assert.Contains(t, out, "ChildResource")
+}
+
+// dispatchStackEvent must route an in-progress event to Spinner.Update, which
+// degrades to ui.Info off-TTY (the test harness isn't a TTY, so spinner.New
+// here produces a non-interactive Spinner exercising that degraded path).
+func TestDispatchStackEvent_InProgressUpdatesSpinner(t *testing.T) {
+	logicalID := "MyBucket"
+	resourceType := "AWS::S3::Bucket"
+	event := &cfntypes.StackEvent{
+		LogicalResourceId: &logicalID,
+		ResourceType:      &resourceType,
+		ResourceStatus:    cfntypes.ResourceStatusCreateInProgress,
+	}
+
+	sp := spinner.New("watching")
+	out := normalizeUIOutput(captureStderr(t, func() { dispatchStackEvent(sp, event) }))
+	assert.Contains(t, out, "MyBucket")
+	assert.Contains(t, out, string(cfntypes.ResourceStatusCreateInProgress))
+}
+
+// dispatchStackEvent must route a completed (non-failed) terminal event to
+// Spinner.Println with FormatSuccess coloring (checkmark icon), not a plain line.
+func TestDispatchStackEvent_CompleteUsesFormatSuccess(t *testing.T) {
+	logicalID := "MyBucket"
+	resourceType := "AWS::S3::Bucket"
+	event := &cfntypes.StackEvent{
+		LogicalResourceId: &logicalID,
+		ResourceType:      &resourceType,
+		ResourceStatus:    cfntypes.ResourceStatusCreateComplete,
+	}
+
+	sp := spinner.New("watching")
+	out := normalizeUIOutput(captureStderr(t, func() { dispatchStackEvent(sp, event) }))
+	assert.Contains(t, out, "✓", "terminal, non-failed events must render via ui.FormatSuccess")
+	assert.Contains(t, out, "MyBucket")
+	assert.Contains(t, out, string(cfntypes.ResourceStatusCreateComplete))
+}
+
+// dispatchStackEvent must route a failed terminal event to Spinner.Println
+// with FormatError coloring (X icon), including the status reason.
+func TestDispatchStackEvent_FailedUsesFormatError(t *testing.T) {
+	logicalID := "MyBucket"
+	resourceType := "AWS::S3::Bucket"
+	reason := "Bucket already exists"
+	event := &cfntypes.StackEvent{
+		LogicalResourceId:    &logicalID,
+		ResourceType:         &resourceType,
+		ResourceStatus:       cfntypes.ResourceStatusCreateFailed,
+		ResourceStatusReason: &reason,
+	}
+
+	sp := spinner.New("watching")
+	out := normalizeUIOutput(captureStderr(t, func() { dispatchStackEvent(sp, event) }))
+	assert.Contains(t, out, "✗", "failed terminal events must render via ui.FormatError")
+	assert.Contains(t, out, "MyBucket")
+	assert.Contains(t, out, "Bucket already exists")
+}
+
+// dispatchStackEvent with a nil spinner (the non-TTY streamStackEvents path)
+// must fall back to printStackEvent unchanged, never the spinner-flavored
+// FormatSuccess coloring.
+func TestDispatchStackEvent_NilSpinnerFallsBackToPrintStackEvent(t *testing.T) {
+	logicalID := "MyBucket"
+	resourceType := "AWS::S3::Bucket"
+	event := &cfntypes.StackEvent{
+		LogicalResourceId: &logicalID,
+		ResourceType:      &resourceType,
+		ResourceStatus:    cfntypes.ResourceStatusCreateComplete,
+	}
+
+	out := captureStderr(t, func() { dispatchStackEvent(nil, event) })
+	assert.Contains(t, out, "MyBucket")
+	assert.NotContains(t, out, "✓", "nil spinner must use plain ui.Writeln, not FormatSuccess coloring")
+}
+
+// finishStreamSpinner must report a successful terminal status via
+// Spinner.Success (FormatSuccess coloring).
+func TestFinishStreamSpinner_SuccessStatus(t *testing.T) {
+	sp := spinner.New("watching")
+	out := normalizeUIOutput(captureStderr(t, func() { finishStreamSpinner(sp, "vpc", cfntypes.StackStatusCreateComplete) }))
+	assert.Contains(t, out, "✓")
+	assert.Contains(t, out, "vpc")
+	assert.Contains(t, out, string(cfntypes.StackStatusCreateComplete))
+}
+
+// finishStreamSpinner must report a failed terminal status via Spinner.Error
+// (FormatError coloring).
+func TestFinishStreamSpinner_FailedStatus(t *testing.T) {
+	sp := spinner.New("watching")
+	out := normalizeUIOutput(captureStderr(t, func() { finishStreamSpinner(sp, "vpc", cfntypes.StackStatusCreateFailed) }))
+	assert.Contains(t, out, "✗")
+	assert.Contains(t, out, "vpc")
+	assert.Contains(t, out, string(cfntypes.StackStatusCreateFailed))
+}
+
+// finishStreamSpinner must be a no-op for a nil spinner (the non-TTY path
+// never starts one).
+func TestFinishStreamSpinner_NilSpinnerIsNoop(t *testing.T) {
+	out := captureStderr(t, func() { finishStreamSpinner(nil, "vpc", cfntypes.StackStatusCreateComplete) })
+	assert.Empty(t, out)
 }
 
 func TestPollStackEvents_StackDeleted(t *testing.T) {

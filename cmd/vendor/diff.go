@@ -62,7 +62,7 @@ func resolveDiffComponents(cmd *cobra.Command, v *viper.Viper) ([]string, error)
 	component := v.GetString("component")
 	filterTags := splitTags(v.GetString("tags"))
 	stack := v.GetString("stack")
-	labels, err := pkgtags.ParseLabelsFlag(v.GetString("labels"))
+	labels, err := pkgtags.ParseLabelsFlag(v.GetStringSlice("labels"))
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func init() {
 		flags.WithStringFlag("file", "", "", "Vendor manifest file (default: ./vendor.yaml)"),
 		flags.WithStringFlag("tags", "", "", "Diff every component whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
 		flags.WithStringFlag("stack", "s", "", "Diff every component belonging to the specified stack"),
-		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
+		flags.WithStringSliceFlag("labels", "", nil, vendorLabelsFlagHelp),
 	)
 	vendorDiffParser.RegisterFlags(vendorDiffCmd)
 	if err := vendorDiffParser.BindToViper(viper.GetViper()); err != nil {
