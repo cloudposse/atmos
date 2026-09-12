@@ -32,14 +32,14 @@ compatible URI (git, s3, http, oci, etc.).
 If the component is already vendored, it will be skipped unless --force is specified.
 
 If component is not specified, prompts interactively for selection.`, cfg.TypeLabel),
-		Example: fmt.Sprintf(`  # Vendor component source (downloads if missing or outdated)
+		Example: fmt.Sprintf(`  # Vendor component source (skipped if the target directory already exists)
   atmos %s source pull vpc --stack dev
 
-  # Force re-vendor even if up-to-date
+  # Force re-vendor even if already vendored
   atmos %s source pull vpc --stack dev --force
 
   # Interactive: prompts for component and stack
-  atmos %s source pull`, cfg.ComponentType, cfg.ComponentType, cfg.ComponentType),
+  atmos %s source pull`, cfg.CLI(), cfg.CLI(), cfg.CLI()),
 		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executePull(cmd, args, cfg, parser)

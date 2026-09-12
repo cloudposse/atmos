@@ -55,6 +55,7 @@ const (
 	AtmosYamlFuncAwsCallerIdentityUserID = "!aws.caller_identity_user_id"
 	AtmosYamlFuncAwsRegion               = "!aws.region"
 	AtmosYamlFuncAwsOrganizationID       = "!aws.organization_id"
+	AtmosYamlFuncAwsCloudFormationOutput = "!aws.cloudformation.output"
 	AtmosYamlFuncEmulator                = "!emulator"
 	AtmosYamlFuncVersion                 = "!version"
 	AtmosYamlFuncTags                    = "!tags"
@@ -98,6 +99,7 @@ var (
 		AtmosYamlFuncAwsCallerIdentityUserID,
 		AtmosYamlFuncAwsRegion,
 		AtmosYamlFuncAwsOrganizationID,
+		AtmosYamlFuncAwsCloudFormationOutput,
 		AtmosYamlFuncEmulator,
 		AtmosYamlFuncVersion,
 		AtmosYamlFuncTags,
@@ -139,6 +141,7 @@ var (
 		AtmosYamlFuncAwsCallerIdentityUserID: true,
 		AtmosYamlFuncAwsRegion:               true,
 		AtmosYamlFuncAwsOrganizationID:       true,
+		AtmosYamlFuncAwsCloudFormationOutput: true,
 		AtmosYamlFuncEmulator:                true,
 		AtmosYamlFuncVersion:                 true,
 		AtmosYamlFuncTags:                    true,

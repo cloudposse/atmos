@@ -16,9 +16,10 @@ import (
 // stackSpec is the fully-resolved, SDK-ready shape of an aws/cloudformation component,
 // extracted from the component's stack config section.
 type stackSpec struct {
-	StackName    string
-	TemplatePath string
-	TemplateBody string
+	StackName       string
+	TemplatePath    string
+	TemplateAbsPath string
+	TemplateBody    string
 	// TemplateURL is set by deliverApply when the template was packaged to a
 	// `kind: aws/s3` target (either because it exceeds CloudFormation's
 	// 51,200-byte inline TemplateBody limit, or because packaging was
