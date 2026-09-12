@@ -47,8 +47,8 @@ atmos aws cloudformation drift detect --affected --base origin/main --fail-on-dr
 ## Flags
 
 <dl>
-  <dt>`--stack`, `-s` <em>(required)</em></dt>
-  <dd>Atmos stack.</dd>
+  <dt>`--stack`, `-s` <em>(required for a single component)</em></dt>
+  <dd>Atmos stack. Required when operating on a single component; optional (and used only to narrow the selected set) with `--all`/`--affected`.</dd>
 
   <dt>`--fail-on-drift` <em>(optional)</em></dt>
   <dd>Exit non-zero if drift is detected. Useful for CI drift-detection jobs.</dd>

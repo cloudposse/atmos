@@ -9,11 +9,13 @@ package cloudformation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/aws/identity"
@@ -94,10 +96,17 @@ func GetOutputs(ctx context.Context, region, stackName string, authContext *sche
 
 // isStackNotFoundError reports whether err is CloudFormation's "does not exist" ValidationError,
 // returned by DescribeStacks for a named stack that was never deployed (as opposed to an
-// account-wide DescribeStacks call, which instead returns an empty Stacks slice). Mirrors
-// pkg/component/aws/cloudformation's own isStackNotFoundError classifier — kept as a small local
-// copy rather than a shared import to avoid coupling this intentionally narrow leaf package (see
-// the package doc comment) to the full CloudFormation component implementation.
+// account-wide DescribeStacks call, which instead returns an empty Stacks slice). Requires the
+// smithy.APIError's ErrorCode to be "ValidationError" before checking the message — CloudFormation
+// uses this generic code for several unrelated validation failures, so the message substring alone
+// is not a reliable classifier. Loosely mirrors pkg/component/aws/cloudformation's own
+// isStackNotFoundError classifier — kept as a small local copy rather than a shared import to avoid
+// coupling this intentionally narrow leaf package (see the package doc comment) to the full
+// CloudFormation component implementation.
 func isStackNotFoundError(err error) bool {
-	return strings.Contains(err.Error(), "does not exist")
+	var apiErr smithy.APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	return apiErr.ErrorCode() == "ValidationError" && strings.Contains(apiErr.ErrorMessage(), "does not exist")
 }
