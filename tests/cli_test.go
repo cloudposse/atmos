@@ -39,11 +39,14 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/github"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/tests/testhelpers"
+	"github.com/cloudposse/atmos/tests/testhelpers/gitconfigenv"
+	"github.com/cloudposse/atmos/tests/testhelpers/gitmirror"
 )
 
 // Command-line flag for regenerating snapshots.
@@ -56,7 +59,10 @@ var (
 	atmosRunner         *testhelpers.AtmosRunner // Global runner for executing Atmos with coverage support (lazy initialized)
 	atmosRunnerOnce     sync.Once
 	atmosRunnerErr      error
-	coverDir            string // GOCOVERDIR environment variable value.
+	coverDir            string            // GOCOVERDIR environment variable value.
+	gitMirrorRoot       string            // Root of the local git mirror built in TestMain (see gitmirror).
+	gitMirrorServer     *gitmirror.Server // HTTP server serving the mirror over git's smart-HTTP protocol (see gitmirror.Serve).
+	gitMirrorConfigPath string            // Temp file holding the GIT_CONFIG_GLOBAL insteadOf rules for the mirror (see gitmirror.WriteGitConfig).
 	sandboxRegistry     = make(map[string]*testhelpers.SandboxEnvironment)
 	sandboxMutex        sync.RWMutex
 )
@@ -821,7 +827,83 @@ func TestMain(m *testing.M) {
 	// instead of depending on host-installed binaries. Only missing tools are
 	// installed; best-effort, so failures leave per-test preconditions to skip
 	// the affected tests.
-	testhelpers.ProvisionToolchain(logger, testhelpers.DefaultTools)
+	testhelpers.ProvisionToolchain(logger, testhelpers.DefaultTools())
+
+	// Build a local git mirror of examples/ and serve it over git's real smart-HTTP protocol (the
+	// same transport a real git host uses), redirecting github.com/cloudposse/atmos.git fetches to
+	// it via a GIT_CONFIG_GLOBAL insteadOf file, so the acceptance suite never depends on live
+	// GitHub connectivity for the vendor/import fixtures that reference
+	// github.com/cloudposse/atmos.git//examples/... (tests/test-cases/vendor-test.yaml,
+	// demo-globs.yaml, demo-vendoring.yaml) -- while atmos itself stays unaware of the mirror and
+	// runs the exact same token-injection/GIT_CONFIG-detection code path it would against a real
+	// host (see pkg/downloader/custom_git_detector.go). Unconditional -- not gated behind
+	// ATMOS_TEST_OFFLINE or any other flag -- otherwise PR shards keep hitting GitHub.
+	var mirrorErr error
+	gitMirrorRoot, mirrorErr = os.MkdirTemp("", "atmos-git-mirror-*") //nolint:lintroller // no *testing.T in TestMain; cleaned up below.
+	if mirrorErr != nil {
+		logger.Fatal("failed to create git mirror temp dir", mirrorErr)
+	}
+	if mirrorErr = gitmirror.Build(gitMirrorRoot); mirrorErr != nil {
+		logger.Fatal("failed to build local git mirror", mirrorErr)
+	}
+
+	// AllowAnonymous: cloudposse/atmos is public on real GitHub, so an anonymous HTTPS clone of it
+	// succeeds there with no credentials at all. Some fixtures rely on exactly that -- a source
+	// already spelled with an explicit forced getter, e.g. "git::https://github.com/...", never
+	// reaches CustomGitDetector.Detect (go-getter only calls registered Detectors when a source has
+	// no forced-getter prefix), so atmos never gets a chance to inject a token for it regardless of
+	// what credentials are available. Rejecting anonymous requests here would fail those fixtures
+	// in a way a real clone of this public repository never would.
+	gitMirrorServer, mirrorErr = gitmirror.Serve(gitMirrorRoot, gitmirror.AllowAnonymous())
+	if mirrorErr != nil {
+		logger.Fatal("failed to start local git mirror server", mirrorErr)
+	}
+
+	// Register every token atmos could actually inject, so the harness never manufactures a
+	// credential of its own: any ambient GITHUB_TOKEN/ATMOS_GITHUB_TOKEN/ATMOS_PRO_GITHUB_TOKEN
+	// (a real developer/CI token also authenticates against the mirror -- needed for
+	// atmos_vendor_pull, which mixes a git mirror source with a live ghcr.io OCI source and keeps
+	// its github_token precondition), plus the `gh auth token` value -- mirroring
+	// pkg/downloader/custom_git_detector.go's resolveToken fallback order exactly, so atmos runs
+	// its real production code path against the mirror instead of an injected value it would
+	// never actually choose. With no ambient token and no authenticated `gh` CLI, atmos injects
+	// nothing and git matches the anonymous rule instead, which the mirror accepts (see
+	// AllowAnonymous() above) -- the same "no credentials" path an anonymous clone of this public
+	// repo takes in production.
+	var mirrorTokens []string
+	for _, envVar := range []string{"GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "ATMOS_PRO_GITHUB_TOKEN"} {
+		if token := os.Getenv(envVar); token != "" {
+			mirrorTokens = append(mirrorTokens, token)
+		}
+	}
+	if token := github.GetGitHubTokenFromCLI(); token != "" {
+		mirrorTokens = append(mirrorTokens, token)
+	}
+	for _, token := range mirrorTokens {
+		gitMirrorServer.RegisterToken(token)
+		// Mask the same base64("x-access-token:"+token) byte sequence a git-over-HTTP request via
+		// the CustomGitDetector-injected URL carries as a Basic-Auth header -- a different byte
+		// sequence than plain GITHUB_TOKEN or base64(GITHUB_TOKEN), which pkg/io's masker already
+		// auto-registers (mirrors the extraheader registration in runCLICommandTest for the same
+		// reasoning).
+		iolib.RegisterSecret("x-access-token:" + token)
+	}
+
+	gitConfigFile, mirrorErr := os.CreateTemp("", "atmos-git-mirror-gitconfig-*")
+	if mirrorErr != nil {
+		logger.Fatal("failed to create git mirror gitconfig temp file", mirrorErr)
+	}
+	gitMirrorConfigPath = gitConfigFile.Name()
+	gitConfigFile.Close()
+	if mirrorErr = gitmirror.WriteGitConfig(gitMirrorConfigPath, gitMirrorServer.URL(), mirrorTokens); mirrorErr != nil {
+		logger.Fatal("failed to write git mirror gitconfig", mirrorErr)
+	}
+	// GIT_CONFIG_GLOBAL replaces git's normal global config lookup (~/.gitconfig or
+	// $XDG_CONFIG_HOME/git/config) outright, so this also isolates every git invocation in the
+	// suite from the developer's real global gitconfig -- the same reason runCLICommandTest points
+	// HOME at a temp dir per test.
+	os.Setenv("GIT_CONFIG_GLOBAL", gitMirrorConfigPath) //nolint:lintroller // Set before m.Run(); no *testing.T available in TestMain; must persist process-wide for every subtest.
+	logger.Info("serving local git mirror for cloudposse/atmos", "url", gitMirrorServer.URL())
 
 	// Auto-start the Floci cloud emulators for the opt-in Floci E2E tests. This is a
 	// no-op unless ATMOS_TEST_FLOCI=true and the FLOCI_* endpoint env vars are unset,
@@ -847,6 +929,43 @@ func TestMain(m *testing.M) {
 	// Clean up the temporary binary if we built one
 	if atmosRunner != nil {
 		atmosRunner.Cleanup()
+	}
+
+	// Clean up the local git mirror server and its temp files. Log a debug-level summary of how
+	// many requests authenticated first -- run with ATMOS_TEST_DEBUG=1 to inspect which git
+	// operations against the mirror carried real Basic-Auth credentials, without adding a
+	// permanent per-test assertion that would couple this package to one specific test case's
+	// git traffic. Because the server AllowAnonymous()es (see above), most requests here
+	// legitimately show authenticated="": git's HTTP client never sends URL-embedded credentials
+	// unless challenged with a 401, and an anonymous request to this public repo mirror always
+	// succeeds immediately -- exactly as a real anonymous clone of the public cloudposse/atmos
+	// repo would. The gitmirror package's own TestServer_CloneWithToken (AllowAnonymous off)
+	// is the test that proves the authentication mechanism itself works end-to-end.
+	if gitMirrorServer != nil {
+		requests := gitMirrorServer.Requests()
+		authenticated := 0
+		users := map[string]struct{}{}
+		for _, req := range requests {
+			if req.User != "" {
+				authenticated++
+				users[req.User] = struct{}{}
+			}
+		}
+		usernames := make([]string, 0, len(users))
+		for user := range users {
+			usernames = append(usernames, user)
+		}
+		logger.Debug("git mirror request summary", "total", len(requests), "authenticated", authenticated, "authenticated_as", usernames)
+		for i, req := range requests {
+			logger.Debug("git mirror request", "i", i, "method", req.Method, "path", req.Path, "user", req.User)
+		}
+		gitMirrorServer.Close()
+	}
+	if gitMirrorConfigPath != "" {
+		os.Remove(gitMirrorConfigPath)
+	}
+	if gitMirrorRoot != "" {
+		os.RemoveAll(gitMirrorRoot)
 	}
 
 	errUtils.Exit(exitCode)
@@ -980,28 +1099,43 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	//   - On CI (headless): hangs forever because there's no UI for Keychain
 	//   - Locally on macOS: shows a Keychain popup asking permission
 	// We fix this by disabling credential.helper and injecting GITHUB_TOKEN directly.
-	if _, exists := tc.Env["GIT_CONFIG_COUNT"]; !exists {
-		if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
-			// Disable credential helper (prevents osxkeychain hangs/popups) and inject token.
-			gitBasicAuthCredential := "x-access-token:" + githubToken
-			basicAuth := base64.StdEncoding.EncodeToString([]byte(gitBasicAuthCredential))
-			// pkg/io's masker auto-registers plain GITHUB_TOKEN and base64(GITHUB_TOKEN), but
-			// GIT_CONFIG_VALUE_1 below embeds base64("x-access-token:"+GITHUB_TOKEN) -- a
-			// different byte sequence the prefix changes the encoding of, so it needs its own
-			// registration or redactAndCapDiagOutput can't catch it in captured child output.
-			iolib.RegisterSecret(gitBasicAuthCredential)
-			tc.Env["GIT_CONFIG_COUNT"] = "2"
-			tc.Env["GIT_CONFIG_KEY_0"] = "credential.helper"
-			tc.Env["GIT_CONFIG_VALUE_0"] = ""
-			tc.Env["GIT_CONFIG_KEY_1"] = "http.https://github.com/.extraheader"
-			tc.Env["GIT_CONFIG_VALUE_1"] = "AUTHORIZATION: basic " + basicAuth
-		} else {
-			// No token available — just disable the credential helper to prevent hangs/popups.
-			tc.Env["GIT_CONFIG_COUNT"] = "1"
-			tc.Env["GIT_CONFIG_KEY_0"] = "credential.helper"
-			tc.Env["GIT_CONFIG_VALUE_0"] = ""
-		}
+	//
+	// This must APPEND to, not overwrite, any GIT_CONFIG_* entries a test case sets of its own:
+	// git's GIT_CONFIG_COUNT/KEY_n/VALUE_n protocol is positional, so writing our own COUNT=1|2
+	// here would silently discard slots another producer already claimed. (The git mirror's own
+	// insteadOf rules live in a GIT_CONFIG_GLOBAL file set once in TestMain, not in this
+	// per-test env-based protocol -- see gitmirror.WriteGitConfig.)
+	//
+	// Build entries unconditionally: a test case that already set GIT_CONFIG_COUNT in tc.Env
+	// still needs credential.helper disabled and, when applicable, the token header injected --
+	// Append merges with whatever is already present instead of overwriting it, so the case's
+	// own entries are preserved (they take precedence over the ambient process environment via
+	// envBase below).
+	entries := []gitconfigenv.GitConfigEntry{
+		// Disable credential helper (prevents osxkeychain hangs/popups).
+		{Key: "credential.helper", Value: ""},
 	}
+	if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
+		// Inject token directly instead of relying on a credential helper.
+		gitBasicAuthCredential := "x-access-token:" + githubToken
+		basicAuth := base64.StdEncoding.EncodeToString([]byte(gitBasicAuthCredential))
+		// pkg/io's masker auto-registers plain GITHUB_TOKEN and base64(GITHUB_TOKEN), but
+		// the extraheader value below embeds base64("x-access-token:"+GITHUB_TOKEN) -- a
+		// different byte sequence the prefix changes the encoding of, so it needs its own
+		// registration or redactAndCapDiagOutput can't catch it in captured child output.
+		iolib.RegisterSecret(gitBasicAuthCredential)
+		entries = append(entries, gitconfigenv.GitConfigEntry{
+			Key:   "http.https://github.com/.extraheader",
+			Value: "AUTHORIZATION: basic " + basicAuth,
+		})
+	}
+	// envBase layers tc.Env's own GIT_CONFIG_* entries (if any) on top of the ambient process
+	// environment, so Append reads and preserves them instead of only seeing os.Environ().
+	envBase := os.Environ()
+	for key, value := range tc.Env {
+		envBase = append(envBase, key+"="+value)
+	}
+	gitconfigenv.Append(tc.Env, envBase, entries...)
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
