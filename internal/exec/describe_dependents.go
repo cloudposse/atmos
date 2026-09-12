@@ -649,29 +649,3 @@ func hasDependencyEntries(depsSection map[string]any) bool {
 	}
 	return false
 }
-
-// findComponentSectionInCachedStacks extracts a component section from pre-computed stacks.
-// Returns nil if the stack or component is not found (caller falls back to ExecuteDescribeComponent).
-func findComponentSectionInCachedStacks(stacks map[string]any, stackName, componentName string) map[string]any {
-	stackSection, ok := stacks[stackName].(map[string]any)
-	if !ok {
-		return nil
-	}
-	componentsSection, ok := stackSection["components"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	// Check terraform components (the common case).
-	if tfSection, ok := componentsSection["terraform"].(map[string]any); ok {
-		if comp, ok := tfSection[componentName].(map[string]any); ok {
-			return comp
-		}
-	}
-	// Check helmfile components.
-	if hfSection, ok := componentsSection["helmfile"].(map[string]any); ok {
-		if comp, ok := hfSection[componentName].(map[string]any); ok {
-			return comp
-		}
-	}
-	return nil
-}
