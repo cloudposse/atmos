@@ -41,7 +41,16 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("mask"), "mask flag should be registered")
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("pager"), "pager flag should be registered")
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("cast"), "cast flag should be registered")
-		assert.NotNil(t, cmd.PersistentFlags().Lookup("interactive"), "interactive flag should be registered")
+		interactiveFlag := cmd.PersistentFlags().Lookup("interactive")
+		assert.NotNil(t, interactiveFlag, "interactive flag should be registered")
+		// The registered pflag default must be "true": missing-required-flag/positional-arg
+		// prompts (flags.PromptForMissingRequired et al.) gate on viper.GetBool("interactive"),
+		// which reads this flag's default when the user never passes --interactive. A
+		// zero-value default here would silently make every "Choose a stack" prompt
+		// require an undiscoverable --interactive opt-in first.
+		if interactiveFlag != nil {
+			assert.Equal(t, "true", interactiveFlag.DefValue, "interactive flag should default to true")
+		}
 
 		// Authentication flags.
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("identity"), "identity flag should be registered")
