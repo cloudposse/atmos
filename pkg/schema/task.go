@@ -29,6 +29,8 @@ const (
 	TaskTypeCast = "cast"
 	// TaskTypeSimulate records simulated terminal activity inside a cast step.
 	TaskTypeSimulate = "simulate"
+	// TaskTypeScreenshot captures a mid-recording still-image marker inside a cast step.
+	TaskTypeScreenshot = "screenshot"
 	// TaskTypeWorkdir provisions a mutable working directory from a source.
 	TaskTypeWorkdir = "workdir"
 	// TaskTypeWait is the action step that blocks until the background step(s)

@@ -3,6 +3,7 @@ package asciicast
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +26,25 @@ func writeTestCast(t *testing.T, width, height int, outputs ...string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestBuildGridUpToOnlyReplaysEventsAtOrBeforeCutoff(t *testing.T) {
+	header := Header{Width: 20, Height: 5}
+	events := []Event{
+		{Time: 0.1, Stream: "o", Data: "before\n"},
+		{Time: 0.2, Stream: "m", Data: "marker"},
+		{Time: 0.3, Stream: "o", Data: "after\n"},
+	}
+
+	cutoff := buildGridUpTo(&header, events, 0.2)
+	if got := gridText(cutoff); got != "before\n" {
+		t.Fatalf("cutoff grid text = %q, want %q (marker's own timestamp, before the later event)", got, "before\n")
+	}
+
+	full := buildGridUpTo(&header, events, math.Inf(1))
+	if got := gridText(full); got != "before\nafter\n" {
+		t.Fatalf("full grid text = %q, want %q", got, "before\nafter\n")
+	}
 }
 
 func TestBuildGridLaysOutPlainLines(t *testing.T) {
