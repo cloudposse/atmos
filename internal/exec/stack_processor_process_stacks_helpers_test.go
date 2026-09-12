@@ -870,6 +870,19 @@ func TestExtractHelmComponentSectionCreateNamespace(t *testing.T) {
 			"create_namespace set on stack-level helm defaults must apply to every helm component")
 		assert.Equal(t, false, defaults[cfg.HelmCreateNamespaceSectionName])
 	})
+
+	t.Run("not-accepted-in-overrides-block-yet", func(t *testing.T) {
+		// create_namespace via an overrides block is a separate follow-up (needs the
+		// helm_overrides schema + type/global override propagation). Guard the current
+		// contract: the overrides whitelist stays narrow and drops it for now.
+		section := map[string]any{
+			cfg.ValuesSectionName:              map[string]any{"cluster": "shared"},
+			cfg.HelmCreateNamespaceSectionName: false,
+		}
+
+		overrides := extractHelmOverrideSection(section)
+		assert.NotContains(t, overrides, cfg.HelmCreateNamespaceSectionName)
+	})
 }
 
 // Compile-time guard: a rename of the schema Plugins fields fails the build.

@@ -57,17 +57,17 @@ raw stack manifest into the final, resolved component config. That whitelist liv
 
 ```go
 var helmComponentSectionKeys = []string{
-	cfg.ChartSectionName,
-	cfg.ValuesSectionName,
-	cfg.ValuesFilesSectionName,
-	cfg.RepositoriesSectionName,
-	cfg.RenderSectionName,
-	"version",
-	"repository",
-	"namespace",
-	"name",
-	cfg.HelmReleaseSectionName,
-	// create_namespace was missing here
+  cfg.ChartSectionName,
+  cfg.ValuesSectionName,
+  cfg.ValuesFilesSectionName,
+  cfg.RepositoriesSectionName,
+  cfg.RenderSectionName,
+  "version",
+  "repository",
+  "namespace",
+  "name",
+  cfg.HelmReleaseSectionName,
+  // create_namespace was missing here
 }
 ```
 
@@ -95,20 +95,34 @@ processing) — hence "validates fine, shows up nowhere."
   `TestExtractHelmComponentSectionCreateNamespace` — a regression test that confirms
   `create_namespace: false`/`true` survives `extractHelmComponentSection`, survives the full
   `extractComponentSections` path into `result.ComponentHelm`, is carried as a stack-level
-  lifecycle default, and is left unset (so the reader default applies) when the key is absent.
+  lifecycle default, is dropped from an `overrides:` block (current contract — see below), and
+  is left unset (so the reader default applies) when the key is absent.
+- `internal/exec/stack_processor_merge_test.go`: added
+  `TestMergeComponentConfigurations_CreateNamespacePrecedence` — proves a component-level value
+  wins over a stack-level default, and an unset component inherits the stack default.
 
-### Deliberate non-changes
+### Precedence
 
-- `helmOverrideSectionKeys` (the `overrides:` block whitelist) was **left narrow** — it still
-  accepts only `values`. Its comment states the intent to keep it narrow "until other Helm
-  fields have documented override semantics," so allowing `create_namespace` there is a
-  separate, documented decision rather than part of this bug fix. Setting `create_namespace`
-  directly on a component or as a stack-level `helm:` default both work; setting it inside an
-  `overrides:` block is intentionally not supported yet.
+The toggle can be set in two places (this fix); the more specific wins:
+
+| Where | Precedence | Use case |
+|-------|-----------|----------|
+| component field (`helmComponentSectionKeys`) | wins | per-release opt-out |
+| stack-level `helm:` default (`helmLifecycleSectionKeys`) | weaker — a component can override it | convenience default across components |
+
+### Deliberate non-change: overrides block
+
+`create_namespace` in an `overrides:` block is **intentionally not supported in this PR** and is
+tracked as a separate follow-up. Empirical CLI testing showed it needs more than a whitelist
+entry: the `helm_overrides` JSON schema is `additionalProperties: false` and rejects the key, and
+the type/global-level override propagation (what a platform team would use to enforce a setting
+across every component) is a separate mechanism that a `helmOverrideSectionKeys` change alone does
+not wire. `helmOverrideSectionKeys` is left narrow (only `values`), and a test guards that current
+contract.
 
 ## Why the original PR's tests missed it
 
-#3034's unit tests exercised `resolveCreateNamespace`/`buildChartSpec` by passing a section
+PR #3034's unit tests exercised `resolveCreateNamespace`/`buildChartSpec` by passing a section
 map with `create_namespace` already populated. They never ran through the stack processor's
 extraction whitelist, which is what strips the key at runtime. The regression test added here
 goes through `extractHelmComponentSection`/`extractComponentSections` — the layer that
@@ -118,11 +132,17 @@ actually dropped the field.
 
 - `go test ./internal/exec/ -run TestExtractHelmComponentSectionCreateNamespace -v` — the new
   test fails on the pre-fix whitelist (reproduces the drop) and passes after adding the key.
+- `go test ./internal/exec/ -run TestMergeComponentConfigurations_CreateNamespacePrecedence -v`
+  — proves component value > stack-default, and stack-default applies when the component is unset.
 - `go test ./internal/exec/ -run 'Helm'` — passes.
+- Empirical CLI run against a copy of `examples/helm` with `create_namespace: false` on the
+  component: `atmos describe stacks -s dev --components demo --component-types helm --sections
+  create_namespace` returned `create_namespace: false` (was `{}` before the fix).
 - `go build ./...`, `go test ./pkg/config/... ./pkg/component/helm/...` — pass.
 - `gofumpt` clean on all changed Go files.
 
 ## Follow-ups
 
-- Consider whether `create_namespace` should also be accepted in `overrides:` blocks
-  (`helmOverrideSectionKeys`); currently intentionally excluded.
+- Support `create_namespace` in an `overrides:` block (component, type, and global levels),
+  including the `helm_overrides` JSON schema and type/global override propagation. Deferred to a
+  separate PR. See "Deliberate non-change: overrides block" above.
