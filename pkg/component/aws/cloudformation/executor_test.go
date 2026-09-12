@@ -709,6 +709,34 @@ func TestResolveSpecAndTemplate_MissingStackPolicyFile(t *testing.T) {
 	assert.Contains(t, err.Error(), "missing-policy.json")
 }
 
+// resolveSpecAndTemplate must load the template but skip stack-policy loading
+// entirely for fmt and changeset-create: only runApply's post-apply
+// SetStackPolicy call consumes spec.StackPolicyBody, so a missing/unreadable
+// stack_policy file must not block either of these operations, unlike
+// TestResolveSpecAndTemplate_MissingStackPolicyFile's apply case above.
+func TestResolveSpecAndTemplate_SkipsStackPolicyLoad(t *testing.T) {
+	for _, operation := range []Operation{OperationFmt, OperationChangesetCreate} {
+		t.Run(string(operation), func(t *testing.T) {
+			tempDir := t.TempDir()
+			templateBody := "AWSTemplateFormatVersion: '2010-09-09'"
+			require.NoError(t, os.WriteFile(filepath.Join(tempDir, "template.yaml"), []byte(templateBody), 0o644))
+			stubProvisionAndResolveComponentPath(t, tempDir, nil)
+
+			info := &schema.ConfigAndStacksInfo{
+				ComponentSection: map[string]any{
+					"stack_name":   "vpc",
+					"template":     "template.yaml",
+					"stack_policy": map[string]any{"file": "missing-policy.json"},
+				},
+			}
+			spec, err := resolveSpecAndTemplate(&schema.AtmosConfiguration{}, info, operation)
+			require.NoError(t, err, "a missing stack_policy file must not block %s", operation)
+			assert.Equal(t, templateBody, spec.TemplateBody, "%s must still load the template", operation)
+			assert.Empty(t, spec.StackPolicyBody, "%s must never load the stack policy", operation)
+		})
+	}
+}
+
 // stubExecutorSeams overrides every executor.go seam var with a happy-path
 // stub and returns a restore func the caller can defer. Individual fields on
 // the returned struct let a test override just the seam it wants to exercise.

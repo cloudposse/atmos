@@ -141,13 +141,21 @@ func TestConfiguredCloudFormationStackNames(t *testing.T) {
 	cfnDescribeStacks = func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
 		return stacksMap, nil
 	}
-	cfnListAllComponents = func(context.Context, string, map[string]any) ([]string, error) {
+	type ctxKey string
+	const key ctxKey = "test-marker"
+	ctx := context.WithValue(context.Background(), key, "expected")
+
+	var receivedCtx context.Context
+	cfnListAllComponents = func(ctx context.Context, _ string, _ map[string]any) ([]string, error) {
+		receivedCtx = ctx
 		return []string{"vpc", "no-stack-name"}, nil
 	}
 
-	names, err := configuredCloudFormationStackNames(&schema.AtmosConfiguration{}, "dev", nil)
+	names, err := configuredCloudFormationStackNames(ctx, &schema.AtmosConfiguration{}, "dev", nil)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]bool{"my-vpc-stack": true}, names)
+	require.NotNil(t, receivedCtx, "configuredCloudFormationStackNames must propagate its context to ListAllComponents")
+	assert.Equal(t, "expected", receivedCtx.Value(key), "the caller-supplied context must reach ListAllComponents unchanged, not context.Background()")
 }
 
 // configuredCloudFormationStackNames must propagate a describe-stacks failure.
@@ -160,7 +168,7 @@ func TestConfiguredCloudFormationStackNames_DescribeError(t *testing.T) {
 		return nil, sentinel
 	}
 
-	_, err := configuredCloudFormationStackNames(&schema.AtmosConfiguration{}, "dev", nil)
+	_, err := configuredCloudFormationStackNames(context.Background(), &schema.AtmosConfiguration{}, "dev", nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, sentinel)
 }
@@ -181,7 +189,7 @@ func TestConfiguredCloudFormationStackNames_ListError(t *testing.T) {
 		return nil, sentinel
 	}
 
-	_, err := configuredCloudFormationStackNames(&schema.AtmosConfiguration{}, "dev", nil)
+	_, err := configuredCloudFormationStackNames(context.Background(), &schema.AtmosConfiguration{}, "dev", nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, sentinel)
 }

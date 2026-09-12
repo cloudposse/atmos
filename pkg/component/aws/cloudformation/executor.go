@@ -122,12 +122,30 @@ var operationsSkippingTemplateLoad = map[Operation]bool{
 	OperationGetPolicy:        true,
 }
 
+// operationsSkippingStackPolicyLoad are operations that load a template (so
+// they're not in operationsSkippingTemplateLoad) but never consume
+// spec.StackPolicyBody: fmt only round-trips the template file, and
+// changeset-create's createChangeSet call has no stack-policy parameter
+// (CreateChangeSet/ExecuteChangeSet don't support one — see setStackPolicy's
+// doc comment). Only runApply's post-apply SetStackPolicy call reads
+// StackPolicyBody, so a missing or unreadable stack_policy file must not
+// block either of these.
+var operationsSkippingStackPolicyLoad = map[Operation]bool{
+	OperationFmt:             true,
+	OperationChangesetCreate: true,
+}
+
 // resolveSpecAndTemplate builds the SDK-ready stackSpec and — for every
 // operation not in operationsSkippingTemplateLoad — resolves the component's
 // on-disk path (including JIT source provisioning), loads the template body,
 // registers NoEcho values with the masker, and loads the stack policy.
 // Operations in operationsSkippingTemplateLoad only need spec fields already
 // set by buildStackSpec (e.g. StackName), so they return immediately.
+// Operations in operationsSkippingStackPolicyLoad need the template but never
+// consume StackPolicyBody (only runApply's post-apply SetStackPolicy call
+// does), so they return right after the template load instead of also
+// resolving and reading a stack_policy file that a missing/unreadable policy
+// would otherwise block them on for no reason.
 func resolveSpecAndTemplate(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) (*stackSpec, error) {
 	spec, err := buildStackSpec(info.ComponentSection)
 	if err != nil {
@@ -153,6 +171,10 @@ func resolveSpecAndTemplate(atmosConfig *schema.AtmosConfiguration, info *schema
 		return nil, err
 	}
 	registerNoEchoValues(spec.TemplateBody, spec)
+
+	if operationsSkippingStackPolicyLoad[operation] {
+		return spec, nil
+	}
 
 	spec.StackPolicyBody, err = loadStackPolicyBody(componentPath, spec)
 	if err != nil {
