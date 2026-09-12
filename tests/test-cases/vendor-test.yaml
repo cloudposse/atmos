@@ -88,6 +88,15 @@ tests:
       - "--tags=git"
     expect:
       timeout: "5m"
+      # atmos vendor pull only prints these per-component "✓ <component> (<ref>)" lines, and the
+      # trailing success count, for components it actually vendored this run -- so matching them
+      # (rather than just file_exists) proves THIS invocation did the vendoring, not that stale
+      # gitignored output from an earlier case (atmos_vendor_pull) in the same shard happened to
+      # already be sitting in components/**.
+      stderr:
+        - "✓ github/stargazers \\(main\\)"
+        - "✓ weather \\(main\\)"
+        - "✓ Vendored components \\(success: 2\\)"
       file_exists:
         - "./components/terraform/github/stargazers/main/main.tf"
         - "./components/terraform/github/stargazers/main/outputs.tf"
