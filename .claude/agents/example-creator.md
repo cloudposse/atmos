@@ -309,35 +309,35 @@ import EmbedFile from '@site/src/components/EmbedFile'
 
 ## File Browser Integration
 
-Examples appear in the website file browser at `/examples/{name}`. The file-browser plugin automatically scans examples and displays them with tags and related documentation links.
+Examples appear in the website file browser at `/examples/{name}`. The file-browser plugin scans each example's `README.md` **frontmatter** for its title, category tags, and optional cast — this is the current, primary mechanism (not a hardcoded lookup table).
 
-### Plugin Configuration
+### README Frontmatter
 
-**File:** `website/plugins/file-browser/index.js`
+Add a YAML frontmatter block at the very top of `examples/{name}/README.md`:
 
-Two mappings control example metadata:
-
-#### TAGS_MAP
-
-Assigns category tags to examples for filtering:
-
-```javascript
-const TAGS_MAP = {
-  // Add your example:
-  '{name}': ['Automation'],  // Choose: Quickstart, Stacks, Components, Automation, DX
-};
+```yaml
+---
+title: Human-Readable Title
+tags: [Automation]
+cast:
+  file: /casts/examples/{name}/{recording}.cast
+  title: atmos {name} demo
+---
 ```
 
-**Available Categories:**
-- `Quickstart` - Quick start tutorials
-- `Stacks` - Stack configuration examples
-- `Components` - Component/library examples
-- `Automation` - Workflow/automation examples
-- `DX` - Developer experience (tools, containers, etc.)
+**Required:** `title`, `tags` (an array — an example can carry more than one, e.g. `[Emulators, Terraform]`). **Optional:** `cast` — only add it if you actually recorded one (see `atmos-asciicast` skill / `atmos --chdir=demo/casts casts generate` conventions); omit the whole block otherwise, don't reference a `.cast` file that doesn't exist under `website/static/casts/examples/{name}/`.
 
-#### DOCS_MAP
+**Available tag categories** (in display order on the gallery — see `DEFAULT_TAG_ORDER` in `website/plugins/file-browser/index.js`): `Quickstart`, `Stacks`, `Components`, `Kubernetes`, `Automation`, `Hooks`, `Emulators`, `AI`, `DX`. A tag outside this list still gets its own gallery section (appended alphabetically after the known ones) rather than being dropped — you don't need to register a new category anywhere, just use it in `tags:`.
 
-Links related documentation to examples:
+### When to Update
+
+**ALWAYS** add this frontmatter block when creating a new example — without it, the example still appears in the gallery (falls back to the directory name as its title) but with **no tags at all**, so it's invisible under every category filter except "All". This is a real, previously-shipped bug (`hooks-tflint`, `hooks-tfmigrate`, `hooks-tfmigrate-advanced` all landed without frontmatter and were silently unfiltered for weeks) — don't repeat it.
+
+There's also a legacy fallback (`TAGS_MAP`/`CAST_MAP`/`DOCS_MAP` in `website/plugins/file-browser/index.js`) used only when an example has **no frontmatter at all**; frontmatter always wins when both exist. Don't add new entries there — it predates the frontmatter convention and only still exists for a handful of pre-frontmatter examples that haven't been migrated.
+
+### DOCS_MAP (still current)
+
+Related-docs links are still assigned via `DOCS_MAP` (frontmatter has no equivalent field yet):
 
 ```javascript
 const DOCS_MAP = {
@@ -347,12 +347,7 @@ const DOCS_MAP = {
 };
 ```
 
-### When to Update
-
-**ALWAYS** update both maps when creating a new example. This ensures:
-- Example appears with correct category filter in file browser
-- Related docs are linked for easy navigation
-- EmbedExample component displays example correctly
+Add an entry here when the example demonstrates a documented feature.
 
 ## Creation Workflow
 

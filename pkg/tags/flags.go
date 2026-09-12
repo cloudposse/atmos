@@ -29,12 +29,16 @@ func ParseTagsFlag(input string) []string {
 // labelsFlagSource is the default source name used in --labels parse errors.
 const labelsFlagSource = "--labels"
 
-// ParseLabelsFlag parses a comma-separated key=value (or key:value) list into a map[string]string.
-// Duplicate keys are last-wins. Errors name the "--labels" flag as their source.
-func ParseLabelsFlag(input string) (map[string]string, error) {
+// ParseLabelsFlag parses a slice of key=value (or key:value) pairs into a map[string]string.
+// The input is shaped the way pflag's StringSlice flag type hands it over: comma-splitting within
+// a single occurrence happens in pflag itself and repeated occurrences accumulate
+// (e.g. --labels a=1,b=2 --labels c=3). Elements are still comma-split here so a value bound from
+// an environment variable (one element holding the whole comma-separated list) parses the same
+// way. Duplicate keys are last-wins. Errors name the "--labels" flag as their source.
+func ParseLabelsFlag(input []string) (map[string]string, error) {
 	defer perf.Track(nil, "tags.ParseLabelsFlag")()
 
-	return ParseLabelsFlagFrom(input, labelsFlagSource)
+	return ParseLabelsFlagFrom(strings.Join(input, ","), labelsFlagSource)
 }
 
 // ParseLabelsFlagFrom parses a comma-separated key=value (or key:value) list into a map[string]string.

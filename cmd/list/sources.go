@@ -63,7 +63,7 @@ type SourcesOptions struct {
 	ProcessFunctions bool
 	Skip             []string
 	Tags             []string
-	LabelsRaw        string
+	LabelsRaw        []string
 }
 
 // sourcesCmd lists components with source configuration.
@@ -133,7 +133,7 @@ func parseSourcesOptions(cmd *cobra.Command, v *viper.Viper, args []string) *Sou
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		Tags:             tags.ParseTagsFlag(v.GetString(tagsViperKey)),
-		LabelsRaw:        v.GetString(labelsViperKey),
+		LabelsRaw:        v.GetStringSlice(labelsViperKey),
 	}
 	if len(args) > 0 {
 		opts.Component = args[0]

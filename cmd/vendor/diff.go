@@ -62,7 +62,7 @@ func resolveDiffComponents(cmd *cobra.Command, v *viper.Viper) ([]string, error)
 	component := v.GetString("component")
 	filterTags := splitTags(v.GetString(vendorTagsViperKey))
 	stack := v.GetString("stack")
-	labels, err := pkgtags.ParseLabelsFlag(v.GetString(vendorLabelsViperKey))
+	labels, err := pkgtags.ParseLabelsFlag(v.GetStringSlice(vendorLabelsViperKey))
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func init() {
 		flags.WithEnvVars(vendorTagsFlagName, envVendorTags),
 		flags.WithViperKey(vendorTagsFlagName, vendorTagsViperKey),
 		flags.WithStringFlag("stack", "s", "", "Diff every component belonging to the specified stack"),
-		flags.WithStringFlag(vendorLabelsFlagName, "", "", vendorLabelsFlagHelp),
+		flags.WithStringSliceFlag(vendorLabelsFlagName, "", nil, vendorLabelsFlagHelp),
 		flags.WithEnvVars(vendorLabelsFlagName, envVendorLabels),
 		flags.WithViperKey(vendorLabelsFlagName, vendorLabelsViperKey),
 	)

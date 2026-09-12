@@ -36,7 +36,7 @@ type InstancesOptions struct {
 	ProcessFunctions bool
 	Skip             []string
 	Tags             []string
-	LabelsRaw        string
+	LabelsRaw        []string
 	// IncludeDependencies/IncludeDependents preview the dependency closure
 	// (0 = off, -1 = unlimited, N>0 = N levels).
 	IncludeDependencies int
@@ -94,7 +94,7 @@ func parseInstancesOptions(cmd *cobra.Command, v *viper.Viper) *InstancesOptions
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		Tags:             tags.ParseTagsFlag(v.GetString(tagsViperKey)),
-		LabelsRaw:        v.GetString(labelsViperKey),
+		LabelsRaw:        v.GetStringSlice(labelsViperKey),
 	}
 }
 
