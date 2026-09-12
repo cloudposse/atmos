@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/smithy-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -126,13 +127,17 @@ func TestGetOutputs_APIError(t *testing.T) {
 // for a named, nonexistent stack — as opposed to the empty-Stacks shape covered by
 // TestGetOutputs_StackNotFound) as ErrAwsCloudFormationStackNotFound, not the generic
 // ErrAwsCloudFormationAPICallFailed, so callers (e.g. `!aws.cloudformation.output`'s YQ-default
-// fallback) can detect a missing stack via errors.Is.
+// fallback) can detect a missing stack via errors.Is. Uses a typed smithy.APIError (as the real SDK
+// would return), not a plain errors.New with a look-alike message, so the assertion actually
+// exercises isStackNotFoundError's errors.As/ErrorCode() check.
 func TestGetOutputs_APIError_StackNotFoundValidationError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := NewMockcloudFormationAPI(ctrl)
 
-	sdkErr := errors.New(`operation error CloudFormation: DescribeStacks, https response error StatusCode: 400, ` +
-		`api error ValidationError: Stack [missing-stack] does not exist`)
+	sdkErr := &smithy.GenericAPIError{
+		Code:    "ValidationError",
+		Message: "Stack [missing-stack] does not exist",
+	}
 	mockClient.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, sdkErr)
 
 	stubOutputsSeams(t, nil, mockClient)
@@ -143,6 +148,50 @@ func TestGetOutputs_APIError_StackNotFoundValidationError(t *testing.T) {
 	assert.NotErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed,
 		"a classified missing-stack error must not also match the generic API-call-failed sentinel")
 	assert.Contains(t, err.Error(), "missing-stack")
+}
+
+// GetOutputs must NOT classify a ValidationError whose message doesn't mention "does not exist" as
+// a missing stack — e.g. a malformed StackName parameter — so it isn't misreported as
+// ErrAwsCloudFormationStackNotFound.
+func TestGetOutputs_APIError_ValidationErrorOtherMessage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockcloudFormationAPI(ctrl)
+
+	sdkErr := &smithy.GenericAPIError{
+		Code:    "ValidationError",
+		Message: "1 validation error detected: Value at 'stackName' failed to satisfy constraint",
+	}
+	mockClient.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, sdkErr)
+
+	stubOutputsSeams(t, nil, mockClient)
+
+	_, err := GetOutputs(context.Background(), "us-east-1", "bad name", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+	assert.NotErrorIs(t, err, errUtils.ErrAwsCloudFormationStackNotFound,
+		"a ValidationError not about a missing stack must not be misclassified as stack-not-found")
+}
+
+// GetOutputs must NOT classify a non-ValidationError API error mentioning "does not exist" (e.g. an
+// unrelated AccessDenied on a resource that "does not exist" in the IAM policy sense) as a missing
+// stack — the ErrorCode gate must be checked, not just the message substring.
+func TestGetOutputs_APIError_NonValidationErrorCodeWithMatchingMessage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockcloudFormationAPI(ctrl)
+
+	sdkErr := &smithy.GenericAPIError{
+		Code:    "AccessDenied",
+		Message: "User is not authorized: resource does not exist in policy",
+	}
+	mockClient.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(nil, sdkErr)
+
+	stubOutputsSeams(t, nil, mockClient)
+
+	_, err := GetOutputs(context.Background(), "us-east-1", "vpc", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationAPICallFailed)
+	assert.NotErrorIs(t, err, errUtils.ErrAwsCloudFormationStackNotFound,
+		"the ErrorCode gate must reject a non-ValidationError even if the message matches")
 }
 
 // GetOutputs must propagate a config-loading failure without ever
