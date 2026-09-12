@@ -50,6 +50,8 @@ atmos_cli_config:
       auto_generate_files: false
     container:
       base_path: components/container
+    aws/cloudformation:
+      base_path: components/cloudformation
   stacks:
     base_path: stacks
     included_paths:

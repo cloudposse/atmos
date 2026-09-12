@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/go-getter"
@@ -96,6 +97,96 @@ func IsOCIURI(uri string) bool {
 // Go-getter supports both explicit s3:: prefix and auto-detected .amazonaws.com URLs.
 func IsS3URI(uri string) bool {
 	return strings.HasPrefix(uri, "s3::") || strings.Contains(uri, ".amazonaws.com/")
+}
+
+// directoryArchiveExtensions lists the go-getter decompressor extensions that
+// unpack to a directory of files (possibly just one), as opposed to the
+// single-compressed-file formats (.gz, .bz2, .xz, .zst alone) that unpack to
+// exactly one file. Longer extensions are listed before their suffixes (e.g.
+// "tar.gz" before "gz" would matter if this were used for prefix matching;
+// HasSuffix below doesn't require that ordering, but it documents intent).
+var directoryArchiveExtensions = []string{
+	".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz",
+	".tar.zst", ".tzst", ".tar", ".zip",
+}
+
+// archiveQueryParam is go-getter's query parameter that explicitly overrides
+// extension-based archive detection: any value that strconv.ParseBool parses
+// as false ("false", "0", "f", "F", "FALSE", "False", etc.) disables
+// unarchiving even for a recognized archive extension, matching go-getter's
+// own client.go (`if b, err := strconv.ParseBool(archiveV); err == nil && !b
+// { archiveV = "-" }`). Any other non-empty value -- a ParseBool-true value or
+// an explicit archive type like "zip" that ParseBool can't parse at all --
+// forces unarchiving. An empty value (`?archive=`, as opposed to the
+// parameter being entirely absent) is treated the same as absent -- go-getter
+// falls through to extension-based detection rather than forcing
+// unarchiving. See
+// https://pkg.go.dev/github.com/hashicorp/go-getter#hdr-Archiving.
+const archiveQueryParam = "archive"
+
+// IsArchiveURI checks whether go-getter will unpack this source into a
+// directory tree (a tarball or zip), rather than staging it as a single file.
+// It honors go-getter's explicit `archive` query parameter override before
+// falling back to extension-based detection on the path suffix, and strips
+// both any go-getter subdirectory (`//...`) suffix and the query string
+// first: a URI like `https://example.com/archive.zip//nested/dir` must still
+// be recognized as an archive by its source extension, not misclassified by
+// its subdirectory path, and `?archive=zip`/`?archive=false` must override
+// extension detection either direction (forcing unarchiving even with no
+// recognized extension, or disabling it for a recognized one) rather than
+// being silently dropped along with the rest of the query string.
+func IsArchiveURI(uri string) bool {
+	source, _ := getter.SourceDirSubdir(uri)
+
+	path := source
+	var rawQuery string
+	if idx := strings.IndexByte(path, '?'); idx != -1 {
+		rawQuery = path[idx+1:]
+		path = path[:idx]
+	}
+
+	if archive, ok := archiveQueryOverride(rawQuery); ok {
+		return archive
+	}
+
+	lowerPath := strings.ToLower(path)
+	for _, ext := range directoryArchiveExtensions {
+		if strings.HasSuffix(lowerPath, ext) {
+			return true
+		}
+	}
+	return false
+}
+
+// archiveQueryOverride parses go-getter's explicit `archive` query parameter
+// override out of rawQuery. It returns ok == false whenever there is no
+// override to apply -- rawQuery is empty or unparseable, the archive
+// parameter is absent, or its value is empty (`?archive=`, which go-getter
+// treats the same as absent: see client.go's `archiveV != ""` check
+// upstream) -- signaling the caller to fall back to extension-based
+// detection instead.
+func archiveQueryOverride(rawQuery string) (archive bool, ok bool) {
+	if rawQuery == "" {
+		return false, false
+	}
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return false, false
+	}
+	raw, present := values[archiveQueryParam]
+	if !present || len(raw) == 0 || raw[0] == "" {
+		return false, false
+	}
+	// Parse with strconv.ParseBool, exactly like go-getter itself does, so
+	// boolean-false spellings other than the literal string "false" (e.g.
+	// "0", "f") are recognized as disabling unarchiving instead of being
+	// misclassified as forcing it. A value ParseBool can't parse at all
+	// (e.g. an explicit archive type like "zip") isn't a boolean override --
+	// it forces unarchiving, same as before.
+	if b, err := strconv.ParseBool(raw[0]); err == nil {
+		return b, true
+	}
+	return true, true
 }
 
 // HasLocalPathPrefix checks if the URI starts with local path prefixes.

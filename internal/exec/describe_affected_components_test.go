@@ -584,6 +584,359 @@ func TestAddHelmSectionAffected_NoFalsePositives(t *testing.T) {
 	})
 }
 
+const (
+	cfnTestStack     = "dev"
+	cfnTestComponent = "vpc"
+)
+
+func cfnRemoteStacksWith(remoteComp map[string]any) map[string]any {
+	return map[string]any{
+		cfnTestStack: map[string]any{
+			"components": map[string]any{
+				cfg.CloudFormationComponentType: map[string]any{
+					cfnTestComponent: remoteComp,
+				},
+			},
+		},
+	}
+}
+
+func cfnAtmosConfig() *schema.AtmosConfiguration {
+	return &schema.AtmosConfiguration{
+		Components: schema.Components{
+			CloudFormation: schema.AwsCloudFormation{BasePath: "components/cloudformation"},
+		},
+	}
+}
+
+// TestAddCloudFormationSectionAffected covers every first-class aws/cloudformation
+// section addCloudFormationSectionAffected checks, including stack_name — a change
+// to stack_name retargets the deployed CloudFormation stack entirely, so it must be
+// detected the same as template/parameters/etc.
+func TestAddCloudFormationSectionAffected(t *testing.T) {
+	tests := []struct {
+		name       string
+		section    string
+		localVal   any
+		remoteVal  any
+		wantReason string
+	}{
+		{"stack_name", sectionNameStackName, "vpc-prod", "vpc-staging", affectedReasonStackStackName},
+		{"template", sectionNameTemplate, "template-a.yaml", "template-b.yaml", affectedReasonStackTemplate},
+		{"parameters", sectionNameParameters, map[string]any{"CidrBlock": "10.0.0.0/16"}, map[string]any{"CidrBlock": "10.1.0.0/16"}, affectedReasonStackParameters},
+		{"capabilities", sectionNameCapabilities, []any{"CAPABILITY_IAM"}, []any{"CAPABILITY_NAMED_IAM"}, affectedReasonStackCapabilities},
+		{"tags", sectionNameTags, map[string]any{"env": "a"}, map[string]any{"env": "b"}, affectedReasonStackTags},
+		{"stack_policy", sectionNameStackPolicy, map[string]any{"file": "a.json"}, map[string]any{"file": "b.json"}, affectedReasonStackStackPolicy},
+		{"role_arn", sectionNameRoleArn, "arn:aws:iam::111:role/a", "arn:aws:iam::111:role/b", affectedReasonStackRoleArn},
+		{"notification_arns", sectionNameNotificationArns, []any{"arn:aws:sns:a"}, []any{"arn:aws:sns:b"}, affectedReasonStackNotificationArns},
+		{"disable_rollback", sectionNameDisableRollback, true, false, affectedReasonStackDisableRollback},
+		{"termination_protection", sectionNameTerminationProtection, true, false, affectedReasonStackTerminationProtection},
+		{"timeout_in_minutes", sectionNameTimeoutInMinutes, 10, 20, affectedReasonStackTimeoutInMinutes},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			componentSection := map[string]any{tt.section: tt.localVal}
+			remoteStacks := cfnRemoteStacksWith(map[string]any{tt.section: tt.remoteVal})
+
+			var affected []schema.Affected
+			err := addCloudFormationSectionAffected(
+				&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+				&componentSection, &remoteStacks, &remoteStacks,
+				false, false,
+			)
+			require.NoError(t, err)
+
+			require.Len(t, affected, 1)
+			assert.Equal(t, cfnTestComponent, affected[0].Component)
+			assert.Equal(t, cfg.CloudFormationComponentType, affected[0].ComponentType)
+			assert.Equal(t, tt.wantReason, affected[0].Affected)
+		})
+	}
+}
+
+func TestAddCloudFormationSectionAffected_NoFalsePositives(t *testing.T) {
+	componentSection := map[string]any{sectionNameStackName: "vpc-prod"}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{sectionNameStackName: "vpc-prod"})
+
+	var affected []schema.Affected
+	err := addCloudFormationSectionAffected(
+		&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+		&componentSection, &remoteStacks, &remoteStacks,
+		false, false,
+	)
+	require.NoError(t, err)
+	assert.Empty(t, affected)
+}
+
+// A section absent from the local component and never present on the remote
+// component either (e.g. tags was never configured on either ref) must not
+// be reported as affected -- only a genuine presence asymmetry is a change.
+func TestAddCloudFormationSectionAffected_AbsentOnBothSidesNoFalsePositive(t *testing.T) {
+	t.Parallel()
+
+	componentSection := map[string]any{sectionNameStackName: "vpc-prod"}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{sectionNameStackName: "vpc-prod"})
+
+	var affected []schema.Affected
+	err := addCloudFormationSectionAffected(
+		&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+		&componentSection, &remoteStacks, &remoteStacks,
+		false, false,
+	)
+	require.NoError(t, err)
+	assert.Empty(t, affected, "tags/stack_policy/role_arn/etc. absent on both sides must not report as affected")
+}
+
+// A section that existed on the remote ref but was removed from the current
+// component (present remotely, absent locally) must still be detected as a
+// change: the previous local-presence guard silently skipped this direction,
+// letting a removed tags/stack_policy/role_arn/etc. section slip past
+// affected detection and skip a required deployment.
+func TestAddCloudFormationSectionAffected_SectionRemoved(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		section    string
+		remoteVal  any
+		wantReason string
+	}{
+		{"tags", sectionNameTags, map[string]any{"env": "prod"}, affectedReasonStackTags},
+		{"stack_policy", sectionNameStackPolicy, map[string]any{"file": "policy.json"}, affectedReasonStackStackPolicy},
+		{"role_arn", sectionNameRoleArn, "arn:aws:iam::111:role/deploy", affectedReasonStackRoleArn},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// stack_name is present and unchanged on both sides -- only the
+			// removed section under test should surface as affected.
+			componentSection := map[string]any{sectionNameStackName: "vpc-prod"}
+			remoteStacks := cfnRemoteStacksWith(map[string]any{
+				sectionNameStackName: "vpc-prod",
+				tt.section:           tt.remoteVal,
+			})
+
+			var affected []schema.Affected
+			err := addCloudFormationSectionAffected(
+				&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+				&componentSection, &remoteStacks, &remoteStacks,
+				false, false,
+			)
+			require.NoError(t, err)
+
+			require.Len(t, affected, 1, "a section removed locally but present remotely must be detected")
+			assert.Equal(t, tt.wantReason, affected[0].Affected)
+		})
+	}
+}
+
+// A section added locally that never existed on the remote ref (present
+// locally, absent remotely) must also be detected as a change.
+func TestAddCloudFormationSectionAffected_SectionAdded(t *testing.T) {
+	t.Parallel()
+
+	componentSection := map[string]any{
+		sectionNameStackName: "vpc-prod",
+		sectionNameTags:      map[string]any{"env": "prod"},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{sectionNameStackName: "vpc-prod"})
+
+	var affected []schema.Affected
+	err := addCloudFormationSectionAffected(
+		&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+		&componentSection, &remoteStacks, &remoteStacks,
+		false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, affectedReasonStackTags, affected[0].Affected)
+}
+
+// TestProcessCloudFormationComponentsIndexed mirrors TestProcessHelmComponentsIndexed:
+// a metadata change, a first-class section change (stack_name), and a settings
+// change must all surface as distinct affected reasons for the same component.
+func TestProcessCloudFormationComponentsIndexed(t *testing.T) {
+	atmosConfig := cfnAtmosConfig()
+	cloudFormationSection := map[string]any{
+		cfnTestComponent: map[string]any{
+			sectionNameMetadata:     map[string]any{"component": "vpc-v1"},
+			sectionNameStackName:    "vpc-prod",
+			cfg.SettingsSectionName: map[string]any{"s": "1"},
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameMetadata:     map[string]any{"component": "vpc-v2"},
+		sectionNameStackName:    "vpc-staging",
+		cfg.SettingsSectionName: map[string]any{"s": "2"},
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, true, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Equal(t, cfg.CloudFormationComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackMetadata)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackStackName)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+}
+
+func TestProcessCloudFormationComponentsIndexed_NotAffected(t *testing.T) {
+	atmosConfig := cfnAtmosConfig()
+	identical := map[string]any{
+		sectionNameMetadata:  map[string]any{"component": "vpc-v1"},
+		sectionNameStackName: "vpc-prod",
+	}
+	cloudFormationSection := map[string]any{cfnTestComponent: identical}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameMetadata:  map[string]any{"component": "vpc-v1"},
+		sectionNameStackName: "vpc-prod",
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, false,
+	)
+	require.NoError(t, err)
+	assert.Empty(t, affected)
+}
+
+func TestProcessCloudFormationComponentsIndexed_FolderChanged(t *testing.T) {
+	atmosConfig := cfnAtmosConfig()
+	cloudFormationSection := map[string]any{
+		cfnTestComponent: map[string]any{
+			sectionNameStackName: "vpc-prod",
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameStackName: "vpc-prod",
+	})
+
+	changedFile, err := filepath.Abs(filepath.Join("components", "cloudformation", cfnTestComponent, "template.yaml"))
+	require.NoError(t, err)
+
+	filesIndex := newChangedFilesIndex(atmosConfig, []string{changedFile}, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Equal(t, cfg.CloudFormationComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonComponent)
+}
+
+func TestProcessCloudFormationComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *testing.T) {
+	atmosConfig := cfnAtmosConfig()
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameStackName: "vpc-staging",
+	})
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	t.Run("abstract skipped", func(t *testing.T) {
+		cloudFormationSection := map[string]any{
+			cfnTestComponent: map[string]any{
+				sectionNameMetadata:  map[string]any{"type": "abstract"},
+				sectionNameStackName: "vpc-prod",
+			},
+		}
+
+		affected, err := processCloudFormationComponentsIndexed(
+			cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("locked skipped when excluded", func(t *testing.T) {
+		cloudFormationSection := map[string]any{
+			cfnTestComponent: map[string]any{
+				sectionNameMetadata:  map[string]any{"locked": true},
+				sectionNameStackName: "vpc-prod",
+			},
+		}
+
+		affected, err := processCloudFormationComponentsIndexed(
+			cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, true,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("non-map component section skipped", func(t *testing.T) {
+		affected, err := processCloudFormationComponentsIndexed(
+			cfnTestStack, map[string]any{cfnTestComponent: "invalid"}, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+}
+
+// TestProcessStackAffected_CloudFormationSection covers processStackAffected's
+// aws/cloudformation dispatch branch (describe_affected_utils_parallel.go),
+// which routes a stack's `components."aws/cloudformation"` section into
+// processCloudFormationComponentsIndexed alongside terraform/helmfile/packer/
+// ansible/kubernetes/helm.
+func TestProcessStackAffected_CloudFormationSection(t *testing.T) {
+	atmosConfig := cfnAtmosConfig()
+
+	stackSection := map[string]any{
+		"components": map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				cfnTestComponent: map[string]any{
+					sectionNameStackName: "vpc-prod",
+				},
+			},
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameStackName: "vpc-staging",
+	})
+	currentStacks := map[string]any{cfnTestStack: stackSection}
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processStackAffected(
+		cfnTestStack, stackSection, &remoteStacks, &currentStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Equal(t, cfg.CloudFormationComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackStackName)
+}
+
 func TestIsComponentSectionEqual(t *testing.T) {
 	t.Parallel()
 

@@ -1,0 +1,61 @@
+---
+title: atmos aws cloudformation
+sidebar_label: cloudformation
+sidebar_class_name: command
+id: cloudformation
+description: Deploy and manage native aws/cloudformation stacks using the AWS SDK for Go v2.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Deploy, inspect, and delete native `aws/cloudformation` stacks directly through the AWS SDK for Go v2 — the
+same stack-based workflow you use for Terraform, Helm, and Kubernetes components, with no `aws` CLI or
+`cfn`/`sam`/`Rain` binary dependency. Alias: `atmos aws cfn`.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Configure CloudFormation Components">
+  Set the default component location in `atmos.yaml`, then describe each stack's
+  template, parameters, capabilities, and delivery behavior with `template`,
+  `stack_name`, `parameters`, `capabilities`, `tags`, `stack_policy`, and more.
+  <div>
+    <PrimaryCTA to="/stacks/components/aws-cloudformation">Stack Configuration</PrimaryCTA>
+  </div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation --help" src="/casts/screengrabs/atmos-aws-cloudformation--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation render <component> --stack <stack>
+atmos aws cloudformation diff <component> --stack <stack>
+atmos aws cloudformation plan <component> --stack <stack>
+atmos aws cloudformation apply <component> --stack <stack>
+atmos aws cloudformation deploy <component> --stack <stack>
+atmos aws cloudformation delete <component> --stack <stack>
+atmos aws cloudformation validate <component> --stack <stack>
+atmos aws cloudformation output <component> --stack <stack>
+
+atmos aws cloudformation apply --all --stack <stack>
+atmos aws cloudformation apply --affected --base origin/main
+
+atmos aws cloudformation apply --affected --tags production
+atmos aws cloudformation apply --all --labels cost-center=platform
+```
+
+The `cfn` alias works everywhere `cloudformation` does:
+
+```shell
+atmos aws cfn apply vpc -s plat-ue2-dev
+```
+
+## Subcommands
+
+<DocCardList/>

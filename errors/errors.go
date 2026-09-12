@@ -1650,6 +1650,21 @@ var (
 	ErrHelmReleaseUpgrade            = errors.New("failed to upgrade helm release")
 	ErrHelmReleaseUninstall          = errors.New("failed to uninstall helm release")
 	ErrHelmReleaseOperation          = errors.New("failed to perform helm release operation")
+
+	// Native aws/cloudformation component errors.
+	ErrMissingAwsCloudFormationTemplate           = errors.New("aws/cloudformation component is missing a 'template' reference")
+	ErrMissingAwsCloudFormationStackName          = errors.New("aws/cloudformation component is missing a 'stack_name'")
+	ErrInvalidAwsCloudFormationCapabilities       = errors.New("invalid aws/cloudformation capabilities")
+	ErrInvalidAwsCloudFormationSettings           = errors.New("invalid aws/cloudformation settings")
+	ErrInvalidComponentsAwsCloudFormation         = errors.New("invalid 'components.aws/cloudformation' section")
+	ErrInvalidSpecificAwsCloudFormationComponent  = errors.New("invalid aws/cloudformation component configuration")
+	ErrAwsCloudFormationChangeSetFailed           = errors.New("aws/cloudformation changeset failed")
+	ErrAwsCloudFormationDriftDetected             = errors.New("aws/cloudformation stack has drifted")
+	ErrAwsCloudFormationFlagsMutuallyExclusive    = errors.New("--all and --affected are mutually exclusive")
+	ErrAwsCloudFormationComponentArgWithSelection = errors.New("component argument cannot be used with --all, --affected, --tags, or --labels")
+	ErrAwsCloudFormationComponentArgRequired      = errors.New("requires exactly one component argument unless --all, --affected, --tags, or --labels is set")
+	ErrAwsCloudFormationIdentityResolutionFailed  = errors.New("aws/cloudformation component requested an identity, but the auth manager could not resolve it")
+	ErrAwsCloudFormationAPICallFailed             = errors.New("aws/cloudformation API call failed")
 )
 
 // Stack dependency (`depends_on`) resolution errors.

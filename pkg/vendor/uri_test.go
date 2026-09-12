@@ -406,6 +406,95 @@ func TestIsS3URI(t *testing.T) {
 	assert.False(t, IsS3URI(""))
 }
 
+func TestIsArchiveURI(t *testing.T) {
+	assert.True(t, IsArchiveURI("https://example.com/module.tar.gz"))
+	assert.True(t, IsArchiveURI("file:///tmp/source.tar.gz"))
+	assert.True(t, IsArchiveURI("https://example.com/module.tgz"))
+	assert.True(t, IsArchiveURI("https://example.com/module.zip"))
+	assert.True(t, IsArchiveURI("https://example.com/module.tar"))
+	assert.True(t, IsArchiveURI("https://example.com/module.tar.bz2"))
+	assert.True(t, IsArchiveURI("https://example.com/archive.zip?checksum=sha256:abc123"))
+	// Single-compressed-file formats unpack to one file, not a directory.
+	assert.False(t, IsArchiveURI("https://example.com/dns.yaml.gz"))
+	assert.False(t, IsArchiveURI("https://example.com/dns.yaml.bz2"))
+	// Non-archive sources.
+	assert.False(t, IsArchiveURI("https://example.com/dns.yaml"))
+	assert.False(t, IsArchiveURI("github.com/cloudposse/terraform-null-label//exports"))
+	assert.False(t, IsArchiveURI(""))
+}
+
+// IsArchiveURI must honor go-getter's explicit `archive` query parameter
+// override in both directions -- forcing unarchiving even without a
+// recognized extension, and disabling it even with one -- and must strip a
+// go-getter subdirectory (`//...`) suffix before checking the source's own
+// extension, rather than checking the combined source+subdir path suffix.
+func TestIsArchiveURI_ArchiveQueryParamAndSubdirectory(t *testing.T) {
+	// archive=<type> forces unarchiving even with no recognized extension.
+	assert.True(t, IsArchiveURI("https://example.com/download?archive=zip"),
+		"an explicit archive type must force unarchiving regardless of extension")
+	// archive=false disables unarchiving even for a recognized extension.
+	assert.False(t, IsArchiveURI("https://example.com/archive.zip?archive=false"),
+		"archive=false must override extension-based detection")
+	// A subdirectory suffix (go-getter's //nested syntax) must not mask the
+	// source's own archive extension.
+	assert.True(t, IsArchiveURI("https://example.com/archive.zip//nested"),
+		"a subdirectory suffix must not hide the source's archive extension")
+	// archive=true is the explicit form of the default (extension-detected)
+	// behavior and must still force unarchiving.
+	assert.True(t, IsArchiveURI("https://example.com/download?archive=true"))
+	// A subdirectory combined with an explicit archive override: the override
+	// still wins, and the subdirectory suffix is not consulted.
+	assert.False(t, IsArchiveURI("https://example.com/archive.zip//nested?archive=false"))
+}
+
+// go-getter's own client.go parses the `archive` query value with
+// strconv.ParseBool, so boolean-false spellings other than the literal
+// string "false" -- "0", "f", "F", "FALSE", "False" -- must disable
+// unarchiving too, and boolean-true spellings other than "true" -- "1", "t",
+// "T", "TRUE", "True" -- must still force it. Regression test for a bug
+// where only `strings.EqualFold(value, "false")` was checked, so
+// `archive=0`/`archive=f` were misclassified as forcing unarchiving instead
+// of disabling it.
+func TestIsArchiveURI_ArchiveQueryParamParsesBoolLikeGoGetter(t *testing.T) {
+	// Non-"false" boolean-false spellings must disable unarchiving, even for
+	// a recognized archive extension.
+	assert.False(t, IsArchiveURI("https://example.com/archive.zip?archive=0"),
+		"archive=0 must be parsed as boolean false and disable unarchiving")
+	assert.False(t, IsArchiveURI("https://example.com/archive.zip?archive=f"),
+		"archive=f must be parsed as boolean false and disable unarchiving")
+	assert.False(t, IsArchiveURI("https://example.com/archive.zip?archive=FALSE"),
+		"archive=FALSE must be parsed case-insensitively as boolean false")
+	// Non-"true" boolean-true spellings must still force unarchiving, even
+	// with no recognized extension.
+	assert.True(t, IsArchiveURI("https://example.com/download?archive=1"),
+		"archive=1 must be parsed as boolean true and force unarchiving")
+	assert.True(t, IsArchiveURI("https://example.com/download?archive=t"),
+		"archive=t must be parsed as boolean true and force unarchiving")
+	// A non-boolean value (an explicit archive type) is not touched by
+	// strconv.ParseBool and must still force unarchiving, exactly as before.
+	assert.True(t, IsArchiveURI("https://example.com/download?archive=tar"),
+		"a non-boolean archive type must still force unarchiving")
+}
+
+// An empty `archive` value (`?archive=`, as opposed to the parameter being
+// absent entirely) must be treated as no override at all -- go-getter falls
+// through to extension-based detection in this case rather than forcing
+// unarchiving (see client.go's `archiveV != ""` check upstream). Regression
+// test for a bug where `len(archive) > 0` alone (without checking the value
+// itself was non-empty) treated `?archive=` as `!EqualFold("", "false")` ==
+// true, misclassifying a single-file source as an archive.
+func TestIsArchiveURI_EmptyArchiveQueryParamFallsBackToExtensionDetection(t *testing.T) {
+	// A single-file extension with an empty archive param must still be
+	// detected as a non-archive via extension detection, not forced true.
+	assert.False(t, IsArchiveURI("https://example.com/file.yaml?archive="),
+		"an empty archive value must fall back to extension detection, not force unarchiving")
+	// An actual archive extension with an empty archive param must still be
+	// detected as an archive via extension detection (proving the empty value
+	// falls through rather than forcing false).
+	assert.True(t, IsArchiveURI("https://example.com/archive.zip?archive="),
+		"an empty archive value must fall back to extension detection, not disable unarchiving")
+}
+
 func TestIsNonGitHTTPURI(t *testing.T) {
 	tests := []struct {
 		name     string

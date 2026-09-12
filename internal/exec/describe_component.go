@@ -513,6 +513,7 @@ func detectComponentType(
 		cfg.EmulatorComponentType,
 		cfg.KubernetesComponentType,
 		cfg.HelmComponentType,
+		cfg.CloudFormationComponentType,
 	}
 
 	var result schema.ConfigAndStacksInfo
@@ -678,6 +679,18 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 		cfg.GenerateSectionName:  true,
 		cfg.SourceSectionName:    true,
 		cfg.ProvisionSectionName: true,
+		// aws/cloudformation-specific sections.
+		cfg.TemplateSectionName:              true,
+		cfg.ParametersSectionName:            true,
+		cfg.CapabilitiesSectionName:          true,
+		cfg.TagsSectionName:                  true,
+		cfg.StackPolicySectionName:           true,
+		cfg.RoleArnSectionName:               true,
+		cfg.NotificationArnsSectionName:      true,
+		cfg.DisableRollbackSectionName:       true,
+		cfg.TerminationProtectionSectionName: true,
+		cfg.TimeoutInMinutesSectionName:      true,
+		cfg.StackNameSectionName:             true,
 	}
 
 	filtered := make(map[string]any)

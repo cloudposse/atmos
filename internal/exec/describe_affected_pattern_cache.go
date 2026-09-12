@@ -62,6 +62,8 @@ func (c *componentPathPatternCache) getComponentPathPattern(
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Kubernetes.BasePath, component)
 	case cfg.HelmComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helm.BasePath, component)
+	case cfg.CloudFormationComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.CloudFormation.BasePath, component)
 	default:
 		// Unknown component type - return pattern without caching.
 		return "", fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)

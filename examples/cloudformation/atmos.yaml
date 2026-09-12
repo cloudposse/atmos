@@ -1,0 +1,50 @@
+base_path: "./"
+
+components:
+  "aws/cloudformation":
+    base_path: "components/cloudformation"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+# Component-config Go templating (used by `stack_name:`/`parameters:` below to
+# interpolate `{{ .vars.stage }}`) is opt-in — without this, `{{ }}` in stack
+# manifest values is left as literal text.
+templates:
+  settings:
+    enabled: true
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# A single aws/emulator identity binds the aws/cloudformation component to the
+# `local/aws` sandbox. `atmos emulator up aws -s local` starts the emulator;
+# `pkg/aws/identity.LoadConfigWithAuth` (the in-process AWS SDK config seam every
+# aws/cloudformation operation goes through) resolves credentials for this
+# identity, and the CloudFormation client applies its endpoint override
+# (`newClient` in client.go) so this component reaches the Floci-emulated
+# CloudFormation endpoint instead of real AWS.
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: local/aws
+      default: true
+
+# Custom CLI commands
+commands:
+  - name: "test"
+    description: "Bring up the sandbox, deploy and delete the demo stack, then tear it down"
+    steps:
+      - atmos validate stacks
+      - atmos emulator up aws -s local
+      - atmos aws cfn deploy demo -s local
+      - atmos aws cfn output demo -s local
+      - atmos aws cfn delete demo -s local --auto-approve
+      - atmos emulator down aws -s local

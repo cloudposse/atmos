@@ -14,6 +14,9 @@ package target
 const (
 	// ArtifactKindKubernetesManifests is a stream of rendered Kubernetes objects.
 	ArtifactKindKubernetesManifests = "kubernetes.manifests"
+	// ArtifactKindCloudFormationTemplate is a packaged CloudFormation template
+	// (plus any local assets uploaded alongside it).
+	ArtifactKindCloudFormationTemplate = "cloudformation.template"
 )
 
 // Artifact formats describe how ProvisionArtifact.Files content is encoded.
