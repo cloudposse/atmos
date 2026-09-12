@@ -407,6 +407,28 @@ func WithFlagRegistry(registry *FlagRegistry) Option {
 func WithCompletionPrompt(flagName, promptTitle string, completionFunc CompletionFunc) Option {
 	defer perf.Track(nil, "flags.WithCompletionPrompt")()
 
+	return WithConditionalCompletionPrompt(flagName, promptTitle, completionFunc, nil)
+}
+
+// WithConditionalCompletionPrompt enables interactive prompting for a missing required
+// flag (Use Case 1) only when shouldPrompt returns true. This is the flag-prompt analogue
+// of WithConditionalPositionalArgPrompt: some commands support a bulk/selection mode (e.g.
+// --all, --affected, --tags, --labels) where a single required value like --stack
+// legitimately has no one answer to prompt for, and the prompt must be suppressed for that
+// mode while still firing for a single-target invocation.
+//
+// Example:
+//
+//	WithStackFlag(),
+//	WithConditionalCompletionPrompt("stack", "Choose a stack", stackFlagCompletion,
+//	    func(_ *ParsedConfig) bool { return !hasSelectionFlags(cmd) }),
+func WithConditionalCompletionPrompt(
+	flagName, promptTitle string,
+	completionFunc CompletionFunc,
+	shouldPrompt func(*ParsedConfig) bool,
+) Option {
+	defer perf.Track(nil, "flags.WithConditionalCompletionPrompt")()
+
 	return func(cfg *parserConfig) {
 		if cfg.flagPrompts == nil {
 			cfg.flagPrompts = make(map[string]*flagPromptConfig)
@@ -414,6 +436,7 @@ func WithCompletionPrompt(flagName, promptTitle string, completionFunc Completio
 		cfg.flagPrompts[flagName] = &flagPromptConfig{
 			PromptTitle:    promptTitle,
 			CompletionFunc: completionFunc,
+			ShouldPrompt:   shouldPrompt,
 		}
 	}
 }

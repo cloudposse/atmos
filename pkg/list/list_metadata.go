@@ -112,10 +112,10 @@ type MetadataOptions struct {
 	// Tags filters rows to components whose metadata.tags contains at least
 	// one of these tags (any-match). Empty means no filter.
 	Tags []string
-	// LabelsRaw is the raw --labels flag value (comma-separated key=value or
-	// key:value pairs, all-match), parsed at filter-build time so an invalid
-	// value surfaces as a command error.
-	LabelsRaw string
+	// LabelsRaw is the raw --labels flag value (one element per pflag StringSlice
+	// occurrence/comma-split entry -- key=value or key:value pairs, all-match),
+	// parsed at filter-build time so an invalid value surfaces as a command error.
+	LabelsRaw []string
 }
 
 // ExecuteListMetadataCmd executes the list metadata command using the renderer pipeline.
@@ -176,7 +176,7 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 // flags. Tags use any-match, labels all-match semantics against the flattened
 // `tags`/`labels` row fields.
 // TODO: Also honor the `--filter` spec once its format is defined for metadata.
-func buildMetadataFilters(tagsFilter []string, labelsRaw string) ([]filter.Filter, error) {
+func buildMetadataFilters(tagsFilter []string, labelsRaw []string) ([]filter.Filter, error) {
 	var filters []filter.Filter
 	if len(tagsFilter) > 0 {
 		filters = append(filters, filter.NewTagFilter("tags", tagsFilter))

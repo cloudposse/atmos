@@ -64,10 +64,16 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
   // When searching, sections are built from the search results so empty
   // sections drop out instead of showing a heading with nothing under it.
   const sections = [
-    ...tags.map((tag) => ({
-      tag,
-      examples: filteredExamples.filter((ex) => (ex.tags[0] ?? 'More') === tag),
-    })),
+    ...tags.map((tag) => {
+      const primary = filteredExamples.filter((ex) => (ex.tags[0] ?? 'More') === tag);
+      // A tag can be assigned to an example without being that example's
+      // primary (first) tag — e.g. `[Emulators, Terraform]`. If nothing has
+      // this tag as primary, fall back to any example carrying it at all, so
+      // the section isn't silently dropped just because it's never anyone's
+      // first tag.
+      const examples = primary.length > 0 ? primary : filteredExamples.filter((ex) => ex.tags.includes(tag));
+      return { tag, examples };
+    }),
     { tag: 'More', examples: filteredExamples.filter((ex) => ex.tags.length === 0) },
   ].filter((section) => section.examples.length > 0);
 

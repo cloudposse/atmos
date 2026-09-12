@@ -299,7 +299,7 @@ func TestParseVendorFlags_MalformedLabelsPropagatesError(t *testing.T) {
 	t.Parallel()
 
 	flags := newVendorPullFlagSetWithStack(true)
-	flags.String("labels", "", "")
+	flags.StringSlice("labels", nil, "")
 	require.NoError(t, flags.Set("labels", "not-a-pair"))
 
 	_, err := parseVendorFlags(flags, nil)
@@ -418,7 +418,7 @@ func TestParseOptionalLabelsFlag(t *testing.T) {
 			t.Parallel()
 			flags := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
 			if tc.registerFlag {
-				flags.String("labels", "", "")
+				flags.StringSlice("labels", nil, "")
 				if tc.setValue != "" {
 					require.NoError(t, flags.Set("labels", tc.setValue))
 				}

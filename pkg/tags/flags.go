@@ -26,16 +26,19 @@ func ParseTagsFlag(input string) []string {
 	return result
 }
 
-// ParseLabelsFlag parses a comma-separated key=value (or key:value) list into a map[string]string.
-func ParseLabelsFlag(input string) (map[string]string, error) {
+// ParseLabelsFlag parses a slice of key=value (or key:value) pairs into a map[string]string.
+// The input is expected to already be split into individual pairs -- pflag's StringSlice flag
+// type comma-splits within a single occurrence and accumulates across repeated occurrences
+// (e.g. --labels a=1,b=2 --labels c=3), so no further splitting happens here.
+func ParseLabelsFlag(input []string) (map[string]string, error) {
 	defer perf.Track(nil, "tags.ParseLabelsFlag")()
 
-	if input == "" {
+	if len(input) == 0 {
 		return nil, nil
 	}
 
 	result := make(map[string]string)
-	for _, pair := range strings.Split(input, ",") {
+	for _, pair := range input {
 		pair = strings.TrimSpace(pair)
 		if pair == "" {
 			continue

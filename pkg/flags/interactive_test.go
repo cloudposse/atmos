@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -316,6 +317,104 @@ func TestStandardFlagParser_PromptForMissingRequiredFlags(t *testing.T) {
 		assert.Equal(t, "", result.Flags["stack"], "should keep empty value when not interactive")
 	})
 }
+
+// TestStandardFlagParser_PromptForMissingRequiredFlags_ShouldPromptGate tests
+// WithConditionalCompletionPrompt: the ShouldPrompt gate must suppress a
+// missing-required-flag prompt (e.g. --stack) even when the terminal is
+// otherwise interactive, so callers like `atmos aws cloudformation apply
+// --all` don't get an unwanted prompt for a single value that doesn't apply
+// to a bulk/selection mode. Without the gate (WithCompletionPrompt has no
+// ShouldPrompt field), this suppression is impossible.
+func TestStandardFlagParser_PromptForMissingRequiredFlags_ShouldPromptGate(t *testing.T) {
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	// Force isInteractive() into its "would prompt" branch so the assertions below
+	// actually distinguish the ShouldPrompt gate from the ambient non-interactive
+	// short-circuit. completionFunc below always returns zero options, so even
+	// when the gate lets the prompt through, PromptForMissingRequired returns
+	// before ever reaching the huh form (no TTY interaction happens in this test).
+	preservedEnv := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(preservedEnv)
+	t.Setenv("ATMOS_FORCE_TTY", "true")
+	viper.Set("interactive", true)
+	require.True(t, isInteractive(), "test setup must actually reach the interactive branch")
+
+	combinedFlags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	combinedFlags.String("stack", "", "")
+
+	t.Run("ShouldPrompt=false suppresses the prompt entirely", func(t *testing.T) {
+		called := false
+		completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			called = true
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		parser := NewStandardFlagParser(
+			WithConditionalCompletionPrompt("stack", "Choose stack", completionFunc, func(*ParsedConfig) bool {
+				return false // Simulates a bulk mode like --all where no single stack applies.
+			}),
+		)
+		result := &ParsedConfig{Flags: map[string]interface{}{"stack": ""}, PositionalArgs: []string{}}
+
+		err := parser.promptForMissingRequiredFlags(result, combinedFlags)
+		require.NoError(t, err)
+		assert.False(t, called, "completionFunc must never be invoked when ShouldPrompt returns false")
+		assert.Equal(t, "", result.Flags["stack"])
+	})
+
+	t.Run("ShouldPrompt=true reaches PromptForMissingRequired", func(t *testing.T) {
+		called := false
+		completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			called = true
+			return nil, cobra.ShellCompDirectiveNoFileComp // Empty options: returns before the huh form runs.
+		}
+
+		parser := NewStandardFlagParser(
+			WithConditionalCompletionPrompt("stack", "Choose stack", completionFunc, func(*ParsedConfig) bool {
+				return true
+			}),
+		)
+		result := &ParsedConfig{Flags: map[string]interface{}{"stack": ""}, PositionalArgs: []string{}}
+
+		err := parser.promptForMissingRequiredFlags(result, combinedFlags)
+		require.NoError(t, err)
+		assert.True(t, called, "completionFunc must be invoked when ShouldPrompt returns true")
+	})
+
+	t.Run("WithCompletionPrompt (nil ShouldPrompt) behaves like ShouldPrompt=true", func(t *testing.T) {
+		called := false
+		completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			called = true
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		parser := NewStandardFlagParser(
+			WithCompletionPrompt("stack", "Choose stack", completionFunc),
+		)
+		result := &ParsedConfig{Flags: map[string]interface{}{"stack": ""}, PositionalArgs: []string{}}
+
+		err := parser.promptForMissingRequiredFlags(result, combinedFlags)
+		require.NoError(t, err)
+		assert.True(t, called, "WithCompletionPrompt must keep unconditionally prompting (backward compatible)")
+	})
+}
+
+// NOTE: The write-back of a resolved prompt selection onto the underlying
+// Cobra flag (see promptForSingleMissingFlag in standard.go, mirroring
+// cmd/terraform/shared.PromptForStack's existing
+// cmd.Flag("stack").Value.Set(...) write-back) is not covered by an automated
+// test. Exercising it requires PromptForValue to actually resolve a
+// selection, which calls huh's Form.Run() — a real TUI read loop with no
+// accessible-mode/non-TTY seam exposed by this package. Attempting to drive
+// that in a headless CI environment risks a hang waiting on stdin rather than
+// a clean failure, so this path is verified by code inspection only; it
+// should be confirmed manually in a real terminal (see also
+// TestNewOperationCommandRegistersExpectedFlags in
+// cmd/aws/cloudformation/cloudformation_test.go, which covers the flag
+// registration/wiring side without invoking the form).
 
 // TestStandardFlagParser_PromptForMissingPositionalArgs tests Use Case 3.
 func TestStandardFlagParser_PromptForMissingPositionalArgs(t *testing.T) {

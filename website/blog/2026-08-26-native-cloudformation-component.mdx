@@ -1,0 +1,84 @@
+---
+slug: native-cloudformation-component
+title: "Deploy raw CloudFormation stacks natively, no wrapper CLI required"
+date: 2026-08-26T12:00:00.000Z
+authors: [osterman]
+tags: [feature, experimental]
+---
+
+Teams running raw CloudFormation have always had a choice: call the AWS CLI directly and manage
+changesets, drift, and StackSets by hand, or reach for a wrapper tool to smooth over the rough
+edges. Rain filled that role for a lot of people — until it was archived, leaving its users with
+working templates and no maintained path forward for the CLI, the artifact-bucket bootstrapping,
+or the changeset/drift ergonomics it provided on top of the AWS CLI.
+
+<!--truncate-->
+
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<CastPlayer src="/casts/examples/cloudformation/lifecycle.cast" title="atmos aws cloudformation lifecycle" chrome controls scrubber />
+
+## The Problem
+
+A CloudFormation template on its own isn't a deployment workflow. Someone still has to package and
+upload oversized templates to S3, create and review a changeset before committing to a change,
+detect drift after the fact, and orchestrate StackSets across accounts and regions. Doing all of
+that by hand with the AWS CLI is tedious and easy to get subtly wrong; doing it through a wrapper
+tool means depending on a binary outside your Atmos toolchain, with its own install, its own
+config file, and — in Rain's case — no future roadmap.
+
+## The Fix
+
+`atmos aws cloudformation` (alias `atmos aws cfn`) deploys, inspects, and deletes CloudFormation
+stacks directly, with the same stack-based configuration, inheritance, and templating every other
+Atmos component type already gives you:
+
+- **Core lifecycle** — `apply`/`deploy`, `diff`/`plan`, `delete`, `validate`, `output`, with
+  automatic changeset creation and cleanup behind `apply`/`diff`.
+- **Changesets and drift** — `changeset create/execute/list/delete` for manual review workflows,
+  `drift detect/describe` to catch out-of-band changes.
+- **StackSets** — `stackset create/update/delete/instances` for multi-account, multi-region
+  deployments, no separate tooling required.
+- **Templates, inline or on disk** — point `path:` at a template file, or author the template
+  directly in stack config with `template:` (a plain string or a structured map) and get Atmos's
+  own `{{ }}` templating for free, something a file-based template never had.
+- **Backend management** — `backend create/describe/update/delete/list` for the S3 bucket
+  CloudFormation packaging uses, with real auto-provisioning when `provision.backend.enabled: true`
+  is set — no manual bootstrap step required before your first deploy.
+- **Observability** — `tree` for the nested-stack dependency graph, `logs`/`watch` for live event
+  streaming during an operation, matching the feedback you already get from `terraform apply`.
+
+## How to Use It
+
+```yaml
+# stacks/catalog/vpc.yaml
+components:
+  "aws/cloudformation":
+    vpc:
+      path: template.yaml
+      stack_name: "{{ .vars.stage }}-vpc"
+      parameters:
+        CidrBlock: "10.0.0.0/16"
+      capabilities:
+        - CAPABILITY_IAM
+      provision:
+        backend:
+          enabled: true
+```
+
+```shell
+atmos aws cloudformation apply vpc -s prod
+atmos aws cloudformation diff vpc -s prod
+atmos aws cloudformation drift detect vpc -s prod
+```
+
+Migrating from Rain or raw CloudFormation? The [migration guide](/migration/from-rain) walks
+through resolving `!Rain::` directives and getting a template deploying through Atmos in about 20
+minutes.
+
+## Get Involved
+
+This component type is still marked experimental while it settles under real-world use — see the
+[aws/cloudformation docs](/stacks/components/aws-cloudformation) for the full configuration
+reference. Have feedback? [Open an issue](https://github.com/cloudposse/atmos/issues) or join the
+conversation in the [Cloud Posse community Slack](https://cloudposse.com/slack).

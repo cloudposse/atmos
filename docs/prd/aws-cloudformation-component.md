@@ -638,15 +638,18 @@ its own design, not through this verb.
 - `--retain-resources <logical-ids>` passed through to the API (only valid for `DELETE_FAILED`
   stacks, per AWS semantics — surfaced with a hint when misused).
 - **Termination protection is respected, never auto-disabled**: deleting a stack with
-  `termination_protection: true` fails with an actionable hint telling the user to flip the config
-  field and re-apply first (or use an explicit `--disable-termination-protection` escape hatch that
-  calls `UpdateTerminationProtection` before deleting). Silent auto-disable would defeat the point of
-  the setting.
+  `termination_protection: true` fails with an actionable hint telling the user to use the explicit
+  `--disable-termination-protection` escape hatch (which calls `UpdateTerminationProtection` before
+  deleting). Silent auto-disable would defeat the point of the setting — including via apply:
+  setting `termination_protection: false` and re-applying does **not** disable it either (see below).
 - **Applying `termination_protection`**: like `stack_policy`, neither `CreateChangeSet` nor
-  `ExecuteChangeSet` has a termination-protection parameter, so `termination_protection` is
-  reconciled via a follow-up `UpdateTerminationProtection` call after every successful apply —
-  unconditionally, not just when `true`, so unsetting it in config actually disables it on the next
-  apply rather than only stopping enforcement at `delete`.
+  `ExecuteChangeSet` has a termination-protection parameter, so enabling it is a follow-up
+  `UpdateTerminationProtection` call after a successful apply — but only when the component opts in
+  (`termination_protection: true`); a component that never sets it is a no-op, never calling
+  `UpdateTerminationProtection` at all. This keeps a target that doesn't implement the action (e.g.
+  an AWS emulator) usable by components that don't use the feature, and keeps disabling a single,
+  explicit path (`--disable-termination-protection` at delete) rather than an implicit one apply
+  could trigger by omission.
 
 ### Parameter Typing
 

@@ -17,6 +17,7 @@ references:
   - references/from-terragrunt.md
   - references/from-mise.md
   - references/from-aqua.md
+  - references/from-rain.md
 ---
 
 # Migrating to Atmos
@@ -43,6 +44,7 @@ For full tutorials for end users, see:
 - [Migrating from Makefiles](https://atmos.tools/migration/makefile)
 - [Migrating from Justfiles](https://atmos.tools/migration/justfile)
 - [Migrating from Taskfile.yml](https://atmos.tools/migration/taskfile)
+- [Migrating from Rain / Raw CloudFormation](https://atmos.tools/migration/from-rain)
 
 ## Terraform or OpenTofu
 
@@ -107,6 +109,7 @@ reference file:
 | Terragrunt (`terragrunt.hcl` or `terragrunt.stack.hcl`)               | [from-terragrunt.md](references/from-terragrunt.md) |
 | mise config (`mise.toml`, `.mise.toml`, `.mise/config.toml`, `.tool-versions`) for tool versions | [from-mise.md](references/from-mise.md) |
 | `aqua.yaml` (Aqua CLI) for tool versions                             | [from-aqua.md](references/from-aqua.md) |
+| User is migrating off Rain / raw CloudFormation                      | [from-rain.md](references/from-rain.md) |
 
 The remote-state-bridge pattern makes progressive migration possible. It lets a team migrate one
 component at a time. Without it, the team must migrate everything at once. Use this pattern when
@@ -290,3 +293,5 @@ Push back if a user or another agent proposes one of these methods during migrat
   vars from mise to the Atmos toolchain.
 - [References/from-aqua.md](references/from-aqua.md) -- migrating tool versions from Aqua CLI's
   `aqua.yaml` to the Atmos toolchain.
+- [References/from-rain.md](references/from-rain.md) -- the `!Rain::` directive mapping table and
+  Rain-to-`aws/cloudformation` verb cross-reference.

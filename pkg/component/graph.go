@@ -155,6 +155,14 @@ func executeGraphNode(ctx context.Context, opts *GraphExecutionOptions, node *de
 	nodeInfo.SubCommand = opts.SubCommand
 	nodeInfo.All = false
 	nodeInfo.Affected = false
+	// Query/Components/Tags/Labels must all be cleared: each component package's
+	// top-level Execute() re-enters the bulk path whenever any selection field is
+	// still set on info, and selection has already been applied by the graph
+	// filtering/sorting above before this node was ever selected for dispatch.
+	// Leaving Tags/Labels set here caused a real infinite recursion
+	// (executeBulk -> executeGraph -> executeGraphNode -> Provider.Execute ->
+	// Execute -> executeBulk -> ...) for any --tags/--labels-only bulk run (no
+	// --all/--affected).
 	nodeInfo.Query = ""
 	nodeInfo.Components = nil
 	nodeInfo.Tags = nil

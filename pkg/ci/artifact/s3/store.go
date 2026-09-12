@@ -126,8 +126,20 @@ func (s *Store) initIdentityClient(ctx context.Context) error {
 		return fmt.Errorf("%w: %w", errUtils.ErrAWSConfigLoadFailed, err)
 	}
 
-	s.client = s3.NewFromConfig(cfg)
+	s.client = s3.NewFromConfig(cfg, buildClientOptFns(authContext)...)
 	return nil
+}
+
+// buildClientOptFns constructs S3 client options from the auth context,
+// mirroring cloudformation.newClient's EndpointURL override handling.
+// Without this, an identity scoped to an emulator (e.g. Floci) still routes
+// S3 calls to the real AWS endpoint.
+func buildClientOptFns(authContext *artifact.AWSAuthConfig) []func(*s3.Options) {
+	var optFns []func(*s3.Options)
+	if authContext != nil && authContext.EndpointURL != "" {
+		optFns = append(optFns, func(o *s3.Options) { o.BaseEndpoint = aws.String(authContext.EndpointURL) })
+	}
+	return optFns
 }
 
 // buildAuthConfigOpts constructs AWS SDK config options from the auth context.
