@@ -80,8 +80,12 @@ between "always re-init" and "the user manually judges when it's safe to skip."
 - **Apply uniformly** across explicit CLI commands and the implicit init that
   `!terraform.output`/`atmos.Component` evaluation performs.
 - **Preserve exact backward compatibility** for anyone who sets `init.mode: always` and
-  `init.reconfigure: always`. Leaving the legacy `init_run_reconfigure: true` default does **not**
-  preserve unconditional `-reconfigure` — it now maps to `init.reconfigure: auto` — see
+  `init.reconfigure: always`, and — for `init.mode`/`init.upgrade` specifically — automatically for
+  anyone whose project is pinned to an [edition](/cli/configuration/edition) from before
+  2026-09-12, with no config changes at all (see [Editions](#editions)). `init.reconfigure` is the
+  exception: leaving the legacy `init_run_reconfigure: true` default does **not** preserve
+  unconditional `-reconfigure`, and pinning an edition does **not** restore it either — it now maps
+  to `init.reconfigure: auto` regardless of pin — see
   [Migration](#migration-from-init_run_reconfigure).
 
 ## Non-Goals
@@ -108,29 +112,23 @@ components:
     init:
       mode: auto         # auto | always | never
       reconfigure: auto  # auto | always | never
-      upgrade: never      # auto | always | never
+      upgrade: auto       # auto | always | never
       pass_vars: false    # existing setting, unchanged
 ```
 
-`init.mode` and `init.reconfigure` default to `auto`. `init.upgrade` defaults to `never`: unlike
-mode/reconfigure, which only make an already-unconditional prior behavior (init always ran,
-`-reconfigure` was always added) conditional, Atmos never passed `-upgrade` automatically before
-this setting existed — defaulting it to `auto` would introduce a genuinely new automatic behavior
-(mutating `.terraform.lock.hcl` to resolve a newer provider version) for every project with zero
-opt-in, rather than a smarter version of something Atmos already did. `never` preserves exactly
-what Atmos always did: `-upgrade` only happens when a user types it explicitly. This also means a
-component whose provider constraint changed enough to need `-upgrade` surfaces that as an explicit
-error with a hint (per [Auto-Recovery Contract](#auto-recovery-contract)'s `never`-is-never-
-overridden rule), rather than Atmos silently resolving a new provider version on its own. Set
-`init.upgrade: auto` to opt into issue #1263's automatic behavior.
+All three settings default to `auto`. `init.mode` and `init.upgrade` reach that default through an
+[edition](/cli/configuration/edition) journal entry rather than a plain struct literal, so a
+project pinned to an edition from before 2026-09-12 sees `always` and `never` respectively instead
+— see [Editions](#editions) below for why, and why `init.reconfigure` can't use the same
+mechanism.
 
 <dl>
   <dt><code>init.mode</code></dt>
   <dd>
     <code>auto</code> skips <code>terraform init</code> when nothing that affects init has changed since the
     last successful init for this component/workspace. <code>always</code> restores the previous
-    unconditional behavior. <code>never</code> never runs init implicitly — the same effect as passing
-    <code>--skip-init</code> on every invocation.<br/>
+    unconditional behavior (the behavior a pre-2026-09-12 edition pin restores). <code>never</code> never
+    runs init implicitly — the same effect as passing <code>--skip-init</code> on every invocation.<br/>
     <strong>Environment variable:</strong> <code>ATMOS_COMPONENTS_TERRAFORM_INIT_MODE</code><br/>
     <strong>Command-line flag:</strong> <code>--init-mode</code>
   </dd>
@@ -145,10 +143,10 @@ overridden rule), rather than Atmos silently resolving a new provider version on
   </dd>
   <dt><code>init.upgrade</code></dt>
   <dd>
-    <code>never</code> (default) never adds <code>-upgrade</code> — the same behavior Atmos always had, since
-    it never passed this flag automatically before this setting existed. <code>auto</code> adds it only when
-    Terraform/OpenTofu reports that an upgrade is required (e.g. a provider version constraint was raised
-    beyond the locked version). <code>always</code> adds it to every init.<br/>
+    <code>auto</code> adds <code>-upgrade</code> only when Terraform/OpenTofu reports that an upgrade is
+    required (e.g. a provider version constraint was raised beyond the locked version). <code>always</code>
+    adds it to every init. <code>never</code> never adds it (the behavior a pre-2026-09-12 edition pin
+    restores).<br/>
     <strong>Environment variable:</strong> <code>ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE</code><br/>
     <strong>Command-line flag:</strong> <code>--init-upgrade</code>
   </dd>
@@ -170,9 +168,35 @@ The existing boolean `init_run_reconfigure` (env `ATMOS_COMPONENTS_TERRAFORM_INI
 - If `init.reconfigure` is set explicitly (at any precedence level), it wins outright.
 - Otherwise, `init_run_reconfigure: false` behaves as `init.reconfigure: never`.
 - Otherwise, the legacy default `init_run_reconfigure: true` behaves as `init.reconfigure: auto` — **not**
-  `always**. This is the one deliberate behavior change existing projects will see: Atmos no longer adds
+  `always`. This is the one deliberate behavior change existing projects will see: Atmos no longer adds
   `-reconfigure` to every init by default. Projects that need the old unconditional behavior set
-  `init.reconfigure: always` explicitly.
+  `init.reconfigure: always` explicitly. Unlike `init.mode`/`init.upgrade` below, this reinterpretation is
+  **not** rolled back by pinning an [edition](/cli/configuration/edition) — see [Editions](#editions).
+
+### Editions
+
+`init.mode` and `init.upgrade` are journaled in [`pkg/edition`](/cli/configuration/edition) (dated
+2026-09-12, this PR): a project pinned to an edition from before that date gets `init.mode: always`
+and `init.upgrade: never` restored automatically — byte-for-byte the behavior Atmos always had for
+init and `-upgrade` — with no config changes. Unpinned projects, and anything pinned on or after
+that date, get the new `auto` defaults. This is genuinely a new key each time (`init.mode` and
+`init.upgrade` didn't exist before this PR), which per the editions system's own rule ("new
+defaults are never journal-gated") would normally need no journal entry at all — but both keys
+govern behavior Atmos always had a fixed, unconfigurable answer for before this PR (init always
+ran; `-upgrade` was never passed automatically), so their ship-day default is treated as journaled
+anyway, protecting existing projects from a silent behavior change on upgrade the same way a
+changed default would be.
+
+`init.reconfigure` cannot get the same treatment: unlike `init.mode`/`init.upgrade`, it has a
+legacy predecessor (`init_run_reconfigure`) whose own fallback logic requires `init.reconfigure` to
+stay genuinely unset when the user hasn't set it explicitly. Journaling it would mean giving it a
+real Viper default, which would make it permanently non-empty and silently break
+`init_run_reconfigure: false`'s `never` mapping for any project relying on it. The
+`init_run_reconfigure: true` → `init.reconfigure: auto` reinterpretation this creates is real and
+undocumented by the edition journal — it is the first `KindBehavior` candidate logged in
+`docs/prd/editions.md`'s Roadmap after the editions system itself shipped, tracked there because
+the editions system can gate a changed *value* (`KindValue`) but not yet a changed *meaning* of an
+existing value (`KindBehavior`, reserved but unimplemented as of this PR).
 
 ---
 
@@ -329,7 +353,7 @@ requires state migration is a decision a human should make explicitly.
 |---|---|---|---|
 | Skip unchanged init | Yes, fingerprint-based | Yes, similar heuristic (source/backend hash) | No built-in auto-init; users script it |
 | Adds `-reconfigure` conditionally | Yes (`auto`) | Partial — reconfigures on detected backend change | N/A |
-| Adds `-upgrade` conditionally | Yes (opt-in via `init.upgrade: auto`), based on provider-constraint diagnostics | No — requires explicit `--terragrunt-source-update` or similar | N/A |
+| Adds `-upgrade` conditionally | Yes (`auto`), based on provider-constraint diagnostics | No — requires explicit `--terragrunt-source-update` or similar | N/A |
 | Auto-recovers from a wrong skip | Yes, via a closed diagnostic table and one retry | Partial — re-runs init on specific known failures | N/A |
 | Nested module changes tracked | No (known gap, shared with Terragrunt) | No (same limitation) | N/A |
 
@@ -353,11 +377,12 @@ invoke explicitly.
 
 - Running `atmos terraform apply <component> -s <stack>` followed immediately by
   `atmos terraform output <component> -s <stack>` performs exactly one `terraform init` for the pair, not two.
-- With `init.upgrade: auto` set, bumping a provider version constraint and re-running `plan` triggers
-  exactly one init with `-upgrade`, with no manual `-upgrade` flag needed. With the `init.upgrade: never`
-  default, the same scenario surfaces an explicit error with a hint instead of upgrading silently.
+- Bumping a provider version constraint and re-running `plan` triggers exactly one init with `-upgrade`
+  (`init.upgrade: auto`), with no manual `-upgrade` flag needed. With `init.upgrade: never` set, the same
+  scenario surfaces an explicit error with a hint instead of upgrading silently.
 - A user who sets `init.mode: always` and `init.reconfigure: always` observes byte-for-byte the same init
-  behavior Atmos had before this change.
+  behavior Atmos had before this change — as does anyone pinned to an edition from before 2026-09-12, for
+  `init.mode`/`init.upgrade` specifically, with no config changes at all.
 - Deleting part of `.terraform` by hand, or a change inside a nested local module, is recovered automatically
   on the next command via the retry path — the user sees one extra init, not a hard failure.
 - No test or documented workflow ever exercises `-migrate-state` as part of implicit or auto-recovered init.

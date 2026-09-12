@@ -52,9 +52,7 @@ performs two full inits.
 `-reconfigure` only goes on when the backend configuration actually changed (or on the first
 init, or after a working directory is re-provisioned), and `-upgrade` only goes on when Terraform
 or OpenTofu itself reports that an upgrade is required — the behavior [#1263](https://github.com/cloudposse/atmos/issues/1263)
-asked for. Unlike `-reconfigure`, `-upgrade` is opt-in: Atmos never added it automatically before,
-so `init.upgrade` defaults to `never` rather than `auto` — set it to `auto` to get the behavior
-above.
+asked for.
 
 None of this trusts the fingerprint blindly. If a skip turns out to have been wrong — a nested
 module changed, or `.terraform` was altered by hand — Terraform or OpenTofu fails with a
@@ -64,14 +62,16 @@ have run, and retries the command once. The one gap this doesn't close is a chan
 nested local module, which isn't part of the fingerprint — that's caught by the same retry path
 rather than avoided up front, and it's a limitation Terragrunt's own Auto-Init shares.
 
-**Behavior change:** `-reconfigure` is no longer added to every init by default. Projects that
-want the previous, unconditional behavior can opt back in explicitly.
+**Behavior change, automatically protected by [editions](/cli/configuration/edition):** init no
+longer runs unconditionally, and `-reconfigure`/`-upgrade` are no longer added to every init, by
+default. If your project is pinned to an [edition](/cli/configuration/edition) from before
+2026-09-12, you see byte-for-byte the same behavior Atmos always had — no config changes needed.
+Unpinned projects, and anything pinned on or after that date, get the new defaults automatically.
+See [Config Editions](/changelog/config-editions) for how pinning works.
 
 ## How to Use It
 
-Three new settings under `components.terraform.init`. `mode` and `reconfigure` default to `auto`;
-`upgrade` defaults to `never`, since Atmos never added `-upgrade` automatically before this
-setting existed:
+Three new settings under `components.terraform.init`, all defaulting to `auto`:
 
 ```yaml
 components:
@@ -79,13 +79,17 @@ components:
     init:
       mode: auto         # auto | always | never
       reconfigure: auto  # auto | always | never
-      upgrade: never      # auto | always | never
+      upgrade: auto       # auto | always | never
 ```
 
 `mode` controls whether init runs at all: `auto` skips it when nothing relevant changed, `always`
 restores the previous behavior, `never` disables it entirely (the same effect as `--skip-init` on
-every invocation). `reconfigure` and `upgrade` control the two flags the same way, independently —
-set `upgrade: auto` to opt into the automatic-upgrade behavior described above.
+every invocation). `reconfigure` and `upgrade` control the two flags the same way, independently.
+
+`mode` and `upgrade` are [edition](/cli/configuration/edition)-protected: pin `edition:
+"2026-09-11"` or earlier and both roll back to their pre-this-PR behavior (`always` and `never`
+respectively) with no other config changes. `reconfigure` isn't — see the note on
+`init_run_reconfigure` below.
 
 Each setting also has a matching flag and environment variable for one-off overrides:
 
@@ -97,7 +101,10 @@ atmos terraform plan vpc -s dev --init-upgrade=always
 
 The existing `init_run_reconfigure` boolean keeps working: `false` maps to `init.reconfigure:
 never`, and the previous default `true` now maps to `init.reconfigure: auto` rather than
-`always`. Set `init.reconfigure: always` explicitly to keep the exact previous behavior.
+`always`. Unlike `mode`/`upgrade`, this one isn't edition-protected — pinning an earlier edition
+doesn't restore it, because `init.reconfigure` has to stay unset internally for the legacy
+`init_run_reconfigure` mapping to keep working at all. Set `init.reconfigure: always` explicitly
+to keep the exact previous behavior.
 
 See [Terraform Configuration](/cli/configuration/components/terraform#configuration-reference) for
 the full setting reference, and [Automatic Initialization](/cli/commands/terraform/init#automatic-initialization)

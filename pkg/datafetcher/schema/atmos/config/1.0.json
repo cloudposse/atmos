@@ -12319,7 +12319,7 @@
               "type": "null"
             }
           ],
-          "description": "Mode controls whether Atmos runs `terraform init` before a subcommand:\n`auto` (default) skips it when the init fingerprint recorded after the last\nsuccessful init is unchanged, `always` runs it on every invocation, and\n`never` never runs it (the same as `--skip-init`)."
+          "description": "Mode controls whether Atmos runs `terraform init` before a subcommand:\n`auto` (default since 2026-09-12; a project pinned to an earlier edition gets `always`\nrestored) skips it when the init fingerprint recorded after the last successful init is\nunchanged, `always` runs it on every invocation, and `never` never runs it (the same as\n`--skip-init`)."
         },
         "reconfigure": {
           "anyOf": [
@@ -12330,7 +12330,7 @@
               "type": "null"
             }
           ],
-          "description": "Reconfigure controls when `-reconfigure` is added to `terraform init`:\n`auto` (default) adds it only when the backend configuration changed since\nthe last init, `always` adds it on every init, and `never` never adds it.\nTakes precedence over the deprecated `init_run_reconfigure`."
+          "description": "Reconfigure controls when `-reconfigure` is added to `terraform init`:\n`auto` (default) adds it only when the backend configuration changed since\nthe last init, `always` adds it on every init, and `never` never adds it.\nTakes precedence over the deprecated `init_run_reconfigure`. Unlike Mode/Upgrade, this\ndefault is NOT edition-pin-protected (see EffectiveInitReconfigure's doc comment): its\nlegacy-boolean fallback makes the standard journal mechanism unsafe to apply here."
         },
         "upgrade": {
           "anyOf": [
@@ -12341,7 +12341,7 @@
               "type": "null"
             }
           ],
-          "description": "Upgrade controls when `-upgrade` is added to `terraform init`: `auto` adds\nit only when terraform/tofu reports that an upgrade is required, `always`\nadds it on every init, and `never` (default) never adds it -- unlike\nmode/reconfigure, Atmos never passed -upgrade automatically before this\nsetting existed, so the default preserves that rather than introducing new\nautomatic behavior. Set to `auto` to opt in."
+          "description": "Upgrade controls when `-upgrade` is added to `terraform init`: `auto` (default since\n2026-09-12; a project pinned to an earlier edition gets `never` restored) adds it only\nwhen terraform/tofu reports that an upgrade is required, `always` adds it on every init,\nand `never` never adds it."
         }
       },
       "type": "object",

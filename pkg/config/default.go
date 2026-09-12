@@ -50,7 +50,9 @@ var (
 					PassVars:    false,
 					Mode:        schema.TerraformInitModeAuto,
 					Reconfigure: schema.TerraformInitReconfigureAuto,
-					Upgrade:     schema.TerraformInitUpgradeNever,
+					// Auto since 2026-09-12 (journaled in pkg/edition); a project pinned to an
+					// earlier edition gets "never" restored -- see EffectiveInitUpgrade's doc comment.
+					Upgrade: schema.TerraformInitUpgradeAuto,
 				},
 				Plan: schema.TerraformPlan{
 					SkipPlanfile: false,

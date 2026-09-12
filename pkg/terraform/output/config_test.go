@@ -301,7 +301,7 @@ func TestExtractComponentConfig(t *testing.T) {
 			}
 			assert.Equal(t, expectedReconfigure, config.InitReconfigure)
 			assert.Equal(t, schema.TerraformInitModeAuto, config.InitMode)
-			assert.Equal(t, schema.TerraformInitUpgradeNever, config.InitUpgrade)
+			assert.Equal(t, schema.TerraformInitUpgradeAuto, config.InitUpgrade)
 
 			if tt.expectedBackendType != "" {
 				assert.Equal(t, tt.expectedBackendType, config.BackendType)
