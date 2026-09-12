@@ -4,9 +4,11 @@ title: "Run Terraform Tests Locally Against Cloud Emulators"
 authors: [osterman]
 tags: [feature, dx]
 date: 2026-07-01T12:00:00.000Z
+cast: "/casts/examples/terraform-tests/stack-discovery.cast"
+castTitle: "atmos terraform tests"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 Terraform's native testing framework (`*.tftest.hcl`) is great — until you hit a `run` block with
 `command = apply`. Those blocks create **real** infrastructure, so running them means a cloud account,
@@ -51,7 +53,7 @@ the app resources against that VPC, and everything is torn down — no AWS accou
 
 Here's that stack discovery and test run end to end:
 
-<CastPlayer src="/casts/examples/terraform-tests/stack-discovery.cast" title="atmos terraform tests" chrome controls scrubber />
+<CastEmbed src="/casts/examples/terraform-tests/stack-discovery.cast" title="atmos terraform tests" chrome controls scrubber />
 
 [View the full example](/examples/terraform-tests)
 

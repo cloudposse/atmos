@@ -42,6 +42,8 @@ type Props = {
    * instead of clipping to a 16:9 viewport. Used for docs screengrabs.
    */
   static?: boolean;
+  /** Extra class name(s) merged onto the root element, e.g. to override the `thumbnail` width cap. */
+  className?: string;
 };
 
 export default function CastPlayer({
@@ -65,6 +67,7 @@ export default function CastPlayer({
   enterDelay = 0.5,
   exitDelay = 0.6,
   static: staticFrame = false,
+  className,
 }: Props) {
   const [events, setEvents] = useState<CastEvent[]>([]);
   const [content, setContent] = useState("");
@@ -289,6 +292,7 @@ export default function CastPlayer({
     chrome ? styles.window : styles.plain,
     thumbnail ? styles.thumbnail : "",
     staticFrame ? styles.staticFrame : "",
+    className || "",
   ]
     .filter(Boolean)
     .join(" ");

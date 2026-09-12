@@ -6,9 +6,11 @@ authors:
 tags:
   - feature
 date: 2025-12-10T12:00:00.000Z
+cast: "/casts/examples/stack-names/explicit-names.cast"
+castTitle: "atmos stack names"
 ---
 
-import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
 
 You can now specify an explicit `name` field in stack manifests to override the logical stack name. This is especially useful when migrating from other tools like Terragrunt, or when your infrastructure doesn't follow a strict naming convention.
 
@@ -16,7 +18,7 @@ You can now specify an explicit `name` field in stack manifests to override the 
 
 See it in action:
 
-<CastPlayer src="/casts/examples/stack-names/explicit-names.cast" title="atmos stack names" chrome controls scrubber />
+<CastEmbed src="/casts/examples/stack-names/explicit-names.cast" title="atmos stack names" chrome controls scrubber />
 
 [View the full example](/examples/stack-names)
 

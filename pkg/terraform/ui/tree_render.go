@@ -629,6 +629,19 @@ func (t *DependencyTree) GetChangeSummary() (add, change, remove int) {
 	return add, change, remove
 }
 
+// HasOutputChanges reports whether the plan contains any output-only change (create, update, or
+// delete of an output value), independent of GetChangeSummary's resource-only counts. A plan
+// whose only diff is an output value has add == change == remove == 0 but must still not be
+// treated as "no changes" (see issue #3114).
+func (t *DependencyTree) HasOutputChanges() bool {
+	return t.outputChanges > 0
+}
+
+// OutputChangeCount returns the number of output-only changes in the plan.
+func (t *DependencyTree) OutputChangeCount() int {
+	return t.outputChanges
+}
+
 func countActions(node *TreeNode, add, change, remove *int) {
 	if node == nil {
 		return
@@ -688,15 +701,33 @@ func buildChangeBadges(add, change, remove int) []string {
 	return badges
 }
 
+// outputsChangedBadge renders a badge indicating an output value changed. Reuses the "change"
+// (yellow) visual language already used for in-place resource updates, since an output-only
+// diff is the same kind of change applied to an output instead of a resource.
+func outputsChangedBadge() string {
+	return changeBadge(theme.ColorYellow, "OUTPUTS CHANGED")
+}
+
 // RenderChangeSummaryBadges renders a badge-style change summary.
-// Shows "NO CHANGES" badge if all counts are zero.
+// Shows "NO CHANGES" badge only when there are no resource changes and no output changes.
 // Format: "  1 ADD 2 CHANGE 1 DELETE" with colored badges (green/yellow/red backgrounds).
-func RenderChangeSummaryBadges(add, change, remove int) string {
+// The hasOutputChanges parameter reports a plan/apply whose only diff is an output value (see
+// DependencyTree.HasOutputChanges) - never reported as "NO CHANGES", even when add, change, and
+// remove are all zero.
+func RenderChangeSummaryBadges(add, change, remove int, hasOutputChanges bool) string {
 	defer perf.Track(nil, "terraform.ui.RenderChangeSummaryBadges")()
 
-	badges := []string{noChangesBadge()}
-	if add > 0 || change > 0 || remove > 0 {
+	var badges []string
+	switch {
+	case add > 0 || change > 0 || remove > 0:
 		badges = buildChangeBadges(add, change, remove)
+		if hasOutputChanges {
+			badges = append(badges, outputsChangedBadge())
+		}
+	case hasOutputChanges:
+		badges = []string{outputsChangedBadge()}
+	default:
+		badges = []string{noChangesBadge()}
 	}
 
 	// Join badges with a space, add blank line above and below, and indent 2 spaces.
