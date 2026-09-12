@@ -74,16 +74,24 @@ func Without(entries []GitConfigEntry, predicate func(GitConfigEntry) bool) []Gi
 // IsInsteadOfEntry reports whether entry is a `url.<base>.insteadOf` rule
 // (the shape gitmirror.InsteadOfRules produces), as opposed to an unrelated
 // git config override such as credential.helper or an HTTP extraheader.
+//
+// The comparison is case-insensitive because git config variable names are themselves
+// case-insensitive (see `git help config`): a rule written as `.insteadOf`, `.insteadof`, or any
+// other casing all resolve identically to git, so a case-sensitive suffix check here could miss
+// an inherited entry and leave a mirror redirect active in a live canary.
 func IsInsteadOfEntry(entry GitConfigEntry) bool {
-	return strings.HasSuffix(entry.Key, ".insteadOf")
+	return strings.HasSuffix(strings.ToLower(entry.Key), ".insteadof")
 }
 
 // IsExtraHeaderEntry reports whether entry is an `http.<url>.extraheader` override -- the shape
 // used to inject a GitHub Basic-Auth Authorization header (see
 // tests/live_github_canary_test.go's githubCanaryEnv and cli_test.go's runCLICommandTest). Used to
 // strip an inherited authorization header from a live-GitHub canary that must run unauthenticated.
+//
+// The comparison is case-insensitive for the same reason as IsInsteadOfEntry: git config variable
+// names are case-insensitive, so `.extraHeader` and `.extraheader` are the same key to git.
 func IsExtraHeaderEntry(entry GitConfigEntry) bool {
-	return strings.HasSuffix(entry.Key, ".extraheader")
+	return strings.HasSuffix(strings.ToLower(entry.Key), ".extraheader")
 }
 
 // ReadEntries extracts any existing GIT_CONFIG_COUNT/KEY_n/VALUE_n entries

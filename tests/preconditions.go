@@ -246,19 +246,34 @@ type GitHubRateLimitInfo struct {
 	Reset     time.Time
 }
 
-// checkGitHubRateLimit checks GitHub API rate limits and handles the response.
-func checkGitHubRateLimit(t *testing.T, client *http.Client) *GitHubRateLimitInfo {
-	t.Helper()
+// githubRateLimitURL is the GitHub API endpoint probed for rate-limit information.
+const githubRateLimitURL = "https://api.github.com/rate_limit"
 
-	apiResp, err := client.Get("https://api.github.com/rate_limit")
+// probeGitHubRateLimit sends the /rate_limit request and decodes a successful JSON response. When
+// token is non-empty, it is sent as "Authorization: Bearer <token>" -- only ever attached to this
+// specific, hardcoded https://api.github.com request, and never logged -- so the authenticated
+// variant of the precondition checks the authenticated quota instead of the anonymous one. It is
+// factored out of checkGitHubRateLimit so requestURL can be pointed at an httptest server in
+// tests. A non-nil error means the request itself failed (network/build); any other failure mode
+// (non-200 status, unreadable/unparsable body) returns (nil, nil), matching the "best effort,
+// silently skip the gate" behavior of the original implementation.
+func probeGitHubRateLimit(client *http.Client, requestURL, token string) (*GitHubRateLimitInfo, error) {
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, requestURL, nil)
 	if err != nil {
-		t.Logf("Warning: Cannot check GitHub API rate limits: %v", err)
-		return nil
+		return nil, err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	apiResp, err := client.Do(req) //nolint:gosec // requestURL is always either the hardcoded githubRateLimitURL constant or a test-controlled httptest server URL, never external/user input.
+	if err != nil {
+		return nil, err
 	}
 	defer apiResp.Body.Close()
 
 	if apiResp.StatusCode != httpOKStatus {
-		return nil
+		return nil, nil
 	}
 
 	var rateLimitResponse struct {
@@ -271,18 +286,35 @@ func checkGitHubRateLimit(t *testing.T, client *http.Client) *GitHubRateLimitInf
 
 	body, err := io.ReadAll(apiResp.Body)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 
-	err = json.Unmarshal(body, &rateLimitResponse)
-	if err != nil {
-		return nil
+	if err := json.Unmarshal(body, &rateLimitResponse); err != nil {
+		return nil, nil
 	}
 
-	info := &GitHubRateLimitInfo{
+	return &GitHubRateLimitInfo{
 		Limit:     rateLimitResponse.Rate.Limit,
 		Remaining: rateLimitResponse.Rate.Remaining,
 		Reset:     time.Unix(rateLimitResponse.Rate.Reset, 0),
+	}, nil
+}
+
+// checkGitHubRateLimit checks GitHub API rate limits and handles the response, authenticating the
+// probe with token (via probeGitHubRateLimit) when it is non-empty so an exhausted anonymous quota
+// never gates an authenticated caller. The requestURL parameter is normally githubRateLimitURL;
+// tests may substitute an httptest server URL to exercise the skip/warn decisions below without a
+// real network call.
+func checkGitHubRateLimit(t *testing.T, client *http.Client, requestURL, token string) *GitHubRateLimitInfo {
+	t.Helper()
+
+	info, err := probeGitHubRateLimit(client, requestURL, token)
+	if err != nil {
+		t.Logf("Warning: Cannot check GitHub API rate limits: %v", err)
+		return nil
+	}
+	if info == nil {
+		return nil
 	}
 
 	// Skip if rate limited
@@ -301,8 +333,11 @@ func checkGitHubRateLimit(t *testing.T, client *http.Client) *GitHubRateLimitInf
 	return info
 }
 
-// RequireGitHubAccess checks network connectivity and rate limits for GitHub.
-func RequireGitHubAccess(t *testing.T) *GitHubRateLimitInfo {
+// requireGitHubAccess is the shared implementation behind RequireGitHubAccess and
+// RequireLiveGitHubAuthenticated's authenticated probe: it checks basic github.com connectivity
+// and then the /rate_limit API, authenticating that probe with token when non-empty (see
+// checkGitHubRateLimit / probeGitHubRateLimit).
+func requireGitHubAccess(t *testing.T, token string) *GitHubRateLimitInfo {
 	t.Helper()
 
 	if Offline() {
@@ -329,7 +364,14 @@ func RequireGitHubAccess(t *testing.T) *GitHubRateLimitInfo {
 	}
 
 	// Check API rate limits
-	return checkGitHubRateLimit(t, client)
+	return checkGitHubRateLimit(t, client, githubRateLimitURL, token)
+}
+
+// RequireGitHubAccess checks network connectivity and rate limits for GitHub, using the
+// unauthenticated (anonymous) rate-limit quota.
+func RequireGitHubAccess(t *testing.T) *GitHubRateLimitInfo {
+	t.Helper()
+	return requireGitHubAccess(t, "")
 }
 
 // RequireNetworkAccess checks general network connectivity to a URL.
@@ -374,14 +416,25 @@ func RequireLiveGitHub(t *testing.T) *GitHubRateLimitInfo {
 // RequireLiveGitHubAuthenticated gates a canary that additionally needs a real GITHUB_TOKEN --
 // used by the "live_github_authenticated" precondition and canaries that exercise the
 // authenticated code path against live GitHub.
+//
+// Unlike RequireLiveGitHub, the /rate_limit probe here is authenticated with GITHUB_TOKEN (see
+// requireGitHubAccess / checkGitHubRateLimit), so an exhausted *anonymous* rate limit never skips
+// an authenticated canary needlessly -- GitHub tracks the authenticated quota separately.
 func RequireLiveGitHubAuthenticated(t *testing.T) *GitHubRateLimitInfo {
 	t.Helper()
 
-	info := RequireLiveGitHub(t)
-	if os.Getenv("GITHUB_TOKEN") == "" {
+	// Check the offline gate before the GITHUB_TOKEN requirement, matching RequireLiveGitHub's
+	// contract that ATMOS_TEST_OFFLINE always skips regardless of what else is configured.
+	if Offline() {
+		t.Skipf("ATMOS_TEST_OFFLINE=true: skipping test that requires live GitHub access")
+	}
+
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
 		t.Skipf("GITHUB_TOKEN not set: skipping authenticated live GitHub canary")
 	}
-	return info
+
+	return requireGitHubAccess(t, token)
 }
 
 // RequireExecutable checks if an executable is available in PATH.

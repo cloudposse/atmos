@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -91,6 +92,11 @@ func skipOrFailLiveGitHubCanary(t *testing.T, action string, err error, stderr s
 	if err == nil {
 		return
 	}
+
+	// The authenticated canary registers its injected token (and basic-auth header) with the
+	// global masker via iolib.RegisterSecret, so this redacts it from both the skip and failure
+	// messages below before they hit classification or t.Log/t.Fatal output.
+	stderr = iolib.MaskString(stderr)
 	if transient, pattern := classifyLiveGitHubFailure(stderr); transient {
 		t.Skipf("skipping %s: transient condition reaching live GitHub (matched %q): %v\nstderr:\n%s", action, pattern, err, stderr)
 	}
@@ -148,6 +154,9 @@ func githubCanaryEnv(t *testing.T, base []string, authenticated bool) []string {
 	}
 
 	if authenticated {
+		// Git redacts the Authorization header from trace output by default, but set this
+		// explicitly so an authenticated canary never depends on that default holding.
+		env = setEnvVar(env, "GIT_TRACE_REDACT", "true")
 		if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 			credential := "x-access-token:" + token
 			basicAuth := base64.StdEncoding.EncodeToString([]byte(credential))
@@ -324,6 +333,18 @@ func TestLiveGitHubCanary_ToolchainInstall(t *testing.T) {
 	info, statErr := os.Stat(binaryPath)
 	require.NoError(t, statErr)
 	require.False(t, info.IsDir())
+
+	// Prove the installed binary is not just present but actually runnable: peteretelej/tree
+	// supports -V/--version, so a successful exit here confirms the download landed a real,
+	// executable binary rather than a truncated or corrupt asset.
+	versionCtx, versionCancel := context.WithTimeout(context.Background(), canaryTimeout)
+	defer versionCancel()
+
+	versionCmd := exec.CommandContext(versionCtx, binaryPath, "--version")
+	var versionStderr bytes.Buffer
+	versionCmd.Stderr = &versionStderr
+	versionErr := versionCmd.Run()
+	skipOrFailLiveGitHubCanary(t, "installed tree --version", versionErr, versionStderr.String())
 }
 
 // TestLiveGitHubCanary_UnauthenticatedRawInclude resolves a `!include.raw` YAML function against

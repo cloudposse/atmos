@@ -142,6 +142,18 @@ func TestIsInsteadOfEntry(t *testing.T) {
 			entry: GitConfigEntry{Key: "http.https://github.com/.extraheader", Value: "AUTHORIZATION: basic dGVzdA=="},
 			want:  false,
 		},
+		{
+			// Git config variable names are case-insensitive; the key's variable-name segment
+			// (here "insteadof") must still match regardless of how it was cased when written.
+			name:  "lowercase insteadof still matches (git config keys are case-insensitive)",
+			entry: GitConfigEntry{Key: "url.file:///mirror/cloudposse/.insteadof", Value: "https://github.com/cloudposse/"},
+			want:  true,
+		},
+		{
+			name:  "mixed-case InsteadOf still matches (git config keys are case-insensitive)",
+			entry: GitConfigEntry{Key: "url.file:///mirror/cloudposse/.InsteadOf", Value: "https://github.com/cloudposse/"},
+			want:  true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -171,6 +183,18 @@ func TestIsExtraHeaderEntry(t *testing.T) {
 			name:  "insteadOf is not an extraheader",
 			entry: GitConfigEntry{Key: "url.file:///mirror/cloudposse/.insteadOf", Value: "https://github.com/cloudposse/"},
 			want:  false,
+		},
+		{
+			// Git config variable names are case-insensitive; the key's variable-name segment
+			// (here "extraheader") must still match regardless of how it was cased when written.
+			name:  "mixed-case extraHeader still matches (git config keys are case-insensitive)",
+			entry: GitConfigEntry{Key: "http.https://github.com/.extraHeader", Value: "AUTHORIZATION: basic dGVzdA=="},
+			want:  true,
+		},
+		{
+			name:  "uppercase EXTRAHEADER still matches (git config keys are case-insensitive)",
+			entry: GitConfigEntry{Key: "http.https://github.com/.EXTRAHEADER", Value: "AUTHORIZATION: basic dGVzdA=="},
+			want:  true,
 		},
 	}
 
