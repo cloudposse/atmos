@@ -5,7 +5,7 @@
   ],
   "labels": ["no-release"],
   "rebaseWhen": "behind-base-branch",
-  "minimumReleaseAge": "7 days",
+  "minimumReleaseAge": "14 days",
   "customManagers": [
     {
       "customType": "regex",
