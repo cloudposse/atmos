@@ -574,25 +574,94 @@ func TestListStackSetInstances_Error(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
 }
 
-// instanceAccountsRegions/mapKeys must dedup accounts/regions shared across
-// instances, and return empty slices (not panic) for empty input.
-func TestInstanceAccountsRegions(t *testing.T) {
-	t.Run("dedups across instances", func(t *testing.T) {
+// instanceAccountsByRegion must group accounts under their own region, dedup
+// accounts appearing more than once in the same region, and return an empty
+// map (not panic) for empty input.
+func TestInstanceAccountsByRegion(t *testing.T) {
+	t.Run("groups and dedups per region", func(t *testing.T) {
 		instances := []cfntypes.StackInstanceSummary{
 			{Account: awsString("111111111111"), Region: awsString("us-east-1")},
-			{Account: awsString("111111111111"), Region: awsString("us-west-2")},
+			{Account: awsString("111111111111"), Region: awsString("us-east-1")}, // duplicate: same account+region.
 			{Account: awsString("222222222222"), Region: awsString("us-east-1")},
+			{Account: awsString("111111111111"), Region: awsString("us-west-2")},
 		}
-		accounts, regions := instanceAccountsRegions(instances)
-		assert.ElementsMatch(t, []string{"111111111111", "222222222222"}, accounts)
-		assert.ElementsMatch(t, []string{"us-east-1", "us-west-2"}, regions)
+		got := instanceAccountsByRegion(instances)
+		assert.Equal(t, map[string][]string{
+			"us-east-1": {"111111111111", "222222222222"},
+			"us-west-2": {"111111111111"},
+		}, got)
 	})
 
 	t.Run("empty input", func(t *testing.T) {
-		accounts, regions := instanceAccountsRegions(nil)
-		assert.Empty(t, accounts)
-		assert.Empty(t, regions)
+		assert.Empty(t, instanceAccountsByRegion(nil))
 	})
+}
+
+// deleteStackSetInstancesByRegion must issue one DeleteStackInstances call per
+// region — scoped to only that region's accounts — instead of a single call
+// with the full account/region lists (whose Cartesian product would include
+// account/region pairs with no actual instance for a sparse StackSet).
+// Regions are visited in sorted order for a deterministic call sequence.
+func TestDeleteStackSetInstancesByRegion_GroupsPerRegion(t *testing.T) {
+	shrinkStackSetTiming(t, time.Millisecond, time.Minute)
+
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	// Sparse StackSet: account A only in us-east-1, account B only in us-west-2.
+	// A single combined DeleteStackInstances(accounts=[A,B], regions=[us-east-1,us-west-2])
+	// call would ask CloudFormation to delete the nonexistent (B, us-east-1) and
+	// (A, us-west-2) pairs too.
+	instances := []cfntypes.StackInstanceSummary{
+		{Account: awsString("111111111111"), Region: awsString("us-east-1")},
+		{Account: awsString("222222222222"), Region: awsString("us-west-2")},
+	}
+
+	var gotCalls []*cloudformation.DeleteStackInstancesInput
+	client.EXPECT().DeleteStackInstances(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, input *cloudformation.DeleteStackInstancesInput, _ ...func(*cloudformation.Options)) (*cloudformation.DeleteStackInstancesOutput, error) {
+			gotCalls = append(gotCalls, input)
+			return &cloudformation.DeleteStackInstancesOutput{OperationId: awsString("op-" + input.Regions[0])}, nil
+		},
+	).Times(2)
+	client.EXPECT().DescribeStackSetOperation(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackSetOperationOutput{
+		StackSetOperation: &cfntypes.StackSetOperation{Status: cfntypes.StackSetOperationStatusSucceeded},
+	}, nil).Times(2)
+
+	err := deleteStackSetInstancesByRegion(context.Background(), client, "mine", instances)
+	require.NoError(t, err)
+
+	require.Len(t, gotCalls, 2)
+	assert.Equal(t, []string{"us-east-1"}, gotCalls[0].Regions, "regions must be visited in sorted order")
+	assert.Equal(t, []string{"111111111111"}, gotCalls[0].Accounts)
+	assert.Equal(t, []string{"us-west-2"}, gotCalls[1].Regions)
+	assert.Equal(t, []string{"222222222222"}, gotCalls[1].Accounts)
+}
+
+// deleteStackSetInstancesByRegion must stop at the first region's
+// pollStackSetOperation failure and never attempt the next region's
+// DeleteStackInstances call.
+func TestDeleteStackSetInstancesByRegion_StopsOnPollFailure(t *testing.T) {
+	shrinkStackSetTiming(t, time.Millisecond, time.Minute)
+
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	instances := []cfntypes.StackInstanceSummary{
+		{Account: awsString("111111111111"), Region: awsString("us-east-1")},
+		{Account: awsString("222222222222"), Region: awsString("us-west-2")},
+	}
+
+	client.EXPECT().DeleteStackInstances(gomock.Any(), gomock.Any()).Return(&cloudformation.DeleteStackInstancesOutput{
+		OperationId: awsString("op-1"),
+	}, nil).Times(1) // only the first (sorted-first) region's call.
+	client.EXPECT().DescribeStackSetOperation(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackSetOperationOutput{
+		StackSetOperation: &cfntypes.StackSetOperation{Status: cfntypes.StackSetOperationStatusFailed},
+	}, nil)
+
+	err := deleteStackSetInstancesByRegion(context.Background(), client, "mine", instances)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationStackSetFailed)
 }
 
 // pollStackSetOperation must return immediately on SUCCEEDED.
