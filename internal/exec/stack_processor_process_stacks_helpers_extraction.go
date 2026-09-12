@@ -348,17 +348,25 @@ var helmComponentSectionKeys = []string{
 	"namespace",
 	"name",
 	cfg.HelmReleaseSectionName,
+	cfg.HelmCreateNamespaceSectionName,
 }
 
 var helmLifecycleSectionKeys = []string{
 	cfg.ValuesSectionName,
 	cfg.RepositoriesSectionName,
 	cfg.HelmReleaseSectionName,
+	cfg.HelmCreateNamespaceSectionName,
 }
 
 // helmOverrideSectionKeys are native Helm fields accepted in a component or
 // type-level overrides block. Keep this intentionally narrow until other Helm
 // fields have documented override semantics.
+//
+// `create_namespace` is deliberately NOT included yet: making it work through an
+// overrides block also requires adding it to the `helm_overrides` JSON schema
+// (which is `additionalProperties: false`) and wiring the type/global-level
+// override propagation, neither of which this focused fix covers. Tracked as a
+// follow-up.
 var helmOverrideSectionKeys = []string{
 	cfg.ValuesSectionName,
 }
