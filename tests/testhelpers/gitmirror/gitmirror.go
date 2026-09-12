@@ -188,15 +188,19 @@ func gitEnv() []string {
 // cli_test.go), so without this, a developer's or CI image's ambient config -- e.g.
 // core.hooksPath or init.templateDir installing a hook -- could run arbitrary code during `git
 // commit`/`git init` or hang Build. GIT_CONFIG_NOSYSTEM similarly excludes the machine-wide
-// /etc/gitconfig, and dropping any ambient GIT_CONFIG_COUNT/KEY_n/VALUE_n prevents a stray
-// command-scope override from doing the same. Neither change affects gitEnv's own callers (client
-// clone verification in this package's tests), which construct their own environment.
+// /etc/gitconfig, and dropping any ambient GIT_CONFIG_COUNT/KEY_n/VALUE_n as well as
+// GIT_CONFIG_PARAMETERS (git's own encoding of command-scope `-c`/env config, which git reads
+// regardless of the COUNT/KEY/VALUE form) prevents a stray command-scope override from doing the
+// same. Neither change affects gitEnv's own callers, which construct their own environment.
 func buildEnv() []string {
 	env := gitEnv()
 	kept := make([]string, 0, len(env)+2)
 	for _, kv := range env {
 		key, _, _ := strings.Cut(kv, "=")
-		if key == "GIT_CONFIG_COUNT" || strings.HasPrefix(key, "GIT_CONFIG_KEY_") || strings.HasPrefix(key, "GIT_CONFIG_VALUE_") {
+		switch {
+		case key == "GIT_CONFIG_COUNT", key == "GIT_CONFIG_PARAMETERS":
+			continue
+		case strings.HasPrefix(key, "GIT_CONFIG_KEY_"), strings.HasPrefix(key, "GIT_CONFIG_VALUE_"):
 			continue
 		}
 		kept = append(kept, kv)

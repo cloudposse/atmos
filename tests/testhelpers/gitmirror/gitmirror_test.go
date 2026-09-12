@@ -28,8 +28,11 @@ func TestBuild(t *testing.T) {
 
 	clone := t.TempDir()
 	cloneDir := filepath.Join(clone, "checkout")
-	cloneCmd := exec.Command("git", "clone", "--quiet", "--branch", "main", bareDir, cloneDir)
-	cloneCmd.Env = gitEnv() // Verify with the same scrubbed env Build uses.
+	// Clone through FileURI (rather than passing bareDir as a plain local path) so this test
+	// actually exercises the documented file:// flow, including FileURI's Windows volume-name
+	// handling.
+	cloneCmd := exec.Command("git", "clone", "--quiet", "--branch", "main", FileURI(bareDir), cloneDir)
+	cloneCmd.Env = buildEnv() // Verify with the same fully-scrubbed env Build uses.
 	out, err := cloneCmd.CombinedOutput()
 	require.NoError(t, err, "git clone failed: %s", out)
 

@@ -11,16 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// emptyGitConfigGlobal points GIT_CONFIG_GLOBAL at an empty temp file for the duration of a git
-// command a test runs, so a developer's real ~/.gitconfig (credential helpers, insteadOf
-// rewrites, etc.) can never interfere with a test asserting exact server behavior.
-func emptyGitConfigGlobal(t *testing.T) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "gitconfig-empty")
-	require.NoError(t, os.WriteFile(path, nil, filePerm))
-	return path
-}
-
 // buildMirrorServer builds a mirror at a fresh temp root and serves it, registering a Close
 // cleanup so callers don't have to.
 func buildMirrorServer(t *testing.T, opts ...Option) *Server {
@@ -139,7 +129,7 @@ func TestServer_CloneWithToken(t *testing.T) {
 	server := buildMirrorServer(t)
 	server.RegisterToken("clone-token")
 
-	env := append(gitEnv(), "GIT_CONFIG_GLOBAL="+emptyGitConfigGlobal(t))
+	env := buildEnv() // Same fully-scrubbed env Build uses, so no ambient config can interfere.
 	repoURL := server.URL() + "/" + Owner + "/" + Repo + ".git"
 
 	goodURL := withCredentials(t, repoURL, defaultGitHubUsername, "clone-token")
