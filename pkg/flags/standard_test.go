@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -1546,6 +1547,112 @@ func TestStandardFlagParser_PromptForSingleMissingFlag_ReceivesPositionalArgs(t 
 	assert.Equal(t, []string{"fixdemo"}, capturedArgs,
 		"the required flag's completion function must see the already-provided "+
 			"positional arg so it can filter its options by it")
+}
+
+// TestStandardFlagParser_HandleInteractivePrompts_PositionalArgPromptErrorPropagates
+// covers handleInteractivePrompts' Use Case 3 error-return branch: when
+// promptForMissingPositionalArgs itself fails (the underlying prompt errors, not
+// merely "no options available"), handleInteractivePrompts must return that error
+// immediately rather than continuing on to Use Case 1's required-flag prompts.
+// Forces the failure via the runForm seam (see interactive.go) so the real
+// PromptForPositionalArg -> PromptForValue call chain is exercised up to the
+// point the form would run, without needing a live TTY.
+func TestStandardFlagParser_HandleInteractivePrompts_PositionalArgPromptErrorPropagates(t *testing.T) {
+	originalInteractive := viper.GetBool("interactive")
+	defer viper.Set("interactive", originalInteractive)
+
+	preserved := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(preserved)
+	t.Setenv("ATMOS_FORCE_TTY", "true")
+	viper.Set("interactive", true)
+	require.True(t, isInteractive(), "test setup must actually reach the interactive branch")
+
+	boom := errors.New("form boom")
+	origRunForm := runForm
+	runForm = func(*huh.Form) error { return boom }
+	defer func() { runForm = origRunForm }()
+
+	var stackCompletionCalled bool
+	componentCompletion := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"vpc", "eks"}, cobra.ShellCompDirectiveNoFileComp
+	}
+	stackCompletion := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		stackCompletionCalled = true
+		return []string{"dev"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	builder := NewPositionalArgsBuilder()
+	builder.AddArg(&PositionalArgSpec{
+		Name:           "component",
+		Required:       true,
+		CompletionFunc: componentCompletion,
+		PromptTitle:    "Choose a component",
+	})
+	specs, validator, usage := builder.Build()
+
+	parser := NewStandardFlagParser(
+		WithStringFlag("stack", "s", "", "Stack name"),
+		WithCompletionPrompt("stack", "Choose a stack", stackCompletion),
+		WithPositionalArgPrompt("component", "Choose a component", componentCompletion),
+	)
+	parser.SetPositionalArgs(specs, validator, usage)
+
+	cmd := &cobra.Command{Use: "apply"}
+	parser.RegisterFlags(cmd)
+
+	result := &ParsedConfig{
+		Flags:          map[string]interface{}{"stack": ""},
+		PositionalArgs: []string{},
+	}
+
+	err := parser.handleInteractivePrompts(result, cmd.Flags())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, boom)
+	assert.False(t, stackCompletionCalled,
+		"a failing positional-arg prompt must short-circuit before Use Case 1's required-flag prompt ever runs")
+}
+
+// TestStandardFlagParser_HandleInteractivePrompts_RequiredFlagPromptErrorPropagates
+// covers handleInteractivePrompts' Use Case 1 error-return branch: when
+// promptForMissingRequiredFlags itself fails, handleInteractivePrompts must
+// return that error rather than swallowing it. The positional arg is already
+// supplied so Use Case 3 short-circuits without prompting, isolating the
+// failure to the required-flag prompt path.
+func TestStandardFlagParser_HandleInteractivePrompts_RequiredFlagPromptErrorPropagates(t *testing.T) {
+	originalInteractive := viper.GetBool("interactive")
+	defer viper.Set("interactive", originalInteractive)
+
+	preserved := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(preserved)
+	t.Setenv("ATMOS_FORCE_TTY", "true")
+	viper.Set("interactive", true)
+	require.True(t, isInteractive(), "test setup must actually reach the interactive branch")
+
+	boom := errors.New("form boom")
+	origRunForm := runForm
+	runForm = func(*huh.Form) error { return boom }
+	defer func() { runForm = origRunForm }()
+
+	stackCompletion := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"dev", "staging"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	parser := NewStandardFlagParser(
+		WithStringFlag("stack", "s", "", "Stack name"),
+		WithCompletionPrompt("stack", "Choose a stack", stackCompletion),
+	)
+
+	cmd := &cobra.Command{Use: "apply"}
+	parser.RegisterFlags(cmd)
+
+	result := &ParsedConfig{
+		Flags:          map[string]interface{}{"stack": ""},
+		PositionalArgs: []string{"already-provided"},
+	}
+
+	err := parser.handleInteractivePrompts(result, cmd.Flags())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, boom)
 }
 
 // TestStandardFlagParser_BindFlagsToViper_EdgeCases tests edge cases in binding.
