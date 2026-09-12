@@ -177,6 +177,7 @@ func TestCredentialFreeSkipTags(t *testing.T) {
 	assert.Contains(t, tags, "store.get")
 	assert.Contains(t, tags, "terraform.output")
 	assert.Contains(t, tags, "terraform.state")
+	assert.Contains(t, tags, "exec")
 	for _, tag := range tags {
 		assert.NotContains(t, tag, "!", "skip tags must have the leading ! trimmed")
 	}

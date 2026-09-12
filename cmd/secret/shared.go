@@ -28,7 +28,8 @@ import (
 // no base credentials and the SDK ultimately dials the EC2 IMDS endpoint, which is unreachable on
 // a workstation). Skipping them keeps listing genuinely credential-free: a skipped function leaves
 // its raw string in place, which the declaration extractor ignores. `!secret` is included because
-// retrieving secret values is a separate, explicit step.
+// retrieving secret values is a separate, explicit step. `!exec` is included because it executes
+// arbitrary shell commands, which must not be triggered during read-only enumeration operations.
 func credentialFreeSkip() []string {
 	// skipFunc compares against the tag with the leading "!" trimmed, so the skip tokens are bare.
 	tags := []string{
@@ -37,6 +38,7 @@ func credentialFreeSkip() []string {
 		u.AtmosYamlFuncStoreGet,
 		u.AtmosYamlFuncTerraformOutput,
 		u.AtmosYamlFuncTerraformState,
+		u.AtmosYamlFuncExec,
 	}
 	skip := make([]string, len(tags))
 	for i, tag := range tags {

@@ -93,7 +93,8 @@ func (t *SecretListTool) Execute(_ context.Context, params map[string]interface{
 	// resolved value, so authenticating per component would be pure overhead. With auth disabled,
 	// credentialed YAML functions (!secret, !store, !store.get, !terraform.output,
 	// !terraform.state) must be skipped too, or an evaluation attempt would fall back to the
-	// default cloud credential chain and fail.
+	// default cloud credential chain and fail. Additionally, !exec must be skipped to prevent
+	// arbitrary command execution during read-only enumeration operations.
 	stacksMap, err := exec.ExecuteDescribeStacksWithAuthDisabled(
 		atmosConfig, stack, components, nil, nil,
 		false, true, true, false, credentialFreeSkipTags(), nil, true,
@@ -117,6 +118,7 @@ func credentialFreeSkipTags() []string {
 		u.AtmosYamlFuncStoreGet,
 		u.AtmosYamlFuncTerraformOutput,
 		u.AtmosYamlFuncTerraformState,
+		u.AtmosYamlFuncExec,
 	}
 	skip := make([]string, len(tags))
 	for i, tag := range tags {
