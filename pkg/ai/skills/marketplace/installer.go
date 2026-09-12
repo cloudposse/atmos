@@ -968,7 +968,13 @@ func readSkillPromptWithReferences(skillDir string, metadata *SkillMetadata) (st
 
 	// Append reference files if any.
 	for _, ref := range metadata.References {
-		refPath := filepath.Join(skillDir, ref)
+		// Validate and resolve the reference path to prevent path traversal attacks.
+		refPath, err := resolveSkillReferencePath(skillDir, ref)
+		if err != nil {
+			log.Warnf("Skipping invalid reference %q: %v", ref, err)
+			continue
+		}
+
 		refContent, err := os.ReadFile(refPath)
 		if err != nil {
 			log.Warnf("Failed to read reference file %q: %v", ref, err)
@@ -980,6 +986,28 @@ func readSkillPromptWithReferences(skillDir string, metadata *SkillMetadata) (st
 	}
 
 	return body, nil
+}
+
+// resolveSkillReferencePath validates and resolves a skill reference path against the skill directory.
+// It rejects absolute paths and paths that escape the skill directory via ".." traversal.
+// This prevents malicious skills from reading arbitrary files on the user's system.
+func resolveSkillReferencePath(skillDir string, ref string) (string, error) {
+	// Reject absolute paths - references must be relative to the skill directory.
+	if filepath.IsAbs(ref) {
+		return "", fmt.Errorf("%w: reference %q must not be an absolute path", errUtils.ErrPathTraversal, ref)
+	}
+
+	// Clean and resolve the reference path.
+	cleanedSkillDir := filepath.Clean(skillDir)
+	resolved := filepath.Clean(filepath.Join(cleanedSkillDir, ref))
+
+	// Verify the resolved path stays within the skill directory.
+	rel, err := filepath.Rel(cleanedSkillDir, resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("%w: reference %q escapes skill directory", errUtils.ErrPathTraversal, ref)
+	}
+
+	return resolved, nil
 }
 
 // readSkillPrompt reads the markdown body from a SKILL.md file (after frontmatter).
