@@ -62,6 +62,36 @@ func TestScopedTokenTransport_SameHostHTTPS(t *testing.T) {
 	assert.Equal(t, "Bearer secret-token", gotAuth)
 }
 
+// TestRequestAllowsToken_SchemeAwarePortHandling pins CodeRabbit thread PRRT_kwDOEW4XoM6h7p3L:
+// normalizeHost strips both port 80 and port 443 unconditionally, so a request explicitly
+// targeting "https://host:80" would normalize identically to the bare configured host (whose
+// real default port for https is 443, not 80) and could wrongly receive a token scoped to that
+// host. The function under test must instead use the scheme-aware IsHostForScheme/
+// IsAPIHostForScheme/IsUploadHostForScheme, which only strip a port when it is the actual
+// default for the request's own scheme.
+func TestRequestAllowsToken_SchemeAwarePortHandling(t *testing.T) {
+	allowed := Endpoints{Host: "host", APIURL: "https://host/api/v3", UploadURL: "https://host/api/uploads"}
+
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{name: "https on the mismatched default http port is rejected", url: "https://host:80/repos/o/r", want: false},
+		{name: "https on its own default port (implicit) is allowed", url: "https://host/repos/o/r", want: true},
+		{name: "https explicitly on port 443 is allowed", url: "https://host:443/repos/o/r", want: true},
+		{name: "plain http on its own default port is rejected (never https)", url: "http://host:80/repos/o/r", want: false},
+		{name: "explicit non-default port must match exactly (mismatch)", url: "https://host:8443/repos/o/r", want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req, err := http.NewRequest(http.MethodGet, tc.url, nil)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, requestAllowsToken(req, allowed))
+		})
+	}
+}
+
 // TestScopedTokenTransport_CrossHostRedirectStripsToken pins that a redirect from the allowed
 // host to an unrelated https host -- both real TLS servers, so this exercises net/http's
 // actual redirect-following, not just a single RoundTrip call -- never carries the token to

@@ -260,8 +260,11 @@ func ConvertToRawURL(githubURL string) (string, error) {
 	}
 
 	// Already a raw URL (github.com's raw.githubusercontent.com, or a GHES host's own /raw/ path).
+	// The public raw host is compared via normalizeHost (not a literal string) so case, a
+	// trailing dot, and an explicit ":443" all still match, exactly like every other host
+	// comparison in this package.
 	endpoints := RepoEndpoints()
-	if u.Host == "raw.githubusercontent.com" || (endpoints.Host != defaultGitHubServerHost && endpoints.IsHost(u.Host) && strings.HasPrefix(u.Path, "/raw/")) {
+	if normalizeHost(u.Host) == "raw.githubusercontent.com" || (endpoints.Host != defaultGitHubServerHost && endpoints.IsHost(u.Host) && strings.HasPrefix(u.Path, "/raw/")) {
 		return githubURL, nil
 	}
 

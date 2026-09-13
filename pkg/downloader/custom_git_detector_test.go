@@ -40,6 +40,24 @@ func TestRewriteSCPURL(t *testing.T) {
 	}
 }
 
+// TestRewriteSCPURL_GHESPortInjectsDefaultUsername pins CodeRabbit thread PRRT_kwDOEW4XoM6h7p3D:
+// SCP syntax ("[user@]host:path") never carries a port, so a GHES host configured on a
+// non-default port (e.g. "ghe.example.com:8443") must still be recognized when compared via
+// RepoEndpoints().Hostname() (portless), not IsHost (which keeps the configured port and would
+// never match the portless SCP host token). The default "git" username must still be injected.
+func TestRewriteSCPURL_GHESPortInjectsDefaultUsername(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.example.com:8443")
+
+	scp := "ghe.example.com:org/repo.git"
+	newURL, rewritten := rewriteSCPURL(scp)
+	if !rewritten {
+		t.Fatalf("Expected SCP URL for a configured GHES host to be rewritten")
+	}
+	if !strings.HasPrefix(newURL, "ssh://git@ghe.example.com/") {
+		t.Errorf("Expected the default git username to be injected for a GHES host on a non-default port, got: %s", newURL)
+	}
+}
+
 func TestNormalizePath_ErrorHandling(t *testing.T) {
 	uObj := &url.URL{
 		Scheme: "http",

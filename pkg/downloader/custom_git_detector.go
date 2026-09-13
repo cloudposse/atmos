@@ -215,8 +215,12 @@ func rewriteSCPURL(src string) (string, bool) {
 		// Only for SSH vendoring (i.e. when rewriting an SCP URL), inject default username (git)
 		// for known hosts. Unlike isConfiguredGitHubHost's other call sites, host here comes
 		// straight from the regex match (not pre-lowercased), so the github.com comparison
-		// stays case-insensitive via EqualFold; RepoEndpoints.IsHost normalizes case itself.
-		if user == "" && (strings.EqualFold(host, hostGitHub) || github.RepoEndpoints().IsHost(host) ||
+		// stays case-insensitive via EqualFold; RepoEndpoints.Hostname() normalizes case itself.
+		// SCP syntax ("[user@]host:path") has no way to carry a port, so a configured GHES host
+		// on a non-default port (e.g. "ghe.example.com:8443") must be compared against
+		// RepoEndpoints().Hostname() (portless) rather than IsHost (which keeps the port and
+		// would never match).
+		if user == "" && (strings.EqualFold(host, hostGitHub) || strings.EqualFold(host, github.RepoEndpoints().Hostname()) ||
 			strings.EqualFold(host, hostGitLab) ||
 			strings.EqualFold(host, hostBitbucket)) {
 			user = "git@"

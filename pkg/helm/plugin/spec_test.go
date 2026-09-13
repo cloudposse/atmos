@@ -100,6 +100,58 @@ func TestParseSpec(t *testing.T) {
 	}
 }
 
+// TestParseSpec_OwnerRepoShorthand pins CodeRabbit thread PRRT_kwDOEW4XoM6h7p3O: the
+// "owner/repo" shorthand resolves against ghtoken.RepoEndpoints().ServerURL, which defaults to
+// public github.com but follows GITHUB_SERVER_URL when a GitHub Enterprise Server host is
+// configured. Table-driven so both cases assert the resolved URL, name, and version together.
+func TestParseSpec_OwnerRepoShorthand(t *testing.T) {
+	tests := []struct {
+		name         string
+		githubServer string // GITHUB_SERVER_URL override, or "" to leave the default (github.com).
+		raw          string
+		wantName     string
+		wantURL      string
+		wantVersion  string
+	}{
+		{
+			name:        "owner/repo under default github.com",
+			raw:         "databus23/helm-diff@v3.9.4",
+			wantName:    "helm-diff",
+			wantURL:     "https://github.com/databus23/helm-diff",
+			wantVersion: "v3.9.4",
+		},
+		{
+			name:         "owner/repo under a configured GitHub Enterprise Server host",
+			githubServer: "https://ghes.example.com",
+			raw:          "databus23/helm-diff@v3.9.4",
+			wantName:     "helm-diff",
+			wantURL:      "https://ghes.example.com/databus23/helm-diff",
+			wantVersion:  "v3.9.4",
+		},
+		{
+			name:         "owner/repo under a configured GHES host without a pinned version",
+			githubServer: "https://ghes.example.com",
+			raw:          "databus23/helm-diff",
+			wantName:     "helm-diff",
+			wantURL:      "https://ghes.example.com/databus23/helm-diff",
+			wantVersion:  "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.githubServer != "" {
+				t.Setenv("GITHUB_SERVER_URL", tt.githubServer)
+			}
+
+			got, err := ParseSpec(tt.raw)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantName, got.Name)
+			assert.Equal(t, tt.wantURL, got.URL)
+			assert.Equal(t, tt.wantVersion, got.Version)
+		})
+	}
+}
+
 func TestParseSpecs(t *testing.T) {
 	specs, err := ParseSpecs([]string{"diff@v3.9.4", "secrets"})
 	require.NoError(t, err)

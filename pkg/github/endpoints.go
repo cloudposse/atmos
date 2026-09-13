@@ -21,6 +21,10 @@ const (
 	defaultGitHubServerHost = "github.com"
 )
 
+// trailingDot is the FQDN trailing-dot separator normalizeHost/normalizeHostForScheme strip
+// from a hostname before comparison, e.g. "ghes.example.com." -> "ghes.example.com".
+const trailingDot = "."
+
 // Endpoints describes where a set of GitHub (or GitHub Enterprise Server) resources live:
 // the web UI/clone host, the REST API host, and the derived upload host. Two independent
 // concerns resolve to their own Endpoints value:
@@ -117,10 +121,16 @@ func newEndpoints(serverURL, apiURL string) Endpoints {
 
 // ResolveEndpointURL reads envVar and returns its value trimmed of a trailing slash, or
 // fallback when the variable is unset or its value fails to parse as an absolute HTTP(S)
-// URL. Invalid values are never fatal: they are logged at debug level and the caller falls
-// back to the default endpoint, matching today's behavior for anyone not opting into GHES.
-// Exported because it is shared by the toolchain registries (e.g. the aqua package's
-// RegistryBaseURL) in addition to RepoEndpoints and ToolchainEndpoints above.
+// URL, or when it carries a query string, fragment, or userinfo component. A base URL is only
+// ever used as a prefix that owner/repo/ref/path segments are appended to (see e.g. RawURL,
+// ReleaseAssetURL, ArchiveURL): a RawQuery would silently vanish once those segments are
+// appended after it (net/url's String() places the query after the whole path), a Fragment
+// would do the same, and a User component would leak credentials into every URL built from it
+// and complicate host comparisons that assume a bare authority. Invalid values are never fatal:
+// they are logged at debug level and the caller falls back to the default endpoint, matching
+// today's behavior for anyone not opting into GHES. Exported because it is shared by the
+// toolchain registries (e.g. the aqua package's RegistryBaseURL) in addition to RepoEndpoints
+// and ToolchainEndpoints above.
 //
 // http:// is accepted here on purpose: the acceptance and unit test suites point these
 // endpoints at local httptest/httpmock servers over plain HTTP, and resolution must keep
@@ -140,7 +150,8 @@ func ResolveEndpointURL(envVar, fallback string) string {
 
 	trimmed := strings.TrimRight(value, "/")
 	parsed, err := url.ParseRequestURI(trimmed)
-	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") ||
+		parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil {
 		log.Debug("Invalid GitHub endpoint URL; falling back to default",
 			"env", envVar, "value", value, "default", fallback, "error", errors.Join(errUtils.ErrInvalidGitHubEndpointURL, err))
 		return fallback
@@ -178,14 +189,14 @@ func normalizeHost(host string) string {
 	host = strings.ToLower(host)
 
 	if h, port, err := net.SplitHostPort(host); err == nil {
-		h = strings.TrimSuffix(h, ".")
+		h = strings.TrimSuffix(h, trailingDot)
 		if port == "443" || port == "80" {
 			return h
 		}
 		return net.JoinHostPort(h, port)
 	}
 
-	return strings.TrimSuffix(host, ".")
+	return strings.TrimSuffix(host, trailingDot)
 }
 
 // IsHost reports whether host (case-insensitive, with port and trailing dot normalized)
@@ -197,6 +208,72 @@ func (e Endpoints) IsHost(host string) bool {
 	defer perf.Track(nil, "github.Endpoints.IsHost")()
 
 	return normalizeHost(host) == e.Host
+}
+
+// normalizeHostForScheme is normalizeHost's scheme-aware sibling: it lower-cases the host,
+// strips a trailing dot, and removes a port only when it is the *default* port for scheme
+// (443 for https, 80 for http) instead of unconditionally stripping both. This matters for any
+// caller deciding whether it is safe to attach a bearer token to a request: normalizeHost's
+// blanket stripping of both 80 and 443 means "https://host:80" normalizes identically to
+// "https://host" (whose default port for https is 443, not 80), so a request explicitly
+// targeting port 80 over "https://" would wrongly be treated as the plain configured host and
+// could receive the token. Comparing with the port that is actually the default for the
+// request's own scheme closes that gap; an explicit non-default port must still match exactly.
+func normalizeHostForScheme(host, scheme string) string {
+	host = strings.ToLower(host)
+
+	if h, port, err := net.SplitHostPort(host); err == nil {
+		h = strings.TrimSuffix(h, trailingDot)
+		if port == defaultPortForScheme(scheme) {
+			return h
+		}
+		return net.JoinHostPort(h, port)
+	}
+
+	return strings.TrimSuffix(host, trailingDot)
+}
+
+// defaultPortForScheme returns the default port for scheme ("443" for https, "80" for http), or
+// "" for any other scheme, which never matches a real port and so never causes
+// normalizeHostForScheme to strip one.
+func defaultPortForScheme(scheme string) string {
+	switch strings.ToLower(scheme) {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
+	default:
+		return ""
+	}
+}
+
+// IsHostForScheme is IsHost's scheme-aware sibling (see normalizeHostForScheme): it strips only
+// the default port for scheme instead of unconditionally stripping both 80 and 443, so an
+// explicit non-default port (e.g. "host:80" for a "https" request) never matches the bare
+// configured host. Callers deciding whether to attach a bearer/OAuth token to a request -- where
+// the scheme is already known -- MUST use this instead of IsHost.
+func (e Endpoints) IsHostForScheme(host, scheme string) bool {
+	defer perf.Track(nil, "github.Endpoints.IsHostForScheme")()
+
+	return normalizeHostForScheme(host, scheme) == normalizeHostForScheme(e.Host, scheme)
+}
+
+// IsAPIHostForScheme is IsAPIHost's scheme-aware sibling (see normalizeHostForScheme). Callers
+// deciding whether to attach a bearer/OAuth token to a request MUST use this instead of
+// IsAPIHost.
+func (e Endpoints) IsAPIHostForScheme(host, scheme string) bool {
+	defer perf.Track(nil, "github.Endpoints.IsAPIHostForScheme")()
+
+	return normalizeHostForScheme(host, scheme) == normalizeHostForScheme(hostOf(e.APIURL), scheme)
+}
+
+// IsUploadHostForScheme is IsUploadHost's scheme-aware sibling (see normalizeHostForScheme).
+// Callers deciding whether to attach a bearer/OAuth token to a request MUST use this instead of
+// IsUploadHost.
+func (e Endpoints) IsUploadHostForScheme(host, scheme string) bool {
+	defer perf.Track(nil, "github.Endpoints.IsUploadHostForScheme")()
+
+	return normalizeHostForScheme(host, scheme) == normalizeHostForScheme(hostOf(e.UploadURL), scheme)
 }
 
 // Hostname returns e.Host with any port stripped, e.g. "ghes.example.com:8443" becomes
