@@ -67,7 +67,8 @@ var operationHelpBySubCommand = map[string]operationHelpEntry{
 			"timeline -- instead of having to check each nested stack's events\n" +
 			"separately.",
 		example: "  atmos aws cloudformation logs vpc --stack plat-ue2-dev\n" +
-			"  atmos aws cloudformation logs vpc --stack plat-ue2-dev --chart",
+			"  atmos aws cloudformation logs vpc --stack plat-ue2-dev --chart\n" +
+			"  atmos aws cloudformation logs vpc --stack plat-ue2-dev --follow",
 	},
 	"watch": {
 		long: "Attach to a stack's operation and stream its events until the stack reaches\n" +

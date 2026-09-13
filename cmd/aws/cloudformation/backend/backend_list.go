@@ -24,7 +24,7 @@ declares "kind: aws/s3" targets per-component, not once per stack.`,
 	Example: `  atmos aws cloudformation backend list vpc --stack dev`,
 	// Args validator is auto-set by parser via SetPositionalArgs with prompt-aware validation.
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
+		ctx := cmd.Context()
 		v := viper.GetViper()
 		if err := listParser.BindFlagsToViper(cmd, v); err != nil {
 			return err

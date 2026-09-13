@@ -48,9 +48,12 @@ func requireConfirmation(operation Operation, stackName string, flags map[string
 	}
 
 	message := fmt.Sprintf("%s stack %q?", verb, stackName)
-	if operation == OperationChangesetExecute {
-		if changesetName, _ := flags["changeset-name"].(string); changesetName != "" {
+	if changesetName, _ := flags["changeset-name"].(string); changesetName != "" {
+		switch operation {
+		case OperationChangesetExecute:
 			message = fmt.Sprintf("execute changeset %q against stack %q?", changesetName, stackName)
+		case OperationChangesetDelete:
+			message = fmt.Sprintf("delete changeset %q for stack %q?", changesetName, stackName)
 		}
 	}
 

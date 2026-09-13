@@ -20,7 +20,7 @@ var createCmd = &cobra.Command{
 	Example: `  atmos aws cloudformation backend create vpc --stack dev`,
 	// Args validator is auto-set by parser via SetPositionalArgs with prompt-aware validation.
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
+		ctx := cmd.Context()
 		v := viper.GetViper()
 		if err := createParser.BindFlagsToViper(cmd, v); err != nil {
 			return err

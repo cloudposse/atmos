@@ -121,6 +121,25 @@ func TestRequireConfirmation_ChangesetDeletePrompts(t *testing.T) {
 	assert.Contains(t, gotMessage, "vpc")
 }
 
+// changeset-delete must include the changeset name in the confirmation prompt when
+// one is given, mirroring changeset-execute's identical requirement: a user with
+// multiple changesets against the same stack must be able to tell which one a
+// prompt refers to before confirming.
+func TestRequireConfirmation_ChangesetDeletePromptsIncludesChangesetName(t *testing.T) {
+	var gotMessage string
+	original := confirmOperation
+	confirmOperation = func(message string) (bool, error) {
+		gotMessage = message
+		return true, nil
+	}
+	t.Cleanup(func() { confirmOperation = original })
+
+	flags := map[string]any{"changeset-name": "my-changeset"}
+	require.NoError(t, requireConfirmation(OperationChangesetDelete, "vpc", flags))
+	assert.Contains(t, gotMessage, "my-changeset")
+	assert.Contains(t, gotMessage, "vpc")
+}
+
 // changeset-delete must respect --auto-approve.
 func TestRequireConfirmation_ChangesetDeleteAutoApproveSkipsPrompt(t *testing.T) {
 	original := confirmOperation

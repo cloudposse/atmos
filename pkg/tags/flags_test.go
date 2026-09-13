@@ -197,6 +197,27 @@ func TestParseLabelsFlag(t *testing.T) {
 			t.Fatalf("ParseLabelsFlag() = %v, want %v", got, want)
 		}
 	})
+
+	// A scalar Viper value (e.g. ATMOS_LABELS="a=1,b=2", or a plain string set via
+	// viper.Set) reaches ParseRunOptions as v.GetStringSlice("labels"), which wraps
+	// the whole comma-separated string in a single slice element -- unlike pflag's
+	// own StringSlice.Set, which comma-splits before ParseLabelsFlag ever sees it.
+	// Regression test for both pairs being dropped/mangled into one bad entry.
+	t.Run("single element with embedded comma from a scalar Viper value is split", func(t *testing.T) {
+		got, err := ParseLabelsFlag([]string{"a=1,b=2"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := map[string]string{"a": "1", "b": "2"}
+		if len(got) != len(want) {
+			t.Fatalf("ParseLabelsFlag() = %v, want %v", got, want)
+		}
+		for k, v := range want {
+			if got[k] != v {
+				t.Fatalf("ParseLabelsFlag()[%q] = %q, want %q", k, got[k], v)
+			}
+		}
+	})
 }
 
 // TestParseLabelsFlag_PflagStringSliceRepeatAccumulates proves the end-to-end contract that
