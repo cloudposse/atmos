@@ -292,6 +292,12 @@ func validateControlStepList(steps []WorkflowStep, inConcurrentGroup bool, paren
 		if len(step.Needs) > 0 {
 			return fmt.Errorf("%w: %s sets needs outside a concurrent control step", ErrWorkflowControlStepInvalid, workflowStepLabel(step, i))
 		}
+		if stepType == TaskTypeTest {
+			if err := ValidateTestStep(step); err != nil {
+				return err
+			}
+			continue
+		}
 		if !isWorkflowControlStep(stepType) {
 			continue
 		}
