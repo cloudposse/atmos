@@ -3,6 +3,7 @@ package cloudformation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -58,6 +59,8 @@ func TestEventsFor(t *testing.T) {
 		{OperationDiff, hooks.BeforeAwsCloudFormationDiff, hooks.AfterAwsCloudFormationDiff},
 		{OperationApply, hooks.BeforeAwsCloudFormationApply, hooks.AfterAwsCloudFormationApply},
 		{OperationDelete, hooks.BeforeAwsCloudFormationDelete, hooks.AfterAwsCloudFormationDelete},
+		{OperationDriftDetect, hooks.BeforeAwsCloudFormationDriftDetect, hooks.AfterAwsCloudFormationDriftDetect},
+		{OperationDriftDescribe, hooks.BeforeAwsCloudFormationDriftDescribe, hooks.AfterAwsCloudFormationDriftDescribe},
 		{OperationRender, hooks.HookEvent(""), hooks.HookEvent("")},
 	}
 	for _, tt := range tests {
@@ -620,6 +623,7 @@ func TestRunDelete_DeleteStackError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	sentinel := errors.New("delete stack failed")
 
+	// deleteStack's live termination-protection check runs first (local config is false).
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 		Stacks: []cfntypes.Stack{{}},
 	}, nil)
@@ -637,6 +641,7 @@ func TestRunDelete_StreamEventsError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	sentinel := errors.New("describe stack events failed")
 
+	// deleteStack's live termination-protection check runs first (local config is false).
 	client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 		Stacks: []cfntypes.Stack{{}},
 	}, nil)
@@ -1166,6 +1171,85 @@ func TestRunWithHooks_OpErrPropagates(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrInvalidSpecificAwsCloudFormationComponent)
 }
 
+// runWithHooks must set the after-hook outcome to RunFailure when the
+// operation fails, so a `when: failure` hook fires and a `when: success`
+// (the default) hook does not — before this fix, the outcome was never set,
+// so RunAll always defaulted to RunSuccess regardless of opErr and
+// failure-only hooks silently never ran. Uses a declined-confirmation delete
+// to fail deterministically without any AWS API call.
+func TestRunWithHooks_SetsFailureOutcome(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	tempDir := t.TempDir()
+	failureMarker := filepath.Join(tempDir, "failure-hook-ran")
+	successMarker := filepath.Join(tempDir, "success-hook-ran")
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "components", "cloudformation", "vpc"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "atmos.yaml"),
+		[]byte(`base_path: "./"
+components:
+  aws/cloudformation:
+    base_path: "components/cloudformation"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+schemas: {}
+logs:
+  level: Info
+`),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tempDir, "stacks", "test.yaml"),
+		[]byte(fmt.Sprintf(`vars:
+  stage: test
+components:
+  aws/cloudformation:
+    vpc:
+      hooks:
+        on-failure:
+          events:
+            - after.aws/cloudformation.delete
+          when: failure
+          kind: command
+          command: %s
+          args: ["-test.run", "^$"]
+          env:
+            _ATMOS_TEST_WRITE_MARKER: %s
+        on-success:
+          events:
+            - after.aws/cloudformation.delete
+          kind: command
+          command: %s
+          args: ["-test.run", "^$"]
+          env:
+            _ATMOS_TEST_WRITE_MARKER: %s
+`, exe, failureMarker, exe, successMarker)),
+		0o644,
+	))
+
+	t.Chdir(tempDir)
+	info := schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "test"}
+	loadedConfig, err := cfg.InitCliConfig(info, true)
+	require.NoError(t, err)
+
+	stubConfirmOperation(t, false, nil)
+
+	ctx := &component.ExecutionContext{}
+	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
+	runErr := runWithHooks(ctx, &loadedConfig, &info, OperationDelete, spec)
+	require.Error(t, runErr, "the declined confirmation must fail the operation")
+
+	_, failureErr := os.Stat(failureMarker)
+	assert.NoError(t, failureErr, "the when:failure hook must run after a failed operation")
+	_, successErr := os.Stat(successMarker)
+	assert.True(t, os.IsNotExist(successErr), "the default (success-only) hook must not run after a failed operation")
+}
+
 // runOperation must reject apply/delete when the confirmation prompt is
 // declined, never reaching buildAWSConfig/newClient.
 func TestRunOperation_Apply_ConfirmationDeclined(t *testing.T) {
@@ -1278,7 +1362,7 @@ func TestOperationHandlers_Dispatch(t *testing.T) {
 			op:   OperationDelete,
 			setup: func(m *MockCloudFormationClient) {
 				gomock.InOrder(
-					// deleteStack's live termination-protection check.
+					// deleteStack's live termination-protection check (local config is false).
 					m.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 						Stacks: []cfntypes.Stack{{}},
 					}, nil),
