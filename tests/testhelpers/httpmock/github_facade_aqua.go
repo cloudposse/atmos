@@ -136,16 +136,11 @@ func (m *GitHubMockServer) tryAqua(w http.ResponseWriter, r *http.Request) bool 
 		return true
 	}
 
-	if aquaPrefix == "" {
-		// An empty aqua prefix makes prefix just "/", which every request path starts with.
-		// Without this guard, an unrecognized path under an empty prefix would be claimed here
-		// and answered with a 404 instead of falling through to the other route handlers
-		// (release downloads, archives, the legacy raw-file fallback, etc.).
-		return false
-	}
-
-	http.NotFound(w, r)
-	return true
+	// Decline every unrecognized path under the aqua prefix instead of answering 404 here:
+	// the prefix can shadow legitimate routes (an empty prefix matches everything, and the
+	// default "/aqua" prefix would otherwise swallow a release download for an owner named
+	// "aqua"). The final handler still returns 404 when no other route matches.
+	return false
 }
 
 // writeAquaIndex serves every registered aqua tool as the top-level registry.yaml index,
