@@ -1273,9 +1273,12 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		// real, live github.com.
 		existingEntries = gitconfigenv.Without(existingEntries, gitconfigenv.IsInsteadOfEntry)
 	}
-	if liveGitHub {
-		// An unauthenticated canary must also ignore any inherited GitHub authorization
-		// extraheader -- otherwise it would silently run authenticated.
+	if liveGitHub || liveGitHubAuthenticated {
+		// A live-GitHub canary must also ignore any inherited GitHub authorization extraheader:
+		// git sends every repeated http.extraHeader value it is given, so an unauthenticated
+		// canary that kept one would silently run authenticated, and an authenticated canary that
+		// kept one alongside the token injected below would send both -- letting an inherited
+		// Authorization header hijack, or collide with, the canary's own credentials.
 		existingEntries = gitconfigenv.Without(existingEntries, gitconfigenv.IsExtraHeaderEntry)
 	}
 	gitconfigenv.AppendEntries(tc.Env, existingEntries, entries...)
