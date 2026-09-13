@@ -210,7 +210,16 @@ func filterGitDirEnv(env []string) []string {
 	for _, kv := range env {
 		key, _, _ := strings.Cut(kv, "=")
 		switch strings.ToUpper(key) {
-		case "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES":
+		case "GIT_DIR",
+			"GIT_WORK_TREE",
+			"GIT_INDEX_FILE",
+			"GIT_OBJECT_DIRECTORY",
+			"GIT_ALTERNATE_OBJECT_DIRECTORIES",
+			// GIT_COMMON_DIR can redirect the repository's non-worktree files outside the throwaway
+			// repository, and GIT_NAMESPACE would make the receive-pack store main under
+			// refs/namespaces/<ns>/, where the HTTP backend (which does not inherit it) cannot see it.
+			"GIT_COMMON_DIR",
+			"GIT_NAMESPACE":
 			continue
 		}
 		kept = append(kept, kv)

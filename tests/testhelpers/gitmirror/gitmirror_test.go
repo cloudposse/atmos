@@ -103,10 +103,15 @@ func TestFilterGitDirEnvCaseInsensitive(t *testing.T) {
 		"git_dir=/some/repo/.git",
 		"Git_Work_Tree=/some/repo",
 		"GIT_INDEX_FILE=/some/repo/.git/index",
+		"git_common_dir=/elsewhere/.git",
+		"Git_Namespace=sandbox",
 		"PATH=/usr/bin:/bin",
 	}
 
 	kept := filterGitDirEnv(env)
+
+	require.NotContains(t, kept, "git_common_dir=/elsewhere/.git")
+	require.NotContains(t, kept, "Git_Namespace=sandbox")
 
 	require.NotContains(t, kept, "git_dir=/some/repo/.git")
 	require.NotContains(t, kept, "Git_Work_Tree=/some/repo")
