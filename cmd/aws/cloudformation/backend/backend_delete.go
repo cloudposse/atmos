@@ -22,7 +22,7 @@ Requires the --force flag for safety. This action cannot be undone.`,
 	Example: `  atmos aws cloudformation backend delete vpc --stack dev --force`,
 	// Args validator is auto-set by parser via SetPositionalArgs with prompt-aware validation.
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
+		ctx := cmd.Context()
 		v := viper.GetViper()
 		if err := deleteParser.BindFlagsToViper(cmd, v); err != nil {
 			return err

@@ -436,6 +436,27 @@ func TestParseOptionalLabelsFlag(t *testing.T) {
 	}
 }
 
+// TestParseOptionalLabelsFlag_RepeatedOccurrencesAccumulate proves that setting
+// --labels twice (e.g. "--labels tier=1 --labels cost-center=platform") accumulates
+// both pairs rather than the second occurrence silently overwriting the first,
+// a contract pkg/tags/flags_test.go covers directly at the pflag/ParseLabelsFlag
+// level. This test covers the same behavior through parseOptionalLabelsFlag's own
+// flags.GetStringSlice("labels") + tags.ParseLabelsFlag call path, since a
+// regression in that helper (e.g. reading only the first Set call) would otherwise
+// go undetected here.
+func TestParseOptionalLabelsFlag_RepeatedOccurrencesAccumulate(t *testing.T) {
+	t.Parallel()
+
+	flagSet := pflag.NewFlagSet("vendor pull", pflag.ContinueOnError)
+	flagSet.StringSlice("labels", nil, "")
+	require.NoError(t, flagSet.Set("labels", "tier=1"))
+	require.NoError(t, flagSet.Set("labels", "cost-center=platform"))
+
+	labels, err := parseOptionalLabelsFlag(flagSet)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"tier": "1", "cost-center": "platform"}, labels)
+}
+
 // TestSetDefaultEverythingFlag_Stack proves --stack alone (like --component and --tags) suppresses
 // the "no flags given" default that otherwise sets Everything to true.
 func TestSetDefaultEverythingFlag_Stack(t *testing.T) {
