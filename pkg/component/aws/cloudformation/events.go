@@ -15,13 +15,24 @@ import (
 )
 
 // eventPollInterval is how often DescribeStackEvents is polled while a stack
-// operation (create/update/delete) is in progress.
-const eventPollInterval = 3 * time.Second
+// operation (create/update/delete) is in progress. A var (not const) so tests
+// can shrink it to avoid real-time sleeps.
+var eventPollInterval = 3 * time.Second
 
 // operationTimeout bounds how long a single stack create/update/delete may run
 // before this command gives up watching it (the operation itself may continue in
 // the account; CloudFormation's own timeout_in_minutes governs that).
 const operationTimeout = 60 * time.Minute
+
+// stackPoll bundles one pollStackEvents observation: the stack's current
+// status, and whether that status was learned via an unambiguous "the stack
+// is actually gone" signal (Gone) as opposed to an ordinary DescribeStacks
+// status read (which can be stale/leftover from a previous operation; see
+// acceptTerminalStatus).
+type stackPoll struct {
+	Status cfntypes.StackStatus
+	Gone   bool
+}
 
 // streamStackEvents polls DescribeStackEvents from the moment it's called and
 // prints each new event as it appears, until the stack reaches a terminal status.
@@ -35,8 +46,16 @@ func streamStackEvents(ctx context.Context, client CloudFormationClient, stackNa
 	seen := make(map[string]bool)
 	deadline := time.Now().Add(operationTimeout)
 
+	// seenInProgress guards against misreading a stack's leftover terminal
+	// status from a previous, unrelated operation as this operation's
+	// completion: ExecuteChangeSet/DeleteStack return before CloudFormation
+	// applies the change, so the very next DescribeStacks call can still
+	// return the pre-execution status. Once we've observed a `*_IN_PROGRESS`
+	// status for this operation, a subsequent terminal status is trustworthy.
+	seenInProgress := false
+
 	for {
-		events, status, err := pollStackEvents(ctx, client, stackName, seen)
+		events, poll, err := pollStackEvents(ctx, client, stackName, seen)
 		if err != nil {
 			return "", err
 		}
@@ -44,25 +63,43 @@ func streamStackEvents(ctx context.Context, client CloudFormationClient, stackNa
 			printStackEvent(&events[i])
 		}
 
-		if status != "" && isTerminalStackStatus(status) {
-			return status, nil
+		seenInProgress = seenInProgress || isInProgressStatus(poll.Status)
+		if acceptTerminalStatus(poll, seenInProgress) {
+			return poll.Status, nil
 		}
 
 		if time.Now().After(deadline) {
-			return status, fmt.Errorf("%w: timed out watching stack events", errUtils.ErrAwsCloudFormationChangeSetFailed)
+			return poll.Status, fmt.Errorf("%w: timed out watching stack events", errUtils.ErrAwsCloudFormationChangeSetFailed)
 		}
 		select {
 		case <-ctx.Done():
-			return status, ctx.Err()
+			return poll.Status, ctx.Err()
 		case <-time.After(eventPollInterval):
 		}
 	}
 }
 
+// isInProgressStatus reports whether status is a non-empty `*_IN_PROGRESS` status.
+func isInProgressStatus(status cfntypes.StackStatus) bool {
+	return status != "" && strings.HasSuffix(string(status), "_IN_PROGRESS")
+}
+
+// acceptTerminalStatus reports whether poll's status may be treated as this
+// operation's completion. A poll.Gone signal (the stack is confirmed to have
+// actually disappeared) is a positive, unambiguous signal accepted regardless
+// of seenInProgress. Any other terminal status must first have been preceded
+// by an observed `*_IN_PROGRESS` status, to rule out reading a stale,
+// pre-execution terminal status (left over from an earlier, unrelated
+// operation) as this operation's completion.
+func acceptTerminalStatus(poll stackPoll, seenInProgress bool) bool {
+	return poll.Status != "" && isTerminalStackStatus(poll.Status) && (poll.Gone || seenInProgress)
+}
+
 // pollStackEvents fetches the current stack status and any events not already in
 // seen, oldest-first (the API returns newest-first). Returns an empty status when
-// the stack has been fully deleted (DescribeStacks returns not-found).
-func pollStackEvents(ctx context.Context, client CloudFormationClient, stackName string, seen map[string]bool) ([]cfntypes.StackEvent, cfntypes.StackStatus, error) {
+// the stack has been fully deleted (DescribeStacks returns not-found), with
+// stackPoll.Gone set -- see stackPoll and acceptTerminalStatus.
+func pollStackEvents(ctx context.Context, client CloudFormationClient, stackName string, seen map[string]bool) ([]cfntypes.StackEvent, stackPoll, error) {
 	eventsOut, err := client.DescribeStackEvents(ctx, &cloudformation.DescribeStackEventsInput{StackName: awsString(stackName)})
 	if err != nil {
 		// A delete can complete (and the stack disappear) faster than this poll loop's
@@ -71,9 +108,9 @@ func pollStackEvents(ctx context.Context, client CloudFormationClient, stackName
 		// found" here the same as the DescribeStacks not-found check below: the stack is
 		// gone, which is delete's successful terminal state, not an error.
 		if isStackNotFoundError(err) {
-			return nil, cfntypes.StackStatusDeleteComplete, nil
+			return nil, stackPoll{Status: cfntypes.StackStatusDeleteComplete, Gone: true}, nil
 		}
-		return nil, "", err
+		return nil, stackPoll{}, err
 	}
 
 	var fresh []cfntypes.StackEvent
@@ -90,14 +127,14 @@ func pollStackEvents(ctx context.Context, client CloudFormationClient, stackName
 	stacksOut, err := client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: awsString(stackName)})
 	if err != nil {
 		if isStackNotFoundError(err) {
-			return fresh, cfntypes.StackStatusDeleteComplete, nil
+			return fresh, stackPoll{Status: cfntypes.StackStatusDeleteComplete, Gone: true}, nil
 		}
-		return fresh, "", err
+		return fresh, stackPoll{}, err
 	}
 	if len(stacksOut.Stacks) == 0 {
-		return fresh, cfntypes.StackStatusDeleteComplete, nil
+		return fresh, stackPoll{Status: cfntypes.StackStatusDeleteComplete, Gone: true}, nil
 	}
-	return fresh, stacksOut.Stacks[0].StackStatus, nil
+	return fresh, stackPoll{Status: stacksOut.Stacks[0].StackStatus}, nil
 }
 
 // isTerminalStackStatus reports whether a stack status is a resting state (not a

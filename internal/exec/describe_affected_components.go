@@ -784,7 +784,7 @@ func stringSlice(value any) []string {
 // components, mirroring processHelmComponentsIndexed's shape (SDK-native
 // component types use the *Indexed helpers, not the legacy per-file scan path).
 //
-//nolint:funlen,dupl // Mirrors the per-type indexed processors (Terraform/Helmfile/Packer/Kubernetes/Helm) with aws/cloudformation-specific sections.
+//nolint:funlen // Mirrors the per-type indexed processors (Terraform/Helmfile/Packer/Kubernetes/Helm) with aws/cloudformation-specific sections.
 func processCloudFormationComponentsIndexed(
 	stackName string,
 	cloudFormationSection map[string]any,
@@ -806,18 +806,23 @@ func processCloudFormationComponentsIndexed(
 		}
 
 		metadataSection, hasMetadata := componentSection[sectionNameMetadata].(map[string]any)
-		if hasMetadata {
-			if shouldSkipComponent(metadataSection, componentName, excludeLocked) {
-				continue
-			}
+		if hasMetadata && shouldSkipComponent(metadataSection, componentName, excludeLocked) {
+			continue
+		}
 
-			if !isEqual(remoteStacks, stackName, cfg.CloudFormationComponentType, componentName, metadataSection, sectionNameMetadata) {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
-					&componentSection, affectedReasonStackMetadata, includeSpaceliftAdminStacks, currentStacks, includeSettings)
-				if err != nil {
-					return nil, err
-				}
-			}
+		locator := remoteComponentLocator{
+			remoteStacks:  remoteStacks,
+			stackName:     stackName,
+			componentType: cfg.CloudFormationComponentType,
+			componentName: componentName,
+		}
+
+		if err := checkCloudFormationMetadataAffected(
+			&affected, atmosConfig, componentName, stackName, &componentSection,
+			metadataSection, hasMetadata, locator, remoteStacks,
+			includeSpaceliftAdminStacks, currentStacks, includeSettings,
+		); err != nil {
+			return nil, err
 		}
 
 		component := GetComponentFolder(&componentSection, componentName)
@@ -838,19 +843,82 @@ func processCloudFormationComponentsIndexed(
 			return nil, err
 		}
 
-		if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
-			err := checkSettingsAndDependenciesIndexed(
-				&affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
-				&componentSection, settingsSection, remoteStacks, currentStacks, filesIndex,
-				includeSpaceliftAdminStacks, includeSettings,
-			)
-			if err != nil {
-				return nil, err
-			}
+		if err := checkCloudFormationSettingsAffected(
+			&affected, atmosConfig, componentName, stackName, &componentSection,
+			locator, remoteStacks, currentStacks, filesIndex,
+			includeSpaceliftAdminStacks, includeSettings,
+		); err != nil {
+			return nil, err
 		}
 	}
 
 	return affected, nil
+}
+
+// checkCloudFormationMetadataAffected compares the `metadata` section
+// symmetrically: a component whose metadata was removed locally (hasMetadata
+// == false) but still exists remotely must be detected as changed too, not
+// silently skipped just because there's nothing local to gate the comparison
+// on. Split out of processCloudFormationComponentsIndexed to keep its
+// cyclomatic complexity down.
+func checkCloudFormationMetadataAffected(
+	affected *[]schema.Affected,
+	atmosConfig *schema.AtmosConfiguration,
+	componentName string,
+	stackName string,
+	componentSection *map[string]any,
+	metadataSection map[string]any,
+	hasMetadata bool,
+	locator remoteComponentLocator,
+	remoteStacks *map[string]any,
+	includeSpaceliftAdminStacks bool,
+	currentStacks *map[string]any,
+	includeSettings bool,
+) error {
+	if !hasMetadata && !locator.sectionPresent(sectionNameMetadata) {
+		return nil
+	}
+	if isEqual(remoteStacks, stackName, cfg.CloudFormationComponentType, componentName, metadataSection, sectionNameMetadata) {
+		return nil
+	}
+	return addAffectedComponent(affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
+		componentSection, affectedReasonStackMetadata, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+}
+
+// checkCloudFormationSettingsAffected compares the `settings` section
+// symmetrically, same rationale as checkCloudFormationMetadataAffected above.
+// When neither side has a `settings` section, `dependencies.components` —
+// which lives at the top level of componentSection, not under settings —
+// must still be checked independently of settings presence, so this falls
+// back to checkDependencyChangesIndexed directly instead of skipping the
+// dependency check entirely. Split out of processCloudFormationComponentsIndexed
+// to keep its cyclomatic complexity down.
+func checkCloudFormationSettingsAffected(
+	affected *[]schema.Affected,
+	atmosConfig *schema.AtmosConfiguration,
+	componentName string,
+	stackName string,
+	componentSection *map[string]any,
+	locator remoteComponentLocator,
+	remoteStacks *map[string]any,
+	currentStacks *map[string]any,
+	filesIndex *changedFilesIndex,
+	includeSpaceliftAdminStacks bool,
+	includeSettings bool,
+) error {
+	settingsSection, hasSettings := (*componentSection)[cfg.SettingsSectionName].(map[string]any)
+	if hasSettings || locator.sectionPresent(cfg.SettingsSectionName) {
+		return checkSettingsAndDependenciesIndexed(
+			affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
+			componentSection, settingsSection, remoteStacks, currentStacks, filesIndex,
+			includeSpaceliftAdminStacks, includeSettings,
+		)
+	}
+	return checkDependencyChangesIndexed(
+		affected, atmosConfig, componentName, stackName, cfg.CloudFormationComponentType,
+		componentSection, nil, filesIndex,
+		includeSpaceliftAdminStacks, currentStacks, includeSettings,
+	)
 }
 
 // addCloudFormationSectionAffected checks the aws/cloudformation-specific

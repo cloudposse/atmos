@@ -764,6 +764,8 @@ func TestAddCloudFormationSectionAffected_SectionAdded(t *testing.T) {
 // TestProcessCloudFormationComponentsIndexed mirrors TestProcessHelmComponentsIndexed:
 // a metadata change, a first-class section change (stack_name), and a settings
 // change must all surface as distinct affected reasons for the same component.
+//
+//nolint:dupl // intentional per-component-type test duplication, mirrors TestProcessHelmComponentsIndexed by design (see comment above).
 func TestProcessCloudFormationComponentsIndexed(t *testing.T) {
 	t.Parallel()
 
@@ -797,6 +799,119 @@ func TestProcessCloudFormationComponentsIndexed(t *testing.T) {
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackMetadata)
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackStackName)
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+}
+
+// TestProcessCloudFormationComponentsIndexed_MetadataRemovedLocally guards
+// against gating the metadata comparison on local presence alone: a component
+// whose `metadata` section was deleted locally but still exists (differently)
+// on the remote/target-ref side must still surface as affected, since the
+// removal itself is a change CodeRabbit flagged as silently skippable.
+func TestProcessCloudFormationComponentsIndexed_MetadataRemovedLocally(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := cfnAtmosConfig()
+	cloudFormationSection := map[string]any{
+		cfnTestComponent: map[string]any{
+			sectionNameStackName: "vpc-prod",
+			// No `metadata` key at all -- previously removed.
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameMetadata:  map[string]any{"component": "vpc-v1"},
+		sectionNameStackName: "vpc-prod",
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackMetadata)
+}
+
+// TestProcessCloudFormationComponentsIndexed_SettingsRemovedLocally is the
+// settings-section analog of the metadata test above: a `settings` section
+// deleted locally but still present remotely must surface as affected.
+func TestProcessCloudFormationComponentsIndexed_SettingsRemovedLocally(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := cfnAtmosConfig()
+	cloudFormationSection := map[string]any{
+		cfnTestComponent: map[string]any{
+			sectionNameStackName: "vpc-prod",
+			// No `settings` key at all -- previously removed.
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameStackName:    "vpc-prod",
+		cfg.SettingsSectionName: map[string]any{"s": "1"},
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+}
+
+// TestProcessCloudFormationComponentsIndexed_DependenciesWithoutSettings
+// guards the other half of the CodeRabbit finding: `dependencies.components`
+// lives at the top level of the component section, not under `settings`, so
+// a component with dependencies.components but no settings section at all
+// (neither locally nor remotely) must still have its file/folder dependency
+// checked -- previously the whole checkSettingsAndDependenciesIndexed call
+// (which is what runs the dependency check) was skipped whenever there was no
+// local settings map.
+func TestProcessCloudFormationComponentsIndexed_DependenciesWithoutSettings(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := cfnAtmosConfig()
+	changedFile, err := filepath.Abs(filepath.Join("configs", "vpc.json"))
+	require.NoError(t, err)
+
+	cloudFormationSection := map[string]any{
+		cfnTestComponent: map[string]any{
+			sectionNameStackName: "vpc-prod",
+			cfg.DependenciesSectionName: map[string]any{
+				"components": []any{
+					map[string]any{"kind": "file", "path": filepath.Join("configs", "vpc.json")},
+				},
+			},
+			// No `settings` key at all, on either side.
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameStackName: "vpc-prod",
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, []string{changedFile}, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Equal(t, "file", affected[0].Affected)
 }
 
 func TestProcessCloudFormationComponentsIndexed_NotAffected(t *testing.T) {
