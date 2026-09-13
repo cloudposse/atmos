@@ -39,8 +39,10 @@ unaware: it sees the same URLs, runs the same detector, and injects the same tok
   scans the env form for broker rewrites and would skip URL token injection, which changed the
   credentials-leakage golden and removed the injected-token path from the test. With the file form the golden
   is byte-identical to `main`.
-- The harness injects nothing into the test environment. Instead it registers every token atmos could
-  actually choose: any ambient `GITHUB_TOKEN`/`ATMOS_GITHUB_TOKEN`/`ATMOS_PRO_GITHUB_TOKEN` plus, mirroring
+- The harness does not manufacture a fallback token. (It still sets `GIT_CONFIG_GLOBAL` in `TestMain`
+  and, for an ambient `GITHUB_TOKEN`, adds the extraheader described above; and because the shared mirror
+  allows anonymous fetches, the authenticated mirror path is exercised by the `gitmirror` package tests
+  rather than by ordinary acceptance fetches.) Instead it registers every token atmos could actually choose: any ambient `GITHUB_TOKEN`/`ATMOS_GITHUB_TOKEN`/`ATMOS_PRO_GITHUB_TOKEN` plus, mirroring
   `pkg/downloader/custom_git_detector.go`'s `resolveToken` fallback order exactly, the `gh auth token` value
   when available. With no ambient token and no authenticated `gh` CLI, atmos injects nothing and git matches
   the anonymous rule, which the mirror accepts. This keeps atmos fully unaware of the mirror -- it runs the
