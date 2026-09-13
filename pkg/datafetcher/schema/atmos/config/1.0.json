@@ -7871,7 +7871,7 @@
         }
       },
       "type": "object",
-      "description": "ParallelFailConfig configures failure behavior for parallel and matrix steps."
+      "description": "ParallelFailConfig configures failure behavior for parallel, matrix, and test steps."
     },
     "PlanfileStoreSpec": {
       "properties": {
@@ -11015,7 +11015,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Control step fields."
+          "description": "Control step fields for parallel, matrix, and test groups."
         },
         "max_concurrency": {
           "anyOf": [
@@ -14541,6 +14541,21 @@
     },
     "ViewportConfig": {
       "properties": {
+        "padding": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Horizontal padding on each side, in columns."
+        },
         "height": {
           "anyOf": [
             {
@@ -16300,7 +16315,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Control step fields."
+          "description": "Control step fields for parallel, matrix, and test groups."
         },
         "max_concurrency": {
           "anyOf": [

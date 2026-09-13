@@ -738,6 +738,8 @@ const config = {
 
     customFields: {
         latestRelease: 'v0.0.0', // initial placeholder
+        // Render downloads from the same revision as the deployed site, including PR casts.
+        castGitRef: process.env.GITHUB_SHA || 'main',
         // Optional base URL (no trailing slash) for landing-page demo recordings.
         // The videos are published by `atmos demo publish` to the same docs-origin
         // bucket under /img/demos/, so DemoVideo serves them same-origin from that
