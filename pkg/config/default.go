@@ -47,9 +47,17 @@ var (
 				PluginCache:             true, // Enabled by default for zero-config performance.
 				PluginCacheDir:          "",   // Empty = use XDG default (~/.cache/atmos/terraform/plugins).
 				Init: schema.TerraformInit{
-					PassVars:    false,
-					Mode:        schema.TerraformInitModeAuto,
-					Reconfigure: schema.TerraformInitReconfigureAuto,
+					PassVars: false,
+					Mode:     schema.TerraformInitModeAuto,
+					// Reconfigure is deliberately left unset (not "auto"), unlike Mode/Upgrade
+					// above: EffectiveInitReconfigure's legacy fallback (InitRunReconfigure, set
+					// above) needs Init.Reconfigure to be genuinely empty to distinguish "unset"
+					// from an explicit choice -- see EffectiveInitReconfigure's doc comment and
+					// setDefaultConfiguration's matching omission in load.go. Setting it here would
+					// make ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE/--init-run-reconfigure
+					// silently stop working whenever no atmos.yaml is found (mergeDefaultConfig is
+					// the only place this struct is used).
+					//
 					// Auto since 2026-09-12 (journaled in pkg/edition); a project pinned to an
 					// earlier edition gets "never" restored -- see EffectiveInitUpgrade's doc comment.
 					Upgrade: schema.TerraformInitUpgradeAuto,

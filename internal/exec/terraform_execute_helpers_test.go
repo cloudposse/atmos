@@ -273,6 +273,27 @@ func TestShouldRunTerraformInit_TrueWhenModeAuto(t *testing.T) {
 	assert.True(t, shouldRunTerraformInit(&atmosConfig, &info))
 }
 
+// TestShouldRunTerraformInit_TrueForWorkspaceWhenModeNever guards against a regression where
+// init.mode: never would also suppress the always-forced reconfigure init that workspace
+// select/new needs. Force is set to true for the workspace subcommand independent of init.mode
+// by autoinit.RequestFromInfo (see shouldRunTerraformInit's doc comment); init.mode: never must
+// only suppress the ordinary unconditional pre-command init, not this workspace-specific one.
+func TestShouldRunTerraformInit_TrueForWorkspaceWhenModeNever(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.Init.Mode = schema.TerraformInitModeNever
+	info := schema.ConfigAndStacksInfo{SubCommand: subcommandWorkspace}
+	assert.True(t, shouldRunTerraformInit(&atmosConfig, &info))
+}
+
+// TestShouldRunTerraformInit_FalseForWorkspaceWhenSkipInitSet confirms --skip-init still wins
+// over the workspace subcommand carve-out above: unlike init.mode: never, --skip-init is an
+// explicit per-invocation override that predates init.mode and must skip init unconditionally.
+func TestShouldRunTerraformInit_FalseForWorkspaceWhenSkipInitSet(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: subcommandWorkspace, SkipInit: true}
+	assert.False(t, shouldRunTerraformInit(&atmosConfig, &info))
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // buildInitArgs
 // ──────────────────────────────────────────────────────────────────────────────

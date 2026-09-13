@@ -95,6 +95,18 @@ func WriteMarker(path string, m *Marker) error {
 	return nil
 }
 
+// InvalidateMarker best-effort removes the marker at path so a subsequent Decide treats init as
+// required (ReasonNoMarker) rather than trusting a marker recorded before an init attempt whose
+// outcome isn't known yet. A missing file is not an error -- there is nothing to invalidate.
+func InvalidateMarker(path string) error {
+	defer perf.Track(nil, "autoinit.InvalidateMarker")()
+
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("%w: removing %s: %w", errUtils.ErrInitMarker, path, err)
+	}
+	return nil
+}
+
 // Record recomputes the fingerprint from in (the lock file, and anything else init may have
 // changed, is re-read post-init) and writes the resulting marker to MarkerPath(dataDir).
 func Record(in *Inputs, initArgs []string, atmosVersion string) error {

@@ -847,6 +847,14 @@ func cloneRCValue(v any) any {
 // Note this only gates whether the smart-init decision point (executeTerraformInitCommand)
 // runs at all -- the decision of whether that pre-step actually shells out to `terraform
 // init`, and with which flags, is made by autoinit.Decide once it does run.
+//
+// The init.mode: never check below excludes the workspace subcommand: autoinit.RequestFromInfo
+// forces Decide's decision (Force: true) whenever info.SubCommand == "workspace", independent of
+// init.mode, because workspace select/new needs a freshly reconfigured backend regardless of
+// whether the ordinary pre-command init would otherwise run -- this predates init.mode entirely
+// (see buildInitArgs's history). Gating that decision point out here for mode: never would
+// silently drop that forced reconfigure and break workspace select/new for anyone who set
+// init.mode: never intending only to suppress the ordinary unconditional pre-command init.
 func shouldRunTerraformInit(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
 	if info.SubCommand == subcommandInit {
 		return false
@@ -858,7 +866,7 @@ func shouldRunTerraformInit(atmosConfig *schema.AtmosConfiguration, info *schema
 		log.Debug("Skipping over 'terraform init' due to '--skip-init' flag being passed")
 		return false
 	}
-	if atmosConfig.Components.Terraform.EffectiveInitMode() == schema.TerraformInitModeNever {
+	if info.SubCommand != subcommandWorkspace && atmosConfig.Components.Terraform.EffectiveInitMode() == schema.TerraformInitModeNever {
 		log.Debug("Skipping over 'terraform init' due to components.terraform.init.mode: never")
 		return false
 	}
@@ -952,12 +960,16 @@ func executeTerraformInitForced(atmosConfig *schema.AtmosConfiguration, info *sc
 		args = append(args, varFileFlag, varFile)
 	}
 
+	in := newAutoInitInputs(atmosConfig, info, componentPath, varFile)
+	// Invalidate before attempting: see executeTerraformInitCommand's matching call for why a
+	// forced init that fails must not leave a stale-but-still-matching marker behind.
+	autoinit.InvalidateFromInfo(in)
 	if _, err := runTerraformInitSubprocess(atmosConfig, info, componentPath, args, opts...); err != nil {
 		return err
 	}
 
 	dispatchAfterInit(atmosConfig, info, componentPath, opts...)
-	recordAutoInit(newAutoInitInputs(atmosConfig, info, componentPath, varFile), args)
+	recordAutoInit(in, args)
 	return nil
 }
 
@@ -1086,6 +1098,10 @@ func executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *s
 
 	tf := &atmosConfig.Components.Terraform
 	args := autoinit.InitArgs(decision, tf.Init.PassVars, varFile)
+	// Invalidate before attempting: if this init fails, a stale-but-still-matching marker must
+	// not survive it -- see autoinit.InvalidateFromInfo's doc comment. RecordFromInfo below
+	// re-records a fresh marker once (and only once) this attempt or its recovery retry succeeds.
+	autoinit.InvalidateFromInfo(in)
 	output, err := runTerraformInitSubprocess(atmosConfig, info, componentPath, args, opts...)
 	usedArgs := args
 

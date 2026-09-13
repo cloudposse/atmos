@@ -960,10 +960,12 @@ func (t *Terraform) EffectiveInitMode() TerraformInitMode {
 // maps to never, and anything else (including the legacy default true) maps to auto.
 //
 // Unlike EffectiveInitMode/EffectiveInitUpgrade, this default is deliberately NOT given a Viper
-// SetDefault in pkg/config/load.go, so it stays edition-pin-unaware: t.Init.Reconfigure must
-// remain genuinely empty ("") when the user hasn't set it explicitly, or this method's legacy
-// fallback below (deprecated init_run_reconfigure) would never run, silently breaking
-// init_run_reconfigure: false's "never" mapping for any project that set it. The
+// SetDefault in pkg/config/load.go, nor a literal default in pkg/config/default.go's
+// defaultCliConfig (used only when no atmos.yaml is found at all), so it stays
+// edition-pin-unaware: t.Init.Reconfigure must remain genuinely empty ("") when the user hasn't
+// set it explicitly, or this method's legacy fallback below (deprecated init_run_reconfigure)
+// would never run, silently breaking init_run_reconfigure: false's "never" mapping for any
+// project that set it. The
 // init_run_reconfigure: true -> auto reinterpretation this creates for anyone who never
 // migrates is a real, undocumented-by-editions default-behavior change -- it's the
 // KindBehavior gap tracked in docs/prd/editions.md's Roadmap (reinterpreting what an existing

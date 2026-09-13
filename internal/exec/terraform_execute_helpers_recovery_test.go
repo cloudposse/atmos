@@ -108,6 +108,33 @@ func TestExecuteTerraformInitForced_SubprocessFailurePropagates(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "a failed forced init must not record a marker")
 }
 
+// TestExecuteTerraformInitForced_SubprocessFailureInvalidatesStaleMarker verifies that a
+// forced reinit that fails removes any pre-existing marker rather than leaving it behind. A
+// stale-but-still-fingerprint-matching marker would let the next, non-forced smart-init decision
+// wrongly return ReasonUpToDate and skip init entirely -- even though the last actual init
+// attempt (this one) never succeeded. See autoinit.InvalidateFromInfo's doc comment.
+func TestExecuteTerraformInitForced_SubprocessFailureInvalidatesStaleMarker(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	componentPath := t.TempDir()
+	markerPath := autoinit.MarkerPath(autoinit.DataDir(componentPath, nil))
+	require.NoError(t, autoinit.WriteMarker(markerPath, &autoinit.Marker{SchemaVersion: autoinit.MarkerSchemaVersion, Fingerprint: "stale"}))
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		Command:          exePath,
+		ComponentEnvList: []string{"_ATMOS_TEST_EXIT_ONE=1"},
+	}
+
+	initErr := executeTerraformInitForced(&atmosConfig, info, componentPath, "vars.tfvars", false, false)
+	require.Error(t, initErr)
+
+	_, statErr := os.Stat(markerPath)
+	assert.True(t, os.IsNotExist(statErr), "a failed forced init must invalidate any pre-existing marker, not leave it behind")
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // recoverFromInitRequired
 // ──────────────────────────────────────────────────────────────────────────────

@@ -137,6 +137,23 @@ func RecordFromInfo(in *Inputs, initArgs []string) {
 	}
 }
 
+// InvalidateFromInfo best-effort invalidates the init marker immediately before an init attempt
+// whose outcome isn't known yet: if that attempt fails, a stale-but-still-matching marker must
+// not survive it, or a later, unrelated invocation could wrongly decide (ReasonUpToDate) that
+// init is unnecessary when the last actual init attempt never succeeded. A nil in (dry run) is a
+// no-op; callers re-record a fresh marker via RecordFromInfo once the attempt that follows this
+// call actually succeeds.
+func InvalidateFromInfo(in *Inputs) {
+	defer perf.Track(nil, "autoinit.InvalidateFromInfo")()
+
+	if in == nil {
+		return
+	}
+	if err := InvalidateMarker(MarkerPath(in.effectiveDataDir())); err != nil {
+		log.Warn("Failed to invalidate terraform init marker before init attempt; smart init may wrongly skip init later if this attempt fails", "error", err)
+	}
+}
+
 // AnnounceSkipped tells the user (on the UI/stderr channel, never stdout) that a fresh
 // `terraform init` was determined to be unnecessary this run.
 func AnnounceSkipped(info *schema.ConfigAndStacksInfo, reason Reason) {

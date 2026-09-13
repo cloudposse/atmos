@@ -19,9 +19,16 @@ import (
 // project pinned to an earlier edition gets "always"/"never" restored instead -- see
 // TestLoadConfigEditionInitModeAndUpgrade for that end-to-end behavior and
 // schema.Terraform.EffectiveInitMode/EffectiveInitUpgrade's doc comments for why.
+//
+// Init.Reconfigure itself is asserted empty, not "auto": EffectiveInitReconfigure's legacy
+// fallback (deprecated init_run_reconfigure, which defaultCliConfig sets to true) needs
+// Init.Reconfigure to stay genuinely unset to resolve to auto -- see
+// EffectiveInitReconfigure's doc comment and defaultCliConfig's matching comment in default.go.
 func TestDefaultConfig_TerraformInit(t *testing.T) {
 	assert.Equal(t, schema.TerraformInitModeAuto, defaultCliConfig.Components.Terraform.Init.Mode)
-	assert.Equal(t, schema.TerraformInitReconfigureAuto, defaultCliConfig.Components.Terraform.Init.Reconfigure)
+	assert.Empty(t, defaultCliConfig.Components.Terraform.Init.Reconfigure)
+	assert.True(t, defaultCliConfig.Components.Terraform.InitRunReconfigure)
+	assert.Equal(t, schema.TerraformInitReconfigureAuto, defaultCliConfig.Components.Terraform.EffectiveInitReconfigure())
 	assert.Equal(t, schema.TerraformInitUpgradeAuto, defaultCliConfig.Components.Terraform.Init.Upgrade)
 	assert.False(t, defaultCliConfig.Components.Terraform.Init.PassVars)
 }

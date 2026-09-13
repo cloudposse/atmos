@@ -29,6 +29,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/autoinit"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -539,6 +540,14 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	// Bare `workspace` (no sub-subcommand) was fully handled by runWorkspaceSetup.
 	if info.SubCommand == subcommandWorkspace && info.SubCommand2 == "" {
 		return nil
+	}
+
+	// An explicit `atmos terraform init` about to run below (see the matching recordAutoInit
+	// call after ExecuteShellCommandWithRetry) must invalidate any existing marker first: see
+	// executeTerraformInitCommand's matching call for why a failed init must not leave a
+	// stale-but-still-matching marker behind for a later, unrelated invocation to trust.
+	if info.SubCommand == subcommandInit {
+		autoinit.InvalidateFromInfo(newAutoInitInputs(atmosConfig, info, componentPath, constructTerraformComponentVarfileName(info)))
 	}
 
 	err := ExecuteShellCommandWithRetry(
