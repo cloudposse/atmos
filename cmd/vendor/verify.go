@@ -68,7 +68,7 @@ Exits non-zero when any drift is found. This never checks for a newer upstream v
 		component := v.GetString("component")
 		filterTags := splitTags(v.GetString("tags"))
 		stack := v.GetString("stack")
-		labels, err := pkgtags.ParseLabelsFlag(v.GetString("labels"))
+		labels, err := pkgtags.ParseLabelsFlag(v.GetStringSlice("labels"))
 		if err != nil {
 			return err
 		}
@@ -211,7 +211,7 @@ func init() {
 		flags.WithStringFlag("file", "", "", "Vendor manifest file (default: ./vendor.yaml)"),
 		flags.WithStringFlag("tags", "", "", "Verify only components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
 		flags.WithStringFlag("stack", "s", "", "Verify only components belonging to the specified stack"),
-		flags.WithStringFlag("labels", "", "", vendorLabelsFlagHelp),
+		flags.WithStringSliceFlag("labels", "", nil, vendorLabelsFlagHelp),
 		flags.WithStringFlag("format", "", "table", "Output format: table or json"),
 	)
 	vendorVerifyParser.RegisterFlags(vendorVerifyCmd)

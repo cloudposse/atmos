@@ -351,8 +351,11 @@ func TestRunLogs_MergesAndSortsAcrossStacks(t *testing.T) {
 		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 	}, nil)
 
-	out := captureStderr(t, func() {
-		summary, err := runLogs(context.Background(), client, "root", false, map[string]any{})
+	// logs is a data command (docs/io-and-ui-output.md); its non-chart output
+	// must go to stdout, not stderr — captureStdout (not captureStderr) is the
+	// regression guard for that.
+	out := captureStdout(t, func() {
+		summary, err := runLogs(context.Background(), client, "root", logsOptions{}, map[string]any{})
 		require.NoError(t, err)
 		assert.Equal(t, 2, summary["event_count"])
 	})
@@ -361,6 +364,21 @@ func TestRunLogs_MergesAndSortsAcrossStacks(t *testing.T) {
 	childIdx := indexOf(t, out, "ChildResource")
 	rootIdx := indexOf(t, out, "RootResource")
 	assert.Less(t, childIdx, rootIdx, "events must be merged in chronological order")
+}
+
+// indexOf is a small test helper returning the index of substr in s, failing
+// the test if it's not found.
+func indexOf(t *testing.T, s, substr string) int {
+	t.Helper()
+	idx := -1
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			idx = i
+			break
+		}
+	}
+	require.GreaterOrEqual(t, idx, 0, "expected %q to contain %q", s, substr)
+	return idx
 }
 
 // runLogs must use a stable sort: when the root and a nested stack's events
@@ -400,8 +418,8 @@ func TestRunLogs_StableSortPreservesOrderForEqualTimestamps(t *testing.T) {
 		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
 	}, nil)
 
-	out := captureStderr(t, func() {
-		summary, err := runLogs(context.Background(), client, "root", false, map[string]any{})
+	out := captureStdout(t, func() {
+		summary, err := runLogs(context.Background(), client, "root", logsOptions{}, map[string]any{})
 		require.NoError(t, err)
 		assert.Equal(t, 2, summary["event_count"])
 	})
@@ -411,21 +429,6 @@ func TestRunLogs_StableSortPreservesOrderForEqualTimestamps(t *testing.T) {
 	rootIdx := indexOf(t, out, "RootResource")
 	childIdx := indexOf(t, out, "ChildResource")
 	assert.Less(t, rootIdx, childIdx, "a stable sort must preserve API order for equal-timestamp events")
-}
-
-// indexOf is a small test helper returning the index of substr in s, failing
-// the test if it's not found.
-func indexOf(t *testing.T, s, substr string) int {
-	t.Helper()
-	idx := -1
-	for i := 0; i+len(substr) <= len(s); i++ {
-		if s[i:i+len(substr)] == substr {
-			idx = i
-			break
-		}
-	}
-	require.GreaterOrEqual(t, idx, 0, "expected %q to contain %q", s, substr)
-	return idx
 }
 
 // runLogs with --chart must render the grouped-by-resource output
@@ -448,12 +451,117 @@ func TestRunLogs_ChartMode(t *testing.T) {
 	}, nil)
 
 	out := captureStdout(t, func() {
-		summary, err := runLogs(context.Background(), client, "root", true, map[string]any{})
+		summary, err := runLogs(context.Background(), client, "root", logsOptions{Chart: true}, map[string]any{})
 		require.NoError(t, err)
 		assert.Equal(t, 2, summary["event_count"])
 	})
 	assert.Contains(t, out, "MyBucket")
 	assert.Contains(t, out, "CREATE_IN_PROGRESS -> CREATE_COMPLETE")
+}
+
+// runLogs with follow=true must dispatch to followLogs (the continuous-tail
+// path) after building the stack tree once, rather than the one-shot path.
+func TestRunLogs_Follow_DispatchesToFollowLogs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString("root")}).Return(&cloudformation.ListStackResourcesOutput{}, nil)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("e1"), LogicalResourceId: awsString("RootResource"), ResourceStatus: cfntypes.ResourceStatusCreateComplete},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	out := captureStdout(t, func() {
+		summary, err := runLogs(ctx, client, "root", logsOptions{Follow: true}, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, 1, summary["event_count"])
+	})
+	assert.Contains(t, out, "RootResource")
+}
+
+// followLogs must merge and chronologically sort events collected across every
+// stack within a single poll iteration, not just write each stack's events as
+// soon as they're fetched (which would print in poll order, not event-time
+// order, whenever an earlier-polled stack's events are actually newer than a
+// later-polled stack's).
+func TestFollowLogs_MergesAndSortsAcrossStacksPerIteration(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	rootLater := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	childEarlier := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+
+	// "root" is polled before "child" (names order), but child's event has the
+	// earlier timestamp — the output must still print child before root.
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("root-1"), LogicalResourceId: awsString("RootResource"), Timestamp: &rootLater},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStackEventsOutput{
+		StackEvents: []cfntypes.StackEvent{
+			{EventId: awsString("child-1"), LogicalResourceId: awsString("ChildResource"), Timestamp: &childEarlier},
+		},
+	}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("child")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	out := captureStdout(t, func() {
+		summary, err := followLogs(ctx, client, "root", []string{"root", "child"}, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, 2, summary["event_count"])
+	})
+
+	childIdx := indexOf(t, out, "ChildResource")
+	rootIdx := indexOf(t, out, "RootResource")
+	assert.Less(t, childIdx, rootIdx, "events must be merged in chronological order, not poll order")
+}
+
+// followLogs must periodically re-walk the nested-stack tree (every
+// stackTreeRefreshEveryNPolls polls) to discover a stack that wasn't there at
+// the initial walk -- e.g. one created after --follow started. Setting the
+// cadence to 1 makes the refresh fire after the very first poll, so this
+// verifies the trigger without driving the loop through real
+// eventPollInterval-length sleeps.
+func TestFollowLogs_RefreshesStackTreeToDiscoverNewStacks(t *testing.T) {
+	original := stackTreeRefreshEveryNPolls
+	stackTreeRefreshEveryNPolls = 1
+	t.Cleanup(func() { stackTreeRefreshEveryNPolls = original })
+
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	client.EXPECT().DescribeStackEvents(gomock.Any(), &cloudformation.DescribeStackEventsInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStackEventsOutput{}, nil)
+	client.EXPECT().DescribeStacks(gomock.Any(), &cloudformation.DescribeStacksInput{StackName: awsString("root")}).Return(&cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
+	}, nil)
+	// The refresh (triggered after the first poll, since the cadence is 1)
+	// must re-walk the tree from "root" and discover "child".
+	client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString("root")}).Return(&cloudformation.ListStackResourcesOutput{
+		StackResourceSummaries: []cfntypes.StackResourceSummary{
+			{ResourceType: awsString(nestedStackResourceType), PhysicalResourceId: awsString("child")},
+		},
+	}, nil)
+	client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString("child")}).Return(&cloudformation.ListStackResourcesOutput{}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := followLogs(ctx, client, "root", []string{"root"}, map[string]any{})
+	require.NoError(t, err)
 }
 
 // runLogs must propagate a buildStackTree failure.
@@ -462,7 +570,7 @@ func TestRunLogs_BuildTreeError(t *testing.T) {
 	client := NewMockCloudFormationClient(ctrl)
 	client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
 
-	_, err := runLogs(context.Background(), client, "root", false, map[string]any{})
+	_, err := runLogs(context.Background(), client, "root", logsOptions{}, map[string]any{})
 	require.Error(t, err)
 }
 
@@ -473,8 +581,65 @@ func TestRunLogs_PollStackEventsError(t *testing.T) {
 	client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(&cloudformation.ListStackResourcesOutput{}, nil)
 	client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
 
-	_, err := runLogs(context.Background(), client, "root", false, map[string]any{})
+	_, err := runLogs(context.Background(), client, "root", logsOptions{}, map[string]any{})
 	require.Error(t, err)
+}
+
+// refreshFollowedStacks must add a newly discovered nested stack to names
+// with a fresh, empty seen map, while leaving an already-tracked stack's
+// existing seen map untouched -- so a refresh never causes already-emitted
+// events to be re-emitted for stacks discovered at the initial walk.
+func TestRefreshFollowedStacks_AddsNewlyDiscoveredStack(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+
+	const childID = "child-physical-id"
+	client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString("root")}).Return(&cloudformation.ListStackResourcesOutput{
+		StackResourceSummaries: []cfntypes.StackResourceSummary{
+			{ResourceType: awsString(nestedStackResourceType), PhysicalResourceId: awsString(childID)},
+		},
+	}, nil)
+	client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString(childID)}).Return(&cloudformation.ListStackResourcesOutput{}, nil)
+
+	seen := map[string]map[string]bool{
+		"root": {"already-seen-event": true},
+	}
+	names := []string{"root"}
+
+	got, err := refreshFollowedStacks(context.Background(), client, "root", names, seen)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"root", childID}, got)
+	assert.True(t, seen["root"]["already-seen-event"], "an already-tracked stack's seen map must survive a refresh untouched")
+	require.Contains(t, seen, childID)
+	assert.Empty(t, seen[childID], "a newly discovered stack must start with a fresh, empty seen map")
+}
+
+// refreshFollowedStacks must not duplicate a stack that's already tracked,
+// even though the tree walk finds it again on every call.
+func TestRefreshFollowedStacks_SkipsAlreadyTrackedStack(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().ListStackResources(gomock.Any(), &cloudformation.ListStackResourcesInput{StackName: awsString("root")}).Return(&cloudformation.ListStackResourcesOutput{}, nil)
+
+	seen := map[string]map[string]bool{"root": {}}
+	got, err := refreshFollowedStacks(context.Background(), client, "root", []string{"root"}, seen)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"root"}, got)
+}
+
+// refreshFollowedStacks must propagate a buildStackTree failure and leave
+// names unchanged, so a transient refresh error never drops an
+// already-tracked stack.
+func TestRefreshFollowedStacks_PropagatesTreeError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := NewMockCloudFormationClient(ctrl)
+	client.EXPECT().ListStackResources(gomock.Any(), gomock.Any()).Return(nil, errors.New("throttled"))
+
+	names := []string{"root"}
+	seen := map[string]map[string]bool{"root": {}}
+	got, err := refreshFollowedStacks(context.Background(), client, "root", names, seen)
+	require.Error(t, err)
+	assert.Equal(t, names, got)
 }
 
 // renderEventChart must group events by resource, joining each resource's
@@ -542,7 +707,7 @@ func TestRunWatch_FailedStatus(t *testing.T) {
 
 	_, err := runWatch(context.Background(), client, "root", map[string]any{})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationChangeSetFailed)
+	assert.ErrorIs(t, err, errUtils.ErrAwsCloudFormationOperationFailed)
 }
 
 // runWatch must propagate a streamStackEvents failure.

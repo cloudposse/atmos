@@ -26,7 +26,7 @@ type MetadataOptions struct {
 	ProcessFunctions bool
 	Skip             []string
 	Tags             []string
-	LabelsRaw        string
+	LabelsRaw        []string
 }
 
 // metadataCmd lists metadata across stacks.
@@ -76,7 +76,7 @@ func parseMetadataOptions(cmd *cobra.Command, v *viper.Viper) *MetadataOptions {
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
-		LabelsRaw:        v.GetString("labels"),
+		LabelsRaw:        v.GetStringSlice("labels"),
 	}
 }
 

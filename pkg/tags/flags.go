@@ -26,25 +26,34 @@ func ParseTagsFlag(input string) []string {
 	return result
 }
 
-// ParseLabelsFlag parses a comma-separated key=value (or key:value) list into a map[string]string.
-func ParseLabelsFlag(input string) (map[string]string, error) {
+// ParseLabelsFlag parses a slice of key=value (or key:value) pairs into a map[string]string.
+// Each element is comma-split before being treated as one or more pairs: when the input
+// arrives via pflag's StringSlice flag type, elements are already individually split
+// (comma-split within a single occurrence, accumulated across repeated occurrences, e.g.
+// --labels a=1,b=2 --labels c=3) and this is a no-op per element. When the input instead
+// arrives via Viper reading a scalar value (e.g. ATMOS_LABELS="a=1,b=2" or a plain string in
+// config), cast.ToStringSlice wraps the whole comma-separated string as a single slice
+// element -- splitting here normalizes both shapes to the same result.
+func ParseLabelsFlag(input []string) (map[string]string, error) {
 	defer perf.Track(nil, "tags.ParseLabelsFlag")()
 
-	if input == "" {
+	if len(input) == 0 {
 		return nil, nil
 	}
 
 	result := make(map[string]string)
-	for _, pair := range strings.Split(input, ",") {
-		pair = strings.TrimSpace(pair)
-		if pair == "" {
-			continue
+	for _, element := range input {
+		for _, pair := range strings.Split(element, ",") {
+			pair = strings.TrimSpace(pair)
+			if pair == "" {
+				continue
+			}
+			key, value, err := splitLabelPair(pair)
+			if err != nil {
+				return nil, err
+			}
+			result[key] = value
 		}
-		key, value, err := splitLabelPair(pair)
-		if err != nil {
-			return nil, err
-		}
-		result[key] = value
 	}
 	return result, nil
 }
