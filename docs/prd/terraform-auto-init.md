@@ -159,7 +159,9 @@ mechanism.
 
 Standard Atmos precedence applies to all three settings: **CLI flag > environment variable > `atmos.yaml` >
 default (`auto`)**. `--skip-init` is unchanged and is equivalent to `--init-mode=never` for that one
-invocation — it does not change the persisted `atmos.yaml` setting. `deploy_run_init` is unchanged and
+invocation for every subcommand except `workspace` — `terraform workspace select`/`new` still forces a
+reconfigured init under `init.mode: never`, but `--skip-init` suppresses it unconditionally. It does not
+change the persisted `atmos.yaml` setting. `deploy_run_init` is unchanged and
 continues to control only whether `deploy` runs init *at all*; when it does, `init.mode` governs whether that
 init is actually executed or skipped.
 

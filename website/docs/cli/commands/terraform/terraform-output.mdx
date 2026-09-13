@@ -280,7 +280,7 @@ Scalar-only formats (`env`, `dotenv`, `bash`, `csv`, `tsv`) will return an error
 
     <dt>`--init-mode` <em>(optional)</em></dt>
     <dd>
-        Override [`init.mode`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default, skip init when nothing relevant changed), `always`, or `never` (same as `--skip-init`).
+        Override [`init.mode`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default, skip init when nothing relevant changed), `always`, or `never` (disables the ordinary implicit init, but unlike `--skip-init` does not suppress the forced reconfigure init that `atmos terraform workspace select`/`new` needs).
 
         ```shell
         atmos terraform output vpc -s dev --init-mode=always

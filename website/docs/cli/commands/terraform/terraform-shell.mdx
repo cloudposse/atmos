@@ -123,6 +123,7 @@ These settings can also be controlled via environment variables:
 export ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=true
 export ATMOS_COMPONENTS_TERRAFORM_INIT_MODE=auto
 export ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE=auto
+export ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE=auto
 export ATMOS_COMPONENTS_TERRAFORM_WORKSPACES_ENABLED=true
 ```
 
@@ -243,7 +244,7 @@ atmos terraform shell infra/vpc -s tenant1-ue2-dev --identity dev-role
 
     <dt>`--init-mode` <em>(optional)</em></dt>
     <dd>
-        Override [`init.mode`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never` (same as `--skip-init`).
+        Override [`init.mode`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never` (disables the ordinary implicit init, but unlike `--skip-init` does not suppress the forced reconfigure init that `atmos terraform workspace select`/`new` needs).
 
         ```shell
         atmos terraform shell <component> -s <stack> --init-mode=always
