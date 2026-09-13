@@ -1,6 +1,6 @@
 ---
 name: atmos-aws-cloudformation
-description: "Native AWS CloudFormation components (experimental): render/plan/diff/apply/deploy/delete/validate/output/fmt/list via the AWS SDK for Go v2, components.\"aws/cloudformation\", changesets, drift detection, the S3 artifact-bucket backend, source-based template provisioning, StackSets, and tree/logs/watch observability"
+description: "Native AWS CloudFormation components (experimental): render/plan/diff/apply/deploy/delete/validate/output/fmt/list via the AWS SDK for Go v2, changesets, drift detection, S3 backend, source provisioning, StackSets, tree/logs/watch"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -12,18 +12,17 @@ metadata:
 Use this skill for the **native `aws/cloudformation`** component type
 (`components."aws/cloudformation"`). It deploys CloudFormation stacks directly through the
 **AWS SDK for Go v2** — no `aws` CLI, and no `cfn`/`sam`/`Rain` binary. `aws/cloudformation` is the
-first member of an `aws/*` namespace reserved for AWS-native primitives that bypass Terraform
-entirely.
+first member of an `aws/*` namespace for AWS-native primitives that bypass Terraform.
 
-This feature is **experimental** (`Annotations["experimental"] = "true"` on the nested command
-group in `cmd/aws/cloudformation/cloudformation.go`, following the same nested-annotation pattern
-`atmos terraform backend` uses — the top-level `aws` command group itself stays stable).
+This feature is **experimental** — the nested command group carries the same experimental
+annotation pattern `atmos terraform backend` uses; the top-level `aws` command group itself stays
+stable.
 
 ## Related Skills
 
 | Need | Load |
 |---|---|
-| Terraform/OpenTofu orchestration (contrast: HCL + state file vs. CloudFormation's own stack/changeset state) | [atmos-terraform](../atmos-terraform/SKILL.md) |
+| Terraform/OpenTofu orchestration (contrast: HCL + state file vs. CFN's own stack/changeset state) | [atmos-terraform](../atmos-terraform/SKILL.md) |
 | Component architecture, inheritance, catalogs, `dependencies.components` DAG ordering | [atmos-components](../atmos-components/SKILL.md) |
 | AWS credentials / identities for the SDK client and per-target auth overrides | [atmos-auth](../atmos-auth/SKILL.md) |
 | Lifecycle hooks around `diff`/`apply`/`delete` | [atmos-hooks](../atmos-hooks/SKILL.md) |
@@ -75,15 +74,6 @@ components:
             kind: git
             repository: acme/infra-gitops
             path: stacks/dev/vpc
-      dependencies:
-        components:
-          - vpc-flow-logs
-      hooks:
-        notify:
-          events:
-            - after.aws/cloudformation.apply
-          kind: command
-          command: echo "vpc stack deployed"
 ```
 
 CloudFormation components use the same stack sections as other component types — `vars`, `env`,
@@ -94,13 +84,13 @@ chart-style plugin system, unlike native Helm).
 
 | Field | Purpose |
 |---|---|
-| `template` / `path` *(exactly one required)* | `template` is an **inline** template body — a literal string (`\|` block scalar, YAML or JSON) or a structured YAML map — and, because it's inline stack config, it flows through Atmos's own `{{ }}` templating pipeline before being sent to CloudFormation. `path` is a **file reference** relative to the component's base path and is read as raw bytes with no Atmos templating applied. Setting both is an error. |
-| `stack_name` | The explicit CloudFormation stack name. Supports Go templates like any other stack field; there is no legacy name-pattern interpolation. |
-| `parameters` | A `map[string]any` of CloudFormation template parameters, normalized at the API boundary: scalars are stringified, lists are comma-joined for `List<Type>`/`CommaDelimitedList`. `UsePreviousValue` is not expressible — Atmos config is always the source of truth. |
-| `capabilities` | Acknowledged IAM capabilities, e.g. `CAPABILITY_IAM`, `CAPABILITY_NAMED_IAM`, `CAPABILITY_AUTO_EXPAND` (needed for macros/transforms/SAM templates). |
-| `tags` | A `map[string]string` of tags applied to the CloudFormation stack — distinct from Atmos's own component `tags`/`--tags` selection. |
-| `stack_policy.file` | Path to a stack policy JSON document, relative to the component's base path. Applied via a follow-up `SetStackPolicy` call *after* a successful apply — it protects the *next* update, not the one that just ran. |
-| `role_arn` | The CloudFormation **service role** — not caller credentials. Passed as `CreateChangeSet`'s `RoleARN`; the caller only needs `iam:PassRole` on it. |
+| `template` / `path` *(exactly one required)* | `template` is an **inline** body (string or YAML map) that flows through Atmos's `{{ }}` templating before reaching CloudFormation. `path` is a **file reference**, read as raw bytes, no templating. Setting both is an error. |
+| `stack_name` | Explicit stack name. Supports Go templates; no legacy name-pattern interpolation. |
+| `parameters` | `map[string]any`, normalized at the API boundary: scalars stringified, lists comma-joined for `List<Type>`. `UsePreviousValue` isn't expressible — Atmos config is always the source of truth. |
+| `capabilities` | Acknowledged IAM capabilities, e.g. `CAPABILITY_IAM`, `CAPABILITY_AUTO_EXPAND` (macros/SAM). |
+| `tags` | `map[string]string` tags on the stack — distinct from Atmos's own component `tags`/`--tags`. |
+| `stack_policy.file` | Stack policy JSON path. Applied via `SetStackPolicy` *after* apply — protects the *next* update. |
+| `role_arn` | The CloudFormation **service role**, not caller credentials — `CreateChangeSet`'s `RoleARN`. |
 | `notification_arns` | SNS topic ARNs CloudFormation publishes stack events to. |
 | `disable_rollback` | Prevents automatic rollback on stack creation/update failure. |
 | `termination_protection` | See [Delete Safety](#delete-safety--termination-protection) below. |
@@ -136,17 +126,10 @@ that works with every verb.
 
 `output` supports the full standard format set shared with `atmos terraform output`: `json`, `yaml`,
 `hcl`, `env`, `dotenv`, `bash`, `csv`, `tsv`, `table` (default on a TTY), and `github` (GitHub
-Actions `$GITHUB_OUTPUT` syntax), plus `--flatten` and `--uppercase` key options.
-
-```shell
-atmos aws cloudformation output vpc -s dev
-atmos aws cloudformation output vpc -s dev VpcId
-atmos aws cloudformation output vpc -s dev --format=github
-```
-
-Outputs sourced from `NoEcho`-declared template parameters are masked by value wherever they
-reappear (changeset rendering, `describe` output, `output` results, logs) — not just at the original
-parameter field.
+Actions `$GITHUB_OUTPUT` syntax via `atmos aws cloudformation output vpc -s dev --format=github`),
+plus `--flatten` and `--uppercase` key options. Outputs sourced from `NoEcho`-declared template
+parameters are masked by value wherever they reappear (changeset rendering, `describe` output,
+`output` results, logs) — not just at the original parameter field.
 
 ## Changesets
 
@@ -182,56 +165,23 @@ work, not yet implemented.
 ## Delivery Targets (Backend Management)
 
 By default `apply`/`deploy` deploy directly to the account/region resolved for the component (see
-[Region Resolution](#region-resolution)) — the implicit target when `--target` is omitted and no
-`provision.default` is set. A component can declare additional named targets under
-`provision.targets`, selected with `--target`:
-
-| Kind | Purpose |
-|---|---|
-| `aws/s3` | Uploads the template to S3. Selected directly (`--target <name>`), it's publish-only (upload and stop — a review step, or a template too large to pass inline). It's also used **automatically** to package any template that exceeds CloudFormation's 51,200-byte inline size limit, regardless of which target is selected for the deploy. `bucket` and `region` are required (`region` builds the `https://` URL `CreateChangeSet`'s `TemplateURL` needs — a bare `s3://` URI is rejected). |
-| `git` | Commits the template YAML to a `git.repositories`-declared repository instead of deploying — a review/GitOps pipeline that applies from the committed template separately. Same shape native Helm/Kubernetes use. |
-| `aws/stackset` | Multi-account/multi-region delivery — **not** selectable via `apply --target`; used exclusively by the `stackset` verb group (see [Stack Sets](#stack-sets)). |
-
-"Backend," for this component type, means the **S3 artifact bucket** declared by a `kind: aws/s3`
-target — CloudFormation's own stack state is service-managed, so the artifact bucket is the type's
-only supporting infrastructure. It follows the same convention as `atmos terraform backend`:
+[Region Resolution](#region-resolution)). A component can declare additional named
+`provision.targets`, selected with `--target`: `aws/s3` (publish-only upload, also used
+**automatically** to package any template over CloudFormation's 51,200-byte inline limit),
+`git` (GitOps commit instead of deploying), and `aws/stackset` (multi-account/region, see
+[Stack Sets](#stack-sets)). "Backend" means the S3 artifact bucket a `kind: aws/s3` target
+declares — CloudFormation's own stack state is service-managed. Manage it like
+`atmos terraform backend`:
 
 ```shell
 atmos aws cloudformation backend create vpc -s dev
-atmos aws cloudformation backend describe vpc -s dev
-atmos aws cloudformation backend update vpc -s dev
-atmos aws cloudformation backend delete vpc -s dev
-atmos aws cloudformation backend list
 ```
 
-The bucket must exist before a packaged `apply`/`deploy` uploads to it — either run `backend create`
-explicitly, or set `provision.backend.enabled: true` (a sibling of `targets`, not nested under one)
-to auto-provision it the first time it's missing, via the same S3 backend provisioner Terraform's
-`provision.backend.enabled` uses:
-
-```yaml
-components:
-  "aws/cloudformation":
-    vpc:
-      provision:
-        backend:
-          enabled: true
-        targets:
-          artifacts:
-            kind: aws/s3
-            bucket: acme-plat-cfn-artifacts
-            region: us-east-2
-```
-
-Auto-provisioning only checks existence up front; it never reconciles a bucket that already exists.
-`backend create`/`update`, run explicitly, always re-apply secure defaults (versioning, encryption,
-public-access blocking, tags).
-
-**Packaging scope today**: automatic packaging uploads the **template body itself** when it exceeds
-the inline size limit. It does not currently rewrite local-asset references inside the template
-(Lambda source zips, nested-stack templates referenced by relative path) the way `aws cloudformation
-package`/Rain's `pkg` do — pre-upload those assets out-of-band and reference the resulting S3
-location directly in the template until a future phase closes this gap.
+Set `provision.backend.enabled: true` to auto-provision the bucket on first use instead of running
+`backend create` explicitly. See
+[references/delivery-targets.md](references/delivery-targets.md) for the full target-kind table,
+the `backend` verb group, auto-provisioning semantics, and today's packaging-scope limitation
+(local assets like Lambda zips aren't rewritten, only the template body is uploaded).
 
 ## Source & Template Management
 
@@ -246,12 +196,10 @@ components:
         uri: github.com/acme/cfn-templates.git//vpc?ref={{ .Version }}
         version: 1.2.0
       path: template.yaml           # relative to the vendored directory
-
-    dns:
-      source:
-        uri: https://raw.githubusercontent.com/acme/cfn-templates/v1.2.0/dns.yaml
-      # path: not needed — a single-file source URI is fetched directly and used as-is.
 ```
+
+A single-file source URI (e.g. a raw `https://.../dns.yaml` link) is fetched directly and used
+as-is — `path:` isn't needed in that case.
 
 Inspect and manage vendored sources with the `source` verb group:
 
@@ -268,22 +216,8 @@ Kubernetes components have.
 
 ## Stack Sets
 
-Multi-account/multi-region orchestration, resolved from a `kind: aws/stackset` provision target:
-
-```yaml
-components:
-  "aws/cloudformation":
-    vpc:
-      provision:
-        targets:
-          multi-account:
-            kind: aws/stackset
-            accounts: ["111111111111", "222222222222"]
-            regions: ["us-east-1", "us-west-2"]
-            permission_model: SELF_MANAGED
-            administration_role_arn: arn:aws:iam::111111111111:role/AWSCloudFormationStackSetAdministrationRole
-            execution_role_name: AWSCloudFormationStackSetExecutionRole
-```
+Multi-account/multi-region orchestration, resolved from a `kind: aws/stackset` provision target
+(`accounts`, `regions`, `permission_model`, `administration_role_arn`, `execution_role_name`):
 
 ```shell
 atmos aws cloudformation stackset create vpc -s dev --target=multi-account
@@ -292,11 +226,10 @@ atmos aws cloudformation stackset delete vpc -s dev
 atmos aws cloudformation stackset instances vpc -s dev
 ```
 
-`stackset create` creates the StackSet's initial stack instances only when both `accounts` and
-`regions` are set on the target; `stackset update` propagates a template/parameter/capability change
-to every existing instance without changing which accounts/regions have one. `stackset delete` and
-`stackset instances` act directly on `stack_name` and don't resolve or require a `provision.targets`
-entry. `create`/`update`/`delete` prompt for confirmation (skip with `--auto-approve`).
+`create`/`update`/`delete` prompt for confirmation (skip with `--auto-approve`). `delete` and
+`instances` act directly on `stack_name`, not the target. See
+[references/delivery-targets.md](references/delivery-targets.md) for the full target YAML shape
+and `create`-vs-`update` semantics.
 
 ## Observability: tree, logs, watch
 
@@ -331,13 +264,10 @@ import/adoption itself is not supported).
 - **`--retain-resources=<logical-id1>,<logical-id2>`** passes retained logical IDs through to the
   API — only valid for a `DELETE_FAILED` stack.
 - **Termination protection is checked against the stack's *live* AWS state, not just local config**,
-  and is never silently disabled. If the live stack has termination protection enabled, `delete`
-  fails with an actionable hint pointing at `--disable-termination-protection` (which calls
-  `UpdateTerminationProtection` before deleting). This matters because local config can legitimately
-  drift from live state: editing `termination_protection: false` in a stack manifest and re-applying
-  does **not** disable protection on an already-protected stack — `apply` only ever turns protection
-  on, never off. Only the explicit `--disable-termination-protection` delete flag turns it off, and
-  it does so unconditionally (no live lookup needed in that path).
+  and is never silently disabled. If live protection is enabled, `delete` fails with a hint pointing
+  at `--disable-termination-protection` (calls `UpdateTerminationProtection` before deleting).
+  Editing `termination_protection: false` and re-applying does **not** unprotect an already-protected
+  stack — `apply` only ever turns protection on. Only the explicit delete flag turns it off.
 
 ## Region Resolution
 
@@ -352,25 +282,13 @@ identity's account.
 
 ## Auth
 
-The primary seam is `pkg/aws/identity`'s in-process `LoadConfigWithAuth` — the same path every
-`cmd/aws/*` command uses — handling identity chaining, `aws/emulator` endpoint overrides, and FIPS
-endpoints without ever shelling out or using `os.Setenv`. Component-level `auth:` selects an identity
-exactly like a Terraform component does. Per-target `provision.targets.<name>.auth` overrides let a
+Component-level `auth:` selects an identity exactly like a Terraform component does — see
+[atmos-auth](../atmos-auth/SKILL.md) for identity chaining, FIPS endpoints, and `aws/emulator`
+(Floci) local/no-credentials testing. Per-target `provision.targets.<name>.auth` overrides let a
 deploy target assume a workload account's identity while an artifact-bucket target uses a
-shared-services account's identity. Local/no-credentials testing works through an `aws/emulator`
-identity (Floci):
-
-```yaml
-auth:
-  identities:
-    local-aws:
-      kind: aws/emulator
-      emulator: local/aws
-      default: true
-```
-
-`role_arn` on the component is a **separate concept** — it's the CloudFormation service role, not
-caller credentials; see the [Component Shape](#component-shape) table.
+shared-services account's identity. `role_arn` on the component is a **separate concept** — it's
+the CloudFormation service role, not caller credentials; see the [Component Shape](#component-shape)
+table.
 
 ## atmos.yaml Configuration
 
@@ -396,21 +314,10 @@ Terraform-only). See [atmos-ci](../atmos-ci/SKILL.md) for the native-CI plumbing
 ## Hooks
 
 Five lifecycle pairs fire hook events: `before`/`after` × `diff` (`plan` normalizes to `diff`),
-`apply` (`deploy` normalizes to `apply`), `delete`, `drift detect`, and `drift describe`. Every
-other verb — `render`, `validate`, `output`, `fmt`, `tree`, `logs`, `watch`, `changeset *`, `get *`,
-`stackset *`, `list`, `backend *`, and `source *` — does not fire hook events.
-
-```yaml
-components:
-  "aws/cloudformation":
-    vpc:
-      hooks:
-        notify:
-          events:
-            - after.aws/cloudformation.apply
-          kind: command
-          command: echo "vpc stack deployed"
-```
+`apply` (`deploy` normalizes to `apply`), `delete`, `drift detect`, and `drift describe` — e.g.
+`after.aws/cloudformation.apply`. Every other verb — `render`, `validate`, `output`, `fmt`, `tree`,
+`logs`, `watch`, `changeset *`, `get *`, `stackset *`, `list`, `backend *`, and `source *` — does
+not fire hook events. See [atmos-hooks](../atmos-hooks/SKILL.md) for the `hooks:` block shape.
 
 ## Secrets
 
@@ -435,20 +342,14 @@ Rain-verb-to-`atmos aws cloudformation`-verb cross-reference (`fmt`→`fmt`, `ca
 
 ## Guidance
 
-- Prefer `path:` for templates that live in the component directory and `template:` (inline) only
-  when you want the body to flow through Atmos's own `{{ }}` templating pipeline before it reaches
-  CloudFormation — `path:`-loaded templates are read as raw bytes with no Atmos-side templating.
+- Prefer `path:` for templates that live in the component directory; use inline `template:` only
+  when the body needs Atmos's own `{{ }}` templating before reaching CloudFormation.
 - Use `dependencies.components` so `--all`/`--affected` deploys stacks in the right order — a
   Terraform component can `depends_on` a CFN stack and vice versa.
-- Use `provision.backend.enabled: true` for a zero-friction dev sandbox; use the explicit
-  `backend create`/`update` verbs in shared/production environments where you want secure defaults
-  re-applied deliberately rather than only on first use.
-- Never assume setting `termination_protection: false` and re-applying will unprotect a stack — use
-  `delete --disable-termination-protection` explicitly.
-- Use `atmos aws cloudformation output` (not a hand-rolled `describe-stacks --query` alias) to fetch
-  Outputs — it renders the same view `apply`/`deploy` show at completion, in every standard format
-  including `github`.
-- Remember large templates and referenced local assets (Lambda zips, nested-stack templates) may need
-  manual out-of-band S3 upload today — automatic packaging only covers the template body itself.
-- Use the Floci `aws/emulator` identity (see `examples/cloudformation/`) to develop and test
-  CloudFormation components with zero AWS credentials before pointing at a real account.
+- Use `provision.backend.enabled: true` for a zero-friction dev sandbox; use explicit
+  `backend create`/`update` in shared/production environments to re-apply secure defaults
+  deliberately rather than only on first use.
+- Referenced local assets (Lambda zips, nested-stack templates) need manual out-of-band S3
+  upload today — automatic packaging only covers the template body itself.
+- Use the Floci `aws/emulator` identity (see `examples/cloudformation/`) to develop and test with
+  zero AWS credentials before pointing at a real account.
