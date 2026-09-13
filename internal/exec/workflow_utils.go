@@ -868,15 +868,15 @@ func ExecuteWorkflow(
 								Interactive: step.Interactive,
 								DryRun:      dryRun,
 							}, func() error {
-								return ExecuteShellWithWriters(&ExecuteShellSpec{
-									Command: command,
-									Name:    commandName,
-									Dir:     workDir,
-									EnvVars: stepEnv,
-									DryRun:  dryRun,
-									Stdout:  io.MultiWriter(ioLayer.MaskWriter(os.Stdout), stdoutCapture),
-									Stderr:  io.MultiWriter(ioLayer.MaskWriter(os.Stderr), stderrCapture),
+								writer := stepPkg.NewCommandOutputWriter(&step, workflowDefinition)
+								_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+									return ExecuteShellWithWriters(&ExecuteShellSpec{
+										Command: command, Name: commandName, Dir: workDir, EnvVars: stepEnv, DryRun: dryRun,
+										Stdout: io.MultiWriter(ioLayer.MaskWriter(stdout), stdoutCapture),
+										Stderr: io.MultiWriter(ioLayer.MaskWriter(stderr), stderrCapture),
+									})
 								})
+								return runErr
 							})
 						})
 					})
@@ -918,18 +918,16 @@ func ExecuteWorkflow(
 
 				ui.Infof("Executing command: `atmos %s`", command)
 				err = retry.Do(context.Background(), step.Retry, func() error {
-					return runCommandStep(func(stdout, stderr io.Writer) error {
-						return ExecuteShellCommand(
-							atmosConfig,
-							"atmos",
-							args,
-							".",
-							stepEnv,
-							dryRun,
-							"",
-							WithStdoutCapture(stdout),
-							WithStderrCapture(stderr),
-						)
+					return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
+						writer := stepPkg.NewCommandOutputWriter(&step, workflowDefinition)
+						_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+							return ExecuteShellCommand(
+								atmosConfig, "atmos", args, ".", stepEnv, dryRun, "",
+								WithStdoutCapture(stdoutCapture), WithStderrCapture(stderrCapture),
+								WithProcessStreams(process.Streams{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr}),
+							)
+						})
+						return runErr
 					})
 				})
 			default:
