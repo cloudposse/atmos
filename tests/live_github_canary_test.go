@@ -59,7 +59,10 @@ var transientLiveGitHubPatterns = []*regexp.Regexp{
 	// i/o timeout / TLS handshake timeout: Go's net package dial/handshake timeout wrapping.
 	regexp.MustCompile(`(?i)i/o timeout`),
 	regexp.MustCompile(`(?i)tls handshake timeout`),
-	regexp.MustCompile(`(?i)timed out`),
+	// "timed out" only when it is a network diagnostic (dial/i/o/connect/handshake/read/write),
+	// never the bare phrase: an application-level message such as `hook "deploy" timed out`
+	// is a real failure, not a transient network condition.
+	regexp.MustCompile(`(?i)(?:i/o|dial|connect(?:ion)?|handshake|read|write|request)[^\n]{0,40}timed out`),
 	// "tls:" (colon) is how Go's crypto/tls wraps its own errors (e.g. "tls: failed to verify
 	// certificate"); a bare "tls" word elsewhere is not necessarily a network condition.
 	regexp.MustCompile(`(?i)\btls:`),
