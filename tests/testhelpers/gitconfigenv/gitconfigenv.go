@@ -105,7 +105,9 @@ func IsInsteadOfEntry(entry GitConfigEntry) bool {
 // IsExtraHeaderEntry reports whether entry is an `http.<url>.extraheader` override -- the shape
 // used to inject a GitHub Basic-Auth Authorization header (see
 // tests/live_github_canary_test.go's githubCanaryEnv and cli_test.go's runCLICommandTest). Used to
-// strip an inherited authorization header from a live-GitHub canary that must run unauthenticated.
+// strip an inherited authorization header from every live-GitHub canary -- unauthenticated and
+// authenticated alike -- before appending the canary's own controlled entry, since git sends every
+// repeated http.extraHeader value it is given rather than only the last one.
 //
 // The comparison is case-insensitive for the same reason as IsInsteadOfEntry: git config variable
 // names are case-insensitive, so `.extraHeader` and `.extraheader` are the same key to git.

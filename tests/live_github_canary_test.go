@@ -131,14 +131,15 @@ func githubCanaryEnv(t *testing.T, base []string, authenticated bool) []string {
 	t.Helper()
 
 	// Strip any inherited insteadOf rule (a redirect to something other than real github.com, e.g.
-	// the local git mirror) and, for the unauthenticated canaries, any inherited GitHub
-	// authorization extraheader: a live-GitHub canary's isolation contract requires it reach real,
-	// unauthenticated github.com regardless of what git config entries the parent process already
-	// carries.
+	// the local git mirror) and any inherited GitHub authorization extraheader: git sends every
+	// repeated http.extraHeader value it is given, so leaving an inherited one in place alongside
+	// the controlled entry appended below (for the authenticated case) would let both reach the
+	// git subprocess, letting an inherited Authorization header hijack -- or collide with -- the
+	// canary's own credentials. A live-GitHub canary's isolation contract requires it reach real
+	// github.com using only the credentials this function controls, regardless of what git config
+	// entries the parent process already carries.
 	existingEntries := gitconfigenv.Without(gitconfigenv.ReadEntries(base), gitconfigenv.IsInsteadOfEntry)
-	if !authenticated {
-		existingEntries = gitconfigenv.Without(existingEntries, gitconfigenv.IsExtraHeaderEntry)
-	}
+	existingEntries = gitconfigenv.Without(existingEntries, gitconfigenv.IsExtraHeaderEntry)
 	env := removeEnvPrefixed(base, "GIT_CONFIG_COUNT=", "GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")
 
 	// TestMain delivers the local git mirror's url.*.insteadOf rules through GIT_CONFIG_GLOBAL
