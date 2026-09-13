@@ -46,16 +46,22 @@ tests:
     workdir: "fixtures/scenarios/empty-dir"
     command: "atmos"
     env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
       # Set explicit config path to prevent parent directory search
       ATMOS_CLI_CONFIG_PATH: "."
     args: []
     expect:
+      ignore_trailing_whitespace: true
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       diff: []
+      stdout:
+        - "USAGE"
+        - "BUILT-IN COMMANDS"
       stderr:
-        - "atmos.yaml CLI config file was not found."
+        - !not "Incorrect Usage|atmos.yaml CLI config file was not found"
         - "Telemetry Enabled"
-        - "https://atmos.tools/cli/configuration"
-      exit_code: 1
+      exit_code: 0
 
   - name: check atmos --help in empty-dir
     enabled: true
