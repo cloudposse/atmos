@@ -1,4 +1,5 @@
 import React from 'react';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 
 import CastPlayer from '@site/src/components/CastPlayer';
 import CastProDownload from '@site/src/components/CastProDownload';
@@ -31,7 +32,7 @@ export interface CastEmbedProps extends CastPlayerProps {
 export default function CastEmbed({
   owner,
   repo,
-  gitRef = 'main',
+  gitRef,
   download = true,
   share = true,
   formats,
@@ -39,6 +40,11 @@ export default function CastEmbed({
   soundtrack,
   ...playerProps
 }: CastEmbedProps): JSX.Element {
+  const { siteConfig } = useDocusaurusContext();
+  const usesSiteRepository =
+    (!owner || owner === siteConfig.organizationName) && (!repo || repo === siteConfig.projectName);
+  const buildRef = usesSiteRepository ? siteConfig.customFields?.castGitRef : undefined;
+  const resolvedGitRef = gitRef ?? (typeof buildRef === 'string' && buildRef ? buildRef : 'main');
   const path = siteCastPath(playerProps.src);
   const showActions = (download || share) && !playerProps.static;
 
@@ -48,13 +54,13 @@ export default function CastEmbed({
       {showActions && (
         <div className={styles.castActions}>
           {share && (
-            <CastShareLink owner={owner} repo={repo} gitRef={gitRef} path={path} />
+            <CastShareLink owner={owner} repo={repo} gitRef={resolvedGitRef} path={path} />
           )}
           {download && (
             <CastProDownload
               owner={owner}
               repo={repo}
-              gitRef={gitRef}
+              gitRef={resolvedGitRef}
               path={path}
               formats={formats}
               ttlSeconds={ttlSeconds}

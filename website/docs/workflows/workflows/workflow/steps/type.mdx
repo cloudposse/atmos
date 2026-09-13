@@ -40,6 +40,7 @@ steps:
 | Type | Purpose | Primary fields |
 | --- | --- | --- |
 | [`parallel`](/workflows/steps/type/parallel) | Run child steps concurrently with dependencies and bounded concurrency. | `steps`, `max_concurrency`, `fail`, `output`, `needs` |
+| [`test`](/workflows/steps/type/test) | Run checks with a test tree, progress, and failure-only logs. | `steps`, `title`, `fail`, `output` |
 | [`matrix`](/workflows/steps/type/matrix) | Expand axes into generated child steps and run them concurrently. | `matrix`, `steps`, `max_concurrency`, `fail`, `output` |
 | [`wait`](/workflows/steps/type/wait) | Block until named background container services are healthy. | `for` |
 | [`wait-all`](/workflows/steps/type/wait#wait-all) | Block until every background container service is healthy. | none |
