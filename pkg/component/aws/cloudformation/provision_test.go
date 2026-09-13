@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -232,8 +233,19 @@ func TestDeployDirect_NoOp(t *testing.T) {
 // compute, execute, and event-stream polling to the given final status.
 // Shared by TestDeployDirect_Success/_FailedFinalStatus and
 // TestDeliverApply_DirectDeployKind so the two callers of deployDirect don't
-// each hand-roll the same six-call sequence.
-func expectDeployDirectFlow(client *MockCloudFormationClient, finalStatus cfntypes.StackStatus) {
+// each hand-roll the same seven-call sequence.
+//
+// The polling sequence includes an explicit CREATE_IN_PROGRESS poll before
+// the terminal one: streamStackEvents requires observing an `*_IN_PROGRESS`
+// status before it will accept a terminal status as this operation's
+// completion (see streamStackEvents), guarding against misreading a leftover
+// terminal status from a previous, unrelated operation.
+func expectDeployDirectFlow(t *testing.T, client *MockCloudFormationClient, finalStatus cfntypes.StackStatus) {
+	t.Helper()
+	oldInterval := eventPollInterval
+	eventPollInterval = time.Millisecond
+	t.Cleanup(func() { eventPollInterval = oldInterval })
+
 	gomock.InOrder(
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{}, nil),
 		client.EXPECT().CreateChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.CreateChangeSetOutput{}, nil),
@@ -241,6 +253,10 @@ func expectDeployDirectFlow(client *MockCloudFormationClient, finalStatus cfntyp
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateInProgress}},
+		}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: finalStatus}},
@@ -253,7 +269,7 @@ func expectDeployDirectFlow(client *MockCloudFormationClient, finalStatus cfntyp
 func TestDeployDirect_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
-	expectDeployDirectFlow(client, cfntypes.StackStatusCreateComplete)
+	expectDeployDirectFlow(t, client, cfntypes.StackStatusCreateComplete)
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
 	result, err := deployDirect(context.Background(), client, spec)
@@ -266,7 +282,7 @@ func TestDeployDirect_Success(t *testing.T) {
 func TestDeployDirect_FailedFinalStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
-	expectDeployDirectFlow(client, cfntypes.StackStatusCreateFailed)
+	expectDeployDirectFlow(t, client, cfntypes.StackStatusCreateFailed)
 
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
 	_, err := deployDirect(context.Background(), client, spec)
@@ -336,7 +352,7 @@ func TestDeployDirect_StreamEventsError(t *testing.T) {
 func TestDeliverApply_DirectDeployKind(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
-	expectDeployDirectFlow(client, cfntypes.StackStatusCreateComplete)
+	expectDeployDirectFlow(t, client, cfntypes.StackStatusCreateComplete)
 
 	octx := &opContext{
 		Ctx:         context.Background(),
@@ -359,6 +375,10 @@ func TestDeliverApply_DirectDeployKind(t *testing.T) {
 // rejects a TemplateBody over 51,200 bytes, and only TemplateURL supports
 // templates beyond that limit.
 func TestDeliverApply_DirectDeployKind_PackagesLargeTemplate(t *testing.T) {
+	oldInterval := eventPollInterval
+	eventPollInterval = time.Millisecond
+	t.Cleanup(func() { eventPollInterval = oldInterval })
+
 	ctrl := gomock.NewController(t)
 	client := NewMockCloudFormationClient(ctrl)
 
@@ -379,6 +399,10 @@ func TestDeliverApply_DirectDeployKind_PackagesLargeTemplate(t *testing.T) {
 			Status: cfntypes.ChangeSetStatusCreateComplete,
 		}, nil),
 		client.EXPECT().ExecuteChangeSet(gomock.Any(), gomock.Any()).Return(&cloudformation.ExecuteChangeSetOutput{}, nil),
+		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
+		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
+			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateInProgress}},
+		}, nil),
 		client.EXPECT().DescribeStackEvents(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStackEventsOutput{}, nil),
 		client.EXPECT().DescribeStacks(gomock.Any(), gomock.Any()).Return(&cloudformation.DescribeStacksOutput{
 			Stacks: []cfntypes.Stack{{StackStatus: cfntypes.StackStatusCreateComplete}},
