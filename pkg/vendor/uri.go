@@ -111,16 +111,23 @@ var directoryArchiveExtensions = []string{
 }
 
 // archiveQueryParam is go-getter's query parameter that explicitly overrides
-// extension-based archive detection: any value that strconv.ParseBool parses
-// as false ("false", "0", "f", "F", "FALSE", "False", etc.) disables
-// unarchiving even for a recognized archive extension, matching go-getter's
-// own client.go (`if b, err := strconv.ParseBool(archiveV); err == nil && !b
-// { archiveV = "-" }`). Any other non-empty value -- a ParseBool-true value or
-// an explicit archive type like "zip" that ParseBool can't parse at all --
-// forces unarchiving. An empty value (`?archive=`, as opposed to the
-// parameter being entirely absent) is treated the same as absent -- go-getter
-// falls through to extension-based detection rather than forcing
-// unarchiving. See
+// extension-based archive detection. Its own client.go resolves it with a
+// plain `c.Decompressors[archiveV]` map lookup after this rewrite:
+// any value strconv.ParseBool parses as false ("false", "0", "f", "F",
+// "FALSE", "False", etc.) is rewritten to the sentinel "-" before the lookup
+// (`if b, err := strconv.ParseBool(archiveV); err == nil && !b { archiveV =
+// "-" }`), while a ParseBool-true value ("true", "1", "t", etc.) is left as
+// that literal string. Neither "-" nor "true"/"1"/"t" is ever a key in
+// Decompressors, so both boolean spellings resolve to no decompressor and
+// go-getter downloads the source as a plain file. Only a value ParseBool
+// can't parse at all -- an explicit archive type like "zip" -- reaches the
+// map lookup as-is, and only forces unarchiving if it names one of
+// go-getter's *directory* archive types (see directoryArchiveExtensions);
+// the single-file codec keys ("bz2", "gz", "xz", "zst") and any unrecognized
+// value also resolve to no decompressor. An empty value (`?archive=`, as
+// opposed to the parameter being entirely absent) is treated the same as
+// absent -- go-getter falls through to extension-based detection rather than
+// forcing unarchiving. See
 // https://pkg.go.dev/github.com/hashicorp/go-getter#hdr-Archiving.
 const archiveQueryParam = "archive"
 
@@ -177,16 +184,37 @@ func archiveQueryOverride(rawQuery string) (archive bool, ok bool) {
 	if !present || len(raw) == 0 || raw[0] == "" {
 		return false, false
 	}
-	// Parse with strconv.ParseBool, exactly like go-getter itself does, so
-	// boolean-false spellings other than the literal string "false" (e.g.
-	// "0", "f") are recognized as disabling unarchiving instead of being
-	// misclassified as forcing it. A value ParseBool can't parse at all
-	// (e.g. an explicit archive type like "zip") isn't a boolean override --
-	// it forces unarchiving, same as before.
-	if b, err := strconv.ParseBool(raw[0]); err == nil {
-		return b, true
+	// Parse with strconv.ParseBool, exactly like go-getter itself does. A
+	// value ParseBool recognizes -- whether a false spelling ("0", "f") or a
+	// true spelling ("1", "t") -- never resolves to a real Decompressors key
+	// in go-getter's client.go (a false value is rewritten to the sentinel
+	// "-"; a true value is left as the literal string "true"/"1"/"t"), so
+	// go-getter downloads the source as a plain file either way.
+	if _, err := strconv.ParseBool(raw[0]); err == nil {
+		return false, true
 	}
-	return true, true
+	// A value ParseBool can't parse at all (e.g. an explicit archive type
+	// like "zip") reaches go-getter's Decompressors map lookup unchanged, so
+	// it only forces unarchiving when it names one of go-getter's directory
+	// archive types -- not a single-file codec key ("bz2", "gz", "xz",
+	// "zst") or an unrecognized value, both of which also miss the lookup
+	// and download as a plain file.
+	return isDirectoryArchiveType(raw[0]), true
+}
+
+// isDirectoryArchiveType reports whether typ (without a leading dot, e.g.
+// "zip" or "tar.gz") is one of go-getter's directory-archive Decompressors
+// keys (github.com/hashicorp/go-getter@v1.8.6 decompress.go), as opposed to
+// a single-file codec key ("bz2", "gz", "xz", "zst") or a value that isn't a
+// Decompressors key at all. Matching is exact-case, mirroring go-getter's
+// own `c.Decompressors[archiveV]` map lookup -- no case normalization.
+func isDirectoryArchiveType(typ string) bool {
+	for _, ext := range directoryArchiveExtensions {
+		if strings.TrimPrefix(ext, ".") == typ {
+			return true
+		}
+	}
+	return false
 }
 
 // HasLocalPathPrefix checks if the URI starts with local path prefixes.

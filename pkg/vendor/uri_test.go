@@ -439,9 +439,10 @@ func TestIsArchiveURI_ArchiveQueryParamAndSubdirectory(t *testing.T) {
 	// source's own archive extension.
 	assert.True(t, IsArchiveURI("https://example.com/archive.zip//nested"),
 		"a subdirectory suffix must not hide the source's archive extension")
-	// archive=true is the explicit form of the default (extension-detected)
-	// behavior and must still force unarchiving.
-	assert.True(t, IsArchiveURI("https://example.com/download?archive=true"))
+	// archive=true parses as a boolean but, like go-getter itself, never
+	// resolves to a real Decompressors key ("true" isn't one), so it must not
+	// force unarchiving.
+	assert.False(t, IsArchiveURI("https://example.com/download?archive=true"))
 	// A subdirectory combined with an explicit archive override: the override
 	// still wins, and the subdirectory suffix is not consulted.
 	assert.False(t, IsArchiveURI("https://example.com/archive.zip//nested?archive=false"))
@@ -450,11 +451,9 @@ func TestIsArchiveURI_ArchiveQueryParamAndSubdirectory(t *testing.T) {
 // go-getter's own client.go parses the `archive` query value with
 // strconv.ParseBool, so boolean-false spellings other than the literal
 // string "false" -- "0", "f", "F", "FALSE", "False" -- must disable
-// unarchiving too, and boolean-true spellings other than "true" -- "1", "t",
-// "T", "TRUE", "True" -- must still force it. Regression test for a bug
-// where only `strings.EqualFold(value, "false")` was checked, so
-// `archive=0`/`archive=f` were misclassified as forcing unarchiving instead
-// of disabling it.
+// unarchiving too. Regression test for a bug where only
+// `strings.EqualFold(value, "false")` was checked, so `archive=0`/`archive=f`
+// were misclassified as forcing unarchiving instead of disabling it.
 func TestIsArchiveURI_ArchiveQueryParamParsesBoolLikeGoGetter(t *testing.T) {
 	// Non-"false" boolean-false spellings must disable unarchiving, even for
 	// a recognized archive extension.
@@ -464,16 +463,40 @@ func TestIsArchiveURI_ArchiveQueryParamParsesBoolLikeGoGetter(t *testing.T) {
 		"archive=f must be parsed as boolean false and disable unarchiving")
 	assert.False(t, IsArchiveURI("https://example.com/archive.zip?archive=FALSE"),
 		"archive=FALSE must be parsed case-insensitively as boolean false")
-	// Non-"true" boolean-true spellings must still force unarchiving, even
-	// with no recognized extension.
-	assert.True(t, IsArchiveURI("https://example.com/download?archive=1"),
-		"archive=1 must be parsed as boolean true and force unarchiving")
-	assert.True(t, IsArchiveURI("https://example.com/download?archive=t"),
-		"archive=t must be parsed as boolean true and force unarchiving")
-	// A non-boolean value (an explicit archive type) is not touched by
-	// strconv.ParseBool and must still force unarchiving, exactly as before.
+	// A non-boolean value naming a real go-getter directory archive type is
+	// not touched by strconv.ParseBool and must still force unarchiving.
 	assert.True(t, IsArchiveURI("https://example.com/download?archive=tar"),
-		"a non-boolean archive type must still force unarchiving")
+		"a non-boolean, supported directory archive type must still force unarchiving")
+}
+
+// Regression test for a CodeRabbit follow-up on PR #2999: go-getter's
+// client.go resolves the `archive` query value with a plain
+// `c.Decompressors[archiveV]` map lookup after rewriting boolean-false
+// spellings to the sentinel "-". Boolean-true spellings ("true", "1", "t")
+// are left as that literal string, which is never a Decompressors key, so
+// go-getter downloads the source as a plain file -- it does NOT force
+// unarchiving the way a bare extension match would. Likewise, a
+// non-boolean value that doesn't name one of go-getter's real Decompressors
+// keys (an unsupported/made-up archive type) also misses the lookup and
+// must not force unarchiving either.
+func TestIsArchiveURI_ArchiveQueryParamBooleanTrueAndUnsupportedTypeDoNotForceUnarchiving(t *testing.T) {
+	// Boolean-true-like values never resolve to a real Decompressors key in
+	// go-getter, so they must not force unarchiving, even with no recognized
+	// extension.
+	assert.False(t, IsArchiveURI("https://example.com/download?archive=true"),
+		"archive=true must not force unarchiving; go-getter never matches the literal key \"true\"")
+	assert.False(t, IsArchiveURI("https://example.com/download?archive=1"),
+		"archive=1 must not force unarchiving; go-getter never matches the literal key \"1\"")
+	assert.False(t, IsArchiveURI("https://example.com/download?archive=t"),
+		"archive=t must not force unarchiving; go-getter never matches the literal key \"t\"")
+	// A supported directory archive type is a real Decompressors key and
+	// must still force unarchiving.
+	assert.True(t, IsArchiveURI("https://example.com/download?archive=zip"),
+		"archive=zip names a real go-getter Decompressors key and must force unarchiving")
+	// An unsupported/made-up type is not a Decompressors key, so it must not
+	// force unarchiving, even with no recognized extension.
+	assert.False(t, IsArchiveURI("https://example.com/download?archive=bogus"),
+		"archive=bogus does not name a go-getter Decompressors key and must not force unarchiving")
 }
 
 // An empty `archive` value (`?archive=`, as opposed to the parameter being
