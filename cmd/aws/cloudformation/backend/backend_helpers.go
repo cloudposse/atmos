@@ -128,7 +128,7 @@ type Provisioner interface {
 // provisioner.DescribeBackend/ListBackends Terraform itself uses today).
 type defaultProvisioner struct{}
 
-func (d *defaultProvisioner) CreateBackend(_ context.Context, params *CreateBackendParams) error {
+func (d *defaultProvisioner) CreateBackend(ctx context.Context, params *CreateBackendParams) error {
 	provisionSection, _ := params.ComponentConfig[cfg.ProvisionSectionName].(map[string]any)
 	s3cfg, err := pkgcfn.ResolveS3BackendTarget(provisionSection, params.Target)
 	if err != nil {
@@ -146,6 +146,7 @@ func (d *defaultProvisioner) CreateBackend(_ context.Context, params *CreateBack
 		Stack:             params.Stack,
 		DescribeComponent: describeFunc,
 		AuthContext:       params.AuthContext,
+		Context:           ctx,
 	})
 }
 
@@ -163,7 +164,7 @@ func (d *defaultProvisioner) BackendExists(ctx context.Context, params *CreateBa
 	return status.Exists, nil
 }
 
-func (d *defaultProvisioner) DeleteBackend(_ context.Context, params *DeleteBackendParams) error {
+func (d *defaultProvisioner) DeleteBackend(ctx context.Context, params *DeleteBackendParams) error {
 	provisionSection, _ := params.ComponentConfig[cfg.ProvisionSectionName].(map[string]any)
 	s3cfg, err := pkgcfn.ResolveS3BackendTarget(provisionSection, params.Target)
 	if err != nil {
@@ -181,6 +182,7 @@ func (d *defaultProvisioner) DeleteBackend(_ context.Context, params *DeleteBack
 		Force:             params.Force,
 		DescribeComponent: describeFunc,
 		AuthContext:       params.AuthContext,
+		Context:           ctx,
 	})
 }
 

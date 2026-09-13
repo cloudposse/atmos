@@ -19,7 +19,7 @@ and `website/docs/stacks/components/aws-cloudformation.mdx` for the stack-config
 
 ## Core Principles (Rain-Specific)
 
-1. **Templates are not preprocessed.** `aws/cloudformation` reads a component's `template:` file
+1. **Templates are not preprocessed.** `aws/cloudformation` reads a component's `path:` file
   as raw bytes (`os.ReadFile`) and submits it to the CloudFormation API — Atmos never rewrites,
   merges, or macro-expands the template body. This is a deliberate design boundary, not a gap: it
   means every `!Rain::*` directive (which Rain resolves by *preprocessing* the template before
@@ -29,7 +29,7 @@ and `website/docs/stacks/components/aws-cloudformation.mdx` for the stack-config
   for anything CloudFormation Parameters can express, or CloudFormation's own native
   `Fn::Transform`/`AWS::Include` intrinsic for template-fragment reuse.
 2. **Existing templates and parameter files are `!include`d or pointed at, never rewritten.**
-  Point `template:` at the existing `.yaml`/`.json` template file unchanged (after resolving any
+  Point `path:` at the existing `.yaml`/`.json` template file unchanged (after resolving any
   `!Rain::` directives per the table below). If the user has a Rain/CFN parameters JSON file
   (`--parameters` flag or `Parameters.json`), pull it into the component's `parameters:` section
   with `!include`. Migration is opt-in, matching the Terraform migration guide's philosophy — see
@@ -60,7 +60,7 @@ so a template still containing `!Rain::*` tags will fail as invalid CloudFormati
 | `!Rain::Constant` | Injects a named constant's value into the template at preprocess time | Move the value to a CloudFormation `Parameters:` entry, referenced via `!Ref` in the template; feed the value from the component's `parameters:` section in stack config (which itself supports inheritance, Go templates, and `!env`/`!template`) |
 | `!Rain::Env` | Injects an environment variable's value into the template at preprocess time | Same as `Constant`: turn it into a `Parameters:` entry, and set the component's `parameters:` value with `!env VAR_NAME` in the stack manifest |
 | `!Rain::Include` | Merges an external JSON/YAML fragment into the template at preprocess time | No direct Atmos-side equivalent (templates aren't preprocessed). For genuine fragment reuse, use CloudFormation's own native `Fn::Transform`/`AWS::Include` intrinsic (resolved by CloudFormation itself at deploy time, from a fragment already in S3) — this is a CloudFormation feature, not Rain- or Atmos-specific. For anything more structural, see `Module` below |
-| `!Rain::Embed` | Inlines a local file's contents as a string literal (e.g. Lambda inline code, `UserData` scripts) at preprocess time | For small scripts: inline the content directly using a YAML block scalar (`|` / `>`) in the template by hand — this is a one-time manual flatten, not an ongoing process. For larger assets: pre-upload to S3 out-of-band and reference the S3 location directly (same gap noted in Core Principle 4) |
+| `!Rain::Embed` | Inlines a local file's contents as a string literal (e.g. Lambda inline code, `UserData` scripts) at preprocess time | For small scripts: inline the content directly using a YAML block scalar (literal `\|` or folded `>`) in the template by hand — this is a one-time manual flatten, not an ongoing process. For larger assets: pre-upload to S3 out-of-band and reference the S3 location directly (same gap noted in Core Principle 4) |
 | `!Rain::S3` | Uploads a local file/directory to S3 and rewrites the reference (e.g. Lambda `S3Bucket`/`S3Key`, nested-stack `TemplateURL`) at preprocess time | **Partial today**: the template body itself auto-packages via the component's `kind: aws/s3` provision target when it exceeds the inline size limit. Arbitrary local assets (Lambda zips, nested templates by relative path) are **not** auto-rewritten yet — pre-upload them out-of-band and reference the resulting S3 URL directly in the template |
 | `!Rain::Module` | Client-side, multi-file template composition (Rain's own docs mark this experimental) | Not supported — use AWS CDK for real modular/reusable template composition. This mirrors the PRD's own Non-Goal: Rain's module system is not a design Atmos is replicating |
 
@@ -104,7 +104,7 @@ Resources:
 components:
   "aws/cloudformation":
     my-bucket:
-      template: template.yaml
+      path: template.yaml
       parameters:
         BucketNamePrefix: acme-plat
         DeployOwner: !env DEPLOY_OWNER
@@ -190,14 +190,14 @@ mapped to" rather than guessing.
 3. **Create `atmos.yaml`** pointing `components."aws/cloudformation".base_path` at wherever the
   templates already live — no forced reorganization, same stance as
   [from-native-terraform.md](from-native-terraform.md).
-4. **Create one stack file** for one environment, pointing `template:` at the existing (now
+4. **Create one stack file** for one environment, pointing `path:` at the existing (now
   directive-free) template file:
   ```yaml
   # stacks/dev.yaml
   components:
     "aws/cloudformation":
       vpc:
-        template: template.yaml
+        path: template.yaml
         stack_name: acme-plat-dev-vpc
         parameters: !include ../params/dev-parameters.json
         capabilities:
