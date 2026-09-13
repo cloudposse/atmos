@@ -125,7 +125,7 @@ func (m *GitHubMockServer) tryAPIRepos(w http.ResponseWriter, r *http.Request) b
 // matching GitHub's semantics for GET .../releases/latest (which excludes drafts/prereleases).
 func (m *GitHubMockServer) writeLatestRelease(w http.ResponseWriter, r *http.Request, key string) {
 	m.mu.Lock()
-	releases := m.releases[key]
+	releases := append([]ReleaseSpec(nil), m.releases[key]...)
 	m.mu.Unlock()
 
 	for _, rel := range releases {
@@ -143,7 +143,7 @@ func (m *GitHubMockServer) writeLatestRelease(w http.ResponseWriter, r *http.Req
 // (pkg/toolchain/registry/aqua/version.go parseNextLink) that talks to the real API.
 func (m *GitHubMockServer) writeReleasesList(w http.ResponseWriter, r *http.Request, key string) {
 	m.mu.Lock()
-	releases := m.releases[key]
+	releases := append([]ReleaseSpec(nil), m.releases[key]...)
 	m.mu.Unlock()
 
 	page := queryInt(r, "page", 1)
@@ -187,7 +187,7 @@ func (m *GitHubMockServer) writeReleasesList(w http.ResponseWriter, r *http.Requ
 // requests per_page=1 and reads only tags[0]).
 func (m *GitHubMockServer) writeTagsList(w http.ResponseWriter, r *http.Request, key string) {
 	m.mu.Lock()
-	tags := m.tags[key]
+	tags := append([]string(nil), m.tags[key]...)
 	m.mu.Unlock()
 
 	perPage := queryInt(r, "per_page", defaultPerPage)
