@@ -60,28 +60,22 @@ func newDescribeAffectedProcessFlagsParser() *flags.StandardParser {
 // This lets the command's existing legacy flag-reading code
 // (exec.SetDescribeAffectedFlagValueInCliArgs, which only reads a flag when
 // cmd.Flags().Changed() is true) pick up the environment-sourced value with zero changes,
-// since pflag's Set() marks the flag Changed just like an explicit CLI value would.
+// since Set() marks the flag Changed just like an explicit CLI value would.
 //
 // Precedence is CLI > env var > default: a flag the user passed explicitly is left untouched
 // (CLI wins over the env var), and the env-sourced value is applied only when it differs from
 // the flag's current (default) value.
 //
-// It binds the env vars via BindToViper (idempotent with the init()-time bind, and required so
-// the function is self-contained under test), which reads the ATMOS_PROCESS_* values via
-// v.GetBool. It deliberately does NOT use v.IsSet to detect whether the env var was provided:
-// BindToViper calls v.SetDefault, and viper's IsSet reports true for keys that only have a
-// default, so it can't distinguish "env var set" from "default in effect". Comparing the
-// resolved value against the flag's current value avoids that ambiguity — when the env var is
-// unset, v.GetBool falls back to the SetDefault value (which equals the flag default), so the
-// values match and the flag is correctly left untouched. It also does NOT call
-// BindFlagsToViper, which would bind the pflag and make v.GetBool return the flag value instead
-// of the env value.
-func resolveDescribeAffectedProcessFlags(cmd *cobra.Command, v *viper.Viper, parser *flags.StandardParser) error {
+// The ATMOS_PROCESS_* env vars must already be bound to v — done once in init() via the parser's
+// BindToViper, and by the tests via the same call. Reading v.GetBool returns the env-var value
+// when set, otherwise the SetDefault value (equal to the flag default). It deliberately does NOT
+// use v.IsSet to detect whether the env var was provided: BindToViper calls v.SetDefault, and
+// viper's IsSet reports true for keys that only have a default, so it can't distinguish "env var
+// set" from "default in effect". Comparing the resolved value against the flag's current value
+// avoids that ambiguity — when the env var is unset, v.GetBool falls back to the SetDefault value,
+// so the values match and the flag is correctly left untouched.
+func resolveDescribeAffectedProcessFlags(cmd *cobra.Command, v *viper.Viper) {
 	defer perf.Track(nil, "cmd.resolveDescribeAffectedProcessFlags")()
-
-	if err := parser.BindToViper(v); err != nil {
-		return err
-	}
 
 	for _, f := range []struct {
 		flagName string
@@ -90,29 +84,21 @@ func resolveDescribeAffectedProcessFlags(cmd *cobra.Command, v *viper.Viper, par
 		{processTemplatesFlagName, processTemplatesViperKey},
 		{processFunctionsFlagName, processFunctionsViperKey},
 	} {
-		// Defensive: the real describeAffectedCmd always registers these flags, but a
-		// command constructed without them has nothing to resolve.
-		if cmd.Flags().Lookup(f.flagName) == nil {
-			continue
-		}
-		// CLI flag wins over the environment variable; if the user passed the flag
-		// explicitly, the legacy reader already picks it up, so leave it untouched.
-		if cmd.Flags().Changed(f.flagName) {
+		flag := cmd.Flags().Lookup(f.flagName)
+		// Skip when the flag isn't registered (defensive: the real describeAffectedCmd always
+		// registers these, but a command constructed without them has nothing to resolve) or when
+		// the user set it explicitly on the CLI (CLI wins; the legacy reader already honors it).
+		if flag == nil || flag.Changed {
 			continue
 		}
 
-		current, err := cmd.Flags().GetBool(f.flagName)
-		if err != nil {
-			return err
+		resolved := strconv.FormatBool(v.GetBool(f.viperKey))
+		if resolved == flag.Value.String() {
+			continue
 		}
-		// v.GetBool returns the env-var value when set, otherwise the SetDefault value
-		// (equal to the flag default). Only write back when the env var actually changes it.
-		if resolved := v.GetBool(f.viperKey); resolved != current {
-			if err := cmd.Flags().Set(f.flagName, strconv.FormatBool(resolved)); err != nil {
-				return err
-			}
-		}
+		// Set can't fail here: `resolved` is always the literal "true"/"false" and the flag was
+		// confirmed registered above. Ignoring the error mirrors the `_ = ...Set(...)` idiom in
+		// pkg/flags (e.g. pkg/flags/standard.go). Set marks the flag Changed for the legacy reader.
+		_ = cmd.Flags().Set(f.flagName, resolved)
 	}
-
-	return nil
 }

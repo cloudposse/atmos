@@ -12,12 +12,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// The three error-return branches in resolveDescribeAffectedProcessFlags are unreachable for
-// this parser's flag config and so are intentionally not covered: BindToViper only calls
-// viper.BindEnv (env vars are always present here) which fails only on empty input; GetBool and
-// Set operate on a bool flag confirmed registered by the Lookup guard, and neither errors on a
-// valid bool. This mirrors the same note in describe_error_mode_flag_test.go.
-
 // newProcessFlagsTestCmd builds a bare command with only the --process-templates and
 // --process-functions flags registered (as persistent flags, matching production), plus a
 // fresh, isolated Viper. It avoids the global viper.GetViper() so tests don't leak state into
@@ -33,12 +27,12 @@ func newProcessFlagsTestCmd(t *testing.T, cliArgs ...string) (*cobra.Command, *v
 	cmd := &cobra.Command{Use: "affected"}
 	parser.RegisterPersistentFlags(cmd)
 	require.NoError(t, cmd.ParseFlags(cliArgs))
-	return cmd, viper.New()
-}
 
-func resolveProcessFlags(t *testing.T, cmd *cobra.Command, v *viper.Viper) {
-	t.Helper()
-	require.NoError(t, resolveDescribeAffectedProcessFlags(cmd, v, newDescribeAffectedProcessFlagsParser()))
+	// Bind the ATMOS_PROCESS_* env vars to v, as init() does in production; the resolver reads
+	// them from v but does not bind them itself.
+	v := viper.New()
+	require.NoError(t, parser.BindToViper(v))
+	return cmd, v
 }
 
 // TestNewDescribeAffectedProcessFlagsParser verifies both flags register with the expected
@@ -63,7 +57,7 @@ func TestNewDescribeAffectedProcessFlagsParser(t *testing.T) {
 func TestResolveDescribeAffectedProcessFlags_NoOverride(t *testing.T) {
 	cmd, v := newProcessFlagsTestCmd(t)
 
-	resolveProcessFlags(t, cmd, v)
+	resolveDescribeAffectedProcessFlags(cmd, v)
 
 	for _, name := range []string{processTemplatesFlagName, processFunctionsFlagName} {
 		assert.Falsef(t, cmd.Flags().Changed(name), "flag %q must not be marked changed when nothing set it", name)
@@ -101,7 +95,7 @@ func TestResolveDescribeAffectedProcessFlags_EnvVarTakesEffect(t *testing.T) {
 			cmd, v := newProcessFlagsTestCmd(t)
 			t.Setenv(tt.envVar, "false")
 
-			resolveProcessFlags(t, cmd, v)
+			resolveDescribeAffectedProcessFlags(cmd, v)
 
 			target, err := cmd.Flags().GetBool(tt.targetFlag)
 			require.NoError(t, err)
@@ -124,7 +118,7 @@ func TestResolveDescribeAffectedProcessFlags_EnvVarTrue(t *testing.T) {
 	cmd, v := newProcessFlagsTestCmd(t)
 	t.Setenv("ATMOS_PROCESS_FUNCTIONS", "true")
 
-	resolveProcessFlags(t, cmd, v)
+	resolveDescribeAffectedProcessFlags(cmd, v)
 
 	val, err := cmd.Flags().GetBool(processFunctionsFlagName)
 	require.NoError(t, err)
@@ -141,7 +135,7 @@ func TestResolveDescribeAffectedProcessFlags_CLIWinsOverEnv(t *testing.T) {
 	// A conflicting env var must NOT override the explicit CLI value.
 	t.Setenv("ATMOS_PROCESS_FUNCTIONS", "false")
 
-	resolveProcessFlags(t, cmd, v)
+	resolveDescribeAffectedProcessFlags(cmd, v)
 
 	val, err := cmd.Flags().GetBool(processFunctionsFlagName)
 	require.NoError(t, err)
@@ -154,7 +148,7 @@ func TestResolveDescribeAffectedProcessFlags_ViperKeyTakesEffect(t *testing.T) {
 	cmd, v := newProcessFlagsTestCmd(t)
 	v.Set(processFunctionsViperKey, false)
 
-	resolveProcessFlags(t, cmd, v)
+	resolveDescribeAffectedProcessFlags(cmd, v)
 
 	val, err := cmd.Flags().GetBool(processFunctionsFlagName)
 	require.NoError(t, err)
@@ -170,9 +164,9 @@ func TestResolveDescribeAffectedProcessFlags_UnregisteredFlagsNoOp(t *testing.T)
 	v := viper.New()
 	t.Setenv("ATMOS_PROCESS_FUNCTIONS", "false")
 
-	err := resolveDescribeAffectedProcessFlags(cmd, v, newDescribeAffectedProcessFlagsParser())
+	// Must not panic or create a flag when the command never registered these flags.
+	resolveDescribeAffectedProcessFlags(cmd, v)
 
-	require.NoError(t, err)
 	assert.Nil(t, cmd.Flags().Lookup(processFunctionsFlagName), "no flag should be created by the resolver")
 }
 
@@ -184,7 +178,7 @@ func TestResolveDescribeAffectedProcessFlags_EnvReachesCliArgs(t *testing.T) {
 	cmd, v := newProcessFlagsTestCmd(t)
 	t.Setenv("ATMOS_PROCESS_FUNCTIONS", "false")
 
-	resolveProcessFlags(t, cmd, v)
+	resolveDescribeAffectedProcessFlags(cmd, v)
 
 	describe := exec.DescribeAffectedCmdArgs{CLIConfig: &schema.AtmosConfiguration{}}
 	exec.SetDescribeAffectedFlagValueInCliArgs(cmd.Flags(), &describe)

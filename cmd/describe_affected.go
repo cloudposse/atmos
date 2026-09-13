@@ -100,12 +100,10 @@ func getRunnableDescribeAffectedCmd(
 			return err
 		}
 
-		// Resolve ATMOS_PROCESS_TEMPLATES / ATMOS_PROCESS_FUNCTIONS (via Viper) onto the
-		// --process-templates / --process-functions Cobra flags before parseDescribeAffectedCliArgs
+		// Resolve ATMOS_PROCESS_TEMPLATES / ATMOS_PROCESS_FUNCTIONS (bound to Viper in init) onto
+		// the --process-templates / --process-functions Cobra flags before parseDescribeAffectedCliArgs
 		// reads them, so the legacy cmd.Flags()-based parsing picks up env-sourced values.
-		if err := resolveDescribeAffectedProcessFlags(cmd, viper.GetViper(), describeAffectedProcessFlagsParser); err != nil {
-			return err
-		}
+		resolveDescribeAffectedProcessFlags(cmd, viper.GetViper())
 
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
 		if err != nil {

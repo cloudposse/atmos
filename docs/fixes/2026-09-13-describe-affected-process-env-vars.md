@@ -38,8 +38,11 @@ that pattern rather than migrating the whole (pre-unified-flag-parsing) command.
   keys on the shared global Viper). `resolveDescribeAffectedProcessFlags()` writes the env-sourced
   value back onto the Cobra flag (via `Flags().Set`, which marks it `Changed`) so the legacy
   reader picks it up — only when the flag wasn't set on the CLI (CLI wins) and the resolved value
-  differs from the flag default. It compares values rather than using `viper.IsSet`, because
-  `SetDefault` makes `IsSet` report true even with no env var set.
+  differs from the flag's current value. It compares the resolved value against
+  `flag.Value.String()` rather than using `viper.IsSet` (which reports true for `SetDefault`
+  values, so it can't tell "env set" from "default in effect"). The env vars are bound to Viper
+  once in `init()`; the resolver reads from Viper and is a plain (non-erroring) function — the one
+  impossible-to-fail `Flags().Set` uses the accepted `_ = ...Set(...)` idiom from `pkg/flags`.
 - `cmd/describe_affected.go`: removed the two raw `PersistentFlags().Bool(...)` registrations for
   these flags (now owned by the parser), added the parser var + its `RegisterPersistentFlags` /
   `BindToViper` wiring in `init()`, and called `resolveDescribeAffectedProcessFlags` in `RunE`
@@ -56,10 +59,11 @@ that pattern rather than migrating the whole (pre-unified-flag-parsing) command.
 - `go test ./cmd/ -run 'ProcessFlags|Describe'` — pass (new tests plus the existing describe /
   error-mode / skip-auth suites, which the change leaves green).
 - `go vet ./cmd/` — clean.
-- New-file coverage: `newDescribeAffectedProcessFlagsParser` 100%, `resolveDescribeAffectedProcessFlags`
-  80% — the uncovered 20% are three defensive `return err` branches (`BindToViper`, `GetBool`,
-  `Set`) that are unreachable for this flag config, documented in the test file (same rationale as
-  `describe_error_mode_flag_test.go`).
+- New-file coverage: both `newDescribeAffectedProcessFlagsParser` and
+  `resolveDescribeAffectedProcessFlags` are 100%. The only uncovered line the patch adds is the
+  `init()` `BindToViper` error handler (`errUtils.CheckErrorPrintAndExit`, which calls `os.Exit`) —
+  standard, untestable init error handling that mirrors the error-mode parser's identical block
+  directly above it.
 - `./custom-gcl run --new-from-rev=origin/main --config=.golangci.yml ./cmd/` — 0 issues
   (forbidigo included: no direct `viper.BindEnv`/`BindPFlag`; all binding goes through `pkg/flags`).
 
